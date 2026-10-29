@@ -109,6 +109,10 @@ export function transformToInstance(
         end_time: new Date(new Date(enc.start_time).getTime() + phase.end_offset_ms).toISOString(),
         kill_type: phase.kill_type,
       })),
+      ranking_window: enc.ranking_window && {
+        start_offset_ms: enc.ranking_window.start_offset_ms,
+        end_offset_ms: enc.ranking_window.end_offset_ms,
+      },
     };
   });
 

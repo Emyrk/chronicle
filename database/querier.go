@@ -60,6 +60,7 @@ type sqlcQuerier interface {
 	CountGuildDiscordInstallationsByDiscordGuildID(ctx context.Context, discordGuildID string) (int64, error)
 	CountGuilds(ctx context.Context, arg CountGuildsParams) (int64, error)
 	CountLuaProjectStars(ctx context.Context, projectIds []uuid.UUID) ([]CountLuaProjectStarsRow, error)
+	CountLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	CountRaidCompositionsByUser(ctx context.Context, arg CountRaidCompositionsByUserParams) (int64, error)
 	CountReadyLuaProjectArtifactGarbage(ctx context.Context) (int64, error)
 	// Log groups uploaded by any of the user's Sidekick installations; 1 right
@@ -132,6 +133,8 @@ type sqlcQuerier interface {
 	DeleteInferenceConnectionByOwner(ctx context.Context, arg DeleteInferenceConnectionByOwnerParams) error
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
+	// Queue every stored package before cascades remove the project's dependent rows.
+	DeleteLuaProject(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteLuaProjectArtifactGarbage(ctx context.Context, objectKey string) error
 	DeleteLuaProjectContributor(ctx context.Context, arg DeleteLuaProjectContributorParams) (int64, error)
 	DeleteLuaProjectRelease(ctx context.Context, arg DeleteLuaProjectReleaseParams) (int64, error)
@@ -180,6 +183,7 @@ type sqlcQuerier interface {
 	DeleteWoWServerRealm(ctx context.Context, id uuid.UUID) error
 	DeleteWorld(ctx context.Context, id uuid.UUID) error
 	DeleteYoutubeVideoByInstanceOrSlug(ctx context.Context, arg DeleteYoutubeVideoByInstanceOrSlugParams) error
+	DisableJITForTransaction(ctx context.Context) error
 	DisconnectSidekickInstallation(ctx context.Context, arg DisconnectSidekickInstallationParams) (SidekickInstallation, error)
 	EncountersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
 	EnsureDeploymentToken(ctx context.Context, deploymentToken pgtype.Text) (pgtype.Text, error)
@@ -518,6 +522,10 @@ type sqlcQuerier interface {
 	InsertDiscordMembershipGrantCheck(ctx context.Context, arg InsertDiscordMembershipGrantCheckParams) (DiscordMembershipGrantCheck, error)
 	InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error)
 	InsertEncounterCharacterFights(ctx context.Context, arg []InsertEncounterCharacterFightsParams) *InsertEncounterCharacterFightsBatchResults
+	// Boss encounters keep the latest timestamped occurrence per player and
+	// encounter name in an uploaded instance so repeated clears cannot form a
+	// synthetic best-of run.
+	// Trash keeps one aggregate per player/spec/sub-spec.
 	InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error
 	InsertEncounterPhase(ctx context.Context, arg InsertEncounterPhaseParams) error
 	InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error)
@@ -798,6 +806,8 @@ type sqlcQuerier interface {
 	ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error)
 	ListWorlds(ctx context.Context) ([]World, error)
 	LockLogFilePartSequence(ctx context.Context, logFileID uuid.UUID) (uuid.UUID, error)
+	// Serializes addon creation for one owner so concurrent requests cannot exceed the quota.
+	LockLuaProjectOwner(ctx context.Context, ownerID uuid.UUID) (uuid.UUID, error)
 	LockPendingProofRequest(ctx context.Context, arg LockPendingProofRequestParams) (ProofRequest, error)
 	// Root-domain site admins only (AdminBypass context).
 	LockPendingProofRequestByID(ctx context.Context, id uuid.UUID) (ProofRequest, error)
@@ -863,12 +873,18 @@ type sqlcQuerier interface {
 	// A "run" is one instance_id (deduplicated by duplicate_group_id).
 	// Within a run, damage and duration are summed across encounters to get run DPS.
 	// Each player appears once with their highest-DPS run.
-	// Deduplicates by (player, encounter, duplicate_group) before aggregating.
+	// Boss encounters are canonicalized on insert; duplicate uploads are still
+	// reduced to one representative instance per logical run before aggregating.
 	// Explicit encounter selections define the required run coverage. Without an
 	// explicit selection, compute coverage per realm because different realms can
 	// record different encounter names for the same instance.
-	// Step 1: aggregate per player per run (sum encounters within a single instance run).
-	// Step 2: pick each player's best run.
+	// Step 1: calculate only the values needed to rank each player/run. Display
+	// metadata is intentionally deferred until after pagination.
+	// Step 2: pick each player's best run using only the narrow score rows.
+	// Step 3: paginate before computing wide display metadata.
+	// Step 4: hydrate display-only fields for only the selected page. score_rows
+	// already contains the exact filtered and Trash-deduplicated ranking IDs, so the
+	// wide joins below do not repeat filtering or touch non-page talent builds.
 	RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error)
 	// Distinct realm names that have DPS ranking data, for the realm filter dropdown.
 	// Rows with an empty realm name are excluded: they cannot be filtered on, and
@@ -975,6 +991,9 @@ type sqlcQuerier interface {
 	SpeedrunGuildClears(ctx context.Context, arg SpeedrunGuildClearsParams) ([]SpeedrunGuildClearsRow, error)
 	// Returns distinct (instance, difficulty) boards that have at least one
 	// qualified speedrun. Each difficulty has its own leaderboard.
+	// Each board carries its record: the first place of SpeedrunLeaderboard with
+	// full timing and no filters (zero/NULL record columns when no run ranks there),
+	// with its instance and whether its log recorded unit positions (a replay).
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	SpeedrunInstanceBoards(ctx context.Context) ([]SpeedrunInstanceBoardsRow, error)
 	// Returns the leaderboard for a given instance name.

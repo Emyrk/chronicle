@@ -1959,15 +1959,17 @@ type LogInstance struct {
 }
 
 type LogInstanceEncounter struct {
-	ID         uuid.UUID          `db:"id" json:"id"`
-	InstanceID uuid.UUID          `db:"instance_id" json:"instance_id"`
-	Name       string             `db:"name" json:"name"`
-	Remaining  guid.GUIDs         `db:"remaining" json:"remaining"`
-	Boss       bool               `db:"boss" json:"boss"`
-	StartTime  pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	EndTime    pgtype.Timestamptz `db:"end_time" json:"end_time"`
-	KillType   KillType           `db:"kill_type" json:"kill_type"`
-	MapID      int32              `db:"map_id" json:"map_id"`
+	ID                   uuid.UUID          `db:"id" json:"id"`
+	InstanceID           uuid.UUID          `db:"instance_id" json:"instance_id"`
+	Name                 string             `db:"name" json:"name"`
+	Remaining            guid.GUIDs         `db:"remaining" json:"remaining"`
+	Boss                 bool               `db:"boss" json:"boss"`
+	StartTime            pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime              pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	KillType             KillType           `db:"kill_type" json:"kill_type"`
+	MapID                int32              `db:"map_id" json:"map_id"`
+	RankingStartOffsetMs pgtype.Int8        `db:"ranking_start_offset_ms" json:"ranking_start_offset_ms"`
+	RankingEndOffsetMs   pgtype.Int8        `db:"ranking_end_offset_ms" json:"ranking_end_offset_ms"`
 }
 
 type LogInstanceEncounterDamageUnitSummary struct {

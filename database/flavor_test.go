@@ -43,6 +43,7 @@ func TestAllFlavorTagValuesIncludesKnownTags(t *testing.T) {
 		database.FlavorFaebright,
 		database.FlavorMoonwell,
 		database.FlavorAshenWoW,
+		database.FlavorHellfire,
 		database.FlavorCrusaderStorm,
 		database.FlavorAzerothcoreProgression,
 		database.FlavorLunatic,
@@ -131,6 +132,7 @@ func TestServerFlavor(t *testing.T) {
 		{"faebright", database.FlavorVanilla, []database.FlavorTag{database.FlavorVanilla, database.FlavorFaebright}},
 		{"moonwell", database.FlavorVanilla, []database.FlavorTag{database.FlavorVanilla, database.FlavorMoonwell}},
 		{"ashenwow", database.FlavorVanilla, []database.FlavorTag{database.FlavorVanilla, database.FlavorAshenWoW}},
+		{"hellfire", database.FlavorTBC, []database.FlavorTag{database.FlavorTBC, database.FlavorHellfire}},
 		{"crusader-storm", database.FlavorVanilla, []database.FlavorTag{database.FlavorVanilla, database.FlavorCrusaderStorm}},
 		{"ascension", database.FlavorWrath, []database.FlavorTag{database.FlavorWrath, database.FlavorAscension}},
 	}

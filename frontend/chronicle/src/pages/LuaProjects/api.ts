@@ -1,5 +1,5 @@
 /** Lua project (addon) API. The browser never evaluates package contents. */
-import type { AddonAuthor, InferenceContributorUsage, LuaProjectContributor, LuaProjectPermissions } from "@/api/typesGenerated"
+import type { AddonAuthor, InferenceContributorUsage, LuaProjectContributor, LuaProjectPermissions, LuaProjectQuota } from "@/api/typesGenerated"
 export type LuaProjectKind = "panel" | "guide"
 /** A tagged snapshot of main. Only the newest few keep their files; older ones are listed with available false. */
 export type LuaRelease = { tag: string; sha256?: string; available: boolean; icon?: string; published_at: string; published_by?: string; published_by_author?: string }
@@ -63,6 +63,10 @@ export async function listProjects(): Promise<LuaProject[]> {
   return Array.isArray(data) ? data : data.projects
 }
 
+export function getProjectQuota(): Promise<LuaProjectQuota> {
+  return request<LuaProjectQuota>(`${base}/quota`)
+}
+
 export async function getProject(id: string): Promise<LuaProject> {
   return request<LuaProject>(`${base}/${encodeURIComponent(id)}`)
 }
@@ -84,6 +88,10 @@ export async function createProject(kind: LuaProjectKind, name: string, slug: st
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ kind, name, slug }),
   })
+}
+
+export function deleteProject(id: string): Promise<void> {
+  return request<void>(`${base}/${encodeURIComponent(id)}`, { method: "DELETE" })
 }
 
 export async function uploadDraft(id: string, revision: number, archive: File): Promise<void> {

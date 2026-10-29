@@ -1,14 +1,13 @@
 import { Link, Navigate, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Plus } from "lucide-react"
 import { useSession } from "@/api/queries"
 import { getAuthorPage, getMyAuthor, listProjects } from "./api"
-import { AddonCard } from "./AddonCard"
+import { AddonList } from "./AddonCard"
 import { isAddonId } from "./addonRoute"
-import { NewAddonForm } from "./NewAddonForm"
-import { card, errorMessage } from "./addonUi"
+import { card, errorMessage, primaryButton } from "./addonUi"
 
-/** /addons/<author>: that author's addons. On your own page, also the addons shared with you and the create form. */
+/** /addons/<author>: that author's addons. On your own page, also the addons shared with you and a button to create one. */
 export function AddonAuthorPage() {
   const { author = "" } = useParams<{ author: string }>()
   const { data: session } = useSession()
@@ -24,26 +23,26 @@ export function AddonAuthorPage() {
   const projects = page.data?.projects ?? []
   return <main className="container mx-auto max-w-5xl space-y-8 px-4 py-10">
     <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/addons"><ArrowLeft className="size-4" /> All addons</Link>
-    <header className="border-b pb-7">
-      <p className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">Addon author</p>
-      <h1 className="font-mono text-3xl font-semibold tracking-tight">{author}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{mine ? "Your addons. Open one to edit it in the Addon Workshop or tag a release." : `Addons by ${author}.`}</p>
+    <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-7">
+      <div>
+        <p className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">Addon author</p>
+        <h1 className="font-mono text-3xl font-semibold tracking-tight">{author}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{mine ? "Your addons. Open one to edit it in the Addon Workshop or tag a release." : `Addons by ${author}.`}</p>
+      </div>
+      {mine && <Link to="/addons/new" className={primaryButton}><Plus className="size-4" /> New addon</Link>}
     </header>
     {page.isError ? <p role="alert" className="text-sm text-destructive">{errorMessage(page.error)}</p> :
-      <div className={mine ? "grid gap-6 md:grid-cols-[minmax(0,1fr)_19rem]" : ""}>
-        <div className="space-y-8">
-          <section aria-label={mine ? "Your addons" : "Addons"} className="space-y-3">
-            {mine && <h2 className="text-lg font-semibold">Your addons</h2>}
-            {page.isPending ? <p className="text-sm text-muted-foreground">Loading addons…</p> :
-              projects.length === 0 ? <p className={`${card} text-sm text-muted-foreground`}>{mine ? "No addons yet. Create one to begin." : "No addons yet."}</p> :
-                projects.map(project => <AddonCard key={project.id} project={project} />)}
-          </section>
-          {mine && !!shared.data?.length && <section aria-label="Shared with you" className="space-y-3">
-            <h2 className="text-lg font-semibold">Shared with you</h2>
-            {shared.data.map(project => <AddonCard key={project.id} project={project} shared />)}
-          </section>}
-        </div>
-        {mine && <div><NewAddonForm author={author} onCreated={() => void page.refetch()} /></div>}
+      <div className="space-y-8">
+        <section aria-label={mine ? "Your addons" : "Addons"} className="space-y-3">
+          {mine && <h2 className="text-lg font-semibold">Your addons</h2>}
+          {page.isPending ? <p className="text-sm text-muted-foreground">Loading addons…</p> :
+            projects.length === 0 ? <p className={`${card} text-sm text-muted-foreground`}>{mine ? "No addons yet. Create one to begin." : "No addons yet."}</p> :
+              <AddonList projects={projects} />}
+        </section>
+        {mine && !!shared.data?.length && <section aria-label="Shared with you" className="space-y-3">
+          <h2 className="text-lg font-semibold">Shared with you</h2>
+          <AddonList projects={shared.data} shared />
+        </section>}
       </div>}
   </main>
 }

@@ -246,7 +246,7 @@ func (w *WorkerCheckDiscordMembershipGrant) Work(ctx context.Context, job *river
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("record discord non-member check: %w", err)
+			return fmt.Errorf("record discord non-member check from grant: %w", err)
 		}
 		_ = river.RecordOutput(ctx, map[string]any{"outcome": "non_member"})
 		return nil

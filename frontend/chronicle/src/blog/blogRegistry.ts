@@ -19,6 +19,7 @@ import {
   ParsingPost,
   PhaseSelectionsPost,
   PlayerTimelinePost,
+  RankedDamagePost,
   ReplayPost,
   TalentBuilderRefreshPost,
   VehicleSupportPost,
@@ -61,6 +62,7 @@ export interface BlogPostDefinition extends BlogPostMetadata {
 }
 
 const BLOG_COMPONENTS = {
+  "ranked-damage": RankedDamagePost,
   "character-cosmetics": CharacterCosmeticsPost,
   "layout-editing": LayoutEditingPost,
   "focus-mode": FocusModePost,
@@ -95,6 +97,7 @@ function remotionVideo(load: LessonVideo["load"], durationInFrames: number): Les
 }
 
 const BLOG_VIDEOS = {
+  "ranked-damage": remotionVideo(() => import("@/pages/Instance/videos/RankedDamage.video"), 900),
   "character-cosmetics": remotionVideo(() => import("@/pages/Instance/videos/CharacterCosmetics.video"), 720),
   "layout-editing": remotionVideo(() => import("@/pages/Instance/videos/LayoutEditing.video"), 700),
   "focus-mode": remotionVideo(() => import("@/pages/Instance/videos/FocusMode.video"), 630),

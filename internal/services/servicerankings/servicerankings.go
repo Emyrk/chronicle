@@ -379,7 +379,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
+	rows, err := s.store.RankingsLeaderboardNoJIT(ctx, database.RankingsLeaderboardParams{
 		InstanceNames:    splitCSV(q.Get("instance_names")),
 		EncounterNames:   encounterNames,
 		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
@@ -515,7 +515,7 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.store.RankingsBoxPlotStats(ctx, database.RankingsBoxPlotStatsParams{
+	rows, err := s.store.RankingsBoxPlotStatsNoJIT(ctx, database.RankingsBoxPlotStatsParams{
 		InstanceNames:    splitCSV(q.Get("instance_names")),
 		EncounterNames:   encounterNames,
 		DifficultyNames:  splitCSV(q.Get("difficulty_names")),

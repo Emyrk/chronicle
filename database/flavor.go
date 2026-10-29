@@ -58,6 +58,8 @@ const (
 	FlavorMoonwell FlavorTag = "moonwell"
 	// FlavorAshenWoW is AshenWoW-specific behavior.
 	FlavorAshenWoW FlavorTag = "ashenwow"
+	// FlavorHellfire is Hellfire WoW-specific behavior.
+	FlavorHellfire FlavorTag = "hellfire"
 	// FlavorCrusaderStorm is Crusader Storm-specific behavior.
 	FlavorCrusaderStorm FlavorTag = "crusader-storm"
 	// FlavorAzerothcoreProgression enables progression-server behavior where
@@ -97,6 +99,7 @@ func AllFlavorTagValues() []FlavorTag {
 		FlavorFaebright,
 		FlavorMoonwell,
 		FlavorAshenWoW,
+		FlavorHellfire,
 		FlavorCrusaderStorm,
 		FlavorAzerothcoreProgression,
 		FlavorVanillaPlus,

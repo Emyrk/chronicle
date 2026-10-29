@@ -1,0 +1,1 @@
+- totem.png — Hearthstone-style totem art supplied by the operator in chat 2026-10-18 (silhouette reference)

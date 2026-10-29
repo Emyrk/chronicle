@@ -1,0 +1,120 @@
+# Wailing Caverns (WoW Forever) bosses — local figurines, 2026-10-13.
+# Blizzard IP: private/local use only.
+#
+# Sculpt house style (see `mini.py new-dungeon` template for the full list):
+# thick chunky volumes, everything fused to the body or base, no thin
+# spikes, no thin sheets, no floating parts; glow is a paint accent.
+#
+# `portrait:` + `portrait_style:` drive `mini.py portraits` (painted key
+# art, dungeons/wailing-caverns/portraits/<boss>.jpg) — lore words are fine
+# there; they never reach the stills prompt.
+
+name: Wailing Caverns
+
+portrait_style: >-
+  richly textured oil painting on rough canvas, visible brush strokes and
+  impasto, painterly fantasy video-game concept art in the style of classic
+  World of Warcraft loading-screen illustration, dramatic rim lighting, damp
+  cavern atmosphere with green-teal bioluminescent haze, single subject
+  centered, three-quarter view, full figure, no text, no lettering, no frame,
+  no border
+
+bosses:
+  # Shape: bulky quadruped, shell.
+  - slug: kresh
+    name: Kresh
+    desc: colossal ancient cave turtle on four thick stumpy legs, a high domed mossy shell cracked in places and studded with chunky crystal clusters, a heavy beaked head low and forward, thick scaly skin
+    palette: [moss green, slate gray, pale crystal teal]
+    views: [front, back]
+    finish: painted
+    notes: crystals are short chunky clusters fused to the shell; legs are thick and merge into the base; no thin spikes; water is a solid sculpted ripple on the base
+    back: From behind, the high domed shell with its cracks, moss and crystal clusters fills the view, with the short thick tail and both rear legs below it. The shell is plain and solid.
+    portrait: a colossal ancient cave turtle, mossy cracked armored shell studded with crystals, slow heavy limbs, dripping water, dim flooded cavern pool
+
+  # Shape: slender humanoid + staff + coiling serpent tail/vines.
+  - slug: lady-anacondra
+    name: Lady Anacondra
+    desc: tall slender elven woman druid with violet-grey skin and pointed ears, long dark hair as one solid mass, green snake-scale markings across her arms and chest, a closed long robe of overlapping scales that ends in a thick coiled serpent tail on the base, holding a thick curved bone staff upright with its foot on the base
+    palette: [violet gray, venom green, bone white]
+    views: [front, back]
+    finish: painted
+    notes: the staff is thick and touches the base and her hand; the serpent tail is one fat coil attached to the base; hair is a solid sculpted mass; no loose vines
+    back: From behind, the solid mass of dark hair, the scaled robe and the thick serpent coil on the base are visible; the staff stays at her side against the body.
+    portrait: a corrupted night elf druid woman, one of the Druids of the Fang, violet-grey skin, serpentine green markings, snake-scale robes, glowing yellow eyes, curved bone staff, coiling vines
+
+  # Shape: broad humanoid + antlers + serpent mantle.
+  - slug: lord-pythas
+    name: Lord Pythas
+    desc: muscular elven male druid with pale blue-grey skin, pointed ears and a fanged grin, a heavy antlered headdress with short thick antlers, a thick python wrapped over one shoulder like a mantle, bare scaled chest, a closed long dark robe to the base, both fists held in front of his chest
+    palette: [blue gray, python green, dark charcoal]
+    views: [front, back]
+    finish: painted
+    notes: antlers are short and as thick as a thumb; the python is one thick band fused to the shoulder; robe is a closed solid volume down to the base
+    back: From behind, the antlered headdress, the python draped across the shoulders and the plain closed robe are visible; his hands are in front and hidden.
+    portrait: a corrupted night elf druid lord, Druid of the Fang, pale blue-grey skin, python-scale shoulder mantle, fanged grin, antlered headdress, venom-green glow in his hands
+
+  # Shape: upright cobra, no limbs to speak of.
+  - slug: lord-cobrahn
+    name: Lord Cobrahn
+    desc: a druid caught mid-transformation into a giant cobra, muscular grey torso with two clawed arms held slightly out, a head with a wide thick hooded cobra frill and open fanged mouth, the lower body a thick tower of coils resting on the base
+    palette: [olive green, bone cream, charcoal]
+    views: [front, back]
+    finish: painted
+    notes: the hood frill is a thick solid fan attached to the whole neck, not a thin sheet; coils are fat and merge into the base; claws are short and chunky
+    back: From behind, the broad hooded frill covers the head and neck, the shoulders and the thick coils below it down to the base. The frill's back is plain scaled.
+    portrait: a night elf druid lord mid-transformation into a cobra, Druid of the Fang, hooded cobra neck frill flared wide, coiled serpent lower body, venom dripping from fangs
+
+  # Shape: bulky quadruped reptile.
+  - slug: skum
+    name: Skum
+    desc: huge heavy prehistoric thunder lizard on four thick legs, broad armored scaly hide, a row of short thick bony spikes down the back, a blunt crocodile-like head, a thick tail resting on the base
+    palette: [slate blue-gray, bone cream, electric blue]
+    views: [front, back]
+    finish: painted
+    notes: spikes are short chunky cones fused to the back; the electric glow is only a blue paint accent, not geometry; tail is thick and lies on the base; legs merge into the base
+    back: From behind, the broad back with its row of spikes, the thick tail lying down the middle and both rear legs are visible.
+    portrait: a huge old thunder lizard, bulky prehistoric reptile with a spiked back and thick scaly hide, faint crackling blue static between its spines, muddy cavern floor
+
+  # Shape: robed humanoid + serpent coils.
+  - slug: lord-serpentis
+    name: Lord Serpentis
+    desc: elven male druid with emerald scaled skin, a forked tongue showing, pointed ears and bright green eyes, a hooded closed dark robe to the base, a thick scaled snake wound around his shoulders and neck, one hand open at his side
+    palette: [emerald green, near black, pale gold]
+    views: [front, back]
+    finish: painted
+    notes: the snake is one fat coil fused to the shoulders; the robe is a closed solid volume down to the base; hood is a solid shape
+    back: From behind, the hood, the plain closed robe and the coil of the snake across the shoulders are visible; the open hand is at his side.
+    portrait: a corrupted night elf druid lord, Druid of the Fang, sleek serpentine features, emerald scaled skin, forked tongue, draped in snakeskin, twin glowing green eyes, dark robes
+
+  # Shape: bulky humanoid plant creature.
+  - slug: verdan-the-everliving
+    name: Verdan the Everliving
+    desc: enormous ancient bog creature made of living roots, moss and swamp vines, hulking humanoid shape with thick tree-trunk arms and legs, a mossy head with deep amber eyes, small mushrooms growing on its shoulders and back, thick roots knotted into its legs and merging into the base
+    palette: [swamp green, bark brown, amber]
+    views: [front, back]
+    finish: painted
+    notes: vines are thick ropes fused to the body; mushrooms are small chunky caps; moss is a solid sculpted mass; legs merge into the base
+    back: From behind, the hunched mossy back with its thick knotted roots and mushrooms is visible, with both arms hanging at the sides.
+    portrait: an enormous ancient bog-beast of living roots, moss and swamp vines, a hulking treant-like mass of tangled green flora with glowing amber eyes, mushrooms growing on its shoulders
+
+  # Shape: bloated hunched fish-man, big jaw.
+  - slug: mutanus-the-devourer
+    name: Mutanus the Devourer
+    desc: huge hunched nightmarish fish-man with a bloated pale belly and gaunt shoulders, an enormous gaping mouth full of thick pointed teeth, glowing pale eyes, short thick fins on the head and arms, purple-green skin, thick clawed hands resting low
+    palette: [murky purple, sickly green, pale belly cream]
+    views: [front, back]
+    finish: painted
+    notes: teeth are short thick cones, few in number; fins are thick and short, never thin sheets; arms are slightly apart from the body; feet merge into the base
+    back: From behind, the hunched fin-ridged back, the short thick tail fin and both arms hanging at the sides are visible; the mouth is not visible.
+    portrait: a huge nightmarish murloc, bloated and gaunt, giant gaping jaws filled with needle teeth, dark purple-green fish skin, fins, glowing pale eyes, rising from a murky dream-haze
+
+  # Shape: tiny flying creature on a stand.
+  - slug: deviate-faerie-dragon
+    name: Deviate Faerie Dragon
+    desc: small rare faerie dragon perched on a rock outcrop on the base, sleek body with iridescent pink and violet scales, a long thick tail curling around the rock, two large thick wings held half-open and upright, a mischievous head tilted slightly
+    palette: [rose pink, violet, pearl]
+    views: [front, back]
+    finish: painted
+    notes: wings are thick leathery slabs with no holes, attached at the shoulder and braced against the rock; tail is thick and touches the base; no floating sparkles
+    back: From behind, the two thick half-open wings, the spine ridge and the curl of the tail around the rock are visible.
+    portrait: a small rare faerie dragon with iridescent wings, sleek body, shimmering pink and violet scales, sparkling pollen trail, mischievous, tiny against the dark cavern

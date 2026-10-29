@@ -3,7 +3,17 @@ import { Gamepad2, Globe, PersonStanding, RotateCcw, Scan, Sparkles, UserRound, 
 import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
 import { DEFAULT_AD_STRAFE, MAP_CONTROL_KEYBINDS } from "./mapControls";
-import { ABOVE_DISC_MODES, CAST_MODES, DEFAULT_EFFECT_SETTINGS, DENSITY_OPTIONS, TRAIL_OPTIONS, type EffectSettings } from "./mapViewSettings";
+import {
+  ABOVE_DISC_MODES,
+  CAST_MODES,
+  CHIP_SCALE_STEP_PERCENT,
+  DEFAULT_EFFECT_SETTINGS,
+  DENSITY_OPTIONS,
+  MAX_CHIP_SCALE_PERCENT,
+  MIN_CHIP_SCALE_PERCENT,
+  TRAIL_OPTIONS,
+  type EffectSettings,
+} from "./mapViewSettings";
 import { DEFAULT_WALK_AVATAR, WALK_AVATAR_GROUPS, WALK_AVATARS } from "./walkAvatars";
 
 export interface MapSettingsOverlayProps {
@@ -40,7 +50,7 @@ interface SettingsTab {
 const TAB_STORAGE_KEY = "chronicle.map.settingsTab";
 
 // The effect settings each tab owns, for its reset and its changed marks.
-const UNIT_KEYS = ["bars", "aboveDisc", "trailSeconds"] as const satisfies readonly (keyof EffectSettings)[];
+const UNIT_KEYS = ["chipScalePercent", "bars", "aboveDisc", "trailSeconds"] as const satisfies readonly (keyof EffectSettings)[];
 const COMBAT_KEYS = ["enabled", "heals", "overheal", "periodic", "castMode", "onlySelected", "maxEffects"] as const satisfies readonly (keyof EffectSettings)[];
 const WORLD_KEYS = ["alignmentOverlay"] as const satisfies readonly (keyof EffectSettings)[];
 
@@ -95,6 +105,16 @@ export function MapSettingsOverlay({
       icon: UserRound,
       content: show3D ? (
         <Section title="On each unit">
+          <Range
+            label="Chip size"
+            detail="Scale units and their markers on the 3D map"
+            value={effectSettings.chipScalePercent}
+            min={MIN_CHIP_SCALE_PERCENT}
+            max={MAX_CHIP_SCALE_PERCENT}
+            step={CHIP_SCALE_STEP_PERCENT}
+            changed={changed("chipScalePercent")}
+            onChange={(chipScalePercent) => onEffectSettings({ chipScalePercent })}
+          />
           <Toggle
             label="Health bars"
             detail="Over bosses, selected players and recently damaged units"
@@ -454,6 +474,45 @@ function Toggle({
     <label className={cn("flex items-start justify-between gap-3", disabled ? "opacity-45" : "cursor-pointer")}>
       <SettingLabel label={label} detail={detail} changed={changed} />
       <Switch size="sm" checked={checked} disabled={disabled} onCheckedChange={onChange} aria-label={label} />
+    </label>
+  );
+}
+
+function Range({
+  label,
+  detail,
+  value,
+  min,
+  max,
+  step,
+  changed = false,
+  onChange,
+}: {
+  label: string;
+  detail: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  changed?: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3">
+      <SettingLabel label={label} detail={detail} changed={changed} />
+      <span className="flex w-44 shrink-0 items-center gap-2">
+        <input
+          type="range"
+          aria-label={label}
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(event) => onChange(Number(event.target.value))}
+          className="min-w-0 flex-1 accent-primary"
+        />
+        <output className="w-10 text-right text-[11px] tabular-nums text-zinc-300">{value}%</output>
+      </span>
     </label>
   );
 }

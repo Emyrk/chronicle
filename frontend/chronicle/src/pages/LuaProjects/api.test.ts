@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { channelSha, createProject, createRelease, deleteRelease, getPublicProject, latestRelease, listProjects, publicPackageURL, uploadDraft } from "./api"
+import { channelSha, createProject, createRelease, deleteProject, deleteRelease, getProjectQuota, getPublicProject, latestRelease, listProjects, publicPackageURL, uploadDraft } from "./api"
 
 const response = (body: unknown = {}) => ({ ok: true, status: 200, json: async () => body })
 
@@ -15,6 +15,15 @@ describe("Lua project authoring API", () => {
     expect(fetch).toHaveBeenNthCalledWith(2, "/api/v1/me/lua-projects", expect.objectContaining({
       credentials: "include", method: "POST", body: JSON.stringify({ kind: "guide", name: "My guide", slug: "my-guide" }),
     }))
+  })
+
+  it("reads quota and deletes whole addons", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(response({ owned: 2, limit: 3 })).mockResolvedValueOnce({ ...response(), status: 204 })
+    vi.stubGlobal("fetch", fetch)
+    expect(await getProjectQuota()).toEqual({ owned: 2, limit: 3 })
+    await deleteProject("a/b")
+    expect(fetch.mock.calls[0]).toEqual(["/api/v1/me/lua-projects/quota", { credentials: "include" }])
+    expect(fetch.mock.calls[1]).toEqual(["/api/v1/me/lua-projects/a%2Fb", expect.objectContaining({ credentials: "include", method: "DELETE" })])
   })
 
   it("uploads raw tar with a revision guard and no form encoding", async () => {

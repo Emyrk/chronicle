@@ -9,6 +9,9 @@ Reads maps/<slug>/map.yaml:
   product     CDN product, e.g. wow_classic_beta
   region      us | eu | ...
   build       pinned CDN build number; a different live build aborts unless --allow-build-drift
+  allow_stale_placement_bounds
+              placed-WMO only: allow a known-stale MODF bounding box while retaining its position/rotation;
+              the mismatch and opt-in are recorded in fetch.json
 Writes maps/<slug>/raw/: map.wdt, placements.json, root.wmo, group-ids.txt, groups/, textures/,
 obj/<slug>.obj (+ .mtl + textures/*.png), and maps/<slug>/fetch.json (build, every FileDataID,
 sha256 of every raw file) — committed provenance that render_set.py copies into each manifest,
@@ -182,18 +185,28 @@ def one_placement(found, what):
             "adts": sorted({m["adt"] for m in found})}
 
 
-def place_obj(obj, root, pl):
+def validate_placement_extent(err, pl, allow_stale_bounds):
+    """Require MODF extents to match unless map.yaml explicitly documents stale bounds."""
+    if err <= 1.0:
+        return True
+    msg = "placed WMO does not reproduce its MODF extents (error %.1f yd): %s" % (err, pl)
+    if not allow_stale_bounds:
+        raise SystemExit(msg)
+    log("WARNING: %s; continuing because map.yaml allows stale placement bounds" % msg)
+    return False
+
+
+def place_obj(obj, root, pl, allow_stale_bounds=False):
     """Move a WMO-local OBJ (wmo2obj) to where an ADT MODF places it: adt2obj.place_vertices gives true
     world coords, then both horizontals are negated (the frame a global WMO's own coordinates are in,
-    which every WMO step after this assumes). Returns the MOHD-box vs MODF-extent error in yards."""
+    which every WMO step after this assumes). Returns the extent error and whether the bounds verified."""
     import numpy as np
     sys.path.insert(0, HERE)
     import adt2obj
     p = {"pos": pl["position"], "rot": pl["rotation"], "bmin": pl["bounds"]["minimum"],
          "bmax": pl["bounds"]["maximum"], "scale": pl["scale"]}
     err = float(adt2obj.verify_convention(adt2obj.wmo_bbox(root), p))
-    if err > 1.0:
-        raise SystemExit("placed WMO does not reproduce its MODF extents (error %.1f yd): %s" % (err, pl))
+    bounds_verified = validate_placement_extent(err, pl, allow_stale_bounds)
     lines = open(obj).read().split("\n")
     vi = [i for i, l in enumerate(lines) if l.startswith("v ")]
     V = np.array([[float(x) for x in lines[i].split()[1:4]] for i in vi])
@@ -202,8 +215,9 @@ def place_obj(obj, root, pl):
         rest = lines[i].split()[4:]
         lines[i] = " ".join(["v %.4f %.4f %.4f" % (-W[k, 0], -W[k, 1], W[k, 2])] + rest)
     open(obj, "w").write("\n".join(lines))
-    log("placed WMO: MODF uid %d at %s rot %s (extent error %.3f yd)" % (pl["uniqueID"], pl["position"], pl["rotation"], err))
-    return err
+    log("placed WMO: MODF uid %d at %s rot %s (extent error %.3f yd, bounds verified: %s)" %
+        (pl["uniqueID"], pl["position"], pl["rotation"], err, bounds_verified))
+    return err, bounds_verified
 
 
 def wdt_mphd_flags(path):
@@ -496,7 +510,11 @@ def fetch_mpq_wmo(a, cfg, mdir, raw, need):
     obj = os.path.join(raw, "obj", "%s.obj" % a.slug)
     sh([sys.executable, "-I", os.path.join(HERE, "wmo2obj.py"), raw, "--out", obj])
     if placed:
-        placed["extent_error_yd"] = round(place_obj(obj, root, placed), 3)
+        err, verified = place_obj(obj, root, placed, bool(cfg.get("allow_stale_placement_bounds")))
+        pl[0]["extent_error_yd"] = round(err, 3)
+        pl[0]["bounds_verified"] = verified
+        if not verified:
+            pl[0]["stale_bounds_allowed"] = True
     files = {}
     for dp, _, fns in os.walk(raw):
         for fn in fns:
@@ -622,7 +640,11 @@ def main():
     obj = os.path.join(raw, "obj", "%s.obj" % a.slug)
     sh([sys.executable, "-I", os.path.join(HERE, "wmo2obj.py"), raw, "--out", obj])
     if placed:
-        placed["extent_error_yd"] = round(place_obj(obj, root, placed), 3)
+        err, verified = place_obj(obj, root, placed, bool(cfg.get("allow_stale_placement_bounds")))
+        pl[0]["extent_error_yd"] = round(err, 3)
+        pl[0]["bounds_verified"] = verified
+        if not verified:
+            pl[0]["stale_bounds_allowed"] = True
 
     # 5. provenance
     files = {}
@@ -642,4 +664,5 @@ def main():
     log("done: %s (%d files hashed)" % (os.path.relpath(obj, ROOT), len(files)))
 
 
-main()
+if __name__ == "__main__":
+    main()

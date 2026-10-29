@@ -36,7 +36,7 @@ type LevelRangeRequirement struct {
 
 // SpeedrunRules defines all requirements for a valid speedrun.
 const (
-	DefaultReentryGap        = 24 * time.Hour
+	DefaultReentryGap        = 6 * time.Hour
 	BossCompletionReentryGap = time.Hour
 	DungeonReentryGap        = 15 * time.Minute
 )
@@ -47,17 +47,33 @@ type SpeedrunRules struct {
 	// RankedStartAfterRequirement starts ranked clear timing at the end of the
 	// fight that satisfies the named requirement instead of at the first fight.
 	RankedStartAfterRequirement string `json:"ranked_start_after_requirement,omitempty"`
-	// ReentryGap controls when a completed run can be split from a later entry
-	// into the same zone. Zero uses DefaultReentryGap.
+	// ReentryGap controls when a run can be split from a later entry into the
+	// same zone. Zero uses DefaultReentryGap.
 	ReentryGap time.Duration `json:"-"`
 }
 
 // Rankings holds all rule sets for an instance.
 // Nil pointers and zero-valued rules mean that ranking category doesn't apply.
 type Rankings struct {
-	Speedrun          *SpeedrunRules           `json:"speedrun,omitempty"`
-	Damage            DamageRule               `json:"-"`
-	DamageByEncounter map[string]DamageTargets `json:"damage_by_encounter,omitempty"`
+	Speedrun *SpeedrunRules `json:"speedrun,omitempty"`
+	Damage   DamageRule     `json:"-"`
+	// DurationByEncounter overrides the damage target selector for the ranked
+	// interval. Without an override, encounters with a damage target rule use
+	// that same selector; encounters without either rule use the full fight.
+	DurationByEncounter map[string]DamageTargets `json:"duration_by_encounter,omitempty"`
+	DamageByEncounter   map[string]DamageTargets `json:"damage_by_encounter,omitempty"`
+}
+
+// DurationTargets uses the damage target selector unless this encounter has
+// an explicit duration override.
+func (r *Rankings) DurationTargets(encounterName string) DamageTargets {
+	if r == nil {
+		return DamageTargets{}
+	}
+	if override, ok := r.DurationByEncounter[encounterName]; ok {
+		return override
+	}
+	return r.DamageByEncounter[encounterName]
 }
 
 // DamageRule selects encounter-specific damage aggregation behavior.

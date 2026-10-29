@@ -1,10 +1,10 @@
 import type { ReactNode } from "react"
-import { ArrowLeft, Info, Loader2, Skull, Swords, Timer, Users } from "lucide-react"
+import { ArrowLeft, Clock, Info, Loader2, Skull, Swords, Timer, Users } from "lucide-react"
 import { Link } from "react-router-dom"
 import { useSupportedInstances } from "@/api/queries"
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages"
 import { cn } from "@/lib/utils"
-import { damageRuleRows, formatLevelRange, rulesetEntries } from "./damageRuleRows"
+import { damageRuleRows, formatLevelRange, rulesetEntries, type RankedTime } from "./damageRuleRows"
 import { SpeedrunRequirements } from "./SpeedrunRequirements"
 
 function RulesSection({ id, icon, iconClassName, title, description, aside, children }: {
@@ -44,6 +44,22 @@ function TargetLegend() {
       <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-red-400" />Boss</span>
       <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-amber-400" />Add</span>
     </div>
+  )
+}
+
+function RankedTimeCell({ rankedTime, mode }: { rankedTime: RankedTime; mode: string }) {
+  if (rankedTime === "full") {
+    return <span className="whitespace-nowrap text-xs text-muted-foreground">Full encounter</span>
+  }
+  const targets = mode === "boss-only" ? "boss" : "target"
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground"
+      title={`From the first counted ${targets} engaging to the last counted ${targets} dying`}
+    >
+      <Clock className="h-3 w-3 text-emerald-300" />
+      First engage → last {targets} death
+    </span>
   )
 }
 
@@ -130,7 +146,7 @@ export function RulesetInstanceView({ instanceName }: { instanceName: string }) 
           title="DPS ranking targets"
           description={<>
             Rankings count effective damage (damage minus overkill, plus absorbed) to eligible targets.
-            Encounters not listed count all eligible hostile damage, including trash.
+            Encounters not listed count all eligible hostile damage, including trash, over the full encounter.
           </>}
         >
           {rows.length === 0 ? (
@@ -142,6 +158,7 @@ export function RulesetInstanceView({ instanceName }: { instanceName: string }) 
                   <tr className="border-b text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                     <th className="px-4 py-2 font-semibold sm:px-5">Encounter</th>
                     <th className="px-4 py-2 font-semibold sm:px-5">Counted damage</th>
+                    <th className="px-4 py-2 font-semibold sm:px-5">Ranked time</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -180,6 +197,9 @@ export function RulesetInstanceView({ instanceName }: { instanceName: string }) 
                           <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-muted-foreground">{row.note}</p>
                         )}
                       </td>
+                      <td className="px-4 py-2 align-top sm:px-5">
+                        <RankedTimeCell rankedTime={row.rankedTime} mode={row.mode} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -193,6 +213,16 @@ export function RulesetInstanceView({ instanceName }: { instanceName: string }) 
               damage to excluded targets move to Excluded. Hit counts, crit rate, and hit sizes still reflect the original hits.
             </span>
           </p>
+          {rows.some((row) => row.rankedTime === "window") && (
+            <p className="mt-2 flex gap-2 rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+              <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" />
+              <span>
+                Ranked time ends when the last counted target dies, so cleanup after the kill doesn&apos;t lower DPS.
+                The full encounter is used instead if a counted target survives, resets, or is engaged more than once.
+                Select the encounter on a log and click Ranked under it to filter panels to this window.
+              </span>
+            </p>
+          )}
         </RulesSection>
       )}
     </div>

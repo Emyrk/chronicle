@@ -1,3 +1,5 @@
+.artifact-tmp
+.claude/worktrees
 notes
 # Built binaries (anchored to repo root so they don't shadow the
 # same-named source dirs cmd/chronicled/ and scripts/dbcdata/).

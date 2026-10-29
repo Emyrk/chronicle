@@ -4,6 +4,8 @@ import {
   activePhaseForTimeRange,
   phaseTimeRangeSelection,
   phaseWidthPercent,
+  rangeStartPercent,
+  rankingWindowActiveForTimeRange,
 } from "./phaseTimeRange";
 
 const phase1: EncounterPhase = {
@@ -76,5 +78,24 @@ describe("activePhaseForTimeRange", () => {
   it("requires exactly one selected encounter and an enabled controller", () => {
     expect(activePhaseForTimeRange([encounter], false, 20_000, 40_000)).toBeNull();
     expect(activePhaseForTimeRange([encounter, { ...encounter, id: "encounter-2" }], true, 20_000, 40_000)).toBeNull();
+  });
+});
+
+describe("ranking window helpers", () => {
+  const windowed: Encounter = {
+    ...encounter,
+    ranking_window: { start_offset_ms: 4_000, end_offset_ms: 36_000 },
+  };
+
+  it("positions the ranked window within the encounter", () => {
+    expect(rangeStartPercent(windowed.ranking_window!, windowed)).toBe(10);
+    expect(phaseWidthPercent(windowed.ranking_window!, windowed)).toBe(80);
+  });
+
+  it("is active only when the controller range matches the window exactly", () => {
+    expect(rankingWindowActiveForTimeRange([windowed], true, 4_000, 36_000)).toBe(true);
+    expect(rankingWindowActiveForTimeRange([windowed], true, 0, 36_000)).toBe(false);
+    expect(rankingWindowActiveForTimeRange([windowed], false, 4_000, 36_000)).toBe(false);
+    expect(rankingWindowActiveForTimeRange([encounter], true, 4_000, 36_000)).toBe(false);
   });
 });

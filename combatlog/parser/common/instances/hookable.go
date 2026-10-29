@@ -461,23 +461,25 @@ func (h *Hookable) UpdateZoneDifficulty(z zone.Zone) {
 }
 
 // ShouldStartNewRun reports whether a later entry into the same zone should
-// start a new parsed instance. A qualified run uses its configured gap; killing
-// every required boss lowers longer gaps to the boss-completion gap.
+// start a new parsed instance. Incomplete runs use their configured gap, while
+// killing every required boss lowers longer gaps to the boss-completion gap.
 func (h *Hookable) ShouldStartNewRun(at time.Time) bool {
-	completedAt, gap, ok := h.speedrunReentryBoundary()
-	if !ok {
-		return false
+	completedAt, gap, completed := h.speedrunReentryBoundary()
+	if !completed {
+		var ok bool
+		gap, ok = h.speedrunReentryGap()
+		if !ok {
+			return false
+		}
 	}
 	lastActivity := h.lastActivity
 	if lastActivity.Before(completedAt) {
 		lastActivity = completedAt
 	}
-	return at.Sub(lastActivity) > gap
+	return !lastActivity.IsZero() && at.Sub(lastActivity) >= gap
 }
 
-func (h *Hookable) speedrunReentryBoundary() (time.Time, time.Duration, bool) {
-	var completedAt time.Time
-	var gap time.Duration
+func (h *Hookable) speedrunTrackers() []*rankings.SpeedrunTracker {
 	trackers := make([]*rankings.SpeedrunTracker, 0, 1+len(h.derivedSpeedrunTrackers))
 	if h.speedrunTracker != nil {
 		trackers = append(trackers, h.speedrunTracker)
@@ -485,7 +487,24 @@ func (h *Hookable) speedrunReentryBoundary() (time.Time, time.Duration, bool) {
 	for _, tracker := range h.derivedSpeedrunTrackers {
 		trackers = append(trackers, tracker)
 	}
-	for _, tracker := range trackers {
+	return trackers
+}
+
+func (h *Hookable) speedrunReentryGap() (time.Duration, bool) {
+	var gap time.Duration
+	for _, tracker := range h.speedrunTrackers() {
+		trackerGap := tracker.ReentryGap()
+		if gap == 0 || trackerGap < gap {
+			gap = trackerGap
+		}
+	}
+	return gap, gap > 0
+}
+
+func (h *Hookable) speedrunReentryBoundary() (time.Time, time.Duration, bool) {
+	var completedAt time.Time
+	var gap time.Duration
+	for _, tracker := range h.speedrunTrackers() {
 		at, trackerGap, complete := tracker.ReentryBoundary()
 		if !complete || (!completedAt.IsZero() && !at.After(completedAt)) {
 			continue
@@ -932,14 +951,33 @@ func (h *Hookable) finalizeFight() error {
 	if rules != nil {
 		damageRule = rules.DamageByEncounter[resolved.Name]
 	}
+	durationRule := rules.DurationTargets(resolved.Name)
+	// Assembly's phase-dependent ranking totals are not classified by the
+	// generic target rule. Do not shorten its denominator without also updating
+	// that specialized numerator.
+	if resolved.Boss && (rules == nil || rules.Damage != rankings.DamageRuleAssemblyOfIron) {
+		fight.RankingWindow = rankings.RankingWindow(fight, durationRule, func(id guid.GUID) bool {
+			if info, ok := h.units.Info[id]; ok && info.Boss {
+				return true
+			}
+			return h.IdentifyUnit(id).Boss
+		})
+	}
+	if fight.RankingWindow != nil && h.survivabilityTracker != nil {
+		// Recompute boss-ranking survivability using the same interval as DPS
+		// and HPS. Transitions before the interval still establish whether a
+		// player was already dead at its start.
+		h.survivabilityTracker.FightFinalized(fight.EncounterID, fight.RankingWindow.Start, fight.RankingWindow.End)
+	}
 	if err := h.currentFight.Events.Damage.SerializeBuffered(func(msg *messages.Damage) {
 		if h.dpsTracker != nil {
-			h.dpsTracker.ClassifyDamage(fight.EncounterID, damageRule, msg)
+			h.dpsTracker.ClassifyDamage(fight.EncounterID, damageRule, msg, fight.RankingWindow)
 		}
 	}); err != nil {
 		return fmt.Errorf("serializing classified damage: %w", err)
 	}
 	if h.dpsTracker != nil {
+		h.dpsTracker.ClassifyHealing(fight.EncounterID, fight.RankingWindow)
 		h.dpsTracker.FinishDamageClassification(fight.EncounterID)
 	}
 
@@ -1169,6 +1207,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		if err != nil {
 			return nil, err
 		}
+		enc.RankingWindow = fight.RankingWindow
 		encounters = append(encounters, enc)
 	}
 

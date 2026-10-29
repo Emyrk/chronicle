@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronicleproto"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -67,6 +68,36 @@ func TestZoneReentryDoesNotReuseDifferentDifficulty(t *testing.T) {
 	require.Same(t, state.Instances[1], state.CurrentInstance)
 }
 
+func TestIncompleteRaidReentryStartsNewInstanceAfterDefaultGap(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	state := NewWithInstanceResolver(ctx, logger, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
+		return instances.NewHookable(ctx, logger, db, firstZone, instances.InstanceParams{
+			Name:        "Naxxramas",
+			MatchesZone: func(z zone.Zone) bool { return z.Name == "naxxramas" },
+			Idf:         identifier.NewIdentifier(map[uint32]instances.Identity{}),
+			Rankings: &rankings.Rankings{Speedrun: &rankings.SpeedrunRules{
+				Requirements: []rankings.SpeedrunRequirement{{Name: "Unkilled Boss", EntryIDs: []uint32{1}, Count: 1}},
+			}},
+		})
+	})
+
+	seen := time.Date(2026, time.October, 20, 4, 52, 0, 0, time.UTC)
+	firstZone := messages.Zone{Zone: zone.Zone{Seen: seen, Name: "naxxramas", InstanceID: 123}}
+	require.NoError(t, state.Process(&firstZone))
+	require.NoError(t, state.Process(&messages.Versions{MessageBase: messages.Base(seen.Add(time.Minute))}))
+	require.Len(t, state.Instances, 1)
+	first := state.CurrentInstance
+
+	reentry := messages.Zone{Zone: zone.Zone{Seen: seen.Add(time.Minute + rankings.DefaultReentryGap), Name: "naxxramas", InstanceID: 123}}
+	require.NoError(t, state.Process(&reentry))
+
+	require.Len(t, state.Instances, 2)
+	require.NotSame(t, first, state.CurrentInstance)
+}
+
 func TestEncounterUsesSingleKnownMapWhenZoneOmitsIt(t *testing.T) {
 	t.Parallel()
 
@@ -105,6 +136,7 @@ func TestEncounterUsesSingleKnownMapWhenZoneOmitsIt(t *testing.T) {
 	}))
 
 	require.Len(t, state.Instances, 1)
+	require.Positive(t, state.InstanceProcessDuration(state.Instances[0]))
 	finalized, err := state.Instances[0].Finalize(ctx)
 	require.NoError(t, err)
 	require.Len(t, finalized.Encounters, 1)

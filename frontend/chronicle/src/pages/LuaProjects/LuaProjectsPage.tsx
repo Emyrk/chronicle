@@ -5,7 +5,7 @@ import { FolderOpen, Search } from "lucide-react"
 import { useSession } from "@/api/queries"
 import { authorPath, getMyAuthor, latestRelease, listProjects, listPublicProjects, type LuaProject } from "./api"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
-import { AddonTable } from "./AddonCard"
+import { AddonList } from "./AddonCard"
 import { AddonWelcome, ClaimAuthorForm, SignInPrompt } from "./AddonWelcome"
 import { NewAddonForm } from "./NewAddonForm"
 import { button, card, errorMessage } from "./addonUi"
@@ -49,7 +49,7 @@ export function LuaProjectsPage() {
         {author && <Link to={authorPath(author)} className={button}><FolderOpen className="size-4" /> My addons</Link>}
       </header>
       {welcome && <AddonWelcome step={!session || !author ? 0 : 1} author={author ?? undefined}>
-        {!session ? <SignInPrompt /> : !author ? <ClaimAuthorForm onClaimed={() => void authorQuery.refetch()} /> : <NewAddonForm author={author} first />}
+        {!session ? <SignInPrompt /> : !author ? <ClaimAuthorForm onClaimed={() => void authorQuery.refetch()} /> : <NewAddonForm author={author} />}
       </AddonWelcome>}
       <section aria-label="Browse addons" className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -67,11 +67,11 @@ export function LuaProjectsPage() {
           </div>
         </div>
         {publicQuery.isPending ? <div className="space-y-px overflow-hidden rounded-xl border border-border/60" aria-label="Loading addons">
-          {Array.from({ length: 6 }, (_, index) => <div key={index} className="h-14 animate-pulse bg-muted/30" />)}</div> :
+          {Array.from({ length: 6 }, (_, index) => <div key={index} className="h-20 animate-pulse bg-muted/30" />)}</div> :
           publicQuery.isError ? <p role="alert" className="text-sm text-destructive">{errorMessage(publicQuery.error)}</p> :
             publicQuery.data.length === 0 ? <p className={`${card} text-sm text-muted-foreground`}>No addons have been released yet.</p> :
               shown.length === 0 ? <p className={`${card} text-sm text-muted-foreground`}>No addons match “{query.trim()}”.</p> :
-                <AddonTable projects={shown} ranked={sort === "popular" && !query.trim()} />}
+                <AddonList projects={shown} ranked={sort === "popular" && !query.trim()} showAuthor />}
       </section>
     </main>
     <AdRailStack primaryPlacement="addons-right-rail" secondaryPlacement="addons-right-rail-lower" railLayout="paired-wide" />
