@@ -263,7 +263,8 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	canonicalID := uuid.New()
 	duplicateID := uuid.New()
 	incompleteID := uuid.New()
-	for _, instanceID := range []uuid.UUID{canonicalID, duplicateID, incompleteID} {
+	tiedID := uuid.New()
+	for _, instanceID := range []uuid.UUID{canonicalID, duplicateID, incompleteID, tiedID} {
 		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
 			ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
 			Name: "Molten Core", Capabilities: []string{},
@@ -275,40 +276,43 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 		Ids:              []uuid.UUID{canonicalID, duplicateID},
 	}))
 
-	insertEncounterRanking := func(instanceID uuid.UUID, encounterName, playerClass, playerSpec, playerSubSpec string, healing int64, killedAt time.Time) {
+	insertEncounterRanking := func(instanceID uuid.UUID, encounterName, playerGUID, playerName, playerClass, playerSpec, playerSubSpec string, healing int64, durationSecs float64, killedAt time.Time) {
 		t.Helper()
 		encounterID := uuid.New()
 		_, err := store.InsertEncounter(ctx, database.InsertEncounterParams{
 			ID: encounterID, InstanceID: instanceID, Name: encounterName,
 			KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: true,
-			StartTime: database.Timestamptz(killedAt.Add(-10 * time.Second)),
+			StartTime: database.Timestamptz(killedAt.Add(-time.Duration(durationSecs) * time.Second)),
 			EndTime:   database.Timestamptz(killedAt),
 		})
 		require.NoError(t, err)
 
-		hps := float64(healing) / 10
+		hps := float64(healing) / durationSecs
 		require.NoError(t, store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
 			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
 			InstanceID:  instanceID, EncounterName: encounterName, InstanceName: "Molten Core",
-			PlayerGuid: "P-HEALER", PlayerName: "Healer", PlayerClass: playerClass,
+			PlayerGuid: playerGUID, PlayerName: playerName, PlayerClass: playerClass,
 			PlayerSpec: playerSpec, PlayerSubSpec: playerSubSpec, PlayerRole: "heal", PlayerLevel: 60,
 			DifficultyName: "", MaxPlayers: 40, RealmID: realmID, RealmName: "test-realm",
-			HealingDone: healing, DurationSecs: 10, Hps: hps,
+			HealingDone: healing, DurationSecs: durationSecs, Hps: hps,
 			KilledAt: database.Timestamptz(killedAt), LogHashedSlug: instanceID.String(),
 		}))
 	}
 
 	// The group anchor is truncated before Ragnaros. The duplicate has the
 	// complete, internally consistent run and must be selected as representative.
-	insertEncounterRanking(canonicalID, "Lucifron", "PALADIN", "Holy", "", 100, baseTime)
-	insertEncounterRanking(canonicalID, "Magmadar", "PALADIN", "Holy", "", 100, baseTime.Add(time.Minute))
-	insertEncounterRanking(duplicateID, "Lucifron", "PRIEST", "Holy", "Bear", 900, baseTime)
-	insertEncounterRanking(duplicateID, "Magmadar", "PRIEST", "Holy", "Bear", 900, baseTime.Add(time.Minute))
-	insertEncounterRanking(duplicateID, "Ragnaros", "PRIEST", "Holy", "Bear", 900, baseTime.Add(2*time.Minute))
+	insertEncounterRanking(canonicalID, "Lucifron", "P-HEALER", "Anchor Healer", "PALADIN", "Holy", "", 100, 10, baseTime)
+	insertEncounterRanking(canonicalID, "Magmadar", "P-HEALER", "Anchor Healer", "PALADIN", "Holy", "", 100, 10, baseTime.Add(time.Minute))
+	insertEncounterRanking(duplicateID, "Lucifron", "P-HEALER", "Healer", "PRIEST", "Holy", "Bear", 900, 10, baseTime)
+	insertEncounterRanking(duplicateID, "Magmadar", "P-HEALER", "Healer", "PRIEST", "Holy", "Bear", 900, 10, baseTime.Add(time.Minute))
+	insertEncounterRanking(duplicateID, "Ragnaros", "P-HEALER", "Healer", "PRIEST", "Holy", "Bear", 900, 10, baseTime.Add(2*time.Minute))
+	// Equal-HPS duplicate encounter rows prefer the latest kill, and per-run
+	// display metadata uses the same deterministic timestamp tie-breaker.
+	insertEncounterRanking(duplicateID, "Lucifron", "P-HEALER", "Latest Healer", "PRIEST", "Holy", "Bear", 1800, 20, baseTime.Add(3*time.Minute))
 	// A separate truncated run has higher per-encounter HPS, but must not rank
 	// when the query explicitly requires all three encounters.
-	insertEncounterRanking(incompleteID, "Lucifron", "PRIEST", "Holy", "Bear", 2000, baseTime)
-	insertEncounterRanking(incompleteID, "Magmadar", "PRIEST", "Holy", "Bear", 2000, baseTime.Add(time.Minute))
+	insertEncounterRanking(incompleteID, "Lucifron", "P-HEALER", "Incomplete Healer", "PRIEST", "Holy", "Bear", 2000, 10, baseTime)
+	insertEncounterRanking(incompleteID, "Magmadar", "P-HEALER", "Incomplete Healer", "PRIEST", "Holy", "Bear", 2000, 10, baseTime.Add(time.Minute))
 
 	// Slugless instances must remain linkable by their instance ID when an older
 	// denormalized ranking row is also missing a slug.
@@ -355,8 +359,9 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, rows, 1)
 		assert.Equal(t, duplicateID.String(), rows[0].LogHashedSlug)
-		assert.Equal(t, int64(2700), rows[0].HealingDone)
-		assert.Equal(t, 30.0, rows[0].DurationSecs)
+		assert.Equal(t, "Latest Healer", rows[0].PlayerName)
+		assert.Equal(t, int64(3600), rows[0].HealingDone)
+		assert.Equal(t, 40.0, rows[0].DurationSecs)
 		assert.Equal(t, 90.0, rows[0].Hps)
 	}
 
@@ -367,7 +372,9 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, emptySelectionRows, 1)
 	assert.Equal(t, duplicateID.String(), emptySelectionRows[0].LogHashedSlug)
-	assert.Equal(t, int64(2700), emptySelectionRows[0].HealingDone)
+	assert.Equal(t, "Latest Healer", emptySelectionRows[0].PlayerName)
+	assert.Equal(t, int64(3600), emptySelectionRows[0].HealingDone)
+	assert.Equal(t, 40.0, emptySelectionRows[0].DurationSecs)
 	assert.Equal(t, 90.0, emptySelectionRows[0].Hps)
 
 	duplicateSelectionRows, err := store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
@@ -377,6 +384,32 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Empty(t, duplicateSelectionRows)
+
+	// Equal aggregate scores prefer the run with the latest completion time.
+	tiedTime := baseTime.Add(24 * time.Hour)
+	insertEncounterRanking(tiedID, "Lucifron", "P-HEALER", "Newest Run", "PRIEST", "Holy", "Bear", 900, 10, tiedTime)
+	insertEncounterRanking(tiedID, "Magmadar", "P-HEALER", "Newest Run", "PRIEST", "Holy", "Bear", 900, 10, tiedTime.Add(time.Minute))
+	insertEncounterRanking(tiedID, "Ragnaros", "P-HEALER", "Newest Run", "PRIEST", "Holy", "Bear", 900, 10, tiedTime.Add(2*time.Minute))
+
+	tiedRows, err := store.RankingsLeaderboard(ctx, equivalenceParams)
+	require.NoError(t, err)
+	require.Len(t, tiedRows, 1)
+	assert.Equal(t, tiedID.String(), tiedRows[0].LogHashedSlug)
+	assert.Equal(t, "Newest Run", tiedRows[0].PlayerName)
+
+	// Equal leaderboard scores use the player GUID as a stable pagination key.
+	insertEncounterRanking(tiedID, "Lucifron", "A-HEALER", "Alphabetical Healer", "PRIEST", "Holy", "Bear", 900, 10, tiedTime)
+	insertEncounterRanking(tiedID, "Magmadar", "A-HEALER", "Alphabetical Healer", "PRIEST", "Holy", "Bear", 900, 10, tiedTime.Add(time.Minute))
+	insertEncounterRanking(tiedID, "Ragnaros", "A-HEALER", "Alphabetical Healer", "PRIEST", "Holy", "Bear", 900, 10, tiedTime.Add(2*time.Minute))
+
+	pageRows, err := store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
+		Metric: "hps", QueryLimit: 1,
+		InstanceNames:  []string{"Molten Core"},
+		EncounterNames: []string{"Lucifron", "Magmadar", "Ragnaros"},
+	})
+	require.NoError(t, err)
+	require.Len(t, pageRows, 1)
+	assert.Equal(t, "A-HEALER", pageRows[0].PlayerGuid)
 }
 
 func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
@@ -424,13 +457,13 @@ func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
 		Ids:              []uuid.UUID{canonicalID, duplicateID},
 	}))
 
-	insertEncounterRanking := func(instanceID uuid.UUID, instanceName, encounterName string, healing int64, killedAt time.Time) {
+	insertEncounterRanking := func(instanceID uuid.UUID, instanceName, encounterName, playerSpec string, healing int64, durationSecs float64, killedAt time.Time) {
 		t.Helper()
 		encounterID := uuid.New()
 		_, err := store.InsertEncounter(ctx, database.InsertEncounterParams{
 			ID: encounterID, InstanceID: instanceID, Name: encounterName,
 			KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: true,
-			StartTime: database.Timestamptz(killedAt.Add(-10 * time.Second)),
+			StartTime: database.Timestamptz(killedAt.Add(-time.Duration(durationSecs) * time.Second)),
 			EndTime:   database.Timestamptz(killedAt),
 		})
 		require.NoError(t, err)
@@ -439,9 +472,9 @@ func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
 			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
 			InstanceID:  instanceID, EncounterName: encounterName, InstanceName: instanceName,
 			PlayerGuid: "P-HEALER", PlayerName: "Healer", PlayerClass: "PRIEST",
-			PlayerSpec: "Holy", PlayerRole: "heal", PlayerLevel: 60,
+			PlayerSpec: playerSpec, PlayerRole: "heal", PlayerLevel: 60,
 			DifficultyName: "", MaxPlayers: 40, RealmID: realmID, RealmName: "test-realm",
-			HealingDone: healing, DurationSecs: 10, Hps: float64(healing) / 10,
+			HealingDone: healing, DurationSecs: durationSecs, Hps: float64(healing) / durationSecs,
 			KilledAt: database.Timestamptz(killedAt), LogHashedSlug: instanceID.String(),
 		}))
 	}
@@ -451,11 +484,14 @@ func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
 	// verifies explicit encounter selections require every requested encounter.
 	// The unrelated instance ensures instance-scoped representative selection
 	// preserves query results.
-	insertEncounterRanking(canonicalID, "Molten Core", "Lucifron", 100, baseTime)
-	insertEncounterRanking(duplicateID, "Molten Core", "Lucifron", 900, baseTime)
-	insertEncounterRanking(duplicateID, "Molten Core", "Magmadar", 900, baseTime.Add(time.Minute))
-	insertEncounterRanking(incompleteID, "Molten Core", "Lucifron", 2000, baseTime)
-	insertEncounterRanking(unrelatedID, "Blackwing Lair", "Razorgore", 5000, baseTime)
+	insertEncounterRanking(canonicalID, "Molten Core", "Lucifron", "Holy", 100, 10, baseTime)
+	insertEncounterRanking(duplicateID, "Molten Core", "Lucifron", "Holy", 900, 10, baseTime)
+	insertEncounterRanking(duplicateID, "Molten Core", "Magmadar", "Discipline", 900, 10, baseTime.Add(time.Minute))
+	// Equal-HPS duplicate encounter rows prefer the latest kill. Selecting the
+	// newer Discipline row makes the run complete under one consistent spec.
+	insertEncounterRanking(duplicateID, "Molten Core", "Lucifron", "Discipline", 1800, 20, baseTime.Add(2*time.Minute))
+	insertEncounterRanking(incompleteID, "Molten Core", "Lucifron", "Holy", 2000, 10, baseTime)
+	insertEncounterRanking(unrelatedID, "Blackwing Lair", "Razorgore", "Holy", 5000, 10, baseTime)
 
 	rows, err := store.RankingsBoxPlotStats(ctx, database.RankingsBoxPlotStatsParams{
 		Metric:         "hps",
@@ -466,7 +502,7 @@ func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "PRIEST", rows[0].PlayerClass)
-	assert.Equal(t, "Holy", rows[0].PlayerSpec)
+	assert.Equal(t, "Discipline", rows[0].PlayerSpec)
 	assert.Equal(t, int64(1), rows[0].Count)
 	assert.Equal(t, 90.0, rows[0].MedianDps)
 

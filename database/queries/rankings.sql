@@ -423,7 +423,10 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
     END
     AND (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) > 0
     ORDER BY edr.player_guid, edr.encounter_name, ri.run_id,
-        (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
+        (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC,
+        edr.killed_at DESC,
+        edr.encounter_id DESC NULLS LAST,
+        edr.id ASC
 ),
 -- Explicit encounter selections define the required run coverage. Without an
 -- explicit selection, compute coverage per realm because different realms can
@@ -441,19 +444,19 @@ per_run AS (
     SELECT
         d.player_guid,
         d.run_id,
-        ((array_agg(d.player_name ORDER BY d.damage_done DESC))[1])::text AS player_name,
-        ((array_agg(d.player_class ORDER BY d.damage_done DESC))[1])::text AS player_class,
+        ((array_agg(d.player_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS player_name,
+        ((array_agg(d.player_class ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS player_class,
         (string_agg(DISTINCT d.player_spec, '/' ORDER BY d.player_spec))::text AS player_spec,
         (string_agg(DISTINCT d.player_sub_spec, '/' ORDER BY d.player_sub_spec))::text AS player_sub_spec,
-        ((array_agg(d.player_role ORDER BY d.damage_done DESC))[1])::text AS player_role,
+        ((array_agg(d.player_role ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS player_role,
         MAX(d.player_level)::smallint AS player_level,
-        ((array_agg(d.instance_name ORDER BY d.damage_done DESC))[1])::text AS instance_name,
-        ((array_agg(d.encounter_name ORDER BY d.damage_done DESC))[1])::text AS encounter_name,
-        ((array_agg(d.difficulty_name ORDER BY d.damage_done DESC))[1])::text AS difficulty_name,
+        ((array_agg(d.instance_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS instance_name,
+        ((array_agg(d.encounter_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS encounter_name,
+        ((array_agg(d.difficulty_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS difficulty_name,
         MAX(d.max_players)::smallint AS max_players,
-        ((array_agg(d.realm_id ORDER BY d.damage_done DESC))[1])::uuid AS realm_id,
-        ((array_agg(d.realm_name ORDER BY d.damage_done DESC))[1])::text AS realm_name,
-        ((array_agg(d.guild_name ORDER BY d.damage_done DESC))[1])::text AS guild_name,
+        ((array_agg(d.realm_id ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::uuid AS realm_id,
+        ((array_agg(d.realm_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS realm_name,
+        ((array_agg(d.guild_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS guild_name,
         SUM(d.damage_done)::bigint AS damage_done,
         SUM(d.healing_done)::bigint AS healing_done,
         SUM(d.absorbed_done)::bigint AS absorbed_done,
@@ -470,10 +473,10 @@ per_run AS (
         (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS dps,
         (SUM(d.healing_done + d.absorbed_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS hps,
         COALESCE(MAX(d.avg_ilvl), 0)::smallint AS avg_ilvl,
-        ((array_agg(d.log_hashed_slug ORDER BY d.damage_done DESC))[1])::text AS log_hashed_slug,
+        ((array_agg(d.log_hashed_slug ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS log_hashed_slug,
         MAX(d.killed_at)::timestamptz AS killed_at,
-        COALESCE((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1], '')::text AS talent_sub_spec,
-        COALESCE((array_agg(d.talent_layout ORDER BY d.damage_done DESC))[1], '')::text AS talent_layout
+        COALESCE((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1], '')::text AS talent_sub_spec,
+        COALESCE((array_agg(d.talent_layout ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1], '')::text AS talent_layout
     FROM deduped d
     LEFT JOIN realm_encounter_counts rec ON rec.realm_id = d.realm_id
     GROUP BY d.player_guid, d.run_id, rec.encounter_count
@@ -516,14 +519,18 @@ aggregated AS (
         pr.talent_sub_spec,
         pr.talent_layout
     FROM per_run pr
-    ORDER BY pr.player_guid, (CASE WHEN @metric :: text = 'hps' THEN pr.hps ELSE pr.dps END) DESC
+    ORDER BY pr.player_guid,
+        (CASE WHEN @metric :: text = 'hps' THEN pr.hps ELSE pr.dps END) DESC,
+        pr.killed_at DESC,
+        pr.run_id ASC
 )
 SELECT
     a.*,
     COUNT(*) OVER() AS total_count
 FROM aggregated a
 WHERE (CASE WHEN @metric :: text = 'hps' THEN a.hps ELSE a.dps END) > 0
-ORDER BY (CASE WHEN @metric :: text = 'hps' THEN a.hps ELSE a.dps END) DESC
+ORDER BY (CASE WHEN @metric :: text = 'hps' THEN a.hps ELSE a.dps END) DESC,
+    a.player_guid ASC
 LIMIT @query_limit::bigint
 OFFSET @query_offset::bigint;
 
@@ -641,7 +648,10 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         ELSE true
     END
     ORDER BY edr.player_guid, edr.encounter_name, ri.run_id,
-        (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
+        (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC,
+        edr.killed_at DESC,
+        edr.encounter_id DESC NULLS LAST,
+        edr.id ASC
 ),
 -- Explicit encounter selections define the required run coverage. Without an
 -- explicit selection, compute coverage per realm because different realms can
