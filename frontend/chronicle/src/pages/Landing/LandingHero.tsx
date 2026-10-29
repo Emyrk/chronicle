@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { Pause, Play } from "lucide-react";
 import type { LandingFeaturedDeath, LandingFeaturedRun } from "@/api/typesGenerated";
+import { Button } from "@/components/ui/button";
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
 import { trackFunnel } from "@/utils/funnel";
 import type { HeroDeathRecap, HeroReplay } from "./heroReplay";
@@ -67,12 +68,12 @@ function currentBossName(run: LandingFeaturedRun, currentMs: number) {
 
 function BossChip({ label, active, fixedWidth, onClick }: { label: string; active?: boolean; fixedWidth?: boolean; onClick?: () => void }) {
   // Fixed width in the desktop window: the window keeps one width as the active boss moves, so the bar never shifts.
-  const className = `whitespace-nowrap rounded-md border px-2.5 py-1.5 text-xs text-[#e8eef8] lg:py-1 ${
+  const className = `whitespace-nowrap rounded-md border px-2.5 py-1.5 text-xs text-foreground lg:py-1 ${
     fixedWidth ? "w-28 truncate text-center" : ""
-  } ${active ? "border-[#4fd1c5] bg-[#4fd1c5]/20" : "border-[#5f6d88] bg-[#0c1322]/70"}`;
+  } ${active ? "border-primary bg-primary/20" : "border-border bg-background/70"}`;
   if (!onClick) return <span className={className} title={label}>{label}</span>;
   return (
-    <button type="button" onClick={onClick} title={`Jump to ${label}`} className={`${className} hover:border-[#8a97ad]`}>
+    <button type="button" onClick={onClick} title={`Jump to ${label}`} className={`${className} hover:border-primary`}>
       {label}
     </button>
   );
@@ -89,7 +90,7 @@ function DeathCard({ death, recap, leftPercent, open }: {
   return (
     <div
       role="tooltip"
-      className={`pointer-events-none absolute bottom-full z-20 mb-3 w-60 flex-col gap-1.5 rounded-lg border border-[#27324a] bg-[#0c1322]/95 p-3 text-left text-xs text-[#d2dae8] shadow-lg ${
+      className={`pointer-events-none absolute bottom-full z-20 mb-3 w-60 flex-col gap-1.5 rounded-md border bg-popover/95 p-3 text-left text-xs text-popover-foreground shadow-lg ${
         open ? "flex" : "hidden"
       }`}
       // Centred on the dot, kept inside the bar's width.
@@ -97,12 +98,12 @@ function DeathCard({ death, recap, leftPercent, open }: {
     >
       <div className="flex items-center gap-2">
         <ClassIcon cls={death.victim_class} className="h-5 w-5 rounded-sm" />
-        <span className="truncate text-sm font-semibold text-[#e8eef8]">{death.victim_name}</span>
-        <span className="ml-auto shrink-0 font-mono text-[#8a97ad]">fell at {formatClock(death.offset_ms)}</span>
+        <span className="truncate text-sm font-semibold text-foreground">{death.victim_name}</span>
+        <span className="ml-auto shrink-0 font-mono text-muted-foreground">fell at {formatClock(death.offset_ms)}</span>
       </div>
       <div className="truncate">
         {death.killer_name ? <>Killed by <span className="font-semibold text-[#f0a8a8]">{death.killer_name}</span></> : "Died"}
-        {recap?.killingBlow ? <span className="text-[#8a97ad]"> · {recap.killingBlow}</span> : null}
+        {recap?.killingBlow ? <span className="text-muted-foreground"> · {recap.killingBlow}</span> : null}
       </div>
       {recap && recap.beats.length > 0 && (
         <div className="flex flex-col gap-1">
@@ -115,7 +116,7 @@ function DeathCard({ death, recap, leftPercent, open }: {
                 <div
                   key={i}
                   className={`absolute w-[3px] -translate-x-1/2 rounded-sm ${
-                    beat.kind === "heal" ? "bottom-1/2 bg-[#7ed98a]" : beat.kind === "hit" ? "top-1/2 bg-[#f0a8a8]" : "top-0 bg-[#e0b45c]"
+                    beat.kind === "heal" ? "bottom-1/2 bg-[#7ed98a]" : beat.kind === "hit" ? "top-1/2 bg-[#f0a8a8]" : "top-0 bg-accent"
                   }`}
                   style={{
                     left: `${100 - (beat.beforeMs / DEATH_STRIP_MS) * 100}%`,
@@ -125,11 +126,11 @@ function DeathCard({ death, recap, leftPercent, open }: {
               );
             })}
           </div>
-          <div className="flex items-center gap-2.5 text-[10px] text-[#8a97ad]">
+          <div className="flex items-center gap-2.5 text-[10px] text-muted-foreground">
             <span>last 10 s</span>
             <span className="inline-flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 bg-[#f0a8a8]" />hits</span>
             <span className="inline-flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 bg-[#7ed98a]" />heals</span>
-            <span className="inline-flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 bg-[#e0b45c]" />killing blow</span>
+            <span className="inline-flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 bg-accent" />killing blow</span>
           </div>
         </div>
       )}
@@ -274,16 +275,16 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
             trackInteraction("play_pause");
             playback?.togglePlay();
           }}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#5f6d88] bg-[#0c1322]/70 text-[#e8eef8] lg:h-10 lg:w-10"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border bg-background/70 text-foreground hover:bg-accent/50 lg:h-10 lg:w-10"
         >
           {playing
             ? <Pause className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
             : <Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" />}
         </button>
-        <div className="order-last font-mono text-xs text-[#e8eef8] lg:order-none lg:text-[13px]" aria-hidden="true">
+        <div className="order-last font-mono text-xs text-foreground lg:order-none lg:text-[13px]" aria-hidden="true">
           {/* As wide as the longest time, so the bar does not shift as digits are added. */}
           <span className="inline-block text-right" style={{ minWidth: `${duration.length}ch` }}>{formatClock(shownMs)}</span>
-          <span className="hidden text-[#8a97ad] lg:inline"> / {duration}</span>
+          <span className="hidden text-muted-foreground lg:inline"> / {duration}</span>
         </div>
         <div className="relative min-w-0 flex-1">
           {/* The hit area is taller than the 6 px bar; horizontal drags scrub, vertical ones still scroll the page. */}
@@ -295,7 +296,7 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
             aria-valuemax={Math.floor(run.duration_ms / 1000)}
             aria-valuenow={Math.floor(shownMs / 1000)}
             aria-valuetext={`${formatClock(shownMs)} of ${duration}`}
-            className="relative flex h-6 cursor-pointer touch-pan-y items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#4fd1c5]"
+            className="relative flex h-6 cursor-pointer touch-pan-y items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onPointerDown={onTrackPointerDown}
             onPointerMove={onTrackPointerMove}
             onPointerUp={endDrag}
@@ -303,14 +304,14 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
           >
             <div ref={trackRef} className="relative h-1.5 w-full rounded-full bg-white/20">
               <div
-                className="absolute inset-y-0 left-0 rounded-full bg-[#4fd1c5]"
+                className="absolute inset-y-0 left-0 rounded-full bg-primary"
                 style={{ width: `${percentOf(shownMs, run.duration_ms)}%` }}
               />
               {run.bosses.map((boss, i) => (
                 <div
                   key={`${boss.name}-${i}`}
                   title={boss.name}
-                  className="absolute -top-[3px] h-3 w-0.5 bg-[#e0b45c]"
+                  className="absolute -top-[3px] h-3 w-0.5 bg-accent"
                   style={{ left: `${percentOf(boss.start_offset_ms, run.duration_ms)}%` }}
                 />
               ))}
@@ -333,7 +334,7 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
               onBlur={() => setFocusedDeath(null)}
               onClick={() => onDeathClick(i)}
             >
-              <span className="h-2.5 w-2.5 rounded-full border-2 border-[#0c1322] bg-[#f0a8a8]" />
+              <span className="h-2.5 w-2.5 rounded-full border-2 border-background bg-[#f0a8a8]" />
             </button>
           ))}
           {/* Every card stays mounted (hidden until open), so its class icon loads once with the bar and a hover fetches nothing. */}
@@ -353,7 +354,7 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
               <BossChip key={name} label={name} active={name === current} fixedWidth onClick={chipClick(name)} />
             ))}
             {hiddenChips > 0 && (
-              <span className="w-10 rounded-md border border-[#5f6d88] bg-[#0c1322]/70 py-1 text-center text-xs text-[#8a97ad]">
+              <span className="w-10 rounded-md border bg-background/70 py-1 text-center text-xs text-muted-foreground">
                 +{hiddenChips}
               </span>
             )}
@@ -367,16 +368,16 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
           ))}
         </div>
       )}
-      <div className="hidden gap-4 pl-[54px] text-xs text-[#b7c2d6] lg:flex">
+      <div className="hidden gap-4 pl-[54px] text-xs text-muted-foreground lg:flex">
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-2 w-2 bg-[#e0b45c]" />
+          <span className="inline-block h-2 w-2 bg-accent" />
           boss pull
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block h-2 w-2 rounded-full bg-[#f0a8a8]" />
           a death · hover to see the killing blow
         </span>
-        <span className="text-[#8a97ad]">Drag the bar. Yes, right now.</span>
+        <span className="text-muted-foreground/80">Drag the bar. Yes, right now.</span>
       </div>
     </div>
   );
@@ -397,7 +398,7 @@ export function LandingHero({
   const delayMinutes = delayMs != null ? Math.max(1, Math.round(delayMs / 60_000)) : 0;
 
   return (
-    <section id="top" className="relative h-[520px] overflow-hidden border-b border-[#27324a] bg-[#101829] lg:h-[580px]">
+    <section id="top" className="relative h-[520px] overflow-hidden border-b bg-card lg:h-[580px]">
       <picture>
         {posterPortrait ? <source media="(max-width: 1023px)" srcSet={posterPortrait} /> : null}
         <img
@@ -408,43 +409,41 @@ export function LandingHero({
         />
       </picture>
       {layer3D ? <div className="absolute inset-0">{layer3D}</div> : null}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0c1322]/25 via-[#0c1322]/35 to-[#0c1322]/95 lg:hidden" />
-      <div className="absolute inset-0 hidden bg-[linear-gradient(90deg,rgba(12,19,34,0.94)_0%,rgba(12,19,34,0.78)_38%,rgba(12,19,34,0.12)_100%)] lg:block" />
-      <div className="absolute inset-x-0 bottom-0 hidden h-[150px] bg-gradient-to-b from-[#0c1322]/0 to-[#0c1322]/95 lg:block" />
+      {/* The page background over the poster; index.html's poster shell draws the same gradients. */}
+      <div className="absolute inset-0 bg-gradient-to-b from-background/25 via-background/35 to-background/95 lg:hidden" />
+      <div className="absolute inset-0 hidden bg-gradient-to-r from-background/95 via-background/80 via-38% to-background/10 lg:block" />
+      <div className="absolute inset-x-0 bottom-0 hidden h-[150px] bg-gradient-to-b from-background/0 to-background/95 lg:block" />
 
       <div className="relative mx-auto flex h-full max-w-[1180px] flex-col justify-end gap-3 px-4 pb-[18px] pt-4 lg:justify-start lg:gap-[18px] lg:px-8 lg:pb-0 lg:pt-[52px]">
         {featured && (
-          <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#4fd1c5] lg:text-xs">
-            <span className="inline-block h-2 w-2 rounded-full bg-[#4fd1c5]" />
+          <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary lg:text-xs">
+            <span className="inline-block h-2 w-2 rounded-full bg-primary" />
             Playing now · {featured.instance_name}
             {bossName && <span className="hidden lg:inline"> · {bossName}</span>}
           </div>
         )}
-        <h1 className="m-0 max-w-[640px] font-['Libre_Baskerville',Georgia,serif] text-[34px] font-bold leading-[1.06] text-[#e8eef8] lg:text-[54px] lg:leading-[1.04]">
+        <h1 className="m-0 max-w-[640px] text-[34px] font-bold leading-[1.06] tracking-tight text-foreground lg:text-[54px] lg:leading-[1.04]">
           Your dungeon run, replayed in 3D.
         </h1>
-        <p className="m-0 max-w-[540px] text-[15px] leading-normal text-[#d2dae8] lg:text-lg">
+        <p className="m-0 max-w-[540px] text-[15px] leading-normal text-foreground/85 lg:text-lg">
           Sidekick sits in your tray and uploads the fight while you loot. Watch your group walk the real floor, see
           who died to what, send the link to the party.
         </p>
         <div className="mt-1 hidden flex-wrap items-center gap-3 lg:flex">
-          <a
-            href={getSidekickHref}
-            onClick={() => trackFunnel("cta_sidekick", { placement: "hero" })}
-            className="rounded-[10px] bg-[#e0b45c] px-[22px] py-3.5 text-base font-semibold text-[#0c1322] no-underline hover:bg-[#e8c477]"
-          >
-            Get Sidekick, free
-          </a>
-          <a
-            href="#runs"
-            className="rounded-[10px] border border-[#5f6d88] bg-[#0c1322]/50 px-5 py-3.5 text-base font-medium text-[#e8eef8] no-underline hover:border-[#8a97ad]"
-          >
-            Open this replay
-          </a>
-          <span className="text-[13px] text-[#b7c2d6]">Mac &amp; Windows · no account to watch</span>
+          <Button asChild variant="button-bright" size="lg" className="h-12 text-base font-semibold">
+            <a href={getSidekickHref} onClick={() => trackFunnel("cta_sidekick", { placement: "hero" })} className="no-underline">
+              Get Sidekick, free
+            </a>
+          </Button>
+          <Button asChild variant="outline" size="lg" className="h-12 text-base">
+            <a href="#runs" className="no-underline">
+              Open this replay
+            </a>
+          </Button>
+          <span className="text-[13px] text-muted-foreground">Mac &amp; Windows · no account to watch</span>
         </div>
         {delayMs != null && (
-          <div className="hidden items-center gap-2.5 self-start rounded-lg border border-[#27324a] bg-[#0c1322]/70 px-3 py-2 text-[13px] text-[#d2dae8] lg:inline-flex">
+          <div className="hidden items-center gap-2.5 self-start rounded-md border bg-background/70 px-3 py-2 text-[13px] text-foreground/85 lg:inline-flex">
             <span className="inline-block h-3 w-3 rounded-full bg-[#7ed98a]" />
             Recorded by Sidekick. Online {delayMinutes} {delayMinutes === 1 ? "minute" : "minutes"} after the group left.
           </div>
