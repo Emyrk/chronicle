@@ -1380,8 +1380,6 @@ func NaxxramasHostiles(fl database.WoWFlavor) map[uint32]Identity {
 		16028: "Patchwerk",
 		15931: "Grobbulus",
 		15932: "Gluth",
-		15930: "Thaddius", // "Feugen"
-		15929: "Thaddius", // "Stalagg"
 		15928: "Thaddius",
 		15956: "Anub'Rekhan",
 		15953: "Grand Widow Faerlina",
