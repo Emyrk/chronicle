@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,46 +18,65 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )
 
-// landingFeaturedTTL bounds how long a site-setting change takes to reach the
-// landing on every replica; the local replica also drops its cache on update.
-const landingFeaturedTTL = 30 * time.Second
+// landingFeaturedTTL bounds how often the hero's pick (the newest positional
+// run) is recomputed per tenant, and how long a site-setting change takes to
+// reach the landing on every replica; the local replica also drops its cache
+// on update.
+const landingFeaturedTTL = 3 * time.Minute
 
-// landingFeaturedCache holds the /start hero payload. It is hit by every ad
-// click, so it is computed once per TTL rather than per request.
+// landingPickCandidates bounds how many of the newest positional runs the
+// pick looks through for one whose last boss pull has a published mesh.
+const landingPickCandidates = 20
+
+// landingFeaturedCache holds the /start hero payload per tenant. It is hit by
+// every ad click, so it is computed once per TTL rather than per request.
 type landingFeaturedCache struct {
 	mu      sync.Mutex
+	entries map[uuid.UUID]landingFeaturedEntry
+}
+
+type landingFeaturedEntry struct {
 	resp    chroniclesdk.LandingFeaturedResponse
 	expires time.Time
 }
 
-func (c *landingFeaturedCache) get(ctx context.Context, load func(context.Context) (*chroniclesdk.LandingFeaturedRun, error)) (chroniclesdk.LandingFeaturedResponse, error) {
+func (c *landingFeaturedCache) get(ctx context.Context, tenantID uuid.UUID, load func(context.Context) (*chroniclesdk.LandingFeaturedRun, error)) (chroniclesdk.LandingFeaturedResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if time.Now().Before(c.expires) {
-		return c.resp, nil
+	entry := c.entries[tenantID]
+	if time.Now().Before(entry.expires) {
+		return entry.resp, nil
+	}
+	if c.entries == nil {
+		c.entries = make(map[uuid.UUID]landingFeaturedEntry)
 	}
 	run, err := load(ctx)
 	if err != nil {
 		// Serve the last good payload and retry soon.
-		c.expires = time.Now().Add(5 * time.Second)
-		return c.resp, err
+		entry.expires = time.Now().Add(5 * time.Second)
+		c.entries[tenantID] = entry
+		return entry.resp, err
 	}
-	c.resp = chroniclesdk.LandingFeaturedResponse{Featured: run}
-	c.expires = time.Now().Add(landingFeaturedTTL)
-	return c.resp, nil
+	c.entries[tenantID] = landingFeaturedEntry{
+		resp:    chroniclesdk.LandingFeaturedResponse{Featured: run},
+		expires: time.Now().Add(landingFeaturedTTL),
+	}
+	return c.entries[tenantID].resp, nil
 }
 
 func (c *landingFeaturedCache) invalidate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.expires = time.Time{}
+	c.entries = nil
 }
 
 // LandingFeatured returns hero metadata for the featured run on /start.
@@ -66,7 +87,14 @@ func (c *landingFeaturedCache) invalidate() {
 //	@Router   /api/v1/landing/featured [get]
 func (a *API) LandingFeatured(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	resp, err := a.landing.get(a.AppContext, a.loadLandingFeatured)
+	// Loaded on the app context (a request's cancellation must not fail the
+	// shared cache), scoped to the request's tenant.
+	tenantID := servicetenant.TenantIDFromContext(ctx)
+	loadCtx := a.AppContext
+	if tenantID != uuid.Nil {
+		loadCtx = servicetenant.WithTenantID(loadCtx, tenantID)
+	}
+	resp, err := a.landing.get(loadCtx, tenantID, a.loadLandingFeatured)
 	if err != nil {
 		a.Opts.Logger.WarnContext(ctx, "load landing featured run", "error", err)
 	}
@@ -89,11 +117,96 @@ func (a *API) loadLandingFeatured(ctx context.Context) (*chroniclesdk.LandingFea
 	if err != nil {
 		return nil, fmt.Errorf("get site config: %w", err)
 	}
-	id := a.landingFeaturedInstanceID(config)
-	if id == uuid.Nil {
-		return nil, nil
+	if id := a.landingFeaturedInstanceID(config); id != uuid.Nil {
+		return a.loadLandingRun(ctx, id, nil)
 	}
+	return a.pickLandingRun(ctx)
+}
 
+// pickLandingRun is the tenant's newest public run with unit positions whose
+// last boss pull has a published dungeon mesh for its map, or nil.
+func (a *API) pickLandingRun(ctx context.Context) (*chroniclesdk.LandingFeaturedRun, error) {
+	db := a.Opts.Zed
+	candidates, err := db.LandingPositionalInstances(ctx, landingPickCandidates)
+	if err != nil {
+		return nil, fmt.Errorf("list positional instances: %w", err)
+	}
+	meshMaps := a.landingMeshMaps
+	if meshMaps == nil {
+		meshMaps = a.datasetMeshMaps
+	}
+	// Candidates share realms, so each realm's manifest is read once.
+	meshesByRealm := make(map[uuid.UUID]map[int32]bool)
+	for _, candidate := range candidates {
+		meshes, ok := meshesByRealm[candidate.RealmID]
+		if !ok {
+			meshes, err = meshMaps(ctx, candidate.RealmID)
+			if err != nil {
+				return nil, fmt.Errorf("published meshes for realm %s: %w", candidate.RealmID, err)
+			}
+			meshesByRealm[candidate.RealmID] = meshes
+		}
+		encounters, err := db.EncountersByInstanceID(ctx, candidate.ID)
+		if err != nil {
+			return nil, fmt.Errorf("get encounters: %w", err)
+		}
+		last, ok := lastBossEncounter(encounters)
+		if !ok || !meshes[last.MapID] {
+			continue
+		}
+		return a.loadLandingRun(ctx, candidate.ID, encounters)
+	}
+	return nil, nil
+}
+
+// landingTimeRange is the instance's time range, falling back to its
+// encounters' span where the instance has none (as the frontend's instance
+// start falls back to the first encounter's), so offsets line up with the
+// replay.
+func landingTimeRange(startTime, endTime pgtype.Timestamptz, encounters []database.LogInstanceEncounter) (time.Time, time.Time, bool) {
+	start, end := startTime.Time, endTime.Time
+	for _, enc := range encounters {
+		if !startTime.Valid && enc.StartTime.Valid && (start.IsZero() || enc.StartTime.Time.Before(start)) {
+			start = enc.StartTime.Time
+		}
+		if !endTime.Valid && enc.EndTime.Valid && enc.EndTime.Time.After(end) {
+			end = enc.EndTime.Time
+		}
+	}
+	return start, end, !start.IsZero() && !end.IsZero()
+}
+
+// lastBossEncounter is the last boss kill, else the last boss wipe.
+func lastBossEncounter(encounters []database.LogInstanceEncounter) (database.LogInstanceEncounter, bool) {
+	var kill, wipe *database.LogInstanceEncounter
+	for i, enc := range encounters {
+		if !enc.Boss || !enc.StartTime.Valid || !enc.EndTime.Valid {
+			continue
+		}
+		switch enc.KillType {
+		case database.KillTypeClean, database.KillTypePartial:
+			if kill == nil || enc.StartTime.Time.After(kill.StartTime.Time) {
+				kill = &encounters[i]
+			}
+		case database.KillTypeWipe:
+			if wipe == nil || enc.StartTime.Time.After(wipe.StartTime.Time) {
+				wipe = &encounters[i]
+			}
+		}
+	}
+	if kill != nil {
+		return *kill, true
+	}
+	if wipe != nil {
+		return *wipe, true
+	}
+	return database.LogInstanceEncounter{}, false
+}
+
+// loadLandingRun builds the hero payload for one instance. encounters may be
+// nil, and are then loaded.
+func (a *API) loadLandingRun(ctx context.Context, id uuid.UUID, encounters []database.LogInstanceEncounter) (*chroniclesdk.LandingFeaturedRun, error) {
+	db := a.Opts.Zed
 	row, err := db.InstanceWithUnlisted(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("featured instance %s not found", id)
@@ -102,14 +215,19 @@ func (a *API) loadLandingFeatured(ctx context.Context) (*chroniclesdk.LandingFea
 		return nil, fmt.Errorf("get instance: %w", err)
 	}
 	inst := row.LogInstancesGuild
-	if row.Unlisted || inst.InvalidatedAt.Valid || !inst.StartTime.Valid || !inst.EndTime.Valid {
-		return nil, fmt.Errorf("featured instance %s is unlisted, invalidated or has no time range", id)
+	if row.Unlisted || inst.InvalidatedAt.Valid {
+		return nil, fmt.Errorf("featured instance %s is unlisted or invalidated", id)
 	}
-	start, end := inst.StartTime.Time, inst.EndTime.Time
 
-	encounters, err := db.EncountersByInstanceID(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("get encounters: %w", err)
+	if encounters == nil {
+		encounters, err = db.EncountersByInstanceID(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("get encounters: %w", err)
+		}
+	}
+	start, end, ok := landingTimeRange(inst.StartTime, inst.EndTime, encounters)
+	if !ok {
+		return nil, fmt.Errorf("featured instance %s has no time range", id)
 	}
 	players, err := db.InstancePlayersByInstanceID(ctx, id)
 	if err != nil {
@@ -144,6 +262,16 @@ func (a *API) loadLandingFeatured(ctx context.Context) (*chroniclesdk.LandingFea
 		Bosses:       []chroniclesdk.LandingFeaturedBoss{},
 		Deaths:       []chroniclesdk.LandingFeaturedDeath{},
 		Upload:       landingUpload(group, end),
+	}
+
+	if last, ok := lastBossEncounter(encounters); ok {
+		run.Encounter = &chroniclesdk.LandingFeaturedEncounter{
+			ID:            last.ID,
+			Name:          last.Name,
+			Kill:          last.KillType != database.KillTypeWipe,
+			StartOffsetMs: last.StartTime.Time.Sub(start).Milliseconds(),
+			EndOffsetMs:   last.EndTime.Time.Sub(start).Milliseconds(),
+		}
 	}
 
 	sort.Slice(encounters, func(i, j int) bool { return encounters[i].StartTime.Time.Before(encounters[j].StartTime.Time) })
@@ -181,6 +309,84 @@ func (a *API) loadLandingFeatured(ctx context.Context) (*chroniclesdk.LandingFea
 	}
 	sort.SliceStable(run.Deaths, func(i, j int) bool { return run.Deaths[i].OffsetMs < run.Deaths[j].OffsetMs })
 	return run, nil
+}
+
+// landingMeshFrame is the one glTF axis convention the 3D map places
+// (DUNGEON_MESH_FRAME in the frontend's dungeonMeshes.ts).
+const landingMeshFrame = "wow-yup-mirrored-x"
+
+// landingMapManifest is the part of the maps manifest (frontend
+// mapGallery.ts, WowMapManifest) that says which maps have a dungeon mesh.
+type landingMapManifest struct {
+	Instances []struct {
+		MapID  int32           `json:"mapID"`
+		Mesh   *landingMapMesh `json:"mesh"`
+		Floors []struct {
+			Mesh *landingMapMesh `json:"mesh"`
+		} `json:"floors"`
+	} `json:"instances"`
+}
+
+type landingMapMesh struct {
+	Path   string `json:"path"`
+	Frame  string `json:"frame"`
+	Bounds struct {
+		MinX float64 `json:"minX"`
+		MaxX float64 `json:"maxX"`
+		MinY float64 `json:"minY"`
+		MaxY float64 `json:"maxY"`
+	} `json:"bounds"`
+}
+
+// placeable mirrors the frontend's placeableDungeonMesh.
+func (m *landingMapMesh) placeable() bool {
+	return m != nil && m.Path != "" && m.Frame == landingMeshFrame &&
+		m.Bounds.MaxX > m.Bounds.MinX && m.Bounds.MaxY > m.Bounds.MinY
+}
+
+// datasetMeshMaps returns the map IDs with a published dungeon mesh in the
+// maps manifest of the realm's dataset, the one the run page's 3D map reads.
+func (a *API) datasetMeshMaps(ctx context.Context, realmID uuid.UUID) (map[int32]bool, error) {
+	datasetID, ok := a.Opts.Dataset.LookupDatasetForRealm(ctx, realmID)
+	if !ok {
+		return nil, nil
+	}
+	ds, err := a.Opts.Dataset.GetDataset(ctx, datasetID)
+	if err != nil {
+		return nil, fmt.Errorf("get dataset: %w", err)
+	}
+	if ds.IconBaseUrl == "" {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(ds.IconBaseUrl, "/")+"/maps/manifest.json", nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch maps manifest: %w", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch maps manifest: status %d", res.StatusCode)
+	}
+	var manifest landingMapManifest
+	if err := json.NewDecoder(res.Body).Decode(&manifest); err != nil {
+		return nil, fmt.Errorf("decode maps manifest: %w", err)
+	}
+	meshes := make(map[int32]bool)
+	for _, inst := range manifest.Instances {
+		placeable := inst.Mesh.placeable()
+		for _, floor := range inst.Floors {
+			placeable = placeable || floor.Mesh.placeable()
+		}
+		if placeable {
+			meshes[inst.MapID] = true
+		}
+	}
+	return meshes, nil
 }
 
 // landingUpload derives upload provenance. Groups uploaded before the source

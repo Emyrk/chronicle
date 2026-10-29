@@ -22,7 +22,7 @@ interface LandingHeroProps {
   /** Portrait crop served below the lg breakpoint, where the hero is taller than wide. */
   posterPortrait?: string;
   posterAlt: string;
-  /** The admin-featured run. Without one the hero shows the poster and copy only. */
+  /** The featured run (scoped to the boss pull the hero plays). Without one the hero shows the poster and copy only. */
   featured?: LandingFeaturedRun | null;
   /** Playback position in ms from the run start; the 3D replay drives it. */
   currentMs?: number;
@@ -417,7 +417,7 @@ export function LandingHero({
           <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#4fd1c5] lg:text-xs">
             <span className="inline-block h-2 w-2 rounded-full bg-[#4fd1c5]" />
             Playing now · {featured.instance_name}
-            {bossName && <span className="hidden lg:inline"> · {bossName}</span>}
+            {bossName && <span> · {bossName}</span>}
           </div>
         )}
         <h1 className="m-0 max-w-[640px] font-['Libre_Baskerville',Georgia,serif] text-[34px] font-bold leading-[1.06] text-[#e8eef8] lg:text-[54px] lg:leading-[1.04]">

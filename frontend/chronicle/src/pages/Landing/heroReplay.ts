@@ -1,4 +1,42 @@
+import type { LandingFeaturedRun } from "@/api/typesGenerated";
 import type { HeroPlayback } from "./LandingHero";
+
+/** The hero starts this long before the boss pull. */
+export const HERO_PULL_LEAD_MS = 5_000;
+
+/** The boss pull the hero loops, in ms from the instance's start. */
+export interface HeroWindow {
+  encounterId: string;
+  startOffsetMs: number;
+  endOffsetMs: number;
+}
+
+/**
+ * The featured run's boss pull (from a few seconds before it), and the run as
+ * the scrubber sees it: that window only, its bosses and deaths timed from the
+ * window's start. A run without a boss pull plays whole (window null).
+ */
+export function heroWindow(run: LandingFeaturedRun): { window: HeroWindow | null; run: LandingFeaturedRun } {
+  const encounter = run.encounter;
+  if (!encounter) return { window: null, run };
+  const startOffsetMs = Math.max(0, encounter.start_offset_ms - HERO_PULL_LEAD_MS);
+  const endOffsetMs = encounter.end_offset_ms;
+  return {
+    window: { encounterId: encounter.id, startOffsetMs, endOffsetMs },
+    run: {
+      ...run,
+      duration_ms: endOffsetMs - startOffsetMs,
+      bosses: [{
+        name: encounter.name,
+        start_offset_ms: encounter.start_offset_ms - startOffsetMs,
+        end_offset_ms: endOffsetMs - startOffsetMs,
+      }],
+      deaths: run.deaths
+        .filter((death) => death.offset_ms >= startOffsetMs && death.offset_ms <= endOffsetMs)
+        .map((death) => ({ ...death, offset_ms: death.offset_ms - startOffsetMs })),
+    },
+  };
+}
 
 /** One beat in a death card's last-ten-seconds strip. */
 export interface HeroDeathBeat {
@@ -10,7 +48,7 @@ export interface HeroDeathBeat {
 
 /** A player death's recap, from the Instance page's deaths processor. */
 export interface HeroDeathRecap {
-  /** Ms from the instance's start, like the featured payload's death offsets. */
+  /** Ms from the instance's start (the window's, when one plays), like the scrubber's death offsets. */
   offsetMs: number;
   victimName: string;
   /** The ability that landed the killing blow, when the log names it. */
@@ -20,7 +58,7 @@ export interface HeroDeathRecap {
 
 /** What the live 3D hero reports to the shell's scrubber once it plays. */
 export interface HeroReplay extends HeroPlayback {
-  /** Where the replay is, in ms from the instance's start (the featured run's offsets). */
+  /** Where the replay is, in ms from the instance's start (the featured run's offsets), or from the window's start when one plays. */
   currentMs: number;
   /** The player deaths' recaps once processed (from streams the replay already fetched); null until then. */
   deathRecaps: HeroDeathRecap[] | null;

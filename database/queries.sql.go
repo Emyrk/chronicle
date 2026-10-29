@@ -11044,6 +11044,55 @@ func (q *sqlQuerier) ListResolvedItemPrices(ctx context.Context, arg ListResolve
 	return items, nil
 }
 
+const landingPositionalInstances = `-- name: LandingPositionalInstances :many
+SELECT li.id, li.realm_id
+FROM log_instances li
+JOIN parsed_log_group plg ON plg.id = li.log_group_id
+JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
+  AND NOT wlg.unlisted
+WHERE 'unit-position' = ANY(li.capabilities)
+  AND li.invalidated_at IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM log_instance_encounters lie
+      WHERE lie.instance_id = li.id
+        AND lie.boss
+        AND lie.kill_type IN ('clean', 'partial', 'wipe')
+  )
+ORDER BY COALESCE(li.start_time, wlg.created_at) DESC, li.id DESC
+LIMIT $1::int
+`
+
+type LandingPositionalInstancesRow struct {
+	ID      uuid.UUID `db:"id" json:"id"`
+	RealmID uuid.UUID `db:"realm_id" json:"realm_id"`
+}
+
+// The newest public, listed, finalized instances on the tenant whose log
+// recorded unit positions and that have a boss encounter, for the /start
+// hero's pick. Newest first.
+func (q *sqlQuerier) LandingPositionalInstances(ctx context.Context, limitCount int32) ([]LandingPositionalInstancesRow, error) {
+	rows, err := q.db.Query(ctx, landingPositionalInstances, limitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LandingPositionalInstancesRow
+	for rows.Next() {
+		var i LandingPositionalInstancesRow
+		if err := rows.Scan(&i.ID, &i.RealmID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLeaderboardVersionRequirements = `-- name: GetLeaderboardVersionRequirements :one
 SELECT instance_name, min_parser_version, min_parser_version_num, min_addon_version, min_addon_version_num, updated_at FROM leaderboard_version_requirements WHERE instance_name = $1
 `

@@ -166,6 +166,8 @@ type API struct {
 	luaArtifactBacklog prometheus.Gauge
 	discoveryStats     discoveryStatsCache
 	landing            landingFeaturedCache
+	// landingMeshMaps overrides datasetMeshMaps (tests).
+	landingMeshMaps func(ctx context.Context, realmID uuid.UUID) (map[int32]bool, error)
 
 	sidekickRelease *sidekickReleaseCache
 }

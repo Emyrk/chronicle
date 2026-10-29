@@ -15,7 +15,7 @@ import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "@/page
 import { MapView2D } from "@/pages/Instance/EventsPanels/Map/MapView2D";
 import MapView3D from "@/pages/Instance/EventsPanels/Map/MapView3D";
 import { previewSpeed, useMapScene } from "@/pages/Instance/EventsPanels/Map/useMapScene";
-import type { HeroDeathBeat, HeroDeathRecap, HeroReplay } from "./heroReplay";
+import type { HeroDeathBeat, HeroDeathRecap, HeroReplay, HeroWindow } from "./heroReplay";
 
 // The Map panel's streams without auras: those only tint debuffed players,
 // and they are by far the biggest download (1.3 MB of 1.6 MB on the Ruins run).
@@ -24,6 +24,8 @@ const HERO_STREAMS: StreamType[] = [...mapProcessor.streams.filter((stream) => s
 const TICK_MS = 250;
 /** Fastest the whole run plays: quick enough to show the run, slow enough to read the fights. */
 const HERO_MAX_SPEED = 4;
+/** A boss pull plays in real time, as the run page's Watch tab does. */
+const HERO_PULL_SPEED = 1;
 const NO_PLAN_ITEMS: [] = [];
 // The hero draws neither the encounter route nor movement trails.
 const NO_ROUTE: [] = [];
@@ -36,6 +38,11 @@ interface LandingHero3DProps {
   instanceId: string;
   /** Where in the run (ms from its start) the replay begins. */
   startOffsetMs: number;
+  /**
+   * The boss pull to loop instead of the whole run, framed like the Watch tab's Map panel on that pull.
+   * The replay then reports and seeks in ms from the window's start.
+   */
+  pull?: HeroWindow | null;
   /** The hero is on screen and the tab visible: the clock runs. Otherwise the clock and the scene's frame loop stop. */
   active: boolean;
   /** The replay's state for the scrubber once the mesh is up and the scene shows, or null (not yet, or it failed). */
@@ -72,15 +79,17 @@ function serializableContext(instance: Instance, selectedEncounterIds: string[])
 }
 
 // Positions first: the featured run's streams, through the Map panel's processor (on the main thread, yielding).
-function useHeroRun(instance: Instance | null) {
+function useHeroRun(instance: Instance | null, encounterId: string | null) {
   const events = useInstanceEventsContext();
-  // Wipes stay in: the death dots and a boss's first pull often land in one.
+  // The pull alone when one plays; else every encounter, wipes in: the death dots and a boss's first pull often land in one.
   const selectedEncounterIds = useMemo(
-    () => instance?.encounters.filter((encounter) => encounter.kill_type !== "reset").map((encounter) => encounter.id) ?? [],
-    [instance],
+    () => encounterId
+      ? [encounterId]
+      : instance?.encounters.filter((encounter) => encounter.kill_type !== "reset").map((encounter) => encounter.id) ?? [],
+    [encounterId, instance],
   );
   return useQuery({
-    queryKey: ["landing-hero-run", instance?.id],
+    queryKey: ["landing-hero-run", instance?.id, encounterId],
     enabled: instance !== null,
     staleTime: Infinity,
     retry: false,
@@ -124,10 +133,10 @@ function heroDeathRecap(death: DeathEvent, instanceStartMs: number): HeroDeathRe
 }
 
 // After the positions: the Instance page's death recaps, through its deaths processor.
-function useHeroDeaths(instance: Instance, enabled: boolean) {
+function useHeroDeaths(instance: Instance, encounterId: string | null, enabled: boolean) {
   const events = useInstanceEventsContext();
   return useQuery({
-    queryKey: ["landing-hero-deaths", instance.id],
+    queryKey: ["landing-hero-deaths", instance.id, encounterId],
     enabled,
     staleTime: Infinity,
     retry: false,
@@ -136,8 +145,8 @@ function useHeroDeaths(instance: Instance, enabled: boolean) {
       const processed = await processIncrementally<DeathsResult>({
         panelId: "death_log",
         streams: new Map(fetched),
-        // Every encounter: the processor skips unselected ones, and any of them can hold a death.
-        context: serializableContext(instance, instance.encounters.map((encounter) => encounter.id)),
+        // The pull, or every encounter: the processor skips unselected ones, and any of them can hold a death.
+        context: serializableContext(instance, encounterId ? [encounterId] : instance.encounters.map((encounter) => encounter.id)),
         stopAtTimestamp: null,
         previousState: null,
       });
@@ -148,12 +157,29 @@ function useHeroDeaths(instance: Instance, enabled: boolean) {
   });
 }
 
-function HeroScene({ instance, startOffsetMs, active, onReplay, still = false }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
-  const run = useHeroRun(instance);
-  const deathRecaps = useHeroDeaths(instance, run.isSuccess).data ?? null;
+function HeroScene({ instance, startOffsetMs, pull = null, active, onReplay, still = false }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
+  const encounterId = pull?.encounterId ?? null;
+  const run = useHeroRun(instance, encounterId);
+  const processedRecaps = useHeroDeaths(instance, encounterId, run.isSuccess).data ?? null;
+  // The scrubber's times are offsets from the instance's start (the featured run's), or from the window's start.
+  const instanceStartMs = Date.parse(instance.startTime);
+  const pullStartOffsetMs = pull?.startOffsetMs ?? null;
+  const pullEndOffsetMs = pull?.endOffsetMs ?? null;
+  const deathRecaps = useMemo(() => pullStartOffsetMs === null
+    ? processedRecaps
+    : processedRecaps?.map((recap) => ({ ...recap, offsetMs: recap.offsetMs - pullStartOffsetMs })) ?? null,
+  [processedRecaps, pullStartOffsetMs]);
   const result = run.data?.result ?? null;
   const span = useMemo(() => {
     if (!result || result.encounters.size === 0) return null;
+    if (encounterId && pullStartOffsetMs !== null && pullEndOffsetMs !== null) {
+      const encounter = result.encounters.get(encounterId);
+      if (!encounter) return null;
+      // One span, the window: nothing to skip inside one pull.
+      const startMs = instanceStartMs + pullStartOffsetMs;
+      const durationMs = Math.max(1, pullEndOffsetMs - pullStartOffsetMs);
+      return { startMs, endMs: startMs + durationMs, durationMs, playable: [[0, durationMs]] as [number, number][], encounterStartMs: encounter.startMs, encounterEndMs: encounter.endMs };
+    }
     const encounters = [...result.encounters.values()];
     const startMs = Math.min(...encounters.map((encounter) => encounter.startMs));
     const endMs = Math.max(...encounters.map((encounter) => encounter.endMs));
@@ -161,12 +187,12 @@ function HeroScene({ instance, startOffsetMs, active, onReplay, still = false }:
     const playable = encounters
       .map((encounter): [number, number] => [encounter.startMs - startMs, encounter.endMs - startMs])
       .sort((left, right) => left[0] - right[0]);
-    return { startMs, endMs, durationMs: Math.max(1, endMs - startMs), playable };
-  }, [result]);
-  const speed = span ? previewSpeed(span.durationMs, HERO_MAX_SPEED) : 1;
+    return { startMs, endMs, durationMs: Math.max(1, endMs - startMs), playable, encounterStartMs: startMs, encounterEndMs: endMs };
+  }, [encounterId, instanceStartMs, pullEndOffsetMs, pullStartOffsetMs, result]);
+  const speed = pull ? HERO_PULL_SPEED : span ? previewSpeed(span.durationMs, HERO_MAX_SPEED) : 1;
 
-  // The hero's own clock, in run time; useMapScene's preview loops it over the run.
-  const [runMs, setRunMs] = useState(startOffsetMs);
+  // The hero's own clock, in run time (window time for a pull); useMapScene's preview loops it over the run.
+  const [runMs, setRunMs] = useState(pull ? 0 : startOffsetMs);
   const [userPlaying, setUserPlaying] = useState(true);
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
   const [unavailable, setUnavailable] = useState(false);
@@ -202,11 +228,19 @@ function HeroScene({ instance, startOffsetMs, active, onReplay, still = false }:
       entitySelection: { enemyIds: new Set(), playerIds: new Set() },
     },
   }), [instance, result, run.data, span]);
+  const playableMs = span ? playableRunMs(runMs, span.playable, span.durationMs) : runMs;
   // Always the mesh's own projection: the landing never shows the 2D tiles, not even while the mesh loads.
+  // A pull is the single encounter the Watch tab's Map panel shows; its preview runs from the encounter's first sample
+  // and loops at its last, so outside them (the lead-in, the window's tail) the scene holds the nearest sample.
+  const pullElapsedMs = span
+    ? Math.min(Math.max(0, span.startMs + playableMs - span.encounterStartMs), Math.max(0, span.encounterEndMs - span.encounterStartMs - 1))
+    : 0;
   const scene = useMapScene(props, {
     rawDungeonProjection: true,
-    wholeRun: true,
-    preview: { elapsedMs: (span ? playableRunMs(runMs, span.playable, span.durationMs) : runMs) / speed, playing, maxSpeed: HERO_MAX_SPEED },
+    wholeRun: !pull,
+    preview: pull
+      ? { elapsedMs: pullElapsedMs, playing, maxSpeed: HERO_PULL_SPEED }
+      : { elapsedMs: playableMs / speed, playing, maxSpeed: HERO_MAX_SPEED },
   });
   // Should the scene still lose its units for a moment, the last ready one stays up (frozen) rather than the view
   // unmounting; as in the Map panel, re-held only when what it shows changes (the frozen view ignores its per-tick data).
@@ -215,7 +249,8 @@ function HeroScene({ instance, startOffsetMs, active, onReplay, still = false }:
   if (live && (!held || held.mapName !== live.mapName || held.mesh !== live.mesh)) setHeld(live);
   const ready = live ?? held;
 
-  // Then the camera framing: the whole-run Follow, as the Map panel's default framing.
+  // Then the camera framing, as the Map panel's default: on a boss pull the fight (the Director frames it, cinematic below),
+  // across the whole run the party Follow.
   const autoFit = ready?.fitByDefault ? ready.autoFit : null;
   const focusCentre = ready?.focusCentre ?? null;
   const focusZoom = autoFit?.zoom ?? null;
@@ -232,22 +267,22 @@ function HeroScene({ instance, startOffsetMs, active, onReplay, still = false }:
   const stillTiles = still && ready !== null && (ready.mesh === null || meshState === "failed");
   const shown = ready !== null && (meshState === "ready" || stillTiles) && !unavailable;
   const togglePlay = useCallback(() => setUserPlaying((current) => !current), []);
-  // The scrubber's times are offsets from the instance's start (the featured run's), not the replay's first sample.
-  const instanceStartMs = Date.parse(instance.startTime);
   const seek = useCallback((offsetMs: number, options?: { cut?: boolean }) => {
     if (!span) return;
-    setRunMs(instanceStartMs + offsetMs - span.startMs);
+    setRunMs(pull ? Math.min(span.durationMs, Math.max(0, offsetMs)) : instanceStartMs + offsetMs - span.startMs);
     setUserPlaying(true);
     if (options?.cut) setCutKey((key) => key + 1);
-  }, [instanceStartMs, span]);
+  }, [instanceStartMs, pull, span]);
   const cursorMs = ready?.cursorMs ?? null;
+  // A pull reports the hero's clock: it moves through the lead-in, where the scene holds the pull's first sample.
+  const currentMs = cursorMs === null ? null : pull ? playableMs : cursorMs - instanceStartMs;
   useEffect(() => {
-    if (!shown || !span || cursorMs === null) {
+    if (!shown || !span || currentMs === null) {
       onReplay(null);
       return;
     }
-    onReplay({ currentMs: cursorMs - instanceStartMs, playing: userPlaying, togglePlay, seek, deathRecaps });
-  }, [cursorMs, deathRecaps, instanceStartMs, onReplay, seek, shown, span, togglePlay, userPlaying]);
+    onReplay({ currentMs, playing: userPlaying, togglePlay, seek, deathRecaps });
+  }, [currentMs, deathRecaps, onReplay, seek, shown, span, togglePlay, userPlaying]);
   useEffect(() => () => onReplay(null), [onReplay]);
 
   if (!ready || unavailable) return null;
@@ -292,7 +327,7 @@ function HeroScene({ instance, startOffsetMs, active, onReplay, still = false }:
   );
 }
 
-/** The landing hero's live layer: the featured run replayed in 3D, muted and looping. */
+/** The landing hero's live layer: the featured run's boss pull (or the whole run) replayed in 3D, muted and looping. */
 export default function LandingHero3D({ instanceId, ...props }: LandingHero3DProps) {
   const { data: apiInstance } = useInstance(instanceId);
   const instance = useMemo(() => apiInstance ? transformToInstance(apiInstance) : null, [apiInstance]);
