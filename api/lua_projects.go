@@ -120,6 +120,22 @@ var luaProjectSlug = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 // reservedLuaProjectSlugs would collide with /addons/<author>/<slug> sub-routes.
 var reservedLuaProjectSlugs = map[string]bool{"edit": true, "new": true, "api": true}
 
+const (
+	luaProjectLimitDefault int64 = 3
+	luaProjectLimitHonored int64 = 5
+	luaProjectLimitRevered int64 = 10
+	luaProjectLimitExalted int64 = 20
+)
+
+type luaProjectQuotaError struct {
+	owned int64
+	limit int64
+}
+
+func (e *luaProjectQuotaError) Error() string {
+	return fmt.Sprintf("addon ownership limit reached: %d of %d", e.owned, e.limit)
+}
+
 // luaReleasesWithFiles is how many of an addon's newest releases keep their packages.
 const luaReleasesWithFiles = 3
 
@@ -318,6 +334,44 @@ func (a *API) canLuaProjectViewOrUse(w http.ResponseWriter, r *http.Request, id 
 	return true
 }
 
+func (a *API) luaProjectLimit(ctx context.Context, userID uuid.UUID) (int64, error) {
+	chronicle := policy.New().GlobalChronicle()
+	user := policy.New().User(userID)
+	allowed, err := a.Opts.Zed.Check(ctx, nil,
+		chronicle.CanHas_exalted_User(user),
+		chronicle.CanHas_revered_User(user),
+		chronicle.CanHas_honored_User(user),
+	)
+	if err != nil {
+		return 0, err
+	}
+	switch {
+	case allowed[0]:
+		return luaProjectLimitExalted, nil
+	case allowed[1]:
+		return luaProjectLimitRevered, nil
+	case allowed[2]:
+		return luaProjectLimitHonored, nil
+	default:
+		return luaProjectLimitDefault, nil
+	}
+}
+
+func (a *API) GetMyLuaProjectQuota(w http.ResponseWriter, r *http.Request) {
+	owner := chronauth.MustAuthenticatedClaims(r.Context()).Subject
+	limit, err := a.luaProjectLimit(r.Context(), owner)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	owned, err := a.Opts.Zed.CountLuaProjectsByOwner(r.Context(), owner)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.LuaProjectQuota{Owned: owned, Limit: limit})
+}
+
 // luaProjectPermissions reports every project permission the request's user holds.
 func (a *API) luaProjectPermissions(r *http.Request, id uuid.UUID) (chroniclesdk.LuaProjectPermissions, error) {
 	actor, _ := luaActor(r)
@@ -359,9 +413,23 @@ func (a *API) CreateLuaProject(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "That address is reserved; choose another slug."})
 		return
 	}
+	limit, err := a.luaProjectLimit(r.Context(), owner)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
 	var p database.LuaProject
 	err = a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
-		var err error
+		if _, err := tx.LockLuaProjectOwner(r.Context(), owner); err != nil {
+			return err
+		}
+		owned, err := tx.CountLuaProjectsByOwner(r.Context(), owner)
+		if err != nil {
+			return err
+		}
+		if owned >= limit {
+			return &luaProjectQuotaError{owned: owned, limit: limit}
+		}
 		p, err = tx.CreateLuaProject(r.Context(), database.CreateLuaProjectParams{OwnerID: owner, Kind: req.Kind, Name: req.Name, Slug: req.Slug})
 		if err != nil {
 			return err
@@ -370,6 +438,11 @@ func (a *API) CreateLuaProject(w http.ResponseWriter, r *http.Request) {
 		return tx.StarLuaProject(r.Context(), database.StarLuaProjectParams{ProjectID: p.ID, UserID: owner})
 	}, nil)
 	if err != nil {
+		var quota *luaProjectQuotaError
+		if errors.As(err, &quota) {
+			httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: fmt.Sprintf("You own %d of %d addons. This limit keeps each account's use of shared storage and processing resources bounded. Delete an addon before creating another.", quota.owned, quota.limit)})
+			return
+		}
 		var pg *pgconn.PgError
 		if errors.As(err, &pg) && pg.Code == "23505" {
 			httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "Project slug already exists."})
@@ -495,6 +568,29 @@ func (a *API) UpdateLuaProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.Write(ctx, w, http.StatusOK, responses[0])
+}
+
+func (a *API) DeleteLuaProject(w http.ResponseWriter, r *http.Request) {
+	id, ok := luaProjectID(w, r)
+	if !ok || !a.canLuaProject(w, r, id, luaManage) {
+		return
+	}
+	var deleted int64
+	err := a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
+		var err error
+		deleted, err = tx.DeleteLuaProject(r.Context(), id)
+		return err
+	}, nil)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if deleted == 0 {
+		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Addon not found."})
+		return
+	}
+	a.drainLuaArtifactGarbageAfterWrite()
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (a *API) GetMyLuaProject(w http.ResponseWriter, r *http.Request) {

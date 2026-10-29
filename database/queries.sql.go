@@ -11743,6 +11743,17 @@ func (q *sqlQuerier) CountLuaProjectStars(ctx context.Context, projectIds []uuid
 	return items, nil
 }
 
+const countLuaProjectsByOwner = `-- name: CountLuaProjectsByOwner :one
+SELECT count(*) FROM lua_projects WHERE owner_id = $1
+`
+
+func (q *sqlQuerier) CountLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countLuaProjectsByOwner, ownerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countReadyLuaProjectArtifactGarbage = `-- name: CountReadyLuaProjectArtifactGarbage :one
 SELECT count(*) FROM lua_project_artifact_gc gc
 WHERE gc.ready_at <= now()
@@ -11827,6 +11838,29 @@ func (q *sqlQuerier) CreateLuaProjectRelease(ctx context.Context, arg CreateLuaP
 		&i.PublishedBy,
 	)
 	return i, err
+}
+
+const deleteLuaProject = `-- name: DeleteLuaProject :execrows
+WITH removed_artifacts AS (
+  DELETE FROM lua_project_artifacts WHERE project_id = $1 RETURNING object_key
+), queued AS (
+  INSERT INTO lua_project_artifact_gc (object_key)
+  SELECT object_key FROM removed_artifacts WHERE object_key IS NOT NULL
+  ON CONFLICT DO NOTHING
+  RETURNING object_key
+), ready AS (
+  SELECT count(*) FROM queued
+)
+DELETE FROM lua_projects p USING ready WHERE p.id = $1
+`
+
+// Queue every stored package before cascades remove the project's dependent rows.
+func (q *sqlQuerier) DeleteLuaProject(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteLuaProject, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteLuaProjectArtifactGarbage = `-- name: DeleteLuaProjectArtifactGarbage :exec
@@ -12429,6 +12463,18 @@ func (q *sqlQuerier) ListUserStarsForProjects(ctx context.Context, arg ListUserS
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockLuaProjectOwner = `-- name: LockLuaProjectOwner :one
+SELECT id FROM users WHERE id = $1 FOR UPDATE
+`
+
+// Serializes addon creation for one owner so concurrent requests cannot exceed the quota.
+func (q *sqlQuerier) LockLuaProjectOwner(ctx context.Context, ownerID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockLuaProjectOwner, ownerID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const pruneLuaProjectArtifacts = `-- name: PruneLuaProjectArtifacts :exec

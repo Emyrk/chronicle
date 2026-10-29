@@ -1,5 +1,26 @@
+-- name: LockLuaProjectOwner :one
+-- Serializes addon creation for one owner so concurrent requests cannot exceed the quota.
+SELECT id FROM users WHERE id = @owner_id FOR UPDATE;
+
+-- name: CountLuaProjectsByOwner :one
+SELECT count(*) FROM lua_projects WHERE owner_id = @owner_id;
+
 -- name: CreateLuaProject :one
 INSERT INTO lua_projects (owner_id, kind, name, slug) VALUES (@owner_id, @kind, @name, @slug) RETURNING *;
+
+-- name: DeleteLuaProject :execrows
+-- Queue every stored package before cascades remove the project's dependent rows.
+WITH removed_artifacts AS (
+  DELETE FROM lua_project_artifacts WHERE project_id = @id RETURNING object_key
+), queued AS (
+  INSERT INTO lua_project_artifact_gc (object_key)
+  SELECT object_key FROM removed_artifacts WHERE object_key IS NOT NULL
+  ON CONFLICT DO NOTHING
+  RETURNING object_key
+), ready AS (
+  SELECT count(*) FROM queued
+)
+DELETE FROM lua_projects p USING ready WHERE p.id = @id;
 
 -- name: ListUserLuaProjects :many
 -- Projects the user owns or contributes to.

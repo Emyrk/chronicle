@@ -16,6 +16,12 @@ function render(element: ReactElement, client = new QueryClient()) {
   return renderToStaticMarkup(<QueryClientProvider client={client}><MemoryRouter>{element}</MemoryRouter></QueryClientProvider>)
 }
 
+function quotaClient(owned = 1, limit = 3) {
+  const client = new QueryClient()
+  client.setQueryData(["addon-project-quota", "me"], { owned, limit })
+  return client
+}
+
 function addon(name: string, stars: number, publishedAt: string): LuaProject {
   return { id: name, owner_id: "o", kind: "panel", name, slug: name, revision: 1, description: `${name} does things.`, author: "someone", stars, starred: false, created_at: publishedAt, updated_at: publishedAt,
     releases: [{ tag: "v1", available: true, sha256: "x", published_at: publishedAt }] }
@@ -63,9 +69,18 @@ describe("new addon form", () => {
 
   it("asks only for a name for a first addon", () => {
     vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: true }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
-    const html = render(<NewAddonForm author="steven" />)
+    const html = render(<NewAddonForm author="steven" />, quotaClient(0))
     expect(html).toContain("Create and open the Workshop")
     expect(html).not.toContain('aria-label="Slug"')
+  })
+
+  it("explains the resource limit instead of presenting it as an upgrade", () => {
+    vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: true }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
+    const html = render(<NewAddonForm author="steven" />, quotaClient(3, 3))
+    expect(html).toContain("You own 3 of 3 addons")
+    expect(html).toContain("shared storage and processing resources")
+    expect(html).not.toContain("upgrade")
+    expect(html).not.toContain("Create and open the Workshop")
   })
 })
 

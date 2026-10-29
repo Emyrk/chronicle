@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react"
 import { Link, Navigate, useNavigate } from "react-router-dom"
 import { ArrowLeft, Plus } from "lucide-react"
 import { useAuthorizationCheck, useSession } from "@/api/queries"
-import { addonPath, createProject, DESCRIPTION_MAX, getMyAuthor, setDescription, urlName } from "./api"
+import { addonPath, createProject, DESCRIPTION_MAX, getMyAuthor, getProjectQuota, setDescription, urlName } from "./api"
 import { useQuery } from "@tanstack/react-query"
 import { button, card, errorMessage, kindLabel, primaryButton } from "./addonUi"
 
@@ -11,6 +11,7 @@ export function NewAddonPage() {
   const { data: session, isLoading: sessionLoading } = useSession()
   const authorQuery = useQuery({ queryKey: ["addon-author", session?.user_id], enabled: !!session, queryFn: getMyAuthor })
   const permission = useAuthorizationCheck({ createLuaProject: "chronicle:chronicle#create_lua_project" }, { enabled: !!session })
+  const quota = useQuery({ queryKey: ["addon-project-quota", session?.user_id], enabled: !!session, queryFn: getProjectQuota })
   const navigate = useNavigate()
   const [name, setName] = useState("")
   const slug = urlName(name, 80)
@@ -29,6 +30,7 @@ export function NewAddonPage() {
     try {
       // Guides are hidden as a new addon kind for now; existing guide addons still work.
       const project = await createProject("panel", name.trim(), slug.trim())
+      await quota.refetch()
       if (description.trim()) await setDescription(project.id, description.trim())
       navigate(addonPath(project, "/edit"))
     } catch (e) { setError(errorMessage(e)); setBusy(false) }
@@ -46,7 +48,14 @@ export function NewAddonPage() {
       {sessionLoading || !author || permission.isPending ? <p>Checking addon creation permission…</p> :
         <p role="alert" className="text-destructive">{permission.isError ? "Could not check addon creation permission. Please try again." :
           "You do not have permission to create addons. Ask a technical administrator for the Addon Author role."}</p>}
-    </div> : <form onSubmit={create} className={`${card} space-y-4`}>
+    </div> : quota.isPending ? <div className={`${card} text-sm text-muted-foreground`}>Checking addon resource limit…</div> :
+      quota.isError ? <div className={`${card} text-sm text-destructive`} role="alert">Could not check your addon resource limit. Please try again.</div> :
+      quota.data.owned >= quota.data.limit ? <div className={`${card} space-y-2 text-sm`}>
+        <h2 className="font-semibold">Addon ownership limit</h2>
+        <p>You own {quota.data.owned} of {quota.data.limit} addons.</p>
+        <p className="text-xs text-muted-foreground">This limit keeps each account&apos;s use of shared storage and processing resources bounded. Delete an addon before creating another.</p>
+      </div> : <form onSubmit={create} className={`${card} space-y-4`}>
+      <p className="text-xs text-muted-foreground">{quota.data.owned} of {quota.data.limit} addon slots used. The limit bounds shared storage and processing usage.</p>
       <fieldset className="min-w-0 space-y-4">
         <label className="block text-sm font-medium">Name<input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={name} maxLength={120} required autoFocus
           onChange={event => setName(event.target.value)} /></label>
