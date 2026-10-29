@@ -5,6 +5,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { iconUrl } from "@/config/iconUrl";
 import { serverCapabilities } from "@/config/serverCapabilities";
+import { usePageTracking } from "@/hooks/usePageTracking";
 import { formatPublishedDate, rarityColor, rarityGlow, RARITY_LABELS } from "./blogFormat";
 import {
   BLOG_RARITIES,
@@ -24,6 +25,7 @@ function requestFlavor(): readonly string[] {
 }
 
 function BlogLayout() {
+  usePageTracking();
   const onPost = useMatch("/blog/:post") !== null;
   return (
     <div className="min-h-screen bg-background text-foreground">
