@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useLandingFeatured } from "@/api/landingFeatured";
+import type { LandingFeaturedRun } from "@/api/typesGenerated";
 import { useSiteConfig } from "@/api/siteConfigQuery";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -243,8 +244,15 @@ export function StartPage() {
   const { data: landing, isError: landingFailed } = useLandingFeatured();
   const { data: siteConfig } = useSiteConfig();
   const siteName = (siteConfig?.tenant?.branding ?? siteConfig?.branding)?.display_name;
-  // The montage's runs (a payload from before montages has the one featured run).
-  const runs = useMemo(() => landing?.entries?.length ? landing.entries : landing?.featured ? [landing.featured] : [], [landing]);
+  // The live 3D replay's position and controls, for the hero's scrubber; null while the poster shows.
+  const [replay, setReplay] = useState<HeroReplay | null>(null);
+  // The run the live 3D plays, kept while it changes pulls.
+  const [liveRun, setLiveRun] = useState<LandingFeaturedRun | null>(null);
+  if (replay && replay.run !== liveRun) setLiveRun(replay.run);
+  // The montage's runs (a payload from before montages has the one featured run). Without any (the endpoint failed or
+  // has no pick) the run the live 3D plays stands in, so the scrubber, boss rail and Explore work all the same.
+  const runs = useMemo(() => landing?.entries?.length ? landing.entries : landing?.featured ? [landing.featured] : liveRun ? [liveRun] : [],
+    [landing, liveRun]);
   // A boss pull picked on the rail for the entry at `index`; `hold` pauses the montage on it.
   const [bossPick, setBossPick] = useState<{ index: number; encounterId: string; hold: boolean } | null>(null);
   // Each entry a run's boss pull: its last one, or the one picked on the rail.
@@ -279,8 +287,6 @@ export function StartPage() {
   const releaseHold = useCallback(() => setBossPick((pick) => pick && { ...pick, hold: false }), []);
   // The hero and its boss rail: scrolling it away releases a held pick.
   const replaySectionRef = useRef<HTMLDivElement>(null);
-  // The live 3D replay's position and controls, for the hero's scrubber; null while the poster shows.
-  const [replay, setReplay] = useState<HeroReplay | null>(null);
   // The pre-rendered clips play until the live 3D shows: index.html picked this visit's (and painted its poster),
   // and each pass moves on to the next.
   const { data: clips } = useHeroClips();
