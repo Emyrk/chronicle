@@ -187,6 +187,13 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, on
   // Bumped on a jump (a boss chip, a death): the camera cuts to the new shot rather than gliding there.
   const [cutKey, setCutKey] = useState(0);
   const playing = userPlaying && active && meshState === "ready";
+  // Another pull (the boss rail) plays from its window's start.
+  const [clockPull, setClockPull] = useState(encounterId);
+  if (clockPull !== encounterId) {
+    setClockPull(encounterId);
+    setRunMs(0);
+    setUserPlaying(true);
+  }
   // The clock and the end callback as the timer reads them, without restarting it.
   const runMsRef = useRef(runMs);
   const onPullEndRef = useRef(onPullEnd);
@@ -244,6 +251,13 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, on
   const [held, setHeld] = useState<typeof live>(null);
   if (live && (!held || held.mapName !== live.mapName || held.mesh !== live.mesh)) setHeld(live);
   const ready = live ?? held;
+  // The camera cuts to another pull once its scene is up (until then the last pull's view holds, frozen).
+  const [cutPull, setCutPull] = useState(encounterId);
+  const livePull = live && run.data ? encounterId : null;
+  if (livePull !== null && livePull !== cutPull) {
+    setCutPull(livePull);
+    setCutKey((key) => key + 1);
+  }
 
   // Then the camera framing, as the Map panel's default: on a boss pull the fight (the Director frames it, cinematic below),
   // across the whole run the party Follow.

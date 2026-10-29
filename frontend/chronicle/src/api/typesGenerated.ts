@@ -2731,7 +2731,9 @@ export const KillTypes: KillType[] = ["clean", "partial", "reset", "wipe"];
  * Offsets are milliseconds from the instance start.
  */
 export interface LandingFeaturedBoss {
+    readonly id: string;
     readonly name: string;
+    readonly kill: boolean;
     readonly start_offset_ms: number;
     readonly end_offset_ms: number;
 }

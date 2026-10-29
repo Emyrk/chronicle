@@ -5,6 +5,7 @@ import { useSiteConfig } from "@/api/siteConfigQuery";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { trackFunnel } from "@/utils/funnel";
+import { BossRail } from "./BossRail";
 import { HeroReplayLayer, type HeroEntry } from "./HeroReplayLayer";
 import { heroWindow, type HeroReplay } from "./heroReplay";
 import { LandingHero } from "./LandingHero";
@@ -15,6 +16,9 @@ import { whenIdle } from "./whenIdle";
 const StartBelowFold = lazy(() => import("./StartBelowFold"));
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
+
+/** A boss picked on the rail holds the montage on that pull this long (or until the replay is scrolled away). */
+const BOSS_PICK_HOLD_MS = 60_000;
 
 // The 3D hero's run when the site setting names none.
 const FALLBACK_FEATURED_INSTANCE: string | undefined = import.meta.env.VITE_LANDING_FEATURED_INSTANCE || undefined;
@@ -230,22 +234,48 @@ export function StartPage() {
   const { data: landing, isError: landingFailed } = useLandingFeatured();
   const { data: siteConfig } = useSiteConfig();
   const siteName = (siteConfig?.tenant?.branding ?? siteConfig?.branding)?.display_name;
-  // The montage, each entry a run's boss pull (a payload from before montages has the one featured run).
-  const heroes = useMemo(() => {
-    const runs = landing?.entries?.length ? landing.entries : landing?.featured ? [landing.featured] : [];
-    return runs.map(heroWindow);
-  }, [landing]);
+  // The montage's runs (a payload from before montages has the one featured run).
+  const runs = useMemo(() => landing?.entries?.length ? landing.entries : landing?.featured ? [landing.featured] : [], [landing]);
+  // A boss pull picked on the rail for the entry at `index`; `hold` pauses the montage on it.
+  const [bossPick, setBossPick] = useState<{ index: number; encounterId: string; hold: boolean } | null>(null);
+  // Each entry a run's boss pull: its last one, or the one picked on the rail.
+  const heroes = useMemo(
+    () => runs.map((run, index) => heroWindow(run, bossPick?.index === index ? bossPick.encounterId : null)),
+    [bossPick, runs],
+  );
   // The 3D hero plays them in turn (the build-time instance's whole run when there are none).
   const heroEntries = useMemo((): HeroEntry[] => heroes.length > 0
     ? heroes.map((hero) => ({ instanceId: hero.run.instance_id, pull: hero.window }))
     : FALLBACK_FEATURED_INSTANCE ? [{ instanceId: FALLBACK_FEATURED_INSTANCE }] : [],
   [heroes]);
   const [heroIndex, setHeroIndex] = useState(0);
-  const advanceHero = useCallback(() => setHeroIndex((index) => index + 1), []);
+  const holding = bossPick?.hold ?? false;
+  const advanceHero = useCallback(() => {
+    if (holding) return;
+    setHeroIndex((index) => index + 1);
+    setBossPick(null);
+  }, [holding]);
   // The scrubber and caption follow the entry playing, spanning its pull only.
-  const hero = heroes.length > 0 ? heroes[heroIndex % heroes.length] : null;
+  const current = heroes.length > 0 ? heroIndex % heroes.length : -1;
+  const hero = current >= 0 ? heroes[current] : null;
+  const pickBoss = useCallback((encounterId: string) => setBossPick({ index: current, encounterId, hold: true }), [current]);
+  const releaseHold = useCallback(() => setBossPick((pick) => pick && { ...pick, hold: false }), []);
+  // The hero and its boss rail: scrolling it away releases a held pick.
+  const replaySectionRef = useRef<HTMLDivElement>(null);
   // The live 3D replay's position and controls, for the hero's scrubber; null while the poster shows.
   const [replay, setReplay] = useState<HeroReplay | null>(null);
+
+  useEffect(() => {
+    if (!holding) return;
+    const timer = window.setTimeout(releaseHold, BOSS_PICK_HOLD_MS);
+    const element = replaySectionRef.current;
+    const observer = new IntersectionObserver(([entry]) => !entry.isIntersecting && releaseHold());
+    if (element) observer.observe(element);
+    return () => {
+      window.clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [bossPick, holding, releaseHold]);
 
   // The funnel's denominator: one per visit to /start, with its campaign.
   useEffect(() => trackFunnel("land"), []);
@@ -258,16 +288,23 @@ export function StartPage() {
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden bg-background text-foreground">
       <LandingNav getSidekickHref={getSidekickHref} />
-      <LandingHero
-        poster={`${IMAGES}/ruins-courtyard-poster.jpg`}
-        posterPortrait={`${IMAGES}/ruins-courtyard-poster-portrait.jpg`}
-        posterAlt="3D replay: a five-player group fighting on the stone platform in the Ruins of Lordaeron courtyard"
-        featured={hero?.run}
-        currentMs={replay?.currentMs}
-        playback={replay}
-        getSidekickHref={getSidekickHref}
-        layer3D={landing || landingFailed ? <HeroReplayLayer entries={heroEntries} index={heroIndex} onAdvance={advanceHero} onReplay={setReplay} /> : null}
-      />
+      <div ref={replaySectionRef}>
+        <LandingHero
+          poster={`${IMAGES}/ruins-courtyard-poster.jpg`}
+          posterPortrait={`${IMAGES}/ruins-courtyard-poster-portrait.jpg`}
+          posterAlt="3D replay: a five-player group fighting on the stone platform in the Ruins of Lordaeron courtyard"
+          featured={hero?.run}
+          currentMs={replay?.currentMs}
+          playback={replay}
+          getSidekickHref={getSidekickHref}
+          layer3D={landing || landingFailed ? <HeroReplayLayer entries={heroEntries} index={heroIndex} onAdvance={advanceHero} onReplay={setReplay} /> : null}
+        />
+        <BossRail
+          bosses={landing || landingFailed ? runs[current]?.bosses ?? [] : undefined}
+          selectedId={hero?.window?.encounterId ?? null}
+          onPick={pickBoss}
+        />
+      </div>
       <SendLinkSection />
       <HowItWorks />
       <BelowFold />
