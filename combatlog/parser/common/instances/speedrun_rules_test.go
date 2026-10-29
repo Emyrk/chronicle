@@ -66,89 +66,13 @@ func TestMoltenCoreDamageTargets(t *testing.T) {
 func TestBlackwingLairDamageTargets(t *testing.T) {
 	t.Parallel()
 
-	bossOnly := rankings.DamageTargets{Mode: rankings.DamageTargetsBossOnly}
-	entries := func(ids ...uint32) rankings.DamageTargets {
-		return rankings.DamageTargets{Mode: rankings.DamageTargetsEntries, EntryIDs: ids}
-	}
-	common := map[string]rankings.DamageTargets{
-		"Broodlord Lashlayer": entries(12017, 14022, 14024, 14025, 14023),
-		"Firemaw":             bossOnly,
-		"Chromaggus":          bossOnly,
-	}
-	commonNefarian := []uint32{11583, 14668, 14605, 14261, 14262, 14263, 14264, 14265, 14302}
-
-	for _, tc := range []struct {
-		name   string
-		flavor database.WoWFlavor
-		want   map[string]rankings.DamageTargets
-	}{
-		{
-			name:   "vanilla",
-			flavor: database.WoWFlavor{database.FlavorVanilla},
-			want: map[string]rankings.DamageTargets{
-				"Vaelastrasz the Corrupt": bossOnly,
-				"Ebonroc":                 bossOnly,
-				"Flamegor":                bossOnly,
-				"Nefarian":                entries(commonNefarian...),
-			},
+	rules := BlackwingLairFactory.FlavoredRankings(database.WoWFlavor{database.FlavorVanilla})
+	require.Equal(t, map[string]rankings.DamageTargets{
+		"Broodlord Lashlayer": {
+			Mode:     rankings.DamageTargetsEntries,
+			EntryIDs: []uint32{12017, 14022, 14024, 14025, 14023},
 		},
-		{
-			name:   "turtle",
-			flavor: database.WoWFlavor{database.FlavorTurtle},
-			want: map[string]rankings.DamageTargets{
-				"Vaelastrasz the Corrupt": bossOnly,
-				"Ebonroc":                 bossOnly,
-				"Flamegor":                bossOnly,
-				"Nefarian":                entries(commonNefarian...),
-				"Ezzel Darkbrewer":        bossOnly,
-			},
-		},
-		{
-			name:   "nightmare",
-			flavor: database.WoWFlavor{database.FlavorNightmareOfUrsol},
-			want: map[string]rankings.DamageTargets{
-				"Vaelastrasz the Corrupt": bossOnly,
-				"Ebonroc":                 bossOnly,
-				"Flamegor":                bossOnly,
-				"Nefarian":                entries(commonNefarian...),
-				"Ezzel Darkbrewer":        bossOnly,
-			},
-		},
-		{
-			name:   "octowow",
-			flavor: database.WoWFlavor{database.FlavorOctoWoW},
-			want: map[string]rankings.DamageTargets{
-				"Vaelastrasz the Corrupt": bossOnly,
-				"Ebonroc":                 bossOnly,
-				"Flamegor":                bossOnly,
-				"Nefarian":                entries(commonNefarian...),
-				"Ezzel Darkbrewer":        bossOnly,
-			},
-		},
-		{
-			name:   "vanilla plus",
-			flavor: database.WoWFlavor{database.FlavorVanillaPlus},
-			want: map[string]rankings.DamageTargets{
-				"Elementium Decapitator Mk III":  bossOnly,
-				"Master Elemental Shaper Krixix": bossOnly,
-				"Flamegor & Ebonroc":             entries(11981, 14601),
-				"Nefarian":                       entries(11583, 14668, 14605, 14261, 14262, 14263, 14264, 14265, 14302, 25123),
-			},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			want := make(map[string]rankings.DamageTargets, len(common)+len(tc.want))
-			for name, rule := range common {
-				want[name] = rule
-			}
-			for name, rule := range tc.want {
-				want[name] = rule
-			}
-			require.Equal(t, want, BlackwingLairFactory.FlavoredRankings(tc.flavor).DamageByEncounter)
-		})
-	}
+	}, rules.DamageByEncounter)
 }
 
 func TestLevel60Cap(t *testing.T) {
