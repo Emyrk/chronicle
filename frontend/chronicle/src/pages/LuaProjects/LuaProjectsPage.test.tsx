@@ -40,11 +40,11 @@ describe("addons home", () => {
     expect(html).toContain('aria-checked="true"')
     expect(html).toContain(">Popular</button>")
     expect(html).toContain("42 people track this addon")
-    expect(html).toContain("<table")
+    expect(html).toContain("<ul")
     expect(html, "descriptions show under the name").toContain("Big Pumper does things.")
     expect(html).toContain('data-ad="addons-left-rail"')
     expect(html).toContain('data-ad="addons-right-rail"')
-    expect(html, "popular order is ranked").toMatch(/<td[^>]*>1<\/td>/)
+    expect(html, "popular order is ranked").toContain('data-rank="1"')
   })
 })
 
@@ -57,21 +57,13 @@ describe("new addon form", () => {
     vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: false }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
     const html = render(<NewAddonForm author="steven" />)
     expect(html).toContain("You do not have permission to create addons")
-    expect(html).not.toContain("New addon</h2>")
+    expect(html).not.toContain("Create and open the Workshop")
     expect(useAuthorizationCheck).toHaveBeenCalledWith({ createLuaProject: "chronicle:chronicle#create_lua_project" }, { enabled: true })
-  })
-
-  it("lets authors pick the address", () => {
-    vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: true }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
-    const html = render(<NewAddonForm author="steven" />)
-    expect(html).toContain("Create addon</button>")
-    expect(html).toContain('aria-label="Slug"')
-    expect(html, "guides are not offered as a new kind").not.toContain("Guide")
   })
 
   it("asks only for a name for a first addon", () => {
     vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: true }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
-    const html = render(<NewAddonForm author="steven" first />)
+    const html = render(<NewAddonForm author="steven" />)
     expect(html).toContain("Create and open the Workshop")
     expect(html).not.toContain('aria-label="Slug"')
   })

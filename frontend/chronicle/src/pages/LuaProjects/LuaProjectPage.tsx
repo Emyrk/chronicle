@@ -167,7 +167,7 @@ function AddonPage({ projectId }: { projectId?: string }) {
           {can.edit && <button type="button" aria-pressed={tab === "contributors"} onClick={() => show({ tab: tab === "contributors" ? undefined : "contributors" })}
             className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent ${tab === "contributors" ? "border-primary/50 bg-muted" : "border-border"}`}>
             <Users className="size-4" /> Contributors</button>}
-          {project.kind === "panel" && can.edit && <Link className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90" to={workshop}><Code2 className="size-4" /> Open in Addon Workshop</Link>}
+          {project.kind === "panel" && can.edit && <Link className="inline-flex items-center gap-2 rounded-md bg-primary-darker px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-darker/90" to={workshop}><Code2 className="size-4" /> Open in Addon Workshop</Link>}
         </div>
       </header>
       {can.manage && !project.author && <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
