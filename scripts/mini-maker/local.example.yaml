@@ -1,0 +1,21 @@
+# Machine settings for mini-maker. Copy to scripts/mini-maker/local.yaml or, to survive worktrees and
+# fresh checkouts, ~/.config/chronicle-mini-maker/local.yaml (gitignored / outside the repo).
+# The first file found is used whole; every key is optional and falls back to the default shown.
+# Check what is in effect: python3 scripts/mini_lib/config.py
+
+# All state: work/, published per-boss folders (dungeons/<slug>/<boss>/), portraits, meshy-tests/, cost.log.
+# Refused when inside any git repo that has a remote (Blizzard-derived files must never be committable).
+workdir: ~/.cache/chronicle-mini-maker
+
+# Interpreter the skill runs the tools with (needs Pillow + PyYAML: requirements.txt).
+# Default: the interpreter running the tool, e.g. scripts/mini-maker/.venv/bin/python.
+# python: ~/somewhere/.venv/bin/python
+
+# A KEY=VALUE file holding MESHY_API_KEY and OPENROUTER_API_KEY. Real environment variables win.
+# The keys are never printed or written anywhere. Each account is your own (meshy.ai, openrouter.ai).
+# env_file: ~/.config/my-keys.env
+
+# Miniature Foundry (publishing; see the make-minis skill). These are the production values.
+foundry:
+  api: https://telemetry.chronicleclassic.com/internal/api/v1/miniatures
+  cdn: https://icons.chronicleclassic.com

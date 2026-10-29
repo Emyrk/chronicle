@@ -1,0 +1,1 @@
+"""mini-maker CLI internals."""
