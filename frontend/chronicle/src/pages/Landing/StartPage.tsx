@@ -299,6 +299,8 @@ export function StartPage() {
   const [pane, setPane] = useState<HeroMeterPane>("damage_done");
   const meter = replay?.meter ?? (clip ? clipMeter(clip) : null);
   const meterKey = replay?.meter ? `live-${hero?.run.instance_id}` : `clip-${clip?.slug}`;
+  // The run page link: the live replay's run, else the run it will play.
+  const meterRun = meter?.run ?? (hero ? { id: hero.run.instance_id } : null);
   const changePane = (next: HeroMeterPane) => {
     setPane(next);
     // A clip has no healing numbers: the live replay brings them.
@@ -371,7 +373,7 @@ export function StartPage() {
               {/* The stats column, following the replay's cursor: the glass meter, then Threat (estimated). From lg up
                   Raid Frames share that slot with a switch (the hero's fixed height has no room for both). */}
               <div className="pointer-events-auto absolute right-4 top-4 flex w-[300px] flex-col gap-2 lg:right-8 lg:top-auto lg:bottom-[112px] lg:w-[320px]">
-                <HeroMeter data={meter} sourceKey={meterKey} pane={pane} onPaneChange={changePane} />
+                <HeroMeter data={meter} sourceKey={meterKey} pane={pane} onPaneChange={changePane} onDrill={requestLive} run={meterRun} />
                 {replay?.renderThreat && (
                   <div className={statsPane === "frames" && replay.renderRaidFrames ? "lg:hidden" : undefined}>
                     {replay.renderThreat(replay.renderRaidFrames ? () => setStatsPane("frames") : null)}
@@ -405,7 +407,7 @@ export function StartPage() {
         {meter && (
           // Below 900 px the meter is a strip under the replay, its top three bars.
           <div className="border-b bg-card px-4 py-4 min-[900px]:hidden">
-            <HeroMeter data={meter} sourceKey={meterKey} pane={pane} onPaneChange={changePane} rows={PHONE_METER_ROWS} />
+            <HeroMeter data={meter} sourceKey={meterKey} pane={pane} onPaneChange={changePane} rows={PHONE_METER_ROWS} onDrill={requestLive} placement="strip" run={meterRun} />
           </div>
         )}
         <BossRail

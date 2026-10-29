@@ -7,16 +7,19 @@ const classColor = (row: PlayerMetricChartData) => `var(--color-class-${row.clas
  * A meter's bars only (the Watch preset): names on class-coloured bars, no
  * columns or breakouts. Clicking a bar calls `onOpen` (e.g. the full preset).
  * With `values`, rows are compact (22 px) with value + share columns, row tags,
- * marker lines and "+N more" (see `MeterValuesOptions`).
+ * marker lines and "+N more" (see `MeterValuesOptions`). `onOpenRow` replaces
+ * `onOpen` on the bars, with the row clicked.
  */
 export function MeterBars({
   data,
   onOpen,
+  onOpenRow,
   openLabel,
   values,
 }: {
   data: PlayerMetricChartData[];
   onOpen?: () => void;
+  onOpenRow?: (row: PlayerMetricChartData) => void;
   openLabel: string;
   values?: MeterValuesOptions;
 }) {
@@ -26,7 +29,7 @@ export function MeterBars({
     return <div className="flex h-full items-center justify-center text-xs text-muted-foreground">Nothing yet</div>;
   }
   if (values) {
-    return <MeterValues data={rows} onOpen={onOpen} openLabel={openLabel} values={values} />;
+    return <MeterValues data={rows} onOpen={onOpen} onOpenRow={onOpenRow} openLabel={openLabel} values={values} />;
   }
   return (
     <div className="styled-scrollbar h-full min-h-0 overflow-y-auto" data-meter-bars>
@@ -35,9 +38,9 @@ export function MeterBars({
           <li key={row.playerID}>
             <button
               type="button"
-              onClick={onOpen}
-              disabled={!onOpen}
-              title={onOpen ? openLabel : row.playerName}
+              onClick={onOpenRow ? () => onOpenRow(row) : onOpen}
+              disabled={!onOpenRow && !onOpen}
+              title={onOpenRow || onOpen ? openLabel : row.playerName}
               className="relative flex h-[18px] w-full items-center overflow-hidden rounded-sm bg-muted/40 px-1.5 text-left text-2xs font-medium text-white enabled:hover:brightness-125"
               style={{ opacity: row.dimmed ? 0.45 : 1 }}
             >
@@ -58,11 +61,13 @@ export function MeterBars({
 function MeterValues({
   data,
   onOpen,
+  onOpenRow,
   openLabel,
   values,
 }: {
   data: PlayerMetricChartData[];
   onOpen?: () => void;
+  onOpenRow?: (row: PlayerMetricChartData) => void;
   openLabel: string;
   values: MeterValuesOptions;
 }) {
@@ -75,9 +80,9 @@ function MeterValues({
             <li key={row.playerID}>
               <button
                 type="button"
-                onClick={onOpen}
-                disabled={!onOpen}
-                title={onOpen ? openLabel : row.playerName}
+                onClick={onOpenRow ? () => onOpenRow(row) : onOpen}
+                disabled={!onOpenRow && !onOpen}
+                title={onOpenRow || onOpen ? openLabel : row.playerName}
                 className="relative flex h-[22px] w-full items-center gap-2 overflow-hidden rounded-sm bg-muted/40 px-1.5 text-left text-xs font-medium tracking-wide text-white [text-shadow:0_1px_2px_rgba(0,0,0,.8)] enabled:hover:brightness-125"
                 style={{ opacity: row.dimmed ? 0.45 : 1 }}
               >

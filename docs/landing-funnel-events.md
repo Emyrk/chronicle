@@ -31,6 +31,7 @@ on the current URL, or else stored in the `chronicle_utm` cookie set on landing
 | `cta_sidekick` | Any Get Sidekick / Download click on `/start`, or Get yours / Get Sidekick in the run page's Sidekick strip. | `placement`: `nav` (top bar), `hero` (hero button), `band` (closing download band), `ghost_card` ("Your run goes here" card), `koth` (King of the Hill "Get your guild on the board"), `run_strip` (run page Sidekick strip) |
 | `explore_3d_open` | The Explore in 3D modal opens on `/start`. | `placement`: `hero` (the button by the hero scrubber), `hero_chip` (the "Live 3D · explore" chip on the hero stage), `recent` (a recent run card), `koth` (King of the Hill "Watch the record in 3D") |
 | `explore_3d_full_run` | "Open the full run →" is clicked in the Explore in 3D modal. | `placement`: where the modal was opened from, as for `explore_3d_open` |
+| `meter_drill` | A bar on the glass meter's Damage Done or Healing Done pane is clicked, drilling into that player's ability breakout (sent on every drill-in). | `pane`: `damage_done` or `healing_done`; `placement`: `hero` (the hero's stats column), `strip` (the meter strip under the replay below 900 px), `explore` (the Explore in 3D modal's meter) |
 | `download_start` | A Sidekick asset link is clicked on `/download` (the main button or the "Also for" links). | `os`: `macos`, `windows` or `linux` |
 
 If the 3D hero fails to load, the poster stays up but `hero_play_3s` is not sent.
@@ -38,7 +39,7 @@ The event only counts a replay that plays or a poster shown because 3D is
 suppressed.
 
 To break these down in GA4 explorations, register `utm_content`, `placement`,
-`mode`, `control` and `os` as event-scoped custom dimensions (Admin → Custom
+`mode`, `control`, `pane` and `os` as event-scoped custom dimensions (Admin → Custom
 definitions). GA4 only fills a custom dimension for events sent after it is
 registered.
 

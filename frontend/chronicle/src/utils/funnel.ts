@@ -2,13 +2,16 @@
 // gtag.js is loaded by index.html only when a GA4 ID is configured; otherwise these are no-ops.
 import { campaignParams } from "./utm";
 
-export type FunnelEvent = "land" | "hero_play_3s" | "scrub_or_bossjump" | "cta_sidekick" | "download_start" | "explore_3d_open" | "explore_3d_full_run";
+export type FunnelEvent = "land" | "hero_play_3s" | "scrub_or_bossjump" | "cta_sidekick" | "download_start" | "explore_3d_open" | "explore_3d_full_run" | "meter_drill";
 
 /** Where a Get Sidekick / Download click came from: /start, or the run page's Sidekick strip. */
 export type CtaPlacement = "nav" | "hero" | "band" | "ghost_card" | "koth" | "run_strip";
 
 /** Where the Explore in 3D modal was opened from on /start. */
 export type ExplorePlacement = "hero" | "hero_chip" | "recent" | "koth";
+
+/** Which glass meter a bar click drilled into: the hero's, the phone strip under it, or the Explore modal's. */
+export type MeterDrillPlacement = "hero" | "strip" | "explore";
 
 /** Sends a funnel event, with the visitor's campaign utm_* params (from the URL, else the landing cookie). */
 export function trackFunnel(event: FunnelEvent, params: Record<string, string> = {}): void {
