@@ -2,19 +2,37 @@
 <html lang="en" class="dark" style="{{ .ThemeCSS }}">
   <head>
     <script>
-      // /start: start the hero poster fetch before the app stylesheet and bundle; the
-      // pre-JS poster shell at the end of <body> paints it (media queries must match).
-      if (location.pathname === "/start") {
-        [["(max-width: 1023px)", "ruins-courtyard-poster-portrait.jpg"], ["(min-width: 1024px)", "ruins-courtyard-poster.jpg"]].forEach(function (p) {
+      // /start: pick this visit's hero clip (they rotate per visit) and start its poster fetch before the
+      // app stylesheet and bundle; the pre-JS poster shell at the end of <body> paints it (media queries
+      // must match). The app reads the pick from these data attributes (pages/Landing/heroClips.ts).
+      // HERO_CLIPS mirrors clips.json's slug, poster and portrait.poster (heroClips.test.ts checks it).
+      (function () {
+        var HERO_CLIPS = [
+          ["zg-hakkar", "/c/images/landing/clips/zg-hakkar.webp", "/c/images/landing/clips/zg-hakkar-portrait.webp"],
+          ["mc-ragnaros", "/c/images/landing/clips/mc-ragnaros.webp", "/c/images/landing/clips/mc-ragnaros-portrait.webp"]
+        ];
+        var start = location.pathname === "/start";
+        var visit = 0;
+        try {
+          visit = Number(localStorage.getItem("landing-hero-clip")) || 0;
+          if (start) localStorage.setItem("landing-hero-clip", String(visit + 1));
+        } catch (e) {}
+        var clip = HERO_CLIPS[visit % HERO_CLIPS.length];
+        var data = document.documentElement.dataset;
+        data.heroClip = clip[0];
+        data.heroPoster = clip[1];
+        data.heroPosterPortrait = clip[2];
+        if (!start) return;
+        [["(max-width: 1023px)", clip[2]], ["(min-width: 1024px)", clip[1]]].forEach(function (p) {
           var link = document.createElement("link");
           link.rel = "preload";
           link.as = "image";
           link.media = p[0];
-          link.href = "/c/images/landing/" + p[1];
+          link.href = p[1];
           link.fetchPriority = "high";
           document.head.appendChild(link);
         });
-      }
+      })();
     </script>
     <!-- {{ if .GA4ID }} -->
     <!-- Google tag (gtag.js) -->
@@ -83,8 +101,8 @@
           "@media (min-width:1024px){#start-poster-shell{height:653px}" +
           "#start-poster-shell i{background:linear-gradient(180deg in oklab,color-mix(in oklab,var(--b) 0%,transparent) calc(100% - 150px),color-mix(in oklab,var(--b) 95%,transparent)),linear-gradient(90deg in oklab,color-mix(in oklab,var(--b) 95%,transparent),color-mix(in oklab,var(--b) 80%,transparent) 38%,color-mix(in oklab,var(--b) 10%,transparent))}}" +
           "</style><div><picture>" +
-          '<source media="(max-width: 1023px)" srcset="/c/images/landing/ruins-courtyard-poster-portrait.jpg">' +
-          '<img src="/c/images/landing/ruins-courtyard-poster.jpg" alt="" fetchpriority="high">' +
+          '<source media="(max-width: 1023px)" srcset="' + document.documentElement.dataset.heroPosterPortrait + '">' +
+          '<img src="' + document.documentElement.dataset.heroPoster + '" alt="" fetchpriority="high">' +
           "</picture><i></i></div>";
         document.body.appendChild(shell);
       }

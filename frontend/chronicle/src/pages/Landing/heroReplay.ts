@@ -1,5 +1,6 @@
 import type { LandingFeaturedRun } from "@/api/typesGenerated";
 import type { HeroPlayback } from "./LandingHero";
+import type { HeroMeterData } from "./heroMeter";
 
 /** The hero starts this long before the boss pull. */
 export const HERO_PULL_LEAD_MS = 5_000;
@@ -51,8 +52,13 @@ export interface HeroDeathRecap {
   /** Ms from the instance's start (the window's, when one plays), like the scrubber's death offsets. */
   offsetMs: number;
   victimName: string;
+  victimClass: string;
+  /** Who landed the killing blow, when the log names them. */
+  killerName: string | null;
   /** The ability that landed the killing blow, when the log names it. */
   killingBlow: string | null;
+  /** The killing blow's damage, when known. */
+  killingBlowAmount: number | null;
   beats: HeroDeathBeat[];
 }
 
@@ -62,4 +68,6 @@ export interface HeroReplay extends HeroPlayback {
   currentMs: number;
   /** The player deaths' recaps once processed (from streams the replay already fetched); null until then. */
   deathRecaps: HeroDeathRecap[] | null;
+  /** The glass meter's live numbers for what plays (from the same streams); null until processed. */
+  meter: HeroMeterData | null;
 }
