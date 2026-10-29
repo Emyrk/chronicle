@@ -11,7 +11,6 @@ import { dungeonMeshLiquid, dungeonMeshUrl } from "@/pages/Instance/EventsPanels
 import { mapProcessor, type MapResult } from "@/pages/Instance/EventsPanels/Map/map.processor";
 import { FULL_MAP_VIEWPORT, type MapViewport } from "@/pages/Instance/EventsPanels/Map/mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "@/pages/Instance/EventsPanels/Map/MapScene3D";
-import { MapView2D } from "@/pages/Instance/EventsPanels/Map/MapView2D";
 import MapView3D from "@/pages/Instance/EventsPanels/Map/MapView3D";
 import { previewSpeed, useMapScene } from "@/pages/Instance/EventsPanels/Map/useMapScene";
 import { liveHeroRun } from "./explore3D";
@@ -56,8 +55,6 @@ interface LandingHero3DProps {
   onPullEnd?: () => void;
   /** The replay's state for the scrubber once the mesh is up and the scene shows, or null (not yet, or it failed). */
   onReplay: (replay: HeroReplay | null) => void;
-  /** A replay still (the run-still page): a map without a mesh, or whose mesh failed, shows its 2D tiles. */
-  still?: boolean;
   /**
    * The Explore modal's scene: the visitor drives the camera (orbit, pan, zoom; clicking a player follows them),
    * as on the run page's Map panel. Off, the hero's backdrop: the cinematic camera only, no pointer input.
@@ -204,7 +201,7 @@ function useHeroMeterAmounts(instance: Instance, encounterIds: string[] | undefi
   });
 }
 
-export function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, onReplay, still = false, explore = false, startPaused = false, initialMs = 0 }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
+export function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, onReplay, explore = false, startPaused = false, initialMs = 0 }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
   const encounterId = pull?.encounterId ?? null;
   const run = useHeroRun(instance, encounterId);
   const processedRecaps = useHeroDeaths(instance, encounterId, run.isSuccess).data ?? null;
@@ -388,8 +385,7 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
   };
   const followedName = followGuid ? instance.players?.[followGuid]?.name ?? instance.units?.[followGuid]?.name ?? null : null;
 
-  const stillTiles = still && ready !== null && (ready.mesh === null || meshState === "failed");
-  const shown = ready !== null && (meshState === "ready" || stillTiles) && !unavailable;
+  const shown = ready !== null && meshState === "ready" && !unavailable;
   const togglePlay = useCallback(() => setUserPlaying((current) => !current), []);
   const seek = useCallback((offsetMs: number, options?: { cut?: boolean }) => {
     if (!span) return;
@@ -421,14 +417,6 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
   useEffect(() => () => onReplay(null), [onReplay]);
 
   if (!ready || unavailable) return null;
-  // A still of a map without a mesh: the Map panel's flat 2D view, framed on the party.
-  if (stillTiles) {
-    return (
-      <div aria-hidden className="pointer-events-none absolute inset-0">
-        <MapView2D ground={ready.ground} markers={ready.markers} routePoints={NO_ROUTE} projectSample={ready.projectSample} trailSeconds={0} view={{ viewport: autoFit ?? FULL_MAP_VIEWPORT, key: "still" }} />
-      </div>
-    );
-  }
   return (
     // Fades in over the poster (which stays underneath) once the mesh is up; until then nothing new shows.
     <div
@@ -462,7 +450,7 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
         debuffSpellIds={ready.debuffSpellIds}
         planItems={NO_PLAN_ITEMS}
         frozen={!live}
-        // The compass only where the camera is free (Explore): on the hero backdrop and the still it sits over the overlays.
+        // The compass only where the camera is free (Explore): on the hero backdrop it sits over the overlays.
         showCompass={explore}
       />
       {explore && shown && (

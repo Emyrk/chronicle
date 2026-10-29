@@ -9,7 +9,6 @@ const (
 	QueueRetention            = "retention"
 	QueueRankings             = "rankings"
 	QueueResync               = "resync"
-	QueueRunStills            = "run-stills"
 )
 
 const (

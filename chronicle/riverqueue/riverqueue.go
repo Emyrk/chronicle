@@ -29,7 +29,6 @@ const (
 	QueueRetention            = riverconst.QueueRetention
 	QueueRankings             = riverconst.QueueRankings
 	QueueResync               = riverconst.QueueResync
-	QueueRunStills            = riverconst.QueueRunStills
 	PriorityHighest           = riverconst.PriorityHighest
 	PriorityHigh              = riverconst.PriorityHigh
 	PriorityDefault           = riverconst.PriorityDefault
