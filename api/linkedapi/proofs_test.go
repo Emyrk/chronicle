@@ -68,14 +68,14 @@ func TestProofNotificationIsBestEffort(t *testing.T) {
 }
 
 type characterLinkDecisionQueue struct {
-	args  chroniclebot.ArgsNotifyCharacterLinkDecision
+	args  chroniclebot.ArgsSendDiscordDM
 	calls int
 	err   error
 }
 
 func (q *characterLinkDecisionQueue) Insert(_ context.Context, args river.JobArgs, _ *river.InsertOpts) (*rivertype.JobInsertResult, error) {
 	q.calls++
-	q.args = args.(chroniclebot.ArgsNotifyCharacterLinkDecision)
+	q.args = args.(chroniclebot.ArgsSendDiscordDM)
 	return nil, q.err
 }
 
@@ -104,14 +104,17 @@ func TestCharacterLinkDecisionNotificationIsBestEffort(t *testing.T) {
 		},
 	})
 	require.Equal(t, 1, queue.calls)
-	require.Equal(t, proofID.String(), queue.args.ProofID)
+	require.Equal(t, proofID.String(), queue.args.UniqueKey)
 	require.Equal(t, "discord-applicant", queue.args.DiscordID)
-	require.Equal(t, "partial", queue.args.Status)
-	require.Equal(t, []string{"Approved (Realm)"}, queue.args.ApprovedCharacters)
-	require.Equal(t, []string{"Rejected (Realm)"}, queue.args.RejectedCharacters)
-	require.Equal(t, "One photo was unclear.", queue.args.Response)
-	require.Equal(t, "Turtle WoW", queue.args.TenantName)
-	require.Equal(t, "https://turtle.chronicle.example/account/characters", queue.args.URL)
+	require.Len(t, queue.args.Message.Embeds, 1)
+	embed := queue.args.Message.Embeds[0]
+	require.Equal(t, "Character link partially approved", embed.Title)
+	require.Equal(t, "https://turtle.chronicle.example/account/characters", embed.URL)
+	require.Len(t, embed.Fields, 4)
+	require.Equal(t, "Turtle WoW", embed.Fields[0].Value)
+	require.Equal(t, "Approved (Realm)", embed.Fields[1].Value)
+	require.Equal(t, "Rejected (Realm)", embed.Fields[2].Value)
+	require.Equal(t, "One photo was unclear.", embed.Fields[3].Value)
 
 	// Missing URL configuration omits the link without skipping the DM.
 	queue.err = nil
@@ -121,10 +124,12 @@ func TestCharacterLinkDecisionNotificationIsBestEffort(t *testing.T) {
 		Subjects: []chroniclesdk.ProofSubject{{Name: "Rejected", RealmName: "Realm", Status: "rejected"}},
 	})
 	require.Equal(t, 2, queue.calls)
-	require.Equal(t, "rejected", queue.args.Status)
-	require.Empty(t, queue.args.ApprovedCharacters)
-	require.Equal(t, []string{"Rejected (Realm)"}, queue.args.RejectedCharacters)
-	require.Empty(t, queue.args.URL)
+	require.Len(t, queue.args.Message.Embeds, 1)
+	embed = queue.args.Message.Embeds[0]
+	require.Equal(t, "Character link rejected", embed.Title)
+	require.Empty(t, embed.URL)
+	require.Len(t, embed.Fields, 2)
+	require.Equal(t, "Rejected (Realm)", embed.Fields[1].Value)
 
 	// Accounts without linked Discord authentication are skipped.
 	unlinkedApplicantID := uuid.New()

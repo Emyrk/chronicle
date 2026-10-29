@@ -14,14 +14,14 @@ import (
 )
 
 type recordingCharacterLinkQueue struct {
-	args  ArgsNotifyCharacterLinkDecision
+	args  ArgsSendDiscordDM
 	calls int
 	err   error
 }
 
 func (q *recordingCharacterLinkQueue) Insert(_ context.Context, args river.JobArgs, _ *river.InsertOpts) (*rivertype.JobInsertResult, error) {
 	q.calls++
-	q.args = args.(ArgsNotifyCharacterLinkDecision)
+	q.args = args.(ArgsSendDiscordDM)
 	return nil, q.err
 }
 
@@ -35,7 +35,10 @@ func TestEnqueueCharacterLinkDecision(t *testing.T) {
 
 	require.NoError(t, EnqueueCharacterLinkDecision(ctx, queue, bot, args))
 	require.Equal(t, 1, queue.calls)
-	require.Equal(t, args, queue.args)
+	require.Equal(t, "discord-user", queue.args.DiscordID)
+	require.Equal(t, "proof", queue.args.UniqueKey)
+	require.Len(t, queue.args.Message.Embeds, 1)
+	require.Equal(t, "Character link rejected", queue.args.Message.Embeds[0].Title)
 
 	queue.err = errors.New("queue unavailable")
 	require.ErrorIs(t, EnqueueCharacterLinkDecision(ctx, queue, bot, args), queue.err)

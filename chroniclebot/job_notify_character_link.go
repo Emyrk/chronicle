@@ -50,18 +50,19 @@ type CharacterLinkDecisionInserter interface {
 	Insert(context.Context, river.JobArgs, *river.InsertOpts) (*rivertype.JobInsertResult, error)
 }
 
-// EnqueueCharacterLinkDecision is a no-op when Discord is disabled or the
-// applicant has no linked Discord account. Callers treat insertion errors as
-// best effort and must not fail a completed proof decision.
+// EnqueueCharacterLinkDecision formats a character-link decision and sends it
+// through the shared Discord DM job. Callers treat insertion errors as best
+// effort and must not fail a completed proof decision.
 func EnqueueCharacterLinkDecision(ctx context.Context, queue CharacterLinkDecisionInserter, bot *Bot, args ArgsNotifyCharacterLinkDecision) error {
-	if bot == nil || bot.Disabled() || args.DiscordID == "" {
-		return nil
-	}
-	if queue == nil {
-		return errors.New("character-link decision notification queue unavailable")
-	}
-	_, err := queue.Insert(ctx, args, nil)
-	return err
+	message := characterLinkDecisionMessage(args)
+	return EnqueueDiscordDM(ctx, queue, bot, ArgsSendDiscordDM{
+		DiscordID: args.DiscordID,
+		Message: DiscordDirectMessage{
+			Content: message.Content,
+			Embeds:  message.Embeds,
+		},
+		UniqueKey: args.ProofID,
+	})
 }
 
 type WorkerNotifyCharacterLinkDecision struct {
