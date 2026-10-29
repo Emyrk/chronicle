@@ -36,6 +36,7 @@ import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
 import { seoProductName } from "@/lib/seo";
 import { Podium } from "@/pages/Leaderboard/Podium";
 import { RaidCard } from "@/pages/Recent/RaidCard";
+import { HeroReplayBackground } from "@/pages/HeroReplay";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
 const ROTATE_SECS = 5 * 60; // rotate the spotlight every 5 minutes
@@ -190,6 +191,7 @@ function HeroSection() {
       className="relative px-6 py-14 md:py-20 bg-cover bg-center bg-no-repeat border-b"
       style={{ backgroundImage: "url('/c/images/herobackground.avif')" }}
     >
+      <HeroReplayBackground />
       <div className="absolute inset-0 bg-background/80" />
       <div className="relative max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-10">
         <div className="max-w-2xl text-center md:text-left">

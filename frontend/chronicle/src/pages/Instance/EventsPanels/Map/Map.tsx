@@ -318,9 +318,15 @@ interface ReplayMapProps extends PanelRenderProps<MapResult> {
   mini?: boolean;
   /** Mobile Map panel: inert 2D preview that opens the 3D world fullscreen. */
   mobile?: boolean;
+  /**
+   * Decorative background use (e.g. the homepage hero): on top of `mini`,
+   * also drops the mini map's own chrome (play/pause, scrubber, Preview
+   * badge) and disables pointer events, so nothing is left to click or drag.
+   */
+  ambient?: boolean;
 }
 
-function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = false, mobile = false, ...props }: ReplayMapProps) {
+function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = false, mobile = false, ambient = false, ...props }: ReplayMapProps) {
   const sync = useSyncModeContextOptional();
   useReplayStepKeys((deltaMs) => {
     if (!sync || sync.externalDriver !== "none" || sync.readOnly || !sync.encounterBounds) return false;
@@ -788,9 +794,10 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
         !mini && !mobile && !immersive && "p-1",
         mobileWorldOpen && "fixed inset-0 z-[100] h-[100dvh] w-screen",
         windowed && "fixed inset-0 z-[100] h-auto",
+        ambient && "pointer-events-none",
       )}
     >
-      {!mobile && (props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>)}
+      {!mobile && !ambient && (props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>)}
       {/* The card has no padding (hoverHeader): the full map keeps a thin window frame a hair inside it, the mini map runs to the edges. */}
       <div className={cn("group/map relative min-h-0 flex-1 overflow-hidden bg-black/70", !mini && !mobile && !immersive && "rounded-sm border border-white/15")}>
         {mobile && !mobileWorldOpen ? (
@@ -844,6 +851,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               presenceSurface={presenceSurface}
               unitRoles={unitRoles}
               frozen={reloading}
+              hideCompass={ambient}
               debuffSpellIds={ready.debuffSpellIds}
               followGuid={followGuid}
               onFollowChange={setFollowGuid}
@@ -862,9 +870,9 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
             onClose={closeMobileWorld}
           />
         )}
-        {!mobile && framingControls}
-        {!mobile && mini && <ExpandMapButton context={props.context} overlay />}
-        {!mobile && previewOn && (
+        {!mobile && !ambient && framingControls}
+        {!mobile && mini && !ambient && <ExpandMapButton context={props.context} overlay />}
+        {!mobile && !ambient && previewOn && (
           <>
             {/* Replay is off: a greyed preview, with the way to the real Replay controls. */}
             <div className="pointer-events-none absolute inset-0 z-30 bg-slate-900/25 backdrop-saturate-50" aria-hidden />
@@ -895,7 +903,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
             )}
           </>
         )}
-        {mini && (
+        {mini && !ambient && (
           <MiniScrubber
             raised={previewOn && Boolean(props.context.onOpenReplay)}
             fraction={(ready.cursorMs - ready.encounterStartMs) / Math.max(1, ready.encounterEndMs - ready.encounterStartMs)}
@@ -911,8 +919,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           />
         )}
         {/* X toggles the replay: flash play or pause over the map, like a video player. */}
-        <ReplayToggleFlash />
-        {reloading && (
+        {!ambient && <ReplayToggleFlash />}
+        {!ambient && reloading && (
           <div className="pointer-events-none absolute left-1/2 top-2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-sm bg-black/75 px-2 py-0.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
             <Loader2 className="h-3 w-3 animate-spin" />
             Loading the encounter…
@@ -1227,7 +1235,7 @@ function MapTelemetryWarning({ props, children }: { props: PanelRenderProps<MapR
   );
 }
 
-function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult> & { forceMini?: boolean }) {
+function MapContent({ forceMini = false, forceAmbient = false, ...props }: PanelRenderProps<MapResult> & { forceMini?: boolean; forceAmbient?: boolean }) {
   const [wholeRun, setWholeRun] = useState(false);
   const isMobile = useIsMobile();
   // The Mini Map panel is always mini; a Map panel is mini with the (older) "mini" option.
@@ -1244,14 +1252,14 @@ function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult>
   if (presentation === "replay-3d" && selectedCount !== 1) {
     return (
       <MapTelemetryWarning props={props}>
-        <SingleEncounterReplayMap {...props} mini={mini} wholeRun onExitWholeRun={() => setWholeRun(false)} />
+        <SingleEncounterReplayMap {...props} mini={mini} ambient={forceAmbient} wholeRun onExitWholeRun={() => setWholeRun(false)} />
       </MapTelemetryWarning>
     );
   }
   if (presentation === "replay-3d") {
     return (
       <MapTelemetryWarning props={props}>
-        <SingleEncounterReplayMap {...props} mini={mini} />
+        <SingleEncounterReplayMap {...props} mini={mini} ambient={forceAmbient} />
       </MapTelemetryWarning>
     );
   }
@@ -1311,11 +1319,16 @@ function MapMessage({ title, detail, children }: { title: string; detail: string
   );
 }
 
-/** The Map panel; `mini` makes the Mini Map panel (just the replay, for small spots like the Summary). */
-export function createMapPanel({ mini = false }: { mini?: boolean } = {}): PanelDefinition<MapResult, MapProcessorEvent> {
+/**
+ * The Map panel; `mini` makes the Mini Map panel (just the replay, for small
+ * spots like the Summary). `ambient` is for decorative, non-interactive uses
+ * (e.g. the homepage hero): implies `mini` and drops its remaining chrome too.
+ */
+export function createMapPanel({ mini = false, ambient = false }: { mini?: boolean; ambient?: boolean } = {}): PanelDefinition<MapResult, MapProcessorEvent> {
+  const effectiveMini = mini || ambient;
   return {
     ...mapProcessor,
-    label: mini ? "Mini Map" : "Map",
+    label: effectiveMini ? "Mini Map" : "Map",
     icon: <MapIcon className="h-4 w-4" />,
     keybinds: MAP_CONTROL_KEYBINDS,
     requiredCapabilities: ["unit-position"],
@@ -1325,6 +1338,6 @@ export function createMapPanel({ mini = false }: { mini?: boolean } = {}): Panel
     hoverHeader: () => true,
     supportsFiltering: false,
     underConstruction: true,
-    render: (props) => <MapContent {...props} forceMini={mini} />,
+    render: (props) => <MapContent {...props} forceMini={effectiveMini} forceAmbient={ambient} />,
   };
 }

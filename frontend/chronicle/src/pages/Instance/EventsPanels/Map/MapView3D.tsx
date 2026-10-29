@@ -118,6 +118,8 @@ export interface MapView3DProps {
    * mesh) as it was instead of tearing the scene down, until fresh props arrive.
    */
   frozen?: boolean;
+  /** Hide the north compass HUD, for decorative/non-interactive uses (e.g. the homepage hero). */
+  hideCompass?: boolean;
 }
 
 const NO_DEBUFFS: readonly number[] = [];
@@ -197,6 +199,7 @@ export default function MapView3D({
   presenceSurface,
   unitRoles = null,
   frozen = false,
+  hideCompass = false,
   debuffSpellIds = NO_DEBUFFS,
   followGuid = null,
   onFollowChange,
@@ -555,7 +558,7 @@ export default function MapView3D({
           </div>
         </div>
       )}
-      <MapCompass northRadians={compassYaw} />
+      {!hideCompass && <MapCompass northRadians={compassYaw} />}
       {effectHover && <EffectTooltip hover={effectHover} />}
     </div>
   );
