@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Camera, Check, ChevronRight, Clock, Maximize2, Search, Users } from "lucide-react";
+import { Camera, Check, ChevronRight, Clock, Maximize2, Search, ShieldCheck, User, Users } from "lucide-react";
 import { useArmorySearch } from "@/api/queries";
 import type {
   ArmorySearchResult,
@@ -255,6 +255,18 @@ function ProofStatus({ status }: { status: string }) {
   return <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${PROOF_STATUS_STYLES[status] ?? "bg-muted text-muted-foreground"}`}>{status.replaceAll("_", " ")}</span>;
 }
 
+function ProofMessage({ author, text }: { author: "you" | "reviewer"; text: string }) {
+  const reviewer = author === "reviewer";
+  const Icon = reviewer ? ShieldCheck : User;
+  return <div className={`rounded-md border px-3 py-2 ${reviewer ? "ml-6 border-primary/30 bg-primary/10" : "mr-6 bg-muted/50"}`}>
+    <p className={`mb-1 flex items-center gap-1.5 text-xs font-semibold ${reviewer ? "text-primary" : "text-foreground"}`}>
+      <Icon className="size-3.5" />
+      {reviewer ? "Reviewer" : "You"}
+    </p>
+    <p className="whitespace-pre-wrap text-sm text-foreground/90">{text}</p>
+  </div>;
+}
+
 export function PhotoProofHistory() {
   const { data: history } = useMyProofs();
   const [expanded, setExpanded] = useState(false);
@@ -281,8 +293,8 @@ export function PhotoProofHistory() {
             {subject.warning && <span className="text-xs text-yellow-500">{subject.warning}</span>}
           </span>)}
         </div>
-        {request.message && <p className="text-xs text-muted-foreground">Your message: {request.message}</p>}
-        {request.response && <p className="text-xs text-muted-foreground">Reviewer: {request.response}</p>}
+        {request.message && <ProofMessage author="you" text={request.message} />}
+        {request.response && <ProofMessage author="reviewer" text={request.response} />}
       </div>)}
     </div>}
   </div>;
