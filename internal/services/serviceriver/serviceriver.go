@@ -112,6 +112,9 @@ func (s *Service) Start(ctx context.Context) error {
 		bot.SetQueue(q)
 		riverqueue.AddWorker(q, bot.NewWorkerSyncDiscordUser())
 		riverqueue.AddWorker(q, bot.NewWorkerNotifyApplication())
+		riverqueue.AddWorker(q, bot.NewWorkerSendDiscordDM())
+		// Keep the specialized worker registered to drain jobs queued before DMs
+		// moved to the shared worker.
 		riverqueue.AddWorker(q, bot.NewWorkerNotifyCharacterLinkDecision())
 		riverqueue.AddWorker(q, bot.NewWorkerNotifyAdmin())
 		riverqueue.AddWorker(q, bot.NewWorkerAnnounceRaidLog())
