@@ -19,7 +19,7 @@ const COMMON_MAP = ["visible", "alpha"]
 const PROPERTIES: Record<NodeKind, readonly string[]> = {
   frame: [...COMMON_UI, "width", "height", "color", "backgroundColor", "borderColor"],
   text: [...COMMON_UI, "width", "height", "text", "fontSize", "color", "align", "backgroundColor", "borderColor"],
-  texture: [...COMMON_UI, "width", "height", "asset", "tint", "borderColor"],
+  texture: [...COMMON_UI, "width", "height", "asset", "textureType", "textureId", "iconName", "tooltip", "tint", "borderColor"],
   button: [...COMMON_UI, "width", "height", "text", "enabled", "color", "backgroundColor", "borderColor"],
   unit: [...COMMON_MAP, "x", "y", "size", "unit", "label", "color", "facing", "entry", "role"],
   icon: [...COMMON_MAP, "x", "y", "size", "asset", "label", "color", "facing"],
@@ -137,9 +137,25 @@ function validateProps(kind: NodeKind, input: unknown, partial: boolean): Record
 
   for (const [key, value] of Object.entries(props)) {
     if (key === "text") displayText(value, `${kind}.text`)
-    else if (["asset", "unit", "label", "role"].includes(key)) string(value, `${kind}.${key}`)
-    else if (["color", "fillColor", "tint", "backgroundColor", "borderColor"].includes(key)) color(value, `${kind}.${key}`)
-    else if (["visible", "enabled"].includes(key)) boolean(value, `${kind}.${key}`)
+    else if (key === "asset") {
+      const asset = string(value, `${kind}.asset`, 255)
+      const segments = asset.split("/")
+      if (asset.startsWith("/") || asset.includes("\\") || asset.includes(":")
+        || [...asset].some((character) => { const code = character.charCodeAt(0); return code < 32 || code > 126 })
+        || segments.some((segment) => !segment || segment === "." || segment === "..")) {
+        throw new SceneValidationError(`${kind}.asset must be a normalized package-local path`)
+      }
+    } else if (["unit", "label", "role"].includes(key)) string(value, `${kind}.${key}`)
+    else if (key === "textureType") {
+      if (value !== "asset" && value !== "spell" && value !== "item" && value !== "icon") throw new SceneValidationError("texture.textureType is invalid")
+    } else if (key === "textureId") {
+      const textureId = bounded(value, 1, 0x7fffffff, "texture.textureId")
+      if (!Number.isInteger(textureId)) throw new SceneValidationError("texture.textureId must be an integer")
+    } else if (key === "iconName") {
+      const iconName = string(value, "texture.iconName", 128)
+      if (!/^[a-z0-9][a-z0-9_-]{0,127}$/.test(iconName)) throw new SceneValidationError("texture.iconName is invalid")
+    } else if (["color", "fillColor", "tint", "backgroundColor", "borderColor"].includes(key)) color(value, `${kind}.${key}`)
+    else if (["visible", "enabled", "tooltip"].includes(key)) boolean(value, `${kind}.${key}`)
     else if (key === "alpha") bounded(value, 0, 1, `${kind}.alpha`)
     else if (key === "anchor") {
       if (typeof value !== "string" || !ANCHORS.has(value)) throw new SceneValidationError(`${kind}.anchor is invalid`)

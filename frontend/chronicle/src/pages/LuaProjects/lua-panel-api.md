@@ -2,7 +2,7 @@
 
 Chronicle modules are small Lua programs that extend Chronicle. This reference covers **instance panel** modules, which turn a raid log into your own panel on the instance page; guide, guild and armory modules will follow the same model. Modules run in a sandboxed browser worker (Lua 5.3 via Fengari) with no network, file or page access. Chronicle replays the log's events into your code, and your code draws the panel with a small WoW-style UI API.
 
-Chronicle modules run on Chronicle in your browser, not in the game client: they do not go in your `Interface/AddOns` folder.
+> **Note:** Chronicle modules run on Chronicle in your browser, not in the game client: they do not go in your `Interface/AddOns` folder.
 
 ## Quick start
 
@@ -157,7 +157,7 @@ local players = Chronicle.GetPlayers() -- array of player GUIDs, sorted by name
 | `owner` | pets and summons | GUID of the player who controls it. |
 | `entry` | NPCs, pets and summons | Creature entry ID. |
 
-Lookups return a new table each call, so cache what you need in a Lua table instead of calling `GetUnit` for every event. Talents and gear are not available yet.
+Lookups return a new table each call, so cache what you need in a Lua table instead of calling `GetUnit` for every event. Units do not carry talents or gear; read those from the `combatant_info` stream.
 
 ## Drawing
 
@@ -194,15 +194,160 @@ UIParent:SetHeight(40 + #rows * ROW)   -- tall enough for a title and every row
 | `SetColor(r, g, b, a)` | Frame, FontString, Button | Text or foreground colour, components 0–1, `a` optional. |
 | `SetBackgroundColor(r, g, b, a)` | Frame, FontString, Button | |
 | `SetBorderColor(r, g, b, a)` | all | |
-| `SetTexture(path)` | Texture | A file listed in `assets`. |
+| `SetTexture(path)` | Texture | A file listed in `assets`. The path is resolved only from the validated module package. |
+| `SetSpell(spellId, tooltip?)` | Texture | Current-dataset spell icon. `tooltip` defaults to `false`; pass `true` for Chronicle's spell tooltip on hover. |
+| `SetItem(itemId, tooltip?)` | Texture | Current-dataset item icon. `tooltip` defaults to `false`; pass `true` for Chronicle's item tooltip on hover. |
+| `SetIcon(iconName)` | Texture | Named icon from Chronicle's current dataset CDN, for example `"inv_sword_39"`. Only letters, numbers, `_` and `-` are accepted; paths and URLs are rejected. |
 | `SetAlpha(a)` | all | 0–1. |
 | `SetLayer(layer)` | all | `"BACKGROUND"`, `"ARTWORK"`, `"OVERLAY"`, or a number. |
 | `Show()`, `Hide()`, `IsShown()` | all | |
 | `SetParent(frame)` | all | |
 | `Destroy()` | all except UIParent | Removes the object and its click handler. |
+| `SetScript("OnClick", fn)` | Button, Frame | Needs the `input` capability. `fn(self)` runs on click. |
 
 `UIParent` supports only `SetSize`, `SetWidth`, `SetHeight` and `SetScript`.
-| `SetScript("OnClick", fn)` | Button, Frame | Needs the `input` capability. `fn(self)` runs on click. |
+
+### Lua Language Server definitions
+
+The repository includes `lua-panel-api.d.lua`, a documentation-only [EmmyLua/LuaLS](https://luals.github.io/wiki/annotations/) definition file. Download it from the **LuaLS definitions** button at the top of this page and copy it into your editor workspace for completion, parameter hints and type checking. Chronicle generates the technical reference below from that file so the editor contract and published documentation stay aligned.
+
+<!-- BEGIN GENERATED LUA API REFERENCE -->
+<!-- Do not edit this section by hand. Edit lua-panel-api.d.lua and run pnpm generate:lua-api. -->
+## Generated Lua API reference
+
+Every global and method below comes from `lua-panel-api.d.lua`, the [EmmyLua/LuaLS](https://luals.github.io/wiki/annotations/) definition file behind the **LuaLS definitions** button. Signatures use LuaLS notation: `name: type`, and a parameter ending in `?` is optional.
+
+### Globals
+
+#### `CreateFrame(frameType: "Frame"|"FontString"|"Texture"|"Button", id?: string, parent?: ChronicleFrame)`
+
+Create a retained UI object. parent defaults to UIParent.
+
+**Returns:** `ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton` object
+
+### `ChronicleRegion`
+
+#### `ChronicleRegion:SetPoint(point: ChronicleAnchor, relativeTo?: ChronicleRegion, relativePoint?: ChronicleAnchor, x?: number, y?: number)`
+
+Anchor this object within its parent. relativeTo and relativePoint are accepted for WoW compatibility but currently ignored.
+
+#### `ChronicleRegion:SetSize(width: number, height: number)`
+
+Set this object's width and height in pixels.
+
+#### `ChronicleRegion:SetWidth(width: number)`
+
+Set this object's width in pixels.
+
+#### `ChronicleRegion:SetHeight(height: number)`
+
+Set this object's height in pixels.
+
+#### `ChronicleRegion:SetParent(parent: ChronicleFrame)`
+
+Move this object to another frame.
+
+#### `ChronicleRegion:SetAlpha(alpha: number)`
+
+Set opacity from 0 through 1.
+
+#### `ChronicleRegion:SetLayer(layer: ChronicleLayer)`
+
+Set draw order using a named layer or numeric z-index.
+
+#### `ChronicleRegion:SetBorderColor(red: number, green: number, blue: number, alpha?: number)`
+
+Set the border color. Components are numbers from 0 through 1.
+
+#### `ChronicleRegion:Show()`
+
+Show this object.
+
+#### `ChronicleRegion:Hide()`
+
+Hide this object.
+
+#### `ChronicleRegion:IsShown()`
+
+Return whether this object is shown.
+
+**Returns:** `boolean` shown
+
+#### `ChronicleRegion:Destroy()`
+
+Remove this object and its callbacks.
+
+### `ChronicleFrame` extends `ChronicleRegion`
+
+#### `ChronicleFrame:CreateFontString(id?: string)`
+
+Create a text object parented to this frame.
+
+**Returns:** `ChronicleFontString` text
+
+#### `ChronicleFrame:CreateTexture(id?: string)`
+
+Create a texture object parented to this frame.
+
+**Returns:** `ChronicleTexture` texture
+
+#### `ChronicleFrame:SetColor(red: number, green: number, blue: number, alpha?: number)`
+
+Set foreground color. Components are numbers from 0 through 1.
+
+#### `ChronicleFrame:SetBackgroundColor(red: number, green: number, blue: number, alpha?: number)`
+
+Set background color. Components are numbers from 0 through 1.
+
+#### `ChronicleFrame:SetScript(script: "OnClick"|"OnSizeChanged", callback: fun(self:ChronicleFrame,...))`
+
+Register a supported callback. OnClick requires the input capability.
+
+### `ChronicleFontString` extends `ChronicleRegion`
+
+#### `ChronicleFontString:SetText(text: string)`
+
+Set displayed text, up to 4 KiB.
+
+#### `ChronicleFontString:SetFontSize(size: number)`
+
+Set font size in pixels.
+
+#### `ChronicleFontString:SetColor(red: number, green: number, blue: number, alpha?: number)`
+
+Set text color. Components are numbers from 0 through 1.
+
+### `ChronicleTexture` extends `ChronicleRegion`
+
+#### `ChronicleTexture:SetTexture(path: string)`
+
+Render an image declared in project.json assets. The path is package-local and never treated as a URL.
+
+#### `ChronicleTexture:SetSpell(spellId: integer, tooltip?: boolean)`
+
+Render the current dataset's icon for a spell ID.
+
+- `tooltip`: Show Chronicle's spell tooltip on hover. Defaults to false.
+
+#### `ChronicleTexture:SetItem(itemId: integer, tooltip?: boolean)`
+
+Render the current dataset's icon for an item ID.
+
+- `tooltip`: Show Chronicle's item tooltip on hover. Defaults to false.
+
+#### `ChronicleTexture:SetIcon(iconName: string)`
+
+Render a named icon from Chronicle's current dataset CDN. Names contain only ASCII letters, numbers, underscores, and hyphens. Paths and URLs are rejected.
+
+- `iconName`: Example: "inv_sword_39".
+
+### `ChronicleButton` extends `ChronicleFrame`
+
+#### `ChronicleButton:SetText(text: string)`
+
+Set the button label.
+
+<!-- END GENERATED LUA API REFERENCE -->
 
 ## Built-in modules
 
@@ -276,7 +421,8 @@ Make sure `project.json` lists every stream you subscribe to in `streams`. Make 
 **My panel is cut off.**
 Content past the panel's edge scrolls. Set `UIParent:SetHeight(...)` to the height your rows need so the panel scrolls to all of it. See [Panel size and scrolling](#panel-size-and-scrolling).
 
-When a module stops, Chronicle shows what went wrong, where (file, line, and whether it was startup, `onEvent`, `onComplete` or a click), and how to fix it. In the workshop, **Ask the assistant to fix it** sends that explanation to the assistant.
+**What happens when my module stops?**
+Chronicle shows what went wrong, where (file, line, and whether it was startup, `onEvent`, `onComplete` or a click), and how to fix it. In the workshop, **Ask the assistant to fix it** sends that explanation to the assistant.
 
 **"Module stopped: instruction budget exceeded".**
 One callback did too much work, for example sorting a large table inside `onEvent`. Move heavy work to `onComplete`, and keep each callback under 100,000 instructions.
@@ -291,7 +437,7 @@ Your `project.json` sets `max_events` lower than the events in scope. Raise or r
 Yes. Set `"stream_scope": "instance"` and use `event.selected` to tell the two apart.
 
 **Can I use talents, gear, healing, casts or auras?**
-Not yet. Only the damage stream and the unit facts above are available.
+Yes. Healing, casts and auras are streams; see [Streams and fields](#streams-and-fields). Gear and talents come from the `combatant_info` stream.
 
 **Can my module load data from the internet or remember things between views?**
 No. Modules have no network or storage access, and every run starts fresh.

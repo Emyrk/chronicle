@@ -59,7 +59,7 @@ interface ObjectState { kind: NodeKind | "root"; shown: boolean }
 const SUPPORTED_PROPS: Record<NodeKind, ReadonlySet<string>> = Object.fromEntries([
   ["frame", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "color", "backgroundColor", "borderColor"]],
   ["text", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "text", "fontSize", "color", "align", "backgroundColor", "borderColor"]],
-  ["texture", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "asset", "tint", "borderColor"]],
+  ["texture", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "asset", "textureType", "textureId", "iconName", "tooltip", "tint", "borderColor"]],
   ["button", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "text", "enabled", "color", "backgroundColor", "borderColor"]],
   ["unit", ["visible", "alpha", "x", "y", "size", "unit", "label", "color", "facing", "entry", "role"]],
   ["icon", ["visible", "alpha", "x", "y", "size", "asset", "label", "color", "facing"]],
@@ -75,7 +75,7 @@ function defaultProps(kind: NodeKind): Record<string, unknown> {
   switch (kind) {
     case "frame": return { x: 0, y: 0, width: 1, height: 1, anchor: "center", visible: true }
     case "text": return { x: 0, y: 0, text: " ", fontSize: 14, color: "#ffffffff", anchor: "center", visible: true }
-    case "texture": return { x: 0, y: 0, width: 1, height: 1, asset: "unset", anchor: "center", visible: true }
+    case "texture": return { x: 0, y: 0, width: 1, height: 1, asset: "unset", textureType: "asset", tooltip: false, anchor: "center", visible: true }
     case "button": return { x: 0, y: 0, width: 1, height: 1, text: " ", anchor: "center", visible: true }
     case "unit": return { x: 0, y: 0, size: 1, unit: "unknown", visible: true }
     case "icon": return { x: 0, y: 0, size: 1, asset: "unset", visible: true }
@@ -121,6 +121,31 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   }
   const optionalString = (state: LuaState, index: number, fallback: string) => lua.lua_isnoneornil(state, index) ? fallback : stringAt(state, index)
   const numberAt = (state: LuaState, index: number) => lauxlib.luaL_checknumber(state, index) as number
+  const optionalBoolean = (state: LuaState, index: number, fallback = false) => {
+    if (lua.lua_isnoneornil(state, index)) return fallback
+    if (!lua.lua_isboolean(state, index)) luaError(state, "tooltip must be a boolean")
+    return lua.lua_toboolean(state, index) !== 0
+  }
+  const positiveIdAt = (state: LuaState, index: number, label: string) => {
+    const value = numberAt(state, index)
+    if (!Number.isInteger(value) || value < 1 || value > 0x7fffffff) luaError(state, `${label} must be a positive 32-bit integer`)
+    return value
+  }
+  const assetPathAt = (state: LuaState, index: number) => {
+    const value = stringAt(state, index, "asset path")
+    const segments = value.split("/")
+    if (value.length > 255 || value.startsWith("/") || value.includes("\\") || value.includes(":")
+      || [...value].some((character) => { const code = character.charCodeAt(0); return code < 32 || code > 126 })
+      || segments.some((segment) => !segment || segment === "." || segment === "..")) {
+      luaError(state, "asset path must be a normalized package-local path")
+    }
+    return value
+  }
+  const iconNameAt = (state: LuaState, index: number) => {
+    const value = stringAt(state, index, "icon name").toLowerCase()
+    if (!/^[a-z0-9][a-z0-9_-]{0,127}$/.test(value)) luaError(state, "icon name must contain only letters, numbers, underscores, or hyphens")
+    return value
+  }
   const pushString = (state: LuaState, value: string) => lua.lua_pushstring(state, to_luastring(value))
   const setField = (state: LuaState, index: number, name: string) => lua.lua_setfield(state, index, to_luastring(name))
   const pushBoolean = (state: LuaState, value: boolean) => lua.lua_pushboolean(state, value ? 1 : 0)
@@ -220,7 +245,24 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
     registerFunction(state, "SetWidth", propertyMethod((inner) => ({ width: numberAt(inner, 2) })))
     registerFunction(state, "SetHeight", propertyMethod((inner) => ({ height: numberAt(inner, 2) })))
     registerFunction(state, "SetText", propertyMethod((inner) => ({ text: stringAt(inner, 2, "text") })))
-    registerFunction(state, "SetTexture", propertyMethod((inner) => kindAt(objectIdAt(inner)) === "texture" ? { asset: stringAt(inner, 2, "asset") } : { asset: stringAt(inner, 2, "asset") }))
+    registerFunction(state, "SetTexture", propertyMethod((inner) => kindAt(objectIdAt(inner)) === "texture"
+      ? { asset: assetPathAt(inner, 2), textureType: "asset", tooltip: false }
+      : { asset: assetPathAt(inner, 2) }))
+    registerFunction(state, "SetSpell", propertyMethod((inner) => ({
+      textureType: "spell",
+      textureId: positiveIdAt(inner, 2, "spell ID"),
+      tooltip: optionalBoolean(inner, 3),
+    })))
+    registerFunction(state, "SetItem", propertyMethod((inner) => ({
+      textureType: "item",
+      textureId: positiveIdAt(inner, 2, "item ID"),
+      tooltip: optionalBoolean(inner, 3),
+    })))
+    registerFunction(state, "SetIcon", propertyMethod((inner) => ({
+      textureType: "icon",
+      iconName: iconNameAt(inner, 2),
+      tooltip: false,
+    })))
     registerFunction(state, "SetColor", propertyMethod((inner) => ({ color: normalizeColor(inner) })))
     registerFunction(state, "SetBackgroundColor", propertyMethod((inner) => ({ backgroundColor: normalizeColor(inner) })))
     registerFunction(state, "SetBorderColor", propertyMethod((inner) => ({ borderColor: normalizeColor(inner) })))
