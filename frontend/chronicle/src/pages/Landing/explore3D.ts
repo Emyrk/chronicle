@@ -22,6 +22,9 @@ export function fullRunHref(instance: { id: string; slug?: string | null }): str
   return `/instances/${instance.slug || instance.id}?preset=watch`;
 }
 
+/** Boss pulls shorter than this are near-zero duplicates (the Ruins log ends on a 15 ms Rath'mael pull), as `landingMinBossPull` in api/landing.go. */
+const MIN_BOSS_PULL_MS = 3_000;
+
 /**
  * A loaded instance as the hero's scrubber and boss rail see a featured run: its boss pulls in order,
  * offsets from the instance's start, and the pull to open on (the last boss kill, else the last boss pull).
@@ -38,6 +41,7 @@ export function exploreRunFromInstance(instance: Instance): LandingFeaturedRun {
       start_offset_ms: Date.parse(encounter.start_time) - startMs,
       end_offset_ms: Date.parse(encounter.end_time) - startMs,
     }))
+    .filter((boss) => boss.end_offset_ms - boss.start_offset_ms >= MIN_BOSS_PULL_MS)
     .sort((left, right) => left.start_offset_ms - right.start_offset_ms);
   const ends = instance.encounters.map((encounter) => Date.parse(encounter.end_time) - startMs);
   const last = [...bosses].reverse().find((boss) => boss.kill) ?? bosses[bosses.length - 1] ?? null;
