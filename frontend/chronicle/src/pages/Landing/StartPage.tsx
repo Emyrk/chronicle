@@ -1,12 +1,14 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useLandingFeatured } from "@/api/landingFeatured";
+import { useSiteConfig } from "@/api/siteConfigQuery";
+import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { trackFunnel } from "@/utils/funnel";
 import { HeroReplayLayer } from "./HeroReplayLayer";
 import { heroWindow, type HeroReplay } from "./heroReplay";
 import { LandingHero } from "./LandingHero";
-import { HEADING_FONT, IMAGES } from "./startPageStyle";
+import { IMAGES } from "./startPageStyle";
 import { whenIdle } from "./whenIdle";
 
 // The sections below how-it-works and their queries: requested only once the trigger in BelowFold fires.
@@ -25,7 +27,7 @@ const STEPS = [
   {
     title: (
       <>
-        Type <span className="rounded bg-[#0c1322] px-1.5 py-px font-mono text-[#40ff40]">/combatlog</span> in game
+        Type <span className="rounded bg-background px-1.5 py-px font-mono text-[#40ff40]">/combatlog</span> in game
       </>
     ),
     body: "Once per session. The tray stone turns teal when it hears the first fight.",
@@ -45,48 +47,66 @@ const FOOTER_LINKS = [
   { to: "/developers/api", label: "API" },
 ];
 
+const NAV_LINK = "text-sm text-muted-foreground no-underline transition-colors hover:text-foreground";
+
+/**
+ * A light copy of the Layout NavBar (same height, tenant logo and button styles), so /start does not pay
+ * for NavBar's account menus before first paint.
+ */
 function LandingNav({ getSidekickHref }: { getSidekickHref: string }) {
-  // Fixed height: the pre-JS poster shell in index.html sits exactly below it.
+  const { data: siteConfig } = useSiteConfig();
+  // Tenant overrides site-level, as in NavBar.
+  const branding = siteConfig?.tenant?.branding ?? siteConfig?.branding ?? null;
+  const hasBranding = !!(branding?.logo_wide || branding?.square_logo || branding?.display_name);
+
+  // Fixed height, NavBar's with a tenant logo: the pre-JS poster shell in index.html sits exactly below it.
   return (
-    <nav className="flex h-14 items-center justify-between gap-4 border-b border-[#27324a] px-4 lg:h-16 lg:px-8">
-      <a href="#top" className="flex items-center gap-2 text-[#e8eef8] no-underline lg:gap-2.5">
-        <span
-          className={`inline-flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#e0b45c] text-[13px] font-bold text-[#e0b45c] lg:h-7 lg:w-7 lg:text-base ${HEADING_FONT}`}
-        >
-          C
-        </span>
-        <span className={`text-lg font-bold lg:text-xl ${HEADING_FONT}`}>Chronicle</span>
-        <span className="ml-1 hidden text-xs uppercase tracking-[0.12em] text-[#8a97ad] lg:inline">WoW Forever</span>
-      </a>
-      <div className="hidden gap-1.5 lg:flex">
-        {[
-          ["#runs", "Watch runs"],
-          ["#dungeons", "Dungeons"],
-          ["#how", "How it works"],
-        ].map(([href, label]) => (
-          <a
-            key={href}
-            href={href}
-            className="rounded-lg px-3.5 py-2 text-sm font-medium text-[#e8eef8] no-underline hover:bg-white/5"
-          >
-            {label}
-          </a>
-        ))}
-      </div>
-      <div className="flex items-center gap-2">
-        <a
-          href={getSidekickHref}
-          onClick={() => trackFunnel("cta_sidekick", { placement: "nav" })}
-          className="rounded-lg bg-[#e0b45c] px-3 py-2 text-[13px] font-semibold text-[#0c1322] no-underline hover:bg-[#e8c477] lg:px-4 lg:py-2.5 lg:text-sm"
-        >
-          Get Sidekick
-        </a>
-        <Link
-          to="/login"
-          className="rounded-lg px-2 py-2 text-[13px] font-medium text-[#b7c2d6] no-underline hover:text-[#e8eef8] lg:px-3 lg:py-2.5 lg:text-sm"
-        >
+    <nav className="relative flex h-[69px] items-center justify-between gap-4 border-b p-4 md:h-[73px]">
+      <div className="flex w-10 items-center">
+        {hasBranding && <img src="/c/chronicle/ChronicleIcon.webp" alt="Chronicle" className="hidden h-10 w-10 md:block" />}
+        <Link to="/login" className={`${NAV_LINK} whitespace-nowrap md:hidden`}>
           Sign in
         </Link>
+      </div>
+      <a href="#top" className="absolute left-1/2 flex -translate-x-1/2 items-center">
+        {/* Nothing until site config is known, so a tenant never flashes the Chronicle logo. */}
+        {!siteConfig ? null : branding?.logo_wide ? (
+          <img src={branding.logo_wide} alt={branding.display_name ?? ""} className="-my-2 h-15 max-w-[44vw] object-contain" />
+        ) : hasBranding ? (
+          <div className="flex items-center gap-2">
+            {branding?.square_logo && <img src={branding.square_logo} alt="" className="h-8 w-8 rounded object-contain" />}
+            {branding?.display_name && <span className="text-lg font-semibold text-foreground">{branding.display_name}</span>}
+          </div>
+        ) : (
+          <img src="/c/chronicle/ChronicleLogoCenter.svg" alt="Chronicle" className="-my-2 h-15" />
+        )}
+      </a>
+      <div className="flex items-center gap-6">
+        <div className="hidden items-center gap-6 lg:flex">
+          {[
+            ["#runs", "Watch runs"],
+            ["#dungeons", "Dungeons"],
+            ["#how", "How it works"],
+          ].map(([href, label]) => (
+            <a key={href} href={href} className={NAV_LINK}>
+              {label}
+            </a>
+          ))}
+        </div>
+        <Button asChild variant="button-bright" size="sm" className="md:h-9 md:px-4">
+          <a
+            href={getSidekickHref}
+            onClick={() => trackFunnel("cta_sidekick", { placement: "nav" })}
+            className="no-underline"
+          >
+            Get Sidekick
+          </a>
+        </Button>
+        <Button asChild className="hidden md:inline-flex">
+          <Link to="/login" className="no-underline">
+            Sign in
+          </Link>
+        </Button>
       </div>
     </nav>
   );
@@ -106,43 +126,36 @@ function SendLinkSection() {
   };
 
   return (
-    <section id="send-link" className="flex flex-col gap-3 border-b border-[#27324a] bg-[#101829] px-4 py-5 lg:hidden">
-      <h2 className={`m-0 text-[22px] font-bold leading-tight ${HEADING_FONT}`}>
+    <section id="send-link" className="flex flex-col gap-3 border-b bg-card px-4 py-5 lg:hidden">
+      <h2 className="m-0 text-[22px] font-bold leading-tight">
         Sidekick runs on the PC you play on. Send it there.
       </h2>
-      <p className="m-0 text-[13px] leading-normal text-[#b7c2d6]">
+      <p className="m-0 text-[13px] leading-normal text-muted-foreground">
         9 MB tray app for Mac and Windows. We will send one link, nothing else.
       </p>
       <form className="flex flex-col gap-2" onSubmit={onSubmit}>
-        <label htmlFor="landing-send-link" className="text-xs text-[#b7c2d6]">
+        <label htmlFor="landing-send-link" className="text-xs text-muted-foreground">
           Email or Discord handle
         </label>
         <input
           id="landing-send-link"
           type="text"
           placeholder="you@example.com"
-          className="h-[46px] rounded-lg border border-[#5f6d88] bg-[#0c1322] px-3 text-[15px] text-[#e8eef8] placeholder:text-[#8a97ad]"
+          className="h-[46px] rounded-md border border-input bg-background px-3 text-[15px] text-foreground placeholder:text-muted-foreground"
         />
-        <button type="submit" className="h-12 rounded-[10px] bg-[#e0b45c] text-[15px] font-semibold text-[#0c1322]">
+        <Button type="submit" variant="button-bright" className="h-12 text-[15px] font-semibold">
           Send me the download link
-        </button>
+        </Button>
       </form>
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={copyLink}
-          className="flex-1 rounded-lg border border-[#5f6d88] p-3 text-[13px] font-medium text-[#e8eef8]"
-        >
+        <Button type="button" variant="outline" onClick={copyLink} className="h-11 flex-1 text-[13px]">
           {copied ? "Link copied" : "Copy link"}
-        </button>
-        <a
-          href={DISCORD_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex-1 rounded-lg border border-[#5f6d88] p-3 text-center text-[13px] font-medium text-[#e8eef8] no-underline"
-        >
-          Join the Discord
-        </a>
+        </Button>
+        <Button asChild variant="outline" className="h-11 flex-1 text-[13px]">
+          <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer" className="no-underline">
+            Join the Discord
+          </a>
+        </Button>
       </div>
     </section>
   );
@@ -150,20 +163,20 @@ function SendLinkSection() {
 
 function HowItWorks() {
   return (
-    <section id="how" className="border-b border-[#27324a] bg-[#0c1322] lg:bg-[#101829]">
+    <section id="how" className="border-b bg-background lg:bg-card">
       <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-3.5 px-4 py-5 lg:grid-cols-3 lg:gap-6 lg:px-8 lg:py-[26px]">
         {STEPS.map((step, i) => (
           <div key={i} className="flex items-start gap-3 lg:gap-3.5">
             <div
-              className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[13px] font-semibold text-[#0c1322] lg:h-[34px] lg:w-[34px] lg:text-base ${
-                i === STEPS.length - 1 ? "bg-[#4fd1c5]" : "bg-[#e0b45c]"
+              className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[13px] font-semibold text-primary-foreground lg:h-[34px] lg:w-[34px] lg:text-base ${
+                i === STEPS.length - 1 ? "bg-primary" : "bg-primary-darker"
               }`}
             >
               {i + 1}
             </div>
             <div className="flex flex-col gap-0.5 lg:gap-1">
               <div className="text-sm font-semibold lg:text-[15px]">{step.title}</div>
-              <div className="text-xs leading-normal text-[#b7c2d6] lg:text-[13px]">{step.body}</div>
+              <div className="text-xs leading-normal text-muted-foreground lg:text-[13px]">{step.body}</div>
             </div>
           </div>
         ))}
@@ -215,6 +228,8 @@ export function StartPage() {
   const isMobile = useIsMobile();
   const getSidekickHref = isMobile ? "#send-link" : "#get";
   const { data: landing, isError: landingFailed } = useLandingFeatured();
+  const { data: siteConfig } = useSiteConfig();
+  const siteName = (siteConfig?.tenant?.branding ?? siteConfig?.branding)?.display_name;
   // The 3D hero replays the featured run (the build-time instance when none is set); undefined until that is known.
   const heroInstanceId = landing || landingFailed ? landing?.featured?.instance_id ?? FALLBACK_FEATURED_INSTANCE : undefined;
   // It loops the featured run's boss pull; the scrubber spans that pull only.
@@ -231,7 +246,7 @@ export function StartPage() {
   }, []);
 
   return (
-    <div className="flex min-h-screen flex-col overflow-x-hidden bg-[#0c1322] text-[#e8eef8]">
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-background text-foreground">
       <LandingNav getSidekickHref={getSidekickHref} />
       <LandingHero
         poster={`${IMAGES}/ruins-courtyard-poster.jpg`}
@@ -246,10 +261,10 @@ export function StartPage() {
       <SendLinkSection />
       <HowItWorks />
       <BelowFold />
-      <footer className="mt-auto flex flex-wrap gap-3 border-t border-[#27324a] px-4 py-3.5 text-[11px] text-[#8a97ad] lg:gap-[18px] lg:px-8 lg:py-[18px] lg:text-xs">
-        <span>Chronicle for WoW Forever</span>
+      <footer className="mt-auto flex flex-wrap gap-3 border-t px-4 py-3.5 text-[11px] text-muted-foreground lg:gap-[18px] lg:px-8 lg:py-[18px] lg:text-xs">
+        <span>{siteName ? `Chronicle for ${siteName}` : "Chronicle"}</span>
         {FOOTER_LINKS.map((link) => (
-          <Link key={link.to} to={link.to} className="text-[#4fd1c5] hover:text-[#8ee6dd]">
+          <Link key={link.to} to={link.to} className="text-link hover:underline">
             {link.label}
           </Link>
         ))}

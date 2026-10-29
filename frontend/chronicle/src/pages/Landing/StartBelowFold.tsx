@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useSupportedInstances } from "@/api/queries";
+import { Button } from "@/components/ui/button";
 import type { RecentInstance, RecentInstancesResponse } from "@/api/typesGenerated";
 import { useTenantDatasetScope } from "@/hooks/useDatasetId";
 import { getInstanceArtCrop } from "@/pages/Logs/utils/instanceImages";
@@ -9,7 +10,7 @@ import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import { trackFunnel } from "@/utils/funnel";
 import { dungeonMapKind, dungeonNames, dungeonShelfCards } from "./dungeonShelf";
 import { formatRunDuration, runBadge, runStillUrl, type RunBadge } from "./recentRuns";
-import { HEADING_FONT, IMAGES } from "./startPageStyle";
+import { IMAGES } from "./startPageStyle";
 
 // Public Sidekick downloads; the utm cookie set on landing carries attribution.
 const DOWNLOAD_MAC_URL = "/download?os=macos";
@@ -39,14 +40,14 @@ const FIRST_MINUTE = [
 function FirstMinute() {
   return (
     <section className="mx-auto box-border flex w-full max-w-[1180px] flex-col gap-[18px] px-4 pb-3 pt-8 lg:px-8 lg:pt-10">
-      <h2 className={`m-0 text-[22px] font-bold lg:text-[28px] ${HEADING_FONT}`}>Three things people do in the first minute</h2>
+      <h2 className="m-0 text-[22px] font-bold lg:text-[28px]">Three things people do in the first minute</h2>
       <div className="grid grid-cols-1 gap-[18px] md:grid-cols-3">
         {FIRST_MINUTE.map((card) => (
-          <div key={card.title} className="flex flex-col overflow-hidden rounded-xl border border-[#27324a] bg-[#141d30]">
+          <div key={card.title} className="flex flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm">
             <img src={card.src} alt={card.alt} loading="lazy" className="block h-40 w-full object-cover" />
             <div className="flex flex-col gap-1.5 px-4 py-3.5">
               <div className="text-[15px] font-semibold">{card.title}</div>
-              <div className="text-[13px] leading-normal text-[#b7c2d6]">{card.body}</div>
+              <div className="text-[13px] leading-normal text-muted-foreground">{card.body}</div>
             </div>
           </div>
         ))}
@@ -90,9 +91,9 @@ function RunCard({ run, badge }: { run: RecentInstance; badge: RunBadge | null }
   return (
     <Link
       to={href}
-      className="flex flex-col overflow-hidden rounded-xl border border-[#27324a] bg-[#141d30] text-[#e8eef8] no-underline hover:border-[#5f6d88]"
+      className="flex flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm no-underline hover:border-primary"
     >
-      <div className="relative h-[130px] overflow-hidden bg-[#1b2740]">
+      <div className="relative h-[130px] overflow-hidden bg-muted">
         {/* Until this run's still loads (or when it has none yet): a muted crop of the dungeon's art. */}
         {still !== "loaded" && !artFailed && (
           <img
@@ -119,22 +120,22 @@ function RunCard({ run, badge }: { run: RecentInstance; badge: RunBadge | null }
         )}
         {badge && (
           <span
-            className={`absolute left-2.5 top-2.5 rounded-md bg-[#0c1322]/85 px-2 py-[3px] text-[11px] font-semibold tracking-[0.08em] ${
-              badge === "3d" ? "text-[#4fd1c5]" : "text-[#b7c2d6]"
+            className={`absolute left-2.5 top-2.5 rounded-md bg-background/85 px-2 py-[3px] text-[11px] font-semibold tracking-[0.08em] ${
+              badge === "3d" ? "text-primary" : "text-muted-foreground"
             }`}
           >
             {badge === "3d" ? "3D REPLAY" : "2D MAP"}
           </span>
         )}
         {duration && (
-          <span className="absolute bottom-2.5 right-2.5 rounded-md bg-[#0c1322]/85 px-2 py-[3px] font-mono text-[11px] text-[#e8eef8]">
+          <span className="absolute bottom-2.5 right-2.5 rounded-md bg-background/85 px-2 py-[3px] font-mono text-[11px] text-foreground">
             {duration}
           </span>
         )}
       </div>
       <div className="flex flex-col gap-1 px-3.5 py-3">
         <div className="text-[15px] font-semibold">{run.name}</div>
-        <div className="text-xs text-[#b7c2d6]">
+        <div className="text-xs text-muted-foreground">
           {run.player_count} players · {run.boss_kills} {run.boss_kills === 1 ? "boss" : "bosses"}
         </div>
       </div>
@@ -154,8 +155,8 @@ function RecentRuns() {
   return (
     <section id="runs" className="mx-auto box-border flex w-full max-w-[1180px] flex-col gap-3.5 px-4 pb-3 pt-7 lg:px-8">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <h2 className={`m-0 text-xl font-bold lg:text-2xl ${HEADING_FONT}`}>Recent runs</h2>
-        <Link to="/recent" className="text-sm text-[#4fd1c5] hover:text-[#8ee6dd]">
+        <h2 className="m-0 text-xl font-bold lg:text-2xl">Recent runs</h2>
+        <Link to="/recent" className="text-sm text-link hover:underline">
           All recent runs
         </Link>
       </div>
@@ -166,15 +167,15 @@ function RecentRuns() {
         <Link
           to="/download"
           onClick={() => trackFunnel("cta_sidekick", { placement: "ghost_card" })}
-          className="flex flex-col overflow-hidden rounded-xl border border-dashed border-[#5f6d88] bg-[#141d30] text-[#e8eef8] no-underline hover:border-[#e0b45c]"
+          className="flex flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm border-dashed no-underline hover:border-primary"
         >
-          <div className="flex h-[130px] flex-col items-center justify-center gap-1.5 bg-[#101829] p-4 text-center">
-            <div className={`text-lg font-bold ${HEADING_FONT}`}>Your run goes here</div>
-            <div className="text-xs text-[#b7c2d6]">Tonight, if Sidekick is running.</div>
+          <div className="flex h-[130px] flex-col items-center justify-center gap-1.5 bg-muted p-4 text-center">
+            <div className="text-lg font-bold">Your run goes here</div>
+            <div className="text-xs text-muted-foreground">Tonight, if Sidekick is running.</div>
           </div>
           <div className="flex flex-col gap-1 px-3.5 py-3">
-            <div className="text-[15px] font-semibold text-[#e0b45c]">Get Sidekick</div>
-            <div className="text-xs text-[#b7c2d6]">2 minutes to set up</div>
+            <div className="text-[15px] font-semibold text-primary">Get Sidekick</div>
+            <div className="text-xs text-muted-foreground">2 minutes to set up</div>
           </div>
         </Link>
       </div>
@@ -190,8 +191,8 @@ function DungeonShelf() {
   return (
     <section id="dungeons" className="mx-auto box-border flex w-full max-w-[1180px] flex-col gap-3.5 px-4 pb-9 pt-7 lg:px-8">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <h2 className={`m-0 text-xl font-bold lg:text-2xl ${HEADING_FONT}`}>Real floors, not dots on a map</h2>
-        <Link to="/supported" className="text-sm text-[#4fd1c5] hover:text-[#8ee6dd]">
+        <h2 className="m-0 text-xl font-bold lg:text-2xl">Real floors, not dots on a map</h2>
+        <Link to="/supported" className="text-sm text-link hover:underline">
           All supported instances
         </Link>
       </div>
@@ -200,14 +201,14 @@ function DungeonShelf() {
           <li key={d.name} className="flex shrink-0 basis-[190px]">
             <Link
               to={`/recent?inst=${encodeURIComponent(d.name)}`}
-              className={`flex w-full flex-col gap-1 rounded-[10px] border bg-[#141d30] p-3.5 text-[#e8eef8] no-underline hover:bg-[#1a2540] ${
-                d.kind === "3d" ? "border-[#4fd1c5]" : "border-[#27324a]"
+              className={`flex w-full flex-col gap-1 rounded-xl border bg-card p-3.5 text-card-foreground shadow-sm no-underline hover:bg-accent/20 ${
+                d.kind === "3d" ? "border-primary" : ""
               }`}
             >
               <div className="font-semibold">{d.name}</div>
               <div
                 className={`text-xs ${
-                  d.kind === "3d" ? "text-[#8ee6dd]" : d.kind === "2d" ? "text-[#b7c2d6]" : "text-[#8a97ad]"
+                  d.kind === "3d" ? "text-primary" : d.kind === "2d" ? "text-muted-foreground" : "text-muted-foreground/70"
                 }`}
               >
                 {d.kind === "3d" ? "3D floor" : d.kind === "2d" ? "2D map" : "Coming"}
@@ -222,11 +223,11 @@ function DungeonShelf() {
 
 function ClosingBand() {
   return (
-    <section id="get" className="hidden border-t border-[#27324a] bg-[#101829] lg:block">
+    <section id="get" className="hidden border-t bg-card lg:block">
       <div className="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-6 p-8">
         <div className="flex max-w-[560px] flex-col gap-1.5">
-          <h2 className={`m-0 text-[26px] font-bold ${HEADING_FONT}`}>Tonight's run could be on this page.</h2>
-          <p className="m-0 text-sm leading-normal text-[#b7c2d6]">
+          <h2 className="m-0 text-[26px] font-bold">Tonight's run could be on this page.</h2>
+          <p className="m-0 text-sm leading-normal text-muted-foreground">
             Sidekick is a 9 MB tray app. It never opens a window, never asks you to upload anything, and the stone
             tells you it is working.
           </p>
@@ -236,14 +237,11 @@ function ClosingBand() {
             [DOWNLOAD_MAC_URL, "Download for macOS"],
             [DOWNLOAD_WINDOWS_URL, "Download for Windows"],
           ].map(([href, label]) => (
-            <a
-              key={href}
-              href={href}
-              onClick={() => trackFunnel("cta_sidekick", { placement: "band" })}
-              className="rounded-[10px] bg-[#e0b45c] px-5 py-[13px] text-[15px] font-semibold text-[#0c1322] no-underline hover:bg-[#e8c477]"
-            >
-              {label}
-            </a>
+            <Button key={href} asChild variant="button-bright" size="lg" className="h-12 text-[15px] font-semibold">
+              <a href={href} onClick={() => trackFunnel("cta_sidekick", { placement: "band" })} className="no-underline">
+                {label}
+              </a>
+            </Button>
           ))}
         </div>
       </div>
