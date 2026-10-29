@@ -128,6 +128,38 @@ describe("guide Lua runtime", () => {
     runtime.stop()
   })
 
+  it("emits semantic spell, item, and CDN icon textures", () => {
+    const { runtime, operations } = run(`
+      local spell = UIParent:CreateTexture("spell")
+      spell:SetSpell(116, true)
+      local item = UIParent:CreateTexture("item")
+      item:SetItem(19019)
+      local icon = UIParent:CreateTexture("icon")
+      icon:SetIcon("INV_Sword_39")
+      icon:SetTexture("assets/local.png")
+    `)
+    expect(operations).toEqual(expect.arrayContaining([
+      { op: "set", id: "spell", props: { textureType: "spell", textureId: 116, tooltip: true } },
+      { op: "set", id: "item", props: { textureType: "item", textureId: 19019, tooltip: false } },
+      { op: "set", id: "icon", props: { textureType: "icon", iconName: "inv_sword_39", tooltip: false } },
+      { op: "set", id: "icon", props: { asset: "assets/local.png", textureType: "asset", tooltip: false } },
+    ]))
+    expectValid(operations)
+    runtime.stop()
+  })
+
+  it("rejects invalid semantic texture inputs before they reach the host", () => {
+    for (const source of [
+      `local t=UIParent:CreateTexture("t"); t:SetSpell(0)`,
+      `local t=UIParent:CreateTexture("t"); t:SetItem(1.5)`,
+      `local t=UIParent:CreateTexture("t"); t:SetSpell(116, "yes")`,
+      `local t=UIParent:CreateTexture("t"); t:SetIcon("../secret")`,
+      `local t=UIParent:CreateTexture("t"); t:SetIcon("https://evil.example/x")`,
+      `local t=UIParent:CreateTexture("t"); t:SetTexture("../secret.png")`,
+      `local t=UIParent:CreateTexture("t"); t:SetTexture("https://evil.example/x.png")`,
+    ]) expect(() => run(source)).toThrow()
+  })
+
   it("supports protocol-valid tactical shape properties", () => {
     const { runtime, operations } = run(`
       local line=Map:CreateLine("line"); line:SetPoints({0.1,0.2,0.8,0.9}); line:SetLineWidth(3)

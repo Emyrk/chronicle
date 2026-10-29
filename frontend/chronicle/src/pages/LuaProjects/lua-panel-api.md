@@ -194,7 +194,10 @@ UIParent:SetHeight(40 + #rows * ROW)   -- tall enough for a title and every row
 | `SetColor(r, g, b, a)` | Frame, FontString, Button | Text or foreground colour, components 0–1, `a` optional. |
 | `SetBackgroundColor(r, g, b, a)` | Frame, FontString, Button | |
 | `SetBorderColor(r, g, b, a)` | all | |
-| `SetTexture(path)` | Texture | A file listed in `assets`. |
+| `SetTexture(path)` | Texture | A file listed in `assets`. The path is resolved only from the validated module package. |
+| `SetSpell(spellId, tooltip?)` | Texture | Current-dataset spell icon. `tooltip` defaults to `false`; pass `true` for Chronicle's spell tooltip on hover. |
+| `SetItem(itemId, tooltip?)` | Texture | Current-dataset item icon. `tooltip` defaults to `false`; pass `true` for Chronicle's item tooltip on hover. |
+| `SetIcon(iconName)` | Texture | Named icon from Chronicle's current dataset CDN, for example `"inv_sword_39"`. Only letters, numbers, `_` and `-` are accepted; paths and URLs are rejected. |
 | `SetAlpha(a)` | all | 0–1. |
 | `SetLayer(layer)` | all | `"BACKGROUND"`, `"ARTWORK"`, `"OVERLAY"`, or a number. |
 | `Show()`, `Hide()`, `IsShown()` | all | |
@@ -203,6 +206,251 @@ UIParent:SetHeight(40 + #rows * ROW)   -- tall enough for a title and every row
 
 `UIParent` supports only `SetSize`, `SetWidth`, `SetHeight` and `SetScript`.
 | `SetScript("OnClick", fn)` | Button, Frame | Needs the `input` capability. `fn(self)` runs on click. |
+
+### Lua Language Server definitions
+
+The repository includes `lua-panel-api.d.lua`, a documentation-only [EmmyLua/LuaLS](https://luals.github.io/wiki/annotations/) definition file. Download it from the **LuaLS definitions** button at the top of this page and copy it into your editor workspace for completion, parameter hints and type checking. Chronicle generates the technical reference below from that file so the editor contract and published documentation stay aligned.
+
+<!-- BEGIN GENERATED LUA API REFERENCE -->
+## Generated Lua API reference
+
+This section is generated from `lua-panel-api.d.lua`, an [EmmyLua/LuaLS](https://luals.github.io/wiki/annotations/) definition file available from the **LuaLS definitions** button at the top of this page. Do not edit this section by hand.
+
+### Globals
+
+#### `CreateFrame(frameType, id, parent)`
+
+Create a retained UI object. parent defaults to UIParent.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `frameType` | `"Frame"\|"FontString"\|"Texture"\|"Button"` |  |
+| `id?` | `string` |  |
+| `parent?` | `ChronicleFrame` |  |
+
+**Returns:** `ChronicleFrame\|ChronicleFontString\|ChronicleTexture\|ChronicleButton`, object
+
+### `ChronicleRegion`
+
+#### `ChronicleRegion:SetPoint(point, relativeTo, relativePoint, x, y)`
+
+Anchor this object within its parent. relativeTo and relativePoint are accepted for WoW compatibility but currently ignored.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `point` | `ChronicleAnchor` |  |
+| `relativeTo?` | `ChronicleRegion` |  |
+| `relativePoint?` | `ChronicleAnchor` |  |
+| `x?` | `number` |  |
+| `y?` | `number` |  |
+
+#### `ChronicleRegion:SetSize(width, height)`
+
+Set this object's width and height in pixels.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `width` | `number` |  |
+| `height` | `number` |  |
+
+#### `ChronicleRegion:SetWidth(width)`
+
+Set this object's width in pixels.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `width` | `number` |  |
+
+#### `ChronicleRegion:SetHeight(height)`
+
+Set this object's height in pixels.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `height` | `number` |  |
+
+#### `ChronicleRegion:SetParent(parent)`
+
+Move this object to another frame.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `parent` | `ChronicleFrame` |  |
+
+#### `ChronicleRegion:SetAlpha(alpha)`
+
+Set opacity from 0 through 1.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `alpha` | `number` |  |
+
+#### `ChronicleRegion:SetLayer(layer)`
+
+Set draw order using a named layer or numeric z-index.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `layer` | `ChronicleLayer` |  |
+
+#### `ChronicleRegion:SetBorderColor(red, green, blue, alpha)`
+
+Set the border color. Components are numbers from 0 through 1.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `red` | `number` |  |
+| `green` | `number` |  |
+| `blue` | `number` |  |
+| `alpha?` | `number` |  |
+
+#### `ChronicleRegion:Show()`
+
+Show this object.
+
+#### `ChronicleRegion:Hide()`
+
+Hide this object.
+
+#### `ChronicleRegion:IsShown()`
+
+Return whether this object is shown.
+
+**Returns:** `boolean`, shown
+
+#### `ChronicleRegion:Destroy()`
+
+Remove this object and its callbacks.
+
+### `ChronicleFrame` extends `ChronicleRegion`
+
+#### `ChronicleFrame:CreateFontString(id)`
+
+Create a text object parented to this frame.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `id?` | `string` |  |
+
+**Returns:** `ChronicleFontString`, text
+
+#### `ChronicleFrame:CreateTexture(id)`
+
+Create a texture object parented to this frame.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `id?` | `string` |  |
+
+**Returns:** `ChronicleTexture`, texture
+
+#### `ChronicleFrame:SetColor(red, green, blue, alpha)`
+
+Set foreground color. Components are numbers from 0 through 1.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `red` | `number` |  |
+| `green` | `number` |  |
+| `blue` | `number` |  |
+| `alpha?` | `number` |  |
+
+#### `ChronicleFrame:SetBackgroundColor(red, green, blue, alpha)`
+
+Set background color. Components are numbers from 0 through 1.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `red` | `number` |  |
+| `green` | `number` |  |
+| `blue` | `number` |  |
+| `alpha?` | `number` |  |
+
+#### `ChronicleFrame:SetScript(script, callback)`
+
+Register a supported callback. OnClick requires the input capability.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `script` | `"OnClick"\|"OnSizeChanged"` |  |
+| `callback` | `fun(self:ChronicleFrame,...)` |  |
+
+### `ChronicleFontString` extends `ChronicleRegion`
+
+#### `ChronicleFontString:SetText(text)`
+
+Set displayed text, up to 4 KiB.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `text` | `string` |  |
+
+#### `ChronicleFontString:SetFontSize(size)`
+
+Set font size in pixels.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `size` | `number` |  |
+
+#### `ChronicleFontString:SetColor(red, green, blue, alpha)`
+
+Set text color. Components are numbers from 0 through 1.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `red` | `number` |  |
+| `green` | `number` |  |
+| `blue` | `number` |  |
+| `alpha?` | `number` |  |
+
+### `ChronicleTexture` extends `ChronicleRegion`
+
+#### `ChronicleTexture:SetTexture(path)`
+
+Render an image declared in project.json assets. The path is package-local and never treated as a URL.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `path` | `string` |  |
+
+#### `ChronicleTexture:SetSpell(spellId, tooltip)`
+
+Render the current dataset's icon for a spell ID.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `spellId` | `integer` |  |
+| `tooltip?` | `boolean` | Show Chronicle's spell tooltip on hover. Defaults to false. |
+
+#### `ChronicleTexture:SetItem(itemId, tooltip)`
+
+Render the current dataset's icon for an item ID.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `itemId` | `integer` |  |
+| `tooltip?` | `boolean` | Show Chronicle's item tooltip on hover. Defaults to false. |
+
+#### `ChronicleTexture:SetIcon(iconName)`
+
+Render a named icon from Chronicle's current dataset CDN. Names contain only ASCII letters, numbers, underscores, and hyphens. Paths and URLs are rejected.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `iconName` | `string` | Example: "inv_sword_39". |
+
+### `ChronicleButton` extends `ChronicleFrame`
+
+#### `ChronicleButton:SetText(text)`
+
+Set the button label.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `text` | `string` |  |
+
+<!-- END GENERATED LUA API REFERENCE -->
 
 ## Built-in modules
 

@@ -14,7 +14,9 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "chromatic": "chromatic --exit-zero-on-changes",
-    "generate:favicon": "node scripts/generate-favicon.mjs"
+    "generate:favicon": "node scripts/generate-favicon.mjs",
+    "generate:lua-api": "node scripts/generate-lua-api-docs.mjs",
+    "check:lua-api": "node scripts/generate-lua-api-docs.mjs --check"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.11.0",

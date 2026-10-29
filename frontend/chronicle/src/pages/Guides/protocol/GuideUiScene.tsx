@@ -1,4 +1,12 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import { useItemTooltip } from "@/api/gamedata";
+import { useSpell } from "@/api/queries";
+import { getSpellIconUrl } from "@/api/wowdb";
+import { iconUrl } from "@/config/iconUrl";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
+import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
+import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import { UI_ROOT_ID } from "./scene";
 import type { RetainedScene, SceneNode } from "./types";
 
@@ -57,7 +65,7 @@ function nodeStyle(node: SceneNode): CSSProperties {
     borderWidth: props.borderColor ? 1 : undefined,
     fontSize: px(props.fontSize),
     textAlign: props.align === "left" || props.align === "center" || props.align === "right" ? props.align : undefined,
-    pointerEvents: node.kind === "button" || node.listeners.includes("click") ? "auto" : "none",
+    pointerEvents: node.kind === "button" || node.listeners.includes("click") || node.props.tooltip === true ? "auto" : "none",
   };
 }
 
@@ -80,6 +88,69 @@ function nodeClassName(node: SceneNode): string | undefined {
     return `rounded-md border border-border/80 px-3 py-1 font-semibold shadow-sm backdrop-blur-sm transition-all duration-200 hover:-translate-y-px hover:border-ring hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${selected ? "uppercase tracking-[0.12em]" : ""}`;
   }
   return undefined;
+}
+
+function textureId(node: SceneNode): number | null {
+  const value = node.props.textureId;
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function GuideTextureNode({
+  node,
+  assets,
+  style,
+  onClick,
+}: {
+  node: SceneNode;
+  assets: ReadonlyMap<string, string>;
+  style: CSSProperties;
+  onClick?: (event: ReactMouseEvent) => void;
+}) {
+  const datasetId = useDatasetId();
+  const iconBaseUrl = useIconBaseUrl();
+  const type = text(node.props.textureType, "asset");
+  const id = textureId(node);
+  const spell = useSpell(String(id ?? 0), datasetId, { enabled: type === "spell" && id !== null });
+  const item = useItemTooltip(type === "item" && id !== null ? { itemId: id } : null);
+
+  let source = "";
+  let alt = "";
+  if (type === "asset") source = assets.get(text(node.props.asset)) ?? "";
+  else if (type === "icon") source = iconUrl(text(node.props.iconName), iconBaseUrl);
+  else if (type === "spell" && spell.data) {
+    source = getSpellIconUrl(spell.data.spell_icon, iconBaseUrl);
+    alt = spell.data.name?.["0"] ?? `Spell ${id}`;
+  } else if (type === "item" && item.data) {
+    source = iconUrl(item.data.icon, iconBaseUrl);
+    alt = item.data.name;
+  }
+  if (!source) return null;
+
+  const image = (
+    <img
+      data-guide-node={node.id}
+      src={source}
+      alt={alt}
+      draggable={false}
+      style={{ ...style, objectFit: "contain", filter: node.props.tint ? `drop-shadow(0 0 0 ${text(node.props.tint)})` : undefined }}
+      onClick={onClick}
+    />
+  );
+  if (node.props.tooltip !== true) return image;
+
+  const tooltip = type === "spell" && spell.data
+    ? <SpellTooltip spell={spell.data} />
+    : type === "item" && item.data ? <ItemTooltip item={item.data} /> : null;
+  if (!tooltip) return image;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{image}</TooltipTrigger>
+      <TooltipContent side="right" align="start" sideOffset={8} className="z-[10000] border-0 bg-transparent p-0" hideArrow>
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 interface GuideUiSceneProps {
@@ -107,20 +178,7 @@ export function GuideUiScene({ scene, assets, onNodeClick }: GuideUiSceneProps) 
     if (node.kind === "text") {
       return <div key={node.id} data-guide-node={node.id} className={nodeClassName(node)} style={style} onClick={click}>{text(node.props.text)}</div>;
     }
-    if (node.kind === "texture") {
-      const source = assets.get(text(node.props.asset));
-      return source ? (
-        <img
-          key={node.id}
-          data-guide-node={node.id}
-          src={source}
-          alt=""
-          draggable={false}
-          style={{ ...style, objectFit: "contain", filter: node.props.tint ? `drop-shadow(0 0 0 ${text(node.props.tint)})` : undefined }}
-          onClick={click}
-        />
-      ) : null;
-    }
+    if (node.kind === "texture") return <GuideTextureNode key={node.id} node={node} assets={assets} style={style} onClick={click} />;
     if (node.kind === "button") {
       return (
         <button
@@ -139,5 +197,5 @@ export function GuideUiScene({ scene, assets, onNodeClick }: GuideUiSceneProps) 
     return null;
   };
 
-  return <>{(childrenByParent.get(UI_ROOT_ID) ?? []).map(renderNode)}</>;
+  return <TooltipProvider delayDuration={150}>{(childrenByParent.get(UI_ROOT_ID) ?? []).map(renderNode)}</TooltipProvider>;
 }

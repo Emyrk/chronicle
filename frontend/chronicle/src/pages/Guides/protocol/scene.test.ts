@@ -97,6 +97,32 @@ describe("retained guide scene reducer", () => {
     expect(() => applySceneBatch(createInitialScene(), [label("x".repeat(4097))])).toThrow(SceneValidationError)
   })
 
+  it("validates semantic texture sources and rejects URL or path injection", () => {
+    const base = applySceneBatch(createInitialScene(), [{
+      op: "create",
+      id: "texture",
+      kind: "texture",
+      parentId: UI_ROOT_ID,
+      props: { x: 0, y: 0, width: 24, height: 24, asset: "unset", textureType: "asset", tooltip: false, anchor: "top-left" },
+    }])
+    const spell = applySceneBatch(base, [{ op: "set", id: "texture", props: { textureType: "spell", textureId: 116, tooltip: true } }])
+    expect(spell.nodes.get("texture")?.props).toMatchObject({ textureType: "spell", textureId: 116, tooltip: true })
+    const icon = applySceneBatch(spell, [{ op: "set", id: "texture", props: { textureType: "icon", iconName: "inv_sword_39", tooltip: false } }])
+    expect(icon.nodes.get("texture")?.props.iconName).toBe("inv_sword_39")
+
+    for (const props of [
+      { textureType: "url" },
+      { textureId: 0 },
+      { textureId: 1.5 },
+      { iconName: "../secret" },
+      { iconName: "https://evil.example/x" },
+      { iconName: "a".repeat(129) },
+      { asset: "../secret.png" },
+      { asset: "https://evil.example/x.png" },
+      { tooltip: "yes" },
+    ]) expect(() => applySceneBatch(base, [{ op: "set", id: "texture", props }])).toThrow(SceneValidationError)
+  })
+
   it("rejects parent cycles and excessive nesting", () => {
     const scene = applySceneBatch(createInitialScene(), [create("a"), create("b", "frame", "a")])
     expect(() => applySceneBatch(scene, [{ op: "set", id: "a", parentId: "b", props: {} }])).toThrow(/cycle/)
