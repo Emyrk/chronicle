@@ -255,6 +255,8 @@ export function StartPage() {
     : FALLBACK_FEATURED_INSTANCE ? [{ instanceId: FALLBACK_FEATURED_INSTANCE }] : [],
   [heroes]);
   const [heroIndex, setHeroIndex] = useState(0);
+  // The stats column's shared slot from lg up: Threat (estimated) or Raid Frames.
+  const [statsPane, setStatsPane] = useState<"threat" | "frames">("threat");
   const holding = bossPick?.hold ?? false;
   const advanceHero = useCallback(() => {
     if (holding) return;
@@ -330,11 +332,20 @@ export function StartPage() {
           siteName={siteName}
           meter={meter && (
             <div className="pointer-events-none absolute inset-0 mx-auto hidden max-w-[1180px] min-[900px]:block">
-              {/* The stats column, following the replay's cursor: the glass meter, Threat (estimated) under it once that
-                  panel exists (#1425), then Raid Frames (from lg up, where the column has the height). */}
+              {/* The stats column, following the replay's cursor: the glass meter, then Threat (estimated). From lg up
+                  Raid Frames share that slot with a switch (the hero's fixed height has no room for both). */}
               <div className="pointer-events-auto absolute right-4 top-4 flex w-[300px] flex-col gap-2 lg:right-8 lg:top-auto lg:bottom-[112px] lg:w-[320px]">
                 <HeroMeter data={meter} sourceKey={meterKey} pane={pane} onPaneChange={changePane} />
-                {replay?.renderRaidFrames && <div className="hidden lg:block">{replay.renderRaidFrames()}</div>}
+                {replay?.renderThreat && (
+                  <div className={statsPane === "frames" && replay.renderRaidFrames ? "lg:hidden" : undefined}>
+                    {replay.renderThreat(replay.renderRaidFrames ? () => setStatsPane("frames") : null)}
+                  </div>
+                )}
+                {replay?.renderRaidFrames && (
+                  <div className={statsPane === "frames" || !replay.renderThreat ? "hidden lg:block" : "hidden"}>
+                    {replay.renderRaidFrames(replay.renderThreat ? () => setStatsPane("threat") : null)}
+                  </div>
+                )}
               </div>
             </div>
           )}

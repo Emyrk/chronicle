@@ -46,4 +46,10 @@ describe("meter values model", () => {
     const model = buildMeterValuesModel(data, { tagFor: (r) => (r.playerName === "a" ? { label: "tank" } : undefined) });
     expect(model.rows.map((r) => r.tag?.label)).toEqual(["tank", undefined, undefined, undefined, undefined]);
   });
+
+  it("keeps a pinned row first, still scaled against the top value", () => {
+    const model = buildMeterValuesModel(data, { pinFirst: (r) => r.playerName === "e", limit: 3 });
+    expect(model.rows.map((r) => r.row.playerName)).toEqual(["e", "a", "b"]);
+    expect(model.rows.map((r) => r.widthPct)).toEqual([10, 100, 60]);
+  });
 });

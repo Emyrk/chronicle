@@ -30,6 +30,8 @@ export interface MeterValuesOptions {
   limit?: number;
   tagFor?: (row: PlayerMetricChartData) => MeterBarTag | undefined;
   markers?: MeterBarMarker[];
+  /** Keeps this row first whatever its value (threat: the tank). */
+  pinFirst?: (row: PlayerMetricChartData) => boolean;
 }
 
 export interface MeterValuesRow {
@@ -50,8 +52,10 @@ const defaultFormatShare = (share: number) => `${(share * 100).toFixed(1)}%`;
 
 export function buildMeterValuesModel(data: PlayerMetricChartData[], options: MeterValuesOptions): MeterValuesModel {
   const sorted = [...data].sort((left, right) => right.value - left.value);
+  const pinned = options.pinFirst ? sorted.findIndex(options.pinFirst) : -1;
+  if (pinned > 0) sorted.unshift(...sorted.splice(pinned, 1));
   const sum = sorted.reduce((total, row) => total + row.value, 0);
-  const scale = options.scaleMax ?? sorted[0]?.value ?? 0;
+  const scale = options.scaleMax ?? Math.max(0, ...sorted.map((row) => row.value));
   const shareBase = options.shareBase ?? sum;
   const formatValue = options.formatValue ?? ((value: number) => String(Math.round(value)));
   const formatShare = options.formatShare ?? defaultFormatShare;

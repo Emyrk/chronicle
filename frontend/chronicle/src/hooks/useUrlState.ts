@@ -654,6 +654,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   map: 'map',
   mini_map: 'mmap',
   raid_frames: 'rf',
+  threat: 'thr',
   activity_log: 'acl',
   status: 'st',
   healer_casts: 'hc',
