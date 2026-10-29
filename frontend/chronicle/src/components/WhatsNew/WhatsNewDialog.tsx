@@ -22,8 +22,8 @@ const HIGHLIGHTS = [
 
 // Widths are percentages of the preview track: ranked damage, then excluded.
 const PREVIEW_ROWS = [
-  { name: "Nightshade", color: "#fff569", ranked: 84, excluded: 4 },
-  { name: "Frostbyte", color: "#69ccf0", ranked: 61, excluded: 39 },
+  { name: "Nightshade", color: "#fff569", ranked: 96, excluded: 1 },
+  { name: "Frostbyte", color: "#69ccf0", ranked: 76, excluded: 24 },
 ];
 
 const EXCLUDED_HATCH =

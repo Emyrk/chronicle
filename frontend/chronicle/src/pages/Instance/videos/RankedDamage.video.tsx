@@ -44,15 +44,15 @@ const HATCH = "repeating-linear-gradient(135deg, rgba(148,163,184,0.5) 0 6px, rg
 
 type Player = { name: string; color: string; raw: number; excluded: number };
 
-// Values in thousands. Frostbyte and Emberly AoE'd Firesworn, so much of their
-// damage is overkill; Frostbyte also cleaved a wandering Lava Surger.
+// Values in thousands. Overkill is only a few hundred per player; most
+// Excluded damage is Frostbyte and Emberly cleaving a wandering Lava Surger.
 const PLAYERS: readonly Player[] = [
-  { name: "Frostbyte", color: "#69ccf0", raw: 612, excluded: 238 },
-  { name: "Gorehowl", color: "#c79c6e", raw: 548, excluded: 41 },
-  { name: "Nightshade", color: "#fff569", raw: 537, excluded: 22 },
-  { name: "Hexkind", color: "#9482c9", raw: 501, excluded: 64 },
-  { name: "Emberly", color: "#69ccf0", raw: 489, excluded: 171 },
-  { name: "Talonfury", color: "#abd473", raw: 402, excluded: 19 },
+  { name: "Frostbyte", color: "#69ccf0", raw: 560, excluded: 132 },
+  { name: "Gorehowl", color: "#c79c6e", raw: 548, excluded: 0.4 },
+  { name: "Nightshade", color: "#fff569", raw: 537, excluded: 0.2 },
+  { name: "Hexkind", color: "#9482c9", raw: 501, excluded: 0.3 },
+  { name: "Emberly", color: "#69ccf0", raw: 489, excluded: 96 },
+  { name: "Talonfury", color: "#abd473", raw: 402, excluded: 0.1 },
 ];
 const MAX_RAW = Math.max(...PLAYERS.map((p) => p.raw));
 const RANKED_ORDER = [...PLAYERS].sort((a, b) => b.raw - b.excluded - (a.raw - a.excluded)).map((p) => p.name);
@@ -60,15 +60,15 @@ const FROSTBYTE_RANKED_ROW = RANKED_ORDER.indexOf("Frostbyte");
 
 const TARGETS = [
   { name: "Garr", kind: "boss", ranked: "268k", excluded: "—", why: "" },
-  { name: "Firesworn", kind: "add", ranked: "106k", excluded: "182k", why: "Overkill" },
-  { name: "Lava Surger", kind: "none", ranked: "—", excluded: "56k", why: "Not a Garr target" },
+  { name: "Firesworn", kind: "add", ranked: "160k", excluded: "0.6k", why: "Overkill" },
+  { name: "Lava Surger", kind: "none", ranked: "—", excluded: "131k", why: "Not a Garr target" },
 ] as const;
 
 // Garr: a 1:48 encounter whose last ranked target dies at 1:31.
 const FIGHT_SECONDS = 108;
 const RANKED_SECONDS = 91;
 const RANKED_SHARE = RANKED_SECONDS / FIGHT_SECONDS;
-const FROSTBYTE_RANKED = 612 - 238;
+const FROSTBYTE_RANKED = 560 - 132;
 
 const ENCOUNTERS = [
   { name: "Lucifron", duration: "1m 12s" },
@@ -119,7 +119,7 @@ export default function RankedDamageVideo() {
 }
 
 function k(value: number) {
-  return `${Math.round(value)}k`;
+  return value < 10 ? `${value.toFixed(1)}k` : `${Math.round(value)}k`;
 }
 
 function Content() {

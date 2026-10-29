@@ -370,7 +370,7 @@ export function RankedDamagePost({ post }: PostProps) {
         </li>
       </ul>
       <p>
-        The meter reorders by ranked damage, so the mage who AoE&apos;d already-dying adds may drop a few places. Hit
+        The meter reorders by ranked damage, so the mage who cleaved adds that don&apos;t count may drop a few places. Hit
         counts, crit rate, and hit sizes still reflect every original hit. Ranked is off by default, so the meter shows
         raw damage until you turn it on. To find the individual hits, use the new <strong>Has Excluded</strong> filter.
       </p>
