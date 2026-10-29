@@ -144,8 +144,8 @@ export function CustomPanelsPage() {
             <Link to="/account/developer-panels" className="rounded-md bg-primary px-4 py-2 font-semibold text-primary-foreground hover:bg-primary/90">
               Manage panels
             </Link>
-            <Link to="/addons" className="rounded-md border px-4 py-2 font-semibold hover:bg-accent">
-              Want something shareable and sandboxed? Build an addon
+            <Link to="/modules" className="rounded-md border px-4 py-2 font-semibold hover:bg-accent">
+              Want something shareable and sandboxed? Build an module
             </Link>
             <a
               href="https://github.com/Emyrk/chronicle-panel"

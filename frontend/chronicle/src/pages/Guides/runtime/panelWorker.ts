@@ -3,7 +3,7 @@ import { createGuideRuntime } from "./runtime"
 import { PANEL_STREAM_SCOPES, PANEL_STREAMS, type PanelStream, type PanelStreamScope } from "./panelEvents"
 import { replayStreams } from "./panelReplay"
 import type { PanelUnits } from "./panelUnits"
-import type { AddonPhase } from "./addonErrors"
+import type { ModulePhase } from "./moduleErrors"
 import { parseWorkerMessage, splitBatchOperations } from "../protocol/protocol"
 import type { GuideCapability } from "../protocol/types"
 
@@ -44,7 +44,7 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
   let declared: PanelStream[] = []
   let startupMs = 0
   // Reported with errors so the host can explain where the addon stopped.
-  let phase: AddonPhase = "startup"
+  let phase: ModulePhase = "startup"
   let delivered = 0
   const flush = (operations: ReturnType<NonNullable<typeof runtime>["flush"]>) => {
     for (const chunk of splitBatchOperations(operations)) send(parseWorkerMessage({ type: "batch", batchId: String(++batchId), operations: chunk }))

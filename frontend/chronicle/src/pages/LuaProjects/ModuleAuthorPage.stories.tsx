@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite"
 import { http, HttpResponse, delay } from "msw"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import type { LuaProject } from "./api"
-import { AddonAuthorPage } from "./AddonAuthorPage"
+import { ModuleAuthorPage } from "./ModuleAuthorPage"
 
 function panel(overrides: Partial<LuaProject> = {}): LuaProject {
   return {
@@ -32,9 +32,9 @@ function handlers({ routeAuthor = "chronicle", viewerIsAuthor = true, authorPage
   return [
     http.get("/api/v1/site-config", () => HttpResponse.json({ signups_enabled: true, client_uploads_disabled: false, billing_enabled: false, ads_enabled: false, tenant: null })),
     http.get("/api/v1/whoami", () => HttpResponse.json({ user_id: "user-1", session_id: "session-1", roles: [], ads_free: false })),
-    http.get("/api/v1/me/addon-author", () => HttpResponse.json({ name: viewerIsAuthor ? routeAuthor : "someone-else" })),
+    http.get("/api/v1/me/module-author", () => HttpResponse.json({ name: viewerIsAuthor ? routeAuthor : "someone-else" })),
     http.get("/api/v1/me/lua-projects", () => HttpResponse.json([...projects, ...shared])),
-    http.get("/api/v1/addons/:author", async () => {
+    http.get("/api/v1/modules/:author", async () => {
       if (pageLoading) await delay("infinite")
       return HttpResponse.json({ author: authorPageAuthor, projects })
     }),
@@ -42,39 +42,39 @@ function handlers({ routeAuthor = "chronicle", viewerIsAuthor = true, authorPage
 }
 
 const meta = {
-  title: "Pages/LuaProjects/AddonAuthorPage",
-  component: AddonAuthorPage,
-  parameters: { layout: "fullscreen", msw: { handlers: handlers() }, path: "/addons/chronicle" },
-  decorators: [(Story, context) => <MemoryRouter initialEntries={[context.parameters.path as string]}><Routes><Route path="/addons/:author" element={<Story />} /></Routes></MemoryRouter>],
-} satisfies Meta<typeof AddonAuthorPage>
+  title: "Pages/LuaProjects/ModuleAuthorPage",
+  component: ModuleAuthorPage,
+  parameters: { layout: "fullscreen", msw: { handlers: handlers() }, path: "/modules/chronicle" },
+  decorators: [(Story, context) => <MemoryRouter initialEntries={[context.parameters.path as string]}><Routes><Route path="/modules/:author" element={<Story />} /></Routes></MemoryRouter>],
+} satisfies Meta<typeof ModuleAuthorPage>
 
 export default meta
 type Story = StoryObj<typeof meta>
 
-/** Your own addon page: a "New addon" button in the header, your addons listed with a colored dot per kind. */
-export const YourAddons: Story = {
+/** Your own module page: a "New module" button in the header, your modules listed with a colored dot per kind. */
+export const YourModules: Story = {
   parameters: { msw: { handlers: handlers({ projects: MY_PROJECTS }) } },
 }
 
-/** With an addon someone else shared edit or release access to. */
-export const WithSharedAddons: Story = {
+/** With a module someone else shared edit or release access to. */
+export const WithSharedModules: Story = {
   parameters: { msw: { handlers: handlers({ projects: MY_PROJECTS, shared: SHARED_PROJECTS }) } },
 }
 
-/** No addons yet: an invite to create the first one. */
-export const EmptyYourAddons: Story = {
+/** No modules yet: an invite to create the first one. */
+export const EmptyYourModules: Story = {
   parameters: { msw: { handlers: handlers({ projects: [] }) } },
 }
 
 /** Someone else's author page: read-only, no create button. */
-export const SomeoneElsesAddons: Story = {
+export const SomeoneElsesModules: Story = {
   parameters: {
-    path: "/addons/duskhollow",
+    path: "/modules/duskhollow",
     msw: { handlers: handlers({ routeAuthor: "duskhollow", viewerIsAuthor: false, authorPageAuthor: "duskhollow", projects: MY_PROJECTS.map(p => ({ ...p, author: "duskhollow" })) }) },
   },
 }
 
-/** While the author's addons are loading. */
+/** While the author's modules are loading. */
 export const Loading: Story = {
   parameters: { msw: { handlers: handlers({ pageLoading: true }) } },
 }

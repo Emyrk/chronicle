@@ -10382,7 +10382,7 @@ type ListInferenceContextUsageByUserRow struct {
 	Calls            int64       `db:"calls" json:"calls"`
 }
 
-// Everyone's usage for one context, e.g. each contributor's Workshop chats on an addon.
+// Everyone's usage for one context, e.g. each contributor's Workshop chats on a module.
 func (q *sqlQuerier) ListInferenceContextUsageByUser(ctx context.Context, arg ListInferenceContextUsageByUserParams) ([]ListInferenceContextUsageByUserRow, error) {
 	rows, err := q.db.Query(ctx, listInferenceContextUsageByUser, arg.ContextType, arg.ContextID)
 	if err != nil {
@@ -11906,28 +11906,6 @@ func (q *sqlQuerier) DeleteLuaProjectRelease(ctx context.Context, arg DeleteLuaP
 	return result.RowsAffected(), nil
 }
 
-const getAddonAuthorByName = `-- name: GetAddonAuthorByName :one
-SELECT user_id, name, created_at FROM addon_authors WHERE name = $1
-`
-
-func (q *sqlQuerier) GetAddonAuthorByName(ctx context.Context, name string) (AddonAuthor, error) {
-	row := q.db.QueryRow(ctx, getAddonAuthorByName, name)
-	var i AddonAuthor
-	err := row.Scan(&i.UserID, &i.Name, &i.CreatedAt)
-	return i, err
-}
-
-const getAddonAuthorByUser = `-- name: GetAddonAuthorByUser :one
-SELECT user_id, name, created_at FROM addon_authors WHERE user_id = $1
-`
-
-func (q *sqlQuerier) GetAddonAuthorByUser(ctx context.Context, userID uuid.UUID) (AddonAuthor, error) {
-	row := q.db.QueryRow(ctx, getAddonAuthorByUser, userID)
-	var i AddonAuthor
-	err := row.Scan(&i.UserID, &i.Name, &i.CreatedAt)
-	return i, err
-}
-
 const getLuaProject = `-- name: GetLuaProject :one
 SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description FROM lua_projects WHERE id = $1
 `
@@ -12048,12 +12026,34 @@ func (q *sqlQuerier) GetLuaProjectDraftPackage(ctx context.Context, id uuid.UUID
 	return i, err
 }
 
+const getModuleAuthorByName = `-- name: GetModuleAuthorByName :one
+SELECT user_id, name, created_at FROM addon_authors WHERE name = $1
+`
+
+func (q *sqlQuerier) GetModuleAuthorByName(ctx context.Context, name string) (AddonAuthor, error) {
+	row := q.db.QueryRow(ctx, getModuleAuthorByName, name)
+	var i AddonAuthor
+	err := row.Scan(&i.UserID, &i.Name, &i.CreatedAt)
+	return i, err
+}
+
+const getModuleAuthorByUser = `-- name: GetModuleAuthorByUser :one
+SELECT user_id, name, created_at FROM addon_authors WHERE user_id = $1
+`
+
+func (q *sqlQuerier) GetModuleAuthorByUser(ctx context.Context, userID uuid.UUID) (AddonAuthor, error) {
+	row := q.db.QueryRow(ctx, getModuleAuthorByUser, userID)
+	var i AddonAuthor
+	err := row.Scan(&i.UserID, &i.Name, &i.CreatedAt)
+	return i, err
+}
+
 const getPublicLuaProject = `-- name: GetPublicLuaProject :one
 SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description FROM lua_projects p WHERE p.id = $1
   AND (p.draft_hash IS NOT NULL OR EXISTS (SELECT 1 FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash IS NOT NULL))
 `
 
-// An addon with something to run: main or a release with files.
+// A module with something to run: main or a release with files.
 func (q *sqlQuerier) GetPublicLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error) {
 	row := q.db.QueryRow(ctx, getPublicLuaProject, id)
 	var i LuaProject
@@ -12114,44 +12114,20 @@ func (q *sqlQuerier) GetPublishedLuaProjectArtifact(ctx context.Context, arg Get
 	return i, err
 }
 
-const insertAddonAuthor = `-- name: InsertAddonAuthor :one
+const insertModuleAuthor = `-- name: InsertModuleAuthor :one
 INSERT INTO addon_authors (user_id, name) VALUES ($1, $2) RETURNING user_id, name, created_at
 `
 
-type InsertAddonAuthorParams struct {
+type InsertModuleAuthorParams struct {
 	UserID uuid.UUID `db:"user_id" json:"user_id"`
 	Name   string    `db:"name" json:"name"`
 }
 
-func (q *sqlQuerier) InsertAddonAuthor(ctx context.Context, arg InsertAddonAuthorParams) (AddonAuthor, error) {
-	row := q.db.QueryRow(ctx, insertAddonAuthor, arg.UserID, arg.Name)
+func (q *sqlQuerier) InsertModuleAuthor(ctx context.Context, arg InsertModuleAuthorParams) (AddonAuthor, error) {
+	row := q.db.QueryRow(ctx, insertModuleAuthor, arg.UserID, arg.Name)
 	var i AddonAuthor
 	err := row.Scan(&i.UserID, &i.Name, &i.CreatedAt)
 	return i, err
-}
-
-const listAddonAuthorsByUsers = `-- name: ListAddonAuthorsByUsers :many
-SELECT user_id, name, created_at FROM addon_authors WHERE user_id = ANY($1::uuid[])
-`
-
-func (q *sqlQuerier) ListAddonAuthorsByUsers(ctx context.Context, userIds []uuid.UUID) ([]AddonAuthor, error) {
-	rows, err := q.db.Query(ctx, listAddonAuthorsByUsers, userIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []AddonAuthor
-	for rows.Next() {
-		var i AddonAuthor
-		if err := rows.Scan(&i.UserID, &i.Name, &i.CreatedAt); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const listLuaProjectArtifactGarbage = `-- name: ListLuaProjectArtifactGarbage :many
@@ -12287,7 +12263,7 @@ const listLuaProjectsByOwner = `-- name: ListLuaProjectsByOwner :many
 SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description FROM lua_projects WHERE owner_id = $1 ORDER BY updated_at DESC LIMIT 100
 `
 
-// An author's own addons, for /addons/<author>.
+// An author's own modules, for /modules/<author>.
 func (q *sqlQuerier) ListLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) ([]LuaProject, error) {
 	rows, err := q.db.Query(ctx, listLuaProjectsByOwner, ownerID)
 	if err != nil {
@@ -12320,13 +12296,37 @@ func (q *sqlQuerier) ListLuaProjectsByOwner(ctx context.Context, ownerID uuid.UU
 	return items, nil
 }
 
+const listModuleAuthorsByUsers = `-- name: ListModuleAuthorsByUsers :many
+SELECT user_id, name, created_at FROM addon_authors WHERE user_id = ANY($1::uuid[])
+`
+
+func (q *sqlQuerier) ListModuleAuthorsByUsers(ctx context.Context, userIds []uuid.UUID) ([]AddonAuthor, error) {
+	rows, err := q.db.Query(ctx, listModuleAuthorsByUsers, userIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AddonAuthor
+	for rows.Next() {
+		var i AddonAuthor
+		if err := rows.Scan(&i.UserID, &i.Name, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPublicLuaProjects = `-- name: ListPublicLuaProjects :many
 SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description FROM lua_projects p
 JOIN LATERAL (SELECT max(r.published_at) AS published_at FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash IS NOT NULL) latest ON latest.published_at IS NOT NULL
 ORDER BY (SELECT count(*) FROM lua_project_stars s WHERE s.project_id = p.id) DESC, latest.published_at DESC LIMIT 100
 `
 
-// Addons with a release people can still run, most tracked first, then newest release.
+// Modules with a release people can still run, most tracked first, then newest release.
 func (q *sqlQuerier) ListPublicLuaProjects(ctx context.Context) ([]LuaProject, error) {
 	rows, err := q.db.Query(ctx, listPublicLuaProjects)
 	if err != nil {
@@ -12364,7 +12364,7 @@ SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.cre
 WHERE s.user_id = $1 ORDER BY s.created_at DESC LIMIT 200
 `
 
-// Addons the user tracks, most recently starred first.
+// Modules the user tracks, most recently starred first.
 func (q *sqlQuerier) ListStarredLuaProjects(ctx context.Context, userID uuid.UUID) ([]LuaProject, error) {
 	rows, err := q.db.Query(ctx, listStarredLuaProjects, userID)
 	if err != nil {
@@ -12469,7 +12469,7 @@ const lockLuaProjectOwner = `-- name: LockLuaProjectOwner :one
 SELECT id FROM users WHERE id = $1 FOR UPDATE
 `
 
-// Serializes addon creation for one owner so concurrent requests cannot exceed the quota.
+// Serializes module creation for one owner so concurrent requests cannot exceed the quota.
 func (q *sqlQuerier) LockLuaProjectOwner(ctx context.Context, ownerID uuid.UUID) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockLuaProjectOwner, ownerID)
 	var id uuid.UUID

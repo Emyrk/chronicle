@@ -5,7 +5,7 @@ import type { RetainedScene, SceneNode } from "../Guides/protocol/types"
 import type { EventStreams } from "../Guides/runtime/panelEvents"
 import type { PanelReplayMetrics } from "../Guides/runtime/panelWorker"
 import type { PanelUnits } from "../Guides/runtime/panelUnits"
-import { explainAddonError, formatAddonError, type AddonPhase } from "../Guides/runtime/addonErrors"
+import { explainModuleError, formatModuleError, type ModulePhase } from "../Guides/runtime/moduleErrors"
 
 /** The parts of a Worker the runner uses, so tests can drive the worker handler directly. */
 export interface PreviewWorker {
@@ -109,10 +109,10 @@ export function runPreview(input: PreviewRunInput, signal?: AbortSignal, createW
     if (signal?.aborted) { finish(null); return }
     signal?.addEventListener("abort", abort, { once: true })
     worker.onmessage = ({ data }) => {
-      const message = data as { type?: string; message?: unknown; metrics?: PanelReplayMetrics; phase?: AddonPhase; events?: number }
+      const message = data as { type?: string; message?: unknown; metrics?: PanelReplayMetrics; phase?: ModulePhase; events?: number }
       if (message?.type === "error") {
         const error = String(message.message ?? "Panel failed")
-        finish({ ok: false, error, explanation: formatAddonError(explainAddonError(error, { phase: message.phase, events: message.events })) })
+        finish({ ok: false, error, explanation: formatModuleError(explainModuleError(error, { phase: message.phase, events: message.events })) })
         return
       }
       if (message?.type === "progress") { armWatchdog(); return }

@@ -117,7 +117,7 @@ func (a *API) luaZIP(w http.ResponseWriter, r *http.Request, key, digest, mimeTy
 
 var luaProjectSlug = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
-// reservedLuaProjectSlugs would collide with /addons/<author>/<slug> sub-routes.
+// reservedLuaProjectSlugs would collide with /modules/<author>/<slug> sub-routes.
 var reservedLuaProjectSlugs = map[string]bool{"edit": true, "new": true, "api": true}
 
 const (
@@ -133,10 +133,10 @@ type luaProjectQuotaError struct {
 }
 
 func (e *luaProjectQuotaError) Error() string {
-	return fmt.Sprintf("addon ownership limit reached: %d of %d", e.owned, e.limit)
+	return fmt.Sprintf("module ownership limit reached: %d of %d", e.owned, e.limit)
 }
 
-// luaReleasesWithFiles is how many of an addon's newest releases keep their packages.
+// luaReleasesWithFiles is how many of an module's newest releases keep their packages.
 const luaReleasesWithFiles = 3
 
 // luaReleaseTag matches the lua_project_releases tag check.
@@ -190,7 +190,7 @@ func (a *API) luaProjectResponses(ctx context.Context, projects ...database.LuaP
 			}
 		}
 	}
-	authors, err := a.addonAuthorNames(ctx, users)
+	authors, err := a.moduleAuthorNames(ctx, users)
 	if err != nil {
 		return nil, err
 	}
@@ -400,9 +400,9 @@ func (a *API) CreateLuaProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	owner := chronauth.MustAuthenticatedClaims(r.Context()).Subject
-	author, err := a.Opts.Zed.GetAddonAuthorByUser(r.Context(), owner)
+	author, err := a.Opts.Zed.GetModuleAuthorByUser(r.Context(), owner)
 	if errors.Is(err, pgx.ErrNoRows) {
-		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "Claim an author name first; it is part of every addon's address."})
+		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "Claim an author name first; it is part of every module's address."})
 		return
 	}
 	if err != nil {
@@ -434,13 +434,13 @@ func (a *API) CreateLuaProject(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		// Owners always track their own addons.
+		// Owners always track their own modules.
 		return tx.StarLuaProject(r.Context(), database.StarLuaProjectParams{ProjectID: p.ID, UserID: owner})
 	}, nil)
 	if err != nil {
 		var quota *luaProjectQuotaError
 		if errors.As(err, &quota) {
-			httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: fmt.Sprintf("You own %d of %d addons. This limit keeps each account's use of shared storage and processing resources bounded. Delete an addon before creating another.", quota.owned, quota.limit)})
+			httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: fmt.Sprintf("You own %d of %d modules. This limit keeps each account's use of shared storage and processing resources bounded. Delete an module before creating another.", quota.owned, quota.limit)})
 			return
 		}
 		var pg *pgconn.PgError
@@ -469,7 +469,7 @@ func (a *API) ListMyLuaProjects(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusOK, out)
 }
 
-// ListStarredLuaProjects lists the addons the caller tracks, which their instance panel picker offers.
+// ListStarredLuaProjects lists the modules the caller tracks, which their instance panel picker offers.
 func (a *API) ListStarredLuaProjects(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	projects, err := a.Opts.Zed.ListStarredLuaProjects(ctx, chronauth.MustAuthenticatedClaims(ctx).Subject)
@@ -477,7 +477,7 @@ func (a *API) ListStarredLuaProjects(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	// A star outlives access: only list addons the caller may still use.
+	// A star outlives access: only list modules the caller may still use.
 	actor, _ := luaActor(r)
 	usable := make([]database.LuaProject, 0, len(projects))
 	for _, p := range projects {
@@ -498,12 +498,12 @@ func (a *API) ListStarredLuaProjects(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
-// StarLuaProject tracks an addon the caller may use.
+// StarLuaProject tracks an module the caller may use.
 func (a *API) StarLuaProject(w http.ResponseWriter, r *http.Request) {
 	a.setLuaProjectStar(w, r, true)
 }
 
-// UnstarLuaProject stops tracking an addon. Owners always track their own.
+// UnstarLuaProject stops tracking an module. Owners always track their own.
 func (a *API) UnstarLuaProject(w http.ResponseWriter, r *http.Request) {
 	a.setLuaProjectStar(w, r, false)
 }
@@ -521,7 +521,7 @@ func (a *API) setLuaProjectStar(w http.ResponseWriter, r *http.Request, star boo
 		return
 	}
 	if !star && p.OwnerID == user {
-		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{Message: "Owners always track their own addons."})
+		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{Message: "Owners always track their own modules."})
 		return
 	}
 	if star {
@@ -541,7 +541,7 @@ func (a *API) setLuaProjectStar(w http.ResponseWriter, r *http.Request, star boo
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.LuaProjectStar{Stars: stars[id], Starred: star})
 }
 
-// UpdateLuaProject sets an addon's description. Anyone who may release the addon may describe it.
+// UpdateLuaProject sets an module's description. Anyone who may release the module may describe it.
 func (a *API) UpdateLuaProject(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, ok := luaProjectID(w, r)
@@ -586,7 +586,7 @@ func (a *API) DeleteLuaProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if deleted == 0 {
-		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Addon not found."})
+		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Module not found."})
 		return
 	}
 	a.drainLuaArtifactGarbageAfterWrite()
@@ -595,7 +595,7 @@ func (a *API) DeleteLuaProject(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) GetMyLuaProject(w http.ResponseWriter, r *http.Request) {
 	id, ok := luaProjectID(w, r)
-	// The Workshop's view; the addon page uses GetLuaProjectPage.
+	// The Workshop's view; the module page uses GetLuaProjectPage.
 	if !ok || !a.canLuaProject(w, r, id, luaEdit) {
 		return
 	}
@@ -713,7 +713,7 @@ func (a *API) CreateLuaProjectRelease(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Read(r.Context(), w, r, &req) {
 		return
 	}
-	// "main" names the unreleased build in addon links, so it cannot be a tag.
+	// "main" names the unreleased build in module links, so it cannot be a tag.
 	if req.ExpectedRevision < 1 || !luaReleaseTag.MatchString(req.Tag) || strings.EqualFold(req.Tag, "main") {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Tags are up to 32 letters, digits, dots, dashes and underscores, starting with a letter or digit, and cannot be \"main\"."})
 		return
@@ -734,7 +734,7 @@ func (a *API) CreateLuaProjectRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
-		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "Nothing saved to release yet, or the addon changed. Reload and try again."})
+		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "Nothing saved to release yet, or the module changed. Reload and try again."})
 		return
 	}
 	if err != nil {

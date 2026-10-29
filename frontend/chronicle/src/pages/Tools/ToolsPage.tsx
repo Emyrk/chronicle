@@ -66,9 +66,9 @@ const tools = [
     icon: <Youtube className="h-6 w-6" />,
   },
   {
-    name: "Addons",
-    description: "Build and share sandboxed Lua panels in the Addon Workshop.",
-    to: "/addons",
+    name: "Modules",
+    description: "Build and share sandboxed Lua panels in the Module Workshop.",
+    to: "/modules",
     icon: <Puzzle className="h-6 w-6" />,
   },
   {

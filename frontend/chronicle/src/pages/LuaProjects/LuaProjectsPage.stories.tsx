@@ -33,8 +33,8 @@ function handlers({ signedIn = false, author = null, myProjects = [], publicProj
     http.get("/api/v1/site-config", () => HttpResponse.json({ signups_enabled: true, client_uploads_disabled: false, billing_enabled: false, ads_enabled: false, tenant: null })),
     http.get("/api/v1/whoami", () => signedIn ? HttpResponse.json({ user_id: "user-1", session_id: "session-1", roles: [], ads_free: false }) : new HttpResponse(null, { status: 204 })),
     http.post("/api/v1/authcheck", () => HttpResponse.json({ createLuaProject: permission })),
-    http.get("/api/v1/me/addon-author", () => author ? HttpResponse.json({ name: author }) : new HttpResponse(null, { status: 204 })),
-    http.get("/api/v1/me/addon-author/suggestion", () => HttpResponse.json({ name: "my-name" })),
+    http.get("/api/v1/me/module-author", () => author ? HttpResponse.json({ name: author }) : new HttpResponse(null, { status: 204 })),
+    http.get("/api/v1/me/module-author/suggestion", () => HttpResponse.json({ name: "my-name" })),
     http.get("/api/v1/me/lua-projects", () => HttpResponse.json(myProjects)),
     http.get("/api/v1/lua-projects", async () => {
       if (publicLoading) await delay("infinite")
@@ -47,7 +47,7 @@ const meta = {
   title: "Pages/LuaProjects/LuaProjectsPage",
   component: LuaProjectsPage,
   parameters: { layout: "fullscreen", msw: { handlers: handlers() } },
-  decorators: [(Story) => <MemoryRouter initialEntries={["/addons"]}><Story /></MemoryRouter>],
+  decorators: [(Story) => <MemoryRouter initialEntries={["/modules"]}><Story /></MemoryRouter>],
 } satisfies Meta<typeof LuaProjectsPage>
 
 export default meta
@@ -58,13 +58,13 @@ export const SignedOut: Story = {
   parameters: { msw: { handlers: handlers({ signedIn: false }) } },
 }
 
-/** A new author with zero addons still sees the three-step welcome, now on step 2: name an addon. */
-export const WelcomeNameYourAddon: Story = {
+/** A new author with zero modules still sees the three-step welcome, now on step 2: name a module. */
+export const WelcomeNameYourModule: Story = {
   parameters: { msw: { handlers: handlers({ signedIn: true, author: "chronicle", myProjects: [], permission: true }) } },
 }
 
-/** A signed-in author who already has addons: the welcome is gone, "My addons" appears, and the gallery is ranked by popularity. */
-export const SignedInWithAddons: Story = {
+/** A signed-in author who already has modules: the welcome is gone, "My modules" appears, and the gallery is ranked by popularity. */
+export const SignedInWithModules: Story = {
   parameters: { msw: { handlers: handlers({ signedIn: true, author: "chronicle", myProjects: [panel({ id: "mine-1" })], permission: true }) } },
 }
 

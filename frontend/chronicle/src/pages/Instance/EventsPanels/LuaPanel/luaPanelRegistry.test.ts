@@ -12,7 +12,7 @@ describe("Lua panel discovery", () => {
     const projects = [
       { id: id("1"), owner_id: "me", kind: "panel", name: "Released", releases: [release("v2", false), release("v1")], main },
       { id: id("2"), owner_id: "me", kind: "panel", name: "Main only", releases: [], main },
-      // The server lists the addons the user starred, so someone else's appears too.
+      // The server lists the modules the user starred, so someone else's appears too.
       { id: id("3"), owner_id: "other", kind: "panel", name: "Tracked", releases: [release("1.0")] },
       { id: id("4"), owner_id: "me", kind: "panel", name: "Empty", releases: [release("v1", false)] },
       { id: id("5"), owner_id: "me", kind: "guide", name: "Guide", releases: [release("v1")], main },

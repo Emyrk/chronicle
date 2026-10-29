@@ -4,13 +4,13 @@ import { useQueryClient } from "@tanstack/react-query"
 import { Star } from "lucide-react"
 import { useSession } from "@/api/queries"
 import { setStarred, type LuaProject } from "./api"
-import { errorMessage } from "./addonUi"
+import { errorMessage } from "./moduleUi"
 
 /**
- * Star to track an addon: tracked panel addons are offered on the instance page. Owners always track
+ * Star to track a module: tracked panel modules are offered on the instance page. Owners always track
  * their own, so their button only shows the count. Signed-out visitors are sent to sign in.
  */
-export function AddonStar({ project, canUse }: { project: LuaProject; canUse: boolean }) {
+export function ModuleStar({ project, canUse }: { project: LuaProject; canUse: boolean }) {
   const { data: session } = useSession()
   const queryClient = useQueryClient()
   const [state, setState] = useState({ stars: project.stars, starred: project.starred })
@@ -28,18 +28,18 @@ export function AddonStar({ project, canUse }: { project: LuaProject; canUse: bo
     setState({ stars: state.stars + (next ? 1 : -1), starred: next })
     try {
       setState(await setStarred(project.id, next))
-      // The instance page's panel picker lists tracked addons.
+      // The instance page's panel picker lists tracked modules.
       void queryClient.invalidateQueries({ queryKey: ["lua-panel-catalog"] })
     } catch (e) {
       setState(previous); setError(errorMessage(e))
     } finally { setBusy(false) }
   }
 
-  if (!session) return <Link to={`/login?from=${encodeURIComponent(window.location.pathname)}`} className={`${shape} border-border hover:bg-accent`} title="Sign in to track this addon">
+  if (!session) return <Link to={`/login?from=${encodeURIComponent(window.location.pathname)}`} className={`${shape} border-border hover:bg-accent`} title="Sign in to track this module">
     <span className="inline-flex items-center gap-2 px-3 py-2">{icon} Track</span>{count}</Link>
   return <div className="flex flex-col items-end gap-1">
     <button type="button" onClick={() => void toggle()} disabled={busy || owner || !canUse} aria-pressed={state.starred}
-      title={owner ? "Owners always track their own addons" : state.starred ? "Stop tracking: it leaves your instance panel picker" : "Track it: it appears in your instance panel picker"}
+      title={owner ? "Owners always track their own modules" : state.starred ? "Stop tracking: it leaves your instance panel picker" : "Track it: it appears in your instance panel picker"}
       className={`${shape} ${state.starred ? "border-amber-300/40 bg-amber-300/10" : "border-border"} enabled:hover:bg-accent disabled:cursor-default`}>
       <span className="inline-flex items-center gap-2 px-3 py-2">{icon} {label}</span>{count}
     </button>

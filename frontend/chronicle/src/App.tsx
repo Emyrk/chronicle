@@ -117,9 +117,9 @@ const APIExplorer = lazy(() => import("./pages/APIExplorer/APIExplorer").then(({
 const LuaProjectsPage = lazy(() => import("./pages/LuaProjects/LuaProjectsPage").then(({ LuaProjectsPage }) => ({ default: LuaProjectsPage })))
 const LuaProjectPage = lazy(() => import("./pages/LuaProjects/LuaProjectPage").then(({ LuaProjectPage }) => ({ default: LuaProjectPage })))
 const LuaProjectWorkspacePage = lazy(() => import("./pages/LuaProjects/LuaProjectWorkspacePage"))
-const AddonAuthorPage = lazy(() => import("./pages/LuaProjects/AddonAuthorPage").then(({ AddonAuthorPage }) => ({ default: AddonAuthorPage })))
-const NewAddonPage = lazy(() => import("./pages/LuaProjects/NewAddonPage").then(({ NewAddonPage }) => ({ default: NewAddonPage })))
-const AddonWorkspaceByPath = lazy(() => import("./pages/LuaProjects/LuaProjectWorkspacePage").then(({ AddonWorkspaceByPath }) => ({ default: AddonWorkspaceByPath })))
+const ModuleAuthorPage = lazy(() => import("./pages/LuaProjects/ModuleAuthorPage").then(({ ModuleAuthorPage }) => ({ default: ModuleAuthorPage })))
+const NewModulePage = lazy(() => import("./pages/LuaProjects/NewModulePage").then(({ NewModulePage }) => ({ default: NewModulePage })))
+const ModuleWorkspaceByPath = lazy(() => import("./pages/LuaProjects/LuaProjectWorkspacePage").then(({ ModuleWorkspaceByPath }) => ({ default: ModuleWorkspaceByPath })))
 const LuaPanelApiPage = lazy(() => import("./pages/LuaProjects/LuaPanelApiPage"))
 const AssistantDebugPage = lazy(() => import("./pages/AssistantDebug/AssistantDebugPage"))
 const CustomPanelsPage = lazy(() => import("./pages/Tools/CustomPanelsPage").then(({ CustomPanelsPage }) => ({ default: CustomPanelsPage })))
@@ -138,7 +138,7 @@ function LegacyYouTubeSyncRedirect() {
   return <Navigate to={`/youtube-sync-v3${location.search}${location.hash}`} replace />
 }
 
-/** Moves a renamed section (e.g. /lua-projects → /addons), keeping the rest of the path, query and hash. */
+/** Moves a renamed section (e.g. /lua-projects → /modules), keeping the rest of the path, query and hash. */
 function RenamedPathRedirect({ from, to }: { from: string; to: string }) {
   const location = useLocation()
   return <Navigate to={`${to}${location.pathname.slice(from.length)}${location.search}${location.hash}`} replace />
@@ -199,15 +199,16 @@ function App() {
         <Route path="/apply/:id" element={<ApplicationPage />} />
         <Route path="/census" element={<CensusPage />} />
         <Route path="/tools" element={<ToolsPage />} />
-        <Route path="/addons" element={<LuaProjectsPage />} />
-        <Route path="/addons/api" element={<LuaPanelApiPage />} />
-        <Route path="/addons/id/:projectId" element={<LuaProjectPage />} />
-        <Route path="/addons/id/:projectId/edit" element={<LuaProjectWorkspacePage />} />
-        <Route path="/addons/new" element={<NewAddonPage />} />
-        <Route path="/addons/:author" element={<AddonAuthorPage />} />
-        <Route path="/addons/:author/:slug" element={<LuaProjectPage />} />
-        <Route path="/addons/:author/:slug/edit" element={<AddonWorkspaceByPath />} />
-        <Route path="/lua-projects/*" element={<RenamedPathRedirect from="/lua-projects" to="/addons" />} />
+        <Route path="/modules" element={<LuaProjectsPage />} />
+        <Route path="/modules/api" element={<LuaPanelApiPage />} />
+        <Route path="/modules/id/:projectId" element={<LuaProjectPage />} />
+        <Route path="/modules/id/:projectId/edit" element={<LuaProjectWorkspacePage />} />
+        <Route path="/modules/new" element={<NewModulePage />} />
+        <Route path="/modules/:author" element={<ModuleAuthorPage />} />
+        <Route path="/modules/:author/:slug" element={<LuaProjectPage />} />
+        <Route path="/modules/:author/:slug/edit" element={<ModuleWorkspaceByPath />} />
+        <Route path="/addons/*" element={<RenamedPathRedirect from="/addons" to="/modules" />} />
+        <Route path="/lua-projects/*" element={<RenamedPathRedirect from="/lua-projects" to="/modules" />} />
         <Route path="/tools/developer-panels" element={<CustomPanelsPage />} />
         <Route path="/tools/custom-panels" element={<RenamedPathRedirect from="/tools/custom-panels" to="/tools/developer-panels" />} />
         <Route path="/developers/api" element={<APIExplorer />} />

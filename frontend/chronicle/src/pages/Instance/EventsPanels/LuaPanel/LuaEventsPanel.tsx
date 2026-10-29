@@ -22,7 +22,7 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
     staleTime: "static",
     gcTime: Infinity, // Keep the resolved hash across panel remounts until page refresh.
     queryFn: ({ signal }) => {
-      if (!ref) throw new Error("Invalid addon reference")
+      if (!ref) throw new Error("Invalid module reference")
       return getPublicProject(ref.id, ref.channel, signal)
     },
   })
@@ -32,9 +32,9 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
     staleTime: Infinity, // Hash-addressed bytes never change while published.
     gcTime: Infinity, // Keep bytes available if the channel rotates before a panel remount.
     queryFn: async ({ signal }) => {
-      if (!ref || !hash) throw new Error("This addon has no published release on this channel")
+      if (!ref || !hash) throw new Error("This module has no published release on this channel")
       const response = await fetch(publicPackageURL(ref.id, hash), { signal })
-      if (!response.ok) throw new Error(`Addon package unavailable (${response.status})`)
+      if (!response.ok) throw new Error(`Module package unavailable (${response.status})`)
       return loadPanelPackage(new Uint8Array(await response.arrayBuffer()))
     },
   })
@@ -62,7 +62,7 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
   const onMetrics = useCallback((run: LuaPanelRunMetrics) => {
     setDone(true)
     reportPanelMetrics?.({
-      panelKey: `panel-${props.panelIndex}`, panelId: String(props.panelType), panelLabel: `${panel?.name ?? "Addon"} (addon)`,
+      panelKey: `panel-${props.panelIndex}`, panelId: String(props.panelType), panelLabel: `${panel?.name ?? "Module"} (module)`,
       panelIndex: props.panelIndex, streams: panel?.streams ?? [],
       streamBytes: Object.fromEntries(Object.entries(eventStreams ?? {}).map(([type, data]) => [type, data.byteLength])), totalStreamBytes: run.bytes,
       totalEvents: run.events, processingTimeMs: run.totalMs, streamProcessingTimeMs: run.luaMs + run.completeMs,
@@ -78,10 +78,10 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
   useEffect(() => () => { for (const url of assetUrls.values()) URL.revokeObjectURL(url) }, [assetUrls])
   return <div className="flex h-full flex-col rounded-lg border border-border bg-card text-card-foreground">
     <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm">
-      <span className="truncate font-semibold">{panel?.name ?? "Addon"} <span className="text-xs text-muted-foreground">({ref?.channel})</span></span>
+      <span className="truncate font-semibold">{panel?.name ?? "Module"} <span className="text-xs text-muted-foreground">({ref?.channel})</span></span>
       <PanelSelector value={props.panelType} onChange={props.onPanelTypeChange} />
     </div>
-    {channelQuery.isPending || (hash && packageQuery.isPending) ? <div className="p-4 text-sm">Loading addon...</div> :
+    {channelQuery.isPending || (hash && packageQuery.isPending) ? <div className="p-4 text-sm">Loading module...</div> :
       channelQuery.error || packageQuery.error || streamError || !hash ? <div role="alert" className="p-4 text-sm text-destructive">{String(channelQuery.error ?? packageQuery.error ?? streamError ?? "Channel not published")}</div> :
       panel && (panel.streams.length > 0 && !eventStreams ? <div className="p-4 text-sm">Loading events...</div> :
         <LuaPanelHost key={`${ref?.id}:${hash}`} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope} maxEvents={panel.maxEvents} capabilities={panel.capabilities}

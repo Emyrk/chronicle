@@ -4,18 +4,18 @@ import { useQuery } from "@tanstack/react-query"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, Trash2, Upload, Users } from "lucide-react"
-import { addonPath, authorPath, createRelease, deleteProject, deleteRelease, latestRelease, nextReleaseTag, uploadDraft, type LuaRelease } from "./api"
-import { AddonIcon } from "./AddonIcon"
-import { AddonReleases, ReleasesTable, VersionPicker } from "./AddonReleases"
+import { modulePath, authorPath, createRelease, deleteProject, deleteRelease, latestRelease, nextReleaseTag, uploadDraft, type LuaRelease } from "./api"
+import { ModuleIcon } from "./ModuleIcon"
+import { ModuleReleases, ReleasesTable, VersionPicker } from "./ModuleReleases"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
-import { AddonDescription } from "./AddonDescription"
-import { AddonStar } from "./AddonStar"
-import { AddonAiUsage, AddonContributors } from "./AddonTeam"
-import { isAddonId, useAddonPage } from "./addonRoute"
-import { card, errorMessage, kindLabel, smallButton } from "./addonUi"
+import { ModuleDescription } from "./ModuleDescription"
+import { ModuleStar } from "./ModuleStar"
+import { ModuleAiUsage, ModuleContributors } from "./ModuleTeam"
+import { isModuleId, useModulePage } from "./moduleRoute"
+import { card, errorMessage, kindLabel, smallButton } from "./moduleUi"
 import { defaultRef, formatBytes, isImagePath, MAIN_REF, manifestSummary, packageDownloadURL, packageSha, readPackageFiles, shortSha, type PackageFile, type PackageRef } from "./packageFiles"
 
-type AddonTab = "releases" | "contributors"
+type ModuleTab = "releases" | "contributors"
 
 const formatDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
 const prose = "prose prose-sm dark:prose-invert max-w-none prose-a:text-primary prose-pre:bg-muted/60 prose-pre:text-foreground prose-code:font-normal prose-code:before:content-none prose-code:after:content-none [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:py-0.5"
@@ -54,16 +54,16 @@ function FileViewer({ file, images }: { file: PackageFile; images: ReadonlyMap<s
 
 export function LuaProjectPage() {
   const { projectId, author, slug } = useParams<{ projectId?: string; author?: string; slug?: string }>()
-  // Old links were /addons/<id>/edit, which now reads as author <id> and slug "edit" (a reserved slug).
-  if (isAddonId(author) && slug === "edit") return <Navigate to={`/addons/id/${author}/edit`} replace />
-  return <AddonPage projectId={projectId} />
+  // Legacy ID links may arrive as /modules/<id>/edit after redirects, which now reads as author <id> and slug "edit" (a reserved slug).
+  if (isModuleId(author) && slug === "edit") return <Navigate to={`/modules/id/${author}/edit`} replace />
+  return <ModulePage projectId={projectId} />
 }
 
-function AddonPage({ projectId }: { projectId?: string }) {
+function ModulePage({ projectId }: { projectId?: string }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [search, setSearch] = useSearchParams()
-  const pageQuery = useAddonPage()
+  const pageQuery = useModulePage()
   const project = pageQuery.data?.project ?? null
   const can = pageQuery.data?.permissions
   const [error, setError] = useState("")
@@ -71,9 +71,9 @@ function AddonPage({ projectId }: { projectId?: string }) {
   const [busy, setBusy] = useState(false)
   const [archive, setArchive] = useState<File | null>(null)
 
-  // /addons/id/<id> keeps working, but shows the addon's named address once it has one.
+  // /modules/id/<id> keeps working, but shows the module's named address once it has one.
   useEffect(() => {
-    if (projectId && project?.author) navigate(addonPath(project) + location.search, { replace: true })
+    if (projectId && project?.author) navigate(modulePath(project) + location.search, { replace: true })
   }, [projectId, project, navigate, location.search])
 
   const requested = search.get("ref") as PackageRef | null
@@ -96,7 +96,7 @@ function AddonPage({ projectId }: { projectId?: string }) {
   const about = files ? manifestSummary(files) : null
 
   // The default build stays out of the URL, so the page keeps following the latest release.
-  function show(next: { ref?: PackageRef | null; file?: string | null; tab?: AddonTab }) {
+  function show(next: { ref?: PackageRef | null; file?: string | null; tab?: ModuleTab }) {
     setSearch(current => {
       const params = new URLSearchParams(current)
       // Opening a build or a file leaves the releases and contributors views.
@@ -128,12 +128,12 @@ function AddonPage({ projectId }: { projectId?: string }) {
     } finally { setBusy(false) }
   }
 
-  if (pageQuery.isPending) return <main className="container mx-auto px-4 py-10">Loading addon…</main>
-  if (!project || !can) return <main className="container mx-auto px-4 py-10"><Link to="/addons">← Addons</Link><p role="alert" className="mt-4">{pageQuery.error ? errorMessage(pageQuery.error) : "Addon not found."}</p></main>
+  if (pageQuery.isPending) return <main className="container mx-auto px-4 py-10">Loading module…</main>
+  if (!project || !can) return <main className="container mx-auto px-4 py-10"><Link to="/modules">← Modules</Link><p role="alert" className="mt-4">{pageQuery.error ? errorMessage(pageQuery.error) : "Module not found."}</p></main>
 
   const latest = latestRelease(project)
   const refIcon = ref === MAIN_REF ? project.main?.icon : project.releases.find(release => release.tag === ref)?.icon
-  const workshop = addonPath(project, "/edit")
+  const workshop = modulePath(project, "/edit")
   const canTag = can.release && !!project.main && latest?.sha256 !== project.main.sha256
   // Contributors are only listed to people who can edit.
   const tab = search.get("tab") === "releases" ? "releases" : search.get("tab") === "contributors" && can.edit ? "contributors" : null
@@ -142,7 +142,7 @@ function AddonPage({ projectId }: { projectId?: string }) {
     if (window.confirm(release === latest ? `Delete ${release.tag}? Panels fall back to the previous release that still has files.` : `Delete ${release.tag}?`)) void mutate(() => deleteRelease(project.id, release.tag), `Deleted ${release.tag}.`)
   }
   const tagRelease = () => {
-    const tag = window.prompt("Tag this release. Everyone running the addon gets it:", nextReleaseTag(project.releases))?.trim()
+    const tag = window.prompt("Tag this release. Everyone running the module gets it:", nextReleaseTag(project.releases))?.trim()
     if (tag) void mutate(async () => { await createRelease(project.id, project.revision, tag); show({ ref: null }) }, `Released ${tag}.`)
   }
 
@@ -151,7 +151,7 @@ function AddonPage({ projectId }: { projectId?: string }) {
     setBusy(true); setError(""); setNotice("")
     try {
       await deleteProject(project.id)
-      navigate(project.author ? authorPath(project.author) : "/addons", { replace: true })
+      navigate(project.author ? authorPath(project.author) : "/modules", { replace: true })
     } catch (e) {
       setError(errorMessage(e)); setBusy(false)
     }
@@ -159,43 +159,43 @@ function AddonPage({ projectId }: { projectId?: string }) {
 
   return <div className="mx-auto flex w-full max-w-[2080px] items-start justify-center gap-6 px-4 py-8">
     <div className="hidden self-stretch 2xl:block">
-      <AdRailStack primaryPlacement="addon-left-rail" secondaryPlacement="addon-left-rail-lower" railLayout="paired-wide" />
+      <AdRailStack primaryPlacement="module-left-rail" secondaryPlacement="module-left-rail-lower" railLayout="paired-wide" />
     </div>
     <main className="w-full min-w-0 max-w-6xl space-y-6">
-      <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/addons"><ArrowLeft className="size-4" /> All addons</Link>
+      <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/modules"><ArrowLeft className="size-4" /> All modules</Link>
       <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-5">
         <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-3 text-2xl font-semibold"><AddonIcon name={refIcon} className="size-6 text-muted-foreground" />{project.name}
+          <h1 className="flex items-center gap-3 text-2xl font-semibold"><ModuleIcon name={refIcon} className="size-6 text-muted-foreground" />{project.name}
             <span className="rounded-full border border-border px-2 py-0.5 text-xs font-normal text-muted-foreground">{kindLabel(project.kind)}</span></h1>
           <p className="mt-1 text-xs text-muted-foreground">
             {project.author ? <>by <Link to={authorPath(project.author)} className="font-mono hover:text-foreground hover:underline">{project.author}</Link></> : "Unnamed author"}
             {can.edit && <span className="font-mono"> · /{project.slug} · revision {project.revision}</span>} · updated {formatDate(project.updated_at)}
           </p>
-          <AddonDescription key={project.id} project={project} canEdit={can.release} onSaved={() => void pageQuery.refetch()} />
+          <ModuleDescription key={project.id} project={project} canEdit={can.release} onSaved={() => void pageQuery.refetch()} />
         </div>
         <div className="flex flex-wrap items-start gap-2">
-          <AddonStar key={project.id} project={project} canUse={can.use} />
+          <ModuleStar key={project.id} project={project} canUse={can.use} />
           {can.edit && <button type="button" aria-pressed={tab === "contributors"} onClick={() => show({ tab: tab === "contributors" ? undefined : "contributors" })}
             className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent ${tab === "contributors" ? "border-primary/50 bg-muted" : "border-border"}`}>
             <Users className="size-4" /> Contributors</button>}
           {can.manage && <button type="button" disabled={busy} onClick={() => void removeProject()}
             className="inline-flex items-center gap-2 rounded-md border border-destructive/40 px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50">
-            <Trash2 className="size-4" /> Delete addon</button>}
-          {project.kind === "panel" && can.edit && <Link className="inline-flex items-center gap-2 rounded-md bg-primary-darker px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-darker/90" to={workshop}><Code2 className="size-4" /> Open in Addon Workshop</Link>}
+            <Trash2 className="size-4" /> Delete module</button>}
+          {project.kind === "panel" && can.edit && <Link className="inline-flex items-center gap-2 rounded-md bg-primary-darker px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-darker/90" to={workshop}><Code2 className="size-4" /> Open in Module Workshop</Link>}
         </div>
       </header>
       {can.manage && !project.author && <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-        This addon has no named address yet. <Link className="text-primary underline underline-offset-2" to="/addons">Claim an author name</Link> to publish it at /addons/&lt;you&gt;/{project.slug}.</p>}
+        This module has no named address yet. <Link className="text-primary underline underline-offset-2" to="/modules">Claim an author name</Link> to publish it at /modules/&lt;you&gt;/{project.slug}.</p>}
       {error && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}{error.includes("revision") && " Reload the project before retrying."}</p>}
       {notice && <p role="status" className="rounded-md border border-emerald-600/30 bg-emerald-600/10 p-3 text-sm">{notice}</p>}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="min-w-0 space-y-4">
-          {tab === "contributors" ? <AddonContributors project={project} canManage={can.manage} onClose={() => show({})} /> :
+          {tab === "contributors" ? <ModuleContributors project={project} canManage={can.manage} onClose={() => show({})} /> :
           showReleases ? <ReleasesTable project={project} latest={latest} viewing={null} canRelease={can.release} busy={busy}
             onView={next => show({ ref: next })} onDelete={removeRelease} onClose={() => show({})} /> :
           !ref || !sha ? <div className={`${card} text-sm text-muted-foreground`}>{can.edit
-            ? <>No files yet. {project.kind === "panel" ? "Open the Addon Workshop and save to main, or upload" : "Upload"} a tar archive from Releases.</>
-            : "This addon has not been published yet."}</div> : <>
+            ? <>No files yet. {project.kind === "panel" ? "Open the Module Workshop and save to main, or upload" : "Upload"} a tar archive from Releases.</>
+            : "This module has not been published yet."}</div> : <>
             <section aria-label="Files" className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
               <div className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/30 px-4 py-2">
                 <VersionPicker project={project} latest={latest} viewing={ref} onView={next => show({ ref: next })} />
@@ -220,7 +220,7 @@ function AddonPage({ projectId }: { projectId?: string }) {
                   <button type="button" className="ml-auto text-xs font-normal text-muted-foreground hover:text-foreground" onClick={() => show({ file: null })}>Show README</button>}
               </div>
               {selected ? <FileViewer file={selected} images={images} />
-                : <p className="p-6 text-sm text-muted-foreground">This build has no README.md. {project.kind === "panel" && can.edit && <>Add one from the README.md tab in the <Link className="text-primary underline underline-offset-2" to={workshop}>Addon Workshop</Link>.</>}</p>}
+                : <p className="p-6 text-sm text-muted-foreground">This build has no README.md. {project.kind === "panel" && can.edit && <>Add one from the README.md tab in the <Link className="text-primary underline underline-offset-2" to={workshop}>Module Workshop</Link>.</>}</p>}
             </section>}
           </>}
         </div>
@@ -233,11 +233,11 @@ function AddonPage({ projectId }: { projectId?: string }) {
               <div><dt className="text-muted-foreground">Capabilities</dt><dd className="mt-1 font-mono">{about.capabilities.join(", ") || "None"}</dd></div>
               <div><dt className="text-muted-foreground">Replays</dt><dd className="mt-1">{about.streamScope === "instance" ? "Whole instance" : "Selected encounters"}{about.maxEvents !== undefined && `, up to ${about.maxEvents.toLocaleString()} events`}</dd></div>
             </dl> : <p className="text-xs text-muted-foreground">{ref ? "Details appear once the files load." : "Details appear once a build exists."}</p>}
-            {/* Cost stays with the people building the addon; visitors never see it. */}
-            {can.edit && project.kind === "panel" && <AddonAiUsage projectId={project.id} />}
-            <p className="border-t border-border pt-3 text-xs text-muted-foreground">Created {formatDate(project.created_at)} · <Link className="text-primary underline-offset-2 hover:underline" to="/addons/api">API reference</Link></p>
+            {/* Cost stays with the people building the module; visitors never see it. */}
+            {can.edit && project.kind === "panel" && <ModuleAiUsage projectId={project.id} />}
+            <p className="border-t border-border pt-3 text-xs text-muted-foreground">Created {formatDate(project.created_at)} · <Link className="text-primary underline-offset-2 hover:underline" to="/modules/api">API reference</Link></p>
           </section>
-          <AddonReleases project={project} latest={latest} viewing={sha && !tab ? ref : null} canTag={canTag} canRelease={can.release} busy={busy}
+          <ModuleReleases project={project} latest={latest} viewing={sha && !tab ? ref : null} canTag={canTag} canRelease={can.release} busy={busy}
             onView={next => show({ ref: next })} onTag={tagRelease} onDelete={removeRelease} onShowAll={() => show({ tab: "releases" })}>
             {can.edit && <details className="mt-4 border-t border-border pt-3 text-xs">
               <summary className="flex cursor-pointer items-center gap-1.5 font-medium text-muted-foreground hover:text-foreground"><Upload className="size-3.5" /> Upload a tar archive</summary>
@@ -247,10 +247,10 @@ function AddonPage({ projectId }: { projectId?: string }) {
                 <button className={smallButton} type="button" disabled={busy || !archive} onClick={() => { if (archive) void mutate(() => uploadDraft(project.id, project.revision, archive), "Uploaded to main.") }}>Upload draft</button>
               </div>
             </details>}
-          </AddonReleases>
+          </ModuleReleases>
         </aside>
       </div>
     </main>
-    <AdRailStack primaryPlacement="addon-right-rail" secondaryPlacement="addon-right-rail-lower" railLayout="paired-wide" />
+    <AdRailStack primaryPlacement="module-right-rail" secondaryPlacement="module-right-rail-lower" railLayout="paired-wide" />
   </div>
 }

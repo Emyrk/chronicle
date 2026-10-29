@@ -63,7 +63,7 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
   onShowCode?: () => void
 }) {
   const { session, isAuthenticated } = useAuth()
-  const permission = useInferencePermission(isAuthenticated, "addon-workshop-panel")
+  const permission = useInferencePermission(isAuthenticated, "module-workshop-panel")
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed)
   const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed)
   const debugPreview = useInferenceDebugPreview()
@@ -89,7 +89,7 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
   const previewDebug = useCallback(async (input: DebugCommandInput) => {
     if (!threadId || !selection.modelId) throw new Error("Open the conversation and select a model first.")
     const snapshot = await debugPreview.mutateAsync({
-      assistant_id: "addon-workshop-panel", thread_id: threadId, model: selection.modelId,
+      assistant_id: "module-workshop-panel", thread_id: threadId, model: selection.modelId,
       ...(input.client ? { client: input.client } : {}),
     })
     setDebugEnabled(true)
@@ -106,7 +106,7 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
     return <div className="flex h-full flex-col">
       <div className="flex justify-end border-b border-border p-1.5">{windowControls}</div>
       <div className="m-auto flex max-w-xs flex-col items-center gap-4 p-6 text-center">
-        <p className="text-sm text-muted-foreground">AI chat isn't available for this account, or the Addon Workshop assistant is turned off in your <Link className="text-primary underline underline-offset-2" to="/account/ai">AI settings</Link>. You can still edit and test the code directly.</p>
+        <p className="text-sm text-muted-foreground">AI chat isn't available for this account, or the Module Workshop assistant is turned off in your <Link className="text-primary underline underline-offset-2" to="/account/ai">AI settings</Link>. You can still edit and test the code directly.</p>
         {showCodeButton}
       </div>
     </div>
@@ -132,7 +132,7 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
       onDebugCommand: debugPermission.allowed ? previewDebug : undefined, onStartNewChat: startNewChat, onRunSettled: refreshThread,
     }}
     panel={{
-      title: `${projectName} · Addon Workshop`,
+      title: `${projectName} · Module Workshop`,
       description: "Builds your panel in the unsaved working copy. Responses can be inaccurate; review before saving.",
       placeholder: "Describe what the panel should show…",
       configuration: selection.connections.length > 0 ? <AssistantConfiguration selection={selection} /> : undefined,
@@ -141,8 +141,8 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
         : undefined,
       debugAvailable: debugPermission.allowed, debugEnabled, onDebugEnabledChange: setDebugEnabled,
       disabled: disconnected || Boolean(selection.error || threadError) || threadLoading,
-      disabledTitle: disconnected ? "Connect OpenRouter to use the Addon Workshop chat"
-        : threadLoading ? "Opening Addon Workshop chat"
+      disabledTitle: disconnected ? "Connect OpenRouter to use the Module Workshop chat"
+        : threadLoading ? "Opening Module Workshop chat"
         : isInferenceAuthorizationError(threadError) ? "Assistant authorization expired" : "Workshop chat unavailable",
       disabledDescription: selection.error?.message ?? threadError?.message ?? (threadLoading ? "Loading conversation history…" : "Connect a provider in account settings, then choose a model."),
       disabledAction: (disconnected || showCodeButton) && <div className="flex flex-wrap justify-center gap-2">

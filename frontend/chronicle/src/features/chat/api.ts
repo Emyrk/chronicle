@@ -216,7 +216,7 @@ export function useCreateLuaProjectInferenceThread() {
         method: "POST",
         credentials: "include",
       });
-      if (!response.ok) throw await readError(response, "Failed to open the Addon Workshop assistant");
+      if (!response.ok) throw await readError(response, "Failed to open the Module Workshop assistant");
       return response.json() as Promise<InferenceThreadResponse>;
     },
     retry: false,

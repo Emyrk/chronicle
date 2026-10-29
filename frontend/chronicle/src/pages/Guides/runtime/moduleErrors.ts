@@ -1,13 +1,13 @@
-/** Where an addon was when it stopped, reported by the panel worker with its error. */
-export type AddonPhase = "startup" | "onEvent" | "onComplete" | "click"
+/** Where an module was when it stopped, reported by the panel worker with its error. */
+export type ModulePhase = "startup" | "onEvent" | "onComplete" | "click"
 
-export interface AddonErrorContext {
-  phase?: AddonPhase
+export interface ModuleErrorContext {
+  phase?: ModulePhase
   /** Events delivered before the error, for onEvent failures. */
   events?: number
 }
 
-export interface AddonErrorExplanation {
+export interface ModuleErrorExplanation {
   /** Short headline, e.g. "Too many UI changes at once". */
   title: string
   /** "main.lua line 151 · in onComplete" when known. */
@@ -16,7 +16,7 @@ export interface AddonErrorExplanation {
   detail: string
   /** Concrete things to change. */
   fixes: string[]
-  /** Section of the Addon API reference (/addons/api#…). */
+  /** Section of the Module API reference (/modules/api#…). */
   docs?: string
   /** The runtime's original message, kept for searching and for the assistant. */
   raw: string
@@ -24,14 +24,14 @@ export interface AddonErrorExplanation {
 
 const number = new Intl.NumberFormat("en-US")
 
-const phaseLabel: Record<AddonPhase, string> = {
+const phaseLabel: Record<ModulePhase, string> = {
   startup: "while loading main.lua",
   onEvent: "in onEvent",
   onComplete: "in onComplete",
   click: "in a click handler",
 }
 
-function describeWhere(location: { file: string; line: string } | null, context: AddonErrorContext): string | undefined {
+function describeWhere(location: { file: string; line: string } | null, context: ModuleErrorContext): string | undefined {
   const parts: string[] = []
   if (location) parts.push(`${location.file} line ${location.line}`)
   if (context.phase) {
@@ -45,7 +45,7 @@ function describeWhere(location: { file: string; line: string } | null, context:
  * Turns a terse runtime error ("main.lua:151: operation limit exceeded") into an explanation with
  * fixes. Shown in the preview and on instance pages, and returned to the workshop assistant.
  */
-export function explainAddonError(message: string, context: AddonErrorContext = {}): AddonErrorExplanation {
+export function explainModuleError(message: string, context: ModuleErrorContext = {}): ModuleErrorExplanation {
   const match = /^([\w./-]+\.lua):(\d+): ([\s\S]*)$/.exec(message)
   const location = match ? { file: match[1], line: match[2] } : null
   const reason = match ? match[3] : message
@@ -101,7 +101,7 @@ export function explainAddonError(message: string, context: AddonErrorContext = 
   if (maxEvents) {
     return {
       ...base,
-      title: "Reached the addon's max_events",
+      title: "Reached the module's max_events",
       detail: `project.json sets "max_events": ${maxEvents[1]}, and this replay has more events than that.`,
       fixes: ["Raise or remove max_events in project.json. Chronicle has no event limit of its own."],
       docs: "project-json",
@@ -110,8 +110,8 @@ export function explainAddonError(message: string, context: AddonErrorContext = 
   if (/made no progress/.test(reason)) {
     return {
       ...base,
-      title: "Addon stopped responding",
-      detail: "The addon did not finish a batch of events for 10 seconds.",
+      title: "Module stopped responding",
+      detail: "The module did not finish a batch of events for 10 seconds.",
       fixes: ["Look for very slow work in onEvent, such as building large strings or tables for every event."],
       docs: "performance",
     }
@@ -121,8 +121,8 @@ export function explainAddonError(message: string, context: AddonErrorContext = 
     return {
       ...base,
       title: "Stream not declared",
-      detail: `The addon subscribed to "${stream[1]}", but project.json does not list it in streams.`,
-      fixes: [`Add "${stream[1]}" to "streams" in project.json.`, "Check the stream name against the Addon API reference."],
+      detail: `The module subscribed to "${stream[1]}", but project.json does not list it in streams.`,
+      fixes: [`Add "${stream[1]}" to "streams" in project.json.`, "Check the stream name against the Module API reference."],
       docs: "streams-and-fields",
     }
   }
@@ -143,21 +143,21 @@ export function explainAddonError(message: string, context: AddonErrorContext = 
       title: "Used a value that is nil",
       detail: `Tried to ${nilValue[1]} ${name}, but it is nil.`,
       fixes: nilValue[1] === "call"
-        ? ["Check the function name's spelling and that it exists in the Addon API reference.", "Methods use a colon: frame:SetText(...), not frame.SetText(...)."]
+        ? ["Check the function name's spelling and that it exists in the Module API reference.", "Methods use a colon: frame:SetText(...), not frame.SetText(...)."]
         : ["Check for nil before using it, e.g. Chronicle.GetUnit returns nil for unknown GUIDs.", "Make sure the variable is assigned before this line runs."],
       docs: "drawing",
     }
   }
   return {
     ...base,
-    title: location ? "Lua error" : "Addon error",
+    title: location ? "Lua error" : "Module error",
     detail: reason,
     fixes: location ? [`Check ${location.file} around line ${location.line}.`] : [],
   }
 }
 
 /** Plain-text version for tool results and "ask the assistant" prompts. */
-export function formatAddonError(explanation: AddonErrorExplanation): string {
+export function formatModuleError(explanation: ModuleErrorExplanation): string {
   return [
     `${explanation.title}${explanation.where ? ` (${explanation.where})` : ""}: ${explanation.detail}`,
     ...explanation.fixes.map(fix => `- ${fix}`),

@@ -14,7 +14,7 @@ import { PANELS, type EventsPanelType } from "./EventsPanel";
 import { listSelectableCustomPanels, resolveCustomPanel, useCustomPanelRegistry } from "./custom/pluginRegistry";
 import { isCustomPanelRef } from "./custom/pluginTypes";
 import { isLuaPanelRef, luaPanelRef, parseLuaPanelRef, useLuaPanelCatalog } from "./LuaPanel/luaPanelRegistry";
-import { AddonIcon } from "../../LuaProjects/AddonIcon";
+import { ModuleIcon } from "../../LuaProjects/ModuleIcon";
 
 interface PanelOption {
   value: EventsPanelType;
@@ -306,7 +306,7 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
     ? { value, label: selectedCustom.panel?.name ?? selectedCustom.panelId ?? "Unavailable developer panel", icon: <Blocks className="h-4 w-4" /> }
     : selectedLua ? (() => {
       const item = luaPanels.find((candidate) => candidate.ref === value);
-      return { value, label: item?.label ?? `Addon (${selectedLua.channel})`, icon: <AddonIcon name={item?.icon} className="h-4 w-4" /> };
+      return { value, label: item?.label ?? `Module (${selectedLua.channel})`, icon: <ModuleIcon name={item?.icon} className="h-4 w-4" /> };
     })()
     : getPanelOption(value);
   const [searchParams] = useSearchParams();
@@ -449,7 +449,7 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
 
     for (const item of luaPanels) {
       const { match, score } = fuzzyMatch(searchQuery, item.label);
-      if (match) results.push({ option: { value: item.ref, label: item.label, icon: <AddonIcon name={item.icon} className="h-4 w-4" /> }, category: "Addons", score });
+      if (match) results.push({ option: { value: item.ref, label: item.label, icon: <ModuleIcon name={item.icon} className="h-4 w-4" /> }, category: "Modules", score });
     }
     // Sort by score descending
     return results.sort((a, b) => b.score - a.score);
@@ -577,7 +577,7 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
                       </button>
                       {expandedPaths.has("Lua") && <div className="ml-2 border-l pl-1">{luaPanels.map((item) => (
                         <button key={item.ref} type="button" onClick={() => handleSelect(item.ref)} className={cn("flex w-full items-center gap-2 pl-6 pr-2 py-1.5 text-left text-sm rounded-sm hover:bg-accent", item.ref === value && "bg-accent/50")}>
-                          <AddonIcon name={item.icon} className="h-4 w-4 shrink-0 text-muted-foreground" /><span className="truncate">{item.label}</span>
+                          <ModuleIcon name={item.icon} className="h-4 w-4 shrink-0 text-muted-foreground" /><span className="truncate">{item.label}</span>
                         </button>
                       ))}</div>}
                     </div>

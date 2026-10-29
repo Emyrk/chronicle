@@ -27,7 +27,7 @@ export interface LuaProjectCatalogEntry {
   main?: { sha256: string; icon?: string }
 }
 
-/** Panel addons the user tracks (stars; owners always do), with a release or a saved main. */
+/** Panel modules the user tracks (stars; owners always do), with a release or a saved main. */
 export async function fetchTrackedLuaPanels(): Promise<LuaProjectCatalogEntry[]> {
   const projects = await listStarredProjects()
   return projects.flatMap(project => {
@@ -45,7 +45,7 @@ export function useLuaPanelCatalog(enabled = true) {
   return useQuery({
     queryKey: ["lua-panel-catalog", ownerId], enabled: enabled && !!ownerId, staleTime: 60_000,
     queryFn: () => {
-      if (!ownerId) throw new Error("Sign in to view your addons")
+      if (!ownerId) throw new Error("Sign in to view your modules")
       return fetchTrackedLuaPanels()
     },
   })

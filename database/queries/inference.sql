@@ -293,7 +293,7 @@ ON CONFLICT (user_id) DO UPDATE
 SET config = inference_user_config.config || jsonb_build_object(@key::text, @value::jsonb), updated_at = now();
 
 -- name: ListInferenceContextUsageByUser :many
--- Everyone's usage for one context, e.g. each contributor's Workshop chats on an addon.
+-- Everyone's usage for one context, e.g. each contributor's Workshop chats on a module.
 SELECT usage.user_id, users.username, author.name AS author_name,
   SUM(usage.prompt_tokens)::bigint AS prompt_tokens, SUM(usage.completion_tokens)::bigint AS completion_tokens,
   SUM(usage.cached_tokens)::bigint AS cached_tokens, SUM(usage.reasoning_tokens)::bigint AS reasoning_tokens,

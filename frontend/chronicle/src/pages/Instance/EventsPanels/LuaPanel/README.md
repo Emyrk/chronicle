@@ -18,7 +18,7 @@ bytes: the manifest may set `max_events`, the runtime bounds pending UI operatio
 per batch, and the host stops a worker after 10 s without progress. `chronicle.v1.ui` provides `metric`, `table`, `bars`, each
 creating retained UI operations validated by the Guide scene protocol.
 
-Selector catalog: `GET /api/v1/me/lua-projects` for addons the signed-in user
+Selector catalog: `GET /api/v1/me/lua-projects` for modules the signed-in user
 owns or contributes to. The panel resolves
 `GET /api/v1/lua-projects/{id}?channel=release|main` once per page load for
 its SHA-256 (the newest release with files, or main), then fetches its ZIP from

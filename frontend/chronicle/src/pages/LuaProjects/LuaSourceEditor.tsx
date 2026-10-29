@@ -87,7 +87,7 @@ const tabLabel: Record<keyof EditorFiles, string> = { lua: "main.lua", manifest:
 const statusHint: Record<keyof EditorFiles, string> = {
   lua: "Lua 5.3 · private working copy",
   manifest: "Identity, entrypoint and assets are fixed; capabilities and streams are editable.",
-  readme: "Markdown · shown on the addon's page",
+  readme: "Markdown · shown on the module's page",
 }
 
 export type LuaSourceProposal = { id: string; files: EditorFiles; expectedRevision: number }
@@ -225,7 +225,7 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
         </div>
         <div id="lua-editor-panel-readme" role="tabpanel" aria-labelledby="lua-editor-tab-readme" hidden={active !== "readme"} className="h-full">
           <textarea aria-label="README.md" className="styled-scrollbar block h-full w-full resize-none bg-background p-4 font-mono text-[13px] leading-relaxed focus-visible:outline-none" value={files.readme} disabled={saving}
-            placeholder="# My addon&#10;&#10;Markdown shown on the addon's page. Leave empty for no README." onChange={event => edit("readme", event.target.value)} />
+            placeholder="# My module&#10;&#10;Markdown shown on the module's page. Leave empty for no README." onChange={event => edit("readme", event.target.value)} />
         </div>
       </> : !error && <p className="p-4 text-sm text-muted-foreground">This editor currently supports panel projects only.</p>}
     </div>

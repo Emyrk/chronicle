@@ -144,7 +144,7 @@ func TestLuaProjectOwnerAndPublication(t *testing.T) {
 	require.Equal(t, int64(1), deleted)
 	garbage, err = db.ListLuaProjectArtifactGarbage(ctx)
 	require.NoError(t, err)
-	require.Contains(t, garbage, draft.ID.String()+"/new.zip", "whole-addon deletion queues its remaining package")
+	require.Contains(t, garbage, draft.ID.String()+"/new.zip", "whole-module deletion queues its remaining package")
 	_, err = db.GetLuaProject(ctx, draft.ID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 
@@ -419,7 +419,7 @@ func TestLuaPublishedHashCaching(t *testing.T) {
 	require.Equal(t, http.StatusOK, get(url, ctx, nil).Code)
 
 	publicRelation := policy.New().Lua_project(project.ID).Object()
-	// Making the addon private removes both public grants: reading the source and running it.
+	// Making the module private removes both public grants: reading the source and running it.
 	for _, relation := range []string{"viewer", "runner"} {
 		require.NoError(t, zed.Delete(ctx, rel.NewPreconditionedFilter(rel.NewFilter(publicRelation.Typ, publicRelation.ID, relation))))
 	}

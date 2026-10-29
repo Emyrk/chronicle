@@ -20,11 +20,11 @@ const maxLuaTarBytes = 8 << 20
 const maxLuaExpandedBytes = 16 << 20
 const maxLuaFiles = 128
 
-// luaAddonIcons are the icon names project.json "icon" may use; the browser draws the same list.
-var luaAddonIcons = func() map[string]bool {
+// luaModuleIcons are the icon names project.json "icon" may use; the browser draws the same list.
+var luaModuleIcons = func() map[string]bool {
 	var names []string
-	if err := json.Unmarshal(frontend.AddonIcons, &names); err != nil {
-		panic(fmt.Sprintf("decode addon icons: %v", err))
+	if err := json.Unmarshal(frontend.ModuleIcons, &names); err != nil {
+		panic(fmt.Sprintf("decode module icons: %v", err))
 	}
 	icons := make(map[string]bool, len(names))
 	for _, name := range names {
@@ -33,7 +33,7 @@ var luaAddonIcons = func() map[string]bool {
 	return icons
 }()
 
-// luaReadmeName is the package's optional Markdown README, shown on the addon page. It is never executed.
+// luaReadmeName is the package's optional Markdown README, shown on the module page. It is never executed.
 const luaReadmeName = "README.md"
 const maxLuaReadmeBytes = 64 << 10
 
@@ -199,8 +199,8 @@ func canonicalLuaZIP(input io.Reader, kind, projectName, slug string) ([]byte, e
 	if manifest.MaxEvents != nil && (*manifest.MaxEvents < 1 || *manifest.MaxEvents > 1<<53) {
 		return nil, errors.New("max_events must be a positive integer")
 	}
-	if manifest.Icon != "" && !luaAddonIcons[manifest.Icon] {
-		return nil, fmt.Errorf("unsupported icon %q; use a name from the Addon API reference", manifest.Icon)
+	if manifest.Icon != "" && !luaModuleIcons[manifest.Icon] {
+		return nil, fmt.Errorf("unsupported icon %q; use a name from the Module API reference", manifest.Icon)
 	}
 	seenCapabilities := map[string]bool{}
 	for _, capability := range manifest.Capabilities {

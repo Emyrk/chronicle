@@ -29,20 +29,6 @@ export interface AddGuildMemberRequest {
     readonly user_id: string;
 }
 
-// From chroniclesdk/lua_project.go
-export interface AddonAuthor {
-    readonly name: string;
-}
-
-// From chroniclesdk/lua_project.go
-/**
- * AddonAuthorPage is /addons/<author>: the author and the addons the caller may view.
- */
-export interface AddonAuthorPage {
-    readonly author: string;
-    readonly projects: readonly LuaProject[];
-}
-
 // From chroniclesdk/custom_panel.go
 export interface AdminActiveCustomPanelInstallation {
     readonly user_id: string;
@@ -730,7 +716,7 @@ export interface ChronicleEncounterEvents {
 }
 
 // From chroniclesdk/lua_project.go
-export interface ClaimAddonAuthorRequest {
+export interface ClaimModuleAuthorRequest {
     readonly name: string;
 }
 
@@ -2883,7 +2869,7 @@ export interface LuaProject {
      */
     readonly description: string;
     /**
-     * Author is the owner's addon author name, the first part of /addons/<author>/<slug>. Absent until claimed.
+     * Author is the owner's module author name, the first part of /modules/<author>/<slug>. Absent until claimed.
      */
     readonly author?: string;
     readonly main?: LuaProjectMain;
@@ -2892,7 +2878,7 @@ export interface LuaProject {
      */
     readonly releases: readonly LuaProjectRelease[];
     /**
-     * Stars counts the people tracking the addon. Starred says whether the caller is one of them.
+     * Stars counts the people tracking the module. Starred says whether the caller is one of them.
      */
     readonly stars: number;
     readonly starred: boolean;
@@ -2902,12 +2888,12 @@ export interface LuaProject {
 
 // From chroniclesdk/lua_project.go
 /**
- * LuaProjectContributor is someone the owner shared an addon with.
+ * LuaProjectContributor is someone the owner shared an module with.
  */
 export interface LuaProjectContributor {
     readonly user_id: string;
     /**
-     * Author is their addon author name; Username is their display name.
+     * Author is their module author name; Username is their display name.
      */
     readonly author?: string;
     readonly username: string;
@@ -2926,7 +2912,7 @@ export const LuaProjectDescriptionMax = 300;
 
 // From chroniclesdk/lua_project.go
 /**
- * LuaProjectMain is the addon's latest saved source. Anyone who can view the addon can run it.
+ * LuaProjectMain is the module's latest saved source. Anyone who can view the module can run it.
  */
 export interface LuaProjectMain {
     readonly sha256: string;
@@ -2936,7 +2922,7 @@ export interface LuaProjectMain {
 
 // From chroniclesdk/lua_project.go
 /**
- * LuaProjectPage is an addon with what the viewing user may do with it.
+ * LuaProjectPage is an module with what the viewing user may do with it.
  */
 export interface LuaProjectPage {
     readonly project: LuaProject;
@@ -2945,7 +2931,7 @@ export interface LuaProjectPage {
 
 // From chroniclesdk/lua_project.go
 /**
- * LuaProjectPermissions are what the viewing user may do with an addon.
+ * LuaProjectPermissions are what the viewing user may do with an module.
  */
 export interface LuaProjectPermissions {
     readonly view: boolean;
@@ -2957,7 +2943,7 @@ export interface LuaProjectPermissions {
 
 // From chroniclesdk/lua_project.go
 /**
- * LuaProjectQuota is the caller's owned-addon resource allowance.
+ * LuaProjectQuota is the caller's owned-module resource allowance.
  */
 export interface LuaProjectQuota {
     readonly owned: number;
@@ -2977,7 +2963,7 @@ export interface LuaProjectRelease {
     readonly published_at: string;
     readonly published_by?: string;
     /**
-     * PublishedByAuthor is the publisher's addon author name.
+     * PublishedByAuthor is the publisher's module author name.
      */
     readonly published_by_author?: string;
 }
@@ -3036,6 +3022,20 @@ export interface ModificationRequest {
  */
 export interface ModifyApplicationAdminRequest {
     readonly user_id: string;
+}
+
+// From chroniclesdk/lua_project.go
+export interface ModuleAuthor {
+    readonly name: string;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * ModuleAuthorPage is /modules/<author>: the author and the modules the caller may view.
+ */
+export interface ModuleAuthorPage {
+    readonly author: string;
+    readonly projects: readonly LuaProject[];
 }
 
 // From chroniclesdk/log.go
@@ -4945,7 +4945,7 @@ export interface UpdateLayoutDefaultsRequest {
 
 // From chroniclesdk/lua_project.go
 /**
- * UpdateLuaProjectRequest changes an addon's settings.
+ * UpdateLuaProjectRequest changes an module's settings.
  */
 export interface UpdateLuaProjectRequest {
     readonly description: string;

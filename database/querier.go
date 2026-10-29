@@ -215,8 +215,6 @@ type sqlcQuerier interface {
 	// so results are self-contained.
 	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
 	GetActiveInferenceRunByThreadForUpdate(ctx context.Context, arg GetActiveInferenceRunByThreadForUpdateParams) (InferenceRun, error)
-	GetAddonAuthorByName(ctx context.Context, name string) (AddonAuthor, error)
-	GetAddonAuthorByUser(ctx context.Context, userID uuid.UUID) (AddonAuthor, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
 	GetBillingEntitlementOwnerByProviderCustomerID(ctx context.Context, arg GetBillingEntitlementOwnerByProviderCustomerIDParams) (uuid.UUID, error)
@@ -360,6 +358,8 @@ type sqlcQuerier interface {
 	GetLuaProjectByAuthorSlug(ctx context.Context, arg GetLuaProjectByAuthorSlugParams) (LuaProject, error)
 	GetLuaProjectDraftPackage(ctx context.Context, id uuid.UUID) (GetLuaProjectDraftPackageRow, error)
 	GetModificationRequestByID(ctx context.Context, id uuid.UUID) (ApplicationModificationRequest, error)
+	GetModuleAuthorByName(ctx context.Context, name string) (AddonAuthor, error)
+	GetModuleAuthorByUser(ctx context.Context, userID uuid.UUID) (AddonAuthor, error)
 	GetOAuthDeviceSession(ctx context.Context, signature string) (GetOAuthDeviceSessionRow, error)
 	GetOAuthTokenSession(ctx context.Context, arg GetOAuthTokenSessionParams) ([]byte, error)
 	GetOrCreateInferenceThread(ctx context.Context, arg GetOrCreateInferenceThreadParams) (InferenceThread, error)
@@ -382,7 +382,7 @@ type sqlcQuerier interface {
 	// The existing proof_requests_applicant_created index supports this lookup.
 	GetProofCooldown(ctx context.Context, arg GetProofCooldownParams) (pgtype.Timestamptz, error)
 	GetProofRequest(ctx context.Context, id uuid.UUID) (ProofRequest, error)
-	// An addon with something to run: main or a release with files.
+	// A module with something to run: main or a release with files.
 	GetPublicLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error)
 	GetPublishedLuaProjectArtifact(ctx context.Context, arg GetPublishedLuaProjectArtifactParams) (GetPublishedLuaProjectArtifactRow, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
@@ -507,7 +507,6 @@ type sqlcQuerier interface {
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
 	InitializeUserWhatsNewState(ctx context.Context, arg InitializeUserWhatsNewStateParams) (UserWhatsNewState, error)
-	InsertAddonAuthor(ctx context.Context, arg InsertAddonAuthorParams) (AddonAuthor, error)
 	InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults
 	InsertAffectedAuraDurations(ctx context.Context, arg []InsertAffectedAuraDurationsParams) *InsertAffectedAuraDurationsBatchResults
 	InsertBillingReconciliationRun(ctx context.Context, id uuid.UUID) (BillingReconciliationRun, error)
@@ -545,6 +544,7 @@ type sqlcQuerier interface {
 	InsertLogInstanceEvents(ctx context.Context, arg []InsertLogInstanceEventsParams) *InsertLogInstanceEventsBatchResults
 	// Modification Requests
 	InsertModificationRequest(ctx context.Context, arg InsertModificationRequestParams) (ApplicationModificationRequest, error)
+	InsertModuleAuthor(ctx context.Context, arg InsertModuleAuthorParams) (AddonAuthor, error)
 	InsertOAuthRelayCode(ctx context.Context, arg InsertOAuthRelayCodeParams) error
 	// Persist a single parse score result for an instance+encounter+player+metric.
 	// No unique constraint: duplicate uploads are collapsed at read time via run_id DISTINCT ON.
@@ -604,7 +604,6 @@ type sqlcQuerier interface {
 	IsParsedLogGroupVisible(ctx context.Context, id uuid.UUID) (bool, error)
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
-	ListAddonAuthorsByUsers(ctx context.Context, userIds []uuid.UUID) ([]AddonAuthor, error)
 	ListAdminActiveCustomPanelInstallations(ctx context.Context) ([]ListAdminActiveCustomPanelInstallationsRow, error)
 	ListAdminProofRequests(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error)
 	ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error)
@@ -656,7 +655,7 @@ type sqlcQuerier interface {
 	ListGuildPageTabs(ctx context.Context, pageID uuid.UUID) ([]GuildPageTab, error)
 	ListGuildsWithPages(ctx context.Context, arg ListGuildsWithPagesParams) ([]ListGuildsWithPagesRow, error)
 	ListInferenceConnectionsByOwner(ctx context.Context, userID uuid.UUID) ([]InferenceConnection, error)
-	// Everyone's usage for one context, e.g. each contributor's Workshop chats on an addon.
+	// Everyone's usage for one context, e.g. each contributor's Workshop chats on a module.
 	ListInferenceContextUsageByUser(ctx context.Context, arg ListInferenceContextUsageByUserParams) ([]ListInferenceContextUsageByUserRow, error)
 	ListInferenceInstanceEncounters(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
 	ListInferenceInstancePlayers(ctx context.Context, instanceID uuid.UUID) ([]LogInstancePlayer, error)
@@ -679,9 +678,10 @@ type sqlcQuerier interface {
 	ListLuaProjectContributors(ctx context.Context, projectID uuid.UUID) ([]ListLuaProjectContributorsRow, error)
 	ListLuaProjectReleases(ctx context.Context, projectID uuid.UUID) ([]LuaProjectRelease, error)
 	ListLuaProjectReleasesForProjects(ctx context.Context, projectIds []uuid.UUID) ([]LuaProjectRelease, error)
-	// An author's own addons, for /addons/<author>.
+	// An author's own modules, for /modules/<author>.
 	ListLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) ([]LuaProject, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
+	ListModuleAuthorsByUsers(ctx context.Context, userIds []uuid.UUID) ([]AddonAuthor, error)
 	ListMyProofRequests(ctx context.Context, arg ListMyProofRequestsParams) ([]ProofRequest, error)
 	ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error)
 	ListParseScoreCohortBuckets(ctx context.Context, arg ListParseScoreCohortBucketsParams) ([]ListParseScoreCohortBucketsRow, error)
@@ -705,7 +705,7 @@ type sqlcQuerier interface {
 	// requests and characters removed from the armory still render without them.
 	ListProofSubjectClasses(ctx context.Context, requestID uuid.UUID) ([]ListProofSubjectClassesRow, error)
 	ListProofSubjects(ctx context.Context, requestID uuid.UUID) ([]ProofRequestSubject, error)
-	// Addons with a release people can still run, most tracked first, then newest release.
+	// Modules with a release people can still run, most tracked first, then newest release.
 	ListPublicLuaProjects(ctx context.Context) ([]LuaProject, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
@@ -747,7 +747,7 @@ type sqlcQuerier interface {
 	ListSpellRadiiByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellRadii, error)
 	ListSpellRangesByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellRange, error)
 	ListSpellVariantsForCheck(ctx context.Context, datasetID uuid.UUID) ([]ListSpellVariantsForCheckRow, error)
-	// Addons the user tracks, most recently starred first.
+	// Modules the user tracks, most recently starred first.
 	ListStarredLuaProjects(ctx context.Context, userID uuid.UUID) ([]LuaProject, error)
 	ListTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)
@@ -789,7 +789,7 @@ type sqlcQuerier interface {
 	ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error)
 	ListWorlds(ctx context.Context) ([]World, error)
 	LockLogFilePartSequence(ctx context.Context, logFileID uuid.UUID) (uuid.UUID, error)
-	// Serializes addon creation for one owner so concurrent requests cannot exceed the quota.
+	// Serializes module creation for one owner so concurrent requests cannot exceed the quota.
 	LockLuaProjectOwner(ctx context.Context, ownerID uuid.UUID) (uuid.UUID, error)
 	LockPendingProofRequest(ctx context.Context, arg LockPendingProofRequestParams) (ProofRequest, error)
 	// Root-domain site admins only (AdminBypass context).
