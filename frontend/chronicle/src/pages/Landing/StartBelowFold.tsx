@@ -1,14 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { useSupportedInstances } from "@/api/queries";
 import { Button } from "@/components/ui/button";
 import type { RecentInstance, RecentInstancesResponse } from "@/api/typesGenerated";
-import { useTenantDatasetScope } from "@/hooks/useDatasetId";
 import { getInstanceArtCrop } from "@/pages/Logs/utils/instanceImages";
-import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import { trackFunnel } from "@/utils/funnel";
-import { dungeonShelfCards } from "./dungeonShelf";
+import { KingOfTheHill } from "./KingOfTheHill";
 import { formatRunDuration, runBadge, runStillUrl, type RunBadge } from "./recentRuns";
 import { IMAGES } from "./startPageStyle";
 
@@ -54,17 +51,6 @@ function FirstMinute() {
       </div>
     </section>
   );
-}
-
-/** The maps manifest: the same query as the Map panel's, so they share one cached fetch. */
-function useMapManifest() {
-  const { iconBaseUrl } = useTenantDatasetScope();
-  return useQuery({
-    queryKey: ["wow-map-manifest", iconBaseUrl],
-    enabled: Boolean(iconBaseUrl),
-    staleTime: 60 * 60 * 1000,
-    queryFn: () => fetchMapManifest(iconBaseUrl!),
-  });
 }
 
 // Replays first (their cards show a still), then video runs, then the rest, so the rail always fills.
@@ -178,44 +164,6 @@ function RecentRuns() {
   );
 }
 
-function DungeonShelf() {
-  const { data: instances } = useSupportedInstances();
-  const { data: manifest } = useMapManifest();
-  const cards = dungeonShelfCards(instances ?? [], manifest);
-
-  return (
-    <section id="dungeons" className="mx-auto box-border flex w-full max-w-[1180px] flex-col gap-3.5 px-4 pb-9 pt-7 lg:px-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <h2 className="m-0 text-xl font-bold lg:text-2xl">Real floors, not dots on a map</h2>
-        <Link to="/supported" className="text-sm text-link hover:underline">
-          All supported instances
-        </Link>
-      </div>
-      <ul className="styled-scrollbar m-0 flex list-none gap-3 overflow-x-auto p-0 pb-1.5">
-        {cards.map((d) => (
-          <li key={d.name} className="flex shrink-0 basis-[190px]">
-            <Link
-              to={`/recent?inst=${encodeURIComponent(d.name)}`}
-              className={`flex w-full flex-col gap-1 rounded-xl border bg-card p-3.5 text-card-foreground shadow-sm no-underline hover:bg-accent/20 ${
-                d.kind === "3d" ? "border-primary" : ""
-              }`}
-            >
-              <div className="font-semibold">{d.name}</div>
-              <div
-                className={`text-xs ${
-                  d.kind === "3d" ? "text-primary" : d.kind === "2d" ? "text-muted-foreground" : "text-muted-foreground/70"
-                }`}
-              >
-                {d.kind === "3d" ? "3D floor" : d.kind === "2d" ? "2D map" : "Coming"}
-              </div>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 function ClosingBand() {
   return (
     <section id="get" className="hidden border-t bg-card lg:block">
@@ -250,7 +198,7 @@ export default function StartBelowFold() {
     <>
       <FirstMinute />
       <RecentRuns />
-      <DungeonShelf />
+      <KingOfTheHill />
       <ClosingBand />
     </>
   );

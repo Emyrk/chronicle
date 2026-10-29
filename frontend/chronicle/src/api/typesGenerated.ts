@@ -4421,6 +4421,16 @@ export interface SocketBonus {
 }
 
 // From chroniclesdk/log.go
+/**
+ * SpeedrunBoardRecord is the fastest ranked full clear of one board.
+ */
+export interface SpeedrunBoardRecord {
+    readonly duration_ms: number;
+    readonly completion_time: string;
+    readonly guild_name: string;
+}
+
+// From chroniclesdk/log.go
 export interface SpeedrunCohortDefinition {
     readonly scope: SpeedrunCohortScope;
     readonly label: string;
@@ -4523,10 +4533,14 @@ export interface SpeedrunGuildClearsEntry {
  * SpeedrunInstanceBoard identifies one leaderboard: each (instance,
  * difficulty) combination has its own board. DifficultyName may be empty for
  * runs whose logs recorded no difficulty.
+ *
+ * Record is the board's first place under full timing, nil when no run ranks
+ * there yet (an unclaimed throne on the landing page).
  */
 export interface SpeedrunInstanceBoard {
     readonly instance_name: string;
     readonly difficulty_name: string;
+    readonly record?: SpeedrunBoardRecord;
 }
 
 // From chroniclesdk/log.go
