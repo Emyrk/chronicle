@@ -58,7 +58,7 @@ const STAT_COLUMNS: readonly StatColumn[] = [
   {
     key: "recent",
     label: "Recent",
-    help: `The median of the latest ${PERFORMANCE_RECENT_RUN_COUNT} runs. The arrow compares it with Typical to show the current direction.`,
+    help: `The median of the latest ${PERFORMANCE_RECENT_RUN_COUNT} runs. The marker beside it compares it with Typical: ▲ improving, ▼ declining, ≈ about the same.`,
     higherIsBetter: true,
   },
   {
@@ -210,7 +210,7 @@ function SummaryTable({ rows, display }: { rows: readonly SummaryRow[]; display:
                             && "font-semibold underline decoration-sky-400 decoration-2 underline-offset-4",
                         )}
                       >
-                        <StatValue summary={summary} column={column} display={display} />
+                        <StatValue summary={summary} column={column} display={display} showRecentDelta />
                       </span>
                     ) : (
                       <span className="text-muted-foreground">—</span>
@@ -270,10 +270,14 @@ function StatValue({
     <>
       <span style={{ color: display === "parse" ? performanceParseColor(value) : undefined }}>{formatStat(value, display)}</span>
       {column.key === "best" && summary.best > summary.highWhisker && <OutlierMark />}
-      {showRecentDelta && Math.abs(delta) >= deltaThreshold && (
-        <span className={cn("ml-1.5 text-xs font-normal", delta > 0 ? "text-emerald-400" : "text-rose-400")}>
-          {delta > 0 ? "▲" : "▼"} {formatStat(Math.abs(delta), display)}
-        </span>
+      {showRecentDelta && column.key === "recent" && (
+        Math.abs(delta) >= deltaThreshold ? (
+          <span className={cn("ml-1.5 text-xs font-normal", delta > 0 ? "text-emerald-400" : "text-rose-400")}>
+            {delta > 0 ? "▲" : "▼"} {formatStat(Math.abs(delta), display)}
+          </span>
+        ) : (
+          <span className="ml-1.5 text-xs font-normal text-muted-foreground" title="About the same as Typical">≈</span>
+        )
       )}
     </>
   );
