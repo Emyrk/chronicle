@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type {
+  ArmoryGearSnapshot,
   ArmoryPlayer,
   ArmorySearchResult,
   CharacterEncounterStatsResponse,
@@ -10,7 +11,7 @@ import type {
   SupportedInstance,
 } from "@/api/typesGenerated";
 import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
-import { BARADDEK_MOLTEN_CORE_RUNS } from "./AnalysisPage.fixtures";
+import { BARADDEK_MOLTEN_CORE_GEAR, BARADDEK_MOLTEN_CORE_RUNS } from "./AnalysisPage.fixtures";
 import { PerformanceComparisonPage } from "./AnalysisPage";
 
 const REALM = "Nordanaar";
@@ -56,6 +57,8 @@ interface MockPlayer {
   fixtureRuns?: CharacterPerformanceRun[];
   /** Defaults to the mock realm; set for cross-realm comparisons. */
   realm?: string;
+  /** Real captured gear snapshots, served instead of generated ones. */
+  fixtureGear?: ArmoryGearSnapshot[];
   instances: string[];
 }
 
@@ -72,7 +75,7 @@ const PLAYERS: MockPlayer[] = [
   { id: "0x00000000000A0009", name: "Fennick", className: "DRUID", guild: "Ironbound", role: "heal", specs: [{ spec: "Restoration", weight: 1 }], base: 83, trend: 6, noise: 5, throughput: 650, deathRate: 0.3, cadence: 2, instances: ["Naxxramas", "Blackwing Lair"] },
   { id: "0x00000000000A000A", name: "Rhovan", className: "HUNTER", guild: "Ashen Covenant", role: "dps", specs: [{ spec: "Marksmanship", weight: 1 }], base: 89, trend: -3, noise: 6, throughput: 1190, deathRate: 0.6, cadence: 2, instances: ["Naxxramas", "Blackwing Lair"] },
   { id: "0x00000000000A000B", name: "Brindle", className: "DRUID", guild: "Wildfire", role: "dps", specs: [{ spec: "Feral", weight: 1 }], base: 70, trend: 2, noise: 11, throughput: 1150, deathRate: 0.9, cadence: 2, luckyRun: 6, instances: ["Naxxramas", "Blackwing Lair"] },
-  { id: "0x00000000000014A0", name: "Baraddek", className: "SHAMAN", guild: "let the family eat", role: "dps", specs: [{ spec: "Enhancement", weight: 1 }], base: 0, trend: 0, noise: 0, throughput: 0, deathRate: 0, cadence: 1, fixtureRuns: BARADDEK_MOLTEN_CORE_RUNS, realm: "Eversong Wilds", instances: ["Naxxramas"] },
+  { id: "0x00000000000014A0", name: "Baraddek", className: "SHAMAN", guild: "let the family eat", role: "dps", specs: [{ spec: "Enhancement", weight: 1 }], base: 0, trend: 0, noise: 0, throughput: 0, deathRate: 0, cadence: 1, fixtureRuns: BARADDEK_MOLTEN_CORE_RUNS, fixtureGear: BARADDEK_MOLTEN_CORE_GEAR, realm: "Eversong Wilds", instances: ["Naxxramas"] },
 ];
 
 const playerById = (id: string) => PLAYERS.find((player) => player.id.toLowerCase() === id.toLowerCase());
@@ -197,6 +200,77 @@ function performanceRuns(player: MockPlayer, url: URL): CharacterPerformanceResp
   return { player_guid: player.id, metric, runs };
 }
 
+/** Mock item name and icon per outfit slot; shirt (3) and tabard (18) stay empty. */
+const GEAR_SLOTS: Record<number, { noun: string; icon: string }> = {
+  0: { noun: "Crown", icon: "INV_Helmet_08" },
+  1: { noun: "Pendant", icon: "INV_Jewelry_Necklace_07" },
+  2: { noun: "Spaulders", icon: "INV_Shoulder_25" },
+  4: { noun: "Breastplate", icon: "INV_Chest_Plate16" },
+  5: { noun: "Girdle", icon: "INV_Belt_22" },
+  6: { noun: "Legguards", icon: "INV_Pants_Plate_17" },
+  7: { noun: "Sabatons", icon: "INV_Boots_Plate_06" },
+  8: { noun: "Bindings", icon: "INV_Bracer_14" },
+  9: { noun: "Gauntlets", icon: "INV_Gauntlets_29" },
+  10: { noun: "Signet", icon: "INV_Jewelry_Ring_15" },
+  11: { noun: "Band", icon: "INV_Jewelry_Ring_38" },
+  12: { noun: "Idol", icon: "INV_Trinket_Naxxramas04" },
+  13: { noun: "Talisman", icon: "INV_Misc_Gem_Pearl_04" },
+  14: { noun: "Cloak", icon: "INV_Misc_Cape_18" },
+  15: { noun: "Blade", icon: "INV_Sword_39" },
+  16: { noun: "Bulwark", icon: "INV_Shield_10" },
+  17: { noun: "Longbow", icon: "INV_Weapon_Bow_08" },
+};
+const GEAR_TIERS = ["Worn", "Valorous", "Dreadborne", "Plagueheart", "Frostfire", "Kel'Thuzad's"];
+
+/**
+ * One gear snapshot per raid night from the same seeded runs: each slot occasionally
+ * upgrades, item level climbs, and rings sometimes trade places.
+ */
+function gearHistory(player: MockPlayer): { snapshots: ArmoryGearSnapshot[] } {
+  if (player.fixtureGear) return { snapshots: player.fixtureGear };
+  const random = seededRandom(hashSeed(`${player.id}|gear`));
+  const tiers: Record<number, number> = Object.fromEntries(Object.keys(GEAR_SLOTS).map((slot) => [slot, 0]));
+  const nights = INSTANCES
+    .filter((instance) => player.instances.includes(instance.name))
+    .flatMap((instance) => {
+      const runsUrl = new URL("http://storybook.local/");
+      runsUrl.searchParams.set("instance_name", instance.name);
+      runsUrl.searchParams.set("encounter_names", instance.bosses.join(","));
+      return performanceRuns(player, runsUrl).runs.map((run) => ({ run, instanceName: instance.name }));
+    })
+    .sort((a, b) => a.run.started_at.localeCompare(b.run.started_at));
+
+  const snapshots = nights.map(({ run, instanceName }) => {
+    for (const slot of Object.keys(tiers)) {
+      if (random() < 0.08) tiers[Number(slot)] = Math.min(GEAR_TIERS.length - 1, tiers[Number(slot)] + 1);
+    }
+    const ringsSwapped = random() < 0.2;
+    const gear = Array.from({ length: 19 }, (_, index) => {
+      const slot = ringsSwapped && index === 10 ? 11 : ringsSwapped && index === 11 ? 10 : index;
+      const def = GEAR_SLOTS[slot];
+      if (!def) return { item_id: 0 };
+      const tier = tiers[slot];
+      const itemLevel = 66 + tier * 5;
+      return {
+        item_id: 100_000 + slot * 100 + tier,
+        item_name: `${GEAR_TIERS[tier]} ${def.noun}`,
+        item_icon: def.icon,
+        item_quality: itemLevel >= 76 ? 4 : 3,
+        item_level: itemLevel,
+      };
+    });
+    const levels = gear.flatMap((item) => "item_level" in item && item.item_level ? [item.item_level] : []);
+    return {
+      instance_id: run.representative_instance_id,
+      instance_name: instanceName,
+      equipped_at: run.started_at,
+      avg_ilvl: levels.reduce((sum, level) => sum + level, 0) / levels.length,
+      gear: gear as unknown as ArmoryGearSnapshot["gear"],
+    };
+  });
+  return { snapshots: snapshots.reverse() };
+}
+
 const SUPPORTED_INSTANCES: SupportedInstance[] = INSTANCES.map((instance) => ({
   name: instance.name,
   category: "raid",
@@ -224,6 +298,10 @@ const handlers = [
     const query = (new URL(request.url).searchParams.get("q") ?? "").toLowerCase();
     const players = PLAYERS.filter((player) => player.name.toLowerCase().includes(query)).map(searchResult);
     return HttpResponse.json({ players, count: players.length });
+  }),
+  http.get("/api/v1/armory/:realm/:id/gear-history", ({ params }) => {
+    const player = playerById(String(params.id));
+    return player ? HttpResponse.json(gearHistory(player)) : new HttpResponse(null, { status: 404 });
   }),
   http.get("/api/v1/armory/:realm/:id", ({ params }) => {
     const player = playerById(String(params.id));
