@@ -77,9 +77,10 @@ type State struct {
 	// evidence, and is shared by all per-instance Collectors.
 	ConsumeTracker *consumeevidence.Tracker
 
-	instanceResolver InstanceResolver
-	verbose          bool
-	timings          *timingAccumulator
+	instanceResolver        InstanceResolver
+	verbose                 bool
+	timings                 *timingAccumulator
+	instanceProcessDuration map[*instances.Hookable]time.Duration
 }
 
 func NewWithInstanceResolver(ctx context.Context, logger *slog.Logger, res InstanceResolver) *State {
@@ -95,8 +96,9 @@ func NewWithInstanceResolver(ctx context.Context, logger *slog.Logger, res Insta
 		Auras:            auras.New(nil), // nil mods: no dataset modifier plumbing available yet
 		// Parsing setup installs the dataset catalog before the first message is
 		// processed. A nil catalog is retained here for lightweight parser tests.
-		ConsumeTracker: consumeevidence.NewTracker(nil),
-		verbose:        parseoptions.IsVerbose(ctx),
+		ConsumeTracker:          consumeevidence.NewTracker(nil),
+		verbose:                 parseoptions.IsVerbose(ctx),
+		instanceProcessDuration: make(map[*instances.Hookable]time.Duration),
 		timings: newTimingAccumulator(
 			"encounter_state.total",
 			"encounter_state.zone",
@@ -208,7 +210,7 @@ func (s *State) Process(m messages.Message) error {
 	// the active encounter before the metadata carrier itself.
 	if consumeActive {
 		for _, aura := range snapshotAuras {
-			if err := s.CurrentInstance.Process(aura); err != nil {
+			if err := s.processInstance(s.CurrentInstance, aura); err != nil {
 				return fmt.Errorf("instance process snapshot aura: %w", err)
 			}
 			s.ConsumeTracker.Process(aura, true)
@@ -219,10 +221,7 @@ func (s *State) Process(m messages.Message) error {
 	// projection sees the pre-message tracker snapshot. This ensures the
 	// pull-starting message's aura is not duplicated by projection.
 	if s.CurrentInstance != nil && forwardToInstance {
-		instanceStart := time.Now()
-		err := s.CurrentInstance.Process(m)
-		s.timings.Add("encounter_state.instance_process", time.Since(instanceStart))
-		if err != nil {
+		if err := s.processInstance(s.CurrentInstance, m); err != nil {
 			return fmt.Errorf("instance process: %w", err)
 		}
 	}
@@ -239,6 +238,20 @@ func (s *State) Process(m messages.Message) error {
 	s.Auras.Process(m)
 
 	return nil
+}
+
+func (s *State) processInstance(instance *instances.Hookable, m messages.Message) error {
+	start := time.Now()
+	err := instance.Process(m)
+	duration := time.Since(start)
+	s.timings.Add("encounter_state.instance_process", duration)
+	s.instanceProcessDuration[instance] += duration
+	return err
+}
+
+// InstanceProcessDuration returns time spent processing events for one instance.
+func (s *State) InstanceProcessDuration(instance *instances.Hookable) time.Duration {
+	return s.instanceProcessDuration[instance]
 }
 
 // Finalize performs parse-level cleanup. Call once after all messages have been

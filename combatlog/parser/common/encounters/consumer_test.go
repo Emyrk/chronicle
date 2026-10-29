@@ -105,6 +105,7 @@ func TestEncounterUsesSingleKnownMapWhenZoneOmitsIt(t *testing.T) {
 	}))
 
 	require.Len(t, state.Instances, 1)
+	require.Positive(t, state.InstanceProcessDuration(state.Instances[0]))
 	finalized, err := state.Instances[0].Finalize(ctx)
 	require.NoError(t, err)
 	require.Len(t, finalized.Encounters, 1)

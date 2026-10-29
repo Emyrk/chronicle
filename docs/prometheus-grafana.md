@@ -252,6 +252,26 @@ Interpretation:
 
 Stage histograms record total stage time for a job. A job can contain more than one instance, so stage values are not per-instance latency.
 
+### Which game instances are slow?
+
+`chronicle_logparse_instance_duration_seconds` records per-instance work with two labels:
+
+- `instance_name`: the parsed raid or dungeon name. This is distinct from Prometheus's `instance` scrape-target label.
+- `stage`: `parse`, `finalize`, or `db_insert`.
+
+Per-instance p95 latency by stage:
+
+```promql
+histogram_quantile(
+  0.95,
+  sum by (le, instance_name, stage) (
+    rate(chronicle_logparse_instance_duration_seconds_bucket[$__rate_interval])
+  )
+)
+```
+
+Filter to `stage="parse"` when comparing event-processing cost between raids and dungeons. The parse stage measures time spent dispatching combat-log events through that instance's encounter hooks. It does not include shared log loading or parse-wide consumers.
+
 ### Which parser consumer is the bottleneck?
 
 ```promql
@@ -819,6 +839,7 @@ For low-traffic deployments, count-based alerts are often more reliable than rat
 | `chronicle_logparse_finalize_duration_seconds` | Histogram | none | Aggregate instance-finalization time |
 | `chronicle_logparse_db_insert_duration_seconds` | Histogram | none | Aggregate parsed-data insertion time |
 | `chronicle_logparse_consumer_duration_seconds` | Histogram | `consumer` | Time spent in code-defined parser and consumer stages |
+| `chronicle_logparse_instance_duration_seconds` | Histogram | `instance_name`, `stage` | Per-game-instance parse, finalization, and database insertion time |
 
 ### River
 

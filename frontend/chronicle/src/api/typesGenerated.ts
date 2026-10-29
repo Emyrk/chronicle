@@ -2391,6 +2391,7 @@ export interface InstanceRankingRecord {
  */
 export interface InstanceReport {
     readonly name: string;
+    readonly parse_duration_ms: Duration;
     readonly finalize_duration_ms: Duration;
     readonly db_insert_duration_ms: Duration;
     readonly encounter_count: number;
