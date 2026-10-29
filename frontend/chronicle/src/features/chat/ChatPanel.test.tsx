@@ -53,6 +53,51 @@ describe("ChatPanel client tool controls", () => {
     expect(markup).toContain("/clear");
   });
 
+  it("shows animated typing dots while waiting for the assistant to respond", () => {
+    const markup = renderToStaticMarkup(
+      <ChatPanel
+        controller={{
+          ...controller,
+          status: "running",
+          isRunning: true,
+          messages: [{ id: "user-1", role: "user", content: "Summarize this raid." }],
+        }}
+      />,
+    );
+
+    expect(markup).toContain('aria-label="Assistant is thinking"');
+    expect(markup).toContain("Thinking");
+    expect(markup.match(/motion-safe:animate-bounce/g)).toHaveLength(3);
+  });
+
+  it("shows animated working dots while the assistant uses tools", () => {
+    const markup = renderToStaticMarkup(
+      <ChatPanel
+        controller={{
+          ...controller,
+          status: "running",
+          isRunning: true,
+          messages: [{
+            id: "assistant-1",
+            role: "assistant",
+            content: "",
+            streaming: true,
+            toolCalls: [{
+              id: "tool-1",
+              name: "inspect_instance",
+              arguments: "{}",
+              status: "streaming",
+            }],
+          }],
+        }}
+      />,
+    );
+
+    expect(markup).toContain('aria-label="Assistant is working"');
+    expect(markup).toContain("Working");
+    expect(markup.match(/motion-safe:animate-bounce/g)).toHaveLength(3);
+  });
+
   it("renders GitHub-flavored markdown tables and strikethrough", () => {
     const markup = renderToStaticMarkup(
       <ChatPanel

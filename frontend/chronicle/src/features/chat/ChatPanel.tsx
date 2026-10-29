@@ -43,6 +43,23 @@ function formattedArguments(value: string): string {
   }
 }
 
+function TypingIndicator({ label }: { label: "Thinking" | "Working" }) {
+  return (
+    <span className="text-muted-foreground inline-flex items-center gap-2 text-xs" role="status" aria-label={`Assistant is ${label.toLowerCase()}`}>
+      <span>{label}</span>
+      <span className="inline-flex items-center gap-1" aria-hidden="true">
+        {[0, 1, 2].map((index) => (
+          <span
+            key={index}
+            className="bg-current size-1.5 rounded-full motion-safe:animate-bounce"
+            style={{ animationDelay: `${index * 150}ms`, animationDuration: "900ms" }}
+          />
+        ))}
+      </span>
+    </span>
+  );
+}
+
 function ToolCallCard({ toolCall }: { toolCall: ChatToolCall }) {
   const complete = toolCall.status === "complete";
   const interrupted = toolCall.status === "interrupted";
@@ -102,9 +119,7 @@ function Message({ message, turnUsage }: { message: ChatMessage; turnUsage?: Cha
               </ReactMarkdown>
             </div>
           ) : message.streaming && !message.toolCalls?.length ? (
-            <span className="text-muted-foreground flex items-center gap-2">
-              <LoaderCircle className="size-3.5 animate-spin" /> Thinking…
-            </span>
+            <TypingIndicator label="Thinking" />
           ) : null
         ) : (
           <p className="whitespace-pre-wrap">{message.content}</p>
@@ -115,9 +130,27 @@ function Message({ message, turnUsage }: { message: ChatMessage; turnUsage?: Cha
         {message.toolCalls?.map((toolCall) => (
           <ToolCallCard key={toolCall.id} toolCall={toolCall} />
         ))}
+        {message.streaming && Boolean(message.toolCalls?.length) && (
+          <div className="mt-3">
+            <TypingIndicator label="Working" />
+          </div>
+        )}
         {turnUsage && (
           <p className="text-muted-foreground mt-2 text-[11px] tabular-nums" title={describeUsage(turnUsage)}>{formatUsage(turnUsage)}</p>
         )}
+      </div>
+    </article>
+  );
+}
+
+function AssistantActivity({ label }: { label: "Thinking" | "Working" }) {
+  return (
+    <article className="flex gap-3" aria-label="Assistant status">
+      <div className="bg-primary/10 text-primary mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border">
+        <Bot className="size-4" />
+      </div>
+      <div className="bg-card rounded-xl border px-3.5 py-2.5 shadow-xs">
+        <TypingIndicator label={label} />
       </div>
     </article>
   );
@@ -164,8 +197,10 @@ export function ChatPanel({
 
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ block: "end" });
-  }, [controller.messages]);
+  }, [controller.isRunning, controller.messages]);
   const turnUsage = turnUsageByMessage(controller.messages, controller.isRunning);
+  const lastMessage = controller.messages[controller.messages.length - 1];
+  const awaitingAssistant = controller.isRunning && lastMessage?.role === "user";
 
   const send = () => {
     if (disabled || controller.isRunning || !composer.trim()) {
@@ -302,6 +337,7 @@ export function ChatPanel({
                 {controller.messages.map((message) => (
                   <Message key={message.id} message={message} turnUsage={turnUsage.get(message.id)} />
                 ))}
+                {awaitingAssistant && <AssistantActivity label="Thinking" />}
                 <div ref={messageEndRef} />
               </div>
             )}
