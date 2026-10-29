@@ -7,9 +7,8 @@ BEGIN;
 --     SELECT ROW_NUMBER() OVER (
 --         PARTITION BY instance_id, player_guid, encounter_name
 --         ORDER BY
---             (dps + hps) DESC,
---             killed_at DESC,
---             encounter_id DESC,
+--             killed_at ASC,
+--             encounter_id ASC,
 --             id ASC
 --     ) AS occurrence_rank
 --     FROM encounter_dps_rankings
@@ -25,9 +24,8 @@ WITH ranked AS (
         ROW_NUMBER() OVER (
             PARTITION BY instance_id, player_guid, encounter_name
             ORDER BY
-                (dps + hps) DESC,
-                killed_at DESC,
-                encounter_id DESC,
+                killed_at ASC,
+                encounter_id ASC,
                 id ASC
         ) AS occurrence_rank
     FROM encounter_dps_rankings
@@ -38,8 +36,9 @@ USING ranked
 WHERE ranked.id = edr.id
   AND ranked.occurrence_rank > 1;
 
--- Boss rankings now have one canonical occurrence per player and encounter name
--- in an uploaded instance. Trash remains unique per player/spec/sub-spec through
+-- Boss rankings now keep the earliest occurrence per player and encounter name
+-- in an uploaded instance, preventing repeated raid clears from becoming a
+-- synthetic best-of-each-boss run. Trash remains unique per player/spec/sub-spec through
 -- idx_edr_trash_unique because a player can respec during a raid.
 CREATE UNIQUE INDEX idx_edr_boss_canonical_unique
     ON encounter_dps_rankings (instance_id, player_guid, encounter_name)

@@ -200,7 +200,7 @@ func TestInstanceRankingRecordsPreservePlayerDeathsNullability(t *testing.T) {
 	assert.Equal(t, int32(2), rows[0].PlayerDeaths.Int32)
 }
 
-func TestInsertEncounterDpsRankingKeepsCanonicalBossOccurrence(t *testing.T) {
+func TestInsertEncounterDpsRankingKeepsEarliestBossOccurrence(t *testing.T) {
 	t.Parallel()
 
 	pool, store, realmID := setupParsesTest(t)
@@ -211,8 +211,8 @@ func TestInsertEncounterDpsRankingKeepsCanonicalBossOccurrence(t *testing.T) {
 	insertRankingRow(t, pool, store, realmID, rankingOpts{
 		encounterName: "Ragnaros", instanceName: "Molten Core",
 		playerGUID: "P-CANONICAL", playerClass: "PRIEST", playerSpec: "Holy",
-		durationSecs: 100, damageDone: 10_000, healingDone: 50_000,
-		dps: 100, hps: 500, killedAt: baseTime, isBoss: true,
+		durationSecs: 100, damageDone: 90_000, healingDone: 10_000,
+		dps: 900, hps: 100, killedAt: baseTime.Add(5 * time.Minute), isBoss: true,
 		instanceID: instanceID,
 	})
 
@@ -237,22 +237,20 @@ func TestInsertEncounterDpsRankingKeepsCanonicalBossOccurrence(t *testing.T) {
 		return encounterID
 	}
 
-	// A lower combined score does not replace the original occurrence.
-	insertOccurrence(uuid.New(), "Lower combined score", 200, 350, baseTime.Add(time.Minute))
-	// A larger combined score replaces it.
-	insertOccurrence(uuid.New(), "Higher combined score", 700, 0, baseTime.Add(2*time.Minute))
-	// A lower combined score never replaces the winner, even when it is newer.
-	insertOccurrence(uuid.New(), "Newer but lower", 300, 300, baseTime.Add(3*time.Minute))
-	// Equal combined scores prefer the latest occurrence, then the highest encounter ID.
-	insertOccurrence(uuid.MustParse("00000000-0000-0000-0000-000000000001"), "Latest tied score", 600, 100, baseTime.Add(4*time.Minute))
-	winningEncounterID := insertOccurrence(uuid.MustParse("00000000-0000-0000-0000-000000000002"), "Encounter tie winner", 600, 100, baseTime.Add(4*time.Minute))
+	// A later occurrence never replaces the original, even with much higher metrics.
+	insertOccurrence(uuid.New(), "Later high score", 2_000, 2_000, baseTime.Add(6*time.Minute))
+	// An earlier occurrence replaces the original regardless of its metrics.
+	insertOccurrence(uuid.New(), "Earlier occurrence", 200, 100, baseTime)
+	// Equal timestamps prefer the lowest encounter ID for deterministic results.
+	insertOccurrence(uuid.MustParse("00000000-0000-0000-0000-000000000002"), "Higher encounter ID", 3_000, 3_000, baseTime)
+	winningEncounterID := insertOccurrence(uuid.MustParse("00000000-0000-0000-0000-000000000001"), "Earliest tie winner", 300, 100, baseTime)
 
 	rows, err := store.InstanceRankingRecords(ctx, instanceID)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, winningEncounterID, rows[0].EncounterID.UUID)
-	assert.Equal(t, "Encounter tie winner", rows[0].PlayerName)
-	assert.Equal(t, 600.0, rows[0].Dps)
+	assert.Equal(t, "Earliest tie winner", rows[0].PlayerName)
+	assert.Equal(t, 300.0, rows[0].Dps)
 	assert.Equal(t, 100.0, rows[0].Hps)
 }
 
@@ -386,9 +384,9 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	insertEncounterRanking(duplicateID, "Lucifron", "P-HEALER", "Healer", "PRIEST", "Holy", "Bear", 900, 10, baseTime)
 	insertEncounterRanking(duplicateID, "Magmadar", "P-HEALER", "Healer", "PRIEST", "Holy", "Bear", 900, 10, baseTime.Add(time.Minute))
 	insertEncounterRanking(duplicateID, "Ragnaros", "P-HEALER", "Healer", "PRIEST", "Holy", "Bear", 900, 10, baseTime.Add(2*time.Minute))
-	// Equal canonical-score encounter rows prefer the latest kill, and per-run
-	// display metadata uses the stored canonical occurrence.
-	insertEncounterRanking(duplicateID, "Lucifron", "P-HEALER", "Latest Healer", "PRIEST", "Holy", "Bear", 1800, 20, baseTime.Add(3*time.Minute))
+	// A later repeated encounter does not replace the earliest occurrence, even
+	// when its raw healing total is larger.
+	insertEncounterRanking(duplicateID, "Lucifron", "P-HEALER", "Later Healer", "PRIEST", "Holy", "Bear", 1800, 20, baseTime.Add(3*time.Minute))
 	// A separate truncated run has higher per-encounter HPS, but must not rank
 	// when the query explicitly requires all three encounters.
 	insertEncounterRanking(incompleteID, "Lucifron", "P-HEALER", "Incomplete Healer", "PRIEST", "Holy", "Bear", 2000, 10, baseTime)
@@ -439,9 +437,9 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, rows, 1)
 		assert.Equal(t, duplicateID.String(), rows[0].LogHashedSlug)
-		assert.Equal(t, "Latest Healer", rows[0].PlayerName)
-		assert.Equal(t, int64(3600), rows[0].HealingDone)
-		assert.Equal(t, 40.0, rows[0].DurationSecs)
+		assert.Equal(t, "Healer", rows[0].PlayerName)
+		assert.Equal(t, int64(2700), rows[0].HealingDone)
+		assert.Equal(t, 30.0, rows[0].DurationSecs)
 		assert.Equal(t, 90.0, rows[0].Hps)
 	}
 
@@ -452,9 +450,9 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, emptySelectionRows, 1)
 	assert.Equal(t, duplicateID.String(), emptySelectionRows[0].LogHashedSlug)
-	assert.Equal(t, "Latest Healer", emptySelectionRows[0].PlayerName)
-	assert.Equal(t, int64(3600), emptySelectionRows[0].HealingDone)
-	assert.Equal(t, 40.0, emptySelectionRows[0].DurationSecs)
+	assert.Equal(t, "Healer", emptySelectionRows[0].PlayerName)
+	assert.Equal(t, int64(2700), emptySelectionRows[0].HealingDone)
+	assert.Equal(t, 30.0, emptySelectionRows[0].DurationSecs)
 	assert.Equal(t, 90.0, emptySelectionRows[0].Hps)
 
 	duplicateSelectionRows, err := store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
@@ -579,11 +577,11 @@ func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
 	// The unrelated instance ensures instance-scoped representative selection
 	// preserves query results.
 	insertEncounterRanking(canonicalID, "Molten Core", "Lucifron", "Holy", 100, 10, baseTime)
-	insertEncounterRanking(duplicateID, "Molten Core", "Lucifron", "Holy", 900, 10, baseTime)
+	insertEncounterRanking(duplicateID, "Molten Core", "Lucifron", "Discipline", 900, 10, baseTime)
 	insertEncounterRanking(duplicateID, "Molten Core", "Magmadar", "Discipline", 900, 10, baseTime.Add(time.Minute))
-	// Equal-HPS duplicate encounter rows prefer the latest kill. Selecting the
-	// newer Discipline row makes the run complete under one consistent spec.
-	insertEncounterRanking(duplicateID, "Molten Core", "Lucifron", "Discipline", 1800, 20, baseTime.Add(2*time.Minute))
+	// The later Holy occurrence must not replace the earliest Discipline row or
+	// turn the first clear into a synthetic best-of run.
+	insertEncounterRanking(duplicateID, "Molten Core", "Lucifron", "Holy", 1800, 20, baseTime.Add(2*time.Minute))
 	insertEncounterRanking(incompleteID, "Molten Core", "Lucifron", "Holy", 2000, 10, baseTime)
 	insertEncounterRanking(unrelatedID, "Blackwing Lair", "Razorgore", "Holy", 5000, 10, baseTime)
 

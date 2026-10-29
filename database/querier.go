@@ -518,8 +518,9 @@ type sqlcQuerier interface {
 	InsertDiscordMembershipGrantCheck(ctx context.Context, arg InsertDiscordMembershipGrantCheckParams) (DiscordMembershipGrantCheck, error)
 	InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error)
 	InsertEncounterCharacterFights(ctx context.Context, arg []InsertEncounterCharacterFightsParams) *InsertEncounterCharacterFightsBatchResults
-	// Boss encounters keep one canonical occurrence per player and encounter name in
-	// an uploaded instance. Trash keeps one aggregate per player/spec/sub-spec.
+	// Boss encounters keep the earliest occurrence per player and encounter name in
+	// an uploaded instance so repeated clears cannot form a synthetic best-of run.
+	// Trash keeps one aggregate per player/spec/sub-spec.
 	InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error
 	InsertEncounterPhase(ctx context.Context, arg InsertEncounterPhaseParams) error
 	InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error)

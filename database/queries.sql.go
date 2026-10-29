@@ -18415,18 +18415,10 @@ WITH boss_insert AS (
         killed_at = EXCLUDED.killed_at,
         created_at = EXCLUDED.created_at
     WHERE
-        (EXCLUDED.dps + EXCLUDED.hps) >
-            (encounter_dps_rankings.dps + encounter_dps_rankings.hps)
+        EXCLUDED.killed_at < encounter_dps_rankings.killed_at
         OR (
-            (EXCLUDED.dps + EXCLUDED.hps) =
-                (encounter_dps_rankings.dps + encounter_dps_rankings.hps)
-            AND EXCLUDED.killed_at > encounter_dps_rankings.killed_at
-        )
-        OR (
-            (EXCLUDED.dps + EXCLUDED.hps) =
-                (encounter_dps_rankings.dps + encounter_dps_rankings.hps)
-            AND EXCLUDED.killed_at = encounter_dps_rankings.killed_at
-            AND EXCLUDED.encounter_id > encounter_dps_rankings.encounter_id
+            EXCLUDED.killed_at = encounter_dps_rankings.killed_at
+            AND EXCLUDED.encounter_id < encounter_dps_rankings.encounter_id
         )
     RETURNING id
 )
@@ -18520,8 +18512,9 @@ type InsertEncounterDpsRankingParams struct {
 	KilledAt           pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
 }
 
-// Boss encounters keep one canonical occurrence per player and encounter name in
-// an uploaded instance. Trash keeps one aggregate per player/spec/sub-spec.
+// Boss encounters keep the earliest occurrence per player and encounter name in
+// an uploaded instance so repeated clears cannot form a synthetic best-of run.
+// Trash keeps one aggregate per player/spec/sub-spec.
 func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error {
 	_, err := q.db.Exec(ctx, insertEncounterDpsRanking,
 		arg.EncounterID,
