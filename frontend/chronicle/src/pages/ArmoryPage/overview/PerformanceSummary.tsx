@@ -260,23 +260,32 @@ function StatValue({
     return (
       <>
         {summary.averageDeaths.toFixed(1)}
-        {summary.averageAlive !== null && (
-          <span className="ml-1.5 text-xs font-normal text-muted-foreground">{Math.round(summary.averageAlive)}% alive</span>
-        )}
+        <MarkerSlot className="w-16 text-muted-foreground">
+          {summary.averageAlive !== null && `${Math.round(summary.averageAlive)}% alive`}
+        </MarkerSlot>
       </>
     );
   }
 
   const value = summary[column.key];
+  const recentSlot = showRecentDelta && column.key === "recent";
   if (value === null) {
     const needs = column.key === "recent" ? `more than ${PERFORMANCE_RECENT_RUN_COUNT}` : "at least 3";
-    return <span className="text-muted-foreground" title={`Needs ${needs} runs`}>—</span>;
+    return (
+      <>
+        <span className="text-muted-foreground" title={`Needs ${needs} runs`}>—</span>
+        {recentSlot && <MarkerSlot className="w-14" />}
+      </>
+    );
   }
   if (column.key === "consistency") {
     return (
       <>
-        <span className="font-sans text-sm font-medium">{consistencyLabel(value, summary.typical, display)}</span>
-        <span className="ml-1.5 text-xs font-normal text-muted-foreground">±{formatStat(value / 2, display)}</span>
+        {/* Inline-block keeps the label width fixed; inheriting text-decoration keeps the leader underline on it. */}
+        <span className="inline-block w-9 text-left font-sans text-sm font-medium [text-decoration:inherit]">
+          {consistencyLabel(value, summary.typical, display)}
+        </span>
+        <MarkerSlot className="w-12 text-muted-foreground">±{formatStat(value / 2, display)}</MarkerSlot>
       </>
     );
   }
@@ -286,18 +295,31 @@ function StatValue({
   return (
     <>
       <span style={{ color: display === "parse" ? performanceParseColor(value) : undefined }}>{formatStat(value, display)}</span>
-      {column.key === "best" && summary.best > summary.highWhisker && <OutlierMark />}
-      {showRecentDelta && column.key === "recent" && (
+      {column.key === "best" && (
+        <MarkerSlot className="w-2">{summary.best > summary.highWhisker && <OutlierMark />}</MarkerSlot>
+      )}
+      {recentSlot && (
         Math.abs(delta) >= deltaThreshold ? (
-          <span className={cn("ml-1.5 text-xs font-normal", delta > 0 ? "text-emerald-400" : "text-rose-400")}>
+          <MarkerSlot className={cn("w-14", delta > 0 ? "text-emerald-400" : "text-rose-400")}>
             {delta > 0 ? "▲" : "▼"} {formatStat(Math.abs(delta), display)}
-          </span>
+          </MarkerSlot>
         ) : (
-          <span className="ml-1.5 text-xs font-normal text-muted-foreground" title="About the same as Typical">≈</span>
+          <MarkerSlot className="w-14 text-muted-foreground">
+            <span title="About the same as Typical">≈</span>
+          </MarkerSlot>
         )
       )}
     </>
   );
+}
+
+/**
+ * Fixed-width space after a number, present even when empty, so markers never
+ * shift the numbers in a column. Being inline-block, it also keeps the leader
+ * underline off the marker.
+ */
+function MarkerSlot({ className, children }: { className: string; children?: ReactNode }) {
+  return <span className={cn("ml-1 inline-block text-left text-xs font-normal", className)}>{children}</span>;
 }
 
 function OutlierMark() {
