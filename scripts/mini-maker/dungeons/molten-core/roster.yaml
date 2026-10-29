@@ -1,0 +1,245 @@
+# Molten Core — boss roster for mini-maker.
+# Blizzard IP: private/local use only.
+#
+# Pipeline input for every `mini.py ... --dungeon molten-core` command. Working
+# state goes to work/molten-core/<boss>/, published minis to dungeons/molten-core/<boss>/.
+#
+# HOUSE SCULPT STYLE (what Meshy can actually reconstruct and a printer can
+# actually print — proven on wailing-caverns):
+#   - Thick, chunky, toy-like volumes. Antlers "as thick as a thumb", spikes
+#     are "short chunky cones", teeth "short thick cones, few in number".
+#   - Everything FUSED: weapons/staffs touch a hand AND the base; snakes,
+#     vines, tails are "one fat coil fused to the shoulders / the base";
+#     legs and feet "merge into the base".
+#   - NO thin spikes, no thin sheets (frills, fins, wings are "thick solid
+#     slabs with no holes"), no loose strands, no floating sparkles or
+#     particles. Glow/electricity/magic is a PAINT accent, never geometry.
+#   - Hair, cloth, robes, hoods, moss are "a solid sculpted mass" / "a closed
+#     solid volume down to the base".
+#   - Water, smoke, ground effects are a solid sculpted shape on the base.
+#   - Write a `# Shape:` comment above each boss (e.g. "bulky quadruped",
+#     "robed humanoid + serpent coils") — it keeps the notes honest.
+#
+# FIELDS (per boss):
+#   slug      lowercase kebab-case, unique; also the folder name
+#   name      display name only — NEVER reaches the stills prompt (proper
+#             nouns come back as painted lettering)
+#   desc      appearance only, no names, no lore
+#   palette   3-5 colour words (ignored for finish: grey)
+#   views     [front, back] is the proven pair
+#   finish    painted | grey
+#   notes     sculpt constraints, in the house style above
+#   back      required with a back view: what is visible from behind and
+#             what is hidden (PLAYBOOK.md "Back-view rule")
+#   portrait  prompt for the painted portrait (`mini.py portraits`); lore
+#             words are fine here, it is not a Meshy input
+
+name: Molten Core
+
+# Appended to every boss `portrait:` as "<portrait>. <portrait_style>".
+# Replace the ATMOSPHERE phrase with this dungeon's setting.
+portrait_style: >-
+  richly textured oil painting on rough canvas, visible brush strokes and
+  impasto, painterly fantasy video-game concept art in the style of classic
+  World of Warcraft loading-screen illustration, dramatic rim lighting,
+  vast volcanic cavern of black basalt and rivers of glowing magma, embers drifting through red smoke, single subject centered, three-quarter view, full figure,
+  no text, no lettering, no frame, no border
+
+# Entry ids: chronicle hostiles.go MoltenCoreHostiles (map 409), confirmed
+# against two OctoWoW lockouts on N'Zoth (2026-10-16/17, 12/12 kills each).
+# Turtle 1.18.0 removed Gehennas (12259); no Gehennas units in either log.
+
+bosses:
+  # Shape: flamewaker — huge muscular torso on a fat serpent tail coiled on the base. Entry 12118.
+  - slug: lucifron
+    name: Lucifron
+    desc: a giant serpent-bodied fire demon rising from a fat coiled snake tail on the base, a broad muscular grey-skinned torso with a pale ribbed scaly belly, two thick clawed arms held forward, a small fierce head with a short snout and a heavy jaw, a tall crown of six thick curved horn-tendrils banded grey and cream sweeping up and back from the head, short thick bony spurs on the forearms and shoulders
+    palette: [ash grey, bone cream, charcoal, ember orange]
+    views: [front, back]
+    finish: painted
+    notes: the snake tail is one fat coil resting on the base along its whole length; the horn-tendrils are thick as a thumb, few in number and fused to each other at the root like a solid crown; forearm spurs are short chunky cones; the ember glow is only a paint accent
+    back: From behind, the broad grey back and the backs of the thick horn-tendril crown fill the view, the body tapering down into the heavy coiled tail on the base. The face, belly and hands are hidden in front.
+    portrait: Lucifron, the flamewaker lieutenant of Ragnaros, a grey serpent-tailed fire demon with a crown of horn-tendrils, casting a dark curse amid molten rock
+
+  # Shape: huge two-headed hound, low and wide, four legs planted. Entry 11982.
+  - slug: magmadar
+    name: Magmadar
+    desc: a huge two-headed molten hound standing four-square on the base, a massive barrel chest and short thick legs, two broad heads side by side with open jaws showing a few short thick fangs and glowing molten throats, a thick ridge of heavy curved armour plates along the neck and back, cracked dark red-brown rocky hide with glowing orange seams
+    palette: [dark rust red, charcoal black, molten orange, ash brown]
+    views: [front, back]
+    finish: painted
+    notes: the two heads are fused at the neck into one thick mass; back plates are short thick slabs fused to the spine, no thin spikes; legs merge into the base; the short thick tail rests on the base; the molten glow is only a paint pattern in the cracks
+    back: From behind, the broad armoured back with its ridge of thick plates fills the view, the two heads just visible over the shoulders, the rear legs and the short tail resting on the base. The faces and jaws are hidden in front.
+    portrait: Magmadar, the two-headed core hound of Molten Core, jaws dripping magma, lava breath roaring across a cavern of fire
+
+  # Shape: rock elemental — boulder torso on a rubble pile, two giant fists on the base. Entry 12057.
+  - slug: garr
+    name: Garr
+    desc: a hulking rock elemental made of heavy black boulders, a huge round boulder torso resting on a fused pile of rubble on the base, two enormous blocky fists of dark stone bound with thick bands of glowing lava resting knuckles-down on the base, a small head of stacked stones with two glowing eye slits sunk between massive boulder shoulders
+    palette: [basalt black, slate grey, molten orange, charcoal]
+    views: [front, back]
+    finish: painted
+    notes: every stone is fused to the next into one solid mass, no gaps between boulders, nothing floats; the rubble pile joins the torso to the base; both fists touch the base and are joined to the shoulders by thick stone arms; the lava bands are only paint
+    back: From behind, the great rounded boulder back and the two massive shoulder stones fill the view, the rubble pile beneath and the backs of both fists resting on the base. The eye slits are hidden in front.
+    portrait: Garr, a colossal elemental of black stone and banded lava, fists raised, lesser fire elementals swirling around him in a magma cavern
+
+  # Shape: flamewaker caster on a coiled tail, short wand. Entry 12264.
+  - slug: shazzrah
+    name: Shazzrah
+    desc: a giant serpent-bodied arcane demon rising from a fat coiled snake tail on the base, a broad muscular icy-blue torso with a pale ribbed scaly belly, a small fierce head under a tall crown of thick curved blue horn-tendrils, one clawed hand raised and the other holding a short thick wand angled down so its tip rests on the tail coil, short thick bony spurs on the forearms
+    palette: [icy blue, deep indigo, pale lavender, arcane violet]
+    views: [front, back]
+    finish: painted
+    notes: the snake tail is one fat coil resting on the base along its whole length; horn-tendrils thick as a thumb and fused into a solid crown; the wand is short and chunky and touches the hand and the coil; arcane glow is only a paint accent, no floating sparkles
+    back: From behind, the broad blue back and the backs of the horn-tendril crown fill the view, tapering into the coiled tail on the base. The face, belly, raised hand and wand are hidden in front.
+    portrait: Shazzrah, the arcane flamewaker, a blue serpent-tailed demon blinking through crackling violet arcane energy in a lava cavern
+
+  # Shape: fire elemental — flaming torso tapering into a fused flame column on the base. Entry 12056.
+  - slug: baron-geddon
+    name: Baron Geddon
+    desc: a massive fire elemental with a broad hunched torso of sculpted flame, two huge muscular flame arms with heavy dark spiked iron bracers on the wrists, a fierce glowing face sunk into the chest beneath a crest of thick flame tongues, the body tapering at the waist into a thick swirling column of sculpted flame that fuses into a round scorched-rock base
+    palette: [flame yellow, bright orange, deep red, iron black]
+    views: [front, back]
+    finish: painted
+    notes: all flame is sculpted as thick solid rounded tongues fused together, never thin wisps; the flame column is one solid twisted mass joining body to base; the bracer spikes are short chunky cones; the fists rest against the flame column or the base; the heat glow is paint only
+    back: From behind, the broad flaming back and shoulders and the backs of the iron bracers fill the view, the body twisting down into the solid flame column on the base. The face is hidden in front.
+    portrait: Baron Geddon, lord of living fire, a towering flame elemental with iron bracers, a living bomb erupting in a sea of molten rock
+
+  # Shape: hulking bipedal giant, mane, huge arms. Entry 11988.
+  - slug: golemagg
+    name: Golemagg the Incinerator
+    desc: a hulking molten giant standing on two thick stumpy legs on the base, cracked red rocky skin with glowing seams, a huge chest and enormous long arms with heavy fists hanging down to touch the base, a small fierce head with a short thick tusked jaw sunk into a thick shaggy pale mane that covers the shoulders and upper back
+    palette: [lava red, ash white, charcoal, molten orange]
+    views: [front, back]
+    finish: painted
+    notes: the mane is one solid sculpted mass fused to head and shoulders; both fists rest on the base; tusks are short thick cones; legs merge into the base; glow in the cracks is paint only
+    back: From behind, the shaggy pale mane over the shoulders and the broad red rocky back fill the view, both long arms hanging to the base and the stumpy legs below. The face is hidden in front.
+    portrait: Golemagg the Incinerator, a hulking molten giant with a pale mane, flanked by his two core rager hounds, magma splashing around him
+
+  # Shape: flamewaker with a long spear planted on the base. Entry 12098.
+  - slug: sulfuron
+    name: Sulfuron Harbinger
+    desc: a giant serpent-bodied fire demon rising from a fat coiled snake tail on the base, a broad muscular orange torso with slate-blue scaly plates on the chest and belly, a small fierce head under a tall crown of thick curved slate-blue horn-tendrils, one clawed hand gripping a long thick spear held upright with its butt planted on the base and a broad leaf-shaped blade at the top
+    palette: [burnt orange, slate blue, charcoal, ember red]
+    views: [front, back]
+    finish: painted
+    notes: the snake tail is one fat coil resting on the base along its whole length; horn-tendrils thick as a thumb and fused into a solid crown; the spear shaft is thick, touches the hand and the base, and stands close against the body; the blade is a thick solid slab; ember glow is paint only
+    back: From behind, the broad orange back with blue plates and the back of the horn-tendril crown fill the view, the spear shaft visible at one side, tapering into the coiled tail on the base. The face and spear blade face front.
+    portrait: Sulfuron Harbinger, herald of Ragnaros, a flamewaker with a great spear leading fire priests in a ritual over lava
+
+  # Shape: flamewaker, one hand wreathed in sculpted flame. Entry 12018.
+  - slug: majordomo
+    name: Majordomo Executus
+    desc: a giant serpent-bodied fire demon rising from a fat coiled snake tail on the base, a broad muscular charcoal-black torso with a pale banded scaly belly, a small stern head under a tall crown of thick curved dark horn-tendrils banded with ember red, one clawed hand raised and wrapped in a thick ball of sculpted flame, the other hand resting on the tail coil
+    palette: [charcoal black, ember red, bone cream, flame orange]
+    views: [front, back]
+    finish: painted
+    notes: the snake tail is one fat coil resting on the base along its whole length; horn-tendrils thick as a thumb and fused into a solid crown; the hand flame is a solid rounded mass fused to the hand, not wisps; the lowered hand touches the coil; glow is paint only
+    back: From behind, the broad black back and the backs of the horn-tendril crown fill the view, tapering into the coiled tail on the base; the raised flaming hand shows just above one shoulder. The face and belly are hidden in front.
+    portrait: Majordomo Executus, steward of Ragnaros, a dark flamewaker with a hand of fire commanding his elite guards before the Firelord's lair
+
+  # Shape: huge torso rising out of a sculpted lava pool that IS the base; hammer head on the base. Entry 11502.
+  - slug: ragnaros
+    name: Ragnaros
+    desc: a colossal fire lord rising waist-deep out of a round pool of sculpted molten lava that forms the whole base, a massive flaming upper body with a broad chest, a fierce horned face with a heavy jaw and glowing eyes, a crest of thick flame tongues sweeping back from the head, huge arms banded with heavy black iron plates, both hands gripping the haft of a giant two-headed war hammer whose head rests on the lava pool beside him
+    palette: [flame orange, bright yellow, iron black, deep magma red]
+    views: [front, back]
+    finish: painted
+    notes: the lava pool is a low solid domed mound with thick rolling ridges, joined to the body all around the waist; flame on the body is thick rounded sculpted tongues fused together; horns are short thick cones; the hammer haft touches both hands and the hammer head rests on the lava; glow is paint only
+    back: From behind, the broad flaming back, the backs of the iron arm bands and the swept-back flame crest fill the view, the body rising out of the round lava pool; the hammer head shows at one side resting on the lava. The face is hidden in front.
+    portrait: Ragnaros the Firelord rising from a lake of magma, wielding the hammer Sulfuras, flames erupting to the cavern roof
+
+  # Shape: huge sail-backed lizard, low quadruped, tail on base. Entry 52145. Turtle custom.
+  - slug: incindis
+    name: Incindis
+    desc: a huge crimson sail-backed lizard crouched low on four short thick bowed legs on a rocky island base, a long heavy body with pebbled scaly hide, a broad crocodile-like head with a blunt snout and a few short thick teeth, a tall rounded sail of thick webbed skin along the spine with heavy ribs, a thick tapering tail curled around the base
+    palette: [crimson red, dark maroon, ember orange, basalt black]
+    views: [front, back]
+    finish: painted
+    notes: the back sail is a thick solid slab with no holes and blunt rounded ribs, fused along its whole length to the spine; legs merge into the base; the tail rests on the base along its whole length; teeth are short thick cones; glow is paint only
+    back: From behind, the tall back sail and the broad crimson back fill the view, the thick tail curling round the base and the rear legs splayed below. The head is mostly hidden behind the sail.
+    portrait: Incindis, primordial mother of the incendosaurs, a colossal crimson sail-backed lizard coiled on an island in a lava lake among glowing eggs
+
+  # Shape: stocky stone golem, huge hexagonal fists. Entry 65020. Turtle custom; duo with smoldaris.
+  - slug: basalthar
+    name: Basalthar
+    desc: a stocky hulking stone golem standing in a wide stance on the base, a massive blocky torso of dark basalt plates with a small sunken head, thick short arms ending in huge hexagonal stone fists bound with black iron bands, heavy pillar legs with black iron ankle bands, a thick banded stone belt, chunky angular knotwork carved into the iron bands
+    palette: [basalt black, dark slate, molten orange, iron grey]
+    views: [front, back]
+    finish: painted
+    notes: one solid blocky mass; fists are thick hexagonal blocks held low and slightly apart from the body, joined to the arms; legs merge into the base; the carved bands are abstract angular knotwork with no letterforms; glow in the seams is paint only
+    back: From behind, the broad blocky basalt back and the backs of both hexagonal fists fill the view, the heavy pillar legs below on the base. The face is hidden in front.
+    portrait: Basalthar, a hulking Dark Iron forge golem of black basalt with hexagonal iron fists, standing guard in an ancient Dark Iron hall over the lava
+
+  # Shape: stocky stone golem, huge hexagonal fists (glowing twin of basalthar). Entry 65021. Turtle custom.
+  - slug: smoldaris
+    name: Smoldaris
+    desc: a stocky hulking stone golem standing in a wide stance on the base, a massive blocky torso of cracked red-orange stone glowing from within, a small sunken head with one large round eye, thick short arms ending in huge hexagonal stone fists bound with black iron bands, heavy pillar legs with black iron ankle bands, a thick banded stone belt, chunky angular knotwork carved into the iron bands
+    palette: [ember red, molten orange, iron black, sickly green]
+    views: [front, back]
+    finish: painted
+    notes: one solid blocky mass; fists are thick hexagonal blocks held low and slightly apart from the body, joined to the arms; legs merge into the base; the eye is a smooth round inset painted green; the carved bands are abstract angular knotwork with no letterforms; glow is paint only
+    back: From behind, the broad blocky red-orange back and the backs of both hexagonal fists fill the view, the heavy pillar legs below on the base. The face and eye are hidden in front.
+    portrait: Smoldaris, a smouldering red forge golem with hexagonal iron fists and a single green eye, in an ancient Dark Iron hall over the lava
+
+  # Shape: stout dwarf sorcerer-king in robes, big stone hammer on the base. Entry 57642. Turtle custom (ghost).
+  - slug: thaurissan
+    name: Sorcerer-Thane Thaurissan
+    desc: a stout broad dwarf sorcerer-king standing on the base, a long thick braided beard down to the belt, glowing eyes under heavy brows, a crown of thick sculpted flame tongues on the head, huge square pauldrons, long heavy robes in deep red, white and black falling in thick solid folds to the base, both hands resting on the haft of a huge blocky stone war hammer standing head-down on the base in front of him, the whole figure pale and spectral
+    palette: [ghostly blue-grey, deep crimson, bone white, charcoal black]
+    views: [front, back]
+    finish: painted
+    notes: the robes are a closed solid volume down to the base; the beard is one solid braided mass fused to the chest; the flame crown is thick rounded tongues fused to the head; the hammer haft touches both hands and the hammer head rests on the base; the spectral look is a pale blue-grey paint wash, never transparency
+    back: From behind, the long heavy robes, the backs of the square pauldrons and the flame crown fill the view, the robe hem resting on the base. The face, beard and hammer are hidden in front of the body.
+    portrait: Sorcerer-Thane Thaurissan, the ghostly first emperor of the Dark Iron dwarves, raising a great stone hammer in the ruins of Old Shadowforge as runes of fire ignite
+# Example record — copy into the list above and fill in:
+#
+# # Shape: bulky quadruped, shell.
+# - slug: kresh
+#   name: Kresh
+#   desc: colossal ancient cave turtle on four thick stumpy legs, a high domed
+#     mossy shell studded with chunky crystal clusters, a heavy beaked head
+#   palette: [moss green, slate gray, pale crystal teal]
+#   views: [front, back]
+#   finish: painted
+#   notes: crystals are short chunky clusters fused to the shell; legs are
+#     thick and merge into the base; no thin spikes
+#   back: From behind, the high domed shell fills the view, with the short
+#     thick tail and both rear legs below it. The shell is plain and solid.
+#   portrait: a colossal ancient cave turtle, mossy cracked armored shell
+#     studded with crystals, dim flooded cavern pool
+
+  # --- Adds (operator 2026-10-18: Core Rager, Son of Flame, one shared Flamewaker) ---
+
+  # Shape: armoured lava hound, four legs planted. Entry 11672 (Golemagg's dogs).
+  - slug: core-rager
+    name: Core Rager
+    desc: a big muscular molten hound standing four-square on the base, a broad single head with open jaws showing a few short thick fangs and a glowing molten throat, heavy dark iron-grey armour plates on the shoulders, back and forelegs, cracked black rocky hide with glowing orange seams, a short thick tail
+    palette: [charcoal black, iron grey, molten orange, rust red]
+    views: [front, back]
+    finish: painted
+    notes: armour plates are thick slabs fused to the body, any spikes are short chunky cones; legs merge into the base; the tail rests on the base; molten glow is a paint pattern in the cracks only
+    back: From behind, the armoured back and haunches fill the view, the short thick tail resting on the base between the rear legs; the head shows just above the shoulders. The jaws are hidden in front.
+    portrait: a Core Rager, an armoured molten hound of Molten Core, snarling with magma dripping from its jaws
+
+  # Shape: fire elemental, torso tapering into a flame column (smaller cousin of baron-geddon). Entry 12143.
+  - slug: son-of-flame
+    name: Son of Flame
+    desc: a stocky fire elemental with a rounded hunched torso of sculpted flame, two thick flame arms with chunky dark iron bracers on the wrists, a fierce glowing face sunk into the chest, a few thick flame tongues on the crown of the head, the body tapering into a thick twisted column of sculpted flame fused to a round scorched-rock base
+    palette: [flame orange, bright yellow, deep red, iron black]
+    views: [front, back]
+    finish: painted
+    notes: all flame is thick solid rounded tongues fused together, never thin wisps; the flame column is one solid mass joining body to base; the fists rest against the column or the base; glow is paint only
+    back: From behind, the rounded flaming back and the backs of the iron bracers fill the view, twisting down into the flame column on the base. The face is hidden in front.
+    portrait: a Son of Flame, a living fire elemental summoned by Ragnaros, erupting from a magma pool
+
+  # Shape: flamewaker guard on a coiled tail with a spear. Entries 12119 Protector, 11662 Priest, 11664 Elite, 11663 Healer.
+  - slug: flamewaker
+    name: Flamewaker
+    desc: a giant serpent-bodied fire demon rising from a fat coiled snake tail on the base, a broad muscular golden-yellow torso with a pale lilac ribbed scaly belly, a small fierce head under a tall crown of thick curved lilac horn-tendrils, one clawed hand gripping a long thick spear held upright with its butt planted on the base and a broad leaf-shaped blade at the top
+    palette: [golden yellow, pale lilac, ember orange, charcoal]
+    views: [front, back]
+    finish: painted
+    notes: the snake tail is one fat coil resting on the base along its whole length; horn-tendrils thick as a thumb and fused into a solid crown; the spear shaft is thick, touches the hand and the base, and stands close against the body; the blade is a thick solid slab; glow is paint only
+    back: From behind, the broad yellow back and the back of the horn-tendril crown fill the view, the spear shaft visible at one side, tapering into the coiled tail on the base. The face and spear blade face front.
+    portrait: a Flamewaker guard of Molten Core, a golden serpent-tailed fire demon with a spear, standing watch over a river of magma

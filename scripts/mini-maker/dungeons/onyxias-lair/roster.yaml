@@ -1,0 +1,84 @@
+# Onyxia's Lair (Classic raid, Dustwallow Marsh) — boss roster for mini-maker.
+# Blizzard IP: private/local use only.
+#
+# Pipeline input for every `mini.py ... --dungeon onyxias-lair` command. Working
+# state goes to work/onyxias-lair/<boss>/, published minis to dungeons/onyxias-lair/<boss>/.
+#
+# HOUSE SCULPT STYLE (what Meshy can actually reconstruct and a printer can
+# actually print — proven on wailing-caverns):
+#   - Thick, chunky, toy-like volumes. Antlers "as thick as a thumb", spikes
+#     are "short chunky cones", teeth "short thick cones, few in number".
+#   - Everything FUSED: weapons/staffs touch a hand AND the base; snakes,
+#     vines, tails are "one fat coil fused to the shoulders / the base";
+#     legs and feet "merge into the base".
+#   - NO thin spikes, no thin sheets (frills, fins, wings are "thick solid
+#     slabs with no holes"), no loose strands, no floating sparkles or
+#     particles. Glow/electricity/magic is a PAINT accent, never geometry.
+#   - Hair, cloth, robes, hoods, moss are "a solid sculpted mass" / "a closed
+#     solid volume down to the base".
+#   - Water, smoke, ground effects are a solid sculpted shape on the base.
+#   - Write a `# Shape:` comment above each boss (e.g. "bulky quadruped",
+#     "robed humanoid + serpent coils") — it keeps the notes honest.
+#
+# FIELDS (per boss):
+#   slug      lowercase kebab-case, unique; also the folder name
+#   name      display name only — NEVER reaches the stills prompt (proper
+#             nouns come back as painted lettering)
+#   desc      appearance only, no names, no lore
+#   palette   3-5 colour words (ignored for finish: grey)
+#   views     [front, back] is the proven pair
+#   finish    painted | grey
+#   notes     sculpt constraints, in the house style above
+#   back      required with a back view: what is visible from behind and
+#             what is hidden (PLAYBOOK.md "Back-view rule")
+#   portrait  prompt for the painted portrait (`mini.py portraits`); lore
+#             words are fine here, it is not a Meshy input
+
+name: Onyxia's Lair
+
+# Appended to every boss `portrait:` as "<portrait>. <portrait_style>".
+# Replace the smoky volcanic lair cavern lit by glowing lava vents and ember haze, scattered bones and charred skulls on the cracked basalt floor phrase with this dungeon's setting.
+portrait_style: >-
+  richly textured oil painting on rough canvas, visible brush strokes and
+  impasto, painterly fantasy video-game concept art in the style of classic
+  World of Warcraft loading-screen illustration, dramatic rim lighting,
+  smoky volcanic lair cavern lit by glowing lava vents and ember haze, scattered bones and charred skulls on the cracked basalt floor, single subject centered, three-quarter view, full figure,
+  no text, no lettering, no frame, no border
+
+bosses:
+  # Shape: winged quadruped reared on a rock outcrop; wings braced, tail + neck heavy.
+  # Hardest print case: wings are thick slabs braced to the rock, no membrane
+  # holes; tail and neck thick and touching; fire breath is paint only.
+  - slug: onyxia
+    name: Onyxia
+    desc: huge black dragon broodmother reared up on her hind legs atop a craggy volcanic rock outcrop on the base, forefeet with thick short claws gripping the top of the rock, a thick muscular neck arching forward and down so the horned head looks ahead with jaws half open, two great wings half-raised as thick leathery slabs with their trailing edges resting down against her flanks and the rock, a heavy thick tail sweeping down and coiled along the base, a row of short blunt spines down the neck and back, bronze-gold armored belly plates, a scattering of chunky bones on the base
+    palette: [jet black, bronze gold, ember orange, basalt gray]
+    views: [front, back]
+    finish: painted
+    notes: the wings are thick solid leathery slabs with no holes, no gaps and no thin finger bones, folded half-raised and braced along their whole lower edge against the body and the rock; horns and spines are short thick cones; the neck is thick and the head is close above the rock; the tail is as thick as a leg and lies on the base along its whole length; hind legs merge into the rock; the ember glow in the mouth, the eyes and the cracks of the rock is only an orange paint accent, there is no fire or smoke
+    back: From behind, the two thick half-raised wing slabs and the spine ridge between them fill the view, with the heavy tail coiled along the base below and the rock outcrop under the hind legs. The backs of the wings are plain solid leather; the head is in front and mostly hidden.
+    portrait: Onyxia the black dragon broodmother, daughter of Deathwing, an immense black dragon with bronze-gold belly scales, reared on a rock outcrop in her lair with wings half-raised, molten ember-orange fire glowing in her open jaws and burning eyes, a hoard of gold and bones below
+
+  # Shape: small crouched quadruped dragon; wings folded flat.
+  - slug: onyxian-whelp
+    name: Onyxian Whelp
+    desc: small stocky baby black dragon crouched low on all four thick legs on a round rocky base, an oversized round head with big eyes and stubby rounded horns, mouth open in a squeak showing a few short teeth, two small wings folded tight and flat against its back, a short thick tail curled around its feet
+    palette: [jet black, bronze gold, ember orange]
+    views: [front, back]
+    finish: painted
+    notes: wings are small thick slabs folded flat against the back with no holes; horns and teeth are short thick cones; tail is thick and lies on the base; legs merge into the base; the ember glow in the mouth is only an orange paint accent
+    back: From behind, the two small folded wings flat on the back, the spine ridge and the short thick tail curled on the base are visible; the head is mostly hidden behind the shoulders.
+    portrait: an Onyxian whelp, a small fierce baby black dragon with bronze-gold belly scales, wings flared, ember-orange sparks in its open mouth, a swarm of whelps spilling from a cavern ledge
+
+  # Shape: dragonkin centaur (taur) — humanoid torso on a four-legged lizard
+  # body, long tail on the base; no wings, no weapon. Ref: the operator's in-game
+  # screenshot 2026-10-16 (rust-orange scales, cream belly, crimson armor).
+  - slug: onyxian-warder
+    name: Onyxian Warder
+    desc: a creature with the upright torso of a muscular humanoid rising from the front of a heavy four-legged lizard body, like a lizard with a man's chest and arms where its neck would be, all four thick legs planted on the base with chunky clawed feet, a reptile head with a short blunt snout and a crest of short thick spikes swept back, a pale cream chest and belly, rust-orange scaled hide, large crimson shoulder plates trimmed in silver with short thick spikes, a crimson and silver belt around the waist where the torso meets the lizard body and crimson bracers on the forearms, both clawed hands held low and forward, one single long thick tail running straight back from the hindquarters and lying flat on the base with a row of short blunt spines
+    palette: [rust orange, pale cream, crimson, silver]
+    views: [front, back]
+    finish: painted
+    notes: exactly one tail; the four legs are thick and merge into the base; the arms are slightly apart from the torso; the head crest, shoulder spikes and tail spines are short thick cones fused to the body; the tail is as thick as a leg and rests on the base along its whole length; the round base is plain with no plaque; no wings, no weapon
+    back: REAR VIEW. The figure has been turned around 180 degrees so it faces directly away from the camera, and the camera now looks at its backside. Nearest the camera is the single thick tail, lying on the base and pointing straight toward the viewer; behind it are the rounded scaly rump and both rear legs, and above them the scaly back of the upright torso between the two crimson shoulder plates, topped by the back of the head with its swept-back spike crest. The face, snout, eyes, teeth, cream chest and both hands are completely hidden on the far side and do not appear in the picture.
+    portrait: an Onyxian Warder, a towering dragonkin guard of Onyxia's lair with the upright torso of a humanoid rising from a four-legged lizard body (four legs on the ground), rust-orange scales with a pale cream belly, crimson spiked shoulder armor trimmed in silver, a long spined tail, clawed hands raised, standing watch in the lair tunnel
