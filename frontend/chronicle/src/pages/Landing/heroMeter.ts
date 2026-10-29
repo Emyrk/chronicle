@@ -28,11 +28,58 @@ export interface HeroMeterDeath {
   source: string | null;
 }
 
+/** One ability row of a player's breakout: its rate and share of the player's total (0–1). */
+export interface HeroMeterAbility {
+  name: string;
+  perSecond: number;
+  share: number;
+}
+
+/** A player's damage or healing on the pull so far, by ability, with a few facts ("crit 31%"). */
+export interface HeroMeterBreakout {
+  total: number;
+  perSecond: number;
+  /** Share of the raid's total (0–1). */
+  raidShare: number;
+  /** Best first. */
+  abilities: HeroMeterAbility[];
+  facts: { label: string; value: string }[];
+}
+
+/** The panes a bar click drills into. */
+export type HeroMeterDrillPane = "damage_done" | "healing_done";
+
+/** The playing pull's breakouts at the cursor, read by player name. */
+export interface HeroMeterBreakouts {
+  encounterId: string;
+  /** Where the cursor is, in ms from the pull's start. */
+  elapsedMs: number;
+  player: (pane: HeroMeterDrillPane, name: string) => HeroMeterBreakout | null;
+}
+
 /** What the meter shows for one pull. A null pane has no numbers for it (a clip carries damage only). */
 export interface HeroMeterData {
   damage: HeroMeterTotals | null;
   healing: HeroMeterTotals | null;
   deaths: HeroMeterDeath[];
+  /** Per-player breakouts at the cursor (the live replay on a pull); absent on a clip. */
+  breakouts?: HeroMeterBreakouts | null;
+  /** The run the numbers belong to, for the run page link (the live replay's instance). */
+  run?: { id: string; slug?: string | null };
+}
+
+/**
+ * Panels the run page offers, as the meter's footer claims ("60+ panels"). A test holds it to at most the
+ * registry's count; the meter must not import the registry, which would pull it into the landing's chunks.
+ */
+export const RUN_PAGE_PANELS = 60;
+
+/** The run page's preset for each pane (`presetLayouts.ts` ids); anything else opens Watch. */
+const PANE_PRESETS: Record<HeroMeterPane, string> = { damage_done: "damage", healing_done: "healing", deaths: "deaths" };
+
+/** The run page on a pane's preset (see `PANE_PRESETS`), without one on Watch. */
+export function runPageHref(instance: { id: string; slug?: string | null }, pane?: HeroMeterPane): string {
+  return `/instances/${instance.slug || instance.id}?preset=${(pane && PANE_PRESETS[pane]) ?? "watch"}`;
 }
 
 /** Players' amounts over a pull of `durationMs` as a pane, best first; zeros dropped. */

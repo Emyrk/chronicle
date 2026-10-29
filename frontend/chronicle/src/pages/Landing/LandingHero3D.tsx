@@ -404,7 +404,14 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
   // the meter's damage and the threat table at the cursor, and the raid frames. Explore's modal shows them too.
   const stats = useHeroStats(instance, encounterId, shown && span && currentMs !== null ? span.startMs + playableMs : null, HERO_STREAMS);
   const cursorDamage = stats?.damage ?? null;
-  const liveMeter = useMemo(() => meter && cursorDamage ? { ...meter, damage: cursorDamage } : meter, [cursorDamage, meter]);
+  const breakouts = stats?.breakouts ?? null;
+  // The run page link's run, and on a pull the per-player breakouts a bar click drills into.
+  const liveMeter = useMemo(() => meter && {
+    ...meter,
+    ...(cursorDamage ? { damage: cursorDamage } : {}),
+    breakouts,
+    run: { id: instance.id, slug: instance.slug },
+  }, [breakouts, cursorDamage, instance, meter]);
   const renderRaidFrames = useMemo(() => stats?.frames
     ? (onSwitch: (() => void) | null) => <HeroRaidFramesCard instance={instance} stats={stats} onSwitch={onSwitch} />
     : null, [instance, stats]);

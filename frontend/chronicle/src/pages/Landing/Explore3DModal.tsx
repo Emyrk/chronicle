@@ -68,7 +68,7 @@ function ToggleButton({ expanded, onClick }: { expanded: boolean; onClick: () =>
 /**
  * The hero's stats column over the scene, following the modal's cursor: the glass meter, then Threat (estimated) or
  * Raid Frames. Desktop docks it top-right (clear of the compass, bottom-right), collapsible; phones start on a
- * three-bar strip at the bottom, a tap expands it.
+ * three-bar strip at the bottom, a tap expands it. In an open meter a bar click drills into that player.
  */
 function ExploreStats({ replay, Meter }: { replay: HeroReplay; Meter: typeof HeroMeter }) {
   const [pane, setPane] = useState<HeroMeterPane>("damage_done");
@@ -118,14 +118,14 @@ function ExploreStats({ replay, Meter }: { replay: HeroReplay; Meter: typeof Her
           </button>
         ) : (
           <>
-            <Meter data={meter} sourceKey="explore" pane={pane} onPaneChange={setPane} onOpen={null} action={<ToggleButton expanded onClick={toggleDesktop} />} />
+            <Meter data={meter} sourceKey="explore" pane={pane} onPaneChange={setPane} placement="explore" action={<ToggleButton expanded onClick={toggleDesktop} />} />
             {cards}
           </>
         )}
       </div>
       {phoneExpanded ? (
         <div className="styled-scrollbar absolute inset-x-2 bottom-[76px] top-14 z-20 flex flex-col gap-2 overflow-y-auto lg:hidden">
-          <Meter data={meter} sourceKey="explore" pane={pane} onPaneChange={setPane} onOpen={null} action={<ToggleButton expanded onClick={() => setPhoneExpanded(false)} />} />
+          <Meter data={meter} sourceKey="explore" pane={pane} onPaneChange={setPane} placement="explore" action={<ToggleButton expanded onClick={() => setPhoneExpanded(false)} />} />
           {cards}
         </div>
       ) : (

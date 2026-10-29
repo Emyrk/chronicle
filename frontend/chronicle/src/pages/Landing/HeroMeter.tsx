@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { ChevronDown, Heart, Skull, Swords } from "lucide-react";
 import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { cn } from "@/lib/utils";
 import { MeterBars } from "@/pages/Instance/EventsPanels/MeterBars";
-import type { HeroMeterData, HeroMeterDeath, HeroMeterPane, HeroMeterTotals } from "./heroMeter";
+import { trackFunnel, type MeterDrillPlacement } from "@/utils/funnel";
+import { RUN_PAGE_PANELS, runPageHref, type HeroMeterBreakouts, type HeroMeterData, type HeroMeterDeath, type HeroMeterDrillPane, type HeroMeterPane, type HeroMeterTotals } from "./heroMeter";
 
 /** Bars the meter shows. */
 const TOP_ROWS = 5;
@@ -18,12 +20,15 @@ const PANES: { value: HeroMeterPane; label: string; icon: ReactNode }[] = [
 const NUMBER = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const COMPACT = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 
-/** The section below with the whole replay. */
-const BELOW = "#runs";
-
-function openBelow() {
-  document.querySelector(BELOW)?.scrollIntoView({ behavior: "smooth" });
+/** The player a bar click drilled into, on the pane and pull it was clicked on (null pull: a clip's bar). */
+interface Drill {
+  pane: HeroMeterDrillPane;
+  name: string;
+  className: string;
+  encounterId: string | null;
 }
+
+const classColor = (className: string) => `var(--color-class-${className.toLowerCase()})`;
 
 function formatClock(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -102,7 +107,13 @@ function DeathLine({ death }: { death: HeroMeterDeath }) {
   );
 }
 
-function Bars({ totals, unit, rows, onOpen }: { totals: HeroMeterTotals; unit: string; rows: number; onOpen: (() => void) | null }) {
+function Bars({ totals, unit, rows, onOpen, onDrill }: {
+  totals: HeroMeterTotals;
+  unit: string;
+  rows: number;
+  onOpen: (() => void) | null | undefined;
+  onDrill: (row: PlayerMetricChartData) => void;
+}) {
   const data = useMemo((): PlayerMetricChartData[] => totals.rows.map((row) => ({
     playerID: row.name,
     playerName: row.name,
@@ -120,9 +131,51 @@ function Bars({ totals, unit, rows, onOpen }: { totals: HeroMeterTotals; unit: s
       <MeterBars
         data={data}
         onOpen={onOpen ?? undefined}
-        openLabel={onOpen === openBelow ? "The whole replay, below" : "Show the stats"}
+        onOpenRow={onOpen === undefined ? onDrill : undefined}
+        openLabel={onOpen === undefined ? "Their abilities on this pull" : "Show the stats"}
         values={{ formatValue: (value) => NUMBER.format(value), shareBase: totals.perSecond, formatShare: (share) => `${Math.round(share * 100)}%`, limit: rows }}
       />
+    </>
+  );
+}
+
+/** A drilled-in player's breakout at the cursor: total, rate and share of the raid, top abilities, a facts line. */
+function Breakout({ drill, breakouts, unit }: { drill: Drill; breakouts: HeroMeterBreakouts; unit: string }) {
+  const breakout = breakouts.player(drill.pane, drill.name);
+  const data = useMemo((): PlayerMetricChartData[] => (breakout?.abilities ?? []).map((ability) => ({
+    playerID: ability.name,
+    playerName: ability.name,
+    className: drill.className,
+    specialization: "",
+    value: ability.perSecond,
+  })), [breakout, drill.className]);
+  if (!breakout) return <div className="text-xs text-muted-foreground">Nothing yet at this point of the pull.</div>;
+  return (
+    <>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="font-mono text-lg font-semibold text-foreground">{COMPACT.format(breakout.total)}</span>
+        <span className="text-xs text-muted-foreground">
+          {unit} <span className="font-mono text-foreground">{NUMBER.format(breakout.perSecond)}</span>
+          {" · "}<span className="font-mono text-foreground">{Math.round(breakout.raidShare * 100)}%</span> of raid
+        </span>
+      </div>
+      {/* Shares of the player's own total. */}
+      <MeterBars
+        data={data}
+        openLabel=""
+        values={{ formatValue: (value) => NUMBER.format(value), shareBase: breakout.perSecond, formatShare: (share) => `${Math.round(share * 100)}%` }}
+      />
+      {breakout.facts.length > 0 && (
+        <div className="flex flex-wrap gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground">
+          {breakout.facts.map((fact) => (
+            <span key={fact.label}>
+              {fact.label === "targets" || fact.label === "target"
+                ? <><span className="font-mono text-foreground">{fact.value}</span> {fact.label}</>
+                : <>{fact.label} <span className="font-mono text-foreground">{fact.value}</span></>}
+            </span>
+          ))}
+        </div>
+      )}
     </>
   );
 }
@@ -132,9 +185,12 @@ function Bars({ totals, unit, rows, onOpen }: { totals: HeroMeterTotals; unit: s
  * chrome, its header the run page's pane dropdown. `sourceKey` names the run
  * the numbers belong to; a new one crossfades the body. A pane without
  * numbers yet (a clip carries damage only) shows a loading line. `rows` caps the bars (5).
- * `onOpen` replaces what a bar click does (null: nothing) and drops the link below; `action` sits right of the dropdown.
+ * A bar click on Damage Done or Healing Done drills into that player's breakout at the cursor (← comes back; a new
+ * pane or pull leaves it), calling `onDrill` (the hero: bring the live replay, a clip has no breakouts) and sending
+ * `meter_drill` with `placement`. `onOpen` replaces that (null: nothing). With `run`, a footer links the run page
+ * on the pane's preset. `action` sits right of the dropdown.
  */
-export function HeroMeter({ data, sourceKey, pane, onPaneChange, className, rows = TOP_ROWS, onOpen = openBelow, action }: {
+export function HeroMeter({ data, sourceKey, pane, onPaneChange, className, rows = TOP_ROWS, onOpen, onDrill, placement = "hero", run, action }: {
   data: HeroMeterData;
   sourceKey: string;
   pane: HeroMeterPane;
@@ -142,34 +198,77 @@ export function HeroMeter({ data, sourceKey, pane, onPaneChange, className, rows
   className?: string;
   rows?: number;
   onOpen?: (() => void) | null;
+  onDrill?: () => void;
+  placement?: MeterDrillPlacement;
+  run?: { id: string; slug?: string | null } | null;
   action?: ReactNode;
 }) {
   const totals = pane === "damage_done" ? data.damage : pane === "healing_done" ? data.healing : null;
   const firstDeath = data.deaths[0];
+  const breakouts = data.breakouts ?? null;
+  const encounterId = breakouts?.encounterId ?? null;
+  const [drill, setDrill] = useState<Drill | null>(null);
+  // Another pane or pull leaves the drill-in; a clip's drill-in takes the live pull once it plays.
+  if (drill && (drill.pane !== pane || (drill.encounterId !== null && encounterId !== null && drill.encounterId !== encounterId))) setDrill(null);
+  else if (drill && drill.encounterId === null && encounterId !== null) setDrill({ ...drill, encounterId });
+  const drillInto = (row: PlayerMetricChartData) => {
+    if (pane === "deaths") return;
+    // The live replay without a pull has no breakouts to show.
+    if (!breakouts && data.run) return;
+    setDrill({ pane, name: row.playerName, className: row.className, encounterId });
+    trackFunnel("meter_drill", { pane, placement });
+    onDrill?.();
+  };
+  const unit = pane === "damage_done" ? "DPS" : "HPS";
+  const paneLabel = PANES.find((candidate) => candidate.value === pane)?.label ?? "";
   return (
     <div className={cn("flex flex-col gap-2.5 rounded-lg border border-white/10 bg-card/60 p-3 shadow-lg backdrop-blur-md", className)}>
       <div className="flex items-center justify-between gap-2">
-        <PaneSelector value={pane} onChange={onPaneChange} />
-        {action}
+        {drill ? (
+          <button
+            type="button"
+            onClick={() => setDrill(null)}
+            aria-label={`Back to ${paneLabel}`}
+            className="flex min-w-0 cursor-pointer items-center gap-1.5 bg-transparent text-sm font-medium text-foreground transition-colors hover:text-muted-foreground"
+          >
+            {/* A glyph, not lucide's ArrowLeft: that icon would be its own chunk before /start paints. */}
+            <span className="shrink-0" aria-hidden>←</span>
+            <span className="truncate font-semibold" style={{ color: classColor(drill.className) }}>{drill.name}</span>
+            <span className="shrink-0 text-muted-foreground">· {paneLabel}</span>
+          </button>
+        ) : (
+          <PaneSelector value={pane} onChange={onPaneChange} />
+        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {drill && breakouts && <span className="font-mono text-[10px] text-muted-foreground">{formatClock(breakouts.elapsedMs)}</span>}
+          {action}
+        </div>
       </div>
-      <div key={`${sourceKey}-${pane}`} className="flex flex-col gap-2 animate-in fade-in-0 duration-500">
-        {pane === "deaths" ? (
+      <div key={`${sourceKey}-${pane}-${drill?.name ?? ""}`} className="flex flex-col gap-2 animate-in fade-in-0 duration-500">
+        {drill ? (
+          breakouts
+            ? <Breakout drill={drill} breakouts={breakouts} unit={unit} />
+            : <div className="text-xs text-muted-foreground">Loading the live replay…</div>
+        ) : pane === "deaths" ? (
           data.deaths.length > 0
             ? data.deaths.slice(0, TOP_ROWS + 1).map((death, i) => <DeathLine key={i} death={death} />)
             : <div className="text-xs text-muted-foreground">No one died on this pull.</div>
         ) : totals ? (
           <>
-            <Bars totals={totals} unit={pane === "damage_done" ? "DPS" : "HPS"} rows={rows} onOpen={onOpen} />
+            <Bars totals={totals} unit={unit} rows={rows} onOpen={onOpen} onDrill={drillInto} />
             {firstDeath && <DeathLine death={firstDeath} />}
           </>
         ) : (
           <div className="text-xs text-muted-foreground">Loading the live replay…</div>
         )}
       </div>
-      {onOpen === openBelow && (
-        <a href={BELOW} className="text-xs text-link no-underline hover:underline">
-          Healing, threat, the whole replay: below
-        </a>
+      {run && (
+        <div className="text-xs text-muted-foreground">
+          Any player, any spell, any ten seconds.{" "}
+          <Link to={runPageHref(run, pane)} className="text-link no-underline hover:underline">
+            {RUN_PAGE_PANELS}+ panels on the run page →
+          </Link>
+        </div>
       )}
     </div>
   );
