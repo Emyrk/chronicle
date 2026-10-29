@@ -117,6 +117,7 @@ function PlayerExplanation({
     && summary.consistency !== null
     && consistencyLabel(summary.consistency, summary.typical, display) !== "High"
     && Math.abs(perWeek) * spanWeeks >= summary.spread;
+  const classColor = getClassColorVar(player.className);
   const bandRule = display === "parse" ? "±2 parse points, Med within ±4" : "±2% of Typical, Med within ±4%";
 
   return (
@@ -126,10 +127,10 @@ function PlayerExplanation({
           <span className="font-medium" style={{ color: getClassColorVar(player.className) }}>{player.name}</span>
           <span className="text-muted-foreground">: all {runs.length} runs in range, lowest to highest {unit}</span>
         </div>
-        <RunStrip runs={runs} summary={summary} display={display} />
+        <RunStrip runs={runs} summary={summary} display={display} color={classColor} />
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-sky-300" />Run</span>
-          <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-sky-300 ring-2 ring-white/80" />Latest {PERFORMANCE_RECENT_RUN_COUNT}</span>
+          <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ backgroundColor: classColor }} />Run</span>
+          <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full ring-2 ring-white/80" style={{ backgroundColor: classColor }} />Latest {PERFORMANCE_RECENT_RUN_COUNT}</span>
           <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full border-2 border-amber-300" />Outlier</span>
           <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-white/10" />Middle half of runs</span>
         </div>
@@ -198,7 +199,17 @@ function PlayerExplanation({
   );
 }
 
-function RunStrip({ runs, summary, display }: { runs: readonly ExplainedRun[]; summary: PerformanceSummary; display: PerformanceDisplayMode }) {
+function RunStrip({
+  runs,
+  summary,
+  display,
+  color,
+}: {
+  runs: readonly ExplainedRun[];
+  summary: PerformanceSummary;
+  display: PerformanceDisplayMode;
+  color: string;
+}) {
   const low = runs[0].value;
   const high = runs[runs.length - 1].value;
   const padding = Math.max((high - low) * 0.04, display === "parse" ? 1 : high * 0.01);
@@ -222,10 +233,14 @@ function RunStrip({ runs, summary, display }: { runs: readonly ExplainedRun[]; s
           title={fmt(run.value)}
           className={cn(
             "absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full",
-            run.outlier ? "border-2 border-amber-300 bg-transparent" : "bg-sky-300/80",
+            run.outlier ? "border-2 border-amber-300 bg-transparent" : "opacity-85",
             run.recent && "ring-2 ring-white/80",
           )}
-          style={{ left: `${position(run.value)}%`, top: `${50 + ((index % 3) - 1) * 25}%` }}
+          style={{
+            left: `${position(run.value)}%`,
+            top: `${50 + ((index % 3) - 1) * 25}%`,
+            backgroundColor: run.outlier ? undefined : color,
+          }}
         />
       ))}
     </div>
