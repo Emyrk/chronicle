@@ -169,6 +169,13 @@ func MoltenCoreSpeedrunRequirements(fl database.WoWFlavor) []rankings.SpeedrunRe
 	return mc
 }
 
+// BlackwingLairDamageTargets limits Broodlord rankings to boss damage.
+func BlackwingLairDamageTargets() map[string]rankings.DamageTargets {
+	return map[string]rankings.DamageTargets{
+		"Broodlord Lashlayer": {Mode: rankings.DamageTargetsBossOnly},
+	}
+}
+
 // BlackwingLairProgressionBosses returns the ordered boss encounters used for
 // progression. Vanilla+ adds the Decapitator and Krixix, combines Ebonroc with
 // Flamegor, and records Vaelastrasz as part of the Nefarian encounter.
@@ -269,8 +276,8 @@ func NaxxramasSpeedrunRequirements() []rankings.SpeedrunRequirement {
 		{Name: "Grobbulus", EntryIDs: []uint32{15931}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 		{Name: "Gluth", EntryIDs: []uint32{15932}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 		{Name: "Thaddius", EntryIDs: []uint32{15928}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-		{Name: "Stalagg", EntryIDs: []uint32{15929}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-		{Name: "Feugen", EntryIDs: []uint32{15930}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Stalagg", EntryIDs: []uint32{15929}, Count: 1, Category: rankings.SpeedrunCategoryTrash},
+		{Name: "Feugen", EntryIDs: []uint32{15930}, Count: 1, Category: rankings.SpeedrunCategoryTrash},
 		// Frostwyrm Lair
 		{Name: "Sapphiron", EntryIDs: []uint32{15989}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 		{Name: "Kel'Thuzad", EntryIDs: []uint32{15990}, Count: 1, Category: rankings.SpeedrunCategoryBosses},

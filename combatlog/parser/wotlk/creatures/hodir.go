@@ -9,9 +9,12 @@ import (
 )
 
 const (
-	hodirEntry                    uint32 = 32845
-	hodirAlternateEntry           uint32 = 32846
-	hodirAuraCleanupDeathCooldown        = 3 * time.Second
+	hodirEntry          uint32 = 32845
+	hodirAlternateEntry uint32 = 32846
+
+	// Surrender removes Hodir's debuffs immediately after the final damage.
+	// Observed wipe cleanup starts later, after the encounter resets.
+	hodirAuraCleanupDamageWindow = 100 * time.Millisecond
 )
 
 var hodirBossEntries = map[uint32]struct{}{
@@ -21,8 +24,7 @@ var hodirBossEntries = map[uint32]struct{}{
 
 type hodirCharacter struct {
 	*characters.Common
-	defeat          *characters.ScriptedDefeatDetector
-	lastPlayerDeath time.Time
+	defeat *characters.ScriptedDefeatDetector
 }
 
 func NewHodirEncounterCharacter(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
@@ -34,9 +36,11 @@ func NewHodirEncounterCharacter(id guid.GUID, all *characters.Characters) (chara
 		return nil, false
 	}
 
+	config := scriptedSurrenderWithAuraCleanupConfig(scriptedKeeperAuraCleanupThreshold)
+	config.AuraCleanup.DamageWindow = hodirAuraCleanupDamageWindow
 	return &hodirCharacter{
 		Common: characters.NewCommonCharacter(id, all),
-		defeat: characters.NewScriptedDefeatDetector(id, scriptedSurrenderWithAuraCleanupConfig(scriptedKeeperAuraCleanupThreshold)),
+		defeat: characters.NewScriptedDefeatDetector(id, config),
 	}, true
 }
 
@@ -44,26 +48,9 @@ func (c *hodirCharacter) Process(m messages.Message) error {
 	if err := c.Common.Process(m); err != nil {
 		return err
 	}
-	if slain, ok := m.(*messages.Slain); ok && slain.Victim.IsPlayer() {
-		c.lastPlayerDeath = slain.Date()
-	}
 
 	if signal, defeated := c.defeat.Observe(m, c.IsActive()); defeated {
-		if signal != characters.ScriptedDefeatAuraCleanup || c.auraCleanupAllowed(m.Date()) {
-			c.Died("hodir_defeated_"+string(signal), m)
-		}
+		c.Died("hodir_defeated_"+string(signal), m)
 	}
 	return nil
-}
-
-func (c *hodirCharacter) Start(reason string, m messages.Message) {
-	if !c.IsActive() {
-		c.lastPlayerDeath = time.Time{}
-		c.defeat.Reset()
-	}
-	c.Common.Start(reason, m)
-}
-
-func (c *hodirCharacter) auraCleanupAllowed(now time.Time) bool {
-	return c.lastPlayerDeath.IsZero() || now.Sub(c.lastPlayerDeath) >= hodirAuraCleanupDeathCooldown
 }

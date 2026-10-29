@@ -12,22 +12,22 @@ func DefaultClientPath(server string) string {
 	switch server {
 	case "faebright":
 		return "/mnt/windows-z/ChronicleGames/Faebright"
-	case "triumvirate":
-		return "/home/steven/Games/TriumvirateWoW"
+	//case "triumvirate":
+	//	return "/home/steven/Games/TriumvirateWoW"
 	case "turtle":
-		return "/home/steven/Games/turtlewow/drive_c/Program Files (x86)/TurtleWoW"
+		return "/mnt/windows-z/ChronicleGames/TurtleWoW"
 	case "epoch":
 		return "/mnt/windows-z/ChronicleGames/Epoch"
 	case "kronos":
 		return "/mnt/windows-z/ChronicleGames/Kronos"
 	case "azerothcore":
 		return "/home/steven/Games/Warmane"
-	case "ascension":
-		return "/home/steven/Games/ascension-wow/drive_c/Program Files/Ascension Launcher/resources/ascension-live"
+	//case "ascension":
+	//	return "/home/steven/Games/ascension-wow/drive_c/Program Files/Ascension Launcher/resources/ascension-live"
 	case "vanillaplus":
 		return "/mnt/windows-z/ChronicleGames/World of Warcraft Vanilla+"
 	case "octowow":
-		return "/home/steven/Games/OctoWoW"
+		return "/mnt/windows-z/ChronicleGames/OctoWoW"
 	case "lunatic":
 		return "/mnt/windows-z/ChronicleGames/LunaticPTR"
 	case "tbc":

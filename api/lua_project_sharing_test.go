@@ -6,12 +6,15 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/gorilla/sessions"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -20,10 +23,125 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/testservices"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
+
+func TestLuaProjectOwnershipQuotas(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		role  string
+		limit int
+	}{
+		{name: "default", limit: 3},
+		{name: "honored", role: "honored", limit: 5},
+		{name: "revered", role: "revered", limit: 10},
+		{name: "exalted", role: "exalted", limit: 20},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := testutil.Context(t, testutil.WaitLong)
+			zed := serviceauthz.Authz(testservices.Authz(t))
+			owner := uuid.New()
+			_, err := zed.InsertUser(ctx, database.InsertUserParams{ID: owner, Username: "quota-" + owner.String()})
+			require.NoError(t, err)
+			_, err = zed.InsertAddonAuthor(ctx, database.InsertAddonAuthorParams{UserID: owner, Name: "quota-" + owner.String()[:8]})
+			require.NoError(t, err)
+			if tc.role != "" {
+				require.NoError(t, zed.SetUserChronicleRoles(ctx, owner, []string{tc.role}))
+			}
+			api := &API{Opts: &Options{Zed: zed, Logger: slog.Default()}}
+			router := chi.NewRouter()
+			router.Post("/me/lua-projects", api.CreateLuaProject)
+			router.Get("/me/lua-projects/quota", api.GetMyLuaProjectQuota)
+			router.Delete("/me/lua-projects/{projectID}", api.DeleteLuaProject)
+			call := func(method, path, body string) *httptest.ResponseRecorder {
+				req := httptest.NewRequest(method, path, strings.NewReader(body)).WithContext(authz.AsUser(chronauth.WithClaims(ctx, &claims.Claims{Subject: owner}), owner))
+				if body != "" {
+					req.Header.Set("Content-Type", "application/json")
+				}
+				rec := httptest.NewRecorder()
+				router.ServeHTTP(rec, req)
+				return rec
+			}
+			projects := make([]chroniclesdk.LuaProject, 0, tc.limit)
+			for i := range tc.limit {
+				rec := call(http.MethodPost, "/me/lua-projects", `{"kind":"panel","name":"Addon `+strconv.Itoa(i)+`","slug":"addon-`+strconv.Itoa(i)+`"}`)
+				require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+				var project chroniclesdk.LuaProject
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &project))
+				projects = append(projects, project)
+			}
+			rec := call(http.MethodGet, "/me/lua-projects/quota", "")
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			var quota chroniclesdk.LuaProjectQuota
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &quota))
+			require.Equal(t, chroniclesdk.LuaProjectQuota{Owned: int64(tc.limit), Limit: int64(tc.limit)}, quota)
+			rec = call(http.MethodPost, "/me/lua-projects", `{"kind":"panel","name":"Too Many","slug":"too-many"}`)
+			require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+			require.Contains(t, rec.Body.String(), "shared storage and processing resources")
+
+			require.Equal(t, http.StatusNoContent, call(http.MethodDelete, "/me/lua-projects/"+projects[0].ID.String(), "").Code)
+			_, err = zed.GetLuaProject(ctx, projects[0].ID)
+			require.ErrorIs(t, err, pgx.ErrNoRows)
+			allowed, err := zed.CheckOne(ctx, nil, policy.New().Lua_project(projects[0].ID).CanManage_User(policy.New().User(owner)))
+			require.NoError(t, err)
+			require.False(t, allowed, "deletion removes every project relationship")
+			require.Equal(t, http.StatusCreated, call(http.MethodPost, "/me/lua-projects", `{"kind":"panel","name":"Replacement","slug":"replacement"}`).Code)
+		})
+	}
+}
+
+func TestConcurrentLuaProjectCreationHonorsQuota(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(testservices.Authz(t))
+	owner := uuid.New()
+	_, err := zed.InsertUser(ctx, database.InsertUserParams{ID: owner, Username: "concurrent-" + owner.String()})
+	require.NoError(t, err)
+	_, err = zed.InsertAddonAuthor(ctx, database.InsertAddonAuthorParams{UserID: owner, Name: "concurrent-" + owner.String()[:8]})
+	require.NoError(t, err)
+	api := &API{Opts: &Options{Zed: zed, Logger: slog.Default()}}
+	router := chi.NewRouter()
+	router.Post("/me/lua-projects", api.CreateLuaProject)
+
+	const attempts = 8
+	codes := make(chan int, attempts)
+	var wg sync.WaitGroup
+	for i := range attempts {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			body := `{"kind":"panel","name":"Concurrent ` + strconv.Itoa(i) + `","slug":"concurrent-` + strconv.Itoa(i) + `"}`
+			req := httptest.NewRequest(http.MethodPost, "/me/lua-projects", strings.NewReader(body)).WithContext(authz.AsUser(chronauth.WithClaims(ctx, &claims.Claims{Subject: owner}), owner))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			codes <- rec.Code
+		}()
+	}
+	wg.Wait()
+	close(codes)
+	created, conflicts := 0, 0
+	for code := range codes {
+		switch code {
+		case http.StatusCreated:
+			created++
+		case http.StatusConflict:
+			conflicts++
+		default:
+			t.Fatalf("unexpected create status %d", code)
+		}
+	}
+	require.Equal(t, 3, created)
+	require.Equal(t, attempts-3, conflicts)
+	owned, err := zed.CountLuaProjectsByOwner(ctx, owner)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), owned)
+}
 
 func TestLuaProjectPermissions(t *testing.T) {
 	t.Parallel()
@@ -43,6 +161,7 @@ func TestLuaProjectPermissions(t *testing.T) {
 	router.Put("/me/lua-projects/{projectID}/star", api.StarLuaProject)
 	router.Delete("/me/lua-projects/{projectID}/star", api.UnstarLuaProject)
 	router.Get("/me/lua-projects/{projectID}", api.GetMyLuaProject)
+	router.Delete("/me/lua-projects/{projectID}", api.DeleteLuaProject)
 	router.Patch("/me/lua-projects/{projectID}", api.UpdateLuaProject)
 	router.Get("/me/lua-projects/{projectID}/contributors", api.ListLuaProjectContributors)
 	router.Put("/me/lua-projects/{projectID}/contributors/{author}", api.PutLuaProjectContributor)
@@ -201,6 +320,11 @@ func TestLuaProjectPermissions(t *testing.T) {
 	require.Equal(t, http.StatusOK, code)
 	require.Equal(t, chroniclesdk.LuaProjectPermissions{View: true, Use: true}, removed.Permissions)
 	require.Equal(t, http.StatusForbidden, call(editor, http.MethodGet, contributors, "").Code)
+	require.Equal(t, http.StatusForbidden, call(stranger, http.MethodDelete, settings, "").Code)
+	require.Equal(t, http.StatusForbidden, call(editor, http.MethodDelete, settings, "").Code)
+	require.Equal(t, http.StatusNoContent, call(owner, http.MethodDelete, settings, "").Code)
+	code, _ = page(uuid.Nil, byID)
+	require.Equal(t, http.StatusNotFound, code)
 }
 
 // The real public routes must see the signed-in user; requests carry session claims, not a SpiceDB actor.

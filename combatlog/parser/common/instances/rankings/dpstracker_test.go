@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
@@ -87,11 +88,40 @@ func TestDPSTracker_SeparatesRankedBossDamage(t *testing.T) {
 	require.NotNil(t, stats)
 	assert.Equal(t, int64(700), stats.DamageDone)
 	assert.Equal(t, int64(700), stats.RankedDamageDone) // Default includes adds.
-	tracker.ClassifyDamage(encID, DamageTargets{Mode: DamageTargetsBossOnly}, addDamage)
+	tracker.ClassifyDamage(encID, DamageTargets{Mode: DamageTargetsBossOnly}, addDamage, nil)
 	tracker.FinishDamageClassification(encID)
 	assert.Equal(t, int64(200), addDamage.Unranked)
 	assert.Equal(t, int64(500), stats.RankedDamageDone)
 	assert.Equal(t, int64(200), stats.UnrankedDamageDone)
+}
+
+func TestDPSTracker_ExcludesDamageOutsideRankingWindow(t *testing.T) {
+	t.Parallel()
+	tracker, units := setupDPSTracker()
+	player := makePlayerGUID(1)
+	boss := makeCreatureGUID(12057, 1)
+	units.Info[player] = unitinfo.Info{Guid: player, IsPlayer: true, CanCooperate: true}
+	units.Info[boss] = unitinfo.Info{Guid: boss, CanCooperate: false}
+	start := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	window := &encounter.RankingWindow{Start: start.Add(10 * time.Second), End: start.Add(50 * time.Second)}
+	encID := uuid.New()
+	tracker.FightStarted(encID, nil)
+	caster := player
+	var damage []*messages.Damage
+	for _, at := range []int{5, 20, 55} {
+		msg := &messages.Damage{MessageBase: messages.Base(start.Add(time.Duration(at) * time.Second)), Caster: &caster, Target: boss, Amount: 100}
+		require.NoError(t, tracker.ProcessMessage(true, encID, msg))
+		damage = append(damage, msg)
+	}
+	tracker.FightEnded(encID, nil)
+	for _, msg := range damage {
+		tracker.ClassifyDamage(encID, DamageTargets{Mode: DamageTargetsEntries, EntryIDs: []uint32{12057}}, msg, window)
+	}
+	tracker.FinishDamageClassification(encID)
+	require.Equal(t, int64(300), tracker.Result()[encID].Units[player].DamageDone)
+	require.Equal(t, int64(100), tracker.Result()[encID].Units[player].RankedDamageDone)
+	require.Equal(t, int64(200), tracker.Result()[encID].Units[player].UnrankedDamageDone)
+	require.Equal(t, []int64{100, 0, 100}, []int64{damage[0].Unranked, damage[1].Unranked, damage[2].Unranked})
 }
 
 func TestDPSTracker_WhitelistExcludesEffectiveDamageButNotOverkill(t *testing.T) {
@@ -114,8 +144,8 @@ func TestDPSTracker_WhitelistExcludesEffectiveDamageButNotOverkill(t *testing.T)
 	require.NoError(t, tracker.ProcessMessage(true, encID, excluded))
 	tracker.FightEnded(encID, nil)
 	rule := DamageTargets{Mode: DamageTargetsEntries, EntryIDs: []uint32{12057, 12099}}
-	tracker.ClassifyDamage(encID, rule, allowed)
-	tracker.ClassifyDamage(encID, rule, excluded)
+	tracker.ClassifyDamage(encID, rule, allowed, nil)
+	tracker.ClassifyDamage(encID, rule, excluded, nil)
 	tracker.FinishDamageClassification(encID)
 	stats := tracker.Result()[encID].Units[player]
 	require.Equal(t, int64(250), stats.DamageDone)
@@ -157,7 +187,7 @@ func TestDPSTracker_PhaseTargetsCommitOnlySlainTarget(t *testing.T) {
 	require.NoError(t, tracker.ProcessMessage(true, encID, molgeimDamage))
 	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Slain{Victim: steelbreaker}))
 	tracker.FightEnded(encID, nil)
-	tracker.ClassifyDamage(encID, DamageTargets{}, molgeimDamage)
+	tracker.ClassifyDamage(encID, DamageTargets{}, molgeimDamage, nil)
 	tracker.FinishDamageClassification(encID)
 
 	stats := tracker.Result()[encID].Units[player]
@@ -437,6 +467,47 @@ func TestDPSTracker_HealingTargetsMatchHealingDonePanel(t *testing.T) {
 	require.NotNil(t, stats)
 	assert.Equal(t, int64(300), stats.HealingDone)
 	assert.Equal(t, int64(125), stats.HealingAbsorbed)
+}
+
+func TestDPSTracker_HealingUsesRankingWindow(t *testing.T) {
+	t.Parallel()
+	tracker, units := setupDPSTracker()
+	healer := makePlayerGUID(1)
+	target := makePlayerGUID(2)
+	units.Info[healer] = unitinfo.Info{Guid: healer, IsPlayer: true, CanCooperate: true}
+	units.Info[target] = unitinfo.Info{Guid: target, IsPlayer: true, CanCooperate: true}
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	window := &encounter.RankingWindow{Start: base.Add(10 * time.Second), End: base.Add(50 * time.Second)}
+	encID := uuid.New()
+	tracker.FightStarted(encID, nil)
+	for _, tc := range []struct {
+		at, heal, absorb int
+	}{
+		{5, 100, 10}, {10, 200, 20}, {35, 300, 30}, {50, 400, 40}, {55, 500, 50},
+	} {
+		at := base.Add(time.Duration(tc.at) * time.Second)
+		require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Heal{
+			MessageBase: messages.Base(at), Caster: healer, Target: target, Amount: int32(tc.heal),
+		}))
+		require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Absorbed{
+			MessageBase: messages.Base(at), Caster: healer, Target: target, Amount: int32(tc.absorb),
+		}))
+	}
+	tracker.FightEnded(encID, nil)
+	tracker.ClassifyHealing(encID, window)
+	stats := tracker.Result()[encID].Units[healer]
+	require.Equal(t, int64(900), stats.HealingDone)
+	require.Equal(t, int64(90), stats.HealingAbsorbed)
+	require.Empty(t, tracker.healingCredits)
+
+	// A fight without a clean window retains its full healing totals.
+	tracker.FightStarted(encID, nil)
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Heal{
+		MessageBase: messages.Base(base), Caster: healer, Target: target, Amount: 100,
+	}))
+	tracker.FightEnded(encID, nil)
+	tracker.ClassifyHealing(encID, nil)
+	require.Equal(t, int64(100), tracker.Result()[encID].Units[healer].HealingDone)
 }
 
 func TestDPSTracker_AbsorbAttribution(t *testing.T) {

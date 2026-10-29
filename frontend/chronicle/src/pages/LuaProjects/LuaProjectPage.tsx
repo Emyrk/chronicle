@@ -3,8 +3,8 @@ import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } 
 import { useQuery } from "@tanstack/react-query"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, Upload } from "lucide-react"
-import { addonPath, authorPath, createRelease, deleteRelease, latestRelease, nextReleaseTag, uploadDraft, type LuaRelease } from "./api"
+import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, Trash2, Upload, Users } from "lucide-react"
+import { addonPath, authorPath, createRelease, deleteProject, deleteRelease, latestRelease, nextReleaseTag, uploadDraft, type LuaRelease } from "./api"
 import { AddonIcon } from "./AddonIcon"
 import { AddonReleases, ReleasesTable, VersionPicker } from "./AddonReleases"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
@@ -14,6 +14,8 @@ import { AddonAiUsage, AddonContributors } from "./AddonTeam"
 import { isAddonId, useAddonPage } from "./addonRoute"
 import { card, errorMessage, kindLabel, smallButton } from "./addonUi"
 import { defaultRef, formatBytes, isImagePath, MAIN_REF, manifestSummary, packageDownloadURL, packageSha, readPackageFiles, shortSha, type PackageFile, type PackageRef } from "./packageFiles"
+
+type AddonTab = "releases" | "contributors"
 
 const formatDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
 const prose = "prose prose-sm dark:prose-invert max-w-none prose-a:text-primary prose-pre:bg-muted/60 prose-pre:text-foreground prose-code:font-normal prose-code:before:content-none prose-code:after:content-none [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:py-0.5"
@@ -94,11 +96,11 @@ function AddonPage({ projectId }: { projectId?: string }) {
   const about = files ? manifestSummary(files) : null
 
   // The default build stays out of the URL, so the page keeps following the latest release.
-  function show(next: { ref?: PackageRef | null; file?: string | null; releases?: boolean }) {
+  function show(next: { ref?: PackageRef | null; file?: string | null; tab?: AddonTab }) {
     setSearch(current => {
       const params = new URLSearchParams(current)
-      // Opening a build or a file leaves the releases table.
-      if (next.releases) params.set("tab", "releases")
+      // Opening a build or a file leaves the releases and contributors views.
+      if (next.tab) params.set("tab", next.tab)
       else params.delete("tab")
       if (next.ref !== undefined) {
         if (next.ref && project && next.ref !== defaultRef(project)) params.set("ref", next.ref)
@@ -133,13 +135,26 @@ function AddonPage({ projectId }: { projectId?: string }) {
   const refIcon = ref === MAIN_REF ? project.main?.icon : project.releases.find(release => release.tag === ref)?.icon
   const workshop = addonPath(project, "/edit")
   const canTag = can.release && !!project.main && latest?.sha256 !== project.main.sha256
-  const showReleases = search.get("tab") === "releases"
+  // Contributors are only listed to people who can edit.
+  const tab = search.get("tab") === "releases" ? "releases" : search.get("tab") === "contributors" && can.edit ? "contributors" : null
+  const showReleases = tab === "releases"
   const removeRelease = (release: LuaRelease) => {
     if (window.confirm(release === latest ? `Delete ${release.tag}? Panels fall back to the previous release that still has files.` : `Delete ${release.tag}?`)) void mutate(() => deleteRelease(project.id, release.tag), `Deleted ${release.tag}.`)
   }
   const tagRelease = () => {
     const tag = window.prompt("Tag this release. Everyone running the addon gets it:", nextReleaseTag(project.releases))?.trim()
     if (tag) void mutate(async () => { await createRelease(project.id, project.revision, tag); show({ ref: null }) }, `Released ${tag}.`)
+  }
+
+  const removeProject = async () => {
+    if (!window.confirm(`Delete ${project.name}? This permanently deletes main, every release, contributor access, and stored files. People tracking it will no longer be able to use it.`)) return
+    setBusy(true); setError(""); setNotice("")
+    try {
+      await deleteProject(project.id)
+      navigate(project.author ? authorPath(project.author) : "/addons", { replace: true })
+    } catch (e) {
+      setError(errorMessage(e)); setBusy(false)
+    }
   }
 
   return <div className="mx-auto flex w-full max-w-[2080px] items-start justify-center gap-6 px-4 py-8">
@@ -160,7 +175,13 @@ function AddonPage({ projectId }: { projectId?: string }) {
         </div>
         <div className="flex flex-wrap items-start gap-2">
           <AddonStar key={project.id} project={project} canUse={can.use} />
-          {project.kind === "panel" && can.edit && <Link className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90" to={workshop}><Code2 className="size-4" /> Open in Addon Workshop</Link>}
+          {can.edit && <button type="button" aria-pressed={tab === "contributors"} onClick={() => show({ tab: tab === "contributors" ? undefined : "contributors" })}
+            className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent ${tab === "contributors" ? "border-primary/50 bg-muted" : "border-border"}`}>
+            <Users className="size-4" /> Contributors</button>}
+          {can.manage && <button type="button" disabled={busy} onClick={() => void removeProject()}
+            className="inline-flex items-center gap-2 rounded-md border border-destructive/40 px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50">
+            <Trash2 className="size-4" /> Delete addon</button>}
+          {project.kind === "panel" && can.edit && <Link className="inline-flex items-center gap-2 rounded-md bg-primary-darker px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-darker/90" to={workshop}><Code2 className="size-4" /> Open in Addon Workshop</Link>}
         </div>
       </header>
       {can.manage && !project.author && <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
@@ -169,7 +190,8 @@ function AddonPage({ projectId }: { projectId?: string }) {
       {notice && <p role="status" className="rounded-md border border-emerald-600/30 bg-emerald-600/10 p-3 text-sm">{notice}</p>}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="min-w-0 space-y-4">
-          {showReleases ? <ReleasesTable project={project} latest={latest} viewing={null} canRelease={can.release} busy={busy}
+          {tab === "contributors" ? <AddonContributors project={project} canManage={can.manage} onClose={() => show({})} /> :
+          showReleases ? <ReleasesTable project={project} latest={latest} viewing={null} canRelease={can.release} busy={busy}
             onView={next => show({ ref: next })} onDelete={removeRelease} onClose={() => show({})} /> :
           !ref || !sha ? <div className={`${card} text-sm text-muted-foreground`}>{can.edit
             ? <>No files yet. {project.kind === "panel" ? "Open the Addon Workshop and save to main, or upload" : "Upload"} a tar archive from Releases.</>
@@ -215,8 +237,8 @@ function AddonPage({ projectId }: { projectId?: string }) {
             {can.edit && project.kind === "panel" && <AddonAiUsage projectId={project.id} />}
             <p className="border-t border-border pt-3 text-xs text-muted-foreground">Created {formatDate(project.created_at)} · <Link className="text-primary underline-offset-2 hover:underline" to="/addons/api">API reference</Link></p>
           </section>
-          <AddonReleases project={project} latest={latest} viewing={sha && !showReleases ? ref : null} canTag={canTag} canRelease={can.release} busy={busy}
-            onView={next => show({ ref: next })} onTag={tagRelease} onDelete={removeRelease} onShowAll={() => show({ releases: true })}>
+          <AddonReleases project={project} latest={latest} viewing={sha && !tab ? ref : null} canTag={canTag} canRelease={can.release} busy={busy}
+            onView={next => show({ ref: next })} onTag={tagRelease} onDelete={removeRelease} onShowAll={() => show({ tab: "releases" })}>
             {can.edit && <details className="mt-4 border-t border-border pt-3 text-xs">
               <summary className="flex cursor-pointer items-center gap-1.5 font-medium text-muted-foreground hover:text-foreground"><Upload className="size-3.5" /> Upload a tar archive</summary>
               <div className="mt-2 space-y-2">
@@ -226,7 +248,6 @@ function AddonPage({ projectId }: { projectId?: string }) {
               </div>
             </details>}
           </AddonReleases>
-          {can.edit && <AddonContributors project={project} canManage={can.manage} />}
         </aside>
       </div>
     </main>

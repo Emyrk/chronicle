@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 
 declare global {
@@ -13,10 +13,15 @@ declare global {
  */
 export function usePageTracking() {
   const location = useLocation();
+  const pagePath = location.pathname + location.search;
+  const previousPagePath = useRef(pagePath);
 
   useEffect(() => {
-    window.gtag?.("event", "page_view", {
-      page_path: location.pathname + location.search,
-    });
-  }, [location]);
+    if (previousPagePath.current === pagePath) {
+      return;
+    }
+    previousPagePath.current = pagePath;
+
+    window.gtag?.("event", "page_view", { page_path: pagePath });
+  }, [pagePath]);
 }

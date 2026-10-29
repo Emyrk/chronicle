@@ -5,6 +5,12 @@ import (
 	"time"
 )
 
+// LuaProjectQuota is the caller's owned-addon resource allowance.
+type LuaProjectQuota struct {
+	Owned int64 `json:"owned"`
+	Limit int64 `json:"limit"`
+}
+
 type CreateLuaProjectRequest struct {
 	Kind string `json:"kind"`
 	Name string `json:"name"`

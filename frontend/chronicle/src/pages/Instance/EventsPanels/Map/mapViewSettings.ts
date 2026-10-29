@@ -18,11 +18,16 @@ export interface EffectSettings {
   aboveDisc: AboveDiscMode;
   /** Seconds of movement trail behind each unit; 0 for none. */
   trailSeconds: number;
+  /** Size of units on the 3D map, as a percentage of their normal size. */
+  chipScalePercent: number;
   /** Translucent 2D artwork over the dungeon mesh for coordinate debugging. */
   alignmentOverlay: boolean;
 }
 
 export const EFFECTS_STORAGE_KEY = "chronicle.map.effects3d";
+export const MIN_CHIP_SCALE_PERCENT = 15;
+export const MAX_CHIP_SCALE_PERCENT = 200;
+export const CHIP_SCALE_STEP_PERCENT = 5;
 
 export const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
   enabled: true,
@@ -35,6 +40,7 @@ export const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
   castMode: "selected",
   aboveDisc: "none",
   trailSeconds: 0,
+  chipScalePercent: 100,
   alignmentOverlay: false,
 };
 
@@ -65,6 +71,9 @@ export function readStoredEffectSettings(): EffectSettings {
     if (!DENSITY_OPTIONS.includes(settings.maxEffects)) settings.maxEffects = MAX_EFFECT_PRIMITIVES;
     if (!ABOVE_DISC_MODES.some((mode) => mode.value === settings.aboveDisc)) settings.aboveDisc = DEFAULT_EFFECT_SETTINGS.aboveDisc;
     if (!TRAIL_OPTIONS.some((option) => option.value === settings.trailSeconds)) settings.trailSeconds = DEFAULT_EFFECT_SETTINGS.trailSeconds;
+    settings.chipScalePercent = typeof settings.chipScalePercent === "number" && Number.isFinite(settings.chipScalePercent)
+      ? Math.min(MAX_CHIP_SCALE_PERCENT, Math.max(MIN_CHIP_SCALE_PERCENT, settings.chipScalePercent))
+      : DEFAULT_EFFECT_SETTINGS.chipScalePercent;
     return settings;
   } catch {
     return DEFAULT_EFFECT_SETTINGS;

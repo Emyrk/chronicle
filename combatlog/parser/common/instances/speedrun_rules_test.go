@@ -63,6 +63,15 @@ func TestMoltenCoreDamageTargets(t *testing.T) {
 	}
 }
 
+func TestBlackwingLairDamageTargets(t *testing.T) {
+	t.Parallel()
+
+	rules := BlackwingLairFactory.FlavoredRankings(database.WoWFlavor{database.FlavorVanilla})
+	require.Equal(t, map[string]rankings.DamageTargets{
+		"Broodlord Lashlayer": {Mode: rankings.DamageTargetsBossOnly},
+	}, rules.DamageByEncounter)
+}
+
 func TestLevel60Cap(t *testing.T) {
 	t.Parallel()
 

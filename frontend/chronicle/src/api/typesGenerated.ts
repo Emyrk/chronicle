@@ -2391,6 +2391,7 @@ export interface InstanceRankingRecord {
  */
 export interface InstanceReport {
     readonly name: string;
+    readonly parse_duration_ms: Duration;
     readonly finalize_duration_ms: Duration;
     readonly db_insert_duration_ms: Duration;
     readonly encounter_count: number;
@@ -3065,6 +3066,15 @@ export interface LuaProjectPermissions {
     readonly edit: boolean;
     readonly release: boolean;
     readonly manage: boolean;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * LuaProjectQuota is the caller's owned-addon resource allowance.
+ */
+export interface LuaProjectQuota {
+    readonly owned: number;
+    readonly limit: number;
 }
 
 // From chroniclesdk/lua_project.go
@@ -5522,6 +5532,7 @@ export interface WoWEncounter {
     readonly remaining?: readonly GUID[];
     readonly start_time: string;
     readonly end_time: string;
+    readonly ranking_window?: WoWRankingWindow;
 }
 
 // From chroniclesdk/log.go
@@ -5716,6 +5727,18 @@ export interface WoWParsedLogJobOutput {
      * Report contains detailed timing and performance metrics for the parse job.
      */
     readonly report?: LogParseReport;
+}
+
+// From chroniclesdk/log.go
+/**
+ * WoWRankingWindow marks the interval scored for boss rankings, relative to the
+ * original encounter start. Absent when the full encounter is scored.
+ */
+export interface WoWRankingWindow {
+    readonly basis: string; // "selected-unit-activity"
+    readonly start_offset_ms: number;
+    readonly end_offset_ms: number;
+    readonly duration_ms: number;
 }
 
 // From types/constants.go

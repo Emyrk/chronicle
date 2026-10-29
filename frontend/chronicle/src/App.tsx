@@ -18,7 +18,6 @@ const Terms = lazy(() => import("./pages/Terms").then(({ Terms }) => ({ default:
 const ParsingPage = lazy(() => import("./pages/Parsing/ParsingPage").then(({ ParsingPage }) => ({ default: ParsingPage })))
 const CohortViewerPage = lazy(() => import("./pages/Parsing/CohortViewerPage").then(({ CohortViewerPage }) => ({ default: CohortViewerPage })))
 const StartPage = lazy(() => import("./pages/Landing/StartPage").then(({ StartPage }) => ({ default: StartPage })))
-const RunStillPage = lazy(() => import("./pages/Landing/RunStillPage").then(({ RunStillPage }) => ({ default: RunStillPage })))
 const HeroClipPage = lazy(() => import("./pages/Landing/HeroClipPage").then(({ HeroClipPage }) => ({ default: HeroClipPage })))
 const Empty = lazy(() => import("./pages/Empty").then(({ Empty }) => ({ default: Empty })))
 const Upload = lazy(() => import("./pages/Upload/Upload").then(({ Upload }) => ({ default: Upload })))
@@ -123,6 +122,7 @@ const LuaProjectsPage = lazy(() => import("./pages/LuaProjects/LuaProjectsPage")
 const LuaProjectPage = lazy(() => import("./pages/LuaProjects/LuaProjectPage").then(({ LuaProjectPage }) => ({ default: LuaProjectPage })))
 const LuaProjectWorkspacePage = lazy(() => import("./pages/LuaProjects/LuaProjectWorkspacePage"))
 const AddonAuthorPage = lazy(() => import("./pages/LuaProjects/AddonAuthorPage").then(({ AddonAuthorPage }) => ({ default: AddonAuthorPage })))
+const NewAddonPage = lazy(() => import("./pages/LuaProjects/NewAddonPage").then(({ NewAddonPage }) => ({ default: NewAddonPage })))
 const AddonWorkspaceByPath = lazy(() => import("./pages/LuaProjects/LuaProjectWorkspacePage").then(({ AddonWorkspaceByPath }) => ({ default: AddonWorkspaceByPath })))
 const LuaPanelApiPage = lazy(() => import("./pages/LuaProjects/LuaPanelApiPage"))
 const AssistantDebugPage = lazy(() => import("./pages/AssistantDebug/AssistantDebugPage"))
@@ -168,13 +168,12 @@ function App() {
 
   return (
     <>
-      {/* The still renderer's page is screenshotted: no consent banner over it. */}
+      {/* Render pages (the hero clip) are recorded: no consent banner over them. */}
       {!location.pathname.startsWith("/render/") && <NitroPayRuntime />}
       <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/start" element={<StartPage />} />
-      <Route path="/render/run-still/:instanceId" element={<RunStillPage />} />
       <Route path="/render/hero-clip/:instanceId" element={<HeroClipPage />} />
       <Route path="/download" element={<DownloadPage />} />
       <Route path="/get-sidekick" element={<DownloadPage />} />
@@ -217,6 +216,7 @@ function App() {
         <Route path="/addons/api" element={<LuaPanelApiPage />} />
         <Route path="/addons/id/:projectId" element={<LuaProjectPage />} />
         <Route path="/addons/id/:projectId/edit" element={<LuaProjectWorkspacePage />} />
+        <Route path="/addons/new" element={<NewAddonPage />} />
         <Route path="/addons/:author" element={<AddonAuthorPage />} />
         <Route path="/addons/:author/:slug" element={<LuaProjectPage />} />
         <Route path="/addons/:author/:slug/edit" element={<AddonWorkspaceByPath />} />

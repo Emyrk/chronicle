@@ -70,6 +70,14 @@ export interface Encounter {
   remaining?: string[]; // GUIDs of enemies that did not die
   /** Optional phases within this encounter (sorted by order). */
   phases?: EncounterPhase[];
+  /** Interval scored for boss rankings, when shorter than the full encounter. */
+  ranking_window?: EncounterRankingWindow;
+}
+
+/** Ranked interval as offsets from the encounter start. */
+export interface EncounterRankingWindow {
+  start_offset_ms: number;
+  end_offset_ms: number;
 }
 
 export interface Instance {

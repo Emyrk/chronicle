@@ -348,6 +348,54 @@ export function CooldownUsagePost({ post }: PostProps) {
   );
 }
 
+export function RankedDamagePost({ post }: PostProps) {
+  return (
+    <ShortPost post={post}>
+      <p>
+        Not every point of damage on the meter counts toward encounter rankings. Overkill never counts, and on many
+        bosses only certain targets do: on Garr, damage to Garr and the Firesworn counts, but cleaving a Lava Surger that
+        wandered in does not. Damage Done can now show you exactly that split.
+      </p>
+      <p>
+        Turn on <strong>Ranked</strong> in the Damage Done panel and every player&apos;s damage is divided in two:
+      </p>
+      <ul>
+        <li>
+          <strong>Ranked</strong> is the damage that counts toward rankings: effective damage to the encounter&apos;s
+          ranking targets. Absorbed damage still counts.
+        </li>
+        <li>
+          <strong>Excluded</strong> is everything else: overkill, and damage to targets the encounter does not rank. It
+          shows as its own column, and in each player&apos;s ability and target breakdown.
+        </li>
+      </ul>
+      <p>
+        The meter reorders by ranked damage, so the mage who cleaved adds that don&apos;t count may drop a few places. Hit
+        counts, crit rate, and hit sizes still reflect every original hit. Ranked is off by default, so the meter shows
+        raw damage until you turn it on. To find the individual hits, use the new <strong>Has Excluded</strong> filter.
+      </p>
+      <p>
+        Which targets count for each encounter is listed on the new{" "}
+        <a href="/leaderboards/rulesets">Rulesets</a> tab in Leaderboards. Each raid&apos;s ruleset shows its DPS ranking
+        targets, marked as bosses or adds, alongside its speedrun requirements: required kills, level range, and when
+        the timer starts. Encounters without a listed rule count all eligible hostile damage, including trash.
+      </p>
+      <h2>Ranked time</h2>
+      <p>
+        The same rules now decide how long a kill lasted. Ranked DPS stops the clock when the last ranked target dies,
+        so the seconds spent cleaning up after the kill no longer drag DPS down. On a 1:48
+        Garr kill where Garr dies at 1:31, ranked DPS divides by 1:31.
+      </p>
+      <p>
+        When a kill has a shorter ranked window, a <strong>Ranked</strong> strip appears under the encounter in the
+        sidebar. It shows where the window falls in the fight; click it to filter every panel to that window, so Damage
+        Done matches the leaderboard numbers. If a ranked target survives, resets, or is engaged more than once, the full
+        encounter is used instead. The Rulesets tab shows each encounter&apos;s ranked time next to its targets.
+      </p>
+    </ShortPost>
+  );
+}
+
 export function CharacterCosmeticsPost({ post }: PostProps) {
   return (
     <ShortPost post={post}>

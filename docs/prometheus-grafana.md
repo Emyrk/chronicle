@@ -50,9 +50,12 @@ For multiple Chronicle replicas, use the labels supplied by your Prometheus serv
 
 The River queue depth and oldest-job-age gauges are database-global values collected by every Chronicle replica. When several replicas are scraped, use `max` across replicas for those metrics instead of `sum`, which would count the same database rows more than once. River execution counters and histograms are local to the worker process and should be summed across replicas. Configured worker capacity is also per process and should be summed for fleet-wide capacity.
 
-## Included Grafana dashboard
+## Included Grafana dashboards
 
-Chronicle includes an importable dashboard at [`docs/grafana/chronicle-operations.json`](grafana/chronicle-operations.json). It covers API traffic, parser outcomes and bottlenecks, River queues, cache behavior, authentication, and leader election.
+Chronicle includes two importable dashboards:
+
+- [`docs/grafana/chronicle-operations.json`](grafana/chronicle-operations.json) covers service health, parser outcomes and bottlenecks, River queues, cache behavior, authentication, and leader election.
+- [`docs/grafana/chronicle-http-traffic.json`](grafana/chronicle-http-traffic.json) investigates HTTP request volume, rate, and latency by route template and method.
 
 See [`docs/grafana/README.md`](grafana/README.md) for import and file-provisioning instructions.
 
@@ -251,6 +254,26 @@ Interpretation:
 | Database insertion | PostgreSQL latency, connection pressure, locks, indexes, or large transactions |
 
 Stage histograms record total stage time for a job. A job can contain more than one instance, so stage values are not per-instance latency.
+
+### Which game instances are slow?
+
+`chronicle_logparse_instance_duration_seconds` records per-instance work with two labels:
+
+- `instance_name`: the parsed raid or dungeon name. This is distinct from Prometheus's `instance` scrape-target label.
+- `stage`: `parse`, `finalize`, or `db_insert`.
+
+Per-instance p95 latency by stage:
+
+```promql
+histogram_quantile(
+  0.95,
+  sum by (le, instance_name, stage) (
+    rate(chronicle_logparse_instance_duration_seconds_bucket[$__rate_interval])
+  )
+)
+```
+
+Filter to `stage="parse"` when comparing event-processing cost between raids and dungeons. The parse stage measures time spent dispatching combat-log events through that instance's encounter hooks. It does not include shared log loading or parse-wide consumers.
 
 ### Which parser consumer is the bottleneck?
 
@@ -819,6 +842,7 @@ For low-traffic deployments, count-based alerts are often more reliable than rat
 | `chronicle_logparse_finalize_duration_seconds` | Histogram | none | Aggregate instance-finalization time |
 | `chronicle_logparse_db_insert_duration_seconds` | Histogram | none | Aggregate parsed-data insertion time |
 | `chronicle_logparse_consumer_duration_seconds` | Histogram | `consumer` | Time spent in code-defined parser and consumer stages |
+| `chronicle_logparse_instance_duration_seconds` | Histogram | `instance_name`, `stage` | Per-game-instance parse, finalization, and database insertion time |
 
 ### River
 

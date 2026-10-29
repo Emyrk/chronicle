@@ -232,6 +232,7 @@ reference_bg: 12,17,20          # that image's flat background colour
 # minimap: false  # only when this CDN product omits MAID textures; disables reference alignment / IoU
 # water_tint: 0.7  water_color: "214,96,32"          (lava; defaults 0.42 / 78,150,196)
 # source: mpq  client: <mpq_clients name>             (1.12 client, see below)  placed_wmo: <fid or name>
+# allow_stale_placement_bounds: true  # placed WMO only: explicit exception for a known-stale MODF bbox
 ```
 2. `tools/fetch_map.py <slug>`. It detects the kind. It aborts, on purpose, on multi-WMO
    or rotated/translated placements, and on terrain tiles without minimap ids — extend
@@ -317,7 +318,10 @@ client's `Data/` read-only through StormLib (built into `cache/mpq/`, pinned by
   raid is `blackrock_upper_guild.wmo` in ADT 33_45 at yaw 35°): `placed_wmo:` in map.yaml (CDN: the
   root FileDataID; MPQ: the file name). fetch_map reads the ADTs for that WMO's MODF (one uniqueID),
   checks the placement against the MODF extents (adt2obj convention, < 1 yd) and writes the OBJ in a
-  global WMO's frame, so the rest of the WMO pipeline and chronicle_render work unchanged.
+  global WMO's frame, so the rest of the WMO pipeline and chronicle_render work unchanged. A custom
+  client can replace the WMO without refreshing the WDT's cached MODF bounds; only for that evidenced
+  case, set `allow_stale_placement_bounds: true`. Position and rotation still come from the MODF, while
+  `fetch.json` records the extent error, `bounds_verified: false`, and `stale_bounds_allowed: true`.
 - **Terrain maps from MPQ are NOT built** (monolithic ADT, MCLQ, MTEX: a 1.12 terrain reader is
   unwritten). A changed terrain map on a fork: stop and report.
 - Inventory of what a fork's custom patches touch: `mpq_inventory.py --custom-from <first custom

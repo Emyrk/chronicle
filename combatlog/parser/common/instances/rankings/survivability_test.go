@@ -56,6 +56,52 @@ func TestSurvivabilityTracker(t *testing.T) {
 	require.InDelta(t, 25, otherStats.AlivePercentage, 0.001)
 }
 
+func TestSurvivabilityTrackerRankingWindow(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, time.September, 21, 12, 0, 0, 0, time.UTC)
+	encounterID := uuid.New()
+	before := guid.GUID(1)
+	during := guid.GUID(2)
+	stillDead := guid.GUID(3)
+	tracker := NewSurvivabilityTracker()
+	tracker.FightStarted(encounterID, &messages.Slain{MessageBase: messages.Base(start)})
+	for _, event := range []struct {
+		at     int
+		player guid.GUID
+		dead   bool
+	}{
+		{20, before, true}, {20, stillDead, true},
+		{40, before, false}, {45, during, true}, {55, during, false},
+		{65, stillDead, false}, {70, before, true}, {80, during, true},
+	} {
+		at := start.Add(time.Duration(event.at) * time.Second)
+		if event.dead {
+			require.NoError(t, tracker.ProcessMessage(true, encounterID, &messages.Slain{
+				MessageBase: messages.Base(at), Victim: event.player,
+			}))
+		} else {
+			require.NoError(t, tracker.ProcessMessage(true, encounterID, &messages.Resurrection{
+				MessageBase: messages.Base(at), Target: event.player,
+			}))
+		}
+	}
+	tracker.FightFinalized(encounterID, start, start.Add(100*time.Second))
+	require.Equal(t, int32(2), tracker.Result()[encounterID].Players[before].Deaths)
+
+	// The boss ranking window starts after the first two deaths and ends before
+	// later deaths. Dead players remain dead when the window starts.
+	tracker.FightFinalized(encounterID, start.Add(30*time.Second), start.Add(60*time.Second))
+	result := tracker.Result()[encounterID]
+	require.Equal(t, float64(30), result.DurationSecs)
+	require.Equal(t, int32(0), result.Players[before].Deaths)
+	require.InDelta(t, 20, result.Players[before].AliveDurationSecs, 0.001)
+	require.InDelta(t, 200.0/3, result.Players[before].AlivePercentage, 0.001)
+	require.Equal(t, int32(1), result.Players[during].Deaths)
+	require.InDelta(t, 20, result.Players[during].AliveDurationSecs, 0.001)
+	require.Equal(t, int32(0), result.Players[stillDead].Deaths)
+	require.Zero(t, result.Players[stillDead].AlivePercentage)
+}
+
 func TestSurvivabilityTrackerResetsPerFight(t *testing.T) {
 	t.Parallel()
 

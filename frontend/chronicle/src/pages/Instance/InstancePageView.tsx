@@ -37,8 +37,15 @@ import {
 import { cn } from "@/lib/utils";
 import { SeamlessLayoutContext } from "./EventsPanels/SeamlessLayoutContext";
 import { useFocusMode } from "@/hooks/useFocusMode";
-import type { Instance, Encounter, EncounterPhase, EnemyUnit } from "./InstancePage";
-import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } from "./phaseTimeRange";
+import type { Instance, Encounter, EnemyUnit } from "./InstancePage";
+import {
+  activePhaseForTimeRange,
+  phaseTimeRangeSelection,
+  phaseWidthPercent,
+  rangeStartPercent,
+  rankingWindowActiveForTimeRange,
+  type EncounterOffsetRange,
+} from "./phaseTimeRange";
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { listSelectableCustomPanels, useCustomPanelRegistry } from "./EventsPanels/custom/pluginRegistry";
@@ -328,6 +335,71 @@ function formatDurationMs(ms: number): string {
   return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
 }
 
+/** Encounter-length track highlighting the interval scored for boss rankings. */
+function RankingWindowStrip({
+  encounter,
+  window,
+  active,
+  onSelect,
+}: {
+  encounter: Encounter;
+  window: EncounterOffsetRange;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const rankedMs = window.end_offset_ms - window.start_offset_ms;
+  const encounterMs = new Date(encounter.end_time).getTime() - new Date(encounter.start_time).getTime();
+  return (
+    <div className="px-2 pb-2">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onSelect}
+            aria-label={`Filter to ranked window: ${formatDurationMs(rankedMs)}`}
+            aria-pressed={active}
+            className={cn(
+              "relative flex h-6 w-full cursor-pointer items-center justify-between overflow-hidden rounded border px-2 text-[11px] font-semibold transition-all duration-150",
+              "hover:-translate-y-px hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              active ? "border-emerald-400/80 text-emerald-50" : "border-emerald-400/40 text-emerald-200",
+            )}
+          >
+            <span
+              aria-hidden
+              className={cn("absolute inset-y-0", active ? "bg-emerald-500/35" : "bg-emerald-500/15")}
+              style={{
+                left: `${rangeStartPercent(window, encounter)}%`,
+                width: `${phaseWidthPercent(window, encounter)}%`,
+              }}
+            />
+            <span className="relative">Ranked</span>
+            <span className="relative font-mono font-normal">{formatDurationMs(rankedMs)}</span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent
+          side="top"
+          sideOffset={8}
+          hideArrow
+          className="w-[260px] rounded-lg border border-border/80 bg-popover p-3.5 text-foreground shadow-2xl"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <p className="whitespace-nowrap text-sm font-semibold">Ranked window</p>
+            <span className="shrink-0 font-mono text-xs text-muted-foreground">
+              {formatDurationMs(rankedMs)} of {formatDurationMs(encounterMs)}
+            </span>
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Boss DPS rankings use this interval: from the first boss engaging to the last boss dying.
+          </p>
+          <p className="mt-2 border-t border-border/70 pt-2 text-[11px] font-medium text-amber-500">
+            Click to filter this window <span aria-hidden>→</span>
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
+
 // ============================================================================
 // Trash grouping
 // ============================================================================
@@ -463,6 +535,7 @@ function EncounterSidebar({
   trashGroups,
   selectedIds,
   activePhaseId,
+  rankingWindowActive,
   onSelect,
   onSelectMany,
   onSelectPhase,
@@ -481,9 +554,10 @@ function EncounterSidebar({
   trashGroups: TrashGroup[];
   selectedIds: string[];
   activePhaseId: string | null;
+  rankingWindowActive: boolean;
   onSelect: (id: string, mode: 'single' | 'toggle') => void;
   onSelectMany: (ids: string[]) => void;
-  onSelectPhase: (phase: EncounterPhase, encounterId: string) => void;
+  onSelectPhase: (range: EncounterOffsetRange, encounterId: string) => void;
   onCollapse: () => void;
   isMobile: boolean;
   showHints: boolean;
@@ -771,6 +845,7 @@ function EncounterSidebar({
           const killParse = encounter.kill_type === "clean" ? killParses?.get(encounter.id) : undefined;
           const phases = [...(encounter.phases ?? [])].sort((a, b) => a.order - b.order);
           const showExpandedPhases = isSelected && phases.length > 0 && !multipleEncountersSelected;
+          const rankingWindow = isSelected && !multipleEncountersSelected ? encounter.ranking_window : undefined;
 
           return (
             <div
@@ -872,6 +947,15 @@ function EncounterSidebar({
                     );
                   })}
                 </div>
+              )}
+
+              {rankingWindow && (
+                <RankingWindowStrip
+                  encounter={encounter}
+                  window={rankingWindow}
+                  active={rankingWindowActive}
+                  onSelect={() => onSelectPhase(rankingWindow, encounter.id)}
+                />
               )}
             </div>
           );
@@ -3211,7 +3295,7 @@ function InstancePageViewContent({
     }
   };
 
-  const handleSelectPhase = useCallback((phase: EncounterPhase, encounterId: string) => {
+  const handleSelectPhase = useCallback((phase: EncounterOffsetRange, encounterId: string) => {
     if (!canEditSharedView) return;
     const selection = phaseTimeRangeSelection(phase, encounterId);
 
@@ -3906,6 +3990,12 @@ function InstancePageViewContent({
     timeRange?.startOffsetMs ?? null,
     timeRange?.endOffsetMs ?? null,
   ), [selectedEncounters, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs]);
+  const rankingWindowActive = rankingWindowActiveForTimeRange(
+    selectedEncounters,
+    timeRange?.enabled ?? false,
+    timeRange?.startOffsetMs ?? null,
+    timeRange?.endOffsetMs ?? null,
+  );
   const trashGroups = groupTrashEncounters(instance.encounters);
 
   const headerBg = getInstanceBackground(instance.name);
@@ -4479,6 +4569,7 @@ function InstancePageViewContent({
             trashGroups={trashGroups}
             selectedIds={selectedIds}
             activePhaseId={activePhaseId}
+            rankingWindowActive={rankingWindowActive}
             onSelect={handleSelect}
             onSelectMany={(ids) => {
               setInternalSelectedIds(ids);

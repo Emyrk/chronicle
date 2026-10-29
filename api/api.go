@@ -362,6 +362,7 @@ func (api *API) Routes() chi.Router {
 				}
 				r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanCreate_lua_project_User)).Post("/me/lua-projects", api.CreateLuaProject)
 				r.Get("/me/lua-projects", api.ListMyLuaProjects)
+				r.Get("/me/lua-projects/quota", api.GetMyLuaProjectQuota)
 				r.Get("/me/lua-projects/starred", api.ListStarredLuaProjects)
 				r.Put("/me/lua-projects/{projectID}/star", api.StarLuaProject)
 				r.Delete("/me/lua-projects/{projectID}/star", api.UnstarLuaProject)
@@ -373,6 +374,7 @@ func (api *API) Routes() chi.Router {
 				r.Delete("/me/lua-projects/{projectID}/contributors/{author}", api.DeleteLuaProjectContributor)
 				r.Get("/me/lua-projects/{projectID}", api.GetMyLuaProject)
 				r.Patch("/me/lua-projects/{projectID}", api.UpdateLuaProject)
+				r.Delete("/me/lua-projects/{projectID}", api.DeleteLuaProject)
 				r.Get("/me/lua-projects/{projectID}/draft/{hash}/package", api.DownloadMyLuaProjectDraft)
 				r.Put("/me/lua-projects/{projectID}/draft", api.PutLuaProjectDraft)
 				r.Post("/me/lua-projects/{projectID}/releases", api.CreateLuaProjectRelease)
@@ -705,7 +707,6 @@ func (api *API) Routes() chi.Router {
 							r.Route("/{instance_id}", func(r chi.Router) {
 								r.Use(httpmw.InstanceIDMiddleware(api.Opts.Zed))
 								r.Get("/cosmetics", api.InstanceCosmetics)
-								r.Get("/still.jpg", api.InstanceRunStill)
 								r.Get("/events/{type}", api.InstanceEvents)
 								r.With(api.trackGuildInstanceView).Get("/", api.Instance)
 								r.Get("/youtube", api.GetInstanceYoutube)

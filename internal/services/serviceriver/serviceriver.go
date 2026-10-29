@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/chronicle/custompanel"
 	"github.com/Emyrk/chronicle/chronicle/guildanalytics"
 	"github.com/Emyrk/chronicle/chronicle/retention"
@@ -49,7 +48,6 @@ type Service struct {
 
 	*riverqueue.Queues
 	logParsingWorkers int64
-	runStillChrome    string
 }
 
 func New(broker *services.Services) *Service {
@@ -111,15 +109,6 @@ func (s *Service) Start(ctx context.Context) error {
 	riverqueue.AddWorker(q, chron.NewWorkerReLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerRegressionSnapshot())
 
-	// Replay stills: one headless Chrome at a time, so a burst of uploads never starves the API.
-	chron.SetRunStillOptions(chronicle.RunStillOptions{
-		ChromePath: s.runStillChrome,
-		BaseURL:    serviceaccessurl.AccessURL(s.broker),
-	})
-	riverqueue.AddWorker(q, chron.NewWorkerRenderRunStill())
-	q.AddQueue(riverqueue.QueueRunStills, river.QueueConfig{
-		MaxWorkers: 1,
-	})
 	if !bot.Disabled() {
 		bot.SetQueue(q)
 		riverqueue.AddWorker(q, bot.NewWorkerSyncDiscordUser())
@@ -327,15 +316,6 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_LOG_PARSING_WORKERS",
 			Default:     "1",
 			Value:       serpent.Int64Of(&s.logParsingWorkers),
-		},
-		{
-			Name:        "Run Still Chrome Path",
-			Description: "Chrome or Chromium binary used to render replay stills for the landing's recent runs. Empty disables stills.",
-			Required:    false,
-			Flag:        "run-still-chrome-path",
-			Env:         "CHRONICLE_RUN_STILL_CHROME_PATH",
-			Default:     "",
-			Value:       serpent.StringOf(&s.runStillChrome),
 		},
 	}
 }

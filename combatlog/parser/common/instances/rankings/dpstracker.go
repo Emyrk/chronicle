@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/combatmetrics"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
@@ -49,6 +50,15 @@ type DPSResult struct {
 	Units map[guid.GUID]*UnitCombatStats
 }
 
+// healingCredit records enough to exclude healing outside a finalized ranking
+// window without retaining message objects (which the parser may reuse).
+type healingCredit struct {
+	caster   guid.GUID
+	at       time.Time
+	amount   int64
+	absorbed bool
+}
+
 // DPSTracker is an instance hook that accumulates damage done, damage taken,
 // and healing done per unit per encounter. At FightEnded it classifies each
 // unit (player vs creature, owner relationship) via unitdb and stores the
@@ -68,6 +78,7 @@ type DPSTracker struct {
 	damageTaken      map[guid.GUID]int64
 	healingDone      map[guid.GUID]int64
 	absorbDone       map[guid.GUID]int64
+	healingCredits   []healingCredit
 	forms            *druidFormTracker
 
 	// Results across all encounters.
@@ -101,6 +112,7 @@ func (t *DPSTracker) FightStarted(_ uuid.UUID, m messages.Message) {
 	t.damageTaken = make(map[guid.GUID]int64)
 	t.healingDone = make(map[guid.GUID]int64)
 	t.absorbDone = make(map[guid.GUID]int64)
+	t.healingCredits = nil
 	t.forms.FightStarted(m)
 	if t.assemblyOfIron != nil {
 		t.assemblyOfIron.reset()
@@ -126,32 +138,33 @@ func (t *DPSTracker) isRankedDamageTarget(target guid.GUID) bool {
 
 // ClassifyDamage assigns the encounter's finalized target rule to a buffered
 // message and updates the already-snapshotted per-player ranking totals.
-func (t *DPSTracker) ClassifyDamage(encounterID uuid.UUID, rule DamageTargets, msg *messages.Damage) {
+func (t *DPSTracker) ClassifyDamage(encounterID uuid.UUID, rule DamageTargets, msg *messages.Damage, window *encounter.RankingWindow) {
 	msg.Unranked = 0
 	eligible := combatmetrics.EffectiveDamage(msg)
 	if eligible <= 0 {
 		return
 	}
+	ranked := window == nil || (!msg.Date().Before(window.Start) && !msg.Date().After(window.End))
 	if t.assemblyOfIron != nil {
-		if t.assemblyExcluded[msg] {
+		if t.assemblyExcluded[msg] || !ranked {
 			msg.Unranked = eligible
 		}
 		return
 	}
-	ranked := true
 	switch rule.Mode {
 	case DamageTargetsBossOnly:
-		ranked = t.isRankedDamageTarget(msg.Target)
+		ranked = ranked && t.isRankedDamageTarget(msg.Target)
 	case DamageTargetsEntries:
-		ranked = false
+		allowedTarget := false
 		if entry, ok := msg.Target.GetEntry(); ok {
 			for _, allowed := range rule.EntryIDs {
 				if entry == allowed {
-					ranked = true
+					allowedTarget = true
 					break
 				}
 			}
 		}
+		ranked = ranked && allowedTarget
 	}
 	if ranked {
 		return
@@ -164,6 +177,31 @@ func (t *DPSTracker) ClassifyDamage(encounterID uuid.UUID, rule DamageTargets, m
 	if stats := t.results[encounterID].Units[credit]; stats != nil {
 		stats.RankedDamageDone -= eligible
 		stats.UnrankedDamageDone += eligible
+	}
+}
+
+// ClassifyHealing limits healing and absorb totals used by HPS rankings to
+// the same interval as ranked damage. Raw encounter events remain unchanged.
+func (t *DPSTracker) ClassifyHealing(encounterID uuid.UUID, window *encounter.RankingWindow) {
+	defer func() { t.healingCredits = nil }()
+	if window == nil {
+		return
+	}
+	result := t.results[encounterID]
+	if result == nil {
+		return
+	}
+	for _, credit := range t.healingCredits {
+		if !credit.at.Before(window.Start) && !credit.at.After(window.End) {
+			continue
+		}
+		if stats := result.Units[credit.caster]; stats != nil {
+			if credit.absorbed {
+				stats.HealingAbsorbed -= credit.amount
+			} else {
+				stats.HealingDone -= credit.amount
+			}
+		}
 	}
 }
 
@@ -268,6 +306,7 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 		effective := int64(msg.Amount) - int64(msg.Overheal)
 		if effective > 0 {
 			t.healingDone[msg.Caster] += effective
+			t.healingCredits = append(t.healingCredits, healingCredit{caster: msg.Caster, at: msg.Date(), amount: effective})
 		}
 
 	case *messages.Absorbed:
@@ -278,6 +317,7 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 		}
 		if msg.Amount > 0 && !msg.Caster.IsZero() {
 			t.absorbDone[msg.Caster] += int64(msg.Amount)
+			t.healingCredits = append(t.healingCredits, healingCredit{caster: msg.Caster, at: msg.Date(), amount: int64(msg.Amount), absorbed: true})
 		}
 	}
 

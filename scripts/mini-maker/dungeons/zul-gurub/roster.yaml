@@ -1,0 +1,235 @@
+# Zul Gurub — boss roster for mini-maker.
+# Blizzard IP: private/local use only.
+#
+# Pipeline input for every `mini.py ... --dungeon zul-gurub` command. Working
+# state goes to work/zul-gurub/<boss>/, published minis to dungeons/zul-gurub/<boss>/.
+#
+# HOUSE SCULPT STYLE (what Meshy can actually reconstruct and a printer can
+# actually print — proven on wailing-caverns):
+#   - Thick, chunky, toy-like volumes. Antlers "as thick as a thumb", spikes
+#     are "short chunky cones", teeth "short thick cones, few in number".
+#   - Everything FUSED: weapons/staffs touch a hand AND the base; snakes,
+#     vines, tails are "one fat coil fused to the shoulders / the base";
+#     legs and feet "merge into the base".
+#   - NO thin spikes, no thin sheets (frills, fins, wings are "thick solid
+#     slabs with no holes"), no loose strands, no floating sparkles or
+#     particles. Glow/electricity/magic is a PAINT accent, never geometry.
+#   - Hair, cloth, robes, hoods, moss are "a solid sculpted mass" / "a closed
+#     solid volume down to the base".
+#   - Water, smoke, ground effects are a solid sculpted shape on the base.
+#   - Write a `# Shape:` comment above each boss (e.g. "bulky quadruped",
+#     "robed humanoid + serpent coils") — it keeps the notes honest.
+#
+# FIELDS (per boss):
+#   slug      lowercase kebab-case, unique; also the folder name
+#   name      display name only — NEVER reaches the stills prompt (proper
+#             nouns come back as painted lettering)
+#   desc      appearance only, no names, no lore
+#   palette   3-5 colour words (ignored for finish: grey)
+#   views     [front, back] is the proven pair
+#   finish    painted | grey
+#   notes     sculpt constraints, in the house style above
+#   back      required with a back view: what is visible from behind and
+#             what is hidden (PLAYBOOK.md "Back-view rule")
+#   portrait  prompt for the painted portrait (`mini.py portraits`); lore
+#             words are fine here, it is not a Meshy input
+
+name: Zul'Gurub
+
+# Appended to every boss `portrait:` as "<portrait>. <portrait_style>".
+portrait_style: >-
+  richly textured oil painting on rough canvas, visible brush strokes and
+  impasto, painterly fantasy video-game concept art in the style of classic
+  World of Warcraft loading-screen illustration, dramatic rim lighting,
+  overgrown jungle temple of mossy stepped stone ziggurats and carved troll idols, hanging vines and blood-red altar light through green voodoo haze, single subject centered, three-quarter view, full figure,
+  no text, no lettering, no frame, no border
+
+# Entry ids (chronicle hostiles.go map 309 + Wowhead classic) are in each
+# `# Shape:` header; the published Chronicle miniature carries them.
+# Multi-form bosses use the form the mini should be (the operator's call, 2026-10-17).
+
+bosses:
+  # Shape: bat-winged humanoid crouched on a stone altar. Entry 14517.
+  # Form: BAT (phase 1). Wings are the risk: thick slabs braced to the altar.
+  - slug: jeklik
+    name: High Priestess Jeklik
+    desc: a huge bat-woman crouched on a low carved stone altar on the base, a lean muscular body with dark furred skin, a bat head with tall pointed ears, a short snout and jaws open showing a few short thick fangs, two great leathery wings half-spread and swept down so their lower edges rest on the altar and the base, clawed hands gripping the altar edge, a loincloth of chunky bone beads at the hips
+    palette: [charcoal black, deep teal, bone ivory, mossy stone]
+    views: [front, back]
+    finish: painted
+    notes: the wings are thick solid leathery slabs with no holes and no thin finger bones, braced along their whole lower edge against the body, the altar and the base; ears and fangs are short thick cones; the legs merge into the altar; the teal glow on the wings is only a paint pattern
+    back: From behind, the two thick wing slabs spread down to the base fill the view, with the furred back, the backs of the pointed ears and the altar under the feet between them. The backs of the wings are plain solid leather; the face and the hands are hidden in front.
+    portrait: High Priestess Jeklik, the Gurubashi bat priestess transformed into a towering dark-furred bat-woman, leathery wings spread over a blood-stained altar, a swarm of bats around her
+
+  # Shape: upright serpent body coiled on the base, humanoid arms. Entry 14507.
+  # Form: SNAKE (phase 2, the kill form).
+  - slug: venoxis
+    name: High Priest Venoxis
+    desc: a giant cobra-man with a thick upright serpent body rising from heavy coils on the base, a broad muscular scaly chest with a pale cream ribbed belly, two thick humanoid arms with clawed hands held forward, a flared cobra hood behind a blunt snake head with short thick fangs, chunky golden shoulder pauldrons and golden bracers
+    palette: [jungle green, pale cream, burnished gold, deep emerald]
+    views: [front, back]
+    finish: painted
+    notes: the serpent body is one fat coil resting on the base along its whole length; the hood is a thick solid slab fused to the neck and shoulders; fangs are short thick cones; arms slightly apart from the body; the venom-green glow is only a paint accent
+    back: From behind, the back of the thick cobra hood and the scaly green back of the serpent body fill the view, sweeping down into the heavy coils on the base; the golden pauldrons show at each shoulder. The face, belly and hands are hidden in front.
+    portrait: High Priest Venoxis, the Gurubashi snake priest transformed into a towering green cobra-man with golden armor, hood flared, venom dripping, poison clouds coiling around a serpent idol
+
+  # Shape: giant spider, low body, eight legs. Entry 14510.
+  # Form: SPIDER (risk: eight legs; fallback is her robed troll form).
+  - slug: marli
+    name: High Priestess Mar'li
+    desc: a giant jungle spider crouched low over the round base, a big bulbous abdomen striped in dark green and bright lime, a bony pale carapace on the head and thorax, a cluster of round eyes and two short thick curved fangs, eight short thick jointed legs in bone-white plates bent low and planted around the base
+    palette: [bone white, dark jungle green, violet purple, sickly lime]
+    views: [front, back]
+    finish: painted
+    notes: the eight legs are short and as thick as a finger, bent low and merging into the base, not one thin leg; tusks and ears are short thick cones; the abdomen rests close to the base; fangs are short thick cones; no web strands; the lime stripes are only paint
+    back: From behind, the big striped abdomen fills the view, with the eight thick legs splayed around it on the base; the eyes and fangs are hidden in front.
+    portrait: High Priestess Mar'li, the Gurubashi spider priestess transformed into a monstrous troll-spider, eight legs spread across a web-shrouded temple chamber, spider eggs and spiderlings around her
+
+  # Shape: armored troll warrior with two-handed axe, on foot. Entry 11382.
+  # On foot: Ohgan (14988) is a separate unit in the log, so he gets his own mini.
+  - slug: mandokir
+    name: Bloodlord Mandokir
+    desc: a tall muscular troll warlord standing in a wide stance, a crest of thick red hair swept back as one solid mass, long tusks, heavy blood-red plate armor with spiked shoulder plates, a huge two-handed axe held diagonally across the body with its head resting on the base, a skull trophy belt
+    palette: [blood red, blue-grey skin, dark iron, bone]
+    views: [front, back]
+    finish: painted
+    notes: the axe haft is as thick as a finger, gripped in both hands and its head rests on the base; the hair crest is a solid sculpted mass; shoulder spikes and tusks are short thick cones; legs merge into the base
+    back: From behind, the broad armored back, the red hair crest, the spiked shoulder plates and the heels on the base are visible; the axe blade shows at one side where it rests on the base. The face and the front of the armor are hidden.
+    portrait: Bloodlord Mandokir, the Gurubashi raptor lord and executioner, a towering red-armored troll with a great axe, his raptor Ohgan at his side, levelling up on the corpses of fallen heroes in a jungle arena
+
+  # Shape: armored raptor, bipedal, tail on base. Entry 14988.
+  - slug: ohgan
+    name: Ohgan
+    desc: a big armored war raptor standing on two thick legs, body leaning forward, a long heavy tail lying on the base, a long head with jaws half open showing a few short thick teeth, a bony skull-plate helm and chunky spiked armor plates along the back, small clawed forearms, mottled orange and grey hide
+    palette: [rust orange, slate grey, bone ivory, dark iron]
+    views: [front, back]
+    finish: painted
+    notes: the legs are thick and merge into the base; the tail is as thick as a leg and rests on the base along its whole length; teeth and armor spikes are short thick cones; no reins or straps
+    back: From behind, the heavy tail lying on the base toward the viewer, the two thick legs and the armored back plates fill the view; the head is mostly hidden in front.
+    portrait: Ohgan, Bloodlord Mandokir's armored war raptor, snarling and charging through a jungle temple court
+
+  # Shape: sea serpent rising from a water mass on the base. Entry 15114.
+  # Ref is dark and ambiguous (looks twin-necked) — check before stills.
+  - slug: gahzranka
+    name: Gahz'ranka
+    desc: a great pale-green sea serpent rising out of a solid sculpted swell of water on the base, a thick scaly neck arching up to a blunt reptilian head with jaws open, a row of short thick fin-spikes down the neck, mottled pale-green and lime scales with a cream belly
+    palette: [pale jade green, lime, cream, deep sea teal]
+    views: [front, back]
+    finish: painted
+    notes: the water is a solid sculpted mass on the base with no spray; the neck is as thick as the head and rises straight out of the water; fin-spikes are short thick cones fused to the neck; no thin fins
+    back: From behind, the back of the arching neck with its row of short fin-spikes rises out of the water swell on the base; the face and jaws are hidden in front.
+    portrait: Gahz'ranka, the great sea serpent summoned with a Mudskunk lure, rising from the jungle pool of Zul'Gurub with jaws open, water cascading
+
+  # Shape: tiger-headed humanoid in robes. Entries 14509 (vanilla) + 14599 (OctoWoW/TWoW).
+  # Form: TIGER (phase 2, the kill form).
+  - slug: thekal
+    name: High Priest Thekal
+    desc: a hulking muscular tiger-man standing upright and leaning forward, a striped tiger head with jaws open showing a few short thick fangs, bare striped orange chest and arms, chunky teal bracers on the forearms, a short teal loincloth at the waist, thick digitigrade legs, big clawed hands raised forward
+    palette: [tiger orange, black stripes, teal, deep gold]
+    views: [front, back]
+    finish: painted
+    notes: legs are thick and merge into the base; fangs and claws are short thick cones; arms slightly apart from the body; the stripes are paint only; no tail
+    back: From behind, the broad striped back, the back of the head, the loincloth and both thick legs on the base are visible; the face and hands are hidden in front.
+    portrait: High Priest Thekal, the Gurubashi tiger priest transformed into a roaring tiger-man, tigers prowling at his sides in a torchlit temple courtyard
+
+  # Shape: hunched panther-woman. Entry 14515.
+  # Form: PANTHER (she shifts both ways; the panther is the memorable one).
+  - slug: arlokk
+    name: High Priestess Arlokk
+    desc: a lean hunched panther-woman standing on two thick digitigrade legs, sleek dark blue-black fur, a panther head with pointed ears and a short muzzle, long thick arms ending in big clawed hands held low and forward, a crimson and silver armored corset with dark shoulder pads, a short thick tail curling to the base
+    palette: [midnight blue-black, crimson, silver, violet]
+    views: [front, back]
+    finish: painted
+    notes: legs merge into the base; the tail is thick and rests on the base; claws are short thick cones; arms slightly apart from the body
+    back: From behind, the furred back, the back of the corset, the pointed ears and the thick tail curling to the base are visible; the face and claws are hidden in front.
+    portrait: High Priestess Arlokk, the Gurubashi panther priestess, a sleek blue-black panther-woman stalking from shadow, panthers emerging from the gloom of a moonlit temple
+
+  # Shape: robed witch doctor with big mask + staff. Entry 11380.
+  - slug: jindo
+    name: Jin'do the Hexxer
+    desc: a lanky troll witch doctor in a wide stance, a huge tall white wooden ritual mask covering the face, green feather tufts at the sides of the mask, chunky purple and green armor with spiked shoulder plates, a long thick staff topped with a skull held upright in one hand with its foot on the base
+    palette: [bone white, violet purple, jungle green, dark iron]
+    views: [front, back]
+    finish: painted
+    notes: the staff is as thick as a finger and touches the hand and the base; the mask is a thick solid slab fused to the head; feathers are solid sculpted tufts; legs merge into the base
+    back: From behind, the back of the tall mask, the spiked shoulder plates, the armored back and the heels on the base are visible, with the staff upright at one side. The face of the mask is hidden.
+    portrait: Jin'do the Hexxer, the masked Gurubashi witch doctor, raising a skull staff as hexes and shades swirl, brain-wash totems glowing around him
+
+  # Shape: winged serpent god rearing up. Entry 14834.
+  - slug: hakkar
+    name: Hakkar the Soulflayer
+    desc: a towering winged serpent god rearing up from heavy coils on the base, a long thick serpent body with red scales and a pale cream ribbed belly, a fierce beaked reptile head with a crest of chunky blue feathers, two thick muscular arms with clawed hands, two great feathered wings half-raised as thick solid slabs with their lower edges resting against the coils
+    palette: [blood red, sky blue, cream, gold]
+    views: [front, back]
+    finish: painted
+    notes: the serpent body is one fat coil resting on the base; the wings are thick solid feathered slabs with no gaps between feathers, braced against the body and the coils; the feather crest is a solid sculpted mass; arms slightly apart from the body
+    back: From behind, the two thick feathered wing slabs and the red-scaled back between them rise above the heavy coils on the base; the feather crest shows at the top. The face, belly and hands are hidden in front.
+    portrait: Hakkar the Soulflayer, the Blood God, a colossal red-scaled winged serpent rearing above a blood altar, blue and red feathered wings spread, corrupted blood raining down
+
+  # Edge of Madness: one spawns per lockout (Gri'lek / Hazza'rah / Renataki / Wushoolay).
+  # Shape: hunched giant troll, huge fists. Entry 15082.
+  - slug: grilek
+    name: Gri'lek
+    desc: a hulking hunched giant troll leaning forward on enormous fists planted on the base, a small head sunk between massive shoulders, a bone mask over the face with long tusks, dark armored bracers on the thick forearms, a sickly green glow on the chest
+    palette: [moss green skin, dark bronze, bone, toxic green]
+    views: [front, back]
+    finish: painted
+    notes: the fists and legs merge into the base; tusks are short thick cones; the green glow is only a paint accent
+    back: From behind, the massive hunched back and shoulders fill the view, with the planted fists and legs on the base around it; the face is hidden.
+    portrait: Gri'lek of the Iron Blood, a hulking giant troll spirit summoned at the Edge of Madness, glowing green with madness
+
+  # Shape: robed troll illusionist. Entry 15083.
+  - slug: hazzarah
+    name: Hazza'rah
+    desc: a tall troll illusionist in a long green robe falling as a closed solid volume to the base, chunky shoulder pads carved as big pale skulls, a red top-knot and long tusks, thick arms held out from the body with open clawed hands
+    palette: [jade green, bone white, crimson, gold]
+    views: [front, back]
+    finish: painted
+    notes: the robe is a closed solid volume down to the base; the skull pauldrons are solid and fused to the shoulders; tusks are short thick cones
+    back: From behind, the long closed robe, the backs of the skull pauldrons and the top-knot are visible; the face and hands are hidden.
+    portrait: Hazza'rah the Dreamweaver, a troll illusionist summoned at the Edge of Madness, nightmare illusions swirling around him
+
+  # Shape: lean troll rogue with daggers. Entry 15084.
+  - slug: renataki
+    name: Renataki
+    desc: a lean wiry troll rogue in a crouched ready stance, a tall spiky black hair crest as one solid mass, red spiked shoulder plates, dark leather armor with studded straps, a short thick dagger in each hand held close against the thighs
+    palette: [teal skin, crimson, dark leather, steel]
+    views: [front, back]
+    finish: painted
+    notes: the daggers are short and thick and touch the legs; the hair crest is a solid sculpted mass; shoulder spikes are short thick cones; legs merge into the base
+    back: From behind, the spiky hair crest, the backs of the red shoulder plates, the leather back and the heels on the base are visible; the daggers are hidden at the sides.
+    portrait: Renataki of the Thousand Blades, a troll rogue spirit summoned at the Edge of Madness, vanishing into shadow with blades drawn
+
+  # Shape: armored troll with huge hammer. Entry 15085.
+  - slug: wushoolay
+    name: Wushoolay
+    desc: a tall armored troll storm-caller in a wide stance, a crest of green hair as one solid mass, a wide-open roaring mouth with tusks, heavy dark armor with green trim and big square pauldrons, a huge square-headed warhammer held low in one hand with its head resting on the base
+    palette: [dark iron, toxic green, teal skin, bone]
+    views: [front, back]
+    finish: painted
+    notes: the hammer haft is as thick as a finger and the hammer head rests on the base; the hair crest is solid; lightning is only a green paint accent, never geometry
+    back: From behind, the armored back, the square pauldrons, the hair crest and the heels on the base are visible, with the hammer head on the base at one side.
+    portrait: Wushoolay the Storm Witch, a troll storm-caller summoned at the Edge of Madness, green lightning crackling around a great hammer
+
+  # Thekal's zealots (boss-flagged in chronicle). Optional.
+  # Shape: armored troll shaman with mace. Entry 11347.
+  - slug: lorkhan
+    name: Zealot Lor'Khan
+    desc: a broad troll shaman in heavy dark plate armor with large rounded pauldrons, long tusks and a short mohawk as one solid mass, a thick spiked mace held in one hand with its head resting on the base
+    palette: [dark slate, steel blue, teal skin, bone]
+    views: [front, back]
+    finish: painted
+    notes: the mace haft is thick and touches the base; tusks are short thick cones; any lightning is only a blue paint accent
+    back: From behind, the broad armored back, the rounded pauldrons and the heels on the base are visible, with the mace head at one side.
+    portrait: Zealot Lor'Khan, a fanatical troll shaman of Thekal's guard, lightning in his fist
+
+  # Shape: troll rogue in fur and spikes. Entry 11348.
+  - slug: zath
+    name: Zealot Zath
+    desc: a lean troll rogue in dark blue armor with shaggy fur mantles over the shoulders, a tall black hair crest as one solid mass, long tusks, a short thick blade held close against one leg
+    palette: [navy blue, black fur, teal skin, steel]
+    views: [front, back]
+    finish: painted
+    notes: the fur mantles are solid sculpted masses; the blade touches the leg; legs merge into the base
+    back: From behind, the shaggy fur mantles, the hair crest and the armored back with the heels on the base are visible; the blade is hidden at the side.
+    portrait: Zealot Zath, a troll rogue zealot of Thekal's guard, blades drawn in the shadows

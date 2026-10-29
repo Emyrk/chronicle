@@ -1443,7 +1443,9 @@ CREATE TABLE log_instance_encounters (
     start_time timestamp with time zone NOT NULL,
     end_time timestamp with time zone NOT NULL,
     kill_type kill_type NOT NULL,
-    map_id integer DEFAULT 0 NOT NULL
+    map_id integer DEFAULT 0 NOT NULL,
+    ranking_start_offset_ms bigint,
+    ranking_end_offset_ms bigint
 );
 
 CREATE TABLE log_instance_events (
@@ -3296,6 +3298,8 @@ CREATE INDEX idx_data_grants_user_id ON data_grants USING btree (user_id);
 CREATE INDEX idx_dbc_cooldown_spells_class ON dbc_cooldown_spells USING btree (dataset_id, spell_class_set);
 
 CREATE INDEX idx_dbc_spells_name ON dbc_spells USING btree (dataset_id, name);
+
+CREATE UNIQUE INDEX idx_edr_boss_canonical_unique ON encounter_dps_rankings USING btree (instance_id, player_guid, encounter_name) WHERE (encounter_id IS NOT NULL);
 
 CREATE INDEX idx_edr_boss_coverage_by_instance ON encounter_dps_rankings USING btree (instance_id, encounter_name) WHERE (encounter_id IS NOT NULL);
 

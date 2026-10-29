@@ -89,7 +89,6 @@ type Chronicle struct {
 	defaultDatasetID   uuid.UUID
 	recordParseAbort   func(context.Context, parseGenerationAbortOutput) error
 	resolveDataset     func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
-	runStill           RunStillOptions
 
 	mu                     sync.Mutex
 	insertParsedInstanceMu sync.Mutex

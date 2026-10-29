@@ -61,6 +61,18 @@ export function rulesetEntries(instances: readonly SupportedInstance[]): Ruleset
   return entries.sort((a, b) => compareByRaidProgression(a.name, b.name, instances))
 }
 
+/**
+ * "window": DPS is divided by the time from the first listed target engaging to
+ * the last one dying. "full": the whole encounter is used. Mirrors
+ * rankings.DurationTargets/RankingWindow, which reuse the damage target rule;
+ * Assembly of Iron keeps the full fight.
+ */
+export type RankedTime = "window" | "full"
+
+function rankedTimeFor(mode: string): RankedTime {
+  return mode === "entries" || mode === "boss-only" ? "window" : "full"
+}
+
 export function damageRuleRows(instance: SupportedInstance) {
   const rules = encounterRules(instance)
   const order = instance.progression_bosses ?? []
@@ -77,6 +89,7 @@ export function damageRuleRows(instance: SupportedInstance) {
     name,
     mode: rules[name].mode,
     note: rules[name].note,
+    rankedTime: rankedTimeFor(rules[name].mode),
     targets: (rules[name].entry_ids ?? []).map((id) => ({
       id,
       name: units.get(id) ?? FALLBACK_UNIT_NAMES[id] ?? `Creature ${id}`,

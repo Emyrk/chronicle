@@ -107,6 +107,21 @@ func (z *Authz) wrap(tx database.Store) *AuthzTX {
 	return spiceTx
 }
 
+func inverseRelationshipUpdates(updates rel.Txn) rel.Txn {
+	reverts := rel.Txn{}
+	for _, update := range updates.V1Updates {
+		switch update.GetOperation() {
+		case v1.RelationshipUpdate_OPERATION_TOUCH:
+			reverts.Delete(*rel.FromV1Proto(update.Relationship))
+		case v1.RelationshipUpdate_OPERATION_DELETE:
+			reverts.Create(*rel.FromV1Proto(update.Relationship))
+		case v1.RelationshipUpdate_OPERATION_CREATE:
+			reverts.Delete(*rel.FromV1Proto(update.Relationship))
+		}
+	}
+	return reverts
+}
+
 func (z *Authz) InTx(ctx context.Context, f func(tx *AuthzTX) error, opts *pgx.TxOptions) error {
 	var wrapped *AuthzTX
 	txErr := z.db.InTx(ctx, func(nestedTX database.Store) error {
@@ -119,18 +134,7 @@ func (z *Authz) InTx(ctx context.Context, f func(tx *AuthzTX) error, opts *pgx.T
 		// the callback (e.g. BeginTx error, context cancellation). In that case
 		// no SpiceDB writes were made, so there is nothing to revert.
 		if wrapped != nil {
-			reverts := rel.Txn{}
-			for _, update := range wrapped.relations.V1Updates {
-				switch update.GetOperation() {
-				case v1.RelationshipUpdate_OPERATION_TOUCH:
-					reverts.Delete(*rel.FromV1Proto(update.Relationship))
-				case v1.RelationshipUpdate_OPERATION_DELETE:
-					reverts.Create(*rel.FromV1Proto(update.Relationship))
-				case v1.RelationshipUpdate_OPERATION_CREATE:
-					reverts.Delete(*rel.FromV1Proto(update.Relationship))
-				}
-			}
-
+			reverts := inverseRelationshipUpdates(wrapped.relations)
 			_, revertErr := z.spice.Write(context.Background(), reverts)
 			if revertErr != nil {
 				z.logger.Error("failed to revert authz transaction after error", "revertErr", revertErr, "originalErr", txErr)

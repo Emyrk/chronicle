@@ -790,6 +790,7 @@ export class MapScene3D {
   // The camera's viewport when the user's current gesture began.
   private gestureStart: MapViewport | null = null;
   private unitScale = 1;
+  private chipScale = 1;
   private frame = 0;
   private disposed = false;
 
@@ -1647,9 +1648,10 @@ export class MapScene3D {
     const trueScale = yards === null ? null : this.dungeonMesh
       ? (MESH_PLAYER_HEIGHT_YARDS * yards) / PLAYER_GEOMETRY_HEIGHT
       : (FLAT_PLAYER_TOKEN_DIAMETER_YARDS * yards) / (2 * TOKEN_RADIUS.player);
-    const scale = trueScale === null ? flatArtworkUnitScale()
+    const baseScale = trueScale === null ? flatArtworkUnitScale()
       : this.dungeonMesh ? Math.max(trueScale, MESH_MIN_SCREEN_SCALE * screenScale)
       : trueScale;
+    const scale = baseScale * this.chipScale;
     if (scale === this.unitScale && !force) return;
     this.unitScale = scale;
     for (const object of this.units.values()) {
@@ -3580,6 +3582,14 @@ export class MapScene3D {
     this.camera.position.copy(target).add(offset);
     this.controls.update();
     return true;
+  }
+
+  /** Scales units and their attached markers relative to the map's normal size. */
+  setChipScale(scale: number) {
+    if (scale === this.chipScale) return;
+    this.chipScale = scale;
+    this.updateUnitScale(true);
+    this.requestRender();
   }
 
   /** The live value drawn as a column above each token. */

@@ -189,15 +189,25 @@ const (
 )
 
 type WoWEncounter struct {
-	ID         uuid.UUID   `json:"id"`
-	InstanceID uuid.UUID   `json:"instance_id"`
-	Boss       bool        `json:"boss"`
-	Name       string      `json:"name"`
-	MapID      int         `json:"map_id"`
-	KillType   KillType    `json:"kill_type"`
-	Remaining  []guid.GUID `json:"remaining,omitempty"`
-	StartTime  time.Time   `json:"start_time"`
-	EndTime    time.Time   `json:"end_time"`
+	ID            uuid.UUID         `json:"id"`
+	InstanceID    uuid.UUID         `json:"instance_id"`
+	Boss          bool              `json:"boss"`
+	Name          string            `json:"name"`
+	MapID         int               `json:"map_id"`
+	KillType      KillType          `json:"kill_type"`
+	Remaining     []guid.GUID       `json:"remaining,omitempty"`
+	StartTime     time.Time         `json:"start_time"`
+	EndTime       time.Time         `json:"end_time"`
+	RankingWindow *WoWRankingWindow `json:"ranking_window,omitempty"`
+}
+
+// WoWRankingWindow marks the interval scored for boss rankings, relative to the
+// original encounter start. Absent when the full encounter is scored.
+type WoWRankingWindow struct {
+	Basis         string `json:"basis"` // "selected-unit-activity"
+	StartOffsetMs int64  `json:"start_offset_ms"`
+	EndOffsetMs   int64  `json:"end_offset_ms"`
+	DurationMs    int64  `json:"duration_ms"`
 }
 
 type WoWEncounterWithHostiles struct {
@@ -278,6 +288,7 @@ type MissedSpell struct {
 // InstanceReport contains timing details for a single parsed instance.
 type InstanceReport struct {
 	Name             string   `json:"name"`
+	ParseDuration    Duration `json:"parse_duration_ms"`
 	FinalizeDuration Duration `json:"finalize_duration_ms"`
 	DBInsertDuration Duration `json:"db_insert_duration_ms"`
 	EncounterCount   int      `json:"encounter_count"`

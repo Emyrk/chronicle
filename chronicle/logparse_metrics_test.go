@@ -20,6 +20,7 @@ func TestLogParseMetrics(t *testing.T) {
 	metrics.encountersParsed.Add(5)
 	metrics.instanceFailures.Inc()
 	metrics.consumerDuration.WithLabelValues("parser").Observe((2 * time.Second).Seconds())
+	metrics.instanceDuration.WithLabelValues("Naxxramas", "parse").Observe((3 * time.Second).Seconds())
 
 	require.Equal(t, float64(1), prometheusCounterValue(t, metrics.jobsTotal.WithLabelValues("success")))
 	require.Equal(t, float64(100), prometheusCounterValue(t, metrics.linesProcessed))
@@ -30,6 +31,7 @@ func TestLogParseMetrics(t *testing.T) {
 	families, err := reg.Gather()
 	require.NoError(t, err)
 	require.Contains(t, metricFamilyNames(families), "chronicle_logparse_consumer_duration_seconds")
+	require.Contains(t, metricFamilyNames(families), "chronicle_logparse_instance_duration_seconds")
 }
 
 func prometheusCounterValue(t *testing.T, counter prometheus.Counter) float64 {

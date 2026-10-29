@@ -1,0 +1,111 @@
+# Shaman Totems — boss roster for mini-maker.
+# Blizzard IP: private/local use only.
+#
+# Pipeline input for every `mini.py ... --dungeon shaman-totems` command. Working
+# state goes to work/shaman-totems/<boss>/, published minis to dungeons/shaman-totems/<boss>/.
+#
+# HOUSE SCULPT STYLE (what Meshy can actually reconstruct and a printer can
+# actually print — proven on wailing-caverns):
+#   - Thick, chunky, toy-like volumes. Antlers "as thick as a thumb", spikes
+#     are "short chunky cones", teeth "short thick cones, few in number".
+#   - Everything FUSED: weapons/staffs touch a hand AND the base; snakes,
+#     vines, tails are "one fat coil fused to the shoulders / the base";
+#     legs and feet "merge into the base".
+#   - NO thin spikes, no thin sheets (frills, fins, wings are "thick solid
+#     slabs with no holes"), no loose strands, no floating sparkles or
+#     particles. Glow/electricity/magic is a PAINT accent, never geometry.
+#   - Hair, cloth, robes, hoods, moss are "a solid sculpted mass" / "a closed
+#     solid volume down to the base".
+#   - Water, smoke, ground effects are a solid sculpted shape on the base.
+#   - Write a `# Shape:` comment above each boss (e.g. "bulky quadruped",
+#     "robed humanoid + serpent coils") — it keeps the notes honest.
+#
+# FIELDS (per boss):
+#   slug      lowercase kebab-case, unique; also the folder name
+#   name      display name only — NEVER reaches the stills prompt (proper
+#             nouns come back as painted lettering)
+#   desc      appearance only, no names, no lore
+#   palette   3-5 colour words (ignored for finish: grey)
+#   views     [front, back] is the proven pair
+#   finish    painted | grey
+#   notes     sculpt constraints, in the house style above
+#   back      required with a back view: what is visible from behind and
+#             what is hidden (PLAYBOOK.md "Back-view rule")
+#   portrait  prompt for the painted portrait (`mini.py portraits`); lore
+#             words are fine here, it is not a Meshy input
+
+name: Shaman Totems
+
+# Appended to every boss `portrait:` as "<portrait>. <portrait_style>".
+# Replace the a windswept shaman ritual ground of standing stones under a stormy sky, elemental energy swirling around the totem phrase with this dungeon's setting.
+portrait_style: >-
+  richly textured oil painting on rough canvas, visible brush strokes and
+  impasto, painterly fantasy video-game concept art in the style of classic
+  World of Warcraft loading-screen illustration, dramatic rim lighting,
+  a windswept shaman ritual ground of standing stones under a stormy sky, elemental energy swirling around the totem, single subject centered, three-quarter view, full figure,
+  no text, no lettering, no frame, no border
+
+bosses:
+  # Shape: upright totem pole + horns + winged crossbar on a rock heap. Base mesh for all four element variants.
+  - slug: totem
+    name: Base Totem
+    desc: a carved wooden shaman totem pole standing upright on a rough round slab of cracked stone, the pole is one thick straight log with a stern carved face near the top with deep-set angry eyes under a heavy brow, a downturned mouth and a long carved beard running down the pole, two thick curved horns banded with wrapped leather sweep up and outward from the top of the head, a wide horizontal crossbar of two thick carved wing slabs with feather-plank grooves juts out from either side of the pole just below the face, the pole base sinks into a heap of jagged rock on the slab, warm natural golden-brown wood with dark grain, horns of pale bone with dark brown leather bands, wing slabs in reddish-brown wood, the rock heap in warm sandstone
+    palette: [golden-brown wood, reddish brown, bone cream, sandstone]
+    views: [front, back]
+    finish: painted
+    notes: the pole is a thick solid log, never thin; the horns are as thick as a thumb and fused to the top of the pole at the root; the wing slabs are thick solid blocks with no holes, fused to the pole; the base rocks are one solid mass fused to the slab and the pole; no floating rocks, no sparkles, no particles; the elemental glow is only a paint accent
+    back: from behind, the plain back of the log with bark grooves, the backs of the horns and wing slabs, and the rock heap; the carved face and beard are hidden
+    portrait: an earth shaman totem rooted in cracked earth, boulders and dust rising around it, warm amber light
+  # Shape: upright totem pole + horns + winged crossbar on a rock heap. Earth totems — STYLE STILL ONLY (front view, used as the Meshy retexture style image on the base `totem` mesh; never meshed).
+  - slug: earth-totem
+    name: Earth Totem
+    desc: a carved wooden shaman totem pole standing upright on a rough round slab of cracked stone, the pole is one thick straight log with a stern carved face near the top with deep-set angry eyes under a heavy brow, a downturned mouth and a long carved beard running down the pole, two thick curved horns banded with wrapped leather sweep up and outward from the top of the head, a wide horizontal crossbar of two thick carved wing slabs with feather-plank grooves juts out from either side of the pole just below the face, the pole base sinks into a heap of jagged rock on the slab, natural brown wood stained with ochre, horns of pale bone, wing slabs and rock heap in earthy brown and tan with a carved stone-rune band on the pole
+    palette: [warm brown wood, ochre, tan stone, bone cream, moss green accent]
+    views: [front]
+    finish: painted
+    notes: the pole is a thick solid log, never thin; the horns are as thick as a thumb and fused to the top of the pole at the root; the wing slabs are thick solid blocks with no holes, fused to the pole; the base rocks are one solid mass fused to the slab and the pole; no floating rocks, no sparkles, no particles; the elemental glow is only a paint accent
+    portrait: an earth shaman totem rooted in cracked earth, boulders and dust rising around it, warm amber light
+  # Shape: upright totem pole + horns + winged crossbar on a rock heap. Fire totems — STYLE STILL ONLY (front view, used as the Meshy retexture style image on the base `totem` mesh; never meshed).
+  - slug: fire-totem
+    name: Fire Totem
+    desc: a carved wooden shaman totem pole standing upright on a rough round slab of cracked stone, the pole is one thick straight log with a stern carved face near the top with deep-set angry eyes under a heavy brow, a downturned mouth and a long carved beard running down the pole, two thick curved horns banded with wrapped leather sweep up and outward from the top of the head, a wide horizontal crossbar of two thick carved wing slabs with feather-plank grooves juts out from either side of the pole just below the face, the pole base sinks into a heap of jagged rock on the slab, wood charred dark with deep red paint, horns of blackened bone, wing slabs painted crimson and orange, the rock heap is black basalt with glowing ember cracks painted in orange
+    palette: [charred brown, crimson, ember orange, black basalt, gold]
+    views: [front]
+    finish: painted
+    notes: the pole is a thick solid log, never thin; the horns are as thick as a thumb and fused to the top of the pole at the root; the wing slabs are thick solid blocks with no holes, fused to the pole; the base rocks are one solid mass fused to the slab and the pole; no floating rocks, no sparkles, no particles; the elemental glow is only a paint accent
+    portrait: a fire shaman totem wreathed in roaring flame, embers and smoke, molten light
+  # Shape: upright totem pole + horns + winged crossbar on a rock heap. Water totems — STYLE STILL ONLY (front view, used as the Meshy retexture style image on the base `totem` mesh; never meshed).
+  - slug: water-totem
+    name: Water Totem
+    desc: a carved wooden shaman totem pole standing upright on a rough round slab of cracked stone, the pole is one thick straight log with a stern carved face near the top with deep-set angry eyes under a heavy brow, a downturned mouth and a long carved beard running down the pole, two thick curved horns banded with wrapped leather sweep up and outward from the top of the head, a wide horizontal crossbar of two thick carved wing slabs with feather-plank grooves juts out from either side of the pole just below the face, the pole base sinks into a heap of jagged rock on the slab, wood stained deep blue-teal, horns of pale bone, wing slabs painted ocean blue with white wave grooves, the rock heap is smooth wet grey stone with painted blue-white water ripples
+    palette: [deep teal, ocean blue, foam white, slate grey, silver]
+    views: [front]
+    finish: painted
+    notes: the pole is a thick solid log, never thin; the horns are as thick as a thumb and fused to the top of the pole at the root; the wing slabs are thick solid blocks with no holes, fused to the pole; the base rocks are one solid mass fused to the slab and the pole; no floating rocks, no sparkles, no particles; the elemental glow is only a paint accent
+    portrait: a water shaman totem standing in a shallow pool, spiralling water and mist, cool blue light
+  # Shape: upright totem pole + horns + winged crossbar on a rock heap. Air totems — STYLE STILL ONLY (front view, used as the Meshy retexture style image on the base `totem` mesh; never meshed).
+  - slug: air-totem
+    name: Air Totem
+    desc: a carved wooden shaman totem pole standing upright on a rough round slab of cracked stone, the pole is one thick straight log with a stern carved face near the top with deep-set angry eyes under a heavy brow, a downturned mouth and a long carved beard running down the pole, two thick curved horns banded with wrapped leather sweep up and outward from the top of the head, a wide horizontal crossbar of two thick carved wing slabs with feather-plank grooves juts out from either side of the pole just below the face, the pole base sinks into a heap of jagged rock on the slab, wood bleached pale grey-white, horns of pale bone, wing slabs painted sky blue and white with swirling wind grooves, the rock heap is pale weathered stone with painted swirl marks
+    palette: [pale ash wood, sky blue, cloud white, soft violet, silver]
+    views: [front]
+    finish: painted
+    notes: the pole is a thick solid log, never thin; the horns are as thick as a thumb and fused to the top of the pole at the root; the wing slabs are thick solid blocks with no holes, fused to the pole; the base rocks are one solid mass fused to the slab and the pole; no floating rocks, no sparkles, no particles; the elemental glow is only a paint accent
+    portrait: an air shaman totem on a windswept peak, swirling gusts and storm clouds, crackling pale light
+
+# Example record — copy into the list above and fill in:
+#
+# # Shape: bulky quadruped, shell.
+# - slug: kresh
+#   name: Kresh
+#   desc: colossal ancient cave turtle on four thick stumpy legs, a high domed
+#     mossy shell studded with chunky crystal clusters, a heavy beaked head
+#   palette: [moss green, slate gray, pale crystal teal]
+#   views: [front]
+#   finish: painted
+#   notes: crystals are short chunky clusters fused to the shell; legs are
+#     thick and merge into the base; no thin spikes
+#   back: From behind, the high domed shell fills the view, with the short
+#     thick tail and both rear legs below it. The shell is plain and solid.
+#   portrait: a colossal ancient cave turtle, mossy cracked armored shell
+#     studded with crystals, dim flooded cavern pool
