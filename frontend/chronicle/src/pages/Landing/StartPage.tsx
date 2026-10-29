@@ -343,7 +343,7 @@ export function StartPage() {
   const exploreModal = explore && (
     // Its own boundary: the modal's chunk loading never suspends the hero around it.
     <Suspense fallback={<div className="fixed inset-0 z-[100] bg-background/80" />}>
-      <Explore3DModal target={explore} onClose={closeExplore} Scrubber={HeroScrubber} Rail={BossRail} />
+      <Explore3DModal target={explore} onClose={closeExplore} Scrubber={HeroScrubber} Rail={BossRail} Meter={HeroMeter} />
     </Suspense>
   );
 

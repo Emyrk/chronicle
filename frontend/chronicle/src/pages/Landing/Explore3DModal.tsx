@@ -1,12 +1,14 @@
 import { Component, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { Loader2, X } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronUp, Loader2, X } from "lucide-react";
 import { InstanceEventsContext, InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { prefersReducedMotion } from "@/pages/Instance/EventsPanels/Map/mapModel";
 import { trackFunnel } from "@/utils/funnel";
 import type { BossRail } from "./BossRail";
 import { deathsFromRecaps, exploreRunFromInstance, fullRunHref, type ExploreTarget } from "./explore3D";
+import type { HeroMeterPane } from "./heroMeter";
+import type { HeroMeter } from "./HeroMeter";
 import { heroWindow, type HeroReplay } from "./heroReplay";
 import type { HeroScrubber } from "./LandingHero";
 import { HeroScene } from "./LandingHero3D";
@@ -37,17 +39,117 @@ function RunEvents({ instanceId, children }: { instanceId: string; children: Rea
   return shared ? <>{children}</> : <InstanceEventsProvider instanceId={instanceId}>{children}</InstanceEventsProvider>;
 }
 
+/** The desktop stats column's collapse, for the session. */
+const STATS_COLLAPSED_KEY = "landing-explore-stats-collapsed";
+
+function readStatsCollapsed() {
+  try {
+    return sessionStorage.getItem(STATS_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function ToggleButton({ expanded, onClick }: { expanded: boolean; onClick: () => void }) {
+  const Icon = expanded ? ChevronUp : ChevronDown;
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      aria-label={expanded ? "Collapse the stats" : "Expand the stats"}
+      onClick={onClick}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/15 text-muted-foreground hover:text-foreground"
+    >
+      <Icon className="h-4 w-4" aria-hidden="true" />
+    </button>
+  );
+}
+
+/**
+ * The hero's stats column over the scene, following the modal's cursor: the glass meter, then Threat (estimated) or
+ * Raid Frames. Desktop docks it top-right (clear of the compass, bottom-right), collapsible; phones start on a
+ * three-bar strip at the bottom, a tap expands it.
+ */
+function ExploreStats({ replay, Meter }: { replay: HeroReplay; Meter: typeof HeroMeter }) {
+  const [pane, setPane] = useState<HeroMeterPane>("damage_done");
+  const [statsPane, setStatsPane] = useState<"threat" | "frames">("threat");
+  const [collapsed, setCollapsed] = useState(readStatsCollapsed);
+  const [phoneExpanded, setPhoneExpanded] = useState(false);
+  const meter = replay.meter;
+  if (!meter) return null;
+  const toggleDesktop = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      sessionStorage.setItem(STATS_COLLAPSED_KEY, next ? "1" : "0");
+    } catch {
+      // Not remembered without storage.
+    }
+  };
+  // As on the hero: Threat and Raid Frames share one slot; Raid Frames only from lg up.
+  const cards = (
+    <>
+      {replay.renderThreat && (
+        <div className={statsPane === "frames" && replay.renderRaidFrames ? "lg:hidden" : undefined}>
+          {replay.renderThreat(replay.renderRaidFrames ? () => setStatsPane("frames") : null)}
+        </div>
+      )}
+      {replay.renderRaidFrames && (
+        <div className={statsPane === "frames" || !replay.renderThreat ? "hidden lg:block" : "hidden"}>
+          {replay.renderRaidFrames(replay.renderThreat ? () => setStatsPane("threat") : null)}
+        </div>
+      )}
+    </>
+  );
+  const expandPhone = () => setPhoneExpanded(true);
+  return (
+    <>
+      <div className="styled-scrollbar absolute right-4 top-4 z-20 hidden max-h-[calc(100%-6rem)] w-[320px] flex-col gap-2 overflow-y-auto lg:flex">
+        {collapsed ? (
+          <button
+            type="button"
+            aria-expanded={false}
+            onClick={toggleDesktop}
+            className="flex items-center gap-1.5 self-end rounded-lg border border-white/10 bg-card/60 px-3 py-2 text-sm font-medium text-foreground shadow-lg backdrop-blur-md hover:border-primary"
+          >
+            <BarChart3 className="h-4 w-4" aria-hidden="true" />
+            Show the stats
+            <ChevronDown className="h-4 w-4" aria-hidden="true" />
+          </button>
+        ) : (
+          <>
+            <Meter data={meter} sourceKey="explore" pane={pane} onPaneChange={setPane} onOpen={null} action={<ToggleButton expanded onClick={toggleDesktop} />} />
+            {cards}
+          </>
+        )}
+      </div>
+      {phoneExpanded ? (
+        <div className="styled-scrollbar absolute inset-x-2 bottom-[76px] top-14 z-20 flex flex-col gap-2 overflow-y-auto lg:hidden">
+          <Meter data={meter} sourceKey="explore" pane={pane} onPaneChange={setPane} onOpen={null} action={<ToggleButton expanded onClick={() => setPhoneExpanded(false)} />} />
+          {cards}
+        </div>
+      ) : (
+        // Clear of the compass in the bottom-right corner.
+        <div className="absolute bottom-2 left-2 right-[76px] z-20 lg:hidden">
+          <Meter data={meter} sourceKey="explore" pane={pane} onPaneChange={setPane} rows={3} onOpen={expandPhone} action={<ToggleButton expanded={false} onClick={expandPhone} />} />
+        </div>
+      )}
+    </>
+  );
+}
+
 /**
  * Explore in 3D: the run's pull on the real Map scene, the camera the visitor's (orbit, pan, zoom, touch; click a
  * player to follow), the hero's scrubber and the boss rail. Full viewport on desktop, a full-screen sheet on phones.
  * Esc or the close button dismisses it; focus stays inside and returns to where it was on close.
- * The page hands over its own scrubber and boss rail: imported here, they would split out of /start's first chunk.
+ * The page hands over its own scrubber, boss rail and glass meter: imported here, they would split out of /start's first chunk.
  */
-export default function Explore3DModal({ target, onClose, Scrubber, Rail }: {
+export default function Explore3DModal({ target, onClose, Scrubber, Rail, Meter }: {
   target: ExploreTarget;
   onClose: () => void;
   Scrubber: typeof HeroScrubber;
   Rail: typeof BossRail;
+  Meter: typeof HeroMeter;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -167,6 +269,7 @@ export default function Explore3DModal({ target, onClose, Scrubber, Rail }: {
             </RunEvents>
           </SceneBoundary>
         )}
+        {replay && <ExploreStats replay={replay} Meter={Meter} />}
       </div>
 
       {scrubberRun && (
