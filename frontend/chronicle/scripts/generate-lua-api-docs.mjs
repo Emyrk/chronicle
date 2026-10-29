@@ -48,9 +48,15 @@ for (const line of stub.split("\n")) {
     const owner = functionMatch[1] ?? null;
     const separator = functionMatch[2] ?? "";
     const name = functionMatch[3];
+    // LuaLS-style signature: optional parameters end in "?", and annotated types follow a colon.
+    const annotated = new Map(params.map((param) => [param.name.replace(/\?$/, ""), param]));
+    const args = functionMatch[4].split(",").map((arg) => arg.trim()).filter(Boolean).map((arg) => {
+      const param = annotated.get(arg);
+      return param ? `${param.name}: ${param.type}` : arg;
+    });
     const fn = {
       owner,
-      signature: `${owner ? `${owner}${separator}` : ""}${name}(${functionMatch[4]})`,
+      signature: `${owner ? `${owner}${separator}` : ""}${name}(${args.join(", ")})`,
       description: description.join(" "),
       params,
       returns,
@@ -63,25 +69,26 @@ for (const line of stub.split("\n")) {
   if (line.trim() && !line.startsWith("local ") && !line.startsWith("---@") && !line.startsWith("--")) resetAnnotations();
 }
 
-const escape = (value) => value.replaceAll("|", "\\|");
 const renderFunction = (fn) => {
   const lines = [`#### \`${fn.signature}\``, "", fn.description || "No description.", ""];
-  if (fn.params.length) {
-    lines.push("| Parameter | Type | Description |", "| --- | --- | --- |");
-    for (const param of fn.params) lines.push(`| \`${escape(param.name)}\` | \`${escape(param.type)}\` | ${escape(param.description)} |`);
-    lines.push("");
+  // Types are in the signature; list only the parameters that say more than their type.
+  const described = fn.params.filter((param) => param.description);
+  if (described.length) {
+    lines.push(...described.map((param) => `- \`${param.name.replace(/\?$/, "")}\`: ${param.description}`), "");
   }
   if (fn.returns.length) {
-    lines.push("**Returns:** " + fn.returns.map((value) => `\`${escape(value.type)}\`${value.description ? `, ${escape(value.description)}` : ""}`).join("; "), "");
+    // Outside a table "|" needs no escaping; escaping it would show the backslash.
+    lines.push("**Returns:** " + fn.returns.map((value) => `\`${value.type}\`${value.description ? ` ${value.description}` : ""}`).join("; "), "");
   }
   return lines.join("\n");
 };
 
 const output = [
   begin,
+  "<!-- Do not edit this section by hand. Edit lua-panel-api.d.lua and run pnpm generate:lua-api. -->",
   "## Generated Lua API reference",
   "",
-  "This section is generated from `lua-panel-api.d.lua`, an [EmmyLua/LuaLS](https://luals.github.io/wiki/annotations/) definition file available from the **LuaLS definitions** button at the top of this page. Do not edit this section by hand.",
+  "Every global and method below comes from `lua-panel-api.d.lua`, the [EmmyLua/LuaLS](https://luals.github.io/wiki/annotations/) definition file behind the **LuaLS definitions** button. Signatures use LuaLS notation: `name: type`, and a parameter ending in `?` is optional.",
   "",
 ];
 const globals = functions.filter((fn) => !fn.owner);
