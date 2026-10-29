@@ -38,16 +38,26 @@ func ensureProtectedTechnicalAdmin(ctx context.Context, zed authz.Authorizer, di
 	return nil
 }
 
+type syncDiscordUserResult struct {
+	Warnings []string
+}
+
 // SyncDiscordUser manages Discord-owned membership and supporter relations,
 // and best-effort Chronicle-owned paid-tier roles in the configured guild.
 // The protected Discord user is always granted technical_admin.
 func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorizer, discordID string, userID uuid.UUID) error {
+	_, err := bot.syncDiscordUser(ctx, zed, discordID, userID)
+	return err
+}
+
+func (bot *Bot) syncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorizer, discordID string, userID uuid.UUID) (syncDiscordUserResult, error) {
+	var result syncDiscordUserResult
 	if bot.disabled {
-		return nil
+		return result, nil
 	}
 
 	if err := ensureProtectedTechnicalAdmin(ctx, zed, discordID, userID); err != nil {
-		return err
+		return result, err
 	}
 
 	checkedAt := time.Now().UTC()
@@ -59,17 +69,20 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 			CheckedAt: database.Timestamptz(checkedAt),
 			LastError: pgtype.Text{String: safeError, Valid: true},
 		}); dbErr != nil {
-			return fmt.Errorf("record guild member fetch error: %w", dbErr)
+			return result, fmt.Errorf("record guild member fetch error: %w", dbErr)
 		}
+		warning := "discord membership sync suspended until next login: " + safeError
+		result.Warnings = append(result.Warnings, warning)
 		bot.logger.Warn("discord membership sync suspended until next login",
 			slog.String("user_id", userID.String()),
 			slog.String("error", safeError),
 		)
-		return nil
+		return result, nil
 	}
 
 	if member != nil {
 		if err := bot.syncEntitlementRoles(ctx, discordID, userID, member.Roles); err != nil {
+			result.Warnings = append(result.Warnings, "sync Discord paid-tier roles: "+err.Error())
 			bot.logger.Warn("sync Discord paid-tier roles", slog.String("user_id", userID.String()), slog.String("error", err.Error()))
 		}
 	}
@@ -79,7 +92,7 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 	f := rel.NewFilter("chronicle", "chronicle", "chronicle_guild_member")
 	f.WithSubjectFilter("user", userID.String(), "")
 	if err := zed.Delete(ctx, rel.NewPreconditionedFilter(f)); err != nil {
-		return fmt.Errorf("delete chronicle_guild_member: %w", err)
+		return result, fmt.Errorf("delete chronicle_guild_member: %w", err)
 	}
 
 	if member != nil {
@@ -87,7 +100,7 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 		b := policy.New()
 		b.GlobalChronicle().Chronicle_guild_member(b.User(userID))
 		if _, err := zed.Write(ctx, *b.Txn()); err != nil {
-			return fmt.Errorf("write chronicle_guild_member: %w", err)
+			return result, fmt.Errorf("write chronicle_guild_member: %w", err)
 		}
 	}
 
@@ -96,7 +109,7 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 	f2 := rel.NewFilter("chronicle", "chronicle", "supporter")
 	f2.WithSubjectFilter("user", userID.String(), "")
 	if err := zed.Delete(ctx, rel.NewPreconditionedFilter(f2)); err != nil {
-		return fmt.Errorf("delete supporter: %w", err)
+		return result, fmt.Errorf("delete supporter: %w", err)
 	}
 
 	if member != nil {
@@ -105,7 +118,7 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 				b := policy.New()
 				b.GlobalChronicle().Supporter(b.User(userID))
 				if _, err := zed.Write(ctx, *b.Txn()); err != nil {
-					return fmt.Errorf("write supporter: %w", err)
+					return result, fmt.Errorf("write supporter: %w", err)
 				}
 				if _, err := zed.UpsertDataGrant(ctx, storagegrants.SupportStorageGrant(userID)); err != nil {
 					bot.logger.Error("upsert supporter storage grant", slog.String("error", err.Error()))
@@ -115,22 +128,22 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 		}
 
 		if _, err := zed.UpsertDataGrant(ctx, storagegrants.DiscordMemberStorageGrant(userID, checkedAt)); err != nil {
-			return fmt.Errorf("upsert discord member storage grant: %w", err)
+			return result, fmt.Errorf("upsert discord member storage grant: %w", err)
 		}
 		if _, err := zed.UpsertDiscordMembershipGrantCheckMember(ctx, database.UpsertDiscordMembershipGrantCheckMemberParams{
 			UserID:    userID,
 			CheckedAt: database.Timestamptz(checkedAt),
 		}); err != nil {
-			return fmt.Errorf("record discord member check: %w", err)
+			return result, fmt.Errorf("record discord member check: %w", err)
 		}
-		return nil
+		return result, nil
 	}
 
 	if _, err := zed.UpsertDiscordMembershipGrantCheckNonMember(ctx, database.UpsertDiscordMembershipGrantCheckNonMemberParams{
 		UserID:    userID,
 		CheckedAt: database.Timestamptz(checkedAt),
 	}); err != nil {
-		return fmt.Errorf("record discord non-member check: %w", err)
+		return result, fmt.Errorf("record discord non-member check: %w", err)
 	}
-	return nil
+	return result, nil
 }

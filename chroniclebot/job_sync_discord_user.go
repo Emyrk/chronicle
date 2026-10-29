@@ -62,7 +62,12 @@ func (w *WorkerSyncDiscordUser) Work(ctx context.Context, job *river.Job[ArgsSyn
 		)
 		return nil // not an error — user just isn't in our system
 	}
-	err = b.SyncDiscordUser(ctx, b.config.Zed, job.Args.DiscordID, link.UserID)
+	result, err := b.syncDiscordUser(ctx, b.config.Zed, job.Args.DiscordID, link.UserID)
+	if len(result.Warnings) > 0 {
+		if outputErr := river.RecordOutput(ctx, map[string]any{"warnings": result.Warnings}); outputErr != nil {
+			b.logger.Warn("record Discord user sync warnings", slog.String("error", outputErr.Error()))
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("sync discord user %s: %w", job.Args.DiscordID, err)
 	}
