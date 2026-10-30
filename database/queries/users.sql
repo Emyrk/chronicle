@@ -42,13 +42,15 @@ WHERE
   id = $1
 FOR UPDATE ;
 
+-- GetCurrentUserAuthSession confirms a token's session still exists. It does
+-- not match jwt_id: refreshing rotates it while requests with the previous
+-- token are still in flight. Deleting the row is what revokes a session.
 -- name: GetCurrentUserAuthSession :one
 SELECT *
 FROM user_auth_session
 WHERE id = @session_id
   AND user_id = @user_id
-  AND user_auth_id = @user_auth_id
-  AND jwt_id = @jwt_id;
+  AND user_auth_id = @user_auth_id;
 
 -- name: DeleteUserAuthSessionByID :exec
 DELETE FROM user_auth_session WHERE id = @id;

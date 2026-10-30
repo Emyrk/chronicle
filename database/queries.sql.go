@@ -28480,23 +28480,19 @@ FROM user_auth_session
 WHERE id = $1
   AND user_id = $2
   AND user_auth_id = $3
-  AND jwt_id = $4
 `
 
 type GetCurrentUserAuthSessionParams struct {
 	SessionID  uuid.UUID `db:"session_id" json:"session_id"`
 	UserID     uuid.UUID `db:"user_id" json:"user_id"`
 	UserAuthID uuid.UUID `db:"user_auth_id" json:"user_auth_id"`
-	JwtID      uuid.UUID `db:"jwt_id" json:"jwt_id"`
 }
 
+// GetCurrentUserAuthSession confirms a token's session still exists. It does
+// not match jwt_id: refreshing rotates it while requests with the previous
+// token are still in flight. Deleting the row is what revokes a session.
 func (q *sqlQuerier) GetCurrentUserAuthSession(ctx context.Context, arg GetCurrentUserAuthSessionParams) (UserAuthSession, error) {
-	row := q.db.QueryRow(ctx, getCurrentUserAuthSession,
-		arg.SessionID,
-		arg.UserID,
-		arg.UserAuthID,
-		arg.JwtID,
-	)
+	row := q.db.QueryRow(ctx, getCurrentUserAuthSession, arg.SessionID, arg.UserID, arg.UserAuthID)
 	var i UserAuthSession
 	err := row.Scan(
 		&i.ID,

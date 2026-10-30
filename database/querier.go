@@ -271,6 +271,9 @@ type sqlcQuerier interface {
 	// score. parse_count tells the caller whether the cached average is complete.
 	GetCharacterPerformanceRuns(ctx context.Context, arg GetCharacterPerformanceRunsParams) ([]GetCharacterPerformanceRunsRow, error)
 	GetCreatureTemplatesByEntries(ctx context.Context, arg GetCreatureTemplatesByEntriesParams) ([]WorldCreatureTemplate, error)
+	// GetCurrentUserAuthSession confirms a token's session still exists. It does
+	// not match jwt_id: refreshing rotates it while requests with the previous
+	// token are still in flight. Deleting the row is what revokes a session.
 	GetCurrentUserAuthSession(ctx context.Context, arg GetCurrentUserAuthSessionParams) (UserAuthSession, error)
 	GetCustomPanelReleaseByRepositoryCommit(ctx context.Context, arg GetCustomPanelReleaseByRepositoryCommitParams) (CustomPanelRelease, error)
 	GetDBCItemDisplayInfoByID(ctx context.Context, arg GetDBCItemDisplayInfoByIDParams) (DbcItemDisplayInfo, error)

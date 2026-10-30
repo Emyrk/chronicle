@@ -59,7 +59,6 @@ func (s *Service) validateCurrentSession(ctx context.Context, c *claims.Claims) 
 		SessionID:  c.SessionID,
 		UserID:     c.Subject,
 		UserAuthID: c.UserAuthID,
-		JwtID:      c.ID,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotAuthorized

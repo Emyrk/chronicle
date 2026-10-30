@@ -127,12 +127,25 @@ func TestCurrentUserAuthSessionRevocation(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = db.GetCurrentUserAuthSession(ctx, database.GetCurrentUserAuthSessionParams{
-		SessionID: sessionID, UserID: userID, UserAuthID: authLink.ID, JwtID: jwtID,
+		SessionID: sessionID, UserID: userID, UserAuthID: authLink.ID,
 	})
 	require.NoError(t, err)
+
+	// A refresh rotates jwt_id; requests still holding the previous token must
+	// not be treated as revoked.
+	_, err = db.UpdateUserAuthSessionTokens(ctx, database.UpdateUserAuthSessionTokensParams{
+		ID: sessionID, AccessToken: "new", RefreshToken: "new",
+		ExpiresAt: database.Timestamptz(now.Add(2 * time.Hour)), UpdatedAt: database.Timestamptz(now), JwtID: uuid.New(),
+	})
+	require.NoError(t, err)
+	_, err = db.GetCurrentUserAuthSession(ctx, database.GetCurrentUserAuthSessionParams{
+		SessionID: sessionID, UserID: userID, UserAuthID: authLink.ID,
+	})
+	require.NoError(t, err)
+
 	require.NoError(t, db.DeleteUserAuthSessionsByUserID(ctx, userID))
 	_, err = db.GetCurrentUserAuthSession(ctx, database.GetCurrentUserAuthSessionParams{
-		SessionID: sessionID, UserID: userID, UserAuthID: authLink.ID, JwtID: jwtID,
+		SessionID: sessionID, UserID: userID, UserAuthID: authLink.ID,
 	})
 	require.ErrorIs(t, err, sql.ErrNoRows)
 }

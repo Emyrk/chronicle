@@ -46,7 +46,6 @@ func (a *API) recentSignInUntil(r *http.Request) (time.Time, error) {
 		SessionID:  claims.SessionID,
 		UserID:     claims.Subject,
 		UserAuthID: claims.UserAuthID,
-		JwtID:      claims.ID,
 	})
 	if err != nil {
 		return time.Time{}, err
