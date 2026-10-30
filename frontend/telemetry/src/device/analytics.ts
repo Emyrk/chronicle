@@ -75,7 +75,7 @@ export function projectDeviceAnalytics(
     topHost: dashboard.hosts[0] ?? null,
     topProduct: dashboard.productFamilies[0] ?? null,
     operations,
-    servers: dashboard.hosts.slice(0, 8).map((host) => ({
+    servers: dashboard.hosts.slice(0, 12).map((host) => ({
       hostname: host.hostname,
       pageViews: host.pageViews,
       previousPageViews: host.previousPageViews,
