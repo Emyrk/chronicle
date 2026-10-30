@@ -43,11 +43,13 @@ var (
 type Options struct {
 	AccessURL       *url.URL
 	ResolveUsername func(context.Context, uuid.UUID) (string, error)
+	OriginPatterns  []string
 }
 
 type Service struct {
 	accessURL       *url.URL
 	resolveUsername func(context.Context, uuid.UUID) (string, error)
+	originPatterns  []string
 
 	mu    sync.Mutex
 	rooms map[string]*room
@@ -95,6 +97,7 @@ func New(options Options) *Service {
 	return &Service{
 		accessURL:       options.AccessURL,
 		resolveUsername: options.ResolveUsername,
+		originPatterns:  append([]string(nil), options.OriginPatterns...),
 		rooms:           make(map[string]*room),
 	}
 }
