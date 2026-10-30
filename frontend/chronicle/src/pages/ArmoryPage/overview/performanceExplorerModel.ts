@@ -398,7 +398,7 @@ export function performanceTrendValue(trend: PerformanceTrendLine, timestamp: nu
 }
 
 /** Theil–Sen trend line (median of pairwise slopes), which a few outlier nights barely move. */
-function fitTrend(points: readonly { day: number; value: number }[]): PerformanceTrendLine {
+export function fitTrend(points: readonly { day: number; value: number }[]): PerformanceTrendLine {
   const slopes: number[] = [];
   for (let i = 0; i < points.length; i += 1) {
     for (let j = i + 1; j < points.length; j += 1) {
@@ -412,7 +412,7 @@ function fitTrend(points: readonly { day: number; value: number }[]): Performanc
 }
 
 /** Linear-interpolated quantile of an ascending, non-empty list. */
-function quantile(sorted: readonly number[], q: number): number {
+export function quantile(sorted: readonly number[], q: number): number {
   const position = (sorted.length - 1) * q;
   const lower = Math.floor(position);
   const upper = Math.ceil(position);

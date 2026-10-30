@@ -495,6 +495,27 @@ type sqlcQuerier interface {
 	// hps for healers and dps for everyone else. Duplicate uploads collapse to
 	// one row per encounter+player before averaging.
 	GuildRunParseAverages(ctx context.Context, arg GuildRunParseAveragesParams) ([]GuildRunParseAveragesRow, error)
+	// Returns the boss kills of the given instances in kill order, for the guild
+	// history page's per-boss splits. parse is the stored server-scope kill-time
+	// parse for the scoring contract given, or -1 when it is not computed or its
+	// sample was too small.
+	GuildSpeedrunBossKills(ctx context.Context, arg GuildSpeedrunBossKillsParams) ([]GuildSpeedrunBossKillsRow, error)
+	// Returns every full clear of one instance by a guild, oldest first, for the
+	// guild history page. Deduplicates re-uploads of the same raid, preferring a
+	// qualified copy and then the fastest. Uses the ranked clear window, so
+	// incomplete runs (no ranked timing) are left out.
+	// trash_duration_ms is the time inside the clear spent in non-boss fights,
+	// with overlapping pulls merged and any overlap with boss fights removed: the
+	// merged length of all fights minus the merged length of boss fights. Merging
+	// uses window functions (gaps and islands) rather than multiranges, which need
+	// PostgreSQL 14.
+	// clear_parse is the stored server-scope clear-time parse for the scoring
+	// contract given, or -1 when it is not computed or its sample was too small.
+	// JOINs wow_server_realms so RLS tenant filtering cascades.
+	// Every fight clipped to its clear's window, once in the "all" scope and,
+	// for boss fights, again in the "boss" scope.
+	// A fight starts a new island when it begins after every earlier fight ended.
+	GuildSpeedrunHistory(ctx context.Context, arg GuildSpeedrunHistoryParams) ([]GuildSpeedrunHistoryRow, error)
 	// Returns the current guild members' best parses for the guild page "Top
 	// Parses" panel. Membership comes from game_players, matching the roster
 	// panel, rather than the guild_id copied onto parse scores at scoring time.

@@ -232,6 +232,40 @@ type GuildRaidClearsResponse struct {
 	Clears []GuildRaidClear `json:"clears"`
 }
 
+// GuildSpeedrunBossKill is one boss kill within a guild's clear.
+type GuildSpeedrunBossKill struct {
+	EncounterName string    `json:"encounter_name"`
+	KilledAt      time.Time `json:"killed_at"`
+	DurationMs    int64     `json:"duration_ms"`
+	// Parse is the server-scope kill-time parse (0-100, higher is faster), or
+	// nil when it is not computed yet or its comparison sample was too small.
+	Parse *float64 `json:"parse"`
+}
+
+// GuildSpeedrunRun is one deduplicated full clear of an instance by a guild.
+// Times use the ranked clear window: first pull to last boss kill.
+type GuildSpeedrunRun struct {
+	Slug                 string    `json:"slug"`
+	Qualified            bool      `json:"qualified"`
+	PlayerCount          int64     `json:"player_count"`
+	StartTime            time.Time `json:"start_time"`
+	CompletionTime       time.Time `json:"completion_time"`
+	DurationMs           int64     `json:"duration_ms"`
+	BossToBossDurationMs int64     `json:"boss_to_boss_duration_ms"`
+	// TrashDurationMs is time in trash fights during the clear, excluding any
+	// overlap with boss fights.
+	TrashDurationMs int64 `json:"trash_duration_ms"`
+	// ClearParse is the server-scope clear-time parse (0-100, higher is
+	// faster), or nil when it is not computed yet or its sample was too small.
+	ClearParse *float64                `json:"clear_parse"`
+	Bosses     []GuildSpeedrunBossKill `json:"bosses"`
+}
+
+// GuildSpeedrunHistoryResponse lists a guild's clears of one instance, oldest first.
+type GuildSpeedrunHistoryResponse struct {
+	Runs []GuildSpeedrunRun `json:"runs"`
+}
+
 // Guild character roster (guild page "Roster" panel)
 
 // CharacterSpecRole is one spec+role combination observed in recent parses.
