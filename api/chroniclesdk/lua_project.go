@@ -53,7 +53,9 @@ type LuaProject struct {
 	// Description is a short summary, up to LuaProjectDescriptionMax characters. It lives outside the manifest.
 	Description string `json:"description"`
 	// Author is the owner's module author name, the first part of /modules/<author>/<slug>. Absent until claimed.
-	Author string          `json:"author,omitempty"`
+	Author string `json:"author,omitempty"`
+	// Flavor lists the LuaProjectFlavorTags the module needs. Sites missing any of them leave it out of listings.
+	Flavor []string        `json:"flavor"`
 	Main   *LuaProjectMain `json:"main,omitempty"`
 	// Releases are newest first. Panels run the newest one that is still available.
 	Releases []LuaProjectRelease `json:"releases"`
@@ -67,9 +69,15 @@ type LuaProject struct {
 // LuaProjectDescriptionMax is the longest description, in characters.
 const LuaProjectDescriptionMax = 300
 
+// LuaProjectFlavorTags are the flavor tags a module may require.
+var LuaProjectFlavorTags = []string{"vanilla", "tbc", "wrath", "nightmare-of-ursol"}
+
 // UpdateLuaProjectRequest changes an module's settings.
 type UpdateLuaProjectRequest struct {
 	Description string `json:"description"`
+	// Flavor replaces the module's flavor tags; omitted keeps them. Only tags the current site has may be
+	// added or removed.
+	Flavor []string `json:"flavor,omitempty"`
 }
 
 // LuaProjectStar answers a star or unstar.

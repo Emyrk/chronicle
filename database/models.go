@@ -2031,6 +2031,7 @@ type LuaProject struct {
 	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	DraftIcon   pgtype.Text        `db:"draft_icon" json:"draft_icon"`
 	Description string             `db:"description" json:"description"`
+	Flavor      []string           `db:"flavor" json:"flavor"`
 }
 
 type LuaProjectArtifact struct {

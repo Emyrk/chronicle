@@ -145,7 +145,7 @@ var luaReleaseTag = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$`)
 // luaProjectResponse builds the API project; authors maps the owner and release publishers to their author names.
 func luaProjectResponse(p database.LuaProject, releases []database.LuaProjectRelease, authors map[uuid.UUID]string) chroniclesdk.LuaProject {
 	result := chroniclesdk.LuaProject{ID: p.ID, OwnerID: p.OwnerID, Kind: p.Kind, Name: p.Name, Slug: p.Slug, Revision: p.Revision, Description: p.Description,
-		Author: authors[p.OwnerID], Releases: make([]chroniclesdk.LuaProjectRelease, 0, len(releases)), CreatedAt: p.CreatedAt.Time, UpdatedAt: p.UpdatedAt.Time}
+		Flavor: p.Flavor, Author: authors[p.OwnerID], Releases: make([]chroniclesdk.LuaProjectRelease, 0, len(releases)), CreatedAt: p.CreatedAt.Time, UpdatedAt: p.UpdatedAt.Time}
 	if p.DraftHash.Valid {
 		result.Main = &chroniclesdk.LuaProjectMain{SHA256: p.DraftHash.String, Icon: p.DraftIcon.String, UpdatedAt: p.UpdatedAt.Time}
 	}
@@ -541,7 +541,39 @@ func (a *API) setLuaProjectStar(w http.ResponseWriter, r *http.Request, star boo
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.LuaProjectStar{Stars: stars[id], Starred: star})
 }
 
-// UpdateLuaProject sets an module's description. Anyone who may release the module may describe it.
+// luaProjectFlavor checks requested flavor tags against the site, returning them in canonical order or why they
+// are refused. A tag the site lacks can neither be added nor removed here, so another site's tags stay put.
+func luaProjectFlavor(current, requested []string, site database.WoWFlavor) ([]string, string) {
+	want := make(map[string]bool, len(requested))
+	for _, tag := range requested {
+		if !slices.Contains(chroniclesdk.LuaProjectFlavorTags, tag) {
+			return nil, fmt.Sprintf("Unknown flavor tag %q.", tag)
+		}
+		want[tag] = true
+	}
+	flavor := make([]string, 0, len(want))
+	for _, tag := range chroniclesdk.LuaProjectFlavorTags {
+		if want[tag] != slices.Contains(current, tag) && !site.Has(database.FlavorTag(tag)) {
+			return nil, fmt.Sprintf("This site does not use %q, so it cannot change that tag.", tag)
+		}
+		if want[tag] {
+			flavor = append(flavor, tag)
+		}
+	}
+	return flavor, ""
+}
+
+// luaProjectFitsSite reports whether the site has every flavor tag the module needs.
+func luaProjectFitsSite(p database.LuaProject, site database.WoWFlavor) bool {
+	for _, tag := range p.Flavor {
+		if !site.Has(database.FlavorTag(tag)) {
+			return false
+		}
+	}
+	return true
+}
+
+// UpdateLuaProject sets an module's description and flavor tags. Anyone who may release the module may describe it.
 func (a *API) UpdateLuaProject(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, ok := luaProjectID(w, r)
@@ -557,7 +589,21 @@ func (a *API) UpdateLuaProject(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: fmt.Sprintf("Descriptions are at most %d characters.", chroniclesdk.LuaProjectDescriptionMax)})
 		return
 	}
-	p, err := a.Opts.Zed.SetLuaProjectDescription(ctx, database.SetLuaProjectDescriptionParams{ID: id, Description: description})
+	var flavor []string
+	if req.Flavor != nil {
+		current, err := a.Opts.Zed.GetLuaProject(ctx, id)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		var message string
+		flavor, message = luaProjectFlavor(current.Flavor, req.Flavor, a.resolvedSiteFlavor(ctx))
+		if message != "" {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: message})
+			return
+		}
+	}
+	p, err := a.Opts.Zed.SetLuaProjectSettings(ctx, database.SetLuaProjectSettingsParams{ID: id, Description: description, Flavor: flavor})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -803,7 +849,11 @@ func (a *API) ListPublicLuaProjects(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		actor = policy.New().User(uuid.Nil)
 	}
+	site := a.resolvedSiteFlavor(r.Context())
 	for _, p := range projects {
+		if !luaProjectFitsSite(p, site) {
+			continue
+		}
 		allowed, err := a.Opts.Zed.CheckOne(r.Context(), nil, policy.New().Lua_project(p.ID).CanUse_User(actor))
 		if err != nil {
 			httpapi.InternalServerError(w, err)

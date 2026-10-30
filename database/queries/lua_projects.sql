@@ -197,6 +197,7 @@ SELECT project_id, count(*) AS stars FROM lua_project_stars WHERE project_id = A
 -- name: ListUserStarsForProjects :many
 SELECT project_id FROM lua_project_stars WHERE user_id = @user_id AND project_id = ANY(@project_ids::uuid[]);
 
--- name: SetLuaProjectDescription :one
--- Leaves updated_at alone: it dates main.
-UPDATE lua_projects SET description = @description WHERE id = @id RETURNING *;
+-- name: SetLuaProjectSettings :one
+-- Leaves updated_at alone: it dates main. A null flavor keeps the current tags.
+UPDATE lua_projects SET description = @description, flavor = COALESCE(sqlc.narg('flavor')::text[], flavor)
+WHERE id = @id RETURNING *;

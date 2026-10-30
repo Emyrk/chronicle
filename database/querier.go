@@ -945,9 +945,9 @@ type sqlcQuerier interface {
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
 	// Replaces one top-level key, leaving the user's other settings untouched.
 	SetInferenceUserConfigKey(ctx context.Context, arg SetInferenceUserConfigKeyParams) error
-	// Leaves updated_at alone: it dates main.
-	SetLuaProjectDescription(ctx context.Context, arg SetLuaProjectDescriptionParams) (LuaProject, error)
 	SetLuaProjectDraft(ctx context.Context, arg SetLuaProjectDraftParams) (LuaProject, error)
+	// Leaves updated_at alone: it dates main. A null flavor keeps the current tags.
+	SetLuaProjectSettings(ctx context.Context, arg SetLuaProjectSettingsParams) (LuaProject, error)
 	SetPanelLayoutCode(ctx context.Context, arg SetPanelLayoutCodeParams) (int64, error)
 	SetPrimaryUserCharacter(ctx context.Context, arg SetPrimaryUserCharacterParams) (UserCharacterLink, error)
 	SetResetToken(ctx context.Context, arg SetResetTokenParams) error
