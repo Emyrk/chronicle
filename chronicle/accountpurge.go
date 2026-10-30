@@ -161,14 +161,15 @@ func (w *WorkerAccountPurge) purge(ctx context.Context, purgeID uuid.UUID) error
 	if err := progress("community"); err != nil {
 		return err
 	}
-	keyIDs, err := db.ListUploadKeyIDsCreatedByUser(ctx, uuid.NullUUID{UUID: userID, Valid: true})
-	if err != nil {
-		return fmt.Errorf("list upload keys: %w", err)
+	// Servers, realms, and upload keys stay; only the creator is cleared.
+	if err := db.ClearServersCreatedByUser(ctx, userID); err != nil {
+		return fmt.Errorf("clear server creator: %w", err)
 	}
-	for _, keyID := range keyIDs {
-		if err := db.DeleteUploadKey(ctx, keyID); err != nil {
-			return fmt.Errorf("delete upload key %s: %w", keyID, err)
-		}
+	if err := db.ClearRealmsCreatedByUser(ctx, userID); err != nil {
+		return fmt.Errorf("clear realm creator: %w", err)
+	}
+	if err := db.ClearUploadKeysCreatedByUser(ctx, userID); err != nil {
+		return fmt.Errorf("clear upload key creator: %w", err)
 	}
 	guildIDs, err := db.ListGuildIDsWithDiscordInstalledByUser(ctx, userID)
 	if err != nil {

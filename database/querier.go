@@ -38,11 +38,16 @@ type sqlcQuerier interface {
 	ClearApplicationReviewsByReviewer(ctx context.Context, userID uuid.NullUUID) error
 	ClearDiscordMembershipGrantCheckClaim(ctx context.Context, arg ClearDiscordMembershipGrantCheckClaimParams) (int64, error)
 	ClearInferenceThreadByOwner(ctx context.Context, arg ClearInferenceThreadByOwnerParams) (InferenceThread, error)
+	ClearRealmsCreatedByUser(ctx context.Context, userID uuid.UUID) error
 	ClearResetToken(ctx context.Context, userAuthID uuid.UUID) error
+	// Servers, realms, and upload keys hold other players' data, so a purge only
+	// removes the user as their creator.
+	ClearServersCreatedByUser(ctx context.Context, userID uuid.UUID) error
 	// Canonical normalized rows produced by legacy Spell.dbc imports.
 	ClearSpellEffectsForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearSpellPowersForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearSpellVariantsForDataset(ctx context.Context, datasetID uuid.UUID) error
+	ClearUploadKeysCreatedByUser(ctx context.Context, userID uuid.UUID) error
 	ClearWoWLogGroupInvalidation(ctx context.Context, logGroupID uuid.UUID) error
 	CompleteBillingReconciliationRun(ctx context.Context, arg CompleteBillingReconciliationRunParams) error
 	CompleteDiscordMembershipGrantCheckError(ctx context.Context, arg CompleteDiscordMembershipGrantCheckErrorParams) (DiscordMembershipGrantCheck, error)
@@ -225,8 +230,8 @@ type sqlcQuerier interface {
 	// GetAccountDataCounts counts the data an account purge removes, grouped into
 	// sets the user must acknowledge individually. Zero counts are omitted.
 	GetAccountDataCounts(ctx context.Context, userID uuid.UUID) ([]GetAccountDataCountsRow, error)
-	// GetAccountDeletionBlockers lists what must be resolved before an account can
-	// be deleted. Servers and realms hold other players' logs and rankings.
+	// GetAccountDeletionBlockers lists what prevents an account from being purged.
+	// Accounts tied to a billing customer are never purged automatically.
 	GetAccountDeletionBlockers(ctx context.Context, userID uuid.UUID) ([]string, error)
 	GetAccountPurge(ctx context.Context, id uuid.UUID) (AccountPurge, error)
 	GetActiveAccountPurgeByUser(ctx context.Context, userID uuid.UUID) (AccountPurge, error)
@@ -811,7 +816,6 @@ type sqlcQuerier interface {
 	ListTimeParseReplacementLogGroups(ctx context.Context, arg ListTimeParseReplacementLogGroupsParams) ([]uuid.UUID, error)
 	// Locate surviving uploads for logical runs whose source log group is deleted.
 	ListTimeParseReplacementLogGroupsForDeletedLogGroup(ctx context.Context, arg ListTimeParseReplacementLogGroupsForDeletedLogGroupParams) ([]uuid.UUID, error)
-	ListUploadKeyIDsCreatedByUser(ctx context.Context, userID uuid.NullUUID) ([]uuid.UUID, error)
 	ListUploadKeysByRealm(ctx context.Context, realmID uuid.UUID) ([]ListUploadKeysByRealmRow, error)
 	ListUserCustomPanelInstallations(ctx context.Context, userID uuid.UUID) ([]ListUserCustomPanelInstallationsRow, error)
 	ListUserFavoriteGuilds(ctx context.Context, userID uuid.UUID) ([]ListUserFavoriteGuildsRow, error)

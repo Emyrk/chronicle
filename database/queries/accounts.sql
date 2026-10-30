@@ -35,9 +35,7 @@ FROM (VALUES
   ('community', 'Guild Discord bot installs', (SELECT count(*) FROM guild_discord_installations t WHERE t.installed_by = @user_id::uuid)),
   ('community', 'Guild join requests', (SELECT count(*) FROM guild_join_requests t WHERE t.user_id = @user_id::uuid)),
   ('community', 'Server applications', (SELECT count(*) FROM server_applications t WHERE t.initiated_by = @user_id::uuid)),
-  ('community', 'Server upload keys', (SELECT count(*) FROM wow_server_upload_keys t WHERE t.created_by = @user_id::uuid)),
   ('community', 'Shared views', (SELECT count(*) FROM shared_views t WHERE t.created_by = @user_id::uuid)),
-  ('billing', 'Supporter entitlements', (SELECT count(*) FROM billing_entitlements t WHERE t.user_id = @user_id::uuid)),
   ('billing', 'Bonus storage grants', (SELECT count(*) FROM data_grants t WHERE t.user_id = @user_id::uuid AND t.source <> 'base')),
   ('billing', 'Photo proof requests', (SELECT count(*) FROM proof_requests t WHERE t.applicant_id = @user_id::uuid))
 ) AS data(group_key, label, count)
@@ -52,13 +50,12 @@ DELETE FROM user_auth_links WHERE user_id = @user_id;
 -- name: DeleteUserAccountRow :execrows
 DELETE FROM users WHERE id = @user_id;
 
--- GetAccountDeletionBlockers lists what must be resolved before an account can
--- be deleted. Servers and realms hold other players' logs and rankings.
+-- GetAccountDeletionBlockers lists what prevents an account from being purged.
+-- Accounts tied to a billing customer are never purged automatically.
 -- name: GetAccountDeletionBlockers :one
 SELECT ARRAY_REMOVE(ARRAY[
-  CASE WHEN EXISTS (SELECT 1 FROM billing_subscriptions t WHERE t.user_id = @user_id::uuid AND t.status NOT IN ('canceled', 'incomplete_expired')) THEN 'active subscription' END,
-  CASE WHEN EXISTS (SELECT 1 FROM wow_servers t WHERE t.created_by = @user_id::uuid) THEN 'created servers' END,
-  CASE WHEN EXISTS (SELECT 1 FROM wow_server_realms t WHERE t.created_by = @user_id::uuid) THEN 'created realms' END
+  CASE WHEN EXISTS (SELECT 1 FROM billing_subscriptions t WHERE t.user_id = @user_id::uuid)
+    OR EXISTS (SELECT 1 FROM billing_entitlements t WHERE t.user_id = @user_id::uuid) THEN 'billing account' END
 ], NULL)::text[] AS blockers;
 
 -- name: ListOwnedLogGroupIDs :many
@@ -76,8 +73,16 @@ WHERE log_file.wow_log_id = wow_log_groups.id
 -- name: ListOwnedLuaProjectIDs :many
 SELECT id FROM lua_projects WHERE owner_id = @user_id;
 
--- name: ListUploadKeyIDsCreatedByUser :many
-SELECT id FROM wow_server_upload_keys WHERE created_by = @user_id;
+-- Servers, realms, and upload keys hold other players' data, so a purge only
+-- removes the user as their creator.
+-- name: ClearServersCreatedByUser :exec
+UPDATE wow_servers SET created_by = NULL WHERE created_by = @user_id::uuid;
+
+-- name: ClearRealmsCreatedByUser :exec
+UPDATE wow_server_realms SET created_by = NULL WHERE created_by = @user_id::uuid;
+
+-- name: ClearUploadKeysCreatedByUser :exec
+UPDATE wow_server_upload_keys SET created_by = NULL WHERE created_by = @user_id::uuid;
 
 -- name: ListGuildIDsWithDiscordInstalledByUser :many
 SELECT guild_id FROM guild_discord_installations WHERE installed_by = @user_id;

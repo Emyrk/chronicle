@@ -24,9 +24,9 @@ const DATA_GROUPS: Record<string, { title: string; description: string }> = {
   modules: { title: "Modules", description: "Modules you published are removed for everyone who uses them, along with your author profile, contributor seats, and stars." },
   community: {
     title: "Guilds & community",
-    description: "Guild Discord bots you installed are removed, plus your join requests, server applications, and upload keys. Shared views stay but are no longer credited to you.",
+    description: "Guild Discord bots you installed are removed, plus your join requests and server applications. Servers and realms you created stay. Shared views stay but are no longer credited to you.",
   },
-  billing: { title: "Supporter perks & proofs", description: "Supporter entitlements, bonus storage, and photo proof requests." },
+  billing: { title: "Bonus storage & proofs", description: "Bonus storage grants and photo proof requests." },
 };
 
 const PURGE_STEPS = [
@@ -147,16 +147,14 @@ function PurgeWizard({ data, blockers, recentSignInUntil, onStarted }: {
       {blocked && (
         <div role="alert" className="rounded-lg border-2 border-amber-500/50 bg-amber-500/10 p-5 space-y-2">
           <div className="flex items-center gap-2 font-semibold text-amber-500">
-            <AlertTriangle className="size-5" /> Resolve these before purging
+            <AlertTriangle className="size-5" /> This account can't be purged here
           </div>
           <ul className="list-disc space-y-1 pl-6 text-sm">
             {blockers.map((blocker) => (
               <li key={blocker}>
-                {blocker === "active subscription" ? (
-                  <>You have an active subscription. <Link to="/account/billing" className="underline underline-offset-2">Cancel it in Billing</Link> first.</>
-                ) : (
-                  <>You own {blocker}, which hold other players' data. <Link to="/contact" className="underline underline-offset-2">Contact us</Link> to hand them over.</>
-                )}
+                {blocker === "billing account" ? (
+                  <>Accounts with billing history can't be purged here. <Link to="/contact" className="underline underline-offset-2">Contact us</Link> to delete your account.</>
+                ) : blocker}
               </li>
             ))}
           </ul>

@@ -23,6 +23,35 @@ func (q *sqlQuerier) ClearApplicationReviewsByReviewer(ctx context.Context, user
 	return err
 }
 
+const clearRealmsCreatedByUser = `-- name: ClearRealmsCreatedByUser :exec
+UPDATE wow_server_realms SET created_by = NULL WHERE created_by = $1::uuid
+`
+
+func (q *sqlQuerier) ClearRealmsCreatedByUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearRealmsCreatedByUser, userID)
+	return err
+}
+
+const clearServersCreatedByUser = `-- name: ClearServersCreatedByUser :exec
+UPDATE wow_servers SET created_by = NULL WHERE created_by = $1::uuid
+`
+
+// Servers, realms, and upload keys hold other players' data, so a purge only
+// removes the user as their creator.
+func (q *sqlQuerier) ClearServersCreatedByUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearServersCreatedByUser, userID)
+	return err
+}
+
+const clearUploadKeysCreatedByUser = `-- name: ClearUploadKeysCreatedByUser :exec
+UPDATE wow_server_upload_keys SET created_by = NULL WHERE created_by = $1::uuid
+`
+
+func (q *sqlQuerier) ClearUploadKeysCreatedByUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearUploadKeysCreatedByUser, userID)
+	return err
+}
+
 const deleteServerApplicationsByInitiator = `-- name: DeleteServerApplicationsByInitiator :exec
 DELETE FROM server_applications WHERE initiated_by = $1
 `
@@ -108,9 +137,7 @@ FROM (VALUES
   ('community', 'Guild Discord bot installs', (SELECT count(*) FROM guild_discord_installations t WHERE t.installed_by = $1::uuid)),
   ('community', 'Guild join requests', (SELECT count(*) FROM guild_join_requests t WHERE t.user_id = $1::uuid)),
   ('community', 'Server applications', (SELECT count(*) FROM server_applications t WHERE t.initiated_by = $1::uuid)),
-  ('community', 'Server upload keys', (SELECT count(*) FROM wow_server_upload_keys t WHERE t.created_by = $1::uuid)),
   ('community', 'Shared views', (SELECT count(*) FROM shared_views t WHERE t.created_by = $1::uuid)),
-  ('billing', 'Supporter entitlements', (SELECT count(*) FROM billing_entitlements t WHERE t.user_id = $1::uuid)),
   ('billing', 'Bonus storage grants', (SELECT count(*) FROM data_grants t WHERE t.user_id = $1::uuid AND t.source <> 'base')),
   ('billing', 'Photo proof requests', (SELECT count(*) FROM proof_requests t WHERE t.applicant_id = $1::uuid))
 ) AS data(group_key, label, count)
@@ -147,14 +174,13 @@ func (q *sqlQuerier) GetAccountDataCounts(ctx context.Context, userID uuid.UUID)
 
 const getAccountDeletionBlockers = `-- name: GetAccountDeletionBlockers :one
 SELECT ARRAY_REMOVE(ARRAY[
-  CASE WHEN EXISTS (SELECT 1 FROM billing_subscriptions t WHERE t.user_id = $1::uuid AND t.status NOT IN ('canceled', 'incomplete_expired')) THEN 'active subscription' END,
-  CASE WHEN EXISTS (SELECT 1 FROM wow_servers t WHERE t.created_by = $1::uuid) THEN 'created servers' END,
-  CASE WHEN EXISTS (SELECT 1 FROM wow_server_realms t WHERE t.created_by = $1::uuid) THEN 'created realms' END
+  CASE WHEN EXISTS (SELECT 1 FROM billing_subscriptions t WHERE t.user_id = $1::uuid)
+    OR EXISTS (SELECT 1 FROM billing_entitlements t WHERE t.user_id = $1::uuid) THEN 'billing account' END
 ], NULL)::text[] AS blockers
 `
 
-// GetAccountDeletionBlockers lists what must be resolved before an account can
-// be deleted. Servers and realms hold other players' logs and rankings.
+// GetAccountDeletionBlockers lists what prevents an account from being purged.
+// Accounts tied to a billing customer are never purged automatically.
 func (q *sqlQuerier) GetAccountDeletionBlockers(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	row := q.db.QueryRow(ctx, getAccountDeletionBlockers, userID)
 	var blockers []string
@@ -288,30 +314,6 @@ SELECT id FROM lua_projects WHERE owner_id = $1
 
 func (q *sqlQuerier) ListOwnedLuaProjectIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listOwnedLuaProjectIDs, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listUploadKeyIDsCreatedByUser = `-- name: ListUploadKeyIDsCreatedByUser :many
-SELECT id FROM wow_server_upload_keys WHERE created_by = $1
-`
-
-func (q *sqlQuerier) ListUploadKeyIDsCreatedByUser(ctx context.Context, userID uuid.NullUUID) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listUploadKeyIDsCreatedByUser, userID)
 	if err != nil {
 		return nil, err
 	}

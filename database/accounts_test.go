@@ -61,14 +61,15 @@ func TestAccountDeletionBlockers(t *testing.T) {
 	require.NoError(t, err)
 	blockers, err = db.GetAccountDeletionBlockers(ctx, userID)
 	require.NoError(t, err)
-	require.Equal(t, []string{"active subscription"}, blockers)
+	require.Equal(t, []string{"billing account"}, blockers)
 
+	// Any billing history blocks, not just an active subscription.
 	subscription.Status = "canceled"
 	_, err = db.UpsertBillingSubscription(ctx, subscription)
 	require.NoError(t, err)
 	blockers, err = db.GetAccountDeletionBlockers(ctx, userID)
 	require.NoError(t, err)
-	require.Empty(t, blockers)
+	require.Equal(t, []string{"billing account"}, blockers)
 }
 
 func TestAccountPurgeLifecycle(t *testing.T) {
@@ -134,4 +135,28 @@ func TestCurrentUserAuthSessionRevocation(t *testing.T) {
 		SessionID: sessionID, UserID: userID, UserAuthID: authLink.ID, JwtID: jwtID,
 	})
 	require.ErrorIs(t, err, sql.ErrNoRows)
+}
+
+func TestAccountPurgeKeepsCreatedServers(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	db, _ := dbtestutil.NewDB(t)
+	userID := insertAccountTestUser(t, db, "server-owner")
+	server, err := db.InsertWoWServer(ctx, database.InsertWoWServerParams{
+		ID: uuid.New(), Name: "purge-server-" + userID.String()[:8], CreatedBy: uuid.NullUUID{UUID: userID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	blockers, err := db.GetAccountDeletionBlockers(ctx, userID)
+	require.NoError(t, err)
+	require.Empty(t, blockers, "created servers do not block a purge")
+
+	require.NoError(t, db.ClearServersCreatedByUser(ctx, userID))
+	deleted, err := db.DeleteUserAccountRow(ctx, userID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
+
+	kept, err := db.GetWoWServer(ctx, server.ID)
+	require.NoError(t, err)
+	require.False(t, kept.CreatedBy.Valid)
 }
