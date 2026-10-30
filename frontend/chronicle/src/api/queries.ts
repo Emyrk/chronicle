@@ -234,9 +234,11 @@ export function useSession(options?: Omit<UseQueryOptions<Session | null>, "quer
   });
 }
 
-export function useMyAccountMergeRequests() {
+export function useMyAccountMergeRequests(enabled: boolean) {
   return useQuery({
     queryKey: ["account-merges", "me"],
+    enabled,
+    retry: false,
     queryFn: async () => {
       const response = await fetch("/api/v1/me/account-merges");
       if (!response.ok) throw new Error("Failed to fetch account merge requests");
@@ -245,9 +247,11 @@ export function useMyAccountMergeRequests() {
   });
 }
 
-export function useAccountDeletionStatus() {
+export function useAccountDeletionStatus(enabled: boolean) {
   return useQuery({
     queryKey: ["account-deletion"],
+    enabled,
+    retry: false,
     queryFn: async () => {
       const response = await fetch("/api/v1/me/account-deletion");
       if (!response.ok) throw new Error("Failed to check account deletion status");

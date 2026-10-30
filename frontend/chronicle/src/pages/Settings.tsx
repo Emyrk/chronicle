@@ -260,8 +260,9 @@ const CHARACTER_COSMETICS_OPTIONS: readonly {
 
 export function ProfileSettings() {
   const { data: session } = useSession();
-  const { data: mergeRequests = [] } = useMyAccountMergeRequests();
-  const { data: deletionStatus } = useAccountDeletionStatus();
+  const authenticated = Boolean(session?.user_id);
+  const { data: mergeRequests = [] } = useMyAccountMergeRequests(authenticated);
+  const { data: deletionStatus } = useAccountDeletionStatus(authenticated);
   const deleteAccount = useDeleteMyAccount();
   const updateCharacterCosmetics = useUpdateCharacterCosmeticsPreference();
   const [searchParams, setSearchParams] = useSearchParams();
