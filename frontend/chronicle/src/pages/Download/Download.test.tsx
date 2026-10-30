@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { SiteConfig } from "@/api/typesGenerated";
 import { DownloadView } from "./Download";
 import { detectOS, type OS } from "./platforms";
-import { tenantAddons } from "./formatAddons";
+import { tenantClients } from "./formatAddons";
 
 function config(default_format: string | null, available_formats: string[] = []): SiteConfig {
   return { default_format: null, available_formats: [], tenant: { default_format, available_formats } } as unknown as SiteConfig;
@@ -13,26 +13,39 @@ function config(default_format: string | null, available_formats: string[] = [])
 function render(os: OS, siteConfig: SiteConfig) {
   return renderToStaticMarkup(
     <MemoryRouter>
-      <DownloadView os={os} addons={tenantAddons(siteConfig)} />
+      <DownloadView os={os} clients={tenantClients(siteConfig)} />
     </MemoryRouter>,
   );
 }
 
-describe("tenantAddons", () => {
-  it("puts the tenant's default format addon first and dedupes the rest", () => {
-    const { addons, defaultNeedsNoAddon } = tenantAddons(
-      config("3.3.5a-cc-addon", ["azerothcore-mod", "2.4.3-cc-addon", "3.3.5a-cc-addon"]),
-    );
-    expect(addons.map((a) => a.name)).toEqual(["ChronicleCompanionWoTLK", "ChronicleCompanionTBC"]);
-    expect(defaultNeedsNoAddon).toBe(false);
+describe("tenantClients", () => {
+  it("puts the tenant's default format first and collapses formats sharing an addon", () => {
+    const clients = tenantClients(config("3.3.5a-cc-addon", ["azerothcore-mod", "2.4.3-cc-addon", "3.3.5a-cc-addon"]));
+    expect(clients.map((c) => c.addon?.name)).toEqual(["ChronicleCompanionWoTLK", "ChronicleCompanionTBC"]);
   });
 
-  it("flags WoW Forever as needing no addon", () => {
-    expect(tenantAddons(config("v22-cleu")).defaultNeedsNoAddon).toBe(true);
+  it("offers 1.14 as the alternate on a 1.12 tenant", () => {
+    const clients = tenantClients(config("1.12a-cc-addon", ["1.12a-cc-addon", "hermesproxy_1_14_2_cc"]));
+    expect(clients.map((c) => c.label)).toEqual(["1.12", "1.14"]);
+  });
+
+  it("gives WoW Forever no addon", () => {
+    expect(tenantClients(config("v22-cleu"))[0].addon).toBeNull();
   });
 });
 
 describe("DownloadView", () => {
+  it("shows a client picker with the default selected when the tenant has several formats", () => {
+    const markup = render("windows", config("1.12a-cc-addon", ["hermesproxy_1_14_2_cc"]));
+    expect(markup).toContain('aria-pressed="true">1.12');
+    expect(markup).toContain('aria-pressed="false">1.14');
+    expect(markup).toContain("Add Nampower");
+  });
+
+  it("hides the picker with a single format", () => {
+    expect(render("windows", config("1.12a-cc-addon"))).not.toContain("Your client");
+  });
+
   it("links the tenant's addon instead of telling players to type /combatlog", () => {
     const markup = render("windows", config("1.12a-cc-addon"));
     expect(markup).toContain("https://github.com/Emyrk/ChronicleCompanion/");

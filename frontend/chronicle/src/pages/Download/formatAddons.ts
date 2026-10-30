@@ -61,44 +61,52 @@ const WOTLK: CompanionAddon = {
   ],
 };
 
-/**
- * Addon per log format, matching the upload page's instructions. A format
- * mapped to null (WoW Forever's Blizzard log) has no addon.
- */
-const FORMAT_ADDONS: Record<string, CompanionAddon | null> = {
-  "1.12a-cc-addon": COMPANION,
-  "1.12a-superwow-addon": { ...COMPANION, requires: [SUPERWOW], optional: [] },
-  "2.4.3-cc-addon": {
-    name: "ChronicleCompanionTBC",
-    url: "https://github.com/Emyrk/ChronicleCompanionTBC",
-    client: "2.4.3",
-    requires: [],
-    optional: [],
-  },
-  "3.3.5a-cc-addon": WOTLK,
-  "azerothcore-mod": WOTLK,
-  "hermesproxy_1_14_2_cc": {
-    name: "ChronicleCompanionJimsProxy",
-    url: "https://github.com/Smopraq/ChronicleCompanionJimsProxy",
-    client: "1.14.2 (HermesProxy)",
-    requires: [],
-    optional: [],
-  },
-  "v22-cleu": null,
-};
-
-export interface TenantAddons {
-  /** Addons for the tenant's formats, default format's first. */
-  addons: CompanionAddon[];
-  /** The default format logs without an addon (WoW Forever). */
-  defaultNeedsNoAddon: boolean;
+/** A game client players can pick, and the addon it logs with. */
+export interface ClientOption {
+  /** Short client name for the picker, e.g. "1.12". */
+  label: string;
+  /** Null when the client logs without an addon (WoW Forever's Blizzard log). */
+  addon: CompanionAddon | null;
 }
 
+/** Client per log format, matching the upload page's instructions. */
+const FORMAT_CLIENTS: Record<string, ClientOption> = {
+  "1.12a-cc-addon": { label: "1.12", addon: COMPANION },
+  "1.12a-superwow-addon": {
+    label: "1.12 · SuperWoW",
+    addon: { ...COMPANION, requires: [SUPERWOW], optional: [] },
+  },
+  "2.4.3-cc-addon": {
+    label: "2.4.3",
+    addon: {
+      name: "ChronicleCompanionTBC",
+      url: "https://github.com/Emyrk/ChronicleCompanionTBC",
+      client: "2.4.3",
+      requires: [],
+      optional: [],
+    },
+  },
+  "3.3.5a-cc-addon": { label: "3.3.5a", addon: WOTLK },
+  "azerothcore-mod": { label: "3.3.5a", addon: WOTLK },
+  "hermesproxy_1_14_2_cc": {
+    label: "1.14",
+    addon: {
+      name: "ChronicleCompanionJimsProxy",
+      url: "https://github.com/Smopraq/ChronicleCompanionJimsProxy",
+      client: "1.14.2 (HermesProxy)",
+      requires: [],
+      optional: [],
+    },
+  },
+  "v22-cleu": { label: "WoW Forever", addon: null },
+};
+
 /**
- * Resolves the addons for this site's upload formats, using the same
- * precedence as the upload page: tenant > site config > compiled-in default.
+ * Resolves the clients for this site's upload formats, default format first,
+ * using the same precedence as the upload page: tenant > site config >
+ * compiled-in default. Formats sharing an addon collapse into one option.
  */
-export function tenantAddons(siteConfig: SiteConfig | undefined): TenantAddons {
+export function tenantClients(siteConfig: SiteConfig | undefined): ClientOption[] {
   const tenant = siteConfig?.tenant;
   const defaultFormat =
     tenant?.default_format ??
@@ -108,10 +116,10 @@ export function tenantAddons(siteConfig: SiteConfig | undefined): TenantAddons {
     ? tenant.available_formats
     : (siteConfig?.available_formats ?? []);
 
-  const addons: CompanionAddon[] = [];
+  const clients: ClientOption[] = [];
   for (const format of [defaultFormat, ...available]) {
-    const addon = FORMAT_ADDONS[format];
-    if (addon && !addons.includes(addon)) addons.push(addon);
+    const client = FORMAT_CLIENTS[format];
+    if (client && !clients.some((c) => c.addon === client.addon)) clients.push(client);
   }
-  return { addons, defaultNeedsNoAddon: FORMAT_ADDONS[defaultFormat] === null };
+  return clients;
 }

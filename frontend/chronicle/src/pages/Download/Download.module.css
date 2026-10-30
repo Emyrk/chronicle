@@ -32,6 +32,8 @@
 .howItem:first-child{padding-left:0;border-left:0}
 .howItem:last-child{padding-right:0}
 .howItem strong,.card strong{color:#f8f1e3}
+.card a strong{color:inherit}
+.stepBody a,.modList a{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}
 .howItem svg{flex:0 0 auto}
 
 .h2{font-size:34px;color:#f8f1e3}
@@ -102,7 +104,12 @@
 .mark .state{position:absolute;right:-3px;bottom:-3px;width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 2px #0b0908}
 .addonRow{display:flex;align-items:center;gap:8px;color:#ffd100}
 .addonBox{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border:1px solid #c9a227;border-radius:2px;background:rgba(255,209,0,.15)}
-.alt{font-size:14px;color:#b8a995}
+.clientPick{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:14px;color:#b8a995}
+.clientPick button{min-height:36px;padding:0 14px;border-radius:999px;border:1px solid #4a3f36;background:#241e19;color:#efe6d6;font:inherit;font-weight:700;cursor:pointer;transition:border-color .2s ease,background .2s ease}
+.clientPick button:hover{border-color:#60a5fa}
+.clientPick button[aria-pressed="true"]{background:#3b82f6;border-color:#3b82f6;color:#fff}
+.clientPick button[aria-pressed="true"] .pickDefault{color:rgba(255,255,255,.75)}
+.pickDefault{font-weight:400;color:#9a8d7b}
 .modRow{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;line-height:1.2;color:#efe6d6;padding:3px 10px;background:#241e19;border:1px solid #3a2f26;border-radius:6px}
 .tagReq,.tagOpt{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 6px;border-radius:4px}
 .tagReq{color:#fff;background:#3b82f6}

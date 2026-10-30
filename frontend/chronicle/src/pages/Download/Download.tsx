@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { BatteryFull, Check, Download as DownloadIcon, ExternalLink, Eye, Info, PanelTop, Upload as UploadIcon, Wifi } from "lucide-react";
 import { useSiteConfig } from "@/api/queries";
 import { MagicLogo } from "@/components/MagicLogo";
-import { tenantAddons, type ClientMod, type CompanionAddon, type TenantAddons } from "./formatAddons";
+import { tenantClients, type ClientMod, type ClientOption, type CompanionAddon } from "./formatAddons";
 import { PLATFORMS, REPO, assetUrl, detectOS, type OS } from "./platforms";
 import s from "./Download.module.css";
 
@@ -43,9 +44,9 @@ function Rise({ n, className = "", children }: { n: number; className?: string; 
   return <div className={`${s.rise} ${s[`d${n}`]} ${className}`}>{children}</div>;
 }
 
-/** Step 3: the tenant's companion addon, which turns on combat logging by itself. */
-function AddonStep({ addons, defaultNeedsNoAddon }: TenantAddons) {
-  if (defaultNeedsNoAddon || addons.length === 0) {
+/** Step 3: the client's companion addon, which turns on combat logging by itself. */
+function AddonStep({ addon: primary }: { addon: CompanionAddon | null }) {
+  if (!primary) {
     return (
       <div className={s.card}>
         <div className={s.shot} style={{ gap: 8 }}>
@@ -69,7 +70,6 @@ function AddonStep({ addons, defaultNeedsNoAddon }: TenantAddons) {
       </div>
     );
   }
-  const [primary, ...others] = addons;
   return (
     <div className={s.card}>
       <div className={s.shot} style={{ gap: 8 }}>
@@ -98,23 +98,9 @@ function AddonStep({ addons, defaultNeedsNoAddon }: TenantAddons) {
         and nothing to forget.
       </p>
       <a href={primary.url} target="_blank" rel="noopener noreferrer" className={s.addonCta}>
-        Get {primary.name}
+        Get the addon
         <ExternalLink size={16} strokeWidth={2.5} aria-hidden="true" />
       </a>
-      {others.length > 0 && (
-        <p className={s.alt}>
-          On another client?{" "}
-          {others.map((a, i) => (
-            <span key={`${a.name}-${a.client}`}>
-              {i > 0 && " · "}
-              <a href={a.url} target="_blank" rel="noopener noreferrer">
-                {a.name}
-              </a>{" "}
-              ({a.client})
-            </span>
-          ))}
-        </p>
-      )}
     </div>
   );
 }
@@ -180,12 +166,14 @@ function ModsStep({ addon }: { addon: CompanionAddon }) {
   );
 }
 
-export function DownloadView({ os, addons }: { os: OS; addons: TenantAddons }) {
+export function DownloadView({ os, clients }: { os: OS; clients: ClientOption[] }) {
   const current = PLATFORMS.find((p) => p.os === os) ?? PLATFORMS[0];
   const [primary, ...alternates] = current.files;
   const others = PLATFORMS.filter((p) => p !== current);
-  // Step 4 only exists when the default format's addon has client mods to go with it.
-  const addon = addons.defaultNeedsNoAddon ? undefined : addons.addons[0];
+  // The tenant's default format is first, so it's selected until the player picks another.
+  const [picked, setPicked] = useState<string>();
+  const addon = (clients.find((c) => c.label === picked) ?? clients[0])?.addon ?? null;
+  // Step 4 only exists when the addon has client mods to go with it.
   const modsAddon = addon && addon.requires.length + addon.optional.length > 0 ? addon : undefined;
 
   return (
@@ -256,6 +244,22 @@ export function DownloadView({ os, addons }: { os: OS; addons: TenantAddons }) {
 
       <Rise n={6} className={`${s.wrap} ${s.steps}`}>
         <h2 className={`${s.serif} ${s.h2}`}>{modsAddon ? "Four" : "Three"} steps, then never again</h2>
+        {clients.length > 1 && (
+          <div className={s.clientPick} role="group" aria-label="Your game client">
+            <span>Your client</span>
+            {clients.map((c, i) => (
+              <button
+                key={c.label}
+                type="button"
+                aria-pressed={c.addon === addon}
+                onClick={() => setPicked(c.label)}
+              >
+                {c.label}
+                {i === 0 && <span className={s.pickDefault}> · default</span>}
+              </button>
+            ))}
+          </div>
+        )}
         <div className={`${s.stepGrid} ${modsAddon ? s.stepGrid4 : ""}`}>
           <div className={s.card}>
             <div className={s.shot}>
@@ -299,7 +303,7 @@ export function DownloadView({ os, addons }: { os: OS; addons: TenantAddons }) {
             </p>
           </div>
 
-          <AddonStep {...addons} />
+          <AddonStep addon={addon} />
           {modsAddon && <ModsStep addon={modsAddon} />}
         </div>
       </Rise>
@@ -362,5 +366,5 @@ export function DownloadPage() {
   // ?os= lets a link pick the platform, e.g. "Download for Windows".
   const requested = new URLSearchParams(useLocation().search).get("os");
   const os = PLATFORMS.some((p) => p.os === requested) ? (requested as OS) : detectOS();
-  return <DownloadView os={os} addons={tenantAddons(siteConfig)} />;
+  return <DownloadView os={os} clients={tenantClients(siteConfig)} />;
 }
