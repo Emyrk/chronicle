@@ -127,6 +127,14 @@ func newLegacyCookieStore(secure bool) *sessions.CookieStore {
 	return configureCookieStore(sessions.NewCookieStore([]byte("secret")), secure)
 }
 
+// newCookie starts a cookie that replaces any existing one with the same name.
+// An existing cookie that can't be decoded, such as one signed with an old
+// key, is overwritten rather than treated as an error.
+func (s *Service) newCookie(r *http.Request, name string) *sessions.Session {
+	session, _ := s.Store.New(r, name)
+	return session
+}
+
 func configureCookieStore(store *sessions.CookieStore, secure bool) *sessions.CookieStore {
 	store.Options.HttpOnly = true
 	store.Options.Secure = secure
@@ -366,11 +374,7 @@ func (s *Service) BeginAuthHandler(w http.ResponseWriter, req *http.Request) {
 		from = "/"
 	}
 
-	sess, err := s.Store.New(req, "from")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	sess := s.newCookie(req, "from")
 	sess.Values["from"] = from
 	err = sess.Save(req, w)
 	if err != nil {
@@ -449,11 +453,7 @@ func (s *Service) BeginLinkFromCodeHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	session, err := s.Store.New(r, LinkSessionName)
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
+	session := s.newCookie(r, LinkSessionName)
 	session.Options.MaxAge = int(linkSessionLifetime.Seconds())
 	session.Values["user_id"] = relay.Session.UserID.String()
 	session.Values["session_id"] = relay.Session.ID.String()
@@ -491,10 +491,7 @@ func (s *Service) linkTarget(r *http.Request) (linkTarget, bool) {
 }
 
 func (s *Service) clearLinkTarget(w http.ResponseWriter, r *http.Request) {
-	session, err := s.Store.Get(r, LinkSessionName)
-	if err != nil {
-		return
-	}
+	session, _ := s.Store.Get(r, LinkSessionName)
 	session.Options.MaxAge = -1
 	session.Values = make(map[interface{}]interface{})
 	_ = session.Save(r, w)
@@ -822,10 +819,7 @@ func (s *Service) SetSessionCookie(w http.ResponseWriter, r *http.Request, provi
 		return err
 	}
 
-	auth, err := s.Store.New(r, AuthSessionName)
-	if err != nil {
-		return err
-	}
+	auth := s.newCookie(r, AuthSessionName)
 
 	auth.Values["jwt"] = jwt
 	err = auth.Save(r, w)
