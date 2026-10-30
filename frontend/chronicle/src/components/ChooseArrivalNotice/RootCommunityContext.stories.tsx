@@ -173,31 +173,73 @@ function PreviewNav({ compactChooser, onChoose }: { compactChooser: boolean; onC
   );
 }
 
+function CommunityStack({ onChoose }: { onChoose: () => void }) {
+  const shown = COMMUNITIES.slice(0, 3);
+  const extra = COMMUNITIES.length - shown.length;
+  return (
+    <button
+      type="button"
+      onClick={onChoose}
+      aria-label="Browse communities"
+      className="group hidden shrink-0 items-center -space-x-2 rounded-xl sm:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {shown.map((community, index) => (
+        <span
+          key={community.slug}
+          style={{ zIndex: shown.length - index }}
+          className="relative rounded-[0.6rem] bg-background p-0.5 ring-1 ring-primary/30 transition-transform group-hover:-translate-y-0.5"
+        >
+          <CommunityMark community={community} />
+        </span>
+      ))}
+      {extra > 0 && (
+        <span className="relative flex size-10 items-center justify-center rounded-[0.6rem] bg-background font-mono text-[11px] text-muted-foreground ring-1 ring-primary/30 transition-colors group-hover:text-(--tertiary)">
+          +{extra}
+        </span>
+      )}
+    </button>
+  );
+}
+
 function RootContextBar({ onChoose, onDismiss }: { onChoose: () => void; onDismiss: () => void }) {
   return (
-    <section className="relative overflow-hidden border-b border-primary/25 bg-[linear-gradient(110deg,color-mix(in_oklch,var(--primary)_13%,var(--background)),var(--background)_58%)]">
-      <div className="absolute inset-y-0 left-[12%] w-56 -skew-x-12 bg-primary/5 blur-2xl" />
-      <div className="relative mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:px-6">
-        <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
-          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-background/65 text-(--tertiary) sm:mt-0">
-            <Globe2 className="size-4" />
-          </span>
+    <section className="relative overflow-hidden border-b border-primary/20 bg-[linear-gradient(100deg,color-mix(in_srgb,var(--primary)_16%,var(--background))_0%,color-mix(in_srgb,var(--primary)_5%,var(--background))_45%,var(--background)_80%)]">
+      {/* Accent rail, soft glow, and a faint grid so the bar reads as a distinct layer. */}
+      <div className="absolute inset-y-0 left-0 w-1 bg-linear-to-b from-(--tertiary) via-primary/60 to-transparent" />
+      <div className="absolute -top-16 left-[8%] size-48 rounded-full bg-primary/15 blur-3xl" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,color-mix(in_oklch,var(--foreground)_4%,transparent)_1px,transparent_1px)] mask-[linear-gradient(to_right,black,transparent_55%)] bg-size-[22px_100%]" />
+      <div className="absolute inset-x-0 bottom-0 h-px bg-linear-to-r from-transparent via-primary/60 to-transparent" />
+
+      <div className="relative mx-auto flex max-w-7xl flex-col gap-3 py-3.5 pr-12 pl-5 sm:flex-row sm:items-center sm:gap-5 sm:pr-4 sm:pl-6">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          <CommunityStack onChoose={onChoose} />
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">You’re viewing Chronicle across all communities</p>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground sm:text-sm">
-              Choose where you play for community-specific logs, rankings, and game data.
+            <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.2em] text-(--tertiary)">
+              <Globe2 className="size-3" />
+              All communities
+            </p>
+            <p className="mt-0.5 font-wow text-base leading-snug text-foreground sm:text-lg">
+              You’re viewing Chronicle across every community
+            </p>
+            <p className="hidden text-sm text-muted-foreground sm:block">
+              Pick where you play for its logs, rankings, and game data.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 pl-12 sm:pl-0">
-          <Button size="sm" onClick={onChoose} className="gap-2 shadow-md shadow-primary/10">
-            <Compass className="size-4" />
-            Choose community
-          </Button>
-          <Button variant="ghost" size="icon" onClick={onDismiss} aria-label="Dismiss for this session" className="size-8">
-            <X className="size-4" />
-          </Button>
-        </div>
+        <Button size="sm" onClick={onChoose} className="group gap-2 shadow-lg shadow-primary/20 sm:h-9 sm:px-4">
+          <Compass className="size-4 transition-transform group-hover:rotate-45" />
+          Choose community
+          <ChevronRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onDismiss}
+          aria-label="Dismiss for this session"
+          className="absolute top-2 right-2 size-8 text-muted-foreground hover:text-foreground sm:static"
+        >
+          <X className="size-4" />
+        </Button>
       </div>
     </section>
   );
