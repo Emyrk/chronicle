@@ -180,6 +180,16 @@
   animation: pulse-ring 1.5s ease-out infinite;
 }
 
+/* Countdown ring: drains a pathLength=1 circle stroke over the animation duration */
+@keyframes countdown-drain {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 1;
+  }
+}
+
 /* One-shot entrance (e.g. an aura going active): slide up, overshoot, and flash a primary ring */
 @keyframes replay-pop {
   0% {

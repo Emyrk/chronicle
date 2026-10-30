@@ -317,6 +317,8 @@ export function useUpdateNotificationSetting() {
   });
 }
 
+export const SIDEKICK_REFRESH_INTERVAL_MS = 30_000;
+
 export function useMySidekicks() {
   return useQuery({
     queryKey: ["sidekicks", "me"],
@@ -325,7 +327,7 @@ export function useMySidekicks() {
       if (!response.ok) throw new Error("Failed to fetch Sidekicks");
       return response.json() as Promise<ListSidekicksResponse>;
     },
-    refetchInterval: 30_000,
+    refetchInterval: SIDEKICK_REFRESH_INTERVAL_MS,
   });
 }
 
