@@ -46,7 +46,10 @@ func (s *Service) RefreshSession(ctx context.Context, w http.ResponseWriter, r *
 		refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sessionRefreshTimeout)
 		defer cancel()
 		result, err := s.refreshSession(refreshCtx, currentClaims)
-		if err == nil && result.refreshed {
+		if err != nil {
+			s.metrics.observeRefresh(currentClaims.Provider, err)
+		} else if result.refreshed {
+			s.metrics.observeRefresh(currentClaims.Provider, nil)
 			s.logger.Debug("successfully refreshed session",
 				slog.String("user_id", currentClaims.Subject.String()),
 				slog.String("session_id", currentClaims.SessionID.String()),

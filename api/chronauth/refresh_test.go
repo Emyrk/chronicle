@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/markbates/goth"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 )
@@ -133,6 +134,8 @@ func newRefreshTestService(
 	require.NoError(t, err)
 	sessions, err := NewSessions(SessionOptions{SecretPEM: authkeys.MarshalPrivateKey(privateKey)})
 	require.NoError(t, err)
+	metrics, err := newAuthMetrics(prometheus.NewRegistry())
+	require.NoError(t, err)
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
@@ -142,6 +145,7 @@ func newRefreshTestService(
 		Zed:       zed,
 		logger:    logger,
 		sessions:  sessions,
+		metrics:   metrics,
 	}
 	return service, store, session
 }
@@ -173,6 +177,7 @@ func TestRefreshSessionUsesTransactionConnection(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int32(1), provider.calls.Load())
+	require.Equal(t, float64(1), authMetricValue(t, service.metrics.refreshes.WithLabelValues("test", authResultSuccess)))
 	updated, err := store.GetUserAuthSessionByID(ctx, session.ID)
 	require.NoError(t, err)
 	require.Equal(t, "new-refresh-token", updated.RefreshToken)
@@ -274,6 +279,7 @@ func TestRefreshSessionFailureMarksCaller(t *testing.T) {
 		currentClaims,
 	)
 	require.ErrorContains(t, err, "provider not found")
+	require.Equal(t, float64(1), authMetricValue(t, service.metrics.refreshes.WithLabelValues("test", authResultError)))
 	cookie := requireResponseCookie(t, resp, RefreshFailedCookieName)
 	require.Equal(t, session.ID.String(), cookie.Value)
 }

@@ -25,6 +25,7 @@ func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User)
 	if !ok {
 		return session, false
 	}
+	registered := false
 
 	err := s.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		linked, err := tx.GetUserAuthByLinkedID(ctx, database.GetUserAuthByLinkedIDParams{
@@ -86,6 +87,7 @@ func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User)
 				return err
 			}
 
+			registered = true
 			s.logger.Info("new user registered",
 				slog.String("provider", provider.Name()),
 				slog.String("email", user.Email),
@@ -126,7 +128,13 @@ func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User)
 		return session, false
 	}
 
-	if provider.Name() == "discord" && s.Bot != nil {
+	if registered {
+		s.metrics.observeSignup(authMethod(provider.Name()))
+	} else {
+		s.metrics.observeLogin(authMethod(provider.Name()))
+	}
+
+	if provider.Name() == authMethodDiscord && s.Bot != nil {
 		if err := s.Bot.EnqueueEntitlementRoleSync(ctx, session.UserID); err != nil {
 			s.logger.Warn("enqueue Discord entitlement role sync after login",
 				slog.String("user_id", session.UserID.String()),

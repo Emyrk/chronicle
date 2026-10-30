@@ -275,7 +275,8 @@ func (w *WorkerAccountPurge) runPurge(ctx context.Context, purge database.Accoun
 	}
 	// Everything else the user owns cascades from the user row. Sessions go in
 	// the same transaction, which revokes the user's JWTs immediately.
-	return db.InTx(ctx, func(tx *authz.AuthzTX) error {
+	deleted := false
+	err = db.InTx(ctx, func(tx *authz.AuthzTX) error {
 		locked, err := tx.LockUsersForUpdate(ctx, []uuid.UUID{userID})
 		if err != nil {
 			return err
@@ -301,12 +302,21 @@ func (w *WorkerAccountPurge) runPurge(ctx context.Context, purge database.Accoun
 			if err := tx.DeleteUserRelationships(ctx, userID); err != nil {
 				return err
 			}
-			if _, err := tx.DeleteUserAccountRow(ctx, userID); err != nil {
+			rowsDeleted, err := tx.DeleteUserAccountRow(ctx, userID)
+			if err != nil {
 				return fmt.Errorf("delete user: %w", err)
 			}
+			deleted = rowsDeleted > 0
 		}
 		return tx.FinishAccountPurge(ctx, database.FinishAccountPurgeParams{
 			ID: purgeID, Status: AccountPurgeSucceeded,
 		})
 	}, nil)
+	if err != nil {
+		return err
+	}
+	if deleted {
+		w.parent.accountMetrics.observeDeletion()
+	}
+	return nil
 }
