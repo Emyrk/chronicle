@@ -230,6 +230,50 @@ func TestLogFilePartRejectsDuplicateSourceSequence(t *testing.T) {
 	require.Error(t, reserve(uuid.New()))
 }
 
+func TestCountUserLogFileParts(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	fileID := insertPartFixture(t, ctx, store)
+
+	reserve := func(countsTowardLimit bool) database.LogFilePart {
+		var part database.LogFilePart
+		require.NoError(t, store.InTx(ctx, func(tx database.Store) error {
+			if _, err := tx.LockLogFilePartSequence(ctx, fileID); err != nil {
+				return err
+			}
+			var err error
+			part, err = tx.ReserveLogFilePart(ctx, database.ReserveLogFilePartParams{
+				PartID:                uuid.New(),
+				LogFileID:             fileID,
+				UploadID:              uuid.New(),
+				ReservationID:         uuid.New(),
+				ObjectKey:             "parts/" + uuid.NewString(),
+				CountsTowardUserLimit: countsTowardLimit,
+			})
+			return err
+		}, nil))
+		return part
+	}
+
+	var counted []database.LogFilePart
+	for range 5 {
+		counted = append(counted, reserve(true))
+	}
+	reserve(false)
+	count, err := store.CountUserLogFileParts(ctx, fileID)
+	require.NoError(t, err)
+	require.Equal(t, int64(5), count)
+
+	require.NoError(t, store.MarkLogFilePartFailed(ctx, database.MarkLogFilePartFailedParams{
+		ID: counted[0].ID, ReservationID: counted[0].ReservationID,
+	}))
+	count, err = store.CountUserLogFileParts(ctx, fileID)
+	require.NoError(t, err)
+	require.Equal(t, int64(4), count)
+}
+
 func TestLogFilePartsCountTowardUserStorage(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)

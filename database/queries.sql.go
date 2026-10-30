@@ -11164,13 +11164,28 @@ func (q *sqlQuerier) AddReadyLogFilePartSizes(ctx context.Context, arg AddReadyL
 	return err
 }
 
+const countUserLogFileParts = `-- name: CountUserLogFileParts :one
+SELECT count(*)
+FROM log_file_parts
+WHERE log_file_id = $1
+  AND counts_toward_user_limit
+  AND status <> 'failed'
+`
+
+func (q *sqlQuerier) CountUserLogFileParts(ctx context.Context, logFileID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countUserLogFileParts, logFileID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const expireStaleLogFileParts = `-- name: ExpireStaleLogFileParts :many
 UPDATE log_file_parts
 SET status = 'failed'
 WHERE log_file_id = $1
   AND status = 'pending'
   AND created_at < $2
-RETURNING id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at
+RETURNING id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at, counts_toward_user_limit
 `
 
 type ExpireStaleLogFilePartsParams struct {
@@ -11202,6 +11217,7 @@ func (q *sqlQuerier) ExpireStaleLogFileParts(ctx context.Context, arg ExpireStal
 			&i.ContentEncoding,
 			&i.CreatedAt,
 			&i.FinalizedAt,
+			&i.CountsTowardUserLimit,
 		); err != nil {
 			return nil, err
 		}
@@ -11224,7 +11240,7 @@ SET status = 'ready',
 WHERE id = $5
   AND reservation_id = $6
   AND status = 'pending'
-RETURNING id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at
+RETURNING id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at, counts_toward_user_limit
 `
 
 type FinalizeLogFilePartParams struct {
@@ -11261,12 +11277,13 @@ func (q *sqlQuerier) FinalizeLogFilePart(ctx context.Context, arg FinalizeLogFil
 		&i.ContentEncoding,
 		&i.CreatedAt,
 		&i.FinalizedAt,
+		&i.CountsTowardUserLimit,
 	)
 	return i, err
 }
 
 const getLogFilePart = `-- name: GetLogFilePart :one
-SELECT id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at
+SELECT id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at, counts_toward_user_limit
 FROM log_file_parts
 WHERE id = $1
 `
@@ -11289,12 +11306,13 @@ func (q *sqlQuerier) GetLogFilePart(ctx context.Context, id uuid.UUID) (LogFileP
 		&i.ContentEncoding,
 		&i.CreatedAt,
 		&i.FinalizedAt,
+		&i.CountsTowardUserLimit,
 	)
 	return i, err
 }
 
 const listLogFilePartsForDeletion = `-- name: ListLogFilePartsForDeletion :many
-SELECT id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at
+SELECT id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at, counts_toward_user_limit
 FROM log_file_parts
 WHERE log_file_id = $1
 ORDER BY sequence, id
@@ -11324,6 +11342,7 @@ func (q *sqlQuerier) ListLogFilePartsForDeletion(ctx context.Context, logFileID 
 			&i.ContentEncoding,
 			&i.CreatedAt,
 			&i.FinalizedAt,
+			&i.CountsTowardUserLimit,
 		); err != nil {
 			return nil, err
 		}
@@ -11336,7 +11355,7 @@ func (q *sqlQuerier) ListLogFilePartsForDeletion(ctx context.Context, logFileID 
 }
 
 const listReadyLogFileParts = `-- name: ListReadyLogFileParts :many
-SELECT part.id, part.log_file_id, part.sequence, part.upload_id, part.reservation_id, part.source_sequence, part.object_key, part.status, part.hash, part.size_bytes, part.compressed_size_bytes, part.content_encoding, part.created_at, part.finalized_at
+SELECT part.id, part.log_file_id, part.sequence, part.upload_id, part.reservation_id, part.source_sequence, part.object_key, part.status, part.hash, part.size_bytes, part.compressed_size_bytes, part.content_encoding, part.created_at, part.finalized_at, part.counts_toward_user_limit
 FROM log_file_parts part
 WHERE part.log_file_id = $1
   AND part.status = 'ready'
@@ -11385,6 +11404,7 @@ func (q *sqlQuerier) ListReadyLogFileParts(ctx context.Context, logFileID uuid.U
 			&i.ContentEncoding,
 			&i.CreatedAt,
 			&i.FinalizedAt,
+			&i.CountsTowardUserLimit,
 		); err != nil {
 			return nil, err
 		}
@@ -11430,7 +11450,8 @@ func (q *sqlQuerier) MarkLogFilePartFailed(ctx context.Context, arg MarkLogFileP
 
 const reserveLogFilePart = `-- name: ReserveLogFilePart :one
 INSERT INTO log_file_parts (
-    id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status
+    id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status,
+    counts_toward_user_limit
 )
 VALUES (
     $1,
@@ -11440,7 +11461,8 @@ VALUES (
     $4,
     $5::bigint,
     $6,
-    'pending'
+    'pending',
+    $7
 )
 ON CONFLICT (log_file_id, upload_id) DO UPDATE
 SET status = CASE
@@ -11458,17 +11480,22 @@ SET status = CASE
     created_at = CASE
         WHEN log_file_parts.status = 'failed' THEN now()
         ELSE log_file_parts.created_at
+    END,
+    counts_toward_user_limit = CASE
+        WHEN log_file_parts.status = 'failed' THEN EXCLUDED.counts_toward_user_limit
+        ELSE log_file_parts.counts_toward_user_limit
     END
-RETURNING id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at
+RETURNING id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at, counts_toward_user_limit
 `
 
 type ReserveLogFilePartParams struct {
-	PartID         uuid.UUID   `db:"part_id" json:"part_id"`
-	LogFileID      uuid.UUID   `db:"log_file_id" json:"log_file_id"`
-	UploadID       uuid.UUID   `db:"upload_id" json:"upload_id"`
-	ReservationID  uuid.UUID   `db:"reservation_id" json:"reservation_id"`
-	SourceSequence pgtype.Int8 `db:"source_sequence" json:"source_sequence"`
-	ObjectKey      string      `db:"object_key" json:"object_key"`
+	PartID                uuid.UUID   `db:"part_id" json:"part_id"`
+	LogFileID             uuid.UUID   `db:"log_file_id" json:"log_file_id"`
+	UploadID              uuid.UUID   `db:"upload_id" json:"upload_id"`
+	ReservationID         uuid.UUID   `db:"reservation_id" json:"reservation_id"`
+	SourceSequence        pgtype.Int8 `db:"source_sequence" json:"source_sequence"`
+	ObjectKey             string      `db:"object_key" json:"object_key"`
+	CountsTowardUserLimit bool        `db:"counts_toward_user_limit" json:"counts_toward_user_limit"`
 }
 
 func (q *sqlQuerier) ReserveLogFilePart(ctx context.Context, arg ReserveLogFilePartParams) (LogFilePart, error) {
@@ -11479,6 +11506,7 @@ func (q *sqlQuerier) ReserveLogFilePart(ctx context.Context, arg ReserveLogFileP
 		arg.ReservationID,
 		arg.SourceSequence,
 		arg.ObjectKey,
+		arg.CountsTowardUserLimit,
 	)
 	var i LogFilePart
 	err := row.Scan(
@@ -11496,6 +11524,7 @@ func (q *sqlQuerier) ReserveLogFilePart(ctx context.Context, arg ReserveLogFileP
 		&i.ContentEncoding,
 		&i.CreatedAt,
 		&i.FinalizedAt,
+		&i.CountsTowardUserLimit,
 	)
 	return i, err
 }
@@ -28135,6 +28164,20 @@ func (q *sqlQuerier) ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockUserStorageQuota = `-- name: LockUserStorageQuota :one
+SELECT id
+FROM users
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *sqlQuerier) LockUserStorageQuota(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockUserStorageQuota, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
 }
 
 const updateUserAuthSessionTokens = `-- name: UpdateUserAuthSessionTokens :one

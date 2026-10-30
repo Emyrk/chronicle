@@ -449,6 +449,21 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 	var group database.WoWLogGroup
 	// tmpFiles and hashes are the files that were uploaded now on local disk.
 	err = c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if _, err := tx.LockUserStorageQuota(ctx, cl.Subject); err != nil {
+			return fmt.Errorf("lock upload owner storage quota: %w", err)
+		}
+		lockedUser, quotaErr := tx.GetUserByID(ctx, cl.Subject)
+		if quotaErr != nil {
+			return fmt.Errorf("fetch locked upload owner storage quota: %w", quotaErr)
+		}
+		if lockedUser.ConsumedStorageBytes+incomingStorageBytes > lockedUser.MaxStorageBytes {
+			return httpapi.NewAPIError(
+				fmt.Errorf("storage limit exceeded"),
+				fmt.Sprintf("This upload would exceed the storage limit of %s; delete log files to free up space", humanize.Bytes(uint64(lockedUser.MaxStorageBytes))),
+				http.StatusBadRequest,
+			)
+		}
+
 		// Insert the log group
 		var err error
 		// Resolve the parse axes, preferring caller-supplied overrides (the
@@ -587,17 +602,62 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 	return &group, dbFiles, nil
 }
 
-var ErrServerLogAppendInProgress = errors.New("server log append with this upload ID is already in progress")
+var (
+	ErrLogAppendInProgress = errors.New("log append with this upload ID is already in progress")
+	ErrUserLogAppendLimit  = errors.New("user log append limit reached")
+)
 
-type ServerLogAppendMeta struct {
+// ErrServerLogAppendInProgress is kept for compatibility with the server upload handler.
+var ErrServerLogAppendInProgress = ErrLogAppendInProgress
+
+type LogAppendMeta struct {
 	UploadID       uuid.UUID
 	SourceSequence pgtype.Int8
 }
 
-// AppendServerLog stores each append as an immutable object part. PostgreSQL is
-// used only for short reservation/finalization transactions; no connection is
-// held while the object is uploaded.
+// ServerLogAppendMeta is retained for compatibility with server upload callers.
+type ServerLogAppendMeta = LogAppendMeta
+
+type logAppendOptions struct {
+	realmID                  uuid.UUID
+	meta                     LogAppendMeta
+	maxUserAppends           int64
+	enforceOwnerStorageQuota bool
+}
+
+func userLogAppendQuotaError(owner database.ChronicleUser, compressedSize int64) error {
+	if owner.ConsumedStorageBytes+compressedSize <= owner.MaxStorageBytes {
+		return nil
+	}
+	return httpapi.NewAPIError(
+		fmt.Errorf("storage limit exceeded"),
+		fmt.Sprintf("This append would exceed the storage limit of %s; delete log files to free up space", humanize.Bytes(uint64(owner.MaxStorageBytes))),
+		http.StatusBadRequest,
+	)
+}
+
+// AppendServerLog stores a server-produced append without a user append limit
+// or owner storage quota check.
 func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGroup, newData io.Reader, realmID uuid.UUID, meta ServerLogAppendMeta) error {
+	return c.appendLog(ctx, group, newData, logAppendOptions{realmID: realmID, meta: meta})
+}
+
+// AppendUserLog stores a user-produced append. maxAppends <= 0 means unlimited.
+// User appends always enforce the owning user's storage quota.
+func (c *Chronicle) AppendUserLog(ctx context.Context, group database.WoWLogGroup, newData io.Reader, realmID uuid.UUID, meta LogAppendMeta, maxAppends int64) error {
+	return c.appendLog(ctx, group, newData, logAppendOptions{
+		realmID:                  realmID,
+		meta:                     meta,
+		maxUserAppends:           maxAppends,
+		enforceOwnerStorageQuota: true,
+	})
+}
+
+// appendLog stores each append as an immutable object part. PostgreSQL is used
+// only for short reservation/finalization transactions; no connection is held
+// while the object is uploaded.
+func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, newData io.Reader, opts logAppendOptions) error {
+	meta := opts.meta
 	files, err := c.Zed.GetWoWLogFilesByGroupID(ctx, group.ID)
 	if err != nil {
 		return fmt.Errorf("fetch log files for group %s: %w", group.ID, err)
@@ -606,6 +666,9 @@ func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGr
 		return fmt.Errorf("server log group %s requires exactly one logical file, found %d", group.ID, len(files))
 	}
 	file := files[0]
+	if file.StorageDeletedAt.Valid {
+		return fmt.Errorf("log file storage was deleted at %s", file.StorageDeletedAt.Time)
+	}
 	if meta.UploadID == uuid.Nil {
 		meta.UploadID = uuid.New()
 	}
@@ -623,22 +686,35 @@ func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGr
 		}
 		var reserveErr error
 		part, reserveErr = tx.ReserveLogFilePart(ctx, database.ReserveLogFilePartParams{
-			PartID:         partID,
-			LogFileID:      file.ID,
-			UploadID:       meta.UploadID,
-			ReservationID:  reservationID,
-			SourceSequence: meta.SourceSequence,
-			ObjectKey:      objectKey,
+			PartID:                partID,
+			LogFileID:             file.ID,
+			UploadID:              meta.UploadID,
+			ReservationID:         reservationID,
+			SourceSequence:        meta.SourceSequence,
+			ObjectKey:             objectKey,
+			CountsTowardUserLimit: opts.maxUserAppends > 0,
 		})
-		return reserveErr
+		if reserveErr != nil {
+			return reserveErr
+		}
+		if opts.maxUserAppends > 0 {
+			count, countErr := tx.CountUserLogFileParts(ctx, file.ID)
+			if countErr != nil {
+				return fmt.Errorf("count user log file parts: %w", countErr)
+			}
+			if count > opts.maxUserAppends {
+				return ErrUserLogAppendLimit
+			}
+		}
+		return nil
 	}, nil); err != nil {
-		return fmt.Errorf("reserve server log part: %w", err)
+		return fmt.Errorf("reserve log part: %w", err)
 	}
 	if part.Status == "ready" {
 		return nil
 	}
 	if part.ReservationID != reservationID {
-		return ErrServerLogAppendInProgress
+		return ErrLogAppendInProgress
 	}
 
 	finalized := false
@@ -685,6 +761,16 @@ func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGr
 	partHash := hex.EncodeToString(h[:])
 	compressedSize := int64(len(compressed))
 
+	if opts.enforceOwnerStorageQuota {
+		owner, err := c.Zed.GetUserByID(ctx, group.Owner)
+		if err != nil {
+			return fmt.Errorf("fetch log owner for storage quota: %w", err)
+		}
+		if err := userLogAppendQuotaError(owner, compressedSize); err != nil {
+			return err
+		}
+	}
+
 	if _, err := c.Storage.UploadFile(ctx, BucketRaidLogs, part.ObjectKey, bytes.NewReader(compressed),
 		storage.FileOptions{ContentType: ptr.Ref("application/gzip")}); err != nil {
 		return fmt.Errorf("upload server log part: %w", err)
@@ -692,6 +778,18 @@ func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGr
 	uploaded = true
 
 	if err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if opts.enforceOwnerStorageQuota {
+			if _, err := tx.LockUserStorageQuota(ctx, group.Owner); err != nil {
+				return fmt.Errorf("lock log owner storage quota: %w", err)
+			}
+			owner, err := tx.GetUserByID(ctx, group.Owner)
+			if err != nil {
+				return fmt.Errorf("fetch locked log owner storage quota: %w", err)
+			}
+			if err := userLogAppendQuotaError(owner, compressedSize); err != nil {
+				return err
+			}
+		}
 		_, finalizeErr := tx.FinalizeLogFilePart(ctx, database.FinalizeLogFilePartParams{
 			ID:                  part.ID,
 			ReservationID:       reservationID,
@@ -720,7 +818,7 @@ func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGr
 		if !ok {
 			return errors.New("server log part transaction does not expose pgx transaction")
 		}
-		if _, err := c.enqueueReParseLog(ctx, tx, pgxTx, group.ID, false, false, false, realmID); err != nil {
+		if _, err := c.enqueueReParseLog(ctx, tx, pgxTx, group.ID, false, false, false, opts.realmID); err != nil {
 			return fmt.Errorf("enqueue reparse after server log part: %w", err)
 		}
 		return nil

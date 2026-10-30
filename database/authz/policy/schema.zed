@@ -83,6 +83,7 @@ definition chronicle {
   permission admin_speedrun_requirements = technical_admin + is_admin_raid_requirements
 
   permission upload_log = upload_capable + administer + supporter + chronicle_guild_member + chronicle_member
+  permission append_log = chronicle_guild_member + chronicle_member
   permission mark_log_unlisted = unlisted_log_capable + admin_logs + unlisted_logs
   permission inference_available = inference_capable + administer
   permission debug_inference_chat = inference_debug_capable + administer
@@ -267,6 +268,7 @@ definition raid_log {
   permission view = uploader + chronicle->admin_logs
   permission mark_unlisted = chronicle->admin_logs + (uploader & chronicle->mark_log_unlisted)
   permission reparse = chronicle->admin_logs + (uploader & chronicle->can_reparse)
+  permission append = chronicle->admin_logs + (uploader & chronicle->append_log)
   permission delete_files = uploader + chronicle->admin_logs
   permission upload_youtube = uploader + chronicle->admin_logs
     

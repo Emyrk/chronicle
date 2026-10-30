@@ -66,6 +66,7 @@ type sqlcQuerier interface {
 	CountUserAuthLinks(ctx context.Context) (int64, error)
 	CountUserGearLists(ctx context.Context, arg CountUserGearListsParams) (int64, error)
 	CountUserGearProgressions(ctx context.Context, arg CountUserGearProgressionsParams) (int64, error)
+	CountUserLogFileParts(ctx context.Context, logFileID uuid.UUID) (int64, error)
 	CountUserPanelLayoutsTotal(ctx context.Context, userID uuid.NullUUID) (int32, error)
 	CountUserTalentBuilds(ctx context.Context, arg CountUserTalentBuildsParams) (int64, error)
 	// ============================================================
@@ -797,6 +798,7 @@ type sqlcQuerier interface {
 	// Serialize submissions by the same account across all tenants. Locking the
 	// applicant, not a proof row, also works for their first request.
 	LockProofApplicant(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	LockUserStorageQuota(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	LockWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error

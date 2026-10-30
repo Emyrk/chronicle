@@ -6,7 +6,8 @@ FOR UPDATE;
 
 -- name: ReserveLogFilePart :one
 INSERT INTO log_file_parts (
-    id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status
+    id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status,
+    counts_toward_user_limit
 )
 VALUES (
     @part_id,
@@ -16,7 +17,8 @@ VALUES (
     @reservation_id,
     sqlc.narg('source_sequence')::bigint,
     @object_key,
-    'pending'
+    'pending',
+    @counts_toward_user_limit
 )
 ON CONFLICT (log_file_id, upload_id) DO UPDATE
 SET status = CASE
@@ -34,8 +36,19 @@ SET status = CASE
     created_at = CASE
         WHEN log_file_parts.status = 'failed' THEN now()
         ELSE log_file_parts.created_at
+    END,
+    counts_toward_user_limit = CASE
+        WHEN log_file_parts.status = 'failed' THEN EXCLUDED.counts_toward_user_limit
+        ELSE log_file_parts.counts_toward_user_limit
     END
 RETURNING *;
+
+-- name: CountUserLogFileParts :one
+SELECT count(*)
+FROM log_file_parts
+WHERE log_file_id = @log_file_id
+  AND counts_toward_user_limit
+  AND status <> 'failed';
 
 -- name: FinalizeLogFilePart :one
 UPDATE log_file_parts

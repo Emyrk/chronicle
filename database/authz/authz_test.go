@@ -741,6 +741,42 @@ func TestLogUnlistedRoles(t *testing.T) {
 	check(adminID, true)
 }
 
+func TestLogAppendRoles(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+
+	memberOwnerID := uuid.New()
+	nonmemberOwnerID := uuid.New()
+	otherMemberID := uuid.New()
+	adminID := uuid.New()
+	memberLogID := uuid.New()
+	nonmemberLogID := uuid.New()
+
+	b := policy.New()
+	chronicle := b.GlobalChronicle()
+	chronicle.Chronicle_member(b.User(memberOwnerID))
+	chronicle.Chronicle_member(b.User(otherMemberID))
+	chronicle.Moderate_logs(b.User(adminID))
+	b.Raid_log(memberLogID).Uploader(b.User(memberOwnerID)).Chronicle(chronicle)
+	b.Raid_log(nonmemberLogID).Uploader(b.User(nonmemberOwnerID)).Chronicle(chronicle)
+	_, err := zed.Write(ctx, *b.Txn())
+	require.NoError(t, err)
+
+	checks := policy.New()
+	allowed, err := zed.Check(ctx, nil,
+		checks.Raid_log(memberLogID).CanAppend_User(checks.User(memberOwnerID)),
+		checks.Raid_log(memberLogID).CanAppend_User(checks.User(otherMemberID)),
+		checks.Raid_log(nonmemberLogID).CanAppend_User(checks.User(nonmemberOwnerID)),
+		checks.Raid_log(memberLogID).CanAppend_User(checks.User(adminID)),
+		checks.Raid_log(nonmemberLogID).CanAppend_User(checks.User(adminID)),
+	)
+	require.NoError(t, err)
+	require.Equal(t, []bool{true, false, false, true, true}, allowed)
+}
+
 func TestMarkWoWLogGroupUnlistedKeepsInstancePublic(t *testing.T) {
 	t.Parallel()
 

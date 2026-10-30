@@ -669,6 +669,7 @@ func (api *API) Routes() chi.Router {
 							r.Get("/", api.WoWLogGroup)
 							r.Group(func(r chi.Router) {
 								r.Use(api.Auth.Authenticated(false))
+								r.Post("/append", api.WoWLogAppend)
 								r.Post("/reparse", api.WoWLogReparse)
 								r.Get("/profile/download", api.WoWLogParseProfileDownload)
 								r.Delete("/delete-files", api.DeleteWoWLogFiles)
