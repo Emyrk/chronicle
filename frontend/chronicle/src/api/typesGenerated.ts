@@ -3974,6 +3974,10 @@ export interface Session {
      */
     readonly ads_free: boolean;
     /**
+     * SupporterTier is the user's highest supporter tier: "free", "honored", "revered", or "exalted".
+     */
+    readonly supporter_tier: string;
+    /**
      * CanDownloadRawLogs indicates that authorization permits downloading original combat log files.
      */
     readonly can_download_raw_logs: boolean;
