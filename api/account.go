@@ -1,7 +1,10 @@
 package api
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"slices"
@@ -22,6 +25,27 @@ import (
 // accountPurgeRecentSignIn is how recently the user must have signed in to
 // start a purge.
 const accountPurgeRecentSignIn = 15 * time.Minute
+
+const accountPurgeTokenHeader = "X-Account-Purge-Token"
+
+// The token is shown once at creation; only its SHA-256 digest is persisted.
+func newAccountPurgeToken() (string, []byte, error) {
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return "", nil, err
+	}
+	digest := sha256.Sum256(secret)
+	return hex.EncodeToString(secret), digest[:], nil
+}
+
+func accountPurgeTokenHash(token string) ([]byte, bool) {
+	secret, err := hex.DecodeString(token)
+	if err != nil || len(secret) != 32 {
+		return nil, false
+	}
+	digest := sha256.Sum256(secret)
+	return digest[:], true
+}
 
 func accountPurgeStatus(row database.AccountPurge) chroniclesdk.AccountPurgeStatus {
 	return chroniclesdk.AccountPurgeStatus{
@@ -54,6 +78,7 @@ func (a *API) recentSignInUntil(r *http.Request) (time.Time, error) {
 }
 
 func (a *API) GetAccountPurgeInventory(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	userID := chronauth.MustAuthenticatedClaims(r.Context()).Subject
 	recentUntil, err := a.recentSignInUntil(r)
 	if err != nil {
@@ -92,6 +117,7 @@ func (a *API) GetAccountPurgeInventory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) StartAccountPurge(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	var req chroniclesdk.StartAccountPurgeRequest
 	if !httpapi.Read(r.Context(), w, r, &req) {
 		return
@@ -115,6 +141,11 @@ func (a *API) StartAccountPurge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := chronauth.MustAuthenticatedClaims(r.Context()).Subject
+	token, tokenHash, err := newAccountPurgeToken()
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
 	var purge database.AccountPurge
 	err = a.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
 		// Uploads and module creation lock the same row, so nothing new can
@@ -144,7 +175,7 @@ func (a *API) StartAccountPurge(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		purge, err = tx.InsertAccountPurge(r.Context(), database.InsertAccountPurgeParams{
-			ID: uuid.New(), UserID: userID,
+			ID: uuid.New(), UserID: userID, StatusTokenHash: tokenHash,
 		})
 		return err
 	}, nil)
@@ -164,16 +195,26 @@ func (a *API) StartAccountPurge(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	httpapi.Write(r.Context(), w, http.StatusAccepted, accountPurgeStatus(purge))
+	status := accountPurgeStatus(purge)
+	status.StatusToken = token
+	httpapi.Write(r.Context(), w, http.StatusAccepted, status)
 }
 
 func (a *API) GetAccountPurgeStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	purgeID, err := uuid.Parse(chi.URLParam(r, "purgeID"))
 	if err != nil {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Purge not found"})
 		return
 	}
-	purge, err := a.Zed.GetAccountPurge(r.Context(), purgeID)
+	tokenHash, ok := accountPurgeTokenHash(r.Header.Get(accountPurgeTokenHeader))
+	if !ok {
+		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Purge not found"})
+		return
+	}
+	purge, err := a.Zed.GetAccountPurgeByTokenHash(r.Context(), database.GetAccountPurgeByTokenHashParams{
+		ID: purgeID, StatusTokenHash: tokenHash,
+	})
 	if isNoRows(err) {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Purge not found"})
 		return

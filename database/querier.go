@@ -234,6 +234,7 @@ type sqlcQuerier interface {
 	// Accounts tied to a billing customer are never purged automatically.
 	GetAccountDeletionBlockers(ctx context.Context, userID uuid.UUID) ([]string, error)
 	GetAccountPurge(ctx context.Context, id uuid.UUID) (AccountPurge, error)
+	GetAccountPurgeByTokenHash(ctx context.Context, arg GetAccountPurgeByTokenHashParams) (AccountPurge, error)
 	GetActiveAccountPurgeByUser(ctx context.Context, userID uuid.UUID) (AccountPurge, error)
 	GetActiveInferenceRunByThreadForUpdate(ctx context.Context, arg GetActiveInferenceRunByThreadForUpdateParams) (InferenceRun, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)

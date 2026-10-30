@@ -29,6 +29,10 @@ export interface AccountPurgeInventory {
 
 // From chroniclesdk/account.go
 export interface AccountPurgeStatus {
+    /**
+     * StatusToken is issued once by POST. Keep it out of inventory and status reads.
+     */
+    readonly status_token?: string;
     readonly id: string;
     readonly status: string;
     readonly step: string;

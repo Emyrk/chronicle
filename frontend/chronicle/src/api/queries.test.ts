@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   billingCheckoutOperationID,
   fetchInstanceSpeedrun,
+  fetchAccountPurgeStatus,
   getLogGroupRefetchInterval,
   spellQueryOptions,
   type RiverJobState,
@@ -11,6 +12,19 @@ import {
 function logWithJobState(state: RiverJobState): WoWLogGroupState {
   return { status: { state } } as WoWLogGroupState;
 }
+
+describe("fetchAccountPurgeStatus", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("sends the token only as a header and bypasses HTTP caching", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: "purge-id", status: "running" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchAccountPurgeStatus("purge/id", "secret")).resolves.toMatchObject({ status: "running" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/account-purges/purge%2Fid", {
+      headers: { "X-Account-Purge-Token": "secret" }, cache: "no-store",
+    });
+  });
+});
 
 describe("spellQueryOptions", () => {
   afterEach(() => {

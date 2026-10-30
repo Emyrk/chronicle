@@ -239,6 +239,7 @@ export function useAccountPurgeInventory(enabled: boolean) {
     queryKey: ["account-purge", "inventory"],
     enabled,
     retry: false,
+    refetchInterval: (query) => query.state.data?.active_purge ? 2000 : false,
     queryFn: async () => {
       const response = await fetch("/api/v1/me/account-purge");
       if (!response.ok) {
@@ -268,17 +269,22 @@ export function useStartAccountPurge() {
   });
 }
 
-// Polls a purge until it finishes. The endpoint is public by purge ID because
-// the purge ends by deleting the account (and session) that started it.
-export function useAccountPurgeStatus(purgeID: string | undefined) {
+export async function fetchAccountPurgeStatus(purgeID: string, token: string) {
+  const response = await fetch(`/api/v1/account-purges/${encodeURIComponent(purgeID)}`, {
+    headers: { "X-Account-Purge-Token": token },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error("Failed to check purge status");
+  return response.json() as Promise<import("./typesGenerated").AccountPurgeStatus>;
+}
+
+// Polls with the session-scoped capability even after the account/session is deleted.
+export function useAccountPurgeStatus(purgeID: string | undefined, token: string | null) {
   return useQuery({
     queryKey: ["account-purge", "status", purgeID],
-    enabled: !!purgeID,
-    queryFn: async () => {
-      const response = await fetch(`/api/v1/account-purges/${encodeURIComponent(purgeID!)}`);
-      if (!response.ok) throw new Error("Failed to check purge status");
-      return response.json() as Promise<import("./typesGenerated").AccountPurgeStatus>;
-    },
+    enabled: !!purgeID && !!token,
+    retry: false,
+    queryFn: () => fetchAccountPurgeStatus(purgeID!, token!),
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       return status === "succeeded" || status === "failed" ? false : 2000;

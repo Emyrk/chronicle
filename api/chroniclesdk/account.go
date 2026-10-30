@@ -31,6 +31,8 @@ type StartAccountPurgeRequest struct {
 }
 
 type AccountPurgeStatus struct {
+	// StatusToken is issued once by POST. Keep it out of inventory and status reads.
+	StatusToken string    `json:"status_token,omitempty"`
 	ID          uuid.UUID `json:"id"`
 	Status      string    `json:"status"`
 	Step        string    `json:"step"`

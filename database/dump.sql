@@ -201,6 +201,7 @@ CREATE TABLE account_purges (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     finished_at timestamp with time zone,
+    status_token_hash bytea,
     CONSTRAINT account_purges_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'running'::text, 'succeeded'::text, 'failed'::text])))
 );
 

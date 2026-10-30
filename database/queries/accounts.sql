@@ -94,7 +94,10 @@ DELETE FROM server_applications WHERE initiated_by = @user_id;
 UPDATE application_modification_requests SET reviewed_by = NULL WHERE reviewed_by = @user_id;
 
 -- name: InsertAccountPurge :one
-INSERT INTO account_purges (id, user_id) VALUES (@id, @user_id) RETURNING *;
+INSERT INTO account_purges (id, user_id, status_token_hash) VALUES (@id, @user_id, @status_token_hash) RETURNING *;
+
+-- name: GetAccountPurgeByTokenHash :one
+SELECT * FROM account_purges WHERE id = @id AND status_token_hash = @status_token_hash;
 
 -- name: GetAccountPurge :one
 SELECT * FROM account_purges WHERE id = @id;

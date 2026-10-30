@@ -189,7 +189,7 @@ func (q *sqlQuerier) GetAccountDeletionBlockers(ctx context.Context, userID uuid
 }
 
 const getAccountPurge = `-- name: GetAccountPurge :one
-SELECT id, user_id, status, step, logs_total, logs_deleted, error, created_at, updated_at, finished_at FROM account_purges WHERE id = $1
+SELECT id, user_id, status, step, logs_total, logs_deleted, error, created_at, updated_at, finished_at, status_token_hash FROM account_purges WHERE id = $1
 `
 
 func (q *sqlQuerier) GetAccountPurge(ctx context.Context, id uuid.UUID) (AccountPurge, error) {
@@ -206,12 +206,41 @@ func (q *sqlQuerier) GetAccountPurge(ctx context.Context, id uuid.UUID) (Account
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.FinishedAt,
+		&i.StatusTokenHash,
+	)
+	return i, err
+}
+
+const getAccountPurgeByTokenHash = `-- name: GetAccountPurgeByTokenHash :one
+SELECT id, user_id, status, step, logs_total, logs_deleted, error, created_at, updated_at, finished_at, status_token_hash FROM account_purges WHERE id = $1 AND status_token_hash = $2
+`
+
+type GetAccountPurgeByTokenHashParams struct {
+	ID              uuid.UUID `db:"id" json:"id"`
+	StatusTokenHash []byte    `db:"status_token_hash" json:"status_token_hash"`
+}
+
+func (q *sqlQuerier) GetAccountPurgeByTokenHash(ctx context.Context, arg GetAccountPurgeByTokenHashParams) (AccountPurge, error) {
+	row := q.db.QueryRow(ctx, getAccountPurgeByTokenHash, arg.ID, arg.StatusTokenHash)
+	var i AccountPurge
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Status,
+		&i.Step,
+		&i.LogsTotal,
+		&i.LogsDeleted,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.FinishedAt,
+		&i.StatusTokenHash,
 	)
 	return i, err
 }
 
 const getActiveAccountPurgeByUser = `-- name: GetActiveAccountPurgeByUser :one
-SELECT id, user_id, status, step, logs_total, logs_deleted, error, created_at, updated_at, finished_at FROM account_purges
+SELECT id, user_id, status, step, logs_total, logs_deleted, error, created_at, updated_at, finished_at, status_token_hash FROM account_purges
 WHERE user_id = $1 AND status IN ('pending', 'running')
 `
 
@@ -229,21 +258,23 @@ func (q *sqlQuerier) GetActiveAccountPurgeByUser(ctx context.Context, userID uui
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.FinishedAt,
+		&i.StatusTokenHash,
 	)
 	return i, err
 }
 
 const insertAccountPurge = `-- name: InsertAccountPurge :one
-INSERT INTO account_purges (id, user_id) VALUES ($1, $2) RETURNING id, user_id, status, step, logs_total, logs_deleted, error, created_at, updated_at, finished_at
+INSERT INTO account_purges (id, user_id, status_token_hash) VALUES ($1, $2, $3) RETURNING id, user_id, status, step, logs_total, logs_deleted, error, created_at, updated_at, finished_at, status_token_hash
 `
 
 type InsertAccountPurgeParams struct {
-	ID     uuid.UUID `db:"id" json:"id"`
-	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	ID              uuid.UUID `db:"id" json:"id"`
+	UserID          uuid.UUID `db:"user_id" json:"user_id"`
+	StatusTokenHash []byte    `db:"status_token_hash" json:"status_token_hash"`
 }
 
 func (q *sqlQuerier) InsertAccountPurge(ctx context.Context, arg InsertAccountPurgeParams) (AccountPurge, error) {
-	row := q.db.QueryRow(ctx, insertAccountPurge, arg.ID, arg.UserID)
+	row := q.db.QueryRow(ctx, insertAccountPurge, arg.ID, arg.UserID, arg.StatusTokenHash)
 	var i AccountPurge
 	err := row.Scan(
 		&i.ID,
@@ -256,6 +287,7 @@ func (q *sqlQuerier) InsertAccountPurge(ctx context.Context, arg InsertAccountPu
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.FinishedAt,
+		&i.StatusTokenHash,
 	)
 	return i, err
 }

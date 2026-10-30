@@ -1,6 +1,7 @@
 package database_test
 
 import (
+	"bytes"
 	"database/sql"
 	"testing"
 	"time"
@@ -82,9 +83,14 @@ func TestAccountPurgeLifecycle(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	purge, err := db.InsertAccountPurge(ctx, database.InsertAccountPurgeParams{ID: uuid.New(), UserID: userID})
+	tokenHash := bytes.Repeat([]byte{0x42}, 32)
+	purge, err := db.InsertAccountPurge(ctx, database.InsertAccountPurgeParams{ID: uuid.New(), UserID: userID, StatusTokenHash: tokenHash})
 	require.NoError(t, err)
 	require.Equal(t, "pending", purge.Status)
+	_, err = db.GetAccountPurgeByTokenHash(ctx, database.GetAccountPurgeByTokenHashParams{ID: purge.ID, StatusTokenHash: bytes.Repeat([]byte{0x43}, 32)})
+	require.ErrorIs(t, err, sql.ErrNoRows)
+	_, err = db.GetAccountPurgeByTokenHash(ctx, database.GetAccountPurgeByTokenHashParams{ID: purge.ID})
+	require.ErrorIs(t, err, sql.ErrNoRows)
 	_, err = db.InsertAccountPurge(ctx, database.InsertAccountPurgeParams{ID: uuid.New(), UserID: userID})
 	require.True(t, database.IsUniqueViolation(err), "only one active purge per user")
 
@@ -103,6 +109,9 @@ func TestAccountPurgeLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "succeeded", finished.Status)
 	require.True(t, finished.FinishedAt.Valid)
+	authorized, err := db.GetAccountPurgeByTokenHash(ctx, database.GetAccountPurgeByTokenHashParams{ID: purge.ID, StatusTokenHash: tokenHash})
+	require.NoError(t, err)
+	require.Equal(t, "succeeded", authorized.Status)
 	_, err = db.GetActiveAccountPurgeByUser(ctx, userID)
 	require.ErrorIs(t, err, sql.ErrNoRows)
 }

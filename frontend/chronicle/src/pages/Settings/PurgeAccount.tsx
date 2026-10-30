@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Circle, Loader2, LogIn, Trash2, XCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAccountPurgeInventory, useAccountPurgeStatus, useSession, useStartAccountPurge } from "@/api/queries";
+import { getAccountPurgeToken, saveAccountPurgeToken } from "@/api/accountPurgeToken";
 import { AccountPurgeConfirmation, type AccountDataCount, type AccountPurgeStatus } from "@/api/typesGenerated";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,13 +43,14 @@ export function PurgeAccount() {
   const { data: session } = useSession();
   const [searchParams, setSearchParams] = useSearchParams();
   const purgeID = searchParams.get("purge") ?? undefined;
-  const { data: inventory, error, refetch, isFetching } = useAccountPurgeInventory(!!session && !purgeID);
+  const { data: inventory, error, refetch, isFetching } = useAccountPurgeInventory(!!session);
   const activePurgeID = purgeID ?? inventory?.active_purge?.id;
 
   if (activePurgeID) {
     return (
       <PurgeProgress
         purgeID={activePurgeID}
+        activeStatus={!!session && inventory?.active_purge?.id === activePurgeID ? inventory.active_purge : undefined}
         onRetry={() => {
           const next = new URLSearchParams(searchParams);
           next.delete("purge");
@@ -81,7 +83,10 @@ export function PurgeAccount() {
       data={inventory.data}
       blockers={inventory.blockers}
       recentSignInUntil={inventory.recent_sign_in_until}
-      onStarted={(status) => setSearchParams({ purge: status.id }, { replace: true })}
+      onStarted={(status) => {
+        if (status.status_token) saveAccountPurgeToken(status.id, status.status_token);
+        setSearchParams({ purge: status.id }, { replace: true });
+      }}
     />
   );
 }
@@ -323,9 +328,11 @@ function PurgeWizard({ data, blockers, recentSignInUntil, onStarted }: {
   );
 }
 
-function PurgeProgress({ purgeID, onRetry }: { purgeID: string; onRetry: () => void }) {
+function PurgeProgress({ purgeID, activeStatus, onRetry }: { purgeID: string; activeStatus?: AccountPurgeStatus; onRetry: () => void }) {
   const queryClient = useQueryClient();
-  const { data: status } = useAccountPurgeStatus(purgeID);
+  const token = getAccountPurgeToken(purgeID);
+  const { data, error } = useAccountPurgeStatus(purgeID, token);
+  const status = token ? data : activeStatus;
   const done = status?.status === "succeeded";
   const failed = status?.status === "failed";
 
@@ -361,6 +368,18 @@ function PurgeProgress({ purgeID, onRetry }: { purgeID: string; onRetry: () => v
     );
   }
 
+  if ((!token && !activeStatus) || error) {
+    return (
+      <div role="alert" className="mx-auto max-w-lg rounded-lg border p-8 space-y-4">
+        <h2 className="text-xl font-semibold">Purge status unavailable</h2>
+        <p className="text-sm text-muted-foreground">
+          {error ? "The status link is no longer valid." : "This purge has no status token in this browser session. Older purges can only be tracked while signed in; the purge itself continues."}
+        </p>
+        <Button variant="outline" onClick={onRetry}>Return to account settings</Button>
+      </div>
+    );
+  }
+
   const currentIndex = PURGE_STEPS.findIndex((step) => step.key === status?.step);
   return (
     <div className="mx-auto max-w-lg rounded-lg border p-8 space-y-6">
@@ -369,6 +388,7 @@ function PurgeProgress({ purgeID, onRetry }: { purgeID: string; onRetry: () => v
         <h2 className="text-xl font-semibold">Purging your account</h2>
         <p className="text-sm text-muted-foreground">You can keep this page open. New uploads are disabled until it finishes.</p>
       </div>
+      {!token && <p className="text-sm text-muted-foreground">This purge started before status tokens were issued. Progress is available only while you remain signed in; deletion continues if you leave this page.</p>}
       <ol className="space-y-3">
         {PURGE_STEPS.map((step, index) => {
           const state = index < currentIndex ? "done" : index === currentIndex ? "active" : "pending";
