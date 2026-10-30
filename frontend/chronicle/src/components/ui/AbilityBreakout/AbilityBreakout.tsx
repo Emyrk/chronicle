@@ -589,6 +589,7 @@ export function AbilityTable({
                         spellId={ability.spellId} 
                         name={ability.name} 
                         size={14}
+                        showRank={!ability.subtitle}
                         className="inline-flex items-center gap-1"
                       />
                     ) : (

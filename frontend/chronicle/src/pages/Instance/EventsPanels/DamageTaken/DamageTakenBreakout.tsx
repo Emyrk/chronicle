@@ -1,12 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
-import { spellQueryOptions } from "@/api/queries";
-import { useDatasetId } from "@/hooks/useDatasetId";
+import { useCallback, useState } from "react";
 import { AbilityBreakout, type AbilityData, type TargetData, type BreakoutTab } from "@/components/ui/AbilityBreakout";
 import type { DamageTakenResult } from "./damageTaken.processor";
 import type { PanelContext } from "../types";
-import type { WoWSpell } from "@/api/wowdb";
-
 /**
  * Convert the ByAbility map for a specific unit into AbilityData[] for the breakout.
  * 
@@ -60,21 +55,6 @@ function getAbilitiesBySpellIdForUnit(
   }
 
   return abilities.sort((a, b) => b.value - a.value);
-}
-
-/**
- * Collect all unique spell IDs from the result for fetching spell data.
- */
-function getAllSpellIds(result: DamageTakenResult | undefined): number[] {
-  if (!result) return [];
-  
-  const spellIds = new Set<number>();
-  
-  for (const unitMap of result.ByAbilityBySpellId.values()) {
-    for (const id of unitMap.keys()) spellIds.add(id);
-  }
-  
-  return Array.from(spellIds);
 }
 
 /**
@@ -156,34 +136,7 @@ export function useDamageTakenBreakout({
   showRanks = false,
 }: UseDamageTakenBreakoutOptions) {
   // Track tab selection per player so it persists across reloads
-  const datasetId = useDatasetId();
   const [tabByUnit, setTabByUnit] = useState<Map<string, BreakoutTab>>(new Map());
-  
-  // Collect all spell IDs for fetching spell data when showRanks is enabled
-  const spellIds = useMemo(() => {
-    if (!showRanks) return [];
-    return getAllSpellIds(result);
-  }, [result, showRanks]);
-  
-  // Fetch spell data for all spell IDs (only when showRanks is true)
-  const spellQueries = useQueries({
-    queries: spellIds.map((id) => ({
-      ...spellQueryOptions(id.toString(), datasetId),
-      staleTime: Infinity,
-      enabled: showRanks,
-    })),
-  });
-  
-  // Build spell data lookup map
-  const spellDataMap = useMemo(() => {
-    const map = new Map<number, WoWSpell>();
-    spellQueries.forEach((query, index) => {
-      if (query.data) {
-        map.set(spellIds[index], query.data);
-      }
-    });
-    return map;
-  }, [spellQueries, spellIds]);
 
   const breakout = useCallback(
     (unitID: string, pinned: boolean) => {
@@ -209,16 +162,11 @@ export function useDamageTakenBreakout({
       let abilities: AbilityData[];
       if (showRanks) {
         const abilitiesWithSpellId = getAbilitiesBySpellIdForUnit(result, unitID);
-        abilities = abilitiesWithSpellId.map((a) => {
-          const spellData = spellDataMap.get(a.spellId);
-          const rank = spellData?.subtext?.["0"]; // enUS locale (e.g., "Rank 7")
-          return {
-            ...a,
-            key: `spell-${a.spellId}`,
-            spellId: a.spellId,
-            subtitle: rank || undefined,
-          };
-        });
+        abilities = abilitiesWithSpellId.map((a) => ({
+          ...a,
+          key: `spell-${a.spellId}`,
+          spellId: a.spellId,
+        }));
       } else {
         abilities = getAbilitiesForUnit(result, unitID);
       }
@@ -261,7 +209,7 @@ export function useDamageTakenBreakout({
         />
       );
     },
-    [result, context, valueLabel, perSecond, durationMs, loading, processing, tabByUnit, showRanks, spellDataMap]
+    [result, context, valueLabel, perSecond, durationMs, loading, processing, tabByUnit, showRanks]
   );
 
   return breakout;

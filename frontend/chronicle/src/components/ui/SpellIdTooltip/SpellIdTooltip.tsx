@@ -14,6 +14,8 @@ interface SpellIdTooltipProps {
   size?: number;
   /** Fetch spell data only after the tooltip is opened and render a text-only trigger. Defaults to false. */
   loadOnHover?: boolean;
+  /** Show the spell rank once metadata has loaded. */
+  showRank?: boolean;
   /** Additional class name for the wrapper */
   className?: string;
   /** Optional content rendered above the spell tooltip. */
@@ -34,6 +36,7 @@ export function SpellIdTooltip({
   name, 
   size = 16,
   loadOnHover = false,
+  showRank = false,
   className,
   tooltipHeader,
   tooltipFooter,
@@ -74,11 +77,16 @@ export function SpellIdTooltip({
     return <span className={className}>{name}</span>;
   }
 
+  const rank = showRank ? spell?.subtext?.["0"] : undefined;
+
   if (loadOnHover) {
     return (
       <Tooltip onOpenChange={(open) => open && setTooltipRequested(true)}>
         <TooltipTrigger asChild>
-          <span ref={ref} className={className}>{name}</span>
+          <span ref={ref} className={className}>
+            {name}
+            {rank && <span className="text-2xs text-muted-foreground/70">{rank}</span>}
+          </span>
         </TooltipTrigger>
         <TooltipContent
           side="right"
@@ -110,6 +118,7 @@ export function SpellIdTooltip({
         // Show name while loading or if fetch fails
         <span>{name}</span>
       )}
+      {rank && <span className="text-2xs text-muted-foreground/70">{rank}</span>}
     </span>
   );
 }
