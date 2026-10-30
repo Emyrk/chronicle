@@ -58,7 +58,9 @@ describe("unitImages", () => {
     await expect(fetchUnitImageManifest("https://icons.example/root/")).resolves.toEqual(payload);
     await expect(fetchUnitImageLookup("https://icons.example/root/")).resolves.toEqual(new Map([[10184, onyxia]]));
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock).toHaveBeenCalledWith("https://icons.example/root/unit-images/manifest.json");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://icons.example/root/unit-images/manifest.json?format=chronicle-unit-images-v1",
+    );
   });
 
   it("resolves a requested label only when the entry and image exist", () => {

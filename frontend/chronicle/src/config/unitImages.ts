@@ -76,7 +76,7 @@ export function parseUnitImageManifest(value: unknown): UnitImageManifest {
 }
 
 export async function fetchUnitImageManifest(baseUrl = ICON_CDN): Promise<UnitImageManifest> {
-  const response = await fetch(unitImageManifestUrl(baseUrl));
+  const response = await fetch(`${unitImageManifestUrl(baseUrl)}?format=${UNIT_IMAGE_MANIFEST_FORMAT}`);
   if (!response.ok) throw new Error(`Unit image manifest request failed with ${response.status}`);
   return parseUnitImageManifest(await response.json());
 }

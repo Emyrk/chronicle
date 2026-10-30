@@ -1,9 +1,15 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Box, Database, ExternalLink, Search } from "lucide-react";
+import { ArrowLeft, Box, Database, ExternalLink, Images, Search } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/Card/Card";
 import { ICON_CDN } from "@/config/iconUrl";
+import {
+  fetchUnitImageManifest,
+  unitImageAssetUrl,
+  unitImageManifestUrl,
+  type UnitImageSet,
+} from "@/config/unitImages";
 import {
   fetchMiniatureManifest,
   miniatureAssetUrl,
@@ -17,8 +23,20 @@ import { MiniaturePreview } from "./MiniaturePreview";
 type Miniature = MiniatureManifest["miniatures"][number];
 const EMPTY_MINIATURES: Miniature[] = [];
 
-function MiniatureCard({ miniature }: { miniature: Miniature }) {
+function matchingImageSets(miniature: Miniature, imageSetsByEntry: ReadonlyMap<number, UnitImageSet>): UnitImageSet[] {
+  return Array.from(new Map(miniature.entry_ids.flatMap((entry) => {
+    const imageSet = imageSetsByEntry.get(entry);
+    return imageSet === undefined ? [] : [[imageSet.name, imageSet] as const];
+  })).values());
+}
+
+function MiniatureCard({ miniature, imageSets }: { miniature: Miniature; imageSets: UnitImageSet[] }) {
   const url = miniatureAssetUrl(miniature.path);
+  const registeredImages = imageSets.flatMap((imageSet) => Object.entries(imageSet.images).map(([label, path]) => ({
+    key: `${imageSet.name}:${label}`,
+    label,
+    path,
+  })));
   return (
     <Card className="group gap-0 overflow-hidden border-amber-950/45 bg-[#171611] py-0 shadow-[0_20px_45px_-34px_rgba(0,0,0,0.95)] transition duration-200 hover:-translate-y-0.5 hover:border-amber-700/55">
       <div className="relative border-b border-amber-950/45">
@@ -28,6 +46,38 @@ function MiniatureCard({ miniature }: { miniature: Miniature }) {
           glTF binary
         </span>
       </div>
+      {registeredImages.length > 0 && (
+        <div className="border-b border-amber-950/45 bg-[linear-gradient(180deg,rgba(52,35,20,0.46),rgba(16,14,12,0.72))] p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.15em] text-amber-100/55">
+              <Images className="h-3 w-3" />
+              Registered images
+            </span>
+            <span className="font-mono text-[9px] text-amber-100/35">{registeredImages.length} variants</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {registeredImages.map(({ key, label, path }) => (
+              <a
+                key={key}
+                href={unitImageAssetUrl(path)}
+                target="_blank"
+                rel="noreferrer"
+                className="group/image relative aspect-square overflow-hidden rounded-md border border-amber-100/10 bg-[#0c0909] transition hover:border-amber-500/45"
+                aria-label={`Open ${miniature.name} ${label} image`}
+              >
+                <img
+                  src={unitImageAssetUrl(path)}
+                  alt={`${miniature.name} ${label}`}
+                  className="h-full w-full object-cover transition duration-300 group-hover/image:scale-[1.025]"
+                />
+                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-2 pb-1.5 pt-5 font-mono text-[9px] uppercase tracking-[0.13em] text-amber-50/80">
+                  {label}
+                </span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="p-3.5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -72,7 +122,20 @@ export function MiniaturesPage() {
     retry: false,
     queryFn: () => fetchMiniatureManifest(),
   });
+  const imageManifestQuery = useQuery({
+    queryKey: ["unit-image-manifest"],
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+    queryFn: () => fetchUnitImageManifest(),
+  });
   const miniatures = manifestQuery.data?.miniatures ?? EMPTY_MINIATURES;
+  const imageSetsByEntry = useMemo(() => new Map(
+    imageManifestQuery.data?.units.flatMap((unit) => unit.entry_ids.map((entry) => [entry, unit] as const)) ?? [],
+  ), [imageManifestQuery.data]);
+  const registeredImageCount = useMemo(
+    () => imageManifestQuery.data?.units.reduce((total, unit) => total + Object.keys(unit.images).length, 0) ?? 0,
+    [imageManifestQuery.data],
+  );
   const entryCount = useMemo(
     () => miniatures.reduce((total, miniature) => total + miniature.entry_ids.length, 0),
     [miniatures],
@@ -119,6 +182,11 @@ export function MiniaturesPage() {
                 <span className="rounded-md border border-amber-950/55 bg-black/20 px-3 py-2">
                   {entryCount} NPC entries
                 </span>
+                {imageManifestQuery.data && (
+                  <span className="rounded-md border border-amber-950/55 bg-black/20 px-3 py-2">
+                    {registeredImageCount} registered images
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -137,21 +205,39 @@ export function MiniaturesPage() {
                 className="h-10 w-full rounded-md border border-border bg-background/75 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted-foreground focus:border-amber-700/70 focus:ring-2 focus:ring-amber-800/20"
               />
             </label>
-            <a
-              href={miniatureManifestUrl()}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background/55 px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-amber-800/50 hover:text-foreground"
-            >
-              <Database className="h-3.5 w-3.5" />
-              manifest.json
-              <ExternalLink className="h-3 w-3" />
-            </a>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={miniatureManifestUrl()}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background/55 px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-amber-800/50 hover:text-foreground"
+              >
+                <Database className="h-3.5 w-3.5" />
+                models manifest
+                <ExternalLink className="h-3 w-3" />
+              </a>
+              <a
+                href={unitImageManifestUrl()}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background/55 px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-amber-800/50 hover:text-foreground"
+              >
+                <Images className="h-3.5 w-3.5" />
+                images manifest
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
           </div>
 
-          <p className="mt-2 break-all font-mono text-[9px] text-muted-foreground/60">
-            Source: {miniatureManifestUrl(ICON_CDN)}
-          </p>
+          <div className="mt-2 space-y-0.5 break-all font-mono text-[9px] text-muted-foreground/60">
+            <p>Models: {miniatureManifestUrl(ICON_CDN)}</p>
+            <p>Images: {unitImageManifestUrl(ICON_CDN)}</p>
+          </div>
+          {imageManifestQuery.isError && (
+            <p className="mt-2 text-xs text-amber-300/70">
+              Registered images are unavailable; miniature models can still be browsed normally.
+            </p>
+          )}
         </header>
 
         {manifestQuery.isPending && (
@@ -193,7 +279,11 @@ export function MiniaturesPage() {
             </div>
             <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
               {visibleMiniatures.items.map((miniature) => (
-                <MiniatureCard key={miniature.path} miniature={miniature} />
+                <MiniatureCard
+                  key={miniature.path}
+                  miniature={miniature}
+                  imageSets={matchingImageSets(miniature, imageSetsByEntry)}
+                />
               ))}
             </div>
             <div className="mt-5">
