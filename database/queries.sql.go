@@ -13176,7 +13176,8 @@ INSERT INTO oauth_relay_codes (
   tenant_slug,
   tenant_name,
   redirect_path,
-  expires_at
+  expires_at,
+  linked_id
 ) VALUES (
   $1,
   $2,
@@ -13184,7 +13185,8 @@ INSERT INTO oauth_relay_codes (
   $4,
   $5,
   $6,
-  $7
+  $7,
+  $8
 )
 `
 
@@ -13196,6 +13198,7 @@ type InsertOAuthRelayCodeParams struct {
 	TenantName        string             `db:"tenant_name" json:"tenant_name"`
 	RedirectPath      string             `db:"redirect_path" json:"redirect_path"`
 	ExpiresAt         pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	LinkedID          string             `db:"linked_id" json:"linked_id"`
 }
 
 func (q *sqlQuerier) InsertOAuthRelayCode(ctx context.Context, arg InsertOAuthRelayCodeParams) error {
@@ -13207,6 +13210,7 @@ func (q *sqlQuerier) InsertOAuthRelayCode(ctx context.Context, arg InsertOAuthRe
 		arg.TenantName,
 		arg.RedirectPath,
 		arg.ExpiresAt,
+		arg.LinkedID,
 	)
 	return err
 }
@@ -13221,7 +13225,8 @@ WITH redeemed AS (
     tenant_slug,
     tenant_name,
     redirect_path,
-    expires_at
+    expires_at,
+    linked_id
 )
 SELECT
   user_auth_session.id, user_auth_session.user_auth_id, user_auth_session.user_id, user_auth_session.access_token, user_auth_session.access_token_secret, user_auth_session.refresh_token, user_auth_session.expires_at, user_auth_session.created_at, user_auth_session.updated_at, user_auth_session.jwt_id,
@@ -13229,7 +13234,8 @@ SELECT
   redeemed.tenant_slug,
   redeemed.tenant_name,
   redeemed.redirect_path,
-  redeemed.expires_at AS relay_expires_at
+  redeemed.expires_at AS relay_expires_at,
+  redeemed.linked_id
 FROM redeemed
 JOIN user_auth_session ON user_auth_session.id = redeemed.user_auth_session_id
 `
@@ -13241,6 +13247,7 @@ type RedeemOAuthRelayCodeRow struct {
 	TenantName      string             `db:"tenant_name" json:"tenant_name"`
 	RedirectPath    string             `db:"redirect_path" json:"redirect_path"`
 	RelayExpiresAt  pgtype.Timestamptz `db:"relay_expires_at" json:"relay_expires_at"`
+	LinkedID        string             `db:"linked_id" json:"linked_id"`
 }
 
 func (q *sqlQuerier) RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) (RedeemOAuthRelayCodeRow, error) {
@@ -13262,6 +13269,7 @@ func (q *sqlQuerier) RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) 
 		&i.TenantName,
 		&i.RedirectPath,
 		&i.RelayExpiresAt,
+		&i.LinkedID,
 	)
 	return i, err
 }

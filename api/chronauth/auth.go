@@ -45,9 +45,10 @@ const (
 	// can affect OAuth callbacks.
 	linkSessionLifetime = 10 * time.Minute
 
-	// linkRelayProvider marks relay codes that start a Discord link instead of
-	// signing in.
-	linkRelayProvider = "discord_link"
+	// linkRelayProvider marks relay codes that start a Discord link, and
+	// linkCompleteRelayProvider marks codes that finish one. Neither signs in.
+	linkRelayProvider         = "discord_link"
+	linkCompleteRelayProvider = "discord_link_complete"
 )
 
 var (
@@ -522,6 +523,11 @@ func (s *Service) linkProviderIdentity(ctx context.Context, accountID uuid.UUID,
 	}, nil)
 }
 
+// completeLink handles the OAuth callback of a Discord link on the access URL.
+// It only proves which Discord account the browser controls; the link itself
+// is made by CompleteLinkHandler on the site that started it, which checks
+// that the same signed-in session is finishing it. That stops a link started
+// by one account from being completed in another person's browser.
 func (s *Service) completeLink(w http.ResponseWriter, r *http.Request) bool {
 	target, linking := s.linkTarget(r)
 	if !linking {
@@ -535,30 +541,60 @@ func (s *Service) completeLink(w http.ResponseWriter, r *http.Request) bool {
 	if chi.URLParam(r, "provider") != "discord" {
 		return false
 	}
-	accountID := target.userID
 
-	redirect := func(result string) {
-		http.Redirect(w, r, target.returnOrigin+"/account/settings?discord_link="+url.QueryEscape(result), http.StatusTemporaryRedirect)
-	}
-	// The link may have started on a tenant subdomain, so the session that
-	// started it is checked in the database rather than from this request.
-	if session, err := s.Zed.GetUserAuthSessionByID(r.Context(), target.sessionID); err != nil || session.UserID != accountID {
-		redirect("session_expired")
+	settings := target.returnOrigin + "/account/settings?discord_link="
+	session, err := s.Zed.GetUserAuthSessionByID(r.Context(), target.sessionID)
+	if err != nil || session.UserID != target.userID {
+		http.Redirect(w, r, settings+"session_expired", http.StatusTemporaryRedirect)
 		return true
 	}
 
 	user, err := s.CompleteUserAuth(w, r)
-	if err != nil {
-		s.logger.Warn("complete Discord account link", slog.String("error", err.Error()))
-		redirect("error")
-		return true
-	}
-	if user.Provider != "discord" {
-		redirect("error")
+	if err != nil || user.Provider != "discord" || user.UserID == "" {
+		if err != nil {
+			s.logger.Warn("complete Discord account link", slog.String("error", err.Error()))
+		}
+		http.Redirect(w, r, settings+"error", http.StatusTemporaryRedirect)
 		return true
 	}
 
-	err = s.linkProviderIdentity(r.Context(), accountID, user)
+	code, err := s.RelayStore.Generate(r.Context(), &RelayCode{
+		Session:   session,
+		Provider:  linkCompleteRelayProvider,
+		LinkedID:  user.UserID,
+		ExpiresAt: time.Now().Add(60 * time.Second),
+	})
+	if err != nil {
+		s.logger.Error("create Discord link completion code", slog.String("error", err.Error()))
+		http.Redirect(w, r, settings+"error", http.StatusTemporaryRedirect)
+		return true
+	}
+	http.Redirect(w, r, target.returnOrigin+"/auth/discord/link/complete?code="+url.QueryEscape(code), http.StatusTemporaryRedirect)
+	return true
+}
+
+// CompleteLinkHandler runs on the site that started a Discord link. It links
+// the Discord identity only when the signed-in session is the one that started
+// the link.
+func (s *Service) CompleteLinkHandler(w http.ResponseWriter, r *http.Request) {
+	redirect := func(result string) {
+		http.Redirect(w, r, "/account/settings?discord_link="+url.QueryEscape(result), http.StatusTemporaryRedirect)
+	}
+	relay, err := s.RelayStore.Redeem(r.Context(), r.URL.Query().Get("code"))
+	if err != nil || relay.Provider != linkCompleteRelayProvider || relay.LinkedID == "" {
+		redirect("session_expired")
+		return
+	}
+	claims, ok := AuthenticatedClaims(r.Context())
+	if !ok || claims == nil || claims.SessionID != relay.Session.ID || claims.Subject != relay.Session.UserID {
+		s.logger.Warn("Discord link completed by a different session",
+			slog.String("link_session_id", relay.Session.ID.String()))
+		redirect("session_expired")
+		return
+	}
+
+	accountID := relay.Session.UserID
+	err = s.linkProviderIdentity(r.Context(), accountID, goth.User{Provider: "discord", UserID: relay.LinkedID})
 	switch {
 	case err == nil:
 		if s.Bot != nil {
@@ -567,19 +603,14 @@ func (s *Service) completeLink(w http.ResponseWriter, r *http.Request) bool {
 			}
 		}
 		redirect("success")
-	case err != nil:
-		if errors.Is(err, errProviderLinkedElsewhere) {
-			redirect("linked_elsewhere")
-			break
-		}
-		if errors.Is(err, errProviderAlreadyLinked) {
-			redirect("already_linked")
-			break
-		}
+	case errors.Is(err, errProviderLinkedElsewhere):
+		redirect("linked_elsewhere")
+	case errors.Is(err, errProviderAlreadyLinked):
+		redirect("already_linked")
+	default:
 		s.logger.Error("link Discord account", slog.String("error", err.Error()))
 		redirect("error")
 	}
-	return true
 }
 
 func (s *Service) Handler() http.Handler {
@@ -592,6 +623,7 @@ func (s *Service) Handler() http.Handler {
 
 		mux.With(s.AuthenticationMiddleware, s.Authenticated(false)).Get("/{provider}/link", s.BeginLinkHandler)
 		mux.Get("/{provider}/link/begin", s.BeginLinkFromCodeHandler)
+		mux.With(s.AuthenticationMiddleware, s.Authenticated(true)).Get("/{provider}/link/complete", s.CompleteLinkHandler)
 
 		mux.Get("/{provider}", func(w http.ResponseWriter, r *http.Request) {
 			cl, ok := AuthenticatedClaims(r.Context())
@@ -850,8 +882,8 @@ func (s *Service) HandleRelay(w http.ResponseWriter, r *http.Request) {
 	}
 
 	relay, err := s.RelayStore.Redeem(r.Context(), code)
-	if err == nil && relay.Provider == linkRelayProvider {
-		// Link codes only start a Discord link; they never sign anyone in.
+	if err == nil && (relay.Provider == linkRelayProvider || relay.Provider == linkCompleteRelayProvider) {
+		// Link codes only start or finish a Discord link; they never sign anyone in.
 		err = errRelayCodeInvalid
 	}
 	if errors.Is(err, errRelayCodeInvalid) {

@@ -2109,6 +2109,7 @@ type OauthRelayCode struct {
 	RedirectPath      string             `db:"redirect_path" json:"redirect_path"`
 	ExpiresAt         pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
 	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	LinkedID          string             `db:"linked_id" json:"linked_id"`
 }
 
 type OauthServerSecret struct {

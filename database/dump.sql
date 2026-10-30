@@ -1716,6 +1716,7 @@ CREATE TABLE oauth_relay_codes (
     redirect_path text NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    linked_id text DEFAULT ''::text NOT NULL,
     CONSTRAINT oauth_relay_codes_code_hash_length CHECK ((octet_length(code_hash) = 32))
 );
 
