@@ -343,6 +343,7 @@ export function useHealingDoneBreakout({
           ...a,
           key: `spell-${a.spellId}-${a.name}`, // Unique key (name includes HoT/DoT suffix)
           spellId: a.spellId,
+          showRank: true,
         }));
         // Pet abilities in merged mode are excluded from ByAbilityBySpellId (different
         // pets share spell IDs, e.g. Auto Attack=6603). Pull them from ByAbility instead.

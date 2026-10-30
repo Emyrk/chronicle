@@ -1,5 +1,14 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/components/ui/SpellIdTooltip", () => ({
+  SpellIdTooltip: ({ name, showRank }: { name: string; showRank?: boolean }) => (
+    <span data-spell-name={name} data-show-rank={showRank ? "true" : "false"}>
+      {name}
+    </span>
+  ),
+}));
+
 import { AbilityBreakout, AbilityTable, type AbilityData } from "./AbilityBreakout";
 
 const ability: AbilityData = {
@@ -41,6 +50,34 @@ function expectColumnOrder(markup: string, primaryFirst: boolean): void {
     expect(section.indexOf(first)).toBeLessThan(section.indexOf(second));
   }
 }
+
+describe("AbilityTable spell ranks", () => {
+  it("does not show a rank for a name-aggregated ability with a representative spell ID", () => {
+    const markup = renderToStaticMarkup(
+      <AbilityTable
+        abilities={[{ ...ability, spellId: 133 }]}
+        totalValue={ability.value}
+        valueLabel="Damage"
+        showHits={false}
+      />,
+    );
+
+    expect(markup).toContain('data-show-rank="false"');
+  });
+
+  it("shows a rank for an explicitly ranked spell row", () => {
+    const markup = renderToStaticMarkup(
+      <AbilityTable
+        abilities={[{ ...ability, spellId: 133, showRank: true }]}
+        totalValue={ability.value}
+        valueLabel="Damage"
+        showHits={false}
+      />,
+    );
+
+    expect(markup).toContain('data-show-rank="true"');
+  });
+});
 
 describe("AbilityTable stacked column order", () => {
   it("places the primary value before the stacked value when requested", () => {

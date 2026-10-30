@@ -275,6 +275,8 @@ export function useDamageDoneBreakout({
             ...a, 
             key: `spell-${a.spellId}-${a.name}`,  // Unique key (name includes HoT/DoT suffix)
             spellId: a.spellId,  // Pass spellId for icon/tooltip
+            showRank: true,
+            spell: spellData,
             subtitle: rank || undefined,
           };
         });

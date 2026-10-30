@@ -315,6 +315,7 @@ export function useHealingTakenBreakout({
           ...a,
           key: `spell-${a.spellId}`,
           spellId: a.spellId,
+          showRank: true,
         }));
       } else {
         abilities = getAbilitiesForUnit(result, playerID, viewMode);

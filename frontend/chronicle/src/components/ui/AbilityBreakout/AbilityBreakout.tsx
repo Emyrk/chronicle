@@ -7,6 +7,7 @@ import { ChevronRight, ChevronLeft } from 'lucide-react'
 import { SpellIdTooltip } from '@/components/ui/SpellIdTooltip'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { usePortalContainer } from '@/components/ui/PortalContainerContext'
+import type { WoWSpell } from '@/api/wowdb'
 
 // ============================================================================
 // CSS Tooltip with Portal (escapes overflow containers)
@@ -216,6 +217,10 @@ export interface AbilityData extends DamageAbilityBreakout{
   subtitle?: string
   /** Optional spell ID for showing spell icon and tooltip */
   spellId?: number
+  /** Whether to append the spell rank after lazily loading metadata. */
+  showRank?: boolean
+  /** Optional preloaded spell metadata, used by deterministic fixtures. */
+  spell?: WoWSpell
   /** Optional unique key for React (defaults to name if not provided) */
   key?: string
 }
@@ -589,7 +594,8 @@ export function AbilityTable({
                         spellId={ability.spellId} 
                         name={ability.name} 
                         size={14}
-                        showRank={!ability.subtitle}
+                        showRank={ability.showRank && !ability.subtitle}
+                        spell={ability.spell}
                         className="inline-flex items-center gap-1"
                       />
                     ) : (

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { WoWSpell } from "@/api/wowdb";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -55,5 +56,21 @@ describe("SpellIdTooltip", () => {
     expect(markup).toContain("data-spell-icon");
     expect(markup).toContain("Fireball");
     expect(markup).toContain("Rank 11");
+  });
+
+  it("uses preloaded spell metadata without enabling the query", () => {
+    useSpellMock.mockReturnValue({ data: undefined });
+    const spell = {
+      id: 133,
+      subtext: { "0": "Rank 11" },
+    } as unknown as WoWSpell;
+
+    const markup = renderToStaticMarkup(
+      <SpellIdTooltip spellId={133} name="Fireball" showRank spell={spell} />,
+    );
+
+    expect(markup).toContain("data-spell-icon");
+    expect(markup).toContain("Rank 11");
+    expect(useSpellMock).toHaveBeenCalledWith("133", "dataset", { enabled: false });
   });
 });

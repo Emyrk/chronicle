@@ -166,6 +166,7 @@ export function useDamageTakenBreakout({
           ...a,
           key: `spell-${a.spellId}`,
           spellId: a.spellId,
+          showRank: true,
         }));
       } else {
         abilities = getAbilitiesForUnit(result, unitID);
