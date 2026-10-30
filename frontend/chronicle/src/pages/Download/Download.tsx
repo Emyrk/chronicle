@@ -44,8 +44,8 @@ function Rise({ n, className = "", children }: { n: number; className?: string; 
   return <div className={`${s.rise} ${s[`d${n}`]} ${className}`}>{children}</div>;
 }
 
-/** Step 3: the client's companion addon, which turns on combat logging by itself. */
-function AddonStep({ addon: primary }: { addon: CompanionAddon | null }) {
+/** The client's companion addon, which turns on combat logging by itself. */
+function AddonStep({ addon: primary, n }: { addon: CompanionAddon | null; n: number }) {
   if (!primary) {
     return (
       <div className={s.card}>
@@ -60,7 +60,7 @@ function AddonStep({ addon: primary }: { addon: CompanionAddon | null }) {
           </div>
         </div>
         <div className={s.stepHead}>
-          <span className={`${s.serif} ${s.num}`}>3</span>
+          <span className={`${s.serif} ${s.num}`}>{n}</span>
           <h3 className={s.h3}>Turn on combat logging</h3>
         </div>
         <p className={s.stepBody}>
@@ -86,7 +86,7 @@ function AddonStep({ addon: primary }: { addon: CompanionAddon | null }) {
         </div>
       </div>
       <div className={s.stepHead}>
-        <span className={`${s.serif} ${s.num}`}>3</span>
+        <span className={`${s.serif} ${s.num}`}>{n}</span>
         <h3 className={s.h3}>Install the addon</h3>
       </div>
       <p className={s.stepBody}>
@@ -113,8 +113,8 @@ function ModLink({ mod }: { mod: ClientMod }) {
   );
 }
 
-/** Step 4: what the addon needs, plus optional extras for replay map positions. */
-function ModsStep({ addon }: { addon: CompanionAddon }) {
+/** What the addon needs, plus optional extras for replay map positions. */
+function ModsStep({ addon, n }: { addon: CompanionAddon; n: number }) {
   const { requires, optional } = addon;
   const title = requires.length > 0 ? `Add ${requires.map((m) => m.name).join(" and ")}` : "Optional: unit positions";
   const kinds = new Set([...requires, ...optional].map((m) => m.kind));
@@ -135,7 +135,7 @@ function ModsStep({ addon }: { addon: CompanionAddon }) {
         )}
       </div>
       <div className={s.stepHead}>
-        <span className={`${s.serif} ${s.num}`}>4</span>
+        <span className={`${s.serif} ${s.num}`}>{n}</span>
         <h3 className={s.h3}>{title}</h3>
       </div>
       {requires.map((m) => (
@@ -247,7 +247,7 @@ export function DownloadView({ os, clients }: { os: OS; clients: ClientOption[] 
       </Rise>
 
       <Rise n={6} className={`${s.wrap} ${s.steps}`}>
-        <h2 className={`${s.serif} ${s.h2}`}>{modsAddon ? "Four" : "Three"} steps, then never again</h2>
+        <h2 className={`${s.serif} ${s.h2}`}>{modsAddon ? "Five" : "Four"} steps, then never again</h2>
         {clients.length > 1 && (
           <div className={s.clientPick} role="group" aria-label="Your game client">
             <span>Your client</span>
@@ -264,7 +264,8 @@ export function DownloadView({ os, clients }: { os: OS; clients: ClientOption[] 
             ))}
           </div>
         )}
-        <div className={`${s.stepGrid} ${modsAddon ? s.stepGrid4 : ""}`}>
+        <h3 className={s.groupHead}>In Sidekick</h3>
+        <div className={s.stepGrid}>
           <div className={s.card}>
             <div className={s.shot}>
               <div className={s.shotLabel}>Your {current.tray}</div>
@@ -307,8 +308,38 @@ export function DownloadView({ os, clients }: { os: OS; clients: ClientOption[] 
             </p>
           </div>
 
-          <AddonStep addon={addon} />
-          {modsAddon && <ModsStep addon={modsAddon} />}
+          <div className={s.card}>
+            <div className={s.shot} style={{ flexDirection: "row", alignItems: "center", justifyContent: "center" }}>
+              <div className={s.menu}>
+                <div className={s.dim}>No World of Warcraft folders</div>
+                <div className={s.hot}>Add WoW folder…</div>
+                <div>Run automatic WoW detection…</div>
+                <div className={s.sep} />
+                <div className={s.dim}>Quit</div>
+              </div>
+            </div>
+            <div className={s.stepHead}>
+              <span className={`${s.serif} ${s.num}`}>3</span>
+              <h3 className={s.h3}>Point it at WoW</h3>
+            </div>
+            <p className={s.stepBody}>
+              Click <strong>Add WoW folder…</strong> and choose the folder your game runs from, the one with{" "}
+              {current.os === "macos" ? "the WoW app" : "WoW.exe"} in it. Play more than one client? Add each folder.
+            </p>
+            <p className={s.note}>
+              <Info size={16} color="#e6b450" aria-hidden="true" />
+              <span>
+                Installed WoW in the standard Blizzard location? <strong>Run automatic WoW detection</strong> finds it
+                for you.
+              </span>
+            </p>
+          </div>
+        </div>
+
+        <h3 className={s.groupHead}>Then in WoW</h3>
+        <div className={s.stepGrid}>
+          <AddonStep addon={addon} n={4} />
+          {modsAddon && <ModsStep addon={modsAddon} n={5} />}
         </div>
       </Rise>
 

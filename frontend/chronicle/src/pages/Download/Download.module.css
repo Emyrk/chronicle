@@ -38,8 +38,8 @@
 
 .h2{font-size:34px;color:#f8f1e3}
 .steps{display:flex;flex-direction:column;gap:20px}
+.groupHead{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#9a8d7b;margin-top:8px}
 .stepGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
-.stepGrid4{grid-template-columns:repeat(2,minmax(0,1fr))}
 .card{display:flex;flex-direction:column;gap:16px;background:#241e19;border:1px solid #3a2f26;border-radius:14px;padding:22px;min-width:0;transition:transform .3s ease,border-color .3s ease}
 .card:hover{border-color:#5a4a3a;transform:translateY(-2px)}
 .shot{height:128px;background:#15110e;border-radius:10px;display:flex;flex-direction:column;justify-content:center;gap:10px;padding:0 16px;overflow:hidden}

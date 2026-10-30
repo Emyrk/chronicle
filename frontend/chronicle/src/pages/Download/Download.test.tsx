@@ -42,6 +42,10 @@ describe("DownloadView", () => {
     expect(markup).toContain("Add Nampower");
   });
 
+  it("tells players to add their WoW folder in Sidekick", () => {
+    expect(render("windows", config("1.12a-cc-addon"))).toContain("Add WoW folder…");
+  });
+
   it("hides the picker with a single format", () => {
     expect(render("windows", config("1.12a-cc-addon"))).not.toContain("Your client");
   });
@@ -55,7 +59,7 @@ describe("DownloadView", () => {
 
   it("adds a 1.12a step for Nampower and optional positional mods", () => {
     const markup = render("windows", config("1.12a-cc-addon"));
-    expect(markup).toContain("Four steps");
+    expect(markup).toContain("Five steps");
     expect(markup).toContain("Add Nampower");
     expect(markup).toContain("ClassicAPI");
     expect(markup).toContain("SuperWoW doesn&#x27;t record enemy unit positions");
@@ -70,7 +74,7 @@ describe("DownloadView", () => {
   });
 
   it("keeps three steps when the addon needs no client mods", () => {
-    expect(render("windows", config("2.4.3-cc-addon"))).toContain("Three steps");
+    expect(render("windows", config("2.4.3-cc-addon"))).toContain("Four steps");
   });
 
   it("links the latest release asset for the detected OS", () => {
