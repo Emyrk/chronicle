@@ -42,7 +42,7 @@ export function PurgeAccount() {
   const { data: session } = useSession();
   const [searchParams, setSearchParams] = useSearchParams();
   const purgeID = searchParams.get("purge") ?? undefined;
-  const { data: inventory, isLoading } = useAccountPurgeInventory(!!session && !purgeID);
+  const { data: inventory, error, refetch, isFetching } = useAccountPurgeInventory(!!session && !purgeID);
   const activePurgeID = purgeID ?? inventory?.active_purge?.id;
 
   if (activePurgeID) {
@@ -57,7 +57,23 @@ export function PurgeAccount() {
       />
     );
   }
-  if (isLoading || !inventory) {
+  if (session === null) {
+    return <div className="text-sm text-muted-foreground">Sign in to manage your account.</div>;
+  }
+  if (error) {
+    return (
+      <div role="alert" className="max-w-xl rounded-lg border border-destructive/40 p-5 space-y-3">
+        <div className="flex items-center gap-2 font-semibold text-destructive">
+          <XCircle className="size-5" /> Couldn't load your account data
+        </div>
+        <p className="break-words text-sm text-muted-foreground">{error.message}</p>
+        <Button variant="outline" disabled={isFetching} onClick={() => void refetch()}>
+          {isFetching && <Loader2 className="size-4 animate-spin" />} Try again
+        </Button>
+      </div>
+    );
+  }
+  if (!inventory) {
     return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Loading your data...</div>;
   }
   return (

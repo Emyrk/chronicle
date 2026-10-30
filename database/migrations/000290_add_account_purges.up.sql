@@ -1,5 +1,10 @@
 BEGIN;
 
+-- An earlier draft of this branch shipped 000289 as account_merge_requests.
+-- Databases that ran it keep version 289, so purges live in 000290 and the
+-- unused merge table is dropped here.
+DROP TABLE IF EXISTS account_merge_requests;
+
 -- account_purges tracks self-service account deletion jobs. user_id has no
 -- foreign key so the row, and its status, outlive the deleted account.
 CREATE TABLE account_purges (

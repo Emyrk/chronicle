@@ -241,7 +241,11 @@ export function useAccountPurgeInventory(enabled: boolean) {
     retry: false,
     queryFn: async () => {
       const response = await fetch("/api/v1/me/account-purge");
-      if (!response.ok) throw new Error("Failed to load account data");
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        const detail = body?.detail ? ` ${body.detail}` : "";
+        throw new Error(`${body?.message || `Failed to load account data (HTTP ${response.status})`}${detail}`);
+      }
       return response.json() as Promise<import("./typesGenerated").AccountPurgeInventory>;
     },
   });
