@@ -57,6 +57,12 @@ WHERE
 RETURNING *
 ;
 
+-- name: LockUserStorageQuota :one
+SELECT id
+FROM users
+WHERE id = @id
+FOR UPDATE;
+
 -- name: GetUserByID :one
 SELECT
   *

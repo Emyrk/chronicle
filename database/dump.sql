@@ -319,6 +319,7 @@ CREATE TABLE log_file_parts (
     content_encoding text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     finalized_at timestamp with time zone,
+    counts_toward_user_limit boolean DEFAULT false NOT NULL,
     CONSTRAINT log_file_parts_sequence_check CHECK ((sequence > 0)),
     CONSTRAINT log_file_parts_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ready'::text, 'failed'::text])))
 );

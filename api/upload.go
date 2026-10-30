@@ -22,11 +22,14 @@ import (
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const (
 	MaxLogFileSize     = 250 * 1024 * 1024 // 250 MB
 	MaxLogArtifactSize = 8 * 1024 * 1024   // 8 MB
+	MaxUserLogAppends  = 5
 )
 
 // parseFlavorParam parses a comma-separated flavor query param into a WoWFlavor,
@@ -294,6 +297,21 @@ func uploadUnlisted(r *http.Request) (bool, error) {
 	return strconv.ParseBool(value)
 }
 
+func userLogAppendMeta(header http.Header) (chronicle.LogAppendMeta, error) {
+	uploadID, err := uuid.Parse(header.Get("X-Chronicle-Upload-ID"))
+	if err != nil {
+		return chronicle.LogAppendMeta{}, errors.New("invalid or missing X-Chronicle-Upload-ID header")
+	}
+	sequence, err := strconv.ParseInt(header.Get("X-Chronicle-Chunk-Sequence"), 10, 64)
+	if err != nil || sequence <= 0 {
+		return chronicle.LogAppendMeta{}, errors.New("invalid or missing X-Chronicle-Chunk-Sequence header")
+	}
+	return chronicle.LogAppendMeta{
+		UploadID:       uploadID,
+		SourceSequence: pgtype.Int8{Int64: sequence, Valid: true},
+	}, nil
+}
+
 func (api *API) authorizeUnlistedUpload(ctx context.Context, w http.ResponseWriter, unlisted bool) bool {
 	if !unlisted {
 		return true
@@ -311,6 +329,114 @@ func (api *API) authorizeUnlistedUpload(ctx context.Context, w http.ResponseWrit
 		return false
 	}
 	return true
+}
+
+func (api *API) WoWLogAppend(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	logID := httpmw.LogID(ctx)
+	actor, _ := authz.ActorFromContext(ctx)
+	if api.clientUploadsDisabled(ctx) {
+		isAdmin, err := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(actor))
+		if err != nil || !isAdmin {
+			httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
+				Message: "Client-side uploads are disabled for this server.",
+			})
+			return
+		}
+	}
+
+	allowed, err := api.Zed.CheckOne(ctx, nil, policy.New().Raid_log(logID).CanAppend_User(actor))
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if !allowed {
+		httpapi.Forbidden(w, nil)
+		return
+	}
+
+	group, err := api.Zed.GetWoWLogGroupByID(ctx, logID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "Log not found"})
+		return
+	}
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	meta, err := userLogAppendMeta(r.Header)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: err.Error()})
+		return
+	}
+
+	file, header, err := r.FormFile("combat_log")
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Failed to get file from form",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	defer func() { _ = file.Close() }()
+	if header.Size > MaxLogFileSize {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Log file part is too large, exceeds maximum allowed size of 250 MB",
+			Detail:  fmt.Sprintf("file size: %d bytes", header.Size),
+		})
+		return
+	}
+	if !isGzipped(header) {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Log file parts must be gzip-compressed"})
+		return
+	}
+
+	isAdmin, err := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(actor))
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	maxAppends := int64(MaxUserLogAppends)
+	if isAdmin {
+		maxAppends = 0
+	}
+
+	var realmID uuid.UUID
+	if realm, realmErr := api.Zed.GetServerUploadMetaRealmID(ctx, logID); realmErr == nil && realm.Valid {
+		realmID = realm.UUID
+	}
+	if err := api.Chronicle.AppendUserLog(ctx, group.WoWLogGroup, file, realmID, meta, maxAppends); err != nil {
+		status := http.StatusInternalServerError
+		message := "Failed to append log file"
+		switch {
+		case errors.Is(err, chronicle.ErrUserLogAppendLimit):
+			status = http.StatusConflict
+			message = fmt.Sprintf("A log can have at most %d user appends", MaxUserLogAppends)
+		case errors.Is(err, chronicle.ErrLogAppendInProgress):
+			status = http.StatusConflict
+			message = "This log append is already in progress"
+		}
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{Message: message, Detail: err.Error()},
+			Status:   status,
+		})
+		return
+	}
+
+	if api.Opts.Sidekick != nil {
+		api.Opts.Sidekick.RecordUpload(ctx)
+	}
+	files, err := api.Zed.GetWoWLogFilesByGroupID(ctx, logID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	fileIDs := make([]uuid.UUID, 0, len(files))
+	for _, logFile := range files {
+		fileIDs = append(fileIDs, logFile.ID)
+	}
+	httpapi.Write(ctx, w, http.StatusCreated, chroniclesdk.LogUploadResponse{LogID: logID, Files: fileIDs})
 }
 
 func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {

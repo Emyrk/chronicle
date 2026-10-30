@@ -1839,20 +1839,21 @@ type LogFile struct {
 }
 
 type LogFilePart struct {
-	ID                  uuid.UUID          `db:"id" json:"id"`
-	LogFileID           uuid.UUID          `db:"log_file_id" json:"log_file_id"`
-	Sequence            int64              `db:"sequence" json:"sequence"`
-	UploadID            uuid.UUID          `db:"upload_id" json:"upload_id"`
-	ReservationID       uuid.UUID          `db:"reservation_id" json:"reservation_id"`
-	SourceSequence      pgtype.Int8        `db:"source_sequence" json:"source_sequence"`
-	ObjectKey           string             `db:"object_key" json:"object_key"`
-	Status              string             `db:"status" json:"status"`
-	Hash                pgtype.Text        `db:"hash" json:"hash"`
-	SizeBytes           pgtype.Int8        `db:"size_bytes" json:"size_bytes"`
-	CompressedSizeBytes pgtype.Int8        `db:"compressed_size_bytes" json:"compressed_size_bytes"`
-	ContentEncoding     pgtype.Text        `db:"content_encoding" json:"content_encoding"`
-	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	FinalizedAt         pgtype.Timestamptz `db:"finalized_at" json:"finalized_at"`
+	ID                    uuid.UUID          `db:"id" json:"id"`
+	LogFileID             uuid.UUID          `db:"log_file_id" json:"log_file_id"`
+	Sequence              int64              `db:"sequence" json:"sequence"`
+	UploadID              uuid.UUID          `db:"upload_id" json:"upload_id"`
+	ReservationID         uuid.UUID          `db:"reservation_id" json:"reservation_id"`
+	SourceSequence        pgtype.Int8        `db:"source_sequence" json:"source_sequence"`
+	ObjectKey             string             `db:"object_key" json:"object_key"`
+	Status                string             `db:"status" json:"status"`
+	Hash                  pgtype.Text        `db:"hash" json:"hash"`
+	SizeBytes             pgtype.Int8        `db:"size_bytes" json:"size_bytes"`
+	CompressedSizeBytes   pgtype.Int8        `db:"compressed_size_bytes" json:"compressed_size_bytes"`
+	ContentEncoding       pgtype.Text        `db:"content_encoding" json:"content_encoding"`
+	CreatedAt             pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	FinalizedAt           pgtype.Timestamptz `db:"finalized_at" json:"finalized_at"`
+	CountsTowardUserLimit bool               `db:"counts_toward_user_limit" json:"counts_toward_user_limit"`
 }
 
 type LogGroupArtifact struct {
