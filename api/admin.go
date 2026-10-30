@@ -207,18 +207,13 @@ func (a *API) AdminResyncUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the user's Discord link
-	link, err := a.Opts.Zed.GetUserAuthLinkByUserID(r.Context(), userID)
+	// Get the user's Discord link. Accounts can also have a password link.
+	link, err := a.Opts.Zed.GetUserAuthLinkByUserIDAndProvider(r.Context(), database.GetUserAuthLinkByUserIDAndProviderParams{
+		UserID: userID, Provider: "discord",
+	})
 	if err != nil {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, map[string]string{
 			"message": "User has no linked Discord account",
-		})
-		return
-	}
-
-	if link.Provider != "discord" {
-		httpapi.Write(r.Context(), w, http.StatusBadRequest, map[string]string{
-			"message": "User is not linked via Discord",
 		})
 		return
 	}

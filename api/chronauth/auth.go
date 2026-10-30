@@ -601,6 +601,11 @@ func (s *Service) CompleteLinkHandler(w http.ResponseWriter, r *http.Request) {
 			if syncErr := s.Bot.EnqueueEntitlementRoleSync(r.Context(), accountID); syncErr != nil {
 				s.logger.Warn("enqueue Discord entitlement role sync after linking", slog.String("error", syncErr.Error()))
 			}
+			// Check Discord server membership perks (such as bonus storage) now,
+			// as a Discord sign-in does, instead of waiting for the weekly check.
+			if checkErr := s.Bot.ReactivateMembershipGrantCheckOnLogin(r.Context(), accountID); checkErr != nil {
+				s.logger.Warn("activate Discord membership grant check after linking", slog.String("error", checkErr.Error()))
+			}
 		}
 		redirect("success")
 	case errors.Is(err, errProviderLinkedElsewhere):

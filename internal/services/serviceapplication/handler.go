@@ -783,8 +783,10 @@ func (s *Service) ListApplicationAdmins(w http.ResponseWriter, r *http.Request) 
 		if err == nil {
 			entry.Username = user.Username
 		}
-		link, err := s.DB.GetUserAuthLinkByUserID(ctx, uid)
-		if err == nil && link.Provider == "discord" {
+		link, err := s.DB.GetUserAuthLinkByUserIDAndProvider(ctx, database.GetUserAuthLinkByUserIDAndProviderParams{
+			UserID: uid, Provider: "discord",
+		})
+		if err == nil {
 			entry.DiscordID = link.LinkedID
 		}
 		entries = append(entries, entry)

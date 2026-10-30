@@ -528,7 +528,8 @@ function ExternalVerificationCard() {
   const provider = siteConfig?.external_verification;
   if (!provider) return null;
 
-  const isDiscord = session?.auth_provider === "discord";
+  // A password account with Discord connected counts, whichever way it signed in.
+  const isDiscord = session?.auth_providers?.includes("discord") ?? false;
 
   const handleSync = () => {
     const at = Date.now();
