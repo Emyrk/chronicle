@@ -69,6 +69,7 @@ func TestWhoAmIAuthenticated(t *testing.T) {
 	require.Equal(t, userID, session.UserID)
 	require.Equal(t, sessionID, session.SessionID)
 	require.Equal(t, "free", session.SupporterTier)
+	require.Equal(t, []string{}, session.AuthProviders)
 
 	// The highest granted tier wins.
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"honored", "revered"}))

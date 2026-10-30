@@ -88,6 +88,7 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 		SupporterTier:        supporterTier,
 		Email:                user.Email,
 		AuthProvider:         claims.Provider,
+		AuthProviders:        []string{},
 		CreatedAt:            user.CreatedAt.Time,
 	}
 

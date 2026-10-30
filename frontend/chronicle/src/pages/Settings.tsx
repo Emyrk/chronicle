@@ -272,8 +272,8 @@ export function ProfileSettings() {
   const characterCosmeticsMode = updateCharacterCosmetics.isPending
     ? updateCharacterCosmetics.variables
     : session?.preferences.character_cosmetics ?? "enabled";
-  const isPasswordAuth = session?.auth_providers.includes("password") ?? false;
-  const isDiscordLinked = session?.auth_providers.includes("discord") ?? false;
+  const isPasswordAuth = session?.auth_providers?.includes("password") ?? false;
+  const isDiscordLinked = session?.auth_providers?.includes("discord") ?? false;
   const email = session?.email;
   const emailVerified = session?.email_verified ?? false;
 
