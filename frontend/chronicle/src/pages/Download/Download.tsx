@@ -10,15 +10,16 @@ const FONTS_URL =
   "https://fonts.googleapis.com/css2?family=Young+Serif&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap";
 
 const SIDEKICK_LOGO = "/c/chronicle/SidekickLogo.webp";
+const CHRONICLE_ICON = "/c/chronicle/ChronicleIconSquare.webp";
 
 // Sidekick's tray state colors (chronicle-sidekick icons.go).
 const STATES = [
   { color: "#8a8f98", text: "Waiting for WoW" },
-  { color: "#e5484d", text: "Not logging, check the addon" },
-  { color: "#f97316", text: "Logging, waiting for a fight" },
-  { color: "#22c55e", text: "Recording" },
-  { color: "#3b82f6", text: "Uploading" },
-  { color: "#f2c12e", text: "Needs reconnect" },
+  { color: "#e5484d", text: "Combat logging not detected" },
+  { color: "#f97316", text: "Combat logging started, waiting for data" },
+  { color: "#22c55e", text: "Combat log receiving data" },
+  { color: "#3b82f6", text: "Uploading or retrying" },
+  { color: "#f2c12e", text: "Chronicle sign-in required" },
 ];
 
 const NIGHT = [
@@ -262,9 +263,7 @@ export function DownloadView({ os, addons }: { os: OS; addons: TenantAddons }) {
           ))}
           <div className={s.station}>
             <div className={`${s.dot} ${s.dotHot}`}>
-              <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1b1714" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 19V5l8 7 8-7v14" />
-              </svg>
+              <img src={CHRONICLE_ICON} alt="" className={s.dotLogo} />
             </div>
             <div className={s.time}>23:11</div>
             <div className={s.what}>Your report is up. Go argue about parses.</div>

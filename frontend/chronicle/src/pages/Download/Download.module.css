@@ -61,7 +61,7 @@
 .track{position:absolute;left:10%;right:10%;top:40px;border-top:2px dashed #3a2f26}
 .station{display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;min-width:0;position:relative}
 .dot{width:56px;height:56px;border-radius:50%;background:#241e19;border:1px solid #3a2f26;display:flex;align-items:center;justify-content:center}
-.dotHot{background:#60a5fa;border-color:#60a5fa;box-shadow:0 0 0 6px rgba(59,130,246,.18)}
+.dotHot{overflow:hidden;background:#1b1714;border-color:#60a5fa;box-shadow:0 0 0 6px rgba(59,130,246,.18)}
 .time{font-size:15px;font-weight:700;color:#f8f1e3}
 .what{font-size:14px;line-height:1.4;color:#c9bba5}
 
@@ -105,3 +105,4 @@
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 @media (prefers-reduced-motion:reduce){.logoImg{animation:none}}
 @media (max-width:860px){.logoImg{width:160px;height:160px}}
+.dotLogo{width:100%;height:100%;border-radius:50%;object-fit:cover}
