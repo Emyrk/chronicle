@@ -6,6 +6,10 @@ import {
   deviceAnalyticsPeriod,
   projectDeviceAnalytics,
 } from "../device/analytics";
+import {
+  fetchDeviceOperations,
+  type DeviceOperations,
+} from "../operations/victoria";
 import type { Env } from "../types";
 
 const device = new Hono<{ Bindings: Env }>();
@@ -20,7 +24,13 @@ device.get("/device/api/v1/analytics/dashboard", async (c) => {
     const analytics = c.env.ANALYTICS_MOCK === "true"
       ? createMockAnalyticsDashboard(requestedDays)
       : await fetchAnalyticsDashboard(c.env, requestedDays);
-    const projected = projectDeviceAnalytics(analytics);
+    let operations: DeviceOperations | null = null;
+    try {
+      operations = await fetchDeviceOperations(c.env);
+    } catch (error) {
+      console.error("device operations dashboard unavailable", error);
+    }
+    const projected = projectDeviceAnalytics(analytics, operations);
     const contentHash = await deviceAnalyticsContentHash(projected);
     const etag = `"${contentHash}"`;
 

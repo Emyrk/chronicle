@@ -4,3 +4,8 @@ ANALYTICS_MOCK=true
 # To preview live GA4 data instead, remove ANALYTICS_MOCK and provide:
 # GOOGLE_CLIENT_EMAIL=telemetry@example-project.iam.gserviceaccount.com
 # GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+
+# Optional operations pages backed by VictoriaMetrics through Home Assistant Ingress.
+# HOME_ASSISTANT_URL=https://home.example.com
+# HOME_ASSISTANT_TOKEN=replace-with-a-long-lived-access-token
+# VICTORIAMETRICS_INGRESS_URL=https://home.example.com/api/hassio_ingress/replace/prometheus/

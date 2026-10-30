@@ -26,6 +26,9 @@ export interface Env {
   GOOGLE_CLIENT_EMAIL?: string;
   GOOGLE_PRIVATE_KEY?: string;
   ANALYTICS_MOCK?: string;
+  HOME_ASSISTANT_URL?: string;
+  HOME_ASSISTANT_TOKEN?: string;
+  VICTORIAMETRICS_INGRESS_URL?: string;
 }
 
 export type NoticeAudience = "public" | "admin";

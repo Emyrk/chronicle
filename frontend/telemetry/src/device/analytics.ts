@@ -1,7 +1,8 @@
 import type { AnalyticsDashboard } from "../analytics/types";
+import type { DeviceOperations } from "../operations/victoria";
 
 export interface DeviceAnalyticsDashboard {
-  schemaVersion: 4;
+  schemaVersion: 5;
   contentHash: string;
   generatedAt: string;
   timezone: string;
@@ -25,6 +26,7 @@ export interface DeviceAnalyticsDashboard {
     pageViews: number;
     share: number;
   } | null;
+  operations: DeviceOperations | null;
   servers: Array<{
     hostname: string;
     pageViews: number;
@@ -55,10 +57,11 @@ export function deviceAnalyticsPeriod(
 }
 
 export function projectDeviceAnalytics(
-  dashboard: AnalyticsDashboard
+  dashboard: AnalyticsDashboard,
+  operations: DeviceOperations | null = null
 ): DeviceAnalyticsWithoutHash {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     generatedAt: dashboard.generatedAt,
     timezone: dashboard.timezone,
     mock: dashboard.mock,
@@ -71,6 +74,7 @@ export function projectDeviceAnalytics(
     })),
     topHost: dashboard.hosts[0] ?? null,
     topProduct: dashboard.productFamilies[0] ?? null,
+    operations,
     servers: dashboard.hosts.slice(0, 8).map((host) => ({
       hostname: host.hostname,
       pageViews: host.pageViews,
