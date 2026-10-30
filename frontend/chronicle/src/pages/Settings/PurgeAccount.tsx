@@ -99,7 +99,7 @@ function useSignInExpired(recentSignInUntil: string) {
 }
 
 async function signInAgain() {
-  await fetch("/auth/logout");
+  await fetch("/auth/logout", { method: "POST" });
   clearInstanceDefaultsCache();
   window.location.href = `/login?from=${encodeURIComponent("/account/purge")}`;
 }
@@ -332,7 +332,7 @@ function PurgeProgress({ purgeID, onRetry }: { purgeID: string; onRetry: () => v
   useEffect(() => {
     if (!done) return;
     // The server already revoked every session; this clears local state.
-    void fetch("/auth/logout").catch(() => {});
+    void fetch("/auth/logout", { method: "POST" }).catch(() => {});
     clearInstanceDefaultsCache();
     queryClient.clear();
   }, [done, queryClient]);

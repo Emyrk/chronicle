@@ -7,7 +7,7 @@ export function useAuth() {
   const { data: session, isLoading } = useSession();
 
   const logout = async () => {
-    await fetch("/auth/logout");
+    await fetch("/auth/logout", { method: "POST" });
     clearInstanceDefaultsCache();
     window.location.reload();
     // Queries should be invalid from a reload

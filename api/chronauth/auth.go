@@ -777,7 +777,11 @@ func (s *Service) Handler() http.Handler {
 			http.Redirect(w, r, redirectTo, http.StatusTemporaryRedirect)
 		})
 
-		mux.With(s.AuthenticationMiddleware, s.Authenticated(true)).Get("/logout", func(w http.ResponseWriter, r *http.Request) {
+		// Do not let GET /logout fall through to the /{provider} OAuth route.
+		mux.Get("/logout", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		})
+		mux.With(logoutSameOrigin, s.AuthenticationMiddleware, s.Authenticated(true)).Post("/logout", func(w http.ResponseWriter, r *http.Request) {
 			if claims, ok := AuthenticatedClaims(r.Context()); ok {
 				if err := s.Zed.DeleteUserAuthSessionByID(r.Context(), claims.SessionID); err != nil {
 					s.logger.Warn("delete session during logout", slog.String("error", err.Error()))
