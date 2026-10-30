@@ -80,6 +80,7 @@ type Chronicle struct {
 	WoWDB              *gamedb.WoWDB
 	ItemFetcher        gamedb.GearResolver
 	metrics            *logParseMetrics
+	accountMetrics     *accountMetrics
 	emitParsingLogs    bool
 	registryMu         sync.Mutex
 	registryByFlavor   map[string]*registry.Registry
@@ -130,6 +131,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, er
 		WoWDB:              opts.WoWDB,
 		TemporaryDirectory: filepath.Join(os.TempDir(), "chronicle_uploads"),
 		metrics:            newLogParseMetrics(opts.Registry),
+		accountMetrics:     newAccountMetrics(opts.Registry),
 		ItemFetcher:        opts.WoWDB,
 		emitParsingLogs:    opts.EmitParsingLogs,
 		registryByFlavor:   make(map[string]*registry.Registry),
