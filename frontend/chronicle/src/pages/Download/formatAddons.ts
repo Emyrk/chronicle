@@ -1,10 +1,11 @@
 import type { SiteConfig } from "@/api/typesGenerated";
 import { hasExplicitServerCapabilities, serverCapabilities } from "@/config/serverCapabilities";
 
-/** A client mod installed alongside the addon. */
+/** A client mod or extra addon installed alongside the companion addon. */
 export interface ClientMod {
   name: string;
   url: string;
+  kind: "mod" | "addon";
   /** What it does for Chronicle. */
   note: string;
   /** A caveat worth calling out on its own. */
@@ -17,21 +18,23 @@ export interface CompanionAddon {
   url: string;
   /** Client the addon is built for, e.g. "1.12a". */
   client: string;
-  /** Client mods the addon needs alongside it. */
+  /** What the addon needs alongside it. */
   requires: ClientMod[];
-  /** Client mods that add unit positions for the replay map. */
+  /** Extras that add unit positions for the replay map. */
   optional: ClientMod[];
 }
 
 const NAMPOWER: ClientMod = {
   name: "Nampower",
   url: "https://github.com/Emyrk/nampower/releases",
+  kind: "mod",
   note: "A DLL mod the addon logs through. Put nampower.dll in your WoW folder, add it to dlls.txt and launch the game with VanillaFixes.",
 };
 
 const SUPERWOW: ClientMod = {
   name: "SuperWoW",
   url: "https://github.com/balakethelock/SuperWoW",
+  kind: "mod",
   note: "Friendly unit positions only.",
   warning: "SuperWoW doesn't record enemy unit positions, so bosses and adds won't show on the replay map.",
 };
@@ -42,7 +45,12 @@ const COMPANION: CompanionAddon = {
   client: "1.12a",
   requires: [NAMPOWER],
   optional: [
-    { name: "ClassicAPI", url: "https://github.com/brues-code/ClassicAPI", note: "Positions for every unit, friend and enemy." },
+    {
+      name: "ClassicAPI",
+      url: "https://github.com/brues-code/ClassicAPI",
+      kind: "mod",
+      note: "Positions for every unit, friend and enemy.",
+    },
     SUPERWOW,
   ],
 };
@@ -56,7 +64,8 @@ const WOTLK: CompanionAddon = {
     {
       name: "ChronicleSidekickBridgeWoTLK",
       url: "https://github.com/Emyrk/ChronicleSidekickBridgeWoTLK",
-      note: "Friendly unit positions.",
+      kind: "addon",
+      note: "An addon that records friendly unit positions.",
     },
   ],
 };

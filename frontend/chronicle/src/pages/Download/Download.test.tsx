@@ -65,6 +65,7 @@ describe("DownloadView", () => {
     const markup = render("windows", config("3.3.5a-cc-addon"));
     expect(markup).toContain("Optional: unit positions");
     expect(markup).toContain("https://github.com/Emyrk/ChronicleSidekickBridgeWoTLK");
+    expect(markup).toContain("Addons for 3.3.5a");
     expect(markup).not.toContain("Nampower");
   });
 

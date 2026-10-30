@@ -113,14 +113,18 @@ function ModLink({ mod }: { mod: ClientMod }) {
   );
 }
 
-/** Step 4: client mods the addon needs, plus optional ones for replay map positions. */
+/** Step 4: what the addon needs, plus optional extras for replay map positions. */
 function ModsStep({ addon }: { addon: CompanionAddon }) {
   const { requires, optional } = addon;
   const title = requires.length > 0 ? `Add ${requires.map((m) => m.name).join(" and ")}` : "Optional: unit positions";
+  const kinds = new Set([...requires, ...optional].map((m) => m.kind));
+  const kindLabel = kinds.size > 1 ? "Mods and addons" : kinds.has("addon") ? "Addons" : "Client mods";
   return (
     <div className={s.card}>
       <div className={s.shot} style={{ gap: 5 }}>
-        <div className={s.shotLabel}>Client mods for {addon.client}</div>
+        <div className={s.shotLabel}>
+          {kindLabel} for {addon.client}
+        </div>
         {[...requires.map((m) => ({ m, tag: "Required" })), ...optional.map((m) => ({ m, tag: "Optional" }))].map(
           ({ m, tag }) => (
             <div key={m.name} className={s.modRow}>
