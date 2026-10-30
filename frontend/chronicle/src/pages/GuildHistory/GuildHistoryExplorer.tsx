@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ExternalLink, EyeOff, List, Map, Plus, Search, Shield, Star, Timer, X } from "lucide-react";
+import { ExternalLink, Eye, EyeOff, List, LockKeyhole, Map, Plus, Search, Settings2, Shield, Star, Timer, Trash2 } from "lucide-react";
 import type { FavoriteGuild, GuildInfo, GuildSpeedrunRun } from "@/api/typesGenerated";
-import { useGuildSearch, useMyFavorites } from "@/api/queries";
+import { useGuildSearch, useMyFavorites, useSession } from "@/api/queries";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/Card/Card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,6 +12,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { cn } from "@/lib/utils";
 import { performanceParseColor } from "@/pages/ArmoryPage/overview/performanceExplorerModel";
 import { SummaryViewToggle, type SummaryView } from "@/pages/ArmoryPage/overview/PerformanceSummary";
+import { isPaidBillingTier, TIER_COLOR } from "@/pages/Settings/billingPricing";
 import { BossFocusCombobox } from "./BossFocusCombobox";
 import { BossSplits } from "./BossSplits";
 import { ClearTimeChart } from "./ClearTimeChart";
@@ -35,10 +36,19 @@ import {
 } from "./guildHistoryState";
 
 const MAX_COMPARISON_GUILDS = 5;
+/** Friendly and signed-out viewers analyze one guild at a time; comparing is a supporter perk. */
+const FREE_COMPARISON_GUILDS = 1;
+
+function useGuildComparisonLimit() {
+  const session = useSession();
+  // Assume the full limit while loading so supporters' shared links never flash trimmed.
+  if (session.isLoading || isPaidBillingTier(session.data?.supporter_tier ?? "")) return MAX_COMPARISON_GUILDS;
+  return FREE_COMPARISON_GUILDS;
+}
 
 const DETAIL_TABS: readonly { value: GuildHistoryTab; label: string; icon: typeof List }[] = [
-  { value: "runs", label: "Clears", icon: List },
   { value: "bosses", label: "Boss splits", icon: Timer },
+  { value: "runs", label: "Clears", icon: List },
 ];
 
 const TIMINGS: readonly { value: GuildHistoryTiming; label: string; help: string }[] = [
@@ -64,19 +74,24 @@ export function GuildHistoryExplorer({
   onStateChange: (state: GuildHistoryState) => void;
 }) {
   const [addOpen, setAddOpen] = useState(false);
+  const [configGuildId, setConfigGuildId] = useState<string | null>(null);
   const [summaryView, setSummaryView] = useState<SummaryView>("numbers");
-  const infoQueries = useGuildInfos(state.guildIds);
-  const clearsQueries = useGuildRaidClearsList(state.guildIds);
+  const guildLimit = useGuildComparisonLimit();
+  // Guilds past the limit stay in the URL, so the link still works for supporters, but are not loaded.
+  const guildIds = state.guildIds.slice(0, guildLimit);
+  const lockedGuilds = state.guildIds.length - guildIds.length;
+  const infoQueries = useGuildInfos(guildIds);
+  const clearsQueries = useGuildRaidClearsList(guildIds);
   const instances = raidOptions(clearsQueries.flatMap((query) => query.data?.clears ?? []));
   const instanceName = state.instanceName || instances[0]?.name;
-  const historyQueries = useGuildSpeedrunHistories(state.guildIds, instanceName);
+  const historyQueries = useGuildSpeedrunHistories(guildIds, instanceName);
   const { timing, boss, part, dateRange, includeUnqualified, tab } = state;
   const focus = { boss, part };
   const canParse = parsesAvailable(timing, focus);
   // Parses exist only for whole clears and boss kills; anything else falls back to times.
   const display = canParse ? state.display : "time";
 
-  const guilds: SelectedGuild[] = state.guildIds.map((id, index) => {
+  const guilds: SelectedGuild[] = guildIds.map((id, index) => {
     const info = infoQueries[index]?.data;
     return {
       id,
@@ -105,8 +120,8 @@ export function GuildHistoryExplorer({
   const loading = historyQueries.some((query) => query.isLoading) || (!instanceName && clearsQueries.some((query) => query.isLoading));
 
   const addGuild = (guildId: string) => {
-    if (state.guildIds.includes(guildId) || state.guildIds.length >= MAX_COMPARISON_GUILDS) return;
-    onStateChange({ ...state, guildIds: [...state.guildIds, guildId] });
+    if (guildIds.includes(guildId) || guildIds.length >= guildLimit) return;
+    onStateChange({ ...state, guildIds: [...guildIds, guildId] });
     setAddOpen(false);
   };
 
@@ -186,56 +201,47 @@ export function GuildHistoryExplorer({
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+        <div className="grid min-w-0 flex-1 grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:items-center">
           {guilds.map((guild) => (
-            <span
+            <button
               key={guild.id}
+              type="button"
+              onClick={(event) => {
+                if (event.shiftKey) toggleHidden(guild.id);
+                else setConfigGuildId(guild.id);
+              }}
               className={cn(
-                "flex h-8 min-w-0 items-center gap-2 rounded-md border bg-background/70 pr-1 text-xs transition-all",
+                "group flex h-8 min-w-0 items-center gap-2 rounded-md border border-border bg-background/70 pr-2 text-left text-xs transition-all hover:bg-accent/50 sm:min-w-40",
                 guild.hidden && "opacity-45 saturate-50",
               )}
               style={{ borderColor: guild.color }}
+              aria-label={`${guild.name}. ${guild.hidden ? "Hidden, Shift+click to show" : "Shift+click to hide"}`}
             >
               <GuildLogo url={guild.logoUrl} color={guild.color} />
-              <button
-                type="button"
-                onClick={(event) => {
-                  if (event.shiftKey) toggleHidden(guild.id);
-                }}
-                title={guild.hidden ? "Hidden. Shift+click to show" : "Shift+click to hide"}
-                aria-label={`${guild.name}. ${guild.hidden ? "Hidden, Shift+click to show" : "Shift+click to hide"}`}
-                className="min-w-0 cursor-default text-left leading-tight"
-              >
+              <span className="min-w-0 flex-1 leading-tight">
                 <span className="block truncate font-semibold" style={{ color: guild.color }}>{guild.name}</span>
                 {guild.realmName && <span className="block truncate text-[10px] text-muted-foreground">{guild.realmName}</span>}
-              </button>
+              </span>
               {guild.hidden && <EyeOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
-              <button
-                type="button"
-                onClick={() => onStateChange({
-                  ...state,
-                  guildIds: state.guildIds.filter((id) => id !== guild.id),
-                  hiddenGuildIds: state.hiddenGuildIds.filter((id) => id !== guild.id),
-                })}
-                className="rounded p-1 text-muted-foreground hover:bg-white/10 hover:text-foreground"
-                aria-label={`Remove ${guild.name}`}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </span>
+              <Settings2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-foreground" />
+            </button>
           ))}
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 px-3 text-xs"
-            disabled={state.guildIds.length >= MAX_COMPARISON_GUILDS}
-            onClick={() => setAddOpen(true)}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add guild
-            <span className="text-[10px] text-muted-foreground/60">{state.guildIds.length}/{MAX_COMPARISON_GUILDS}</span>
-          </Button>
+          {guildIds.length >= guildLimit && guildLimit < MAX_COMPARISON_GUILDS ? (
+            <GuildComparisonUpsell lockedGuilds={lockedGuilds} />
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 min-w-0 px-3 text-xs"
+              disabled={guildIds.length >= guildLimit}
+              onClick={() => setAddOpen(true)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add guild
+              <span className="text-[10px] text-muted-foreground/60">{guildIds.length}/{guildLimit}</span>
+            </Button>
+          )}
         </div>
           {!loading && <SummaryViewToggle view={summaryView} onChange={setSummaryView} className="shrink-0 self-end sm:self-start" />}
         </div>
@@ -299,10 +305,23 @@ export function GuildHistoryExplorer({
         </div>
       </CardContent>
 
+      <GuildSettingsDialog
+        guild={guilds.find((guild) => guild.id === configGuildId)}
+        onClose={() => setConfigGuildId(null)}
+        onToggleHidden={toggleHidden}
+        onRemove={(guildId) => {
+          onStateChange({
+            ...state,
+            guildIds: state.guildIds.filter((id) => id !== guildId),
+            hiddenGuildIds: state.hiddenGuildIds.filter((id) => id !== guildId),
+          });
+          setConfigGuildId(null);
+        }}
+      />
       <AddGuildDialog
         open={addOpen}
         onOpenChange={setAddOpen}
-        selectedIds={state.guildIds}
+        selectedIds={guildIds}
         onSelect={addGuild}
       />
     </Card>
@@ -429,6 +448,66 @@ function ClearsTable({ guilds, label }: { guilds: readonly SelectedGuild[]; labe
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** Replaces "Add guild" for viewers at the free limit: comparing guilds is a supporter perk. */
+function GuildComparisonUpsell({ lockedGuilds }: { lockedGuilds: number }) {
+  return (
+    <Link
+      to="/supporter"
+      className="col-span-2 flex h-8 min-w-0 items-center gap-1.5 rounded-md border px-3 text-xs transition-colors hover:brightness-125 sm:col-span-1"
+      style={{ borderColor: `${TIER_COLOR.honored}66`, backgroundColor: `${TIER_COLOR.honored}14` }}
+    >
+      <LockKeyhole className="h-3.5 w-3.5 shrink-0" style={{ color: TIER_COLOR.honored }} aria-hidden="true" />
+      <span className="truncate">
+        {lockedGuilds > 0
+          ? `${lockedGuilds} more ${lockedGuilds === 1 ? "guild" : "guilds"} in this link. `
+          : ""}
+        <span className="font-medium" style={{ color: TIER_COLOR.honored }}>Honored</span>
+        <span className="text-muted-foreground"> supporters compare up to {MAX_COMPARISON_GUILDS} guilds</span>
+      </span>
+    </Link>
+  );
+}
+
+function GuildSettingsDialog({
+  guild,
+  onClose,
+  onToggleHidden,
+  onRemove,
+}: {
+  guild: SelectedGuild | undefined;
+  onClose: () => void;
+  onToggleHidden: (guildId: string) => void;
+  onRemove: (guildId: string) => void;
+}) {
+  return (
+    <Dialog open={!!guild} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-xl">
+        {guild && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <span className="size-2.5 rounded-full" style={{ backgroundColor: guild.color }} />
+                <span style={{ color: guild.color }}>{guild.name}</span>
+              </DialogTitle>
+              {guild.realmName && <DialogDescription>{guild.realmName}</DialogDescription>}
+            </DialogHeader>
+            <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-4">
+              <Button type="button" variant="outline" size="sm" onClick={() => onToggleHidden(guild.id)}>
+                {guild.hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                {guild.hidden ? "Show guild data" : "Hide guild data"}
+              </Button>
+              <Button variant="destructive" size="sm" onClick={() => onRemove(guild.id)}>
+                <Trash2 className="h-4 w-4" />
+                Remove guild
+              </Button>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 

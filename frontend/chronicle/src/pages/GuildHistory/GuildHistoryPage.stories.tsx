@@ -47,18 +47,24 @@ function favoriteGuild(guild: GuildHistoryFixture): FavoriteGuild {
   return { id: guild.guildId, name: guild.guildName, realm_id: "realm-eversong", realm_name: guild.realmName };
 }
 
-const handlers = [
-  http.get("/api/v1/site-config", () => HttpResponse.json({ signups_enabled: true, client_uploads_disabled: false, billing_enabled: false, ads_enabled: false, tenant: null })),
-  // Signed in, with every fixture guild saved as a favorite for the Add guild quick picks.
-  http.get("/api/v1/whoami", () => HttpResponse.json({
+function whoami(tier: "free" | "honored") {
+  return http.get("/api/v1/whoami", () => HttpResponse.json({
     user_id: "user-storybook",
     session_id: "session-storybook",
     roles: [],
     max_storage_bytes: 0,
     consumed_storage_bytes: 0,
     preferences: {},
-    ads_free: false,
-  })),
+    ads_free: tier !== "free",
+    supporter_tier: tier,
+  }));
+}
+
+const handlers = [
+  // Signed in as Honored so stories can compare up to five guilds; FriendlyLimit shows the free limit.
+  // Every fixture guild is saved as a favorite for the Add guild quick picks.
+  whoami("honored"),
+  http.get("/api/v1/site-config", () => HttpResponse.json({ signups_enabled: true, client_uploads_disabled: false, billing_enabled: false, ads_enabled: false, tenant: null })),
   http.get("/api/v1/me/favorites", () => HttpResponse.json({ guilds: GUILDS.map(favoriteGuild), players: [] })),
   http.get("/api/v1/guilds/", ({ request }) => {
     const query = (new URL(request.url).searchParams.get("search") ?? "").toLowerCase();
@@ -132,17 +138,25 @@ export const CompareGuilds: Story = {
   parameters: { path: pathFor(["Zug Zug", "Once Upon", "LaNuit", "Eternal Saints"]) },
 };
 
-export const BossSplitsSingle: Story = {
-  parameters: { path: pathFor(["LaNuit"], "&tab=bosses") },
+/** Friendly viewers see one guild; the rest of a shared comparison link is locked behind an upsell. */
+export const FriendlyLimit: Story = {
+  parameters: {
+    path: pathFor(["Zug Zug", "Once Upon", "LaNuit", "Eternal Saints"]),
+    msw: { handlers: [whoami("free"), ...handlers] },
+  },
+};
+
+export const ClearsTab: Story = {
+  parameters: { path: pathFor(["LaNuit"], "&tab=runs") },
 };
 
 export const BossSplitsCompare: Story = {
-  parameters: { path: pathFor(["Zug Zug", "Once Upon", "LaNuit", "Eternal Saints"], "&tab=bosses&range=60d") },
+  parameters: { path: pathFor(["Zug Zug", "Once Upon", "LaNuit", "Eternal Saints"], "&range=60d") },
 };
 
 /** Ragnaros kill times across guilds, picked from Focus or by clicking a boss in Boss splits. */
 export const FocusBoss: Story = {
-  parameters: { path: pathFor(["Zug Zug", "Once Upon", "LaNuit", "Eternal Saints"], "&boss=Ragnaros&tab=bosses") },
+  parameters: { path: pathFor(["Zug Zug", "Once Upon", "LaNuit", "Eternal Saints"], "&boss=Ragnaros") },
 };
 
 /** Switch the summary to "Box plot" to compare how spread out each guild's clears are. */
