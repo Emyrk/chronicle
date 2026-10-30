@@ -22770,7 +22770,7 @@ func (q *sqlQuerier) UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertS
 }
 
 const getSiteConfig = `-- name: GetSiteConfig :one
-SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled FROM site_config WHERE id = TRUE
+SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery FROM site_config WHERE id = TRUE
 `
 
 func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
@@ -22787,6 +22787,7 @@ func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
 		&i.ClientUploadsDisabled,
 		&i.ParseConfig,
 		&i.AdsEnabled,
+		&i.RootDomainDiscovery,
 	)
 	return i, err
 }
@@ -22796,19 +22797,21 @@ UPDATE site_config SET
     signups_enabled = COALESCE($1, signups_enabled),
     branding = COALESCE($2, branding),
     discoverable = COALESCE($3, discoverable),
-    default_format = COALESCE($4, default_format),
-    available_formats = COALESCE($5, available_formats),
-    client_uploads_disabled = COALESCE($6, client_uploads_disabled),
-    ads_enabled = COALESCE($7, ads_enabled),
+    root_domain_discovery = COALESCE($4, root_domain_discovery),
+    default_format = COALESCE($5, default_format),
+    available_formats = COALESCE($6, available_formats),
+    client_uploads_disabled = COALESCE($7, client_uploads_disabled),
+    ads_enabled = COALESCE($8, ads_enabled),
     updated_at = now()
 WHERE id = TRUE
-RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery
 `
 
 type UpdateSiteConfigParams struct {
 	SignupsEnabled        pgtype.Bool   `db:"signups_enabled" json:"signups_enabled"`
 	Branding              []byte        `db:"branding" json:"branding"`
 	Discoverable          pgtype.Bool   `db:"discoverable" json:"discoverable"`
+	RootDomainDiscovery   pgtype.Bool   `db:"root_domain_discovery" json:"root_domain_discovery"`
 	DefaultFormat         NullLogFormat `db:"default_format" json:"default_format"`
 	AvailableFormats      []string      `db:"available_formats" json:"available_formats"`
 	ClientUploadsDisabled pgtype.Bool   `db:"client_uploads_disabled" json:"client_uploads_disabled"`
@@ -22820,6 +22823,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		arg.SignupsEnabled,
 		arg.Branding,
 		arg.Discoverable,
+		arg.RootDomainDiscovery,
 		arg.DefaultFormat,
 		arg.AvailableFormats,
 		arg.ClientUploadsDisabled,
@@ -22837,6 +22841,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		&i.ClientUploadsDisabled,
 		&i.ParseConfig,
 		&i.AdsEnabled,
+		&i.RootDomainDiscovery,
 	)
 	return i, err
 }

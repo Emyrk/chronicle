@@ -251,6 +251,9 @@ type SiteConfig struct {
 	Branding *Branding `json:"branding"`
 	// Discoverable controls whether this deployment appears in /api/v1/discovery.
 	Discoverable bool `json:"discoverable"`
+	// RootDomainDiscovery makes browser navigation on the primary domain open the
+	// tenant chooser instead of treating the primary domain as a Chronicle site.
+	RootDomainDiscovery bool `json:"root_domain_discovery"`
 	// DefaultFormat is the primary domain's preferred log parse format.
 	// Nil means no preference — fall back to the compiled-in server default.
 	DefaultFormat *string `json:"default_format"`
@@ -274,6 +277,7 @@ type UpdateSiteConfigRequest struct {
 	DisableClientUpload *bool     `json:"disable_client_upload,omitempty"`
 	Branding            *Branding `json:"branding,omitempty"`
 	Discoverable        *bool     `json:"discoverable,omitempty"`
+	RootDomainDiscovery *bool     `json:"root_domain_discovery,omitempty"`
 	DefaultFormat       *string   `json:"default_format,omitempty"`
 	AvailableFormats    []string  `json:"available_formats,omitempty"`
 }

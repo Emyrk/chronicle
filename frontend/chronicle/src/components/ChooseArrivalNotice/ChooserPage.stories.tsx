@@ -104,6 +104,7 @@ export const ForgotChoice: Story = {
   args: { saved: "chromie", url: `${PAGE_URL}&choose_forget=1` },
 };
 
+/** The dedicated choose.* entry point for visitors who need to select a destination. */
 export const HomePage: Story = {
   args: { url: "https://choose.chronicleclassic.com/" },
 };

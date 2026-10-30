@@ -4338,6 +4338,11 @@ export interface SiteConfig {
      */
     readonly discoverable: boolean;
     /**
+     * RootDomainDiscovery makes browser navigation on the primary domain open the
+     * tenant chooser instead of treating the primary domain as a Chronicle site.
+     */
+    readonly root_domain_discovery: boolean;
+    /**
      * DefaultFormat is the primary domain's preferred log parse format.
      * Nil means no preference — fall back to the compiled-in server default.
      */
@@ -5123,6 +5128,7 @@ export interface UpdateSiteConfigRequest {
     readonly disable_client_upload?: boolean;
     readonly branding?: Branding;
     readonly discoverable?: boolean;
+    readonly root_domain_discovery?: boolean;
     readonly default_format?: string;
     readonly available_formats?: readonly string[];
 }

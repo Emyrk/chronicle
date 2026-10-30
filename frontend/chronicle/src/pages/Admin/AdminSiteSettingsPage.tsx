@@ -173,6 +173,38 @@ export function AdminSiteSettingsPage() {
             )}
           </Button>
         </div>
+        {!config?.tenant && (
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium">Root Domain Discovery</p>
+              <p className="text-sm text-muted-foreground">
+                Show the community chooser on the root domain instead of treating it as a Chronicle site.
+              </p>
+            </div>
+            <Button
+              variant={config?.root_domain_discovery ? "default" : "outline"}
+              size="sm"
+              disabled={updateConfig.isPending}
+              onClick={() => {
+                updateConfig.mutate({ root_domain_discovery: !config?.root_domain_discovery });
+              }}
+            >
+              {updateConfig.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : config?.root_domain_discovery ? (
+                <>
+                  <Check className="h-4 w-4 mr-1" />
+                  Enabled
+                </>
+              ) : (
+                <>
+                  <X className="h-4 w-4 mr-1" />
+                  Disabled
+                </>
+              )}
+            </Button>
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <div>
             <p className="font-medium">Client Uploads</p>

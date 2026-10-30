@@ -74,7 +74,12 @@ func New(broker *services.Services) *Service {
 
 // NewTest creates an enabled Service without a broker, for unit tests.
 func NewTest(slug string, tenantSvc *servicetenant.Service, accessURL url.URL) *Service {
-	return &Service{slug: slug, tenantSvc: tenantSvc, accessURL: accessURL}
+	return NewTestWithStore(slug, tenantSvc, accessURL, nil)
+}
+
+// NewTestWithStore creates a test Service with a site-config store.
+func NewTestWithStore(slug string, tenantSvc *servicetenant.Service, accessURL url.URL, db database.Store) *Service {
+	return &Service{slug: slug, tenantSvc: tenantSvc, accessURL: accessURL, db: db}
 }
 
 func (s *Service) Name() string         { return services.ServiceChoose }
@@ -102,15 +107,12 @@ func (s *Service) Options() serpent.OptionSet {
 
 func (s *Service) Start(ctx context.Context) error {
 	s.slug = strings.ToLower(strings.TrimSpace(s.slug))
-	if s.slug == "" {
-		return nil
-	}
 	if strings.Contains(s.slug, ".") {
 		return fmt.Errorf("choose slug %q must be a single subdomain label", s.slug)
 	}
 
 	tenantSvc := servicetenant.Tenant(s.broker)
-	if tenantSvc.PrimaryDomain() == "" {
+	if s.slug != "" && tenantSvc.PrimaryDomain() == "" {
 		return fmt.Errorf("choose slug %q requires --primary-domain", s.slug)
 	}
 	if raw := serviceaccessurl.AccessURL(s.broker); raw != "" {
@@ -120,7 +122,9 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.tenantSvc = tenantSvc
 	s.db = database.New(servicepgxpool.PGXPool(s.broker))
-	go s.orderLoop(ctx)
+	if tenantSvc.PrimaryDomain() != "" {
+		go s.orderLoop(ctx)
+	}
 	return nil
 }
 
@@ -210,25 +214,41 @@ func (s *Service) originFor(slug string) string {
 	return scheme + "://" + host
 }
 
-// Middleware serves the chooser page on the chooser subdomain. Other requests
-// on that subdomain (assets such as favicons and logos) go to untenanted,
-// since the chooser is not a tenant. Requests on any other host go to
-// tenanted.
+// Middleware serves the chooser page on the chooser subdomain. It also serves
+// the chooser for browser navigation on the primary domain when site config
+// enables root-domain discovery. API calls and static assets continue to the
+// normal untenanted handler.
 func (s *Service) Middleware(untenanted, tenanted http.Handler) http.Handler {
-	if !s.Enabled() {
+	if s == nil || s.tenantSvc == nil {
 		return tenanted
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.IsChooseHost(r.Host) {
-			tenanted.ServeHTTP(w, r)
+		if s.IsChooseHost(r.Host) {
+			if isPageRequest(r) {
+				s.servePage(w, r)
+				return
+			}
+			untenanted.ServeHTTP(w, r)
 			return
 		}
-		if isPageRequest(r) {
+		if isPageRequest(r) && !isRootManagementPath(r.URL.Path) && s.isRootDomainDiscovery(r) {
 			s.servePage(w, r)
 			return
 		}
-		untenanted.ServeHTTP(w, r)
+		tenanted.ServeHTTP(w, r)
 	})
+}
+
+func isRootManagementPath(requestPath string) bool {
+	return requestPath == "/login" || requestPath == "/admin" || strings.HasPrefix(requestPath, "/admin/")
+}
+
+func (s *Service) isRootDomainDiscovery(r *http.Request) bool {
+	if s.db == nil || !s.tenantSvc.IsPrimaryHost(r.Host) {
+		return false
+	}
+	config, err := s.db.GetSiteConfig(r.Context())
+	return err == nil && config.RootDomainDiscovery
 }
 
 // isPageRequest reports whether r is a browser navigation the chooser should

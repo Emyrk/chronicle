@@ -1,0 +1,2 @@
+ALTER TABLE site_config
+ADD COLUMN root_domain_discovery BOOLEAN NOT NULL DEFAULT FALSE;

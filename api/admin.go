@@ -851,6 +851,7 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	resp.ChooseURL = a.Opts.Choose.ChooseURL()
 	resp.Branding = unmarshalBranding(config.Branding)
 	resp.Discoverable = config.Discoverable
+	resp.RootDomainDiscovery = config.RootDomainDiscovery
 	if config.DefaultFormat.Valid {
 		s := string(config.DefaultFormat.LogFormat)
 		resp.DefaultFormat = &s
@@ -902,6 +903,9 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 	if req.Discoverable != nil {
 		params.Discoverable = pgtype.Bool{Bool: *req.Discoverable, Valid: true}
 	}
+	if req.RootDomainDiscovery != nil {
+		params.RootDomainDiscovery = pgtype.Bool{Bool: *req.RootDomainDiscovery, Valid: true}
+	}
 	if req.DefaultFormat != nil {
 		params.DefaultFormat = database.NullLogFormat{LogFormat: database.LogFormat(*req.DefaultFormat), Valid: true}
 	}
@@ -928,6 +932,7 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 		DisabledAds:           []string{},
 		Branding:              unmarshalBranding(config.Branding),
 		Discoverable:          config.Discoverable,
+		RootDomainDiscovery:   config.RootDomainDiscovery,
 	}
 	if t != nil {
 		resp.DisabledAds = t.DisabledAds

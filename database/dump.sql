@@ -2112,6 +2112,7 @@ CREATE TABLE site_config (
     client_uploads_disabled boolean DEFAULT false NOT NULL,
     parse_config jsonb,
     ads_enabled boolean DEFAULT false NOT NULL,
+    root_domain_discovery boolean DEFAULT false NOT NULL,
     CONSTRAINT site_config_id_check CHECK (id)
 );
 
