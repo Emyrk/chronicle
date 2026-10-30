@@ -4393,8 +4393,8 @@ export interface SiteConfig {
      */
     readonly discoverable: boolean;
     /**
-     * RootDomainDiscovery makes browser navigation on the primary domain open the
-     * tenant chooser instead of treating the primary domain as a Chronicle site.
+     * RootDomainDiscovery shows a community-discovery notice on the root site.
+     * The root remains a fully usable Chronicle site.
      */
     readonly root_domain_discovery: boolean;
     /**

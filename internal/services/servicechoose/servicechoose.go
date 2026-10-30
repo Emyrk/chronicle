@@ -74,12 +74,7 @@ func New(broker *services.Services) *Service {
 
 // NewTest creates an enabled Service without a broker, for unit tests.
 func NewTest(slug string, tenantSvc *servicetenant.Service, accessURL url.URL) *Service {
-	return NewTestWithStore(slug, tenantSvc, accessURL, nil)
-}
-
-// NewTestWithStore creates a test Service with a site-config store.
-func NewTestWithStore(slug string, tenantSvc *servicetenant.Service, accessURL url.URL, db database.Store) *Service {
-	return &Service{slug: slug, tenantSvc: tenantSvc, accessURL: accessURL, db: db}
+	return &Service{slug: slug, tenantSvc: tenantSvc, accessURL: accessURL}
 }
 
 func (s *Service) Name() string         { return services.ServiceChoose }
@@ -214,10 +209,9 @@ func (s *Service) originFor(slug string) string {
 	return scheme + "://" + host
 }
 
-// Middleware serves the chooser page on the chooser subdomain. It also serves
-// the chooser for browser navigation on the primary domain when site config
-// enables root-domain discovery. API calls and static assets continue to the
-// normal untenanted handler.
+// Middleware serves the chooser page on the chooser subdomain. API calls and
+// static assets continue to the normal untenanted handler; every other host
+// continues to the normal Chronicle application.
 func (s *Service) Middleware(untenanted, tenanted http.Handler) http.Handler {
 	if s == nil || s.tenantSvc == nil {
 		return tenanted
@@ -231,24 +225,8 @@ func (s *Service) Middleware(untenanted, tenanted http.Handler) http.Handler {
 			untenanted.ServeHTTP(w, r)
 			return
 		}
-		if isPageRequest(r) && !isRootManagementPath(r.URL.Path) && s.isRootDomainDiscovery(r) {
-			s.servePage(w, r)
-			return
-		}
 		tenanted.ServeHTTP(w, r)
 	})
-}
-
-func isRootManagementPath(requestPath string) bool {
-	return requestPath == "/login" || requestPath == "/admin" || strings.HasPrefix(requestPath, "/admin/")
-}
-
-func (s *Service) isRootDomainDiscovery(r *http.Request) bool {
-	if s.db == nil || !s.tenantSvc.IsPrimaryHost(r.Host) {
-		return false
-	}
-	config, err := s.db.GetSiteConfig(r.Context())
-	return err == nil && config.RootDomainDiscovery
 }
 
 // isPageRequest reports whether r is a browser navigation the chooser should

@@ -4,6 +4,11 @@ import { NavBar } from "../NavBar/NavBar";
 import { Footer } from "../Footer/Footer";
 import { SupportBanner } from "../SupportBanner";
 import { ChooseArrivalNotice } from "../ChooseArrivalNotice/ChooseArrivalNotice";
+import {
+  RootCommunityBanner,
+  RootCommunityDialog,
+  RootCommunityProvider,
+} from "../RootCommunityContext/RootCommunityContext";
 import { Toaster } from "../ui/Sonner/Sonner";
 import { TooltipProvider } from "../ui/Tooltip/tooltip";
 import { usePageTracking } from "@/hooks/usePageTracking";
@@ -25,22 +30,26 @@ export function Layout() {
 
   return (
     <TooltipProvider>
-      {!hideChrome && (
-        <>
-          <NoticeBanner notices={noticeResponse?.notices ?? []} />
-          <SupportBanner />
-          <NavBar />
-        </>
-      )}
-      <main>
-        <Suspense fallback={<RouteLoadingFallback />}>
-          <Outlet />
-        </Suspense>
-      </main>
-      {!hideChrome && <Footer />}
-      {!hideChrome && !hasPageChat && <GlobalSiteHelpChat />}
-      <ChooseArrivalNotice />
-      <Toaster />
+      <RootCommunityProvider>
+        {!hideChrome && (
+          <>
+            <NoticeBanner notices={noticeResponse?.notices ?? []} />
+            <RootCommunityBanner />
+            <SupportBanner />
+            <NavBar />
+          </>
+        )}
+        <main>
+          <Suspense fallback={<RouteLoadingFallback />}>
+            <Outlet />
+          </Suspense>
+        </main>
+        {!hideChrome && <Footer />}
+        {!hideChrome && !hasPageChat && <GlobalSiteHelpChat />}
+        <RootCommunityDialog />
+        <ChooseArrivalNotice />
+        <Toaster />
+      </RootCommunityProvider>
     </TooltipProvider>
   );
 }

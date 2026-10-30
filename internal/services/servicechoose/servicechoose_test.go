@@ -127,6 +127,7 @@ func TestMiddleware(t *testing.T) {
 		{name: "Asset", method: http.MethodGet, host: "choose.localhost", path: "/c/capy/logo.png", accept: "image/*", wantBody: "untenanted"},
 		{name: "API", method: http.MethodGet, host: "choose.localhost", path: "/api/v1/site-config", wantBody: "untenanted"},
 		{name: "Post", method: http.MethodPost, host: "choose.localhost", path: "/", wantBody: "untenanted"},
+		{name: "RootSite", method: http.MethodGet, host: "legacy.localhost", path: "/instances/123", wantBody: "tenanted"},
 		{name: "OtherTenant", method: http.MethodGet, host: "capy.localhost", path: "/instances/123", wantBody: "tenanted"},
 	}
 	for _, tc := range tests {
@@ -137,57 +138,6 @@ func TestMiddleware(t *testing.T) {
 			if tc.accept != "" {
 				req.Header.Set("Accept", tc.accept)
 			}
-			rec := httptest.NewRecorder()
-			handler.ServeHTTP(rec, req)
-			require.Equal(t, http.StatusOK, rec.Code)
-			require.Contains(t, rec.Body.String(), tc.wantBody)
-		})
-	}
-}
-
-type fakeSiteConfigStore struct {
-	database.Store
-	rootDomainDiscovery bool
-}
-
-func (f fakeSiteConfigStore) GetSiteConfig(context.Context) (database.SiteConfig, error) {
-	return database.SiteConfig{RootDomainDiscovery: f.rootDomainDiscovery}, nil
-}
-
-func TestRootDomainDiscovery(t *testing.T) {
-	t.Parallel()
-
-	marker := func(name string) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte(name))
-		})
-	}
-
-	tests := []struct {
-		name                string
-		rootDomainDiscovery bool
-		host                string
-		path                string
-		wantBody            string
-	}{
-		{name: "enabled root page", rootDomainDiscovery: true, host: "localhost:4000", path: "/instances/123", wantBody: "Where should this link open?"},
-		{name: "disabled root page", host: "localhost:4000", path: "/", wantBody: "tenanted"},
-		{name: "tenant page unaffected", rootDomainDiscovery: true, host: "capy.localhost:4000", path: "/", wantBody: "tenanted"},
-		{name: "root API unaffected", rootDomainDiscovery: true, host: "localhost:4000", path: "/api/v1/site-config", wantBody: "tenanted"},
-		{name: "root login remains available", rootDomainDiscovery: true, host: "localhost:4000", path: "/login", wantBody: "tenanted"},
-		{name: "root admin remains available", rootDomainDiscovery: true, host: "localhost:4000", path: "/admin/site-settings", wantBody: "tenanted"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			u, err := url.Parse("http://legacy.localhost:4000")
-			require.NoError(t, err)
-			tenants := servicetenant.NewTestWithTenants(*u, "localhost:4000", tenant("capy", "Capy", true, ""))
-			svc := servicechoose.NewTestWithStore("", tenants, *u, fakeSiteConfigStore{rootDomainDiscovery: tc.rootDomainDiscovery})
-			handler := svc.Middleware(marker("untenanted"), marker("tenanted"))
-
-			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
-			req.Host = tc.host
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 			require.Equal(t, http.StatusOK, rec.Code)

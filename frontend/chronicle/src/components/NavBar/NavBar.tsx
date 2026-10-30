@@ -9,6 +9,7 @@ import type { Branding } from "@/api/typesGenerated";
 import { Button } from "../ui/button";
 import { FavoritesMenu } from "../Favorites";
 import { WhatsNewDialog } from "../WhatsNew/WhatsNewDialog";
+import { RootCommunityNavButton } from "../RootCommunityContext/RootCommunityContext";
 import {
   Sheet,
   SheetContent,
@@ -281,6 +282,7 @@ export function NavBar() {
 
       {/* Right: Desktop navigation (hidden on mobile) */}
       <div className="hidden md:flex items-center gap-6">
+        <RootCommunityNavButton />
         <Link
           to="/recent"
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -386,8 +388,10 @@ export function NavBar() {
         )}
       </div>
 
-      {/* Right: Empty spacer for mobile to balance hamburger on left */}
-      <div className="md:hidden w-10" />
+      {/* Right: community chooser after the root notice is dismissed, otherwise a balancing spacer. */}
+      <div className="flex w-10 justify-end md:hidden">
+        <RootCommunityNavButton mobile />
+      </div>
       <WhatsNewDialog open={whatsNewOpen} onOpenChange={setWhatsNewOpen} />
     </nav>
   );

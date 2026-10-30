@@ -1836,9 +1836,10 @@ export function useSiteConfig() {
 }
 
 // useDiscoverableServers lists every discoverable Chronicle server, even from a tenant subdomain.
-export function useDiscoverableServers() {
+export function useDiscoverableServers(enabled = true) {
   return useQuery({
     queryKey: ["discovery", "all"],
+    enabled,
     staleTime: 60 * 60 * 1000,
     queryFn: async () => {
       const response = await fetch("/api/v1/discovery?scope=all");

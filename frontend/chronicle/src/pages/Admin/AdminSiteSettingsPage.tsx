@@ -178,7 +178,7 @@ export function AdminSiteSettingsPage() {
             <div>
               <p className="font-medium">Root Domain Discovery</p>
               <p className="text-sm text-muted-foreground">
-                Show the community chooser on the root domain instead of treating it as a Chronicle site.
+                Show a notice that the root site is not a specific community, with a link to choose one.
               </p>
             </div>
             <Button
