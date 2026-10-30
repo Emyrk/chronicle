@@ -102,6 +102,8 @@
 .addonRow{display:flex;align-items:center;gap:8px;color:#ffd100}
 .addonBox{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border:1px solid #c9a227;border-radius:2px;background:rgba(255,209,0,.15)}
 .alt{font-size:14px;color:#b8a995}
+.page a.addonCta{display:inline-flex;align-items:center;gap:10px;align-self:flex-start;min-height:44px;padding:0 20px;background:#3b82f6;color:#fff;border-radius:8px;text-decoration:none;font-size:16px;font-weight:700;box-shadow:0 6px 20px rgba(59,130,246,.25);transition:transform .25s ease,box-shadow .25s ease}
+.page a.addonCta:hover{color:#fff;transform:translateY(-1px);box-shadow:0 10px 28px rgba(59,130,246,.35)}
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 @media (prefers-reduced-motion:reduce){.logoImg{animation:none}}
 @media (max-width:860px){.logoImg{width:160px;height:160px}}

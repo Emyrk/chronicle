@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { BatteryFull, Check, Download as DownloadIcon, Eye, Info, PanelTop, Upload as UploadIcon, Wifi } from "lucide-react";
+import { BatteryFull, Check, Download as DownloadIcon, ExternalLink, Eye, Info, PanelTop, Upload as UploadIcon, Wifi } from "lucide-react";
 import { useSiteConfig } from "@/api/queries";
 import { MagicLogo } from "@/components/MagicLogo";
 import { tenantAddons, type TenantAddons } from "./formatAddons";
@@ -97,7 +97,7 @@ function AddonStep({ addons, defaultNeedsNoAddon }: TenantAddons) {
         . It turns on combat logging every time you log in, so there's nothing to type and nothing to forget.
         {primary.requires.length > 0 && (
           <>
-            {" "}It needs{" "}
+            {" "}On {primary.client} it also needs{" "}
             {primary.requires.map((r, i) => (
               <span key={r.name}>
                 {i > 0 && ", "}
@@ -110,6 +110,10 @@ function AddonStep({ addons, defaultNeedsNoAddon }: TenantAddons) {
           </>
         )}
       </p>
+      <a href={primary.url} target="_blank" rel="noopener noreferrer" className={s.addonCta}>
+        Get {primary.name}
+        <ExternalLink size={16} strokeWidth={2.5} aria-hidden="true" />
+      </a>
       {others.length > 0 && (
         <p className={s.alt}>
           On another client?{" "}
