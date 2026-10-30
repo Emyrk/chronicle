@@ -138,7 +138,7 @@ func newRefreshTestService(
 	}
 	service := &Service{
 		Providers: goth.Providers{"test": provider},
-		Store:     newCookieStore(false),
+		Store:     testCookieStore(t),
 		Zed:       zed,
 		logger:    logger,
 		sessions:  sessions,

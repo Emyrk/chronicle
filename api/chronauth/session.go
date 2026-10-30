@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/gorilla/sessions"
 )
 
 type authContextKey struct{}
@@ -102,7 +103,7 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		auth, err := s.Store.Get(r, AuthSessionName)
+		auth, err := s.authSession(w, r)
 		if err != nil {
 			_ = s.Logout(w, r)
 			next.ServeHTTP(w, withState(r, &AuthenticationContext{
@@ -174,7 +175,7 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 // cookie. Used by the token-dump endpoint so users can extract a token for
 // CLI / programmatic use. Returns ErrNotAuthorized if no session JWT exists.
 func (s *Service) RawSessionJWT(r *http.Request) (string, error) {
-	auth, err := s.Store.Get(r, AuthSessionName)
+	auth, err := s.authSession(nil, r)
 	if err != nil {
 		return "", err
 	}
@@ -241,4 +242,30 @@ func (s *Service) Authenticated(optional bool) func(next http.Handler) http.Hand
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// authSession reads the session cookie. A cookie signed with the old public
+// cookie key is accepted once and, when w is set, re-saved with the current
+// key. That grants nothing a forger could use: the JWT inside is still
+// verified with its own key.
+func (s *Service) authSession(w http.ResponseWriter, r *http.Request) (*sessions.Session, error) {
+	auth, err := s.Store.Get(r, AuthSessionName)
+	if err == nil || s.legacyStore == nil {
+		return auth, err
+	}
+	// New decodes without the per-request registry, which cached the failure.
+	legacy, legacyErr := s.legacyStore.New(r, AuthSessionName)
+	if legacyErr != nil || legacy.IsNew {
+		return auth, err
+	}
+	upgraded := sessions.NewSession(s.Store, AuthSessionName)
+	opts := *s.Store.Options
+	upgraded.Options = &opts
+	upgraded.Values = legacy.Values
+	if w != nil {
+		if saveErr := upgraded.Save(r, w); saveErr != nil {
+			s.logger.Warn("re-save legacy session cookie", slog.String("error", saveErr.Error()))
+		}
+	}
+	return upgraded, nil
 }

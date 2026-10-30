@@ -67,7 +67,7 @@ func TestDiscordLinkFromTenant(t *testing.T) {
 	victimDiscordID := "discord-" + uuid.NewString()
 	s := &Service{
 		Providers:  goth.Providers{"discord": &fakeDiscord{userID: victimDiscordID}},
-		Store:      newCookieStore(false),
+		Store:      testCookieStore(t),
 		Zed:        zed,
 		RelayStore: NewRelayCodeStore(zed),
 		logger:     slog.Default(),
@@ -207,7 +207,7 @@ func TestDiscordLinkFromTenant(t *testing.T) {
 func TestCompleteLinkIgnoresOtherProviders(t *testing.T) {
 	t.Parallel()
 
-	s := &Service{Store: newCookieStore(false), logger: slog.Default()}
+	s := &Service{Store: testCookieStore(t), logger: slog.Default()}
 	setup := httptest.NewRecorder()
 	link, err := s.Store.New(httptest.NewRequest(http.MethodGet, "/", nil), LinkSessionName)
 	require.NoError(t, err)

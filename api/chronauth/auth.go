@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/hkdf"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -75,9 +77,11 @@ type Options struct {
 type Service struct {
 	Providers goth.Providers
 	Store     *sessions.CookieStore
-	Zed       *authz.Authz
-	Bot       *chroniclebot.Bot
-	logger    *slog.Logger
+	// legacyStore migrates session cookies signed with the old public key.
+	legacyStore *sessions.CookieStore
+	Zed         *authz.Authz
+	Bot         *chroniclebot.Bot
+	logger      *slog.Logger
 
 	sessions          *Sessions
 	mailer            *chroniclemail.Mailer
@@ -98,8 +102,32 @@ type Service struct {
 	refreshes singleflight.Group
 }
 
-func newCookieStore(secure bool) *sessions.CookieStore {
-	store := sessions.NewCookieStore([]byte("secret"))
+// newCookieStore signs and encrypts cookies with keys derived from secret, the
+// JWT signing key, so cookies share its lifetime: stable across deploys and
+// instances when it is configured, and per process when it is generated.
+func newCookieStore(secure bool, secret []byte) (*sessions.CookieStore, error) {
+	if len(secret) == 0 {
+		return nil, errors.New("cookie store needs a secret")
+	}
+	hashKey, err := hkdf.Key(sha256.New, secret, nil, "chronicle cookie authentication", 64)
+	if err != nil {
+		return nil, fmt.Errorf("derive cookie authentication key: %w", err)
+	}
+	blockKey, err := hkdf.Key(sha256.New, secret, nil, "chronicle cookie encryption", 32)
+	if err != nil {
+		return nil, fmt.Errorf("derive cookie encryption key: %w", err)
+	}
+	return configureCookieStore(sessions.NewCookieStore(hashKey, blockKey), secure), nil
+}
+
+// newLegacyCookieStore reads cookies signed before keys were derived from the
+// JWT secret. Its key was public, so it is only used to migrate the session
+// cookie, whose JWT is verified on its own.
+func newLegacyCookieStore(secure bool) *sessions.CookieStore {
+	return configureCookieStore(sessions.NewCookieStore([]byte("secret")), secure)
+}
+
+func configureCookieStore(store *sessions.CookieStore, secure bool) *sessions.CookieStore {
 	store.Options.HttpOnly = true
 	store.Options.Secure = secure
 	// sessions v1.4 defaults to SameSite=None and Secure. Preserve the prior
@@ -133,7 +161,11 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 		)
 	}
 
-	store := newCookieStore(opts.AccessURL.Scheme == "https")
+	secure := opts.AccessURL.Scheme == "https"
+	store, err := newCookieStore(secure, opts.Sessions.SecretPEM)
+	if err != nil {
+		return nil, err
+	}
 	if !store.Options.Secure {
 		logger.Warn("using non-secure cookie store; this is not recommended for production environments")
 	}
@@ -163,6 +195,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 	return &Service{
 		Providers:         providers,
 		Store:             store,
+		legacyStore:       newLegacyCookieStore(secure),
 		logger:            logger.With(slog.String("service", "auth")),
 		sessions:          sess,
 		Bot:               opts.Bot,
@@ -294,15 +327,12 @@ func (s *Service) CompleteUserAuth(res http.ResponseWriter, req *http.Request) (
 // Logout invalidates a user session.
 func (s *Service) Logout(res http.ResponseWriter, req *http.Request) error {
 	for _, cookieName := range []string{AuthSessionName, OAuthSessionName} {
-		session, err := s.Store.Get(req, cookieName)
-		if err != nil {
-			// Nothing to really do
-			continue
-		}
+		// Get returns a usable session even when the cookie can't be decoded,
+		// such as one signed with an old key, so it is still deleted.
+		session, _ := s.Store.Get(req, cookieName)
 		session.Options.MaxAge = -1
 		session.Values = make(map[interface{}]interface{})
-		err = session.Save(req, res)
-		if err != nil {
+		if err := session.Save(req, res); err != nil {
 			return errors.New("could not delete user session ")
 		}
 	}
@@ -314,10 +344,7 @@ func (s *Service) Logout(res http.ResponseWriter, req *http.Request) error {
 // session. Used in CompleteUserAuth so the primary domain's existing auth
 // cookie survives relay flows to tenant subdomains.
 func (s *Service) logoutOAuth(res http.ResponseWriter, req *http.Request) error {
-	session, err := s.Store.Get(req, OAuthSessionName)
-	if err != nil {
-		return nil
-	}
+	session, _ := s.Store.Get(req, OAuthSessionName)
 	session.Options.MaxAge = -1
 	session.Values = make(map[interface{}]interface{})
 	if err := session.Save(req, res); err != nil {

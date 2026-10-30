@@ -96,7 +96,7 @@ func TestAuthorizeSessionUnwrapsContextualRefreshProvider(t *testing.T) {
 func TestLinkTargetRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	service := &Service{Store: newCookieStore(false)}
+	service := &Service{Store: testCookieStore(t)}
 	userID := uuid.New()
 	sessionID := uuid.New()
 
