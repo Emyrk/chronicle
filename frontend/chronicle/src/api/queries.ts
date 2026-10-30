@@ -2256,7 +2256,10 @@ export function useArmoryLoot(
   });
 }
 
-export function useGuildSearch(params: { search: string; realm?: string; offset?: number }) {
+export function useGuildSearch(
+  params: { search: string; realm?: string; offset?: number },
+  options?: Omit<UseQueryOptions<ListGuildsResponse>, "queryKey" | "queryFn">,
+) {
   return useQuery({
     queryKey: ["guild-search", params],
     queryFn: async () => {
@@ -2272,6 +2275,7 @@ export function useGuildSearch(params: { search: string; realm?: string; offset?
     },
     staleTime: 30_000,
     placeholderData: keepPreviousData,
+    ...options,
   });
 }
 
