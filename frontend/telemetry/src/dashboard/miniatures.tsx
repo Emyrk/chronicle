@@ -92,7 +92,7 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
       <main>
         <header>
           <div><div class="eyebrow">Shared creature tokens</div><h1>Miniature foundry</h1><p>Map many creature entries to one reusable GLB, shared by every Chronicle server.</p></div>
-          <div class="header-actions"><a class="back" href="/internal">← Telemetry</a><a class="back" href="/internal/maps">Map foundry →</a></div>
+          <div class="header-actions"><a class="back" href="/internal">← Telemetry</a><a class="back" href="/internal/unit-images">Unit image foundry →</a><a class="back" href="/internal/maps">Map foundry →</a></div>
         </header>
         <section class="toolbar">
           <input id="search" type="search" aria-label="Search miniatures" placeholder="Search name, path, or entry ID" />
