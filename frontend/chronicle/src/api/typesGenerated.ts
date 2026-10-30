@@ -2873,6 +2873,10 @@ export interface LuaProject {
      * Author is the owner's module author name, the first part of /modules/<author>/<slug>. Absent until claimed.
      */
     readonly author?: string;
+    /**
+     * Flavor lists the LuaProjectFlavorTags the module needs. Sites missing any of them leave it out of listings.
+     */
+    readonly flavor: readonly string[];
     readonly main?: LuaProjectMain;
     /**
      * Releases are newest first. Panels run the newest one that is still available.
@@ -4952,6 +4956,11 @@ export interface UpdateLayoutDefaultsRequest {
  */
 export interface UpdateLuaProjectRequest {
     readonly description: string;
+    /**
+     * Flavor replaces the module's flavor tags; omitted keeps them. Only tags the current site has may be
+     * added or removed.
+     */
+    readonly flavor?: readonly string[];
 }
 
 // From chroniclesdk/user.go

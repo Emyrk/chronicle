@@ -219,8 +219,14 @@ func (a *API) GetModuleAuthorPage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		actor = policy.New().User(uuid.Nil)
 	}
+	// Authors still see their own modules for other sites, so they can find and retag them.
+	site := a.resolvedSiteFlavor(ctx)
+	claims, signedIn := chronauth.AuthenticatedClaims(ctx)
 	visible := make([]database.LuaProject, 0, len(projects))
 	for _, p := range projects {
+		if !luaProjectFitsSite(p, site) && (!signedIn || claims.Subject != author.UserID) {
+			continue
+		}
 		allowed, err := a.Opts.Zed.CheckOne(ctx, nil, policy.New().Lua_project(p.ID).CanView_User(actor))
 		if err != nil {
 			httpapi.InternalServerError(w, err)

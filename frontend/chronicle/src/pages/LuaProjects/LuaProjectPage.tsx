@@ -9,6 +9,7 @@ import { ModuleIcon } from "./ModuleIcon"
 import { ModuleReleases, ReleasesTable, VersionPicker } from "./ModuleReleases"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
 import { ModuleDescription } from "./ModuleDescription"
+import { ModuleFlavorTags } from "./ModuleFlavorTags"
 import { ModuleStar } from "./ModuleStar"
 import { ModuleAiUsage, ModuleContributors } from "./ModuleTeam"
 import { isModuleId, useModulePage } from "./moduleRoute"
@@ -172,6 +173,7 @@ function ModulePage({ projectId }: { projectId?: string }) {
             {can.edit && <span className="font-mono"> · /{project.slug} · revision {project.revision}</span>} · updated {formatDate(project.updated_at)}
           </p>
           <ModuleDescription key={project.id} project={project} canEdit={can.release} onSaved={() => void pageQuery.refetch()} />
+          <ModuleFlavorTags project={project} canEdit={can.release} onSaved={() => void pageQuery.refetch()} />
         </div>
         <div className="flex flex-wrap items-start gap-2">
           <ModuleStar key={project.id} project={project} canUse={can.use} />

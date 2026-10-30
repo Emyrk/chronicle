@@ -7,9 +7,10 @@ import { useAuthorizationCheck, useSession } from "@/api/queries"
 import { LuaProjectsPage } from "./LuaProjectsPage"
 import { NewModuleForm } from "./NewModuleForm"
 import { ModuleDescription } from "./ModuleDescription"
+import { ModuleList } from "./ModuleCard"
 import type { LuaProject } from "./api"
 
-vi.mock("@/api/queries", () => ({ useAuthorizationCheck: vi.fn(), useSession: vi.fn() }))
+vi.mock("@/api/queries", () => ({ useAuthorizationCheck: vi.fn(), useSession: vi.fn(), useSiteConfig: () => ({ data: { dataset_flavor: ["vanilla", "turtle"] } }) }))
 vi.mock("@/components/Ads/AdRailStack", () => ({ AdRailStack: ({ primaryPlacement }: { primaryPlacement: string }) => <aside data-ad={primaryPlacement} /> }))
 
 function render(element: ReactElement, client = new QueryClient()) {
@@ -51,6 +52,16 @@ describe("modules home", () => {
     expect(html).toContain('data-ad="modules-left-rail"')
     expect(html).toContain('data-ad="modules-right-rail"')
     expect(html, "popular order is ranked").toContain('data-rank="1"')
+    expect(html, "names read owner/module").toContain('someone / </span><span class="font-semibold">Big Pumper</span>')
+  })
+
+  it("shows flavor tags and marks modules this site does not use", () => {
+    const fits = { ...module("Vanilla Panel", 1, "2026-01-01T00:00:00Z"), flavor: ["vanilla"] }
+    const elsewhere = { ...module("Wrath Panel", 1, "2026-01-01T00:00:00Z"), flavor: ["wrath"] }
+    const html = render(<ModuleList projects={[fits, elsewhere]} />)
+    expect(html).toContain(">Vanilla</span>")
+    expect(html).toContain('class="text-destructive">Wrath</span>')
+    expect(html.match(/Not on this site/g)).toHaveLength(1)
   })
 })
 

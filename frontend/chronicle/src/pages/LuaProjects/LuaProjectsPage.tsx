@@ -62,7 +62,7 @@ export function LuaProjectsPage() {
             </label>
             <div role="radiogroup" aria-label="Sort modules" className="inline-flex rounded-md border p-0.5 text-sm">
               {sorts.map(option => <button key={option.id} type="button" role="radio" aria-checked={sort === option.id} onClick={() => setSort(option.id)}
-                className={`rounded px-3 py-1 ${sort === option.id ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{option.label}</button>)}
+                className={`rounded px-3 py-1 ${sort === option.id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{option.label}</button>)}
             </div>
           </div>
         </div>

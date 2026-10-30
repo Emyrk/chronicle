@@ -16,6 +16,8 @@ export type LuaProject = {
   description: string
   /** The owner's module author name; the project's address is /modules/<author>/<slug> once it is set. */
   author?: string
+  /** Flavor tags the module needs; sites missing any of them leave it out of listings. */
+  flavor?: string[]
   main?: LuaMain
   /** Newest first. */
   releases: LuaRelease[]
@@ -75,10 +77,15 @@ export async function getProject(id: string): Promise<LuaProject> {
 export const DESCRIPTION_MAX = 300
 
 export async function setDescription(id: string, description: string): Promise<LuaProject> {
+  return updateProject(id, { description })
+}
+
+/** Saves the module's settings. Leaving out flavor keeps its tags. */
+export async function updateProject(id: string, settings: { description: string; flavor?: string[] }): Promise<LuaProject> {
   return request<LuaProject>(`${base}/${encodeURIComponent(id)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ description }),
+    body: JSON.stringify(settings),
   })
 }
 
