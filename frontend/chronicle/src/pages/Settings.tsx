@@ -257,6 +257,7 @@ const CHARACTER_COSMETICS_OPTIONS: readonly {
 
 export function ProfileSettings() {
   const { data: session } = useSession();
+  const { data: siteConfig } = useSiteConfig();
   const updateCharacterCosmetics = useUpdateCharacterCosmeticsPreference();
   const [searchParams, setSearchParams] = useSearchParams();
   const [resending, setResending] = useState(false);
@@ -281,7 +282,10 @@ export function ProfileSettings() {
   const switchToDiscordAccount = async () => {
     await fetch("/auth/logout");
     clearInstanceDefaultsCache();
-    window.location.href = "/auth/discord?from=/account/settings";
+    // OAuth runs on the main domain; tenants pass a full URL so it relays back.
+    window.location.href = siteConfig?.tenant && siteConfig.access_url
+      ? `${siteConfig.access_url}/auth/discord?from=${encodeURIComponent(`${window.location.origin}/account/settings`)}`
+      : "/auth/discord?from=/account/settings";
   };
 
   useEffect(() => {

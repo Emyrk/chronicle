@@ -106,6 +106,7 @@ func TestLinkTargetRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	linkSession.Values["user_id"] = userID.String()
 	linkSession.Values["session_id"] = sessionID.String()
+	linkSession.Values["return_origin"] = "http://turtle.localhost:4000"
 	require.NoError(t, linkSession.Save(request, recorder))
 
 	callback := httptest.NewRequest(http.MethodGet, "/auth/discord/callback", nil)
@@ -113,10 +114,11 @@ func TestLinkTargetRoundTrip(t *testing.T) {
 		callback.AddCookie(cookie)
 	}
 
-	gotUserID, gotSessionID, ok := service.linkTarget(callback)
+	target, ok := service.linkTarget(callback)
 	require.True(t, ok)
-	require.Equal(t, userID, gotUserID)
-	require.Equal(t, sessionID, gotSessionID)
+	require.Equal(t, userID, target.userID)
+	require.Equal(t, sessionID, target.sessionID)
+	require.Equal(t, "http://turtle.localhost:4000", target.returnOrigin)
 }
 
 var _ contextualTokenRefresher = (*contextualRefreshProvider)(nil)

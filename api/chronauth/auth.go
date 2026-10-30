@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/api/chronauth/fakeoidc"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
@@ -45,6 +44,10 @@ const (
 	// linkSessionLifetime bounds how long an unfinished Discord link attempt
 	// can affect OAuth callbacks.
 	linkSessionLifetime = 10 * time.Minute
+
+	// linkRelayProvider marks relay codes that start a Discord link instead of
+	// signing in.
+	linkRelayProvider = "discord_link"
 )
 
 var (
@@ -370,14 +373,63 @@ func (s *Service) BeginLinkHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// OAuth always completes on the access URL, so a link started on a tenant
+	// subdomain hands its session to the access URL with a one-time code and
+	// returns to the tenant afterwards.
+	returnOrigin := ""
+	if s.accessURL != nil && r.Host != s.accessURL.Host {
+		origin, _, _, ok := s.parseRelayTarget(s.accessURL.Scheme + "://" + r.Host + "/")
+		if !ok {
+			httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Discord can't be connected from this site"})
+			return
+		}
+		returnOrigin = origin
+	}
+	authSession, err := s.Zed.GetUserAuthSessionByID(r.Context(), claims.SessionID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	code, err := s.RelayStore.Generate(r.Context(), &RelayCode{
+		Session:      authSession,
+		Provider:     linkRelayProvider,
+		RedirectPath: returnOrigin,
+		ExpiresAt:    time.Now().Add(60 * time.Second),
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	begin := "/auth/" + provider.Name() + "/link/begin?code=" + url.QueryEscape(code)
+	if s.accessURL != nil {
+		begin = strings.TrimRight(s.accessURL.String(), "/") + begin
+	}
+	http.Redirect(w, r, begin, http.StatusTemporaryRedirect)
+}
+
+// BeginLinkFromCodeHandler runs on the access URL. It redeems the code from
+// BeginLinkHandler, remembers which account is linking, and starts OAuth here
+// so the OAuth state and callback share a domain.
+func (s *Service) BeginLinkFromCodeHandler(w http.ResponseWriter, r *http.Request) {
+	provider, ok := s.provider(w, r)
+	if !ok {
+		return
+	}
+	relay, err := s.RelayStore.Redeem(r.Context(), r.URL.Query().Get("code"))
+	if err != nil || relay.Provider != linkRelayProvider || provider.Name() != "discord" {
+		http.Redirect(w, r, "/account/settings?discord_link=session_expired", http.StatusTemporaryRedirect)
+		return
+	}
+
 	session, err := s.Store.New(r, LinkSessionName)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 	session.Options.MaxAge = int(linkSessionLifetime.Seconds())
-	session.Values["user_id"] = claims.Subject.String()
-	session.Values["session_id"] = claims.SessionID.String()
+	session.Values["user_id"] = relay.Session.UserID.String()
+	session.Values["session_id"] = relay.Session.ID.String()
+	session.Values["return_origin"] = relay.RedirectPath
 	if err := session.Save(r, w); err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -386,20 +438,28 @@ func (s *Service) BeginLinkHandler(w http.ResponseWriter, r *http.Request) {
 	s.BeginAuthHandler(w, r)
 }
 
-func (s *Service) linkTarget(r *http.Request) (uuid.UUID, uuid.UUID, bool) {
+type linkTarget struct {
+	userID    uuid.UUID
+	sessionID uuid.UUID
+	// returnOrigin is the tenant origin to return to, or empty for the access URL.
+	returnOrigin string
+}
+
+func (s *Service) linkTarget(r *http.Request) (linkTarget, bool) {
 	session, err := s.Store.Get(r, LinkSessionName)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, false
+		return linkTarget{}, false
 	}
 	userID, err := uuid.Parse(fmt.Sprint(session.Values["user_id"]))
 	if err != nil {
-		return uuid.Nil, uuid.Nil, false
+		return linkTarget{}, false
 	}
 	sessionID, err := uuid.Parse(fmt.Sprint(session.Values["session_id"]))
 	if err != nil {
-		return uuid.Nil, uuid.Nil, false
+		return linkTarget{}, false
 	}
-	return userID, sessionID, true
+	returnOrigin, _ := session.Values["return_origin"].(string)
+	return linkTarget{userID: userID, sessionID: sessionID, returnOrigin: returnOrigin}, true
 }
 
 func (s *Service) clearLinkTarget(w http.ResponseWriter, r *http.Request) {
@@ -462,24 +522,27 @@ func (s *Service) linkProviderIdentity(ctx context.Context, accountID uuid.UUID,
 	}, nil)
 }
 
-func (s *Service) completeLink(w http.ResponseWriter, r *http.Request, claims *claims.Claims) bool {
-	accountID, sessionID, linking := s.linkTarget(r)
+func (s *Service) completeLink(w http.ResponseWriter, r *http.Request) bool {
+	target, linking := s.linkTarget(r)
 	if !linking {
 		return false
 	}
 	// Clear before writing any response: a Set-Cookie added after the redirect
 	// is dropped, which would leave every later OAuth callback stuck here.
 	s.clearLinkTarget(w, r)
-	// Without a signed-in user, or on another provider's callback, the link
-	// cookie is stale. Continue with a normal sign-in.
-	if claims == nil || chi.URLParam(r, "provider") != "discord" {
+	// On another provider's callback the link cookie is stale. Continue with a
+	// normal sign-in.
+	if chi.URLParam(r, "provider") != "discord" {
 		return false
 	}
+	accountID := target.userID
 
 	redirect := func(result string) {
-		http.Redirect(w, r, "/account/settings?discord_link="+url.QueryEscape(result), http.StatusTemporaryRedirect)
+		http.Redirect(w, r, target.returnOrigin+"/account/settings?discord_link="+url.QueryEscape(result), http.StatusTemporaryRedirect)
 	}
-	if claims.Subject != accountID || claims.SessionID != sessionID {
+	// The link may have started on a tenant subdomain, so the session that
+	// started it is checked in the database rather than from this request.
+	if session, err := s.Zed.GetUserAuthSessionByID(r.Context(), target.sessionID); err != nil || session.UserID != accountID {
 		redirect("session_expired")
 		return true
 	}
@@ -528,6 +591,7 @@ func (s *Service) Handler() http.Handler {
 		)
 
 		mux.With(s.AuthenticationMiddleware, s.Authenticated(false)).Get("/{provider}/link", s.BeginLinkHandler)
+		mux.Get("/{provider}/link/begin", s.BeginLinkFromCodeHandler)
 
 		mux.Get("/{provider}", func(w http.ResponseWriter, r *http.Request) {
 			cl, ok := AuthenticatedClaims(r.Context())
@@ -566,16 +630,12 @@ func (s *Service) Handler() http.Handler {
 			s.BeginAuthHandler(w, r)
 		})
 
-		mux.With(s.AuthenticationMiddleware, s.Authenticated(true)).Get("/{provider}/callback", func(w http.ResponseWriter, r *http.Request) {
+		mux.Get("/{provider}/callback", func(w http.ResponseWriter, r *http.Request) {
 			var authSession database.UserAuthSession
 			var authProvider string
 			var isNewAuth bool
 
-			// The callback runs the auth middleware only so Discord linking can see
-			// the signed-in user. Every other callback completes OAuth and issues a
-			// new session even when a cookie exists; the tenant relay depends on it.
-			cl, _ := AuthenticatedClaims(r.Context())
-			if s.completeLink(w, r, cl) {
+			if s.completeLink(w, r) {
 				return
 			}
 			_, provOK := s.provider(w, r)
@@ -790,6 +850,10 @@ func (s *Service) HandleRelay(w http.ResponseWriter, r *http.Request) {
 	}
 
 	relay, err := s.RelayStore.Redeem(r.Context(), code)
+	if err == nil && relay.Provider == linkRelayProvider {
+		// Link codes only start a Discord link; they never sign anyone in.
+		err = errRelayCodeInvalid
+	}
 	if errors.Is(err, errRelayCodeInvalid) {
 		// Code is invalid, expired, or already consumed.
 		http.Redirect(w, r, "/login?error=relay_expired", http.StatusTemporaryRedirect)
