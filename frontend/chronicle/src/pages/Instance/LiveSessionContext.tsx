@@ -567,7 +567,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     }
   }, [clearSnapshotRetry, notifyPresence]);
 
-  const connectSocket = useCallback((roomCode: string, token: string, nextRole: LiveSessionRole) => {
+  const connectSocket = useCallback((roomCode: string, token: string, nextRole: LiveSessionRole, remoteURL?: string) => {
     closeTransport();
     closingSocketRef.current = false;
     currentRoleRef.current = nextRole;
@@ -577,10 +577,12 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     setStatus("connecting");
     setError(null);
 
-    const socket = new WebSocket(websocketURL(
-      `/api/v1/live-sessions/${encodeURIComponent(roomCode)}/ws?token=${encodeURIComponent(token)}`,
+    const endpoint = new URL(remoteURL ?? websocketURL(
+      `/api/v1/live-sessions/${encodeURIComponent(roomCode)}/ws`,
       window.location,
     ));
+    endpoint.searchParams.set("token", token);
+    const socket = new WebSocket(endpoint);
     socketRef.current = socket;
     socket.onopen = () => {
       if (nextRole === "leader") setStatus("live");
@@ -680,7 +682,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
       next.delete("import");
       return next;
     }, { replace: true });
-    connectSocket(created.code, created.leader_token, "leader");
+    connectSocket(created.code, created.leader_token, "leader", created.websocket_url);
     return nextInviteURL;
   }, [connectSocket, setSearchParams]);
 
@@ -711,7 +713,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
       throw mismatch;
     }
     setInviteURL(liveSessionInviteURL(window.location.href, roomCode));
-    connectSocket(roomCode, joined.participant_token, "participant");
+    connectSocket(roomCode, joined.participant_token, "participant", joined.websocket_url);
   }, [connectSocket]);
 
   const leave = useCallback(() => {

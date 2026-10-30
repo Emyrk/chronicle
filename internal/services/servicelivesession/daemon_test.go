@@ -12,6 +12,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -73,6 +74,42 @@ func TestDaemonPrivateAuthAndLifecycle(t *testing.T) {
 	service.mu.Lock()
 	require.Empty(t, service.rooms)
 	service.mu.Unlock()
+}
+
+func TestDaemonExpiresUnstartedRoomWithConnectedGuest(t *testing.T) {
+	t.Parallel()
+	service := New(Options{OriginPatterns: []string{"https://chronicle.example"}})
+	room, err := service.create(uuid.New(), "")
+	require.NoError(t, err)
+	participant, _, err := service.join(room.code, "")
+	require.NoError(t, err)
+	server := httptest.NewServer(service.PublicHandler())
+	defer server.Close()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/v1/live-sessions/" + room.code + "/ws?token=" + url.QueryEscape(participant.token)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: http.Header{"Origin": []string{"https://chronicle.example"}}})
+	require.NoError(t, err)
+	defer func() { _ = conn.CloseNow() }()
+	require.Eventually(t, func() bool {
+		service.mu.Lock()
+		defer service.mu.Unlock()
+		return room.participants[participant.token].conn != nil
+	}, time.Second, time.Millisecond)
+	service.mu.Lock()
+	room.createdAt = time.Now().Add(-unstartedRoomTTL - time.Second)
+	service.mu.Unlock()
+	cleanupCtx, stop := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { service.RunCleanup(cleanupCtx, time.Millisecond); close(done) }()
+	defer func() { stop(); <-done }()
+	var ended serverMessage
+	require.NoError(t, wsjson.Read(ctx, conn, &ended))
+	require.Equal(t, "session_ended", ended.Type)
+	service.mu.Lock()
+	_, exists := service.rooms[room.code]
+	service.mu.Unlock()
+	require.False(t, exists)
 }
 
 func TestDaemonOriginAndPeriodicCleanup(t *testing.T) {
