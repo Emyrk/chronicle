@@ -310,19 +310,22 @@ maps.get("/internal/api/v1/maps/:namespace/instances/:mapID/preview", async (c) 
   }
 });
 
-maps.get("/internal/api/v1/maps/:namespace/preview-assets/:layer/:filename", async (c) => {
+maps.on(["GET", "HEAD"], "/internal/api/v1/maps/:namespace/preview-assets/:layer/:filename", async (c) => {
   const namespace = c.req.param("namespace");
   const assetPath = `${c.req.param("layer")}/${c.req.param("filename")}`;
   if (!isNamespace(namespace)) return c.json({ error: "Unsupported map namespace" }, 404);
   if (!isPreviewableMapAssetPath(assetPath)) return c.json({ error: "Invalid map asset path" }, 400);
-  const object = await c.env.MAPS.get(`${root(namespace)}/${assetPath}`);
+  const key = `${root(namespace)}/${assetPath}`;
+  const object = c.req.method === "HEAD" ? await c.env.MAPS.head(key) : await c.env.MAPS.get(key);
   if (!object) return c.json({ error: "Map asset not found" }, 404);
   const headers = new Headers();
   object.writeHttpMetadata(headers);
+  headers.set("Content-Length", String(object.size));
   headers.set("ETag", object.httpEtag);
   headers.set("Cache-Control", "private, max-age=300");
   headers.set("X-Content-Type-Options", "nosniff");
-  return new Response(object.body, { headers });
+  const body = c.req.method === "HEAD" ? null : (object as R2ObjectBody).body;
+  return new Response(body, { headers });
 });
 
 maps.put("/internal/api/v1/maps/:namespace/draft", async (c) => {

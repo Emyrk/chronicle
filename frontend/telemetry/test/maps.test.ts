@@ -17,6 +17,7 @@ const { default: maps } = await import("../src/routes/maps.ts");
 
 interface StoredObject {
   bytes: Uint8Array;
+  size: number;
   etag: string;
   httpEtag: string;
   uploaded: Date;
@@ -46,6 +47,7 @@ class FakeBucket {
     const etag = `etag-${++this.version}`;
     const object: StoredObject = {
       bytes,
+      size: bytes.byteLength,
       etag,
       httpEtag: `"${etag}"`,
       uploaded: new Date(),
@@ -135,6 +137,11 @@ test("Map Foundry uploads, drafts, previews, and publishes floor assets without 
   const uploaded = await upload.json() as { path: string; floor: number; width: number; height: number };
   assert.match(uploaded.path, /^renders\/43-floor-1-[0-9a-f]{16}-floor-one\.png$/);
   assert.deepEqual({ floor: uploaded.floor, width: uploaded.width, height: uploaded.height }, { floor: 1, width: 1600, height: 1000 });
+
+  const previewAsset = await request(bucket, `/internal/api/v1/maps/forever/preview-assets/${uploaded.path}`, { method: "HEAD" });
+  assert.equal(previewAsset.status, 200);
+  assert.equal(previewAsset.headers.get("Content-Length"), String(png(1600, 1000).byteLength));
+  assert.equal((await previewAsset.arrayBuffer()).byteLength, 0);
 
   const meshForm = new FormData();
   meshForm.append("mapID", "43");

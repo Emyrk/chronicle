@@ -99,8 +99,8 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
         .preview-stage { min-height:420px; display:grid; place-items:center; padding:16px; background:radial-gradient(circle at 50% 40%,#27302a 0,transparent 55%),#0c0f0e; }
         .preview-loading,.preview-empty { max-width:430px; color:var(--muted); font-size:12px; line-height:1.6; text-align:center; }
         .preview-empty strong { display:block; margin-bottom:5px; color:#c6cec8; }
-        .tile-preview { position:relative; width:min(100%,900px); overflow:hidden; background:#050706; box-shadow:0 18px 55px #0009; }
-        .tile-preview img { position:absolute; display:block; background:#151a17; }
+        .tile-preview { width:min(100%,900px); overflow:hidden; background:#050706; box-shadow:0 18px 55px #0009; }
+        .tile-preview canvas { width:100%; height:auto; display:block; }
         .image-preview { max-width:100%; max-height:70vh; display:block; object-fit:contain; box-shadow:0 18px 55px #0009; }
         model-viewer { width:100%; min-height:520px; height:65vh; max-height:760px; background:radial-gradient(circle at 50% 38%,#35423a 0,#141916 64%,#0a0c0b 100%); --poster-color:transparent; }
         .preview-meta { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:10px 13px; color:var(--muted); border-top:1px solid var(--line); font:10px 'JetBrains Mono',monospace; }
@@ -159,6 +159,8 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
         let previewMode = 'original';
         let previewChoice = 0;
         let previewRequest = 0;
+        let previewPaintRequest = 0;
+        let previewSizeRequest = 0;
         let loadRequest = 0;
         let addedMaps = new Map();
 
@@ -261,6 +263,57 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           }
         }
         function assetURL(path) { return '/internal/api/v1/maps/' + encodeURIComponent(state.namespace) + '/preview-assets/' + path.split('/').map(encodeURIComponent).join('/'); }
+        function formatAssetSize(bytes) {
+          if (!Number.isFinite(bytes) || bytes < 0) return 'size unavailable';
+          const units = ['B','KB','MB','GB'];
+          let value = bytes;
+          let unit = 0;
+          while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
+          const digits = unit === 0 || value >= 100 ? 0 : value >= 10 ? 1 : 2;
+          return value.toFixed(digits) + ' ' + units[unit];
+        }
+        function renderPreviewMeta(label, paths, action = '') {
+          const meta = document.getElementById('preview-meta');
+          if (!meta) return;
+          const request = ++previewSizeRequest;
+          meta.innerHTML = '<span>' + escapeHTML(label) + ' · <span data-preview-size>measuring…</span></span>' + action;
+          void Promise.all(paths.map(async path => {
+            const response = await fetch(assetURL(path), {method:'HEAD'});
+            if (!response.ok) throw new Error('Asset size unavailable');
+            const bytes = Number(response.headers.get('Content-Length'));
+            if (!Number.isFinite(bytes)) throw new Error('Asset size unavailable');
+            return bytes;
+          })).then(sizes => {
+            if (request !== previewSizeRequest) return;
+            const target = document.querySelector('[data-preview-size]');
+            if (target) target.textContent = formatAssetSize(sizes.reduce((sum,size) => sum + size, 0));
+          }).catch(() => {
+            if (request !== previewSizeRequest) return;
+            const target = document.querySelector('[data-preview-size]');
+            if (target) target.textContent = 'size unavailable';
+          });
+        }
+        function renderTilePreview(floor) {
+          const stage = document.getElementById('preview-stage');
+          const canvas = document.getElementById('tile-preview-canvas');
+          if (!stage || !(canvas instanceof HTMLCanvasElement)) return;
+          const request = ++previewPaintRequest;
+          const context = canvas.getContext('2d');
+          if (!context) return;
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          void Promise.all(floor.tiles.map(tile => new Promise((resolve,reject) => {
+            const image = new Image();
+            image.onload = () => resolve({image,tile});
+            image.onerror = () => reject(new Error('Tile failed to load'));
+            image.src = assetURL(tile.path);
+          }))).then(tiles => {
+            if (request !== previewPaintRequest) return;
+            for (const {image,tile} of tiles) context.drawImage(image, tile.column * floor.tileWidth, tile.row * floor.tileHeight);
+          }).catch(error => {
+            if (request !== previewPaintRequest) return;
+            stage.innerHTML = '<div class="preview-empty preview-error"><strong>Original art unavailable</strong>' + escapeHTML(error.message) + '</div>';
+          });
+        }
         function previewSources() {
           if (!previewData) return { floors:[], images:[], models:[] };
           const previewFloor = selectedFloor === null ? null : previewData.floors?.find(item => item.floor === selectedFloor);
@@ -290,6 +343,8 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           const options = document.getElementById('preview-options');
           const meta = document.getElementById('preview-meta');
           if (!stage || !options || !meta) return;
+          previewPaintRequest++;
+          previewSizeRequest++;
           document.querySelectorAll('.preview-tab').forEach(button => button.classList.toggle('active', button.dataset.mode === previewMode));
           if (!previewData) { options.innerHTML = ''; stage.innerHTML = '<div class="preview-loading">Loading original tiles and artwork metadata…</div>'; meta.innerHTML = ''; return; }
           const sources = previewSources();
@@ -302,27 +357,21 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
             if (!floor) { stage.innerHTML = '<div class="preview-empty"><strong>No original instance art</strong>This map has no native floor tile set in manifest.original.json.</div>'; meta.innerHTML = 'Original art is the native client floor tile layer.'; return; }
             const columns = Math.max(1, ...floor.tiles.map(tile => tile.column + 1));
             const rows = Math.max(1, ...floor.tiles.map(tile => tile.row + 1));
-            const images = floor.tiles.map(tile => {
-              const left = tile.column * floor.tileWidth / floor.width * 100;
-              const top = tile.row * floor.tileHeight / floor.height * 100;
-              const width = floor.tileWidth / floor.width * 100;
-              const height = floor.tileHeight / floor.height * 100;
-              return '<img src="' + assetURL(tile.path) + '" alt="" loading="lazy" style="left:' + left + '%;top:' + top + '%;width:' + width + '%;height:' + height + '%" />';
-            }).join('');
-            stage.innerHTML = '<div class="tile-preview" style="aspect-ratio:' + floor.width + '/' + floor.height + '">' + images + '</div>';
-            meta.innerHTML = '<span>Original · ' + floor.width + '×' + floor.height + ' · ' + columns + '×' + rows + ' tiles</span><span>' + escapeHTML(floor.bounds ? 'calibrated bounds' : 'no world bounds') + '</span>';
+            stage.innerHTML = '<div class="tile-preview"><canvas id="tile-preview-canvas" width="' + floor.width + '" height="' + floor.height + '" aria-label="Original floor artwork preview"></canvas></div>';
+            renderTilePreview(floor);
+            renderPreviewMeta('Original · ' + floor.width + '×' + floor.height + ' · ' + columns + '×' + rows + ' tiles', floor.tiles.map(tile => tile.path), '<span>' + escapeHTML(floor.bounds ? 'calibrated bounds' : 'no world bounds') + '</span>');
           } else if (previewMode === 'rendered') {
             const image = sources.images[previewChoice];
             if (!image) { stage.innerHTML = '<div class="preview-empty"><strong>No rendered artwork</strong>Upload a manual PNG or WebP image, or publish styled artwork.</div>'; meta.innerHTML = ''; return; }
             const url = assetURL(image.artwork.path);
             stage.innerHTML = '<img class="image-preview" src="' + url + '" alt="' + escapeHTML(image.label + ' preview') + '" />';
-            meta.innerHTML = '<span>' + escapeHTML(image.label) + ' · ' + image.artwork.width + '×' + image.artwork.height + '</span><a href="' + url + '" target="_blank" rel="noreferrer">Open asset ↗</a>';
+            renderPreviewMeta(image.label + ' · ' + image.artwork.width + '×' + image.artwork.height, [image.artwork.path], '<a href="' + url + '" target="_blank" rel="noreferrer">Open asset ↗</a>');
           } else {
             const model = sources.models[previewChoice];
             if (!model) { stage.innerHTML = '<div class="preview-empty"><strong>No 3D model</strong>Upload a GLB to orbit, zoom, and inspect it here.</div>'; meta.innerHTML = ''; return; }
             const url = assetURL(model.asset.path);
             stage.innerHTML = '<model-viewer src="' + url + '" alt="3D model preview" camera-controls auto-rotate shadow-intensity="1" environment-image="neutral" interaction-prompt="auto"><div slot="progress-bar"></div></model-viewer>';
-            meta.innerHTML = '<span>' + escapeHTML(model.label) + ' · GLB · drag to orbit · scroll to zoom</span><a href="' + url + '" target="_blank" rel="noreferrer">Open asset ↗</a>';
+            renderPreviewMeta(model.label + ' · GLB · drag to orbit · scroll to zoom', [model.asset.path], '<a href="' + url + '" target="_blank" rel="noreferrer">Open asset ↗</a>');
           }
         }
         async function loadPreview() {
