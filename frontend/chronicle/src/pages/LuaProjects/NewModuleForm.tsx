@@ -34,7 +34,7 @@ export function NewModuleForm({ author }: { author: string }) {
   if (permission.data?.createLuaProject !== true) return <div className={`${welcomeBox} text-sm`}>
     {sessionLoading || permission.isPending ? <p>Checking module creation permission…</p> :
       <p role="alert" className="text-destructive">{permission.isError ? "Could not check module creation permission. Please try again." :
-        "You do not have permission to create modules. Ask a technical administrator for the Module Author role."}</p>}
+        "You need Revered or Exalted supporter status to create modules."}</p>}
   </div>
 
   if (quota.isPending) return <div className={`${welcomeBox} text-sm text-muted-foreground`}>Checking module resource limit…</div>

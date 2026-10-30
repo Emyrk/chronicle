@@ -36,9 +36,7 @@ func TestLuaProjectOwnershipQuotas(t *testing.T) {
 		role  string
 		limit int
 	}{
-		{name: "default", limit: 3},
-		{name: "honored", role: "honored", limit: 5},
-		{name: "revered", role: "revered", limit: 10},
+		{name: "revered", role: "revered", limit: 5},
 		{name: "exalted", role: "exalted", limit: 20},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -104,6 +102,7 @@ func TestConcurrentLuaProjectCreationHonorsQuota(t *testing.T) {
 	require.NoError(t, err)
 	_, err = zed.InsertModuleAuthor(ctx, database.InsertModuleAuthorParams{UserID: owner, Name: "concurrent-" + owner.String()[:8]})
 	require.NoError(t, err)
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, owner, []string{"revered"}))
 	api := &API{Opts: &Options{Zed: zed, Logger: slog.Default()}}
 	router := chi.NewRouter()
 	router.Post("/me/lua-projects", api.CreateLuaProject)
@@ -136,11 +135,11 @@ func TestConcurrentLuaProjectCreationHonorsQuota(t *testing.T) {
 			t.Fatalf("unexpected create status %d", code)
 		}
 	}
-	require.Equal(t, 3, created)
-	require.Equal(t, attempts-3, conflicts)
+	require.Equal(t, 5, created)
+	require.Equal(t, attempts-5, conflicts)
 	owned, err := zed.CountLuaProjectsByOwner(ctx, owner)
 	require.NoError(t, err)
-	require.Equal(t, int64(3), owned)
+	require.Equal(t, int64(5), owned)
 }
 
 func TestLuaProjectPermissions(t *testing.T) {

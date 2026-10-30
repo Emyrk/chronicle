@@ -1,7 +1,8 @@
 import { useState, type FormEvent, type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { AtSign, Check, Globe, LogIn, Sparkles, Tag, TriangleAlert } from "lucide-react"
+import { ArrowRight, AtSign, Check, Globe, LockKeyhole, LogIn, Sparkles, Tag, TriangleAlert } from "lucide-react"
+import { TIER_COLOR } from "@/pages/Settings/billingPricing"
 import { claimAuthor, MIN_AUTHOR_NAME, suggestAuthor, urlNameInput, validAuthorName } from "./api"
 import { button, card, errorMessage, primaryButton, welcomeBox } from "./moduleUi"
 
@@ -38,6 +39,19 @@ export function ModuleWelcome({ step, author, children }: { step: number; author
     </div>
     {children}
   </section>
+}
+
+/** Shown on /modules instead of the welcome to signed-in newcomers who lack Revered status: making modules is a Revered perk. */
+export function ReveredUpsell() {
+  return <aside aria-label="Become Revered to make modules" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-4 py-2.5 text-sm"
+    style={{ borderColor: `${TIER_COLOR.revered}66`, backgroundColor: `${TIER_COLOR.revered}14` }}>
+    <LockKeyhole className="size-4 shrink-0" style={{ color: TIER_COLOR.revered }} aria-hidden="true" />
+    <p className="min-w-0 flex-1"><span className="font-medium">Making modules is a Revered perk.</span>{" "}
+      <span className="text-muted-foreground">Anyone can track released modules.</span></p>
+    <Link to="/supporter" className="inline-flex shrink-0 items-center gap-1 font-medium underline-offset-4 hover:underline" style={{ color: TIER_COLOR.revered }}>
+      Become Revered <ArrowRight className="size-4" />
+    </Link>
+  </aside>
 }
 
 export function SignInPrompt() {

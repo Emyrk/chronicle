@@ -30,7 +30,7 @@ export const Form: Story = {
   parameters: { msw: { handlers: handlers() } },
 }
 
-/** No Module Author role: the form is replaced with an explanation. */
+/** Below Revered: the form is replaced with an explanation. */
 export const PermissionDenied: Story = {
   parameters: { msw: { handlers: handlers({ permission: false }) } },
 }

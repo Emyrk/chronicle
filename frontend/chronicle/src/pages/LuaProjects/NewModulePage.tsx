@@ -47,7 +47,7 @@ export function NewModulePage() {
     {permission.data?.createLuaProject !== true ? <div className={`${card} text-sm`}>
       {sessionLoading || !author || permission.isPending ? <p>Checking module creation permission…</p> :
         <p role="alert" className="text-destructive">{permission.isError ? "Could not check module creation permission. Please try again." :
-          "You do not have permission to create modules. Ask a technical administrator for the Module Author role."}</p>}
+          "You need Revered or Exalted supporter status to create modules."}</p>}
     </div> : quota.isPending ? <div className={`${card} text-sm text-muted-foreground`}>Checking module resource limit…</div> :
       quota.isError ? <div className={`${card} text-sm text-destructive`} role="alert">Could not check your module resource limit. Please try again.</div> :
       quota.data.owned >= quota.data.limit ? <div className={`${card} space-y-2 text-sm`}>

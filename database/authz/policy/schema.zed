@@ -16,7 +16,7 @@ definition chronicle {
   relation inference_capable: user
   relation inference_debug_capable: user
   relation inference_disabled: user
-  relation lua_project_author: user
+  relation lua_project_author: user // Deprecated; module creation now follows supporter tier.
   relation technical_user: user
   relation supporter: user
 
@@ -88,8 +88,8 @@ definition chronicle {
   permission inference_available = inference_capable + administer
   permission debug_inference_chat = inference_debug_capable + administer
   permission use_inference_chat = inference_available - inference_disabled
-  // Technical admins can manage all projects; other authors opt in explicitly.
-  permission create_lua_project = lua_project_author + technical_admin
+  // Module creation requires Revered status; technical admins retain their site-wide override.
+  permission create_lua_project = has_revered + technical_admin
   permission create_layout = chronicle_guild_member + chronicle_member
   permission admin_world_data = technical_admin + is_admin_game_data
   permission admin_consumables = administer + manage_consumables

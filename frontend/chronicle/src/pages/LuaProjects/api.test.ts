@@ -18,9 +18,9 @@ describe("Lua project authoring API", () => {
   })
 
   it("reads quota and deletes whole modules", async () => {
-    const fetch = vi.fn().mockResolvedValueOnce(response({ owned: 2, limit: 3 })).mockResolvedValueOnce({ ...response(), status: 204 })
+    const fetch = vi.fn().mockResolvedValueOnce(response({ owned: 2, limit: 5 })).mockResolvedValueOnce({ ...response(), status: 204 })
     vi.stubGlobal("fetch", fetch)
-    expect(await getProjectQuota()).toEqual({ owned: 2, limit: 3 })
+    expect(await getProjectQuota()).toEqual({ owned: 2, limit: 5 })
     await deleteProject("a/b")
     expect(fetch.mock.calls[0]).toEqual(["/api/v1/me/lua-projects/quota", { credentials: "include" }])
     expect(fetch.mock.calls[1]).toEqual(["/api/v1/me/lua-projects/a%2Fb", expect.objectContaining({ credentials: "include", method: "DELETE" })])

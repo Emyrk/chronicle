@@ -2,11 +2,11 @@ import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { FolderOpen, Search } from "lucide-react"
-import { useSession } from "@/api/queries"
+import { useAuthorizationCheck, useSession } from "@/api/queries"
 import { authorPath, getMyAuthor, latestRelease, listProjects, listPublicProjects, type LuaProject } from "./api"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
 import { ModuleList } from "./ModuleCard"
-import { ModuleWelcome, ClaimAuthorForm, SignInPrompt } from "./ModuleWelcome"
+import { ModuleWelcome, ClaimAuthorForm, ReveredUpsell, SignInPrompt } from "./ModuleWelcome"
 import { NewModuleForm } from "./NewModuleForm"
 import { button, card, errorMessage } from "./moduleUi"
 
@@ -33,7 +33,11 @@ export function LuaProjectsPage() {
   const [query, setQuery] = useState("")
   const shown = useMemo(() => galleryOrder(publicQuery.data ?? [], sort, query), [publicQuery.data, sort, query])
   // Newcomers get the welcome until their first module exists: sign in, claim a name, then create.
-  const welcome = !sessionLoading && (!session || (authorQuery.isSuccess && (author === null || (mineQuery.isSuccess && mineQuery.data.length === 0))))
+  const newcomer = !sessionLoading && (!session || (authorQuery.isSuccess && (author === null || (mineQuery.isSuccess && mineQuery.data.length === 0))))
+  // Signed-in newcomers below Revered get an upsell instead, so they never claim an author name they cannot use.
+  const permission = useAuthorizationCheck({ createLuaProject: "chronicle:chronicle#create_lua_project" }, { enabled: !!session })
+  const welcome = newcomer && (!session || permission.data?.createLuaProject === true)
+  const upsell = newcomer && !!session && permission.data?.createLuaProject === false
 
   return <div className="mx-auto flex w-full max-w-[2080px] items-start justify-center gap-6 px-4 py-10">
     <div className="hidden self-stretch 2xl:block">
@@ -51,9 +55,13 @@ export function LuaProjectsPage() {
       {welcome && <ModuleWelcome step={!session || !author ? 0 : 1} author={author ?? undefined}>
         {!session ? <SignInPrompt /> : !author ? <ClaimAuthorForm onClaimed={() => void authorQuery.refetch()} /> : <NewModuleForm author={author} />}
       </ModuleWelcome>}
-      <section aria-label="Browse modules" className="space-y-4">
+      {upsell && <ReveredUpsell />}
+      <section aria-label="Community modules" className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">Browse modules</h2>
+          <div>
+            <h2 className="text-lg font-semibold">Made by the community</h2>
+            <p className="text-sm text-muted-foreground">Panels other players built and released. Track one to add it to your raids.</p>
+          </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <label className="flex min-w-0 flex-1 items-center gap-2 rounded-md border bg-background px-3 py-1.5 text-sm sm:w-64 sm:flex-none">
               <Search className="size-4 shrink-0 text-muted-foreground" />

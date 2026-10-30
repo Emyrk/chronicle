@@ -11,7 +11,7 @@ vi.mock("@/api/queries", () => ({ useAuthorizationCheck: vi.fn(), useSession: vi
 function render(element: ReactElement, author: string | null = "steven", owned = 0) {
   const client = new QueryClient()
   client.setQueryData(["module-author", "me"], author)
-  client.setQueryData(["module-project-quota", "me"], { owned, limit: 3 })
+  client.setQueryData(["module-project-quota", "me"], { owned, limit: 5 })
   return renderToStaticMarkup(<QueryClientProvider client={client}><MemoryRouter>{element}</MemoryRouter></QueryClientProvider>)
 }
 
@@ -26,15 +26,15 @@ describe("new module page", () => {
     vi.mocked(useSession).mockReturnValue({ data: { user_id: "me" }, isLoading: false } as ReturnType<typeof useSession>)
     vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: false }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
     const html = render(<NewModulePage />)
-    expect(html).toContain("You do not have permission to create modules")
+    expect(html).toContain("You need Revered or Exalted supporter status to create modules")
     expect(html).not.toContain("Create module</button>")
   })
 
   it("blocks creation at the resource limit", () => {
     vi.mocked(useSession).mockReturnValue({ data: { user_id: "me" }, isLoading: false } as ReturnType<typeof useSession>)
     vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: true }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
-    const html = render(<NewModulePage />, "steven", 3)
-    expect(html).toContain("You own 3 of 3 modules")
+    const html = render(<NewModulePage />, "steven", 5)
+    expect(html).toContain("You own 5 of 5 modules")
     expect(html).toContain("shared storage and processing resources")
     expect(html).not.toContain("Create module</button>")
   })

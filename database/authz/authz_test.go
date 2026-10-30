@@ -133,12 +133,17 @@ func TestLuaProjectPermissions(t *testing.T) {
 	}
 	require.False(t, checkCreate(owner))
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, owner, []string{"admin"}))
-	require.False(t, checkCreate(owner), "non-technical administrators must opt in")
+	require.False(t, checkCreate(owner), "non-technical administrators still need Revered status")
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, owner, []string{"lua_project_author"}))
+	require.False(t, checkCreate(owner), "the legacy Module Author role no longer grants creation")
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, owner, []string{"honored"}))
+	require.False(t, checkCreate(owner))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, owner, []string{"revered"}))
+	require.True(t, checkCreate(owner))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, other, []string{"exalted"}))
+	require.True(t, checkCreate(other))
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, techAdmin, []string{"technical_admin"}))
 	require.True(t, checkCreate(techAdmin))
-	require.NoError(t, zed.SetUserChronicleRoles(ctx, owner, []string{"lua_project_author"}))
-	require.True(t, checkCreate(owner))
-	require.False(t, checkCreate(other))
 
 	var project database.LuaProject
 	err = zed.InTx(ctx, func(tx *authz.AuthzTX) error {

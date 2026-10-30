@@ -63,6 +63,11 @@ export const WelcomeNameYourModule: Story = {
   parameters: { msw: { handlers: handlers({ signedIn: true, author: "chronicle", myProjects: [], permission: true }) } },
 }
 
+/** Signed in below Revered: an upsell replaces the welcome, so no author name is claimed. */
+export const NeedsRevered: Story = {
+  parameters: { msw: { handlers: handlers({ signedIn: true, author: null, myProjects: [], permission: false }) } },
+}
+
 /** A signed-in author who already has modules: the welcome is gone, "My modules" appears, and the gallery is ranked by popularity. */
 export const SignedInWithModules: Story = {
   parameters: { msw: { handlers: handlers({ signedIn: true, author: "chronicle", myProjects: [panel({ id: "mine-1" })], permission: true }) } },

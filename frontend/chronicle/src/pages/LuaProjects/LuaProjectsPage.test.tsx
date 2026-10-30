@@ -17,7 +17,7 @@ function render(element: ReactElement, client = new QueryClient()) {
   return renderToStaticMarkup(<QueryClientProvider client={client}><MemoryRouter>{element}</MemoryRouter></QueryClientProvider>)
 }
 
-function quotaClient(owned = 1, limit = 3) {
+function quotaClient(owned = 1, limit = 5) {
   const client = new QueryClient()
   client.setQueryData(["module-project-quota", "me"], { owned, limit })
   return client
@@ -34,8 +34,32 @@ describe("modules home", () => {
     const html = render(<LuaProjectsPage />)
     expect(html).toContain("Welcome! Make your first module")
     expect(html).toContain("Sign in to get started.")
-    expect(html).toContain("Browse modules")
+    expect(html).toContain("Made by the community")
     expect(html).not.toContain("My modules")
+  })
+
+  it("upsells Revered instead of the welcome to signed-in users who cannot create modules", () => {
+    vi.mocked(useSession).mockReturnValue({ data: { user_id: "me" }, isLoading: false } as ReturnType<typeof useSession>)
+    vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: false }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
+    const client = new QueryClient()
+    client.setQueryData(["module-author", "me"], null)
+    const html = render(<LuaProjectsPage />, client)
+    expect(html).toContain("Making modules is a Revered perk")
+    expect(html).toContain('href="/supporter"')
+    expect(html).not.toContain("Make your first module")
+    expect(html).not.toContain("Claim name")
+  })
+
+  it("keeps My modules for authors who lost Revered", () => {
+    vi.mocked(useSession).mockReturnValue({ data: { user_id: "me" }, isLoading: false } as ReturnType<typeof useSession>)
+    vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: false }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
+    const client = new QueryClient()
+    client.setQueryData(["module-author", "me"], "steven")
+    client.setQueryData(["my-modules", "me"], [module("Old Panel", 0, "2026-01-01T00:00:00Z")])
+    const html = render(<LuaProjectsPage />, client)
+    expect(html).toContain("My modules")
+    expect(html).toContain('href="/modules/steven"')
+    expect(html).not.toContain("Making modules is a Revered perk")
   })
 
   it("shows released modules as a gallery in the server's most-tracked order", () => {
@@ -73,7 +97,7 @@ describe("new module form", () => {
   it("explains a denied permission instead of showing the form", () => {
     vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: false }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
     const html = render(<NewModuleForm author="steven" />)
-    expect(html).toContain("You do not have permission to create modules")
+    expect(html).toContain("You need Revered or Exalted supporter status to create modules")
     expect(html).not.toContain("Create and open the Workshop")
     expect(useAuthorizationCheck).toHaveBeenCalledWith({ createLuaProject: "chronicle:chronicle#create_lua_project" }, { enabled: true })
   })
@@ -87,8 +111,8 @@ describe("new module form", () => {
 
   it("explains the resource limit instead of presenting it as an upgrade", () => {
     vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: true }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
-    const html = render(<NewModuleForm author="steven" />, quotaClient(3, 3))
-    expect(html).toContain("You own 3 of 3 modules")
+    const html = render(<NewModuleForm author="steven" />, quotaClient(5, 5))
+    expect(html).toContain("You own 5 of 5 modules")
     expect(html).toContain("shared storage and processing resources")
     expect(html).not.toContain("upgrade")
     expect(html).not.toContain("Create and open the Workshop")

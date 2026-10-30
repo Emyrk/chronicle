@@ -121,9 +121,7 @@ var luaProjectSlug = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 var reservedLuaProjectSlugs = map[string]bool{"edit": true, "new": true, "api": true}
 
 const (
-	luaProjectLimitDefault int64 = 3
-	luaProjectLimitHonored int64 = 5
-	luaProjectLimitRevered int64 = 10
+	luaProjectLimitRevered int64 = 5
 	luaProjectLimitExalted int64 = 20
 )
 
@@ -335,26 +333,14 @@ func (a *API) canLuaProjectViewOrUse(w http.ResponseWriter, r *http.Request, id 
 }
 
 func (a *API) luaProjectLimit(ctx context.Context, userID uuid.UUID) (int64, error) {
-	chronicle := policy.New().GlobalChronicle()
-	user := policy.New().User(userID)
-	allowed, err := a.Opts.Zed.Check(ctx, nil,
-		chronicle.CanHas_exalted_User(user),
-		chronicle.CanHas_revered_User(user),
-		chronicle.CanHas_honored_User(user),
-	)
+	exalted, err := a.Opts.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanHas_exalted_User(policy.New().User(userID)))
 	if err != nil {
 		return 0, err
 	}
-	switch {
-	case allowed[0]:
+	if exalted {
 		return luaProjectLimitExalted, nil
-	case allowed[1]:
-		return luaProjectLimitRevered, nil
-	case allowed[2]:
-		return luaProjectLimitHonored, nil
-	default:
-		return luaProjectLimitDefault, nil
 	}
+	return luaProjectLimitRevered, nil
 }
 
 func (a *API) GetMyLuaProjectQuota(w http.ResponseWriter, r *http.Request) {
