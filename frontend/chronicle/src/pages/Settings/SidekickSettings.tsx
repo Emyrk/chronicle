@@ -13,6 +13,7 @@ import {
   Pencil,
   PlugZap,
   Settings2,
+  Trash2,
   Unplug,
   Upload,
   Wifi,
@@ -32,6 +33,7 @@ import type {
   SidekickInstallation,
 } from "@/api/typesGenerated";
 import {
+  useDeleteSidekick,
   useDisconnectSidekick,
   useMySidekicks,
   useRenameSidekick,
@@ -294,6 +296,7 @@ function SidekickCard({
   readOnly = false,
   onRename,
   onDisconnect,
+  onDelete,
   onConfigChange,
   busy = false,
 }: {
@@ -301,6 +304,7 @@ function SidekickCard({
   readOnly?: boolean;
   onRename?: (id: string, name: string) => Promise<void>;
   onDisconnect?: (id: string) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
   onConfigChange?: (id: string, config: SidekickConfig) => Promise<void>;
   busy?: boolean;
 }) {
@@ -321,6 +325,11 @@ function SidekickCard({
   const disconnect = async () => {
     if (!onDisconnect || !confirm(`Disconnect ${sidekick.name}? It will need to be authorized again before it can upload.`)) return;
     await onDisconnect(sidekick.id);
+  };
+
+  const deleteSidekick = async () => {
+    if (!onDelete || !confirm(`Delete ${sidekick.name}? This permanently removes its saved settings and history, and immediately revokes its Chronicle authorization. The app must register again as a new Sidekick.`)) return;
+    await onDelete(sidekick.id);
   };
 
   return (
@@ -357,11 +366,19 @@ function SidekickCard({
             </div>
           </div>
         </div>
-        {!readOnly && !disconnected ? (
-          <Button variant="outline" size="sm" className="gap-2 text-destructive hover:text-destructive" disabled={busy} onClick={() => void disconnect()}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unplug className="h-4 w-4" />}
-            Disconnect
-          </Button>
+        {!readOnly ? (
+          <div className="flex items-center gap-2">
+            {!disconnected ? (
+              <Button variant="outline" size="sm" className="gap-2" disabled={busy} onClick={() => void disconnect()}>
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unplug className="h-4 w-4" />}
+                Disconnect
+              </Button>
+            ) : null}
+            <Button variant="outline" size="sm" className="gap-2 text-destructive hover:text-destructive" disabled={busy} onClick={() => void deleteSidekick()}>
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Delete
+            </Button>
+          </div>
         ) : null}
       </div>
 
@@ -455,6 +472,7 @@ function SidekickCard({
 export function SidekickCards({ sidekicks, readOnly = false }: { sidekicks: readonly SidekickInstallation[]; readOnly?: boolean }) {
   const rename = useRenameSidekick();
   const disconnect = useDisconnectSidekick();
+  const deleteSidekick = useDeleteSidekick();
   const updateConfig = useUpdateSidekickConfig();
 
   if (sidekicks.length === 0) {
@@ -474,7 +492,7 @@ export function SidekickCards({ sidekicks, readOnly = false }: { sidekicks: read
           key={sidekick.id}
           sidekick={sidekick}
           readOnly={readOnly}
-          busy={rename.isPending || disconnect.isPending || updateConfig.isPending}
+          busy={rename.isPending || disconnect.isPending || deleteSidekick.isPending || updateConfig.isPending}
           onConfigChange={readOnly ? undefined : async (id, config) => {
             try {
               await updateConfig.mutateAsync({ id, config });
@@ -489,6 +507,14 @@ export function SidekickCards({ sidekicks, readOnly = false }: { sidekicks: read
               toast.success("Sidekick renamed");
             } catch {
               toast.error("Could not rename Sidekick");
+            }
+          }}
+          onDelete={readOnly ? undefined : async (id) => {
+            try {
+              await deleteSidekick.mutateAsync(id);
+              toast.success("Sidekick deleted. It must register again before it can upload.");
+            } catch {
+              toast.error("Could not delete Sidekick");
             }
           }}
           onDisconnect={readOnly ? undefined : async (id) => {

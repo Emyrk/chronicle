@@ -398,6 +398,17 @@ export function useDisconnectSidekick() {
   });
 }
 
+export function useDeleteSidekick() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/v1/me/sidekicks/${id}/installation`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Failed to delete Sidekick");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sidekicks", "me"] }),
+  });
+}
+
 const WHATS_NEW_CACHE_MS = 24 * 60 * 60 * 1000;
 
 interface CachedWhatsNewStatus {

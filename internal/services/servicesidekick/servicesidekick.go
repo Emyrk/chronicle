@@ -69,6 +69,7 @@ func (s *Service) setupRoutes() {
 	s.accountRoutes.Delete("/{sidekickID}/config", s.DeleteMySidekickConfig)
 	s.accountRoutes.Patch("/{sidekickID}", s.RenameMySidekick)
 	s.accountRoutes.Delete("/{sidekickID}", s.DisconnectMySidekick)
+	s.accountRoutes.Delete("/{sidekickID}/installation", s.DeleteMySidekick)
 
 	s.statusRoutes = chi.NewRouter()
 	s.statusRoutes.Put("/status", s.UpdateSidekickStatus)

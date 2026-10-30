@@ -17,6 +17,11 @@ WHERE sidekick_id = @sidekick_id
   AND revoked_at IS NULL
 RETURNING oauth_request_id;
 
+-- name: ListSidekickOAuthGrantRequestIDs :many
+SELECT oauth_request_id
+FROM sidekick_oauth_grants
+WHERE sidekick_id = @sidekick_id;
+
 -- name: InsertSidekickOAuthGrant :exec
 INSERT INTO sidekick_oauth_grants (oauth_request_id, sidekick_id)
 VALUES (@oauth_request_id, @sidekick_id)
@@ -111,6 +116,12 @@ SET disconnected_at = NOW(),
 WHERE id = @id
   AND user_id = @user_id
   AND disconnected_at IS NULL
+RETURNING *;
+
+-- name: DeleteSidekickInstallation :one
+DELETE FROM sidekick_installations
+WHERE id = @id
+  AND user_id = @user_id
 RETURNING *;
 
 -- name: UpsertSidekickWoWDirectory :exec

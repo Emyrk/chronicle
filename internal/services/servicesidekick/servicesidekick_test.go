@@ -40,14 +40,15 @@ func TestMountedRoutes(t *testing.T) {
 		return nil
 	}))
 	require.Equal(t, map[string]struct{}{
-		http.MethodGet + " /api/v1/me/sidekicks/":                       {},
-		http.MethodGet + " /api/v1/me/sidekicks/{sidekickID}/config":    {},
-		http.MethodPut + " /api/v1/me/sidekicks/{sidekickID}/config":    {},
-		http.MethodDelete + " /api/v1/me/sidekicks/{sidekickID}/config": {},
-		http.MethodPatch + " /api/v1/me/sidekicks/{sidekickID}":         {},
-		http.MethodDelete + " /api/v1/me/sidekicks/{sidekickID}":        {},
-		http.MethodPut + " /api/v1/sidekick/status":                     {},
-		http.MethodGet + " /api/v1/admin/users/{userID}/sidekicks/":     {},
+		http.MethodGet + " /api/v1/me/sidekicks/":                             {},
+		http.MethodGet + " /api/v1/me/sidekicks/{sidekickID}/config":          {},
+		http.MethodPut + " /api/v1/me/sidekicks/{sidekickID}/config":          {},
+		http.MethodDelete + " /api/v1/me/sidekicks/{sidekickID}/config":       {},
+		http.MethodPatch + " /api/v1/me/sidekicks/{sidekickID}":               {},
+		http.MethodDelete + " /api/v1/me/sidekicks/{sidekickID}":              {},
+		http.MethodDelete + " /api/v1/me/sidekicks/{sidekickID}/installation": {},
+		http.MethodPut + " /api/v1/sidekick/status":                           {},
+		http.MethodGet + " /api/v1/admin/users/{userID}/sidekicks/":           {},
 	}, actual)
 }
 
@@ -138,6 +139,84 @@ func TestDecodeSidekickConfigAddsArchiveDefaultsToLegacyConfig(t *testing.T) {
 	_, needsUpgrade, err = decodeSidekickConfig(payload)
 	require.NoError(t, err)
 	require.False(t, needsUpgrade)
+}
+
+func TestDeleteMySidekickRevokesAuthorizationAndAllowsFreshRegistration(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	db, _ := dbtestutil.NewDB(t)
+
+	ownerID := uuid.New()
+	_, err := db.InsertUser(ctx, database.InsertUserParams{
+		ID: ownerID, Username: "sidekick-delete-owner-" + ownerID.String()[:8],
+	})
+	require.NoError(t, err)
+
+	installationID := uuid.New()
+	_, err = db.UpsertSidekickInstallation(ctx, database.UpsertSidekickInstallationParams{
+		ID: installationID, UserID: ownerID, Name: "Raid PC", Platform: "test", Version: "1",
+	})
+	require.NoError(t, err)
+	_, err = db.UpsertSidekickConfigOverride(ctx, database.UpsertSidekickConfigOverrideParams{
+		SidekickID: installationID, UserID: ownerID, Config: []byte(`{}`),
+	})
+	require.NoError(t, err)
+
+	const requestID = "sidekick-delete-request"
+	require.NoError(t, db.InsertSidekickOAuthGrant(ctx, database.InsertSidekickOAuthGrantParams{
+		OauthRequestID: requestID, SidekickID: installationID,
+	}))
+	expiresAt := pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}
+	for _, tokenType := range []string{"access", "refresh"} {
+		require.NoError(t, db.CreateOAuthTokenSession(ctx, database.CreateOAuthTokenSessionParams{
+			TokenType: tokenType, Signature: tokenType + "-signature", RequestID: requestID,
+			Request: []byte(`{}`), ExpiresAt: expiresAt,
+		}))
+	}
+	require.NoError(t, db.CreateOAuthDeviceSession(ctx, database.CreateOAuthDeviceSessionParams{
+		DeviceSignature: "device-signature", UserSignature: "user-signature", Request: []byte(`{}`),
+		ExpiresAt: expiresAt, SidekickInstallationID: uuid.NullUUID{UUID: installationID, Valid: true},
+	}))
+
+	service := &Service{zed: authz.NewDatabaseOnly(slog.Default(), db)}
+	service.setupRoutes()
+	deleteRequest := func(userID uuid.UUID) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodDelete, "/"+installationID.String()+"/installation", nil)
+		req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
+		recorder := httptest.NewRecorder()
+		service.AccountRoutes().ServeHTTP(recorder, req)
+		return recorder
+	}
+
+	ownerRecorder := deleteRequest(ownerID)
+	require.Equal(t, http.StatusNoContent, ownerRecorder.Code, ownerRecorder.Body.String())
+	_, err = db.GetSidekickInstallationByUser(ctx, database.GetSidekickInstallationByUserParams{
+		SidekickID: installationID, UserID: ownerID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = db.GetSidekickConfigOverride(ctx, database.GetSidekickConfigOverrideParams{
+		SidekickID: installationID, UserID: ownerID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	requestIDs, err := db.ListSidekickOAuthGrantRequestIDs(ctx, installationID)
+	require.NoError(t, err)
+	require.Empty(t, requestIDs)
+	for _, tokenType := range []string{"access", "refresh"} {
+		_, err = db.GetOAuthTokenSession(ctx, database.GetOAuthTokenSessionParams{
+			TokenType: tokenType, Signature: tokenType + "-signature",
+		})
+		require.ErrorIs(t, err, pgx.ErrNoRows)
+	}
+	deviceSession, err := db.GetOAuthDeviceSession(ctx, "device-signature")
+	require.NoError(t, err)
+	require.True(t, deviceSession.Invalidated)
+
+	fresh, err := db.UpsertSidekickInstallation(ctx, database.UpsertSidekickInstallationParams{
+		ID: installationID, UserID: ownerID, Name: "Raid PC re-registered", Platform: "test", Version: "2",
+	})
+	require.NoError(t, err)
+	require.Equal(t, installationID, fresh.ID)
+	require.Equal(t, "Raid PC re-registered", fresh.Name)
 }
 
 func TestSidekickConfigStorageAndOwnership(t *testing.T) {

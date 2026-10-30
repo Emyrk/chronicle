@@ -206,6 +206,49 @@ func (s *Service) DisconnectMySidekick(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusNoContent, nil)
 }
 
+func (s *Service) DeleteMySidekick(w http.ResponseWriter, r *http.Request) {
+	claims := chronauth.MustAuthenticatedClaims(r.Context())
+	installationID, err := uuid.Parse(chi.URLParam(r, "sidekickID"))
+	if err != nil {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid Sidekick ID."})
+		return
+	}
+	err = s.zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
+		if _, err := tx.GetSidekickInstallationByUser(r.Context(), database.GetSidekickInstallationByUserParams{
+			SidekickID: installationID, UserID: claims.Subject,
+		}); err != nil {
+			return err
+		}
+		if _, err := tx.InvalidateOAuthDeviceSessionsBySidekickInstallationID(r.Context(), uuid.NullUUID{
+			UUID: installationID, Valid: true,
+		}); err != nil {
+			return err
+		}
+		requestIDs, err := tx.ListSidekickOAuthGrantRequestIDs(r.Context(), installationID)
+		if err != nil {
+			return err
+		}
+		for _, requestID := range requestIDs {
+			if _, err := tx.DeleteOAuthTokenSessionsByRequestID(r.Context(), requestID); err != nil {
+				return err
+			}
+		}
+		_, err = tx.DeleteSidekickInstallation(r.Context(), database.DeleteSidekickInstallationParams{
+			ID: installationID, UserID: claims.Subject,
+		})
+		return err
+	}, nil)
+	if errors.Is(err, pgx.ErrNoRows) {
+		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Sidekick not found."})
+		return
+	}
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(r.Context(), w, http.StatusNoContent, nil)
+}
+
 func (s *Service) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 	claims := chronauth.MustAuthenticatedClaims(r.Context())
 	installationID, ok := serviceoauth.SidekickInstallationID(r.Context())

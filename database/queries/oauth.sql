@@ -39,6 +39,13 @@ WHERE device_signature = @device_signature
   AND NOT invalidated
   AND expires_at > NOW();
 
+-- name: InvalidateOAuthDeviceSessionsBySidekickInstallationID :execrows
+UPDATE oauth_device_sessions
+SET invalidated = TRUE
+WHERE sidekick_installation_id = @sidekick_installation_id
+  AND NOT invalidated
+  AND expires_at > NOW();
+
 -- name: DeleteExpiredOAuthDeviceSessions :execrows
 DELETE FROM oauth_device_sessions
 WHERE expires_at <= NOW();

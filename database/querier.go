@@ -161,6 +161,7 @@ type sqlcQuerier interface {
 	DeleteRetentionRule(ctx context.Context, id uuid.UUID) error
 	DeleteServerApplicationsByInitiator(ctx context.Context, userID uuid.UUID) error
 	DeleteSidekickConfigOverride(ctx context.Context, arg DeleteSidekickConfigOverrideParams) ([]byte, error)
+	DeleteSidekickInstallation(ctx context.Context, arg DeleteSidekickInstallationParams) (SidekickInstallation, error)
 	DeleteSidekickWoWDirectoriesExcept(ctx context.Context, arg DeleteSidekickWoWDirectoriesExceptParams) (int64, error)
 	DeleteTenant(ctx context.Context, id uuid.UUID) error
 	DeleteTimeParseBossKillMembershipSeries(ctx context.Context, arg DeleteTimeParseBossKillMembershipSeriesParams) error
@@ -647,6 +648,7 @@ type sqlcQuerier interface {
 	InstanceUnitsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceUnit, error)
 	InstanceWithUnlisted(ctx context.Context, id uuid.UUID) (InstanceWithUnlistedRow, error)
 	InvalidateOAuthDeviceSession(ctx context.Context, deviceSignature string) (int64, error)
+	InvalidateOAuthDeviceSessionsBySidekickInstallationID(ctx context.Context, sidekickInstallationID uuid.NullUUID) (int64, error)
 	InvalidateWoWLogGroup(ctx context.Context, arg InvalidateWoWLogGroupParams) error
 	IsLayoutTrackedByUser(ctx context.Context, arg IsLayoutTrackedByUserParams) (bool, error)
 	IsLogInstanceInvalid(ctx context.Context, id uuid.UUID) (bool, error)
@@ -785,6 +787,7 @@ type sqlcQuerier interface {
 	ListServerApplications(ctx context.Context) ([]ListServerApplicationsRow, error)
 	ListSidekickInstallationsByUser(ctx context.Context, userID uuid.UUID) ([]SidekickInstallation, error)
 	ListSidekickIssues(ctx context.Context, arg ListSidekickIssuesParams) ([]SidekickIssue, error)
+	ListSidekickOAuthGrantRequestIDs(ctx context.Context, sidekickID uuid.UUID) ([]string, error)
 	ListSidekickWoWDirectories(ctx context.Context, sidekickID uuid.UUID) ([]SidekickWowDirectory, error)
 	// Canonical database-backed spell lookups. Each base spell row carries its
 	// independently ordered normalized components without multiplying child rows.

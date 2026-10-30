@@ -13560,6 +13560,22 @@ func (q *sqlQuerier) InvalidateOAuthDeviceSession(ctx context.Context, deviceSig
 	return result.RowsAffected(), nil
 }
 
+const invalidateOAuthDeviceSessionsBySidekickInstallationID = `-- name: InvalidateOAuthDeviceSessionsBySidekickInstallationID :execrows
+UPDATE oauth_device_sessions
+SET invalidated = TRUE
+WHERE sidekick_installation_id = $1
+  AND NOT invalidated
+  AND expires_at > NOW()
+`
+
+func (q *sqlQuerier) InvalidateOAuthDeviceSessionsBySidekickInstallationID(ctx context.Context, sidekickInstallationID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, invalidateOAuthDeviceSessionsBySidekickInstallationID, sidekickInstallationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const revokeOAuthTokenSessions = `-- name: RevokeOAuthTokenSessions :execrows
 DELETE FROM oauth_token_sessions
 WHERE request_id = $1 AND token_type = $2
@@ -22261,6 +22277,38 @@ func (q *sqlQuerier) DeleteSidekickConfigOverride(ctx context.Context, arg Delet
 	return config, err
 }
 
+const deleteSidekickInstallation = `-- name: DeleteSidekickInstallation :one
+DELETE FROM sidekick_installations
+WHERE id = $1
+  AND user_id = $2
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, start_at_login, auto_upload_capabilities
+`
+
+type DeleteSidekickInstallationParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) DeleteSidekickInstallation(ctx context.Context, arg DeleteSidekickInstallationParams) (SidekickInstallation, error) {
+	row := q.db.QueryRow(ctx, deleteSidekickInstallation, arg.ID, arg.UserID)
+	var i SidekickInstallation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Platform,
+		&i.Version,
+		&i.LastSeenAt,
+		&i.LastUploadAt,
+		&i.DisconnectedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.StartAtLogin,
+		&i.AutoUploadCapabilities,
+	)
+	return i, err
+}
+
 const deleteSidekickWoWDirectoriesExcept = `-- name: DeleteSidekickWoWDirectoriesExcept :execrows
 DELETE FROM sidekick_wow_directories
 WHERE sidekick_id = $1
@@ -22482,6 +22530,32 @@ func (q *sqlQuerier) ListSidekickIssues(ctx context.Context, arg ListSidekickIss
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSidekickOAuthGrantRequestIDs = `-- name: ListSidekickOAuthGrantRequestIDs :many
+SELECT oauth_request_id
+FROM sidekick_oauth_grants
+WHERE sidekick_id = $1
+`
+
+func (q *sqlQuerier) ListSidekickOAuthGrantRequestIDs(ctx context.Context, sidekickID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listSidekickOAuthGrantRequestIDs, sidekickID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var oauth_request_id string
+		if err := rows.Scan(&oauth_request_id); err != nil {
+			return nil, err
+		}
+		items = append(items, oauth_request_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
