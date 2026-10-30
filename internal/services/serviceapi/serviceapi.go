@@ -69,6 +69,12 @@ func OnAPI() string {
 	return (&Service{}).Name()
 }
 
+const oauthDeviceApprovalPath = "/oauth/device"
+
+func oauthBrowserOnlyMiddleware(accessURL *url.URL) func(http.Handler) http.Handler {
+	return httpmw.BrowserOnly(accessURL, oauthDeviceApprovalPath)
+}
+
 type Service struct {
 	broker *services.Services
 
@@ -275,7 +281,7 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 
 	oauthService.SetBrowserAuth(
-		httpmw.BrowserOnly(au),
+		oauthBrowserOnlyMiddleware(au),
 		handler.Auth.AuthenticationMiddleware,
 		// Optional so signed-out visitors are redirected to the login page
 		// instead of receiving a plain-text 401.

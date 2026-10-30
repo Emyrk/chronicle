@@ -9,7 +9,7 @@ import (
 // BrowserOnly rejects requests that do not originate from a browser.
 // It uses the Sec-Fetch-Site header, which is a forbidden header that browsers
 // set automatically and JavaScript cannot override. Non-browser clients (curl,
-// scripts, bots) won't send it, so they are rejected. Exact paths in
+// scripts, bots) won't send it, so they are rejected. Exact GET paths in
 // allowedCrossSitePaths are exempt for browser flows such as OAuth callbacks,
 // which arrive as cross-site navigations without an Origin header.
 func BrowserOnly(accessURL *url.URL, allowedCrossSitePaths ...string) func(next http.Handler) http.Handler {
@@ -50,7 +50,7 @@ func BrowserOnly(accessURL *url.URL, allowedCrossSitePaths ...string) func(next 
 			}
 
 			site := r.Header.Get("Sec-Fetch-Site")
-			if site == "cross-site" && isAllowedCrossSitePath(r.URL.Path) {
+			if site == "cross-site" && r.Method == http.MethodGet && isAllowedCrossSitePath(r.URL.Path) {
 				next.ServeHTTP(w, r)
 				return
 			}

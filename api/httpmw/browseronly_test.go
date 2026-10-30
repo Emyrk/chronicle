@@ -24,6 +24,7 @@ func TestBrowserOnly(t *testing.T) {
 	tests := []struct {
 		name                  string
 		accessURL             *url.URL
+		method                string
 		path                  string
 		host                  string
 		forwardedProto        string
@@ -38,6 +39,7 @@ func TestBrowserOnly(t *testing.T) {
 		{name: "prod cross-site wiki allowed", accessURL: prodURL, path: "/api/v1/whoami", secFetch: "cross-site", origin: "https://wiki.chronicleclassic.com", wantStatus: http.StatusOK},
 		{name: "prod cross-site Discord allowed", accessURL: prodURL, path: "/api/v1/whoami", secFetch: "cross-site", origin: "https://discord.com", wantStatus: http.StatusOK},
 		{name: "prod cross-site callback allowed", accessURL: prodURL, path: "/api/v1/discord-integration/callback", secFetch: "cross-site", allowedCrossSitePaths: []string{"/api/v1/discord-integration/callback"}, wantStatus: http.StatusOK},
+		{name: "prod cross-site post to allowed path rejected", accessURL: prodURL, method: http.MethodPost, path: "/oauth/device", secFetch: "cross-site", allowedCrossSitePaths: []string{"/oauth/device"}, wantStatus: http.StatusForbidden},
 		{name: "prod callback without browser header rejected", accessURL: prodURL, path: "/api/v1/discord-integration/callback", allowedCrossSitePaths: []string{"/api/v1/discord-integration/callback"}, wantStatus: http.StatusForbidden},
 		{name: "prod cross-site similar callback rejected", accessURL: prodURL, path: "/api/v1/discord-integration/callback/other", secFetch: "cross-site", allowedCrossSitePaths: []string{"/api/v1/discord-integration/callback"}, wantStatus: http.StatusForbidden},
 		{name: "prod cross-site rejected", accessURL: prodURL, path: "/api/v1/whoami", secFetch: "cross-site", wantStatus: http.StatusForbidden},
@@ -52,7 +54,11 @@ func TestBrowserOnly(t *testing.T) {
 			t.Parallel()
 
 			handler := httpmw.BrowserOnly(tc.accessURL, tc.allowedCrossSitePaths...)(ok)
-			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			method := tc.method
+			if method == "" {
+				method = http.MethodGet
+			}
+			req := httptest.NewRequest(method, tc.path, nil)
 			if tc.host != "" {
 				req.Host = tc.host
 			}
