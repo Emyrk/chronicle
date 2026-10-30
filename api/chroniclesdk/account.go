@@ -1,6 +1,10 @@
 package chroniclesdk
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // AccountPurgeConfirmation is the phrase a user types to start an account purge.
 const AccountPurgeConfirmation = "PURGE MY ACCOUNT"
@@ -15,6 +19,9 @@ type AccountPurgeInventory struct {
 	Data        []AccountDataCount  `json:"data"`
 	Blockers    []string            `json:"blockers"`
 	ActivePurge *AccountPurgeStatus `json:"active_purge,omitempty"`
+	// RecentSignInUntil is when the current sign-in becomes too old to start a
+	// purge. After it passes, the user must sign out and back in.
+	RecentSignInUntil time.Time `json:"recent_sign_in_until"`
 }
 
 type StartAccountPurgeRequest struct {

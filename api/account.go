@@ -38,8 +38,29 @@ func isNoRows(err error) bool {
 	return errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows)
 }
 
+// recentSignInUntil returns when the caller's sign-in stops counting as recent
+// enough to start a purge.
+func (a *API) recentSignInUntil(r *http.Request) (time.Time, error) {
+	claims := chronauth.MustAuthenticatedClaims(r.Context())
+	session, err := a.Zed.GetCurrentUserAuthSession(r.Context(), database.GetCurrentUserAuthSessionParams{
+		SessionID:  claims.SessionID,
+		UserID:     claims.Subject,
+		UserAuthID: claims.UserAuthID,
+		JwtID:      claims.ID,
+	})
+	if err != nil {
+		return time.Time{}, err
+	}
+	return session.CreatedAt.Time.Add(accountPurgeRecentSignIn), nil
+}
+
 func (a *API) GetAccountPurgeInventory(w http.ResponseWriter, r *http.Request) {
 	userID := chronauth.MustAuthenticatedClaims(r.Context()).Subject
+	recentUntil, err := a.recentSignInUntil(r)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
 	counts, err := a.Zed.GetAccountDataCounts(r.Context(), userID)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
@@ -51,8 +72,9 @@ func (a *API) GetAccountPurgeInventory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	inventory := chroniclesdk.AccountPurgeInventory{
-		Data:     make([]chroniclesdk.AccountDataCount, 0, len(counts)),
-		Blockers: blockers,
+		Data:              make([]chroniclesdk.AccountDataCount, 0, len(counts)),
+		Blockers:          blockers,
+		RecentSignInUntil: recentUntil,
 	}
 	for _, count := range counts {
 		inventory.Data = append(inventory.Data, chroniclesdk.AccountDataCount{
@@ -81,25 +103,19 @@ func (a *API) StartAccountPurge(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	claims := chronauth.MustAuthenticatedClaims(r.Context())
-	currentSession, err := a.Zed.GetCurrentUserAuthSession(r.Context(), database.GetCurrentUserAuthSessionParams{
-		SessionID:  claims.SessionID,
-		UserID:     claims.Subject,
-		UserAuthID: claims.UserAuthID,
-		JwtID:      claims.ID,
-	})
+	recentUntil, err := a.recentSignInUntil(r)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	if time.Since(currentSession.CreatedAt.Time) > accountPurgeRecentSignIn {
+	if time.Now().After(recentUntil) {
 		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{
 			Message: "Sign out and sign back in before purging your account",
 		})
 		return
 	}
 
-	userID := claims.Subject
+	userID := chronauth.MustAuthenticatedClaims(r.Context()).Subject
 	var purge database.AccountPurge
 	err = a.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
 		// Uploads and module creation lock the same row, so nothing new can

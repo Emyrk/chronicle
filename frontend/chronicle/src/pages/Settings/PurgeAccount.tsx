@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, CheckCircle2, Circle, Loader2, Trash2, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Circle, Loader2, LogIn, Trash2, XCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAccountPurgeInventory, useAccountPurgeStatus, useSession, useStartAccountPurge } from "@/api/queries";
 import { AccountPurgeConfirmation, type AccountDataCount, type AccountPurgeStatus } from "@/api/typesGenerated";
@@ -64,14 +64,34 @@ export function PurgeAccount() {
     <PurgeWizard
       data={inventory.data}
       blockers={inventory.blockers}
+      recentSignInUntil={inventory.recent_sign_in_until}
       onStarted={(status) => setSearchParams({ purge: status.id }, { replace: true })}
     />
   );
 }
 
-function PurgeWizard({ data, blockers, onStarted }: {
+function useSignInExpired(recentSignInUntil: string) {
+  const until = new Date(recentSignInUntil).getTime();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const remaining = until - Date.now();
+    if (remaining <= 0) return;
+    const timer = window.setTimeout(() => setNow(Date.now()), remaining + 500);
+    return () => window.clearTimeout(timer);
+  }, [until]);
+  return now >= until;
+}
+
+async function signInAgain() {
+  await fetch("/auth/logout");
+  clearInstanceDefaultsCache();
+  window.location.href = `/login?from=${encodeURIComponent("/account/purge")}`;
+}
+
+function PurgeWizard({ data, blockers, recentSignInUntil, onStarted }: {
   data: readonly AccountDataCount[];
   blockers: readonly string[];
+  recentSignInUntil: string;
   onStarted: (status: AccountPurgeStatus) => void;
 }) {
   const [step, setStep] = useState<WizardStep>("review");
@@ -88,6 +108,7 @@ function PurgeWizard({ data, blockers, onStarted }: {
   }, [data]);
   const allAcknowledged = groups.every((group) => acknowledged.has(group.key));
   const blocked = blockers.length > 0;
+  const signInExpired = useSignInExpired(recentSignInUntil);
 
   const toggle = (key: string, checked: boolean) => {
     setAcknowledged((current) => {
@@ -142,121 +163,148 @@ function PurgeWizard({ data, blockers, onStarted }: {
         </div>
       )}
 
-      {step === "review" && (
-        <div className="space-y-4">
-          {groups.length === 0 ? (
-            <div className="rounded-lg border p-4 text-sm text-muted-foreground">
-              Your account has no saved data. Purging deletes the account itself.
+      {signInExpired && (
+        <div role="alert" className="rounded-lg border-2 border-primary/50 bg-primary/10 p-6 space-y-4">
+          <div className="flex items-start gap-4">
+            <div className="rounded-full bg-primary/15 p-3">
+              <LogIn className="size-6 text-primary" />
             </div>
-          ) : (
-            <>
-              <p className="text-sm text-muted-foreground">Tick every set of data to confirm you understand it will be permanently deleted.</p>
-              <div className="space-y-3">
-                {groups.map((group) => {
-                  const meta = DATA_GROUPS[group.key] ?? { title: group.key, description: "" };
-                  const checked = acknowledged.has(group.key);
-                  const id = `purge-${group.key}`;
-                  return (
-                    <div
-                      key={group.key}
-                      role="presentation"
-                      onClick={() => toggle(group.key, !checked)}
-                      className={cn(
-                        "flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
-                        checked ? "border-destructive/60 bg-destructive/5" : "hover:bg-muted/40",
-                      )}
-                    >
-                      <Checkbox
-                        id={id}
-                        aria-labelledby={`${id}-title`}
-                        checked={checked}
-                        onClick={(event) => event.stopPropagation()}
-                        onCheckedChange={(value) => toggle(group.key, value === true)}
-                        className="mt-0.5"
-                      />
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div id={`${id}-title`} className="font-medium">{meta.title}</div>
-                        <p className="text-xs text-muted-foreground">{meta.description}</p>
-                        <ul className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-sm">
-                          {group.items.map((item) => (
-                            <li key={item.label}>
-                              <span className="font-semibold tabular-nums">{item.count.toLocaleString()}</span>{" "}
-                              <span className="text-muted-foreground">{item.label}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  );
-                })}
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold">Sign in again to continue</h3>
+              <p className="text-sm text-muted-foreground">
+                For your security, purging your account requires a sign-in from the last 15 minutes. Sign out and back in, and you'll come right back here.
+              </p>
+            </div>
+          </div>
+          <div className="ml-[4.25rem]">
+            <Button size="lg" onClick={() => void signInAgain()}>
+              <LogIn className="size-5" /> Sign out and sign back in
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <fieldset
+        disabled={signInExpired}
+        aria-disabled={signInExpired}
+        className={cn("min-w-0 space-y-6", signInExpired && "pointer-events-none select-none opacity-40")}
+      >
+        {step === "review" && (
+          <div className="space-y-4">
+            {groups.length === 0 ? (
+              <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+                Your account has no saved data. Purging deletes the account itself.
               </div>
-            </>
-          )}
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-muted-foreground">{acknowledged.size} of {groups.length} confirmed</span>
-            <Button variant="destructive" disabled={blocked || !allAcknowledged} onClick={() => setStep("confirm")}>
-              Continue
-            </Button>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">Tick every set of data to confirm you understand it will be permanently deleted.</p>
+                <div className="space-y-3">
+                  {groups.map((group) => {
+                    const meta = DATA_GROUPS[group.key] ?? { title: group.key, description: "" };
+                    const checked = acknowledged.has(group.key);
+                    const id = `purge-${group.key}`;
+                    return (
+                      <div
+                        key={group.key}
+                        role="presentation"
+                        onClick={() => toggle(group.key, !checked)}
+                        className={cn(
+                          "flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
+                          checked ? "border-destructive/60 bg-destructive/5" : "hover:bg-muted/40",
+                        )}
+                      >
+                        <Checkbox
+                          id={id}
+                          aria-labelledby={`${id}-title`}
+                          checked={checked}
+                          onClick={(event) => event.stopPropagation()}
+                          onCheckedChange={(value) => toggle(group.key, value === true)}
+                          className="mt-0.5"
+                        />
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div id={`${id}-title`} className="font-medium">{meta.title}</div>
+                          <p className="text-xs text-muted-foreground">{meta.description}</p>
+                          <ul className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-sm">
+                            {group.items.map((item) => (
+                              <li key={item.label}>
+                                <span className="font-semibold tabular-nums">{item.count.toLocaleString()}</span>{" "}
+                                <span className="text-muted-foreground">{item.label}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm text-muted-foreground">{acknowledged.size} of {groups.length} confirmed</span>
+              <Button variant="destructive" disabled={blocked || !allAcknowledged} onClick={() => setStep("confirm")}>
+                Continue
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {step === "confirm" && (
-        <div className="rounded-lg border border-destructive/40 p-5 space-y-4">
-          <div className="space-y-1">
-            <h3 className="font-semibold">Confirm it's you</h3>
-            <p className="text-sm text-muted-foreground">
-              You must have signed in within the last 15 minutes. If it's been longer, sign out and back in first.
-            </p>
+        {step === "confirm" && (
+          <div className="rounded-lg border border-destructive/40 p-5 space-y-4">
+            <div className="space-y-1">
+              <h3 className="font-semibold">Confirm it's you</h3>
+              <p className="text-sm text-muted-foreground">
+                For your security, you have until {new Date(recentSignInUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} to start the purge. After that you'll need to sign in again.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="purge-confirmation" className="block text-sm">
+                Type <span className="font-mono font-semibold">{AccountPurgeConfirmation}</span> to continue
+              </label>
+              <Input
+                id="purge-confirmation"
+                value={confirmation}
+                onChange={(event) => setConfirmation(event.target.value)}
+                autoComplete="off"
+                className="sm:max-w-sm"
+              />
+            </div>
+            <div className="flex justify-between gap-3">
+              <Button variant="ghost" onClick={() => setStep("review")}>Back</Button>
+              <Button variant="destructive" disabled={confirmation.trim() !== AccountPurgeConfirmation} onClick={() => setStep("final")}>
+                Continue
+              </Button>
+            </div>
           </div>
-          <div className="space-y-2">
-            <label htmlFor="purge-confirmation" className="block text-sm">
-              Type <span className="font-mono font-semibold">{AccountPurgeConfirmation}</span> to continue
-            </label>
-            <Input
-              id="purge-confirmation"
-              value={confirmation}
-              onChange={(event) => setConfirmation(event.target.value)}
-              autoComplete="off"
-              className="sm:max-w-sm"
-            />
-          </div>
-          <div className="flex justify-between gap-3">
-            <Button variant="ghost" onClick={() => setStep("review")}>Back</Button>
-            <Button variant="destructive" disabled={confirmation.trim() !== AccountPurgeConfirmation} onClick={() => setStep("final")}>
-              Continue
-            </Button>
-          </div>
-        </div>
-      )}
+        )}
 
-      {step === "final" && (
-        <div className="rounded-lg border-2 border-destructive bg-destructive/10 p-6 space-y-4 text-center">
-          <Trash2 className="mx-auto size-10 text-destructive" />
-          <div className="space-y-1">
-            <h3 className="text-lg font-semibold">This cannot be undone</h3>
-            <p className="text-sm text-muted-foreground">
-              Your account and everything you confirmed will be permanently deleted. You'll be signed out when it finishes.
-            </p>
+        {step === "final" && (
+          <div className="rounded-lg border-2 border-destructive bg-destructive/10 p-6 space-y-4 text-center">
+            <Trash2 className="mx-auto size-10 text-destructive" />
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold">This cannot be undone</h3>
+              <p className="text-sm text-muted-foreground">
+                Your account and everything you confirmed will be permanently deleted. You'll be signed out when it finishes.
+              </p>
+            </div>
+            {startPurge.error && <p className="text-sm text-destructive">{startPurge.error.message}</p>}
+            <div className="flex flex-col items-center gap-2">
+              <Button
+                size="lg"
+                variant="destructive"
+                disabled={startPurge.isPending}
+                onClick={() => startPurge.mutate(
+                  { acknowledged_groups: Array.from(acknowledged), confirmation: confirmation.trim() },
+                  { onSuccess: onStarted },
+                )}
+              >
+                {startPurge.isPending ? <Loader2 className="size-5 animate-spin" /> : <Trash2 className="size-5" />}
+                Purge my account
+              </Button>
+              <Button variant="ghost" onClick={() => setStep("confirm")} disabled={startPurge.isPending}>Back</Button>
+            </div>
           </div>
-          {startPurge.error && <p className="text-sm text-destructive">{startPurge.error.message}</p>}
-          <div className="flex flex-col items-center gap-2">
-            <Button
-              size="lg"
-              variant="destructive"
-              disabled={startPurge.isPending}
-              onClick={() => startPurge.mutate(
-                { acknowledged_groups: Array.from(acknowledged), confirmation: confirmation.trim() },
-                { onSuccess: onStarted },
-              )}
-            >
-              {startPurge.isPending ? <Loader2 className="size-5 animate-spin" /> : <Trash2 className="size-5" />}
-              Purge my account
-            </Button>
-            <Button variant="ghost" onClick={() => setStep("confirm")} disabled={startPurge.isPending}>Back</Button>
-          </div>
-        </div>
-      )}
+        )}
+      </fieldset>
     </div>
   );
 }

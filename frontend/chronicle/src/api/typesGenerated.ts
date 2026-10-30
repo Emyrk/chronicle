@@ -20,6 +20,11 @@ export interface AccountPurgeInventory {
     readonly data: readonly AccountDataCount[];
     readonly blockers: readonly string[];
     readonly active_purge?: AccountPurgeStatus;
+    /**
+     * RecentSignInUntil is when the current sign-in becomes too old to start a
+     * purge. After it passes, the user must sign out and back in.
+     */
+    readonly recent_sign_in_until: string;
 }
 
 // From chroniclesdk/account.go
