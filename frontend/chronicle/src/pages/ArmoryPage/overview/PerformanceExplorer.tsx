@@ -1264,7 +1264,7 @@ function PerformanceTrend({
   );
 }
 
-function ResponsiveDateAxis({ minTime, maxTime }: { minTime: number; maxTime: number }) {
+export function ResponsiveDateAxis({ minTime, maxTime }: { minTime: number; maxTime: number }) {
   const axisRef = useRef<HTMLDivElement>(null);
   const [tickCount, setTickCount] = useState(2);
 

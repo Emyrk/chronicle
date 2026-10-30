@@ -100,6 +100,7 @@ const ArmoryPage = lazy(() => import("./pages/ArmoryPage").then(({ ArmoryPage })
 const PerformanceComparisonPage = lazy(() => import("./pages/ArmoryPage").then(({ PerformanceComparisonPage }) => ({ default: PerformanceComparisonPage })))
 const ArmorySearchPage = lazy(() => import("./pages/ArmorySearch").then(({ ArmorySearchPage }) => ({ default: ArmorySearchPage })))
 const GuildSearchPage = lazy(() => import("./pages/GuildSearch").then(({ GuildSearchPage }) => ({ default: GuildSearchPage })))
+const GuildHistoryPage = lazy(() => import("./pages/GuildHistory/GuildHistoryPage").then(({ GuildHistoryPage }) => ({ default: GuildHistoryPage })))
 const ApplyPage = lazy(() => import("./pages/Apply/ApplyPage").then(({ ApplyPage }) => ({ default: ApplyPage })))
 const ApplicationPage = lazy(() => import("./pages/Apply/ApplicationPage").then(({ ApplicationPage }) => ({ default: ApplicationPage })))
 const SimPage = lazy(() => import("./pages/Sim").then(({ SimPage }) => ({ default: SimPage })))
@@ -183,6 +184,7 @@ function App() {
         <Route path="/guilds" element={<GuildSearchPage />} />
         <Route path="/armory" element={<ArmorySearchPage />} />
         <Route path="/performance-history" element={<PerformanceComparisonPage />} />
+        <Route path="/guild-history" element={<GuildHistoryPage />} />
         <Route path="/armory/:realmName/:playerIdentifier/analysis" element={<ArmoryAnalysisRedirect />} />
         <Route path="/armory/:realmName/:playerIdentifier" element={<ArmoryPage />} />
         <Route path="/sim" element={<SimPage />} />

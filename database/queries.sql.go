@@ -22699,6 +22699,255 @@ func (q *sqlQuerier) GuildRaidClears(ctx context.Context, arg GuildRaidClearsPar
 	return items, nil
 }
 
+const guildSpeedrunBossKills = `-- name: GuildSpeedrunBossKills :many
+SELECT
+    lie.instance_id,
+    lie.name AS encounter_name,
+    lie.end_time AS killed_at,
+    (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms,
+    COALESCE(CASE WHEN tpbs.server_status IN ('ok', 'low_confidence') THEN tpbs.server_precise_score END, -1)::float8 AS parse
+FROM log_instance_encounters lie
+LEFT JOIN time_parse_scores tps
+    ON tps.tenant_id = $1
+   AND tps.instance_id = lie.instance_id
+   AND tps.lookback_days = $2::smallint
+   AND tps.policy_version = $3::smallint
+   AND tps.query_version = $4::smallint
+LEFT JOIN time_parse_boss_scores tpbs
+    ON tpbs.time_parse_score_id = tps.id
+   AND tpbs.encounter_id = lie.id
+WHERE lie.instance_id = ANY($5 :: uuid[])
+  AND lie.boss = true
+  AND lie.kill_type IN ('clean', 'partial')
+  AND lie.end_time > lie.start_time
+ORDER BY lie.instance_id, lie.end_time
+`
+
+type GuildSpeedrunBossKillsParams struct {
+	TenantID      uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	LookbackDays  int16       `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion int16       `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16       `db:"query_version" json:"query_version"`
+	InstanceIds   []uuid.UUID `db:"instance_ids" json:"instance_ids"`
+}
+
+type GuildSpeedrunBossKillsRow struct {
+	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	DurationMs    int64              `db:"duration_ms" json:"duration_ms"`
+	Parse         float64            `db:"parse" json:"parse"`
+}
+
+// Returns the boss kills of the given instances in kill order, for the guild
+// history page's per-boss splits. parse is the stored server-scope kill-time
+// parse for the scoring contract given, or -1 when it is not computed or its
+// sample was too small.
+func (q *sqlQuerier) GuildSpeedrunBossKills(ctx context.Context, arg GuildSpeedrunBossKillsParams) ([]GuildSpeedrunBossKillsRow, error) {
+	rows, err := q.db.Query(ctx, guildSpeedrunBossKills,
+		arg.TenantID,
+		arg.LookbackDays,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.InstanceIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildSpeedrunBossKillsRow
+	for rows.Next() {
+		var i GuildSpeedrunBossKillsRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.EncounterName,
+			&i.KilledAt,
+			&i.DurationMs,
+			&i.Parse,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const guildSpeedrunHistory = `-- name: GuildSpeedrunHistory :many
+WITH deduped AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        sr.instance_id,
+        li.hashed_slug,
+        sr.qualified,
+        sr.ranked_start_time::timestamptz AS start_time,
+        sr.ranked_completion_time::timestamptz AS completion_time,
+        sr.ranked_duration_ms::bigint AS duration_ms,
+        COALESCE(sr.boss_to_boss_duration_ms, 0)::bigint AS boss_to_boss_duration_ms
+    FROM instance_speedruns sr
+    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+    JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+    WHERE sr.guild_id = $5 :: uuid
+      AND sr.instance_name = $6 :: text
+      AND sr.ranked_duration_ms > 0
+      AND CASE
+          WHEN $7 :: bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => $7::int)
+          ELSE true
+      END
+    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.qualified DESC, sr.ranked_duration_ms ASC
+),
+fights AS (
+    SELECT f.instance_id, scope.name AS scope, f.fight_start, f.fight_end
+    FROM (
+        SELECT
+            e.instance_id,
+            e.boss,
+            GREATEST(e.start_time, d.start_time) AS fight_start,
+            LEAST(e.end_time, d.completion_time) AS fight_end
+        FROM deduped d
+        JOIN log_instance_encounters e ON e.instance_id = d.instance_id
+    ) f
+    CROSS JOIN LATERAL (
+        SELECT 'all'::text AS name
+        UNION ALL
+        SELECT 'boss'::text WHERE f.boss
+    ) scope
+    WHERE f.fight_end > f.fight_start
+),
+marked AS (
+    SELECT
+        instance_id,
+        scope,
+        fight_start,
+        fight_end,
+        CASE WHEN fight_start <= MAX(fight_end) OVER (
+            PARTITION BY instance_id, scope
+            ORDER BY fight_start, fight_end
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) THEN 0 ELSE 1 END AS starts_island
+    FROM fights
+),
+islands AS (
+    SELECT
+        instance_id,
+        scope,
+        fight_start,
+        fight_end,
+        SUM(starts_island) OVER (PARTITION BY instance_id, scope ORDER BY fight_start, fight_end) AS island
+    FROM marked
+),
+covered AS (
+    SELECT
+        instance_id,
+        SUM(CASE WHEN scope = 'all' THEN island_ms ELSE -island_ms END) AS trash_ms
+    FROM (
+        SELECT instance_id, scope, EXTRACT(EPOCH FROM (MAX(fight_end) - MIN(fight_start))) * 1000 AS island_ms
+        FROM islands
+        GROUP BY instance_id, scope, island
+    ) merged
+    GROUP BY instance_id
+)
+SELECT
+    d.instance_id,
+    COALESCE(d.hashed_slug, '')::text AS slug,
+    d.qualified,
+    d.start_time,
+    d.completion_time,
+    d.duration_ms,
+    d.boss_to_boss_duration_ms,
+    (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = d.instance_id)::bigint AS player_count,
+    GREATEST(COALESCE(c.trash_ms, 0), 0)::bigint AS trash_duration_ms,
+    COALESCE(CASE WHEN tps.clear_server_status IN ('ok', 'low_confidence') THEN tps.clear_server_precise_score END, -1)::float8 AS clear_parse
+FROM deduped d
+LEFT JOIN covered c ON c.instance_id = d.instance_id
+LEFT JOIN time_parse_scores tps
+    ON tps.tenant_id = $1
+   AND tps.instance_id = d.instance_id
+   AND tps.lookback_days = $2::smallint
+   AND tps.policy_version = $3::smallint
+   AND tps.query_version = $4::smallint
+ORDER BY d.completion_time ASC
+`
+
+type GuildSpeedrunHistoryParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	LookbackDays  int16     `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+	GuildID       uuid.UUID `db:"guild_id" json:"guild_id"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	SinceDays     int64     `db:"since_days" json:"since_days"`
+}
+
+type GuildSpeedrunHistoryRow struct {
+	InstanceID           uuid.UUID          `db:"instance_id" json:"instance_id"`
+	Slug                 string             `db:"slug" json:"slug"`
+	Qualified            bool               `db:"qualified" json:"qualified"`
+	StartTime            pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	CompletionTime       pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	DurationMs           int64              `db:"duration_ms" json:"duration_ms"`
+	BossToBossDurationMs int64              `db:"boss_to_boss_duration_ms" json:"boss_to_boss_duration_ms"`
+	PlayerCount          int64              `db:"player_count" json:"player_count"`
+	TrashDurationMs      int64              `db:"trash_duration_ms" json:"trash_duration_ms"`
+	ClearParse           float64            `db:"clear_parse" json:"clear_parse"`
+}
+
+// Returns every full clear of one instance by a guild, oldest first, for the
+// guild history page. Deduplicates re-uploads of the same raid, preferring a
+// qualified copy and then the fastest. Uses the ranked clear window, so
+// incomplete runs (no ranked timing) are left out.
+// trash_duration_ms is the time inside the clear spent in non-boss fights,
+// with overlapping pulls merged and any overlap with boss fights removed: the
+// merged length of all fights minus the merged length of boss fights. Merging
+// uses window functions (gaps and islands) rather than multiranges, which need
+// PostgreSQL 14.
+// clear_parse is the stored server-scope clear-time parse for the scoring
+// contract given, or -1 when it is not computed or its sample was too small.
+// JOINs wow_server_realms so RLS tenant filtering cascades.
+// Every fight clipped to its clear's window, once in the "all" scope and,
+// for boss fights, again in the "boss" scope.
+// A fight starts a new island when it begins after every earlier fight ended.
+func (q *sqlQuerier) GuildSpeedrunHistory(ctx context.Context, arg GuildSpeedrunHistoryParams) ([]GuildSpeedrunHistoryRow, error) {
+	rows, err := q.db.Query(ctx, guildSpeedrunHistory,
+		arg.TenantID,
+		arg.LookbackDays,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.GuildID,
+		arg.InstanceName,
+		arg.SinceDays,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildSpeedrunHistoryRow
+	for rows.Next() {
+		var i GuildSpeedrunHistoryRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.Slug,
+			&i.Qualified,
+			&i.StartTime,
+			&i.CompletionTime,
+			&i.DurationMs,
+			&i.BossToBossDurationMs,
+			&i.PlayerCount,
+			&i.TrashDurationMs,
+			&i.ClearParse,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertInstanceSpeedrun = `-- name: InsertInstanceSpeedrun :exec
 INSERT INTO instance_speedruns (
     instance_id, instance_name, realm_id, guild_id,

@@ -1885,6 +1885,55 @@ export interface GuildSettings {
     readonly is_member: boolean;
 }
 
+// From chroniclesdk/guild_page.go
+/**
+ * GuildSpeedrunBossKill is one boss kill within a guild's clear.
+ */
+export interface GuildSpeedrunBossKill {
+    readonly encounter_name: string;
+    readonly killed_at: string;
+    readonly duration_ms: number;
+    /**
+     * Parse is the server-scope kill-time parse (0-100, higher is faster), or
+     * nil when it is not computed yet or its comparison sample was too small.
+     */
+    readonly parse: number | null;
+}
+
+// From chroniclesdk/guild_page.go
+/**
+ * GuildSpeedrunHistoryResponse lists a guild's clears of one instance, oldest first.
+ */
+export interface GuildSpeedrunHistoryResponse {
+    readonly runs: readonly GuildSpeedrunRun[];
+}
+
+// From chroniclesdk/guild_page.go
+/**
+ * GuildSpeedrunRun is one deduplicated full clear of an instance by a guild.
+ * Times use the ranked clear window: first pull to last boss kill.
+ */
+export interface GuildSpeedrunRun {
+    readonly slug: string;
+    readonly qualified: boolean;
+    readonly player_count: number;
+    readonly start_time: string;
+    readonly completion_time: string;
+    readonly duration_ms: number;
+    readonly boss_to_boss_duration_ms: number;
+    /**
+     * TrashDurationMs is time in trash fights during the clear, excluding any
+     * overlap with boss fights.
+     */
+    readonly trash_duration_ms: number;
+    /**
+     * ClearParse is the server-scope clear-time parse (0-100, higher is
+     * faster), or nil when it is not computed yet or its sample was too small.
+     */
+    readonly clear_parse: number | null;
+    readonly bosses: readonly GuildSpeedrunBossKill[];
+}
+
 // From chroniclesdk/constants.go
 export type GuildTag = "Casual" | "Chinese" | "Dungeons" | "English" | "French" | "German" | "Hardcore" | "Korean" | "Leveling" | "Portuguese" | "PvP" | "Questing" | "RP" | "Raiding" | "Russian" | "Social" | "Spanish" | "Taiwanese";
 

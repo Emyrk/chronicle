@@ -386,3 +386,140 @@ func TestExternalAPILeaderboardDuplicateLogsFollowTimingMode(t *testing.T) {
 	assertMode(true, bossWinner, fullWinner, 35*time.Minute,
 		"https://youtube.com/watch?v=ranked", "https://youtube.com/watch?v=full")
 }
+
+func TestGuildSpeedrunHistory(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	startedAt := time.Now().UTC().Truncate(time.Second).Add(-48 * time.Hour)
+
+	guildID := uuid.New()
+	otherGuildID := uuid.New()
+	_, err := pool.Exec(ctx, "INSERT INTO guilds (id, realm_id, name) VALUES ($1, $2, $3), ($4, $2, $5)",
+		guildID, realmID, "History Raiders", otherGuildID, "Other Raiders")
+	require.NoError(t, err)
+
+	userID := uuid.New()
+	_, err = store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "u-" + userID.String()[:8]})
+	require.NoError(t, err)
+	logGroupID := uuid.New()
+	_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+		ID: logGroupID, Owner: userID, LogType: database.LogTypeV1,
+		CreatedAt: database.Timestamptz(startedAt), UpdatedAt: database.Timestamptz(startedAt),
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
+
+	insertClear := func(guild uuid.UUID, instanceName string, start time.Time, duration time.Duration, qualified bool) uuid.UUID {
+		t.Helper()
+		id := uuid.New()
+		end := start.Add(duration)
+		_, err := store.InsertInstance(ctx, database.InsertInstanceParams{
+			ID: id, RealmID: realmID, LogGroupID: logGroupID,
+			Name: instanceName, HashedSlug: pgtype.Text{String: "history-" + id.String()[:8], Valid: true},
+			GuildID:   uuid.NullUUID{UUID: guild, Valid: true},
+			StartTime: database.Timestamptz(start), EndTime: database.Timestamptz(end),
+			Capabilities: []string{}, DifficultyName: "Normal", MaxPlayers: 40,
+		})
+		require.NoError(t, err)
+		require.NoError(t, store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
+			InstanceID: id, InstanceName: instanceName, RealmID: realmID,
+			GuildID: uuid.NullUUID{UUID: guild, Valid: true}, Qualified: qualified,
+			StartTime: database.Timestamptz(start), CompletionTime: database.Timestamptz(end),
+			DurationMs:      int64(duration / time.Millisecond),
+			RankedStartTime: database.Timestamptz(start), RankedCompletionTime: database.Timestamptz(end),
+			RankedDurationMs: pgtype.Int8{Int64: int64(duration / time.Millisecond), Valid: true},
+			Proof:            []byte(`{"proof":[]}`),
+		}))
+		return id
+	}
+	insertFight := func(instanceID uuid.UUID, name string, boss bool, start time.Time, length time.Duration) uuid.UUID {
+		t.Helper()
+		id := uuid.New()
+		_, err := store.InsertEncounter(ctx, database.InsertEncounterParams{
+			ID: id, InstanceID: instanceID, Name: name,
+			KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: boss,
+			StartTime: database.Timestamptz(start), EndTime: database.Timestamptz(start.Add(length)),
+		})
+		require.NoError(t, err)
+		return id
+	}
+
+	// The first clear has two overlapping trash pulls (0:10-0:15 and 0:12-0:18, so 8 minutes once
+	// merged), a pull that runs into a boss (0:28-0:32, of which 0:30-0:32 is the boss), and trash
+	// after the clear ends, which must not count.
+	first := insertClear(guildID, "Molten Core", startedAt.Add(-24*time.Hour), time.Hour, true)
+	firstStart := startedAt.Add(-24 * time.Hour)
+	insertFight(first, "Trash A", false, firstStart.Add(10*time.Minute), 5*time.Minute)
+	insertFight(first, "Trash B", false, firstStart.Add(12*time.Minute), 6*time.Minute)
+	insertFight(first, "Trash C", false, firstStart.Add(28*time.Minute), 4*time.Minute)
+	lucifron := insertFight(first, "Lucifron", true, firstStart.Add(30*time.Minute), 2*time.Minute)
+	ragnaros := insertFight(first, "Ragnaros", true, firstStart.Add(55*time.Minute), 5*time.Minute)
+	insertFight(first, "Late Trash", false, firstStart.Add(70*time.Minute), 5*time.Minute)
+
+	// A re-upload of the first clear: unqualified and slower, so the qualified copy wins.
+	reupload := insertClear(guildID, "Molten Core", firstStart, 70*time.Minute, false)
+	_, err = pool.Exec(ctx, "UPDATE log_instances SET duplicate_group_id = $1 WHERE id IN ($1, $2)", first, reupload)
+	require.NoError(t, err)
+
+	second := insertClear(guildID, "Molten Core", startedAt, 50*time.Minute, false)
+	// Other raids, other guilds and clears outside the window are left out.
+	insertClear(guildID, "Blackwing Lair", startedAt, 50*time.Minute, true)
+	insertClear(otherGuildID, "Molten Core", startedAt, 40*time.Minute, true)
+	insertClear(guildID, "Molten Core", startedAt.Add(-400*24*time.Hour), 45*time.Minute, true)
+
+	// Stored time parses for the first clear: a clear parse, a scored Lucifron kill, and a
+	// Ragnaros kill whose sample was too small, which reads as no parse.
+	const lookbackDays, policyVersion, queryVersion = 60, 1, 1
+	scoreID := uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO time_parse_scores (
+		id, tenant_id, instance_id, run_id, realm_id, clear_duration_ms,
+		clear_server_precise_score, clear_server_display_score, clear_server_rank, clear_server_sample_size, clear_server_status,
+		clear_realm_precise_score, clear_realm_display_score, clear_realm_rank, clear_realm_sample_size, clear_realm_status,
+		cutoff, window_start, lookback_days, policy_version, query_version
+	) VALUES ($1, $2, $3, $3, $4, 3600000, 87.5, 87, 3, 20, 'ok', 90, 90, 2, 20, 'ok', now(), now(), $5, $6, $7)`,
+		scoreID, uuid.Nil, first, realmID, lookbackDays, policyVersion, queryVersion)
+	require.NoError(t, err)
+	insertBossScore := func(encounterID uuid.UUID, name string, score float64, status string) {
+		t.Helper()
+		_, err := pool.Exec(ctx, `INSERT INTO time_parse_boss_scores (
+			time_parse_score_id, encounter_id, encounter_name, duration_ms,
+			server_precise_score, server_display_score, server_rank, server_sample_size, server_status,
+			realm_precise_score, realm_display_score, realm_rank, realm_sample_size, realm_status
+		) VALUES ($1, $2, $3, 1, $4, 0, 1, 1, $5, 0, 0, 1, 1, $5)`, scoreID, encounterID, name, score, status)
+		require.NoError(t, err)
+	}
+	insertBossScore(lucifron, "Lucifron", 64.25, "ok")
+	insertBossScore(ragnaros, "Ragnaros", 12, "sample_too_small")
+
+	rows, err := store.GuildSpeedrunHistory(ctx, database.GuildSpeedrunHistoryParams{
+		TenantID: uuid.Nil, LookbackDays: lookbackDays, PolicyVersion: policyVersion, QueryVersion: queryVersion,
+		GuildID: guildID, InstanceName: "Molten Core", SinceDays: 180,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+
+	require.Equal(t, first, rows[0].InstanceID)
+	require.True(t, rows[0].Qualified)
+	require.EqualValues(t, time.Hour/time.Millisecond, rows[0].DurationMs)
+	require.EqualValues(t, 10*time.Minute/time.Millisecond, rows[0].TrashDurationMs)
+	require.InDelta(t, 87.5, rows[0].ClearParse, 0.001)
+
+	require.Equal(t, second, rows[1].InstanceID)
+	require.False(t, rows[1].Qualified)
+	require.Zero(t, rows[1].TrashDurationMs)
+	require.EqualValues(t, -1, rows[1].ClearParse)
+
+	kills, err := store.GuildSpeedrunBossKills(ctx, database.GuildSpeedrunBossKillsParams{
+		TenantID: uuid.Nil, LookbackDays: lookbackDays, PolicyVersion: policyVersion, QueryVersion: queryVersion,
+		InstanceIds: []uuid.UUID{first, second},
+	})
+	require.NoError(t, err)
+	require.Len(t, kills, 2)
+	require.Equal(t, "Lucifron", kills[0].EncounterName)
+	require.EqualValues(t, 2*time.Minute/time.Millisecond, kills[0].DurationMs)
+	require.InDelta(t, 64.25, kills[0].Parse, 0.001)
+	require.Equal(t, "Ragnaros", kills[1].EncounterName)
+	require.EqualValues(t, -1, kills[1].Parse)
+}

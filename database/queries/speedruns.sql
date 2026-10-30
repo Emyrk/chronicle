@@ -329,3 +329,140 @@ WHERE sr.instance_name = @instance_name
 GROUP BY sr.guild_id, g.name, gp.theme
 ORDER BY clears DESC, g.name ASC
 LIMIT NULLIF(@result_limit :: bigint, 0);
+
+-- name: GuildSpeedrunHistory :many
+-- Returns every full clear of one instance by a guild, oldest first, for the
+-- guild history page. Deduplicates re-uploads of the same raid, preferring a
+-- qualified copy and then the fastest. Uses the ranked clear window, so
+-- incomplete runs (no ranked timing) are left out.
+-- trash_duration_ms is the time inside the clear spent in non-boss fights,
+-- with overlapping pulls merged and any overlap with boss fights removed: the
+-- merged length of all fights minus the merged length of boss fights. Merging
+-- uses window functions (gaps and islands) rather than multiranges, which need
+-- PostgreSQL 14.
+-- clear_parse is the stored server-scope clear-time parse for the scoring
+-- contract given, or -1 when it is not computed or its sample was too small.
+-- JOINs wow_server_realms so RLS tenant filtering cascades.
+WITH deduped AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        sr.instance_id,
+        li.hashed_slug,
+        sr.qualified,
+        sr.ranked_start_time::timestamptz AS start_time,
+        sr.ranked_completion_time::timestamptz AS completion_time,
+        sr.ranked_duration_ms::bigint AS duration_ms,
+        COALESCE(sr.boss_to_boss_duration_ms, 0)::bigint AS boss_to_boss_duration_ms
+    FROM instance_speedruns sr
+    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+    JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+    WHERE sr.guild_id = @guild_id :: uuid
+      AND sr.instance_name = @instance_name :: text
+      AND sr.ranked_duration_ms > 0
+      AND CASE
+          WHEN @since_days :: bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => @since_days::int)
+          ELSE true
+      END
+    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.qualified DESC, sr.ranked_duration_ms ASC
+),
+-- Every fight clipped to its clear's window, once in the "all" scope and,
+-- for boss fights, again in the "boss" scope.
+fights AS (
+    SELECT f.instance_id, scope.name AS scope, f.fight_start, f.fight_end
+    FROM (
+        SELECT
+            e.instance_id,
+            e.boss,
+            GREATEST(e.start_time, d.start_time) AS fight_start,
+            LEAST(e.end_time, d.completion_time) AS fight_end
+        FROM deduped d
+        JOIN log_instance_encounters e ON e.instance_id = d.instance_id
+    ) f
+    CROSS JOIN LATERAL (
+        SELECT 'all'::text AS name
+        UNION ALL
+        SELECT 'boss'::text WHERE f.boss
+    ) scope
+    WHERE f.fight_end > f.fight_start
+),
+-- A fight starts a new island when it begins after every earlier fight ended.
+marked AS (
+    SELECT
+        instance_id,
+        scope,
+        fight_start,
+        fight_end,
+        CASE WHEN fight_start <= MAX(fight_end) OVER (
+            PARTITION BY instance_id, scope
+            ORDER BY fight_start, fight_end
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) THEN 0 ELSE 1 END AS starts_island
+    FROM fights
+),
+islands AS (
+    SELECT
+        instance_id,
+        scope,
+        fight_start,
+        fight_end,
+        SUM(starts_island) OVER (PARTITION BY instance_id, scope ORDER BY fight_start, fight_end) AS island
+    FROM marked
+),
+covered AS (
+    SELECT
+        instance_id,
+        SUM(CASE WHEN scope = 'all' THEN island_ms ELSE -island_ms END) AS trash_ms
+    FROM (
+        SELECT instance_id, scope, EXTRACT(EPOCH FROM (MAX(fight_end) - MIN(fight_start))) * 1000 AS island_ms
+        FROM islands
+        GROUP BY instance_id, scope, island
+    ) merged
+    GROUP BY instance_id
+)
+SELECT
+    d.instance_id,
+    COALESCE(d.hashed_slug, '')::text AS slug,
+    d.qualified,
+    d.start_time,
+    d.completion_time,
+    d.duration_ms,
+    d.boss_to_boss_duration_ms,
+    (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = d.instance_id)::bigint AS player_count,
+    GREATEST(COALESCE(c.trash_ms, 0), 0)::bigint AS trash_duration_ms,
+    COALESCE(CASE WHEN tps.clear_server_status IN ('ok', 'low_confidence') THEN tps.clear_server_precise_score END, -1)::float8 AS clear_parse
+FROM deduped d
+LEFT JOIN covered c ON c.instance_id = d.instance_id
+LEFT JOIN time_parse_scores tps
+    ON tps.tenant_id = @tenant_id
+   AND tps.instance_id = d.instance_id
+   AND tps.lookback_days = @lookback_days::smallint
+   AND tps.policy_version = @policy_version::smallint
+   AND tps.query_version = @query_version::smallint
+ORDER BY d.completion_time ASC;
+
+-- name: GuildSpeedrunBossKills :many
+-- Returns the boss kills of the given instances in kill order, for the guild
+-- history page's per-boss splits. parse is the stored server-scope kill-time
+-- parse for the scoring contract given, or -1 when it is not computed or its
+-- sample was too small.
+SELECT
+    lie.instance_id,
+    lie.name AS encounter_name,
+    lie.end_time AS killed_at,
+    (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms,
+    COALESCE(CASE WHEN tpbs.server_status IN ('ok', 'low_confidence') THEN tpbs.server_precise_score END, -1)::float8 AS parse
+FROM log_instance_encounters lie
+LEFT JOIN time_parse_scores tps
+    ON tps.tenant_id = @tenant_id
+   AND tps.instance_id = lie.instance_id
+   AND tps.lookback_days = @lookback_days::smallint
+   AND tps.policy_version = @policy_version::smallint
+   AND tps.query_version = @query_version::smallint
+LEFT JOIN time_parse_boss_scores tpbs
+    ON tpbs.time_parse_score_id = tps.id
+   AND tpbs.encounter_id = lie.id
+WHERE lie.instance_id = ANY(@instance_ids :: uuid[])
+  AND lie.boss = true
+  AND lie.kill_type IN ('clean', 'partial')
+  AND lie.end_time > lie.start_time
+ORDER BY lie.instance_id, lie.end_time;
