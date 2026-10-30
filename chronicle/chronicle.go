@@ -905,6 +905,13 @@ func (c *Chronicle) WoWLogGroup(ctx context.Context, groupID uuid.UUID) (*chroni
 	}
 
 	sdkGroup := db2sdk.WoWLogGroupRow(group)
+	for i := range sdkGroup.Files {
+		parts, err := c.Zed.ListFinalizedLogFileParts(ctx, sdkGroup.Files[i].ID)
+		if err != nil {
+			return nil, fmt.Errorf("fetch finalized parts for log file %s: %w", sdkGroup.Files[i].ID, err)
+		}
+		sdkGroup.Files[i].Parts = slice.List(parts, db2sdk.WoWLogFilePart)
+	}
 	sdkGroup.Artifacts = slice.List(artifacts, db2sdk.WoWLogArtifact)
 	return &chroniclesdk.WoWLogGroupState{
 		WoWLogGroup: sdkGroup,

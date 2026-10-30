@@ -153,6 +153,55 @@ func TestLogFilePartSourceOrderingAndStaleRecovery(t *testing.T) {
 	require.Equal(t, []uuid.UUID{earlySource.ID, lateSource.ID, headerless.ID}, []uuid.UUID{ready[0].ID, ready[1].ID, ready[2].ID})
 }
 
+func TestListFinalizedLogFilePartsIncludesEveryReadyPart(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	fileID := insertPartFixture(t, ctx, store)
+
+	reserve := func(sourceSequence int64) database.LogFilePart {
+		var part database.LogFilePart
+		require.NoError(t, store.InTx(ctx, func(tx database.Store) error {
+			if _, err := tx.LockLogFilePartSequence(ctx, fileID); err != nil {
+				return err
+			}
+			var err error
+			part, err = tx.ReserveLogFilePart(ctx, database.ReserveLogFilePartParams{
+				PartID: uuid.New(), LogFileID: fileID, UploadID: uuid.New(), ReservationID: uuid.New(),
+				SourceSequence: pgtype.Int8{Int64: sourceSequence, Valid: true}, ObjectKey: "parts/" + uuid.NewString(),
+			})
+			return err
+		}, nil))
+		return part
+	}
+	finalize := func(part database.LogFilePart) {
+		_, err := store.FinalizeLogFilePart(ctx, database.FinalizeLogFilePartParams{
+			ID: part.ID, ReservationID: part.ReservationID,
+			Hash: pgtype.Text{String: uuid.NewString(), Valid: true}, SizeBytes: pgtype.Int8{Int64: 10, Valid: true},
+			CompressedSizeBytes: pgtype.Int8{Int64: 5, Valid: true}, ContentEncoding: pgtype.Text{String: "gzip", Valid: true},
+		})
+		require.NoError(t, err)
+	}
+
+	later := reserve(2)
+	earlierPending := reserve(1)
+	finalize(later)
+
+	parseReady, err := store.ListReadyLogFileParts(ctx, fileID)
+	require.NoError(t, err)
+	require.Empty(t, parseReady)
+
+	displayReady, err := store.ListFinalizedLogFileParts(ctx, fileID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{later.ID}, []uuid.UUID{displayReady[0].ID})
+
+	finalize(earlierPending)
+	displayReady, err = store.ListFinalizedLogFileParts(ctx, fileID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{earlierPending.ID, later.ID}, []uuid.UUID{displayReady[0].ID, displayReady[1].ID})
+}
+
 func TestLogFilePartReservationFencesExpiredUploader(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)

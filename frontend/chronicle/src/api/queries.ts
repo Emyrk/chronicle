@@ -11,6 +11,7 @@ import type {
   WoWLogGroup as WoWLogGroupGenerated, 
   WoWLogArtifact as WoWLogArtifactGenerated,
   WoWLogFile as WoWLogFileGenerated,
+  WoWLogFilePart as WoWLogFilePartGenerated,
   WoWLogGroupState as WoWLogGroupStateGenerated,
   JobStatus as JobStatusGenerated,
   RiverJobState as RiverJobStateGenerated,
@@ -95,6 +96,7 @@ import type {
 export type WoWLogGroup = WoWLogGroupGenerated;
 export type WoWLogArtifact = WoWLogArtifactGenerated;
 export type WoWLogFile = WoWLogFileGenerated;
+export type WoWLogFilePart = WoWLogFilePartGenerated;
 export type WoWLogGroupState = WoWLogGroupStateGenerated;
 export type JobStatus = JobStatusGenerated;
 export type RiverJobState = RiverJobStateGenerated;

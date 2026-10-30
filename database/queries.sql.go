@@ -11311,6 +11311,53 @@ func (q *sqlQuerier) GetLogFilePart(ctx context.Context, id uuid.UUID) (LogFileP
 	return i, err
 }
 
+const listFinalizedLogFileParts = `-- name: ListFinalizedLogFileParts :many
+SELECT id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at, counts_toward_user_limit
+FROM log_file_parts
+WHERE log_file_id = $1
+  AND status = 'ready'
+ORDER BY source_sequence IS NULL,
+         COALESCE(source_sequence, sequence),
+         sequence,
+         id
+`
+
+func (q *sqlQuerier) ListFinalizedLogFileParts(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error) {
+	rows, err := q.db.Query(ctx, listFinalizedLogFileParts, logFileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogFilePart
+	for rows.Next() {
+		var i LogFilePart
+		if err := rows.Scan(
+			&i.ID,
+			&i.LogFileID,
+			&i.Sequence,
+			&i.UploadID,
+			&i.ReservationID,
+			&i.SourceSequence,
+			&i.ObjectKey,
+			&i.Status,
+			&i.Hash,
+			&i.SizeBytes,
+			&i.CompressedSizeBytes,
+			&i.ContentEncoding,
+			&i.CreatedAt,
+			&i.FinalizedAt,
+			&i.CountsTowardUserLimit,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLogFilePartsForDeletion = `-- name: ListLogFilePartsForDeletion :many
 SELECT id, log_file_id, sequence, upload_id, reservation_id, source_sequence, object_key, status, hash, size_bytes, compressed_size_bytes, content_encoding, created_at, finalized_at, counts_toward_user_limit
 FROM log_file_parts

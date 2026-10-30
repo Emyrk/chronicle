@@ -67,6 +67,26 @@ func TestWoWLogGroupRowIncludesOwnerName(t *testing.T) {
 	require.Equal(t, "LogUploader", converted.OwnerName)
 }
 
+func TestWoWLogFilePart(t *testing.T) {
+	t.Parallel()
+
+	converted := WoWLogFilePart(database.LogFilePart{
+		Sequence:            3,
+		SourceSequence:      pgtype.Int8{Int64: 7, Valid: true},
+		Hash:                pgtype.Text{String: "part-hash", Valid: true},
+		SizeBytes:           pgtype.Int8{Int64: 100, Valid: true},
+		CompressedSizeBytes: pgtype.Int8{Int64: 40, Valid: true},
+		ContentEncoding:     pgtype.Text{String: "gzip", Valid: true},
+	})
+
+	require.Equal(t, int64(3), converted.Sequence)
+	require.Equal(t, int64(7), *converted.SourceSequence)
+	require.Equal(t, "part-hash", converted.Hash)
+	require.Equal(t, int64(100), converted.SizeBytes)
+	require.Equal(t, int64(40), *converted.CompressedSizeBytes)
+	require.Equal(t, "gzip", *converted.ContentEncoding)
+}
+
 func TestWoWEncounterIncludesMapID(t *testing.T) {
 	t.Parallel()
 

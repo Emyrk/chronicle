@@ -149,6 +149,33 @@ func WoWLogFile(file database.LogFile) chroniclesdk.WoWLogFile {
 	}
 }
 
+func WoWLogFilePart(part database.LogFilePart) chroniclesdk.WoWLogFilePart {
+	var sourceSequence *int64
+	if part.SourceSequence.Valid {
+		sourceSequence = &part.SourceSequence.Int64
+	}
+	var compressedSize *int64
+	if part.CompressedSizeBytes.Valid {
+		compressedSize = &part.CompressedSizeBytes.Int64
+	}
+	var contentEncoding *string
+	if part.ContentEncoding.Valid {
+		contentEncoding = &part.ContentEncoding.String
+	}
+
+	return chroniclesdk.WoWLogFilePart{
+		ID:                  part.ID,
+		Sequence:            part.Sequence,
+		SourceSequence:      sourceSequence,
+		Hash:                part.Hash.String,
+		SizeBytes:           part.SizeBytes.Int64,
+		CompressedSizeBytes: compressedSize,
+		ContentEncoding:     contentEncoding,
+		CreatedAt:           part.CreatedAt,
+		FinalizedAt:         part.FinalizedAt,
+	}
+}
+
 func WoWLogArtifact(artifact database.LogGroupArtifact) chroniclesdk.WoWLogArtifact {
 	var contentEncoding *string
 	if artifact.ContentEncoding.Valid {

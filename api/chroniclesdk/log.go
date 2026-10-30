@@ -70,6 +70,19 @@ type WoWLogFile struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	StorageDeletedAt    pgtype.Timestamptz `json:"storage_deleted_at,omitempty"`
+	Parts               []WoWLogFilePart   `json:"parts,omitempty"`
+}
+
+type WoWLogFilePart struct {
+	ID                  uuid.UUID          `json:"id"`
+	Sequence            int64              `json:"sequence"`
+	SourceSequence      *int64             `json:"source_sequence,omitempty"`
+	Hash                string             `json:"hash"`
+	SizeBytes           int64              `json:"size_bytes"`
+	CompressedSizeBytes *int64             `json:"compressed_size_bytes,omitempty"`
+	ContentEncoding     *string            `json:"content_encoding,omitempty"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	FinalizedAt         pgtype.Timestamptz `json:"finalized_at"`
 }
 
 type WoWLogArtifact struct {

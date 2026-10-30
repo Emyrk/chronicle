@@ -45,7 +45,7 @@ function buildCopy(action: ActivePendingAction): CopyResult {
   if (action.kind === "delete-raw") {
     const freed = action.groups.reduce((sum, g) => sum + activeQuotaBytes(g), 0);
     const body =
-      "Parsed reports will remain available. The original combat-log files will be permanently removed — " +
+      "Parsed reports will remain available. Every raw upload for each selected log, including the base file and all appended parts, will be permanently removed — " +
       "Chronicle will no longer be able to investigate parser issues or re-parse them later.";
     const note =
       action.excludedCount > 0

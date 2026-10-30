@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { WoWLogArtifact } from "@/api/queries";
-import { UploadedArtifactRow } from "./LogDetail";
+import type { WoWLogArtifact, WoWLogFile } from "@/api/queries";
+import { UploadedArtifactRow, UploadedLogFileRows } from "./LogDetail";
 
 const artifact: WoWLogArtifact = {
   id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
@@ -15,6 +15,45 @@ const artifact: WoWLogArtifact = {
   created_at: "2026-10-25T00:00:00Z",
   updated_at: "2026-10-25T00:00:00Z",
 };
+
+const logFile: WoWLogFile = {
+  id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+  owner: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+  wow_log_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  hash: "logical-hash",
+  size_bytes: 1300,
+  compressed_size_bytes: 620,
+  mime_type: "text/plain;charset=UTF-8",
+  content_encoding: "gzip",
+  created_at: "2026-10-25T00:00:00Z",
+  updated_at: "2026-10-25T00:00:00Z",
+  parts: [
+    {
+      id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+      sequence: 1,
+      source_sequence: 1,
+      hash: "part-hash",
+      size_bytes: 300,
+      compressed_size_bytes: 120,
+      content_encoding: "gzip",
+      created_at: "2026-10-25T01:00:00Z",
+      finalized_at: "2026-10-25T01:00:01Z",
+    },
+  ],
+};
+
+describe("UploadedLogFileRows", () => {
+  it("renders the base file and every appended part with one combined download", () => {
+    const markup = renderToStaticMarkup(
+      <UploadedLogFileRows logId={logFile.wow_log_id} file={logFile} canDownloadFiles />,
+    );
+
+    expect(markup).toContain("Combat log · Base file");
+    expect(markup).toContain("Combat log · Append 1");
+    expect(markup.match(/\/download/g)).toHaveLength(1);
+    expect(markup).toContain("Download combined combat log");
+  });
+});
 
 describe("UploadedArtifactRow", () => {
   it("shows the artifact and download link with raw-log download permission", () => {

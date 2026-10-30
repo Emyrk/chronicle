@@ -5494,6 +5494,20 @@ export interface WoWLogFile {
     readonly created_at: string;
     readonly updated_at: string;
     readonly storage_deleted_at?: string;
+    readonly parts?: readonly WoWLogFilePart[];
+}
+
+// From chroniclesdk/log.go
+export interface WoWLogFilePart {
+    readonly id: string;
+    readonly sequence: number;
+    readonly source_sequence?: number;
+    readonly hash: string;
+    readonly size_bytes: number;
+    readonly compressed_size_bytes?: number;
+    readonly content_encoding?: string;
+    readonly created_at: string;
+    readonly finalized_at: string;
 }
 
 // From chroniclesdk/log.go

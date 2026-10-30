@@ -61,7 +61,8 @@ import {
   getLogGroupRefetchInterval,
   type WoWLogGroupState, 
   type WoWLogArtifact,
-  type WoWLogFile, 
+  type WoWLogFile,
+  type WoWLogFilePart,
   type RiverJobState,
   type WoWParsedLogJobOutput,
   type WoWEncounter,
@@ -127,6 +128,97 @@ export function UploadedArtifactRow({ logId, artifact, canDownloadFiles }: Uploa
         )}
       </div>
     </div>
+  );
+}
+
+function storedPartBytes(part: WoWLogFilePart): number {
+  return part.compressed_size_bytes ?? part.size_bytes;
+}
+
+function baseFileSizes(file: WoWLogFile): { originalBytes: number; storedBytes: number } {
+  const parts = file.parts ?? [];
+  const appendedOriginal = parts.reduce((sum, part) => sum + part.size_bytes, 0);
+  const appendedStored = parts.reduce((sum, part) => sum + storedPartBytes(part), 0);
+  return {
+    originalBytes: Math.max(0, file.size_bytes - appendedOriginal),
+    storedBytes: file.compressed_size_bytes == null
+      ? Math.max(0, file.size_bytes - appendedOriginal)
+      : Math.max(0, file.compressed_size_bytes - appendedStored),
+  };
+}
+
+interface UploadedLogFileRowsProps {
+  logId: string;
+  file: WoWLogFile;
+  canDownloadFiles: boolean;
+}
+
+export function UploadedLogFileRows({ logId, file, canDownloadFiles }: UploadedLogFileRowsProps) {
+  const parts = file.parts ?? [];
+  const base = baseFileSizes(file);
+  const deleted = !!file.storage_deleted_at;
+
+  const sizeDetails = (originalBytes: number, storedBytes: number, createdAt: unknown) => (
+    <div className="text-right text-sm text-muted-foreground whitespace-nowrap">
+      <p className="text-xs">
+        <span className="text-muted-foreground/70">Original:</span> {formatBytes(originalBytes)}
+      </p>
+      <p>
+        <span className="text-muted-foreground/70">Stored:</span> {formatBytes(storedBytes)}
+      </p>
+      <p className="hidden text-xs sm:block">{formatDate(createdAt)}</p>
+      {file.storage_deleted_at && (
+        <p className="text-xs text-destructive">Deleted: {formatDate(file.storage_deleted_at)}</p>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      <div className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border ${deleted ? "opacity-60" : ""}`}>
+        <div className="flex items-center gap-3 min-w-0">
+          <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <p className="font-medium text-sm">Combat log · Base file</p>
+            <p className="text-xs text-muted-foreground truncate">
+              {file.mime_type || "unknown type"} · {file.id.slice(0, 8)}
+            </p>
+          </div>
+        </div>
+        <div className="ml-auto flex items-center gap-3">
+          {sizeDetails(base.originalBytes, base.storedBytes, file.created_at)}
+          {canDownloadFiles && !deleted && (
+            <a href={`/api/v1/raidlogs/logs/${logId}/files/${file.id}/download`} download>
+              <Button variant="outline" size="sm" title="Download combined combat log">
+                <Download className="h-4 w-4" />
+              </Button>
+            </a>
+          )}
+        </div>
+      </div>
+      {parts.map((part) => {
+        const partNumber = part.source_sequence ?? part.sequence;
+        return (
+          <div
+            key={part.id}
+            className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border ${deleted ? "opacity-60" : ""}`}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="font-medium text-sm">Combat log · Append {partNumber}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {part.content_encoding === "gzip" ? "application/gzip" : "text/plain"} · {part.id.slice(0, 8)}
+                </p>
+              </div>
+            </div>
+            <div className="ml-auto flex items-center gap-3">
+              {sizeDetails(part.size_bytes, storedPartBytes(part), part.finalized_at)}
+            </div>
+          </div>
+        );
+      })}
+    </>
   );
 }
 
@@ -1568,7 +1660,7 @@ export function LogDetailView({
                   ) : (
                     <>
                       <Trash2 className="h-4 w-4 mr-2" />
-                      Delete Files
+                      Delete All Files
                     </>
                   )}
                 </Button>
@@ -1579,7 +1671,7 @@ export function LogDetailView({
             {canDeleteFiles && hasStoredUploadedData && (
               <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                 <p className="text-sm text-amber-200">
-                  <strong>Before deleting:</strong> These are your raw combat log files and upload artifacts. Chronicle stores a compressed version of the parsed data, but if there are any parsing errors or missing data, the uploaded files are needed to investigate and re-parse.
+                  <strong>Before deleting:</strong> This action removes every raw upload in this log, including the base file, all appended parts, and upload artifacts. Chronicle stores a compressed version of the parsed data, but if there are any parsing errors or missing data, the uploaded files are needed to investigate and re-parse.
                 </p>
                 <p className="text-sm text-amber-200/80 mt-2">
                   Only delete if:
@@ -1595,52 +1687,12 @@ export function LogDetailView({
               {hasUploadedData ? (
                 <>
                   {uploadedFiles.map((file: WoWLogFile) => (
-                    <div
+                    <UploadedLogFileRows
                       key={file.id}
-                      className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border ${file.storage_deleted_at ? "opacity-60" : ""}`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
-                        <div className="min-w-0">
-                          <p className="font-medium text-sm">Combat log</p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {file.mime_type || "unknown type"} · {file.id.slice(0, 8)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="ml-auto flex items-center gap-3">
-                        <div className="text-right text-sm text-muted-foreground whitespace-nowrap">
-                          {file.compressed_size_bytes != null ? (
-                            <>
-                              <p className="text-xs">
-                                <span className="text-muted-foreground/70">Original:</span> {formatBytes(file.size_bytes)}
-                              </p>
-                              <p>
-                                <span className="text-muted-foreground/70">Stored:</span> {formatBytes(file.compressed_size_bytes)}
-                              </p>
-                            </>
-                          ) : (
-                            <p>{formatBytes(file.size_bytes)}</p>
-                          )}
-                          <p className="hidden text-xs sm:block">{formatDate(file.created_at)}</p>
-                          {file.storage_deleted_at && (
-                            <p className="text-xs text-destructive">
-                              Deleted: {formatDate(file.storage_deleted_at)}
-                            </p>
-                          )}
-                        </div>
-                        {canDownloadFiles && !file.storage_deleted_at && (
-                          <a
-                            href={`/api/v1/raidlogs/logs/${log.id}/files/${file.id}/download`}
-                            download
-                          >
-                            <Button variant="outline" size="sm" title="Download combat log">
-                              <Download className="h-4 w-4" />
-                            </Button>
-                          </a>
-                        )}
-                      </div>
-                    </div>
+                      logId={log.id}
+                      file={file}
+                      canDownloadFiles={canDownloadFiles}
+                    />
                   ))}
                   {uploadedArtifacts.map((artifact: WoWLogArtifact) => (
                     <UploadedArtifactRow

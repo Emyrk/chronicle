@@ -101,6 +101,16 @@ ORDER BY part.source_sequence IS NULL,
          part.sequence,
          part.id;
 
+-- name: ListFinalizedLogFileParts :many
+SELECT *
+FROM log_file_parts
+WHERE log_file_id = @log_file_id
+  AND status = 'ready'
+ORDER BY source_sequence IS NULL,
+         COALESCE(source_sequence, sequence),
+         sequence,
+         id;
+
 -- name: ListLogFilePartsForDeletion :many
 SELECT *
 FROM log_file_parts
