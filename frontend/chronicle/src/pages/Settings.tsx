@@ -280,7 +280,7 @@ export function ProfileSettings() {
   };
 
   const switchToDiscordAccount = async () => {
-    await fetch("/auth/logout");
+    await fetch("/auth/logout", { method: "POST" });
     clearInstanceDefaultsCache();
     // OAuth runs on the main domain; tenants pass a full URL so it relays back.
     window.location.href = siteConfig?.tenant && siteConfig.access_url
