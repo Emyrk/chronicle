@@ -25,6 +25,32 @@ func main() {
 	}
 }
 
+func parseAccessURL(raw string) (*url.URL, error) {
+	accessURL, err := url.Parse(raw)
+	if err != nil || (accessURL.Scheme != "https" && accessURL.Scheme != "http") || accessURL.Host == "" || accessURL.User != nil || (accessURL.Path != "" && accessURL.Path != "/") || accessURL.RawQuery != "" || accessURL.Fragment != "" {
+		return nil, errors.New("CHRONICLE_ACCESS_URL must be an HTTP(S) origin")
+	}
+	return accessURL, nil
+}
+
+func listenerAddresses() (string, string, error) {
+	publicAddr := os.Getenv("LIVESESSION_PUBLIC_ADDR")
+	if publicAddr == "" {
+		publicAddr = ":8080"
+		if port := os.Getenv("PORT"); port != "" {
+			publicAddr = net.JoinHostPort("", port)
+		}
+	}
+	privateAddr := os.Getenv("LIVESESSION_PRIVATE_ADDR")
+	if privateAddr == "" {
+		privateAddr = ":8081"
+	}
+	if publicAddr == privateAddr {
+		return "", "", errors.New("public and private listeners must use different addresses")
+	}
+	return publicAddr, privateAddr, nil
+}
+
 func run() error {
 	secret := os.Getenv("LIVESESSION_INTERNAL_SECRET")
 	if secret == "" {
@@ -46,20 +72,13 @@ func run() error {
 		}
 		patterns[i] = pattern
 	}
-	accessURL, err := url.Parse(os.Getenv("CHRONICLE_ACCESS_URL"))
-	if err != nil || accessURL.Scheme == "" || accessURL.Host == "" {
-		return errors.New("CHRONICLE_ACCESS_URL must be an absolute URL")
+	accessURL, err := parseAccessURL(os.Getenv("CHRONICLE_ACCESS_URL"))
+	if err != nil {
+		return err
 	}
-	publicAddr := os.Getenv("LIVESESSION_PUBLIC_ADDR")
-	if publicAddr == "" {
-		publicAddr = ":8080"
-	}
-	privateAddr := os.Getenv("LIVESESSION_PRIVATE_ADDR")
-	if privateAddr == "" {
-		privateAddr = "127.0.0.1:8081"
-	}
-	if publicAddr == privateAddr {
-		return errors.New("public and private listeners must use different addresses")
+	publicAddr, privateAddr, err := listenerAddresses()
+	if err != nil {
+		return err
 	}
 	publicListener, err := net.Listen("tcp", publicAddr)
 	if err != nil {
@@ -76,8 +95,18 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go service.RunCleanup(ctx, time.Minute)
-	public := &http.Server{Handler: service.PublicHandler(), ReadHeaderTimeout: 5 * time.Second}
-	private := &http.Server{Handler: service.PrivateHandler(secret), ReadHeaderTimeout: 5 * time.Second}
+	public := &http.Server{
+		Handler:           service.PublicHandler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+	private := &http.Server{
+		Handler:           service.PrivateHandler(secret),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 	errorsCh := make(chan error, 2)
 	go func() { errorsCh <- public.Serve(publicListener) }()
 	go func() { errorsCh <- private.Serve(privateListener) }()

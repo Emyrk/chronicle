@@ -12,10 +12,11 @@ Environment:
   No catch-all `*`. Include scheme and port when applicable.
 - `CHRONICLE_ACCESS_URL` (required): base URL of the main Chronicle site,
   used to build the share link in the create response.
-- `LIVESESSION_PUBLIC_ADDR` (default `:8080`): public listener, expose only
-  `/healthz` and `GET /api/v1/live-sessions/{code}/ws?token=...`.
-- `LIVESESSION_PRIVATE_ADDR` (default `127.0.0.1:8081`): private listener,
-  bind to the backend-reachable private interface. Never publish it publicly.
+- `LIVESESSION_PUBLIC_ADDR` (default `:$PORT` when Railway provides `PORT`,
+  otherwise `:8080`): public listener, expose only `/healthz` and
+  `GET /api/v1/live-sessions/{code}/ws?token=...`.
+- `LIVESESSION_PRIVATE_ADDR` (default `:8081`): private listener, reachable
+  from the backend over the platform's private network. Never publish it publicly.
 
 The backend calls `POST /internal/live-sessions` with the JSON
 `CreateLiveSessionRequest` (`instance_id`, optional `password`) and
@@ -42,6 +43,21 @@ configured origin to `connect-src`. Configure `LIVESESSION_ALLOWED_ORIGINS` to
 include every Chronicle site origin used by guests. If the backend settings are
 absent, the old process-local signaling mode remains available for single-node
 development; **do not run multiple API replicas in that mode**.
+
+## Railway rollout
+
+1. Create a `livesessiond` service from the `emyrk/livesessiond:latest` image and
+   keep it at exactly one replica.
+2. Generate a public domain for the service's `PORT` listener and configure the
+   health check path as `/healthz`.
+3. Set `LIVESESSION_PRIVATE_ADDR=:8081`; Railway private networking can then
+   reach it at `http://livesessiond.railway.internal:8081` when the service is
+   named `livesessiond`.
+4. Set the required daemon variables above. Use the same strong generated secret
+   for `LIVESESSION_INTERNAL_SECRET` and the backend's
+   `CHRONICLE_LIVE_SIGNALING_SECRET`.
+5. Verify the public health check and private create/join connectivity before
+   setting the three backend signaling variables and redeploying `chronicled`.
 
 Deploy the singleton daemon first, ensure its public and private listeners are
 reachable from their respective clients, and then enable all three backend
