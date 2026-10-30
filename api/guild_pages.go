@@ -226,8 +226,12 @@ func (api *API) GetGuild(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if page exists
-	_, pageErr := api.Opts.Zed.GetGuildPage(ctx, guildID)
+	page, pageErr := api.Opts.Zed.GetGuildPage(ctx, guildID)
 	hasPage := pageErr == nil
+	var theme chroniclesdk.GuildPageTheme
+	if hasPage {
+		_ = json.Unmarshal(page.Theme, &theme)
+	}
 
 	// Check if user can edit
 	canEdit := false
@@ -241,6 +245,7 @@ func (api *API) GetGuild(w http.ResponseWriter, r *http.Request) {
 		RealmID:   guild.RealmID,
 		RealmName: guild.RealmName,
 		HasPage:   hasPage,
+		LogoURL:   theme.LogoURL,
 		CanEdit:   canEdit,
 	})
 }
