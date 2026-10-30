@@ -8,8 +8,7 @@ import s from "./Download.module.css";
 const FONTS_URL =
   "https://fonts.googleapis.com/css2?family=Young+Serif&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap";
 
-// TODO: swap for the Sidekick logo once it exists.
-const SIDEKICK_LOGO = "/c/chronicle/ChronicleIconSquare.webp";
+const SIDEKICK_LOGO = "/c/chronicle/SidekickLogo.webp";
 
 // Sidekick's tray state colors (chronicle-sidekick icons.go).
 const STATES = [
