@@ -76,7 +76,7 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
     return urls
   }, [panel])
   useEffect(() => () => { for (const url of assetUrls.values()) URL.revokeObjectURL(url) }, [assetUrls])
-  return <div className="flex h-full flex-col rounded-lg border border-border bg-card text-card-foreground">
+  return <div data-panel-explorer-host className="relative flex h-full flex-col rounded-lg border border-border bg-card text-card-foreground">
     <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm">
       <span className="truncate font-semibold">{panel?.name ?? "Module"} <span className="text-xs text-muted-foreground">({ref?.channel})</span></span>
       <PanelSelector value={props.panelType} onChange={props.onPanelTypeChange} />
