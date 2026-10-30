@@ -99,9 +99,10 @@ const CLEAR_SORTS: readonly { value: ClearSortKey; label: string; title: string 
 ];
 
 const PART_ROWS = [
-  { key: "bossMs", label: "Boss" },
-  { key: "trashMs", label: "Trash" },
-  { key: "idleMs", label: "Idle" },
+  { key: "fullMs", label: "Full clear", help: "The whole clear, from first pull to last boss kill." },
+  { key: "bossMs", label: "Boss", help: PART_HELP.boss },
+  { key: "trashMs", label: "Trash", help: PART_HELP.trash },
+  { key: "idleMs", label: "Idle", help: PART_HELP.idle },
 ] as const;
 
 /** Every clear split into boss, trash and idle time: as one bar per clear, or as a box plot per part. */
@@ -117,7 +118,7 @@ function ClearByClear({ guilds }: { guilds: readonly BossSplitGuild[] }) {
           title="Clear by clear"
           description={view === "bars"
             ? "One bar per clear, to see which part made a night fast or slow."
-            : "How much each part swings from clear to clear. A wide box is a part that is hard to keep steady."}
+            : "How much the full clear and each part swing from clear to clear. A wide box is something that is hard to keep steady."}
         />
         <div className="flex flex-wrap items-center gap-2">
           {view === "bars" && <SortButtons sort={sort} onChange={setSort} />}
@@ -289,10 +290,13 @@ function SortButtons({ sort, onChange }: { sort: ClearSort; onChange: (sort: Cle
   );
 }
 
-/** One row per part, a lane per guild, on one axis from zero. */
+/** The full clear, then one row per part, a lane per guild, on one axis from zero. */
 function PartsBoxPlot({ guilds }: { guilds: readonly BossSplitGuild[] }) {
   const stats = guilds.map((guild) => {
-    const parts = guild.runs.filter((run) => run.bosses.length > 0).map(clearTimeParts);
+    const parts = guild.runs.filter((run) => run.bosses.length > 0).map((run) => {
+      const split = clearTimeParts(run);
+      return { ...split, fullMs: partsTotal(split) };
+    });
     return Object.fromEntries(PART_ROWS.map(({ key }) => {
       const values = parts.map((part) => part[key]).sort((a, b) => a - b);
       return [key, values.length > 0 ? { ...boxStats(values), values } : undefined];
@@ -323,12 +327,12 @@ function PartsBoxPlot({ guilds }: { guilds: readonly BossSplitGuild[] }) {
             ))}
           </div>
         </div>
-        {PART_ROWS.map(({ key, label }) => {
+        {PART_ROWS.map(({ key, label, help }) => {
           const medians = stats.flatMap((byPart) => byPart[key] ? [byPart[key].median] : []);
           const fastest = Math.min(...medians);
           return (
             <div key={key} className="grid grid-cols-[5rem_5rem_minmax(16rem,1fr)] items-center gap-x-3 border-b border-border/40 py-1.5 last:border-0">
-              <span className="px-1 text-sm font-medium" title={PART_HELP[label.toLowerCase() as keyof typeof PART_HELP]}>{label}</span>
+              <span className="px-1 text-sm font-medium" title={help}>{label}</span>
               <div className="space-y-0.5">
                 {guilds.map((guild, index) => {
                   const part = stats[index][key];

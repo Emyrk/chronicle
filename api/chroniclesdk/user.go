@@ -20,6 +20,8 @@ type Session struct {
 	Preferences          Preferences `json:"preferences"`
 	// AdsFree indicates that authorization grants the user an ad-free experience.
 	AdsFree bool `json:"ads_free"`
+	// SupporterTier is the user's highest supporter tier: "free", "honored", "revered", or "exalted".
+	SupporterTier string `json:"supporter_tier"`
 	// CanDownloadRawLogs indicates that authorization permits downloading original combat log files.
 	CanDownloadRawLogs bool `json:"can_download_raw_logs"`
 	// Email is the user's email address (if available).

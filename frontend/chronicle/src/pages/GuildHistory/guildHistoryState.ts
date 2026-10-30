@@ -33,7 +33,7 @@ export const DEFAULT_GUILD_HISTORY_STATE: GuildHistoryState = {
   part: "",
   dateRange: "180d",
   includeUnqualified: false,
-  tab: "runs",
+  tab: "bosses",
 };
 
 export const GUILD_HISTORY_RANGE_DAYS: Record<GuildHistoryDateRange, number> = { "180d": 180, "60d": 60, "30d": 30 };
@@ -53,7 +53,7 @@ export function parseGuildHistoryState(params: URLSearchParams): GuildHistorySta
     part: part === "boss" || part === "trash" || part === "idle" ? part : "",
     dateRange: range === "60d" || range === "30d" ? range : "180d",
     includeUnqualified: params.get("unqualified") === "1",
-    tab: tab === "bosses" ? "bosses" : "runs",
+    tab: tab === "runs" ? "runs" : "bosses",
   };
 }
 
@@ -71,6 +71,6 @@ export function serializeGuildHistoryState(state: GuildHistoryState): URLSearchP
   else if (state.part) params.set("part", state.part);
   if (state.dateRange !== "180d") params.set("range", state.dateRange);
   if (state.includeUnqualified) params.set("unqualified", "1");
-  if (state.tab !== "runs") params.set("tab", state.tab);
+  if (state.tab !== "bosses") params.set("tab", state.tab);
   return params;
 }

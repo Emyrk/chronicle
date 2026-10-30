@@ -47,22 +47,32 @@ func TestWhoAmIAuthenticated(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	handler := (&API{Zed: zed, Opts: &Options{Zed: zed}}).WhoAmI
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/whoami", nil)
-	request = request.WithContext(chronauth.WithClaims(request.Context(), &claims.Claims{
-		Subject:   userID,
-		SessionID: sessionID,
-		Provider:  "test",
-	}))
-	response := httptest.NewRecorder()
+	whoami := func() chroniclesdk.Session {
+		handler := (&API{Zed: zed, Opts: &Options{Zed: zed}}).WhoAmI
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/whoami", nil)
+		request = request.WithContext(chronauth.WithClaims(request.Context(), &claims.Claims{
+			Subject:   userID,
+			SessionID: sessionID,
+			Provider:  "test",
+		}))
+		response := httptest.NewRecorder()
 
-	handler(response, request)
+		handler(response, request)
 
-	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	var session chroniclesdk.Session
-	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &session))
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		var session chroniclesdk.Session
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &session))
+		return session
+	}
+
+	session := whoami()
 	require.Equal(t, userID, session.UserID)
 	require.Equal(t, sessionID, session.SessionID)
+	require.Equal(t, "free", session.SupporterTier)
+
+	// The highest granted tier wins.
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"honored", "revered"}))
+	require.Equal(t, "revered", whoami().SupporterTier)
 }
 
 func TestUpdateMyPreferencesCharacterCosmetics(t *testing.T) {

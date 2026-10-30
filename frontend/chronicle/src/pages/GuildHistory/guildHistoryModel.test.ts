@@ -157,7 +157,7 @@ describe("formatting", () => {
 describe("guild history URL state", () => {
   it("round-trips and leaves defaults out", () => {
     expect(serializeGuildHistoryState(DEFAULT_GUILD_HISTORY_STATE).toString()).toBe("");
-    const state = { ...DEFAULT_GUILD_HISTORY_STATE, guildIds: ["a", "b"], hiddenGuildIds: ["b"], instanceName: "Molten Core", timing: "boss" as const, display: "parse" as const, boss: "Ragnaros", part: "" as const, tab: "bosses" as const };
+    const state = { ...DEFAULT_GUILD_HISTORY_STATE, guildIds: ["a", "b"], hiddenGuildIds: ["b"], instanceName: "Molten Core", timing: "boss" as const, display: "parse" as const, boss: "Ragnaros", part: "" as const, tab: "runs" as const };
     expect(parseGuildHistoryState(serializeGuildHistoryState(state))).toEqual(state);
   });
 });

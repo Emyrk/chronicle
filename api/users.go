@@ -12,6 +12,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -50,17 +51,30 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 	permissions, err := a.Zed.Check(ctx, nil,
 		chronicle.CanAd_free_User(actor),
 		chronicle.CanDownload_raw_logs_User(actor),
+		chronicle.CanHas_exalted_User(actor),
+		chronicle.CanHas_revered_User(actor),
+		chronicle.CanHas_honored_User(actor),
 	)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	if len(permissions) != 2 {
-		httpapi.InternalServerError(w, fmt.Errorf("check whoami permissions: expected 2 results, got %d", len(permissions)))
+	if len(permissions) != 5 {
+		httpapi.InternalServerError(w, fmt.Errorf("check whoami permissions: expected 5 results, got %d", len(permissions)))
 		return
 	}
 	adsFree := permissions[0]
 	canDownloadRawLogs := permissions[1]
+	// Highest supporter tier wins; the tier permissions include both manual and Stripe grants.
+	supporterTier := billing.TierFree
+	switch {
+	case permissions[2]:
+		supporterTier = billing.TierExalted
+	case permissions[3]:
+		supporterTier = billing.TierRevered
+	case permissions[4]:
+		supporterTier = billing.TierHonored
+	}
 
 	sess := chroniclesdk.Session{
 		UserID:               claims.Subject,
@@ -71,6 +85,7 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 		Preferences:          userPreferences(user),
 		CanDownloadRawLogs:   canDownloadRawLogs,
 		AdsFree:              adsFree,
+		SupporterTier:        supporterTier,
 		Email:                user.Email,
 		AuthProvider:         claims.Provider,
 		CreatedAt:            user.CreatedAt.Time,
