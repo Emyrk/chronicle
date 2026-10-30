@@ -80,6 +80,7 @@ const MapGalleryPage = lazy(() => import("./pages/Technical").then(({ MapGallery
 const MiniaturesPage = lazy(() => import("./pages/Technical").then(({ MiniaturesPage }) => ({ default: MiniaturesPage })))
 const AccountLayout = lazy(() => import("./pages/Settings").then(({ AccountLayout }) => ({ default: AccountLayout })))
 const ProfileSettings = lazy(() => import("./pages/Settings").then(({ ProfileSettings }) => ({ default: ProfileSettings })))
+const PurgeAccount = lazy(() => import("./pages/Settings/PurgeAccount").then(({ PurgeAccount }) => ({ default: PurgeAccount })))
 const BillingSettings = lazy(() => import("./pages/Settings").then(({ BillingSettings }) => ({ default: BillingSettings })))
 const CharacterSettings = lazy(() => import("./pages/Settings").then(({ CharacterSettings }) => ({ default: CharacterSettings })))
 const StorageSettings = lazy(() => import("./pages/Settings").then(({ StorageSettings }) => ({ default: StorageSettings })))
@@ -314,6 +315,7 @@ function App() {
         <Route path="/account" element={<AccountLayout />}>
           <Route index element={<Navigate to="/account/settings" replace />} />
           <Route path="settings" element={<ProfileSettings />} />
+          <Route path="purge" element={<PurgeAccount />} />
           <Route path="billing" element={<BillingSettings />} />
           <Route path="characters" element={<CharacterSettings />} />
           <Route path="storage" element={<StorageSettings />} />

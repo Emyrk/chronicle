@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/chronicle/custompanel"
 	"github.com/Emyrk/chronicle/chronicle/guildanalytics"
 	"github.com/Emyrk/chronicle/chronicle/retention"
@@ -108,6 +109,13 @@ func (s *Service) Start(ctx context.Context) error {
 	riverqueue.AddWorker(q, chron.NewWorkerLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerReLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerRegressionSnapshot())
+	var leaveDiscordGuild func(string) error
+	if !bot.Disabled() {
+		leaveDiscordGuild = bot.LeaveGuild
+	}
+	riverqueue.AddWorker(q, chron.NewWorkerAccountPurge(leaveDiscordGuild, func(ctx context.Context, purge chronicle.AccountPurgeNotification) error {
+		return chroniclebot.EnqueueAdminNotification(ctx, q, bot, accountPurgeNotificationArgs(purge))
+	}))
 	if !bot.Disabled() {
 		bot.SetQueue(q)
 		riverqueue.AddWorker(q, bot.NewWorkerSyncDiscordUser())

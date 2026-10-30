@@ -6,7 +6,8 @@ INSERT INTO oauth_relay_codes (
   tenant_slug,
   tenant_name,
   redirect_path,
-  expires_at
+  expires_at,
+  linked_id
 ) VALUES (
   @code_hash,
   @user_auth_session_id,
@@ -14,7 +15,8 @@ INSERT INTO oauth_relay_codes (
   @tenant_slug,
   @tenant_name,
   @redirect_path,
-  @expires_at
+  @expires_at,
+  @linked_id
 );
 
 -- name: RedeemOAuthRelayCode :one
@@ -27,7 +29,8 @@ WITH redeemed AS (
     tenant_slug,
     tenant_name,
     redirect_path,
-    expires_at
+    expires_at,
+    linked_id
 )
 SELECT
   sqlc.embed(user_auth_session),
@@ -35,7 +38,8 @@ SELECT
   redeemed.tenant_slug,
   redeemed.tenant_name,
   redeemed.redirect_path,
-  redeemed.expires_at AS relay_expires_at
+  redeemed.expires_at AS relay_expires_at,
+  redeemed.linked_id
 FROM redeemed
 JOIN user_auth_session ON user_auth_session.id = redeemed.user_auth_session_id;
 

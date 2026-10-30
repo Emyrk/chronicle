@@ -2,6 +2,41 @@
 
 import type { GUID } from "@/lib/guid/guid";
 
+// From chroniclesdk/account.go
+export interface AccountDataCount {
+    readonly group_key: string;
+    readonly label: string;
+    readonly count: number;
+}
+
+// From chroniclesdk/account.go
+/**
+ * AccountPurgeConfirmation is the phrase a user types to start an account purge.
+ */
+export const AccountPurgeConfirmation = "PURGE MY ACCOUNT";
+
+// From chroniclesdk/account.go
+export interface AccountPurgeInventory {
+    readonly data: readonly AccountDataCount[];
+    readonly blockers: readonly string[];
+    readonly active_purge?: AccountPurgeStatus;
+    /**
+     * RecentSignInUntil is when the current sign-in becomes too old to start a
+     * purge. After it passes, the user must sign out and back in.
+     */
+    readonly recent_sign_in_until: string;
+}
+
+// From chroniclesdk/account.go
+export interface AccountPurgeStatus {
+    readonly id: string;
+    readonly status: string;
+    readonly step: string;
+    readonly logs_total: number;
+    readonly logs_deleted: number;
+    readonly error: string;
+}
+
 // From chroniclesdk/panel_layout.go
 export interface ActionBarSlotsResponse {
     readonly slot_1: string | null;
@@ -3994,6 +4029,10 @@ export interface Session {
      */
     readonly auth_provider: string;
     /**
+     * AuthProviders lists every sign-in method linked to this account.
+     */
+    readonly auth_providers: readonly string[];
+    /**
      * CreatedAt is when the user's account was created.
      */
     readonly created_at: string;
@@ -4592,6 +4631,15 @@ export interface SpeedrunVersionStatus {
     readonly addon_version: string;
     readonly min_addon_version: string;
     readonly addon_qualified: boolean;
+}
+
+// From chroniclesdk/account.go
+export interface StartAccountPurgeRequest {
+    /**
+     * AcknowledgedGroups must include every group_key in the inventory.
+     */
+    readonly acknowledged_groups: readonly string[];
+    readonly confirmation: string;
 }
 
 // From chroniclesdk/supported_instance.go

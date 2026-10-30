@@ -17,7 +17,7 @@ type sessionContextKey struct{}
 func TestDevCookieStoreDoesNotRequireSecureTransport(t *testing.T) {
 	t.Parallel()
 
-	store := newCookieStore(false)
+	store := testCookieStore(t)
 	req := httptest.NewRequest("GET", "http://localhost:4000", nil)
 	res := httptest.NewRecorder()
 

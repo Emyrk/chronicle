@@ -2,6 +2,7 @@ package chronauth
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -10,7 +11,9 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/gorilla/sessions"
 )
 
 type authContextKey struct{}
@@ -52,7 +55,21 @@ func bearerToken(r *http.Request) string {
 	return ""
 }
 
-// AuthenticationMiddleware should avoid hitting the database.
+func (s *Service) validateCurrentSession(ctx context.Context, c *claims.Claims) error {
+	_, err := s.Zed.GetCurrentUserAuthSession(ctx, database.GetCurrentUserAuthSessionParams{
+		SessionID:  c.SessionID,
+		UserID:     c.Subject,
+		UserAuthID: c.UserAuthID,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotAuthorized
+	}
+	return err
+}
+
+// AuthenticationMiddleware validates both the signed token and its current
+// database session. The database check makes logout and account deletion
+// revoke already-issued JWTs immediately.
 func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// An earlier authentication middleware, such as service OAuth, may have
@@ -74,13 +91,19 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 				}))
 				return
 			}
+			if err := s.validateCurrentSession(r.Context(), &c); err != nil {
+				next.ServeHTTP(w, withState(r, &AuthenticationContext{
+					Error: fmt.Errorf("revoked bearer token: %w", err),
+				}))
+				return
+			}
 			next.ServeHTTP(w, withState(r, &AuthenticationContext{
 				Claims: &c,
 			}))
 			return
 		}
 
-		auth, err := s.Store.Get(r, AuthSessionName)
+		auth, err := s.authSession(w, r)
 		if err != nil {
 			_ = s.Logout(w, r)
 			next.ServeHTTP(w, withState(r, &AuthenticationContext{
@@ -115,6 +138,13 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 			}))
 			return
 		}
+		if err := s.validateCurrentSession(r.Context(), &c); err != nil {
+			_ = s.Logout(w, r)
+			next.ServeHTTP(w, withState(r, &AuthenticationContext{
+				Error: fmt.Errorf("revoked session: %w", err),
+			}))
+			return
+		}
 
 		expiringDuration := time.Hour * 24
 		lifespan := c.Expiry.Time().Sub(c.NotBefore.Time())
@@ -145,7 +175,7 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 // cookie. Used by the token-dump endpoint so users can extract a token for
 // CLI / programmatic use. Returns ErrNotAuthorized if no session JWT exists.
 func (s *Service) RawSessionJWT(r *http.Request) (string, error) {
-	auth, err := s.Store.Get(r, AuthSessionName)
+	auth, err := s.authSession(nil, r)
 	if err != nil {
 		return "", err
 	}
@@ -212,4 +242,30 @@ func (s *Service) Authenticated(optional bool) func(next http.Handler) http.Hand
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// authSession reads the session cookie. A cookie signed with the old public
+// cookie key is accepted once and, when w is set, re-saved with the current
+// key. That grants nothing a forger could use: the JWT inside is still
+// verified with its own key.
+func (s *Service) authSession(w http.ResponseWriter, r *http.Request) (*sessions.Session, error) {
+	auth, err := s.Store.Get(r, AuthSessionName)
+	if err == nil || s.legacyStore == nil {
+		return auth, err
+	}
+	// New decodes without the per-request registry, which cached the failure.
+	legacy, legacyErr := s.legacyStore.New(r, AuthSessionName)
+	if legacyErr != nil || legacy.IsNew {
+		return auth, err
+	}
+	upgraded := sessions.NewSession(s.Store, AuthSessionName)
+	opts := *s.Store.Options
+	upgraded.Options = &opts
+	upgraded.Values = legacy.Values
+	if w != nil {
+		if saveErr := upgraded.Save(r, w); saveErr != nil {
+			s.logger.Warn("re-save legacy session cookie", slog.String("error", saveErr.Error()))
+		}
+	}
+	return upgraded, nil
 }

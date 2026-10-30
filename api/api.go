@@ -321,6 +321,9 @@ func (api *API) Routes() chi.Router {
 			r.Group(func(r chi.Router) {
 				r.Use(api.Auth.Authenticated(true))
 				r.Get("/whoami", api.WhoAmI)
+				// Public by unguessable ID: the purge finishes by deleting the
+				// account that started it.
+				r.Get("/account-purges/{purgeID}", api.GetAccountPurgeStatus)
 			})
 
 			r.Group(func(r chi.Router) {
@@ -371,6 +374,8 @@ func (api *API) Routes() chi.Router {
 				r.Get("/me/custom-panels", api.GetMyCustomPanelSettings)
 				r.Put("/me/custom-panels", api.UpdateMyCustomPanelSettings)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
+				r.Get("/me/account-purge", api.GetAccountPurgeInventory)
+				r.Post("/me/account-purge", api.StartAccountPurge)
 				r.Get("/me/whats-new", api.GetMyWhatsNewStatus)
 				r.Put("/me/whats-new/read", api.MarkMyWhatsNewRead)
 

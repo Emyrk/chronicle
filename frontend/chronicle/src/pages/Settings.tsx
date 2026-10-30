@@ -45,7 +45,7 @@ import { Button } from "@/components/ui/button";
 import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider, useTenantDatasetScope } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
+import { clearInstanceDefaultsCache, useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
 import { EventsPanel, type EventsPanelType } from "@/pages/Instance/EventsPanels";
 import { isCustomPanelRef } from "@/pages/Instance/EventsPanels/custom/pluginTypes";
 import { PANELS } from "@/pages/Instance/EventsPanels/EventsPanel";
@@ -80,6 +80,7 @@ import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import { InferenceSettings } from "@/features/chat/InferenceSettings";
 import { FavoritesList } from "@/components/Favorites";
 import { PhotoProofCard, PhotoProofHistory } from "./Settings/PhotoProof";
+import { DiscordIcon } from "@/components/icons/DiscordIcon";
 
 export { BillingSettings } from "./Settings/BillingSettings";
 export { CustomPanelSettings } from "./Settings/CustomPanelSettings";
@@ -256,16 +257,50 @@ const CHARACTER_COSMETICS_OPTIONS: readonly {
 
 export function ProfileSettings() {
   const { data: session } = useSession();
+  const { data: siteConfig } = useSiteConfig();
   const updateCharacterCosmetics = useUpdateCharacterCosmeticsPreference();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [resending, setResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
 
   const characterCosmeticsMode = updateCharacterCosmetics.isPending
     ? updateCharacterCosmetics.variables
     : session?.preferences.character_cosmetics ?? "enabled";
-  const isPasswordAuth = session?.auth_provider === "password";
+  const isPasswordAuth = session?.auth_providers?.includes("password") ?? false;
+  const isDiscordLinked = session?.auth_providers?.includes("discord") ?? false;
   const email = session?.email;
   const emailVerified = session?.email_verified ?? false;
+
+  // Kept in the URL so the explanation stays visible until dismissed.
+  const discordLinkedElsewhere = searchParams.get("discord_link") === "linked_elsewhere";
+  const dismissDiscordLinkError = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("discord_link");
+    setSearchParams(next, { replace: true });
+  };
+
+  const switchToDiscordAccount = async () => {
+    await fetch("/auth/logout");
+    clearInstanceDefaultsCache();
+    // OAuth runs on the main domain; tenants pass a full URL so it relays back.
+    window.location.href = siteConfig?.tenant && siteConfig.access_url
+      ? `${siteConfig.access_url}/auth/discord?from=${encodeURIComponent(`${window.location.origin}/account/settings`)}`
+      : "/auth/discord?from=/account/settings";
+  };
+
+  useEffect(() => {
+    const result = searchParams.get("discord_link");
+    if (!result || result === "linked_elsewhere") return;
+
+    if (result === "success") toast.success("Discord account connected.");
+    else if (result === "already_linked") toast.info("A different Discord identity is already connected to this account.");
+    else if (result === "session_expired") toast.error("Your session changed while connecting Discord. Please try again.");
+    else toast.error("Discord account could not be connected.");
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("discord_link");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const handleResendVerification = async () => {
     if (!email) return;
@@ -305,6 +340,42 @@ export function ProfileSettings() {
         <p className="text-muted-foreground">Manage your profile information.</p>
       </div>
 
+      {discordLinkedElsewhere && (
+        <div role="alert" className="relative rounded-lg border-2 border-amber-500/50 bg-amber-500/10 p-6 space-y-4">
+          <button
+            type="button"
+            onClick={dismissDiscordLinkError}
+            aria-label="Dismiss"
+            className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+          >
+            <X className="size-5" />
+          </button>
+          <div className="flex items-start gap-4 pr-6">
+            <div className="rounded-full bg-amber-500/15 p-3">
+              <DiscordIcon className="size-7 text-[#5865F2]" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold">Discord couldn't be connected</h3>
+              <p className="text-sm text-muted-foreground">
+                That Discord account already has its own Chronicle account, and a Discord account can only belong to one Chronicle account.
+                To connect it here, delete that other account first.
+              </p>
+            </div>
+          </div>
+          <ol className="ml-[4.25rem] list-decimal space-y-1 pl-5 text-sm">
+            <li>Sign in with Discord. You'll be signed out of this account.</li>
+            <li>In that account's settings, use Purge account to delete it and everything saved to it.</li>
+            <li>Sign back in with your email and password, then click Connect again.</li>
+          </ol>
+          <div className="ml-[4.25rem] flex flex-wrap items-center gap-3">
+            <Button size="lg" className="bg-[#5865F2] text-white hover:bg-[#4752C4]" onClick={switchToDiscordAccount}>
+              <DiscordIcon className="size-5" /> Sign in with Discord to delete it
+            </Button>
+            <Button size="lg" variant="ghost" onClick={dismissDiscordLinkError}>Not now</Button>
+          </div>
+        </div>
+      )}
+
       {email && (
         <div className="rounded-lg border p-4 space-y-3">
           <h3 className="text-sm font-medium">Email</h3>
@@ -340,8 +411,56 @@ export function ProfileSettings() {
 
       {session?.auth_provider && (
         <div className="rounded-lg border p-4 space-y-3">
-          <h3 className="text-sm font-medium">Sign-in Method</h3>
-          <span className="text-sm capitalize">{session.auth_provider === "password" ? "Email & Password" : session.auth_provider}</span>
+          <div>
+            <h3 className="text-sm font-medium">Sign-in Methods</h3>
+            <p className="text-xs text-muted-foreground">
+              {isPasswordAuth
+                ? "Your account uses email and password. Connecting Discord is optional and adds a second way to sign in to this same account."
+                : "Ways you can sign in to this account."}
+            </p>
+          </div>
+          <div className="divide-y rounded-md border">
+            {isPasswordAuth && (
+              <div className="flex items-center gap-3 p-3">
+                <Lock className="size-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium">Email & Password</div>
+                  <div className="truncate text-xs text-muted-foreground">{email}</div>
+                </div>
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Primary</span>
+              </div>
+            )}
+            {(isDiscordLinked || isPasswordAuth) && (
+              <div className="flex items-center gap-3 p-3">
+                <DiscordIcon className={cn("size-5 shrink-0", isDiscordLinked ? "text-[#5865F2]" : "text-muted-foreground")} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    Discord
+                    {isPasswordAuth && !isDiscordLinked && (
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">Optional</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {isDiscordLinked
+                      ? isPasswordAuth ? "Connected as a secondary sign-in method." : "Signs you in to this account."
+                      : "Add Discord as a secondary sign-in method. Your email and password keep working."}
+                  </div>
+                </div>
+                {isDiscordLinked ? (
+                  <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-500">Connected</span>
+                ) : (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href="/auth/discord/link?from=/account/settings">Connect</a>
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+          {isPasswordAuth && !isDiscordLinked && !discordLinkedElsewhere && (
+            <p className="text-xs text-muted-foreground">
+              A Discord account that already has its own Chronicle account must be deleted before it can be connected here.
+            </p>
+          )}
         </div>
       )}
 
@@ -378,6 +497,17 @@ export function ProfileSettings() {
         </div>
       </div>
 
+      <div className="rounded-lg border border-destructive/40 p-4 space-y-3">
+        <div>
+          <h3 className="text-sm font-medium text-destructive">Delete Account</h3>
+          <p className="text-xs text-muted-foreground">
+            Permanently delete your account and everything attached to it: uploaded logs, characters, modules, and settings. You'll review each set of data before anything is deleted.
+          </p>
+        </div>
+        <Button variant="destructive" asChild>
+          <Link to="/account/purge"><Trash className="size-4" /> Purge account</Link>
+        </Button>
+      </div>
     </div>
   );
 }
@@ -398,7 +528,8 @@ function ExternalVerificationCard() {
   const provider = siteConfig?.external_verification;
   if (!provider) return null;
 
-  const isDiscord = session?.auth_provider === "discord";
+  // A password account with Discord connected counts, whichever way it signed in.
+  const isDiscord = session?.auth_providers?.includes("discord") ?? false;
 
   const handleSync = () => {
     const at = Date.now();

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/google/uuid"
 	"github.com/markbates/goth/providers/openidConnect"
 	"github.com/stretchr/testify/require"
 )
@@ -90,6 +91,34 @@ func TestAuthorizeSessionUnwrapsContextualRefreshProvider(t *testing.T) {
 	_, err = authorizeSession(session, provider, url.Values{"code": {"authorization-code"}})
 	require.NoError(t, err)
 	require.Equal(t, "access-token", session.AccessToken)
+}
+
+func TestLinkTargetRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	service := &Service{Store: testCookieStore(t)}
+	userID := uuid.New()
+	sessionID := uuid.New()
+
+	request := httptest.NewRequest(http.MethodGet, "/auth/discord/link", nil)
+	recorder := httptest.NewRecorder()
+	linkSession, err := service.Store.New(request, LinkSessionName)
+	require.NoError(t, err)
+	linkSession.Values["user_id"] = userID.String()
+	linkSession.Values["session_id"] = sessionID.String()
+	linkSession.Values["return_origin"] = "http://turtle.localhost:4000"
+	require.NoError(t, linkSession.Save(request, recorder))
+
+	callback := httptest.NewRequest(http.MethodGet, "/auth/discord/callback", nil)
+	for _, cookie := range recorder.Result().Cookies() {
+		callback.AddCookie(cookie)
+	}
+
+	target, ok := service.linkTarget(callback)
+	require.True(t, ok)
+	require.Equal(t, userID, target.userID)
+	require.Equal(t, sessionID, target.sessionID)
+	require.Equal(t, "http://turtle.localhost:4000", target.returnOrigin)
 }
 
 var _ contextualTokenRefresher = (*contextualRefreshProvider)(nil)

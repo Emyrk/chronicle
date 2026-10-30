@@ -787,6 +787,19 @@ func AllWowPlayableRaceValues() []WowPlayableRace {
 	}
 }
 
+type AccountPurge struct {
+	ID          uuid.UUID          `db:"id" json:"id"`
+	UserID      uuid.UUID          `db:"user_id" json:"user_id"`
+	Status      string             `db:"status" json:"status"`
+	Step        string             `db:"step" json:"step"`
+	LogsTotal   int32              `db:"logs_total" json:"logs_total"`
+	LogsDeleted int32              `db:"logs_deleted" json:"logs_deleted"`
+	Error       string             `db:"error" json:"error"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+}
+
 type AddonAuthor struct {
 	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
 	Name      string             `db:"name" json:"name"`
@@ -2096,6 +2109,7 @@ type OauthRelayCode struct {
 	RedirectPath      string             `db:"redirect_path" json:"redirect_path"`
 	ExpiresAt         pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
 	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	LinkedID          string             `db:"linked_id" json:"linked_id"`
 }
 
 type OauthServerSecret struct {

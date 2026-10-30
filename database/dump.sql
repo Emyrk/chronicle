@@ -190,6 +190,20 @@ CREATE FUNCTION river_job_state_in_bitmask(bitmask bit, state river_job_state) R
     END = 1;
 $$;
 
+CREATE TABLE account_purges (
+    id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    step text DEFAULT ''::text NOT NULL,
+    logs_total integer DEFAULT 0 NOT NULL,
+    logs_deleted integer DEFAULT 0 NOT NULL,
+    error text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    finished_at timestamp with time zone,
+    CONSTRAINT account_purges_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'running'::text, 'succeeded'::text, 'failed'::text])))
+);
+
 CREATE TABLE addon_authors (
     user_id uuid NOT NULL,
     name text NOT NULL,
@@ -1702,6 +1716,7 @@ CREATE TABLE oauth_relay_codes (
     redirect_path text NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    linked_id text DEFAULT ''::text NOT NULL,
     CONSTRAINT oauth_relay_codes_code_hash_length CHECK ((octet_length(code_hash) = 32))
 );
 
@@ -2640,6 +2655,9 @@ ALTER TABLE ONLY river_job ALTER COLUMN id SET DEFAULT nextval('river_job_id_seq
 
 ALTER TABLE ONLY river_notification ALTER COLUMN id SET DEFAULT nextval('river_notification_id_seq'::regclass);
 
+ALTER TABLE ONLY account_purges
+    ADD CONSTRAINT account_purges_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY addon_authors
     ADD CONSTRAINT addon_authors_name_key UNIQUE (name);
 
@@ -3251,6 +3269,8 @@ ALTER TABLE ONLY wow_server_upload_keys
 
 ALTER TABLE ONLY wow_servers
     ADD CONSTRAINT wow_servers_pkey PRIMARY KEY (id);
+
+CREATE UNIQUE INDEX account_purges_active_user ON account_purges USING btree (user_id) WHERE (status = ANY (ARRAY['pending'::text, 'running'::text]));
 
 CREATE INDEX billing_entitlements_user_key_idx ON billing_entitlements USING btree (user_id, entitlement_key);
 

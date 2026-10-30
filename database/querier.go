@@ -35,13 +35,19 @@ type sqlcQuerier interface {
 	ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
 	ClaimDueDiscordMembershipGrantChecks(ctx context.Context, arg ClaimDueDiscordMembershipGrantChecksParams) ([]ClaimDueDiscordMembershipGrantChecksRow, error)
 	ClaimLuaProjectArtifactGarbage(ctx context.Context, asOf pgtype.Timestamptz) ([]string, error)
+	ClearApplicationReviewsByReviewer(ctx context.Context, userID uuid.NullUUID) error
 	ClearDiscordMembershipGrantCheckClaim(ctx context.Context, arg ClearDiscordMembershipGrantCheckClaimParams) (int64, error)
 	ClearInferenceThreadByOwner(ctx context.Context, arg ClearInferenceThreadByOwnerParams) (InferenceThread, error)
+	ClearRealmsCreatedByUser(ctx context.Context, userID uuid.UUID) error
 	ClearResetToken(ctx context.Context, userAuthID uuid.UUID) error
+	// Servers, realms, and upload keys hold other players' data, so a purge only
+	// removes the user as their creator.
+	ClearServersCreatedByUser(ctx context.Context, userID uuid.UUID) error
 	// Canonical normalized rows produced by legacy Spell.dbc imports.
 	ClearSpellEffectsForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearSpellPowersForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearSpellVariantsForDataset(ctx context.Context, datasetID uuid.UUID) error
+	ClearUploadKeysCreatedByUser(ctx context.Context, userID uuid.UUID) error
 	ClearWoWLogGroupInvalidation(ctx context.Context, logGroupID uuid.UUID) error
 	CompleteBillingReconciliationRun(ctx context.Context, arg CompleteBillingReconciliationRunParams) error
 	CompleteDiscordMembershipGrantCheckError(ctx context.Context, arg CompleteDiscordMembershipGrantCheckErrorParams) (DiscordMembershipGrantCheck, error)
@@ -153,6 +159,7 @@ type sqlcQuerier interface {
 	DeleteRegressionSnapshot(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionPolicy(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionRule(ctx context.Context, id uuid.UUID) error
+	DeleteServerApplicationsByInitiator(ctx context.Context, userID uuid.UUID) error
 	DeleteSidekickConfigOverride(ctx context.Context, arg DeleteSidekickConfigOverrideParams) ([]byte, error)
 	DeleteSidekickWoWDirectoriesExcept(ctx context.Context, arg DeleteSidekickWoWDirectoriesExceptParams) (int64, error)
 	DeleteTenant(ctx context.Context, id uuid.UUID) error
@@ -168,6 +175,10 @@ type sqlcQuerier interface {
 	DeleteTimeParseClearTimeMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error
 	DeleteTimeParseScoreForContract(ctx context.Context, arg DeleteTimeParseScoreForContractParams) error
 	DeleteUploadKey(ctx context.Context, id uuid.UUID) error
+	DeleteUserAccountRow(ctx context.Context, userID uuid.UUID) (int64, error)
+	DeleteUserAuthLinksByUserID(ctx context.Context, userID uuid.UUID) error
+	DeleteUserAuthSessionByID(ctx context.Context, id uuid.UUID) error
+	DeleteUserAuthSessionsByUserID(ctx context.Context, userID uuid.UUID) error
 	DeleteUserCharacterLink(ctx context.Context, arg DeleteUserCharacterLinkParams) (UserCharacterLink, error)
 	DeleteUserCharacterLinksByUserAndSource(ctx context.Context, arg DeleteUserCharacterLinksByUserAndSourceParams) ([]UserCharacterLink, error)
 	DeleteUserCustomPanelInstallationsExcept(ctx context.Context, arg DeleteUserCustomPanelInstallationsExceptParams) error
@@ -195,6 +206,7 @@ type sqlcQuerier interface {
 	// instance_token (unique per instance, immune to AzerothCore ID reuse),
 	// instance_id, instance_name, and realm_id.
 	FindMatchingServerUpload(ctx context.Context, arg FindMatchingServerUploadParams) (WoWLogGroup, error)
+	FinishAccountPurge(ctx context.Context, arg FinishAccountPurgeParams) error
 	GearTrendsSlotEnchants(ctx context.Context, arg GearTrendsSlotEnchantsParams) ([]GearTrendsSlotEnchantsRow, error)
 	// Observed gear trends: the gear worn by the top leaderboard performances
 	// of a class/spec, aggregated per equipment slot.
@@ -215,6 +227,14 @@ type sqlcQuerier interface {
 	// Item name/quality/icon/level are read from the snapshot jsonb itself,
 	// so results are self-contained.
 	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
+	// GetAccountDataCounts counts the data an account purge removes, grouped into
+	// sets the user must acknowledge individually. Zero counts are omitted.
+	GetAccountDataCounts(ctx context.Context, userID uuid.UUID) ([]GetAccountDataCountsRow, error)
+	// GetAccountDeletionBlockers lists what prevents an account from being purged.
+	// Accounts tied to a billing customer are never purged automatically.
+	GetAccountDeletionBlockers(ctx context.Context, userID uuid.UUID) ([]string, error)
+	GetAccountPurge(ctx context.Context, id uuid.UUID) (AccountPurge, error)
+	GetActiveAccountPurgeByUser(ctx context.Context, userID uuid.UUID) (AccountPurge, error)
 	GetActiveInferenceRunByThreadForUpdate(ctx context.Context, arg GetActiveInferenceRunByThreadForUpdateParams) (InferenceRun, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
@@ -251,6 +271,10 @@ type sqlcQuerier interface {
 	// score. parse_count tells the caller whether the cached average is complete.
 	GetCharacterPerformanceRuns(ctx context.Context, arg GetCharacterPerformanceRunsParams) ([]GetCharacterPerformanceRunsRow, error)
 	GetCreatureTemplatesByEntries(ctx context.Context, arg GetCreatureTemplatesByEntriesParams) ([]WorldCreatureTemplate, error)
+	// GetCurrentUserAuthSession confirms a token's session still exists. It does
+	// not match jwt_id: refreshing rotates it while requests with the previous
+	// token are still in flight. Deleting the row is what revokes a session.
+	GetCurrentUserAuthSession(ctx context.Context, arg GetCurrentUserAuthSessionParams) (UserAuthSession, error)
 	GetCustomPanelReleaseByRepositoryCommit(ctx context.Context, arg GetCustomPanelReleaseByRepositoryCommitParams) (CustomPanelRelease, error)
 	GetDBCItemDisplayInfoByID(ctx context.Context, arg GetDBCItemDisplayInfoByIDParams) (DbcItemDisplayInfo, error)
 	// Dataset queries. These run with AdminBypass context since the datasets table
@@ -528,6 +552,7 @@ type sqlcQuerier interface {
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
 	InitializeUserWhatsNewState(ctx context.Context, arg InitializeUserWhatsNewStateParams) (UserWhatsNewState, error)
+	InsertAccountPurge(ctx context.Context, arg InsertAccountPurgeParams) (AccountPurge, error)
 	InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults
 	InsertAffectedAuraDurations(ctx context.Context, arg []InsertAffectedAuraDurationsParams) *InsertAffectedAuraDurationsBatchResults
 	InsertBillingReconciliationRun(ctx context.Context, id uuid.UUID) (BillingReconciliationRun, error)
@@ -670,6 +695,7 @@ type sqlcQuerier interface {
 	ListGearProgressionsByUser(ctx context.Context, arg ListGearProgressionsByUserParams) ([]GearProgression, error)
 	ListGearStatWeightsByUser(ctx context.Context, arg ListGearStatWeightsByUserParams) ([]GearStatWeight, error)
 	ListGuildDiscordAnnouncementAttempts(ctx context.Context, arg ListGuildDiscordAnnouncementAttemptsParams) ([]ListGuildDiscordAnnouncementAttemptsRow, error)
+	ListGuildIDsWithDiscordInstalledByUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 	ListGuildJoinRequests(ctx context.Context, guildID uuid.UUID) ([]ListGuildJoinRequestsRow, error)
 	// Guild Page Panels
 	ListGuildPagePanels(ctx context.Context, tabID uuid.UUID) ([]GuildPagePanel, error)
@@ -706,6 +732,8 @@ type sqlcQuerier interface {
 	ListModuleAuthorsByUsers(ctx context.Context, userIds []uuid.UUID) ([]AddonAuthor, error)
 	ListMyProofRequests(ctx context.Context, arg ListMyProofRequestsParams) ([]ProofRequest, error)
 	ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error)
+	ListOwnedLogGroupIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
+	ListOwnedLuaProjectIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 	ListParseScoreCohortBuckets(ctx context.Context, arg ListParseScoreCohortBucketsParams) ([]ListParseScoreCohortBucketsRow, error)
 	ListParseScoreMemberships(ctx context.Context, arg ListParseScoreMembershipsParams) ([]ParseScoreMembership, error)
 	// Read one persisted legacy result per player and encounter for the snapshot ID
@@ -820,6 +848,7 @@ type sqlcQuerier interface {
 	// applicant, not a proof row, also works for their first request.
 	LockProofApplicant(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	LockUserStorageQuota(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	LockUsersForUpdate(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
 	LockWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
@@ -912,6 +941,8 @@ type sqlcQuerier interface {
 	// Returns aggregate refresh metadata for one tenant's precomputed summaries.
 	RankingsSummaryStatus(ctx context.Context, tenantID uuid.UUID) (RankingsSummaryStatusRow, error)
 	ReactivateDiscordMembershipGrantCheck(ctx context.Context, arg ReactivateDiscordMembershipGrantCheckParams) (ReactivateDiscordMembershipGrantCheckRow, error)
+	// Files the user appended to someone else's log group belong to that raid.
+	ReassignAppendedLogFilesToGroupOwner(ctx context.Context, userID uuid.UUID) error
 	RecordAuthzMigration(ctx context.Context, version int32) error
 	RecordGuildInstanceView(ctx context.Context, arg RecordGuildInstanceViewParams) error
 	RecordGuildResourceView(ctx context.Context, arg RecordGuildResourceViewParams) error
@@ -1031,6 +1062,7 @@ type sqlcQuerier interface {
 	UnsetPrimaryUserCharacter(ctx context.Context, userID uuid.UUID) error
 	UnstarLuaProject(ctx context.Context, arg UnstarLuaProjectParams) error
 	UntrackUserPanelLayout(ctx context.Context, arg UntrackUserPanelLayoutParams) (int64, error)
+	UpdateAccountPurgeProgress(ctx context.Context, arg UpdateAccountPurgeProgressParams) error
 	// Only non-null params are applied; NULL means "keep existing value".
 	UpdateDataset(ctx context.Context, arg UpdateDatasetParams) (Dataset, error)
 	UpdateDiscordAnnouncementRun(ctx context.Context, arg UpdateDiscordAnnouncementRunParams) (GuildDiscordLogAnnouncement, error)

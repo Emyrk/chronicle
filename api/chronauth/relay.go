@@ -29,6 +29,8 @@ type RelayCode struct {
 	TenantName   string
 	RedirectPath string // Path to redirect to after setting cookie (e.g. "/raids")
 	ExpiresAt    time.Time
+	// LinkedID is the OAuth identity carried by a Discord link completion code.
+	LinkedID string
 }
 
 // RelayCodeStore persists one-time cross-subdomain auth relay codes in
@@ -64,6 +66,7 @@ func (s *RelayCodeStore) Generate(ctx context.Context, relay *RelayCode) (string
 		TenantName:        relay.TenantName,
 		RedirectPath:      relay.RedirectPath,
 		ExpiresAt:         database.Timestamptz(relay.ExpiresAt),
+		LinkedID:          relay.LinkedID,
 	})
 	if err != nil {
 		return "", fmt.Errorf("insert OAuth relay code: %w", err)
@@ -94,5 +97,6 @@ func (s *RelayCodeStore) Redeem(ctx context.Context, code string) (*RelayCode, e
 		TenantName:   redeemed.TenantName,
 		RedirectPath: redeemed.RedirectPath,
 		ExpiresAt:    redeemed.RelayExpiresAt.Time,
+		LinkedID:     redeemed.LinkedID,
 	}, nil
 }
