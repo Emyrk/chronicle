@@ -854,6 +854,20 @@ export function floorBoundsYardStep(bounds: WowMapFloorBounds | undefined): { x:
   };
 }
 
+export function flatMapYardStep(
+  project: (sample: MapPositionSample) => MapPoint | null,
+  sample: MapPositionSample | undefined,
+  worldCoordinates: boolean,
+  floorBounds: WowMapFloorBounds | undefined,
+): { x: MapPoint; y: MapPoint } | null {
+  const step = worldCoordinates
+    ? sample ? flatYardStep(project, sample, true) : null
+    : floorBoundsYardStep(floorBounds);
+  if (!step) return null;
+  const components = [step.x.leftPercent, step.x.topPercent, step.y.leftPercent, step.y.topPercent];
+  return components.every(Number.isFinite) && components.some((component) => component !== 0) ? step : null;
+}
+
 /**
  * Flat artwork without published world bounds cannot be yard-calibrated. Keep
  * its chips smaller than native geometry so dense raid stacks stay readable.

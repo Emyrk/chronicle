@@ -12,6 +12,7 @@ import {
   coverMapCanvasRect,
   fitFreeMapCameraToPoints,
   flatArtworkUnitScale,
+  flatMapYardStep,
   flatYardStep,
   floorBoundsYardStep,
   zoomFreeMapCamera,
@@ -674,6 +675,28 @@ describe("floorBoundsYardStep", () => {
   it("requires usable bounds", () => {
     expect(floorBoundsYardStep(undefined)).toBeNull();
     expect(floorBoundsYardStep({ minX: 1, maxX: 1, minY: 0, maxY: 2 })).toBeNull();
+  });
+});
+
+describe("flatMapYardStep", () => {
+  const sample: MapPositionSample = { timestampMs: 0, x: 10, y: 20, mapId: 595 };
+  const project = (value: MapPositionSample) => ({ leftPercent: value.x * 2, topPercent: value.y * 3 });
+
+  it("uses projected world coordinates when they are available", () => {
+    expect(flatMapYardStep(project, sample, true, undefined)).toEqual({
+      x: { leftPercent: 2, topPercent: 0 },
+      y: { leftPercent: 0, topPercent: 3 },
+    });
+    expect(flatMapYardStep(project, undefined, true, undefined)).toBeNull();
+    expect(flatMapYardStep(() => ({ leftPercent: 10, topPercent: 10 }), sample, true, undefined)).toBeNull();
+  });
+
+  it("uses published floor bounds for normalized map coordinates", () => {
+    expect(flatMapYardStep(project, undefined, false, { minX: 0, maxX: 200, minY: 0, maxY: 100 })).toEqual({
+      x: { leftPercent: 0, topPercent: 0.5 },
+      y: { leftPercent: 1, topPercent: 0 },
+    });
+    expect(flatMapYardStep(project, sample, false, undefined)).toBeNull();
   });
 });
 

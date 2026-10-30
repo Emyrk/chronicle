@@ -25,6 +25,7 @@ import type { MapLivePresence } from "./MapView3D";
 import { MapFloorPicker } from "./MapFloorPicker";
 import { MapOverview2D } from "./MapOverview2D";
 import {
+  flatMapYardStep,
   FULL_MAP_VIEWPORT,
   INITIAL_MAP_FRAMING,
   manualMapFraming,
@@ -90,6 +91,15 @@ export function preferredMeshState(stored: boolean | null): boolean {
 
 export function alignmentOverlayForMapMode(requested: boolean, meshWanted: boolean): boolean {
   return requested && meshWanted;
+}
+
+export function walkModeAvailable(
+  show3D: boolean,
+  meshWanted: boolean,
+  meshState: DungeonMeshState,
+  flatYardsAvailable: boolean,
+): boolean {
+  return show3D && (meshWanted ? meshState === "ready" : flatYardsAvailable);
 }
 
 const RAID_FRAMES_STORAGE_KEY = "chronicle.map.raidFrames";
@@ -661,8 +671,17 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   const onMesh = show3D && meshWanted && meshState === "ready";
   const canFollow = ready.wholeRun || onMesh;
   const following = canFollow && cinematic;
-  // On the mesh once it has loaded, else on the flat artwork.
-  const canWalk = show3D && (!meshWanted || meshState === "ready");
+  const worldCoordinates = props.context.instance.positionCoordinateSpace !== "ui-map-normalized";
+  const yardSample = ready.markers[0]?.sample;
+  const floorBounds = "bounds" in ready.ground.canvas ? ready.ground.canvas.bounds : undefined;
+  const flatYardsAvailable = flatMapYardStep(ready.projectSample, yardSample, worldCoordinates, floorBounds) !== null;
+  // Walking needs a loaded mesh or a flat map calibrated in world yards.
+  const canWalk = walkModeAvailable(show3D, meshWanted, meshState, flatYardsAvailable);
+  const walkUnavailableTitle = meshWanted
+    ? "Walk mode: waiting for the 3D map to load"
+    : "Walk mode unavailable: this map has no world scale";
+  // Planning only needs the rendered floor; it does not depend on yard calibration.
+  const canPlan = show3D && (!meshWanted || meshState === "ready");
   // A unit frame's Follow: the cinematic camera on that unit (resumed if the
   // user had pinned a framing); again, or taking the camera, stops it.
   const followUnit = (guid: string) => {
@@ -810,7 +829,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               alignmentGround={ready.alignmentGround}
               markers={ready.markers}
               projectSample={ready.projectSample}
-              worldCoordinates={props.context.instance.positionCoordinateSpace !== "ui-map-normalized"}
+              worldCoordinates={worldCoordinates}
               cursorMs={ready.cursorMs}
               playing={ready.playing}
               playbackSpeed={ready.playbackSpeed}
@@ -840,9 +859,9 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               debuffSpellIds={ready.debuffSpellIds}
               followGuid={followGuid}
               onFollowChange={setFollowGuid}
-              planItems={planOpen && canWalk ? planEditor.drawnItems : NO_PLAN_ITEMS}
+              planItems={planOpen && canPlan ? planEditor.drawnItems : NO_PLAN_ITEMS}
               planSelectedId={planOpen ? planEditor.state.selectedId : null}
-              planInput={planOpen && canWalk ? planEditor.input : null}
+              planInput={planOpen && canPlan ? planEditor.input : null}
             />
           </Suspense>
         )}
@@ -994,7 +1013,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               aria-pressed={walking}
               title={canWalk
                 ? walking ? "Leave walk mode (G or Esc)" : "Walk mode (G): join the fight with a character of your own"
-                : "Walk mode: waiting for the 3D map to load"}
+                : walkUnavailableTitle}
               aria-label="Walk mode"
               className={cn(
                 "absolute right-2 top-10 z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] disabled:opacity-40",
@@ -1011,9 +1030,9 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
                 if (!planOpen) setWalking(false);
                 setPlanOpen(!planOpen);
               }}
-              disabled={!canWalk}
+              disabled={!canPlan}
               aria-pressed={planOpen}
-              title={canWalk ? planOpen ? "Close planning" : "Plan: draw markers, arrows, ranges and player spots on the floor" : "Planning needs the 3D map (Map settings → World → 3D map)"}
+              title={canPlan ? planOpen ? "Close planning" : "Plan: draw markers, arrows, ranges and player spots on the floor" : "Planning needs the 3D map (Map settings → World → 3D map)"}
               aria-label="Plan"
               className={cn(
                 "absolute right-2 top-[4.5rem] z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] disabled:opacity-40",
@@ -1023,7 +1042,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               <PenLine className="h-4 w-4" />
             </button>
           )}
-          {planOpen && canWalk && (
+          {planOpen && canPlan && (
             <PlanControls editor={planEditor} roster={planRoster} onClose={closePlan} />
           )}
           {(walking || show3D) && (

@@ -4,6 +4,7 @@ import {
   createMapPanel,
   mapPresentationForSelection,
   preferredMeshState,
+  walkModeAvailable,
 } from "./Map";
 
 describe("map presentation", () => {
@@ -44,5 +45,13 @@ describe("map presentation", () => {
     expect(preferredMeshState(null)).toBe(true);
     expect(preferredMeshState(true)).toBe(true);
     expect(preferredMeshState(false)).toBe(false);
+  });
+
+  it("only enables walk mode when the active floor has a usable world scale", () => {
+    expect(walkModeAvailable(true, false, "loading", true)).toBe(true);
+    expect(walkModeAvailable(true, false, "ready", false)).toBe(false);
+    expect(walkModeAvailable(true, true, "loading", true)).toBe(false);
+    expect(walkModeAvailable(true, true, "ready", false)).toBe(true);
+    expect(walkModeAvailable(false, false, "ready", true)).toBe(false);
   });
 });

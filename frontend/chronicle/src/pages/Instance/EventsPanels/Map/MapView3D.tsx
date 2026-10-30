@@ -13,7 +13,7 @@ import type { MapPositionSample } from "./map.processor";
 import { cameraPoseAt, type MapCameraMark, type MapCameraPose } from "./cameraPath";
 import { DISPEL_KINDS, DISPEL_ORDER, type DispelKind } from "./unitTokenArt";
 import type { PlanInput, PlanItem } from "./plan/mapPlan";
-import { flatYardStep, floorBoundsYardStep, movementTrailPoints, prefersReducedMotion, replayPositionAt, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
+import { flatMapYardStep, movementTrailPoints, prefersReducedMotion, replayPositionAt, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
 import {
   MapScene3D,
   type DungeonMeshRequest,
@@ -279,10 +279,7 @@ export default function MapView3D({
   const floorBounds = "bounds" in ground.canvas ? ground.canvas.bounds : undefined;
   useEffect(() => {
     if (frozen) return;
-    const scale = worldCoordinates
-      ? yardSample ? flatYardStep(projectSample, yardSample, true) : null
-      : floorBoundsYardStep(floorBounds);
-    sceneRef.current?.setFlatYards(scale);
+    sceneRef.current?.setFlatYards(flatMapYardStep(projectSample, yardSample, worldCoordinates, floorBounds));
   }, [floorBounds, frozen, projectSample, worldCoordinates, yardSample]);
 
   useEffect(() => {
