@@ -2454,6 +2454,7 @@ type SiteConfig struct {
 	ClientUploadsDisabled bool               `db:"client_uploads_disabled" json:"client_uploads_disabled"`
 	ParseConfig           []byte             `db:"parse_config" json:"parse_config"`
 	AdsEnabled            bool               `db:"ads_enabled" json:"ads_enabled"`
+	RootDomainDiscovery   bool               `db:"root_domain_discovery" json:"root_domain_discovery"`
 }
 
 type TalentBuild struct {

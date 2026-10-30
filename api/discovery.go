@@ -99,7 +99,7 @@ func (a *API) Discovery(w http.ResponseWriter, r *http.Request) {
 
 	// Site-level branding.
 	config, err := a.Opts.Zed.GetSiteConfig(listCtx)
-	if err == nil && config.Discoverable {
+	if err == nil && config.Discoverable && !config.RootDomainDiscovery {
 		if b := unmarshalBranding(config.Branding); b != nil {
 			url := ""
 			if a.Opts.AccessURL != nil {

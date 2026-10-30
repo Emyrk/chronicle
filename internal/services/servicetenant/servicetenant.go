@@ -3,6 +3,7 @@ package servicetenant
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -274,6 +275,22 @@ func (s *Service) IsAllowedOrigin(origin string) bool {
 // PrimaryDomain returns the configured primary domain.
 func (s *Service) PrimaryDomain() string {
 	return s.primaryDomain
+}
+
+// IsPrimaryHost reports whether host is the configured primary domain. The
+// optional request port is ignored.
+func (s *Service) IsPrimaryHost(host string) bool {
+	if s == nil || s.primaryDomain == "" {
+		return false
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	primaryDomain := s.primaryDomain
+	if h, _, err := net.SplitHostPort(primaryDomain); err == nil {
+		primaryDomain = h
+	}
+	return strings.EqualFold(host, primaryDomain)
 }
 
 // ExtractSlug exposes subdomain extraction from a host string (including port).
