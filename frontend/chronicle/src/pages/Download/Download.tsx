@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { BatteryFull, Check, Download as DownloadIcon, ExternalLink, Eye, Info, PanelTop, Upload as UploadIcon, Wifi } from "lucide-react";
 import { useSiteConfig } from "@/api/queries";
 import { MagicLogo } from "@/components/MagicLogo";
-import { tenantAddons, type TenantAddons } from "./formatAddons";
+import { tenantAddons, type ClientMod, type CompanionAddon, type TenantAddons } from "./formatAddons";
 import { PLATFORMS, REPO, assetUrl, detectOS, type OS } from "./platforms";
 import s from "./Download.module.css";
 
@@ -93,22 +93,9 @@ function AddonStep({ addons, defaultNeedsNoAddon }: TenantAddons) {
         Install{" "}
         <a href={primary.url} target="_blank" rel="noopener noreferrer">
           <strong>{primary.name}</strong>
-        </a>
-        . It turns on combat logging every time you log in, so there's nothing to type and nothing to forget.
-        {primary.requires.length > 0 && (
-          <>
-            {" "}On {primary.client} it also needs{" "}
-            {primary.requires.map((r, i) => (
-              <span key={r.name}>
-                {i > 0 && ", "}
-                <a href={r.url} target="_blank" rel="noopener noreferrer">
-                  {r.name}
-                </a>
-              </span>
-            ))}
-            .
-          </>
-        )}
+        </a>{" "}
+        for the {primary.client} client. It turns on combat logging every time you log in, so there's nothing to type
+        and nothing to forget.
       </p>
       <a href={primary.url} target="_blank" rel="noopener noreferrer" className={s.addonCta}>
         Get {primary.name}
@@ -132,10 +119,74 @@ function AddonStep({ addons, defaultNeedsNoAddon }: TenantAddons) {
   );
 }
 
+function ModLink({ mod }: { mod: ClientMod }) {
+  return (
+    <a href={mod.url} target="_blank" rel="noopener noreferrer">
+      <strong>{mod.name}</strong>
+    </a>
+  );
+}
+
+/** Step 4: client mods the addon needs, plus optional ones for replay map positions. */
+function ModsStep({ addon }: { addon: CompanionAddon }) {
+  const { requires, optional } = addon;
+  const title = requires.length > 0 ? `Add ${requires.map((m) => m.name).join(" and ")}` : "Optional: unit positions";
+  return (
+    <div className={s.card}>
+      <div className={s.shot} style={{ gap: 5 }}>
+        <div className={s.shotLabel}>Client mods for {addon.client}</div>
+        {[...requires.map((m) => ({ m, tag: "Required" })), ...optional.map((m) => ({ m, tag: "Optional" }))].map(
+          ({ m, tag }) => (
+            <div key={m.name} className={s.modRow}>
+              <span>{m.name}</span>
+              <span className={tag === "Required" ? s.tagReq : s.tagOpt}>{tag}</span>
+            </div>
+          ),
+        )}
+      </div>
+      <div className={s.stepHead}>
+        <span className={`${s.serif} ${s.num}`}>4</span>
+        <h3 className={s.h3}>{title}</h3>
+      </div>
+      {requires.map((m) => (
+        <p key={m.name} className={s.stepBody}>
+          <ModLink mod={m} /> is required. {m.note}
+        </p>
+      ))}
+      {optional.length > 0 && (
+        <>
+          <p className={s.stepBody}>
+            {optional.length > 1 ? "Optionally add one of these" : "Optionally add this"} for unit positions on the
+            replay map:
+          </p>
+          <ul className={s.modList}>
+            {optional.map((m) => (
+              <li key={m.name}>
+                <ModLink mod={m} />: {m.note}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {[...requires, ...optional]
+        .filter((m) => m.warning)
+        .map((m) => (
+          <p key={m.name} className={s.note}>
+            <Info size={16} color="#e6b450" aria-hidden="true" />
+            <span>{m.warning}</span>
+          </p>
+        ))}
+    </div>
+  );
+}
+
 export function DownloadView({ os, addons }: { os: OS; addons: TenantAddons }) {
   const current = PLATFORMS.find((p) => p.os === os) ?? PLATFORMS[0];
   const [primary, ...alternates] = current.files;
   const others = PLATFORMS.filter((p) => p !== current);
+  // Step 4 only exists when the default format's addon has client mods to go with it.
+  const addon = addons.defaultNeedsNoAddon ? undefined : addons.addons[0];
+  const modsAddon = addon && addon.requires.length + addon.optional.length > 0 ? addon : undefined;
 
   return (
     <div className={s.page}>
@@ -204,8 +255,8 @@ export function DownloadView({ os, addons }: { os: OS; addons: TenantAddons }) {
       </Rise>
 
       <Rise n={6} className={`${s.wrap} ${s.steps}`}>
-        <h2 className={`${s.serif} ${s.h2}`}>Three steps, then never again</h2>
-        <div className={s.stepGrid}>
+        <h2 className={`${s.serif} ${s.h2}`}>{modsAddon ? "Four" : "Three"} steps, then never again</h2>
+        <div className={`${s.stepGrid} ${modsAddon ? s.stepGrid4 : ""}`}>
           <div className={s.card}>
             <div className={s.shot}>
               <div className={s.shotLabel}>Your {current.tray}</div>
@@ -249,6 +300,7 @@ export function DownloadView({ os, addons }: { os: OS; addons: TenantAddons }) {
           </div>
 
           <AddonStep {...addons} />
+          {modsAddon && <ModsStep addon={modsAddon} />}
         </div>
       </Rise>
 

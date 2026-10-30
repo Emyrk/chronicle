@@ -37,6 +37,7 @@
 .h2{font-size:34px;color:#f8f1e3}
 .steps{display:flex;flex-direction:column;gap:20px}
 .stepGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.stepGrid4{grid-template-columns:repeat(2,minmax(0,1fr))}
 .card{display:flex;flex-direction:column;gap:16px;background:#241e19;border:1px solid #3a2f26;border-radius:14px;padding:22px;min-width:0;transition:transform .3s ease,border-color .3s ease}
 .card:hover{border-color:#5a4a3a;transform:translateY(-2px)}
 .shot{height:128px;background:#15110e;border-radius:10px;display:flex;flex-direction:column;justify-content:center;gap:10px;padding:0 16px;overflow:hidden}
@@ -102,6 +103,11 @@
 .addonRow{display:flex;align-items:center;gap:8px;color:#ffd100}
 .addonBox{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border:1px solid #c9a227;border-radius:2px;background:rgba(255,209,0,.15)}
 .alt{font-size:14px;color:#b8a995}
+.modRow{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;line-height:1.2;color:#efe6d6;padding:3px 10px;background:#241e19;border:1px solid #3a2f26;border-radius:6px}
+.tagReq,.tagOpt{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 6px;border-radius:4px}
+.tagReq{color:#fff;background:#3b82f6}
+.tagOpt{color:#b8a995;border:1px solid #4a3f36}
+.modList{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:15px;line-height:1.5;color:#d8ccb6}
 .page a.addonCta{display:inline-flex;align-items:center;gap:10px;align-self:flex-start;min-height:44px;padding:0 20px;background:#3b82f6;color:#fff;border-radius:8px;text-decoration:none;font-size:16px;font-weight:700;box-shadow:0 6px 20px rgba(59,130,246,.25);transition:transform .25s ease,box-shadow .25s ease}
 .page a.addonCta:hover{color:#fff;transform:translateY(-1px);box-shadow:0 10px 28px rgba(59,130,246,.35)}
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}

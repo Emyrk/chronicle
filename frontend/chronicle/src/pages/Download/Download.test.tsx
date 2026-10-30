@@ -40,6 +40,25 @@ describe("DownloadView", () => {
     expect(markup).not.toContain("/combatlog");
   });
 
+  it("adds a 1.12a step for Nampower and optional positional mods", () => {
+    const markup = render("windows", config("1.12a-cc-addon"));
+    expect(markup).toContain("Four steps");
+    expect(markup).toContain("Add Nampower");
+    expect(markup).toContain("ClassicAPI");
+    expect(markup).toContain("SuperWoW doesn&#x27;t record enemy unit positions");
+  });
+
+  it("offers the WoTLK bridge as an optional step on 3.3.5a", () => {
+    const markup = render("windows", config("3.3.5a-cc-addon"));
+    expect(markup).toContain("Optional: unit positions");
+    expect(markup).toContain("https://github.com/Emyrk/ChronicleSidekickBridgeWoTLK");
+    expect(markup).not.toContain("Nampower");
+  });
+
+  it("keeps three steps when the addon needs no client mods", () => {
+    expect(render("windows", config("2.4.3-cc-addon"))).toContain("Three steps");
+  });
+
   it("links the latest release asset for the detected OS", () => {
     const markup = render("macos", config("2.4.3-cc-addon"));
     expect(markup).toContain("Download for macOS");

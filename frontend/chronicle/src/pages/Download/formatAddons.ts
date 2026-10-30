@@ -1,6 +1,16 @@
 import type { SiteConfig } from "@/api/typesGenerated";
 import { hasExplicitServerCapabilities, serverCapabilities } from "@/config/serverCapabilities";
 
+/** A client mod installed alongside the addon. */
+export interface ClientMod {
+  name: string;
+  url: string;
+  /** What it does for Chronicle. */
+  note: string;
+  /** A caveat worth calling out on its own. */
+  warning?: string;
+}
+
 /** A Chronicle addon that turns on combat logging when you log in. */
 export interface CompanionAddon {
   name: string;
@@ -8,14 +18,33 @@ export interface CompanionAddon {
   /** Client the addon is built for, e.g. "1.12a". */
   client: string;
   /** Client mods the addon needs alongside it. */
-  requires: { name: string; url: string }[];
+  requires: ClientMod[];
+  /** Client mods that add unit positions for the replay map. */
+  optional: ClientMod[];
 }
+
+const NAMPOWER: ClientMod = {
+  name: "Nampower",
+  url: "https://github.com/Emyrk/nampower/releases",
+  note: "A DLL mod the addon logs through. Put nampower.dll in your WoW folder, add it to dlls.txt and launch the game with VanillaFixes.",
+};
+
+const SUPERWOW: ClientMod = {
+  name: "SuperWoW",
+  url: "https://github.com/balakethelock/SuperWoW",
+  note: "Friendly unit positions only.",
+  warning: "SuperWoW doesn't record enemy unit positions, so bosses and adds won't show on the replay map.",
+};
 
 const COMPANION: CompanionAddon = {
   name: "ChronicleCompanion",
   url: "https://github.com/Emyrk/ChronicleCompanion/",
   client: "1.12a",
-  requires: [{ name: "Nampower", url: "https://github.com/Emyrk/nampower" }],
+  requires: [NAMPOWER],
+  optional: [
+    { name: "ClassicAPI", url: "https://github.com/brues-code/ClassicAPI", note: "Positions for every unit, friend and enemy." },
+    SUPERWOW,
+  ],
 };
 
 const WOTLK: CompanionAddon = {
@@ -23,6 +52,13 @@ const WOTLK: CompanionAddon = {
   url: "https://github.com/Emyrk/ChronicleCompanionWoTLK",
   client: "3.3.5a",
   requires: [],
+  optional: [
+    {
+      name: "ChronicleSidekickBridgeWoTLK",
+      url: "https://github.com/Emyrk/ChronicleSidekickBridgeWoTLK",
+      note: "Friendly unit positions.",
+    },
+  ],
 };
 
 /**
@@ -31,15 +67,13 @@ const WOTLK: CompanionAddon = {
  */
 const FORMAT_ADDONS: Record<string, CompanionAddon | null> = {
   "1.12a-cc-addon": COMPANION,
-  "1.12a-superwow-addon": {
-    ...COMPANION,
-    requires: [{ name: "SuperWoW", url: "https://github.com/balakethelock/SuperWoW" }],
-  },
+  "1.12a-superwow-addon": { ...COMPANION, requires: [SUPERWOW], optional: [] },
   "2.4.3-cc-addon": {
     name: "ChronicleCompanionTBC",
     url: "https://github.com/Emyrk/ChronicleCompanionTBC",
     client: "2.4.3",
     requires: [],
+    optional: [],
   },
   "3.3.5a-cc-addon": WOTLK,
   "azerothcore-mod": WOTLK,
@@ -48,6 +82,7 @@ const FORMAT_ADDONS: Record<string, CompanionAddon | null> = {
     url: "https://github.com/Smopraq/ChronicleCompanionJimsProxy",
     client: "1.14.2 (HermesProxy)",
     requires: [],
+    optional: [],
   },
   "v22-cleu": null,
 };
