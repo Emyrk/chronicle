@@ -55,6 +55,20 @@ type WorkerAccountPurge struct {
 	// leaveDiscordGuild removes the bot from a Discord server once no Chronicle
 	// guild uses it. Nil when the bot is disabled.
 	leaveDiscordGuild func(discordGuildID string) error
+	// notify reports a finished purge to administrators. Optional.
+	notify func(context.Context, AccountPurgeNotification) error
+}
+
+// AccountPurgeNotification describes a purge that just finished. User details
+// are read before anything is deleted.
+type AccountPurgeNotification struct {
+	PurgeID     uuid.UUID
+	UserID      uuid.UUID
+	Username    string
+	Email       string
+	Status      string
+	LogsDeleted int32
+	Error       string
 }
 
 // RejectIfAccountPurging freezes an account while it is being purged. Call it
@@ -70,8 +84,11 @@ func RejectIfAccountPurging(ctx context.Context, tx *authz.AuthzTX, userID uuid.
 	return httpapi.NewAPIError(errors.New("account purge in progress"), "Your account is being purged, so new uploads are disabled.", http.StatusConflict)
 }
 
-func (c *Chronicle) NewWorkerAccountPurge(leaveDiscordGuild func(discordGuildID string) error) river.Worker[ArgsAccountPurge] {
-	return &WorkerAccountPurge{parent: c, leaveDiscordGuild: leaveDiscordGuild}
+func (c *Chronicle) NewWorkerAccountPurge(
+	leaveDiscordGuild func(discordGuildID string) error,
+	notify func(context.Context, AccountPurgeNotification) error,
+) river.Worker[ArgsAccountPurge] {
+	return &WorkerAccountPurge{parent: c, leaveDiscordGuild: leaveDiscordGuild, notify: notify}
 }
 
 func (c *Chronicle) EnqueueAccountPurge(ctx context.Context, purgeID uuid.UUID) error {
@@ -87,30 +104,83 @@ func (*WorkerAccountPurge) Timeout(*river.Job[ArgsAccountPurge]) time.Duration {
 }
 
 func (w *WorkerAccountPurge) Work(ctx context.Context, job *river.Job[ArgsAccountPurge]) error {
-	err := w.purge(ctx, job.Args.PurgeID)
+	purgeID := job.Args.PurgeID
+	notification := w.newNotification(ctx, purgeID)
+	finished, err := w.purge(ctx, purgeID)
 	if err == nil {
+		if finished {
+			w.sendNotification(ctx, notification)
+		}
 		return nil
 	}
-	slog.ErrorContext(ctx, "account purge failed", slog.String("purge_id", job.Args.PurgeID.String()), slog.Int("attempt", job.Attempt), slog.Any("error", err))
+	slog.ErrorContext(ctx, "account purge failed", slog.String("purge_id", purgeID.String()), slog.Int("attempt", job.Attempt), slog.Any("error", err))
 	if job.Attempt >= job.MaxAttempts {
 		if finishErr := w.parent.Zed.FinishAccountPurge(ctx, database.FinishAccountPurgeParams{
-			ID: job.Args.PurgeID, Status: AccountPurgeFailed, Error: accountPurgeFailedMessage,
+			ID: purgeID, Status: AccountPurgeFailed, Error: accountPurgeFailedMessage,
 		}); finishErr != nil {
 			return errors.Join(err, finishErr)
 		}
+		notification.Error = err.Error()
+		w.sendNotification(ctx, notification)
 	}
 	return err
 }
 
-func (w *WorkerAccountPurge) purge(ctx context.Context, purgeID uuid.UUID) error {
-	db := w.parent.Zed
-	purge, err := db.GetAccountPurge(ctx, purgeID)
+// newNotification captures who is being purged while the user still exists.
+func (w *WorkerAccountPurge) newNotification(ctx context.Context, purgeID uuid.UUID) AccountPurgeNotification {
+	notification := AccountPurgeNotification{PurgeID: purgeID}
+	if w.notify == nil {
+		return notification
+	}
+	purge, err := w.parent.Zed.GetAccountPurge(ctx, purgeID)
 	if err != nil {
-		return fmt.Errorf("get account purge: %w", err)
+		return notification
+	}
+	notification.UserID = purge.UserID
+	if user, err := w.parent.Zed.GetUserByID(ctx, purge.UserID); err == nil {
+		notification.Username = user.Username
+		notification.Email = user.Email
+	}
+	return notification
+}
+
+// sendNotification fills in the purge outcome and reports it. Failing to
+// notify never fails the purge.
+func (w *WorkerAccountPurge) sendNotification(ctx context.Context, notification AccountPurgeNotification) {
+	if w.notify == nil {
+		return
+	}
+	if purge, err := w.parent.Zed.GetAccountPurge(ctx, notification.PurgeID); err == nil {
+		notification.Status = purge.Status
+		notification.LogsDeleted = purge.LogsDeleted
+		if notification.Error == "" {
+			notification.Error = purge.Error
+		}
+	}
+	if err := w.notify(ctx, notification); err != nil {
+		slog.WarnContext(ctx, "failed to notify admins about account purge", slog.String("purge_id", notification.PurgeID.String()), slog.Any("error", err))
+	}
+}
+
+// purge runs the purge and reports whether it finished, successfully or as a
+// failure the user must resolve, during this call.
+func (w *WorkerAccountPurge) purge(ctx context.Context, purgeID uuid.UUID) (bool, error) {
+	purge, err := w.parent.Zed.GetAccountPurge(ctx, purgeID)
+	if err != nil {
+		return false, fmt.Errorf("get account purge: %w", err)
 	}
 	if purge.Status == AccountPurgeSucceeded || purge.Status == AccountPurgeFailed {
-		return nil
+		return false, nil
 	}
+	if err := w.runPurge(ctx, purge); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (w *WorkerAccountPurge) runPurge(ctx context.Context, purge database.AccountPurge) error {
+	db := w.parent.Zed
+	purgeID := purge.ID
 	userID := purge.UserID
 	logsDeleted := purge.LogsDeleted
 	logsTotal := purge.LogsTotal
