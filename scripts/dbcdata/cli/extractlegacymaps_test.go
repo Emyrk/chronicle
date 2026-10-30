@@ -105,6 +105,17 @@ func TestLegacyDungeonMapBounds(t *testing.T) {
 	require.False(t, exists)
 }
 
+func TestClassicDungeonFloorBoundsIncludesUlduarExterior(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, &wowMapFloorBounds{
+		MinX: -1704.1666259765625,
+		MaxX: 1583.3333740234375,
+		MinY: -1022.9166259765625,
+		MaxY: 1168.75,
+	}, classicDungeonFloorBounds(603, 1))
+}
+
 func TestClassicDungeonFloorBoundsIncludesVioletHold(t *testing.T) {
 	t.Parallel()
 

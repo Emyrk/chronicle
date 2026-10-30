@@ -324,6 +324,17 @@ describe("map replay model", () => {
     expect(point).not.toEqual(uiMapPoint({ timestampMs: 1_055, x: 0.5539, y: 0.5876, mapId: 537, floor: 1 }));
   });
 
+  it("keeps Ulduar's placed WMO axes when registering normalized telemetry", () => {
+    const point = uiMapDungeonMeshPoint(
+      { timestampMs: 0, x: 0.5, y: 0.5, mapId: 603, floor: 2 },
+      { minX: -445.234985, maxX: 224.216003, minY: 1392.709961, maxY: 1839.01001 },
+      { minX: 1411.221558, maxX: 2260.505615, minY: -465.209503, maxY: 399.600891 },
+    );
+
+    expect(point?.leftPercent).toBeCloseTo(58.99, 2);
+    expect(point?.topPercent).toBeCloseTo(75.90, 2);
+  });
+
   it("converts world coordinates using UiMapAssignment axis order", () => {
     const assignment = manifest.maps[1].assignments![0];
     expect(zoneMapPoint({ timestampMs: 0, x: 3837, y: 3033, mapId: 0, facing: 0 }, assignment)).toEqual({

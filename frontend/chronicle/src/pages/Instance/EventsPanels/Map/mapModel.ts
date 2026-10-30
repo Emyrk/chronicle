@@ -719,12 +719,23 @@ export function uiMapPoint(sample: MapPositionSample): MapPoint {
   };
 }
 
+function axisSignNearestBounds(
+  sourceMin: number,
+  sourceMax: number,
+  targetMin: number,
+  targetMax: number,
+): 1 | -1 {
+  const sourceCentre = (sourceMin + sourceMax) / 2;
+  const targetCentre = (targetMin + targetMax) / 2;
+  return Math.abs(sourceCentre - targetCentre) <= Math.abs(-sourceCentre - targetCentre) ? 1 : -1;
+}
+
 /**
  * Projects normalized DungeonMap coordinates onto a WMO mesh. DungeonMap.dbc
- * stores its floor extents in the WMO export frame, whose two horizontal axes
- * are the inverse of the world frame used by the published mesh bounds. Convert
- * the UI percentages back through that floor extent, negate both axes, then use
- * the same world projection as native world-coordinate telemetry.
+ * stores its floor extents in the source map frame. Placed WMO exports may keep
+ * or negate either horizontal world axis, so choose each orientation by matching
+ * the floor and mesh centres. Then use the same projection as native world-coordinate
+ * telemetry.
  */
 export function uiMapDungeonMeshPoint(
   sample: MapPositionSample,
@@ -732,10 +743,14 @@ export function uiMapDungeonMeshPoint(
   meshBounds: WowMapFloorBounds,
 ): MapPoint | null {
   if (uiBounds.maxX === uiBounds.minX || uiBounds.maxY === uiBounds.minY) return null;
+  const rawX = uiBounds.maxY - sample.y * (uiBounds.maxY - uiBounds.minY);
+  const rawY = uiBounds.maxX - sample.x * (uiBounds.maxX - uiBounds.minX);
+  const xSign = axisSignNearestBounds(uiBounds.minY, uiBounds.maxY, meshBounds.minX, meshBounds.maxX);
+  const ySign = axisSignNearestBounds(uiBounds.minX, uiBounds.maxX, meshBounds.minY, meshBounds.maxY);
   return renderedDungeonMapPoint({
     ...sample,
-    x: -(uiBounds.maxY - sample.y * (uiBounds.maxY - uiBounds.minY)),
-    y: -(uiBounds.maxX - sample.x * (uiBounds.maxX - uiBounds.minX)),
+    x: xSign * rawX,
+    y: ySign * rawY,
   }, meshBounds);
 }
 

@@ -183,19 +183,6 @@ export function floorBelow(
   return cast(top);
 }
 
-/**
- * Chooses a mesh floor when the log has no height. World-coordinate logs keep
- * the highest surface for compatibility; normalized UI-map logs prefer the
- * lowest upward-facing surface so roofs and canopies do not capture units.
- */
-export function floorWithoutLoggedHeight(
-  highest: number | null,
-  lowest: number | null,
-  preferLowest: boolean,
-): number | null {
-  return preferLowest ? lowest ?? highest : highest;
-}
-
 /** The median of the defined heights, or undefined when there are none. */
 export function medianHeight(heights: Iterable<number | undefined>): number | undefined {
   const values: number[] = [];
