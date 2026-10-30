@@ -95,9 +95,9 @@
 }
 
 .logo{flex:0 0 auto;width:240px;height:240px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 24px 40px rgba(0,0,0,.5))}
-.logo img{width:100%;height:100%;object-fit:contain;border-radius:28px;animation:float 6s ease-in-out infinite}
+.logo img{width:100%;height:100%;object-fit:contain;border-radius:50%;box-shadow:0 0 0 1px rgba(230,180,80,.3);animation:float 6s ease-in-out infinite}
 .mark{position:relative;display:inline-flex;flex:0 0 auto}
-.mark img{width:100%;height:100%;border-radius:4px}
+.mark img{width:100%;height:100%;border-radius:50%}
 .mark .state{position:absolute;right:-3px;bottom:-3px;width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 2px #0b0908}
 .addonRow{display:flex;align-items:center;gap:8px;color:#ffd100}
 .addonBox{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border:1px solid #c9a227;border-radius:2px;background:rgba(255,209,0,.15)}
