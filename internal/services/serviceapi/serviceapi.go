@@ -78,34 +78,39 @@ func oauthBrowserOnlyMiddleware(accessURL *url.URL) func(http.Handler) http.Hand
 type Service struct {
 	broker *services.Services
 
-	secretPem             string
-	httpAddress           string
-	devAuth               bool
-	saffronURL            *url.URL
-	ocrURL                *url.URL
-	adsTxtURL             *url.URL
-	nitroPaySiteID        string
-	ga4MeasurementID      string
-	shortLinkDomain       string
-	clientUploadsDisabled bool
-	zugzugURL             string
-	zugzugSecret          string
-	zugzugInstructionsURL string
-	itemPricingAPIKey     string
-	itemPricingBaseURL    string
-	discordAuth           chronauth.DiscordOAuth
-	app                   *api.API
-	serverLn              net.Listener
-	httpHandler           *switchableHandler
-	closeListener         func()
+	secretPem                string
+	httpAddress              string
+	liveSignalingInternalURL *url.URL
+	liveSignalingPublicURL   *url.URL
+	liveSignalingSecret      string
+	devAuth                  bool
+	saffronURL               *url.URL
+	ocrURL                   *url.URL
+	adsTxtURL                *url.URL
+	nitroPaySiteID           string
+	ga4MeasurementID         string
+	shortLinkDomain          string
+	clientUploadsDisabled    bool
+	zugzugURL                string
+	zugzugSecret             string
+	zugzugInstructionsURL    string
+	itemPricingAPIKey        string
+	itemPricingBaseURL       string
+	discordAuth              chronauth.DiscordOAuth
+	app                      *api.API
+	serverLn                 net.Listener
+	httpHandler              *switchableHandler
+	closeListener            func()
 }
 
 func New(broker *services.Services) *Service {
 	return &Service{
-		broker:     broker,
-		saffronURL: new(url.URL),
-		ocrURL:     new(url.URL),
-		adsTxtURL:  new(url.URL),
+		broker:                   broker,
+		saffronURL:               new(url.URL),
+		ocrURL:                   new(url.URL),
+		adsTxtURL:                new(url.URL),
+		liveSignalingInternalURL: new(url.URL),
+		liveSignalingPublicURL:   new(url.URL),
 	}
 }
 
@@ -218,6 +223,14 @@ func (s *Service) Start(ctx context.Context) error {
 	if s.adsTxtURL.Scheme == "" {
 		adsTxtURL = nil
 	}
+	liveInternalURL := s.liveSignalingInternalURL
+	if liveInternalURL.Scheme == "" {
+		liveInternalURL = nil
+	}
+	livePublicURL := s.liveSignalingPublicURL
+	if livePublicURL.Scheme == "" {
+		livePublicURL = nil
+	}
 	wowDBSvc := servicewowdb.WoWDB(s.broker)
 	wowdb := wowDBSvc
 	assets := serviceassets.Assets(s.broker)
@@ -255,25 +268,28 @@ func (s *Service) Start(ctx context.Context) error {
 		CustomPanelHTTPClient: githubClient,
 		ItemPricing:           itempricing.New(zed, s.itemPricingAPIKey, s.itemPricingBaseURL),
 
-		Billing:               billingService,
-		AccessURL:             au,
-		AdsTxtURL:             adsTxtURL,
-		NitroPaySiteID:        s.nitroPaySiteID,
-		GA4ID:                 s.ga4MeasurementID,
-		ShortLinkDomain:       s.shortLinkDomain,
-		ClientUploadsDisabled: s.clientUploadsDisabled,
-		BillingEnabled:        servicebilling.BillingEnabled(s.broker),
-		ExternalVerification:  s.externalVerification(),
-		DevOAuth:              s.devAuth,
-		Discord:               s.discordAuth,
-		SecretPEM:             decodedSecret,
-		Tenant:                tenantSvc,
-		Choose:                servicechoose.Choose(s.broker),
-		Application:           appSvc,
-		Dataset:               datasetSvc,
-		CacheSvc:              servicecache.CacheService(s.broker),
-		WhatsNew:              servicewhatsnew.WhatsNew(s.broker),
-		Inference:             serviceinference.Inference(s.broker),
+		Billing:                  billingService,
+		AccessURL:                au,
+		AdsTxtURL:                adsTxtURL,
+		NitroPaySiteID:           s.nitroPaySiteID,
+		GA4ID:                    s.ga4MeasurementID,
+		ShortLinkDomain:          s.shortLinkDomain,
+		ClientUploadsDisabled:    s.clientUploadsDisabled,
+		BillingEnabled:           servicebilling.BillingEnabled(s.broker),
+		ExternalVerification:     s.externalVerification(),
+		DevOAuth:                 s.devAuth,
+		Discord:                  s.discordAuth,
+		SecretPEM:                decodedSecret,
+		LiveSignalingInternalURL: liveInternalURL,
+		LiveSignalingPublicURL:   livePublicURL,
+		LiveSignalingSecret:      s.liveSignalingSecret,
+		Tenant:                   tenantSvc,
+		Choose:                   servicechoose.Choose(s.broker),
+		Application:              appSvc,
+		Dataset:                  datasetSvc,
+		CacheSvc:                 servicecache.CacheService(s.broker),
+		WhatsNew:                 servicewhatsnew.WhatsNew(s.broker),
+		Inference:                serviceinference.Inference(s.broker),
 	})
 
 	if err != nil {
@@ -334,6 +350,18 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_HTTP_ADDRESS",
 			Default:     "0.0.0.0:4000",
 			Value:       serpent.StringOf(&s.httpAddress),
+		},
+		{
+			Name: "Live signaling internal URL", Flag: "live-signaling-internal-url", Env: "CHRONICLE_LIVE_SIGNALING_INTERNAL_URL",
+			Description: "Private URL of the singleton live signaling service.", Value: serpent.URLOf(s.liveSignalingInternalURL),
+		},
+		{
+			Name: "Live signaling public URL", Flag: "live-signaling-public-url", Env: "CHRONICLE_LIVE_SIGNALING_PUBLIC_URL",
+			Description: "Public origin of the live signaling WebSocket service.", Value: serpent.URLOf(s.liveSignalingPublicURL),
+		},
+		{
+			Name: "Live signaling secret", Flag: "live-signaling-secret", Env: "CHRONICLE_LIVE_SIGNALING_SECRET",
+			Description: "Shared credential for private room creation and joining.", Value: serpent.StringOf(&s.liveSignalingSecret),
 		},
 		{
 			Name:        "dev-auth",

@@ -25,3 +25,27 @@ return the standard `chroniclesdk` create/join responses. The backend must
 perform its own authorization and resolve the authenticated username before
 forwarding it; leave `username` empty for a guest. The backend constructs the
 public WebSocket URL. This daemon does not expose public create/join endpoints.
+
+The main Chronicle API remains the only browser-facing create/join API and
+checks the global SpiceDB `create_live_session` permission (Revered or Exalted)
+before creating a room. Guests may still join using a code and optional password.
+Configure the backend with all three settings together:
+
+- `CHRONICLE_LIVE_SIGNALING_INTERNAL_URL=http://<private-service-address>:8081`
+- `CHRONICLE_LIVE_SIGNALING_PUBLIC_URL=https://<public-signaling-origin>`
+- `CHRONICLE_LIVE_SIGNALING_SECRET=<same secret as LIVESESSION_INTERNAL_SECRET>`
+
+The backend must reach the private listener over the platform's internal network;
+only the public listener should receive external traffic. The browser obtains the
+public WebSocket URL from the create/join response; the main site's CSP adds that
+configured origin to `connect-src`. Configure `LIVESESSION_ALLOWED_ORIGINS` to
+include every Chronicle site origin used by guests. If the backend settings are
+absent, the old process-local signaling mode remains available for single-node
+development; **do not run multiple API replicas in that mode**.
+
+Deploy the singleton daemon first, ensure its public and private listeners are
+reachable from their respective clients, and then enable all three backend
+settings on every API replica. A backend configured for the daemon fails startup
+if any one setting is missing. Existing in-memory sessions on an old backend
+end during rollout. Do not scale the signaling service itself past one replica
+without implementing shared room/peer coordination.

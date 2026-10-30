@@ -58,7 +58,25 @@ func (s *Service) RunCleanup(ctx context.Context, interval time.Duration) {
 		case now := <-ticker.C:
 			s.mu.Lock()
 			s.cleanupLocked(now)
+			// A guest may connect before the leader. Do not keep such an
+			// unstarted room alive forever just because its guest socket pings.
+			var stranded []*peer
+			for code, room := range s.rooms {
+				if room.leader != nil || now.Sub(room.createdAt) < unstartedRoomTTL {
+					continue
+				}
+				delete(s.rooms, code)
+				for _, guest := range room.participants {
+					if guest.conn != nil {
+						stranded = append(stranded, guest)
+					}
+				}
+			}
 			s.mu.Unlock()
+			for _, guest := range stranded {
+				_ = guest.writeJSON(serverMessage{Type: "session_ended", Reason: "leader_unavailable"})
+				guest.closeNow()
+			}
 		}
 	}
 }

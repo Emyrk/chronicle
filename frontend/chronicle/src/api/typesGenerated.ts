@@ -863,6 +863,7 @@ export interface CreateLiveSessionResponse {
     readonly code: string;
     readonly leader_token: string;
     readonly url: string;
+    readonly websocket_url?: string;
 }
 
 // From chroniclesdk/lua_project.go
@@ -2767,6 +2768,7 @@ export interface JoinLiveSessionRequest {
 export interface JoinLiveSessionResponse {
     readonly participant_token: string;
     readonly instance_id: string;
+    readonly websocket_url?: string;
 }
 
 // From chroniclesdk/rankings.go

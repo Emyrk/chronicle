@@ -125,10 +125,13 @@ type Options struct {
 	// ExternalVerification enables the external character verification
 	// provider (e.g. zug-zug). Configured via environment variables; nil
 	// when disabled.
-	ExternalVerification *chroniclesdk.ExternalVerification
-	DevOAuth             bool
-	Discord              chronauth.DiscordOAuth
-	SecretPEM            []byte // Used for JWTs
+	ExternalVerification     *chroniclesdk.ExternalVerification
+	DevOAuth                 bool
+	Discord                  chronauth.DiscordOAuth
+	SecretPEM                []byte // Used for JWTs
+	LiveSignalingInternalURL *url.URL
+	LiveSignalingPublicURL   *url.URL
+	LiveSignalingSecret      string
 
 	// Tenant is the multi-tenant service for subdomain → tenant resolution.
 	// If nil, tenant middleware is a no-op.
@@ -161,6 +164,7 @@ type API struct {
 	Zed                *authz.Authz
 	CustomPanels       *custompanelapi.Handler
 	liveSessions       *servicelivesession.Service
+	liveSessionRemote  *liveSessionRemote
 	luaArtifactBacklog prometheus.Gauge
 	discoveryStats     discoveryStatsCache
 }
@@ -225,6 +229,17 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	if err := opts.Registry.Register(luaArtifactBacklog); err != nil {
 		return nil, fmt.Errorf("register Lua artifact GC metric: %w", err)
 	}
+	resolveLiveUsername := func(ctx context.Context, userID uuid.UUID) (string, error) {
+		user, err := opts.Zed.GetUserByID(ctx, userID)
+		if err != nil {
+			return "", err
+		}
+		return user.Username, nil
+	}
+	liveRemote, err := newLiveSessionRemote(opts.LiveSignalingInternalURL, opts.LiveSignalingPublicURL, opts.LiveSignalingSecret, resolveLiveUsername)
+	if err != nil {
+		return nil, fmt.Errorf("configure live signaling: %w", err)
+	}
 	api := &API{
 		luaArtifactBacklog: luaArtifactBacklog,
 		Opts:               &opts,
@@ -234,16 +249,13 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		Queues:             opts.RiverQueue,
 		Zed:                opts.Zed,
 		CustomPanels:       custompanelapi.New(custompanelapi.Options{HTTPClient: opts.CustomPanelHTTPClient}),
-		liveSessions: servicelivesession.New(servicelivesession.Options{
-			AccessURL: opts.AccessURL,
-			ResolveUsername: func(ctx context.Context, userID uuid.UUID) (string, error) {
-				user, err := opts.Zed.GetUserByID(ctx, userID)
-				if err != nil {
-					return "", err
-				}
-				return user.Username, nil
-			},
-		}),
+		liveSessionRemote:  liveRemote,
+	}
+	if liveRemote == nil {
+		api.liveSessions = servicelivesession.New(servicelivesession.Options{
+			AccessURL:       opts.AccessURL,
+			ResolveUsername: resolveLiveUsername,
+		})
 	}
 	gcCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	api.drainLuaArtifactGarbage(gcCtx)
@@ -269,12 +281,21 @@ func New(ctx context.Context, opts Options) (*API, error) {
 
 func (api *API) Routes() chi.Router {
 	r := chi.NewRouter()
+	var liveConnectSources []string
+	if api.liveSessionRemote != nil {
+		public := api.liveSessionRemote.publicURL
+		scheme := "ws"
+		if public.Scheme == "https" {
+			scheme = "wss"
+		}
+		liveConnectSources = []string{scheme + "://" + public.Host}
+	}
 	r.Use(
 		httpmw.Recover(api.Opts.Logger),
 		httpmw.Log500(api.Opts.Logger),
 		RouteCors(api.Opts.Tenant),
 		httpmw.SecurityHeaders(),
-		httpmw.ContentSecurityPolicy(api.adsEnabledForRequest),
+		httpmw.ContentSecurityPolicy(api.adsEnabledForRequest, liveConnectSources...),
 		httpmw.NoWWW(),
 		httpmw.PrometheusMW(api.Opts.Registry),
 		middleware.Compress(5,
@@ -316,8 +337,12 @@ func (api *API) Routes() chi.Router {
 			r.Use(api.Auth.AuthenticationMiddleware)
 
 			r.Get("/discord-integration/callback", api.CompleteGuildDiscordInstall)
-			r.Post("/live-sessions/{code}/join", api.liveSessions.Join)
-			r.Get("/live-sessions/{code}/ws", api.liveSessions.WebSocket)
+			if api.liveSessionRemote != nil {
+				r.Post("/live-sessions/{code}/join", api.liveSessionRemote.Join)
+			} else {
+				r.Post("/live-sessions/{code}/join", api.liveSessions.Join)
+				r.Get("/live-sessions/{code}/ws", api.liveSessions.WebSocket)
+			}
 
 			r.Group(func(r chi.Router) {
 				r.Use(api.Auth.Authenticated(true))
@@ -333,7 +358,11 @@ func (api *API) Routes() chi.Router {
 				)
 				r.Get("/whoami/dump", api.DumpToken)
 				r.Post("/authcheck", api.checkAuthorization)
-				r.Post("/live-sessions", api.liveSessions.Create)
+				if api.liveSessionRemote != nil {
+					r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanCreate_live_session_User)).Post("/live-sessions", api.liveSessionRemote.Create)
+				} else {
+					r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanCreate_live_session_User)).Post("/live-sessions", api.liveSessions.Create)
+				}
 				r.Get("/me/storage", api.GetMyStorage)
 				if api.Opts.Sidekick != nil {
 					r.Mount("/me/sidekicks", api.Opts.Sidekick.AccountRoutes())

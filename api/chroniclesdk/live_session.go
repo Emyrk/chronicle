@@ -10,9 +10,10 @@ type CreateLiveSessionRequest struct {
 
 // CreateLiveSessionResponse contains the leader credentials for a live session.
 type CreateLiveSessionResponse struct {
-	Code        string `json:"code"`
-	LeaderToken string `json:"leader_token"`
-	URL         string `json:"url"`
+	Code         string `json:"code"`
+	LeaderToken  string `json:"leader_token"`
+	URL          string `json:"url"`
+	WebSocketURL string `json:"websocket_url,omitempty"`
 }
 
 // JoinLiveSessionRequest contains the optional password for a live session.
@@ -24,4 +25,5 @@ type JoinLiveSessionRequest struct {
 type JoinLiveSessionResponse struct {
 	ParticipantToken string    `json:"participant_token"`
 	InstanceID       uuid.UUID `json:"instance_id"`
+	WebSocketURL     string    `json:"websocket_url,omitempty"`
 }
