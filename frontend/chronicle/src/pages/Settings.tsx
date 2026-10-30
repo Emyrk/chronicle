@@ -370,29 +370,54 @@ export function ProfileSettings() {
         <div className="rounded-lg border p-4 space-y-3">
           <div>
             <h3 className="text-sm font-medium">Sign-in Methods</h3>
-            <p className="text-xs text-muted-foreground">Connect another method so you can use either one to sign in to this account.</p>
+            <p className="text-xs text-muted-foreground">
+              {isPasswordAuth
+                ? "Your account uses email and password. Connecting Discord is optional and adds a second way to sign in to this same account."
+                : "Ways you can sign in to this account."}
+            </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="divide-y rounded-md border">
             {isPasswordAuth && (
-              <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm">
-                <Lock className="size-4 text-muted-foreground" /> Email & Password
-              </span>
+              <div className="flex items-center gap-3 p-3">
+                <Lock className="size-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium">Email & Password</div>
+                  <div className="truncate text-xs text-muted-foreground">{email}</div>
+                </div>
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Primary</span>
+              </div>
             )}
-            {isDiscordLinked ? (
-              <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm">
-                <DiscordIcon className="size-4 text-[#5865F2]" /> Discord connected
-              </span>
-            ) : isPasswordAuth ? (
-              <Button variant="outline" size="sm" asChild>
-                <a href="/auth/discord/link?from=/account/settings">
-                  <DiscordIcon className="size-4" /> Connect Discord
-                </a>
-              </Button>
-            ) : null}
+            {(isDiscordLinked || isPasswordAuth) && (
+              <div className="flex items-center gap-3 p-3">
+                <DiscordIcon className={cn("size-5 shrink-0", isDiscordLinked ? "text-[#5865F2]" : "text-muted-foreground")} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    Discord
+                    {isPasswordAuth && !isDiscordLinked && (
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">Optional</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {isDiscordLinked
+                      ? isPasswordAuth ? "Connected as a secondary sign-in method." : "Signs you in to this account."
+                      : "Add Discord as a secondary sign-in method. Your email and password keep working."}
+                  </div>
+                </div>
+                {isDiscordLinked ? (
+                  <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-500">Connected</span>
+                ) : (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href="/auth/discord/link?from=/account/settings">Connect</a>
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground">
-            Discord identities already attached to another Chronicle account require support-assisted verification before those accounts can be merged or deleted.
-          </p>
+          {isPasswordAuth && !isDiscordLinked && (
+            <p className="text-xs text-muted-foreground">
+              If this Discord account is already attached to another Chronicle account, connecting it starts a merge request that an administrator must review.
+            </p>
+          )}
         </div>
       )}
 
@@ -423,39 +448,6 @@ export function ProfileSettings() {
           </div>
         </div>
       )}
-
-      <div className="rounded-lg border border-destructive/40 p-4 space-y-3">
-        <div>
-          <h3 className="text-sm font-medium text-destructive">Delete Account</h3>
-          <p className="text-xs text-muted-foreground">
-            Account deletion is permanent. You must have signed in within the last 15 minutes. Accounts with owned content, billing, permissions, or active merge requests require administrator assistance first.
-          </p>
-        </div>
-        {deletionStatus && !deletionStatus.can_delete && (
-          <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
-            This account cannot be deleted automatically: {deletionStatus.blockers.join(", ")}.
-          </div>
-        )}
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Input
-            value={deleteConfirmation}
-            onChange={(event) => setDeleteConfirmation(event.target.value)}
-            placeholder="Type DELETE to confirm"
-            aria-label="Account deletion confirmation"
-            className="sm:max-w-xs"
-          />
-          <Button
-            variant="destructive"
-            disabled={!deletionStatus?.can_delete || deleteConfirmation !== "DELETE" || deleteAccount.isPending}
-            onClick={() => deleteAccount.mutate(deleteConfirmation, {
-              onSuccess: () => { window.location.href = "/login"; },
-              onError: (error) => toast.error("Account could not be deleted", { description: error.message }),
-            })}
-          >
-            {deleteAccount.isPending ? "Deleting..." : "Delete account permanently"}
-          </Button>
-        </div>
-      </div>
 
       <div className="rounded-lg border p-4 space-y-3">
         <div>
@@ -490,6 +482,38 @@ export function ProfileSettings() {
         </div>
       </div>
 
+      <div className="rounded-lg border border-destructive/40 p-4 space-y-3">
+        <div>
+          <h3 className="text-sm font-medium text-destructive">Delete Account</h3>
+          <p className="text-xs text-muted-foreground">
+            Account deletion is permanent. You must have signed in within the last 15 minutes. Accounts with owned content, billing, permissions, or active merge requests require administrator assistance first.
+          </p>
+        </div>
+        {deletionStatus && !deletionStatus.can_delete && (
+          <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+            This account cannot be deleted automatically: {deletionStatus.blockers.join(", ")}.
+          </div>
+        )}
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            value={deleteConfirmation}
+            onChange={(event) => setDeleteConfirmation(event.target.value)}
+            placeholder="Type DELETE to confirm"
+            aria-label="Account deletion confirmation"
+            className="sm:max-w-xs"
+          />
+          <Button
+            variant="destructive"
+            disabled={!deletionStatus?.can_delete || deleteConfirmation !== "DELETE" || deleteAccount.isPending}
+            onClick={() => deleteAccount.mutate(deleteConfirmation, {
+              onSuccess: () => { window.location.href = "/login"; },
+              onError: (error) => toast.error("Account could not be deleted", { description: error.message }),
+            })}
+          >
+            {deleteAccount.isPending ? "Deleting..." : "Delete account permanently"}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
