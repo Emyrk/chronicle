@@ -27878,6 +27878,98 @@ func (q *sqlQuerier) UpdateUserPanelLayoutDefaults(ctx context.Context, arg Upda
 	return i, err
 }
 
+const getDiscordNotificationTarget = `-- name: GetDiscordNotificationTarget :one
+SELECT ual.linked_id
+FROM user_notification_settings uns
+JOIN user_auth_links ual ON ual.user_id = uns.user_id AND ual.provider = 'discord'
+WHERE uns.user_id = $1
+  AND uns.channel = 'discord'
+  AND uns.event = $2
+  AND uns.enabled
+LIMIT 1
+`
+
+type GetDiscordNotificationTargetParams struct {
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	Event  string    `db:"event" json:"event"`
+}
+
+// GetDiscordNotificationTarget returns the user's linked Discord ID when they
+// have opted into Discord DMs for the event.
+func (q *sqlQuerier) GetDiscordNotificationTarget(ctx context.Context, arg GetDiscordNotificationTargetParams) (string, error) {
+	row := q.db.QueryRow(ctx, getDiscordNotificationTarget, arg.UserID, arg.Event)
+	var linked_id string
+	err := row.Scan(&linked_id)
+	return linked_id, err
+}
+
+const listUserNotificationSettings = `-- name: ListUserNotificationSettings :many
+SELECT user_id, channel, event, enabled, updated_at
+FROM user_notification_settings
+WHERE user_id = $1
+ORDER BY channel, event
+`
+
+func (q *sqlQuerier) ListUserNotificationSettings(ctx context.Context, userID uuid.UUID) ([]UserNotificationSetting, error) {
+	rows, err := q.db.Query(ctx, listUserNotificationSettings, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserNotificationSetting
+	for rows.Next() {
+		var i UserNotificationSetting
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Channel,
+			&i.Event,
+			&i.Enabled,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertUserNotificationSetting = `-- name: UpsertUserNotificationSetting :one
+INSERT INTO user_notification_settings (user_id, channel, event, enabled)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (user_id, channel, event) DO UPDATE
+SET enabled = EXCLUDED.enabled,
+    updated_at = NOW()
+RETURNING user_id, channel, event, enabled, updated_at
+`
+
+type UpsertUserNotificationSettingParams struct {
+	UserID  uuid.UUID `db:"user_id" json:"user_id"`
+	Channel string    `db:"channel" json:"channel"`
+	Event   string    `db:"event" json:"event"`
+	Enabled bool      `db:"enabled" json:"enabled"`
+}
+
+func (q *sqlQuerier) UpsertUserNotificationSetting(ctx context.Context, arg UpsertUserNotificationSettingParams) (UserNotificationSetting, error) {
+	row := q.db.QueryRow(ctx, upsertUserNotificationSetting,
+		arg.UserID,
+		arg.Channel,
+		arg.Event,
+		arg.Enabled,
+	)
+	var i UserNotificationSetting
+	err := row.Scan(
+		&i.UserID,
+		&i.Channel,
+		&i.Event,
+		&i.Enabled,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const countUserPanelLayoutsTotal = `-- name: CountUserPanelLayoutsTotal :one
 SELECT
   (SELECT COUNT(*) FROM user_panel_layouts upl WHERE upl.user_id = $1) +

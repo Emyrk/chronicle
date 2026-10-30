@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw, Lock, Sparkles, Bot } from "lucide-react";
+import { Bell, Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw, Lock, Sparkles, Bot } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -85,6 +85,7 @@ import { DiscordIcon } from "@/components/icons/DiscordIcon";
 export { BillingSettings } from "./Settings/BillingSettings";
 export { CustomPanelSettings } from "./Settings/CustomPanelSettings";
 export { SidekickSettings } from "./Settings/SidekickSettings";
+export { NotificationSettings } from "./Settings/NotificationSettings";
 
 const LAYOUT_LAB_INSTANCE_REFERENCE_STORAGE_KEY = "layout-lab.instance-reference";
 const LAYOUT_LAB_RESIZE_HINT_DISMISSED_STORAGE_KEY = "layout-lab.resize-hint-dismissed";
@@ -130,7 +131,7 @@ const allTabs: Tab[] = [
   { path: "/account/characters", label: "Characters", icon: Swords },
   { path: "/account/billing", label: "Billing", icon: CreditCard },
   { path: "/account/storage", label: "Storage", icon: HardDrive },
-  // { path: "/account/notifications", label: "Notifications", icon: Bell },
+  { path: "/account/notifications", label: "Notifications", icon: Bell },
   // { path: "/account/privacy", label: "Privacy", icon: Shield },
   // { path: "/account/appearance", label: "Appearance", icon: Palette },
   { path: "/account/ai", label: "AI assistant", icon: Bot },
@@ -992,15 +993,6 @@ export function AiAssistantSettings() {
         <p className="text-muted-foreground mt-1 text-sm">Choose which AI assistants appear for your account and connect the provider that pays for them.</p>
       </div>
       <InferenceSettings />
-    </div>
-  );
-}
-
-export function NotificationSettings() {
-  return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Notification Preferences</h2>
-      <p className="text-muted-foreground">Configure how you receive notifications.</p>
     </div>
   );
 }

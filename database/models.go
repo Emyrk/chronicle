@@ -2697,6 +2697,14 @@ type UserMapControl struct {
 	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
+type UserNotificationSetting struct {
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	Channel   string             `db:"channel" json:"channel"`
+	Event     string             `db:"event" json:"event"`
+	Enabled   bool               `db:"enabled" json:"enabled"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type UserPanelLayout struct {
 	ID              uuid.UUID          `db:"id" json:"id"`
 	UserID          uuid.NullUUID      `db:"user_id" json:"user_id"`

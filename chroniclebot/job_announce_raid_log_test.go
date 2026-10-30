@@ -388,20 +388,20 @@ func TestInstanceURL(t *testing.T) {
 		PrimaryDomain: "chronicle.example",
 	}}}
 	instanceID := uuid.New()
-	require.Equal(t, "https://legacy.chronicle.example/instances/durable-slug", worker.instanceURL(
+	require.Equal(t, "https://legacy.chronicle.example/instances/durable-slug", worker.bot.instanceURL(
 		instanceID,
 		pgtype.Text{String: "durable-slug", Valid: true},
 		pgtype.Text{},
 	))
-	require.Equal(t, "https://epoch.chronicle.example/instances/durable-slug", worker.instanceURL(
+	require.Equal(t, "https://epoch.chronicle.example/instances/durable-slug", worker.bot.instanceURL(
 		instanceID,
 		pgtype.Text{String: "durable-slug", Valid: true},
 		pgtype.Text{String: "epoch", Valid: true},
 	))
-	require.Equal(t, "https://legacy.chronicle.example/instances/"+instanceID.String(), worker.instanceURL(
+	require.Equal(t, "https://legacy.chronicle.example/instances/"+instanceID.String(), worker.bot.instanceURL(
 		instanceID,
 		pgtype.Text{},
 		pgtype.Text{},
 	))
-	require.Empty(t, worker.instanceURL(uuid.Nil, pgtype.Text{}, pgtype.Text{}))
+	require.Empty(t, worker.bot.instanceURL(uuid.Nil, pgtype.Text{}, pgtype.Text{}))
 }

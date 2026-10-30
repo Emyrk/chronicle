@@ -218,7 +218,7 @@ func (w *WorkerAnnounceRaidLog) Work(ctx context.Context, job *river.Job[ArgsAnn
 	}
 
 	announcement := reconciled.announcement
-	messagePayload, err := w.buildAnnouncement(ctx, announcement.RunID)
+	messagePayload, err := w.bot.buildAnnouncement(ctx, announcement.RunID)
 	if err != nil {
 		return err
 	}
@@ -306,7 +306,7 @@ func (w *WorkerAnnounceRaidLog) deleteObsoleteMessage(announcement *database.Gui
 	}
 }
 
-func (w *WorkerAnnounceRaidLog) instanceURL(instanceID uuid.UUID, slug, tenantSlug pgtype.Text) string {
+func (b *Bot) instanceURL(instanceID uuid.UUID, slug, tenantSlug pgtype.Text) string {
 	identifier := slug.String
 	if !slug.Valid || identifier == "" {
 		if instanceID == uuid.Nil {
@@ -315,16 +315,20 @@ func (w *WorkerAnnounceRaidLog) instanceURL(instanceID uuid.UUID, slug, tenantSl
 		identifier = instanceID.String()
 	}
 
-	baseURL := strings.TrimRight(w.bot.config.AccessURL, "/")
-	if tenantSlug.Valid && tenantSlug.String != "" && w.bot.config.PrimaryDomain != "" {
-		if accessURL, err := url.Parse(w.bot.config.AccessURL); err == nil && accessURL.Scheme != "" {
+	return fmt.Sprintf("%s/instances/%s", b.tenantBaseURL(tenantSlug), url.PathEscape(identifier))
+}
+
+func (b *Bot) tenantBaseURL(tenantSlug pgtype.Text) string {
+	baseURL := strings.TrimRight(b.config.AccessURL, "/")
+	if tenantSlug.Valid && tenantSlug.String != "" && b.config.PrimaryDomain != "" {
+		if accessURL, err := url.Parse(b.config.AccessURL); err == nil && accessURL.Scheme != "" {
 			baseURL = (&url.URL{
 				Scheme: accessURL.Scheme,
-				Host:   tenantSlug.String + "." + w.bot.config.PrimaryDomain,
+				Host:   tenantSlug.String + "." + b.config.PrimaryDomain,
 			}).String()
 		}
 	}
-	return fmt.Sprintf("%s/instances/%s", baseURL, url.PathEscape(identifier))
+	return baseURL
 }
 
 func formatDuration(duration time.Duration) string {
@@ -409,8 +413,10 @@ func formatUploadedLog(logName, author, duration string, bossCount int) string {
 	return strings.Join(parts, " · ")
 }
 
-func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uuid.UUID) (*discordgo.MessageSend, error) {
-	logs, err := w.bot.config.DB.ListInstancesForDiscordAnnouncement(ctx, runID)
+// buildAnnouncement renders the single message format used for completed
+// instances, both in guild announcement channels and in user DMs.
+func (b *Bot) buildAnnouncement(ctx context.Context, runID uuid.UUID) (*discordgo.MessageSend, error) {
+	logs, err := b.config.DB.ListInstancesForDiscordAnnouncement(ctx, runID)
 	if err != nil {
 		return nil, fmt.Errorf("list announcement logs: %w", err)
 	}
@@ -419,13 +425,13 @@ func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uui
 	}
 
 	best := logs[0]
-	bestEncounters, err := w.bot.config.DB.ListDiscordAnnouncementEncounters(ctx, best.ID)
+	bestEncounters, err := b.config.DB.ListDiscordAnnouncementEncounters(ctx, best.ID)
 	if err != nil {
 		return nil, fmt.Errorf("list announcement encounters: %w", err)
 	}
 	encounterCounts := map[uuid.UUID]int{best.ID: len(bestEncounters)}
 	for _, candidate := range logs[1:] {
-		encounters, err := w.bot.config.DB.ListDiscordAnnouncementEncounters(ctx, candidate.ID)
+		encounters, err := b.config.DB.ListDiscordAnnouncementEncounters(ctx, candidate.ID)
 		if err != nil {
 			return nil, fmt.Errorf("list announcement encounters: %w", err)
 		}
@@ -464,7 +470,7 @@ func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uui
 				label = log.UploaderName
 			}
 			logName := fmt.Sprintf("Log %d", i+1)
-			if logURL := w.instanceURL(log.ID, log.HashedSlug, log.TenantSlug); logURL != "" {
+			if logURL := b.instanceURL(log.ID, log.HashedSlug, log.TenantSlug); logURL != "" {
 				logName = fmt.Sprintf("[%s](%s)", logName, logURL)
 			}
 			lines = append(lines, formatUploadedLog(logName, label, announcementDuration(log), encounterCounts[log.ID]))
@@ -488,7 +494,7 @@ func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uui
 	embed := &discordgo.MessageEmbed{
 		Author: &discordgo.MessageEmbedAuthor{Name: category + " UPLOAD"},
 		Title:  title,
-		URL:    w.instanceURL(best.ID, best.HashedSlug, best.TenantSlug),
+		URL:    b.instanceURL(best.ID, best.HashedSlug, best.TenantSlug),
 		Fields: fields,
 		Color:  announcementColor(best.Name),
 		Footer: &discordgo.MessageEmbedFooter{Text: strings.Join(footerParts, " · ")},

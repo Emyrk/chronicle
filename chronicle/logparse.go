@@ -1080,6 +1080,13 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			}
 		}
 	}
+	// Only a log's first parse notifies its uploader; reparses and appends are
+	// replacements.
+	if !job.Args.Replacement {
+		if _, err := w.parent.queue.Insert(ctx, chroniclebot.ArgsNotifyUploadProcessed{LogGroupID: job.Args.LogID}, nil); err != nil {
+			w.parent.logger.WarnContext(ctx, "failed to enqueue upload processed notification", slog.Any("error", err))
+		}
+	}
 
 	return nil
 }

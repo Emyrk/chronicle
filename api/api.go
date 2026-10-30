@@ -63,7 +63,8 @@ type SidekickService interface {
 	AccountRoutes() http.Handler
 	StatusRoutes() http.Handler
 	AdminRoutes() http.Handler
-	RecordUpload(context.Context)
+	// RecordUpload reports whether the upload came from a Sidekick.
+	RecordUpload(context.Context) bool
 }
 
 type InferenceService interface {
@@ -374,6 +375,8 @@ func (api *API) Routes() chi.Router {
 				r.Get("/me/custom-panels", api.GetMyCustomPanelSettings)
 				r.Put("/me/custom-panels", api.UpdateMyCustomPanelSettings)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
+				r.Get("/me/notifications", api.GetMyNotificationSettings)
+				r.Put("/me/notifications", api.UpdateMyNotificationSetting)
 				r.Get("/me/account-purge", api.GetAccountPurgeInventory)
 				r.Post("/me/account-purge", api.StartAccountPurge)
 				r.Get("/me/whats-new", api.GetMyWhatsNewStatus)

@@ -683,8 +683,8 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if api.Opts.Sidekick != nil {
-		api.Opts.Sidekick.RecordUpload(ctx)
+	if api.Opts.Sidekick != nil && api.Opts.Sidekick.RecordUpload(ctx) {
+		api.notifySidekickUploadAccepted(ctx, group.ID)
 	}
 
 	fileIDs := make([]uuid.UUID, 0, len(files))

@@ -2331,6 +2331,16 @@ CREATE TABLE user_map_controls (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE user_notification_settings (
+    user_id uuid NOT NULL,
+    channel text NOT NULL,
+    event text NOT NULL,
+    enabled boolean DEFAULT false NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_notification_settings_channel_check CHECK ((channel = 'discord'::text)),
+    CONSTRAINT user_notification_settings_event_check CHECK ((event = ANY (ARRAY['sidekick_upload_accepted'::text, 'upload_processed'::text])))
+);
+
 CREATE TABLE user_panel_layouts (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid,
@@ -3202,6 +3212,9 @@ ALTER TABLE ONLY user_favorite_players
 
 ALTER TABLE ONLY user_map_controls
     ADD CONSTRAINT user_map_controls_pkey PRIMARY KEY (user_id);
+
+ALTER TABLE ONLY user_notification_settings
+    ADD CONSTRAINT user_notification_settings_pkey PRIMARY KEY (user_id, channel, event);
 
 ALTER TABLE ONLY user_panel_layouts
     ADD CONSTRAINT user_panel_layouts_code_key UNIQUE (code);
@@ -4151,6 +4164,9 @@ ALTER TABLE ONLY user_favorite_players
 
 ALTER TABLE ONLY user_map_controls
     ADD CONSTRAINT user_map_controls_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_notification_settings
+    ADD CONSTRAINT user_notification_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY user_panel_layouts
     ADD CONSTRAINT user_panel_layouts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;

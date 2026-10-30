@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type QueryClient, type UseQueryOptions } from "@tanstack/react-query";
-import type { CharacterCosmeticsResponse, DiscoveryEntry, ListSidekicksResponse, RenameSidekickRequest, SidekickConfig, SidekickConfigState, SidekickInstallation, UpdateCharacterCosmeticsRequest, WhatsNewStatus } from "./typesGenerated";
+import type { CharacterCosmeticsResponse, DiscoveryEntry, ListSidekicksResponse, NotificationSetting, NotificationSettings, RenameSidekickRequest, SidekickConfig, SidekickConfigState, SidekickInstallation, UpdateCharacterCosmeticsRequest, WhatsNewStatus } from "./typesGenerated";
 import type { WoWSpell } from "./wowdb";
 import {
   recordPublicNoticeResult,
@@ -283,6 +283,36 @@ export function useAccountPurgeStatus(purgeID: string | undefined) {
       const status = query.state.data?.status;
       return status === "succeeded" || status === "failed" ? false : 2000;
     },
+  });
+}
+
+export function useMyNotificationSettings() {
+  return useQuery({
+    queryKey: ["notifications", "me"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/me/notifications");
+      if (!response.ok) throw new Error("Failed to fetch notification settings");
+      return response.json() as Promise<NotificationSettings>;
+    },
+  });
+}
+
+export function useUpdateNotificationSetting() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (setting: NotificationSetting) => {
+      const response = await fetch("/api/v1/me/notifications", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(setting),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message ?? "Failed to update notification setting");
+      }
+      return response.json() as Promise<NotificationSettings>;
+    },
+    onSuccess: (data) => queryClient.setQueryData(["notifications", "me"], data),
   });
 }
 

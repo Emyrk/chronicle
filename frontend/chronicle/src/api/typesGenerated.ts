@@ -3126,6 +3126,36 @@ export interface ModuleAuthorPage {
     readonly projects: readonly LuaProject[];
 }
 
+// From chroniclesdk/notifications.go
+export type NotificationChannel = "discord";
+
+export const NotificationChannels: NotificationChannel[] = ["discord"];
+
+// From chroniclesdk/notifications.go
+export type NotificationEvent = "sidekick_upload_accepted" | "upload_processed";
+
+export const NotificationEvents: NotificationEvent[] = ["sidekick_upload_accepted", "upload_processed"];
+
+// From chroniclesdk/notifications.go
+/**
+ * NotificationSetting is whether one event is delivered over one channel.
+ */
+export interface NotificationSetting {
+    readonly channel: NotificationChannel;
+    readonly event: NotificationEvent;
+    readonly enabled: boolean;
+}
+
+// From chroniclesdk/notifications.go
+/**
+ * NotificationSettings lists the user's notification opt-ins. Events missing
+ * from Settings are disabled.
+ */
+export interface NotificationSettings {
+    readonly discord_linked: boolean;
+    readonly settings: readonly NotificationSetting[];
+}
+
 // From chroniclesdk/log.go
 export interface OverviewIncomingDamageAbility {
     readonly spell_id?: number;

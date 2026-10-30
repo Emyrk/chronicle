@@ -293,6 +293,9 @@ type sqlcQuerier interface {
 	GetDiscordAnnouncementSource(ctx context.Context, arg GetDiscordAnnouncementSourceParams) (GetDiscordAnnouncementSourceRow, error)
 	GetDiscordAnnouncementSourceBySlug(ctx context.Context, instanceSlug pgtype.Text) (GetDiscordAnnouncementSourceBySlugRow, error)
 	GetDiscordMembershipGrantCheckClaim(ctx context.Context, arg GetDiscordMembershipGrantCheckClaimParams) (DiscordMembershipGrantCheck, error)
+	// GetDiscordNotificationTarget returns the user's linked Discord ID when they
+	// have opted into Discord DMs for the event.
+	GetDiscordNotificationTarget(ctx context.Context, arg GetDiscordNotificationTargetParams) (string, error)
 	GetDisplayInfoByID(ctx context.Context, arg GetDisplayInfoByIDParams) (WorldDisplayInfo, error)
 	GetEncounterPhasesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounterPhase, error)
 	GetEncounterSummariesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]GetEncounterSummariesByInstanceIDRow, error)
@@ -826,6 +829,7 @@ type sqlcQuerier interface {
 	ListUserFavoritePlayers(ctx context.Context, userID uuid.UUID) ([]ListUserFavoritePlayersRow, error)
 	// Projects the user owns or contributes to.
 	ListUserLuaProjects(ctx context.Context, userID uuid.UUID) ([]LuaProject, error)
+	ListUserNotificationSettings(ctx context.Context, userID uuid.UUID) ([]UserNotificationSetting, error)
 	ListUserPanelLayouts(ctx context.Context, userID uuid.NullUUID) ([]ListUserPanelLayoutsRow, error)
 	ListUserStarsForProjects(ctx context.Context, arg ListUserStarsForProjectsParams) ([]uuid.UUID, error)
 	ListUserTalentBuilds(ctx context.Context, arg ListUserTalentBuildsParams) ([]UserTalentBuild, error)
@@ -1159,6 +1163,7 @@ type sqlcQuerier interface {
 	UpsertUserCharacterCosmetics(ctx context.Context, arg UpsertUserCharacterCosmeticsParams) (UserCharacterCosmetic, error)
 	UpsertUserCustomPanelInstallation(ctx context.Context, arg UpsertUserCustomPanelInstallationParams) (UserCustomPanelInstallation, error)
 	UpsertUserCustomPanelSettings(ctx context.Context, arg UpsertUserCustomPanelSettingsParams) (UserCustomPanelSetting, error)
+	UpsertUserNotificationSetting(ctx context.Context, arg UpsertUserNotificationSettingParams) (UserNotificationSetting, error)
 }
 
 var _ sqlcQuerier = (*sqlQuerier)(nil)
