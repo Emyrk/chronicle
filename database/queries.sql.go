@@ -693,7 +693,7 @@ func (q *sqlQuerier) UpsertGuild(ctx context.Context, arg UpsertGuildParams) (Gu
 }
 
 const getLogGroupArtifact = `-- name: GetLogGroupArtifact :one
-SELECT id, log_group_id, kind, schema_version, hash, size_bytes, mime_type, content_encoding, object_key, original_filename, storage_deleted_at, created_at, updated_at
+SELECT id, log_group_id, kind, schema_version, hash, size_bytes, mime_type, content_encoding, object_key, original_filename, storage_deleted_at, created_at, updated_at, log_file_part_id
 FROM log_group_artifacts
 WHERE log_group_id = $1
   AND id = $2
@@ -721,12 +721,13 @@ func (q *sqlQuerier) GetLogGroupArtifact(ctx context.Context, arg GetLogGroupArt
 		&i.StorageDeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LogFilePartID,
 	)
 	return i, err
 }
 
 const getLogGroupArtifacts = `-- name: GetLogGroupArtifacts :many
-SELECT id, log_group_id, kind, schema_version, hash, size_bytes, mime_type, content_encoding, object_key, original_filename, storage_deleted_at, created_at, updated_at
+SELECT id, log_group_id, kind, schema_version, hash, size_bytes, mime_type, content_encoding, object_key, original_filename, storage_deleted_at, created_at, updated_at, log_file_part_id
 FROM log_group_artifacts
 WHERE log_group_id = $1
 ORDER BY created_at, id
@@ -755,6 +756,7 @@ func (q *sqlQuerier) GetLogGroupArtifacts(ctx context.Context, logGroupID uuid.U
 			&i.StorageDeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LogFilePartID,
 		); err != nil {
 			return nil, err
 		}
@@ -770,6 +772,7 @@ const insertLogGroupArtifact = `-- name: InsertLogGroupArtifact :one
 INSERT INTO log_group_artifacts (
   id,
   log_group_id,
+  log_file_part_id,
   kind,
   schema_version,
   hash,
@@ -781,15 +784,25 @@ INSERT INTO log_group_artifacts (
   created_at,
   updated_at
 )
-VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
-)
-RETURNING id, log_group_id, kind, schema_version, hash, size_bytes, mime_type, content_encoding, object_key, original_filename, storage_deleted_at, created_at, updated_at
+SELECT
+  $1, $2, $3::uuid, $4,
+  $5, $6, $7, $8, $9,
+  $10, $11, $12, $13
+WHERE $3::uuid IS NULL
+   OR EXISTS (
+     SELECT 1
+     FROM log_file_parts parts
+     JOIN log_file files ON files.id = parts.log_file_id
+     WHERE parts.id = $3::uuid
+       AND files.wow_log_id = $2
+   )
+RETURNING id, log_group_id, kind, schema_version, hash, size_bytes, mime_type, content_encoding, object_key, original_filename, storage_deleted_at, created_at, updated_at, log_file_part_id
 `
 
 type InsertLogGroupArtifactParams struct {
 	ID               uuid.UUID          `db:"id" json:"id"`
 	LogGroupID       uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	LogFilePartID    uuid.NullUUID      `db:"log_file_part_id" json:"log_file_part_id"`
 	Kind             string             `db:"kind" json:"kind"`
 	SchemaVersion    int32              `db:"schema_version" json:"schema_version"`
 	Hash             string             `db:"hash" json:"hash"`
@@ -806,6 +819,7 @@ func (q *sqlQuerier) InsertLogGroupArtifact(ctx context.Context, arg InsertLogGr
 	row := q.db.QueryRow(ctx, insertLogGroupArtifact,
 		arg.ID,
 		arg.LogGroupID,
+		arg.LogFilePartID,
 		arg.Kind,
 		arg.SchemaVersion,
 		arg.Hash,
@@ -832,12 +846,13 @@ func (q *sqlQuerier) InsertLogGroupArtifact(ctx context.Context, arg InsertLogGr
 		&i.StorageDeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LogFilePartID,
 	)
 	return i, err
 }
 
 const listLogGroupArtifacts = `-- name: ListLogGroupArtifacts :many
-SELECT id, log_group_id, kind, schema_version, hash, size_bytes, mime_type, content_encoding, object_key, original_filename, storage_deleted_at, created_at, updated_at
+SELECT id, log_group_id, kind, schema_version, hash, size_bytes, mime_type, content_encoding, object_key, original_filename, storage_deleted_at, created_at, updated_at, log_file_part_id
 FROM log_group_artifacts
 WHERE log_group_id = $1
   AND storage_deleted_at IS NULL
@@ -867,6 +882,56 @@ func (q *sqlQuerier) ListLogGroupArtifacts(ctx context.Context, logGroupID uuid.
 			&i.StorageDeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LogFilePartID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLogGroupArtifactsForParse = `-- name: ListLogGroupArtifactsForParse :many
+SELECT artifacts.id, artifacts.log_group_id, artifacts.kind, artifacts.schema_version, artifacts.hash, artifacts.size_bytes, artifacts.mime_type, artifacts.content_encoding, artifacts.object_key, artifacts.original_filename, artifacts.storage_deleted_at, artifacts.created_at, artifacts.updated_at, artifacts.log_file_part_id
+FROM log_group_artifacts artifacts
+LEFT JOIN log_file_parts parts ON parts.id = artifacts.log_file_part_id
+WHERE artifacts.log_group_id = $1
+  AND artifacts.storage_deleted_at IS NULL
+ORDER BY artifacts.log_file_part_id IS NOT NULL,
+         parts.source_sequence IS NULL,
+         COALESCE(parts.source_sequence, parts.sequence),
+         parts.sequence,
+         artifacts.created_at,
+         artifacts.id
+`
+
+func (q *sqlQuerier) ListLogGroupArtifactsForParse(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error) {
+	rows, err := q.db.Query(ctx, listLogGroupArtifactsForParse, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogGroupArtifact
+	for rows.Next() {
+		var i LogGroupArtifact
+		if err := rows.Scan(
+			&i.ID,
+			&i.LogGroupID,
+			&i.Kind,
+			&i.SchemaVersion,
+			&i.Hash,
+			&i.SizeBytes,
+			&i.MimeType,
+			&i.ContentEncoding,
+			&i.ObjectKey,
+			&i.OriginalFilename,
+			&i.StorageDeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LogFilePartID,
 		); err != nil {
 			return nil, err
 		}
@@ -884,7 +949,7 @@ SET storage_deleted_at = $1,
     updated_at = $1
 WHERE log_group_id = $2
   AND storage_deleted_at IS NULL
-RETURNING id, log_group_id, kind, schema_version, hash, size_bytes, mime_type, content_encoding, object_key, original_filename, storage_deleted_at, created_at, updated_at
+RETURNING id, log_group_id, kind, schema_version, hash, size_bytes, mime_type, content_encoding, object_key, original_filename, storage_deleted_at, created_at, updated_at, log_file_part_id
 `
 
 type MarkLogGroupArtifactsStorageDeletedParams struct {
@@ -915,6 +980,7 @@ func (q *sqlQuerier) MarkLogGroupArtifactsStorageDeleted(ctx context.Context, ar
 			&i.StorageDeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LogFilePartID,
 		); err != nil {
 			return nil, err
 		}

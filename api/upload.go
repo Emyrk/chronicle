@@ -392,6 +392,62 @@ func (api *API) WoWLogAppend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var artifactInput *chronicle.ArtifactInput
+	artifactFile, artifactHeader, artifactErr := r.FormFile("sidekick_storage")
+	switch {
+	case artifactErr == nil:
+		defer func() { _ = artifactFile.Close() }()
+		if artifactHeader.Size > MaxLogArtifactSize {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Sidekick SavedVariables file is too large, exceeds maximum allowed size of 8 MB",
+				Detail:  fmt.Sprintf("file size: %d bytes", artifactHeader.Size),
+			})
+			return
+		}
+		effectiveFormat := group.WoWLogGroup.LogType.Format()
+		if group.WoWLogGroup.Format.Valid {
+			effectiveFormat = group.WoWLogGroup.Format.LogFormat
+		}
+		if effectiveFormat != database.LogFormat335aCcAddon {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Sidekick SavedVariables artifacts are only supported for 3.3.5a logs",
+			})
+			return
+		}
+		decoded, decodeErr := (sidekickstorage.Decoder{}).Decode(ctx, artifactFile)
+		if decodeErr != nil {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Invalid Sidekick SavedVariables file",
+				Detail:  decodeErr.Error(),
+			})
+			return
+		}
+		sidekickSource, ok := decoded.(*sidekickstorage.Source)
+		if !ok {
+			httpapi.InternalServerError(w, fmt.Errorf("unexpected Sidekick storage source type %T", decoded))
+			return
+		}
+		if _, seekErr := artifactFile.Seek(0, io.SeekStart); seekErr != nil {
+			httpapi.InternalServerError(w, fmt.Errorf("rewind Sidekick SavedVariables file: %w", seekErr))
+			return
+		}
+		artifactInput = &chronicle.ArtifactInput{
+			Kind:             chronicle.ArtifactKindSidekickStorage,
+			SchemaVersion:    sidekickSource.SchemaVersion(),
+			Reader:           artifactFile,
+			MimeType:         "text/plain;charset=UTF-8",
+			OriginalFilename: artifactHeader.Filename,
+		}
+	case errors.Is(artifactErr, http.ErrMissingFile):
+		// Sidekick storage is optional for each appended part.
+	default:
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Failed to get Sidekick SavedVariables file from form",
+			Detail:  artifactErr.Error(),
+		})
+		return
+	}
+
 	isAdmin, err := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(actor))
 	if err != nil {
 		httpapi.InternalServerError(w, err)
@@ -406,7 +462,7 @@ func (api *API) WoWLogAppend(w http.ResponseWriter, r *http.Request) {
 	if realm, realmErr := api.Zed.GetServerUploadMetaRealmID(ctx, logID); realmErr == nil && realm.Valid {
 		realmID = realm.UUID
 	}
-	if err := api.Chronicle.AppendUserLog(ctx, group.WoWLogGroup, file, realmID, meta, maxAppends); err != nil {
+	if err := api.Chronicle.AppendUserLog(ctx, group.WoWLogGroup, file, artifactInput, realmID, meta, maxAppends); err != nil {
 		status := http.StatusInternalServerError
 		message := "Failed to append log file"
 		switch {

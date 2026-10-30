@@ -252,6 +252,16 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 		return nil, nil, fmt.Errorf("at least one file is required")
 	}
 
+	sidekickArtifactCount := 0
+	for _, artifact := range artifacts {
+		if artifact.Kind == ArtifactKindSidekickStorage {
+			sidekickArtifactCount++
+		}
+	}
+	if sidekickArtifactCount > 1 {
+		return nil, nil, fmt.Errorf("at most one Sidekick storage artifact is allowed for the base log file")
+	}
+
 	now := time.Now()
 	cl, ok := chronauth.AuthenticatedClaims(ctx)
 	if !ok {
@@ -626,6 +636,7 @@ type ServerLogAppendMeta = LogAppendMeta
 type logAppendOptions struct {
 	realmID                  uuid.UUID
 	meta                     LogAppendMeta
+	artifact                 *ArtifactInput
 	maxUserAppends           int64
 	enforceOwnerStorageQuota bool
 }
@@ -649,10 +660,11 @@ func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGr
 
 // AppendUserLog stores a user-produced append. maxAppends <= 0 means unlimited.
 // User appends always enforce the owning user's storage quota.
-func (c *Chronicle) AppendUserLog(ctx context.Context, group database.WoWLogGroup, newData io.Reader, realmID uuid.UUID, meta LogAppendMeta, maxAppends int64) error {
+func (c *Chronicle) AppendUserLog(ctx context.Context, group database.WoWLogGroup, newData io.Reader, artifact *ArtifactInput, realmID uuid.UUID, meta LogAppendMeta, maxAppends int64) error {
 	return c.appendLog(ctx, group, newData, logAppendOptions{
 		realmID:                  realmID,
 		meta:                     meta,
+		artifact:                 artifact,
 		maxUserAppends:           maxAppends,
 		enforceOwnerStorageQuota: true,
 	})
@@ -724,6 +736,13 @@ func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, n
 
 	finalized := false
 	uploaded := false
+	artifactUploaded := false
+	var artifactID uuid.UUID
+	var artifactObjectKey string
+	if opts.artifact != nil {
+		artifactID = uuid.New()
+		artifactObjectKey = c.artifactPath(group.ID, artifactID)
+	}
 	defer func() {
 		if finalized {
 			return
@@ -747,6 +766,11 @@ func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, n
 				slog.WarnContext(cleanupCtx, "failed to remove unfinalized log file part", "error", err, "part_id", part.ID)
 			}
 		}
+		if artifactUploaded {
+			if _, err := c.Storage.RemoveFile(cleanupCtx, BucketRaidLogs, []string{artifactObjectKey}); err != nil {
+				slog.WarnContext(cleanupCtx, "failed to remove unfinalized log file part artifact", "error", err, "part_id", part.ID, "artifact_id", artifactID)
+			}
+		}
 	}()
 
 	compressed, err := io.ReadAll(newData)
@@ -766,12 +790,35 @@ func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, n
 	partHash := hex.EncodeToString(h[:])
 	compressedSize := int64(len(compressed))
 
+	var artifactBytes []byte
+	var artifactHash string
+	var artifactSize int64
+	if artifact := opts.artifact; artifact != nil {
+		if artifact.Kind == "" {
+			return fmt.Errorf("artifact kind is required")
+		}
+		if artifact.SchemaVersion <= 0 {
+			return fmt.Errorf("artifact %q has invalid schema version %d", artifact.Kind, artifact.SchemaVersion)
+		}
+		if artifact.MimeType == "" {
+			return fmt.Errorf("artifact %q MIME type is required", artifact.Kind)
+		}
+		artifactBytes, err = io.ReadAll(artifact.Reader)
+		if err != nil {
+			return fmt.Errorf("read log part artifact: %w", err)
+		}
+		artifactDigest := sha256.Sum256(artifactBytes)
+		artifactHash = hex.EncodeToString(artifactDigest[:])
+		artifactSize = int64(len(artifactBytes))
+	}
+	incomingStorageBytes := compressedSize + artifactSize
+
 	if opts.enforceOwnerStorageQuota {
 		owner, err := c.Zed.GetUserByID(ctx, group.Owner)
 		if err != nil {
 			return fmt.Errorf("fetch log owner for storage quota: %w", err)
 		}
-		if err := userLogAppendQuotaError(owner, compressedSize); err != nil {
+		if err := userLogAppendQuotaError(owner, incomingStorageBytes); err != nil {
 			return err
 		}
 	}
@@ -782,6 +829,14 @@ func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, n
 	}
 	uploaded = true
 
+	if artifact := opts.artifact; artifact != nil {
+		if _, err := c.Storage.UploadFile(ctx, BucketRaidLogs, artifactObjectKey, bytes.NewReader(artifactBytes),
+			storage.FileOptions{ContentType: ptr.Ref(artifact.MimeType)}); err != nil {
+			return fmt.Errorf("upload log part artifact: %w", err)
+		}
+		artifactUploaded = true
+	}
+
 	if err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		if opts.enforceOwnerStorageQuota {
 			if _, err := tx.LockUserStorageQuota(ctx, group.Owner); err != nil {
@@ -791,7 +846,7 @@ func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, n
 			if err != nil {
 				return fmt.Errorf("fetch locked log owner storage quota: %w", err)
 			}
-			if err := userLogAppendQuotaError(owner, compressedSize); err != nil {
+			if err := userLogAppendQuotaError(owner, incomingStorageBytes); err != nil {
 				return err
 			}
 		}
@@ -818,6 +873,29 @@ func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, n
 			CompressedSizeBytes: database.Int8(&compressedSize),
 		}); err != nil {
 			return fmt.Errorf("update logical log file sizes: %w", err)
+		}
+		if artifact := opts.artifact; artifact != nil {
+			var originalFilename *string
+			if artifact.OriginalFilename != "" {
+				originalFilename = ptr.Ref(artifact.OriginalFilename)
+			}
+			now := database.Timestamptz(time.Now())
+			if _, err := tx.InsertLogGroupArtifact(ctx, database.InsertLogGroupArtifactParams{
+				ID:               artifactID,
+				LogGroupID:       group.ID,
+				LogFilePartID:    uuid.NullUUID{UUID: part.ID, Valid: true},
+				Kind:             artifact.Kind,
+				SchemaVersion:    artifact.SchemaVersion,
+				Hash:             artifactHash,
+				SizeBytes:        artifactSize,
+				MimeType:         artifact.MimeType,
+				ObjectKey:        artifactObjectKey,
+				OriginalFilename: database.Text(originalFilename),
+				CreatedAt:        now,
+				UpdatedAt:        now,
+			}); err != nil {
+				return fmt.Errorf("insert log part artifact %q: %w", artifact.Kind, err)
+			}
 		}
 		pgxTx, ok := tx.PGXTx()
 		if !ok {
@@ -910,14 +988,24 @@ func (c *Chronicle) WoWLogGroup(ctx context.Context, groupID uuid.UUID) (*chroni
 	}
 
 	sdkGroup := db2sdk.WoWLogGroupRow(group)
+	sdkArtifacts := slice.List(artifacts, db2sdk.WoWLogArtifact)
+	artifactsByPart := make(map[uuid.UUID]*chroniclesdk.WoWLogArtifact, len(sdkArtifacts))
+	for i := range sdkArtifacts {
+		if sdkArtifacts[i].LogFilePartID != nil {
+			artifactsByPart[*sdkArtifacts[i].LogFilePartID] = &sdkArtifacts[i]
+		}
+	}
 	for i := range sdkGroup.Files {
 		parts, err := c.Zed.ListFinalizedLogFileParts(ctx, sdkGroup.Files[i].ID)
 		if err != nil {
 			return nil, fmt.Errorf("fetch finalized parts for log file %s: %w", sdkGroup.Files[i].ID, err)
 		}
 		sdkGroup.Files[i].Parts = slice.List(parts, db2sdk.WoWLogFilePart)
+		for j := range sdkGroup.Files[i].Parts {
+			sdkGroup.Files[i].Parts[j].Artifact = artifactsByPart[sdkGroup.Files[i].Parts[j].ID]
+		}
 	}
-	sdkGroup.Artifacts = slice.List(artifacts, db2sdk.WoWLogArtifact)
+	sdkGroup.Artifacts = sdkArtifacts
 	return &chroniclesdk.WoWLogGroupState{
 		WoWLogGroup: sdkGroup,
 		Status:      jobStatus,

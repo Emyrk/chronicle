@@ -1883,6 +1883,7 @@ type LogGroupArtifact struct {
 	StorageDeletedAt pgtype.Timestamptz `db:"storage_deleted_at" json:"storage_deleted_at"`
 	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	LogFilePartID    uuid.NullUUID      `db:"log_file_part_id" json:"log_file_part_id"`
 }
 
 type LogInstance struct {

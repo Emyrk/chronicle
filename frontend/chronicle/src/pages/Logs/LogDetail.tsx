@@ -150,10 +150,11 @@ function baseFileSizes(file: WoWLogFile): { originalBytes: number; storedBytes: 
 interface UploadedLogFileRowsProps {
   logId: string;
   file: WoWLogFile;
+  baseArtifact?: WoWLogArtifact;
   canDownloadFiles: boolean;
 }
 
-export function UploadedLogFileRows({ logId, file, canDownloadFiles }: UploadedLogFileRowsProps) {
+export function UploadedLogFileRows({ logId, file, baseArtifact, canDownloadFiles }: UploadedLogFileRowsProps) {
   const parts = file.parts ?? [];
   const base = baseFileSizes(file);
   const deleted = !!file.storage_deleted_at;
@@ -196,25 +197,44 @@ export function UploadedLogFileRows({ logId, file, canDownloadFiles }: UploadedL
           )}
         </div>
       </div>
+      {baseArtifact && (
+        <div className="ml-6">
+          <UploadedArtifactRow
+            logId={logId}
+            artifact={baseArtifact}
+            canDownloadFiles={canDownloadFiles}
+          />
+        </div>
+      )}
       {parts.map((part) => {
         const partNumber = part.source_sequence ?? part.sequence;
         return (
-          <div
-            key={part.id}
-            className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border ${deleted ? "opacity-60" : ""}`}
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
-              <div className="min-w-0">
-                <p className="font-medium text-sm">Combat log · Append {partNumber}</p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {part.content_encoding === "gzip" ? "application/gzip" : "text/plain"} · {part.id.slice(0, 8)}
-                </p>
+          <div key={part.id} className="contents">
+            <div
+              className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border ${deleted ? "opacity-60" : ""}`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <p className="font-medium text-sm">Combat log · Append {partNumber}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {part.content_encoding === "gzip" ? "application/gzip" : "text/plain"} · {part.id.slice(0, 8)}
+                  </p>
+                </div>
+              </div>
+              <div className="ml-auto flex items-center gap-3">
+                {sizeDetails(part.size_bytes, storedPartBytes(part), part.finalized_at)}
               </div>
             </div>
-            <div className="ml-auto flex items-center gap-3">
-              {sizeDetails(part.size_bytes, storedPartBytes(part), part.finalized_at)}
-            </div>
+            {part.artifact && (
+              <div className="ml-6">
+                <UploadedArtifactRow
+                  logId={logId}
+                  artifact={part.artifact}
+                  canDownloadFiles={canDownloadFiles}
+                />
+              </div>
+            )}
           </div>
         );
       })}
@@ -1358,10 +1378,14 @@ export function LogDetailView({
   const nextCheck = useNextCheckIn(log, lastCheckedAt);
   const nextCheckSeconds = nextCheck ? Math.ceil(nextCheck.remainingMs / 1000) : 0;
   const uploadedFiles = log?.files ?? [];
-  const uploadedArtifacts = log?.artifacts ?? [];
-  const hasUploadedData = uploadedFiles.length > 0 || uploadedArtifacts.length > 0;
+  const allUploadedArtifacts = log?.artifacts ?? [];
+  const baseArtifact = allUploadedArtifacts.find((artifact) =>
+    !artifact.log_file_part_id && artifact.kind === "sidekick-storage");
+  const uploadedArtifacts = allUploadedArtifacts.filter((artifact) =>
+    artifact.log_file_part_id == null && artifact.id !== baseArtifact?.id);
+  const hasUploadedData = uploadedFiles.length > 0 || allUploadedArtifacts.length > 0;
   const hasStoredUploadedData = uploadedFiles.some((file) => !file.storage_deleted_at)
-    || uploadedArtifacts.some((artifact) => !artifact.storage_deleted_at);
+    || allUploadedArtifacts.some((artifact) => !artifact.storage_deleted_at);
   // Rare, irreversible action — kept small rather than given its own card.
   const unlistedAction = log && !log.unlisted && canMarkUnlisted && (
     <UnlistedConfirmationDialog
@@ -1686,11 +1710,12 @@ export function LogDetailView({
             <div className="space-y-2">
               {hasUploadedData ? (
                 <>
-                  {uploadedFiles.map((file: WoWLogFile) => (
+                  {uploadedFiles.map((file: WoWLogFile, index) => (
                     <UploadedLogFileRows
                       key={file.id}
                       logId={log.id}
                       file={file}
+                      baseArtifact={index === 0 ? baseArtifact : undefined}
                       canDownloadFiles={canDownloadFiles}
                     />
                   ))}

@@ -292,7 +292,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		return fmt.Errorf("fetch log files: %w", err)
 	}
 
-	artifacts, err := db.ListLogGroupArtifacts(ctx, job.Args.LogID)
+	artifacts, err := db.ListLogGroupArtifactsForParse(ctx, job.Args.LogID)
 	if err != nil {
 		jobResult = "failure"
 		return fmt.Errorf("fetch log group artifacts: %w", err)

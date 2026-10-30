@@ -177,6 +177,10 @@ func WoWLogFilePart(part database.LogFilePart) chroniclesdk.WoWLogFilePart {
 }
 
 func WoWLogArtifact(artifact database.LogGroupArtifact) chroniclesdk.WoWLogArtifact {
+	var logFilePartID *uuid.UUID
+	if artifact.LogFilePartID.Valid {
+		logFilePartID = &artifact.LogFilePartID.UUID
+	}
 	var contentEncoding *string
 	if artifact.ContentEncoding.Valid {
 		contentEncoding = &artifact.ContentEncoding.String
@@ -189,6 +193,7 @@ func WoWLogArtifact(artifact database.LogGroupArtifact) chroniclesdk.WoWLogArtif
 	return chroniclesdk.WoWLogArtifact{
 		ID:               artifact.ID,
 		LogGroupID:       artifact.LogGroupID,
+		LogFilePartID:    logFilePartID,
 		Kind:             artifact.Kind,
 		SchemaVersion:    artifact.SchemaVersion,
 		Hash:             artifact.Hash,

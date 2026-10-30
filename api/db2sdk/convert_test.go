@@ -6,6 +6,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
@@ -85,6 +86,17 @@ func TestWoWLogFilePart(t *testing.T) {
 	require.Equal(t, int64(100), converted.SizeBytes)
 	require.Equal(t, int64(40), *converted.CompressedSizeBytes)
 	require.Equal(t, "gzip", *converted.ContentEncoding)
+}
+
+func TestWoWLogArtifactIncludesPartAssociation(t *testing.T) {
+	t.Parallel()
+
+	partID := uuid.New()
+	converted := WoWLogArtifact(database.LogGroupArtifact{
+		LogFilePartID: uuid.NullUUID{UUID: partID, Valid: true},
+	})
+
+	require.Equal(t, partID, *converted.LogFilePartID)
 }
 
 func TestWoWEncounterIncludesMapID(t *testing.T) {
