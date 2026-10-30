@@ -13,11 +13,11 @@ func TestSidekickConfigHashStable(t *testing.T) {
 	config := DefaultSidekickConfig()
 	payload, err := config.CanonicalJSON()
 	require.NoError(t, err)
-	require.Equal(t, `{"version":1,"wow_directories":{}}`, string(payload))
+	require.Equal(t, `{"version":1,"archive":{"enabled":true,"retention_days":7},"wow_directories":{}}`, string(payload))
 
 	hash, err := config.Hash()
 	require.NoError(t, err)
-	require.Equal(t, "6cf556c64ba0052d92ec879851a5ff6c5e60756e88f2da5f2eca540cda76497f", hash)
+	require.Equal(t, "03ba74a583c3e096527eb448a456583b975a0f8c32d8517c630ff3954e3528e4", hash)
 }
 
 func TestSidekickConfigCanonicalJSONSortsDirectories(t *testing.T) {
@@ -35,7 +35,7 @@ func TestSidekickConfigCanonicalJSONSortsDirectories(t *testing.T) {
 
 	payload, err := config.CanonicalJSON()
 	require.NoError(t, err)
-	require.Equal(t, `{"version":1,"wow_directories":{"wowdir_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":{"game_format":"wotlk_3.3.5a","auto_upload":"on_game_exit"},"wowdir_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb":{"game_format":"wotlk_3.3.5a","auto_upload":"disabled"}}}`, string(payload))
+	require.Equal(t, `{"version":1,"archive":{"enabled":true,"retention_days":7},"wow_directories":{"wowdir_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":{"game_format":"wotlk_3.3.5a","auto_upload":"on_game_exit"},"wowdir_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb":{"game_format":"wotlk_3.3.5a","auto_upload":"disabled"}}}`, string(payload))
 }
 
 func TestSidekickConfigValidate(t *testing.T) {
@@ -45,6 +45,16 @@ func TestSidekickConfigValidate(t *testing.T) {
 		config := DefaultSidekickConfig()
 		config.Version = 2
 		require.ErrorContains(t, config.Validate(), "unsupported Sidekick config version 2")
+	})
+	t.Run("archive retention too short", func(t *testing.T) {
+		config := DefaultSidekickConfig()
+		config.Archive.RetentionDays = 0
+		require.ErrorContains(t, config.Validate(), "archive retention_days must be between 1 and 365")
+	})
+	t.Run("archive retention too long", func(t *testing.T) {
+		config := DefaultSidekickConfig()
+		config.Archive.RetentionDays = 366
+		require.ErrorContains(t, config.Validate(), "archive retention_days must be between 1 and 365")
 	})
 	t.Run("directory ID", func(t *testing.T) {
 		config := DefaultSidekickConfig()

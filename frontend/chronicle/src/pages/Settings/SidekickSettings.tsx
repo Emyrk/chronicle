@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useParams } from "react-router-dom";
 import {
   AlertTriangle,
+  Archive,
   CheckCircle2,
   Clock3,
   FolderOpen,
@@ -17,6 +19,11 @@ import {
   WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  SidekickArchiveRetentionDaysDefault,
+  SidekickArchiveRetentionDaysMax,
+  SidekickArchiveRetentionDaysMin,
+} from "@/api/typesGenerated";
 import type {
   SidekickAutoUploadMode,
   SidekickConfig,
@@ -33,8 +40,13 @@ import {
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/Switch/Switch";
 
-const EMPTY_CONFIG: SidekickConfig = { version: 1, wow_directories: {} };
+const EMPTY_CONFIG: SidekickConfig = {
+  version: 1,
+  archive: { enabled: true, retention_days: SidekickArchiveRetentionDaysDefault },
+  wow_directories: {},
+};
 const WOTLK_FORMAT: SidekickGameFormat = "wotlk_3.3.5a";
 
 function formatTimestamp(value?: string): string {
@@ -76,7 +88,77 @@ function updateDirectoryConfig(
   const wowDirectories = { ...config.wow_directories };
   if (next) wowDirectories[directoryID] = next;
   else delete wowDirectories[directoryID];
-  return { version: 1, wow_directories: wowDirectories };
+  return { ...config, wow_directories: wowDirectories };
+}
+
+function ArchiveSettings({
+  config,
+  disabled,
+  onConfigChange,
+}: {
+  config: SidekickConfig;
+  disabled: boolean;
+  onConfigChange?: (config: SidekickConfig) => Promise<void>;
+}) {
+  const [retentionDays, setRetentionDays] = useState(String(config.archive.retention_days));
+
+  const saveRetentionDays = async () => {
+    if (!onConfigChange) return;
+    const days = Number(retentionDays);
+    if (!Number.isInteger(days) || days < SidekickArchiveRetentionDaysMin || days > SidekickArchiveRetentionDaysMax) {
+      setRetentionDays(String(config.archive.retention_days));
+      toast.error(`Archive retention must be between ${SidekickArchiveRetentionDaysMin} and ${SidekickArchiveRetentionDaysMax} days`);
+      return;
+    }
+    if (days === config.archive.retention_days) return;
+    await onConfigChange({
+      ...config,
+      archive: { ...config.archive, retention_days: days },
+    });
+  };
+
+  return (
+    <div className="grid gap-4 rounded-lg border bg-background/60 p-4 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-center">
+      <div className="flex items-start gap-3">
+        <Archive className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <div>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            Keep uploaded files locally
+            <Switch
+              size="sm"
+              checked={config.archive.enabled}
+              disabled={disabled || !onConfigChange}
+              onCheckedChange={(enabled) => {
+                if (!onConfigChange) return;
+                void onConfigChange({ ...config, archive: { ...config.archive, enabled } });
+              }}
+              aria-label="Keep uploaded files locally"
+            />
+          </label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Disable this to delete local snapshots after successful uploads. Pending and failed uploads are always retained.
+          </p>
+        </div>
+      </div>
+      <label className="space-y-1.5 text-xs font-medium">
+        <span className="text-muted-foreground">Retention days</span>
+        <Input
+          type="number"
+          min={SidekickArchiveRetentionDaysMin}
+          max={SidekickArchiveRetentionDaysMax}
+          value={retentionDays}
+          disabled={disabled || !onConfigChange}
+          onChange={(event) => setRetentionDays(event.target.value)}
+          onBlur={() => void saveRetentionDays()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            }
+          }}
+        />
+      </label>
+    </div>
+  );
 }
 
 function StatusDatum({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
@@ -291,6 +373,21 @@ function SidekickCard({
       </div>
 
       <div className="border-t px-5 py-4">
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold">Local archive</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Choose whether Sidekick keeps uploaded snapshots on this computer and how long it retains them.
+          </p>
+        </div>
+        <ArchiveSettings
+          key={`${sidekick.id}:${configuration.archive.retention_days}`}
+          config={configuration}
+          disabled={readOnly || disconnected || busy}
+          onConfigChange={onConfigChange ? (config) => onConfigChange(sidekick.id, config) : undefined}
+        />
+      </div>
+
+      <div className="border-t px-5 py-4">
         <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h3 className="flex items-center gap-2 text-sm font-semibold">
@@ -409,7 +506,12 @@ export function SidekickCards({ sidekicks, readOnly = false }: { sidekicks: read
 }
 
 export function SidekickSettings() {
+  const { sidekickID } = useParams<{ sidekickID?: string }>();
   const { data, isLoading, error } = useMySidekicks();
+  const sidekicks = data?.sidekicks ?? [];
+  const visibleSidekicks = sidekickID
+    ? sidekicks.filter((sidekick) => sidekick.id === sidekickID)
+    : sidekicks;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -427,8 +529,16 @@ export function SidekickSettings() {
         <div className="flex items-center gap-2 py-12 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading Sidekicks...</div>
       ) : error ? (
         <Card className="border-destructive/40 p-5 text-sm text-destructive">Could not load your Sidekicks.</Card>
+      ) : sidekickID && visibleSidekicks.length === 0 ? (
+        <Card className="border-dashed p-10 text-center">
+          <Laptop className="mx-auto h-9 w-9 text-muted-foreground" />
+          <h2 className="mt-4 font-semibold">Sidekick not found</h2>
+          <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+            This installation is no longer connected to your Chronicle account.
+          </p>
+        </Card>
       ) : (
-        <SidekickCards sidekicks={data?.sidekicks ?? []} />
+        <SidekickCards sidekicks={visibleSidekicks} />
       )}
     </div>
   );

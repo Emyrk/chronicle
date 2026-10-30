@@ -4130,6 +4130,21 @@ export interface SharedViewResponse {
 }
 
 // From chroniclesdk/sidekick.go
+export interface SidekickArchiveConfig {
+    readonly enabled: boolean;
+    readonly retention_days: number;
+}
+
+// From chroniclesdk/sidekick.go
+export const SidekickArchiveRetentionDaysDefault = 7;
+
+// From chroniclesdk/sidekick.go
+export const SidekickArchiveRetentionDaysMax = 365;
+
+// From chroniclesdk/sidekick.go
+export const SidekickArchiveRetentionDaysMin = 1;
+
+// From chroniclesdk/sidekick.go
 export type SidekickAutoUploadCapabilities = Record<SidekickGameFormat, SidekickAutoUploadMode[]>;
 
 // From chroniclesdk/sidekick.go
@@ -4140,6 +4155,7 @@ export const SidekickAutoUploadModes: SidekickAutoUploadMode[] = ["disabled", "o
 // From chroniclesdk/sidekick.go
 export interface SidekickConfig {
     readonly version: number;
+    readonly archive: SidekickArchiveConfig;
     readonly wow_directories: Record<string, SidekickDirectoryConfig>;
 }
 
@@ -4212,6 +4228,7 @@ export interface SidekickStatusRequest {
 
 // From chroniclesdk/sidekick.go
 export interface SidekickStatusResponse {
+    readonly settings_url: string;
     readonly config_hash: string;
     readonly config?: SidekickConfig;
 }
