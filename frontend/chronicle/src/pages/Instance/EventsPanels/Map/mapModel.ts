@@ -432,6 +432,22 @@ export function selectMapJourneyEncounters(
     .sort((left, right) => left.startMs - right.startMs);
 }
 
+function dominantFloor(samples: readonly MapPositionSample[]): number | undefined {
+  const counts = new Map<number, number>();
+  for (const sample of samples) {
+    if (sample.floor !== undefined) counts.set(sample.floor, (counts.get(sample.floor) ?? 0) + 1);
+  }
+  let selected: number | undefined;
+  let count = 0;
+  for (const [floor, candidateCount] of counts) {
+    if (candidateCount > count) {
+      selected = floor;
+      count = candidateCount;
+    }
+  }
+  return selected;
+}
+
 export function encounterRouteSamples(
   encounter: MapEncounterPositions,
   includeUnit: (guid: string) => boolean,
@@ -459,11 +475,16 @@ export function encounterRouteSamples(
     .map(([, values]) => {
       const mapId = dominantMapId(values);
       const mapSamples = values.filter((sample) => sample.mapId === mapId);
+      const floor = dominantFloor(mapSamples);
+      const positionSamples = floor === undefined
+        ? mapSamples
+        : mapSamples.filter((sample) => sample.floor === floor);
       return {
-        timestampMs: median(mapSamples.map((sample) => sample.timestampMs)),
-        x: median(mapSamples.map((sample) => sample.x)),
-        y: median(mapSamples.map((sample) => sample.y)),
+        timestampMs: median(positionSamples.map((sample) => sample.timestampMs)),
+        x: median(positionSamples.map((sample) => sample.x)),
+        y: median(positionSamples.map((sample) => sample.y)),
         mapId: mapId!,
+        ...(floor === undefined ? {} : { floor }),
       };
     });
 }

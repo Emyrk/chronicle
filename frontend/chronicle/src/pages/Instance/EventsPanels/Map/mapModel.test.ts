@@ -30,6 +30,7 @@ import {
   viewportPoint,
   zoomViewportAt,
   dungeonMapPoint,
+  encounterRouteSamples,
   replayPositionAt,
   healthBarColor,
   latestHealthAt,
@@ -592,6 +593,35 @@ describe("floor-specific dungeon canvases", () => {
       canvas: instance.floors[1],
       rendered: false,
     });
+  });
+});
+
+describe("encounterRouteSamples", () => {
+  it("preserves the dominant floor and aggregates only samples from that floor", () => {
+    const positions: MapEncounterPositions = {
+      ...encounter,
+      positionsByUnit: new Map([
+        ["player-one", [
+          { timestampMs: 100, x: 0.25, y: 0.25, mapId: 603, floor: 3 },
+          { timestampMs: 200, x: 0.5, y: 0.75, mapId: 603, floor: 3 },
+        ]],
+        ["player-two", [
+          { timestampMs: 150, x: 0.9, y: 0.8, mapId: 603, floor: 1 },
+        ]],
+      ]),
+    };
+
+    expect(encounterRouteSamples(positions, () => true)).toEqual([{
+      timestampMs: 150,
+      x: 0.375,
+      y: 0.5,
+      mapId: 603,
+      floor: 3,
+    }]);
+  });
+
+  it("keeps the floor absent for legacy position samples", () => {
+    expect(encounterRouteSamples(encounter, () => true)[0]).not.toHaveProperty("floor");
   });
 });
 
