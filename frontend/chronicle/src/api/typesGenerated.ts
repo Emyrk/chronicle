@@ -5596,6 +5596,7 @@ export interface WoWInstance {
 export interface WoWLogArtifact {
     readonly id: string;
     readonly log_group_id: string;
+    readonly log_file_part_id?: string;
     readonly kind: string;
     readonly schema_version: number;
     readonly hash: string;
@@ -5633,6 +5634,7 @@ export interface WoWLogFilePart {
     readonly size_bytes: number;
     readonly compressed_size_bytes?: number;
     readonly content_encoding?: string;
+    readonly artifact?: WoWLogArtifact;
     readonly created_at: string;
     readonly finalized_at: string;
 }

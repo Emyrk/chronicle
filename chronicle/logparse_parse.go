@@ -22,7 +22,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
-	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/sidekickstorage"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -187,32 +186,16 @@ func (w *WorkerLogParse) parseCombatLog(
 		p.SetRealmClockInfo(scanCompanionHeaderClock(data))
 		c.Advancer = p
 		var parseSource messagesource.MessageSource = p
-		var sawSidekickResources, sawSidekickPosition bool
+		var sidekickSource *sidekickArtifactSource
 		if logFormat == database.LogFormat335aCcAddon {
+			sidekickArtifacts := make([]database.LogGroupArtifact, 0, len(artifacts))
 			for _, artifact := range artifacts {
-				if artifact.Kind != ArtifactKindSidekickStorage {
-					continue
+				if artifact.Kind == ArtifactKindSidekickStorage {
+					sidekickArtifacts = append(sidekickArtifacts, artifact)
 				}
-				if artifact.SchemaVersion != 1 && artifact.SchemaVersion != 2 && artifact.SchemaVersion != 3 {
-					return nil, fmt.Errorf("unsupported Sidekick storage artifact schema version %d", artifact.SchemaVersion)
-				}
-				contents, err := w.parent.Storage.DownloadFile(ctx, BucketRaidLogs, artifact.ObjectKey)
-				if err != nil {
-					return nil, fmt.Errorf("download Sidekick storage artifact: %w", err)
-				}
-				decoded, err := (sidekickstorage.Decoder{}).Decode(ctx, bytes.NewReader(contents))
-				if err != nil {
-					return nil, fmt.Errorf("decode Sidekick storage artifact: %w", err)
-				}
-				sidekickSource, ok := decoded.(*sidekickstorage.Source)
-				if !ok {
-					return nil, fmt.Errorf("unexpected Sidekick storage source type %T", decoded)
-				}
-				if sidekickSource.SchemaVersion() != artifact.SchemaVersion {
-					return nil, fmt.Errorf("sidekick storage artifact schema version %d does not match payload schema version %d", artifact.SchemaVersion, sidekickSource.SchemaVersion())
-				}
-				sawSidekickResources = sawSidekickResources || sidekickSource.SawUnitResources()
-				sawSidekickPosition = sawSidekickPosition || sidekickSource.SawUnitPosition()
+			}
+			if len(sidekickArtifacts) > 0 {
+				sidekickSource = newSidekickArtifactSource(w.parent.Storage, w.parent.logger, sidekickArtifacts)
 				parseSource = messagesource.NewInserter(parseSource, sidekickSource)
 			}
 		}
@@ -223,6 +206,11 @@ func (w *WorkerLogParse) parseCombatLog(
 		totalLines = p.Metrics().TotalLinesParsed
 		if p.SawRaidGroup() {
 			logCapabilities = append(logCapabilities, "raidgroup")
+		}
+		var sawSidekickResources, sawSidekickPosition bool
+		if sidekickSource != nil {
+			sawSidekickResources = sidekickSource.SawUnitResources()
+			sawSidekickPosition = sidekickSource.SawUnitPosition()
 		}
 		logCapabilities = append(logCapabilities, observedUnitTelemetryCapabilities(
 			sawSidekickResources,

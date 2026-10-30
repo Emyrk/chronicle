@@ -81,6 +81,7 @@ type WoWLogFilePart struct {
 	SizeBytes           int64              `json:"size_bytes"`
 	CompressedSizeBytes *int64             `json:"compressed_size_bytes,omitempty"`
 	ContentEncoding     *string            `json:"content_encoding,omitempty"`
+	Artifact            *WoWLogArtifact    `json:"artifact,omitempty"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	FinalizedAt         pgtype.Timestamptz `json:"finalized_at"`
 }
@@ -88,6 +89,7 @@ type WoWLogFilePart struct {
 type WoWLogArtifact struct {
 	ID               uuid.UUID          `json:"id"`
 	LogGroupID       uuid.UUID          `json:"log_group_id"`
+	LogFilePartID    *uuid.UUID         `json:"log_file_part_id,omitempty"`
 	Kind             string             `json:"kind"`
 	SchemaVersion    int32              `json:"schema_version"`
 	Hash             string             `json:"hash"`

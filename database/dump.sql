@@ -352,6 +352,7 @@ CREATE TABLE log_group_artifacts (
     storage_deleted_at timestamp with time zone,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
+    log_file_part_id uuid,
     CONSTRAINT log_group_artifacts_size_bytes_check CHECK ((size_bytes >= 0))
 );
 
@@ -3503,6 +3504,8 @@ CREATE UNIQUE INDEX log_file_parts_source_sequence_idx ON log_file_parts USING b
 
 CREATE INDEX log_group_artifacts_kind_idx ON log_group_artifacts USING btree (kind);
 
+CREATE UNIQUE INDEX log_group_artifacts_log_file_part_id_idx ON log_group_artifacts USING btree (log_file_part_id) WHERE (log_file_part_id IS NOT NULL);
+
 CREATE INDEX log_group_artifacts_log_group_id_idx ON log_group_artifacts USING btree (log_group_id);
 
 CREATE UNIQUE INDEX log_instance_raid_group_clean_kill_idx ON log_instance_raid_group_snapshots USING btree (encounter_id) WHERE (snapshot_type = 'clean_kill'::raid_group_snapshot_type);
@@ -3884,6 +3887,9 @@ ALTER TABLE ONLY log_file_parts
 
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_wow_log_id_fkey FOREIGN KEY (wow_log_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY log_group_artifacts
+    ADD CONSTRAINT log_group_artifacts_log_file_part_id_fkey FOREIGN KEY (log_file_part_id) REFERENCES log_file_parts(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY log_group_artifacts
     ADD CONSTRAINT log_group_artifacts_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;

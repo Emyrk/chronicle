@@ -36,6 +36,12 @@ const logFile: WoWLogFile = {
       size_bytes: 300,
       compressed_size_bytes: 120,
       content_encoding: "gzip",
+      artifact: {
+        ...artifact,
+        id: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        log_file_part_id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+        original_filename: "ChronicleSidekickBridgeWoTLK-append.lua",
+      },
       created_at: "2026-10-25T01:00:00Z",
       finalized_at: "2026-10-25T01:00:01Z",
     },
@@ -43,14 +49,21 @@ const logFile: WoWLogFile = {
 };
 
 describe("UploadedLogFileRows", () => {
-  it("renders the base file and every appended part with one combined download", () => {
+  it("renders the base file, appended parts, and their associated artifacts", () => {
     const markup = renderToStaticMarkup(
-      <UploadedLogFileRows logId={logFile.wow_log_id} file={logFile} canDownloadFiles />,
+      <UploadedLogFileRows
+        logId={logFile.wow_log_id}
+        file={logFile}
+        baseArtifact={artifact}
+        canDownloadFiles
+      />,
     );
 
     expect(markup).toContain("Combat log · Base file");
     expect(markup).toContain("Combat log · Append 1");
-    expect(markup.match(/\/download/g)).toHaveLength(1);
+    expect(markup).toContain("ChronicleSidekickBridgeWoTLK.lua");
+    expect(markup).toContain("ChronicleSidekickBridgeWoTLK-append.lua");
+    expect(markup.match(/\/download/g)).toHaveLength(3);
     expect(markup).toContain("Download combined combat log");
   });
 });

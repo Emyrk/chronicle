@@ -722,6 +722,7 @@ type sqlcQuerier interface {
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListLogFilePartsForDeletion(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
+	ListLogGroupArtifactsForParse(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
 	ListLuaProjectArtifactGarbage(ctx context.Context) ([]string, error)
 	ListLuaProjectContributors(ctx context.Context, projectID uuid.UUID) ([]ListLuaProjectContributorsRow, error)
 	ListLuaProjectReleases(ctx context.Context, projectID uuid.UUID) ([]LuaProjectRelease, error)
