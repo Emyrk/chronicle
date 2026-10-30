@@ -8,6 +8,8 @@ import {
   focusLabel,
   formatClearTime,
   formatGuildValue,
+  GUILD_HISTORY_MAX_TIME_HOURS,
+  guildHistoryValueIsShown,
   guildRunValue,
   NO_FOCUS,
   summarizeClearTimes,
@@ -44,18 +46,22 @@ export function ClearTimeChart({
 
   if (loading) return <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">Loading clears…</div>;
 
-  const points = series.flatMap((item) => item.runs.flatMap((run) => {
+  const allPoints = series.flatMap((item) => item.runs.flatMap((run) => {
     const value = guildRunValue(run, timing, focus, display);
     if (value === null) return [];
     const timestamp = Date.parse(run.completion_time);
     return [{ id: `${item.id}-${run.slug}`, guild: item, run, value, timestamp, day: startOfLocalDay(timestamp) }];
   }));
+  const omittedLongValues = allPoints.filter((point) => !guildHistoryValueIsShown(point.value, display)).length;
+  const points = allPoints.filter((point) => guildHistoryValueIsShown(point.value, display));
   if (points.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-border text-center text-sm text-muted-foreground">
-        {parse
-          ? "No time parses for these clears yet. Parses need enough comparable clears on the server."
-          : focus.boss ? `No ${focus.boss} kills match these filters.` : "No clears match these filters."}
+      <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
+        {omittedLongValues > 0
+          ? `${omittedLongValues} ${omittedLongValues === 1 ? "clear" : "clears"} over ${GUILD_HISTORY_MAX_TIME_HOURS} hours not shown.`
+          : parse
+            ? "No time parses for these clears yet. Parses need enough comparable clears on the server."
+            : focus.boss ? `No ${focus.boss} kills match these filters.` : "No clears match these filters."}
       </div>
     );
   }
@@ -105,7 +111,12 @@ export function ClearTimeChart({
       onPointerMove={updateHoverDay}
       onPointerLeave={() => setHoverDay(null)}
     >
-      <div className="pointer-events-none absolute top-1.5 right-2 z-10 flex flex-wrap justify-end gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+      <div className="pointer-events-none absolute top-1.5 right-2 left-2 z-10 flex flex-wrap justify-end gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+        {omittedLongValues > 0 && (
+          <span className="rounded border border-amber-400/20 bg-amber-400/10 px-2 py-0.5 font-medium text-amber-200">
+            {omittedLongValues} {omittedLongValues === 1 ? "clear" : "clears"} over {GUILD_HISTORY_MAX_TIME_HOURS} hours not shown
+          </span>
+        )}
         {(focus.boss || focus.part) && (
           <span className="font-medium text-sky-300">
             {focus.boss ? `${focus.boss} kill ${parse ? "parse" : "time"}` : focusLabel(focus)}
@@ -188,6 +199,8 @@ export function ClearTimeChart({
         <Link
           key={id}
           to={`/instances/${run.slug}`}
+          target="_blank"
+          rel="noopener noreferrer"
           className="absolute z-10 flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full outline-none focus-visible:ring-2"
           style={{ left: `${x(day)}%`, top: `${y(value)}%`, "--tw-ring-color": guild.color } as React.CSSProperties}
           aria-label={`${guild.name}, ${new Date(run.completion_time).toLocaleDateString()}, ${format(value)}${parse ? " parse" : ""}`}

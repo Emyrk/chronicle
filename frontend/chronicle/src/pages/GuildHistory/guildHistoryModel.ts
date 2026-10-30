@@ -9,6 +9,10 @@ export const GUILD_SERIES_COLORS = ["#38bdf8", "#f59e0b", "#a78bfa", "#34d399", 
 
 export const GUILD_RECENT_RUN_COUNT = 5;
 
+/** Longer values are usually logs left running and would flatten the useful clear-time chart. */
+export const GUILD_HISTORY_MAX_TIME_HOURS = 6;
+export const GUILD_HISTORY_MAX_TIME_MS = GUILD_HISTORY_MAX_TIME_HOURS * 60 * 60 * 1000;
+
 /** A clear must sit at least this fraction of the typical clear beyond the middle half to be an outlier. */
 const MIN_OUTLIER_GAP = 0.1;
 /** The same minimum gap for parses, in parse points. */
@@ -70,6 +74,11 @@ export function guildRunValue(
   return duration > 0 ? duration : null;
 }
 
+/** Whether a value belongs in history statistics and charts. Parse values are never time-limited. */
+export function guildHistoryValueIsShown(value: number, display: GuildHistoryDisplay): boolean {
+  return display === "parse" || value <= GUILD_HISTORY_MAX_TIME_MS;
+}
+
 /** Whether parses exist for what is being measured. */
 export function parsesAvailable(timing: GuildHistoryTiming, focus: GuildFocus): boolean {
   return !focus.part && (!!focus.boss || timing === "full");
@@ -126,7 +135,7 @@ export function summarizeClearTimes(
 ): ClearSummary | null {
   const timed = runs.flatMap((run) => {
     const value = guildRunValue(run, timing, focus, display);
-    return value === null ? [] : [{ run, value }];
+    return value === null || !guildHistoryValueIsShown(value, display) ? [] : [{ run, value }];
   });
   if (timed.length === 0) return null;
 

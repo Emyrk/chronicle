@@ -4,6 +4,8 @@ import {
   clearConsistencyLabel,
   filterGuildRuns,
   formatClearTime,
+  GUILD_HISTORY_MAX_TIME_MS,
+  guildHistoryValueIsShown,
   mergeBossOrder,
   summarizeBossSplits,
   summarizeClearTimes,
@@ -84,6 +86,16 @@ describe("summarizeClearTimes", () => {
     const runs = [60, 61, 62, 63, 64, 66, 140].map((minutes, index) => run(index * 7, minutes));
     expect(summarizeClearTimes(runs, "full")!.outliers).toEqual([140 * MINUTE]);
     expect(summarizeClearTimes(runs.slice(0, 6), "full")!.outliers).toEqual([]);
+  });
+
+  it("excludes clear times over six hours from history statistics", () => {
+    const runs = [run(0, 60), run(7, 65), run(14, 7 * 60)];
+    const summary = summarizeClearTimes(runs, "full")!;
+    expect(summary.runCount).toBe(2);
+    expect(summary.typical).toBe(62.5 * MINUTE);
+    expect(guildHistoryValueIsShown(GUILD_HISTORY_MAX_TIME_MS, "time")).toBe(true);
+    expect(guildHistoryValueIsShown(GUILD_HISTORY_MAX_TIME_MS + 1, "time")).toBe(false);
+    expect(guildHistoryValueIsShown(GUILD_HISTORY_MAX_TIME_MS + 1, "parse")).toBe(true);
   });
 
   it("reports Recent only once there are more clears than the recent window", () => {

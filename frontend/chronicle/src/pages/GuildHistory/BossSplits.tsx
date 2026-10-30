@@ -160,6 +160,8 @@ function ClearBars({ guilds, sort }: { guilds: readonly BossSplitGuild[]; sort: 
           <TooltipTrigger asChild>
             <Link
               to={`/instances/${run.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
               className="grid grid-cols-[7rem_minmax(0,1fr)_4.5rem] items-center gap-3 rounded px-1 py-0.5 text-xs hover:bg-white/5 sm:grid-cols-[10rem_minmax(0,1fr)_4.5rem]"
             >
               <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">

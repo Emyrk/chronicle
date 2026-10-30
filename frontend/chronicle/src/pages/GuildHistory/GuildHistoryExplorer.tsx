@@ -439,7 +439,12 @@ function ClearsTable({ guilds, label }: { guilds: readonly SelectedGuild[]; labe
               <td className="px-3 py-1.5 text-right font-mono tabular-nums text-muted-foreground">{run.bosses.length}</td>
               <td className="px-3 py-1.5 text-right font-mono tabular-nums text-muted-foreground">{run.player_count}</td>
               <td className="px-3 py-1.5 text-right">
-                <Link to={`/instances/${run.slug}`} className="inline-flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300">
+                <Link
+                  to={`/instances/${run.slug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300"
+                >
                   Log <ExternalLink className="h-3 w-3" />
                 </Link>
               </td>
@@ -456,6 +461,8 @@ function GuildComparisonUpsell({ lockedGuilds }: { lockedGuilds: number }) {
   return (
     <Link
       to="/supporter"
+      target="_blank"
+      rel="noopener noreferrer"
       className="col-span-2 flex h-8 min-w-0 items-center gap-1.5 rounded-md border px-3 text-xs transition-colors hover:brightness-125 sm:col-span-1"
       style={{ borderColor: `${TIER_COLOR.honored}66`, backgroundColor: `${TIER_COLOR.honored}14` }}
     >
