@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"reflect"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -26,82 +28,105 @@ func decodeSidekickConfig(payload []byte) (chroniclesdk.SidekickConfig, error) {
 	return config, nil
 }
 
-func effectiveSidekickConfig(account chroniclesdk.SidekickConfig, override *chroniclesdk.SidekickConfig) chroniclesdk.SidekickConfig {
-	if override != nil {
-		return *override
+func decodeSidekickCapabilities(payload []byte) (chroniclesdk.SidekickAutoUploadCapabilities, error) {
+	capabilities := chroniclesdk.SidekickAutoUploadCapabilities{}
+	if len(payload) == 0 {
+		return capabilities, nil
 	}
-	return account
+	if err := json.Unmarshal(payload, &capabilities); err != nil {
+		return nil, err
+	}
+	return capabilities, nil
 }
 
-func (s *Service) accountConfig(ctx context.Context, userID uuid.UUID) (chroniclesdk.SidekickAccountConfigResponse, error) {
-	config := chroniclesdk.DefaultSidekickConfig()
-	payload, err := s.zed.GetSidekickAccountConfig(ctx, userID)
-	if err == nil {
-		config, err = decodeSidekickConfig(payload)
-		if err != nil {
-			return chroniclesdk.SidekickAccountConfigResponse{}, err
+func supportsAutoUpload(capabilities chroniclesdk.SidekickAutoUploadCapabilities, format chroniclesdk.SidekickGameFormat, mode chroniclesdk.SidekickAutoUploadMode) bool {
+	if mode == chroniclesdk.SidekickAutoUploadDisabled {
+		return true
+	}
+	for _, supported := range capabilities[format] {
+		if supported == mode {
+			return true
 		}
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		return chroniclesdk.SidekickAccountConfigResponse{}, err
 	}
-	hash, err := config.Hash()
-	if err != nil {
-		return chroniclesdk.SidekickAccountConfigResponse{}, err
+	return false
+}
+
+func normalizeSidekickConfig(config chroniclesdk.SidekickConfig, capabilities chroniclesdk.SidekickAutoUploadCapabilities) chroniclesdk.SidekickConfig {
+	normalized := chroniclesdk.DefaultSidekickConfig()
+	for id, directory := range config.WoWDirectories {
+		if !supportsAutoUpload(capabilities, directory.GameFormat, directory.AutoUpload) {
+			directory.AutoUpload = chroniclesdk.SidekickAutoUploadDisabled
+		}
+		normalized.WoWDirectories[id] = directory
 	}
-	return chroniclesdk.SidekickAccountConfigResponse{Config: config, Hash: hash}, nil
+	return normalized
+}
+
+func validateSidekickCapabilities(config chroniclesdk.SidekickConfig, capabilities chroniclesdk.SidekickAutoUploadCapabilities) error {
+	for id, directory := range config.WoWDirectories {
+		if !supportsAutoUpload(capabilities, directory.GameFormat, directory.AutoUpload) {
+			return fmt.Errorf("auto-upload mode %q is not supported for %q by directory %q", directory.AutoUpload, directory.GameFormat, id)
+		}
+	}
+	return nil
 }
 
 func (s *Service) sidekickConfigState(ctx context.Context, userID, sidekickID uuid.UUID) (chroniclesdk.SidekickConfigState, error) {
-	if _, err := s.zed.GetSidekickInstallationByUser(ctx, database.GetSidekickInstallationByUserParams{
+	installation, err := s.zed.GetSidekickInstallationByUser(ctx, database.GetSidekickInstallationByUserParams{
 		SidekickID: sidekickID,
 		UserID:     userID,
-	}); err != nil {
+	})
+	if err != nil {
 		return chroniclesdk.SidekickConfigState{}, err
 	}
-
-	account, err := s.accountConfig(ctx, userID)
+	capabilities, err := decodeSidekickCapabilities(installation.AutoUploadCapabilities)
 	if err != nil {
 		return chroniclesdk.SidekickConfigState{}, err
 	}
 
-	var override *chroniclesdk.SidekickConfig
+	config := chroniclesdk.DefaultSidekickConfig()
+	resetStoredConfig := false
 	payload, err := s.zed.GetSidekickConfigOverride(ctx, database.GetSidekickConfigOverrideParams{
 		SidekickID: sidekickID,
 		UserID:     userID,
 	})
 	if err == nil {
-		config, decodeErr := decodeSidekickConfig(payload)
+		decoded, decodeErr := decodeSidekickConfig(payload)
 		if decodeErr != nil {
-			return chroniclesdk.SidekickConfigState{}, decodeErr
+			resetStoredConfig = true
+		} else {
+			config = decoded
 		}
-		override = &config
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return chroniclesdk.SidekickConfigState{}, err
 	}
 
-	effective := effectiveSidekickConfig(account.Config, override)
-	hash, err := effective.Hash()
+	normalized := normalizeSidekickConfig(config, capabilities)
+	if (resetStoredConfig || !reflect.DeepEqual(config, normalized)) && !installation.DisconnectedAt.Valid {
+		payload, encodeErr := normalized.CanonicalJSON()
+		if encodeErr != nil {
+			return chroniclesdk.SidekickConfigState{}, encodeErr
+		}
+		if _, persistErr := s.zed.UpsertSidekickConfigOverride(ctx, database.UpsertSidekickConfigOverrideParams{
+			SidekickID: sidekickID,
+			UserID:     userID,
+			Config:     payload,
+		}); persistErr != nil {
+			return chroniclesdk.SidekickConfigState{}, persistErr
+		}
+	}
+	config = normalized
+	hash, err := config.Hash()
 	if err != nil {
 		return chroniclesdk.SidekickConfigState{}, err
 	}
-	return chroniclesdk.SidekickConfigState{
-		Inherited:     override == nil,
-		Override:      override,
-		Effective:     effective,
-		EffectiveHash: hash,
-	}, nil
+	return chroniclesdk.SidekickConfigState{Config: config, Hash: hash}, nil
 }
 
-func sidekickStatusResponse(installation chroniclesdk.SidekickInstallation, clientHash string) chroniclesdk.SidekickStatusResponse {
-	configuration := installation.Configuration
-	installation.Configuration = nil
-	response := chroniclesdk.SidekickStatusResponse{SidekickInstallation: installation}
-	if configuration == nil {
-		return response
-	}
-	response.ConfigHash = configuration.EffectiveHash
-	if clientHash != configuration.EffectiveHash {
-		config := configuration.Effective
+func sidekickStatusResponse(configuration chroniclesdk.SidekickConfigState, clientHash string) chroniclesdk.SidekickStatusResponse {
+	response := chroniclesdk.SidekickStatusResponse{ConfigHash: configuration.Hash}
+	if clientHash != configuration.Hash {
+		config := configuration.Config
 		response.Config = &config
 	}
 	return response
@@ -126,48 +151,6 @@ func sidekickIDParam(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 		return uuid.Nil, false
 	}
 	return sidekickID, true
-}
-
-func (s *Service) GetMySidekickAccountConfig(w http.ResponseWriter, r *http.Request) {
-	claims := chronauth.MustAuthenticatedClaims(r.Context())
-	response, err := s.accountConfig(r.Context(), claims.Subject)
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-	httpapi.Write(r.Context(), w, http.StatusOK, response)
-}
-
-func (s *Service) PutMySidekickAccountConfig(w http.ResponseWriter, r *http.Request) {
-	claims := chronauth.MustAuthenticatedClaims(r.Context())
-	config, ok := readSidekickConfig(w, r)
-	if !ok {
-		return
-	}
-	payload, err := config.CanonicalJSON()
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-	stored, err := s.zed.UpsertSidekickAccountConfig(r.Context(), database.UpsertSidekickAccountConfigParams{
-		UserID: claims.Subject,
-		Config: payload,
-	})
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-	config, err = decodeSidekickConfig(stored)
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-	hash, err := config.Hash()
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.SidekickAccountConfigResponse{Config: config, Hash: hash})
 }
 
 func (s *Service) GetMySidekickConfig(w http.ResponseWriter, r *http.Request) {
@@ -196,6 +179,27 @@ func (s *Service) PutMySidekickConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	config, ok := readSidekickConfig(w, r)
 	if !ok {
+		return
+	}
+	installation, err := s.zed.GetSidekickInstallationByUser(r.Context(), database.GetSidekickInstallationByUserParams{
+		SidekickID: sidekickID,
+		UserID:     claims.Subject,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Sidekick not found."})
+		return
+	}
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	capabilities, err := decodeSidekickCapabilities(installation.AutoUploadCapabilities)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if err := validateSidekickCapabilities(config, capabilities); err != nil {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: err.Error()})
 		return
 	}
 	payload, err := config.CanonicalJSON()

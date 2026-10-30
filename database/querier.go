@@ -404,7 +404,6 @@ type sqlcQuerier interface {
 	GetServersForWorld(ctx context.Context, worldID uuid.UUID) ([]WowServer, error)
 	GetSharedViewByCode(ctx context.Context, code string) (SharedView, error)
 	GetSharedViewByInstanceAndHash(ctx context.Context, arg GetSharedViewByInstanceAndHashParams) (SharedView, error)
-	GetSidekickAccountConfig(ctx context.Context, userID uuid.UUID) ([]byte, error)
 	GetSidekickConfigOverride(ctx context.Context, arg GetSidekickConfigOverrideParams) ([]byte, error)
 	GetSidekickInstallationByUser(ctx context.Context, arg GetSidekickInstallationByUserParams) (SidekickInstallation, error)
 	GetSidekickInstallationForOAuthRequest(ctx context.Context, arg GetSidekickInstallationForOAuthRequestParams) (uuid.UUID, error)
@@ -1117,7 +1116,6 @@ type sqlcQuerier interface {
 	UpsertRetentionPolicy(ctx context.Context, arg UpsertRetentionPolicyParams) (RetentionPolicy, error)
 	UpsertRetentionPolicyByRealm(ctx context.Context, arg UpsertRetentionPolicyByRealmParams) (RetentionPolicy, error)
 	UpsertRetentionRule(ctx context.Context, arg UpsertRetentionRuleParams) (RetentionRule, error)
-	UpsertSidekickAccountConfig(ctx context.Context, arg UpsertSidekickAccountConfigParams) ([]byte, error)
 	UpsertSidekickConfigOverride(ctx context.Context, arg UpsertSidekickConfigOverrideParams) ([]byte, error)
 	UpsertSidekickInstallation(ctx context.Context, arg UpsertSidekickInstallationParams) (SidekickInstallation, error)
 	UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertSidekickWoWDirectoryParams) error

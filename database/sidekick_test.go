@@ -7,6 +7,7 @@ import (
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,25 +39,30 @@ func TestSidekickLifecycleAndIssues(t *testing.T) {
 	require.Equal(t, installationID, resolvedInstallationID)
 
 	installation, err = db.UpdateSidekickHeartbeat(ctx, database.UpdateSidekickHeartbeatParams{
-		ID: installationID, UserID: userID, Platform: "linux", Version: "1.2.4",
+		ID: installationID, UserID: userID, Platform: "linux", SidekickVersion: "1.2.4",
+		StartAtLogin: true, AutoUploadCapabilities: []byte(`{"wotlk_3.3.5a":["on_game_exit"]}`),
 	})
 	require.NoError(t, err)
 	require.True(t, installation.LastSeenAt.Valid)
 	require.Equal(t, "linux", installation.Platform)
 
 	require.NoError(t, db.UpsertSidekickWoWDirectory(ctx, database.UpsertSidekickWoWDirectoryParams{
-		SidekickID: installationID, Path: `C:\\Games\\CapyCraft`, TenantName: "CapyCraft",
-		TenantBaseUrl: "https://capy.chronicleclassic.com", Realmlist: "apac.capycraft.io",
+		SidekickID: installationID, ID: pgtype.Text{}, Path: `C:\\Games\\Legacy`, TenantName: "Legacy",
+		TenantBaseUrl: "https://legacy.chronicleclassic.com", Realmlist: "", GameFormat: "",
 	}))
 	require.NoError(t, db.UpsertSidekickWoWDirectory(ctx, database.UpsertSidekickWoWDirectoryParams{
-		SidekickID: installationID, Path: `C:\\Games\\Warmane`, TenantName: "Warmane",
-		TenantBaseUrl: "https://warmane.chronicleclassic.com", Realmlist: "logon.warmane.com",
+		SidekickID: installationID, ID: pgtype.Text{String: "wowdir_capy", Valid: true}, Path: `C:\\Games\\CapyCraft`, TenantName: "CapyCraft",
+		TenantBaseUrl: "https://capy.chronicleclassic.com", Realmlist: "apac.capycraft.io", GameFormat: "",
+	}))
+	require.NoError(t, db.UpsertSidekickWoWDirectory(ctx, database.UpsertSidekickWoWDirectoryParams{
+		SidekickID: installationID, ID: pgtype.Text{String: "wowdir_warmane", Valid: true}, Path: `C:\\Games\\Warmane`, TenantName: "Warmane",
+		TenantBaseUrl: "https://warmane.chronicleclassic.com", Realmlist: "logon.warmane.com", GameFormat: "wotlk_3.3.5a",
 	}))
 	directories, err := db.ListSidekickWoWDirectories(ctx, installationID)
 	require.NoError(t, err)
-	require.Len(t, directories, 2)
+	require.Len(t, directories, 3)
 	_, err = db.DeleteSidekickWoWDirectoriesExcept(ctx, database.DeleteSidekickWoWDirectoriesExceptParams{
-		SidekickID: installationID, ActivePaths: []string{`C:\\Games\\Warmane`},
+		SidekickID: installationID, ActiveIds: []string{"wowdir_warmane"},
 	})
 	require.NoError(t, err)
 	directories, err = db.ListSidekickWoWDirectories(ctx, installationID)

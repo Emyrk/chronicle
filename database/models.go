@@ -2385,16 +2385,18 @@ type SidekickConfigOverride struct {
 }
 
 type SidekickInstallation struct {
-	ID             uuid.UUID          `db:"id" json:"id"`
-	UserID         uuid.UUID          `db:"user_id" json:"user_id"`
-	Name           string             `db:"name" json:"name"`
-	Platform       string             `db:"platform" json:"platform"`
-	Version        string             `db:"version" json:"version"`
-	LastSeenAt     pgtype.Timestamptz `db:"last_seen_at" json:"last_seen_at"`
-	LastUploadAt   pgtype.Timestamptz `db:"last_upload_at" json:"last_upload_at"`
-	DisconnectedAt pgtype.Timestamptz `db:"disconnected_at" json:"disconnected_at"`
-	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ID                     uuid.UUID          `db:"id" json:"id"`
+	UserID                 uuid.UUID          `db:"user_id" json:"user_id"`
+	Name                   string             `db:"name" json:"name"`
+	Platform               string             `db:"platform" json:"platform"`
+	Version                string             `db:"version" json:"version"`
+	LastSeenAt             pgtype.Timestamptz `db:"last_seen_at" json:"last_seen_at"`
+	LastUploadAt           pgtype.Timestamptz `db:"last_upload_at" json:"last_upload_at"`
+	DisconnectedAt         pgtype.Timestamptz `db:"disconnected_at" json:"disconnected_at"`
+	CreatedAt              pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	StartAtLogin           bool               `db:"start_at_login" json:"start_at_login"`
+	AutoUploadCapabilities []byte             `db:"auto_upload_capabilities" json:"auto_upload_capabilities"`
 }
 
 type SidekickIssue struct {
@@ -2423,6 +2425,8 @@ type SidekickWowDirectory struct {
 	Realmlist     string             `db:"realmlist" json:"realmlist"`
 	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ID            pgtype.Text        `db:"id" json:"id"`
+	GameFormat    string             `db:"game_format" json:"game_format"`
 }
 
 type SiteConfig struct {

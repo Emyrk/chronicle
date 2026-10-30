@@ -2040,6 +2040,9 @@ CREATE TABLE sidekick_installations (
     disconnected_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    start_at_login boolean DEFAULT false NOT NULL,
+    auto_upload_capabilities jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT sidekick_installations_auto_upload_capabilities_object CHECK ((jsonb_typeof(auto_upload_capabilities) = 'object'::text)),
     CONSTRAINT sidekick_installations_name_check CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100))),
     CONSTRAINT sidekick_installations_platform_check CHECK ((char_length(platform) <= 100)),
     CONSTRAINT sidekick_installations_version_check CHECK ((char_length(version) <= 100))
@@ -2074,6 +2077,9 @@ CREATE TABLE sidekick_wow_directories (
     realmlist text DEFAULT ''::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    id text,
+    game_format text DEFAULT ''::text NOT NULL,
+    CONSTRAINT sidekick_wow_directories_id_length CHECK (((id IS NULL) OR ((char_length(id) >= 1) AND (char_length(id) <= 100)))),
     CONSTRAINT sidekick_wow_directories_path_check CHECK (((char_length(path) >= 1) AND (char_length(path) <= 2000))),
     CONSTRAINT sidekick_wow_directories_realmlist_check CHECK ((char_length(realmlist) <= 255)),
     CONSTRAINT sidekick_wow_directories_tenant_base_url_check CHECK (((char_length(tenant_base_url) >= 1) AND (char_length(tenant_base_url) <= 500))),
@@ -3549,6 +3555,8 @@ CREATE UNIQUE INDEX sidekick_issues_active_code_idx ON sidekick_issues USING btr
 CREATE INDEX sidekick_issues_history_idx ON sidekick_issues USING btree (sidekick_id, last_reported_at DESC);
 
 CREATE INDEX sidekick_oauth_grants_sidekick_id_idx ON sidekick_oauth_grants USING btree (sidekick_id) WHERE (revoked_at IS NULL);
+
+CREATE UNIQUE INDEX sidekick_wow_directories_sidekick_id_id_idx ON sidekick_wow_directories USING btree (sidekick_id, id) WHERE (id IS NOT NULL);
 
 CREATE INDEX telemetry_notices_audience_idx ON telemetry_notices USING btree (audience);
 

@@ -2830,7 +2830,6 @@ export interface ListRaidCompositionsResponse {
 
 // From chroniclesdk/sidekick.go
 export interface ListSidekicksResponse {
-    readonly account_config: SidekickAccountConfigResponse;
     readonly sidekicks: readonly SidekickInstallation[];
 }
 
@@ -4092,39 +4091,47 @@ export interface SharedViewResponse {
 }
 
 // From chroniclesdk/sidekick.go
-export interface SidekickAccountConfigResponse {
-    readonly config: SidekickConfig;
-    readonly hash: string;
-}
+export type SidekickAutoUploadCapabilities = Record<SidekickGameFormat, SidekickAutoUploadMode[]>;
 
 // From chroniclesdk/sidekick.go
-export interface SidekickAutoUploadConfig {
-    readonly enabled: boolean;
-}
+export type SidekickAutoUploadMode = "disabled" | "on_game_exit";
+
+export const SidekickAutoUploadModes: SidekickAutoUploadMode[] = ["disabled", "on_game_exit"];
 
 // From chroniclesdk/sidekick.go
 export interface SidekickConfig {
     readonly version: number;
-    readonly auto_upload: SidekickAutoUploadConfig;
+    readonly wow_directories: Record<string, SidekickDirectoryConfig>;
 }
 
 // From chroniclesdk/sidekick.go
 export interface SidekickConfigState {
-    readonly inherited: boolean;
-    readonly override?: SidekickConfig;
-    readonly effective: SidekickConfig;
-    readonly effective_hash: string;
+    readonly config: SidekickConfig;
+    readonly hash: string;
 }
 
 // From chroniclesdk/sidekick.go
 export const SidekickConfigVersion = 1;
 
 // From chroniclesdk/sidekick.go
+export interface SidekickDirectoryConfig {
+    readonly game_format: SidekickGameFormat;
+    readonly auto_upload: SidekickAutoUploadMode;
+}
+
+// From chroniclesdk/sidekick.go
+export type SidekickGameFormat = "wotlk_3.3.5a";
+
+export const SidekickGameFormats: SidekickGameFormat[] = ["wotlk_3.3.5a"];
+
+// From chroniclesdk/sidekick.go
 export interface SidekickInstallation {
     readonly id: string;
     readonly name: string;
     readonly platform?: string;
-    readonly version?: string;
+    readonly sidekick_version?: string;
+    readonly start_at_login: boolean;
+    readonly auto_upload_capabilities: SidekickAutoUploadCapabilities;
     readonly online: boolean;
     readonly last_seen_at?: string;
     readonly last_upload_at?: string;
@@ -4156,24 +4163,28 @@ export interface SidekickIssueReport {
 // From chroniclesdk/sidekick.go
 export interface SidekickStatusRequest {
     readonly platform?: string;
-    readonly version?: string;
+    readonly sidekick_version?: string;
     readonly config_hash?: string;
+    readonly start_at_login: boolean | null;
+    readonly auto_upload_capabilities: SidekickAutoUploadCapabilities;
     readonly wow_directories: readonly SidekickWoWDirectory[];
     readonly issues: readonly SidekickIssueReport[];
 }
 
 // From chroniclesdk/sidekick.go
-export interface SidekickStatusResponse extends SidekickInstallation {
+export interface SidekickStatusResponse {
     readonly config_hash: string;
     readonly config?: SidekickConfig;
 }
 
 // From chroniclesdk/sidekick.go
 export interface SidekickWoWDirectory {
+    readonly id: string;
     readonly path: string;
-    readonly tenant_name: string;
-    readonly tenant_base_url: string;
+    readonly tenant_name?: string;
+    readonly tenant_base_url?: string;
     readonly realmlist?: string;
+    readonly game_format?: SidekickGameFormat;
 }
 
 // From chroniclesdk/sim.go
