@@ -68,8 +68,8 @@ func (s *Service) validateCurrentSession(ctx context.Context, c *claims.Claims) 
 }
 
 // AuthenticationMiddleware validates both the signed token and its current
-// database session. The database check makes logout, account deletion, and
-// account merges revoke already-issued JWTs immediately.
+// database session. The database check makes logout and account deletion
+// revoke already-issued JWTs immediately.
 func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// An earlier authentication middleware, such as service OAuth, may have

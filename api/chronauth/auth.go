@@ -43,15 +43,10 @@ const (
 	LinkSessionName  = "chronicle_link_session"
 )
 
-var errProviderAlreadyLinked = errors.New("provider already linked to this account")
-
-type providerLinkedElsewhereError struct {
-	link database.UserAuthLink
-}
-
-func (e *providerLinkedElsewhereError) Error() string {
-	return "provider identity belongs to another account"
-}
+var (
+	errProviderAlreadyLinked   = errors.New("provider already linked to this account")
+	errProviderLinkedElsewhere = errors.New("provider identity belongs to another account")
+)
 
 type Options struct {
 	AccessURL *url.URL
@@ -60,8 +55,6 @@ type Options struct {
 	Discord   DiscordOAuth
 	Bot       *chroniclebot.Bot
 	Mailer    *chroniclemail.Mailer
-
-	NotifyAccountMerge func(context.Context, database.AccountMergeRequest) error
 
 	WhatsNewCurrentID string
 	Sessions          SessionOptions
@@ -77,8 +70,6 @@ type Service struct {
 	Zed       *authz.Authz
 	Bot       *chroniclebot.Bot
 	logger    *slog.Logger
-
-	notifyAccountMerge func(context.Context, database.AccountMergeRequest) error
 
 	sessions          *Sessions
 	mailer            *chroniclemail.Mailer
@@ -162,21 +153,20 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 	}
 
 	return &Service{
-		Providers:          providers,
-		Store:              store,
-		logger:             logger.With(slog.String("service", "auth")),
-		sessions:           sess,
-		Bot:                opts.Bot,
-		notifyAccountMerge: opts.NotifyAccountMerge,
-		Zed:                opts.Zed,
-		mailer:             opts.Mailer,
-		whatsNewCurrentID:  opts.WhatsNewCurrentID,
-		devMode:            opts.DevServer,
-		RelayStore:         NewRelayCodeStore(opts.Zed),
-		accessURL:          opts.AccessURL,
-		tenantChecker:      opts.TenantChecker,
-		registerAttempts:   make(map[string]time.Time),
-		loginAttempts:      make(map[string]time.Time),
+		Providers:         providers,
+		Store:             store,
+		logger:            logger.With(slog.String("service", "auth")),
+		sessions:          sess,
+		Bot:               opts.Bot,
+		Zed:               opts.Zed,
+		mailer:            opts.Mailer,
+		whatsNewCurrentID: opts.WhatsNewCurrentID,
+		devMode:           opts.DevServer,
+		RelayStore:        NewRelayCodeStore(opts.Zed),
+		accessURL:         opts.AccessURL,
+		tenantChecker:     opts.TenantChecker,
+		registerAttempts:  make(map[string]time.Time),
+		loginAttempts:     make(map[string]time.Time),
 	}, nil
 }
 
@@ -419,7 +409,7 @@ func (s *Service) clearLinkTarget(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) linkProviderIdentity(ctx context.Context, accountID uuid.UUID, user goth.User) error {
 	return s.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
-		locked, err := tx.LockUsersForAccountMerge(ctx, []uuid.UUID{accountID})
+		locked, err := tx.LockUsersForUpdate(ctx, []uuid.UUID{accountID})
 		if err != nil {
 			return err
 		}
@@ -448,7 +438,7 @@ func (s *Service) linkProviderIdentity(ctx context.Context, accountID uuid.UUID,
 			if existing.UserID == accountID {
 				return nil
 			}
-			return &providerLinkedElsewhereError{link: existing}
+			return errProviderLinkedElsewhere
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
@@ -465,48 +455,6 @@ func (s *Service) linkProviderIdentity(ctx context.Context, accountID uuid.UUID,
 		})
 		return err
 	}, nil)
-}
-
-func (s *Service) requestAccountMerge(ctx context.Context, targetUserID uuid.UUID, sourceLink database.UserAuthLink) error {
-	target, err := s.Zed.GetUserByID(ctx, targetUserID)
-	if err != nil {
-		return fmt.Errorf("get target account: %w", err)
-	}
-	source, err := s.Zed.GetUserByID(ctx, sourceLink.UserID)
-	if err != nil {
-		return fmt.Errorf("get source account: %w", err)
-	}
-
-	requestID := uuid.New()
-	created, err := s.Zed.InsertAccountMergeRequest(ctx, database.InsertAccountMergeRequestParams{
-		ID:              requestID,
-		RequesterUserID: targetUserID,
-		SourceUserID:    source.ID,
-		TargetUserID:    target.ID,
-		DiscordID:       sourceLink.LinkedID,
-		SourceUsername:  source.Username,
-		SourceEmail:     source.Email,
-		TargetUsername:  target.Username,
-		TargetEmail:     target.Email,
-		Message:         "Requested after proving control of the Discord identity through OAuth.",
-	})
-	if database.IsUniqueViolation(err) {
-		pending, pendingErr := s.Zed.GetPendingAccountMergeRequestByTarget(ctx, targetUserID)
-		if pendingErr == nil && pending.SourceUserID == source.ID {
-			return nil
-		}
-	}
-	if err != nil {
-		return fmt.Errorf("insert account merge request: %w", err)
-	}
-	if s.notifyAccountMerge != nil {
-		notifyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		if notifyErr := s.notifyAccountMerge(notifyCtx, created); notifyErr != nil {
-			s.logger.Error("enqueue account merge notification", slog.String("error", notifyErr.Error()))
-		}
-	}
-	return nil
 }
 
 func (s *Service) completeLink(w http.ResponseWriter, r *http.Request, claims *claims.Claims) bool {
@@ -545,14 +493,8 @@ func (s *Service) completeLink(w http.ResponseWriter, r *http.Request, claims *c
 		}
 		redirect("success")
 	case err != nil:
-		var conflict *providerLinkedElsewhereError
-		if errors.As(err, &conflict) {
-			if requestErr := s.requestAccountMerge(r.Context(), accountID, conflict.link); requestErr != nil {
-				s.logger.Error("request account merge", slog.String("error", requestErr.Error()))
-				redirect("error")
-				break
-			}
-			redirect("merge_requested")
+		if errors.Is(err, errProviderLinkedElsewhere) {
+			redirect("linked_elsewhere")
 			break
 		}
 		if errors.Is(err, errProviderAlreadyLinked) {

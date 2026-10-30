@@ -10,7 +10,6 @@ import {
   useMyCharacterCosmetics,
   useMyFavorites,
   useSession,
-  useMyAccountMergeRequests,
   useAccountDeletionStatus,
   useDeleteMyAccount,
   useSetPrimaryCharacter,
@@ -261,7 +260,6 @@ const CHARACTER_COSMETICS_OPTIONS: readonly {
 export function ProfileSettings() {
   const { data: session } = useSession();
   const authenticated = Boolean(session?.user_id);
-  const { data: mergeRequests = [] } = useMyAccountMergeRequests(authenticated);
   const { data: deletionStatus } = useAccountDeletionStatus(authenticated);
   const deleteAccount = useDeleteMyAccount();
   const updateCharacterCosmetics = useUpdateCharacterCosmeticsPreference();
@@ -283,8 +281,8 @@ export function ProfileSettings() {
     if (!result) return;
 
     if (result === "success") toast.success("Discord account connected.");
-    else if (result === "merge_requested") toast.success("Account merge requested.", {
-      description: "An administrator must review the duplicate account before Discord can be connected.",
+    else if (result === "linked_elsewhere") toast.error("That Discord account is already used by another Chronicle account.", {
+      description: "Sign in with Discord to use that account, or connect a different Discord account here.",
     });
     else if (result === "already_linked") toast.info("A different Discord identity is already connected to this account.");
     else if (result === "session_expired") toast.error("Your session changed while connecting Discord. Please try again.");
@@ -415,37 +413,9 @@ export function ProfileSettings() {
           </div>
           {isPasswordAuth && !isDiscordLinked && (
             <p className="text-xs text-muted-foreground">
-              If this Discord account is already attached to another Chronicle account, connecting it starts a merge request that an administrator must review.
+              If this Discord account is already attached to another Chronicle account, it can't be connected here.
             </p>
           )}
-        </div>
-      )}
-
-      {mergeRequests.length > 0 && (
-        <div className="rounded-lg border p-4 space-y-3">
-          <div>
-            <h3 className="text-sm font-medium">Account Merge Requests</h3>
-            <p className="text-xs text-muted-foreground">Duplicate-account merges require administrator approval.</p>
-          </div>
-          <div className="space-y-2">
-            {mergeRequests.map((request) => (
-              <div key={request.id} className="rounded-md border px-3 py-2 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <span>Discord account <span className="font-medium">{request.source_username}</span></span>
-                  <span className={cn(
-                    "rounded-full px-2 py-0.5 text-xs font-medium capitalize",
-                    request.status === "approved" && "bg-green-500/10 text-green-500",
-                    request.status === "rejected" && "bg-destructive/10 text-destructive",
-                    request.status === "pending" && "bg-yellow-500/10 text-yellow-500",
-                  )}>{request.status}</span>
-                </div>
-                {request.response && <p className="mt-1 text-xs text-muted-foreground">{request.response}</p>}
-                {request.status === "pending" && request.source_blockers.length > 0 && (
-                  <p className="mt-1 text-xs text-amber-500">Admin action required: {request.source_blockers.join(", ")}.</p>
-                )}
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
@@ -486,7 +456,7 @@ export function ProfileSettings() {
         <div>
           <h3 className="text-sm font-medium text-destructive">Delete Account</h3>
           <p className="text-xs text-muted-foreground">
-            Account deletion is permanent. You must have signed in within the last 15 minutes. Accounts with owned content, billing, permissions, or active merge requests require administrator assistance first.
+            Account deletion is permanent. You must have signed in within the last 15 minutes. Accounts with owned content, billing, or permissions require administrator assistance first.
           </p>
         </div>
         {deletionStatus && !deletionStatus.can_delete && (

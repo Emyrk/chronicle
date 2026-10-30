@@ -787,24 +787,6 @@ func AllWowPlayableRaceValues() []WowPlayableRace {
 	}
 }
 
-type AccountMergeRequest struct {
-	ID              uuid.UUID          `db:"id" json:"id"`
-	RequesterUserID uuid.UUID          `db:"requester_user_id" json:"requester_user_id"`
-	SourceUserID    uuid.UUID          `db:"source_user_id" json:"source_user_id"`
-	TargetUserID    uuid.UUID          `db:"target_user_id" json:"target_user_id"`
-	DiscordID       string             `db:"discord_id" json:"discord_id"`
-	SourceUsername  string             `db:"source_username" json:"source_username"`
-	SourceEmail     string             `db:"source_email" json:"source_email"`
-	TargetUsername  string             `db:"target_username" json:"target_username"`
-	TargetEmail     string             `db:"target_email" json:"target_email"`
-	Status          string             `db:"status" json:"status"`
-	Message         string             `db:"message" json:"message"`
-	Response        string             `db:"response" json:"response"`
-	ReviewerID      uuid.NullUUID      `db:"reviewer_id" json:"reviewer_id"`
-	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	ReviewedAt      pgtype.Timestamptz `db:"reviewed_at" json:"reviewed_at"`
-}
-
 type AddonAuthor struct {
 	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
 	Name      string             `db:"name" json:"name"`

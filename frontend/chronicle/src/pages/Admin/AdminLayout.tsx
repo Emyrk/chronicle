@@ -23,7 +23,6 @@ import {
   Camera,
   PanelsTopLeft,
   CreditCard,
-  GitMerge,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -38,7 +37,6 @@ const tabs: Tab[] = [
   { path: "/admin/logs", label: "Logs", icon: FileText },
   { path: "/admin/leaderboard", label: "Leaderboard", icon: Trophy },
   { path: "/admin/site-settings", label: "Site Settings", icon: Shield },
-  { path: "/admin/account-merges", label: "Account Merges", icon: GitMerge },
   { path: "/admin/photo-proofs", label: "Proof Review", icon: Camera },
   { path: "/admin/users", label: "Manage Users", icon: Users },
   { path: "/admin/storage", label: "Storage Grants", icon: HardDrive },

@@ -8,32 +8,6 @@ export interface AccountDeletionStatus {
     readonly blockers: readonly string[];
 }
 
-// From chroniclesdk/account.go
-export interface AccountMergeDecisionRequest {
-    readonly approved: boolean;
-    readonly response: string;
-}
-
-// From chroniclesdk/account.go
-export interface AccountMergeRequest {
-    readonly id: string;
-    readonly requester_user_id: string;
-    readonly source_user_id: string;
-    readonly target_user_id: string;
-    readonly discord_id: string;
-    readonly source_username: string;
-    readonly source_email: string;
-    readonly target_username: string;
-    readonly target_email: string;
-    readonly source_blockers: readonly string[];
-    readonly status: string;
-    readonly message: string;
-    readonly response: string;
-    readonly reviewer_id?: string;
-    readonly created_at: string;
-    readonly reviewed_at?: string;
-}
-
 // From chroniclesdk/panel_layout.go
 export interface ActionBarSlotsResponse {
     readonly slot_1: string | null;

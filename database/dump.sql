@@ -190,28 +190,6 @@ CREATE FUNCTION river_job_state_in_bitmask(bitmask bit, state river_job_state) R
     END = 1;
 $$;
 
-CREATE TABLE account_merge_requests (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    requester_user_id uuid NOT NULL,
-    source_user_id uuid NOT NULL,
-    target_user_id uuid NOT NULL,
-    discord_id text NOT NULL,
-    source_username text NOT NULL,
-    source_email text NOT NULL,
-    target_username text NOT NULL,
-    target_email text NOT NULL,
-    status text DEFAULT 'pending'::text NOT NULL,
-    message text DEFAULT ''::text NOT NULL,
-    response text DEFAULT ''::text NOT NULL,
-    reviewer_id uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    reviewed_at timestamp with time zone,
-    CONSTRAINT account_merge_requests_check CHECK ((source_user_id <> target_user_id)),
-    CONSTRAINT account_merge_requests_check1 CHECK ((requester_user_id = target_user_id)),
-    CONSTRAINT account_merge_requests_check2 CHECK (((status = 'pending'::text) OR (reviewed_at IS NOT NULL))),
-    CONSTRAINT account_merge_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text])))
-);
-
 CREATE TABLE addon_authors (
     user_id uuid NOT NULL,
     name text NOT NULL,
@@ -2662,9 +2640,6 @@ ALTER TABLE ONLY river_job ALTER COLUMN id SET DEFAULT nextval('river_job_id_seq
 
 ALTER TABLE ONLY river_notification ALTER COLUMN id SET DEFAULT nextval('river_notification_id_seq'::regclass);
 
-ALTER TABLE ONLY account_merge_requests
-    ADD CONSTRAINT account_merge_requests_pkey PRIMARY KEY (id);
-
 ALTER TABLE ONLY addon_authors
     ADD CONSTRAINT addon_authors_name_key UNIQUE (name);
 
@@ -3277,14 +3252,6 @@ ALTER TABLE ONLY wow_server_upload_keys
 ALTER TABLE ONLY wow_servers
     ADD CONSTRAINT wow_servers_pkey PRIMARY KEY (id);
 
-CREATE UNIQUE INDEX account_merge_requests_pending_source ON account_merge_requests USING btree (source_user_id) WHERE (status = 'pending'::text);
-
-CREATE UNIQUE INDEX account_merge_requests_pending_target ON account_merge_requests USING btree (target_user_id) WHERE (status = 'pending'::text);
-
-CREATE INDEX account_merge_requests_requester_created ON account_merge_requests USING btree (requester_user_id, created_at DESC);
-
-CREATE INDEX account_merge_requests_status_created ON account_merge_requests USING btree (status, created_at DESC);
-
 CREATE INDEX billing_entitlements_user_key_idx ON billing_entitlements USING btree (user_id, entitlement_key);
 
 CREATE INDEX billing_reconciliation_runs_started_at_idx ON billing_reconciliation_runs USING btree (started_at DESC);
@@ -3614,9 +3581,6 @@ CREATE TRIGGER trg_cleanup_after_untrack AFTER DELETE ON user_tracked_layouts FO
 CREATE TRIGGER trg_reattach_by_slug AFTER INSERT ON log_instances FOR EACH ROW EXECUTE FUNCTION reattach_by_slug();
 
 CREATE TRIGGER trigger_insert_default_data_grant AFTER INSERT ON users FOR EACH ROW EXECUTE FUNCTION insert_default_data_grant();
-
-ALTER TABLE ONLY account_merge_requests
-    ADD CONSTRAINT account_merge_requests_reviewer_id_fkey FOREIGN KEY (reviewer_id) REFERENCES users(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY addon_authors
     ADD CONSTRAINT addon_authors_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;

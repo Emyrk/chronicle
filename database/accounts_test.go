@@ -23,47 +23,6 @@ func insertAccountTestUser(t *testing.T, db database.Store, prefix string) uuid.
 	return id
 }
 
-func TestAccountMergeRequestLifecycle(t *testing.T) {
-	t.Parallel()
-	ctx := testutil.Context(t, testutil.WaitShort)
-	db, _ := dbtestutil.NewDB(t)
-	sourceID := insertAccountTestUser(t, db, "merge-source")
-	targetID := insertAccountTestUser(t, db, "merge-target")
-
-	requestID := uuid.New()
-	created, err := db.InsertAccountMergeRequest(ctx, database.InsertAccountMergeRequestParams{
-		ID: requestID, RequesterUserID: targetID, SourceUserID: sourceID, TargetUserID: targetID,
-		DiscordID: "123456", SourceUsername: "source", SourceEmail: "source@example.com",
-		TargetUsername: "target", TargetEmail: "target@example.com", Message: "OAuth verified",
-	})
-	require.NoError(t, err)
-	require.Equal(t, "pending", created.Status)
-
-	pending, err := db.GetPendingAccountMergeRequestByTarget(ctx, targetID)
-	require.NoError(t, err)
-	require.Equal(t, requestID, pending.ID)
-	mine, err := db.ListMyAccountMergeRequests(ctx, targetID)
-	require.NoError(t, err)
-	require.Len(t, mine, 1)
-	admin, err := db.ListAdminAccountMergeRequests(ctx)
-	require.NoError(t, err)
-	require.Len(t, admin, 1)
-
-	_, err = db.InsertAccountMergeRequest(ctx, database.InsertAccountMergeRequestParams{
-		ID: uuid.New(), RequesterUserID: targetID, SourceUserID: uuid.New(), TargetUserID: targetID,
-		DiscordID: "other", SourceUsername: "other", TargetUsername: "target",
-	})
-	require.True(t, database.IsUniqueViolation(err))
-
-	updated, err := db.DecideAccountMergeRequest(ctx, database.DecideAccountMergeRequestParams{
-		ID: requestID, Status: "rejected", Response: "Keep separate", ReviewerID: uuid.NullUUID{UUID: targetID, Valid: true},
-	})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, updated)
-	_, err = db.GetPendingAccountMergeRequestByTarget(ctx, targetID)
-	require.ErrorIs(t, err, sql.ErrNoRows)
-}
-
 func TestAccountRemovalBlockers(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)

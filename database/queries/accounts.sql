@@ -1,43 +1,8 @@
--- name: InsertAccountMergeRequest :one
-INSERT INTO account_merge_requests (
-  id, requester_user_id, source_user_id, target_user_id, discord_id,
-  source_username, source_email, target_username, target_email, message
-) VALUES (
-  @id, @requester_user_id, @source_user_id, @target_user_id, @discord_id,
-  @source_username, @source_email, @target_username, @target_email, @message
-)
-RETURNING *;
-
--- name: GetPendingAccountMergeRequestByTarget :one
-SELECT * FROM account_merge_requests
-WHERE target_user_id = @target_user_id AND status = 'pending';
-
--- name: ListMyAccountMergeRequests :many
-SELECT * FROM account_merge_requests
-WHERE requester_user_id = @requester_user_id
-ORDER BY created_at DESC
-LIMIT 100;
-
--- name: ListAdminAccountMergeRequests :many
-SELECT * FROM account_merge_requests
-ORDER BY (status = 'pending') DESC, created_at DESC
-LIMIT 200;
-
--- name: LockPendingAccountMergeRequest :one
-SELECT * FROM account_merge_requests
-WHERE id = @id AND status = 'pending'
-FOR UPDATE;
-
--- name: LockUsersForAccountMerge :many
+-- name: LockUsersForUpdate :many
 SELECT id FROM users
 WHERE id = ANY(@ids::uuid[])
 ORDER BY id
 FOR UPDATE;
-
--- name: ListUserAuthLinks :many
-SELECT * FROM user_auth_links
-WHERE user_id = @user_id
-ORDER BY provider, id;
 
 -- name: GetAccountRemovalBlockers :one
 SELECT ARRAY_REMOVE(ARRAY[
@@ -79,17 +44,6 @@ SELECT ARRAY_REMOVE(ARRAY[
   CASE WHEN EXISTS (SELECT 1 FROM wow_server_upload_keys t WHERE t.created_by = @user_id) THEN 'server upload keys' END
 ], NULL)::text[] AS blockers;
 
--- name: HasPendingAccountMergeRequestForUser :one
-SELECT EXISTS (
-  SELECT 1 FROM account_merge_requests
-  WHERE status = 'pending' AND (source_user_id = @user_id OR target_user_id = @user_id)
-);
-
--- name: MoveUserAuthLink :exec
-UPDATE user_auth_links
-SET user_id = @target_user_id, updated_at = now()
-WHERE id = @auth_link_id AND user_id = @source_user_id;
-
 -- name: DeleteUserAuthSessionsByUserID :exec
 DELETE FROM user_auth_session WHERE user_id = @user_id;
 
@@ -98,8 +52,3 @@ DELETE FROM user_auth_links WHERE user_id = @user_id;
 
 -- name: DeleteUserAccountRow :execrows
 DELETE FROM users WHERE id = @user_id;
-
--- name: DecideAccountMergeRequest :execrows
-UPDATE account_merge_requests
-SET status = @status, response = @response, reviewer_id = @reviewer_id, reviewed_at = now()
-WHERE id = @id AND status = 'pending';
