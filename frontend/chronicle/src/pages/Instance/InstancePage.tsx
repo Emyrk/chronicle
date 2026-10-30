@@ -146,7 +146,7 @@ function normalizeArray<T>(value: readonly T[] | null | undefined): readonly T[]
 }
 
 // Helper to transform API data to view data
-function transformToInstance(
+export function transformToInstance(
   apiInstance: {
     id: string;
     slug?: string;
