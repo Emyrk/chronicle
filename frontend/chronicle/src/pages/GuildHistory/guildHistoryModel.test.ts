@@ -20,6 +20,7 @@ function run(day: number, minutes: number, overrides: Partial<GuildSpeedrunRun> 
   return {
     slug: `run-${day}`,
     qualified: true,
+    complete: true,
     player_count: 25,
     start_time: new Date(start).toISOString(),
     completion_time: new Date(start + minutes * MINUTE).toISOString(),
@@ -169,7 +170,7 @@ describe("formatting", () => {
 describe("guild history URL state", () => {
   it("round-trips and leaves defaults out", () => {
     expect(serializeGuildHistoryState(DEFAULT_GUILD_HISTORY_STATE).toString()).toBe("");
-    const state = { ...DEFAULT_GUILD_HISTORY_STATE, guildIds: ["a", "b"], hiddenGuildIds: ["b"], instanceName: "Molten Core", timing: "boss" as const, display: "parse" as const, boss: "Ragnaros", part: "" as const, tab: "runs" as const };
+    const state = { ...DEFAULT_GUILD_HISTORY_STATE, guildIds: ["a", "b"], hiddenGuildIds: ["b"], instanceName: "Ulduar", difficultyName: "25 Player", maxPlayers: 25, dynamicDifficulty: 0, timing: "boss" as const, display: "parse" as const, boss: "Yogg-Saron", part: "" as const, includeUnqualified: true, tab: "runs" as const };
     expect(parseGuildHistoryState(serializeGuildHistoryState(state))).toEqual(state);
   });
 });

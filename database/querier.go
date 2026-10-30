@@ -505,8 +505,8 @@ type sqlcQuerier interface {
 	// collapse via duplicate_group_id. JOINs wow_server_realms so RLS tenant
 	// filtering cascades.
 	GuildEncounterKills(ctx context.Context, guildID uuid.UUID) ([]GuildEncounterKillsRow, error)
-	// Returns per-instance clear counts and duration aggregates for a guild,
-	// used by the guild page "Raid Clears" panel.
+	// Returns clear counts and duration aggregates per instance, recorded
+	// difficulty, raid size, and dynamic mode for the guild history picker.
 	// Deduplicates by duplicate_group so re-uploaded logs of the same raid count
 	// once (best duration per group). Includes unqualified runs: a clear is a
 	// clear, qualification only affects the public leaderboard. Requires

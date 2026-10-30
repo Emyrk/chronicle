@@ -221,11 +221,14 @@ type CreateJoinRequestBody struct {
 
 // GuildRaidClear is a per-instance clear summary for a guild.
 type GuildRaidClear struct {
-	InstanceName   string    `json:"instance_name"`
-	ClearCount     int64     `json:"clear_count"`
-	BestDurationMs int64     `json:"best_duration_ms"`
-	AvgDurationMs  int64     `json:"avg_duration_ms"`
-	LastClearedAt  time.Time `json:"last_cleared_at"`
+	InstanceName      string    `json:"instance_name"`
+	DifficultyName    string    `json:"difficulty_name"`
+	MaxPlayers        int32     `json:"max_players"`
+	DynamicDifficulty int32     `json:"dynamic_difficulty"`
+	ClearCount        int64     `json:"clear_count"`
+	BestDurationMs    int64     `json:"best_duration_ms"`
+	AvgDurationMs     int64     `json:"avg_duration_ms"`
+	LastClearedAt     time.Time `json:"last_cleared_at"`
 }
 
 type GuildRaidClearsResponse struct {
@@ -245,8 +248,11 @@ type GuildSpeedrunBossKill struct {
 // GuildSpeedrunRun is one deduplicated full clear of an instance by a guild.
 // Times use the ranked clear window: first pull to last boss kill.
 type GuildSpeedrunRun struct {
-	Slug                 string    `json:"slug"`
-	Qualified            bool      `json:"qualified"`
+	Slug      string `json:"slug"`
+	Qualified bool   `json:"qualified"`
+	// Complete reports whether every raid requirement was satisfied. A complete
+	// run can still be unqualified for another reason, such as missing addon data.
+	Complete             bool      `json:"complete"`
 	PlayerCount          int64     `json:"player_count"`
 	StartTime            time.Time `json:"start_time"`
 	CompletionTime       time.Time `json:"completion_time"`

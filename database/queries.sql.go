@@ -23095,6 +23095,9 @@ const guildRaidClears = `-- name: GuildRaidClears :many
 WITH deduped AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         sr.instance_name,
+        li.difficulty_name,
+        li.max_players,
+        li.dynamic_difficulty,
         sr.ranked_duration_ms::bigint AS duration_ms,
         sr.ranked_completion_time::timestamptz AS completion_time
     FROM instance_speedruns sr
@@ -23111,13 +23114,16 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 )
 SELECT
     instance_name,
+    difficulty_name,
+    max_players,
+    dynamic_difficulty,
     COUNT(*) :: bigint AS clear_count,
     MIN(duration_ms) :: bigint AS best_duration_ms,
     AVG(duration_ms) :: bigint AS avg_duration_ms,
     MAX(completion_time) :: timestamptz AS last_cleared_at
 FROM deduped
-GROUP BY instance_name
-ORDER BY clear_count DESC, instance_name
+GROUP BY instance_name, difficulty_name, max_players, dynamic_difficulty
+ORDER BY clear_count DESC, instance_name, difficulty_name, max_players, dynamic_difficulty
 `
 
 type GuildRaidClearsParams struct {
@@ -23126,15 +23132,18 @@ type GuildRaidClearsParams struct {
 }
 
 type GuildRaidClearsRow struct {
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	ClearCount     int64              `db:"clear_count" json:"clear_count"`
-	BestDurationMs int64              `db:"best_duration_ms" json:"best_duration_ms"`
-	AvgDurationMs  int64              `db:"avg_duration_ms" json:"avg_duration_ms"`
-	LastClearedAt  pgtype.Timestamptz `db:"last_cleared_at" json:"last_cleared_at"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int32              `db:"max_players" json:"max_players"`
+	DynamicDifficulty int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	ClearCount        int64              `db:"clear_count" json:"clear_count"`
+	BestDurationMs    int64              `db:"best_duration_ms" json:"best_duration_ms"`
+	AvgDurationMs     int64              `db:"avg_duration_ms" json:"avg_duration_ms"`
+	LastClearedAt     pgtype.Timestamptz `db:"last_cleared_at" json:"last_cleared_at"`
 }
 
-// Returns per-instance clear counts and duration aggregates for a guild,
-// used by the guild page "Raid Clears" panel.
+// Returns clear counts and duration aggregates per instance, recorded
+// difficulty, raid size, and dynamic mode for the guild history picker.
 // Deduplicates by duplicate_group so re-uploaded logs of the same raid count
 // once (best duration per group). Includes unqualified runs: a clear is a
 // clear, qualification only affects the public leaderboard. Requires
@@ -23152,6 +23161,9 @@ func (q *sqlQuerier) GuildRaidClears(ctx context.Context, arg GuildRaidClearsPar
 		var i GuildRaidClearsRow
 		if err := rows.Scan(
 			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DynamicDifficulty,
 			&i.ClearCount,
 			&i.BestDurationMs,
 			&i.AvgDurationMs,
@@ -23249,6 +23261,13 @@ WITH deduped AS (
         sr.instance_id,
         li.hashed_slug,
         sr.qualified,
+        CASE
+            WHEN jsonb_typeof(sr.proof->'proof') = 'array' AND jsonb_array_length(sr.proof->'proof') > 0 THEN
+                NOT EXISTS (SELECT 1 FROM jsonb_array_elements(sr.proof->'proof') item WHERE NOT (item->>'satisfied')::boolean)
+            WHEN jsonb_typeof(sr.proof) = 'array' AND jsonb_array_length(sr.proof) > 0 THEN
+                NOT EXISTS (SELECT 1 FROM jsonb_array_elements(sr.proof) item WHERE NOT (item->>'satisfied')::boolean)
+            ELSE sr.qualified
+        END::boolean AS complete,
         sr.ranked_start_time::timestamptz AS start_time,
         sr.ranked_completion_time::timestamptz AS completion_time,
         sr.ranked_duration_ms::bigint AS duration_ms,
@@ -23261,7 +23280,19 @@ WITH deduped AS (
       AND sr.instance_name = $6 :: text
       AND sr.ranked_duration_ms > 0
       AND CASE
-          WHEN $7 :: bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => $7::int)
+          WHEN $7 :: boolean THEN li.difficulty_name = $8 :: text
+          ELSE true
+      END
+      AND CASE
+          WHEN $9 :: boolean THEN li.max_players = $10 :: int
+          ELSE true
+      END
+      AND CASE
+          WHEN $11 :: boolean THEN li.dynamic_difficulty = $12 :: int
+          ELSE true
+      END
+      AND CASE
+          WHEN $13 :: bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => $13::int)
           ELSE true
       END
     ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.qualified DESC, sr.ranked_duration_ms ASC
@@ -23321,6 +23352,7 @@ SELECT
     d.instance_id,
     COALESCE(d.hashed_slug, '')::text AS slug,
     d.qualified,
+    d.complete,
     d.start_time,
     d.completion_time,
     d.duration_ms,
@@ -23340,19 +23372,26 @@ ORDER BY d.completion_time ASC
 `
 
 type GuildSpeedrunHistoryParams struct {
-	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	LookbackDays  int16     `db:"lookback_days" json:"lookback_days"`
-	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
-	QueryVersion  int16     `db:"query_version" json:"query_version"`
-	GuildID       uuid.UUID `db:"guild_id" json:"guild_id"`
-	InstanceName  string    `db:"instance_name" json:"instance_name"`
-	SinceDays     int64     `db:"since_days" json:"since_days"`
+	TenantID                uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	LookbackDays            int16     `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion           int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion            int16     `db:"query_version" json:"query_version"`
+	GuildID                 uuid.UUID `db:"guild_id" json:"guild_id"`
+	InstanceName            string    `db:"instance_name" json:"instance_name"`
+	FilterDifficulty        bool      `db:"filter_difficulty" json:"filter_difficulty"`
+	DifficultyName          string    `db:"difficulty_name" json:"difficulty_name"`
+	FilterMaxPlayers        bool      `db:"filter_max_players" json:"filter_max_players"`
+	MaxPlayers              int32     `db:"max_players" json:"max_players"`
+	FilterDynamicDifficulty bool      `db:"filter_dynamic_difficulty" json:"filter_dynamic_difficulty"`
+	DynamicDifficulty       int32     `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	SinceDays               int64     `db:"since_days" json:"since_days"`
 }
 
 type GuildSpeedrunHistoryRow struct {
 	InstanceID           uuid.UUID          `db:"instance_id" json:"instance_id"`
 	Slug                 string             `db:"slug" json:"slug"`
 	Qualified            bool               `db:"qualified" json:"qualified"`
+	Complete             bool               `db:"complete" json:"complete"`
 	StartTime            pgtype.Timestamptz `db:"start_time" json:"start_time"`
 	CompletionTime       pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
 	DurationMs           int64              `db:"duration_ms" json:"duration_ms"`
@@ -23385,6 +23424,12 @@ func (q *sqlQuerier) GuildSpeedrunHistory(ctx context.Context, arg GuildSpeedrun
 		arg.QueryVersion,
 		arg.GuildID,
 		arg.InstanceName,
+		arg.FilterDifficulty,
+		arg.DifficultyName,
+		arg.FilterMaxPlayers,
+		arg.MaxPlayers,
+		arg.FilterDynamicDifficulty,
+		arg.DynamicDifficulty,
 		arg.SinceDays,
 	)
 	if err != nil {
@@ -23398,6 +23443,7 @@ func (q *sqlQuerier) GuildSpeedrunHistory(ctx context.Context, arg GuildSpeedrun
 			&i.InstanceID,
 			&i.Slug,
 			&i.Qualified,
+			&i.Complete,
 			&i.StartTime,
 			&i.CompletionTime,
 			&i.DurationMs,

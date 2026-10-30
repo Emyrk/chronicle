@@ -4,7 +4,7 @@ export interface GuildHistoryFixture {
   guildId: string;
   guildName: string;
   realmName: string;
-  runs: GuildSpeedrunRun[];
+  runs: Array<Omit<GuildSpeedrunRun, "complete"> & { complete?: boolean }>;
 }
 
 /** Real Molten Core clears captured from the capy tenant on 2026-10-29. */

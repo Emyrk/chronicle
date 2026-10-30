@@ -1828,6 +1828,9 @@ export interface GuildPanelPosition {
  */
 export interface GuildRaidClear {
     readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly dynamic_difficulty: number;
     readonly clear_count: number;
     readonly best_duration_ms: number;
     readonly avg_duration_ms: number;
@@ -1951,6 +1954,11 @@ export interface GuildSpeedrunHistoryResponse {
 export interface GuildSpeedrunRun {
     readonly slug: string;
     readonly qualified: boolean;
+    /**
+     * Complete reports whether every raid requirement was satisfied. A complete
+     * run can still be unqualified for another reason, such as missing addon data.
+     */
+    readonly complete: boolean;
     readonly player_count: number;
     readonly start_time: string;
     readonly completion_time: string;

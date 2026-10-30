@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -14,8 +16,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// GuildRaidClears returns per-instance clear counts and duration aggregates
-// for a guild. Used by the guild page "Raid Clears" panel.
+// GuildRaidClears returns clear counts and duration aggregates per instance,
+// recorded difficulty, raid size, and dynamic mode for a guild.
 //
 //	GET /api/v1/guilds/{guildID}/speedruns/clears?since_days=90
 func (api *API) GuildRaidClears(w http.ResponseWriter, r *http.Request) {
@@ -44,11 +46,14 @@ func (api *API) GuildRaidClears(w http.ResponseWriter, r *http.Request) {
 	clears := make([]chroniclesdk.GuildRaidClear, len(rows))
 	for i, row := range rows {
 		clears[i] = chroniclesdk.GuildRaidClear{
-			InstanceName:   row.InstanceName,
-			ClearCount:     row.ClearCount,
-			BestDurationMs: row.BestDurationMs,
-			AvgDurationMs:  row.AvgDurationMs,
-			LastClearedAt:  row.LastClearedAt.Time,
+			InstanceName:      row.InstanceName,
+			DifficultyName:    row.DifficultyName,
+			MaxPlayers:        row.MaxPlayers,
+			DynamicDifficulty: row.DynamicDifficulty,
+			ClearCount:        row.ClearCount,
+			BestDurationMs:    row.BestDurationMs,
+			AvgDurationMs:     row.AvgDurationMs,
+			LastClearedAt:     row.LastClearedAt.Time,
 		}
 	}
 
@@ -61,10 +66,10 @@ func (api *API) GuildRaidClears(w http.ResponseWriter, r *http.Request) {
 // stays bounded for guilds that clear several times a week.
 const maxGuildSpeedrunHistoryDays = 365
 
-// GuildSpeedrunHistory returns every clear of one instance by a guild, with
-// per-boss kill times and trash time, for the guild history page.
+// GuildSpeedrunHistory returns every clear of one instance and optional
+// difficulty by a guild, with per-boss kill times and trash time.
 //
-//	GET /api/v1/guilds/{guildID}/speedruns/history?instance_name=Molten+Core&since_days=180
+//	GET /api/v1/guilds/{guildID}/speedruns/history?instance_name=Ulduar&difficulty_name=10+Player&max_players=10&dynamic_difficulty=0&since_days=180
 func (api *API) GuildSpeedrunHistory(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	guild := httpmw.Guild(ctx)
@@ -89,15 +94,37 @@ func (api *API) GuildSpeedrunHistory(w http.ResponseWriter, r *http.Request) {
 		sinceDays = min(parsed, maxGuildSpeedrunHistoryDays)
 	}
 
+	query := r.URL.Query()
+	difficultyValues, filterDifficulty := query["difficulty_name"]
+	difficultyName := ""
+	if filterDifficulty {
+		difficultyName = difficultyValues[0]
+	}
+
+	maxPlayers, filterMaxPlayers, ok := optionalInt32Query(ctx, w, query, "max_players", false)
+	if !ok {
+		return
+	}
+	dynamicDifficulty, filterDynamicDifficulty, ok := optionalInt32Query(ctx, w, query, "dynamic_difficulty", true)
+	if !ok {
+		return
+	}
+
 	tenantID := servicetenant.TenantIDFromContext(ctx)
 	rows, err := api.Opts.Zed.GuildSpeedrunHistory(ctx, database.GuildSpeedrunHistoryParams{
-		TenantID:      tenantID,
-		LookbackDays:  servicerankings.TimeParseScoreLookbackDays,
-		PolicyVersion: int16(timeparsepolicy.PolicyVersion),
-		QueryVersion:  timeparsepolicy.QueryVersion,
-		GuildID:       guild.ID,
-		InstanceName:  instanceName,
-		SinceDays:     sinceDays,
+		TenantID:                tenantID,
+		LookbackDays:            servicerankings.TimeParseScoreLookbackDays,
+		PolicyVersion:           int16(timeparsepolicy.PolicyVersion),
+		QueryVersion:            timeparsepolicy.QueryVersion,
+		GuildID:                 guild.ID,
+		InstanceName:            instanceName,
+		FilterDifficulty:        filterDifficulty,
+		DifficultyName:          difficultyName,
+		FilterMaxPlayers:        filterMaxPlayers,
+		MaxPlayers:              maxPlayers,
+		FilterDynamicDifficulty: filterDynamicDifficulty,
+		DynamicDifficulty:       dynamicDifficulty,
+		SinceDays:               sinceDays,
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -148,6 +175,7 @@ func (api *API) GuildSpeedrunHistory(w http.ResponseWriter, r *http.Request) {
 		runs[i] = chroniclesdk.GuildSpeedrunRun{
 			Slug:                 row.Slug,
 			Qualified:            row.Qualified,
+			Complete:             row.Complete,
 			PlayerCount:          row.PlayerCount,
 			StartTime:            row.StartTime.Time,
 			CompletionTime:       row.CompletionTime.Time,
@@ -162,6 +190,23 @@ func (api *API) GuildSpeedrunHistory(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildSpeedrunHistoryResponse{
 		Runs: runs,
 	})
+}
+
+func optionalInt32Query(ctx context.Context, w http.ResponseWriter, query url.Values, name string, allowZero bool) (int32, bool, bool) {
+	values, present := query[name]
+	if !present {
+		return 0, false, true
+	}
+	value, err := strconv.ParseInt(values[0], 10, 32)
+	if err != nil || (!allowZero && value <= 0) || (allowZero && value < 0) {
+		requirement := "a positive number"
+		if allowZero {
+			requirement = "a non-negative number"
+		}
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: name + " must be " + requirement})
+		return 0, false, false
+	}
+	return int32(value), true, true
 }
 
 // storedParse turns the queries' -1 "no parse" sentinel into nil.
