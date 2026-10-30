@@ -256,6 +256,17 @@ const CHARACTER_COSMETICS_OPTIONS: readonly {
   },
 ];
 
+// One calm, one animated, and one flashy style, so each mode's preview shows
+// what it keeps, freezes, and hides.
+const CHARACTER_COSMETICS_SAMPLES: readonly {
+  character: Pick<LinkedCharacter, "name" | "class">;
+  selection: CosmeticStyleSelection;
+}[] = [
+  { character: { name: "Calmwater", class: "Mage" }, selection: { name: "epic", background: "satin", border: "none" } },
+  { character: { name: "Emberforge", class: "Warrior" }, selection: { name: "legendary", background: "embers", border: "none" } },
+  { character: { name: "Glimmerwing", class: "Rogue" }, selection: { name: "shimmer", background: "gleam", border: "chasing" } },
+];
+
 export function ProfileSettings() {
   const { data: session } = useSession();
   const { data: siteConfig } = useSiteConfig();
@@ -472,6 +483,7 @@ export function ProfileSettings() {
             Choose how supporter cosmetics appear on player rows in raid analysis.
           </p>
         </div>
+        <style>{COSMETIC_CSS}</style>
         <div role="radiogroup" aria-label="Character cosmetics display mode" className="grid gap-2 sm:grid-cols-3">
           {CHARACTER_COSMETICS_OPTIONS.map((option) => {
             const selected = characterCosmeticsMode === option.value;
@@ -486,12 +498,21 @@ export function ProfileSettings() {
                   onError: () => toast.error("Failed to update character cosmetics preference."),
                 })}
                 className={cn(
-                  "rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
+                  "flex flex-col rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
                   selected ? "border-primary bg-primary/5" : "hover:bg-muted/50",
                 )}
               >
                 <span className="block text-sm font-medium">{option.label}</span>
                 <span className="mt-1 block text-xs text-muted-foreground">{option.description}</span>
+                <span aria-hidden="true" className="mt-auto flex flex-col gap-1 pt-3">
+                  {CHARACTER_COSMETICS_SAMPLES.map((sample) => (
+                    <MiniRow
+                      key={sample.character.name}
+                      character={sample.character}
+                      cosmetic={combineCosmetics(sample.selection, option.value)}
+                    />
+                  ))}
+                </span>
               </button>
             );
           })}
