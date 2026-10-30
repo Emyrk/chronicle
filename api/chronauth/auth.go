@@ -571,30 +571,31 @@ func (s *Service) Handler() http.Handler {
 			var authProvider string
 			var isNewAuth bool
 
-			cl, ok := AuthenticatedClaims(r.Context())
+			// The callback runs the auth middleware only so Discord linking can see
+			// the signed-in user. Every other callback completes OAuth and issues a
+			// new session even when a cookie exists; the tenant relay depends on it.
+			cl, _ := AuthenticatedClaims(r.Context())
 			if s.completeLink(w, r, cl) {
 				return
 			}
-			if !ok || cl == nil {
-				_, provOK := s.provider(w, r)
-				if !provOK {
-					return
-				}
-
-				user, err := s.CompleteUserAuth(w, r)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-
-				sess, signedUp := s.Signup(w, r, user)
-				if !signedUp {
-					return
-				}
-				authSession = sess
-				authProvider = user.Provider
-				isNewAuth = true
+			_, provOK := s.provider(w, r)
+			if !provOK {
+				return
 			}
+
+			user, err := s.CompleteUserAuth(w, r)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			sess, signedUp := s.Signup(w, r, user)
+			if !signedUp {
+				return
+			}
+			authSession = sess
+			authProvider = user.Provider
+			isNewAuth = true
 
 			// Read the "from" redirect target.
 			redirectTo := "/"
