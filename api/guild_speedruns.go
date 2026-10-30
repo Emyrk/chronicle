@@ -101,7 +101,7 @@ func (api *API) GuildSpeedrunHistory(w http.ResponseWriter, r *http.Request) {
 		difficultyName = difficultyValues[0]
 	}
 
-	maxPlayers, filterMaxPlayers, ok := optionalInt32Query(ctx, w, query, "max_players", false)
+	maxPlayers, filterMaxPlayers, ok := optionalInt32Query(ctx, w, query, "max_players", true)
 	if !ok {
 		return
 	}
