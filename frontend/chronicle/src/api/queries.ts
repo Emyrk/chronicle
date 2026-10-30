@@ -286,9 +286,10 @@ export function useAccountPurgeStatus(purgeID: string | undefined) {
   });
 }
 
-export function useMyNotificationSettings() {
+export function useMyNotificationSettings(enabled = true) {
   return useQuery({
     queryKey: ["notifications", "me"],
+    enabled,
     queryFn: async () => {
       const response = await fetch("/api/v1/me/notifications");
       if (!response.ok) throw new Error("Failed to fetch notification settings");
