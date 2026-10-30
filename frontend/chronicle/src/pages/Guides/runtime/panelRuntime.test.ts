@@ -16,10 +16,17 @@ describe("safe panel profile", () => {
       ui.metric(UIParent, "metric", "Damage", 5, 0, 0)
       ui.table(UIParent, "table", {{"Alice", 5}}, 0, -70)
       ui.bars(UIParent, "bars", {{"Alice", 5}}, 0, -100)
+      local chart = ui.playerMetricChart(UIParent, "chart", {
+        type = "damage", perSecond = true, durationMillis = 60000,
+        panelTitle = "Damage Done", width = 480, height = 320,
+      })
+      chart:SetData({{ playerID = "p1", playerName = "Alice", className = "mage", value = 120000 }})
     `)
     const operations = runtime.start()
     expect(() => applySceneBatch(createInitialScene(), operations)).not.toThrow()
     expect(operations).toContainEqual(expect.objectContaining({ op: "create", id: "metric" }))
+    expect(operations).toContainEqual(expect.objectContaining({ op: "create", id: "chart", kind: "player-metric-chart" }))
+    expect(operations).toContainEqual({ op: "set", id: "chart", props: { data: [{ playerID: "p1", playerName: "Alice", className: "MAGE", specialization: "", value: 120000 }] } })
     runtime.stop()
   })
 

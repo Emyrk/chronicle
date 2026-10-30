@@ -133,6 +133,56 @@ function ChronicleTexture:SetItem(itemId, tooltip) end
 ---@param iconName string Example: "inv_sword_39".
 function ChronicleTexture:SetIcon(iconName) end
 
+---@alias ChroniclePlayerMetricChartType "damage"|"healing"|"taken"|"mitigation"
+
+---@class ChroniclePlayerMetricRow
+---@field playerID string Player GUID used for Chronicle specialization and cosmetic enrichment.
+---@field playerName string Display name.
+---@field className string Upper-case class token such as "MAGE".
+---@field specialization? string Optional specialization label when Chronicle cannot infer one.
+---@field value number Primary total before optional per-second conversion.
+---@field stackedValue? number Optional secondary total, such as overhealing.
+---@field dimmed? boolean Reduce this row's visual prominence.
+
+---@class ChroniclePlayerMetricChart: ChronicleRegion
+local ChroniclePlayerMetricChart = {}
+
+---Replace every row in the chart. At most 100 rows.
+---@param data ChroniclePlayerMetricRow[]
+function ChroniclePlayerMetricChart:SetData(data) end
+
+---Choose the standard Chronicle player metric presentation.
+---@param chartType ChroniclePlayerMetricChartType
+function ChroniclePlayerMetricChart:SetChartType(chartType) end
+
+---Display values per second using the configured duration.
+---@param enabled boolean
+function ChroniclePlayerMetricChart:SetPerSecond(enabled) end
+
+---Set the duration used for per-second conversion, in milliseconds.
+---@param durationMillis number
+function ChroniclePlayerMetricChart:SetDuration(durationMillis) end
+
+---Set the title used by Chronicle-owned chart surfaces.
+---@param title string
+function ChroniclePlayerMetricChart:SetPanelTitle(title) end
+
+---Set the label for stacked secondary values.
+---@param label string
+function ChroniclePlayerMetricChart:SetStackedLabel(label) end
+
+---Override the value suffix.
+---@param suffix string
+function ChroniclePlayerMetricChart:SetValueSuffix(suffix) end
+
+---Hide primary value badges whose value is zero.
+---@param hidden boolean
+function ChroniclePlayerMetricChart:SetHideZeroValue(hidden) end
+
+---Set row height in pixels, from 12 through 128.
+---@param height number
+function ChroniclePlayerMetricChart:SetRowHeight(height) end
+
 ---@class ChronicleButton: ChronicleFrame
 local ChronicleButton = {}
 
@@ -141,10 +191,10 @@ local ChronicleButton = {}
 function ChronicleButton:SetText(text) end
 
 ---Create a retained UI object. parent defaults to UIParent.
----@param frameType "Frame"|"FontString"|"Texture"|"Button"
+---@param frameType "Frame"|"FontString"|"Texture"|"Button"|"PlayerMetricChart"
 ---@param id? string
 ---@param parent? ChronicleFrame
----@return ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton object
+---@return ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton|ChroniclePlayerMetricChart object
 function CreateFrame(frameType, id, parent) end
 
 ---@type ChronicleFrame

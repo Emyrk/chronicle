@@ -6,7 +6,7 @@ import { PANEL_STREAMS, validatePanelEvent, type PanelEvent, type PanelStream } 
 import type { PanelUnit, PanelUnits } from "./panelUnits"
 
 const encoder = new TextEncoder()
-const UI_KINDS = new Map<string, NodeKind>([["Frame", "frame"], ["FontString", "text"], ["Texture", "texture"], ["Button", "button"]])
+const UI_KINDS = new Map<string, NodeKind>([["Frame", "frame"], ["FontString", "text"], ["Texture", "texture"], ["Button", "button"], ["PlayerMetricChart", "player-metric-chart"]])
 const MAP_KINDS = new Map<string, NodeKind>([
   ["CreateUnit", "unit"], ["CreateUnitMarker", "unit"], ["CreateIcon", "icon"], ["CreateText", "map-text"],
   ["CreateLine", "line"], ["CreateArrow", "arrow"], ["CreateCircle", "circle"], ["CreateCone", "cone"], ["CreatePolygon", "polygon"],
@@ -61,6 +61,7 @@ const SUPPORTED_PROPS: Record<NodeKind, ReadonlySet<string>> = Object.fromEntrie
   ["text", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "text", "fontSize", "color", "align", "backgroundColor", "borderColor"]],
   ["texture", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "asset", "textureType", "textureId", "iconName", "tooltip", "tint", "borderColor"]],
   ["button", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "text", "enabled", "color", "backgroundColor", "borderColor"]],
+  ["player-metric-chart", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "data", "type", "perSecond", "durationMillis", "panelTitle", "stackedLabel", "valueSuffix", "hideZeroValue", "rowHeight"]],
   ["unit", ["visible", "alpha", "x", "y", "size", "unit", "label", "color", "facing", "entry", "role"]],
   ["icon", ["visible", "alpha", "x", "y", "size", "asset", "label", "color", "facing"]],
   ["map-text", ["visible", "alpha", "x", "y", "text", "fontSize", "color", "align"]],
@@ -77,6 +78,7 @@ function defaultProps(kind: NodeKind): Record<string, unknown> {
     case "text": return { x: 0, y: 0, text: " ", fontSize: 14, color: "#ffffffff", anchor: "center", visible: true }
     case "texture": return { x: 0, y: 0, width: 1, height: 1, asset: "unset", textureType: "asset", tooltip: false, anchor: "center", visible: true }
     case "button": return { x: 0, y: 0, width: 1, height: 1, text: " ", anchor: "center", visible: true }
+    case "player-metric-chart": return { x: 0, y: 0, width: 320, height: 240, anchor: "top-left", visible: true, data: [], type: "damage", perSecond: false, hideZeroValue: false, rowHeight: 30 }
     case "unit": return { x: 0, y: 0, size: 1, unit: "unknown", visible: true }
     case "icon": return { x: 0, y: 0, size: 1, asset: "unset", visible: true }
     case "map-text": return { x: 0, y: 0, text: " ", fontSize: 14, color: "#ffffffff", visible: true }
@@ -121,9 +123,9 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   }
   const optionalString = (state: LuaState, index: number, fallback: string) => lua.lua_isnoneornil(state, index) ? fallback : stringAt(state, index)
   const numberAt = (state: LuaState, index: number) => lauxlib.luaL_checknumber(state, index) as number
-  const optionalBoolean = (state: LuaState, index: number, fallback = false) => {
+  const optionalBoolean = (state: LuaState, index: number, fallback = false, label = "value") => {
     if (lua.lua_isnoneornil(state, index)) return fallback
-    if (!lua.lua_isboolean(state, index)) luaError(state, "tooltip must be a boolean")
+    if (!lua.lua_isboolean(state, index)) luaError(state, `${label} must be a boolean`)
     return lua.lua_toboolean(state, index) !== 0
   }
   const positiveIdAt = (state: LuaState, index: number, label: string) => {
@@ -204,6 +206,53 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
     if (values.length < 4 || values.length % 2 !== 0) luaError(state, "points must contain coordinate pairs")
     return Array.from({ length: values.length / 2 }, (_, index) => ({ x: values[index * 2], y: values[index * 2 + 1] }))
   }
+  const readPlayerMetricData = (state: LuaState, index: number) => {
+    lauxlib.luaL_checktype(state, index, lua.LUA_TTABLE)
+    const length = lua.lua_rawlen(state, index) as number
+    if (length > 100) luaError(state, "player metric chart supports at most 100 rows")
+    const rows: Array<Record<string, unknown>> = []
+    const readRequiredString = (rowIndex: number, field: string) => {
+      lua.lua_getfield(state, rowIndex, to_luastring(field))
+      if (!lua.lua_isstring(state, -1)) luaError(state, `player metric row ${field} must be a string`)
+      const value = stringAt(state, -1, field); lua.lua_pop(state, 1); return value
+    }
+    const readOptionalString = (rowIndex: number, field: string, fallback: string) => {
+      lua.lua_getfield(state, rowIndex, to_luastring(field))
+      if (lua.lua_isnil(state, -1)) { lua.lua_pop(state, 1); return fallback }
+      if (!lua.lua_isstring(state, -1)) luaError(state, `player metric row ${field} must be a string`)
+      const value = stringAt(state, -1, field); lua.lua_pop(state, 1); return value
+    }
+    for (let i = 1; i <= length; i++) {
+      lua.lua_rawgeti(state, index, i)
+      if (!lua.lua_istable(state, -1)) luaError(state, "player metric data must contain row tables")
+      const rowIndex = lua.lua_gettop(state)
+      lua.lua_getfield(state, rowIndex, to_luastring("value"))
+      if (!lua.lua_isnumber(state, -1)) luaError(state, "player metric row value must be a number")
+      const value = lua.lua_tonumber(state, -1); lua.lua_pop(state, 1)
+      const row: Record<string, unknown> = {
+        playerID: readRequiredString(rowIndex, "playerID"),
+        playerName: readRequiredString(rowIndex, "playerName"),
+        className: readRequiredString(rowIndex, "className").toUpperCase(),
+        specialization: readOptionalString(rowIndex, "specialization", ""),
+        value,
+      }
+      lua.lua_getfield(state, rowIndex, to_luastring("stackedValue"))
+      if (!lua.lua_isnil(state, -1)) {
+        if (!lua.lua_isnumber(state, -1)) luaError(state, "player metric row stackedValue must be a number")
+        row.stackedValue = lua.lua_tonumber(state, -1)
+      }
+      lua.lua_pop(state, 1)
+      lua.lua_getfield(state, rowIndex, to_luastring("dimmed"))
+      if (!lua.lua_isnil(state, -1)) {
+        if (!lua.lua_isboolean(state, -1)) luaError(state, "player metric row dimmed must be a boolean")
+        row.dimmed = lua.lua_toboolean(state, -1) !== 0
+      }
+      lua.lua_pop(state, 1)
+      rows.push(row)
+      lua.lua_pop(state, 1)
+    }
+    return rows
+  }
   const kindAt = (id: string) => objects.get(id)!.kind
 
   function releaseCallback(key: string) {
@@ -239,7 +288,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
       const kind = kindAt(objectIdAt(inner))
       const width = numberAt(inner, 2); const height = numberAt(inner, 3)
       if (kind === "unit" || kind === "icon") return { size: Math.max(width, height) }
-      if (kind === "frame" || kind === "text" || kind === "texture" || kind === "button" || kind === "root") return { width, height }
+      if (kind === "frame" || kind === "text" || kind === "texture" || kind === "button" || kind === "player-metric-chart" || kind === "root") return { width, height }
       return luaError(inner, `SetSize is not supported for ${kind}`)
     }))
     registerFunction(state, "SetWidth", propertyMethod((inner) => ({ width: numberAt(inner, 2) })))
@@ -251,12 +300,12 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
     registerFunction(state, "SetSpell", propertyMethod((inner) => ({
       textureType: "spell",
       textureId: positiveIdAt(inner, 2, "spell ID"),
-      tooltip: optionalBoolean(inner, 3),
+      tooltip: optionalBoolean(inner, 3, false, "tooltip"),
     })))
     registerFunction(state, "SetItem", propertyMethod((inner) => ({
       textureType: "item",
       textureId: positiveIdAt(inner, 2, "item ID"),
-      tooltip: optionalBoolean(inner, 3),
+      tooltip: optionalBoolean(inner, 3, false, "tooltip"),
     })))
     registerFunction(state, "SetIcon", propertyMethod((inner) => ({
       textureType: "icon",
@@ -285,6 +334,15 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
     registerFunction(state, "SetHeadSize", propertyMethod((inner) => ({ headSize: numberAt(inner, 2) })))
     registerFunction(state, "SetFillColor", propertyMethod((inner) => ({ fillColor: normalizeColor(inner) })))
     registerFunction(state, "SetPoints", propertyMethod((inner) => ({ points: readPoints(inner, 2) })))
+    registerFunction(state, "SetData", propertyMethod((inner) => ({ data: readPlayerMetricData(inner, 2) })))
+    registerFunction(state, "SetChartType", propertyMethod((inner) => ({ type: stringAt(inner, 2, "chart type") })))
+    registerFunction(state, "SetPerSecond", propertyMethod((inner) => ({ perSecond: optionalBoolean(inner, 2, false, "perSecond") })))
+    registerFunction(state, "SetDuration", propertyMethod((inner) => ({ durationMillis: numberAt(inner, 2) })))
+    registerFunction(state, "SetPanelTitle", propertyMethod((inner) => ({ panelTitle: stringAt(inner, 2, "panel title") })))
+    registerFunction(state, "SetStackedLabel", propertyMethod((inner) => ({ stackedLabel: stringAt(inner, 2, "stacked label") })))
+    registerFunction(state, "SetValueSuffix", propertyMethod((inner) => ({ valueSuffix: stringAt(inner, 2, "value suffix") })))
+    registerFunction(state, "SetHideZeroValue", propertyMethod((inner) => ({ hideZeroValue: optionalBoolean(inner, 2, false, "hideZeroValue") })))
+    registerFunction(state, "SetRowHeight", propertyMethod((inner) => ({ rowHeight: numberAt(inner, 2) })))
     registerFunction(state, "Show", (inner) => { const objectId = objectIdAt(inner); objects.get(objectId)!.shown = true; setProps(objectId, { visible: true }); return 0 })
     registerFunction(state, "Hide", (inner) => { const objectId = objectIdAt(inner); objects.get(objectId)!.shown = false; setProps(objectId, { visible: false }); return 0 })
     registerFunction(state, "IsShown", (inner) => { pushBoolean(inner, objects.get(objectIdAt(inner))!.shown); return 1 })

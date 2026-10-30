@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
+import { PlayerMetricChart, type ChartType, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { UI_ROOT_ID } from "./scene";
 import type { RetainedScene, SceneNode } from "./types";
 
@@ -153,6 +154,22 @@ function GuideTextureNode({
   );
 }
 
+function playerMetricChartData(value: unknown): PlayerMetricChartData[] {
+  if (!Array.isArray(value)) return [];
+  return (value as Array<Omit<PlayerMetricChartData, "specialization"> & { specialization?: string }>).map((row) => ({
+    ...row,
+    specialization: row.specialization ?? "",
+  }));
+}
+
+function chartType(value: unknown): ChartType {
+  return value === "healing" || value === "taken" || value === "mitigation" ? value : "damage";
+}
+
+function optionalText(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
 interface GuideUiSceneProps {
   scene: RetainedScene;
   assets: ReadonlyMap<string, string>;
@@ -179,6 +196,26 @@ export function GuideUiScene({ scene, assets, onNodeClick }: GuideUiSceneProps) 
       return <div key={node.id} data-guide-node={node.id} className={nodeClassName(node)} style={style} onClick={click}>{text(node.props.text)}</div>;
     }
     if (node.kind === "texture") return <GuideTextureNode key={node.id} node={node} assets={assets} style={style} onClick={click} />;
+    if (node.kind === "player-metric-chart") {
+      return (
+        <div key={node.id} data-guide-node={node.id} style={style}>
+          <PlayerMetricChart
+            className="h-full"
+            data={playerMetricChartData(node.props.data)}
+            type={chartType(node.props.type)}
+            perSecond={node.props.perSecond === true}
+            duration_millis={px(node.props.durationMillis)}
+            panelTitle={optionalText(node.props.panelTitle)}
+            stackedLabel={optionalText(node.props.stackedLabel)}
+            valueSuffix={optionalText(node.props.valueSuffix)}
+            hideZeroValue={node.props.hideZeroValue === true}
+            rowHeight={px(node.props.rowHeight)}
+            disableInteractions
+            animateValues={false}
+          />
+        </div>
+      );
+    }
     if (node.kind === "button") {
       return (
         <button

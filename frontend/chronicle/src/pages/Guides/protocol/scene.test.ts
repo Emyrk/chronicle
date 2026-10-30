@@ -46,6 +46,7 @@ describe("retained guide scene reducer", () => {
     ["text", { x: 0, y: 0, text: "Text", fontSize: 14, color: "#fff", anchor: "center" }],
     ["texture", { x: 0, y: 0, width: 20, height: 20, asset: "icon.png", anchor: "center" }],
     ["button", { x: 0, y: 0, width: 80, height: 24, text: "Go", anchor: "bottom-right" }],
+    ["player-metric-chart", { x: 0, y: 0, width: 320, height: 240, anchor: "top-left", type: "damage", data: [{ playerID: "p1", playerName: "Jaina", className: "MAGE", value: 42 }] }],
     ["unit", { x: 0.5, y: 0.5, size: 20, unit: "boss" }],
     ["icon", { x: 0.5, y: 0.5, size: 20, asset: "icon.png" }],
     ["map-text", { x: 0.5, y: 0.5, text: "Stack", fontSize: 12, color: "#ffffff" }],
@@ -55,7 +56,7 @@ describe("retained guide scene reducer", () => {
     ["cone", { x: 0.5, y: 0.5, radius: 0.2, facing: Math.PI, angle: Math.PI / 2, color: "#fff", width: 2 }],
     ["polygon", { points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0.5, y: 1 }], color: "#fff", width: 2 }],
   ] as const)("accepts the %s node kind", (kind, props) => {
-    const parentId = ["frame", "text", "texture", "button"].includes(kind) ? UI_ROOT_ID : null
+    const parentId = ["frame", "text", "texture", "button", "player-metric-chart"].includes(kind) ? UI_ROOT_ID : null
     const next = applySceneBatch(createInitialScene(), [{ op: "create", id: `node-${kind}`, kind, parentId, props }])
     expect(next.nodes.get(`node-${kind}`)?.kind).toBe(kind)
   })
@@ -121,6 +122,25 @@ describe("retained guide scene reducer", () => {
       { asset: "https://evil.example/x.png" },
       { tooltip: "yes" },
     ]) expect(() => applySceneBatch(base, [{ op: "set", id: "texture", props }])).toThrow(SceneValidationError)
+  })
+
+  it("validates player metric chart rows and options", () => {
+    const chart = {
+      op: "create" as const,
+      id: "chart",
+      kind: "player-metric-chart" as const,
+      parentId: UI_ROOT_ID,
+      props: {
+        x: 0, y: 0, width: 400, height: 300, anchor: "top-left",
+        type: "healing", perSecond: true, durationMillis: 60_000, rowHeight: 30,
+        data: [{ playerID: "p1", playerName: "Jaina", className: "MAGE", specialization: "Frost", value: 42, stackedValue: 5, dimmed: false }],
+      },
+    }
+    expect(() => applySceneBatch(createInitialScene(), [chart])).not.toThrow()
+    expect(() => applySceneBatch(createInitialScene(), [{ ...chart, props: { ...chart.props, type: "threat" } }])).toThrow(/type/)
+    expect(() => applySceneBatch(createInitialScene(), [{ ...chart, props: { ...chart.props, data: [{ playerID: "p1", playerName: "Jaina", className: "MAGE", specialization: "", value: -1 }] } }])).toThrow(/value/)
+    expect(() => applySceneBatch(createInitialScene(), [{ ...chart, props: { ...chart.props, data: [{ playerID: "p1", playerName: "Jaina", className: "MAGE", specialization: "", value: 1, breakout: "no" }] } }])).toThrow(/unknown property/)
+    expect(() => applySceneBatch(createInitialScene(), [{ ...chart, props: { ...chart.props, data: Array.from({ length: 101 }, (_, index) => ({ playerID: `p${index}`, playerName: "Player", className: "MAGE", specialization: "", value: 1 })) } }])).toThrow(/100 rows/)
   })
 
   it("rejects parent cycles and excessive nesting", () => {

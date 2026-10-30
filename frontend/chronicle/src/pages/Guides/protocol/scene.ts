@@ -7,6 +7,7 @@ export const MAX_NESTING = 64
 export const MAX_STRING_LENGTH = 4_096
 export const MAX_ID_LENGTH = 128
 export const MAX_POINTS = 256
+export const MAX_PLAYER_METRIC_ROWS = 100
 /** Largest content size UIParent:SetSize accepts, in pixels. */
 export const MAX_CANVAS_SIZE = 16_384
 
@@ -21,6 +22,7 @@ const PROPERTIES: Record<NodeKind, readonly string[]> = {
   text: [...COMMON_UI, "width", "height", "text", "fontSize", "color", "align", "backgroundColor", "borderColor"],
   texture: [...COMMON_UI, "width", "height", "asset", "textureType", "textureId", "iconName", "tooltip", "tint", "borderColor"],
   button: [...COMMON_UI, "width", "height", "text", "enabled", "color", "backgroundColor", "borderColor"],
+  "player-metric-chart": [...COMMON_UI, "width", "height", "data", "type", "perSecond", "durationMillis", "panelTitle", "stackedLabel", "valueSuffix", "hideZeroValue", "rowHeight"],
   unit: [...COMMON_MAP, "x", "y", "size", "unit", "label", "color", "facing", "entry", "role"],
   icon: [...COMMON_MAP, "x", "y", "size", "asset", "label", "color", "facing"],
   "map-text": [...COMMON_MAP, "x", "y", "text", "fontSize", "color", "align"],
@@ -36,6 +38,7 @@ const REQUIRED: Record<NodeKind, readonly string[]> = {
   text: ["x", "y", "text", "fontSize", "color", "anchor"],
   texture: ["x", "y", "width", "height", "asset", "anchor"],
   button: ["x", "y", "width", "height", "text", "anchor"],
+  "player-metric-chart": ["x", "y", "width", "height", "anchor", "data", "type"],
   unit: ["x", "y", "size", "unit"],
   icon: ["x", "y", "size", "asset"],
   "map-text": ["x", "y", "text", "fontSize", "color"],
@@ -130,6 +133,24 @@ function validatePoint(value: unknown, label: string) {
   bounded(point.y, 0, 1, `${label}.y`)
 }
 
+function validatePlayerMetricData(value: unknown, label: string) {
+  if (!Array.isArray(value) || value.length > MAX_PLAYER_METRIC_ROWS) {
+    throw new SceneValidationError(`${label} must be an array of at most ${MAX_PLAYER_METRIC_ROWS} rows`)
+  }
+  value.forEach((rawRow, index) => {
+    const rowLabel = `${label}[${index}]`
+    const row = record(rawRow, rowLabel)
+    exact(row, ["playerID", "playerName", "className", "specialization", "value", "stackedValue", "dimmed"], rowLabel)
+    string(row.playerID, `${rowLabel}.playerID`, MAX_ID_LENGTH)
+    displayText(row.playerName, `${rowLabel}.playerName`)
+    string(row.className, `${rowLabel}.className`, 32)
+    if (row.specialization !== undefined) displayText(row.specialization, `${rowLabel}.specialization`)
+    bounded(row.value, 0, Number.MAX_SAFE_INTEGER, `${rowLabel}.value`)
+    if (row.stackedValue !== undefined) bounded(row.stackedValue, 0, Number.MAX_SAFE_INTEGER, `${rowLabel}.stackedValue`)
+    if (row.dimmed !== undefined) boolean(row.dimmed, `${rowLabel}.dimmed`)
+  })
+}
+
 function validateProps(kind: NodeKind, input: unknown, partial: boolean): Record<string, unknown> {
   const props = record(input, `${kind} props`)
   exact(props, PROPERTIES[kind], `${kind} props`)
@@ -137,6 +158,10 @@ function validateProps(kind: NodeKind, input: unknown, partial: boolean): Record
 
   for (const [key, value] of Object.entries(props)) {
     if (key === "text") displayText(value, `${kind}.text`)
+    else if (key === "data") validatePlayerMetricData(value, `${kind}.data`)
+    else if (key === "type") {
+      if (value !== "damage" && value !== "healing" && value !== "taken" && value !== "mitigation") throw new SceneValidationError(`${kind}.type is invalid`)
+    } else if (key === "panelTitle" || key === "stackedLabel" || key === "valueSuffix") displayText(value, `${kind}.${key}`)
     else if (key === "asset") {
       const asset = string(value, `${kind}.asset`, 255)
       const segments = asset.split("/")
@@ -155,7 +180,9 @@ function validateProps(kind: NodeKind, input: unknown, partial: boolean): Record
       const iconName = string(value, "texture.iconName", 128)
       if (!/^[a-z0-9][a-z0-9_-]{0,127}$/.test(iconName)) throw new SceneValidationError("texture.iconName is invalid")
     } else if (["color", "fillColor", "tint", "backgroundColor", "borderColor"].includes(key)) color(value, `${kind}.${key}`)
-    else if (["visible", "enabled", "tooltip"].includes(key)) boolean(value, `${kind}.${key}`)
+    else if (["visible", "enabled", "tooltip", "perSecond", "hideZeroValue"].includes(key)) boolean(value, `${kind}.${key}`)
+    else if (key === "durationMillis") bounded(value, 0, Number.MAX_SAFE_INTEGER, `${kind}.durationMillis`)
+    else if (key === "rowHeight") bounded(value, 12, 128, `${kind}.rowHeight`)
     else if (key === "alpha") bounded(value, 0, 1, `${kind}.alpha`)
     else if (key === "anchor") {
       if (typeof value !== "string" || !ANCHORS.has(value)) throw new SceneValidationError(`${kind}.anchor is invalid`)

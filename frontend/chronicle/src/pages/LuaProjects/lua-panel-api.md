@@ -170,7 +170,7 @@ local image = frame:CreateTexture("my-icon")
 local button = CreateFrame("Button", "my-button", UIParent)
 ```
 
-`CreateFrame(type, id, parent)` accepts `"Frame"`, `"FontString"`, `"Texture"` and `"Button"`. `id` must be unique within the module; omit it to get a generated one. `parent` defaults to `UIParent`, the panel's root. Objects persist until you call `:Destroy()`, so create them once and update them, rather than creating new ones each time.
+`CreateFrame(type, id, parent)` accepts `"Frame"`, `"FontString"`, `"Texture"`, `"Button"` and the Chronicle-owned `"PlayerMetricChart"`. `id` must be unique within the module; omit it to get a generated one. `parent` defaults to `UIParent`, the panel's root. Objects persist until you call `:Destroy()`, so create them once and update them, rather than creating new ones each time.
 
 ### Panel size and scrolling
 
@@ -207,6 +207,35 @@ UIParent:SetHeight(40 + #rows * ROW)   -- tall enough for a title and every row
 
 `UIParent` supports only `SetSize`, `SetWidth`, `SetHeight` and `SetScript`.
 
+### Player metric chart
+
+Use Chronicle's standard player meter instead of rebuilding its bars from frames. The host renders the real `PlayerMetricChart`, including class colors and icons. On a live instance page it also inherits Chronicle's inferred specializations and the viewer's enabled character cosmetics; Workshop preview falls back to the row fields supplied by the module.
+
+```lua
+local ui = require("chronicle.v1.ui")
+local chart = ui.playerMetricChart(UIParent, "damage-chart", {
+  type = "damage",
+  panelTitle = "Damage Done",
+  perSecond = true,
+  durationMillis = 60000,
+  width = 560,
+  height = 420,
+})
+
+chart:SetData({
+  {
+    playerID = "0x0000000000000001",
+    playerName = "Jaina",
+    className = "MAGE",
+    value = 125000,
+  },
+})
+```
+
+Each row requires `playerID`, `playerName`, `className` and a non-negative `value`. It may also include `specialization`, `stackedValue` and `dimmed`. A chart accepts at most 100 rows. `type` is `"damage"`, `"healing"`, `"taken"` or `"mitigation"`. The chart is display-only in Lua v1: modules cannot inject React tooltip or breakout content.
+
+The returned chart also supports `SetChartType`, `SetPerSecond`, `SetDuration`, `SetPanelTitle`, `SetStackedLabel`, `SetValueSuffix`, `SetHideZeroValue`, `SetRowHeight` and `SetData`.
+
 ### Lua Language Server definitions
 
 The repository includes `lua-panel-api.d.lua`, a documentation-only [EmmyLua/LuaLS](https://luals.github.io/wiki/annotations/) definition file. Download it from the **LuaLS definitions** button at the top of this page and copy it into your editor workspace for completion, parameter hints and type checking. Chronicle generates the technical reference below from that file so the editor contract and published documentation stay aligned.
@@ -219,11 +248,11 @@ Every global and method below comes from `lua-panel-api.d.lua`, the [EmmyLua/Lua
 
 ### Globals
 
-#### `CreateFrame(frameType: "Frame"|"FontString"|"Texture"|"Button", id?: string, parent?: ChronicleFrame)`
+#### `CreateFrame(frameType: "Frame"|"FontString"|"Texture"|"Button"|"PlayerMetricChart", id?: string, parent?: ChronicleFrame)`
 
 Create a retained UI object. parent defaults to UIParent.
 
-**Returns:** `ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton` object
+**Returns:** `ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton|ChroniclePlayerMetricChart` object
 
 ### `ChronicleRegion`
 
@@ -341,6 +370,44 @@ Render a named icon from Chronicle's current dataset CDN. Names contain only ASC
 
 - `iconName`: Example: "inv_sword_39".
 
+### `ChroniclePlayerMetricChart` extends `ChronicleRegion`
+
+#### `ChroniclePlayerMetricChart:SetData(data: ChroniclePlayerMetricRow[])`
+
+Replace every row in the chart. At most 100 rows.
+
+#### `ChroniclePlayerMetricChart:SetChartType(chartType: ChroniclePlayerMetricChartType)`
+
+Choose the standard Chronicle player metric presentation.
+
+#### `ChroniclePlayerMetricChart:SetPerSecond(enabled: boolean)`
+
+Display values per second using the configured duration.
+
+#### `ChroniclePlayerMetricChart:SetDuration(durationMillis: number)`
+
+Set the duration used for per-second conversion, in milliseconds.
+
+#### `ChroniclePlayerMetricChart:SetPanelTitle(title: string)`
+
+Set the title used by Chronicle-owned chart surfaces.
+
+#### `ChroniclePlayerMetricChart:SetStackedLabel(label: string)`
+
+Set the label for stacked secondary values.
+
+#### `ChroniclePlayerMetricChart:SetValueSuffix(suffix: string)`
+
+Override the value suffix.
+
+#### `ChroniclePlayerMetricChart:SetHideZeroValue(hidden: boolean)`
+
+Hide primary value badges whose value is zero.
+
+#### `ChroniclePlayerMetricChart:SetRowHeight(height: number)`
+
+Set row height in pixels, from 12 through 128.
+
 ### `ChronicleButton` extends `ChronicleFrame`
 
 #### `ChronicleButton:SetText(text: string)`
@@ -355,10 +422,11 @@ Load with `require`. The `chronicle` module names are reserved; you cannot ship 
 
 - **`chronicle.v1.events`**: `onEvent(fn)` for every declared stream, `onComplete(fn)`. See [Events](#events).
 - **`chronicle.v1.events.<stream>`**: `onEvent(fn)`, `onComplete(fn)` for one stream, e.g. `chronicle.v1.events.aura`. The `damage` module also has `bySource(onUpdate)`.
-- **`chronicle.v1.ui`**: quick widgets.
+- **`chronicle.v1.ui`**: host-owned widgets.
   - `metric(parent, id, label, value, x, y)` draws a label and a large value. It returns `{ frame, set(v) }`.
   - `table(parent, id, rows, x, y)` draws up to 50 `{label, value}` rows as text.
   - `bars(parent, id, rows, x, y)` draws up to 50 `{label, value}` rows as bars. The bar width is `value` pixels, capped at 310, so scale your values first.
+  - `playerMetricChart(parent, id, options)` renders Chronicle's standard player metric chart and returns the chart object. Call `chart:SetData(rows)` to replace its rows.
   - `table` and `bars` return the frame; destroy it and create it again to refresh.
 
 Your own files can be loaded with `require("helpers")` (for `helpers.lua`) when they are in the package.
