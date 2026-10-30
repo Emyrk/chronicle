@@ -36,6 +36,7 @@ import {
   selectHealthBars,
   selectMapEncounter,
   unitFocusBounds,
+  uiMapDungeonMeshPoint,
   uiMapPoint,
   zoneMapPoint,
   type MapPoint,
@@ -402,11 +403,14 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
   // The active floor owns its mesh and render when published; legacy
-  // instance-level assets remain the fallback. Normalized UI-map positions
-  // still map onto the mesh by their floor percentages when 3D is selected.
-  const mesh = artwork.kind === "instance"
+  // instance-level assets remain the fallback.
+  const candidateMesh = artwork.kind === "instance"
     ? replayDungeonMesh(artwork.instance, selectedFloor)
     : null;
+  // Normalized telemetry refers to the native DungeonMap frame, not a mesh's
+  // cropped extent. Do not offer a misleading 3D placement until the manifest
+  // supplies the floor bounds needed to register those two coordinate frames.
+  const mesh = normalizedUIMap && !selectedFloor?.bounds ? null : candidateMesh;
   const availableFlatCanvas = artwork.kind === "instance"
     ? replayDungeonCanvasForCoordinates(
       artwork.instance,
@@ -445,7 +449,9 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const overlayAvailable = normalizedUIMap || (Boolean(dungeonBounds)
     && (artwork.kind !== "instance" || artwork.instance.mapID !== 43 || rawProjection || renderCanvas !== null || dungeonCalibration !== null));
   const projectSample = (sample: MapPositionSample): MapPoint | null => normalizedUIMap
-    ? uiMapPoint(sample)
+    ? meshCanvas && mesh && selectedFloor?.bounds
+      ? uiMapDungeonMeshPoint(sample, selectedFloor.bounds, mesh.bounds)
+      : uiMapPoint(sample)
     : artwork.kind === "zone"
       ? zoneMapPoint(sample, artwork.assignment)
       : dungeonBounds && overlayAvailable
@@ -456,9 +462,12 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
             : dungeonMapPoint(sample, dungeonBounds)
         : null;
 
+  const projectionKind = normalizedUIMap
+    ? meshCanvas && selectedFloor?.bounds ? "ui-map-mesh" : "ui-map"
+    : meshCanvas ? "mesh" : renderCanvas ? "render" : "calibrated";
   const projectionKey = artwork.kind === "zone"
     ? `zone:${artwork.map.id}:${artwork.assignment.id}`
-    : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}:${normalizedUIMap ? "ui-map" : meshCanvas ? "mesh" : renderCanvas ? "render" : "calibrated"}`;
+    : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}:${projectionKind}`;
 
   const selectedPlayers = props.context.entitySelection.playerIds;
   const bossGuids = new Set((wholeRun ? props.context.instance.encounters : instanceEncounter ? [instanceEncounter] : [])

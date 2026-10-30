@@ -45,7 +45,7 @@ go run ./scripts/dbcdata extract-legacy-maps \
 
 Legacy base-zone maps use the twelve standard 256-pixel tiles plus explored overlays from `WorldMapOverlay.dbc`. Every dungeon and raid in `Map.dbc` is included in the instance inventory so Map Foundry can attach manual renders and meshes. Native floors are included when the client contains a complete twelve-tile floor matching that instance. The stock 2.4.3 client does not include dungeon floor artwork, so its instance entries have no native floors.
 
-For Wrath-era clients, the legacy extractor also reads `DungeonMap.dbc` and writes each matching `instances[].floors[].bounds` as the floor's world-coordinate extent. The frontend uses those bounds to recover yards-per-artwork-unit for normalized UI-map telemetry, including unit-token scale. Artwork dimensions such as `1002 × 668` describe pixels only and must not be treated as physical size. If a client has no usable `DungeonMap` row, bounds remain absent and replay falls back to uncalibrated flat-map sizing.
+For Wrath-era clients, the legacy extractor also reads `DungeonMap.dbc` and writes each matching `instances[].floors[].bounds` as the floor's coordinate extent. The frontend uses those bounds to recover yards-per-artwork-unit for normalized UI-map telemetry, including unit-token scale, and to register normalized positions into a cropped WMO mesh's coordinate frame. Artwork dimensions such as `1002 × 668` describe pixels only and must not be treated as physical size. If a client has no usable `DungeonMap` row, bounds remain absent and replay falls back to uncalibrated flat-map sizing; mesh-backed 3D is withheld for normalized telemetry rather than placing units against the wrong crop.
 
 ## Modern CASC clients
 

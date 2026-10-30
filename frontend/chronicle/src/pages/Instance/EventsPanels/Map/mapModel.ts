@@ -662,6 +662,26 @@ export function uiMapPoint(sample: MapPositionSample): MapPoint {
   };
 }
 
+/**
+ * Projects normalized DungeonMap coordinates onto a WMO mesh. DungeonMap.dbc
+ * stores its floor extents in the WMO export frame, whose two horizontal axes
+ * are the inverse of the world frame used by the published mesh bounds. Convert
+ * the UI percentages back through that floor extent, negate both axes, then use
+ * the same world projection as native world-coordinate telemetry.
+ */
+export function uiMapDungeonMeshPoint(
+  sample: MapPositionSample,
+  uiBounds: WowMapFloorBounds,
+  meshBounds: WowMapFloorBounds,
+): MapPoint | null {
+  if (uiBounds.maxX === uiBounds.minX || uiBounds.maxY === uiBounds.minY) return null;
+  return renderedDungeonMapPoint({
+    ...sample,
+    x: -(uiBounds.maxY - sample.y * (uiBounds.maxY - uiBounds.minY)),
+    y: -(uiBounds.maxX - sample.x * (uiBounds.maxX - uiBounds.minX)),
+  }, meshBounds);
+}
+
 export function zoneMapPoint(sample: MapPositionSample, assignment: WowMapAssignment): MapPoint | null {
   const [minWorldX, minWorldY, , maxWorldX, maxWorldY] = assignment.region;
   if (maxWorldX === minWorldX || maxWorldY === minWorldY) return null;

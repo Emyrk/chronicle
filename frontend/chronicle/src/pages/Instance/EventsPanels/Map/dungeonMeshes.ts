@@ -37,8 +37,8 @@ export function placeableDungeonMesh(mesh: WowMapMeshInstance | undefined): WowM
 
 /**
  * The selected floor's mesh (or the legacy instance mesh), when placeable.
- * UI-map-normalized telemetry still uses this mesh: its normalized points are
- * projected across the mesh canvas, while flat mode keeps native floor art.
+ * Callers must separately register UI-map-normalized telemetry through the
+ * native floor bounds before placing it on this mesh.
  */
 export function replayDungeonMesh(
   instance: WowMapInstance,

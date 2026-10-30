@@ -46,6 +46,7 @@ import {
   resolveMapFloorNumber,
   selectHealthBars,
   selectMapEncounter,
+  uiMapDungeonMeshPoint,
   uiMapPoint,
   zoneMapPoint,
   type MapViewport,
@@ -306,6 +307,19 @@ describe("map replay model", () => {
       leftPercent: 35.82,
       topPercent: 84.66,
     });
+  });
+
+  it("projects normalized Violet Hold telemetry through DungeonMap bounds onto the mesh", () => {
+    const point = uiMapDungeonMeshPoint(
+      // Blooddingo at Ichoron +1.055 s in L6R3oMMlI98Ag2Q8.
+      { timestampMs: 1_055, x: 0.5539, y: 0.5876, mapId: 537, floor: 1 },
+      { minX: 665.346985, maxX: 921.575989, minY: 1813.349976, maxY: 1984.170044 },
+      { minX: -1990.141846, maxX: -1767.377441, minY: -902.016785, maxY: -684.908997 },
+    );
+
+    expect(point?.leftPercent).toBeCloseTo(43.64, 2);
+    expect(point?.topPercent).toBeCloseTo(52.26, 2);
+    expect(point).not.toEqual(uiMapPoint({ timestampMs: 1_055, x: 0.5539, y: 0.5876, mapId: 537, floor: 1 }));
   });
 
   it("converts world coordinates using UiMapAssignment axis order", () => {
