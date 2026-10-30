@@ -369,10 +369,7 @@ func (s *Service) BeginAuthHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	from := req.URL.Query().Get("from")
-	if from == "" {
-		from = "/"
-	}
+	from := s.safeAuthRedirect(req.URL.Query().Get("from"))
 
 	sess := s.newCookie(req, "from")
 	sess.Values["from"] = from
@@ -659,8 +656,8 @@ func (s *Service) Handler() http.Handler {
 			if ok && cl != nil {
 				// Already authenticated. If "from" is a tenant URL,
 				// relay the existing session directly without re-doing OAuth.
-				from := r.URL.Query().Get("from")
-				if from != "" {
+				from := s.safeAuthRedirect(r.URL.Query().Get("from"))
+				if from != "/" {
 					if relayTarget, redirectPath, tenant, relayOK := s.parseRelayTarget(from); relayOK {
 						session, err := s.Zed.GetUserAuthSessionByID(r.Context(), cl.SessionID)
 						if err == nil {
@@ -724,9 +721,7 @@ func (s *Service) Handler() http.Handler {
 			if redirect != nil {
 				raw := redirect.Values["from"]
 				fromStr, _ := raw.(string)
-				if fromStr != "" {
-					redirectTo = fromStr
-				}
+				redirectTo = s.safeAuthRedirect(fromStr)
 				delete(redirect.Values, "from")
 				_ = redirect.Save(r, w)
 			}
@@ -934,6 +929,37 @@ func (s *Service) HandleRelay(w http.ResponseWriter, r *http.Request) {
 		redirectPath = "/"
 	}
 	http.Redirect(w, r, redirectPath, http.StatusTemporaryRedirect)
+}
+
+// safeAuthRedirect only accepts local redirects or the known tenant origin used
+// by the cross-subdomain relay. Recheck the cookie on callback as well as the
+// incoming query, since older cookies may contain an unchecked target.
+func (s *Service) safeAuthRedirect(from string) string {
+	if from == "" || strings.TrimSpace(from) != from || strings.ContainsAny(from, "\\\r\n\t") || strings.HasPrefix(from, "//") {
+		return "/"
+	}
+	parsed, err := url.Parse(from)
+	if err != nil || parsed.Opaque != "" || parsed.User != nil {
+		return "/"
+	}
+	if !parsed.IsAbs() && parsed.Host == "" {
+		return from
+	}
+	if s.accessURL == nil || !strings.EqualFold(parsed.Scheme, s.accessURL.Scheme) || parsed.Host == "" {
+		return "/"
+	}
+	if strings.EqualFold(parsed.Host, s.accessURL.Host) {
+		return from
+	}
+	// The relay redirects using the decoded path; encoded slashes must not
+	// turn that path into a protocol-relative URL on the tenant domain.
+	if strings.HasPrefix(parsed.Path, "//") || strings.Contains(parsed.Path, "\\") {
+		return "/"
+	}
+	if _, _, _, relay := s.parseRelayTarget(from); relay {
+		return from
+	}
+	return "/"
 }
 
 // parseRelayTarget checks if `from` is a full URL pointing to a known tenant

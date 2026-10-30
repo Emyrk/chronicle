@@ -189,6 +189,47 @@ func TestRelayCodeStore_ConcurrentRedemptionHasOneWinner(t *testing.T) {
 	}
 }
 
+func TestSafeAuthRedirect(t *testing.T) {
+	t.Parallel()
+	accessURL, err := url.Parse("https://legacy.chronicleclassic.com")
+	require.NoError(t, err)
+	svc := &Service{
+		accessURL: accessURL,
+		logger:    slog.Default(),
+		tenantChecker: func(host string) *TenantInfo {
+			if host == "epoch.chronicleclassic.com" {
+				return &TenantInfo{Slug: "epoch", Name: "Epoch"}
+			}
+			return nil
+		},
+	}
+	for _, tt := range []struct {
+		name, from, want string
+	}{
+		{"empty", "", "/"},
+		{"relative path", "/raids?tab=boss", "/raids?tab=boss"},
+		{"relative segment", "raids?tab=boss", "raids?tab=boss"},
+		{"same origin", "https://legacy.chronicleclassic.com/raids", "https://legacy.chronicleclassic.com/raids"},
+		{"tenant relay", "https://epoch.chronicleclassic.com/raids?tab=boss", "https://epoch.chronicleclassic.com/raids?tab=boss"},
+		{"external", "https://evil.example.com/steal", "/"},
+		{"external with matching suffix", "https://epoch.chronicleclassic.com.evil.example/raids", "/"},
+		{"protocol relative external", "//evil.example.com/steal", "/"},
+		{"protocol relative tenant", "//epoch.chronicleclassic.com/raids", "/"},
+		{"encoded tenant redirect authority", "https://epoch.chronicleclassic.com/%2fevil.example.com", "/"},
+		{"encoded tenant redirect backslash", "https://epoch.chronicleclassic.com/%5cevil.example.com", "/"},
+		{"backslash authority", `/\\evil.example.com/steal`, "/"},
+		{"wrong scheme tenant", "http://epoch.chronicleclassic.com/raids", "/"},
+		{"wrong scheme same host", "http://legacy.chronicleclassic.com/raids", "/"},
+		{"opaque scheme", "javascript:alert(1)", "/"},
+		{"invalid URL", "://bad", "/"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, svc.safeAuthRedirect(tt.from))
+		})
+	}
+}
+
 func TestParseRelayTarget(t *testing.T) {
 	t.Parallel()
 
