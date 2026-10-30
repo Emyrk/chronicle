@@ -1,0 +1,50 @@
+<!doctype html>
+<!--
+  Source for public/c/images/og/sidekick.jpg (the /download social preview).
+  Regenerate from frontend/chronicle:
+    NODE_PATH=./node_modules node scripts/og/render-og.cjs scripts/og/sidekick-og.html public/c/images/og/sidekick.jpg
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Atkinson+Hyperlegible:wght@400;700&display=swap" />
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1200px; height: 630px; overflow: hidden; background: #1b1714; color: #f3ead9; font-family: "Atkinson Hyperlegible", sans-serif; }
+  .card { position: relative; width: 100%; height: 100%; padding: 64px 72px; display: flex; flex-direction: column; justify-content: center; gap: 64px; }
+  .glow { position: absolute; left: -160px; top: -200px; width: 820px; height: 720px; border-radius: 50%; background: radial-gradient(closest-side, rgba(59,130,246,.32), rgba(59,130,246,.08) 55%, rgba(27,23,20,0) 100%); }
+  .glow2 { position: absolute; right: -200px; bottom: -260px; width: 700px; height: 560px; border-radius: 50%; background: radial-gradient(closest-side, rgba(96,165,250,.14), rgba(27,23,20,0) 100%); }
+  .top { position: relative; display: flex; align-items: center; gap: 44px; }
+  .logo { width: 196px; height: 196px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(230,180,80,.35), 0 24px 60px rgba(0,0,0,.55), 0 0 80px rgba(59,130,246,.35); }
+  .eyebrow { font-size: 22px; letter-spacing: .2em; text-transform: uppercase; color: #60a5fa; font-weight: 700; }
+  h1 { font-family: "Young Serif", serif; font-weight: 400; font-size: 60px; line-height: 1.05; color: #f8f1e3; margin-top: 10px; }
+  .sub { font-size: 28px; color: #c9bba5; margin-top: 16px; }
+  .steps { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .step { display: flex; align-items: center; gap: 16px; padding: 20px 22px; background: rgba(36,30,25,.85); border: 1px solid #3a2f26; border-radius: 16px; }
+  .num { font-family: "Young Serif", serif; font-size: 40px; color: #60a5fa; line-height: 1; }
+  .step b { display: block; font-size: 24px; color: #f8f1e3; }
+  .step span { font-size: 19px; color: #b8a995; }
+  .url { position: absolute; right: 72px; top: 64px; font-size: 20px; color: #8d7f6c; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="glow"></div>
+    <div class="glow2"></div>
+    <div class="url">Free · Windows · macOS · Linux</div>
+    <div class="top">
+      <img class="logo" src="../../public/c/chronicle/SidekickLogo.webp" alt="" />
+      <div>
+        <div class="eyebrow">Chronicle Sidekick</div>
+        <h1>Install once.<br />Never hunt for a log again.</h1>
+        <div class="sub">Your raid logs, sent to Chronicle in one click.</div>
+      </div>
+    </div>
+    <div class="steps">
+      <div class="step"><div class="num">1</div><div><b>Install the app</b><span>It finds WoW for you</span></div></div>
+      <div class="step"><div class="num">2</div><div><b>Install the addon</b><span>Logging turns on by itself</span></div></div>
+      <div class="step"><div class="num">3</div><div><b>Raid, then upload</b><span>One click from your tray</span></div></div>
+    </div>
+  </div>
+</body>
+</html>
