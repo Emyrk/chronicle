@@ -100,6 +100,7 @@ type Service struct {
 	loginAttempts map[string]time.Time
 
 	refreshes singleflight.Group
+	metrics   *authMetrics
 }
 
 // newCookieStore signs and encrypts cookies with keys derived from secret, the
@@ -182,6 +183,10 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 	if err != nil {
 		return nil, fmt.Errorf("new sessions: %w", err)
 	}
+	metrics, err := newAuthMetrics(opts.Sessions.Registry)
+	if err != nil {
+		return nil, err
+	}
 
 	if opts.DevServer {
 		devProv, err := fakeoidc.Run(ctx, opts.AccessURL)
@@ -216,6 +221,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 		tenantChecker:     opts.TenantChecker,
 		registerAttempts:  make(map[string]time.Time),
 		loginAttempts:     make(map[string]time.Time),
+		metrics:           metrics,
 	}, nil
 }
 
