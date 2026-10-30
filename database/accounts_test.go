@@ -23,23 +23,87 @@ func insertAccountTestUser(t *testing.T, db database.Store, prefix string) uuid.
 	return id
 }
 
-func TestAccountRemovalBlockers(t *testing.T) {
+func TestAccountDataCounts(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	db, _ := dbtestutil.NewDB(t)
-	userID := insertAccountTestUser(t, db, "removal")
+	userID := insertAccountTestUser(t, db, "counts")
 
-	blockers, err := db.GetAccountRemovalBlockers(ctx, userID)
+	counts, err := db.GetAccountDataCounts(ctx, userID)
 	require.NoError(t, err)
-	require.Empty(t, blockers)
+	require.Empty(t, counts)
 
 	_, err = db.UpsertDataGrant(ctx, database.UpsertDataGrantParams{
 		UserID: userID, Source: "test", StorageBytes: 1024,
 	})
 	require.NoError(t, err)
-	blockers, err = db.GetAccountRemovalBlockers(ctx, userID)
+	counts, err = db.GetAccountDataCounts(ctx, userID)
 	require.NoError(t, err)
-	require.Contains(t, blockers, "storage grants")
+	require.Equal(t, []database.GetAccountDataCountsRow{
+		{GroupKey: "billing", Label: "Bonus storage grants", Count: 1},
+	}, counts)
+}
+
+func TestAccountDeletionBlockers(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	db, _ := dbtestutil.NewDB(t)
+	userID := insertAccountTestUser(t, db, "blockers")
+
+	blockers, err := db.GetAccountDeletionBlockers(ctx, userID)
+	require.NoError(t, err)
+	require.Empty(t, blockers)
+
+	subscription := database.UpsertBillingSubscriptionParams{
+		UserID: userID, Provider: "stripe", ProviderCustomerID: "cus_test", ProductCode: "honored", Status: "active",
+	}
+	_, err = db.UpsertBillingSubscription(ctx, subscription)
+	require.NoError(t, err)
+	blockers, err = db.GetAccountDeletionBlockers(ctx, userID)
+	require.NoError(t, err)
+	require.Equal(t, []string{"active subscription"}, blockers)
+
+	subscription.Status = "canceled"
+	_, err = db.UpsertBillingSubscription(ctx, subscription)
+	require.NoError(t, err)
+	blockers, err = db.GetAccountDeletionBlockers(ctx, userID)
+	require.NoError(t, err)
+	require.Empty(t, blockers)
+}
+
+func TestAccountPurgeLifecycle(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	db, _ := dbtestutil.NewDB(t)
+	userID := insertAccountTestUser(t, db, "purge")
+	_, err := db.UpsertDataGrant(ctx, database.UpsertDataGrantParams{
+		UserID: userID, Source: "test", StorageBytes: 1024,
+	})
+	require.NoError(t, err)
+
+	purge, err := db.InsertAccountPurge(ctx, database.InsertAccountPurgeParams{ID: uuid.New(), UserID: userID})
+	require.NoError(t, err)
+	require.Equal(t, "pending", purge.Status)
+	_, err = db.InsertAccountPurge(ctx, database.InsertAccountPurgeParams{ID: uuid.New(), UserID: userID})
+	require.True(t, database.IsUniqueViolation(err), "only one active purge per user")
+
+	active, err := db.GetActiveAccountPurgeByUser(ctx, userID)
+	require.NoError(t, err)
+	require.Equal(t, purge.ID, active.ID)
+
+	// Personal data cascades from the user row.
+	deleted, err := db.DeleteUserAccountRow(ctx, userID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
+	require.NoError(t, db.FinishAccountPurge(ctx, database.FinishAccountPurgeParams{ID: purge.ID, Status: "succeeded"}))
+
+	// The purge row outlives the account so its status stays readable.
+	finished, err := db.GetAccountPurge(ctx, purge.ID)
+	require.NoError(t, err)
+	require.Equal(t, "succeeded", finished.Status)
+	require.True(t, finished.FinishedAt.Valid)
+	_, err = db.GetActiveAccountPurgeByUser(ctx, userID)
+	require.ErrorIs(t, err, sql.ErrNoRows)
 }
 
 func TestCurrentUserAuthSessionRevocation(t *testing.T) {

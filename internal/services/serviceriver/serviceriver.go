@@ -108,6 +108,11 @@ func (s *Service) Start(ctx context.Context) error {
 	riverqueue.AddWorker(q, chron.NewWorkerLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerReLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerRegressionSnapshot())
+	var leaveDiscordGuild func(string) error
+	if !bot.Disabled() {
+		leaveDiscordGuild = bot.LeaveGuild
+	}
+	riverqueue.AddWorker(q, chron.NewWorkerAccountPurge(leaveDiscordGuild))
 	if !bot.Disabled() {
 		bot.SetQueue(q)
 		riverqueue.AddWorker(q, bot.NewWorkerSyncDiscordUser())

@@ -3,9 +3,33 @@
 import type { GUID } from "@/lib/guid/guid";
 
 // From chroniclesdk/account.go
-export interface AccountDeletionStatus {
-    readonly can_delete: boolean;
+export interface AccountDataCount {
+    readonly group_key: string;
+    readonly label: string;
+    readonly count: number;
+}
+
+// From chroniclesdk/account.go
+/**
+ * AccountPurgeConfirmation is the phrase a user types to start an account purge.
+ */
+export const AccountPurgeConfirmation = "PURGE MY ACCOUNT";
+
+// From chroniclesdk/account.go
+export interface AccountPurgeInventory {
+    readonly data: readonly AccountDataCount[];
     readonly blockers: readonly string[];
+    readonly active_purge?: AccountPurgeStatus;
+}
+
+// From chroniclesdk/account.go
+export interface AccountPurgeStatus {
+    readonly id: string;
+    readonly status: string;
+    readonly step: string;
+    readonly logs_total: number;
+    readonly logs_deleted: number;
+    readonly error: string;
 }
 
 // From chroniclesdk/panel_layout.go
@@ -1150,11 +1174,6 @@ export interface DatasetTenantSummary {
 export interface DecideProofRequest {
     readonly message: string;
     readonly decisions: readonly ProofDecision[];
-}
-
-// From chroniclesdk/account.go
-export interface DeleteAccountRequest {
-    readonly confirmation: string;
 }
 
 // From chroniclesdk/server_application.go
@@ -4607,6 +4626,15 @@ export interface SpeedrunVersionStatus {
     readonly addon_version: string;
     readonly min_addon_version: string;
     readonly addon_qualified: boolean;
+}
+
+// From chroniclesdk/account.go
+export interface StartAccountPurgeRequest {
+    /**
+     * AcknowledgedGroups must include every group_key in the inventory.
+     */
+    readonly acknowledged_groups: readonly string[];
+    readonly confirmation: string;
 }
 
 // From chroniclesdk/supported_instance.go

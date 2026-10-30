@@ -14,6 +14,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearApplicationReviewsByReviewer = `-- name: ClearApplicationReviewsByReviewer :exec
+UPDATE application_modification_requests SET reviewed_by = NULL WHERE reviewed_by = $1
+`
+
+func (q *sqlQuerier) ClearApplicationReviewsByReviewer(ctx context.Context, userID uuid.NullUUID) error {
+	_, err := q.db.Exec(ctx, clearApplicationReviewsByReviewer, userID)
+	return err
+}
+
+const deleteServerApplicationsByInitiator = `-- name: DeleteServerApplicationsByInitiator :exec
+DELETE FROM server_applications WHERE initiated_by = $1
+`
+
+func (q *sqlQuerier) DeleteServerApplicationsByInitiator(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteServerApplicationsByInitiator, userID)
+	return err
+}
+
 const deleteUserAccountRow = `-- name: DeleteUserAccountRow :execrows
 DELETE FROM users WHERE id = $1
 `
@@ -44,52 +62,272 @@ func (q *sqlQuerier) DeleteUserAuthSessionsByUserID(ctx context.Context, userID 
 	return err
 }
 
-const getAccountRemovalBlockers = `-- name: GetAccountRemovalBlockers :one
+const finishAccountPurge = `-- name: FinishAccountPurge :exec
+UPDATE account_purges
+SET status = $1, error = $2, updated_at = now(), finished_at = now()
+WHERE id = $3
+`
+
+type FinishAccountPurgeParams struct {
+	Status string    `db:"status" json:"status"`
+	Error  string    `db:"error" json:"error"`
+	ID     uuid.UUID `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) FinishAccountPurge(ctx context.Context, arg FinishAccountPurgeParams) error {
+	_, err := q.db.Exec(ctx, finishAccountPurge, arg.Status, arg.Error, arg.ID)
+	return err
+}
+
+const getAccountDataCounts = `-- name: GetAccountDataCounts :many
+SELECT data.group_key::text AS group_key, data.label::text AS label, data.count::bigint AS count
+FROM (VALUES
+  ('logs', 'Uploaded logs', (SELECT count(*) FROM wow_log_groups t WHERE t.owner = $1::uuid)),
+  ('characters', 'Linked characters', (SELECT count(*) FROM user_character_links t WHERE t.user_id = $1::uuid)),
+  ('gear', 'Gear lists', (SELECT count(*) FROM gear_lists t WHERE t.user_id = $1::uuid)),
+  ('gear', 'Gear progressions', (SELECT count(*) FROM gear_progressions t WHERE t.user_id = $1::uuid)),
+  ('gear', 'Stat weights', (SELECT count(*) FROM gear_stat_weights t WHERE t.user_id = $1::uuid)),
+  ('gear', 'Raid compositions', (SELECT count(*) FROM raid_compositions t WHERE t.user_id = $1::uuid)),
+  ('gear', 'Talent builds', (SELECT count(*) FROM user_talent_builds t WHERE t.user_id = $1::uuid)),
+  ('layouts', 'Panel layouts', (SELECT count(*) FROM user_panel_layouts t WHERE t.user_id = $1::uuid)),
+  ('layouts', 'Tracked layouts', (SELECT count(*) FROM user_tracked_layouts t WHERE t.user_id = $1::uuid)),
+  ('layouts', 'Action bar settings', (SELECT count(*) FROM user_action_bar_slots t WHERE t.user_id = $1::uuid)),
+  ('layouts', 'Custom panel settings', (SELECT count(*) FROM user_custom_panel_settings t WHERE t.user_id = $1::uuid)),
+  ('layouts', 'Custom panel installs', (SELECT count(*) FROM user_custom_panel_installations t WHERE t.user_id = $1::uuid)),
+  ('favorites', 'Favorite guilds', (SELECT count(*) FROM user_favorite_guilds t WHERE t.user_id = $1::uuid)),
+  ('favorites', 'Favorite players', (SELECT count(*) FROM user_favorite_players t WHERE t.user_id = $1::uuid)),
+  ('ai', 'AI provider connections', (SELECT count(*) FROM inference_connections t WHERE t.user_id = $1::uuid)),
+  ('ai', 'AI chats', (SELECT count(*) FROM inference_threads t WHERE t.user_id = $1::uuid)),
+  ('ai', 'AI settings', (SELECT count(*) FROM inference_user_config t WHERE t.user_id = $1::uuid)),
+  ('sidekick', 'Sidekick installs', (SELECT count(*) FROM sidekick_installations t WHERE t.user_id = $1::uuid)),
+  ('sidekick', 'Sidekick settings', (SELECT count(*) FROM sidekick_account_configs t WHERE t.user_id = $1::uuid)),
+  ('modules', 'Published modules', (SELECT count(*) FROM lua_projects t WHERE t.owner_id = $1::uuid)),
+  ('modules', 'Module author profile', (SELECT count(*) FROM addon_authors t WHERE t.user_id = $1::uuid)),
+  ('modules', 'Module contributor seats', (SELECT count(*) FROM lua_project_contributors t WHERE t.user_id = $1::uuid)),
+  ('modules', 'Starred modules', (SELECT count(*) FROM lua_project_stars t WHERE t.user_id = $1::uuid)),
+  ('community', 'Guild Discord bot installs', (SELECT count(*) FROM guild_discord_installations t WHERE t.installed_by = $1::uuid)),
+  ('community', 'Guild join requests', (SELECT count(*) FROM guild_join_requests t WHERE t.user_id = $1::uuid)),
+  ('community', 'Server applications', (SELECT count(*) FROM server_applications t WHERE t.initiated_by = $1::uuid)),
+  ('community', 'Server upload keys', (SELECT count(*) FROM wow_server_upload_keys t WHERE t.created_by = $1::uuid)),
+  ('community', 'Shared views', (SELECT count(*) FROM shared_views t WHERE t.created_by = $1::uuid)),
+  ('billing', 'Supporter entitlements', (SELECT count(*) FROM billing_entitlements t WHERE t.user_id = $1::uuid)),
+  ('billing', 'Bonus storage grants', (SELECT count(*) FROM data_grants t WHERE t.user_id = $1::uuid AND t.source <> 'base')),
+  ('billing', 'Photo proof requests', (SELECT count(*) FROM proof_requests t WHERE t.applicant_id = $1::uuid))
+) AS data(group_key, label, count)
+WHERE data.count > 0
+`
+
+type GetAccountDataCountsRow struct {
+	GroupKey string `db:"group_key" json:"group_key"`
+	Label    string `db:"label" json:"label"`
+	Count    int64  `db:"count" json:"count"`
+}
+
+// GetAccountDataCounts counts the data an account purge removes, grouped into
+// sets the user must acknowledge individually. Zero counts are omitted.
+func (q *sqlQuerier) GetAccountDataCounts(ctx context.Context, userID uuid.UUID) ([]GetAccountDataCountsRow, error) {
+	rows, err := q.db.Query(ctx, getAccountDataCounts, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAccountDataCountsRow
+	for rows.Next() {
+		var i GetAccountDataCountsRow
+		if err := rows.Scan(&i.GroupKey, &i.Label, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAccountDeletionBlockers = `-- name: GetAccountDeletionBlockers :one
 SELECT ARRAY_REMOVE(ARRAY[
-  CASE WHEN EXISTS (SELECT 1 FROM wow_log_groups WHERE wow_log_groups.owner = $1) THEN 'uploaded logs' END,
-  CASE WHEN EXISTS (SELECT 1 FROM log_file WHERE log_file.owner = $1) THEN 'uploaded files' END,
-  CASE WHEN EXISTS (SELECT 1 FROM billing_subscriptions t WHERE t.user_id = $1) THEN 'billing subscription' END,
-  CASE WHEN EXISTS (SELECT 1 FROM billing_entitlements t WHERE t.user_id = $1) THEN 'billing entitlements' END,
-  CASE WHEN EXISTS (SELECT 1 FROM data_grants t WHERE t.user_id = $1 AND t.source <> 'base') THEN 'storage grants' END,
-  CASE WHEN EXISTS (SELECT 1 FROM guild_join_requests t WHERE t.user_id = $1) THEN 'guild join requests' END,
-  CASE WHEN EXISTS (SELECT 1 FROM guild_discord_installations t WHERE t.installed_by = $1) THEN 'guild Discord installations' END,
-  CASE WHEN EXISTS (SELECT 1 FROM user_character_links t WHERE t.user_id = $1 OR t.linked_by = $1) THEN 'linked characters' END,
-  CASE WHEN EXISTS (SELECT 1 FROM gear_lists t WHERE t.user_id = $1) THEN 'gear lists' END,
-  CASE WHEN EXISTS (SELECT 1 FROM gear_progressions t WHERE t.user_id = $1) THEN 'gear progressions' END,
-  CASE WHEN EXISTS (SELECT 1 FROM gear_stat_weights t WHERE t.user_id = $1) THEN 'stat weights' END,
-  CASE WHEN EXISTS (SELECT 1 FROM raid_compositions t WHERE t.user_id = $1) THEN 'raid compositions' END,
-  CASE WHEN EXISTS (SELECT 1 FROM user_talent_builds t WHERE t.user_id = $1) THEN 'talent builds' END,
-  CASE WHEN EXISTS (SELECT 1 FROM user_panel_layouts t WHERE t.user_id = $1) THEN 'panel layouts' END,
-  CASE WHEN EXISTS (SELECT 1 FROM user_tracked_layouts t WHERE t.user_id = $1) THEN 'tracked layouts' END,
-  CASE WHEN EXISTS (SELECT 1 FROM user_action_bar_slots t WHERE t.user_id = $1) THEN 'action bar settings' END,
-  CASE WHEN EXISTS (SELECT 1 FROM user_custom_panel_settings t WHERE t.user_id = $1) THEN 'custom panel settings' END,
-  CASE WHEN EXISTS (SELECT 1 FROM user_custom_panel_installations t WHERE t.user_id = $1) THEN 'custom panel installations' END,
-  CASE WHEN EXISTS (SELECT 1 FROM user_favorite_guilds t WHERE t.user_id = $1) THEN 'favorite guilds' END,
-  CASE WHEN EXISTS (SELECT 1 FROM user_favorite_players t WHERE t.user_id = $1) THEN 'favorite players' END,
-  CASE WHEN EXISTS (SELECT 1 FROM inference_connections t WHERE t.user_id = $1) THEN 'AI provider connections' END,
-  CASE WHEN EXISTS (SELECT 1 FROM inference_threads t WHERE t.user_id = $1) THEN 'AI chat history' END,
-  CASE WHEN EXISTS (SELECT 1 FROM inference_user_config t WHERE t.user_id = $1) THEN 'AI settings' END,
-  CASE WHEN EXISTS (SELECT 1 FROM sidekick_installations t WHERE t.user_id = $1) THEN 'Sidekick installations' END,
-  CASE WHEN EXISTS (SELECT 1 FROM sidekick_account_configs t WHERE t.user_id = $1) THEN 'Sidekick settings' END,
-  CASE WHEN EXISTS (SELECT 1 FROM lua_projects t WHERE t.owner_id = $1) THEN 'published modules' END,
-  CASE WHEN EXISTS (SELECT 1 FROM addon_authors t WHERE t.user_id = $1) THEN 'module author profile' END,
-  CASE WHEN EXISTS (SELECT 1 FROM lua_project_contributors t WHERE t.user_id = $1 OR t.added_by = $1) THEN 'module contributions' END,
-  CASE WHEN EXISTS (SELECT 1 FROM lua_project_stars t WHERE t.user_id = $1) THEN 'starred modules' END,
-  CASE WHEN EXISTS (SELECT 1 FROM proof_requests t WHERE t.applicant_id = $1 OR t.reviewer_id = $1) THEN 'proof request history' END,
-  CASE WHEN EXISTS (SELECT 1 FROM server_applications t WHERE t.initiated_by = $1) THEN 'server applications' END,
-  CASE WHEN EXISTS (SELECT 1 FROM application_modification_requests t WHERE t.reviewed_by = $1) THEN 'application reviews' END,
-  CASE WHEN EXISTS (SELECT 1 FROM shared_views t WHERE t.created_by = $1) THEN 'shared views' END,
-  CASE WHEN EXISTS (SELECT 1 FROM wow_servers t WHERE t.created_by = $1) THEN 'created servers' END,
-  CASE WHEN EXISTS (SELECT 1 FROM wow_server_realms t WHERE t.created_by = $1) THEN 'created realms' END,
-  CASE WHEN EXISTS (SELECT 1 FROM wow_server_upload_keys t WHERE t.created_by = $1) THEN 'server upload keys' END
+  CASE WHEN EXISTS (SELECT 1 FROM billing_subscriptions t WHERE t.user_id = $1::uuid AND t.status NOT IN ('canceled', 'incomplete_expired')) THEN 'active subscription' END,
+  CASE WHEN EXISTS (SELECT 1 FROM wow_servers t WHERE t.created_by = $1::uuid) THEN 'created servers' END,
+  CASE WHEN EXISTS (SELECT 1 FROM wow_server_realms t WHERE t.created_by = $1::uuid) THEN 'created realms' END
 ], NULL)::text[] AS blockers
 `
 
-func (q *sqlQuerier) GetAccountRemovalBlockers(ctx context.Context, userID uuid.UUID) ([]string, error) {
-	row := q.db.QueryRow(ctx, getAccountRemovalBlockers, userID)
+// GetAccountDeletionBlockers lists what must be resolved before an account can
+// be deleted. Servers and realms hold other players' logs and rankings.
+func (q *sqlQuerier) GetAccountDeletionBlockers(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	row := q.db.QueryRow(ctx, getAccountDeletionBlockers, userID)
 	var blockers []string
 	err := row.Scan(&blockers)
 	return blockers, err
+}
+
+const getAccountPurge = `-- name: GetAccountPurge :one
+SELECT id, user_id, status, step, logs_total, logs_deleted, error, created_at, updated_at, finished_at FROM account_purges WHERE id = $1
+`
+
+func (q *sqlQuerier) GetAccountPurge(ctx context.Context, id uuid.UUID) (AccountPurge, error) {
+	row := q.db.QueryRow(ctx, getAccountPurge, id)
+	var i AccountPurge
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Status,
+		&i.Step,
+		&i.LogsTotal,
+		&i.LogsDeleted,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
+const getActiveAccountPurgeByUser = `-- name: GetActiveAccountPurgeByUser :one
+SELECT id, user_id, status, step, logs_total, logs_deleted, error, created_at, updated_at, finished_at FROM account_purges
+WHERE user_id = $1 AND status IN ('pending', 'running')
+`
+
+func (q *sqlQuerier) GetActiveAccountPurgeByUser(ctx context.Context, userID uuid.UUID) (AccountPurge, error) {
+	row := q.db.QueryRow(ctx, getActiveAccountPurgeByUser, userID)
+	var i AccountPurge
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Status,
+		&i.Step,
+		&i.LogsTotal,
+		&i.LogsDeleted,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
+const insertAccountPurge = `-- name: InsertAccountPurge :one
+INSERT INTO account_purges (id, user_id) VALUES ($1, $2) RETURNING id, user_id, status, step, logs_total, logs_deleted, error, created_at, updated_at, finished_at
+`
+
+type InsertAccountPurgeParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) InsertAccountPurge(ctx context.Context, arg InsertAccountPurgeParams) (AccountPurge, error) {
+	row := q.db.QueryRow(ctx, insertAccountPurge, arg.ID, arg.UserID)
+	var i AccountPurge
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Status,
+		&i.Step,
+		&i.LogsTotal,
+		&i.LogsDeleted,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
+const listGuildIDsWithDiscordInstalledByUser = `-- name: ListGuildIDsWithDiscordInstalledByUser :many
+SELECT guild_id FROM guild_discord_installations WHERE installed_by = $1
+`
+
+func (q *sqlQuerier) ListGuildIDsWithDiscordInstalledByUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listGuildIDsWithDiscordInstalledByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var guild_id uuid.UUID
+		if err := rows.Scan(&guild_id); err != nil {
+			return nil, err
+		}
+		items = append(items, guild_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnedLogGroupIDs = `-- name: ListOwnedLogGroupIDs :many
+SELECT id FROM wow_log_groups WHERE owner = $1
+`
+
+func (q *sqlQuerier) ListOwnedLogGroupIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOwnedLogGroupIDs, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnedLuaProjectIDs = `-- name: ListOwnedLuaProjectIDs :many
+SELECT id FROM lua_projects WHERE owner_id = $1
+`
+
+func (q *sqlQuerier) ListOwnedLuaProjectIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOwnedLuaProjectIDs, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUploadKeyIDsCreatedByUser = `-- name: ListUploadKeyIDsCreatedByUser :many
+SELECT id FROM wow_server_upload_keys WHERE created_by = $1
+`
+
+func (q *sqlQuerier) ListUploadKeyIDsCreatedByUser(ctx context.Context, userID uuid.NullUUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUploadKeyIDsCreatedByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockUsersForUpdate = `-- name: LockUsersForUpdate :many
@@ -117,6 +355,44 @@ func (q *sqlQuerier) LockUsersForUpdate(ctx context.Context, ids []uuid.UUID) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const reassignAppendedLogFilesToGroupOwner = `-- name: ReassignAppendedLogFilesToGroupOwner :exec
+UPDATE log_file
+SET owner = wow_log_groups.owner
+FROM wow_log_groups
+WHERE log_file.wow_log_id = wow_log_groups.id
+  AND log_file.owner = $1::uuid
+  AND wow_log_groups.owner <> $1::uuid
+`
+
+// Files the user appended to someone else's log group belong to that raid.
+func (q *sqlQuerier) ReassignAppendedLogFilesToGroupOwner(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, reassignAppendedLogFilesToGroupOwner, userID)
+	return err
+}
+
+const updateAccountPurgeProgress = `-- name: UpdateAccountPurgeProgress :exec
+UPDATE account_purges
+SET status = 'running', step = $1, logs_total = $2, logs_deleted = $3, updated_at = now()
+WHERE id = $4
+`
+
+type UpdateAccountPurgeProgressParams struct {
+	Step        string    `db:"step" json:"step"`
+	LogsTotal   int32     `db:"logs_total" json:"logs_total"`
+	LogsDeleted int32     `db:"logs_deleted" json:"logs_deleted"`
+	ID          uuid.UUID `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) UpdateAccountPurgeProgress(ctx context.Context, arg UpdateAccountPurgeProgressParams) error {
+	_, err := q.db.Exec(ctx, updateAccountPurgeProgress,
+		arg.Step,
+		arg.LogsTotal,
+		arg.LogsDeleted,
+		arg.ID,
+	)
+	return err
 }
 
 const censusPlayerCounts = `-- name: CensusPlayerCounts :many

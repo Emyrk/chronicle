@@ -234,32 +234,50 @@ export function useSession(options?: Omit<UseQueryOptions<Session | null>, "quer
   });
 }
 
-export function useAccountDeletionStatus(enabled: boolean) {
+export function useAccountPurgeInventory(enabled: boolean) {
   return useQuery({
-    queryKey: ["account-deletion"],
+    queryKey: ["account-purge", "inventory"],
     enabled,
     retry: false,
     queryFn: async () => {
-      const response = await fetch("/api/v1/me/account-deletion");
-      if (!response.ok) throw new Error("Failed to check account deletion status");
-      return response.json() as Promise<import("./typesGenerated").AccountDeletionStatus>;
+      const response = await fetch("/api/v1/me/account-purge");
+      if (!response.ok) throw new Error("Failed to load account data");
+      return response.json() as Promise<import("./typesGenerated").AccountPurgeInventory>;
     },
   });
 }
 
-export function useDeleteMyAccount() {
+export function useStartAccountPurge() {
   return useMutation({
-    mutationFn: async (confirmation: string) => {
-      const response = await fetch("/api/v1/me/account", {
-        method: "DELETE",
+    mutationFn: async (request: import("./typesGenerated").StartAccountPurgeRequest) => {
+      const response = await fetch("/api/v1/me/account-purge", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmation }),
+        body: JSON.stringify(request),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
-        const blockers = Array.isArray(body?.blockers) ? body.blockers.join(", ") : "";
-        throw new Error(blockers || body?.message || "Failed to delete account");
+        throw new Error(body?.message || "Failed to start the purge");
       }
+      return response.json() as Promise<import("./typesGenerated").AccountPurgeStatus>;
+    },
+  });
+}
+
+// Polls a purge until it finishes. The endpoint is public by purge ID because
+// the purge ends by deleting the account (and session) that started it.
+export function useAccountPurgeStatus(purgeID: string | undefined) {
+  return useQuery({
+    queryKey: ["account-purge", "status", purgeID],
+    enabled: !!purgeID,
+    queryFn: async () => {
+      const response = await fetch(`/api/v1/account-purges/${encodeURIComponent(purgeID!)}`);
+      if (!response.ok) throw new Error("Failed to check purge status");
+      return response.json() as Promise<import("./typesGenerated").AccountPurgeStatus>;
+    },
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "succeeded" || status === "failed" ? false : 2000;
     },
   });
 }

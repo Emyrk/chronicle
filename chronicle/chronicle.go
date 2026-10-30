@@ -452,6 +452,9 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 		if _, err := tx.LockUserStorageQuota(ctx, cl.Subject); err != nil {
 			return fmt.Errorf("lock upload owner storage quota: %w", err)
 		}
+		if err := RejectIfAccountPurging(ctx, tx, cl.Subject); err != nil {
+			return err
+		}
 		lockedUser, quotaErr := tx.GetUserByID(ctx, cl.Subject)
 		if quotaErr != nil {
 			return fmt.Errorf("fetch locked upload owner storage quota: %w", quotaErr)

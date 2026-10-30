@@ -18,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
@@ -409,6 +410,9 @@ func (a *API) CreateLuaProject(w http.ResponseWriter, r *http.Request) {
 		if _, err := tx.LockLuaProjectOwner(r.Context(), owner); err != nil {
 			return err
 		}
+		if err := chronicle.RejectIfAccountPurging(r.Context(), tx, owner); err != nil {
+			return err
+		}
 		owned, err := tx.CountLuaProjectsByOwner(r.Context(), owner)
 		if err != nil {
 			return err
@@ -424,6 +428,10 @@ func (a *API) CreateLuaProject(w http.ResponseWriter, r *http.Request) {
 		return tx.StarLuaProject(r.Context(), database.StarLuaProjectParams{ProjectID: p.ID, UserID: owner})
 	}, nil)
 	if err != nil {
+		if apiErr, ok := httpapi.IsAPIError(err); ok {
+			httpapi.Write(r.Context(), w, apiErr.Status, apiErr.Response)
+			return
+		}
 		var quota *luaProjectQuotaError
 		if errors.As(err, &quota) {
 			httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: fmt.Sprintf("You own %d of %d modules. This limit keeps each account's use of shared storage and processing resources bounded. Delete an module before creating another.", quota.owned, quota.limit)})
