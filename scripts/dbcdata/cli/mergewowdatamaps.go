@@ -25,12 +25,20 @@ type wowMapLayer struct {
 
 type wowMapLayerInstance struct {
 	MapID int32 `json:"mapID"`
-	// Name is required when meshes or renders create a floorless instance;
+	// Name is required when meshes or renders create an instance;
 	// the original's name wins for an existing instance.
 	Name    string                  `json:"name,omitempty"`
+	Floors  []wowMapLayerFloor      `json:"floors,omitempty"`
 	Styled  *wowMapRenderedInstance `json:"styled,omitempty"`
 	Mesh    *wowMapMeshInstance     `json:"mesh,omitempty"`
 	Renders *wowMapManualRender     `json:"renders,omitempty"`
+}
+
+type wowMapLayerFloor struct {
+	Floor       int32               `json:"floor"`
+	Preferred2D string              `json:"preferred2D,omitempty"`
+	Mesh        *wowMapMeshInstance `json:"mesh,omitempty"`
+	Renders     *wowMapManualRender `json:"renders,omitempty"`
 }
 
 // MergeWowdataMapsCmd joins independently generated instance artwork with
@@ -89,6 +97,10 @@ func mergeWowdataMaps(originalPath, styledPath, meshesPath, rendersPath, outPath
 		// The original manifest owns metadata, not optional artwork. This also
 		// makes rerunning a merge independent of any stale original overlays.
 		instance.Styled, instance.Mesh, instance.Renders = nil, nil, nil
+		for floorIndex := range instance.Floors {
+			floor := &instance.Floors[floorIndex]
+			floor.Preferred2D, floor.Mesh, floor.Renders = "", nil, nil
+		}
 		instances[instance.MapID] = i
 	}
 	for _, layer := range []struct{ kind, file string }{{"styled", styledPath}, {"meshes", meshesPath}, {"renders", rendersPath}} {
@@ -176,32 +188,49 @@ func mergeWowMapLayer(file, kind string, manifest *wowMapManifest, instances map
 // wowMapMeshLiquidColor is the only colour syntax the frontend applies.
 var wowMapMeshLiquidColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
-// applyWowMapLayerEntry copies the one artwork a layer of `kind` may carry
-// for an instance onto it, after checking its path and metadata.
+// applyWowMapLayerEntry copies the artwork a layer of `kind` may carry
+// for an instance or its floors, after checking paths and metadata.
 func applyWowMapLayerEntry(kind string, entry wowMapLayerInstance, instance *wowMapInstance) error {
+	if len(entry.Floors) > 0 {
+		if entry.Styled != nil || entry.Mesh != nil || entry.Renders != nil || kind == "styled" {
+			return fmt.Errorf("%s map layer mapID %d cannot mix floors with instance artwork", kind, entry.MapID)
+		}
+		seen := make(map[int32]struct{}, len(entry.Floors))
+		for _, layerFloor := range entry.Floors {
+			if _, exists := seen[layerFloor.Floor]; exists {
+				return fmt.Errorf("duplicate %s map layer floor %d for mapID %d", kind, layerFloor.Floor, entry.MapID)
+			}
+			seen[layerFloor.Floor] = struct{}{}
+			floor := wowMapInstanceFloorByNumber(instance, layerFloor.Floor)
+			if floor == nil {
+				instance.Floors = append(instance.Floors, wowMapInstanceFloor{Floor: layerFloor.Floor, Tiles: []wowMapTile{}})
+				floor = &instance.Floors[len(instance.Floors)-1]
+			}
+			if err := applyWowMapFloorLayerEntry(kind, entry.MapID, layerFloor, floor); err != nil {
+				return err
+			}
+		}
+		sort.Slice(instance.Floors, func(i, j int) bool { return instance.Floors[i].Floor < instance.Floors[j].Floor })
+		return nil
+	}
 	if kind == "meshes" {
-		mesh := entry.Mesh
-		if mesh == nil || entry.Styled != nil || entry.Renders != nil {
+		if entry.Mesh == nil || entry.Styled != nil || entry.Renders != nil {
 			return fmt.Errorf("meshes map layer mapID %d must contain mesh only", entry.MapID)
 		}
-		if !validWowMapLayerPath(mesh.Path, "3d/") || !strings.HasSuffix(mesh.Path, ".glb") ||
-			!(mesh.Bounds.MinX < mesh.Bounds.MaxX) || !(mesh.Bounds.MinY < mesh.Bounds.MaxY) || !(mesh.ZMin < mesh.ZMax) ||
-			mesh.Frame != wowMapMeshFrame {
-			return fmt.Errorf("invalid meshes map layer mesh for mapID %d", entry.MapID)
+		if err := validateWowMapLayerMesh(entry.MapID, 0, entry.Mesh); err != nil {
+			return err
 		}
-		if liquid := mesh.Liquid; liquid != nil && (!wowMapMeshLiquidColor.MatchString(liquid.Color) || !(liquid.Opacity > 0) || liquid.Opacity > 1) {
-			return fmt.Errorf("invalid meshes map layer liquid for mapID %d", entry.MapID)
-		}
-		instance.Mesh = mesh
+		instance.Mesh = entry.Mesh
 		return nil
 	}
 	if kind == "renders" {
-		artwork := entry.Renders
-		if artwork == nil || entry.Styled != nil || entry.Mesh != nil ||
-			!validWowMapLayerPath(artwork.Path, "renders/") || !validWowMapRenderExtension(artwork.Path) || artwork.Width <= 0 || artwork.Height <= 0 {
+		if entry.Renders == nil || entry.Styled != nil || entry.Mesh != nil {
 			return fmt.Errorf("invalid renders map layer artwork for mapID %d", entry.MapID)
 		}
-		instance.Renders = artwork
+		if err := validateWowMapLayerRender(entry.MapID, 0, entry.Renders); err != nil {
+			return err
+		}
+		instance.Renders = entry.Renders
 		return nil
 	}
 	if entry.Styled == nil || entry.Mesh != nil || entry.Renders != nil {
@@ -212,6 +241,63 @@ func applyWowMapLayerEntry(kind string, entry wowMapLayerInstance, instance *wow
 		return fmt.Errorf("invalid styled map layer artwork for mapID %d", entry.MapID)
 	}
 	instance.Styled = artwork
+	return nil
+}
+
+func wowMapInstanceFloorByNumber(instance *wowMapInstance, number int32) *wowMapInstanceFloor {
+	for i := range instance.Floors {
+		if instance.Floors[i].Floor == number {
+			return &instance.Floors[i]
+		}
+	}
+	return nil
+}
+
+func applyWowMapFloorLayerEntry(kind string, mapID int32, layer wowMapLayerFloor, floor *wowMapInstanceFloor) error {
+	if kind == "meshes" {
+		if layer.Mesh == nil || layer.Renders != nil || layer.Preferred2D != "" {
+			return fmt.Errorf("meshes map layer mapID %d floor %d must contain mesh only", mapID, layer.Floor)
+		}
+		if err := validateWowMapLayerMesh(mapID, layer.Floor, layer.Mesh); err != nil {
+			return err
+		}
+		floor.Mesh = layer.Mesh
+		return nil
+	}
+	if layer.Renders == nil || layer.Mesh != nil || (layer.Preferred2D != "" && layer.Preferred2D != "renders" && layer.Preferred2D != "art") {
+		return fmt.Errorf("invalid renders map layer artwork for mapID %d floor %d", mapID, layer.Floor)
+	}
+	if err := validateWowMapLayerRender(mapID, layer.Floor, layer.Renders); err != nil {
+		return err
+	}
+	floor.Renders = layer.Renders
+	floor.Preferred2D = layer.Preferred2D
+	return nil
+}
+
+func validateWowMapLayerMesh(mapID, floor int32, mesh *wowMapMeshInstance) error {
+	location := fmt.Sprintf("mapID %d", mapID)
+	if floor != 0 {
+		location += fmt.Sprintf(" floor %d", floor)
+	}
+	if !validWowMapLayerPath(mesh.Path, "3d/") || !strings.HasSuffix(mesh.Path, ".glb") ||
+		!(mesh.Bounds.MinX < mesh.Bounds.MaxX) || !(mesh.Bounds.MinY < mesh.Bounds.MaxY) || !(mesh.ZMin < mesh.ZMax) ||
+		mesh.Frame != wowMapMeshFrame {
+		return fmt.Errorf("invalid meshes map layer mesh for %s", location)
+	}
+	if liquid := mesh.Liquid; liquid != nil && (!wowMapMeshLiquidColor.MatchString(liquid.Color) || !(liquid.Opacity > 0) || liquid.Opacity > 1) {
+		return fmt.Errorf("invalid meshes map layer liquid for %s", location)
+	}
+	return nil
+}
+
+func validateWowMapLayerRender(mapID, floor int32, artwork *wowMapManualRender) error {
+	if !validWowMapLayerPath(artwork.Path, "renders/") || !validWowMapRenderExtension(artwork.Path) || artwork.Width <= 0 || artwork.Height <= 0 {
+		if floor != 0 {
+			return fmt.Errorf("invalid renders map layer artwork for mapID %d floor %d", mapID, floor)
+		}
+		return fmt.Errorf("invalid renders map layer artwork for mapID %d", mapID)
+	}
 	return nil
 }
 

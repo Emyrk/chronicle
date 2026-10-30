@@ -137,13 +137,16 @@ type wowMapFloorBounds struct {
 }
 
 type wowMapInstanceFloor struct {
-	Floor      int32              `json:"floor"`
-	Width      int32              `json:"width"`
-	Height     int32              `json:"height"`
-	TileWidth  int32              `json:"tileWidth"`
-	TileHeight int32              `json:"tileHeight"`
-	Bounds     *wowMapFloorBounds `json:"bounds,omitempty"`
-	Tiles      []wowMapTile       `json:"tiles"`
+	Floor       int32               `json:"floor"`
+	Width       int32               `json:"width"`
+	Height      int32               `json:"height"`
+	TileWidth   int32               `json:"tileWidth"`
+	TileHeight  int32               `json:"tileHeight"`
+	Bounds      *wowMapFloorBounds  `json:"bounds,omitempty"`
+	Tiles       []wowMapTile        `json:"tiles"`
+	Preferred2D string              `json:"preferred2D,omitempty"`
+	Renders     *wowMapManualRender `json:"renders,omitempty"`
+	Mesh        *wowMapMeshInstance `json:"mesh,omitempty"`
 }
 
 type wowMapArtLayer struct {

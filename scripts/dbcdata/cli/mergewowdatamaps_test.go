@@ -80,6 +80,95 @@ func TestMergeWowdataMaps(t *testing.T) {
 	}
 }
 
+func TestMergeWowdataMapsFloorLayers(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	target := wowMapTarget{Product: "azerothcore", Build: "3.3.5", Region: "us", Locale: "enUS"}
+	product := wowMapTarget{Product: target.Product}
+	original := wowMapManifest{
+		Format: wowMapManifestFormat,
+		Target: target,
+		Instances: []wowMapInstance{{
+			MapID: 603,
+			Name:  "Ulduar",
+			Floors: []wowMapInstanceFloor{
+				{Floor: 1, Width: 1002, Height: 668, Tiles: []wowMapTile{{Path: "original/1.webp"}}},
+				{Floor: 2, Width: 1002, Height: 668, Tiles: []wowMapTile{{Path: "original/2.webp"}}},
+			},
+		}},
+	}
+	floorOneMesh := &wowMapMeshInstance{Path: "3d/603-floor-1.glb", Bounds: wowMapFloorBounds{MinX: -10, MaxX: 20, MinY: -30, MaxY: 40}, ZMin: -5, ZMax: 6, Frame: wowMapMeshFrame}
+	floorTwoMesh := &wowMapMeshInstance{Path: "3d/603-floor-2.glb", Bounds: wowMapFloorBounds{MinX: 1, MaxX: 2, MinY: 3, MaxY: 4}, ZMin: 5, ZMax: 6, Frame: wowMapMeshFrame}
+	floorOneRender := &wowMapManualRender{Path: "renders/603-floor-1.png", Width: 2400, Height: 3200, Bounds: &floorOneMesh.Bounds}
+	floorTwoRender := &wowMapManualRender{Path: "renders/603-floor-2.webp", Width: 2400, Height: 1800, Bounds: &floorTwoMesh.Bounds}
+
+	originalPath := filepath.Join(dir, "manifest.original.json")
+	meshesPath := filepath.Join(dir, "manifest.meshes.json")
+	rendersPath := filepath.Join(dir, "manifest.renders.json")
+	outPath := filepath.Join(dir, "manifest.json")
+	require.NoError(t, writeWowMapManifest(originalPath, original))
+	writeMapLayerTest(t, meshesPath, wowMapLayer{Format: wowMapManifestFormat, Target: product, Instances: []wowMapLayerInstance{{
+		MapID: 603,
+		Name:  "Ulduar",
+		Floors: []wowMapLayerFloor{
+			{Floor: 1, Mesh: floorOneMesh},
+			{Floor: 2, Mesh: floorTwoMesh},
+		},
+	}}})
+	writeMapLayerTest(t, rendersPath, wowMapLayer{Format: wowMapManifestFormat, Target: product, Instances: []wowMapLayerInstance{{
+		MapID: 603,
+		Name:  "Ulduar",
+		Floors: []wowMapLayerFloor{
+			{Floor: 1, Preferred2D: "renders", Renders: floorOneRender},
+			{Floor: 2, Preferred2D: "art", Renders: floorTwoRender},
+		},
+	}}})
+
+	require.NoError(t, mergeWowdataMaps(originalPath, "", meshesPath, rendersPath, outPath))
+	data, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	var merged wowMapManifest
+	require.NoError(t, json.Unmarshal(data, &merged))
+	require.Len(t, merged.Instances, 1)
+	require.Len(t, merged.Instances[0].Floors, 2)
+	require.Equal(t, original.Instances[0].Floors[0].Tiles, merged.Instances[0].Floors[0].Tiles)
+	require.Equal(t, floorOneMesh, merged.Instances[0].Floors[0].Mesh)
+	require.Equal(t, floorOneRender, merged.Instances[0].Floors[0].Renders)
+	require.Equal(t, "renders", merged.Instances[0].Floors[0].Preferred2D)
+	require.Equal(t, floorTwoMesh, merged.Instances[0].Floors[1].Mesh)
+	require.Equal(t, floorTwoRender, merged.Instances[0].Floors[1].Renders)
+	require.Equal(t, "art", merged.Instances[0].Floors[1].Preferred2D)
+
+	// Reusing a merged manifest as the original clears and reapplies floor layers deterministically.
+	againPath := filepath.Join(dir, "again.json")
+	require.NoError(t, mergeWowdataMaps(outPath, "", meshesPath, rendersPath, againPath))
+	again, err := os.ReadFile(againPath)
+	require.NoError(t, err)
+	require.JSONEq(t, string(data), string(again))
+}
+
+func TestApplyWowMapLayerEntryRejectsInvalidFloors(t *testing.T) {
+	t.Parallel()
+	mesh := &wowMapMeshInstance{Path: "3d/603-floor-1.glb", Bounds: wowMapFloorBounds{MinX: 1, MaxX: 2, MinY: 3, MaxY: 4}, ZMin: 5, ZMax: 6, Frame: wowMapMeshFrame}
+	for _, tc := range []struct {
+		name  string
+		kind  string
+		entry wowMapLayerInstance
+		want  string
+	}{
+		{name: "duplicate floors", kind: "meshes", entry: wowMapLayerInstance{MapID: 603, Floors: []wowMapLayerFloor{{Floor: 1, Mesh: mesh}, {Floor: 1, Mesh: mesh}}}, want: "duplicate meshes map layer floor"},
+		{name: "mixed instance and floors", kind: "meshes", entry: wowMapLayerInstance{MapID: 603, Mesh: mesh, Floors: []wowMapLayerFloor{{Floor: 1, Mesh: mesh}}}, want: "cannot mix floors"},
+		{name: "mesh floor with render", kind: "meshes", entry: wowMapLayerInstance{MapID: 603, Floors: []wowMapLayerFloor{{Floor: 1, Mesh: mesh, Renders: &wowMapManualRender{Path: "renders/603.png", Width: 2, Height: 2}}}}, want: "must contain mesh only"},
+		{name: "invalid preference", kind: "renders", entry: wowMapLayerInstance{MapID: 603, Floors: []wowMapLayerFloor{{Floor: 1, Preferred2D: "styled", Renders: &wowMapManualRender{Path: "renders/603.png", Width: 2, Height: 2}}}}, want: "invalid renders"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := applyWowMapLayerEntry(tc.kind, tc.entry, &wowMapInstance{MapID: 603, Floors: []wowMapInstanceFloor{{Floor: 1}}})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 func TestApplyWowMapLayerEntryRenderExtensions(t *testing.T) {
 	t.Parallel()
 	for _, assetPath := range []string{"renders/43.png", "renders/43.webp"} {
@@ -306,7 +395,6 @@ func TestMergeWowdataMapsMeshOnlyInstance(t *testing.T) {
 		{name: "liquid opacity zero", layer: liquidLayerTest(productOnly, wowMapMeshLiquid{Color: "#d66020"}), want: "invalid meshes map layer liquid"},
 		{name: "liquid opacity above one", layer: liquidLayerTest(productOnly, wowMapMeshLiquid{Color: "#d66020", Opacity: 1.5}), want: "invalid meshes map layer liquid"},
 		{name: "liquid extraneous field", raw: `{"format":"chronicle-wow-map-art-v2","target":{"product":"wow_classic_beta"},"instances":[{"mapID":389,"name":"Ragefire Chasm","mesh":{"path":"3d/ragefire-chasm-open-top.glb","bounds":{"minX":-416,"maxX":102,"minY":-108,"maxY":275},"zMin":-66,"zMax":59,"frame":"wow-yup-mirrored-x","liquid":{"color":"#d66020","opacity":0.85,"glow":true}}}]}`, want: "decode meshes"},
-		{name: "floors on a layer entry", raw: `{"format":"chronicle-wow-map-art-v2","target":{"product":"wow_classic_beta"},"instances":[{"mapID":389,"name":"Ragefire Chasm","floors":[],"mesh":{"path":"3d/ragefire-chasm-open-top.glb","bounds":{"minX":-416,"maxX":102,"minY":-108,"maxY":275},"zMin":-66,"zMax":59,"frame":"wow-yup-mirrored-x"}}]}`, want: "decode meshes"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
