@@ -1,7 +1,7 @@
 import { Fragment, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { BossSpread, SpreadLane, type LaneStats } from "./BossSpread";
 import type { GuildSpeedrunRun } from "@/api/typesGenerated";
@@ -156,7 +156,7 @@ function ClearBars({ guilds, sort }: { guilds: readonly BossSplitGuild[]; sort: 
   return (
     <div className="max-h-96 space-y-px overflow-y-auto pr-1 styled-scrollbar">
       {rows.map(({ guild, run, parts }) => (
-        <HintTooltip key={`${guild.id}-${run.slug}`}>
+        <Tooltip key={`${guild.id}-${run.slug}`}>
           <TooltipTrigger asChild>
             <Link
               to={`/instances/${run.slug}`}
@@ -173,7 +173,6 @@ function ClearBars({ guilds, sort }: { guilds: readonly BossSplitGuild[]; sort: 
                 {(!run.complete || !run.qualified) && (
                   <span
                     className="shrink-0 font-mono text-sm font-bold leading-none text-amber-300"
-                    title={!run.complete ? "Incomplete run" : "Unqualified run"}
                     aria-label={!run.complete ? "Incomplete run" : "Unqualified run"}
                   >
                     *
@@ -181,13 +180,13 @@ function ClearBars({ guilds, sort }: { guilds: readonly BossSplitGuild[]; sort: 
                 )}
               </span>
               <span className="text-right font-mono font-medium tabular-nums">{formatClearTime(run.duration_ms)}</span>
-              <PartsBar parts={parts} longest={longest} color={guild.color} thin />
+              <PartsBar parts={parts} longest={longest} color={guild.color} thin nativeTitles={false} />
             </Link>
           </TooltipTrigger>
           <TooltipContent side="top" className="min-w-64 text-left">
             <ClearTooltip guild={guild} run={run} parts={parts} typical={typicalByGuild.get(guild.id) ?? null} />
           </TooltipContent>
-        </HintTooltip>
+        </Tooltip>
       ))}
     </div>
   );
@@ -423,12 +422,15 @@ function PartsBar({
   color,
   showLabels = false,
   thin = false,
+  nativeTitles = true,
 }: {
   parts: ClearTimeParts;
   longest: number;
   color: string;
   showLabels?: boolean;
   thin?: boolean;
+  /** Native browser titles compete with the row's rich tooltip. */
+  nativeTitles?: boolean;
 }) {
   const total = Math.max(partsTotal(parts), 1);
   const segments = [
@@ -449,7 +451,7 @@ function PartsBar({
             key={segment.key}
             className={cn("flex min-w-0 items-center justify-between gap-1 px-2", segment.key === "idle" && "bg-white/10", segment.text)}
             style={{ ...segment.style, width: `${(segment.value / total) * 100}%` }}
-            title={`${segment.label} ${formatClearTime(segment.value)} (${share}%) · ${PART_HELP[segment.key]}`}
+            title={nativeTitles ? `${segment.label} ${formatClearTime(segment.value)} (${share}%) · ${PART_HELP[segment.key]}` : undefined}
           >
             {showLabels && share >= 8 && (
               <>
