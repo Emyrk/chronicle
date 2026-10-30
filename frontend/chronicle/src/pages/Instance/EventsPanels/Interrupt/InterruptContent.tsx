@@ -4,12 +4,13 @@
  * Shows who interrupted the most spells, with a focus view for per-spell breakdown.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { ChevronLeft } from "lucide-react";
 import { useBreakoutHover } from "@/components/ui/AbilityBreakout/BreakoutHoverContext";
-import { RowContextMenu, getArmoryUrl } from "@/components/ui/PlayerMetricChart/RowContextMenu";
+import { focusPlayerActions, instanceRowEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import { EntityActionScope } from "@/components/EntityMenu/EntityMenu";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
 import type { InterruptResult, InterruptEntityData } from "./interrupt.processor";
@@ -170,9 +171,6 @@ function getEntityInterruptData(
 // ============================================================================
 
 export function InterruptContent(props: PanelRenderProps<InterruptResult>) {
-  const [contextMenu, setContextMenu] = useState<{
-    x: number; y: number; playerId: string; playerName: string;
-  } | null>(null);
 
   const focusedPlayerId = useMemo(() => parseFocusFromOption(props.panelOption), [props.panelOption]);
   const setFocusedPlayerId = useCallback((id: string | null) => {
@@ -209,11 +207,6 @@ export function InterruptContent(props: PanelRenderProps<InterruptResult>) {
     loading: hasData ? false : props.loading,
     processing: hasData ? false : props.processing,
   };
-
-  const handleRowCtrlClick = useCallback((playerId: string, event: React.MouseEvent) => {
-    const playerName = chartData.find(d => d.playerID === playerId)?.playerName ?? playerId;
-    setContextMenu({ x: event.clientX, y: event.clientY, playerId, playerName });
-  }, [chartData]);
 
   // ESC key to unfocus
   useEffect(() => {
@@ -336,25 +329,18 @@ export function InterruptContent(props: PanelRenderProps<InterruptResult>) {
           disableInteractions={props.context.renderMode === "layout_lab"}
         />
       ) : (
-        <PlayerMetricChart
-          data={chartData}
-          type={"healing"}
-          panelTitle="Interrupts"
-          duration_millis={props.durationMs}
-          perSecond={props.perSecond}
-          breakout={breakout}
-          onRowCtrlClick={handleRowCtrlClick}
-          disableInteractions={props.context.renderMode === "layout_lab"}
-        />
-      )}
-      {contextMenu && (
-        <RowContextMenu
-          position={{ x: contextMenu.x, y: contextMenu.y }}
-          playerName={contextMenu.playerName}
-          onFocus={() => { setFocusedPlayerId(contextMenu.playerId); setContextMenu(null); }}
-          onClose={() => setContextMenu(null)}
-          armoryUrl={getArmoryUrl(props.context.instance, contextMenu.playerId)}
-        />
+        <EntityActionScope actions={focusPlayerActions(setFocusedPlayerId)}>
+          <PlayerMetricChart
+            data={chartData}
+            type={"healing"}
+            panelTitle="Interrupts"
+            duration_millis={props.durationMs}
+            perSecond={props.perSecond}
+            breakout={breakout}
+            rowEntity={instanceRowEntity(props.context.instance)}
+            disableInteractions={props.context.renderMode === "layout_lab"}
+          />
+        </EntityActionScope>
       )}
       </>}
     </GenericPanel>

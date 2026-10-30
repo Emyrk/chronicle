@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { Instance } from "@/pages/Instance/InstancePage"
-import { getArmoryUrl } from "./RowContextMenu"
+import { getArmoryUrl } from "./instanceEntity"
 
 describe("getArmoryUrl", () => {
   it("uses the player GUID instead of the character name", () => {

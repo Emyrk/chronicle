@@ -220,12 +220,12 @@ const focusPlayer: L = {
   title: "Focus a single player",
   group: "advanced",
   description: () =>
-    "Ctrl+click a player to swap the panel to just their abilities.",
+    "Alt+click a player to swap the panel to just their abilities.",
   deriveState: () => "available",
   instruction:
-    "Ctrl+click a player row (Cmd+click on Mac) and choose 'Focus' — the whole panel swaps to that player's per-ability breakdown. Click Back or press Esc to return to the roster.",
+    "Alt+click a player row (Option+click on Mac) and choose 'Focus' — the whole panel swaps to that player's per-ability breakdown. Click Back or press Esc to return to the roster.",
   bullets: [
-    "Ctrl+click a player row (Cmd+click on Mac)",
+    "Alt+click a player row (Option+click on Mac)",
     "'Focus' swaps the panel to that player's abilities",
     "Back or Esc returns to the roster",
   ],

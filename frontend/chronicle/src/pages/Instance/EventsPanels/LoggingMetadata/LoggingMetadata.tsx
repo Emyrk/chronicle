@@ -10,7 +10,7 @@ import { Link } from "react-router-dom";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { loggingMetadataProcessor, type LoggingMetadataResult } from "./loggingMetadata.processor";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
-import { getArmoryUrl } from "@/components/ui/PlayerMetricChart/RowContextMenu";
+import { getArmoryUrl } from "@/components/ui/PlayerMetricChart/instanceEntity";
 
 /** Human-readable labels for version keys */
 const VERSION_LABELS: Record<string, string> = {
