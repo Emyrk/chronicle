@@ -54,13 +54,14 @@ export function PanelCard({
         <Card
           className={cn(
             "group/panel gap-2 mb-0 flex flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(0deg)] has-[[data-window-fullscreen]]:[transform:none]",
-            contentHeight ? "[grid-area:1/1]" : "absolute inset-0 h-full",
+            contentHeight ? "relative [grid-area:1/1]" : "absolute inset-0 h-full",
             bleed ? "p-0" : "p-2 sm:p-4",
             underConstruction && "border-yellow-500/50",
             flipped && "pointer-events-none",
             seamless && "rounded-none shadow-none",
           )}
           style={borderColor ? { borderColor } : undefined}
+          data-panel-explorer-host
         >
           {front}
         </Card>

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { fetchTrackedLuaPanels, luaPanelRef, parseLuaPanelRef } from "./luaPanelRegistry"
+import { fetchTrackedLuaPanels, luaPanelRef, parseLuaPanelRef, publicLuaPanelOptions, trackedLuaPanelOptions } from "./luaPanelRegistry"
+import type { LuaProject } from "../../../LuaProjects/api"
 
 const id = (suffix: string) => `00000000-0000-4000-8000-00000000000${suffix}`
 const release = (tag: string, available = true) => ({ tag, available, ...(available && { sha256: `${tag}-sha`, icon: "swords" }), published_at: "2026-10-01T00:00:00Z" })
@@ -26,6 +27,21 @@ describe("Lua panel discovery", () => {
     expect(panels[1].release).toBeUndefined()
     expect(panels[1].main).toEqual({ sha256: "main-sha", icon: "zap" })
     expect(fetch).toHaveBeenCalledWith("/api/v1/me/lua-projects/starred", { credentials: "include" })
+  })
+
+  it("names module choices author/name without a version", () => {
+    const entry = { id: id("1"), kind: "panel" as const, name: "Pumper", author: "steven", description: "Shows pumping.", stars: 3,
+      release: { tag: "v1", sha256: "v1-sha" }, main: { sha256: "main-sha" } }
+    expect(trackedLuaPanelOptions([entry]).map(option => option.label)).toEqual(["steven/Pumper", "steven/Pumper (main)"])
+    expect(trackedLuaPanelOptions([{ ...entry, author: undefined, main: undefined }]).map(option => option.label)).toEqual(["Pumper"])
+
+    const projects = [
+      { id: id("2"), owner_id: "o", kind: "panel", name: "Released", author: "someone", description: "", slug: "r", revision: 1, stars: 9, starred: false,
+        releases: [release("v2")], created_at: "", updated_at: "" },
+      { id: id("3"), owner_id: "o", kind: "guide", name: "Guide", slug: "g", description: "", revision: 1, stars: 0, starred: false,
+        releases: [release("v1")], created_at: "", updated_at: "" },
+    ] as LuaProject[]
+    expect(publicLuaPanelOptions(projects)).toEqual([{ ref: luaPanelRef(id("2"), "release"), icon: "swords", label: "someone/Released", description: "", stars: 9 }])
   })
 
   it("reads saved stable and unstable references as release and main", () => {
