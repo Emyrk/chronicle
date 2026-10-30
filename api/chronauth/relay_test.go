@@ -254,6 +254,16 @@ func TestParseRelayTarget(t *testing.T) {
 			wantSlug:   "epoch",
 		},
 		{
+			name:      "HTTP known tenant rejected",
+			from:      "http://epoch.chronicleclassic.com/raids",
+			wantRelay: false,
+		},
+		{
+			name:      "other scheme known tenant rejected",
+			from:      "ftp://epoch.chronicleclassic.com/raids",
+			wantRelay: false,
+		},
+		{
 			name:      "unknown host",
 			from:      "https://evil.example.com/steal",
 			wantRelay: false,
@@ -274,6 +284,40 @@ func TestParseRelayTarget(t *testing.T) {
 				assert.Equal(t, tt.wantOrigin, origin)
 				assert.Equal(t, tt.wantPath, path)
 				assert.Equal(t, tt.wantSlug, tenant.Slug)
+			}
+		})
+	}
+}
+
+func TestParseRelayTarget_LocalHTTP(t *testing.T) {
+	t.Parallel()
+
+	accessURL, _ := url.Parse("http://localhost:4000")
+	checkTenant := func(host string) *TenantInfo {
+		if host == "epoch.localhost:4000" || host == "epoch.chronicleclassic.com" {
+			return &TenantInfo{Slug: "epoch", Name: "Epoch"}
+		}
+		return nil
+	}
+	for _, tt := range []struct {
+		name      string
+		devMode   bool
+		from      string
+		wantRelay bool
+	}{
+		{"local dev tenant", true, "http://epoch.localhost:4000/raids", true},
+		{"local tenant without dev mode", false, "http://epoch.localhost:4000/raids", false},
+		{"remote HTTP tenant in dev mode", true, "http://epoch.chronicleclassic.com/raids", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			svc := &Service{accessURL: accessURL, devMode: tt.devMode, tenantChecker: checkTenant}
+			origin, path, tenant, isRelay := svc.parseRelayTarget(tt.from)
+			assert.Equal(t, tt.wantRelay, isRelay)
+			if tt.wantRelay {
+				assert.Equal(t, "http://epoch.localhost:4000", origin)
+				assert.Equal(t, "/raids", path)
+				assert.Equal(t, "epoch", tenant.Slug)
 			}
 		})
 	}

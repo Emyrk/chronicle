@@ -951,6 +951,15 @@ func (s *Service) parseRelayTarget(from string) (origin string, path string, ten
 		return "", "", nil, false
 	}
 
+	// Relay codes are credentials in the redirect URL. Only send them over
+	// HTTPS, except to a localhost tenant in local HTTP development.
+	localHTTP := parsed.Scheme == "http" && s.devMode && s.accessURL != nil &&
+		s.accessURL.Scheme == "http" && s.accessURL.Hostname() == "localhost" &&
+		(parsed.Hostname() == "localhost" || strings.HasSuffix(parsed.Hostname(), ".localhost"))
+	if parsed.Scheme != "https" && !localHTTP {
+		return "", "", nil, false
+	}
+
 	// Same host as the access URL — no relay needed.
 	if s.accessURL != nil && parsed.Host == s.accessURL.Host {
 		return "", "", nil, false
