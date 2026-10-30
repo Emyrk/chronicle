@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { BatteryFull, Check, Download as DownloadIcon, Eye, Info, PanelTop, Upload as UploadIcon, Wifi } from "lucide-react";
 import { useSiteConfig } from "@/api/queries";
+import { MagicLogo } from "@/components/MagicLogo";
 import { tenantAddons, type TenantAddons } from "./formatAddons";
 import { PLATFORMS, REPO, assetUrl, detectOS, type OS } from "./platforms";
 import s from "./Download.module.css";
@@ -145,7 +146,7 @@ export function DownloadView({ os, addons }: { os: OS; addons: TenantAddons }) {
 
       <section className={`${s.wrap} ${s.hero}`}>
         <div className={`${s.rise} ${s.d1} ${s.logo}`}>
-          <img src={SIDEKICK_LOGO} alt="Chronicle Sidekick" />
+          <MagicLogo src={SIDEKICK_LOGO} alt="Chronicle Sidekick" className={s.logoImg} />
         </div>
         <div className={s.heroText}>
           <p className={`${s.rise} ${s.d2} ${s.eyebrow}`}>Chronicle Sidekick</p>
