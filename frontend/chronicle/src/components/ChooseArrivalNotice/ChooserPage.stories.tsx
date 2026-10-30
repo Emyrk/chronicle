@@ -104,20 +104,8 @@ export const ForgotChoice: Story = {
   args: { saved: "chromie", url: `${PAGE_URL}&choose_forget=1` },
 };
 
-/** The primary domain in root-domain discovery mode. */
-export const RootDomainDiscovery: Story = {
-  args: { url: "https://chronicleclassic.com/" },
-  parameters: {
-    docs: {
-      description: {
-        story: "When root-domain discovery is enabled, the primary domain reuses the chooser experience instead of rendering a Chronicle site.",
-      },
-    },
-  },
-};
-
-/** The dedicated choose.* entry point uses the same experience. */
-export const ChooserSubdomainHome: Story = {
+/** The dedicated choose.* entry point for visitors who need to select a destination. */
+export const HomePage: Story = {
   args: { url: "https://choose.chronicleclassic.com/" },
 };
 
