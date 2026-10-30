@@ -10,6 +10,9 @@ import {
   useMyCharacterCosmetics,
   useMyFavorites,
   useSession,
+  useMyAccountMergeRequests,
+  useAccountDeletionStatus,
+  useDeleteMyAccount,
   useSetPrimaryCharacter,
   useUnlinkMyCharacter,
   useUpdateMyCharacterCosmetics,
@@ -80,6 +83,7 @@ import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import { InferenceSettings } from "@/features/chat/InferenceSettings";
 import { FavoritesList } from "@/components/Favorites";
 import { PhotoProofCard, PhotoProofHistory } from "./Settings/PhotoProof";
+import { DiscordIcon } from "@/components/icons/DiscordIcon";
 
 export { BillingSettings } from "./Settings/BillingSettings";
 export { CustomPanelSettings } from "./Settings/CustomPanelSettings";
@@ -256,16 +260,39 @@ const CHARACTER_COSMETICS_OPTIONS: readonly {
 
 export function ProfileSettings() {
   const { data: session } = useSession();
+  const { data: mergeRequests = [] } = useMyAccountMergeRequests();
+  const { data: deletionStatus } = useAccountDeletionStatus();
+  const deleteAccount = useDeleteMyAccount();
   const updateCharacterCosmetics = useUpdateCharacterCosmeticsPreference();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [resending, setResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   const characterCosmeticsMode = updateCharacterCosmetics.isPending
     ? updateCharacterCosmetics.variables
     : session?.preferences.character_cosmetics ?? "enabled";
-  const isPasswordAuth = session?.auth_provider === "password";
+  const isPasswordAuth = session?.auth_providers.includes("password") ?? false;
+  const isDiscordLinked = session?.auth_providers.includes("discord") ?? false;
   const email = session?.email;
   const emailVerified = session?.email_verified ?? false;
+
+  useEffect(() => {
+    const result = searchParams.get("discord_link");
+    if (!result) return;
+
+    if (result === "success") toast.success("Discord account connected.");
+    else if (result === "merge_requested") toast.success("Account merge requested.", {
+      description: "An administrator must review the duplicate account before Discord can be connected.",
+    });
+    else if (result === "already_linked") toast.info("A different Discord identity is already connected to this account.");
+    else if (result === "session_expired") toast.error("Your session changed while connecting Discord. Please try again.");
+    else toast.error("Discord account could not be connected.");
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("discord_link");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const handleResendVerification = async () => {
     if (!email) return;
@@ -340,10 +367,94 @@ export function ProfileSettings() {
 
       {session?.auth_provider && (
         <div className="rounded-lg border p-4 space-y-3">
-          <h3 className="text-sm font-medium">Sign-in Method</h3>
-          <span className="text-sm capitalize">{session.auth_provider === "password" ? "Email & Password" : session.auth_provider}</span>
+          <div>
+            <h3 className="text-sm font-medium">Sign-in Methods</h3>
+            <p className="text-xs text-muted-foreground">Connect another method so you can use either one to sign in to this account.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {isPasswordAuth && (
+              <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm">
+                <Lock className="size-4 text-muted-foreground" /> Email & Password
+              </span>
+            )}
+            {isDiscordLinked ? (
+              <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm">
+                <DiscordIcon className="size-4 text-[#5865F2]" /> Discord connected
+              </span>
+            ) : isPasswordAuth ? (
+              <Button variant="outline" size="sm" asChild>
+                <a href="/auth/discord/link?from=/account/settings">
+                  <DiscordIcon className="size-4" /> Connect Discord
+                </a>
+              </Button>
+            ) : null}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Discord identities already attached to another Chronicle account require support-assisted verification before those accounts can be merged or deleted.
+          </p>
         </div>
       )}
+
+      {mergeRequests.length > 0 && (
+        <div className="rounded-lg border p-4 space-y-3">
+          <div>
+            <h3 className="text-sm font-medium">Account Merge Requests</h3>
+            <p className="text-xs text-muted-foreground">Duplicate-account merges require administrator approval.</p>
+          </div>
+          <div className="space-y-2">
+            {mergeRequests.map((request) => (
+              <div key={request.id} className="rounded-md border px-3 py-2 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span>Discord account <span className="font-medium">{request.source_username}</span></span>
+                  <span className={cn(
+                    "rounded-full px-2 py-0.5 text-xs font-medium capitalize",
+                    request.status === "approved" && "bg-green-500/10 text-green-500",
+                    request.status === "rejected" && "bg-destructive/10 text-destructive",
+                    request.status === "pending" && "bg-yellow-500/10 text-yellow-500",
+                  )}>{request.status}</span>
+                </div>
+                {request.response && <p className="mt-1 text-xs text-muted-foreground">{request.response}</p>}
+                {request.status === "pending" && request.source_blockers.length > 0 && (
+                  <p className="mt-1 text-xs text-amber-500">Admin action required: {request.source_blockers.join(", ")}.</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-destructive/40 p-4 space-y-3">
+        <div>
+          <h3 className="text-sm font-medium text-destructive">Delete Account</h3>
+          <p className="text-xs text-muted-foreground">
+            Account deletion is permanent. You must have signed in within the last 15 minutes. Accounts with owned content, billing, permissions, or active merge requests require administrator assistance first.
+          </p>
+        </div>
+        {deletionStatus && !deletionStatus.can_delete && (
+          <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+            This account cannot be deleted automatically: {deletionStatus.blockers.join(", ")}.
+          </div>
+        )}
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            value={deleteConfirmation}
+            onChange={(event) => setDeleteConfirmation(event.target.value)}
+            placeholder="Type DELETE to confirm"
+            aria-label="Account deletion confirmation"
+            className="sm:max-w-xs"
+          />
+          <Button
+            variant="destructive"
+            disabled={!deletionStatus?.can_delete || deleteConfirmation !== "DELETE" || deleteAccount.isPending}
+            onClick={() => deleteAccount.mutate(deleteConfirmation, {
+              onSuccess: () => { window.location.href = "/login"; },
+              onError: (error) => toast.error("Account could not be deleted", { description: error.message }),
+            })}
+          >
+            {deleteAccount.isPending ? "Deleting..." : "Delete account permanently"}
+          </Button>
+        </div>
+      </div>
 
       <div className="rounded-lg border p-4 space-y-3">
         <div>

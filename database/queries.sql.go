@@ -14,6 +14,401 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const decideAccountMergeRequest = `-- name: DecideAccountMergeRequest :execrows
+UPDATE account_merge_requests
+SET status = $1, response = $2, reviewer_id = $3, reviewed_at = now()
+WHERE id = $4 AND status = 'pending'
+`
+
+type DecideAccountMergeRequestParams struct {
+	Status     string        `db:"status" json:"status"`
+	Response   string        `db:"response" json:"response"`
+	ReviewerID uuid.NullUUID `db:"reviewer_id" json:"reviewer_id"`
+	ID         uuid.UUID     `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) DecideAccountMergeRequest(ctx context.Context, arg DecideAccountMergeRequestParams) (int64, error) {
+	result, err := q.db.Exec(ctx, decideAccountMergeRequest,
+		arg.Status,
+		arg.Response,
+		arg.ReviewerID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteUserAccountRow = `-- name: DeleteUserAccountRow :execrows
+DELETE FROM users WHERE id = $1
+`
+
+func (q *sqlQuerier) DeleteUserAccountRow(ctx context.Context, userID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUserAccountRow, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteUserAuthLinksByUserID = `-- name: DeleteUserAuthLinksByUserID :exec
+DELETE FROM user_auth_links WHERE user_id = $1
+`
+
+func (q *sqlQuerier) DeleteUserAuthLinksByUserID(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserAuthLinksByUserID, userID)
+	return err
+}
+
+const deleteUserAuthSessionsByUserID = `-- name: DeleteUserAuthSessionsByUserID :exec
+DELETE FROM user_auth_session WHERE user_id = $1
+`
+
+func (q *sqlQuerier) DeleteUserAuthSessionsByUserID(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserAuthSessionsByUserID, userID)
+	return err
+}
+
+const getAccountRemovalBlockers = `-- name: GetAccountRemovalBlockers :one
+SELECT ARRAY_REMOVE(ARRAY[
+  CASE WHEN EXISTS (SELECT 1 FROM wow_log_groups WHERE wow_log_groups.owner = $1) THEN 'uploaded logs' END,
+  CASE WHEN EXISTS (SELECT 1 FROM log_file WHERE log_file.owner = $1) THEN 'uploaded files' END,
+  CASE WHEN EXISTS (SELECT 1 FROM billing_subscriptions t WHERE t.user_id = $1) THEN 'billing subscription' END,
+  CASE WHEN EXISTS (SELECT 1 FROM billing_entitlements t WHERE t.user_id = $1) THEN 'billing entitlements' END,
+  CASE WHEN EXISTS (SELECT 1 FROM data_grants t WHERE t.user_id = $1 AND t.source <> 'base') THEN 'storage grants' END,
+  CASE WHEN EXISTS (SELECT 1 FROM guild_join_requests t WHERE t.user_id = $1) THEN 'guild join requests' END,
+  CASE WHEN EXISTS (SELECT 1 FROM guild_discord_installations t WHERE t.installed_by = $1) THEN 'guild Discord installations' END,
+  CASE WHEN EXISTS (SELECT 1 FROM user_character_links t WHERE t.user_id = $1 OR t.linked_by = $1) THEN 'linked characters' END,
+  CASE WHEN EXISTS (SELECT 1 FROM gear_lists t WHERE t.user_id = $1) THEN 'gear lists' END,
+  CASE WHEN EXISTS (SELECT 1 FROM gear_progressions t WHERE t.user_id = $1) THEN 'gear progressions' END,
+  CASE WHEN EXISTS (SELECT 1 FROM gear_stat_weights t WHERE t.user_id = $1) THEN 'stat weights' END,
+  CASE WHEN EXISTS (SELECT 1 FROM raid_compositions t WHERE t.user_id = $1) THEN 'raid compositions' END,
+  CASE WHEN EXISTS (SELECT 1 FROM user_talent_builds t WHERE t.user_id = $1) THEN 'talent builds' END,
+  CASE WHEN EXISTS (SELECT 1 FROM user_panel_layouts t WHERE t.user_id = $1) THEN 'panel layouts' END,
+  CASE WHEN EXISTS (SELECT 1 FROM user_tracked_layouts t WHERE t.user_id = $1) THEN 'tracked layouts' END,
+  CASE WHEN EXISTS (SELECT 1 FROM user_action_bar_slots t WHERE t.user_id = $1) THEN 'action bar settings' END,
+  CASE WHEN EXISTS (SELECT 1 FROM user_custom_panel_settings t WHERE t.user_id = $1) THEN 'custom panel settings' END,
+  CASE WHEN EXISTS (SELECT 1 FROM user_custom_panel_installations t WHERE t.user_id = $1) THEN 'custom panel installations' END,
+  CASE WHEN EXISTS (SELECT 1 FROM user_favorite_guilds t WHERE t.user_id = $1) THEN 'favorite guilds' END,
+  CASE WHEN EXISTS (SELECT 1 FROM user_favorite_players t WHERE t.user_id = $1) THEN 'favorite players' END,
+  CASE WHEN EXISTS (SELECT 1 FROM inference_connections t WHERE t.user_id = $1) THEN 'AI provider connections' END,
+  CASE WHEN EXISTS (SELECT 1 FROM inference_threads t WHERE t.user_id = $1) THEN 'AI chat history' END,
+  CASE WHEN EXISTS (SELECT 1 FROM inference_user_config t WHERE t.user_id = $1) THEN 'AI settings' END,
+  CASE WHEN EXISTS (SELECT 1 FROM sidekick_installations t WHERE t.user_id = $1) THEN 'Sidekick installations' END,
+  CASE WHEN EXISTS (SELECT 1 FROM sidekick_account_configs t WHERE t.user_id = $1) THEN 'Sidekick settings' END,
+  CASE WHEN EXISTS (SELECT 1 FROM lua_projects t WHERE t.owner_id = $1) THEN 'published modules' END,
+  CASE WHEN EXISTS (SELECT 1 FROM addon_authors t WHERE t.user_id = $1) THEN 'module author profile' END,
+  CASE WHEN EXISTS (SELECT 1 FROM lua_project_contributors t WHERE t.user_id = $1 OR t.added_by = $1) THEN 'module contributions' END,
+  CASE WHEN EXISTS (SELECT 1 FROM lua_project_stars t WHERE t.user_id = $1) THEN 'starred modules' END,
+  CASE WHEN EXISTS (SELECT 1 FROM proof_requests t WHERE t.applicant_id = $1 OR t.reviewer_id = $1) THEN 'proof request history' END,
+  CASE WHEN EXISTS (SELECT 1 FROM server_applications t WHERE t.initiated_by = $1) THEN 'server applications' END,
+  CASE WHEN EXISTS (SELECT 1 FROM application_modification_requests t WHERE t.reviewed_by = $1) THEN 'application reviews' END,
+  CASE WHEN EXISTS (SELECT 1 FROM shared_views t WHERE t.created_by = $1) THEN 'shared views' END,
+  CASE WHEN EXISTS (SELECT 1 FROM wow_servers t WHERE t.created_by = $1) THEN 'created servers' END,
+  CASE WHEN EXISTS (SELECT 1 FROM wow_server_realms t WHERE t.created_by = $1) THEN 'created realms' END,
+  CASE WHEN EXISTS (SELECT 1 FROM wow_server_upload_keys t WHERE t.created_by = $1) THEN 'server upload keys' END
+], NULL)::text[] AS blockers
+`
+
+func (q *sqlQuerier) GetAccountRemovalBlockers(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	row := q.db.QueryRow(ctx, getAccountRemovalBlockers, userID)
+	var blockers []string
+	err := row.Scan(&blockers)
+	return blockers, err
+}
+
+const getPendingAccountMergeRequestByTarget = `-- name: GetPendingAccountMergeRequestByTarget :one
+SELECT id, requester_user_id, source_user_id, target_user_id, discord_id, source_username, source_email, target_username, target_email, status, message, response, reviewer_id, created_at, reviewed_at FROM account_merge_requests
+WHERE target_user_id = $1 AND status = 'pending'
+`
+
+func (q *sqlQuerier) GetPendingAccountMergeRequestByTarget(ctx context.Context, targetUserID uuid.UUID) (AccountMergeRequest, error) {
+	row := q.db.QueryRow(ctx, getPendingAccountMergeRequestByTarget, targetUserID)
+	var i AccountMergeRequest
+	err := row.Scan(
+		&i.ID,
+		&i.RequesterUserID,
+		&i.SourceUserID,
+		&i.TargetUserID,
+		&i.DiscordID,
+		&i.SourceUsername,
+		&i.SourceEmail,
+		&i.TargetUsername,
+		&i.TargetEmail,
+		&i.Status,
+		&i.Message,
+		&i.Response,
+		&i.ReviewerID,
+		&i.CreatedAt,
+		&i.ReviewedAt,
+	)
+	return i, err
+}
+
+const hasPendingAccountMergeRequestForUser = `-- name: HasPendingAccountMergeRequestForUser :one
+SELECT EXISTS (
+  SELECT 1 FROM account_merge_requests
+  WHERE status = 'pending' AND (source_user_id = $1 OR target_user_id = $1)
+)
+`
+
+func (q *sqlQuerier) HasPendingAccountMergeRequestForUser(ctx context.Context, userID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPendingAccountMergeRequestForUser, userID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const insertAccountMergeRequest = `-- name: InsertAccountMergeRequest :one
+INSERT INTO account_merge_requests (
+  id, requester_user_id, source_user_id, target_user_id, discord_id,
+  source_username, source_email, target_username, target_email, message
+) VALUES (
+  $1, $2, $3, $4, $5,
+  $6, $7, $8, $9, $10
+)
+RETURNING id, requester_user_id, source_user_id, target_user_id, discord_id, source_username, source_email, target_username, target_email, status, message, response, reviewer_id, created_at, reviewed_at
+`
+
+type InsertAccountMergeRequestParams struct {
+	ID              uuid.UUID `db:"id" json:"id"`
+	RequesterUserID uuid.UUID `db:"requester_user_id" json:"requester_user_id"`
+	SourceUserID    uuid.UUID `db:"source_user_id" json:"source_user_id"`
+	TargetUserID    uuid.UUID `db:"target_user_id" json:"target_user_id"`
+	DiscordID       string    `db:"discord_id" json:"discord_id"`
+	SourceUsername  string    `db:"source_username" json:"source_username"`
+	SourceEmail     string    `db:"source_email" json:"source_email"`
+	TargetUsername  string    `db:"target_username" json:"target_username"`
+	TargetEmail     string    `db:"target_email" json:"target_email"`
+	Message         string    `db:"message" json:"message"`
+}
+
+func (q *sqlQuerier) InsertAccountMergeRequest(ctx context.Context, arg InsertAccountMergeRequestParams) (AccountMergeRequest, error) {
+	row := q.db.QueryRow(ctx, insertAccountMergeRequest,
+		arg.ID,
+		arg.RequesterUserID,
+		arg.SourceUserID,
+		arg.TargetUserID,
+		arg.DiscordID,
+		arg.SourceUsername,
+		arg.SourceEmail,
+		arg.TargetUsername,
+		arg.TargetEmail,
+		arg.Message,
+	)
+	var i AccountMergeRequest
+	err := row.Scan(
+		&i.ID,
+		&i.RequesterUserID,
+		&i.SourceUserID,
+		&i.TargetUserID,
+		&i.DiscordID,
+		&i.SourceUsername,
+		&i.SourceEmail,
+		&i.TargetUsername,
+		&i.TargetEmail,
+		&i.Status,
+		&i.Message,
+		&i.Response,
+		&i.ReviewerID,
+		&i.CreatedAt,
+		&i.ReviewedAt,
+	)
+	return i, err
+}
+
+const listAdminAccountMergeRequests = `-- name: ListAdminAccountMergeRequests :many
+SELECT id, requester_user_id, source_user_id, target_user_id, discord_id, source_username, source_email, target_username, target_email, status, message, response, reviewer_id, created_at, reviewed_at FROM account_merge_requests
+ORDER BY (status = 'pending') DESC, created_at DESC
+LIMIT 200
+`
+
+func (q *sqlQuerier) ListAdminAccountMergeRequests(ctx context.Context) ([]AccountMergeRequest, error) {
+	rows, err := q.db.Query(ctx, listAdminAccountMergeRequests)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AccountMergeRequest
+	for rows.Next() {
+		var i AccountMergeRequest
+		if err := rows.Scan(
+			&i.ID,
+			&i.RequesterUserID,
+			&i.SourceUserID,
+			&i.TargetUserID,
+			&i.DiscordID,
+			&i.SourceUsername,
+			&i.SourceEmail,
+			&i.TargetUsername,
+			&i.TargetEmail,
+			&i.Status,
+			&i.Message,
+			&i.Response,
+			&i.ReviewerID,
+			&i.CreatedAt,
+			&i.ReviewedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMyAccountMergeRequests = `-- name: ListMyAccountMergeRequests :many
+SELECT id, requester_user_id, source_user_id, target_user_id, discord_id, source_username, source_email, target_username, target_email, status, message, response, reviewer_id, created_at, reviewed_at FROM account_merge_requests
+WHERE requester_user_id = $1
+ORDER BY created_at DESC
+LIMIT 100
+`
+
+func (q *sqlQuerier) ListMyAccountMergeRequests(ctx context.Context, requesterUserID uuid.UUID) ([]AccountMergeRequest, error) {
+	rows, err := q.db.Query(ctx, listMyAccountMergeRequests, requesterUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AccountMergeRequest
+	for rows.Next() {
+		var i AccountMergeRequest
+		if err := rows.Scan(
+			&i.ID,
+			&i.RequesterUserID,
+			&i.SourceUserID,
+			&i.TargetUserID,
+			&i.DiscordID,
+			&i.SourceUsername,
+			&i.SourceEmail,
+			&i.TargetUsername,
+			&i.TargetEmail,
+			&i.Status,
+			&i.Message,
+			&i.Response,
+			&i.ReviewerID,
+			&i.CreatedAt,
+			&i.ReviewedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserAuthLinks = `-- name: ListUserAuthLinks :many
+SELECT id, linked_id, user_id, provider, created_at, updated_at FROM user_auth_links
+WHERE user_id = $1
+ORDER BY provider, id
+`
+
+func (q *sqlQuerier) ListUserAuthLinks(ctx context.Context, userID uuid.UUID) ([]UserAuthLink, error) {
+	rows, err := q.db.Query(ctx, listUserAuthLinks, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserAuthLink
+	for rows.Next() {
+		var i UserAuthLink
+		if err := rows.Scan(
+			&i.ID,
+			&i.LinkedID,
+			&i.UserID,
+			&i.Provider,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockPendingAccountMergeRequest = `-- name: LockPendingAccountMergeRequest :one
+SELECT id, requester_user_id, source_user_id, target_user_id, discord_id, source_username, source_email, target_username, target_email, status, message, response, reviewer_id, created_at, reviewed_at FROM account_merge_requests
+WHERE id = $1 AND status = 'pending'
+FOR UPDATE
+`
+
+func (q *sqlQuerier) LockPendingAccountMergeRequest(ctx context.Context, id uuid.UUID) (AccountMergeRequest, error) {
+	row := q.db.QueryRow(ctx, lockPendingAccountMergeRequest, id)
+	var i AccountMergeRequest
+	err := row.Scan(
+		&i.ID,
+		&i.RequesterUserID,
+		&i.SourceUserID,
+		&i.TargetUserID,
+		&i.DiscordID,
+		&i.SourceUsername,
+		&i.SourceEmail,
+		&i.TargetUsername,
+		&i.TargetEmail,
+		&i.Status,
+		&i.Message,
+		&i.Response,
+		&i.ReviewerID,
+		&i.CreatedAt,
+		&i.ReviewedAt,
+	)
+	return i, err
+}
+
+const lockUsersForAccountMerge = `-- name: LockUsersForAccountMerge :many
+SELECT id FROM users
+WHERE id = ANY($1::uuid[])
+ORDER BY id
+FOR UPDATE
+`
+
+func (q *sqlQuerier) LockUsersForAccountMerge(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockUsersForAccountMerge, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const moveUserAuthLink = `-- name: MoveUserAuthLink :exec
+UPDATE user_auth_links
+SET user_id = $1, updated_at = now()
+WHERE id = $2 AND user_id = $3
+`
+
+type MoveUserAuthLinkParams struct {
+	TargetUserID uuid.UUID `db:"target_user_id" json:"target_user_id"`
+	AuthLinkID   uuid.UUID `db:"auth_link_id" json:"auth_link_id"`
+	SourceUserID uuid.UUID `db:"source_user_id" json:"source_user_id"`
+}
+
+func (q *sqlQuerier) MoveUserAuthLink(ctx context.Context, arg MoveUserAuthLinkParams) error {
+	_, err := q.db.Exec(ctx, moveUserAuthLink, arg.TargetUserID, arg.AuthLinkID, arg.SourceUserID)
+	return err
+}
+
 const censusPlayerCounts = `-- name: CensusPlayerCounts :many
 SELECT
   gp.class,
@@ -28080,6 +28475,54 @@ func (q *sqlQuerier) CountUserAuthLinks(ctx context.Context) (int64, error) {
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const deleteUserAuthSessionByID = `-- name: DeleteUserAuthSessionByID :exec
+DELETE FROM user_auth_session WHERE id = $1
+`
+
+func (q *sqlQuerier) DeleteUserAuthSessionByID(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserAuthSessionByID, id)
+	return err
+}
+
+const getCurrentUserAuthSession = `-- name: GetCurrentUserAuthSession :one
+SELECT id, user_auth_id, user_id, access_token, access_token_secret, refresh_token, expires_at, created_at, updated_at, jwt_id
+FROM user_auth_session
+WHERE id = $1
+  AND user_id = $2
+  AND user_auth_id = $3
+  AND jwt_id = $4
+`
+
+type GetCurrentUserAuthSessionParams struct {
+	SessionID  uuid.UUID `db:"session_id" json:"session_id"`
+	UserID     uuid.UUID `db:"user_id" json:"user_id"`
+	UserAuthID uuid.UUID `db:"user_auth_id" json:"user_auth_id"`
+	JwtID      uuid.UUID `db:"jwt_id" json:"jwt_id"`
+}
+
+func (q *sqlQuerier) GetCurrentUserAuthSession(ctx context.Context, arg GetCurrentUserAuthSessionParams) (UserAuthSession, error) {
+	row := q.db.QueryRow(ctx, getCurrentUserAuthSession,
+		arg.SessionID,
+		arg.UserID,
+		arg.UserAuthID,
+		arg.JwtID,
+	)
+	var i UserAuthSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserAuthID,
+		&i.UserID,
+		&i.AccessToken,
+		&i.AccessTokenSecret,
+		&i.RefreshToken,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.JwtID,
+	)
+	return i, err
 }
 
 const getUserAuthByLinkedID = `-- name: GetUserAuthByLinkedID :one

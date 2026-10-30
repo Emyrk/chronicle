@@ -2,6 +2,7 @@ package chronauth
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 )
 
@@ -52,7 +54,22 @@ func bearerToken(r *http.Request) string {
 	return ""
 }
 
-// AuthenticationMiddleware should avoid hitting the database.
+func (s *Service) validateCurrentSession(ctx context.Context, c *claims.Claims) error {
+	_, err := s.Zed.GetCurrentUserAuthSession(ctx, database.GetCurrentUserAuthSessionParams{
+		SessionID:  c.SessionID,
+		UserID:     c.Subject,
+		UserAuthID: c.UserAuthID,
+		JwtID:      c.ID,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotAuthorized
+	}
+	return err
+}
+
+// AuthenticationMiddleware validates both the signed token and its current
+// database session. The database check makes logout, account deletion, and
+// account merges revoke already-issued JWTs immediately.
 func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// An earlier authentication middleware, such as service OAuth, may have
@@ -71,6 +88,12 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 			if err != nil {
 				next.ServeHTTP(w, withState(r, &AuthenticationContext{
 					Error: fmt.Errorf("invalid bearer token (%s): %w", err.Error(), ErrNotAuthorized),
+				}))
+				return
+			}
+			if err := s.validateCurrentSession(r.Context(), &c); err != nil {
+				next.ServeHTTP(w, withState(r, &AuthenticationContext{
+					Error: fmt.Errorf("revoked bearer token: %w", err),
 				}))
 				return
 			}
@@ -112,6 +135,13 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 			_ = s.Logout(w, r)
 			next.ServeHTTP(w, withState(r, &AuthenticationContext{
 				Error: fmt.Errorf("invalid session (%s): %w", err.Error(), ErrNotAuthorized),
+			}))
+			return
+		}
+		if err := s.validateCurrentSession(r.Context(), &c); err != nil {
+			_ = s.Logout(w, r)
+			next.ServeHTTP(w, withState(r, &AuthenticationContext{
+				Error: fmt.Errorf("revoked session: %w", err),
 			}))
 			return
 		}

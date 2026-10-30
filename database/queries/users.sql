@@ -42,6 +42,17 @@ WHERE
   id = $1
 FOR UPDATE ;
 
+-- name: GetCurrentUserAuthSession :one
+SELECT *
+FROM user_auth_session
+WHERE id = @session_id
+  AND user_id = @user_id
+  AND user_auth_id = @user_auth_id
+  AND jwt_id = @jwt_id;
+
+-- name: DeleteUserAuthSessionByID :exec
+DELETE FROM user_auth_session WHERE id = @id;
+
 -- name: UpdateUserAuthSessionTokens :one
 UPDATE
   user_auth_session

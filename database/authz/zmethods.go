@@ -128,6 +128,29 @@ func (z *Authz) Check(ctx context.Context, cs *consistency.Strategy, rs ...rel.I
 	return z.spice.Check(ctx, cs, rs...)
 }
 
+// DeleteUserRelationships removes every authorization relationship where the
+// account is the subject. Keep this list aligned with resource definitions in
+// policy/schema.zed that can refer to a user.
+func (z *AuthzTX) DeleteUserRelationships(ctx context.Context, userID uuid.UUID) error {
+	for _, resourceType := range []string{
+		"chronicle", "cosmetic", "wow_server_upload_key", "wow_tenant",
+		"wow_tenant_application", "wow_server", "wow_server_realm", "layout",
+		"lua_project", "talent_build", "raid_composition", "river_queue", "guild",
+		"armory_player", "raid_log", "instance",
+	} {
+		filter := rel.NewFilter(resourceType, "", "")
+		filter.WithSubjectFilter("user", userID.String(), "")
+		if err := z.DeleteRelationships(ctx, filter); err != nil {
+			return fmt.Errorf("delete %s relationships for user %s: %w", resourceType, userID, err)
+		}
+	}
+	return nil
+}
+
+func (z *AuthzTX) UserChronicleRoles(ctx context.Context, user uuid.UUID) ([]string, error) {
+	return z.parent.UserChronicleRoles(ctx, user)
+}
+
 // UserChronicleRoles returns the relations/roles a user has on the chronicle singleton object.
 // These are roles like "admin", "moderator", "upload_capable".
 func (z *Authz) UserChronicleRoles(ctx context.Context, user uuid.UUID) ([]string, error) {

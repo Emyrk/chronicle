@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -15,13 +16,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/api/chronauth/fakeoidc"
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/chroniclemail"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/gorilla/sessions"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
@@ -36,7 +40,18 @@ const (
 
 	OAuthSessionName = "chronicle_oauth_session"
 	AuthSessionName  = "chronicle_auth_session"
+	LinkSessionName  = "chronicle_link_session"
 )
+
+var errProviderAlreadyLinked = errors.New("provider already linked to this account")
+
+type providerLinkedElsewhereError struct {
+	link database.UserAuthLink
+}
+
+func (e *providerLinkedElsewhereError) Error() string {
+	return "provider identity belongs to another account"
+}
 
 type Options struct {
 	AccessURL *url.URL
@@ -45,6 +60,8 @@ type Options struct {
 	Discord   DiscordOAuth
 	Bot       *chroniclebot.Bot
 	Mailer    *chroniclemail.Mailer
+
+	NotifyAccountMerge func(context.Context, database.AccountMergeRequest) error
 
 	WhatsNewCurrentID string
 	Sessions          SessionOptions
@@ -60,6 +77,8 @@ type Service struct {
 	Zed       *authz.Authz
 	Bot       *chroniclebot.Bot
 	logger    *slog.Logger
+
+	notifyAccountMerge func(context.Context, database.AccountMergeRequest) error
 
 	sessions          *Sessions
 	mailer            *chroniclemail.Mailer
@@ -143,20 +162,21 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 	}
 
 	return &Service{
-		Providers:         providers,
-		Store:             store,
-		logger:            logger.With(slog.String("service", "auth")),
-		sessions:          sess,
-		Bot:               opts.Bot,
-		Zed:               opts.Zed,
-		mailer:            opts.Mailer,
-		whatsNewCurrentID: opts.WhatsNewCurrentID,
-		devMode:           opts.DevServer,
-		RelayStore:        NewRelayCodeStore(opts.Zed),
-		accessURL:         opts.AccessURL,
-		tenantChecker:     opts.TenantChecker,
-		registerAttempts:  make(map[string]time.Time),
-		loginAttempts:     make(map[string]time.Time),
+		Providers:          providers,
+		Store:              store,
+		logger:             logger.With(slog.String("service", "auth")),
+		sessions:           sess,
+		Bot:                opts.Bot,
+		notifyAccountMerge: opts.NotifyAccountMerge,
+		Zed:                opts.Zed,
+		mailer:             opts.Mailer,
+		whatsNewCurrentID:  opts.WhatsNewCurrentID,
+		devMode:            opts.DevServer,
+		RelayStore:         NewRelayCodeStore(opts.Zed),
+		accessURL:          opts.AccessURL,
+		tenantChecker:      opts.TenantChecker,
+		registerAttempts:   make(map[string]time.Time),
+		loginAttempts:      make(map[string]time.Time),
 	}, nil
 }
 
@@ -336,6 +356,215 @@ func (s *Service) BeginAuthHandler(w http.ResponseWriter, req *http.Request) {
 	http.Redirect(w, req, u, http.StatusTemporaryRedirect)
 }
 
+func (s *Service) BeginLinkHandler(w http.ResponseWriter, r *http.Request) {
+	claims := MustAuthenticatedClaims(r.Context())
+	provider, ok := s.provider(w, r)
+	if !ok {
+		return
+	}
+	if provider.Name() != "discord" {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, fmt.Errorf("provider %s cannot be linked", provider.Name()))
+		return
+	}
+	if _, err := s.Zed.GetUserAuthLinkByUserIDAndProvider(r.Context(), database.GetUserAuthLinkByUserIDAndProviderParams{
+		UserID: claims.Subject, Provider: "password",
+	}); errors.Is(err, sql.ErrNoRows) {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Discord can only be connected to a password account"})
+		return
+	} else if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	session, err := s.Store.New(r, LinkSessionName)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	session.Values["user_id"] = claims.Subject.String()
+	session.Values["session_id"] = claims.SessionID.String()
+	if err := session.Save(r, w); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	s.BeginAuthHandler(w, r)
+}
+
+func (s *Service) linkTarget(r *http.Request) (uuid.UUID, uuid.UUID, bool) {
+	session, err := s.Store.Get(r, LinkSessionName)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, false
+	}
+	userID, err := uuid.Parse(fmt.Sprint(session.Values["user_id"]))
+	if err != nil {
+		return uuid.Nil, uuid.Nil, false
+	}
+	sessionID, err := uuid.Parse(fmt.Sprint(session.Values["session_id"]))
+	if err != nil {
+		return uuid.Nil, uuid.Nil, false
+	}
+	return userID, sessionID, true
+}
+
+func (s *Service) clearLinkTarget(w http.ResponseWriter, r *http.Request) {
+	session, err := s.Store.Get(r, LinkSessionName)
+	if err != nil {
+		return
+	}
+	session.Options.MaxAge = -1
+	session.Values = make(map[interface{}]interface{})
+	_ = session.Save(r, w)
+}
+
+func (s *Service) linkProviderIdentity(ctx context.Context, accountID uuid.UUID, user goth.User) error {
+	return s.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		locked, err := tx.LockUsersForAccountMerge(ctx, []uuid.UUID{accountID})
+		if err != nil {
+			return err
+		}
+		if len(locked) != 1 {
+			return sql.ErrNoRows
+		}
+		current, err := tx.GetUserAuthLinkByUserIDAndProvider(ctx, database.GetUserAuthLinkByUserIDAndProviderParams{
+			UserID:   accountID,
+			Provider: user.Provider,
+		})
+		if err == nil {
+			if current.LinkedID == user.UserID {
+				return nil
+			}
+			return errProviderAlreadyLinked
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+
+		existing, err := tx.GetUserAuthByLinkedID(ctx, database.GetUserAuthByLinkedIDParams{
+			LinkedID: user.UserID,
+			Provider: user.Provider,
+		})
+		if err == nil {
+			if existing.UserID == accountID {
+				return nil
+			}
+			return &providerLinkedElsewhereError{link: existing}
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+
+		now := time.Now()
+		_, err = tx.InsertUserAuth(ctx, database.InsertUserAuthParams{
+			ID:        uuid.New(),
+			LinkedID:  user.UserID,
+			UserID:    accountID,
+			Provider:  user.Provider,
+			CreatedAt: database.Timestamptz(now),
+			UpdatedAt: database.Timestamptz(now),
+		})
+		return err
+	}, nil)
+}
+
+func (s *Service) requestAccountMerge(ctx context.Context, targetUserID uuid.UUID, sourceLink database.UserAuthLink) error {
+	target, err := s.Zed.GetUserByID(ctx, targetUserID)
+	if err != nil {
+		return fmt.Errorf("get target account: %w", err)
+	}
+	source, err := s.Zed.GetUserByID(ctx, sourceLink.UserID)
+	if err != nil {
+		return fmt.Errorf("get source account: %w", err)
+	}
+
+	requestID := uuid.New()
+	created, err := s.Zed.InsertAccountMergeRequest(ctx, database.InsertAccountMergeRequestParams{
+		ID:              requestID,
+		RequesterUserID: targetUserID,
+		SourceUserID:    source.ID,
+		TargetUserID:    target.ID,
+		DiscordID:       sourceLink.LinkedID,
+		SourceUsername:  source.Username,
+		SourceEmail:     source.Email,
+		TargetUsername:  target.Username,
+		TargetEmail:     target.Email,
+		Message:         "Requested after proving control of the Discord identity through OAuth.",
+	})
+	if database.IsUniqueViolation(err) {
+		pending, pendingErr := s.Zed.GetPendingAccountMergeRequestByTarget(ctx, targetUserID)
+		if pendingErr == nil && pending.SourceUserID == source.ID {
+			return nil
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("insert account merge request: %w", err)
+	}
+	if s.notifyAccountMerge != nil {
+		notifyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if notifyErr := s.notifyAccountMerge(notifyCtx, created); notifyErr != nil {
+			s.logger.Error("enqueue account merge notification", slog.String("error", notifyErr.Error()))
+		}
+	}
+	return nil
+}
+
+func (s *Service) completeLink(w http.ResponseWriter, r *http.Request, claims *claims.Claims) bool {
+	accountID, sessionID, linking := s.linkTarget(r)
+	if !linking {
+		return false
+	}
+	defer s.clearLinkTarget(w, r)
+
+	redirect := func(result string) {
+		http.Redirect(w, r, "/account/settings?discord_link="+url.QueryEscape(result), http.StatusTemporaryRedirect)
+	}
+	if claims == nil || claims.Subject != accountID || claims.SessionID != sessionID {
+		redirect("session_expired")
+		return true
+	}
+
+	user, err := s.CompleteUserAuth(w, r)
+	if err != nil {
+		s.logger.Warn("complete Discord account link", slog.String("error", err.Error()))
+		redirect("error")
+		return true
+	}
+	if user.Provider != "discord" {
+		redirect("error")
+		return true
+	}
+
+	err = s.linkProviderIdentity(r.Context(), accountID, user)
+	switch {
+	case err == nil:
+		if s.Bot != nil {
+			if syncErr := s.Bot.EnqueueEntitlementRoleSync(r.Context(), accountID); syncErr != nil {
+				s.logger.Warn("enqueue Discord entitlement role sync after linking", slog.String("error", syncErr.Error()))
+			}
+		}
+		redirect("success")
+	case err != nil:
+		var conflict *providerLinkedElsewhereError
+		if errors.As(err, &conflict) {
+			if requestErr := s.requestAccountMerge(r.Context(), accountID, conflict.link); requestErr != nil {
+				s.logger.Error("request account merge", slog.String("error", requestErr.Error()))
+				redirect("error")
+				break
+			}
+			redirect("merge_requested")
+			break
+		}
+		if errors.Is(err, errProviderAlreadyLinked) {
+			redirect("already_linked")
+			break
+		}
+		s.logger.Error("link Discord account", slog.String("error", err.Error()))
+		redirect("error")
+	}
+	return true
+}
+
 func (s *Service) Handler() http.Handler {
 	mux := chi.NewRouter()
 	mux.Group(func(r chi.Router) {
@@ -343,6 +572,8 @@ func (s *Service) Handler() http.Handler {
 			s.AuthenticationMiddleware,
 			s.Authenticated(true),
 		)
+
+		mux.With(s.AuthenticationMiddleware, s.Authenticated(false)).Get("/{provider}/link", s.BeginLinkHandler)
 
 		mux.Get("/{provider}", func(w http.ResponseWriter, r *http.Request) {
 			cl, ok := AuthenticatedClaims(r.Context())
@@ -381,12 +612,15 @@ func (s *Service) Handler() http.Handler {
 			s.BeginAuthHandler(w, r)
 		})
 
-		mux.Get("/{provider}/callback", func(w http.ResponseWriter, r *http.Request) {
+		mux.With(s.AuthenticationMiddleware, s.Authenticated(true)).Get("/{provider}/callback", func(w http.ResponseWriter, r *http.Request) {
 			var authSession database.UserAuthSession
 			var authProvider string
 			var isNewAuth bool
 
 			cl, ok := AuthenticatedClaims(r.Context())
+			if s.completeLink(w, r, cl) {
+				return
+			}
 			if !ok || cl == nil {
 				_, provOK := s.provider(w, r)
 				if !provOK {
@@ -461,7 +695,12 @@ func (s *Service) Handler() http.Handler {
 			http.Redirect(w, r, redirectTo, http.StatusTemporaryRedirect)
 		})
 
-		mux.Get("/logout", func(w http.ResponseWriter, r *http.Request) {
+		mux.With(s.AuthenticationMiddleware, s.Authenticated(true)).Get("/logout", func(w http.ResponseWriter, r *http.Request) {
+			if claims, ok := AuthenticatedClaims(r.Context()); ok {
+				if err := s.Zed.DeleteUserAuthSessionByID(r.Context(), claims.SessionID); err != nil {
+					s.logger.Warn("delete session during logout", slog.String("error", err.Error()))
+				}
+			}
 			_ = s.Logout(w, r)
 			httpapi.Write(r.Context(), w, http.StatusNoContent, nil)
 		})

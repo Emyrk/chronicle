@@ -234,6 +234,76 @@ export function useSession(options?: Omit<UseQueryOptions<Session | null>, "quer
   });
 }
 
+export function useMyAccountMergeRequests() {
+  return useQuery({
+    queryKey: ["account-merges", "me"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/me/account-merges");
+      if (!response.ok) throw new Error("Failed to fetch account merge requests");
+      return response.json() as Promise<import("./typesGenerated").AccountMergeRequest[]>;
+    },
+  });
+}
+
+export function useAccountDeletionStatus() {
+  return useQuery({
+    queryKey: ["account-deletion"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/me/account-deletion");
+      if (!response.ok) throw new Error("Failed to check account deletion status");
+      return response.json() as Promise<import("./typesGenerated").AccountDeletionStatus>;
+    },
+  });
+}
+
+export function useDeleteMyAccount() {
+  return useMutation({
+    mutationFn: async (confirmation: string) => {
+      const response = await fetch("/api/v1/me/account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        const blockers = Array.isArray(body?.blockers) ? body.blockers.join(", ") : "";
+        throw new Error(blockers || body?.message || "Failed to delete account");
+      }
+    },
+  });
+}
+
+export function useAdminAccountMergeRequests() {
+  return useQuery({
+    queryKey: ["admin", "account-merges"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/admin/account-merges/");
+      if (!response.ok) throw new Error("Failed to fetch account merge requests");
+      return response.json() as Promise<import("./typesGenerated").AccountMergeRequest[]>;
+    },
+  });
+}
+
+export function useDecideAccountMergeRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, approved, response: message }: { id: string; approved: boolean; response: string }) => {
+      const response = await fetch(`/api/v1/admin/account-merges/${encodeURIComponent(id)}/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved, response: message }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        const blockers = Array.isArray(body?.blockers) ? body.blockers.join(", ") : "";
+        throw new Error(blockers || body?.message || "Failed to decide merge request");
+      }
+      return response.json() as Promise<import("./typesGenerated").AccountMergeRequest>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin", "account-merges"] }),
+  });
+}
+
 export function useMySidekicks() {
   return useQuery({
     queryKey: ["sidekicks", "me"],

@@ -28,6 +28,7 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/chroniclemail"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/database/pubsub"
@@ -198,10 +199,25 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	}
 
 	service, err := chronauth.New(ctx, opts.Logger, chronauth.Options{
-		AccessURL:         opts.AccessURL,
-		DevServer:         opts.DevOAuth,
-		Discord:           opts.Discord,
-		Bot:               opts.Bot,
+		AccessURL: opts.AccessURL,
+		DevServer: opts.DevOAuth,
+		Discord:   opts.Discord,
+		Bot:       opts.Bot,
+		NotifyAccountMerge: func(ctx context.Context, request database.AccountMergeRequest) error {
+			if opts.AccessURL == nil {
+				return nil
+			}
+			return chroniclebot.EnqueueAdminNotification(ctx, opts.RiverQueue, opts.Bot, chroniclebot.ArgsNotifyAdmin{
+				Title: "New account merge request",
+				URL:   strings.TrimRight(opts.AccessURL.String(), "/") + "/admin/account-merges",
+				Fields: []chroniclebot.AdminNotificationField{
+					{Name: "Password account", Value: fmt.Sprintf("%s (%s)", request.TargetUsername, request.TargetUserID), Inline: true},
+					{Name: "Discord account", Value: fmt.Sprintf("%s (%s)", request.SourceUsername, request.SourceUserID), Inline: true},
+					{Name: "Discord ID", Value: request.DiscordID},
+					{Name: "Request", Value: request.ID.String()},
+				},
+			})
+		},
 		Zed:               opts.Zed,
 		Mailer:            opts.Mailer,
 		WhatsNewCurrentID: servicewhatsnew.CurrentID(),
@@ -371,6 +387,9 @@ func (api *API) Routes() chi.Router {
 				r.Get("/me/custom-panels", api.GetMyCustomPanelSettings)
 				r.Put("/me/custom-panels", api.UpdateMyCustomPanelSettings)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
+				r.Get("/me/account-merges", api.ListMyAccountMergeRequests)
+				r.Get("/me/account-deletion", api.GetAccountDeletionStatus)
+				r.Delete("/me/account", api.DeleteMyAccount)
 				r.Get("/me/whats-new", api.GetMyWhatsNewStatus)
 				r.Put("/me/whats-new/read", api.MarkMyWhatsNewRead)
 
@@ -447,6 +466,12 @@ func (api *API) Routes() chi.Router {
 						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
 					).Post("/billing/resync", api.AdminResyncBilling)
 				}
+				r.Route("/account-merges", func(r chi.Router) {
+					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
+					r.Get("/", api.ListAdminAccountMergeRequests)
+					r.Post("/{requestID}/decision", api.DecideAccountMergeRequest)
+				})
+
 				r.Route("/users", func(r chi.Router) {
 					r.Use(
 						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),

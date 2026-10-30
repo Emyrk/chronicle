@@ -94,6 +94,7 @@ type sqlcQuerier interface {
 	CreateSharedView(ctx context.Context, arg CreateSharedViewParams) (SharedView, error)
 	CreateUserPanelLayout(ctx context.Context, arg CreateUserPanelLayoutParams) (UserPanelLayout, error)
 	CreateUserTalentBuild(ctx context.Context, arg CreateUserTalentBuildParams) (UserTalentBuild, error)
+	DecideAccountMergeRequest(ctx context.Context, arg DecideAccountMergeRequestParams) (int64, error)
 	DecideProofRequest(ctx context.Context, arg DecideProofRequestParams) (int64, error)
 	DecideProofSubject(ctx context.Context, arg DecideProofSubjectParams) (int64, error)
 	DeleteAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) error
@@ -168,6 +169,10 @@ type sqlcQuerier interface {
 	DeleteTimeParseClearTimeMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error
 	DeleteTimeParseScoreForContract(ctx context.Context, arg DeleteTimeParseScoreForContractParams) error
 	DeleteUploadKey(ctx context.Context, id uuid.UUID) error
+	DeleteUserAccountRow(ctx context.Context, userID uuid.UUID) (int64, error)
+	DeleteUserAuthLinksByUserID(ctx context.Context, userID uuid.UUID) error
+	DeleteUserAuthSessionByID(ctx context.Context, id uuid.UUID) error
+	DeleteUserAuthSessionsByUserID(ctx context.Context, userID uuid.UUID) error
 	DeleteUserCharacterLink(ctx context.Context, arg DeleteUserCharacterLinkParams) (UserCharacterLink, error)
 	DeleteUserCharacterLinksByUserAndSource(ctx context.Context, arg DeleteUserCharacterLinksByUserAndSourceParams) ([]UserCharacterLink, error)
 	DeleteUserCustomPanelInstallationsExcept(ctx context.Context, arg DeleteUserCustomPanelInstallationsExceptParams) error
@@ -215,6 +220,7 @@ type sqlcQuerier interface {
 	// Item name/quality/icon/level are read from the snapshot jsonb itself,
 	// so results are self-contained.
 	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
+	GetAccountRemovalBlockers(ctx context.Context, userID uuid.UUID) ([]string, error)
 	GetActiveInferenceRunByThreadForUpdate(ctx context.Context, arg GetActiveInferenceRunByThreadForUpdateParams) (InferenceRun, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
@@ -251,6 +257,7 @@ type sqlcQuerier interface {
 	// score. parse_count tells the caller whether the cached average is complete.
 	GetCharacterPerformanceRuns(ctx context.Context, arg GetCharacterPerformanceRunsParams) ([]GetCharacterPerformanceRunsRow, error)
 	GetCreatureTemplatesByEntries(ctx context.Context, arg GetCreatureTemplatesByEntriesParams) ([]WorldCreatureTemplate, error)
+	GetCurrentUserAuthSession(ctx context.Context, arg GetCurrentUserAuthSessionParams) (UserAuthSession, error)
 	GetCustomPanelReleaseByRepositoryCommit(ctx context.Context, arg GetCustomPanelReleaseByRepositoryCommitParams) (CustomPanelRelease, error)
 	GetDBCItemDisplayInfoByID(ctx context.Context, arg GetDBCItemDisplayInfoByIDParams) (DbcItemDisplayInfo, error)
 	// Dataset queries. These run with AdminBypass context since the datasets table
@@ -376,6 +383,7 @@ type sqlcQuerier interface {
 	GetParseScoreResultsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreResult, error)
 	GetParsedBytesByOwner(ctx context.Context, owner uuid.UUID) (GetParsedBytesByOwnerRow, error)
 	GetParsedLogGroupByID(ctx context.Context, id uuid.UUID) (ParsedLogGroup, error)
+	GetPendingAccountMergeRequestByTarget(ctx context.Context, targetUserID uuid.UUID) (AccountMergeRequest, error)
 	GetPendingInferenceClientToolRequestByThreadForUpdate(ctx context.Context, arg GetPendingInferenceClientToolRequestByThreadForUpdateParams) (InferenceClientToolRequest, error)
 	GetPlayerGearHistory(ctx context.Context, arg GetPlayerGearHistoryParams) ([]GetPlayerGearHistoryRow, error)
 	// Do not tenant-filter: switching sites must not bypass the account limit.
@@ -526,8 +534,10 @@ type sqlcQuerier interface {
 	HasBillingEntitlement(ctx context.Context, arg HasBillingEntitlementParams) (bool, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
+	HasPendingAccountMergeRequestForUser(ctx context.Context, userID uuid.UUID) (bool, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
 	InitializeUserWhatsNewState(ctx context.Context, arg InitializeUserWhatsNewStateParams) (UserWhatsNewState, error)
+	InsertAccountMergeRequest(ctx context.Context, arg InsertAccountMergeRequestParams) (AccountMergeRequest, error)
 	InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults
 	InsertAffectedAuraDurations(ctx context.Context, arg []InsertAffectedAuraDurationsParams) *InsertAffectedAuraDurationsBatchResults
 	InsertBillingReconciliationRun(ctx context.Context, id uuid.UUID) (BillingReconciliationRun, error)
@@ -625,6 +635,7 @@ type sqlcQuerier interface {
 	IsParsedLogGroupVisible(ctx context.Context, id uuid.UUID) (bool, error)
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
+	ListAdminAccountMergeRequests(ctx context.Context) ([]AccountMergeRequest, error)
 	ListAdminActiveCustomPanelInstallations(ctx context.Context) ([]ListAdminActiveCustomPanelInstallationsRow, error)
 	ListAdminProofRequests(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error)
 	ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error)
@@ -704,6 +715,7 @@ type sqlcQuerier interface {
 	ListLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) ([]LuaProject, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
 	ListModuleAuthorsByUsers(ctx context.Context, userIds []uuid.UUID) ([]AddonAuthor, error)
+	ListMyAccountMergeRequests(ctx context.Context, requesterUserID uuid.UUID) ([]AccountMergeRequest, error)
 	ListMyProofRequests(ctx context.Context, arg ListMyProofRequestsParams) ([]ProofRequest, error)
 	ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error)
 	ListParseScoreCohortBuckets(ctx context.Context, arg ListParseScoreCohortBucketsParams) ([]ListParseScoreCohortBucketsRow, error)
@@ -792,6 +804,7 @@ type sqlcQuerier interface {
 	// Locate surviving uploads for logical runs whose source log group is deleted.
 	ListTimeParseReplacementLogGroupsForDeletedLogGroup(ctx context.Context, arg ListTimeParseReplacementLogGroupsForDeletedLogGroupParams) ([]uuid.UUID, error)
 	ListUploadKeysByRealm(ctx context.Context, realmID uuid.UUID) ([]ListUploadKeysByRealmRow, error)
+	ListUserAuthLinks(ctx context.Context, userID uuid.UUID) ([]UserAuthLink, error)
 	ListUserCustomPanelInstallations(ctx context.Context, userID uuid.UUID) ([]ListUserCustomPanelInstallationsRow, error)
 	ListUserFavoriteGuilds(ctx context.Context, userID uuid.UUID) ([]ListUserFavoriteGuildsRow, error)
 	ListUserFavoritePlayers(ctx context.Context, userID uuid.UUID) ([]ListUserFavoritePlayersRow, error)
@@ -813,6 +826,7 @@ type sqlcQuerier interface {
 	LockLogFilePartSequence(ctx context.Context, logFileID uuid.UUID) (uuid.UUID, error)
 	// Serializes module creation for one owner so concurrent requests cannot exceed the quota.
 	LockLuaProjectOwner(ctx context.Context, ownerID uuid.UUID) (uuid.UUID, error)
+	LockPendingAccountMergeRequest(ctx context.Context, id uuid.UUID) (AccountMergeRequest, error)
 	LockPendingProofRequest(ctx context.Context, arg LockPendingProofRequestParams) (ProofRequest, error)
 	// Root-domain site admins only (AdminBypass context).
 	LockPendingProofRequestByID(ctx context.Context, id uuid.UUID) (ProofRequest, error)
@@ -820,6 +834,7 @@ type sqlcQuerier interface {
 	// applicant, not a proof row, also works for their first request.
 	LockProofApplicant(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	LockUserStorageQuota(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	LockUsersForAccountMerge(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
 	LockWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
@@ -828,6 +843,7 @@ type sqlcQuerier interface {
 	MarkWhatsNewRead(ctx context.Context, arg MarkWhatsNewReadParams) (UserWhatsNewState, error)
 	MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
+	MoveUserAuthLink(ctx context.Context, arg MoveUserAuthLinkParams) error
 	PauseInferenceRun(ctx context.Context, arg PauseInferenceRunParams) (InferenceRun, error)
 	PruneLuaProjectArtifacts(ctx context.Context, id uuid.UUID) error
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error

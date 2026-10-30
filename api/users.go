@@ -91,15 +91,28 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:            user.CreatedAt.Time,
 	}
 
-	// For password-auth users, look up email verification status
-	if claims.Provider == chronauth.PasswordProvider {
-		pw, err := a.Opts.Zed.GetUserPasswordByAuthID(ctx, claims.UserAuthID)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	for _, provider := range []string{chronauth.PasswordProvider, "discord"} {
+		link, err := a.Opts.Zed.GetUserAuthLinkByUserIDAndProvider(ctx, database.GetUserAuthLinkByUserIDAndProviderParams{
+			UserID:   claims.Subject,
+			Provider: provider,
+		})
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return
 		}
-		if err == nil {
-			sess.EmailVerified = pw.EmailVerified
+		sess.AuthProviders = append(sess.AuthProviders, provider)
+		if provider == chronauth.PasswordProvider {
+			pw, err := a.Opts.Zed.GetUserPasswordByAuthID(ctx, link.ID)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				httpapi.InternalServerError(w, err)
+				return
+			}
+			if err == nil {
+				sess.EmailVerified = pw.EmailVerified
+			}
 		}
 	}
 
