@@ -41,6 +41,10 @@ const (
 	OAuthSessionName = "chronicle_oauth_session"
 	AuthSessionName  = "chronicle_auth_session"
 	LinkSessionName  = "chronicle_link_session"
+
+	// linkSessionLifetime bounds how long an unfinished Discord link attempt
+	// can affect OAuth callbacks.
+	linkSessionLifetime = 10 * time.Minute
 )
 
 var (
@@ -371,6 +375,7 @@ func (s *Service) BeginLinkHandler(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	session.Options.MaxAge = int(linkSessionLifetime.Seconds())
 	session.Values["user_id"] = claims.Subject.String()
 	session.Values["session_id"] = claims.SessionID.String()
 	if err := session.Save(r, w); err != nil {
@@ -462,12 +467,19 @@ func (s *Service) completeLink(w http.ResponseWriter, r *http.Request, claims *c
 	if !linking {
 		return false
 	}
-	defer s.clearLinkTarget(w, r)
+	// Clear before writing any response: a Set-Cookie added after the redirect
+	// is dropped, which would leave every later OAuth callback stuck here.
+	s.clearLinkTarget(w, r)
+	// Without a signed-in user, or on another provider's callback, the link
+	// cookie is stale. Continue with a normal sign-in.
+	if claims == nil || chi.URLParam(r, "provider") != "discord" {
+		return false
+	}
 
 	redirect := func(result string) {
 		http.Redirect(w, r, "/account/settings?discord_link="+url.QueryEscape(result), http.StatusTemporaryRedirect)
 	}
-	if claims == nil || claims.Subject != accountID || claims.SessionID != sessionID {
+	if claims.Subject != accountID || claims.SessionID != sessionID {
 		redirect("session_expired")
 		return true
 	}
