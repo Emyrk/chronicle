@@ -72,6 +72,15 @@ async function loadState(bucket: R2Bucket) {
   return { published, draft, draftObject };
 }
 
+async function loadAssetSizes(bucket: R2Bucket, manifests: UnitImageManifest[]): Promise<Record<string, number>> {
+  const paths = new Set(manifests.flatMap((manifest) => manifest.units.flatMap((unit) => Object.values(unit.images))));
+  const entries = await Promise.all([...paths].map(async (path) => {
+    const object = await bucket.head(path);
+    return object ? [path, object.size] as const : undefined;
+  }));
+  return Object.fromEntries(entries.filter((entry): entry is readonly [string, number] => Boolean(entry)));
+}
+
 function lockBody(state: "held" | "released"): string {
   return `${state}:${crypto.randomUUID()}:${new Date().toISOString()}`;
 }
@@ -131,11 +140,13 @@ async function digest(bytes: Uint8Array): Promise<string> {
 unitImages.get("/internal/api/v1/unit-images", async (c) => {
   try {
     const state = await loadState(c.env.MAPS);
+    const asset_sizes = await loadAssetSizes(c.env.MAPS, [state.published, state.draft]);
     return c.json({
       has_draft: Boolean(state.draftObject),
       draft_version: state.draftObject?.httpEtag ?? null,
       published: state.published,
       draft: state.draft,
+      asset_sizes,
     }, 200, { "Cache-Control": "private, no-store" });
   } catch (error) {
     return c.json({ error: errorMessage(error) }, 500);
@@ -168,7 +179,7 @@ unitImages.post("/internal/api/v1/unit-images/assets", async (c) => {
     await c.env.MAPS.put(path, bytes, {
       httpMetadata: { contentType: type.contentType, cacheControl: "public, max-age=31536000, immutable" },
     });
-    return c.json({ path }, 201);
+    return c.json({ path, size: bytes.byteLength }, 201);
   } catch (error) {
     return c.json({ error: errorMessage(error) }, 400);
   }

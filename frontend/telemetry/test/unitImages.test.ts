@@ -27,6 +27,7 @@ interface StoredObject {
   etag: string;
   httpEtag: string;
   uploaded: Date;
+  size: number;
   httpMetadata?: { contentType?: string; cacheControl?: string };
   json(): Promise<unknown>;
   text(): Promise<string>;
@@ -53,6 +54,7 @@ class FakeBucket {
       etag,
       httpEtag: `"${etag}"`,
       uploaded: new Date(),
+      size: bytes.byteLength,
       httpMetadata: options.httpMetadata,
       async json() { return JSON.parse(new TextDecoder().decode(bytes)); },
       async text() { return new TextDecoder().decode(bytes); },
@@ -120,8 +122,9 @@ test("Unit Image Foundry uploads, previews, drafts, and publishes images", async
   form.append("file", new File([webp()], "Onyxia Headshot.webp", { type: "image/webp" }));
   const upload = await request(bucket, "/internal/api/v1/unit-images/assets", { method: "POST", body: form });
   assert.equal(upload.status, 201);
-  const uploaded = await upload.json() as { path: string };
+  const uploaded = await upload.json() as { path: string; size: number };
   assert.match(uploaded.path, /^unit-images\/[0-9a-f]{64}-onyxia-headshot\.webp$/);
+  assert.equal(uploaded.size, webp().byteLength);
 
   const preview = await request(bucket, `/internal/api/v1/unit-images/preview/${uploaded.path.split("/").pop()}`);
   assert.equal(preview.status, 200);
@@ -147,9 +150,14 @@ test("Unit Image Foundry uploads, previews, drafts, and publishes images", async
 
   const state = await request(bucket, "/internal/api/v1/unit-images");
   assert.equal(state.status, 200);
-  const stateBody = await state.json() as { has_draft: boolean; published: { units: typeof units } };
+  const stateBody = await state.json() as {
+    has_draft: boolean;
+    published: { units: typeof units };
+    asset_sizes: Record<string, number>;
+  };
   assert.equal(stateBody.has_draft, false);
   assert.deepEqual(stateBody.published.units, units);
+  assert.equal(stateBody.asset_sizes[uploaded.path], webp().byteLength);
 });
 
 test("Unit Image Foundry rejects invalid images and cross-site mutations", async () => {
