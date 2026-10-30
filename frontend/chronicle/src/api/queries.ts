@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type QueryClient, type UseQueryOptions } from "@tanstack/react-query";
-import type { CharacterCosmeticsResponse, DiscoveryEntry, ListSidekicksResponse, RenameSidekickRequest, SidekickAccountConfigResponse, SidekickConfig, SidekickConfigState, SidekickInstallation, UpdateCharacterCosmeticsRequest, WhatsNewStatus } from "./typesGenerated";
+import type { CharacterCosmeticsResponse, DiscoveryEntry, ListSidekicksResponse, RenameSidekickRequest, SidekickConfig, SidekickConfigState, SidekickInstallation, UpdateCharacterCosmeticsRequest, WhatsNewStatus } from "./typesGenerated";
 import type { WoWSpell } from "./wowdb";
 import {
   recordPublicNoticeResult,
@@ -246,37 +246,7 @@ export function useMySidekicks() {
   });
 }
 
-export function useSidekickAccountConfig() {
-  return useQuery({
-    queryKey: ["sidekicks", "config"],
-    queryFn: async () => {
-      const response = await fetch("/api/v1/me/sidekicks/config");
-      if (!response.ok) throw new Error("Failed to fetch Sidekick configuration");
-      return response.json() as Promise<SidekickAccountConfigResponse>;
-    },
-  });
-}
-
-export function useUpdateSidekickAccountConfig() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (config: SidekickConfig) => {
-      const response = await fetch("/api/v1/me/sidekicks/config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
-      });
-      if (!response.ok) throw new Error("Failed to update Sidekick configuration");
-      return response.json() as Promise<SidekickAccountConfigResponse>;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sidekicks", "config"] });
-      queryClient.invalidateQueries({ queryKey: ["sidekicks", "me"] });
-    },
-  });
-}
-
-export function useUpdateSidekickOverride() {
+export function useUpdateSidekickConfig() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, config }: { id: string; config: SidekickConfig }) => {

@@ -45,19 +45,6 @@ FROM sidekick_installations
 WHERE id = @sidekick_id
   AND user_id = @user_id;
 
--- name: GetSidekickAccountConfig :one
-SELECT config
-FROM sidekick_account_configs
-WHERE user_id = @user_id;
-
--- name: UpsertSidekickAccountConfig :one
-INSERT INTO sidekick_account_configs (user_id, config)
-VALUES (@user_id, @config::jsonb)
-ON CONFLICT (user_id) DO UPDATE SET
-  config = EXCLUDED.config,
-  updated_at = NOW()
-RETURNING config;
-
 -- name: GetSidekickConfigOverride :one
 SELECT sco.config
 FROM sidekick_config_overrides sco
@@ -98,7 +85,9 @@ RETURNING *;
 -- name: UpdateSidekickHeartbeat :one
 UPDATE sidekick_installations
 SET platform = @platform,
-    version = @version,
+    version = @sidekick_version,
+    start_at_login = @start_at_login,
+    auto_upload_capabilities = @auto_upload_capabilities::jsonb,
     last_seen_at = NOW(),
     updated_at = NOW()
 WHERE id = @id
@@ -126,21 +115,23 @@ RETURNING *;
 
 -- name: UpsertSidekickWoWDirectory :exec
 INSERT INTO sidekick_wow_directories (
-  sidekick_id, path, tenant_name, tenant_base_url, realmlist
+  sidekick_id, id, path, tenant_name, tenant_base_url, realmlist, game_format
 )
 VALUES (
-  @sidekick_id, @path, @tenant_name, @tenant_base_url, @realmlist
+  @sidekick_id, @id, @path, @tenant_name, @tenant_base_url, @realmlist, @game_format
 )
-ON CONFLICT (sidekick_id, path) DO UPDATE SET
+ON CONFLICT (sidekick_id, id) WHERE id IS NOT NULL DO UPDATE SET
+  path = EXCLUDED.path,
   tenant_name = EXCLUDED.tenant_name,
   tenant_base_url = EXCLUDED.tenant_base_url,
   realmlist = EXCLUDED.realmlist,
+  game_format = EXCLUDED.game_format,
   updated_at = NOW();
 
 -- name: DeleteSidekickWoWDirectoriesExcept :execrows
 DELETE FROM sidekick_wow_directories
 WHERE sidekick_id = @sidekick_id
-  AND NOT (path = ANY(@active_paths::text[]));
+  AND (id IS NULL OR NOT (id = ANY(@active_ids::text[])));
 
 -- name: ListSidekickWoWDirectories :many
 SELECT *

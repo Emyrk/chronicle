@@ -41,8 +41,6 @@ func TestMountedRoutes(t *testing.T) {
 	}))
 	require.Equal(t, map[string]struct{}{
 		http.MethodGet + " /api/v1/me/sidekicks/":                       {},
-		http.MethodGet + " /api/v1/me/sidekicks/config":                 {},
-		http.MethodPut + " /api/v1/me/sidekicks/config":                 {},
 		http.MethodGet + " /api/v1/me/sidekicks/{sidekickID}/config":    {},
 		http.MethodPut + " /api/v1/me/sidekicks/{sidekickID}/config":    {},
 		http.MethodDelete + " /api/v1/me/sidekicks/{sidekickID}/config": {},
@@ -73,20 +71,27 @@ func TestListMySidekicksWithoutSavedConfig(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
 	var response chroniclesdk.ListSidekicksResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-	require.Equal(t, chroniclesdk.DefaultSidekickConfig(), response.AccountConfig.Config)
-	require.NotEmpty(t, response.AccountConfig.Hash)
 	require.Empty(t, response.Sidekicks)
 }
 
-func TestEffectiveSidekickConfigPrecedence(t *testing.T) {
+func TestNormalizeSidekickConfigDisablesUnsupportedModes(t *testing.T) {
 	t.Parallel()
 
-	account := chroniclesdk.DefaultSidekickConfig()
-	account.AutoUpload.Enabled = true
-	require.Equal(t, account, effectiveSidekickConfig(account, nil))
+	id := "wowdir_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	config := chroniclesdk.DefaultSidekickConfig()
+	config.WoWDirectories[id] = chroniclesdk.SidekickDirectoryConfig{
+		GameFormat: chroniclesdk.SidekickGameFormatWotLK335a,
+		AutoUpload: chroniclesdk.SidekickAutoUploadOnGameExit,
+	}
 
-	override := chroniclesdk.DefaultSidekickConfig()
-	require.Equal(t, override, effectiveSidekickConfig(account, &override))
+	normalized := normalizeSidekickConfig(config, chroniclesdk.SidekickAutoUploadCapabilities{})
+	require.Equal(t, chroniclesdk.SidekickAutoUploadDisabled, normalized.WoWDirectories[id].AutoUpload)
+
+	capabilities := chroniclesdk.SidekickAutoUploadCapabilities{
+		chroniclesdk.SidekickGameFormatWotLK335a: {chroniclesdk.SidekickAutoUploadOnGameExit},
+	}
+	normalized = normalizeSidekickConfig(config, capabilities)
+	require.Equal(t, chroniclesdk.SidekickAutoUploadOnGameExit, normalized.WoWDirectories[id].AutoUpload)
 }
 
 func TestSidekickStatusResponseConfigReconciliation(t *testing.T) {
@@ -95,21 +100,16 @@ func TestSidekickStatusResponseConfigReconciliation(t *testing.T) {
 	config := chroniclesdk.DefaultSidekickConfig()
 	hash, err := config.Hash()
 	require.NoError(t, err)
-	installation := chroniclesdk.SidekickInstallation{
-		Configuration: &chroniclesdk.SidekickConfigState{
-			Inherited: true, Effective: config, EffectiveHash: hash,
-		},
-	}
+	state := chroniclesdk.SidekickConfigState{Config: config, Hash: hash}
 
-	legacy := sidekickStatusResponse(installation, "")
-	require.Nil(t, legacy.Configuration)
-	legacyJSON, err := json.Marshal(legacy)
+	changed := sidekickStatusResponse(state, "")
+	changedJSON, err := json.Marshal(changed)
 	require.NoError(t, err)
-	require.NotContains(t, string(legacyJSON), `"configuration"`)
-	require.Equal(t, hash, legacy.ConfigHash)
-	require.Equal(t, &config, legacy.Config)
+	require.NotContains(t, string(changedJSON), `"configuration"`)
+	require.Equal(t, hash, changed.ConfigHash)
+	require.Equal(t, &config, changed.Config)
 
-	matched := sidekickStatusResponse(installation, hash)
+	matched := sidekickStatusResponse(state, hash)
 	matchedJSON, err := json.Marshal(matched)
 	require.NoError(t, err)
 	var matchedFields map[string]json.RawMessage
@@ -143,15 +143,11 @@ func TestSidekickConfigStorageAndOwnership(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	account := chroniclesdk.DefaultSidekickConfig()
-	account.AutoUpload.Enabled = true
-	accountJSON, err := account.CanonicalJSON()
-	require.NoError(t, err)
-	storedAccount, err := db.UpsertSidekickAccountConfig(ctx, database.UpsertSidekickAccountConfigParams{UserID: ownerID, Config: accountJSON})
-	require.NoError(t, err)
-	require.JSONEq(t, string(accountJSON), string(storedAccount))
-
 	override := chroniclesdk.DefaultSidekickConfig()
+	override.WoWDirectories["wowdir_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] = chroniclesdk.SidekickDirectoryConfig{
+		GameFormat: chroniclesdk.SidekickGameFormatWotLK335a,
+		AutoUpload: chroniclesdk.SidekickAutoUploadDisabled,
+	}
 	overrideJSON, err := override.CanonicalJSON()
 	require.NoError(t, err)
 	storedOverride, err := db.UpsertSidekickConfigOverride(ctx, database.UpsertSidekickConfigOverrideParams{
@@ -163,7 +159,7 @@ func TestSidekickConfigStorageAndOwnership(t *testing.T) {
 	_, err = db.GetSidekickConfigOverride(ctx, database.GetSidekickConfigOverrideParams{SidekickID: sidekickID, UserID: otherID})
 	require.True(t, errors.Is(err, pgx.ErrNoRows))
 	_, err = db.UpsertSidekickConfigOverride(ctx, database.UpsertSidekickConfigOverrideParams{
-		SidekickID: sidekickID, UserID: otherID, Config: accountJSON,
+		SidekickID: sidekickID, UserID: otherID, Config: overrideJSON,
 	})
 	require.True(t, errors.Is(err, pgx.ErrNoRows))
 	_, err = db.DeleteSidekickConfigOverride(ctx, database.DeleteSidekickConfigOverrideParams{SidekickID: sidekickID, UserID: otherID})

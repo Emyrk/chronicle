@@ -21807,16 +21807,16 @@ func (q *sqlQuerier) DeleteSidekickConfigOverride(ctx context.Context, arg Delet
 const deleteSidekickWoWDirectoriesExcept = `-- name: DeleteSidekickWoWDirectoriesExcept :execrows
 DELETE FROM sidekick_wow_directories
 WHERE sidekick_id = $1
-  AND NOT (path = ANY($2::text[]))
+  AND (id IS NULL OR NOT (id = ANY($2::text[])))
 `
 
 type DeleteSidekickWoWDirectoriesExceptParams struct {
-	SidekickID  uuid.UUID `db:"sidekick_id" json:"sidekick_id"`
-	ActivePaths []string  `db:"active_paths" json:"active_paths"`
+	SidekickID uuid.UUID `db:"sidekick_id" json:"sidekick_id"`
+	ActiveIds  []string  `db:"active_ids" json:"active_ids"`
 }
 
 func (q *sqlQuerier) DeleteSidekickWoWDirectoriesExcept(ctx context.Context, arg DeleteSidekickWoWDirectoriesExceptParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteSidekickWoWDirectoriesExcept, arg.SidekickID, arg.ActivePaths)
+	result, err := q.db.Exec(ctx, deleteSidekickWoWDirectoriesExcept, arg.SidekickID, arg.ActiveIds)
 	if err != nil {
 		return 0, err
 	}
@@ -21830,7 +21830,7 @@ SET disconnected_at = NOW(),
 WHERE id = $1
   AND user_id = $2
   AND disconnected_at IS NULL
-RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, start_at_login, auto_upload_capabilities
 `
 
 type DisconnectSidekickInstallationParams struct {
@@ -21852,21 +21852,10 @@ func (q *sqlQuerier) DisconnectSidekickInstallation(ctx context.Context, arg Dis
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.StartAtLogin,
+		&i.AutoUploadCapabilities,
 	)
 	return i, err
-}
-
-const getSidekickAccountConfig = `-- name: GetSidekickAccountConfig :one
-SELECT config
-FROM sidekick_account_configs
-WHERE user_id = $1
-`
-
-func (q *sqlQuerier) GetSidekickAccountConfig(ctx context.Context, userID uuid.UUID) ([]byte, error) {
-	row := q.db.QueryRow(ctx, getSidekickAccountConfig, userID)
-	var config []byte
-	err := row.Scan(&config)
-	return config, err
 }
 
 const getSidekickConfigOverride = `-- name: GetSidekickConfigOverride :one
@@ -21890,7 +21879,7 @@ func (q *sqlQuerier) GetSidekickConfigOverride(ctx context.Context, arg GetSidek
 }
 
 const getSidekickInstallationByUser = `-- name: GetSidekickInstallationByUser :one
-SELECT id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+SELECT id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, start_at_login, auto_upload_capabilities
 FROM sidekick_installations
 WHERE id = $1
   AND user_id = $2
@@ -21915,6 +21904,8 @@ func (q *sqlQuerier) GetSidekickInstallationByUser(ctx context.Context, arg GetS
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.StartAtLogin,
+		&i.AutoUploadCapabilities,
 	)
 	return i, err
 }
@@ -21960,7 +21951,7 @@ func (q *sqlQuerier) InsertSidekickOAuthGrant(ctx context.Context, arg InsertSid
 }
 
 const listSidekickInstallationsByUser = `-- name: ListSidekickInstallationsByUser :many
-SELECT id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+SELECT id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, start_at_login, auto_upload_capabilities
 FROM sidekick_installations
 WHERE user_id = $1
 ORDER BY disconnected_at NULLS FIRST, created_at DESC
@@ -21986,6 +21977,8 @@ func (q *sqlQuerier) ListSidekickInstallationsByUser(ctx context.Context, userID
 			&i.DisconnectedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.StartAtLogin,
+			&i.AutoUploadCapabilities,
 		); err != nil {
 			return nil, err
 		}
@@ -22040,7 +22033,7 @@ func (q *sqlQuerier) ListSidekickIssues(ctx context.Context, arg ListSidekickIss
 }
 
 const listSidekickWoWDirectories = `-- name: ListSidekickWoWDirectories :many
-SELECT sidekick_id, path, tenant_name, tenant_base_url, realmlist, created_at, updated_at
+SELECT sidekick_id, path, tenant_name, tenant_base_url, realmlist, created_at, updated_at, id, game_format
 FROM sidekick_wow_directories
 WHERE sidekick_id = $1
 ORDER BY tenant_name, path
@@ -22063,6 +22056,8 @@ func (q *sqlQuerier) ListSidekickWoWDirectories(ctx context.Context, sidekickID 
 			&i.Realmlist,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ID,
+			&i.GameFormat,
 		); err != nil {
 			return nil, err
 		}
@@ -22081,7 +22076,7 @@ SET name = $1,
 WHERE id = $2
   AND user_id = $3
   AND disconnected_at IS NULL
-RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, start_at_login, auto_upload_capabilities
 `
 
 type RenameSidekickInstallationParams struct {
@@ -22104,6 +22099,8 @@ func (q *sqlQuerier) RenameSidekickInstallation(ctx context.Context, arg RenameS
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.StartAtLogin,
+		&i.AutoUploadCapabilities,
 	)
 	return i, err
 }
@@ -22184,25 +22181,31 @@ const updateSidekickHeartbeat = `-- name: UpdateSidekickHeartbeat :one
 UPDATE sidekick_installations
 SET platform = $1,
     version = $2,
+    start_at_login = $3,
+    auto_upload_capabilities = $4::jsonb,
     last_seen_at = NOW(),
     updated_at = NOW()
-WHERE id = $3
-  AND user_id = $4
+WHERE id = $5
+  AND user_id = $6
   AND disconnected_at IS NULL
-RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, start_at_login, auto_upload_capabilities
 `
 
 type UpdateSidekickHeartbeatParams struct {
-	Platform string    `db:"platform" json:"platform"`
-	Version  string    `db:"version" json:"version"`
-	ID       uuid.UUID `db:"id" json:"id"`
-	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+	Platform               string    `db:"platform" json:"platform"`
+	SidekickVersion        string    `db:"sidekick_version" json:"sidekick_version"`
+	StartAtLogin           bool      `db:"start_at_login" json:"start_at_login"`
+	AutoUploadCapabilities []byte    `db:"auto_upload_capabilities" json:"auto_upload_capabilities"`
+	ID                     uuid.UUID `db:"id" json:"id"`
+	UserID                 uuid.UUID `db:"user_id" json:"user_id"`
 }
 
 func (q *sqlQuerier) UpdateSidekickHeartbeat(ctx context.Context, arg UpdateSidekickHeartbeatParams) (SidekickInstallation, error) {
 	row := q.db.QueryRow(ctx, updateSidekickHeartbeat,
 		arg.Platform,
-		arg.Version,
+		arg.SidekickVersion,
+		arg.StartAtLogin,
+		arg.AutoUploadCapabilities,
 		arg.ID,
 		arg.UserID,
 	)
@@ -22218,6 +22221,8 @@ func (q *sqlQuerier) UpdateSidekickHeartbeat(ctx context.Context, arg UpdateSide
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.StartAtLogin,
+		&i.AutoUploadCapabilities,
 	)
 	return i, err
 }
@@ -22261,27 +22266,6 @@ func (q *sqlQuerier) UpsertActiveSidekickIssue(ctx context.Context, arg UpsertAc
 	return i, err
 }
 
-const upsertSidekickAccountConfig = `-- name: UpsertSidekickAccountConfig :one
-INSERT INTO sidekick_account_configs (user_id, config)
-VALUES ($1, $2::jsonb)
-ON CONFLICT (user_id) DO UPDATE SET
-  config = EXCLUDED.config,
-  updated_at = NOW()
-RETURNING config
-`
-
-type UpsertSidekickAccountConfigParams struct {
-	UserID uuid.UUID `db:"user_id" json:"user_id"`
-	Config []byte    `db:"config" json:"config"`
-}
-
-func (q *sqlQuerier) UpsertSidekickAccountConfig(ctx context.Context, arg UpsertSidekickAccountConfigParams) ([]byte, error) {
-	row := q.db.QueryRow(ctx, upsertSidekickAccountConfig, arg.UserID, arg.Config)
-	var config []byte
-	err := row.Scan(&config)
-	return config, err
-}
-
 const upsertSidekickConfigOverride = `-- name: UpsertSidekickConfigOverride :one
 INSERT INTO sidekick_config_overrides (sidekick_id, config)
 SELECT id, $1::jsonb
@@ -22318,7 +22302,7 @@ ON CONFLICT (id) DO UPDATE SET
   disconnected_at = NULL,
   updated_at = NOW()
 WHERE sidekick_installations.user_id = EXCLUDED.user_id
-RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, start_at_login, auto_upload_capabilities
 `
 
 type UpsertSidekickInstallationParams struct {
@@ -22349,39 +22333,47 @@ func (q *sqlQuerier) UpsertSidekickInstallation(ctx context.Context, arg UpsertS
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.StartAtLogin,
+		&i.AutoUploadCapabilities,
 	)
 	return i, err
 }
 
 const upsertSidekickWoWDirectory = `-- name: UpsertSidekickWoWDirectory :exec
 INSERT INTO sidekick_wow_directories (
-  sidekick_id, path, tenant_name, tenant_base_url, realmlist
+  sidekick_id, id, path, tenant_name, tenant_base_url, realmlist, game_format
 )
 VALUES (
-  $1, $2, $3, $4, $5
+  $1, $2, $3, $4, $5, $6, $7
 )
-ON CONFLICT (sidekick_id, path) DO UPDATE SET
+ON CONFLICT (sidekick_id, id) WHERE id IS NOT NULL DO UPDATE SET
+  path = EXCLUDED.path,
   tenant_name = EXCLUDED.tenant_name,
   tenant_base_url = EXCLUDED.tenant_base_url,
   realmlist = EXCLUDED.realmlist,
+  game_format = EXCLUDED.game_format,
   updated_at = NOW()
 `
 
 type UpsertSidekickWoWDirectoryParams struct {
-	SidekickID    uuid.UUID `db:"sidekick_id" json:"sidekick_id"`
-	Path          string    `db:"path" json:"path"`
-	TenantName    string    `db:"tenant_name" json:"tenant_name"`
-	TenantBaseUrl string    `db:"tenant_base_url" json:"tenant_base_url"`
-	Realmlist     string    `db:"realmlist" json:"realmlist"`
+	SidekickID    uuid.UUID   `db:"sidekick_id" json:"sidekick_id"`
+	ID            pgtype.Text `db:"id" json:"id"`
+	Path          string      `db:"path" json:"path"`
+	TenantName    string      `db:"tenant_name" json:"tenant_name"`
+	TenantBaseUrl string      `db:"tenant_base_url" json:"tenant_base_url"`
+	Realmlist     string      `db:"realmlist" json:"realmlist"`
+	GameFormat    string      `db:"game_format" json:"game_format"`
 }
 
 func (q *sqlQuerier) UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertSidekickWoWDirectoryParams) error {
 	_, err := q.db.Exec(ctx, upsertSidekickWoWDirectory,
 		arg.SidekickID,
+		arg.ID,
 		arg.Path,
 		arg.TenantName,
 		arg.TenantBaseUrl,
 		arg.Realmlist,
+		arg.GameFormat,
 	)
 	return err
 }
