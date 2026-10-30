@@ -82,7 +82,7 @@ func (obj *ObjArmory_player) Create() *Armory_playerRelates {
 	return &Armory_playerRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:255
+// Chronicle schema.zed:256
 // Relationship: armory_player:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjArmory_player) Chronicle(subs ...*ObjChronicle) *ObjArmory_player {
@@ -100,7 +100,7 @@ func (r *Armory_playerRelates) Chronicle(subs ...*ObjChronicle) *Armory_playerRe
 	return r
 }
 
-// Owner schema.zed:258
+// Owner schema.zed:259
 // Relationship: armory_player:<id>#owner@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Owner() etc.
 func (obj *ObjArmory_player) Owner(subs ...*ObjUser) *ObjArmory_player {
@@ -446,6 +446,10 @@ func (obj *ObjChronicle) PermissionDebug_inference_chat() string {
 
 func (obj *ObjChronicle) PermissionUse_inference_chat() string {
 	return "use_inference_chat"
+}
+
+func (obj *ObjChronicle) PermissionCreate_live_session() string {
+	return "create_live_session"
 }
 
 func (obj *ObjChronicle) PermissionCreate_lua_project() string {
@@ -1522,6 +1526,21 @@ func (obj *ObjChronicle) CanUse_inference_chat_User(sub *ObjUser) rel.Relationsh
 	}
 }
 
+// CanCreate_live_session_User checks if the subject has create_live_session permission
+// // Object: chronicle:<id>
+// Schema: permission create_live_session = has_revered
+func (obj *ObjChronicle) CanCreate_live_session_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "create_live_session",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
+	}
+}
+
 // CanCreate_lua_project_User checks if the subject has create_lua_project permission
 // // Object: chronicle:<id>
 func (obj *ObjChronicle) CanCreate_lua_project_User(sub *ObjUser) rel.Relationship {
@@ -1744,7 +1763,7 @@ func (obj *ObjCosmetic) Create() *CosmeticRelates {
 	return &CosmeticRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Honored schema.zed:111
+// Honored schema.zed:112
 // Relationship: cosmetic:<id>#honored@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Honored() etc.
 func (obj *ObjCosmetic) Honored(subs ...*ObjChronicle) *ObjCosmetic {
@@ -1762,7 +1781,7 @@ func (r *CosmeticRelates) Honored(subs ...*ObjChronicle) *CosmeticRelates {
 	return r
 }
 
-// Revered schema.zed:112
+// Revered schema.zed:113
 // Relationship: cosmetic:<id>#revered@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Revered() etc.
 func (obj *ObjCosmetic) Revered(subs ...*ObjChronicle) *ObjCosmetic {
@@ -1780,7 +1799,7 @@ func (r *CosmeticRelates) Revered(subs ...*ObjChronicle) *CosmeticRelates {
 	return r
 }
 
-// Exalted schema.zed:113
+// Exalted schema.zed:114
 // Relationship: cosmetic:<id>#exalted@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Exalted() etc.
 func (obj *ObjCosmetic) Exalted(subs ...*ObjChronicle) *ObjCosmetic {
@@ -1900,7 +1919,7 @@ func (obj *ObjGuild) Create() *GuildRelates {
 	return &GuildRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:234
+// Chronicle schema.zed:235
 // Relationship: guild:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjGuild) Chronicle(subs ...*ObjChronicle) *ObjGuild {
@@ -1918,7 +1937,7 @@ func (r *GuildRelates) Chronicle(subs ...*ObjChronicle) *GuildRelates {
 	return r
 }
 
-// Leader schema.zed:236
+// Leader schema.zed:237
 // Relationship: guild:<id>#leader@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Leader() etc.
 func (obj *ObjGuild) Leader(subs ...*ObjUser) *ObjGuild {
@@ -1936,7 +1955,7 @@ func (r *GuildRelates) Leader(subs ...*ObjUser) *GuildRelates {
 	return r
 }
 
-// Member schema.zed:237
+// Member schema.zed:238
 // Relationship: guild:<id>#member@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Member() etc.
 func (obj *ObjGuild) Member(subs ...*ObjUser) *ObjGuild {
@@ -1954,7 +1973,7 @@ func (r *GuildRelates) Member(subs ...*ObjUser) *GuildRelates {
 	return r
 }
 
-// Discord_bot_enabledWildcard schema.zed:241
+// Discord_bot_enabledWildcard schema.zed:242
 // Relationship: guild:<id>#discord_bot_enabled@user:*
 func (obj *ObjGuild) Discord_bot_enabledWildcard() *ObjGuild {
 	obj.src.Touch().Add("discord_bot_enabled", &v1.ObjectReference{
@@ -2240,7 +2259,7 @@ func (obj *ObjInstance) Create() *InstanceRelates {
 	return &InstanceRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Raid_log schema.zed:280
+// Raid_log schema.zed:281
 // Relationship: instance:<id>#raid_log@raid_log:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Raid_log() etc.
 func (obj *ObjInstance) Raid_log(subs ...*ObjRaid_log) *ObjInstance {
@@ -2258,7 +2277,7 @@ func (r *InstanceRelates) Raid_log(subs ...*ObjRaid_log) *InstanceRelates {
 	return r
 }
 
-// PublicWildcard schema.zed:281
+// PublicWildcard schema.zed:282
 // Relationship: instance:<id>#public@user:*
 func (obj *ObjInstance) PublicWildcard() *ObjInstance {
 	obj.src.Touch().Add("public", &v1.ObjectReference{
@@ -2365,7 +2384,7 @@ func (obj *ObjLayout) Create() *LayoutRelates {
 	return &LayoutRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:167
+// Chronicle schema.zed:168
 // Relationship: layout:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjLayout) Chronicle(subs ...*ObjChronicle) *ObjLayout {
@@ -2383,7 +2402,7 @@ func (r *LayoutRelates) Chronicle(subs ...*ObjChronicle) *LayoutRelates {
 	return r
 }
 
-// Owner schema.zed:168
+// Owner schema.zed:169
 // Relationship: layout:<id>#owner@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Owner() etc.
 func (obj *ObjLayout) Owner(subs ...*ObjUser) *ObjLayout {
@@ -2560,7 +2579,7 @@ func (obj *ObjLua_project) Create() *Lua_projectRelates {
 	return &Lua_projectRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:177
+// Chronicle schema.zed:178
 // Relationship: lua_project:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjLua_project) Chronicle(subs ...*ObjChronicle) *ObjLua_project {
@@ -2578,7 +2597,7 @@ func (r *Lua_projectRelates) Chronicle(subs ...*ObjChronicle) *Lua_projectRelate
 	return r
 }
 
-// Owner schema.zed:178
+// Owner schema.zed:179
 // Relationship: lua_project:<id>#owner@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Owner() etc.
 func (obj *ObjLua_project) Owner(subs ...*ObjUser) *ObjLua_project {
@@ -2596,7 +2615,7 @@ func (r *Lua_projectRelates) Owner(subs ...*ObjUser) *Lua_projectRelates {
 	return r
 }
 
-// Public_viewerWildcard schema.zed:180
+// Public_viewerWildcard schema.zed:181
 // Relationship: lua_project:<id>#public_viewer@user:*
 func (obj *ObjLua_project) Public_viewerWildcard() *ObjLua_project {
 	obj.src.Touch().Add("public_viewer", &v1.ObjectReference{
@@ -2615,7 +2634,7 @@ func (r *Lua_projectRelates) Public_viewerWildcard() *Lua_projectRelates {
 	return r
 }
 
-// Viewer_User schema.zed:183
+// Viewer_User schema.zed:184
 // Relationship: lua_project:<id>#viewer@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Viewer_User() etc.
 func (obj *ObjLua_project) Viewer_User(subs ...*ObjUser) *ObjLua_project {
@@ -2633,7 +2652,7 @@ func (r *Lua_projectRelates) Viewer_User(subs ...*ObjUser) *Lua_projectRelates {
 	return r
 }
 
-// ViewerWildcard schema.zed:183
+// ViewerWildcard schema.zed:184
 // Relationship: lua_project:<id>#viewer@user:*
 func (obj *ObjLua_project) ViewerWildcard() *ObjLua_project {
 	obj.src.Touch().Add("viewer", &v1.ObjectReference{
@@ -2652,7 +2671,7 @@ func (r *Lua_projectRelates) ViewerWildcard() *Lua_projectRelates {
 	return r
 }
 
-// Runner_User schema.zed:184
+// Runner_User schema.zed:185
 // Relationship: lua_project:<id>#runner@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Runner_User() etc.
 func (obj *ObjLua_project) Runner_User(subs ...*ObjUser) *ObjLua_project {
@@ -2670,7 +2689,7 @@ func (r *Lua_projectRelates) Runner_User(subs ...*ObjUser) *Lua_projectRelates {
 	return r
 }
 
-// RunnerWildcard schema.zed:184
+// RunnerWildcard schema.zed:185
 // Relationship: lua_project:<id>#runner@user:*
 func (obj *ObjLua_project) RunnerWildcard() *ObjLua_project {
 	obj.src.Touch().Add("runner", &v1.ObjectReference{
@@ -2689,7 +2708,7 @@ func (r *Lua_projectRelates) RunnerWildcard() *Lua_projectRelates {
 	return r
 }
 
-// Editor schema.zed:186
+// Editor schema.zed:187
 // Relationship: lua_project:<id>#editor@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Editor() etc.
 func (obj *ObjLua_project) Editor(subs ...*ObjUser) *ObjLua_project {
@@ -2707,7 +2726,7 @@ func (r *Lua_projectRelates) Editor(subs ...*ObjUser) *Lua_projectRelates {
 	return r
 }
 
-// Publisher schema.zed:187
+// Publisher schema.zed:188
 // Relationship: lua_project:<id>#publisher@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Publisher() etc.
 func (obj *ObjLua_project) Publisher(subs ...*ObjUser) *ObjLua_project {
@@ -2725,7 +2744,7 @@ func (r *Lua_projectRelates) Publisher(subs ...*ObjUser) *Lua_projectRelates {
 	return r
 }
 
-// Unstable_publisher schema.zed:189
+// Unstable_publisher schema.zed:190
 // Relationship: lua_project:<id>#unstable_publisher@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Unstable_publisher() etc.
 func (obj *ObjLua_project) Unstable_publisher(subs ...*ObjUser) *ObjLua_project {
@@ -3000,7 +3019,7 @@ func (obj *ObjRaid_composition) Create() *Raid_compositionRelates {
 	return &Raid_compositionRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:215
+// Chronicle schema.zed:216
 // Relationship: raid_composition:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjRaid_composition) Chronicle(subs ...*ObjChronicle) *ObjRaid_composition {
@@ -3018,7 +3037,7 @@ func (r *Raid_compositionRelates) Chronicle(subs ...*ObjChronicle) *Raid_composi
 	return r
 }
 
-// Owner schema.zed:216
+// Owner schema.zed:217
 // Relationship: raid_composition:<id>#owner@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Owner() etc.
 func (obj *ObjRaid_composition) Owner(subs ...*ObjUser) *ObjRaid_composition {
@@ -3036,7 +3055,7 @@ func (r *Raid_compositionRelates) Owner(subs ...*ObjUser) *Raid_compositionRelat
 	return r
 }
 
-// Editor schema.zed:217
+// Editor schema.zed:218
 // Relationship: raid_composition:<id>#editor@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Editor() etc.
 func (obj *ObjRaid_composition) Editor(subs ...*ObjUser) *ObjRaid_composition {
@@ -3054,7 +3073,7 @@ func (r *Raid_compositionRelates) Editor(subs ...*ObjUser) *Raid_compositionRela
 	return r
 }
 
-// Viewer schema.zed:218
+// Viewer schema.zed:219
 // Relationship: raid_composition:<id>#viewer@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Viewer() etc.
 func (obj *ObjRaid_composition) Viewer(subs ...*ObjUser) *ObjRaid_composition {
@@ -3072,7 +3091,7 @@ func (r *Raid_compositionRelates) Viewer(subs ...*ObjUser) *Raid_compositionRela
 	return r
 }
 
-// Public_viewerWildcard schema.zed:219
+// Public_viewerWildcard schema.zed:220
 // Relationship: raid_composition:<id>#public_viewer@user:*
 func (obj *ObjRaid_composition) Public_viewerWildcard() *ObjRaid_composition {
 	obj.src.Touch().Add("public_viewer", &v1.ObjectReference{
@@ -3290,7 +3309,7 @@ func (obj *ObjRaid_log) Create() *Raid_logRelates {
 	return &Raid_logRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:265
+// Chronicle schema.zed:266
 // Relationship: raid_log:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjRaid_log) Chronicle(subs ...*ObjChronicle) *ObjRaid_log {
@@ -3308,7 +3327,7 @@ func (r *Raid_logRelates) Chronicle(subs ...*ObjChronicle) *Raid_logRelates {
 	return r
 }
 
-// Uploader schema.zed:266
+// Uploader schema.zed:267
 // Relationship: raid_log:<id>#uploader@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Uploader() etc.
 func (obj *ObjRaid_log) Uploader(subs ...*ObjUser) *ObjRaid_log {
@@ -3585,7 +3604,7 @@ func (obj *ObjRiver_queue) Create() *River_queueRelates {
 	return &River_queueRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:228
+// Chronicle schema.zed:229
 // Relationship: river_queue:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjRiver_queue) Chronicle(subs ...*ObjChronicle) *ObjRiver_queue {
@@ -3677,7 +3696,7 @@ func (obj *ObjTalent_build) Create() *Talent_buildRelates {
 	return &Talent_buildRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:203
+// Chronicle schema.zed:204
 // Relationship: talent_build:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjTalent_build) Chronicle(subs ...*ObjChronicle) *ObjTalent_build {
@@ -3695,7 +3714,7 @@ func (r *Talent_buildRelates) Chronicle(subs ...*ObjChronicle) *Talent_buildRela
 	return r
 }
 
-// Owner schema.zed:204
+// Owner schema.zed:205
 // Relationship: talent_build:<id>#owner@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Owner() etc.
 func (obj *ObjTalent_build) Owner(subs ...*ObjUser) *ObjTalent_build {
@@ -3866,7 +3885,7 @@ func (obj *ObjWow_server) Create() *Wow_serverRelates {
 	return &Wow_serverRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:147
+// Chronicle schema.zed:148
 // Relationship: wow_server:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjWow_server) Chronicle(subs ...*ObjChronicle) *ObjWow_server {
@@ -3884,7 +3903,7 @@ func (r *Wow_serverRelates) Chronicle(subs ...*ObjChronicle) *Wow_serverRelates 
 	return r
 }
 
-// Admin schema.zed:148
+// Admin schema.zed:149
 // Relationship: wow_server:<id>#admin@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Admin() etc.
 func (obj *ObjWow_server) Admin(subs ...*ObjUser) *ObjWow_server {
@@ -3902,7 +3921,7 @@ func (r *Wow_serverRelates) Admin(subs ...*ObjUser) *Wow_serverRelates {
 	return r
 }
 
-// Tenant schema.zed:149
+// Tenant schema.zed:150
 // Relationship: wow_server:<id>#tenant@wow_tenant:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Tenant() etc.
 func (obj *ObjWow_server) Tenant(subs ...*ObjWow_tenant) *ObjWow_server {
@@ -4118,7 +4137,7 @@ func (obj *ObjWow_server_realm) Create() *Wow_server_realmRelates {
 	return &Wow_server_realmRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Wow_server schema.zed:158
+// Wow_server schema.zed:159
 // Relationship: wow_server_realm:<id>#wow_server@wow_server:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Wow_server() etc.
 func (obj *ObjWow_server_realm) Wow_server(subs ...*ObjWow_server) *ObjWow_server_realm {
@@ -4136,7 +4155,7 @@ func (r *Wow_server_realmRelates) Wow_server(subs ...*ObjWow_server) *Wow_server
 	return r
 }
 
-// World_daemon schema.zed:159
+// World_daemon schema.zed:160
 // Relationship: wow_server_realm:<id>#world_daemon@wow_server_upload_key:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().World_daemon() etc.
 func (obj *ObjWow_server_realm) World_daemon(subs ...*ObjWow_server_upload_key) *ObjWow_server_realm {
@@ -4341,7 +4360,7 @@ func (obj *ObjWow_tenant) Create() *Wow_tenantRelates {
 	return &Wow_tenantRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:122
+// Chronicle schema.zed:123
 // Relationship: wow_tenant:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjWow_tenant) Chronicle(subs ...*ObjChronicle) *ObjWow_tenant {
@@ -4359,7 +4378,7 @@ func (r *Wow_tenantRelates) Chronicle(subs ...*ObjChronicle) *Wow_tenantRelates 
 	return r
 }
 
-// Admin schema.zed:123
+// Admin schema.zed:124
 // Relationship: wow_tenant:<id>#admin@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Admin() etc.
 func (obj *ObjWow_tenant) Admin(subs ...*ObjUser) *ObjWow_tenant {
@@ -4377,7 +4396,7 @@ func (r *Wow_tenantRelates) Admin(subs ...*ObjUser) *Wow_tenantRelates {
 	return r
 }
 
-// Photo_proof_submitter schema.zed:124
+// Photo_proof_submitter schema.zed:125
 // Relationship: wow_tenant:<id>#photo_proof_submitter@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Photo_proof_submitter() etc.
 func (obj *ObjWow_tenant) Photo_proof_submitter(subs ...*ObjUser) *ObjWow_tenant {
@@ -4395,7 +4414,7 @@ func (r *Wow_tenantRelates) Photo_proof_submitter(subs ...*ObjUser) *Wow_tenantR
 	return r
 }
 
-// Photo_proof_reviewer schema.zed:125
+// Photo_proof_reviewer schema.zed:126
 // Relationship: wow_tenant:<id>#photo_proof_reviewer@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Photo_proof_reviewer() etc.
 func (obj *ObjWow_tenant) Photo_proof_reviewer(subs ...*ObjUser) *ObjWow_tenant {
@@ -4556,7 +4575,7 @@ func (obj *ObjWow_tenant_application) Create() *Wow_tenant_applicationRelates {
 	return &Wow_tenant_applicationRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Wow_tenant schema.zed:138
+// Wow_tenant schema.zed:139
 // Relationship: wow_tenant_application:<id>#wow_tenant@wow_tenant:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Wow_tenant() etc.
 func (obj *ObjWow_tenant_application) Wow_tenant(subs ...*ObjWow_tenant) *ObjWow_tenant_application {
@@ -4574,7 +4593,7 @@ func (r *Wow_tenant_applicationRelates) Wow_tenant(subs ...*ObjWow_tenant) *Wow_
 	return r
 }
 
-// Admin schema.zed:141
+// Admin schema.zed:142
 // Relationship: wow_tenant_application:<id>#admin@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Admin() etc.
 func (obj *ObjWow_tenant_application) Admin(subs ...*ObjUser) *ObjWow_tenant_application {
