@@ -17,6 +17,9 @@ type GuildInfo struct {
 	CanEdit       bool      `json:"can_edit"`
 	CanViewRoster bool      `json:"can_view_roster"`
 	CanClaim      bool      `json:"can_claim"`
+	// ClaimLocked is true when the guild is unclaimed but the user lacks the
+	// permission to submit a claim (e.g. not Honored).
+	ClaimLocked bool `json:"claim_locked"`
 }
 
 type GuildPageConfig struct {

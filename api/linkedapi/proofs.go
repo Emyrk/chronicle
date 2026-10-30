@@ -343,9 +343,11 @@ func (h *Handler) proofResponse(ctx context.Context, scope serviceproof.Scope, i
 	}
 	classBySubject := make(map[uuid.UUID]string, len(classes))
 	guildBySubject := make(map[uuid.UUID]string, len(classes))
+	nameBySubject := make(map[uuid.UUID]string, len(classes))
 	for _, subject := range classes {
 		classBySubject[subject.SubjectID] = string(subject.Class)
 		guildBySubject[subject.SubjectID] = subject.GuildName.String
+		nameBySubject[subject.SubjectID] = subject.CharacterName
 	}
 	for _, s := range subjects {
 		if s.SubjectType == "guild" && s.GuildID.Valid {
@@ -358,9 +360,16 @@ func (h *Handler) proofResponse(ctx context.Context, scope serviceproof.Scope, i
 			if claimed && s.Status == "pending" {
 				warning = "Guild has already been claimed"
 			}
-			out.Subjects = append(out.Subjects, chroniclesdk.ProofSubject{
+			subject := chroniclesdk.ProofSubject{
 				GuildID: &guildID, Name: s.Name, RealmName: s.RealmName, Status: s.Status, Warning: warning,
-			})
+			}
+			// Claims made before a character was required have none.
+			if s.RealmID.Valid && s.CharacterGuid != nil {
+				subject.ProofCharacter = chroniclesdk.ProofCharacter{RealmID: s.RealmID.UUID, CharacterGUID: *s.CharacterGuid}
+				subject.Class = classBySubject[s.ID]
+				subject.CharacterName = nameBySubject[s.ID]
+			}
+			out.Subjects = append(out.Subjects, subject)
 			continue
 		}
 		if !s.RealmID.Valid || s.CharacterGuid == nil {

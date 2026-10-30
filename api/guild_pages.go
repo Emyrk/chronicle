@@ -258,6 +258,7 @@ func (api *API) GetGuildPage(w http.ResponseWriter, r *http.Request) {
 	canEdit := false
 	canViewRoster := false
 	canClaim := false
+	claimLocked := false
 	// Check if user can edit
 	// TODO: This should be an auth check call
 	actor, ok := authz.ActorFromContext(ctx)
@@ -273,13 +274,14 @@ func (api *API) GetGuildPage(w http.ResponseWriter, r *http.Request) {
 			canEdit = results[0]
 			canViewRoster = results[1]
 		}
-		if !canEdit && len(results) == 3 && results[2] {
+		if !canEdit && len(results) == 3 {
 			hasLeader, err := api.Zed.GuildHasLeader(ctx, guild.ID)
 			if err != nil {
 				httpapi.InternalServerError(w, err)
 				return
 			}
-			canClaim = !hasLeader
+			canClaim = !hasLeader && results[2]
+			claimLocked = !hasLeader && !results[2]
 		}
 	}
 
@@ -292,6 +294,7 @@ func (api *API) GetGuildPage(w http.ResponseWriter, r *http.Request) {
 		CanEdit:       canEdit,
 		CanViewRoster: canViewRoster,
 		CanClaim:      canClaim,
+		ClaimLocked:   claimLocked,
 	}
 
 	page, err := api.Opts.Zed.GetFullGuildPage(ctx, guild.ID)

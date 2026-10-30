@@ -18,8 +18,10 @@ type ProofSubject struct {
 	RealmName string     `json:"realm_name"`
 	Class     string     `json:"class,omitempty"`
 	GuildName string     `json:"guild_name,omitempty"`
-	Status    string     `json:"status"`
-	Warning   string     `json:"warning,omitempty"`
+	// CharacterName is the claiming character on a guild subject.
+	CharacterName string `json:"character_name,omitempty"`
+	Status        string `json:"status"`
+	Warning       string `json:"warning,omitempty"`
 }
 
 type ProofRequest struct {

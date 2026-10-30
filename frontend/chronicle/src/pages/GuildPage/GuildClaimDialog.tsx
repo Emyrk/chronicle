@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, Crown, ShieldCheck } from "lucide-react";
+import { BadgeCheck, Check, Clock, Copy, Crown, Link2, Lock, Maximize2, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import type { GuildInfo, ProofCooldownResponse } from "@/api/typesGenerated";
+import type { GuildInfo, GuildRosterCharacter, ProofCooldownResponse } from "@/api/typesGenerated";
+import { useGuildCharacters, useMyCharacters } from "@/api/queries";
 import { ProofScreenshotDropzone } from "@/components/ProofScreenshotDropzone";
 import { encodeProofScreenshot } from "@/lib/proofScreenshot";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -14,9 +17,120 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import type { ProofRequest } from "@/pages/Settings/PhotoProof";
+import { getClassColorVar } from "@/pages/ArmoryPage/types";
 
 const GUILD_PROOF_PURPOSE = "guild-ownership";
+const EXAMPLE_SCREENSHOT = "/c/images/guild-claim-example.webp";
+// Chat commands that print the character, guild, guild-master flag, and realm
+// so reviewers can verify them in the screenshot.
+const CLAIM_COMMANDS = [
+  `/run local g,r,i=GetGuildInfo("player"); DEFAULT_CHAT_FRAME:AddMessage('Character: "'..UnitName("player")..'" Guild: "'..(g or "None")..'" Guild Master: '..(i==0 and "YES" or "NO"))`,
+  `/run DEFAULT_CHAT_FRAME:AddMessage("Realm: "..GetRealmName().." Client: "..GetBuildInfo())`,
+];
+
+function ClaimCommands() {
+  return <ol className="space-y-2">
+    {CLAIM_COMMANDS.map((command, index) => <li key={command} className="flex items-start gap-2">
+      <span className="mt-1.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-xs font-semibold text-amber-500">{index + 1}</span>
+      <code className="min-w-0 flex-1 break-all rounded-md border bg-muted/50 px-2.5 py-1.5 font-mono text-xs text-foreground">{command}</code>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="shrink-0"
+        onClick={async () => {
+          await navigator.clipboard.writeText(command);
+          toast.success(`Command ${index + 1} copied`);
+        }}
+      >
+        <Copy className="h-3.5 w-3.5" />
+        Copy
+      </Button>
+    </li>)}
+  </ol>;
+}
+
+function GuildClaimExample() {
+  const [expanded, setExpanded] = useState(false);
+  return <>
+    <button type="button" onClick={() => setExpanded(true)} className="group relative h-72 w-full overflow-hidden rounded-lg border bg-black text-left">
+      <img src={EXAMPLE_SCREENSHOT} alt="Example guild claim screenshot" className="size-full object-contain transition-transform group-hover:scale-105" />
+      <span className="absolute top-2 left-2 rounded bg-black/70 px-2 py-0.5 text-xs font-medium text-white">Example</span>
+      <span className="absolute top-2 right-2 rounded bg-black/70 p-1 text-white opacity-80 group-hover:opacity-100"><Maximize2 className="size-3.5" /></span>
+      <span className="absolute inset-x-0 bottom-0 bg-black/70 px-3 py-1.5 text-xs text-white">Guild roster, guild ranks, character panel, and both command outputs in chat</span>
+    </button>
+    <Dialog open={expanded} onOpenChange={setExpanded}>
+      <DialogContent className="max-w-5xl sm:max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>Example screenshot</DialogTitle>
+          <DialogDescription>Open the guild roster, the guild rank list, and your character panel, then run both chat commands so their output is visible (boxed). Your character must hold the top rank.</DialogDescription>
+        </DialogHeader>
+        <img src={EXAMPLE_SCREENSHOT} alt="Example screenshot showing the guild roster, guild ranks, character panel, and chat command output" className="max-h-[75vh] w-full rounded object-contain" />
+      </DialogContent>
+    </Dialog>
+  </>;
+}
+
+// CharacterPicker collapses to the chosen character once one is picked;
+// clicking it reopens the searchable list.
+function CharacterPicker({ members, linked, selected, onSelect }: {
+  members: readonly GuildRosterCharacter[];
+  linked: Set<string>;
+  selected: GuildRosterCharacter | null;
+  onSelect: (member: GuildRosterCharacter) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [listOpen, setListOpen] = useState(!selected);
+  const filtered = members
+    .filter((member) => member.name.toLowerCase().includes(search.trim().toLowerCase()))
+    .sort((a, b) => Number(linked.has(b.id)) - Number(linked.has(a.id)) || a.name.localeCompare(b.name));
+
+  if (selected && !listOpen) {
+    const isLinked = linked.has(selected.id);
+    return <button
+      type="button"
+      onClick={() => setListOpen(true)}
+      className={`flex w-full items-center gap-3 rounded-md border-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/40 ${isLinked ? "border-green-500/60 bg-green-500/5" : "border-amber-500/60 bg-amber-500/5"}`}
+    >
+      {isLinked
+        ? <Check className="h-5 w-5 shrink-0 text-green-500" />
+        : <Lock className="h-5 w-5 shrink-0 text-amber-500" />}
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold" style={{ color: getClassColorVar(selected.class) }}>{selected.name}</span>
+        <span className="block text-xs text-muted-foreground">{selected.level} {selected.class} · {isLinked ? "Linked to your account" : "Not linked to your account"}</span>
+      </span>
+      <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"><Search className="h-3.5 w-3.5" />Change</span>
+    </button>;
+  }
+
+  return <div className="space-y-2">
+    <Input
+      autoFocus={!!selected}
+      value={search}
+      onChange={(event) => setSearch(event.target.value)}
+      placeholder="Search this guild's characters..."
+    />
+    <div className="max-h-48 divide-y overflow-y-auto rounded-md border styled-scrollbar">
+      {filtered.length === 0 && <p className="p-3 text-sm text-muted-foreground">No matching characters.</p>}
+      {filtered.map((member) => <button
+        key={member.id}
+        type="button"
+        onClick={() => {
+          onSelect(member);
+          setSearch("");
+          setListOpen(false);
+        }}
+        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-muted/60 ${selected?.id === member.id ? "bg-amber-500/10" : ""}`}
+      >
+        <span className="font-medium" style={{ color: getClassColorVar(member.class) }}>{member.name}</span>
+        <span className="text-xs text-muted-foreground">{member.level} {member.class}</span>
+        {linked.has(member.id) && <span className="ml-auto flex items-center gap-1 text-xs text-green-500"><BadgeCheck className="h-3.5 w-3.5" />Linked</span>}
+      </button>)}
+    </div>
+  </div>;
+}
 
 function cooldownText(remainingMs: number) {
   const minutes = Math.ceil(remainingMs / 60_000);
@@ -31,9 +145,60 @@ function requestError(response: Response, fallback: string) {
     .then((body) => new Error(body?.message ?? `${fallback} (${response.status})`));
 }
 
+// ClaimRequirements lists what a guild claim needs; `honored` marks whether
+// the user already has the Honored (claim) permission.
+function ClaimRequirements({ honored }: { honored: boolean }) {
+  return <TooltipContent side="bottom" sideOffset={6} className="w-80 max-w-[calc(100vw-2rem)] p-4 text-left text-sm text-pretty">
+    <p className="flex items-center gap-2 font-semibold text-amber-400">
+      <Crown className="h-4 w-4" /> Claiming a guild requires
+    </p>
+    <ul className="mt-3 space-y-2.5">
+      <li className="flex gap-2">
+        <Crown className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+        <span><span className="font-medium text-white">Guild master.</span> Your character must hold the guild's top rank. You'll prove it with a screenshot.</span>
+      </li>
+      <li className="flex gap-2">
+        <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
+        <span><span className="font-medium text-white">Linked character.</span> That character must be{" "}
+          <Link to="/account/characters" className="text-sky-400 underline underline-offset-2 hover:text-sky-300">linked to your account</Link>.
+        </span>
+      </li>
+      <li className="flex gap-2">
+        {honored
+          ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#1eff00]" />
+          : <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#1eff00]" />}
+        {honored
+          ? <span><span className="font-medium text-white">Honored or above.</span> <span className="text-[#1eff00]">You have this.</span></span>
+          : <span><span className="font-medium text-white">Honored or above.</span>{" "}
+            <Link to="/account/billing" className="text-[#1eff00] underline underline-offset-2 hover:brightness-125">Become an Honored supporter</Link> to unlock guild claims.
+          </span>}
+      </li>
+    </ul>
+  </TooltipContent>;
+}
+
+// GuildClaimLockedButton is shown to signed-in users who could claim an
+// unclaimed guild but lack the claim permission.
+export function GuildClaimLockedButton() {
+  return <HintTooltip delayDuration={150}>
+    <TooltipTrigger asChild>
+      {/* Disabled buttons swallow pointer events, so the span hosts the tooltip. */}
+      <span tabIndex={0} className="inline-flex">
+        <Button size="sm" disabled className="pointer-events-none border border-amber-300/30 bg-amber-500/90 text-black shadow-sm">
+          <Lock className="h-4 w-4" />
+          Claim this guild
+        </Button>
+      </span>
+    </TooltipTrigger>
+    <ClaimRequirements honored={false} />
+  </HintTooltip>;
+}
+
 export function GuildClaimDialog({ guild }: { guild: GuildInfo }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [character, setCharacter] = useState<GuildRosterCharacter | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [message, setMessage] = useState("");
@@ -62,6 +227,13 @@ export function GuildClaimDialog({ guild }: { guild: GuildInfo }) {
     staleTime: 30_000,
   });
 
+  const roster = useGuildCharacters(open ? guild.id : undefined);
+  const myCharacters = useMyCharacters({ enabled: open });
+  const linked = useMemo(() => new Set((myCharacters.data ?? [])
+    .filter((link) => link.realm_id === guild.realm_id)
+    .map((link) => link.character_guid)), [myCharacters.data, guild.realm_id]);
+  const characterLinked = !!character && linked.has(character.id);
+
   const pendingClaim = proofs.data?.find((request) =>
     request.purpose === GUILD_PROOF_PURPOSE &&
     request.status === "pending" &&
@@ -73,9 +245,11 @@ export function GuildClaimDialog({ guild }: { guild: GuildInfo }) {
 
   const submit = useMutation({
     mutationFn: async () => {
+      if (!character || !characterLinked) throw new Error("Select your linked guild master character");
       if (!file) throw new Error("Choose a screenshot that proves you lead this guild");
       const form = new FormData();
       form.append("guild_id", guild.id);
+      form.append("character_guid", character.id);
       form.append("photo", await encodeProofScreenshot(file), "guild-roster.jpg");
       form.append("message", message.trim());
       const response = await fetch("/api/v1/linked/me/guild-proofs", {
@@ -101,6 +275,7 @@ export function GuildClaimDialog({ guild }: { guild: GuildInfo }) {
       queryClient.invalidateQueries({ queryKey: ["my-proofs"] });
       queryClient.invalidateQueries({ queryKey: ["guild-proof-cooldown"] });
       setFile(null);
+      setCharacter(null);
       setFileInputKey((key) => key + 1);
       setMessage("");
       setOpen(false);
@@ -116,15 +291,20 @@ export function GuildClaimDialog({ guild }: { guild: GuildInfo }) {
   }
 
   return <>
-    <Button
-      size="sm"
-      onClick={() => setOpen(true)}
-      disabled={proofs.isLoading}
-      className="border border-amber-300/30 bg-amber-500/90 text-black shadow-sm hover:bg-amber-400"
-    >
-      <Crown className="h-4 w-4" />
-      {proofs.isLoading ? "Checking claim..." : "Claim this guild"}
-    </Button>
+    <HintTooltip delayDuration={150}>
+      <TooltipTrigger asChild>
+        <Button
+          size="sm"
+          onClick={() => setOpen(true)}
+          disabled={proofs.isLoading}
+          className="border border-amber-300/30 bg-amber-500/90 text-black shadow-sm hover:bg-amber-400"
+        >
+          <Crown className="h-4 w-4" />
+          {proofs.isLoading ? "Checking claim..." : "Claim this guild"}
+        </Button>
+      </TooltipTrigger>
+      <ClaimRequirements honored />
+    </HintTooltip>
     <Dialog open={open} onOpenChange={(next) => !submit.isPending && setOpen(next)}>
       <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto styled-scrollbar">
         <DialogHeader className="pr-8">
@@ -139,15 +319,38 @@ export function GuildClaimDialog({ guild }: { guild: GuildInfo }) {
         </DialogHeader>
 
         <div className="space-y-5">
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold">1. Choose your guild master character</h3>
+            <p className="text-sm text-muted-foreground">Pick the character that leads &lt;{guild.name}&gt;. It must already be linked to your Chronicle account.</p>
+            <p className="text-sm text-muted-foreground">Chronicle must also know the character is in this guild. If yours isn't listed, upload a log from a dungeon or raid run with it to get registered.</p>
+            {roster.isLoading || myCharacters.isLoading
+              ? <p className="text-sm text-muted-foreground">Loading guild characters...</p>
+              : roster.isError || myCharacters.isError
+                ? <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">Could not load characters. Refresh the page to try again.</p>
+                : <CharacterPicker members={roster.data?.members ?? []} linked={linked} selected={character} onSelect={setCharacter} />}
+            {character && !characterLinked && <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-500">
+              <span className="flex-1">{character.name} is not linked to your account. Link it first, then come back to claim this guild.</span>
+              <Button size="sm" variant="outline" onClick={() => navigate("/account/characters")}>
+                <Link2 className="h-4 w-4" />
+                Link {character.name}
+              </Button>
+            </div>}
+          </div>
+
+          <h3 className="text-sm font-semibold">2. Upload a screenshot</h3>
           <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 p-4">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-amber-500">
               <Crown className="h-4 w-4" /> What the screenshot must show
             </h3>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
               <li>The in-game guild roster with <span className="font-medium text-foreground">{guild.name}</span> clearly visible.</li>
-              <li>Your character identified as guild leader, guild master, or the highest leadership rank.</li>
-              <li>The realm or server name <span className="font-medium text-foreground">{guild.realm_name}</span>, visible in the same screenshot when possible.</li>
+              <li>{character && characterLinked ? <span className="font-medium text-foreground">{character.name}</span> : "Your character"} identified as guild leader, guild master, or the highest leadership rank.</li>
+              <li>The guild rank list and your character panel open, so the reviewer can match the character to the top rank.</li>
+              <li>The output of both chat commands below, showing <span className="font-medium text-foreground">Guild Master: YES</span> and the realm <span className="font-medium text-foreground">{guild.realm_name}</span>.</li>
             </ul>
+            <p className="mt-3 mb-2 text-sm font-medium text-foreground">Run these two commands in chat before taking the screenshot:</p>
+            <ClaimCommands />
+            <div className="mt-3"><GuildClaimExample /></div>
             <p className="mt-2 text-xs text-muted-foreground">Use an uncropped screenshot with enough interface context for an administrator to verify it. The image is deleted after review.</p>
           </div>
 
@@ -181,7 +384,7 @@ export function GuildClaimDialog({ guild }: { guild: GuildInfo }) {
 
         <DialogFooter>
           <Button variant="ghost" disabled={submit.isPending} onClick={() => setOpen(false)}>Cancel</Button>
-          <Button disabled={!file || cannotSubmit || submit.isPending} onClick={() => submit.mutate()}>
+          <Button disabled={!file || !characterLinked || cannotSubmit || submit.isPending} onClick={() => submit.mutate()}>
             {submit.isPending ? "Preparing screenshot..." : "Submit guild claim"}
           </Button>
         </DialogFooter>

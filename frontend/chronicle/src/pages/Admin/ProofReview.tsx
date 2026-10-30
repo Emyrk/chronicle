@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { BadgeCheck, Check, ChevronLeft, ChevronRight, Crown, Server, User, X } from "lucide-react";
+import { BadgeCheck, Check, ChevronLeft, ChevronRight, Crown, Link2, Server, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ProofRequest } from "@/pages/Settings/PhotoProof";
@@ -16,6 +16,22 @@ type ProofSubject = ProofRequest["subjects"][number];
 const subjectKey = (subject: ProofSubject) => subject.guild_id
   ? `guild/${subject.guild_id}`
   : `character/${subject.realm_id}/${subject.character_guid}`;
+
+const isGuildClaim = (request: ProofRequest) => request.purpose === "guild-ownership";
+
+// Guild claims are amber with a crown; character links are sky with a link icon.
+function PurposeBadge({ request, large = false }: { request: ProofRequest; large?: boolean }) {
+  const guild = isGuildClaim(request);
+  const Icon = guild ? Crown : Link2;
+  return <span className={cn(
+    "inline-flex items-center gap-1.5 rounded-md border font-semibold uppercase tracking-wide",
+    guild ? "border-amber-500/40 bg-amber-500/15 text-amber-500" : "border-sky-500/40 bg-sky-500/15 text-sky-400",
+    large ? "px-3 py-1 text-sm" : "px-2 py-0.5 text-xs",
+  )}>
+    <Icon className={large ? "size-4" : "size-3.5"} />
+    {guild ? "Guild claim" : "Character link"}
+  </span>;
+}
 
 function TenantBadge({ request, large = false }: { request: ProofRequest; large?: boolean }) {
   return <span className={cn("inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 font-medium text-primary", large ? "px-3 py-1 text-base" : "px-2 py-0.5 text-sm")} title={`Tenant ${request.tenant_id}`}>
@@ -102,11 +118,12 @@ function Review({ request, draft, onDraftChange }: { request: ProofRequest; draf
     onSuccess: () => { toast.success("Decision saved"); queryClient.invalidateQueries({ queryKey: ["admin-proofs"] }); },
     onError: (error) => toast.error(error.message),
   });
-  const isGuildClaim = request.purpose === "guild-ownership";
+  const guildClaim = isGuildClaim(request);
   const undecided = request.subjects.filter((subject) => choices[subjectKey(subject)] === undefined).length;
 
-  return <article className="rounded-lg border">
-    <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b bg-muted/30 px-4 py-3 text-sm">
+  return <article className={cn("rounded-lg border border-l-4", guildClaim ? "border-l-amber-500" : "border-l-sky-500")}>
+    <header className={cn("flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3 text-sm", guildClaim ? "bg-amber-500/10" : "bg-sky-500/10")}>
+      <PurposeBadge request={request} large />
       <span className="text-muted-foreground">Submitted to</span>
       <TenantBadge request={request} large />
       <span className="text-muted-foreground">{new Date(request.created_at).toLocaleString()}</span>
@@ -119,27 +136,30 @@ function Review({ request, draft, onDraftChange }: { request: ProofRequest; draf
         {request.message && <div className="rounded bg-muted/50 p-3 text-sm whitespace-pre-wrap"><span className="block text-xs text-muted-foreground">Applicant message</span>{request.message}</div>}
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-medium">{isGuildClaim ? "Guild claim" : `Characters (${request.subjects.length})`}</h3>
-            {!isGuildClaim && request.subjects.length > 1 && <div className="flex gap-1">
+            <h3 className="text-sm font-medium">{guildClaim ? "Guild claim" : `Characters (${request.subjects.length})`}</h3>
+            {!guildClaim && request.subjects.length > 1 && <div className="flex gap-1">
               <Button size="sm" variant="ghost" onClick={() => setAll(true)}>Approve all</Button>
               <Button size="sm" variant="ghost" onClick={() => setAll(false)}>Deny all</Button>
             </div>}
           </div>
           <p className="text-xs text-muted-foreground">
-            {isGuildClaim
-              ? "Confirm the screenshot shows this guild's roster, realm, and evidence that the applicant holds the guild-leader rank."
+            {guildClaim
+              ? "Confirm the screenshot shows this guild's roster and the chat command output: the claiming character, this guild, 'Guild Master: YES', and the realm."
               : "Check the realm and each name against the screenshot. Existing links cannot be reassigned by this review."}
           </p>
           {request.subjects.map((subject) => {
             const key = subjectKey(subject);
             const choice = choices[key];
-            return <div key={key} className={cn("rounded border p-3 space-y-2 text-sm", choice === true && "border-green-500/50 bg-green-500/5", choice === false && "border-destructive/50 bg-destructive/5")}>
+            return <div key={key} className={cn("rounded border p-3 space-y-2 text-sm", subject.guild_id && "border-amber-500/30", choice === true && "border-green-500/50 bg-green-500/5", choice === false && "border-destructive/50 bg-destructive/5")}>
               {subject.guild_id ? (
-                <div className="flex items-center gap-2">
-                  <span className="rounded-md bg-amber-500/15 p-1.5 text-amber-500"><Crown className="size-4" /></span>
+                <div className="flex items-center gap-3">
+                  <span className="rounded-lg bg-amber-500/15 p-2.5 text-amber-500"><Crown className="size-6" /></span>
                   <div>
-                    <Link className="font-medium hover:underline" to={`/g/${subject.guild_id}`} target="_blank">&lt;{subject.name}&gt;</Link>
+                    <Link className="text-base font-semibold text-amber-500 hover:underline" to={`/g/${subject.guild_id}`} target="_blank">&lt;{subject.name}&gt;</Link>
                     <p className="text-xs text-muted-foreground">{subject.realm_name} · Guild ID <code>{subject.guild_id}</code></p>
+                    {subject.character_name && <p className="text-xs text-muted-foreground">Claiming as{" "}
+                      <Link className="font-medium hover:underline" to={`/armory/${encodeURIComponent(subject.realm_name)}/${subject.character_guid}`} target="_blank" style={subject.class ? { color: getClassColorVar(subject.class) } : undefined}>{subject.character_name}</Link>
+                    </p>}
                   </div>
                 </div>
               ) : (
@@ -161,7 +181,7 @@ function Review({ request, draft, onDraftChange }: { request: ProofRequest; draf
         <label className="block text-sm space-y-1"><span>Response to applicant</span><textarea className="w-full min-h-20 rounded-md border bg-background p-2" maxLength={2000} value={message} onChange={(event) => onDraftChange({ ...draft, message: event.target.value })} placeholder="Explain approvals or denials" /></label>
         <div className="flex items-center gap-3">
           <Button disabled={!evidenceAvailable || decide.isPending || undecided > 0} onClick={() => decide.mutate()}>{decide.isPending ? "Saving..." : "Save decision"}</Button>
-          {undecided > 0 && <span className="text-xs text-muted-foreground">{undecided} {isGuildClaim ? "guild claim still needs" : `character${undecided === 1 ? "" : "s"} still need`} a decision</span>}
+          {undecided > 0 && <span className="text-xs text-muted-foreground">{undecided} {guildClaim ? "guild claim still needs" : `character${undecided === 1 ? "" : "s"} still need`} a decision</span>}
         </div>
       </div>
     </div>
@@ -178,6 +198,7 @@ export function ProofReview() {
     },
   });
   const pending = data?.filter((request) => request.status === "pending") ?? [];
+  const guildPending = pending.filter(isGuildClaim).length;
   const [index, setIndex] = useState(0);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   // Saving a decision drops the request from the pending list; clamp so the
@@ -199,7 +220,7 @@ export function ProofReview() {
 
   return <section className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h2 className="text-lg font-semibold">Photo proof review <span className="text-muted-foreground font-normal">({pending.length} pending)</span></h2>
+      <h2 className="text-lg font-semibold">Photo proof review <span className="text-muted-foreground font-normal">({pending.length} pending{guildPending > 0 && <> · <span className="text-amber-500">{guildPending} guild claim{guildPending === 1 ? "" : "s"}</span></>})</span></h2>
       {pending.length > 0 && <div className="flex items-center gap-2">
         <Button size="sm" variant="outline" disabled={current === 0} onClick={() => go(-1)} aria-label="Previous request"><ChevronLeft className="size-4" />Prev</Button>
         <span className="min-w-20 text-center text-sm tabular-nums">{current + 1} of {pending.length}</span>
@@ -218,8 +239,9 @@ export function ProofReview() {
     />}
     {!!data?.some((r) => r.status !== "pending") && <div className="border-t pt-4 space-y-2">
       <h3 className="text-sm font-medium">Recent decisions</h3>
-      {data.filter((r) => r.status !== "pending").slice(0, 10).map((r) => <div key={r.id} className="rounded border p-3 text-sm space-y-1">
+      {data.filter((r) => r.status !== "pending").slice(0, 10).map((r) => <div key={r.id} className={cn("rounded border border-l-4 p-3 text-sm space-y-1", isGuildClaim(r) ? "border-l-amber-500" : "border-l-sky-500")}>
         <div className="flex flex-wrap items-center gap-2">
+          <PurposeBadge request={r} />
           <span className="font-medium capitalize">{r.status}</span>
           <TenantBadge request={r} />
           <span className="text-muted-foreground">{new Date(r.reviewed_at ?? r.created_at).toLocaleString()} · {r.applicant?.username ?? r.applicant_id}</span>
