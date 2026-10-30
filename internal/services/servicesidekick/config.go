@@ -17,15 +17,20 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func decodeSidekickConfig(payload []byte) (chroniclesdk.SidekickConfig, error) {
-	var config chroniclesdk.SidekickConfig
+func decodeSidekickConfig(payload []byte) (chroniclesdk.SidekickConfig, bool, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return chroniclesdk.SidekickConfig{}, false, err
+	}
+	config := chroniclesdk.DefaultSidekickConfig()
 	if err := json.Unmarshal(payload, &config); err != nil {
-		return chroniclesdk.SidekickConfig{}, err
+		return chroniclesdk.SidekickConfig{}, false, err
 	}
+	_, hasArchive := fields["archive"]
 	if err := config.Validate(); err != nil {
-		return chroniclesdk.SidekickConfig{}, err
+		return chroniclesdk.SidekickConfig{}, false, err
 	}
-	return config, nil
+	return config, !hasArchive, nil
 }
 
 func decodeSidekickCapabilities(payload []byte) (chroniclesdk.SidekickAutoUploadCapabilities, error) {
@@ -53,6 +58,7 @@ func supportsAutoUpload(capabilities chroniclesdk.SidekickAutoUploadCapabilities
 
 func normalizeSidekickConfig(config chroniclesdk.SidekickConfig, capabilities chroniclesdk.SidekickAutoUploadCapabilities) chroniclesdk.SidekickConfig {
 	normalized := chroniclesdk.DefaultSidekickConfig()
+	normalized.Archive = config.Archive
 	for id, directory := range config.WoWDirectories {
 		if !supportsAutoUpload(capabilities, directory.GameFormat, directory.AutoUpload) {
 			directory.AutoUpload = chroniclesdk.SidekickAutoUploadDisabled
@@ -91,11 +97,12 @@ func (s *Service) sidekickConfigState(ctx context.Context, userID, sidekickID uu
 		UserID:     userID,
 	})
 	if err == nil {
-		decoded, decodeErr := decodeSidekickConfig(payload)
+		decoded, needsUpgrade, decodeErr := decodeSidekickConfig(payload)
 		if decodeErr != nil {
 			resetStoredConfig = true
 		} else {
 			config = decoded
+			resetStoredConfig = needsUpgrade
 		}
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return chroniclesdk.SidekickConfigState{}, err
@@ -123,8 +130,11 @@ func (s *Service) sidekickConfigState(ctx context.Context, userID, sidekickID uu
 	return chroniclesdk.SidekickConfigState{Config: config, Hash: hash}, nil
 }
 
-func sidekickStatusResponse(configuration chroniclesdk.SidekickConfigState, clientHash string) chroniclesdk.SidekickStatusResponse {
-	response := chroniclesdk.SidekickStatusResponse{ConfigHash: configuration.Hash}
+func sidekickStatusResponse(sidekickID uuid.UUID, configuration chroniclesdk.SidekickConfigState, clientHash string) chroniclesdk.SidekickStatusResponse {
+	response := chroniclesdk.SidekickStatusResponse{
+		SettingsURL: "/account/sidekick/installations/" + sidekickID.String(),
+		ConfigHash:  configuration.Hash,
+	}
 	if clientHash != configuration.Hash {
 		config := configuration.Config
 		response.Config = &config

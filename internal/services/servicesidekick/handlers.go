@@ -364,11 +364,7 @@ func (s *Service) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	response := sidekickStatusResponse(configuration, request.ConfigHash)
-	if response.Config == nil {
-		httpapi.Write(r.Context(), w, http.StatusNoContent, nil)
-		return
-	}
+	response := sidekickStatusResponse(installation.ID, configuration, request.ConfigHash)
 	httpapi.Write(r.Context(), w, http.StatusOK, response)
 }
 

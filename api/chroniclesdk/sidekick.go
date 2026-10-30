@@ -16,6 +16,12 @@ const SidekickOnlineThreshold = 3 * time.Minute
 const SidekickConfigVersion = 1
 
 const (
+	SidekickArchiveRetentionDaysDefault = 7
+	SidekickArchiveRetentionDaysMin     = 1
+	SidekickArchiveRetentionDaysMax     = 365
+)
+
+const (
 	SidekickGameFormatWotLK335a SidekickGameFormat = "wotlk_3.3.5a"
 
 	SidekickAutoUploadDisabled   SidekickAutoUploadMode = "disabled"
@@ -37,14 +43,24 @@ type SidekickDirectoryConfig struct {
 	AutoUpload SidekickAutoUploadMode `json:"auto_upload"`
 }
 
+type SidekickArchiveConfig struct {
+	Enabled       bool `json:"enabled"`
+	RetentionDays int  `json:"retention_days"`
+}
+
 type SidekickConfig struct {
 	Version        int                                `json:"version"`
+	Archive        SidekickArchiveConfig              `json:"archive"`
 	WoWDirectories map[string]SidekickDirectoryConfig `json:"wow_directories"`
 }
 
 func DefaultSidekickConfig() SidekickConfig {
 	return SidekickConfig{
-		Version:        SidekickConfigVersion,
+		Version: SidekickConfigVersion,
+		Archive: SidekickArchiveConfig{
+			Enabled:       true,
+			RetentionDays: SidekickArchiveRetentionDaysDefault,
+		},
 		WoWDirectories: map[string]SidekickDirectoryConfig{},
 	}
 }
@@ -52,6 +68,9 @@ func DefaultSidekickConfig() SidekickConfig {
 func (c SidekickConfig) Validate() error {
 	if c.Version != SidekickConfigVersion {
 		return fmt.Errorf("unsupported Sidekick config version %d", c.Version)
+	}
+	if c.Archive.RetentionDays < SidekickArchiveRetentionDaysMin || c.Archive.RetentionDays > SidekickArchiveRetentionDaysMax {
+		return fmt.Errorf("archive retention_days must be between %d and %d", SidekickArchiveRetentionDaysMin, SidekickArchiveRetentionDaysMax)
 	}
 	if c.WoWDirectories == nil {
 		return fmt.Errorf("wow_directories must be an object")
@@ -94,8 +113,9 @@ type SidekickConfigState struct {
 }
 
 type SidekickStatusResponse struct {
-	ConfigHash string          `json:"config_hash"`
-	Config     *SidekickConfig `json:"config,omitempty"`
+	SettingsURL string          `json:"settings_url"`
+	ConfigHash  string          `json:"config_hash"`
+	Config      *SidekickConfig `json:"config,omitempty"`
 }
 
 type SidekickAutoUploadCapabilities map[SidekickGameFormat][]SidekickAutoUploadMode

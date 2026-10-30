@@ -321,6 +321,7 @@ function App() {
           <Route path="storage" element={<StorageSettings />} />
           <Route path="ai" element={<AiAssistantSettings />} />
           <Route path="sidekick" element={<SidekickSettings />} />
+          <Route path="sidekick/installations/:sidekickID" element={<SidekickSettings />} />
           <Route path="notifications" element={<NotificationSettings />} />
           <Route path="privacy" element={<PrivacySettings />} />
           <Route path="appearance" element={<AppearanceSettings />} />

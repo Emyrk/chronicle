@@ -102,21 +102,42 @@ func TestSidekickStatusResponseConfigReconciliation(t *testing.T) {
 	require.NoError(t, err)
 	state := chroniclesdk.SidekickConfigState{Config: config, Hash: hash}
 
-	changed := sidekickStatusResponse(state, "")
+	sidekickID := uuid.New()
+	changed := sidekickStatusResponse(sidekickID, state, "")
 	changedJSON, err := json.Marshal(changed)
 	require.NoError(t, err)
 	require.NotContains(t, string(changedJSON), `"configuration"`)
+	require.Equal(t, "/account/sidekick/installations/"+sidekickID.String(), changed.SettingsURL)
 	require.Equal(t, hash, changed.ConfigHash)
 	require.Equal(t, &config, changed.Config)
 
-	matched := sidekickStatusResponse(state, hash)
+	matched := sidekickStatusResponse(sidekickID, state, hash)
 	matchedJSON, err := json.Marshal(matched)
 	require.NoError(t, err)
 	var matchedFields map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(matchedJSON, &matchedFields))
 	require.NotContains(t, matchedFields, "config")
+	require.Equal(t, "/account/sidekick/installations/"+sidekickID.String(), matched.SettingsURL)
 	require.Equal(t, hash, matched.ConfigHash)
 	require.Nil(t, matched.Config)
+}
+
+func TestDecodeSidekickConfigAddsArchiveDefaultsToLegacyConfig(t *testing.T) {
+	t.Parallel()
+
+	config, needsUpgrade, err := decodeSidekickConfig([]byte(`{"version":1,"wow_directories":{}}`))
+	require.NoError(t, err)
+	require.True(t, needsUpgrade)
+	require.Equal(t, chroniclesdk.SidekickArchiveConfig{
+		Enabled:       true,
+		RetentionDays: chroniclesdk.SidekickArchiveRetentionDaysDefault,
+	}, config.Archive)
+
+	payload, err := config.CanonicalJSON()
+	require.NoError(t, err)
+	_, needsUpgrade, err = decodeSidekickConfig(payload)
+	require.NoError(t, err)
+	require.False(t, needsUpgrade)
 }
 
 func TestSidekickConfigStorageAndOwnership(t *testing.T) {

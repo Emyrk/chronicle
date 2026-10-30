@@ -29,7 +29,7 @@ Send `PUT /api/v1/sidekick/status` with the OAuth bearer token once per minute:
 {
   "platform": "windows/amd64",
   "sidekick_version": "0.7.0",
-  "config_hash": "6cf556c64ba0052d92ec879851a5ff6c5e60756e88f2da5f2eca540cda76497f",
+  "config_hash": "03ba74a583c3e096527eb448a456583b975a0f8c32d8517c630ff3954e3528e4",
   "start_at_login": true,
   "auto_upload_capabilities": {
     "wotlk_3.3.5a": ["on_game_exit"]
@@ -82,6 +82,10 @@ Chronicle stores one complete managed configuration per Sidekick installation. C
 ```json
 {
   "version": 1,
+  "archive": {
+    "enabled": true,
+    "retention_days": 7
+  },
   "wow_directories": {
     "wowdir_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef": {
       "game_format": "wotlk_3.3.5a",
@@ -90,6 +94,8 @@ Chronicle stores one complete managed configuration per Sidekick installation. C
   }
 }
 ```
+
+`archive.enabled` controls whether successfully uploaded managed snapshots remain on the Sidekick computer. `archive.retention_days` is always required and must be between 1 and 365, even when retention is disabled. The default is enabled for seven days. Sidekick never deletes pending or failed uploads.
 
 Supported game formats:
 
@@ -108,7 +114,7 @@ The account settings API exposes complete per-installation configuration documen
 | --- | --- | --- |
 | `GET` | `/api/v1/me/sidekicks/{sidekickID}/config` | Read the desired configuration and canonical hash. |
 | `PUT` | `/api/v1/me/sidekicks/{sidekickID}/config` | Replace the complete desired configuration. |
-| `DELETE` | `/api/v1/me/sidekicks/{sidekickID}/config` | Reset the desired configuration to an empty directory map. |
+| `DELETE` | `/api/v1/me/sidekicks/{sidekickID}/config` | Reset archive policy and directories to their defaults. |
 
 All installation endpoints enforce account ownership. `GET /api/v1/me/sidekicks` includes each installation's desired configuration, observed directory formats, local start-at-login state, and auto-upload capabilities.
 
@@ -117,19 +123,20 @@ All installation endpoints enforce account ownership. `GET /api/v1/me/sidekicks`
 Chronicle hashes only the managed configuration object:
 
 1. Serialize JSON without insignificant whitespace.
-2. Preserve struct field order: `version`, then `wow_directories`.
-3. Within each directory, preserve `game_format`, then `auto_upload`.
-4. Sort `wow_directories` keys lexicographically.
-5. Calculate SHA-256 over the UTF-8 JSON bytes.
-6. Encode the digest as lowercase hexadecimal.
+2. Preserve struct field order: `version`, `archive`, then `wow_directories`.
+3. Within `archive`, preserve `enabled`, then `retention_days`.
+4. Within each directory, preserve `game_format`, then `auto_upload`.
+5. Sort `wow_directories` keys lexicographically.
+6. Calculate SHA-256 over the UTF-8 JSON bytes.
+7. Encode the digest as lowercase hexadecimal.
 
 The empty configuration serializes as:
 
 ```json
-{"version":1,"wow_directories":{}}
+{"version":1,"archive":{"enabled":true,"retention_days":7},"wow_directories":{}}
 ```
 
-Its hash is `6cf556c64ba0052d92ec879851a5ff6c5e60756e88f2da5f2eca540cda76497f`.
+Its hash is `03ba74a583c3e096527eb448a456583b975a0f8c32d8517c630ff3954e3528e4`.
 
 ### Heartbeat reconciliation
 
@@ -137,15 +144,20 @@ When the heartbeat hash differs from the desired hash, Chronicle returns the com
 
 ```json
 {
+  "settings_url": "/account/sidekick/installations/<installation_id>",
   "config_hash": "<lowercase-sha256>",
   "config": {
     "version": 1,
+    "archive": {
+      "enabled": true,
+      "retention_days": 7
+    },
     "wow_directories": {}
   }
 }
 ```
 
-When the hashes match, Chronicle returns `204 No Content`. Chronicle never returns an automatic upload mode that the reporting Sidekick did not list for the configured format. If a previously saved mode is no longer supported, Chronicle reconciles it to `disabled`.
+Chronicle returns `200 OK` with `settings_url` and `config_hash` on every successful heartbeat. When the hashes match, it omits `config`. The relative settings URL is same-origin and opens the reporting installation directly. Chronicle never returns an automatic upload mode that the reporting Sidekick did not list for the configured format. If a previously saved mode is no longer supported, Chronicle reconciles it to `disabled`.
 
 Sidekick validates the complete document and hash before replacing its previous valid configuration.
 
