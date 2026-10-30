@@ -33,6 +33,7 @@ import {
   reconcileMapFraming,
   type MapFraming,
   type MapViewport,
+  type ReplayMapSource,
 } from "./mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus, MapUnitRoles } from "./MapScene3D";
 import { MapView2D, type MapViewRequest } from "./MapView2D";
@@ -72,6 +73,25 @@ const RAID_FRAMES_PANEL = createRaidFramesPanel();
 const UNIT_AURAS_PANEL = createUnitAurasPanel();
 
 const MESH_STORAGE_KEY = "chronicle.map.mesh";
+const MAP_SOURCE_STORAGE_KEY = "chronicle.map.source2d";
+
+function readStoredMapSource(): ReplayMapSource {
+  try {
+    const stored = localStorage.getItem(MAP_SOURCE_STORAGE_KEY);
+    return stored === "renders" || stored === "art" ? stored : "auto";
+  } catch {
+    return "auto";
+  }
+}
+
+function storeMapSource(source: ReplayMapSource) {
+  try {
+    if (source === "auto") localStorage.removeItem(MAP_SOURCE_STORAGE_KEY);
+    else localStorage.setItem(MAP_SOURCE_STORAGE_KEY, source);
+  } catch {
+    // Storage may be unavailable; the choice still applies for this session.
+  }
+}
 
 /** How often the mini map's preview clock ticks; the 3D view extrapolates between ticks. */
 const PREVIEW_TICK_MS = 250;
@@ -433,6 +453,11 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   const [storedMesh, setStoredMesh] = useState(readStoredMesh);
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
   const meshOn = preferredMeshState(storedMesh);
+  const [mapSource, setMapSourceState] = useState(readStoredMapSource);
+  const setMapSource = (source: ReplayMapSource) => {
+    setMapSourceState(source);
+    storeMapSource(source);
+  };
   // Mini map preview: with the page's Replay off, the mini plays the fight on a
   // loop by its own clock, so the Summary shows what the map does.
   const previewOn = (mini || mobile) && !sync?.enabled;
@@ -461,6 +486,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   const scene = useMapScene(props, {
     rawDungeonProjection: show3D && meshOn && meshState === "ready",
     preferRenderedCanvas: !show3D || !meshOn || (mobile && !mobileWorldOpen),
+    mapSource,
     wholeRun,
     showHiddenUnits: effectSettings.showHiddenUnits,
     preview,
@@ -579,6 +605,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     setShowEnemyFrames(true);
     setStoredMesh(null);
     storeMesh(null);
+    setMapSource("auto");
   };
   // WoW-style targeting: clicking a unit (on the map or a raid frame) makes it
   // the target, shown at centre left with its own target at centre right.
@@ -1089,6 +1116,13 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               show3D={show3D}
               hasEffects={Boolean(ready.effects)}
               mesh={show3D && meshUrl ? { on: meshWanted, locked: meshOnly, loading: Boolean(dungeonMesh) && meshState === "loading", onToggle: toggleMesh } : null}
+              map2D={ready.mapSources.length > 1 && ready.mapSource ? {
+                value: ready.mapSource,
+                options: ready.mapSources,
+                changed: mapSource !== "auto",
+                onChange: setMapSource,
+                onReset: () => setMapSource("auto"),
+              } : null}
               floors={ready.floors.length > 1 ? { list: ready.floors, value: ready.selectedFloorNumber, onChange: ready.setFloorNumber } : null}
               onTopDown={() => setTopDownKey((key) => key + 1)}
               adStrafe={adStrafe}

@@ -9,6 +9,7 @@ import { DEFAULT_WALK_AVATAR } from "./walkAvatars";
 function SettingsPlayground({ initial = DEFAULT_EFFECT_SETTINGS }: { initial?: EffectSettings }) {
   const [effectSettings, setEffectSettings] = useState<EffectSettings>(initial);
   const [meshOn, setMeshOn] = useState(true);
+  const [map2D, setMap2D] = useState<"renders" | "art">("renders");
   const [floor, setFloor] = useState(1);
   const [adStrafe, setAdStrafe] = useState(DEFAULT_AD_STRAFE);
   const [walkAvatar, setWalkAvatar] = useState(DEFAULT_WALK_AVATAR);
@@ -21,6 +22,7 @@ function SettingsPlayground({ initial = DEFAULT_EFFECT_SETTINGS }: { initial?: E
         show3D
         hasEffects
         mesh={{ on: meshOn, locked: false, loading: false, onToggle: () => setMeshOn(!meshOn) }}
+        map2D={{ value: map2D, options: ["renders", "art"], changed: map2D !== "renders", onChange: setMap2D, onReset: () => setMap2D("renders") }}
         floors={{ list: [1, 2], value: floor, onChange: setFloor }}
         onTopDown={() => {}}
         adStrafe={adStrafe}
@@ -30,6 +32,7 @@ function SettingsPlayground({ initial = DEFAULT_EFFECT_SETTINGS }: { initial?: E
         onResetAll={() => {
           setEffectSettings(DEFAULT_EFFECT_SETTINGS);
           setMeshOn(true);
+          setMap2D("renders");
           setAdStrafe(DEFAULT_AD_STRAFE);
           setWalkAvatar(DEFAULT_WALK_AVATAR);
         }}

@@ -566,29 +566,64 @@ export function overviewDungeonCanvas(
   return { canvas: hasNativeMapFloorArtwork(floor) ? floor : undefined, source: "art" as const };
 }
 
+export type ReplayMapSource = "auto" | "renders" | "art";
+export type SelectedReplayMapSource = Exclude<ReplayMapSource, "auto">;
+
 export type ReplayDungeonCanvas =
   | { canvas: WowMapRenderedInstance; rendered: true }
   | { canvas: WowMapInstanceFloor; rendered: false };
 
+export type ReplayDungeonCanvasSelection = ReplayDungeonCanvas & {
+  source: SelectedReplayMapSource;
+};
+
+/** The selectable 2D replay sources that have their own usable coordinate projection. */
+export function replayDungeonSources(
+  instance: WowMapInstance,
+  floor: WowMapInstanceFloor | undefined,
+): SelectedReplayMapSource[] {
+  const render = calibratedManualRender(mapFloorRender(instance, floor));
+  return [
+    ...(render && "source" in render ? ["renders" as const] : []),
+    ...(floor && hasNativeMapFloorArtwork(floor) ? ["art" as const] : []),
+  ];
+}
+
 /** Prefer the floor's automatic 2D source in flat mode, while retaining every source as fallback. */
-export function replayDungeonCanvas(
+export function selectReplayDungeonCanvas(
   instance: WowMapInstance,
   floor: WowMapInstanceFloor | undefined,
   preferRendered: boolean,
-): ReplayDungeonCanvas | null {
+  source: ReplayMapSource = "auto",
+): ReplayDungeonCanvasSelection | null {
   const render = calibratedManualRender(mapFloorRender(instance, floor));
   const boundedRender = render && "source" in render ? render : null;
   const styled = instance.styled && instance.styled.width > 0 && instance.styled.height > 0
     ? instance.styled
     : null;
-  const rendered = boundedRender ?? styled;
   const nativeArtwork = floor && hasNativeMapFloorArtwork(floor) ? floor : null;
+  if (source === "renders" && boundedRender) return { canvas: boundedRender, rendered: true, source };
+  if (source === "art" && nativeArtwork) return { canvas: nativeArtwork, rendered: false, source };
   if (preferRendered && floor?.preferred2D === "art" && nativeArtwork) {
-    return { canvas: nativeArtwork, rendered: false };
+    return { canvas: nativeArtwork, rendered: false, source: "art" };
   }
-  if (preferRendered && rendered) return { canvas: rendered, rendered: true };
-  if (nativeArtwork) return { canvas: nativeArtwork, rendered: false };
-  return rendered ? { canvas: rendered, rendered: true } : null;
+  if (preferRendered && boundedRender) return { canvas: boundedRender, rendered: true, source: "renders" };
+  if (preferRendered && styled) return { canvas: styled, rendered: true, source: "renders" };
+  if (nativeArtwork) return { canvas: nativeArtwork, rendered: false, source: "art" };
+  if (boundedRender) return { canvas: boundedRender, rendered: true, source: "renders" };
+  return styled ? { canvas: styled, rendered: true, source: "renders" } : null;
+}
+
+export function replayDungeonCanvas(
+  instance: WowMapInstance,
+  floor: WowMapInstanceFloor | undefined,
+  preferRendered: boolean,
+): ReplayDungeonCanvas | null {
+  const selected = selectReplayDungeonCanvas(instance, floor, preferRendered);
+  if (!selected) return null;
+  return selected.rendered
+    ? { canvas: selected.canvas, rendered: true }
+    : { canvas: selected.canvas, rendered: false };
 }
 
 /** Normalized UI-map coordinates must use native floor artwork, never world-calibrated renders. */
@@ -597,11 +632,12 @@ export function replayDungeonCanvasForCoordinates(
   floor: WowMapInstanceFloor | undefined,
   normalizedUIMap: boolean,
   preferRendered: boolean,
-): ReplayDungeonCanvas | null {
+  source: ReplayMapSource = "auto",
+): ReplayDungeonCanvasSelection | null {
   if (normalizedUIMap) {
-    return floor && hasNativeMapFloorArtwork(floor) ? { canvas: floor, rendered: false } : null;
+    return floor && hasNativeMapFloorArtwork(floor) ? { canvas: floor, rendered: false, source: "art" } : null;
   }
-  return replayDungeonCanvas(instance, floor, preferRendered);
+  return selectReplayDungeonCanvas(instance, floor, preferRendered, source);
 }
 
 export function resolveMapArtwork(

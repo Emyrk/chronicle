@@ -14,6 +14,7 @@ import {
   TRAIL_OPTIONS,
   type EffectSettings,
 } from "./mapViewSettings";
+import type { SelectedReplayMapSource } from "./mapModel";
 import { DEFAULT_WALK_AVATAR, WALK_AVATAR_GROUPS, WALK_AVATARS } from "./walkAvatars";
 
 export interface MapSettingsOverlayProps {
@@ -26,6 +27,14 @@ export interface MapSettingsOverlayProps {
   hasEffects: boolean;
   /** The "3D map" dungeon mesh, when the instance has one. */
   mesh: { on: boolean; locked: boolean; loading: boolean; onToggle: () => void } | null;
+  /** Selectable native artwork/render sources for the active 2D floor. */
+  map2D: {
+    value: SelectedReplayMapSource;
+    options: SelectedReplayMapSource[];
+    changed: boolean;
+    onChange: (source: SelectedReplayMapSource) => void;
+    onReset: () => void;
+  } | null;
   floors: { list: number[]; value: number | null; onChange: (floor: number) => void } | null;
   onTopDown: () => void;
   adStrafe: boolean;
@@ -78,6 +87,7 @@ export function MapSettingsOverlay({
   show3D,
   hasEffects,
   mesh,
+  map2D,
   floors,
   onTopDown,
   adStrafe,
@@ -190,7 +200,7 @@ export function MapSettingsOverlay({
       id: "world",
       label: "World",
       icon: Globe,
-      content: mesh || floors ? (
+      content: mesh || map2D || floors ? (
         <Section title="Ground">
           {mesh && (
             <Toggle
@@ -202,6 +212,18 @@ export function MapSettingsOverlay({
               changed={!mesh.locked && !mesh.on}
               disabled={mesh.locked}
               onChange={() => mesh.onToggle()}
+            />
+          )}
+          {map2D && (
+            <Choice
+              label="2D map"
+              detail="Choose the flat map shown when the 3D dungeon mesh is off"
+              value={map2D.value}
+              options={map2D.options.map((source) => source === "renders"
+                ? { value: source, label: "Render", title: "Use the published top-down render" }
+                : { value: source, label: "Artwork", title: "Use the game's native map artwork" })}
+              changed={map2D.changed}
+              onChange={map2D.onChange}
             />
           )}
           {mesh && !mesh.locked && (
@@ -229,10 +251,11 @@ export function MapSettingsOverlay({
           )}
         </Section>
       ) : null,
-      reset: mesh && !mesh.locked ? {
-        changed: !mesh.on || WORLD_KEYS.some(changed),
+      reset: mesh && !mesh.locked || map2D ? {
+        changed: Boolean(mesh && !mesh.locked && !mesh.on) || Boolean(map2D?.changed) || WORLD_KEYS.some(changed),
         apply: () => {
-          if (!mesh.on) mesh.onToggle();
+          if (mesh && !mesh.locked && !mesh.on) mesh.onToggle();
+          map2D?.onReset();
           onEffectSettings(defaultsFor(WORLD_KEYS));
         },
       } : undefined,

@@ -30,6 +30,7 @@ import {
   projectionScale,
   renderedDungeonMapPoint,
   replayDungeonCanvasForCoordinates,
+  replayDungeonSources,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
   resolveMapFloorNumber,
@@ -42,6 +43,8 @@ import {
   type MapPoint,
   type MapPointBounds,
   type MapViewport,
+  type ReplayMapSource,
+  type SelectedReplayMapSource,
 } from "./mapModel";
 
 interface MapFocus {
@@ -231,6 +234,10 @@ export type MapScene =
     encounterStartMs: number;
     encounterEndMs: number;
     ground: MapSceneGround;
+    /** Selectable, calibrated 2D sources published for the active floor. */
+    mapSources: SelectedReplayMapSource[];
+    /** The 2D source currently selected after defaults and fallbacks are applied. */
+    mapSource: SelectedReplayMapSource | null;
     /** The preferred 2D artwork retained while the active ground switches to mesh coordinates. */
     alignmentGround: MapSceneGround | null;
     markers: MapSceneMarker[];
@@ -273,6 +280,8 @@ export interface MapSceneOptions {
   rawDungeonProjection?: boolean;
   /** Use the floor's automatic 2D source instead of forcing native artwork while the mesh is inactive. */
   preferRenderedCanvas?: boolean;
+  /** Explicit 2D source chosen by the user; auto preserves the manifest/default behavior. */
+  mapSource?: ReplayMapSource;
   /**
    * Replay every processed encounter as one run: the camera follows the
    * party's median position rather than a boss, and non-player units that
@@ -417,8 +426,12 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       selectedFloor,
       normalizedUIMap,
       Boolean(options.preferRenderedCanvas) || !selectedFloor?.bounds,
+      options.mapSource,
     )
     : null;
+  const mapSources = artwork.kind === "instance" && !normalizedUIMap
+    ? replayDungeonSources(artwork.instance, selectedFloor)
+    : [];
   // A mesh-only floor has no native or calibrated 2D canvas to fall back on,
   // so its mesh is the canvas from the start, not only once asked.
   const meshOnly = artwork.kind === "instance" && mesh !== null && availableFlatCanvas === null;
@@ -577,6 +590,8 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       canvas,
       overlays: artwork.kind === "zone" ? zoneSelection?.art.overlays : undefined,
     },
+    mapSources,
+    mapSource: availableFlatCanvas?.source ?? null,
     alignmentGround: artwork.kind === "instance" && availableFlatCanvas
       ? { iconBaseUrl, canvas: availableFlatCanvas.canvas }
       : null,

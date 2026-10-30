@@ -41,6 +41,7 @@ import {
   overviewDungeonCanvas,
   replayDungeonCanvas,
   replayDungeonCanvasForCoordinates,
+  replayDungeonSources,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
   resolveMapFloorNumber,
@@ -531,6 +532,26 @@ describe("floor-specific dungeon canvases", () => {
     });
   });
 
+  it("lists render and native artwork when both can project replay positions", () => {
+    expect(replayDungeonSources(instance, instance.floors[1])).toEqual(["renders", "art"]);
+  });
+
+  it("lets an explicit 2D replay choice override the floor default", () => {
+    const preferredFloor = { ...instance.floors[1], preferred2D: "art" as const };
+    const preferredInstance = { ...instance, floors: [instance.floors[0], preferredFloor] };
+
+    expect(replayDungeonCanvasForCoordinates(preferredInstance, preferredFloor, false, true, "renders")).toMatchObject({
+      source: "renders",
+      rendered: true,
+      canvas: { path: floorRender.path },
+    });
+    expect(replayDungeonCanvasForCoordinates(instance, instance.floors[1], false, true, "art")).toEqual({
+      source: "art",
+      rendered: false,
+      canvas: instance.floors[1],
+    });
+  });
+
   it("re-evaluates automatic preference for each selected floor", () => {
     const preferredFloor = { ...instance.floors[1], preferred2D: "art" as const };
     const preferredInstance = { ...instance, floors: [instance.floors[0], preferredFloor] };
@@ -557,6 +578,7 @@ describe("floor-specific dungeon canvases", () => {
     expect(replayDungeonCanvasForCoordinates(instance, instance.floors[1], true, true)).toEqual({
       canvas: instance.floors[1],
       rendered: false,
+      source: "art",
     });
   });
 
