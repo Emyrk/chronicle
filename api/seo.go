@@ -88,15 +88,20 @@ func (api *API) isUnlistedInstancePath(r *http.Request) bool {
 }
 
 func canonicalRequestURL(api *API, r *http.Request) string {
-	scheme := "https"
-	if api.Opts.AccessURL != nil && api.Opts.AccessURL.Scheme != "" {
-		scheme = api.Opts.AccessURL.Scheme
-	}
 	path := r.URL.EscapedPath()
 	if path == "" {
 		path = "/"
 	}
-	return scheme + "://" + ogHost(r) + path
+	return canonicalOrigin(api, r) + path
+}
+
+// canonicalOrigin returns the canonical scheme and host for SEO URLs.
+func canonicalOrigin(api *API, r *http.Request) string {
+	scheme := "https"
+	if api.Opts.AccessURL != nil && api.Opts.AccessURL.Scheme != "" {
+		scheme = api.Opts.AccessURL.Scheme
+	}
+	return scheme + "://" + ogHost(r)
 }
 
 func absoluteAssetURL(api *API, r *http.Request, raw string) string {

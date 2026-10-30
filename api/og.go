@@ -26,7 +26,11 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 		routes = append(routes, frontend.OGRoute{
 			Pattern: pattern,
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return flavorStaticOG(pattern, seoProductName(api.resolvedSiteFlavor(r.Context())), metadata, canonicalRequestURL(api, r))
+				og := flavorStaticOG(pattern, seoProductName(api.resolvedSiteFlavor(r.Context())), metadata, canonicalRequestURL(api, r))
+				if metadata.Image != "" {
+					og.ImageURL = canonicalOrigin(api, r) + metadata.Image
+				}
+				return og
 			},
 		})
 	}
@@ -67,6 +71,8 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 type staticOGMetadata struct {
 	Title       string
 	Description string
+	// Image is an optional site-relative social preview image path.
+	Image string
 }
 
 func seoProductName(flavor database.WoWFlavor) string {
@@ -135,6 +141,11 @@ var staticOGRoutes = map[string]staticOGMetadata{
 	"/census":                  {Title: "Realm Census", Description: "Explore character and population statistics."},
 	"/speedrunning":            {Title: "Speedrunning", Description: "Explore raid speedrunning records and performance."},
 	"/tools":                   {Title: "Tools", Description: "Explore Chronicle raid and character analysis tools."},
+	"/download": {
+		Title:       "Chronicle Sidekick",
+		Description: "A free tray app for Windows, macOS and Linux that finds WoW, watches your combat log and uploads your raid to Chronicle in one click.",
+		Image:       "/c/images/og/sidekick.jpg",
+	},
 }
 
 // talentClassSlugs maps calculator URL slugs to display and wowspec names.

@@ -16,6 +16,7 @@ const Terms = lazy(() => import("./pages/Terms").then(({ Terms }) => ({ default:
 const ParsingPage = lazy(() => import("./pages/Parsing/ParsingPage").then(({ ParsingPage }) => ({ default: ParsingPage })))
 const CohortViewerPage = lazy(() => import("./pages/Parsing/CohortViewerPage").then(({ CohortViewerPage }) => ({ default: CohortViewerPage })))
 const Empty = lazy(() => import("./pages/Empty").then(({ Empty }) => ({ default: Empty })))
+const DownloadPage = lazy(() => import("./pages/Download/Download").then(({ DownloadPage }) => ({ default: DownloadPage })))
 const Upload = lazy(() => import("./pages/Upload/Upload").then(({ Upload }) => ({ default: Upload })))
 const LogsList = lazy(() => import("./pages/Logs/LogsList").then(({ LogsList }) => ({ default: LogsList })))
 const LogDetail = lazy(() => import("./pages/Logs/LogDetail").then(({ LogDetail }) => ({ default: LogDetail })))
@@ -175,6 +176,7 @@ function App() {
         <Route path="/recent" element={<RecentRaids />} />
         <Route path="/empty" element={<Empty />} />
         <Route path="/upload" element={<Upload />} />
+        <Route path="/download" element={<DownloadPage />} />
         <Route path="/logs" element={<LogsList />} />
         <Route path="/logs/:logId" element={<LogDetail />} />
         <Route path="/logs/file/:fileHash" element={<LogDetailByHash />} />

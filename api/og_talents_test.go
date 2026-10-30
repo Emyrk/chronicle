@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/Emyrk/chronicle/database"
@@ -46,6 +48,23 @@ func TestFlavorStaticOG(t *testing.T) {
 	require.Equal(t, "Raid Logs and Performance Analysis", og.Title)
 	require.Contains(t, og.Description, "WoW Forever combat logs")
 	require.Contains(t, og.Description, "rankings")
+}
+
+func TestDownloadOGImage(t *testing.T) {
+	t.Parallel()
+	api := &API{Opts: &Options{}}
+	req := httptest.NewRequest(http.MethodGet, "https://octo.chronicleclassic.com/download", nil)
+	for _, route := range api.OGRoutes() {
+		if route.Pattern != "/download" {
+			continue
+		}
+		og := route.Resolve(req)
+		require.Equal(t, "Chronicle Sidekick", og.Title)
+		require.Equal(t, "https://octo.chronicleclassic.com/download", og.URL)
+		require.Equal(t, "https://octo.chronicleclassic.com/c/images/og/sidekick.jpg", og.ImageURL)
+		return
+	}
+	t.Fatal("no /download OG route")
 }
 
 func TestTalentCalculatorOG(t *testing.T) {
