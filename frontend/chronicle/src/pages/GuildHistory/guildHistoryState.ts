@@ -9,8 +9,12 @@ export interface GuildHistoryState {
   guildIds: string[];
   /** Selected guilds left out of the stats and chart, toggled with Shift+click. */
   hiddenGuildIds: string[];
-  /** Empty until chosen: the page falls back to the most recently cleared raid. */
+  /** Empty until chosen: the page falls back to the most frequently cleared raid. */
   instanceName: string;
+  /** Null until chosen. Empty string is a real legacy/default difficulty. */
+  difficultyName: string | null;
+  maxPlayers: number | null;
+  dynamicDifficulty: number | null;
   timing: GuildHistoryTiming;
   /** Times, or time parses where they exist (whole clears and boss kills). */
   display: GuildHistoryDisplay;
@@ -27,6 +31,9 @@ export const DEFAULT_GUILD_HISTORY_STATE: GuildHistoryState = {
   guildIds: [],
   hiddenGuildIds: [],
   instanceName: "",
+  difficultyName: null,
+  maxPlayers: null,
+  dynamicDifficulty: null,
   timing: "full",
   display: "time",
   boss: "",
@@ -38,6 +45,12 @@ export const DEFAULT_GUILD_HISTORY_STATE: GuildHistoryState = {
 
 export const GUILD_HISTORY_RANGE_DAYS: Record<GuildHistoryDateRange, number> = { "180d": 180, "60d": 60, "30d": 30 };
 
+function parseOptionalNumber(params: URLSearchParams, name: string): number | null {
+  if (!params.has(name)) return null;
+  const value = Number(params.get(name));
+  return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
 export function parseGuildHistoryState(params: URLSearchParams): GuildHistoryState {
   const timing = params.get("timing");
   const range = params.get("range");
@@ -47,6 +60,9 @@ export function parseGuildHistoryState(params: URLSearchParams): GuildHistorySta
     guildIds: [...new Set(params.getAll("guild").filter(Boolean))],
     hiddenGuildIds: [...new Set(params.getAll("hide").filter(Boolean))],
     instanceName: params.get("instance") ?? "",
+    difficultyName: params.has("difficulty") ? (params.get("difficulty") ?? "") : null,
+    maxPlayers: parseOptionalNumber(params, "size"),
+    dynamicDifficulty: parseOptionalNumber(params, "dynamic"),
     timing: timing === "boss" ? "boss" : "full",
     display: params.get("display") === "parse" ? "parse" : "time",
     boss: params.get("boss") ?? "",
@@ -65,6 +81,9 @@ export function serializeGuildHistoryState(state: GuildHistoryState): URLSearchP
     if (state.guildIds.includes(guildId)) params.append("hide", guildId);
   }
   if (state.instanceName) params.set("instance", state.instanceName);
+  if (state.difficultyName !== null) params.set("difficulty", state.difficultyName);
+  if (state.maxPlayers !== null) params.set("size", String(state.maxPlayers));
+  if (state.dynamicDifficulty !== null) params.set("dynamic", String(state.dynamicDifficulty));
   if (state.timing !== "full") params.set("timing", state.timing);
   if (state.display !== "time") params.set("display", state.display);
   if (state.boss) params.set("boss", state.boss);

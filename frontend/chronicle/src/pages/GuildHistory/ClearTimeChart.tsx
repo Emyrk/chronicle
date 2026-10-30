@@ -33,6 +33,9 @@ export function ClearTimeChart({
   focus = NO_FOCUS,
   display = "time",
   loading,
+  includeUnqualified,
+  unqualifiedRunCount,
+  onIncludeUnqualifiedChange,
 }: {
   series: readonly ClearTimeSeries[];
   timing: GuildHistoryTiming;
@@ -40,6 +43,9 @@ export function ClearTimeChart({
   focus?: GuildFocus;
   display?: GuildHistoryDisplay;
   loading: boolean;
+  includeUnqualified: boolean;
+  unqualifiedRunCount: number;
+  onIncludeUnqualifiedChange: (value: boolean) => void;
 }) {
   const [hoverDay, setHoverDay] = useState<number | null>(null);
   const parse = display === "parse";
@@ -55,17 +61,33 @@ export function ClearTimeChart({
   const omittedLongValues = allPoints.filter((point) => !guildHistoryValueIsShown(point.value, display)).length;
   const points = allPoints.filter((point) => guildHistoryValueIsShown(point.value, display));
   if (points.length === 0) {
+    const hiddenUnqualified = !includeUnqualified && unqualifiedRunCount > 0 && !focus.boss && !focus.part && !parse;
     return (
-      <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
-        {omittedLongValues > 0
-          ? `${omittedLongValues} ${omittedLongValues === 1 ? "clear" : "clears"} over ${GUILD_HISTORY_MAX_TIME_HOURS} hours not shown.`
-          : parse
-            ? "No time parses for these clears yet. Parses need enough comparable clears on the server."
-            : focus.boss ? `No ${focus.boss} kills match these filters.` : "No clears match these filters."}
+      <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
+        <span>
+          {hiddenUnqualified
+            ? "No full qualified clears."
+            : omittedLongValues > 0
+              ? `${omittedLongValues} ${omittedLongValues === 1 ? "clear" : "clears"} over ${GUILD_HISTORY_MAX_TIME_HOURS} hours not shown.`
+              : parse
+                ? "No time parses for these clears yet. Parses need enough comparable clears on the server."
+                : focus.boss ? `No ${focus.boss} kills match these filters.` : "No clears match these filters."}
+        </span>
+        {hiddenUnqualified && (
+          <button
+            type="button"
+            onClick={() => onIncludeUnqualifiedChange(true)}
+            className="inline-flex h-8 items-center gap-2 rounded-md border border-amber-400/40 bg-amber-500/10 px-3 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-500/20"
+          >
+            <span className="size-2.5 rounded-full border-2 border-amber-300" aria-hidden="true" />
+            Show {unqualifiedRunCount} unqualified {unqualifiedRunCount === 1 ? "clear" : "clears"}
+          </button>
+        )}
       </div>
     );
   }
 
+  const incompleteRunCount = points.filter((point) => !point.run.complete).length;
   const values = points.map((point) => point.value);
   const format = (value: number) => formatGuildValue(value, parse);
   const min = Math.min(...values);
@@ -120,6 +142,23 @@ export function ClearTimeChart({
         {(focus.boss || focus.part) && (
           <span className="font-medium text-sky-300">
             {focus.boss ? `${focus.boss} kill ${parse ? "parse" : "time"}` : focusLabel(focus)}
+          </span>
+        )}
+        {unqualifiedRunCount > 0 && (
+          <button
+            type="button"
+            onClick={() => onIncludeUnqualifiedChange(!includeUnqualified)}
+            aria-pressed={includeUnqualified}
+            className={`pointer-events-auto inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 transition-colors ${includeUnqualified ? "bg-amber-500/15 text-amber-200" : "hover:bg-white/5 hover:text-foreground"}`}
+          >
+            <span className="size-2.5 rounded-full border-2 border-amber-300" aria-hidden="true" />
+            Unqualified ({unqualifiedRunCount})
+          </button>
+        )}
+        {incompleteRunCount > 0 && (
+          <span className="inline-flex items-center gap-1.5 text-amber-200">
+            <span className="size-2.5 rounded-sm border-2 border-amber-300" aria-hidden="true" />
+            Incomplete ({incompleteRunCount})
           </span>
         )}
         <span>{parse ? "Higher is better" : "Lower is faster"}</span>
@@ -203,13 +242,14 @@ export function ClearTimeChart({
           rel="noopener noreferrer"
           className="absolute z-10 flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full outline-none focus-visible:ring-2"
           style={{ left: `${x(day)}%`, top: `${y(value)}%`, "--tw-ring-color": guild.color } as React.CSSProperties}
-          aria-label={`${guild.name}, ${new Date(run.completion_time).toLocaleDateString()}, ${format(value)}${parse ? " parse" : ""}`}
+          aria-label={`${guild.name}, ${new Date(run.completion_time).toLocaleDateString()}, ${format(value)}${parse ? " parse" : ""}${!run.complete ? ", incomplete" : !run.qualified ? ", unqualified" : ""}`}
         >
           <span
-            className="size-2.5 rounded-full border-2 transition-transform"
+            className={`size-2.5 border-2 transition-transform ${run.complete ? "rounded-full" : "rounded-sm"}`}
             style={{
-              borderColor: guild.color,
+              borderColor: run.complete ? guild.color : "rgb(252 211 77)",
               backgroundColor: run.qualified ? guild.color : "transparent",
+              boxShadow: run.complete ? undefined : "0 0 0 2px rgb(245 158 11 / 0.18)",
               transform: activeDay === day ? "scale(1.35)" : undefined,
             }}
           />
@@ -241,7 +281,7 @@ export function ClearTimeChart({
                   {focus.boss || focus.part || parse
                     ? ` · clear ${formatClearTime(run.duration_ms)}`
                     : timing === "full" && run.boss_to_boss_duration_ms > 0 && ` · boss to boss ${formatClearTime(run.boss_to_boss_duration_ms)}`}
-                  {!run.qualified && " · unqualified"}
+                  {!run.complete ? " · incomplete" : !run.qualified && " · unqualified"}
                 </div>
               </div>
             ))}

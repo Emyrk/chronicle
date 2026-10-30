@@ -30,13 +30,22 @@ export function useGuildRaidClearsList(guildIds: readonly string[]) {
   });
 }
 
-export function useGuildSpeedrunHistories(guildIds: readonly string[], instanceName: string | undefined) {
+export function useGuildSpeedrunHistories(
+  guildIds: readonly string[],
+  instanceName: string | undefined,
+  difficultyName: string | undefined,
+  maxPlayers: number | undefined,
+  dynamicDifficulty: number | undefined,
+) {
   return useQueries({
     queries: guildIds.map((guildId) => ({
-      queryKey: ["guild-speedrun-history", guildId, instanceName],
+      queryKey: ["guild-speedrun-history", guildId, instanceName, difficultyName, maxPlayers, dynamicDifficulty],
       queryFn: () => {
         // The longest date range the page offers; shorter ranges filter client-side.
         const search = new URLSearchParams({ instance_name: instanceName ?? "", since_days: "180" });
+        if (difficultyName !== undefined) search.set("difficulty_name", difficultyName);
+        if (maxPlayers !== undefined) search.set("max_players", String(maxPlayers));
+        if (dynamicDifficulty !== undefined) search.set("dynamic_difficulty", String(dynamicDifficulty));
         return fetchJSON<GuildSpeedrunHistoryResponse>(
           `/api/v1/guilds/${encodeURIComponent(guildId)}/speedruns/history?${search.toString()}`,
         );

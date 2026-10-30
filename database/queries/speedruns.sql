@@ -268,8 +268,8 @@ WHERE sr.qualified = true
 ORDER BY realm_name;
 
 -- name: GuildRaidClears :many
--- Returns per-instance clear counts and duration aggregates for a guild,
--- used by the guild page "Raid Clears" panel.
+-- Returns clear counts and duration aggregates per instance, recorded
+-- difficulty, raid size, and dynamic mode for the guild history picker.
 -- Deduplicates by duplicate_group so re-uploaded logs of the same raid count
 -- once (best duration per group). Includes unqualified runs: a clear is a
 -- clear, qualification only affects the public leaderboard. Requires
@@ -279,6 +279,9 @@ ORDER BY realm_name;
 WITH deduped AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         sr.instance_name,
+        li.difficulty_name,
+        li.max_players,
+        li.dynamic_difficulty,
         sr.ranked_duration_ms::bigint AS duration_ms,
         sr.ranked_completion_time::timestamptz AS completion_time
     FROM instance_speedruns sr
@@ -295,13 +298,16 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 )
 SELECT
     instance_name,
+    difficulty_name,
+    max_players,
+    dynamic_difficulty,
     COUNT(*) :: bigint AS clear_count,
     MIN(duration_ms) :: bigint AS best_duration_ms,
     AVG(duration_ms) :: bigint AS avg_duration_ms,
     MAX(completion_time) :: timestamptz AS last_cleared_at
 FROM deduped
-GROUP BY instance_name
-ORDER BY clear_count DESC, instance_name;
+GROUP BY instance_name, difficulty_name, max_players, dynamic_difficulty
+ORDER BY clear_count DESC, instance_name, difficulty_name, max_players, dynamic_difficulty;
 
 -- name: SpeedrunGuildClears :many
 -- Returns guilds ranked by number of qualified full clears of the given
@@ -348,6 +354,13 @@ WITH deduped AS (
         sr.instance_id,
         li.hashed_slug,
         sr.qualified,
+        CASE
+            WHEN jsonb_typeof(sr.proof->'proof') = 'array' AND jsonb_array_length(sr.proof->'proof') > 0 THEN
+                NOT EXISTS (SELECT 1 FROM jsonb_array_elements(sr.proof->'proof') item WHERE NOT (item->>'satisfied')::boolean)
+            WHEN jsonb_typeof(sr.proof) = 'array' AND jsonb_array_length(sr.proof) > 0 THEN
+                NOT EXISTS (SELECT 1 FROM jsonb_array_elements(sr.proof) item WHERE NOT (item->>'satisfied')::boolean)
+            ELSE sr.qualified
+        END::boolean AS complete,
         sr.ranked_start_time::timestamptz AS start_time,
         sr.ranked_completion_time::timestamptz AS completion_time,
         sr.ranked_duration_ms::bigint AS duration_ms,
@@ -359,6 +372,18 @@ WITH deduped AS (
     WHERE sr.guild_id = @guild_id :: uuid
       AND sr.instance_name = @instance_name :: text
       AND sr.ranked_duration_ms > 0
+      AND CASE
+          WHEN @filter_difficulty :: boolean THEN li.difficulty_name = @difficulty_name :: text
+          ELSE true
+      END
+      AND CASE
+          WHEN @filter_max_players :: boolean THEN li.max_players = @max_players :: int
+          ELSE true
+      END
+      AND CASE
+          WHEN @filter_dynamic_difficulty :: boolean THEN li.dynamic_difficulty = @dynamic_difficulty :: int
+          ELSE true
+      END
       AND CASE
           WHEN @since_days :: bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => @since_days::int)
           ELSE true
@@ -423,6 +448,7 @@ SELECT
     d.instance_id,
     COALESCE(d.hashed_slug, '')::text AS slug,
     d.qualified,
+    d.complete,
     d.start_time,
     d.completion_time,
     d.duration_ms,

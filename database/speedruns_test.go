@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -411,7 +412,7 @@ func TestGuildSpeedrunHistory(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
 
-	insertClear := func(guild uuid.UUID, instanceName string, start time.Time, duration time.Duration, qualified bool) uuid.UUID {
+	insertClear := func(guild uuid.UUID, instanceName, difficultyName string, maxPlayers, dynamicDifficulty int32, start time.Time, duration time.Duration, qualified bool) uuid.UUID {
 		t.Helper()
 		id := uuid.New()
 		end := start.Add(duration)
@@ -420,7 +421,7 @@ func TestGuildSpeedrunHistory(t *testing.T) {
 			Name: instanceName, HashedSlug: pgtype.Text{String: "history-" + id.String()[:8], Valid: true},
 			GuildID:   uuid.NullUUID{UUID: guild, Valid: true},
 			StartTime: database.Timestamptz(start), EndTime: database.Timestamptz(end),
-			Capabilities: []string{}, DifficultyName: "Normal", MaxPlayers: 40,
+			Capabilities: []string{}, DifficultyName: difficultyName, MaxPlayers: maxPlayers, DynamicDifficulty: dynamicDifficulty,
 		})
 		require.NoError(t, err)
 		require.NoError(t, store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
@@ -449,7 +450,7 @@ func TestGuildSpeedrunHistory(t *testing.T) {
 	// The first clear has two overlapping trash pulls (0:10-0:15 and 0:12-0:18, so 8 minutes once
 	// merged), a pull that runs into a boss (0:28-0:32, of which 0:30-0:32 is the boss), and trash
 	// after the clear ends, which must not count.
-	first := insertClear(guildID, "Molten Core", startedAt.Add(-24*time.Hour), time.Hour, true)
+	first := insertClear(guildID, "Molten Core", "Normal", 40, 0, startedAt.Add(-24*time.Hour), time.Hour, true)
 	firstStart := startedAt.Add(-24 * time.Hour)
 	insertFight(first, "Trash A", false, firstStart.Add(10*time.Minute), 5*time.Minute)
 	insertFight(first, "Trash B", false, firstStart.Add(12*time.Minute), 6*time.Minute)
@@ -459,15 +460,33 @@ func TestGuildSpeedrunHistory(t *testing.T) {
 	insertFight(first, "Late Trash", false, firstStart.Add(70*time.Minute), 5*time.Minute)
 
 	// A re-upload of the first clear: unqualified and slower, so the qualified copy wins.
-	reupload := insertClear(guildID, "Molten Core", firstStart, 70*time.Minute, false)
+	reupload := insertClear(guildID, "Molten Core", "Normal", 40, 0, firstStart, 70*time.Minute, false)
 	_, err = pool.Exec(ctx, "UPDATE log_instances SET duplicate_group_id = $1 WHERE id IN ($1, $2)", first, reupload)
 	require.NoError(t, err)
 
-	second := insertClear(guildID, "Molten Core", startedAt, 50*time.Minute, false)
+	second := insertClear(guildID, "Molten Core", "Normal", 40, 0, startedAt, 50*time.Minute, false)
+	third := insertClear(guildID, "Molten Core", "Normal", 40, 0, startedAt.Add(3*time.Hour), 60*time.Minute, false)
+	_, err = pool.Exec(ctx, `UPDATE instance_speedruns SET proof = '{"proof":[{"satisfied":true}]}' WHERE instance_id = $1`, second)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE instance_speedruns SET proof = '{"proof":[{"satisfied":false}]}' WHERE instance_id = $1`, third)
+	require.NoError(t, err)
+	insertClear(guildID, "Molten Core", "Heroic", 40, 1, startedAt.Add(time.Hour), 55*time.Minute, true)
+	insertClear(guildID, "Molten Core", "Normal", 20, 0, startedAt.Add(2*time.Hour), 45*time.Minute, true)
 	// Other raids, other guilds and clears outside the window are left out.
-	insertClear(guildID, "Blackwing Lair", startedAt, 50*time.Minute, true)
-	insertClear(otherGuildID, "Molten Core", startedAt, 40*time.Minute, true)
-	insertClear(guildID, "Molten Core", startedAt.Add(-400*24*time.Hour), 45*time.Minute, true)
+	insertClear(guildID, "Blackwing Lair", "Normal", 40, 0, startedAt, 50*time.Minute, true)
+	insertClear(otherGuildID, "Molten Core", "Normal", 40, 0, startedAt, 40*time.Minute, true)
+	insertClear(guildID, "Molten Core", "Normal", 40, 0, startedAt.Add(-400*24*time.Hour), 45*time.Minute, true)
+
+	clears, err := store.GuildRaidClears(ctx, database.GuildRaidClearsParams{GuildID: guildID, SinceDays: 180})
+	require.NoError(t, err)
+	clearCounts := make(map[string]int64, len(clears))
+	for _, clear := range clears {
+		key := fmt.Sprintf("%s\x00%s\x00%d\x00%d", clear.InstanceName, clear.DifficultyName, clear.MaxPlayers, clear.DynamicDifficulty)
+		clearCounts[key] = clear.ClearCount
+	}
+	require.Equal(t, int64(3), clearCounts["Molten Core\x00Normal\x0040\x000"])
+	require.Equal(t, int64(1), clearCounts["Molten Core\x00Heroic\x0040\x001"])
+	require.Equal(t, int64(1), clearCounts["Molten Core\x00Normal\x0020\x000"])
 
 	// Stored time parses for the first clear: a clear parse, a scored Lucifron kill, and a
 	// Ragnaros kill whose sample was too small, which reads as no parse.
@@ -495,10 +514,14 @@ func TestGuildSpeedrunHistory(t *testing.T) {
 
 	rows, err := store.GuildSpeedrunHistory(ctx, database.GuildSpeedrunHistoryParams{
 		TenantID: uuid.Nil, LookbackDays: lookbackDays, PolicyVersion: policyVersion, QueryVersion: queryVersion,
-		GuildID: guildID, InstanceName: "Molten Core", SinceDays: 180,
+		GuildID: guildID, InstanceName: "Molten Core",
+		FilterDifficulty: true, DifficultyName: "Normal",
+		FilterMaxPlayers: true, MaxPlayers: 40,
+		FilterDynamicDifficulty: true, DynamicDifficulty: 0,
+		SinceDays: 180,
 	})
 	require.NoError(t, err)
-	require.Len(t, rows, 2)
+	require.Len(t, rows, 3)
 
 	require.Equal(t, first, rows[0].InstanceID)
 	require.True(t, rows[0].Qualified)
@@ -510,6 +533,11 @@ func TestGuildSpeedrunHistory(t *testing.T) {
 	require.False(t, rows[1].Qualified)
 	require.Zero(t, rows[1].TrashDurationMs)
 	require.EqualValues(t, -1, rows[1].ClearParse)
+
+	require.True(t, rows[1].Complete)
+	require.Equal(t, third, rows[2].InstanceID)
+	require.False(t, rows[2].Qualified)
+	require.False(t, rows[2].Complete)
 
 	kills, err := store.GuildSpeedrunBossKills(ctx, database.GuildSpeedrunBossKillsParams{
 		TenantID: uuid.Nil, LookbackDays: lookbackDays, PolicyVersion: policyVersion, QueryVersion: queryVersion,

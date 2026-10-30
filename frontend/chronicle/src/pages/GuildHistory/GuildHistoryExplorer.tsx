@@ -12,6 +12,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { cn } from "@/lib/utils";
 import { performanceParseColor } from "@/pages/ArmoryPage/overview/performanceExplorerModel";
 import { SummaryViewToggle, type SummaryView } from "@/pages/ArmoryPage/overview/PerformanceSummary";
+import { difficultyLabel } from "@/pages/Leaderboards/Parsing/spreadBands";
 import { isPaidBillingTier, TIER_COLOR } from "@/pages/Settings/billingPricing";
 import { BossFocusCombobox } from "./BossFocusCombobox";
 import { BossSplits } from "./BossSplits";
@@ -82,15 +83,24 @@ export function GuildHistoryExplorer({
   const lockedGuilds = state.guildIds.length - guildIds.length;
   const infoQueries = useGuildInfos(guildIds);
   const clearsQueries = useGuildRaidClearsList(guildIds);
-  const instances = raidOptions(clearsQueries.flatMap((query) => query.data?.clears ?? []));
-  const instanceName = state.instanceName || instances[0]?.name;
-  const historyQueries = useGuildSpeedrunHistories(guildIds, instanceName);
+  const raids = raidOptions(clearsQueries.flatMap((query) => query.data?.clears ?? []));
+  const selectedRaid = selectRaid(raids, state.instanceName, state.difficultyName, state.maxPlayers, state.dynamicDifficulty);
+  const instanceName = selectedRaid?.name;
+  const difficultyName = selectedRaid?.difficultyName;
+  const maxPlayers = selectedRaid?.maxPlayers;
+  const dynamicDifficulty = selectedRaid?.dynamicDifficulty;
+  const historyQueries = useGuildSpeedrunHistories(guildIds, instanceName, difficultyName, maxPlayers, dynamicDifficulty);
   const { timing, boss, part, dateRange, includeUnqualified, tab } = state;
   const focus = { boss, part };
   const canParse = parsesAvailable(timing, focus);
   // Parses exist only for whole clears and boss kills; anything else falls back to times.
   const display = canParse ? state.display : "time";
 
+  const runsByGuild = guildIds.map((_, index) => filterGuildRuns(historyQueries[index]?.data?.runs ?? [], {
+    includeUnqualified: true,
+    rangeDays: GUILD_HISTORY_RANGE_DAYS[dateRange],
+  }));
+  const unqualifiedRunCount = runsByGuild.flat().filter((run) => !run.qualified).length;
   const guilds: SelectedGuild[] = guildIds.map((id, index) => {
     const info = infoQueries[index]?.data;
     return {
@@ -100,10 +110,7 @@ export function GuildHistoryExplorer({
       logoUrl: info?.logo_url ?? "",
       color: GUILD_SERIES_COLORS[index % GUILD_SERIES_COLORS.length],
       hidden: state.hiddenGuildIds.includes(id),
-      runs: filterGuildRuns(historyQueries[index]?.data?.runs ?? [], {
-        includeUnqualified,
-        rangeDays: GUILD_HISTORY_RANGE_DAYS[dateRange],
-      }),
+      runs: includeUnqualified ? runsByGuild[index] : runsByGuild[index].filter((run) => run.qualified),
     };
   });
   const visibleGuilds = guilds.filter((guild) => !guild.hidden);
@@ -137,14 +144,27 @@ export function GuildHistoryExplorer({
             <span className="sr-only">Raid</span>
             <Map className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-sky-400" />
             <select
-              value={instanceName ?? ""}
-              onChange={(event) => onStateChange({ ...state, instanceName: event.target.value, boss: "", part: "" })}
+              value={selectedRaid ? raidOptionValue(selectedRaid) : ""}
+              onChange={(event) => {
+                const raid = raids.find((option) => raidOptionValue(option) === event.target.value);
+                if (raid) {
+                  onStateChange({
+                    ...state,
+                    instanceName: raid.name,
+                    difficultyName: raid.difficultyName,
+                    maxPlayers: raid.maxPlayers,
+                    dynamicDifficulty: raid.dynamicDifficulty,
+                    boss: "",
+                    part: "",
+                  });
+                }
+              }}
               className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-3 text-sm text-foreground outline-none focus:border-sky-500/70"
             >
-              {instances.length === 0 && <option value="">No clears yet</option>}
-              {instances.map((instance) => (
-                <option key={instance.name} value={instance.name}>
-                  {instance.name} ({instance.clears} {instance.clears === 1 ? "clear" : "clears"})
+              {raids.length === 0 && <option value="">No clears yet</option>}
+              {raids.map((raid) => (
+                <option key={raidOptionValue(raid)} value={raidOptionValue(raid)}>
+                  {raidLabel(raid)} ({raid.clears} {raid.clears === 1 ? "clear" : "clears"})
                 </option>
               ))}
             </select>
@@ -185,18 +205,6 @@ export function GuildHistoryExplorer({
               value={dateRange}
               onChange={(value: GuildHistoryDateRange) => onStateChange({ ...state, dateRange: value })}
             />
-            <label
-              className="flex h-8 cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-2.5 text-xs text-muted-foreground hover:text-foreground"
-              title="Unqualified clears are complete but missing something the leaderboard requires, such as the addon or a level-capped roster."
-            >
-              <input
-                type="checkbox"
-                checked={includeUnqualified}
-                onChange={(event) => onStateChange({ ...state, includeUnqualified: event.target.checked })}
-                className="accent-sky-500"
-              />
-              Unqualified
-            </label>
           </div>
         </div>
 
@@ -265,6 +273,9 @@ export function GuildHistoryExplorer({
           focus={focus}
           display={display}
           loading={loading}
+          includeUnqualified={includeUnqualified}
+          unqualifiedRunCount={unqualifiedRunCount}
+          onIncludeUnqualifiedChange={(value) => onStateChange({ ...state, includeUnqualified: value })}
         />
 
         <div className="pt-2">
@@ -328,13 +339,68 @@ export function GuildHistoryExplorer({
   );
 }
 
-/** Raids any selected guild has cleared, most clears first. */
-function raidOptions(clears: readonly { instance_name: string; clear_count: number }[]) {
-  const totals = new globalThis.Map<string, number>();
-  for (const clear of clears) totals.set(clear.instance_name, (totals.get(clear.instance_name) ?? 0) + clear.clear_count);
-  return [...totals.entries()]
-    .map(([name, count]) => ({ name, clears: count }))
-    .sort((a, b) => b.clears - a.clears || a.name.localeCompare(b.name));
+/** Raids any selected guild has cleared, with each recorded difficulty kept separate. */
+interface RaidOption {
+  name: string;
+  difficultyName: string;
+  maxPlayers: number;
+  dynamicDifficulty: number;
+  clears: number;
+}
+
+function raidOptions(clears: readonly {
+  instance_name: string;
+  difficulty_name: string;
+  max_players: number;
+  dynamic_difficulty: number;
+  clear_count: number;
+}[]): RaidOption[] {
+  const totals = new globalThis.Map<string, RaidOption>();
+  for (const clear of clears) {
+    const option: RaidOption = {
+      name: clear.instance_name,
+      difficultyName: clear.difficulty_name,
+      maxPlayers: clear.max_players,
+      dynamicDifficulty: clear.dynamic_difficulty,
+      clears: clear.clear_count,
+    };
+    const key = raidOptionValue(option);
+    totals.set(key, { ...option, clears: (totals.get(key)?.clears ?? 0) + clear.clear_count });
+  }
+  return [...totals.values()]
+    .sort((a, b) => b.clears - a.clears
+      || a.name.localeCompare(b.name)
+      || a.maxPlayers - b.maxPlayers
+      || a.difficultyName.localeCompare(b.difficultyName)
+      || a.dynamicDifficulty - b.dynamicDifficulty);
+}
+
+function selectRaid(
+  raids: readonly RaidOption[],
+  instanceName: string,
+  difficultyName: string | null,
+  maxPlayers: number | null,
+  dynamicDifficulty: number | null,
+): RaidOption | undefined {
+  if (!instanceName) return raids[0];
+  return raids.find((raid) => raid.name === instanceName
+      && (difficultyName === null || raid.difficultyName === difficultyName)
+      && (maxPlayers === null || raid.maxPlayers === maxPlayers)
+      && (dynamicDifficulty === null || raid.dynamicDifficulty === dynamicDifficulty))
+    ?? raids.find((raid) => raid.name === instanceName && (difficultyName === null || raid.difficultyName === difficultyName))
+    ?? raids.find((raid) => raid.name === instanceName)
+    ?? raids[0];
+}
+
+function raidOptionValue(raid: Pick<RaidOption, "name" | "difficultyName" | "maxPlayers" | "dynamicDifficulty">): string {
+  return JSON.stringify([raid.name, raid.difficultyName, raid.maxPlayers, raid.dynamicDifficulty]);
+}
+
+function raidLabel(raid: Pick<RaidOption, "name" | "difficultyName" | "maxPlayers" | "dynamicDifficulty">): string {
+  const board = difficultyLabel(raid.difficultyName, raid.maxPlayers);
+  const mode = raid.dynamicDifficulty > 0 && !raid.difficultyName.toLowerCase().includes("heroic") ? "Heroic" : "";
+  const details = [mode, board].filter(Boolean).join(" · ");
+  return details ? `${raid.name} (${details})` : raid.name;
 }
 
 function Segmented<T extends string>({
@@ -412,10 +478,20 @@ function ClearsTable({ guilds, label }: { guilds: readonly SelectedGuild[]; labe
         </thead>
         <tbody>
           {rows.map(({ guild, run }) => (
-            <tr key={`${guild.id}-${run.slug}`} className="border-b border-border/40 last:border-0">
+            <tr
+              key={`${guild.id}-${run.slug}`}
+              className={cn(
+                "border-b border-border/40 last:border-0",
+                !run.complete && "bg-amber-500/[0.06] shadow-[inset_3px_0_0_0_rgb(252_211_77_/_0.75)]",
+              )}
+            >
               <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
                 {new Date(run.completion_time).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                {!run.qualified && <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-300">Unqualified</span>}
+                {!run.complete ? (
+                  <span className="ml-2 rounded border border-amber-400/35 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-200">Incomplete</span>
+                ) : !run.qualified ? (
+                  <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-300">Unqualified</span>
+                ) : null}
               </td>
               {guilds.length > 1 && (
                 <td className="px-3 py-1.5 whitespace-nowrap">

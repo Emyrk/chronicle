@@ -20,6 +20,7 @@ const GUILDS: GuildHistoryFixture[] = MOLTEN_CORE_GUILD_HISTORY.map((guild) => (
   ...guild,
   runs: guild.runs.map((run): GuildSpeedrunRun => ({
     ...run,
+    complete: run.complete ?? run.qualified,
     start_time: shift(run.start_time),
     completion_time: shift(run.completion_time),
     bosses: run.bosses.map((boss) => ({ ...boss, killed_at: shift(boss.killed_at) })),
@@ -77,6 +78,9 @@ const handlers = [
     const response: GuildRaidClearsResponse = {
       clears: runs.length === 0 ? [] : [{
         instance_name: "Molten Core",
+        difficulty_name: "Normal",
+        max_players: 40,
+        dynamic_difficulty: 0,
         clear_count: runs.length,
         best_duration_ms: Math.min(...runs.map((run) => run.duration_ms)),
         avg_duration_ms: Math.round(runs.reduce((sum, run) => sum + run.duration_ms, 0) / runs.length),
