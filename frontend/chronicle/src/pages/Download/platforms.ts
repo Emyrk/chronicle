@@ -25,7 +25,7 @@ export const PLATFORMS: Platform[] = [
       { label: "64-bit", file: "Chronicle-Sidekick-windows-amd64.exe" },
       { label: "ARM64", file: "Chronicle-Sidekick-windows-arm64.exe" },
     ],
-    tray: "system tray, near the clock",
+    tray: "system tray",
     install: "Run the downloaded .exe. There is no installer.",
     warning: "The build isn't signed yet, so SmartScreen warns you once. Click More info, then Run anyway.",
   },
