@@ -114,6 +114,15 @@ export function GuildHistoryExplorer({
     };
   });
   const visibleGuilds = guilds.filter((guild) => !guild.hidden);
+  const showRealms = new Set(guilds.map((guild) => guild.realmName)).size > 1;
+  const label = (guild: SelectedGuild) => showRealms && guild.realmName ? `${guild.name} · ${guild.realmName}` : guild.name;
+  const summaryRows = visibleGuilds.map((guild) => ({
+    id: guild.id,
+    name: label(guild),
+    color: guild.color,
+    summary: summarizeClearTimes(guild.runs, timing, focus, display),
+  }));
+  const hasSummary = summaryRows.some((row) => row.summary !== null);
   const bossNames = mergeBossOrder(visibleGuilds.map((guild) => summarizeBossSplits(guild.runs)));
   const focusBoss = (next: string) => onStateChange({ ...state, boss: next, part: "" });
   const toggleHidden = (guildId: string) => onStateChange({
@@ -122,8 +131,6 @@ export function GuildHistoryExplorer({
       ? state.hiddenGuildIds.filter((id) => id !== guildId)
       : [...state.hiddenGuildIds, guildId],
   });
-  const showRealms = new Set(guilds.map((guild) => guild.realmName)).size > 1;
-  const label = (guild: SelectedGuild) => showRealms && guild.realmName ? `${guild.name} · ${guild.realmName}` : guild.name;
   const loading = historyQueries.some((query) => query.isLoading) || (!instanceName && clearsQueries.some((query) => query.isLoading));
 
   const addGuild = (guildId: string) => {
@@ -251,19 +258,14 @@ export function GuildHistoryExplorer({
             </Button>
           )}
         </div>
-          {!loading && <SummaryViewToggle view={summaryView} onChange={setSummaryView} className="shrink-0 self-end sm:self-start" />}
+          {!loading && hasSummary && <SummaryViewToggle view={summaryView} onChange={setSummaryView} className="shrink-0 self-end sm:self-start" />}
         </div>
 
         {!loading && (
           <GuildClearSummary
-            rows={visibleGuilds.map((guild) => ({
-              id: guild.id,
-              name: label(guild),
-              color: guild.color,
-              summary: summarizeClearTimes(guild.runs, timing, focus, display),
-            }))}
+            rows={summaryRows}
             view={summaryView}
-            countLabel={display === "parse" ? "Parsed" : boss ? "Kills" : "Clears"}
+            countLabel={display === "parse" ? "Qualified parses" : boss ? "Qualified kills" : "Qualified clears"}
           />
         )}
 

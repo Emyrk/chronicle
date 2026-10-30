@@ -1,7 +1,7 @@
 import { Fragment, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { BossSpread, SpreadLane, type LaneStats } from "./BossSpread";
 import type { GuildSpeedrunRun } from "@/api/typesGenerated";
@@ -117,7 +117,7 @@ function ClearByClear({ guilds }: { guilds: readonly BossSplitGuild[] }) {
         <SectionHeading
           title="Clear by clear"
           description={view === "bars"
-            ? "One bar per clear, to see which part made a night fast or slow."
+            ? "One bar per clear, to see which part made a night fast or slow. A yellow * marks an incomplete or unqualified run."
             : "How much the full clear and each part swing from clear to clear. A wide box is something that is hard to keep steady."}
         />
         <div className="flex flex-wrap items-center gap-2">
@@ -156,13 +156,13 @@ function ClearBars({ guilds, sort }: { guilds: readonly BossSplitGuild[]; sort: 
   return (
     <div className="max-h-96 space-y-px overflow-y-auto pr-1 styled-scrollbar">
       {rows.map(({ guild, run, parts }) => (
-        <HintTooltip key={`${guild.id}-${run.slug}`}>
+        <Tooltip key={`${guild.id}-${run.slug}`}>
           <TooltipTrigger asChild>
             <Link
               to={`/instances/${run.slug}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="grid grid-cols-[7rem_minmax(0,1fr)_4.5rem] items-center gap-3 rounded px-1 py-0.5 text-xs hover:bg-white/5 sm:grid-cols-[10rem_minmax(0,1fr)_4.5rem]"
+              className="grid grid-cols-[7rem_4.5rem_minmax(0,1fr)] items-center gap-3 rounded px-1 py-0.5 text-xs hover:bg-white/5 sm:grid-cols-[10rem_4.5rem_minmax(0,1fr)]"
             >
               <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
                 {multiple && <span className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: guild.color }} />}
@@ -170,15 +170,23 @@ function ClearBars({ guilds, sort }: { guilds: readonly BossSplitGuild[]; sort: 
                   {new Date(run.completion_time).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                   {multiple && ` · ${guild.name}`}
                 </span>
+                {(!run.complete || !run.qualified) && (
+                  <span
+                    className="shrink-0 font-mono text-sm font-bold leading-none text-amber-300"
+                    aria-label={!run.complete ? "Incomplete run" : "Unqualified run"}
+                  >
+                    *
+                  </span>
+                )}
               </span>
-              <PartsBar parts={parts} longest={longest} color={guild.color} thin />
-              <span className="text-right font-mono tabular-nums">{formatClearTime(run.duration_ms)}</span>
+              <span className="text-right font-mono font-medium tabular-nums">{formatClearTime(run.duration_ms)}</span>
+              <PartsBar parts={parts} longest={longest} color={guild.color} thin nativeTitles={false} />
             </Link>
           </TooltipTrigger>
           <TooltipContent side="top" className="min-w-64 text-left">
             <ClearTooltip guild={guild} run={run} parts={parts} typical={typicalByGuild.get(guild.id) ?? null} />
           </TooltipContent>
-        </HintTooltip>
+        </Tooltip>
       ))}
     </div>
   );
@@ -216,7 +224,7 @@ function ClearTooltip({
           {start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
           {" · "}
           {run.player_count} players
-          {!run.qualified && " · unqualified"}
+          {!run.complete ? " · incomplete" : !run.qualified && " · unqualified"}
         </div>
       </div>
       <dl className="grid grid-cols-[auto_1fr_auto] items-baseline gap-x-3 gap-y-0.5 font-mono tabular-nums">
@@ -414,12 +422,15 @@ function PartsBar({
   color,
   showLabels = false,
   thin = false,
+  nativeTitles = true,
 }: {
   parts: ClearTimeParts;
   longest: number;
   color: string;
   showLabels?: boolean;
   thin?: boolean;
+  /** Native browser titles compete with the row's rich tooltip. */
+  nativeTitles?: boolean;
 }) {
   const total = Math.max(partsTotal(parts), 1);
   const segments = [
@@ -440,7 +451,7 @@ function PartsBar({
             key={segment.key}
             className={cn("flex min-w-0 items-center justify-between gap-1 px-2", segment.key === "idle" && "bg-white/10", segment.text)}
             style={{ ...segment.style, width: `${(segment.value / total) * 100}%` }}
-            title={`${segment.label} ${formatClearTime(segment.value)} (${share}%) · ${PART_HELP[segment.key]}`}
+            title={nativeTitles ? `${segment.label} ${formatClearTime(segment.value)} (${share}%) · ${PART_HELP[segment.key]}` : undefined}
           >
             {showLabels && share >= 8 && (
               <>
