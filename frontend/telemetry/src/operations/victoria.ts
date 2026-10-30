@@ -32,6 +32,14 @@ export interface DeviceOperations {
   leaderOk: boolean;
   gcBacklog: number;
   requestTrend7d: number[];
+  accounts: {
+    available: boolean;
+    signups24h: number;
+    logins24h: number;
+    refreshErrors24h: number;
+    refreshAttempts24h: number;
+    deletions24h: number;
+  };
   parsing: {
     instances24h: number;
     lines24h: number;
@@ -285,6 +293,12 @@ export async function fetchDeviceOperations(env: Env): Promise<DeviceOperations>
     billingErrors: `max(chronicle_billing_reconciliation_subscription_errors) + max(chronicle_billing_reconciliation_entitlement_errors)`,
     leader: `sum(chronicle_leader_election_leader)`,
     gc: `sum(chronicle_lua_projects_artifact_gc_backlog)`,
+    accountSeries: `count({__name__=~"chronicle_api_auth_signups_total|chronicle_api_auth_logins_total|chronicle_api_auth_refreshes_total|chronicle_accounts_deleted_total"})`,
+    signups: `sum(increase(chronicle_api_auth_signups_total[24h]))`,
+    logins: `sum(increase(chronicle_api_auth_logins_total[24h]))`,
+    refreshErrors: `sum(increase(chronicle_api_auth_refreshes_total{result="error"}[24h]))`,
+    refreshAttempts: `sum(increase(chronicle_api_auth_refreshes_total[24h]))`,
+    deletions: `sum(increase(chronicle_accounts_deleted_total[24h]))`,
     completed: `sum(increase(chronicle_river_jobs_total{result=~"completed|success"}[24h]))`,
     cancelled: `sum(increase(chronicle_river_jobs_total{result="cancelled"}[24h]))`,
     workers: `sum(chronicle_river_configured_workers)`,
@@ -360,6 +374,14 @@ export async function fetchDeviceOperations(env: Env): Promise<DeviceOperations>
     leaderOk: values.leader >= 1,
     gcBacklog: Math.round(values.gc),
     requestTrend7d: matrixValues(requestTrend, 7).map(Math.round),
+    accounts: {
+      available: values.accountSeries > 0,
+      signups24h: Math.round(values.signups),
+      logins24h: Math.round(values.logins),
+      refreshErrors24h: Math.round(values.refreshErrors),
+      refreshAttempts24h: Math.round(values.refreshAttempts),
+      deletions24h: Math.round(values.deletions),
+    },
     parsing: {
       instances24h: Math.round(values.instances),
       lines24h: Math.round(values.lines),

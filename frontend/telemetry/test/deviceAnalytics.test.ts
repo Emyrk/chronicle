@@ -26,6 +26,14 @@ const operations = {
   leaderOk: true,
   gcBacklog: 0,
   requestTrend7d: [120000, 131000, 118000, 143000, 156000, 149000, 132000],
+  accounts: {
+    available: true,
+    signups24h: 42,
+    logins24h: 1840,
+    refreshErrors24h: 4,
+    refreshAttempts24h: 2000,
+    deletions24h: 3,
+  },
   parsing: {
     instances24h: 228,
     lines24h: 9842738,
