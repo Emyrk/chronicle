@@ -8,6 +8,7 @@ import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
 import { playwright } from '@vitest/browser-playwright';
+import { localProxyHeaders } from './src/config/viteProxy';
 const dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 
 // Proxy helper that rewrites the Host header to preserve the subdomain
@@ -19,6 +20,7 @@ function backendProxy(): ProxyOptions {
   const rewriteHeaders = (
     proxyReq: { setHeader: (name: string, value: string) => void },
     host: string | undefined,
+    origin: string | undefined,
     websocket = false,
   ) => {
     if (isRemote) {
@@ -27,11 +29,11 @@ function backendProxy(): ProxyOptions {
       proxyReq.setHeader('Origin', target.replace(/\/$/, ''));
       proxyReq.setHeader('Referer', target);
     } else if (host) {
-      const backendHost = host.replace(/:\d+$/, ':4000');
-      proxyReq.setHeader('Host', backendHost);
-      // coder/websocket requires the Origin host to match the proxied Host.
-      // The browser sends the Vite port, so rewrite it for upgrade requests.
-      if (websocket) proxyReq.setHeader('Origin', `${targetUrl.protocol}//${backendHost}`);
+      const headers = localProxyHeaders(host, origin, targetUrl.protocol, websocket);
+      proxyReq.setHeader('Host', headers.host);
+      // Same-origin checks compare Origin with the rewritten backend Host.
+      // Only rewrite a browser Origin that matched the incoming Vite Host.
+      if (headers.origin) proxyReq.setHeader('Origin', headers.origin);
     }
   };
 
@@ -41,8 +43,8 @@ function backendProxy(): ProxyOptions {
     changeOrigin: isRemote,
     ws: true,
     configure: (proxy) => {
-      proxy.on('proxyReq', (proxyReq, req) => rewriteHeaders(proxyReq, req.headers.host));
-      proxy.on('proxyReqWs', (proxyReq, req) => rewriteHeaders(proxyReq, req.headers.host, true));
+      proxy.on('proxyReq', (proxyReq, req) => rewriteHeaders(proxyReq, req.headers.host, req.headers.origin));
+      proxy.on('proxyReqWs', (proxyReq, req) => rewriteHeaders(proxyReq, req.headers.host, req.headers.origin, true));
     },
   };
 }
