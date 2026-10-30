@@ -11,6 +11,7 @@ const siteConfig = {
   ads_enabled: false,
   disabled_ads: [],
   discoverable: true,
+  root_domain_discovery: false,
   default_format: null,
   available_formats: [],
   dataset_flavor: [],

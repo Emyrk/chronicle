@@ -122,7 +122,7 @@ func TestMiddleware(t *testing.T) {
 		wantBody string
 	}{
 		{name: "PagePath", method: http.MethodGet, host: "choose.localhost", path: "/instances/123", wantBody: "Where should this link open?"},
-		{name: "Root", method: http.MethodGet, host: "choose.localhost:4000", path: "/", wantBody: "Where should this link open?"},
+		{name: "Root", method: http.MethodGet, host: "choose.localhost:4000", path: "/", wantBody: "Choose your community"},
 		{name: "HTMLWithExtension", method: http.MethodGet, host: "choose.localhost", path: "/notes.v2", accept: "text/html", wantBody: "Where should this link open?"},
 		{name: "Asset", method: http.MethodGet, host: "choose.localhost", path: "/c/capy/logo.png", accept: "image/*", wantBody: "untenanted"},
 		{name: "API", method: http.MethodGet, host: "choose.localhost", path: "/api/v1/site-config", wantBody: "untenanted"},

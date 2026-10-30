@@ -309,15 +309,18 @@
     remember.addEventListener("change", syncRemember);
     syncRemember();
 
+    var isHome = forwardPath === "/";
     var children = [
       brand(),
-      el("h1", { text: "Where should this link open?" }),
+      el("h1", { text: isHome ? "Choose your community" : "Where should this link open?" }),
       el("p", {
         "class": "lede",
-        text: "Chronicle is home to many communities. Pick yours and we'll open this page there.",
+        text: isHome
+          ? "Chronicle is home to many communities. Choose where you play to open the right site."
+          : "Pick your community and we'll open this page there.",
       }),
-      pathChip(),
     ];
+    if (!isHome) children.push(pathChip());
 
     if (message) {
       children.push(el("div", { "class": "notice", role: "status", text: message }));
