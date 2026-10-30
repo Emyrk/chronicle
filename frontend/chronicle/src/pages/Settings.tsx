@@ -47,7 +47,7 @@ import { Button } from "@/components/ui/button";
 import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider, useTenantDatasetScope } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
+import { clearInstanceDefaultsCache, useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
 import { EventsPanel, type EventsPanelType } from "@/pages/Instance/EventsPanels";
 import { isCustomPanelRef } from "@/pages/Instance/EventsPanels/custom/pluginTypes";
 import { PANELS } from "@/pages/Instance/EventsPanels/EventsPanel";
@@ -276,14 +276,25 @@ export function ProfileSettings() {
   const email = session?.email;
   const emailVerified = session?.email_verified ?? false;
 
+  // Kept in the URL so the explanation stays visible until dismissed.
+  const discordLinkedElsewhere = searchParams.get("discord_link") === "linked_elsewhere";
+  const dismissDiscordLinkError = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("discord_link");
+    setSearchParams(next, { replace: true });
+  };
+
+  const switchToDiscordAccount = async () => {
+    await fetch("/auth/logout");
+    clearInstanceDefaultsCache();
+    window.location.href = "/auth/discord?from=/account/settings";
+  };
+
   useEffect(() => {
     const result = searchParams.get("discord_link");
-    if (!result) return;
+    if (!result || result === "linked_elsewhere") return;
 
     if (result === "success") toast.success("Discord account connected.");
-    else if (result === "linked_elsewhere") toast.error("That Discord account is already used by another Chronicle account.", {
-      description: "Sign in with Discord to use that account, or connect a different Discord account here.",
-    });
     else if (result === "already_linked") toast.info("A different Discord identity is already connected to this account.");
     else if (result === "session_expired") toast.error("Your session changed while connecting Discord. Please try again.");
     else toast.error("Discord account could not be connected.");
@@ -330,6 +341,42 @@ export function ProfileSettings() {
         <h2 className="text-xl font-semibold">Profile Settings</h2>
         <p className="text-muted-foreground">Manage your profile information.</p>
       </div>
+
+      {discordLinkedElsewhere && (
+        <div role="alert" className="relative rounded-lg border-2 border-amber-500/50 bg-amber-500/10 p-6 space-y-4">
+          <button
+            type="button"
+            onClick={dismissDiscordLinkError}
+            aria-label="Dismiss"
+            className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+          >
+            <X className="size-5" />
+          </button>
+          <div className="flex items-start gap-4 pr-6">
+            <div className="rounded-full bg-amber-500/15 p-3">
+              <DiscordIcon className="size-7 text-[#5865F2]" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold">Discord couldn't be connected</h3>
+              <p className="text-sm text-muted-foreground">
+                That Discord account already has its own Chronicle account, and a Discord account can only belong to one Chronicle account.
+                To connect it here, delete that other account first.
+              </p>
+            </div>
+          </div>
+          <ol className="ml-[4.25rem] list-decimal space-y-1 pl-5 text-sm">
+            <li>Sign in with Discord. You'll be signed out of this account.</li>
+            <li>In that account's settings, delete it. Anything saved to it is deleted too.</li>
+            <li>Sign back in with your email and password, then click Connect again.</li>
+          </ol>
+          <div className="ml-[4.25rem] flex flex-wrap items-center gap-3">
+            <Button size="lg" className="bg-[#5865F2] text-white hover:bg-[#4752C4]" onClick={switchToDiscordAccount}>
+              <DiscordIcon className="size-5" /> Sign in with Discord to delete it
+            </Button>
+            <Button size="lg" variant="ghost" onClick={dismissDiscordLinkError}>Not now</Button>
+          </div>
+        </div>
+      )}
 
       {email && (
         <div className="rounded-lg border p-4 space-y-3">
@@ -411,9 +458,9 @@ export function ProfileSettings() {
               </div>
             )}
           </div>
-          {isPasswordAuth && !isDiscordLinked && (
+          {isPasswordAuth && !isDiscordLinked && !discordLinkedElsewhere && (
             <p className="text-xs text-muted-foreground">
-              If this Discord account is already attached to another Chronicle account, it can't be connected here.
+              A Discord account that already has its own Chronicle account must be deleted before it can be connected here.
             </p>
           )}
         </div>
