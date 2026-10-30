@@ -134,6 +134,9 @@ export function summarizeClearTimes(
   display: GuildHistoryDisplay = "time",
 ): ClearSummary | null {
   const timed = runs.flatMap((run) => {
+    // Unqualified runs can be displayed for context, but must not define Best,
+    // Typical, Trend, or other headline performance statistics.
+    if (!run.qualified) return [];
     const value = guildRunValue(run, timing, focus, display);
     return value === null || !guildHistoryValueIsShown(value, display) ? [] : [{ run, value }];
   });

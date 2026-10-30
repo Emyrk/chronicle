@@ -89,6 +89,15 @@ describe("summarizeClearTimes", () => {
     expect(summarizeClearTimes(runs.slice(0, 6), "full")!.outliers).toEqual([]);
   });
 
+  it("excludes unqualified runs from headline statistics", () => {
+    const qualified = run(0, 60);
+    const unqualified = run(7, 30, { qualified: false, complete: false });
+    const summary = summarizeClearTimes([qualified, unqualified], "full")!;
+    expect(summary.runCount).toBe(1);
+    expect(summary.best).toBe(60 * MINUTE);
+    expect(summarizeClearTimes([unqualified], "full")).toBeNull();
+  });
+
   it("excludes clear times over six hours from history statistics", () => {
     const runs = [run(0, 60), run(7, 65), run(14, 7 * 60)];
     const summary = summarizeClearTimes(runs, "full")!;

@@ -23,7 +23,7 @@ const MIN_COMPARABLE_RUNS = 3;
 
 type StatKey = "best" | "typical" | "recent" | "worst" | "consistency" | "trend";
 
-const CLEARS_HELP = `Full clears matching the current filters, or kills of the focused boss in them. Guilds with fewer than ${MIN_COMPARABLE_RUNS} clears are shown but never highlighted.`;
+const CLEARS_HELP = `Qualified full clears matching the current filters, or kills of the focused boss in them. Unqualified runs may appear in the chart but never affect these statistics. Guilds with fewer than ${MIN_COMPARABLE_RUNS} clears are shown but never highlighted.`;
 
 /** Column labels and help, worded for times (lower is better) or parses (higher is better). */
 function statColumns(parse: boolean): readonly { key: StatKey; label: string; help: string }[] {
