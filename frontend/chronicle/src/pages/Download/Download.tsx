@@ -15,7 +15,7 @@ const CHRONICLE_ICON = "/c/chronicle/ChronicleIconSquare.webp";
 // Sidekick's tray state colors (chronicle-sidekick icons.go).
 const STATES = [
   { color: "#8a8f98", text: "Waiting for WoW" },
-  { color: "#e5484d", text: "Combat logging not detected" },
+  { color: "#e5484d", text: "Not logging" },
   { color: "#f97316", text: "Combat logging started, waiting for data" },
   { color: "#22c55e", text: "Combat log receiving data" },
   { color: "#3b82f6", text: "Uploading or retrying" },
