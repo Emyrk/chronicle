@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw, Lock, Sparkles, Bot } from "lucide-react";
+import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw, Lock, Sparkles, Bot, AlertTriangle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -490,8 +490,21 @@ export function ProfileSettings() {
           </p>
         </div>
         {deletionStatus && !deletionStatus.can_delete && (
-          <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
-            This account cannot be deleted automatically: {deletionStatus.blockers.join(", ")}.
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-amber-500">
+              <AlertTriangle className="size-4 shrink-0" /> This account can't be deleted yet
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Your account still has data or permissions attached that an administrator needs to review before it can be removed:
+            </p>
+            <ul className="list-disc space-y-0.5 pl-5 text-xs">
+              {deletionStatus.blockers.map((blocker) => (
+                <li key={blocker} className="first-letter:uppercase">{blocker}</li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground">
+              <Link to="/contact" className="underline underline-offset-2 hover:text-foreground">Contact us</Link> to request deletion.
+            </p>
           </div>
         )}
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -500,6 +513,7 @@ export function ProfileSettings() {
             onChange={(event) => setDeleteConfirmation(event.target.value)}
             placeholder="Type DELETE to confirm"
             aria-label="Account deletion confirmation"
+            disabled={!deletionStatus?.can_delete || deleteAccount.isPending}
             className="sm:max-w-xs"
           />
           <Button
