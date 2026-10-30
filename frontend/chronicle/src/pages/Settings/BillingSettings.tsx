@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, Navigate, useSearchParams } from "react-router-dom"
+import { useQueryClient } from "@tanstack/react-query"
 import type { BillingPrice, BillingSummary } from "@/api/typesGenerated"
 import { useCreateBillingCancel, useCreateBillingChange, useCreateBillingCheckout, useCreateBillingPortal, useBillingSummary, useSiteConfig } from "@/api/queries"
 import { iconUrl } from "@/config/iconUrl"
@@ -134,11 +135,24 @@ function useBillingReturnPolling(): boolean {
   return polling
 }
 
+/**
+ * The session (/whoami) carries the supporter tier that pages gate on. The webhook updates the tier
+ * and billing summary together, so refetch the session whenever the polled summary's tier changes.
+ */
+function useSyncSessionTier(billing: BillingSummary | undefined) {
+  const queryClient = useQueryClient()
+  const tierKey = billing ? `${billing.tier}:${billing.ads_free}` : undefined
+  useEffect(() => {
+    if (tierKey) void queryClient.invalidateQueries({ queryKey: ["session"] })
+  }, [tierKey, queryClient])
+}
+
 export function BillingSettings() {
   const { data: siteConfig, isLoading: isSiteConfigLoading } = useSiteConfig()
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth()
   const polling = useBillingReturnPolling()
   const { data: billing, isLoading } = useBillingSummary(polling ? BILLING_RETURN_POLL_MS : false)
+  useSyncSessionTier(billing)
 
   if (isSiteConfigLoading || isAuthLoading) return null
   if (!siteConfig?.billing_enabled) return <Navigate to="/account/settings" replace />
