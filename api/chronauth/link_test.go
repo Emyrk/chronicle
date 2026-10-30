@@ -72,6 +72,7 @@ func TestDiscordLinkFromTenant(t *testing.T) {
 		RelayStore: NewRelayCodeStore(zed),
 		logger:     slog.Default(),
 		accessURL:  accessURL,
+		devMode:    true, // Local HTTP tenant links are allowed only in development.
 		tenantChecker: func(host string) *TenantInfo {
 			if host == "turtle.localhost:4000" {
 				return &TenantInfo{Slug: "turtle", Name: "Turtle"}
@@ -157,6 +158,11 @@ func TestDiscordLinkFromTenant(t *testing.T) {
 	// An attacker starts a link and gets the victim to finish Discord OAuth in
 	// the victim's browser. The victim's session must not complete it.
 	signedIn = attacker
+	// A recognized HTTP tenant must not receive a link code outside dev mode.
+	s.devMode = false
+	rejected := serve(tenantOrigin+"/auth/discord/link", nil)
+	require.Equal(t, http.StatusBadRequest, rejected.Code)
+	s.devMode = true
 	begin := startLink()
 	complete := authorizeDiscord(begin)
 	require.True(t, strings.HasPrefix(complete, tenantOrigin+"/auth/discord/link/complete?code="), complete)
