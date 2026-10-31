@@ -79,7 +79,7 @@ export const RemotionRoot: React.FC = () => {
         <Composition id="LayoutEditing" component={LayoutEditingVideo} durationInFrames={700} fps={30} width={1280} height={720} />
         <Composition id="CharacterCosmetics" component={CharacterCosmeticsVideo} durationInFrames={720} fps={30} width={1280} height={720} />
         <Composition id="RankedDamage" component={RankedDamageVideo} durationInFrames={900} fps={30} width={1280} height={720} />
-        <Composition id="EntityInspector" component={EntityInspectorVideo} durationInFrames={1110} fps={30} width={1280} height={720} />
+        <Composition id="EntityInspector" component={EntityInspectorVideo} durationInFrames={1256} fps={30} width={1280} height={720} />
       </Folder>
       <Folder name="DamageDoneLessons">
       <Composition

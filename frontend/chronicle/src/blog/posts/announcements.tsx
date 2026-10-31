@@ -370,7 +370,7 @@ export function EntityInspectorPost({ post }: PostProps) {
         each kind, and it stays with you as you move between pages. Tabs in its header switch between players, guilds,
         bosses and raids, and the 30d, 60d and 180d buttons set how far back it looks. Hover a name in the tray to see
         which page you added it from; <kbd>Shift</kbd>+click hides a name without removing it. Clear all (the trash
-        can) empties the tray, and ⤢ opens the full comparison in a drawer.
+        can) empties the tray.
       </p>
       <ul>
         <li>
@@ -393,11 +393,19 @@ export function EntityInspectorPost({ post }: PostProps) {
         </li>
       </ul>
 
+      <h2>The full history, in a drawer</h2>
+      <p>
+        When the tray isn&apos;t enough, the button at its bottom opens the full performance history (or a
+        guild&apos;s clear-time history) in a drawer over the page you&apos;re on. It starts on the same raid and
+        bosses as the tray, with every chart, table and filter from the full page. Close it and you&apos;re right where
+        you were; <strong>Open full page</strong> in its corner takes it to its own tab.
+      </p>
+
       <h2>Who gets what</h2>
       <p>
-        The menu, the tray, and the boss and raid comparisons are free for everyone. Player scores and charts are a
-        Revered perk: Friendly and Honored members see a blurred preview, with a link to the full performance history
-        page. <a href="/supporter">Become a supporter</a> to see them right in the tray.
+        The menu, the tray, and the boss and raid comparisons are free for everyone. Player scores, charts and the
+        drawer are a Revered perk: Friendly and Honored members see a blurred preview, and the button opens the full
+        history page in a new tab instead. <a href="/supporter">Become a supporter</a> to see them right in the tray.
       </p>
 
       <h2>Where it works</h2>

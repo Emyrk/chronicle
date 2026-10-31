@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import { ChevronDown, ChevronUp, ExternalLink, EyeOff, GitCompareArrows, Lock, Maximize2, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, EyeOff, GitCompareArrows, Lock, PanelRightOpen, Trash2, X } from "lucide-react";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
@@ -53,7 +53,7 @@ function pageLink(kind: EntityKind, entities: EntityRef[], hidden: ReadonlySet<s
  * The corner card for players, guilds and encounters added with "Add to compare". It shows their
  * quick stats (one entity: a short summary; several: a comparison). Player and guild stats need
  * the stats tier, and below it show a blurred preview with an upgrade prompt; encounter kill times
- * are free. Everyone can open the full page from here.
+ * are free. The footer opens the full stats: in the drawer for the stats tier, otherwise on its page.
  */
 export function CompareTray({
   pins,
@@ -94,6 +94,9 @@ export function CompareTray({
   const showStats = canShowStats || isEncounter;
   const link = pageLink(kind, entities, hidden);
   const iconButton = "shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground";
+  const footerClass =
+    "flex w-full items-center justify-center gap-1.5 rounded-md bg-[color-mix(in_oklab,var(--kind)_15%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--kind)] transition-colors hover:bg-[color-mix(in_oklab,var(--kind)_25%,transparent)]";
+  const footerStyle = { "--kind": kindColor(kind) } as CSSProperties;
 
   if (collapsed) {
     return (
@@ -171,11 +174,6 @@ export function CompareTray({
             ))}
           </div>
         )}
-        {canShowStats && !isEncounter && (
-          <button type="button" onClick={() => onExpand(kind)} className={iconButton} aria-label="Expand to full stats" title="Full stats">
-            <Maximize2 className="h-3.5 w-3.5" />
-          </button>
-        )}
         <button type="button" onClick={onClearAll} className={iconButton} aria-label="Clear all" title="Clear everything from compare">
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -247,15 +245,18 @@ export function CompareTray({
           <LockedPreview kind={kind} entities={entities.filter((entity) => !hidden.has(entityKey(entity)))} />
         )}
 
-        <Link
-          to={link.to}
-          target="_blank"
-          className="flex items-center justify-center gap-1.5 rounded-md bg-[color-mix(in_oklab,var(--kind)_15%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--kind)] transition-colors hover:bg-[color-mix(in_oklab,var(--kind)_25%,transparent)]"
-          style={{ "--kind": kindColor(kind) } as CSSProperties}
-        >
-          {link.label}
-          <ExternalLink className="h-3.5 w-3.5" />
-        </Link>
+        {/* Supporters open player and guild history in the drawer, which links on to the full page. */}
+        {canShowStats && !isEncounter ? (
+          <button type="button" onClick={() => onExpand(kind)} className={footerClass} style={footerStyle}>
+            {link.label}
+            <PanelRightOpen className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <Link to={link.to} target="_blank" className={footerClass} style={footerStyle}>
+            {link.label}
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Link>
+        )}
       </div>
     </section>
   );

@@ -6,8 +6,9 @@
  * adding them to compare opens the compare tray: their parses on this log's
  * bosses, then a chart of every night. The boss and the raid go in the tray
  * too, as kill-time and clear-time box plots against the server, realm and
- * guild. Last, the preview Friendly and Honored members see for players.
- * 1110 frames @ 30fps, 1280x720.
+ * guild. Revered supporters open the full history in a drawer from the tray's
+ * footer; last, the preview Friendly and Honored members see for players.
+ * 1256 frames @ 30fps, 1280x720.
  */
 import type { ReactNode } from "react";
 import {
@@ -19,8 +20,8 @@ import {
   History,
   LayoutGrid,
   Lock,
-  Maximize2,
   MousePointerClick,
+  PanelRightOpen,
   Plus,
   Timer,
   Trash2,
@@ -41,17 +42,19 @@ const ZOOM_IN_1 = 250;
 const CLICK_CHART = 320;
 const CLICK_RANGE = 372;
 const HOVER_CHART = 400;
-const ZOOM_OUT_1 = 450;
-const CLICK_BOSS = 500;
-const ADD_BOSS = 536;
-const ZOOM_IN_2 = 545;
-const HOVER_BOX = 600;
-const ZOOM_OUT_2 = 668;
-const CLICK_RAID = 712;
-const ADD_RAID = 748;
-const ZOOM_IN_3 = 755;
-const CLICK_TIER = 862;
-const FINALE = 960;
+const CLICK_DRAWER = 456;
+const CLOSE_DRAWER = 576;
+const ZOOM_OUT_1 = 596;
+const CLICK_BOSS = 646;
+const ADD_BOSS = 682;
+const ZOOM_IN_2 = 691;
+const HOVER_BOX = 746;
+const ZOOM_OUT_2 = 814;
+const CLICK_RAID = 858;
+const ADD_RAID = 894;
+const ZOOM_IN_3 = 901;
+const CLICK_TIER = 1008;
+const FINALE = 1106;
 const FADE = 14;
 const ZOOM = 1.3;
 
@@ -82,6 +85,16 @@ const BAR_WIDTH = 620;
 const TRAY = { left: 16, bottom: 504, width: 520, compact: 214, full: 350 };
 const TRAY_TOP = TRAY.bottom - TRAY.full;
 const ORIGIN = { x: TRAY.left, y: TRAY.bottom };
+
+// The full stats drawer, in window-local pixels: it slides over the page from the right.
+const DRAWER = { left: 120, top: BROWSER_BAR, width: 936, height: 490 };
+const DRAWER_FULL_PAGE = { x: DRAWER.left + DRAWER.width - 96, y: DRAWER.top + 20 };
+const DRAWER_CLOSE = { x: DRAWER.left + DRAWER.width - 22, y: DRAWER.top + 20 };
+const DRAWER_BOSSES = ["Lucifron", "Magmadar", "Gehennas", "Garr", "Shazzrah", "Baron Geddon", "Sulfuron Harbinger", "Golemagg", "Majordomo", "Ragnaros"];
+const DRAWER_ROWS = [
+  { name: "Frostbyte", color: "#69ccf0", runs: 23, best: 98.1, typical: 88.7, recent: 91.4, trend: "▲ 2.7", floor: 79.2, consistency: "High ±5" },
+  { name: "Nightshade", color: "#fff569", runs: 31, best: 96.4, typical: 85.2, recent: 87.9, trend: "▲ 2.7", floor: 71.8, consistency: "Medium ±9" },
+];
 
 const KIND_COLOR = { player: "#38bdf8", guild: "#f59e0b", encounter: "#fb7185", raid: "#a78bfa" } as const;
 type Kind = keyof typeof KIND_COLOR;
@@ -175,6 +188,7 @@ const trayPoint = (x: number, y: number) => ({ x: TRAY.left + x, y: TRAY_TOP + y
 const CHART_TAB = trayPoint(105, 99);
 const RANGE_180 = trayPoint(416, 20);
 const PLAYERS_TAB = trayPoint(79, 20);
+const FOOTER = trayPoint(TRAY.width / 2, TRAY.full - 28);
 
 type Menu = { kind: Kind; title: string; titleColor: string; items: { icon: ReactNode; label: string }[]; addIndex: number };
 const MENU_WIDTH = 236;
@@ -272,7 +286,12 @@ function Content() {
     [CLICK_RANGE - 6, RANGE_180, 1],
     [CLICK_RANGE + 10, RANGE_180, 1],
     [HOVER_CHART, chartHover, 1],
-    [ZOOM_OUT_1 - 4, chartHover, 1],
+    [CLICK_DRAWER - 8, FOOTER, 1],
+    [CLICK_DRAWER + 10, FOOTER, 1],
+    [CLICK_DRAWER + 56, DRAWER_FULL_PAGE, 0],
+    [CLOSE_DRAWER - 34, DRAWER_FULL_PAGE, 0],
+    [CLOSE_DRAWER - 6, DRAWER_CLOSE, 0],
+    [CLOSE_DRAWER + 10, DRAWER_CLOSE, 0],
     [CLICK_BOSS - 6, boss, 0],
     [CLICK_BOSS + 12, boss, 0],
     [ADD_BOSS - 6, add[2], 0],
@@ -292,7 +311,7 @@ function Content() {
   const cursorX = interpolate(frame, frames, screenPath.map(([, p]) => p.x), ease);
   const cursorY = interpolate(frame, frames, screenPath.map(([, p]) => p.y), ease);
   const clicking = Math.max(
-    ...[CLICK_P1, ADD_P1, CLICK_P2, ADD_P2, CLICK_CHART, CLICK_RANGE, CLICK_BOSS, ADD_BOSS, CLICK_RAID, ADD_RAID, CLICK_TIER].map((at) => pulse(frame, at)),
+    ...[CLICK_P1, ADD_P1, CLICK_P2, ADD_P2, CLICK_CHART, CLICK_RANGE, CLICK_DRAWER, CLOSE_DRAWER, CLICK_BOSS, ADD_BOSS, CLICK_RAID, ADD_RAID, CLICK_TIER].map((at) => pulse(frame, at)),
   );
   const cursorOpacity = interpolate(frame, [10, 22, CLICK_TIER + 50, CLICK_TIER + 64], [0, 1, 1, 0], clamp);
 
@@ -314,6 +333,7 @@ function Content() {
             <EntityMenu key={menu.title} frame={frame} openAt={at} closeAt={ADD_AT[i]} anchor={anchor} menu={menu} />
           ))}
         </div>
+        <Drawer frame={frame} />
         <BrowserBar url="chronicleclassic.com/instances/molten-core?encounter=Ragnaros" />
         <div style={{ opacity: cursorOpacity }}>
           <Cursor x={cursorX} y={cursorY} clicking={clicking} />
@@ -506,9 +526,11 @@ function Tray({ frame }: { frame: number }) {
             </span>
           ))}
         </div>
-        <RangePicker frame={frame} />
+        {/* Like the real tray, the range only applies to player stats. */}
+        <div style={{ opacity: views.players }}>
+          <RangePicker frame={frame} />
+        </div>
         <div className="ml-auto flex items-center gap-2 text-slate-400">
-          <Maximize2 className="h-4 w-4" />
           <Trash2 className="h-4 w-4" />
           <ChevronDown className="h-4 w-4" />
         </div>
@@ -545,6 +567,126 @@ function Tray({ frame }: { frame: number }) {
   );
 }
 
+/** The full performance history, opened in a drawer from the tray's footer (Revered and Exalted). */
+function Drawer({ frame }: { frame: number }) {
+  const open = interpolate(frame, [CLICK_DRAWER + 2, CLICK_DRAWER + 20, CLOSE_DRAWER + 2, CLOSE_DRAWER + 18], [0, 1, 1, 0], ease);
+  if (open === 0) {
+    return null;
+  }
+  const fullPageHover = frame >= CLICK_DRAWER + 52 && frame < CLOSE_DRAWER - 30;
+  const draw = interpolate(frame, [CLICK_DRAWER + 14, CLICK_DRAWER + 44], [0, 1], ease);
+  const chart = { width: 664, height: 200 };
+  const points = (values: number[]) =>
+    values.map((value, i) => ({ x: (i / (values.length - 1)) * chart.width, y: chart.height - ((value - 60) / 40) * chart.height }));
+
+  return (
+    <>
+      <div className="absolute inset-x-0 bottom-0 z-20 bg-black/50" style={{ top: BROWSER_BAR, opacity: open }} />
+      <div
+        className="absolute z-20 overflow-hidden border-l border-white/10 bg-[#141416] shadow-2xl"
+        style={{ ...DRAWER, translate: `${(1 - open) * DRAWER.width}px 0` }}
+      >
+        <div className="flex h-10 items-center gap-2 border-b border-white/10 px-3">
+          <span className="flex items-center gap-2 rounded-md bg-white/10 px-3 py-1 text-sm font-medium">
+            <span className="h-2 w-2 rounded-full" style={{ background: KIND_COLOR.player }} />2 players
+          </span>
+          <span
+            className={`ml-auto flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs ${fullPageHover ? "bg-white/10 text-white" : "text-slate-400"}`}
+          >
+            Open full page
+            <ExternalLink className="h-3.5 w-3.5" />
+          </span>
+          <X className="h-4 w-4 text-slate-400" />
+        </div>
+
+        <div className="absolute inset-x-3 bottom-3 top-[52px] rounded-lg border border-white/10 bg-white/[0.02]">
+          <div className="flex items-center gap-3 px-4 py-2.5">
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-200">Player analysis</span>
+            <span className="rounded border border-white/10 bg-black/30 px-3 py-0.5 text-xs">Molten Core · Normal · 40-player</span>
+            <span className="ml-auto flex rounded bg-black/30 p-0.5 text-[11px]">
+              <span className="rounded bg-red-500/20 px-2 py-0.5 text-red-300">DPS</span>
+              <span className="px-2 py-0.5 text-slate-400">HPS</span>
+            </span>
+            <span className="flex rounded bg-black/30 p-0.5 text-[11px]">
+              <span className="px-2 py-0.5 text-slate-400">Raw</span>
+              <span className="rounded bg-white/15 px-2 py-0.5">Parse</span>
+            </span>
+          </div>
+
+          <div className="absolute bottom-3 left-4 top-12 w-[170px]">
+            <div className="flex rounded bg-black/30 p-0.5 text-[11px]">
+              {["180d", "60d", "30d"].map((range) => (
+                <span key={range} className={`flex-1 rounded py-0.5 text-center ${range === "180d" ? "bg-sky-700/70 text-white" : "text-slate-400"}`}>{range}</span>
+              ))}
+            </div>
+            <p className="mt-3 text-[10px] uppercase tracking-wider text-slate-400">Encounters</p>
+            {DRAWER_BOSSES.map((boss) => (
+              <p key={boss} className="mt-1 truncate rounded-sm border-l-2 border-sky-500/60 bg-sky-900/30 px-2 py-[2px] text-[11px] text-slate-200">✓ {boss}</p>
+            ))}
+          </div>
+
+          <div className="absolute bottom-3 left-[200px] right-4 top-12">
+            <div className="grid grid-cols-[1.4fr_0.6fr_0.7fr_0.8fr_1fr_0.7fr_1.1fr] border-b border-white/10 pb-1 text-[10px] uppercase tracking-wider text-slate-400">
+              {["Player", "Runs", "Best", "Typical", "Recent", "Floor", "Consistency"].map((label) => (
+                <span key={label}>{label}</span>
+              ))}
+            </div>
+            {DRAWER_ROWS.map((row) => (
+              <div key={row.name} className="grid grid-cols-[1.4fr_0.6fr_0.7fr_0.8fr_1fr_0.7fr_1.1fr] border-b border-white/5 py-1.5 font-mono text-[12px] tabular-nums">
+                <span className="flex items-center gap-1.5 font-sans" style={{ color: row.color }}>
+                  <span className="h-2 w-2 rounded-full" style={{ background: row.color }} />
+                  {row.name}
+                </span>
+                <span>{row.runs}</span>
+                <span style={{ color: parseColor(row.best) }}>{row.best.toFixed(1)}</span>
+                <span style={{ color: parseColor(row.typical) }}>{row.typical.toFixed(1)}</span>
+                <span>
+                  <span style={{ color: parseColor(row.recent) }}>{row.recent.toFixed(1)}</span>{" "}
+                  <span className="text-[10px] text-emerald-400">{row.trend}</span>
+                </span>
+                <span style={{ color: parseColor(row.floor) }}>{row.floor.toFixed(1)}</span>
+                <span className="font-sans">{row.consistency}</span>
+              </div>
+            ))}
+
+            <div className="mt-3 rounded-md border border-white/10 bg-black/20 px-3 py-3">
+              <svg width={chart.width} height={chart.height} className="overflow-visible">
+                <defs>
+                  <clipPath id="drawer-draw">
+                    <rect x={-6} y={-10} width={(chart.width + 12) * draw} height={chart.height + 20} />
+                  </clipPath>
+                </defs>
+                {[0.25, 0.5, 0.75].map((line) => (
+                  <line key={line} x1={0} x2={chart.width} y1={chart.height * line} y2={chart.height * line} stroke="rgba(255,255,255,0.06)" />
+                ))}
+                <g clipPath="url(#drawer-draw)">
+                  {SERIES_180.map((values, i) => {
+                    const dots = points(values);
+                    return (
+                      <g key={i}>
+                        <polyline points={dots.map((dot) => `${dot.x},${dot.y}`).join(" ")} fill="none" stroke={SCORES[i].color} strokeWidth={1.5} />
+                        {dots.map((dot, j) => (
+                          <circle key={j} cx={dot.x} cy={dot.y} r={2.5} fill={SCORES[i].color} />
+                        ))}
+                      </g>
+                    );
+                  })}
+                </g>
+              </svg>
+              <div className="mt-1 flex justify-between text-[10px] text-slate-500">
+                <span>May 4</span>
+                <span>Jun 30</span>
+                <span>Aug 27</span>
+                <span>Oct 29</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function RangePicker({ frame }: { frame: number }) {
   const selected = frame >= CLICK_RANGE ? "180d" : "60d";
   return (
@@ -559,19 +701,21 @@ function RangePicker({ frame }: { frame: number }) {
 }
 
 function TrayFooter({ views }: { views: ReturnType<typeof trayViews> }) {
-  const footer = (key: string, label: string, color: string, opacity: number) => (
+  // Revered opens player history in the drawer; everyone else gets the page.
+  const footer = (key: string, label: string, color: string, opacity: number, drawer = false) => (
     <div
       key={key}
       className="absolute inset-x-3 bottom-3 flex h-8 items-center justify-center gap-1.5 rounded text-sm"
       style={{ background: `${color}26`, color, opacity }}
     >
       {label}
-      <ExternalLink className="h-3.5 w-3.5" />
+      {drawer ? <PanelRightOpen className="h-3.5 w-3.5" /> : <ExternalLink className="h-3.5 w-3.5" />}
     </div>
   );
   return (
     <>
-      {footer("player", "Open performance history", KIND_COLOR.player, Math.max(views.players, views.preview))}
+      {footer("player", "Open performance history", KIND_COLOR.player, views.players, true)}
+      {footer("preview", "Open performance history", KIND_COLOR.player, views.preview)}
       {footer("encounter", "Open log overview", KIND_COLOR.encounter, views.encounter)}
       {footer("raid", "Open log overview", KIND_COLOR.raid, views.raid)}
     </>
@@ -712,7 +856,7 @@ function linePoints(values: number[]) {
 function ParseChart({ frame }: { frame: number }) {
   const wide = interpolate(frame, [CLICK_RANGE + 2, CLICK_RANGE + 12], [0, 1], clamp);
   const draw = interpolate(frame, [CLICK_CHART, CLICK_CHART + 30], [0, 1], ease);
-  const hover = interpolate(frame, [HOVER_CHART, HOVER_CHART + 8], [0, 1], clamp);
+  const hover = interpolate(frame, [HOVER_CHART, HOVER_CHART + 8, CLICK_DRAWER - 14, CLICK_DRAWER - 6], [0, 1, 1, 0], clamp);
   const bandTop = chartY(91);
   const bandBottom = chartY(85);
   const hoverX = HOVER_X;
@@ -930,10 +1074,11 @@ const CAPTIONS: { step: number; text: ReactNode; from: number; to: number }[] = 
   { step: 1, text: <>Hold <span className="text-sky-300">Alt</span> (Option on Mac) to see what you can inspect</>, from: 16, to: CLICK_P1 + 10 },
   { step: 2, text: <>Alt+click a name, then <span className="text-sky-300">Add to compare</span></>, from: CLICK_P1 + 14, to: ZOOM_IN_1 + 4 },
   { step: 3, text: "Their parses on the same bosses as this log", from: ZOOM_IN_1 + 10, to: CLICK_CHART - 2 },
-  { step: 4, text: "Chart every night over 30, 60 or 180 days", from: CLICK_CHART + 2, to: ZOOM_OUT_1 + 16 },
-  { step: 5, text: <>Bosses: the kill against the <span className="text-rose-300">server, realm and guild</span></>, from: ZOOM_OUT_1 + 22, to: ZOOM_OUT_2 + 16 },
-  { step: 6, text: <>Raids: the clear time, plus the <span className="text-violet-300">speedrun top 3</span></>, from: ZOOM_OUT_2 + 22, to: CLICK_TIER - 4 },
-  { step: 7, text: "Player scores are a Revered perk. Bosses and raids are free.", from: CLICK_TIER + 2, to: FINALE - 4 },
+  { step: 4, text: "Chart every night over 30, 60 or 180 days", from: CLICK_CHART + 2, to: CLICK_DRAWER - 2 },
+  { step: 5, text: <>Open the full history in a <span className="text-sky-300">drawer</span>, without leaving the log</>, from: CLICK_DRAWER + 2, to: ZOOM_OUT_1 + 16 },
+  { step: 6, text: <>Bosses: the kill against the <span className="text-rose-300">server, realm and guild</span></>, from: ZOOM_OUT_1 + 22, to: ZOOM_OUT_2 + 16 },
+  { step: 7, text: <>Raids: the clear time, plus the <span className="text-violet-300">speedrun top 3</span></>, from: ZOOM_OUT_2 + 22, to: CLICK_TIER - 4 },
+  { step: 8, text: "Player scores are a Revered perk. Bosses and raids are free.", from: CLICK_TIER + 2, to: FINALE - 4 },
 ];
 
 function Captions({ frame }: { frame: number }) {

@@ -476,7 +476,10 @@ export const ComparePlayers: Story = {
     const tray = await body.findByRole("region", { name: "Compare tray" });
     await expect(within(tray).getByRole("button", { name: /3 players/ })).toHaveAttribute("aria-pressed", "true");
     await expect(await within(tray).findByRole("columnheader", { name: "This log" }, { timeout: 5000 })).toBeInTheDocument();
-    await expect(within(tray).getByRole("link", { name: /Open performance history/ })).toHaveAttribute(
+    // Revered opens the drawer; its Open full page link goes on to the history page.
+    await userEvent.click(within(tray).getByRole("button", { name: /Open performance history/ }));
+    const panel = await body.findByRole("dialog", { name: "Stats" }, { timeout: 5000 });
+    await expect(within(panel).getByRole("link", { name: /Open full page/ })).toHaveAttribute(
       "href",
       "/performance-history?player=0x00000000000A0002&player_realm=Nordanaar&player=0x00000000000A0001&player_realm=Nordanaar&player=0x00000000000A0003&player_realm=Nordanaar",
     );
@@ -498,7 +501,9 @@ export const HideWithShift: Story = {
     fireEvent.click(names.getByRole("button", { name: "Velyndra" }), { shiftKey: true });
     await expect(within(tray).getByRole("button", { name: "Velyndra, hidden" })).toHaveAttribute("aria-pressed", "true");
     await expect(within(tray).getAllByRole("row")).toHaveLength(3);
-    await expect(within(tray).getByRole("link", { name: /Open performance history/ }).getAttribute("href")).toContain("hidden=0x00000000000A0001");
+    await userEvent.click(within(tray).getByRole("button", { name: /Open performance history/ }));
+    const panel = await body.findByRole("dialog", { name: "Stats" }, { timeout: 5000 });
+    await expect(within(panel).getByRole("link", { name: /Open full page/ }).getAttribute("href")).toContain("hidden=0x00000000000A0001");
   },
 };
 
@@ -571,7 +576,7 @@ export const OneGuild: Story = {
   },
 };
 
-/** Expand turns the tray into the full performance and guild history, with a tab per kind. */
+/** For Revered, the footer opens the full performance and guild history in a drawer, with a tab per kind. */
 export const ExpandToFull: Story = {
   beforeEach: () => {
     localStorage.setItem(PINS_KEY, JSON.stringify([rowEntity(rows[0]), rowEntity(rows[2]), rowEntity(rows[3]), guild, otherGuild]));
@@ -580,7 +585,7 @@ export const ExpandToFull: Story = {
     const body = within(canvasElement.ownerDocument.body);
     const tray = await body.findByRole("region", { name: "Compare tray" });
     await userEvent.click(within(tray).getByRole("button", { name: /3 players/ }));
-    await userEvent.click(within(tray).getByRole("button", { name: "Expand to full stats" }));
+    await userEvent.click(within(tray).getByRole("button", { name: /Open performance history/ }));
     const panel = await body.findByRole("dialog", { name: "Stats" }, { timeout: 5000 });
     await expect(within(panel).getByRole("tab", { name: /3 players/ })).toHaveAttribute("aria-selected", "true");
     await expect(within(panel).getByRole("tab", { name: /2 guilds/ })).toBeInTheDocument();
@@ -598,8 +603,8 @@ export const FriendlyOnePlayer: Story = {
     const body = within(canvasElement.ownerDocument.body);
     const tray = await body.findByRole("region", { name: "Compare tray" });
     await waitFor(() => expect(within(tray).getByRole("link", { name: "Become Revered" })).toHaveAttribute("href", "/supporter"));
-    await expect(within(tray).queryByRole("button", { name: "Expand to full stats" })).toBeNull();
-    await expect(within(tray).getByRole("link", { name: /Open performance history/ })).toBeInTheDocument();
+    // Below Revered the footer opens the history page instead of the drawer.
+    await expect(within(tray).getByRole("link", { name: /Open performance history/ })).toHaveAttribute("href", expect.stringContaining("/performance-history"));
   },
 };
 
