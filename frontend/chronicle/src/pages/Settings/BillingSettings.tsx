@@ -284,7 +284,7 @@ function CosmeticsPreview({ tier, label }: { tier: PaidBillingTier; label: strin
   )
 }
 
-const COMPARISON: { feature: string; description: string; friendly: string; honored: string; revered?: string; exalted?: string; highlight?: boolean; cosmetics?: boolean }[] = [
+const COMPARISON: { feature: string; description: string; friendly: string; honored: string; revered?: string; exalted?: string; highlight?: boolean; cosmetics?: boolean; href?: string }[] = [
   {
     feature: "Log parsing, panels, rankings, and replays",
     description: "Full access for everyone. Core analysis is never paywalled.",
@@ -334,6 +334,14 @@ const COMPARISON: { feature: string; description: string; friendly: string; hono
     revered: "+ Backgrounds",
     exalted: "+ Borders",
     cosmetics: true,
+  },
+  {
+    feature: "Compare tray stats",
+    description: "Alt+click players and guilds to see their scores, charts, and full history without leaving the page. Boss and raid comparisons are free for everyone.",
+    friendly: "Preview",
+    honored: "Preview",
+    revered: INCLUDED,
+    href: "/blog/alt-click-compare",
   },
   {
     feature: "Supporting Chronicle",
@@ -399,7 +407,15 @@ export function ComparisonTable({ currentTier }: { currentTier: string }) {
                   {row.highlight ? <Sparkles className="size-4 shrink-0" aria-hidden="true" /> : null}
                   {row.feature}
                 </span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">{row.description}</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  {row.description}
+                  {row.href ? (
+                    // Blog routes mount a separate app entry, so this link must reload the document.
+                    <a href={row.href} className="ml-1 whitespace-nowrap text-sky-300 hover:underline">
+                      Learn more
+                    </a>
+                  ) : null}
+                </span>
               </dt>
               {COMPARISON_COLUMNS.map(({ tier, label, color }) => {
                 const value = comparisonValue(row, tier)

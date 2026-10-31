@@ -10,6 +10,7 @@ import {
   ConsumablesPost,
   CooldownUsagePost,
   CustomPanelsPost,
+  EntityInspectorPost,
   FavoritesPost,
   FocusModePost,
   GearProgressionPost,
@@ -62,6 +63,7 @@ export interface BlogPostDefinition extends BlogPostMetadata {
 }
 
 const BLOG_COMPONENTS = {
+  "alt-click-compare": EntityInspectorPost,
   "ranked-damage": RankedDamagePost,
   "character-cosmetics": CharacterCosmeticsPost,
   "layout-editing": LayoutEditingPost,
@@ -97,6 +99,7 @@ function remotionVideo(load: LessonVideo["load"], durationInFrames: number): Les
 }
 
 const BLOG_VIDEOS = {
+  "alt-click-compare": remotionVideo(() => import("@/pages/Instance/videos/EntityInspector.video"), 1256),
   "ranked-damage": remotionVideo(() => import("@/pages/Instance/videos/RankedDamage.video"), 900),
   "character-cosmetics": remotionVideo(() => import("@/pages/Instance/videos/CharacterCosmetics.video"), 720),
   "layout-editing": remotionVideo(() => import("@/pages/Instance/videos/LayoutEditing.video"), 700),

@@ -53,6 +53,7 @@ import ReplayExplainerVideo from "../../../frontend/chronicle/src/pages/Instance
 import LayoutEditingVideo from "../../../frontend/chronicle/src/pages/Instance/videos/LayoutEditing.video";
 import CharacterCosmeticsVideo from "../../../frontend/chronicle/src/pages/Instance/videos/CharacterCosmetics.video";
 import RankedDamageVideo from "../../../frontend/chronicle/src/pages/Instance/videos/RankedDamage.video";
+import EntityInspectorVideo from "../../../frontend/chronicle/src/pages/Instance/videos/EntityInspector.video";
 import FavoritesPromo from "./FavoritesPromo";
 import CooldownUsagePromo from "./CooldownUsagePromo";
 import Maps3DAnnouncement, { MAPS_3D_ANNOUNCEMENT_DURATION } from "./Maps3DAnnouncement";
@@ -78,6 +79,7 @@ export const RemotionRoot: React.FC = () => {
         <Composition id="LayoutEditing" component={LayoutEditingVideo} durationInFrames={700} fps={30} width={1280} height={720} />
         <Composition id="CharacterCosmetics" component={CharacterCosmeticsVideo} durationInFrames={720} fps={30} width={1280} height={720} />
         <Composition id="RankedDamage" component={RankedDamageVideo} durationInFrames={900} fps={30} width={1280} height={720} />
+        <Composition id="EntityInspector" component={EntityInspectorVideo} durationInFrames={1256} fps={30} width={1280} height={720} />
       </Folder>
       <Folder name="DamageDoneLessons">
       <Composition
