@@ -77,7 +77,7 @@ export function CompareTray({
   const isEncounter = kind === "encounter";
   const showStats = canShowStats || isEncounter;
   const link = pageLink(kind, entities, hidden);
-  const iconButton = "rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground";
+  const iconButton = "shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground";
 
   if (collapsed) {
     return (
@@ -108,32 +108,36 @@ export function CompareTray({
       aria-label="Compare tray"
       className="w-[min(380px,calc(100vw-2rem))] rounded-lg border bg-popover text-popover-foreground shadow-xl"
     >
-      <header className="flex items-center gap-1 border-b px-2 py-1.5">
+      <header className="flex min-w-0 items-center gap-1 border-b px-2 py-1.5">
         <GitCompareArrows className="mx-1 h-4 w-4 shrink-0 text-sky-400" aria-hidden="true" />
         {groups.length > 1 ? (
-          groups.map((group) => (
-            <button
-              key={group.kind}
-              type="button"
-              aria-pressed={group.kind === kind}
-              onClick={() => setChosen({ kind: group.kind, count: pins.length })}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium",
-                group.kind === kind ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: kindColor(group.kind) }} aria-hidden="true" />
-              {group.entities.length}{" "}
-              {/* Just the dot and count on phones, where the title bar also holds the range. */}
-              <span className="max-sm:sr-only">{KIND_LABEL[group.kind][group.entities.length === 1 ? "one" : "many"]}</span>
-            </button>
-          ))
+          groups.map((group) => {
+            const label = KIND_LABEL[group.kind][group.entities.length === 1 ? "one" : "many"];
+            return (
+              <button
+                key={group.kind}
+                type="button"
+                aria-pressed={group.kind === kind}
+                title={`${group.entities.length} ${label}`}
+                onClick={() => setChosen({ kind: group.kind, count: pins.length })}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium",
+                  group.kind === kind ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: kindColor(group.kind) }} aria-hidden="true" />
+                {group.entities.length}{" "}
+                {/* Just the dot and count when the title bar is crowded: on phones, or with all three kinds. */}
+                <span className={groups.length > 2 ? "sr-only" : "max-sm:sr-only"}>{label}</span>
+              </button>
+            );
+          })
         ) : (
           <h2 className="text-xs font-semibold">Compare</h2>
         )}
-        <span className="ml-auto" />
+        <span className="ml-auto min-w-0" />
         {canShowStats && !isEncounter && (
-          <div className="flex gap-0.5 rounded-md bg-white/5 p-0.5" role="group" aria-label="Range">
+          <div className="flex shrink-0 gap-0.5 rounded-md bg-white/5 p-0.5" role="group" aria-label="Range">
             {QUICK_RANGES.map((option) => (
               <button
                 key={option}

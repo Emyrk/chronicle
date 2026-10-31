@@ -214,6 +214,26 @@ export const EncounterKillTimes: Story = {
   },
 };
 
+/** Players, guilds and encounters at once: the title bar shows each kind as a dot and count so the range still fits. */
+export const AllKinds: Story = {
+  beforeEach: () => {
+    localStorage.removeItem(TAB_KEY);
+    localStorage.setItem(
+      PINS_KEY,
+      JSON.stringify([patchwerkEntity, grobbulusEntity, guild, otherGuild, rowEntity(rows[0]), rowEntity(rows[2]), rowEntity(rows[3])]),
+    );
+  },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    const tray = await body.findByRole("region", { name: "Compare tray" });
+    const range = within(tray).getByRole("group", { name: "Range" });
+    const minimize = within(tray).getByRole("button", { name: "Minimize compare tray" });
+    await expect(range.getBoundingClientRect().right).toBeLessThanOrEqual(tray.getBoundingClientRect().right);
+    await expect(minimize.getBoundingClientRect().right).toBeLessThanOrEqual(tray.getBoundingClientRect().right);
+    await expect(within(tray).getByRole("button", { name: "2 encounters" })).toBeInTheDocument();
+  },
+};
+
 /** Several encounters: a table of times and parses, and the Spread tab with each pull on its boss's server kills. */
 export const CompareEncounters: Story = {
   parameters: { msw: { handlers: tierHandlers("free") } },
