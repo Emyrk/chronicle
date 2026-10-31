@@ -1012,7 +1012,7 @@ export function TalentTreeViewer({
     ? "grid min-w-0 gap-2 grid-cols-3"
     : mobileLayout
       ? "-mx-4 grid min-w-0 gap-3"
-      : "grid min-w-0 gap-4 md:grid-cols-2 min-[1100px]:grid-cols-3";
+      : "grid min-w-0 gap-4 min-[768px]:grid-cols-2 min-[1100px]:grid-cols-3";
   const maxPoints = maxTalentPoints;
   const flavor = useMemo(() => ({ maxLevel, maxTalentPoints }), [maxLevel, maxTalentPoints]);
 
