@@ -349,6 +349,28 @@ export const RaidClear: Story = {
   },
 };
 
+/** Two clears of the same raid share one set of box plots (a dot each) and one speedrun top three. */
+export const RaidCompareSameRaid: Story = {
+  beforeEach: () => {
+    localStorage.setItem(
+      PINS_KEY,
+      JSON.stringify([
+        raidClear,
+        { ...raidClear, id: "log-naxx-2", logId: "log-naxx-2", clearMs: 79 * 60_000, startTime: "2026-10-21T19:00:00Z", guildName: "Zug Zug" },
+      ]),
+    );
+  },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    const tray = await body.findByRole("region", { name: "Compare tray" });
+    await waitFor(() => expect(tray.querySelectorAll("[data-kill-box]")).toHaveLength(3), { timeout: 5000 });
+    await expect(within(tray).getAllByText("Fastest clears")).toHaveLength(1);
+    await expect(within(tray).getByText("2 clears")).toBeInTheDocument();
+    // Each scope's parse column holds one number per clear.
+    await waitFor(() => expect(tray.querySelector('[data-kill-parse="server"]')!.children).toHaveLength(2));
+  },
+};
+
 /** A raid name with no clear (as on the leaderboards): the server's clear times and the speedrun top three. */
 export const RaidName: Story = {
   play: async ({ canvasElement }) => {

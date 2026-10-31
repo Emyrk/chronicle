@@ -32,9 +32,8 @@ export function EncounterKillBoxPlots({
         scope,
         loading: cohorts[scope].isLoading,
         summary: cohorts[scope].data ? summarizeEncounterKillTimes(cohorts[scope].data.runs).get(encounter.name) : undefined,
-        parse: scoredKillParse(parses?.[scope]),
       }))
-    : [{ scope: "server", loading: serverStats.isLoading, summary: serverStatsSummary(serverStats.data, encounter.name), parse: undefined }];
+    : [{ scope: "server", loading: serverStats.isLoading, summary: serverStatsSummary(serverStats.data, encounter.name) }];
   const killed = encounter.killType === "clean" || encounter.killType === "partial";
   const lookbackDays = logId ? PULL_LOOKBACK_DAYS : SERVER_STATS_LOOKBACK_DAYS;
 
@@ -52,8 +51,19 @@ export function EncounterKillBoxPlots({
         )
       }
       lanes={lanes}
-      marker={killed && encounter.durationMs !== undefined ? encounter.durationMs : null}
-      markerLabel="This pull"
+      markers={
+        killed && encounter.durationMs !== undefined
+          ? [
+              {
+                key: encounter.id,
+                value: encounter.durationMs,
+                color,
+                label: "This pull",
+                parses: { server: scoredKillParse(parses?.server), realm: scoredKillParse(parses?.realm), guild: scoredKillParse(parses?.guild) },
+              },
+            ]
+          : []
+      }
       subject={encounter.name}
       unit="kills"
       lookbackDays={lookbackDays}

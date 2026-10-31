@@ -7,64 +7,104 @@ import { scoredKillParse } from "@/pages/Instance/Overview/encounterKillTimePopu
 import type { EntityRef } from "./entity";
 import { guildAttributes } from "./leaderboardEntities";
 import { PULL_LOOKBACK_DAYS, SERVER_STATS_LOOKBACK_DAYS, serverStatsSummary, summarizeClears, useScopeCohorts } from "./scopeCohorts";
-import { ScopeBoxPlots, type Scope, type ScopeLane } from "./ScopeBoxPlots";
+import { ScopeBoxPlots, type BoxMarker, type Scope, type ScopeLane } from "./ScopeBoxPlots";
 
 type RaidPin = Extract<EntityRef, { kind: "raid" }>;
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
-/**
- * A raid against its server, realm and guild: box plots of qualified full-clear times, with the
- * pinned clear marked and its clear-time parse, then the speedrun board's top three. A raid name
- * with no clear (on a leaderboard) has no log to define a realm or guild, so it shows the server.
- */
-export function RaidClearBoxPlots({
-  raid,
-  label,
-  color,
-  parses,
-}: {
+/** One pinned raid in a group, with its tray color and its log's clear-time parses. */
+export interface RaidGroupMember {
   raid: RaidPin;
-  label: string;
   color: string;
   parses: Partial<Record<Scope, TimeParseScore>> | null | undefined;
-}) {
-  const cohorts = useScopeCohorts(raid.logId);
-  const serverStats = useRankingsClearTimes(raid.name, `${SERVER_STATS_LOOKBACK_DAYS}d`, !raid.logId);
-  const lanes: ScopeLane[] = raid.logId
+}
+
+/**
+ * One raid (and difficulty) against its server, realm and guild: box plots of qualified full-clear
+ * times with every pinned clear of it marked and its clear-time parse, then the speedrun board's
+ * top three once. A raid name with no clear (on a leaderboard) has no log to define a realm or
+ * guild, so a group without any log shows the server's clears.
+ */
+export function RaidClearBoxPlots({ members }: { members: RaidGroupMember[] }) {
+  const [first] = members;
+  // Clears of the same raid share the cohort; the first one from a log defines the realm and guild.
+  const anchor = members.find((member) => member.raid.logId)?.raid;
+  const cohorts = useScopeCohorts(anchor?.logId);
+  const serverStats = useRankingsClearTimes(first.raid.name, `${SERVER_STATS_LOOKBACK_DAYS}d`, !anchor);
+  const lanes: ScopeLane[] = anchor
     ? (["server", "realm", "guild"] as const).map((scope) => ({
         scope,
         loading: cohorts[scope].isLoading,
         summary: cohorts[scope].data ? summarizeClears(cohorts[scope].data.runs) : undefined,
-        parse: scoredKillParse(parses?.[scope]),
       }))
-    : [{ scope: "server", loading: serverStats.isLoading, summary: serverStatsSummary(serverStats.data), parse: undefined }];
-  const lookbackDays = raid.logId ? PULL_LOOKBACK_DAYS : SERVER_STATS_LOOKBACK_DAYS;
+    : [{ scope: "server", loading: serverStats.isLoading, summary: serverStatsSummary(serverStats.data) }];
+  const lookbackDays = anchor ? PULL_LOOKBACK_DAYS : SERVER_STATS_LOOKBACK_DAYS;
+  const markers: BoxMarker[] = members.flatMap(({ raid, color, parses }) =>
+    raid.clearMs === undefined
+      ? []
+      : [
+          {
+            key: raid.id,
+            value: raid.clearMs,
+            color,
+            label: clearLabel(raid),
+            parses: { server: scoredKillParse(parses?.server), realm: scoredKillParse(parses?.realm), guild: scoredKillParse(parses?.guild) },
+          },
+        ],
+  );
+  const title = [first.raid.name, first.raid.difficultyName].filter(Boolean).join(" · ");
+  const single = members.length === 1;
 
   return (
     <div className="space-y-2.5">
       <ScopeBoxPlots
-        label={label}
-        color={color}
+        label={single ? [title, first.raid.guildName ? `<${first.raid.guildName}>` : ""].filter(Boolean).join(" · ") : title}
+        color={single ? first.color : "var(--color-violet-400)"}
         headerRight={
-          raid.clearMs !== undefined ? (
-            <span className="font-mono font-semibold tabular-nums">{formatClearDuration(raid.clearMs)}</span>
-          ) : (
+          single && first.raid.clearMs !== undefined ? (
+            <span className="font-mono font-semibold tabular-nums">{formatClearDuration(first.raid.clearMs)}</span>
+          ) : single ? (
             <span className="text-[10px] text-muted-foreground">
-              {raid.logId ? "No qualified clear" : `Server, last ${lookbackDays} days`}
+              {first.raid.logId ? "No qualified clear" : `Server, last ${lookbackDays} days`}
             </span>
+          ) : (
+            <span className="text-[10px] text-muted-foreground">{markers.length} clears</span>
+          )
+        }
+        legend={
+          single ? undefined : (
+            <ul className="space-y-0.5 text-[11px]">
+              {members.map(({ raid, color }) => (
+                <li key={raid.id} className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
+                  <span className="truncate text-muted-foreground">{clearLabel(raid)}</span>
+                  <span className="ml-auto shrink-0 font-mono tabular-nums">
+                    {raid.clearMs !== undefined ? formatClearDuration(raid.clearMs) : raid.logId ? "no clear" : "server"}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )
         }
         lanes={lanes}
-        marker={raid.clearMs ?? null}
-        markerLabel="This clear"
-        subject={raid.name}
+        markers={markers}
+        subject={first.raid.name}
         unit="clears"
         lookbackDays={lookbackDays}
       />
-      <TopSpeedruns instanceName={raid.name} difficultyName={raid.difficultyName} />
+      <TopSpeedruns instanceName={first.raid.name} difficultyName={first.raid.difficultyName} />
     </div>
   );
+}
+
+/** Which clear a dot is: its guild and night, e.g. "<Once Upon> · Oct 28". */
+function clearLabel(raid: RaidPin): string {
+  const parts = [
+    raid.guildName ? `<${raid.guildName}>` : "",
+    raid.startTime ? new Date(raid.startTime).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "",
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : raid.logId ? "This clear" : "Across the server";
 }
 
 /** The raid's three fastest guilds on the speedrun board. */

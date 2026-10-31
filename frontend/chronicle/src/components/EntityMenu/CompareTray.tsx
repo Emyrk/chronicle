@@ -200,11 +200,11 @@ export function CompareTray({
                         // Keep Shift+click from selecting text.
                         onMouseDown={(event) => event.shiftKey && event.preventDefault()}
                         onClick={(event) => event.shiftKey && onToggleHidden(entity)}
-                        className="flex max-w-[120px] items-center gap-1 font-medium"
+                        className="flex max-w-[160px] items-center gap-1 font-medium"
                         style={entity.kind === "character" && entity.className ? { color: getClassColorVar(entity.className) } : undefined}
                       >
                         {isHidden && <EyeOff className="h-3 w-3 shrink-0" aria-hidden="true" />}
-                        <span className={cn("truncate", isHidden && "line-through")}>{entity.name}</span>
+                        <span className={cn("truncate", isHidden && "line-through")}>{chipLabel(entity, entities)}</span>
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="top" sideOffset={6} className="w-64 p-0">
@@ -254,6 +254,13 @@ export function CompareTray({
       </div>
     </section>
   );
+}
+
+/** A pin's name, plus its date when another pin has the same name (two nights of one raid or boss). */
+function chipLabel(pin: Pin, all: Pin[]): string {
+  const startTime = pin.kind === "raid" || pin.kind === "encounter" ? pin.startTime : undefined;
+  if (!startTime || all.filter((other) => other.name === pin.name).length < 2) return pin.name;
+  return `${pin.name} · ${new Date(startTime).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
 }
 
 const dateTime = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });

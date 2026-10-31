@@ -21,7 +21,7 @@ import { filterGuildRuns, formatClearTime, GUILD_SERIES_COLORS, summarizeClearTi
 import { scopedClearParses, scopedKillParsesByEncounter } from "@/pages/Instance/Overview/encounterKillTimePopulation";
 import { useInstancesTimeParses } from "@/pages/Instance/Overview/overviewQueries";
 import { EncounterKillBoxPlots } from "./EncounterKillBoxPlots";
-import { RaidClearBoxPlots } from "./RaidClearBoxPlots";
+import { RaidClearBoxPlots, type RaidGroupMember } from "./RaidClearBoxPlots";
 import { entityKey, type EntityKind, type EntityRef } from "./entity";
 import type { EntityRaidContext } from "./entityMenuContext";
 
@@ -573,38 +573,35 @@ function EncounterQuickStats({ encounters, hidden }: { encounters: EncounterPin[
 }
 
 /**
- * Raids added to compare, from logs or leaderboards: each as box plots of the server's, realm's and
- * guild's full-clear times with the clear and its parse marked, then the speedrun board's top three.
+ * Raids added to compare, from logs or leaderboards, grouped by raid and difficulty: box plots of the
+ * server's, realm's and guild's full-clear times with each clear and its parse marked, then the
+ * speedrun board's top three.
  */
 function RaidQuickStats({ raids, hidden }: { raids: RaidPin[]; hidden: ReadonlySet<string> }) {
   const logIds = [...new Set(raids.flatMap((raid) => (raid.logId ? [raid.logId] : [])))];
   const parseQueries = useInstancesTimeParses(logIds);
-  const nameCounts = new Map<string, number>();
-  for (const raid of raids) nameCounts.set(raid.name, (nameCounts.get(raid.name) ?? 0) + 1);
-  const rows = raids
-    .map((raid, index) => ({ raid, color: GUILD_SERIES_COLORS[index % GUILD_SERIES_COLORS.length] }))
-    .filter(({ raid }) => !hidden.has(entityKey(raid)));
+  // Clears of the same raid and difficulty share one set of box plots and one speedrun top three.
+  const groups = new Map<string, RaidGroupMember[]>();
+  raids.forEach((raid, index) => {
+    if (hidden.has(entityKey(raid))) return;
+    const key = `${raid.name}\u0000${raid.difficultyName ?? ""}`;
+    const members = groups.get(key) ?? [];
+    members.push({
+      raid,
+      color: GUILD_SERIES_COLORS[index % GUILD_SERIES_COLORS.length],
+      parses: raid.logId ? scopedClearParses(parseQueries[logIds.indexOf(raid.logId)]?.data) : undefined,
+    });
+    groups.set(key, members);
+  });
 
-  if (rows.length === 0) return <Empty>Everyone here is hidden. Shift+click a name to show them again.</Empty>;
+  if (groups.size === 0) return <Empty>Everyone here is hidden. Shift+click a name to show them again.</Empty>;
   return (
     <div className="space-y-3">
-      <p className="text-[11px] text-muted-foreground">Qualified full clears, fastest on the left. The dot is the clear; the number is its parse.</p>
+      <p className="text-[11px] text-muted-foreground">Qualified full clears, fastest on the left. The dots are the clears; the numbers are their parses.</p>
       <div className="styled-scrollbar max-h-[50vh] space-y-4 overflow-y-auto pr-1">
-        {rows.map(({ raid, color }) => {
-          const repeated = (nameCounts.get(raid.name) ?? 0) > 1;
-          const detail = [raid.difficultyName, raid.guildName ? `<${raid.guildName}>` : "", repeated && raid.startTime ? shortDate(raid.startTime) : ""]
-            .filter(Boolean)
-            .join(" · ");
-          return (
-            <RaidClearBoxPlots
-              key={entityKey(raid)}
-              raid={raid}
-              color={color}
-              label={detail ? `${raid.name} · ${detail}` : raid.name}
-              parses={raid.logId ? scopedClearParses(parseQueries[logIds.indexOf(raid.logId)]?.data) : undefined}
-            />
-          );
-        })}
+        {[...groups.entries()].map(([key, members]) => (
+          <RaidClearBoxPlots key={key} members={members} />
+        ))}
       </div>
     </div>
   );

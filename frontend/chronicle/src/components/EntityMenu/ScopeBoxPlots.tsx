@@ -14,21 +14,29 @@ export interface ScopeLane {
   scope: Scope;
   loading: boolean;
   summary: EncounterKillTimeSummary | undefined;
-  /** The marked run's time parse in this scope. */
-  parse: TimeParseScore | undefined;
+}
+
+/** One run marked on the box plots, e.g. a pull or a clear, with its time parse in each scope. */
+export interface BoxMarker {
+  key: string;
+  value: number;
+  color: string;
+  /** What the run is, e.g. "This pull" or "<Once Upon> · Oct 28". */
+  label: string;
+  parses?: Partial<Record<Scope, TimeParseScore | undefined>>;
 }
 
 /**
  * Box plots of times (boss kills or full clears) for the server, realm and guild on one axis, with
- * a run marked and its parse in each scope. Hovering a row spells out its numbers.
+ * one or more runs marked and their parses in each scope. Hovering a row spells out its numbers.
  */
 export function ScopeBoxPlots({
   label,
   color,
   headerRight,
+  legend,
   lanes,
-  marker,
-  markerLabel,
+  markers,
   subject,
   unit,
   lookbackDays,
@@ -36,11 +44,10 @@ export function ScopeBoxPlots({
   label: string;
   color: string;
   headerRight: ReactNode;
+  /** Shown under the header, e.g. which dot is which when several runs are marked. */
+  legend?: ReactNode;
   lanes: ScopeLane[];
-  /** The marked run's time; null for none (a wipe, or a raid or boss with no particular run). */
-  marker: number | null;
-  /** What the marked run is, e.g. "This pull". */
-  markerLabel: string;
+  markers: BoxMarker[];
   /** What is being timed, e.g. the boss or raid name. */
   subject: string;
   /** Plural noun for the sample, e.g. "kills" or "clears". */
@@ -49,7 +56,7 @@ export function ScopeBoxPlots({
 }) {
   // One axis for all three scopes so they line up; whiskers set the ends.
   const ends = lanes.flatMap((lane) => (lane.summary ? [lane.summary.min, lane.summary.max] : []));
-  if (marker !== null) ends.push(marker);
+  ends.push(...markers.map((marker) => marker.value));
   const low = ends.length > 0 ? Math.min(...ends) : 0;
   const high = ends.length > 0 ? Math.max(...ends) : 1;
   const pad = (high - low) * 0.04 || 1000;
@@ -62,6 +69,7 @@ export function ScopeBoxPlots({
         <span className="truncate font-medium">{label}</span>
         <span className="ml-auto shrink-0">{headerRight}</span>
       </div>
+      {legend}
       <div className="space-y-1">
         {lanes.map((lane) => (
           <Tooltip key={lane.scope}>
@@ -86,32 +94,40 @@ export function ScopeBoxPlots({
                       {lane.loading ? "Loading…" : `No ${SCOPE_LABEL[lane.scope].toLowerCase()} ${unit}`}
                     </span>
                   )}
-                  {marker !== null && lane.summary && (
-                    <div
-                      className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-popover"
-                      style={{ left: position(marker), backgroundColor: color }}
-                    />
-                  )}
+                  {lane.summary &&
+                    markers.map((marker) => (
+                      <div
+                        key={marker.key}
+                        className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-popover"
+                        style={{ left: position(marker.value), backgroundColor: marker.color }}
+                      />
+                    ))}
                 </div>
                 <span
-                  className={cn("w-7 shrink-0 text-right font-mono text-xs font-bold tabular-nums", !lane.parse && "text-muted-foreground")}
-                  style={lane.parse ? { color: parseHexColor(lane.parse.display_score) } : undefined}
+                  className="flex min-w-7 shrink-0 justify-end gap-1.5 font-mono text-xs font-bold tabular-nums"
                   data-kill-parse={lane.scope}
                 >
-                  {lane.parse ? lane.parse.display_score : "—"}
+                  {markers.length === 0 || markers.every((marker) => !marker.parses?.[lane.scope]) ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    markers.map((marker) => {
+                      const parse = marker.parses?.[lane.scope];
+                      return (
+                        <span
+                          key={marker.key}
+                          className={cn(!parse && "text-muted-foreground", markers.length > 1 && "border-b-2")}
+                          style={{ color: parse ? parseHexColor(parse.display_score) : undefined, borderColor: markers.length > 1 ? marker.color : undefined }}
+                        >
+                          {parse ? parse.display_score : "—"}
+                        </span>
+                      );
+                    })
+                  )}
                 </span>
               </div>
             </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={6} className="w-60 p-0">
-              <LaneTooltip
-                lane={lane}
-                subject={subject}
-                unit={unit}
-                lookbackDays={lookbackDays}
-                marker={marker}
-                markerLabel={markerLabel}
-                markerColor={color}
-              />
+            <TooltipContent side="top" sideOffset={6} className="w-64 p-0">
+              <LaneTooltip lane={lane} subject={subject} unit={unit} lookbackDays={lookbackDays} markers={markers} />
             </TooltipContent>
           </Tooltip>
         ))}
@@ -126,26 +142,21 @@ export function ScopeBoxPlots({
   );
 }
 
-/** A scope's times spelled out, with where the marked run lands and its parse. */
+/** A scope's times spelled out, with where each marked run lands and its parse. */
 function LaneTooltip({
   lane,
   subject,
   unit,
   lookbackDays,
-  marker,
-  markerLabel,
-  markerColor,
+  markers,
 }: {
   lane: ScopeLane;
   subject: string;
   unit: string;
   lookbackDays: number;
-  marker: number | null;
-  markerLabel: string;
-  markerColor: string;
+  markers: BoxMarker[];
 }) {
-  const { scope, summary, loading, parse } = lane;
-  const delta = summary && marker !== null ? marker - summary.median : null;
+  const { scope, summary, loading } = lane;
   const stats: [string, string][] = summary
     ? [
         ["Fastest", formatClearDuration(summary.min)],
@@ -180,31 +191,35 @@ function LaneTooltip({
           {loading ? "Loading…" : `No ${SCOPE_LABEL[scope].toLowerCase()} ${unit} of ${subject} in the last ${lookbackDays} days.`}
         </p>
       )}
-      {marker !== null && (
-        <div className="space-y-1 border-t border-white/10 px-3 py-2">
-          <div className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: markerColor }} aria-hidden="true" />
-            <span className="text-zinc-400">{markerLabel}</span>
-            <span className="ml-auto font-mono font-semibold tabular-nums">{formatClearDuration(marker)}</span>
+      {markers.map((marker) => {
+        const delta = summary ? marker.value - summary.median : null;
+        const parse = marker.parses?.[scope];
+        return (
+          <div key={marker.key} className="space-y-1 border-t border-white/10 px-3 py-2">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: marker.color }} aria-hidden="true" />
+              <span className="truncate text-zinc-400">{marker.label}</span>
+              <span className="ml-auto font-mono font-semibold tabular-nums">{formatClearDuration(marker.value)}</span>
+            </div>
+            {delta !== null && (
+              <div className={cn("text-right", delta <= 0 ? "text-emerald-400" : "text-rose-400")}>
+                {delta === 0 ? "Right on the median" : `${formatClearDuration(Math.abs(delta))} ${delta < 0 ? "faster" : "slower"} than the median`}
+              </div>
+            )}
+            {parse && (
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-zinc-400">Parse</span>
+                <span className="font-mono font-bold tabular-nums" style={{ color: parseHexColor(parse.display_score) }}>
+                  {parse.display_score}
+                </span>
+                <span className="ml-auto text-[10px] text-zinc-400">
+                  rank {parse.rank} of {parse.sample_size}
+                </span>
+              </div>
+            )}
           </div>
-          {delta !== null && (
-            <div className={cn("text-right", delta <= 0 ? "text-emerald-400" : "text-rose-400")}>
-              {delta === 0 ? "Right on the median" : `${formatClearDuration(Math.abs(delta))} ${delta < 0 ? "faster" : "slower"} than the median`}
-            </div>
-          )}
-          {parse && (
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-zinc-400">Parse</span>
-              <span className="font-mono font-bold tabular-nums" style={{ color: parseHexColor(parse.display_score) }}>
-                {parse.display_score}
-              </span>
-              <span className="ml-auto text-[10px] text-zinc-400">
-                rank {parse.rank} of {parse.sample_size}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 }
