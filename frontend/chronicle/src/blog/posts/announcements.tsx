@@ -374,38 +374,42 @@ export function EntityInspectorPost({ post }: PostProps) {
       </p>
       <ul>
         <li>
-          <strong>Players:</strong> parses on the same bosses as the log you&apos;re viewing. The Score tab lists
+          <strong>Players</strong> (Revered and Exalted): parses on the same bosses as the log you&apos;re viewing. The Score tab lists
           this log, their recent nights, their typical night, their best and how many nights they&apos;ve logged.
           The Chart tab plots every night, with their typical range shaded. Switch between Parse and Value, and
           between DPS and HPS.
         </li>
         <li>
-          <strong>Guilds:</strong> their clear times.
+          <strong>Guilds</strong> (Revered and Exalted): their clear times.
         </li>
         <li>
-          <strong>Bosses:</strong> box plots of kill times on your server, your realm and the guild. The dot is the
+          <strong>Bosses</strong> (everyone): box plots of kill times on your server, your realm and the guild. The dot is the
           kill you added, and the number beside each plot is its parse. Hover a plot for the fastest, median and
           slowest kills, and how far this pull was from the median.
         </li>
         <li>
-          <strong>Raids:</strong> the same box plots for full clears, plus the server&apos;s three fastest clears. Add
+          <strong>Raids</strong> (everyone): the same box plots for full clears, plus the server&apos;s three fastest clears. Add
           several clears of the same raid and they share one plot, with a dot for each.
         </li>
       </ul>
 
       <h2>The full history, in a drawer</h2>
       <p>
-        When the tray isn&apos;t enough, the button at its bottom opens the full performance history (or a
-        guild&apos;s clear-time history) in a drawer over the page you&apos;re on. It starts on the same raid and
+        For Revered and Exalted supporters, the button at the bottom of the tray opens the full performance history
+        (or a guild&apos;s clear-time history) in a drawer over the page you&apos;re on. It starts on the same raid and
         bosses as the tray, with every chart, table and filter from the full page. Close it and you&apos;re right where
         you were; <strong>Open full page</strong> in its corner takes it to its own tab.
       </p>
 
       <h2>Who gets what</h2>
       <p>
-        The menu, the tray, and the boss and raid comparisons are free for everyone. Player scores, charts and the
-        drawer are a Revered perk: Friendly and Honored members see a blurred preview, and the button opens the full
-        history page in a new tab instead. <a href="/supporter">Become a supporter</a> to see them right in the tray.
+        Everyone can use the Alt+click menu, add names to the tray, and see the boss and raid box plots there.
+      </p>
+      <p>
+        Seeing player and guild stats on the page you&apos;re already on is for <strong>Revered and Exalted</strong>{" "}
+        supporters only. That covers the scores and chart in the tray and the full history in the drawer. Friendly and
+        Honored members see a blurred preview in the tray, and its button opens the performance or clear-time history
+        page in a new tab instead. <a href="/supporter">Become Revered</a> to see it all without leaving the log.
       </p>
 
       <h2>Where it works</h2>

@@ -16,7 +16,7 @@ interface WhatsNewDialogProps {
 const HIGHLIGHTS = [
   "Hold Alt (Option on Mac) to outline every player, guild, boss and raid you can inspect.",
   "Alt+click one for a quick menu. On touch screens, press and hold.",
-  "Add to compare to line up players' parses on the same fights, then open their full history in a drawer.",
+  "Revered and Exalted see compared players' parses and full history right on the page; everyone else gets a preview and the history page.",
   "Bosses and raids show kill and clear times against your server, realm and guild, free for everyone.",
 ];
 
