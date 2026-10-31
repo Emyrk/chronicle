@@ -4,6 +4,7 @@ import { BatteryFull, Check, Download as DownloadIcon, ExternalLink, Eye, Info, 
 import { useSiteConfig } from "@/api/queries";
 import { MagicLogo } from "@/components/MagicLogo";
 import { tenantClients, type ClientMod, type ClientOption, type CompanionAddon } from "./formatAddons";
+import { OSIcon } from "./OSIcon";
 import { PLATFORMS, REPO, assetUrl, detectOS, type OS } from "./platforms";
 import s from "./Download.module.css";
 
@@ -170,10 +171,43 @@ function ModsStep({ addon, n }: { addon: CompanionAddon; n: number }) {
   );
 }
 
+/** One icon per OS; clicking one lists every build for it. */
+function OtherDownloads() {
+  const [open, setOpen] = useState<OS>();
+  const shown = PLATFORMS.find((p) => p.os === open);
+  return (
+    <div className={s.meta}>
+      <div className={s.osRow}>
+        <span>Other downloads</span>
+        {PLATFORMS.map((p) => (
+          <button
+            key={p.os}
+            type="button"
+            className={s.osButton}
+            aria-label={p.label}
+            title={p.label}
+            aria-pressed={p.os === open}
+            onClick={() => setOpen(p.os === open ? undefined : p.os)}
+          >
+            <OSIcon os={p.os} width={18} height={18} />
+          </button>
+        ))}
+      </div>
+      {shown && (
+        <div className={s.osFiles}>
+          {shown.files.map((f) => (
+            <a key={f.file} href={assetUrl(f.file)}>
+              {f.label}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function DownloadView({ os, clients }: { os: OS; clients: ClientOption[] }) {
   const current = PLATFORMS.find((p) => p.os === os) ?? PLATFORMS[0];
-  const { primary, alternates } = current;
-  const others = PLATFORMS.filter((p) => p !== current);
   // The tenant's default format is first, so it's selected until the player picks another.
   const [picked, setPicked] = useState<string>();
   const addon = (clients.find((c) => c.label === picked) ?? clients[0])?.addon ?? null;
@@ -208,28 +242,11 @@ export function DownloadView({ os, clients }: { os: OS; clients: ClientOption[] 
             raid's over, one click sends it to Chronicle. No dragging files around.
           </p>
           <div className={`${s.rise} ${s.d4} ${s.ctaBlock}`}>
-            <a href={assetUrl(primary.file)} className={s.cta}>
+            <a href={assetUrl(current.files[0].file)} className={s.cta}>
               <DownloadIcon className={s.arrow} size={22} strokeWidth={2.6} aria-hidden="true" />
               Download for {current.label}
             </a>
-            <div className={s.meta}>
-              <span>{primary.label}</span>
-              {alternates.map((a) => (
-                <span key={a.prompt}>
-                  {a.prompt}{" "}
-                  {a.links.map((l, i) => (
-                    <span key={l.file}>
-                      {i > 0 && " · "}
-                      <a href={assetUrl(l.file)}>{l.label}</a>
-                    </span>
-                  ))}
-                </span>
-              ))}
-              <span>
-                Also for <a href={assetUrl(others[0].primary.file)}>{others[0].label}</a> and{" "}
-                <a href={assetUrl(others[1].primary.file)}>{others[1].label}</a>
-              </span>
-            </div>
+            <OtherDownloads />
           </div>
         </div>
       </section>
