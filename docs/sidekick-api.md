@@ -50,7 +50,7 @@ Send `PUT /api/v1/sidekick/status` with the OAuth bearer token once per minute:
 
 Chronicle considers an installation running when its most recent heartbeat is less than three minutes old.
 
-`sidekick_version`, `start_at_login`, `auto_upload_capabilities`, `wow_directories`, and `issues` are required on every heartbeat. Empty capability, directory, and issue collections are valid.
+`sidekick_version`, `start_at_login`, `auto_upload_capabilities`, and `wow_directories` are required on every heartbeat. Empty capability, directory, and issue collections are valid. For compatibility, Chronicle also treats `issues: null` or an omitted `issues` field as an empty issue snapshot.
 
 `sidekick_version` is the installed Sidekick application version. The old top-level `version` field is not part of the heartbeat contract.
 

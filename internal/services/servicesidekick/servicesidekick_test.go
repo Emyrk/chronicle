@@ -52,6 +52,21 @@ func TestMountedRoutes(t *testing.T) {
 	}, actual)
 }
 
+func TestSidekickStatusAllowsNullIssues(t *testing.T) {
+	t.Parallel()
+
+	var request chroniclesdk.SidekickStatusRequest
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"sidekick_version": "0.7.0",
+		"start_at_login": true,
+		"auto_upload_capabilities": {},
+		"wow_directories": [],
+		"issues": null
+	}`), &request))
+	require.Nil(t, request.Issues)
+	require.False(t, sidekickStatusMissingRequiredFields(request))
+}
+
 func TestListMySidekicksWithoutSavedConfig(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
