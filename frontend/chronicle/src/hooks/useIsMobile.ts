@@ -1,30 +1,18 @@
-import { useState, useEffect } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 /**
  * Hook to detect if the viewport is mobile-sized.
- * Uses Tailwind's `lg` breakpoint (1024px) as the threshold to cover
- * phones in both portrait and landscape orientations.
+ * Defaults to Tailwind's `lg` breakpoint, but pages with denser responsive
+ * layouts can opt into a narrower threshold.
  */
-export function useIsMobile(): boolean {
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.innerWidth < 1024;
-  });
+export function useIsMobile(maxWidth = 1023): boolean {
+  const query = `(max-width: ${maxWidth}px)`;
+  const subscribe = useCallback((onStoreChange: () => void) => {
+    const mediaQuery = window.matchMedia(query);
+    mediaQuery.addEventListener("change", onStoreChange);
+    return () => mediaQuery.removeEventListener("change", onStoreChange);
+  }, [query]);
+  const getSnapshot = useCallback(() => window.matchMedia(query).matches, [query]);
 
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(max-width: 1023px)");
-    
-    const handleChange = (e: MediaQueryListEvent) => {
-      setIsMobile(e.matches);
-    };
-
-    // Set initial value
-    setIsMobile(mediaQuery.matches);
-
-    // Listen for changes
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
-
-  return isMobile;
+  return useSyncExternalStore(subscribe, getSnapshot, () => false);
 }

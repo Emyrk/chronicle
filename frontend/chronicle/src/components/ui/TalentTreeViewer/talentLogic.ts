@@ -127,6 +127,7 @@ export type TalentVisualState = "locked" | "available" | "selected" | "maxed";
 
 // ─── Constants ────────────────────────────────────────────────────
 
+export const TALENT_MOBILE_MAX_WIDTH = 767;
 export const TALENT_BUTTON_SIZE = 44;
 export const TALENT_GRID_COLUMNS = 4;
 export const TALENT_CELL_WIDTH = 52;
