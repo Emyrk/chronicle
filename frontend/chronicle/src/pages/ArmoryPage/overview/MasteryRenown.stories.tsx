@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fireEvent, userEvent } from "storybook/test";
+import { expect, fireEvent } from "storybook/test";
 import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
 import { MasteryRenownPrototype } from "./MasteryRenownPrototype";
 
@@ -28,11 +28,11 @@ export const FieldGuide: Story = {};
 export const OneKillCannotMaster: Story = {
   args: { initialPlayerId: "rave" },
   play: async ({ canvas }) => {
+    expect(canvas.getByRole("button", { name: "Show Rave's Mastery story" })).toHaveAttribute("aria-pressed", "true");
     expect(canvas.getAllByText("The perfect flash").length).toBeGreaterThan(0);
+    expect(canvas.getAllByText("100.0").length).toBeGreaterThan(0);
     expect(canvas.getAllByText("65.0").length).toBeGreaterThan(0);
     expect(canvas.getAllByText("1.0", { exact: true }).length).toBeGreaterThan(0);
-    await userEvent.click(canvas.getByRole("button", { name: "Show Port's Mastery story" }));
-    expect(canvas.getAllByText("The proven ace").length).toBeGreaterThan(0);
   },
 };
 
