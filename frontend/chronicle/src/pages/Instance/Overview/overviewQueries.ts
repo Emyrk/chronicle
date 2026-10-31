@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import type {
   InstanceOverviewMetrics,
   SpeedrunCohortOverviewMetrics,
@@ -121,8 +121,8 @@ export function useSpeedrunPopulation(selection: PopulationSelection | undefined
  * Fetches server-computed time-parse scores for an instance.
  * Boss scores use the current-known cohort bounded by the snapshot dates.
  */
-export function useInstanceTimeParses(instanceId: string | undefined) {
-  return useQuery({
+function instanceTimeParsesQuery(instanceId: string | undefined) {
+  return {
     queryKey: ["rankings", "time-parses", instanceId] as const,
     queryFn: async (): Promise<ScopedInstanceTimeParsesResponse> => {
       if (!instanceId) throw new Error("No instance ID");
@@ -135,5 +135,14 @@ export function useInstanceTimeParses(instanceId: string | undefined) {
     staleTime: 0,
     retry: false,
     enabled: instanceId !== undefined,
-  });
+  };
+}
+
+export function useInstanceTimeParses(instanceId: string | undefined) {
+  return useQuery(instanceTimeParsesQuery(instanceId));
+}
+
+/** Time parses for several logs at once, e.g. encounters from different nights in the compare tray. */
+export function useInstancesTimeParses(instanceIds: readonly string[]) {
+  return useQueries({ queries: instanceIds.map((instanceId) => instanceTimeParsesQuery(instanceId)) });
 }

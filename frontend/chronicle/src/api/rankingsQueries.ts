@@ -473,9 +473,9 @@ export function useTimeParseCohortBuckets(date: string, period: TimeParseCohortP
  * Kill-time and clear-time parse spreads for one instance. Always the live
  * 60-day window ending today.
  */
-export function useTimeParseSpreads(instanceName: string, enabled = true) {
+function timeParseSpreadsQuery(instanceName: string, enabled = true) {
   const searchParams = new URLSearchParams({ instance_name: instanceName, period: "60d" });
-  return useQuery({
+  return {
     queryKey: ["rankings", "time-parse-spreads", instanceName],
     queryFn: () =>
       fetchJSON<TimeParseSpreadsResponse>(
@@ -483,7 +483,16 @@ export function useTimeParseSpreads(instanceName: string, enabled = true) {
       ),
     staleTime: RANKINGS_STALE_TIME,
     enabled: enabled && !!instanceName,
-  });
+  };
+}
+
+export function useTimeParseSpreads(instanceName: string, enabled = true) {
+  return useQuery(timeParseSpreadsQuery(instanceName, enabled));
+}
+
+/** Kill-time spreads for several raids, e.g. encounters from different instances in the compare tray. */
+export function useTimeParseSpreadsForInstances(instanceNames: readonly string[]) {
+  return useQueries({ queries: instanceNames.map((instanceName) => timeParseSpreadsQuery(instanceName)) });
 }
 
 export function useTimeParseCohort(params: {

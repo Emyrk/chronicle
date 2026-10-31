@@ -25,8 +25,8 @@ import { compareAction, kindColor, STATS_TIER, useComparePins } from "./entityCo
 
 import {
   EntityMenuContext,
+  type EntityActionProvider,
   type EntityMenuContextValue,
-  type EntityScopeProviders,
   type EntityRaidContext,
 } from "./entityMenuContext";
 import {
@@ -34,7 +34,6 @@ import {
   closestEntity,
   guildHistoryUrl,
   guildPageUrl,
-  isComparable,
   killTimeLeaderboardUrl,
   performanceHistoryUrl,
   type EntityKind,
@@ -43,7 +42,7 @@ import {
 
 const ComparePanel = lazy(() => import("./ComparePanel"));
 
-export type { EntityActionProvider, EntityDetailsProvider } from "./entityMenuContext";
+export type { EntityActionProvider } from "./entityMenuContext";
 
 export interface EntityAction {
   id: string;
@@ -64,8 +63,6 @@ interface OpenMenu {
   y: number;
   container: HTMLElement;
   scoped: EntityAction[];
-  /** The innermost scope's card for this entity, shown above the actions. */
-  details: ReactNode;
 }
 
 
@@ -116,7 +113,7 @@ function isEditable(target: EventTarget | null): boolean {
  * or press and hold it on a touch screen. Holding Alt outlines everything that can be clicked.
  */
 export function EntityMenuProvider({ children }: { children: ReactNode }) {
-  const providers = useRef(new Map<string, EntityScopeProviders>());
+  const providers = useRef(new Map<string, EntityActionProvider>());
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const compare = useComparePins();
   const supporter = useSupporterTier();
@@ -171,15 +168,13 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
   // Pointer events reach us from popped-out panel windows too, where key events don't.
   const openMenuFor = useCallback((hit: NonNullable<ReturnType<typeof closestEntity>>, x: number, y: number) => {
     const scoped: EntityAction[] = [];
-    let details: ReactNode = null;
     // Innermost scope first.
     for (let scope = hit.element.closest(`[${SCOPE_ATTRIBUTE}]`); scope; scope = scope.parentElement?.closest(`[${SCOPE_ATTRIBUTE}]`) ?? null) {
       const provider = providers.current.get(scope.getAttribute(SCOPE_ATTRIBUTE) ?? "");
-      if (provider?.actions) scoped.push(...provider.actions(hit.entity));
-      details ??= provider?.details?.(hit.entity) ?? null;
+      if (provider) scoped.push(...provider(hit.entity));
     }
     const doc = hit.element.ownerDocument;
-    setMenu({ entity: hit.entity, x, y, container: doc.body, scoped, details });
+    setMenu({ entity: hit.entity, x, y, container: doc.body, scoped });
   }, []);
 
   // Touch has no Alt key: press and hold a name instead. Moving the finger (scrolling) cancels it.
@@ -240,8 +235,8 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
   const closeMenu = useCallback(() => setMenu(null), []);
 
   const value = useMemo<EntityMenuContextValue>(() => ({
-    register: (id, scopeProviders) => {
-      providers.current.set(id, scopeProviders);
+    register: (id, provider) => {
+      providers.current.set(id, provider);
       return () => {
         providers.current.delete(id);
       };
@@ -286,7 +281,7 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
             menu={menu}
             actions={[
               ...menu.scoped,
-              ...(isComparable(menu.entity) ? [compareAction(menu.entity, compare.pins, compare.toggle)] : []),
+              compareAction(menu.entity, compare.pins, compare.toggle),
               ...globalActions(menu.entity),
             ]}
             onClose={closeMenu}
@@ -297,29 +292,15 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * Adds `actions`, and optionally a `details` card, to the entity menu for anything Alt+clicked
- * inside `children`.
- */
-export function EntityActionScope({
-  actions,
-  details,
-  children,
-}: EntityScopeProviders & { children: ReactNode }) {
+/** Adds `actions` to the entity menu for anything Alt+clicked inside `children`. */
+export function EntityActionScope({ actions, children }: { actions: EntityActionProvider; children: ReactNode }) {
   const context = useContext(EntityMenuContext);
   const id = useId();
-  const latest = useRef<EntityScopeProviders>({ actions, details });
+  const latest = useRef(actions);
   useLayoutEffect(() => {
-    latest.current = { actions, details };
+    latest.current = actions;
   });
-  useEffect(
-    () =>
-      context?.register(id, {
-        actions: (entity) => latest.current.actions?.(entity) ?? [],
-        details: (entity) => latest.current.details?.(entity),
-      }),
-    [context, id],
-  );
+  useEffect(() => context?.register(id, (entity) => latest.current(entity)), [context, id]);
   return (
     <div style={{ display: "contents" }} {...{ [SCOPE_ATTRIBUTE]: id }}>
       {children}
@@ -328,8 +309,6 @@ export function EntityActionScope({
 }
 
 const MENU_WIDTH = 220;
-/** Wider when a scope adds a details card. */
-const MENU_WIDTH_WITH_DETAILS = 264;
 const KIND_TITLE = { character: "Player", guild: "Guild", encounter: "Encounter" } as const;
 
 function EntityMenuPopover({ menu, actions, onClose }: { menu: OpenMenu; actions: EntityAction[]; onClose: () => void }) {
@@ -387,7 +366,7 @@ function EntityMenuPopover({ menu, actions, onClose }: { menu: OpenMenu; actions
       role="menu"
       aria-label={`${entity.name} actions`}
       className="fixed z-[100] rounded-md border bg-popover p-1 text-popover-foreground shadow-xl"
-      style={{ ...position, width: menu.details ? MENU_WIDTH_WITH_DETAILS : MENU_WIDTH }}
+      style={{ ...position, width: MENU_WIDTH }}
     >
       <div className="flex items-baseline gap-2 px-2 pt-1 pb-1.5">
         <span
@@ -400,7 +379,6 @@ function EntityMenuPopover({ menu, actions, onClose }: { menu: OpenMenu; actions
           {KIND_TITLE[entity.kind]}
         </span>
       </div>
-      {menu.details && <div className="mb-1 overflow-hidden rounded-md border border-white/10 bg-white/[0.03]">{menu.details}</div>}
       {actions.map((action, index) => {
         const Icon = action.icon;
         const divider = index === menu.scoped.length && index > 0;

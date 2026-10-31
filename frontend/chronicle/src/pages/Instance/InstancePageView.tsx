@@ -37,7 +37,7 @@ import {
 import { cn } from "@/lib/utils";
 import { entityAttributes, type EntityRef } from "@/components/EntityMenu/entity";
 import { EntityActionScope, type EntityAction } from "@/components/EntityMenu/EntityMenu";
-import { EncounterKillReference } from "./EncounterKillReference";
+import { pullDurationMs } from "./encounterKillTimes";
 import { instanceEntityAttributes, instanceGuildEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { SeamlessLayoutContext } from "./EventsPanels/SeamlessLayoutContext";
 import { useFocusMode } from "@/hooks/useFocusMode";
@@ -569,7 +569,7 @@ function EncounterSidebar({
   onIncludeWipesChange: (value: boolean) => void;
   instanceStartTime: string;
   instanceId: string;
-  /** The raid, for an encounter's server kill-time spread. */
+  /** The raid, carried by encounters added to compare. */
   raidInstance: Pick<Instance, "name" | "difficultyName" | "maxPlayers">;
   /** Switches the page to its Overview; omitted when the log has none. */
   onShowOverview?: () => void;
@@ -637,31 +637,29 @@ function EncounterSidebar({
     }
   };
 
-  // Alt+click a boss: its kill times against the server, realm and guild, and a way to the overview.
-  const encounterDetails = (entity: EntityRef) => {
-    if (entity.kind !== "encounter") return null;
-    const encounter = encounters.find((item) => item.id === entity.id);
-    if (!encounter) return null;
-    return (
-      <EncounterKillReference
-        encounter={encounter}
-        instance={raidInstance}
-        parses={scopedKillParses?.get(encounter.id)}
-        lookbackDays={lookbackDays}
-      />
-    );
-  };
+  // Alt+click a boss to add it to compare (its kill times show in the tray) or jump to the overview.
   const encounterActions = (entity: EntityRef): EntityAction[] =>
     entity.kind === "encounter" && onShowOverview
       ? [{ id: "overview", label: "Go to overview", icon: LayoutDashboard, onSelect: onShowOverview }]
       : [];
   const encounterEntity = (encounter: Encounter) =>
     encounter.boss
-      ? entityAttributes({ kind: "encounter", id: encounter.id, name: encounter.name, instanceName: raidInstance.name })
+      ? entityAttributes({
+          kind: "encounter",
+          id: encounter.id,
+          name: encounter.name,
+          logId: instanceId,
+          instanceName: raidInstance.name,
+          difficultyName: raidInstance.difficultyName,
+          maxPlayers: raidInstance.maxPlayers,
+          killType: encounter.kill_type,
+          durationMs: pullDurationMs(encounter),
+          startTime: encounter.start_time,
+        })
       : undefined;
 
   return (
-    <EntityActionScope actions={encounterActions} details={encounterDetails}>
+    <EntityActionScope actions={encounterActions}>
     <div 
       data-help-encounter-sidebar
       className={cn(

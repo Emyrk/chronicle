@@ -1,17 +1,9 @@
-import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useEffect } from "react";
 import type { EntityRef } from "./entity";
 import type { EntityAction } from "./EntityMenu";
 
 /** Contributes actions for entities clicked inside a scope, e.g. "Focus" in a meter panel. */
 export type EntityActionProvider = (entity: EntityRef) => EntityAction[];
-
-/** Contributes a card shown above the menu's actions, e.g. an encounter's kill times. */
-export type EntityDetailsProvider = (entity: EntityRef) => ReactNode;
-
-export interface EntityScopeProviders {
-  actions?: EntityActionProvider;
-  details?: EntityDetailsProvider;
-}
 
 /**
  * The raid a page is showing, so quick stats compare the same fights. Boss names only:
@@ -29,7 +21,7 @@ export interface EntityRaidContext {
 }
 
 export interface EntityMenuContextValue {
-  register: (id: string, providers: EntityScopeProviders) => () => void;
+  register: (id: string, provider: EntityActionProvider) => () => void;
   setRaid: (raid: EntityRaidContext | null) => void;
 }
 

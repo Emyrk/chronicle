@@ -4,22 +4,43 @@ import { ChevronDown, ChevronUp, ExternalLink, EyeOff, GitCompareArrows, Lock, M
 import { cn } from "@/lib/utils";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { billingTierLabel, TIER_COLOR } from "@/pages/Settings/billingPricing";
-import { entityAttributes, entityKey, guildCompareUrl, performanceCompareUrl, type EntityKind, type EntityRef } from "./entity";
+import {
+  entityAttributes,
+  entityKey,
+  guildCompareUrl,
+  instanceOverviewUrl,
+  killTimeLeaderboardUrl,
+  performanceCompareUrl,
+  type EntityKind,
+  type EntityRef,
+} from "./entity";
 import { KIND_LABEL, kindColor, MAX_COMPARE, QUICK_RANGE_DAYS, QUICK_RANGES, STATS_TIER, useQuickRange } from "./entityCompare";
 import type { EntityRaidContext } from "./entityMenuContext";
 
 const QuickStats = lazy(() => import("./QuickStats"));
 
-function pageUrl(kind: EntityKind, entities: EntityRef[], hidden: ReadonlySet<string>): string {
-  return kind === "character"
-    ? performanceCompareUrl(entities as Extract<EntityRef, { kind: "character" }>[], hidden)
-    : guildCompareUrl(entities as Extract<EntityRef, { kind: "guild" }>[], hidden);
+type Encounter = Extract<EntityRef, { kind: "encounter" }>;
+
+/** Where the tray's footer link goes for the kind on show. */
+function pageLink(kind: EntityKind, entities: EntityRef[], hidden: ReadonlySet<string>): { to: string; label: string } {
+  if (kind === "character") {
+    return { to: performanceCompareUrl(entities as Extract<EntityRef, { kind: "character" }>[], hidden), label: "Open performance history" };
+  }
+  if (kind === "guild") {
+    return { to: guildCompareUrl(entities as Extract<EntityRef, { kind: "guild" }>[], hidden), label: "Open clear-time history" };
+  }
+  // Pulls from one log compare on its Overview; pulls from several fall back to the boss leaderboard.
+  const encounters = entities as Encounter[];
+  return new Set(encounters.map((encounter) => encounter.logId)).size === 1
+    ? { to: instanceOverviewUrl(encounters[0].logId), label: "Open log overview" }
+    : { to: killTimeLeaderboardUrl(encounters[0]), label: "Open kill time leaderboard" };
 }
 
 /**
- * The corner card for players and guilds added with "Add to compare". It shows their quick stats
- * (one entity: a short summary; several: a comparison), or for viewers below the stats tier a
- * blurred preview with an upgrade prompt. Everyone can open the full history page from here.
+ * The corner card for players, guilds and encounters added with "Add to compare". It shows their
+ * quick stats (one entity: a short summary; several: a comparison). Player and guild stats need
+ * the stats tier, and below it show a blurred preview with an upgrade prompt; encounter kill times
+ * are free. Everyone can open the full page from here.
  */
 export function CompareTray({
   pins,
@@ -46,13 +67,16 @@ export function CompareTray({
   // A choice holds until something new is added; then the card follows the newest pin.
   const [chosen, setChosen] = useState<{ kind: EntityKind; count: number } | null>(null);
   if (pins.length === 0) return null;
-  const groups = (["character", "guild"] as const)
+  const groups = (["character", "guild", "encounter"] as const)
     .map((kind) => ({ kind, entities: pins.filter((pin) => pin.kind === kind) }))
     .filter((group) => group.entities.length > 0);
   const latestKind = pins[pins.length - 1].kind;
   const kind =
     chosen && chosen.count === pins.length && groups.some((group) => group.kind === chosen.kind) ? chosen.kind : latestKind;
   const entities = groups.find((group) => group.kind === kind)!.entities;
+  const isEncounter = kind === "encounter";
+  const showStats = canShowStats || isEncounter;
+  const link = pageLink(kind, entities, hidden);
   const iconButton = "rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground";
 
   if (collapsed) {
@@ -108,7 +132,7 @@ export function CompareTray({
           <h2 className="text-xs font-semibold">Compare</h2>
         )}
         <span className="ml-auto" />
-        {canShowStats && (
+        {canShowStats && !isEncounter && (
           <div className="flex gap-0.5 rounded-md bg-white/5 p-0.5" role="group" aria-label="Range">
             {QUICK_RANGES.map((option) => (
               <button
@@ -127,7 +151,7 @@ export function CompareTray({
             ))}
           </div>
         )}
-        {canShowStats && (
+        {canShowStats && !isEncounter && (
           <button type="button" onClick={() => onExpand(kind)} className={iconButton} aria-label="Expand to full stats" title="Full stats">
             <Maximize2 className="h-3.5 w-3.5" />
           </button>
@@ -153,7 +177,10 @@ export function CompareTray({
                     type="button"
                     aria-pressed={isHidden}
                     aria-label={isHidden ? `${entity.name}, hidden` : entity.name}
-                    title={isHidden ? "Hidden from the stats. Shift+click to show" : "Shift+click to hide from the stats"}
+                    title={[
+                      entity.kind === "encounter" ? new Date(entity.startTime).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "",
+                      isHidden ? "Hidden from the stats. Shift+click to show" : "Shift+click to hide from the stats",
+                    ].filter(Boolean).join(" · ")}
                     // Keep Shift+click from selecting text.
                     onMouseDown={(event) => event.shiftKey && event.preventDefault()}
                     onClick={(event) => event.shiftKey && onToggleHidden(entity)}
@@ -186,7 +213,7 @@ export function CompareTray({
           </div>
         </div>
 
-        {canShowStats ? (
+        {showStats ? (
           <Suspense fallback={<div className="h-32" />}>
             <QuickStats kind={kind} entities={entities} hidden={hidden} raid={raid} rangeDays={QUICK_RANGE_DAYS[range]} />
           </Suspense>
@@ -195,12 +222,12 @@ export function CompareTray({
         )}
 
         <Link
-          to={pageUrl(kind, entities, hidden)}
+          to={link.to}
           target="_blank"
           className="flex items-center justify-center gap-1.5 rounded-md bg-[color-mix(in_oklab,var(--kind)_15%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--kind)] transition-colors hover:bg-[color-mix(in_oklab,var(--kind)_25%,transparent)]"
           style={{ "--kind": kindColor(kind) } as CSSProperties}
         >
-          {kind === "character" ? "Open performance history" : "Open clear-time history"}
+          {link.label}
           <ExternalLink className="h-3.5 w-3.5" />
         </Link>
       </div>

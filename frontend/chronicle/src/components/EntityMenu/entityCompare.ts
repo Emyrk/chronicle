@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import type { PaidBillingTier } from "@/pages/Settings/billingPricing";
-import { entityKey, type ComparableEntity, type EntityKind, type EntityRef } from "./entity";
+import { entityKey, type EntityKind, type EntityRef } from "./entity";
 import type { EntityAction } from "./EntityMenu";
 
 /** Matches the comparison limit on the performance and guild history pages. */
 export const MAX_COMPARE = 5;
-/** The lowest tier that sees quick stats in the compare tray and can expand them; below it, a preview. */
+/**
+ * The lowest tier that sees player and guild quick stats in the compare tray and can expand them;
+ * below it, a preview. Encounter kill times are free for everyone.
+ */
 export const STATS_TIER: PaidBillingTier = "revered";
 
 const STORAGE_KEY = "chronicle.entity-compare";
@@ -106,7 +109,7 @@ export function useComparePins() {
 }
 
 /** The menu's "Add to compare" entry, for everyone; disabled once that kind is full. */
-export function compareAction(entity: ComparableEntity, pins: EntityRef[], toggle: (entity: EntityRef) => void): EntityAction {
+export function compareAction(entity: EntityRef, pins: EntityRef[], toggle: (entity: EntityRef) => void): EntityAction {
   const key = entityKey(entity);
   if (pins.some((pin) => entityKey(pin) === key)) {
     return { id: "compare", label: "Remove from compare", icon: Minus, onSelect: () => toggle(entity) };

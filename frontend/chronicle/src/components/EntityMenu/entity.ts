@@ -5,8 +5,24 @@
 export type EntityRef =
   | { kind: "character"; realm: string; guid: string; name: string; className?: string }
   | { kind: "guild"; id: string; name: string }
-  /** One pull of a boss in a log; `id` is the log's encounter id. */
-  | { kind: "encounter"; id: string; name: string; instanceName: string };
+  /**
+   * One pull of a boss in a log; `id` is the log's encounter id. It carries what the compare tray
+   * needs to show it on any page, so the same boss can be compared across nights.
+   */
+  | {
+      kind: "encounter";
+      id: string;
+      name: string;
+      /** The log (instance) the pull is in. */
+      logId: string;
+      instanceName: string;
+      difficultyName?: string;
+      maxPlayers?: number;
+      killType: "clean" | "partial" | "reset" | "wipe";
+      /** The ranked length of the pull. */
+      durationMs: number;
+      startTime: string;
+    };
 
 export type EntityKind = EntityRef["kind"];
 
@@ -27,7 +43,7 @@ export function parseEntity(value: string | null | undefined): EntityRef | null 
     const parsed = JSON.parse(value) as Partial<EntityRef> | null;
     if (parsed?.kind === "character" && parsed.realm && parsed.guid && parsed.name) return parsed as EntityRef;
     if (parsed?.kind === "guild" && parsed.id && parsed.name) return parsed as EntityRef;
-    if (parsed?.kind === "encounter" && parsed.id && parsed.name && parsed.instanceName) return parsed as EntityRef;
+    if (parsed?.kind === "encounter" && parsed.id && parsed.name && parsed.logId && parsed.instanceName) return parsed as EntityRef;
   } catch {
     // Not ours.
   }
@@ -46,11 +62,9 @@ export function entityKey(entity: EntityRef): string {
   return entity.kind === "character" ? `character:${entity.realm}:${entity.guid}` : `${entity.kind}:${entity.id}`;
 }
 
-/** The kinds that can be collected in the compare tray. */
-export type ComparableEntity = Extract<EntityRef, { kind: "character" | "guild" }>;
-
-export function isComparable(entity: EntityRef): entity is ComparableEntity {
-  return entity.kind === "character" || entity.kind === "guild";
+/** A log's Overview view, which compares its kill times against the server. */
+export function instanceOverviewUrl(logId: string): string {
+  return `/instances/${encodeURIComponent(logId)}?view=overview`;
 }
 
 export function armoryUrl(entity: Extract<EntityRef, { kind: "character" }>): string {

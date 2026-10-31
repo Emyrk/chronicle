@@ -12,44 +12,62 @@ import { useEntityRaidContext } from "./entityMenuContext";
 import { entityAttributes, type EntityRef } from "./entity";
 import { http, HttpResponse } from "msw";
 import { LayoutDashboard } from "lucide-react";
-import { EncounterKillReference } from "@/pages/Instance/EncounterKillReference";
-import type { Encounter } from "@/pages/Instance/InstancePage";
 import { performanceHandlers, PLAYERS, REALM } from "@/pages/ArmoryPage/AnalysisPage.mocks";
 import { GUILDS, guildHistoryHandlers, whoami } from "@/pages/GuildHistory/GuildHistoryPage.mocks";
 
-// The server's spread of Patchwerk kills, for the encounter menu.
+// The server's spread of kills and this log's kill-time parses, for encounters in the tray.
+const LOG_ID = "log-naxx";
+const spread = (encounter_name: string, min_ms: number, median_ms: number, max_ms: number, sample_size: number) => ({
+  kind: "boss_kill", encounter_name, difficulty_name: "Normal", max_players: 40, sample_size, status: "ok", min_ms, median_ms, max_ms, cutoffs: [],
+});
 const spreadsHandler = http.get("/api/v1/rankings/time-parse-cohorts/spreads", () =>
   HttpResponse.json({
     cutoff: "",
     lookback_days: 60,
     instance_name: "Naxxramas",
-    spreads: [
-      { kind: "boss_kill", encounter_name: "Patchwerk", difficulty_name: "Normal", max_players: 40, sample_size: 212, status: "ok", min_ms: 118_000, median_ms: 161_000, max_ms: 290_000, cutoffs: [] },
-    ],
+    spreads: [spread("Patchwerk", 118_000, 161_000, 290_000, 212), spread("Grobbulus", 96_000, 132_000, 240_000, 198)],
+  }),
+);
+const bossParse = (encounter_id: string, encounter_name: string, duration_ms: number, rank: number, sample_size: number, score: number) => ({
+  encounter_id, encounter_name, duration_ms, precise_score: score, display_score: Math.round(score), rank, sample_size, status: "ok",
+});
+const scopeResult = (patchwerk: ReturnType<typeof bossParse>, grobbulus: ReturnType<typeof bossParse>) => ({
+  available: true,
+  boss_kill_times: [patchwerk, grobbulus],
+});
+const timeParsesHandler = http.get("/api/v1/rankings/instances/:id/time-parses", () =>
+  HttpResponse.json({
+    available: true,
+    cutoff: "",
+    lookback_days: 60,
+    policy_version: 1,
+    query_version: 1,
+    computed_at: "",
+    boss_kill_times: [],
+    scopes: {
+      server: scopeResult(bossParse("enc-patchwerk", "Patchwerk", 142_000, 24, 212, 89.4), bossParse("enc-grobbulus", "Grobbulus", 151_000, 140, 198, 31.2)),
+      realm: scopeResult(bossParse("enc-patchwerk", "Patchwerk", 142_000, 9, 61, 86.2), bossParse("enc-grobbulus", "Grobbulus", 151_000, 40, 55, 27.5)),
+      guild: scopeResult(bossParse("enc-patchwerk", "Patchwerk", 142_000, 2, 11, 91.0), bossParse("enc-grobbulus", "Grobbulus", 151_000, 9, 10, 15.0)),
+    },
   }),
 );
 
-const tierHandlers = (tier: Parameters<typeof whoami>[0]) => [whoami(tier), spreadsHandler, ...performanceHandlers, ...guildHistoryHandlers];
+const tierHandlers = (tier: Parameters<typeof whoami>[0]) => [whoami(tier), spreadsHandler, timeParsesHandler, ...performanceHandlers, ...guildHistoryHandlers];
 
-const patchwerk: Encounter = {
-  id: "enc-patchwerk",
-  name: "Patchwerk",
-  boss: true,
-  mapId: 0,
-  kill_type: "clean",
-  start_time: "2026-10-28T20:41:00Z",
-  end_time: "2026-10-28T20:43:22Z",
-};
-const scoredKill = (rank: number, sample: number, score: number) => ({
-  duration_ms: 142_000,
-  precise_score: score,
-  display_score: Math.round(score),
-  rank,
-  sample_size: sample,
-  status: "ok",
+const encounterPin = (id: string, name: string, durationMs: number, startTime: string): EntityRef => ({
+  kind: "encounter",
+  id,
+  name,
+  logId: LOG_ID,
+  instanceName: "Naxxramas",
+  difficultyName: "Normal",
+  maxPlayers: 40,
+  killType: "clean",
+  durationMs,
+  startTime,
 });
-const patchwerkParses = { server: scoredKill(24, 212, 89.4), realm: scoredKill(9, 61, 86.2), guild: scoredKill(2, 11, 91.0) };
-const patchwerkEntity: EntityRef = { kind: "encounter", id: patchwerk.id, name: patchwerk.name, instanceName: "Naxxramas" };
+const patchwerkEntity = encounterPin("enc-patchwerk", "Patchwerk", 142_000, "2026-10-28T20:41:00Z");
+const grobbulusEntity = encounterPin("enc-grobbulus", "Grobbulus", 151_000, "2026-10-28T20:52:00Z");
 
 // Players and guilds from the performance and guild history mocks, so "Show stats" has data.
 const rows: PlayerMetricChartData[] = [
@@ -123,20 +141,14 @@ function Playground() {
         actions={(entity) =>
           entity.kind === "encounter" ? [{ id: "overview", label: "Go to overview", icon: LayoutDashboard, onSelect: () => undefined }] : []
         }
-        details={(entity) =>
-          entity.kind === "encounter" ? (
-            <EncounterKillReference
-              encounter={patchwerk}
-              instance={{ name: "Naxxramas", difficultyName: "Normal", maxPlayers: 40 }}
-              parses={patchwerkParses}
-              lookbackDays={60}
-            />
-          ) : null
-        }
       >
-        <div className="flex w-56 items-center justify-between rounded-md border px-3 py-2" {...entityAttributes(patchwerkEntity)}>
-          <span>Patchwerk</span>
-          <span className="font-mono text-xs text-muted-foreground">2:22</span>
+        <div className="w-56 space-y-1">
+          {[patchwerkEntity, grobbulusEntity].map((encounter) => (
+            <div key={encounter.id} className="flex items-center justify-between rounded-md border px-3 py-2" {...entityAttributes(encounter)}>
+              <span>{encounter.name}</span>
+              <span className="font-mono text-xs text-muted-foreground">{encounter.id === "enc-patchwerk" ? "2:22" : "2:31"}</span>
+            </div>
+          ))}
         </div>
       </EntityActionScope>
       <p>
@@ -181,18 +193,40 @@ export const Default: Story = {
   render: () => <OnLogPage />,
 };
 
-/** Encounters are a third kind: kill times against the server, realm and guild, free for everyone. */
+/**
+ * Encounters are a third kind. Add one to compare and the tray shows its kill time against the
+ * server's spread and its parse against the server, realm and guild, free for everyone.
+ */
 export const EncounterKillTimes: Story = {
   parameters: { msw: { handlers: tierHandlers("free") } },
   play: async ({ canvasElement }) => {
     const body = within(canvasElement.ownerDocument.body);
-    await altClick(canvasElement.querySelector('[data-entity-kind="encounter"]')!, 120, 200);
+    await altClick(canvasElement.querySelector('[data-entity*="Patchwerk"]')!, 120, 200);
     const menu = await body.findByRole("menu", { name: "Patchwerk actions" });
     await expect(within(menu).getByText("Encounter")).toBeInTheDocument();
-    await expect(await within(menu).findByText("Median 2:41")).toBeInTheDocument();
-    await expect(within(menu).getByText("Rank 24 of 212 kills")).toBeInTheDocument();
     const items = within(menu).getAllByRole("menuitem").map((item) => item.textContent);
-    await expect(items).toEqual(["Go to overview", "Kill time leaderboard", "Copy name"]);
+    await expect(items).toEqual(["Go to overview", "Add to compare", "Kill time leaderboard", "Copy name"]);
+    await userEvent.click(within(menu).getByRole("menuitem", { name: "Add to compare" }));
+    const tray = await body.findByRole("region", { name: "Compare tray" });
+    await expect(await within(tray).findByText("Median 2:41", {}, { timeout: 5000 })).toBeInTheDocument();
+    await expect(within(tray).getByText("Rank 24 of 212 kills")).toBeInTheDocument();
+    await expect(within(tray).getByRole("link", { name: /Open log overview/ })).toHaveAttribute("href", `/instances/${LOG_ID}?view=overview`);
+  },
+};
+
+/** Several encounters: a table of times and parses, and the Spread tab with each pull on its boss's server kills. */
+export const CompareEncounters: Story = {
+  parameters: { msw: { handlers: tierHandlers("free") } },
+  beforeEach: () => {
+    localStorage.removeItem(TAB_KEY);
+    localStorage.setItem(PINS_KEY, JSON.stringify([patchwerkEntity, grobbulusEntity]));
+  },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    const tray = await body.findByRole("region", { name: "Compare tray" });
+    await expect(await within(tray).findByRole("columnheader", { name: "Realm" }, { timeout: 5000 })).toBeInTheDocument();
+    await userEvent.click(within(tray).getByRole("tab", { name: "Spread" }));
+    await expect(await within(tray).findByText("Median 2:12")).toBeInTheDocument();
   },
 };
 
