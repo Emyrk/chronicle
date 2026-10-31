@@ -2479,7 +2479,10 @@ const INSTANCE_PAGE_KEYBINDS = [
   { keys: "Esc (while editing)", action: "Cancel layout editing" },
   { keys: "Shift + click panel", action: "Edit that panel's options" },
   { keys: "Click metric row", action: "Open its breakout" },
-  { keys: "Ctrl/Cmd + click metric row", action: "Open its actions menu" },
+  { keys: "Hold Alt / Option", action: "Outline every player, guild and boss you can inspect" },
+  { keys: "Alt/Option + click a name or boss", action: "Open its menu: focus, armory, history, add to compare" },
+  { keys: "Press and hold (touch)", action: "Open a name or boss's menu" },
+  { keys: "Shift + click a name in Compare", action: "Hide it from the comparison" },
 ] as const;
 
 export function InstancePageView(props: InstancePageViewProps) {
