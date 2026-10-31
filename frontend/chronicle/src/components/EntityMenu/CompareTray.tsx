@@ -13,6 +13,7 @@ import {
   instanceOverviewUrl,
   killTimeLeaderboardUrl,
   performanceCompareUrl,
+  speedrunLeaderboardUrl,
   type EntityKind,
   type EntityRef,
 } from "./entity";
@@ -30,6 +31,14 @@ function pageLink(kind: EntityKind, entities: EntityRef[], hidden: ReadonlySet<s
   }
   if (kind === "guild") {
     return { to: guildCompareUrl(entities as Extract<EntityRef, { kind: "guild" }>[], hidden), label: "Open clear-time history" };
+  }
+  if (kind === "raid") {
+    const raids = entities as Extract<EntityRef, { kind: "raid" }>[];
+    const logIds = new Set(raids.map((raid) => raid.logId));
+    const [logId] = logIds;
+    return logIds.size === 1 && logId
+      ? { to: instanceOverviewUrl(logId), label: "Open log overview" }
+      : { to: speedrunLeaderboardUrl(raids[0].name, raids[0].difficultyName), label: "Open speedrun leaderboard" };
   }
   // Pulls from one log compare on its Overview; anything else falls back to the boss leaderboard.
   const encounters = entities as Encounter[];
@@ -71,14 +80,15 @@ export function CompareTray({
   // A choice holds until something new is added; then the card follows the newest pin.
   const [chosen, setChosen] = useState<{ kind: EntityKind; count: number } | null>(null);
   if (pins.length === 0) return null;
-  const groups = (["character", "guild", "encounter"] as const)
+  const groups = (["character", "guild", "encounter", "raid"] as const)
     .map((kind) => ({ kind, entities: pins.filter((pin) => pin.kind === kind) }))
     .filter((group) => group.entities.length > 0);
   const latestKind = pins[pins.length - 1].kind;
   const kind =
     chosen && chosen.count === pins.length && groups.some((group) => group.kind === chosen.kind) ? chosen.kind : latestKind;
   const entities = groups.find((group) => group.kind === kind)!.entities;
-  const isEncounter = kind === "encounter";
+  // Encounter kill times and raid clear times are free and have no range or full view.
+  const isEncounter = kind === "encounter" || kind === "raid";
   const showStats = canShowStats || isEncounter;
   const link = pageLink(kind, entities, hidden);
   const iconButton = "shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground";
@@ -254,6 +264,11 @@ function PinDetails({ pin, hidden }: { pin: Pin; hidden: boolean }) {
   if (pin.kind === "character") {
     details.push(pin.realm);
     if (pin.className) details.push(pin.className);
+  } else if (pin.kind === "raid") {
+    details.push([pin.difficultyName, pin.maxPlayers ? `${pin.maxPlayers}-player` : ""].filter(Boolean).join(" · ") || "All difficulties");
+    if (pin.guildName) details.push(`<${pin.guildName}>`);
+    if (pin.startTime) details.push(`Started ${dateTime(pin.startTime)}`);
+    details.push(pin.clearMs !== undefined ? `Cleared in ${formatClearDuration(pin.clearMs)}` : pin.logId ? "No qualified clear" : "The raid across the server, not one clear");
   } else if (pin.kind === "encounter") {
     details.push([pin.instanceName, pin.difficultyName, pin.maxPlayers ? `${pin.maxPlayers}-player` : ""].filter(Boolean).join(" · "));
     if (pin.startTime) details.push(`Pulled ${dateTime(pin.startTime)}`);

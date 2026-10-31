@@ -18,22 +18,25 @@ import {
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { useGuildRaidClearsList, useGuildSpeedrunHistories } from "@/pages/GuildHistory/guildHistoryQueries";
 import { filterGuildRuns, formatClearTime, GUILD_SERIES_COLORS, summarizeClearTimes } from "@/pages/GuildHistory/guildHistoryModel";
-import { scopedKillParsesByEncounter } from "@/pages/Instance/Overview/encounterKillTimePopulation";
+import { scopedClearParses, scopedKillParsesByEncounter } from "@/pages/Instance/Overview/encounterKillTimePopulation";
 import { useInstancesTimeParses } from "@/pages/Instance/Overview/overviewQueries";
 import { EncounterKillBoxPlots } from "./EncounterKillBoxPlots";
+import { RaidClearBoxPlots } from "./RaidClearBoxPlots";
 import { entityKey, type EntityKind, type EntityRef } from "./entity";
 import type { EntityRaidContext } from "./entityMenuContext";
 
 type Character = Extract<EntityRef, { kind: "character" }>;
 type Guild = Extract<EntityRef, { kind: "guild" }>;
 type EncounterPin = Extract<EntityRef, { kind: "encounter" }>;
+type RaidPin = Extract<EntityRef, { kind: "raid" }>;
 type QuickTab = "score" | "chart";
 
 const TAB_LABELS: Record<EntityKind, Record<QuickTab, string>> = {
   character: { score: "Score", chart: "Chart" },
   guild: { score: "Clear", chart: "Chart" },
-  // Encounters have one view (box plots), so their tabs are hidden.
+  // Encounters and raids have one view (box plots), so their tabs are hidden.
   encounter: { score: "Kills", chart: "Kills" },
+  raid: { score: "Clears", chart: "Clears" },
 };
 type Metric = "dps" | "hps";
 /** Parse (rank against others on the same fights) or the raw DPS/HPS value. */
@@ -99,11 +102,12 @@ export default function QuickStats({
   const characters = entities.filter((entity): entity is Character => entity.kind === "character");
   const guilds = entities.filter((entity): entity is Guild => entity.kind === "guild");
   const encounters = entities.filter((entity): entity is EncounterPin => entity.kind === "encounter");
+  const raids = entities.filter((entity): entity is RaidPin => entity.kind === "raid");
 
   return (
     <div aria-label="Quick stats" role="region">
       <div className="flex items-center gap-1">
-        <div role="tablist" aria-label="Quick stats view" className={cn("flex gap-0.5 rounded-md bg-white/5 p-0.5", kind === "encounter" && "hidden")}>
+        <div role="tablist" aria-label="Quick stats view" className={cn("flex gap-0.5 rounded-md bg-white/5 p-0.5", (kind === "encounter" || kind === "raid") && "hidden")}>
           {(["score", "chart"] as const).map((option) => (
             <button
               key={option}
@@ -165,6 +169,8 @@ export default function QuickStats({
           />
         ) : kind === "encounter" ? (
           <EncounterQuickStats encounters={encounters} hidden={hidden} />
+        ) : kind === "raid" ? (
+          <RaidQuickStats raids={raids} hidden={hidden} />
         ) : (
           <GuildQuickStats key={guilds.map(entityKey).join()} guilds={guilds} hidden={hidden} raid={raid} tab={tab} rangeDays={rangeDays} />
         )}
@@ -561,6 +567,44 @@ function EncounterQuickStats({ encounters, hidden }: { encounters: EncounterPin[
             parses={encounter.logId ? scopedKillParsesByEncounter(parseQueries[logIds.indexOf(encounter.logId)]?.data)?.get(encounter.id) : undefined}
           />
         ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Raids added to compare, from logs or leaderboards: each as box plots of the server's, realm's and
+ * guild's full-clear times with the clear and its parse marked, then the speedrun board's top three.
+ */
+function RaidQuickStats({ raids, hidden }: { raids: RaidPin[]; hidden: ReadonlySet<string> }) {
+  const logIds = [...new Set(raids.flatMap((raid) => (raid.logId ? [raid.logId] : [])))];
+  const parseQueries = useInstancesTimeParses(logIds);
+  const nameCounts = new Map<string, number>();
+  for (const raid of raids) nameCounts.set(raid.name, (nameCounts.get(raid.name) ?? 0) + 1);
+  const rows = raids
+    .map((raid, index) => ({ raid, color: GUILD_SERIES_COLORS[index % GUILD_SERIES_COLORS.length] }))
+    .filter(({ raid }) => !hidden.has(entityKey(raid)));
+
+  if (rows.length === 0) return <Empty>Everyone here is hidden. Shift+click a name to show them again.</Empty>;
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] text-muted-foreground">Qualified full clears, fastest on the left. The dot is the clear; the number is its parse.</p>
+      <div className="styled-scrollbar max-h-[50vh] space-y-4 overflow-y-auto pr-1">
+        {rows.map(({ raid, color }) => {
+          const repeated = (nameCounts.get(raid.name) ?? 0) > 1;
+          const detail = [raid.difficultyName, raid.guildName ? `<${raid.guildName}>` : "", repeated && raid.startTime ? shortDate(raid.startTime) : ""]
+            .filter(Boolean)
+            .join(" · ");
+          return (
+            <RaidClearBoxPlots
+              key={entityKey(raid)}
+              raid={raid}
+              color={color}
+              label={detail ? `${raid.name} · ${detail}` : raid.name}
+              parses={raid.logId ? scopedClearParses(parseQueries[logIds.indexOf(raid.logId)]?.data) : undefined}
+            />
+          );
+        })}
       </div>
     </div>
   );

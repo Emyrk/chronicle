@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { Users } from "lucide-react"
 import type { SpeedrunLeaderboardEntry } from "../../api/typesGenerated"
 import { navigateWithModifiers } from "@/lib/navigation"
-import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities"
+import { guildAttributes, speedrunClearAttributes } from "@/components/EntityMenu/leaderboardEntities"
 
 function formatDuration(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000)
@@ -26,9 +26,11 @@ interface LeaderboardTableProps {
   entries: SpeedrunLeaderboardEntry[]
   startRank: number
   className?: string
+  /** Makes each clear's time Alt+clickable as a raid to compare. */
+  instanceName?: string
 }
 
-export function LeaderboardTable({ entries, startRank, className }: LeaderboardTableProps) {
+export function LeaderboardTable({ entries, startRank, className, instanceName }: LeaderboardTableProps) {
   const navigate = useNavigate()
   return (
     <div className={className ?? ""}>
@@ -58,7 +60,7 @@ export function LeaderboardTable({ entries, startRank, className }: LeaderboardT
                     {entry.guild_name || "Unknown Guild"}
                   </span>
                   <span className="font-mono font-semibold shrink-0">
-                    {formatDuration(entry.duration_ms)}
+                    <span {...(instanceName ? speedrunClearAttributes(entry, instanceName) : {})}>{formatDuration(entry.duration_ms)}</span>
                   </span>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
@@ -124,7 +126,7 @@ export function LeaderboardTable({ entries, startRank, className }: LeaderboardT
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right font-mono font-medium">
-                    {formatDuration(entry.duration_ms)}
+                    <span {...(instanceName ? speedrunClearAttributes(entry, instanceName) : {})}>{formatDuration(entry.duration_ms)}</span>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {entry.realm_name}

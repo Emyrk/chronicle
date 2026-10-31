@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
-import { armoryUrl, entityAttributes, guildPageUrl, killTimeLeaderboardUrl, type EntityRef } from "./entity";
+import { armoryUrl, entityAttributes, guildPageUrl, killTimeLeaderboardUrl, speedrunLeaderboardUrl, type EntityRef } from "./entity";
 
 /**
  * A character or guild name that the entity menu can open (Alt+click). Characters are
@@ -32,7 +32,14 @@ export function EntityName({
   };
   const content = children ?? entity.name;
   if (!link) return <span {...props}>{content}</span>;
-  const to = entity.kind === "character" ? armoryUrl(entity) : entity.kind === "guild" ? guildPageUrl(entity) : killTimeLeaderboardUrl(entity);
+  const to =
+    entity.kind === "character"
+      ? armoryUrl(entity)
+      : entity.kind === "guild"
+        ? guildPageUrl(entity)
+        : entity.kind === "raid"
+          ? speedrunLeaderboardUrl(entity.name, entity.difficultyName)
+          : killTimeLeaderboardUrl(entity);
   return (
     <Link to={to} target={newTab ? "_blank" : undefined} {...props}>
       {content}

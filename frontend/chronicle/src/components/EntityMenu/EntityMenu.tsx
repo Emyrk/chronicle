@@ -34,8 +34,11 @@ import {
   closestEntity,
   guildHistoryUrl,
   guildPageUrl,
+  instanceOverviewUrl,
   killTimeLeaderboardUrl,
   performanceHistoryUrl,
+  speedrunLeaderboardUrl,
+  statisticsLeaderboardUrl,
   type EntityKind,
   type EntityRef,
 } from "./entity";
@@ -88,6 +91,16 @@ function globalActions(entity: EntityRef): EntityAction[] {
     return [
       { id: "armory", label: "View armory", icon: ExternalLink, href: armoryUrl(entity) },
       { id: "performance", label: "Performance history", icon: History, href: performanceHistoryUrl(entity) },
+      copy,
+    ];
+  }
+  if (entity.kind === "raid") {
+    return [
+      ...(entity.logId
+        ? [{ id: "raid-overview", label: "Open log overview", icon: ExternalLink, href: instanceOverviewUrl(entity.logId) }]
+        : []),
+      { id: "speedrun-leaderboard", label: "Speedrun leaderboard", icon: Timer, href: speedrunLeaderboardUrl(entity.name, entity.difficultyName) },
+      { id: "statistics-leaderboard", label: "Statistics leaderboard", icon: Trophy, href: statisticsLeaderboardUrl(entity.name) },
       copy,
     ];
   }
@@ -154,13 +167,22 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
       setReveal(document, false);
     };
     const clear = () => setReveal(document, false);
+    // Alt+click downloads a link in Chrome and Safari. It's the inspect gesture here, so cancel it on
+    // every link, including ones React doesn't render (the click handler below covers popped-out panels).
+    const onAltClickLink = (event: MouseEvent) => {
+      if (event.altKey && event.button === 0 && event.target instanceof Element && event.target.closest("a[href]")) {
+        event.preventDefault();
+      }
+    };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", clear);
+    window.addEventListener("click", onAltClickLink, true);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", clear);
+      window.removeEventListener("click", onAltClickLink, true);
       clear();
     };
   }, [setReveal]);
@@ -218,9 +240,12 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (!event.altKey || event.button !== 0) return;
+    // Alt+click on a link downloads it in Chrome and Safari. Alt+click is the inspect gesture here,
+    // so cancel that on every link, not just names (a row link around a name, a log link).
+    if (event.target instanceof Element && event.target.closest("a[href]")) event.preventDefault();
     const hit = closestEntity(event.target);
     if (!hit) return;
-    // Alt+click on a link downloads it in Chrome and Safari; keep the row's own click from running too.
+    // Keep the row's own click from running too.
     event.preventDefault();
     event.stopPropagation();
     altAlone.current = false;
@@ -315,7 +340,7 @@ export function EntityActionScope({ actions, children }: { actions: EntityAction
 }
 
 const MENU_WIDTH = 220;
-const KIND_TITLE = { character: "Player", guild: "Guild", encounter: "Encounter" } as const;
+const KIND_TITLE = { character: "Player", guild: "Guild", encounter: "Encounter", raid: "Raid" } as const;
 
 function EntityMenuPopover({ menu, actions, onClose }: { menu: OpenMenu; actions: EntityAction[]; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);

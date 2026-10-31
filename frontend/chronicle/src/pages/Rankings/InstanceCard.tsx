@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { entityAttributes, raidEntity } from "@/components/EntityMenu/entity"
 import { Link } from "react-router-dom"
 import {
   getInstanceBackground,
@@ -45,7 +46,7 @@ export function InstanceCard({
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
             {getInstanceAbbrev(name)}
           </span>
-          <h2 className="text-lg font-bold leading-tight">{name}</h2>
+          <h2 className="text-lg font-bold leading-tight" {...entityAttributes(raidEntity(name))}>{name}</h2>
         </div>
         {children}
       </div>

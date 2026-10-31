@@ -2479,8 +2479,8 @@ const INSTANCE_PAGE_KEYBINDS = [
   { keys: "Esc (while editing)", action: "Cancel layout editing" },
   { keys: "Shift + click panel", action: "Edit that panel's options" },
   { keys: "Click metric row", action: "Open its breakout" },
-  { keys: "Hold Alt / Option", action: "Outline every player, guild and boss you can inspect" },
-  { keys: "Alt/Option + click a name or boss", action: "Open its menu: focus, armory, history, add to compare" },
+  { keys: "Hold Alt / Option", action: "Outline every player, guild, boss and raid you can inspect" },
+  { keys: "Alt/Option + click a name, boss or raid", action: "Open its menu: focus, armory, history, add to compare" },
   { keys: "Press and hold (touch)", action: "Open a name or boss's menu" },
   { keys: "Shift + click a name in Compare", action: "Hide it from the comparison" },
 ] as const;
@@ -2596,6 +2596,19 @@ function InstancePageViewContent({
 
   const isMobile = useIsMobile();
   const guildEntity = instanceGuildEntity(instance);
+  // The raid name opens the raid's clear times, with this log's qualified clear marked.
+  const clearMs = instanceSpeedrun?.qualified ? instanceSpeedrun.ranked_duration_ms || instanceSpeedrun.duration_ms : undefined;
+  const raidEntityAttributes = entityAttributes({
+    kind: "raid",
+    id: instance.id,
+    name: instance.name,
+    difficultyName: instance.difficultyName,
+    maxPlayers: instance.maxPlayers,
+    logId: instance.id,
+    clearMs: clearMs && clearMs > 0 ? clearMs : undefined,
+    startTime: instance.startTime,
+    guildName: instance.guild?.name,
+  });
 
   const liveSession = useLiveSession();
   const canEditSharedView = liveSession.canEditSharedView;
@@ -4225,7 +4238,7 @@ function InstancePageViewContent({
         {/* Row 1: Title (+ mobile menu / desktop difficulty) */}
         <div className="flex items-start justify-between gap-4 mb-1">
           <h1 className={cn("font-bold flex items-center gap-2", isMobile ? "text-xl" : "text-2xl", heroic && "drop-shadow-[0_0_8px_rgba(147,51,234,0.3)]")}>
-            {instance.name}
+            <span {...raidEntityAttributes}>{instance.name}</span>
             {!instance.unlisted && (
               <ClearParseBadge
                 parses={scopedClearParses(instanceTimeParsesQuery.data)}

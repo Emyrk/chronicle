@@ -9,6 +9,7 @@ import {
 } from "../Logs/utils/instanceProgressionOrder"
 import { useSupportedInstances } from "@/api/queries"
 import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities"
+import { entityAttributes, raidEntity } from "@/components/EntityMenu/entity"
 import { useEntityRaidContext } from "@/components/EntityMenu/entityMenuContext"
 import { useState, useEffect, useCallback, useRef } from "react"
 import type { SpeedrunInstanceBoard, SpeedrunLeaderboardEntry, SpeedrunRulesResponse } from "../../api/typesGenerated"
@@ -489,7 +490,9 @@ function InstanceCard({ board, timing, to }: { board: SpeedrunInstanceBoard; tim
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
             {getInstanceConfig(name)?.abbrev ?? ""}
           </span>
-          <h3 className="text-lg font-bold leading-tight text-white">{boardTitle(name, board.difficulty_name)}</h3>
+          <h3 className="text-lg font-bold leading-tight text-white" {...entityAttributes(raidEntity(name, board.difficulty_name))}>
+            {boardTitle(name, board.difficulty_name)}
+          </h3>
         </div>
 
         {top3.length > 0 && (
@@ -751,7 +754,7 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
                 </div>
               ) : selectedInstance ? (
                 <span className="flex items-center gap-2 text-xl md:text-3xl font-bold truncate">
-                  {selectedInstance}
+                  <span {...entityAttributes(raidEntity(selectedInstance, selectedDifficulty ?? undefined))}>{selectedInstance}</span>
                   {selectedDifficulty && (
                     <span className="text-base md:text-xl font-normal text-muted-foreground">{selectedDifficulty}</span>
                   )}
@@ -863,8 +866,10 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
       <div className="px-0 md:px-6 py-4 md:py-6">
         {!entriesLoading && entries && entries.length > 0 ? (
           <>
-            <LeaderboardTable entries={entries} startRank={1} className="md:hidden" />
-            {rest.length > 0 && <LeaderboardTable entries={rest} startRank={4} className="hidden md:flex md:flex-col" />}
+            <LeaderboardTable entries={entries} startRank={1} className="md:hidden" instanceName={selectedInstance} />
+            {rest.length > 0 && (
+              <LeaderboardTable entries={rest} startRank={4} className="hidden md:flex md:flex-col" instanceName={selectedInstance} />
+            )}
           </>
         ) : !entriesLoading && selectedInstance ? (
           <div className="text-center py-20 text-muted-foreground">

@@ -1,4 +1,4 @@
-import type { KillTimeLeaderboardEntry, RankingsEntry } from "@/api/typesGenerated";
+import type { KillTimeLeaderboardEntry, RankingsEntry, SpeedrunLeaderboardEntry } from "@/api/typesGenerated";
 import { entityAttributes } from "./entity";
 
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
@@ -35,5 +35,19 @@ export function killAttributes(entry: KillTimeLeaderboardEntry): Partial<ReturnT
     killType: "clean",
     durationMs,
     startTime: new Date(Date.parse(entry.killed_at) - durationMs).toISOString(),
+  });
+}
+
+/** Alt+click attributes for one clear on the speedrun board, as a raid to compare. */
+export function speedrunClearAttributes(entry: SpeedrunLeaderboardEntry, instanceName: string): ReturnType<typeof entityAttributes> {
+  return entityAttributes({
+    kind: "raid",
+    id: entry.instance_id,
+    name: instanceName,
+    difficultyName: entry.difficulty_name,
+    logId: entry.instance_id,
+    clearMs: entry.duration_ms,
+    startTime: entry.start_time,
+    guildName: entry.guild_name || undefined,
   });
 }

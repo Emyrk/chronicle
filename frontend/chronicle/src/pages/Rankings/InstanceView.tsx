@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { useEntityRaidContext, type EntityRaidContext } from "@/components/EntityMenu/entityMenuContext"
-import { bossEntity, entityAttributes } from "@/components/EntityMenu/entity"
+import { bossEntity, entityAttributes, raidEntity } from "@/components/EntityMenu/entity"
 import { createPortal } from "react-dom"
 import { useSearchParams } from "react-router-dom"
 import { ArrowLeft, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, CircleDashed, List, Loader2, X } from "lucide-react"
@@ -894,7 +894,9 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                   Back to Rankings
                 </button>
                 <h1 className="flex flex-wrap items-baseline gap-x-2 text-xl font-bold leading-tight sm:text-2xl">
-                  <span>{instanceName}</span>
+                  <span {...entityAttributes(raidEntity(instanceName, selectedDifficulties.size === 1 ? [...selectedDifficulties][0] : undefined))}>
+                    {instanceName}
+                  </span>
                   {headerDifficulty && (
                     <span className="text-sm font-normal text-muted-foreground sm:text-lg">{headerDifficulty}</span>
                   )}

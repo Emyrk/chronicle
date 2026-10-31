@@ -23,6 +23,23 @@ export type EntityRef =
       /** The ranked length of the pull. */
       durationMs?: number;
       startTime?: string;
+    }
+  /**
+   * A raid. With a clear (a log, or a run on the speedrun board) `id` is the log id and the clear's
+   * time comes along; without one (a raid name on a leaderboard) `id` is `raidEntityId(...)`.
+   */
+  | {
+      kind: "raid";
+      id: string;
+      /** The instance name, e.g. "Naxxramas". */
+      name: string;
+      difficultyName?: string;
+      maxPlayers?: number;
+      logId?: string;
+      /** The clear's ranked length, when it has one. */
+      clearMs?: number;
+      startTime?: string;
+      guildName?: string;
     };
 
 export type EntityKind = EntityRef["kind"];
@@ -45,6 +62,7 @@ export function parseEntity(value: string | null | undefined): EntityRef | null 
     if (parsed?.kind === "character" && parsed.realm && parsed.guid && parsed.name) return parsed as EntityRef;
     if (parsed?.kind === "guild" && parsed.id && parsed.name) return parsed as EntityRef;
     if (parsed?.kind === "encounter" && parsed.id && parsed.name && parsed.instanceName) return parsed as EntityRef;
+    if (parsed?.kind === "raid" && parsed.id && parsed.name) return parsed as EntityRef;
   } catch {
     // Not ours.
   }
@@ -71,6 +89,23 @@ export function bossEncounterId(instanceName: string, encounterName: string): st
 /** A boss name as an encounter to compare, without a particular pull. */
 export function bossEntity(instanceName: string, encounterName: string): EntityRef {
   return { kind: "encounter", id: bossEncounterId(instanceName, encounterName), name: encounterName, instanceName };
+}
+
+/** A raid name as something to compare, without a particular clear. */
+export function raidEntity(instanceName: string, difficultyName?: string): EntityRef {
+  return { kind: "raid", id: `raid:${instanceName}:${difficultyName ?? ""}`, name: instanceName, difficultyName };
+}
+
+/** The raid's speedrun board, on the difficulty when known. */
+export function speedrunLeaderboardUrl(instanceName: string, difficultyName?: string): string {
+  const params = new URLSearchParams({ instance: instanceName });
+  if (difficultyName !== undefined) params.set("difficulty", difficultyName);
+  return `/leaderboards/speedruns?${params}`;
+}
+
+/** The raid's statistics board. */
+export function statisticsLeaderboardUrl(instanceName: string): string {
+  return `/leaderboards/statistics?${new URLSearchParams({ instance: instanceName })}`;
 }
 
 /** A log's Overview view, which compares its kill times against the server. */

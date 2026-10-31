@@ -9,7 +9,7 @@ import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
 import { EntityActionScope, EntityMenuProvider } from "./EntityMenu";
 import { EntityName } from "./EntityName";
 import { useEntityRaidContext } from "./entityMenuContext";
-import { bossEntity, entityAttributes, type EntityRef } from "./entity";
+import { bossEntity, entityAttributes, raidEntity, type EntityRef } from "./entity";
 import { http, HttpResponse } from "msw";
 import { LayoutDashboard } from "lucide-react";
 import { performanceHandlers, PLAYERS, REALM } from "@/pages/ArmoryPage/AnalysisPage.mocks";
@@ -31,6 +31,7 @@ const cohortHandler = http.get("/api/v1/raidlogs/instances/:id/speedrun/cohort",
       start_time: "2026-10-01T20:00:00Z",
       requirements_complete: true,
       qualified: true,
+      duration_ms: Math.round(COHORT_PACE[scope] * (95 * 60_000 + wobble * 30 * 60_000)),
       requirements_satisfied: 1,
       requirements_total: 1,
       encounter_kill_times: [
@@ -51,8 +52,13 @@ const cohortHandler = http.get("/api/v1/raidlogs/instances/:id/speedrun/cohort",
 const bossParse = (encounter_id: string, encounter_name: string, duration_ms: number, rank: number, sample_size: number, score: number) => ({
   encounter_id, encounter_name, duration_ms, precise_score: score, display_score: Math.round(score), rank, sample_size, status: "ok",
 });
-const scopeResult = (patchwerk: ReturnType<typeof bossParse>, grobbulus: ReturnType<typeof bossParse>) => ({
+const clearParse = (rank: number, sample_size: number, score: number) => ({
+  duration_ms: 88 * 60_000, precise_score: score, display_score: Math.round(score), rank, sample_size, status: "ok",
+});
+const CLEAR_PARSES = { server: clearParse(14, 60, 78.3), realm: clearParse(6, 24, 74.0), guild: clearParse(2, 9, 88.0) } as const;
+const scopeResult = (patchwerk: ReturnType<typeof bossParse>, grobbulus: ReturnType<typeof bossParse>, scope: keyof typeof CLEAR_PARSES) => ({
   available: true,
+  clear_time: CLEAR_PARSES[scope],
   boss_kill_times: [patchwerk, grobbulus],
 });
 const timeParsesHandler = http.get("/api/v1/rankings/instances/:id/time-parses", () =>
@@ -65,9 +71,9 @@ const timeParsesHandler = http.get("/api/v1/rankings/instances/:id/time-parses",
     computed_at: "",
     boss_kill_times: [],
     scopes: {
-      server: scopeResult(bossParse("enc-patchwerk", "Patchwerk", 142_000, 24, 212, 89.4), bossParse("enc-grobbulus", "Grobbulus", 151_000, 140, 198, 31.2)),
-      realm: scopeResult(bossParse("enc-patchwerk", "Patchwerk", 142_000, 9, 61, 86.2), bossParse("enc-grobbulus", "Grobbulus", 151_000, 40, 55, 27.5)),
-      guild: scopeResult(bossParse("enc-patchwerk", "Patchwerk", 142_000, 2, 11, 91.0), bossParse("enc-grobbulus", "Grobbulus", 151_000, 9, 10, 15.0)),
+      server: scopeResult(bossParse("enc-patchwerk", "Patchwerk", 142_000, 24, 212, 89.4), bossParse("enc-grobbulus", "Grobbulus", 151_000, 140, 198, 31.2), "server"),
+      realm: scopeResult(bossParse("enc-patchwerk", "Patchwerk", 142_000, 9, 61, 86.2), bossParse("enc-grobbulus", "Grobbulus", 151_000, 40, 55, 27.5), "realm"),
+      guild: scopeResult(bossParse("enc-patchwerk", "Patchwerk", 142_000, 2, 11, 91.0), bossParse("enc-grobbulus", "Grobbulus", 151_000, 9, 10, 15.0), "guild"),
     },
   }),
 );
@@ -77,7 +83,21 @@ const killTimesHandler = http.get("/api/v1/rankings/kill-times", () =>
   HttpResponse.json([{ encounter_name: "Thaddius", min_secs: 150, q1_secs: 190, median_secs: 210, q3_secs: 240, max_secs: 330, count: 180 }]),
 );
 
-const tierHandlers = (tier: Parameters<typeof whoami>[0]) => [whoami(tier), cohortHandler, timeParsesHandler, killTimesHandler, ...performanceHandlers, ...guildHistoryHandlers];
+// Server clear-time stats and the speedrun board, for raids.
+const clearTimesHandler = http.get("/api/v1/rankings/clear-times", () =>
+  HttpResponse.json([{ encounter_name: "Full clear", min_secs: 4_700, q1_secs: 5_300, median_secs: 5_700, q3_secs: 6_300, max_secs: 8_100, count: 140 }]),
+);
+const speedrunBoardHandler = http.get("/api/v1/rankings/speedrun", () =>
+  HttpResponse.json(
+    [["Zug Zug", 4_712_000], ["Once Upon", 4_955_000], ["LaNuit", 5_102_000]].map(([guild_name, duration_ms], index) => ({
+      instance_id: `speedrun-${index}`, slug: `speedrun-${index}`, difficulty_name: "Normal", duration_ms, guild_id: `guild-${index}`,
+      guild_name, realm_name: "Nordanaar", start_time: "2026-10-20T19:00:00Z", completion_time: "2026-10-20T20:30:00Z",
+      player_count: 40, parser_version: "", addon_version: "",
+    })),
+  ),
+);
+
+const tierHandlers = (tier: Parameters<typeof whoami>[0]) => [whoami(tier), cohortHandler, timeParsesHandler, killTimesHandler, clearTimesHandler, speedrunBoardHandler, ...performanceHandlers, ...guildHistoryHandlers];
 
 const encounterPin = (id: string, name: string, durationMs: number, startTime: string): EntityRef => ({
   kind: "encounter",
@@ -92,6 +112,17 @@ const encounterPin = (id: string, name: string, durationMs: number, startTime: s
   startTime,
 });
 const patchwerkEntity = encounterPin("enc-patchwerk", "Patchwerk", 142_000, "2026-10-28T20:41:00Z");
+const raidClear: EntityRef = {
+  kind: "raid",
+  id: LOG_ID,
+  name: "Naxxramas",
+  difficultyName: "Normal",
+  maxPlayers: 40,
+  logId: LOG_ID,
+  clearMs: 88 * 60_000,
+  startTime: "2026-10-28T19:02:00Z",
+  guildName: "Once Upon",
+};
 const grobbulusEntity = encounterPin("enc-grobbulus", "Grobbulus", 151_000, "2026-10-28T20:52:00Z");
 
 // Players and guilds from the performance and guild history mocks, so "Show stats" has data.
@@ -175,6 +206,12 @@ function Playground() {
               <span className="font-mono text-xs text-muted-foreground">{encounter.id === "enc-patchwerk" ? "2:22" : "2:31"}</span>
             </div>
           ))}
+          <div className="rounded-md border px-3 py-2 font-semibold" {...entityAttributes(raidClear)}>
+            Naxxramas <span className="text-xs font-normal text-muted-foreground">(this log's raid, cleared in 1:28:00)</span>
+          </div>
+          <div className="rounded-md border border-dashed px-3 py-2 text-muted-foreground" {...entityAttributes(raidEntity("Molten Core"))}>
+            Molten Core <span className="text-xs">(a raid name, as on the leaderboards)</span>
+          </div>
           <div className="rounded-md border border-dashed px-3 py-2 text-muted-foreground" {...entityAttributes(bossEntity("Naxxramas", "Thaddius"))}>
             Thaddius <span className="text-xs">(a boss name, as on the leaderboards)</span>
           </div>
@@ -292,6 +329,36 @@ export const PinOrigin: Story = {
     // Radix renders tooltip text twice (once for screen readers).
     await expect((await body.findAllByText("Added from", {}, { timeout: 2000 }))[0]).toBeInTheDocument();
     await expect(body.getAllByRole("link", { name: "Naxxramas · <Once Upon> · Oct 28, 2026" })[0]).toBeInTheDocument();
+  },
+};
+
+/** A log's raid: server, realm and guild clear times with the clear and its parse, then the speedrun top three. */
+export const RaidClear: Story = {
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    await altClick(canvasElement.querySelector('[data-entity-kind="raid"][data-entity*="log-naxx"]')!, 120, 260);
+    const menu = await body.findByRole("menu", { name: "Naxxramas actions" });
+    const items = within(menu).getAllByRole("menuitem").map((item) => item.textContent);
+    await expect(items).toEqual(["Add to compare", "Open log overview", "Speedrun leaderboard", "Statistics leaderboard", "Copy name"]);
+    await userEvent.click(within(menu).getByRole("menuitem", { name: "Add to compare" }));
+    const tray = await body.findByRole("region", { name: "Compare tray" });
+    await waitFor(() => expect(tray.querySelectorAll("[data-kill-box]")).toHaveLength(3), { timeout: 5000 });
+    await waitFor(() => expect(tray.querySelector('[data-kill-parse="guild"]')).toHaveTextContent("88"));
+    await expect(await within(tray).findByText("Fastest clears")).toBeInTheDocument();
+    await expect(within(tray).getByText("Zug Zug")).toBeInTheDocument();
+  },
+};
+
+/** A raid name with no clear (as on the leaderboards): the server's clear times and the speedrun top three. */
+export const RaidName: Story = {
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    await altClick(canvasElement.querySelector('[data-entity*="raid:Molten Core"]')!, 120, 280);
+    const menu = await body.findByRole("menu", { name: "Molten Core actions" });
+    await userEvent.click(within(menu).getByRole("menuitem", { name: "Add to compare" }));
+    const tray = await body.findByRole("region", { name: "Compare tray" });
+    await waitFor(() => expect(tray.querySelectorAll("[data-kill-box]")).toHaveLength(1), { timeout: 5000 });
+    await expect(within(tray).getByText("Server, last 90 days")).toBeInTheDocument();
   },
 };
 

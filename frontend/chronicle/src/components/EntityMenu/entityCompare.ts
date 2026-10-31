@@ -46,12 +46,14 @@ export const KIND_LABEL: Record<EntityKind, { one: string; many: string }> = {
   character: { one: "player", many: "players" },
   guild: { one: "guild", many: "guilds" },
   encounter: { one: "encounter", many: "encounters" },
+  raid: { one: "raid", many: "raids" },
 };
 
 /** Same colors as the Alt outlines in index.css. */
 export function kindColor(kind: EntityKind): string {
   if (kind === "guild") return "var(--color-amber-400)";
   if (kind === "encounter") return "var(--color-rose-400)";
+  if (kind === "raid") return "var(--color-violet-400)";
   return "var(--color-sky-400)";
 }
 

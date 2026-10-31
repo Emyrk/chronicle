@@ -604,6 +604,9 @@
 [data-entity-kind="encounter"] {
   --entity-color: var(--color-rose-400);
 }
+[data-entity-kind="raid"] {
+  --entity-color: var(--color-violet-400);
+}
 /* Pressing and holding a name opens its menu on touch screens, so skip the text selection and link preview. */
 @media (pointer: coarse) {
   [data-entity] {
