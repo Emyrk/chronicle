@@ -15,7 +15,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { Copy, ExternalLink, History, Shield, Timer, type LucideIcon } from "lucide-react";
+import { Copy, ExternalLink, History, Shield, Timer, Trophy, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useSupporterTier } from "@/hooks/useSupporterTier";
@@ -25,8 +25,8 @@ import { compareAction, kindColor, STATS_TIER, useComparePins } from "./entityCo
 
 import {
   EntityMenuContext,
-  type EntityActionProvider,
   type EntityMenuContextValue,
+  type EntityScopeProviders,
   type EntityRaidContext,
 } from "./entityMenuContext";
 import {
@@ -34,6 +34,8 @@ import {
   closestEntity,
   guildHistoryUrl,
   guildPageUrl,
+  isComparable,
+  killTimeLeaderboardUrl,
   performanceHistoryUrl,
   type EntityKind,
   type EntityRef,
@@ -41,7 +43,7 @@ import {
 
 const ComparePanel = lazy(() => import("./ComparePanel"));
 
-export type { EntityActionProvider } from "./entityMenuContext";
+export type { EntityActionProvider, EntityDetailsProvider } from "./entityMenuContext";
 
 export interface EntityAction {
   id: string;
@@ -62,10 +64,14 @@ interface OpenMenu {
   y: number;
   container: HTMLElement;
   scoped: EntityAction[];
+  /** The innermost scope's card for this entity, shown above the actions. */
+  details: ReactNode;
 }
 
 
 const SCOPE_ATTRIBUTE = "data-entity-scope";
+const LONG_PRESS_MS = 450;
+const LONG_PRESS_SLOP_PX = 10;
 const REVEAL_ATTRIBUTE = "data-entity-reveal";
 
 /** Actions every entity of a kind gets, wherever it appears. */
@@ -88,6 +94,12 @@ function globalActions(entity: EntityRef): EntityAction[] {
       copy,
     ];
   }
+  if (entity.kind === "encounter") {
+    return [
+      { id: "kill-time-leaderboard", label: "Kill time leaderboard", icon: Trophy, href: killTimeLeaderboardUrl(entity) },
+      copy,
+    ];
+  }
   return [
     { id: "guild-page", label: "Guild page", icon: Shield, href: guildPageUrl(entity) },
     { id: "guild-history", label: "Clear-time history", icon: Timer, href: guildHistoryUrl(entity) },
@@ -100,11 +112,11 @@ function isEditable(target: EventTarget | null): boolean {
 }
 
 /**
- * Alt+click (Option+click on Mac) any element marked with `entityAttributes` to open its menu.
- * Holding Alt outlines everything that can be clicked this way.
+ * Alt+click (Option+click on Mac) any element marked with `entityAttributes` to open its menu,
+ * or press and hold it on a touch screen. Holding Alt outlines everything that can be clicked.
  */
 export function EntityMenuProvider({ children }: { children: ReactNode }) {
-  const providers = useRef(new Map<string, EntityActionProvider>());
+  const providers = useRef(new Map<string, EntityScopeProviders>());
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const compare = useComparePins();
   const supporter = useSupporterTier();
@@ -157,13 +169,59 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
   }, [setReveal]);
 
   // Pointer events reach us from popped-out panel windows too, where key events don't.
+  const openMenuFor = useCallback((hit: NonNullable<ReturnType<typeof closestEntity>>, x: number, y: number) => {
+    const scoped: EntityAction[] = [];
+    let details: ReactNode = null;
+    // Innermost scope first.
+    for (let scope = hit.element.closest(`[${SCOPE_ATTRIBUTE}]`); scope; scope = scope.parentElement?.closest(`[${SCOPE_ATTRIBUTE}]`) ?? null) {
+      const provider = providers.current.get(scope.getAttribute(SCOPE_ATTRIBUTE) ?? "");
+      if (provider?.actions) scoped.push(...provider.actions(hit.entity));
+      details ??= provider?.details?.(hit.entity) ?? null;
+    }
+    const doc = hit.element.ownerDocument;
+    setMenu({ entity: hit.entity, x, y, container: doc.body, scoped, details });
+  }, []);
+
+  // Touch has no Alt key: press and hold a name instead. Moving the finger (scrolling) cancels it.
+  const longPress = useRef<{ timer: number; x: number; y: number } | null>(null);
+  // The tap that ends a long press must not also click the row underneath.
+  const swallowClick = useRef(false);
+  const cancelLongPress = useCallback(() => {
+    if (longPress.current) window.clearTimeout(longPress.current.timer);
+    longPress.current = null;
+  }, []);
+
+  const handlePointerDown = useCallback((event: ReactPointerEvent) => {
+    cancelLongPress();
+    swallowClick.current = false;
+    if (event.pointerType !== "touch") return;
+    const hit = closestEntity(event.target);
+    if (!hit) return;
+    const { clientX: x, clientY: y } = event;
+    const timer = window.setTimeout(() => {
+      longPress.current = null;
+      swallowClick.current = true;
+      navigator.vibrate?.(10);
+      openMenuFor(hit, x, y);
+    }, LONG_PRESS_MS);
+    longPress.current = { timer, x, y };
+  }, [cancelLongPress, openMenuFor]);
+
   const handlePointerMove = useCallback((event: ReactPointerEvent) => {
+    const pending = longPress.current;
+    if (pending && Math.hypot(event.clientX - pending.x, event.clientY - pending.y) > LONG_PRESS_SLOP_PX) cancelLongPress();
     const doc = (event.target as Node).ownerDocument;
     if (!doc) return;
     if (event.altKey !== doc.documentElement.hasAttribute(REVEAL_ATTRIBUTE)) setReveal(doc, event.altKey);
-  }, [setReveal]);
+  }, [cancelLongPress, setReveal]);
 
   const handleClickCapture = useCallback((event: ReactMouseEvent) => {
+    if (swallowClick.current) {
+      swallowClick.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     if (!event.altKey || event.button !== 0) return;
     const hit = closestEntity(event.target);
     if (!hit) return;
@@ -171,21 +229,19 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
     event.preventDefault();
     event.stopPropagation();
     altAlone.current = false;
-    const scoped: EntityAction[] = [];
-    // Innermost scope first.
-    for (let scope = hit.element.closest(`[${SCOPE_ATTRIBUTE}]`); scope; scope = scope.parentElement?.closest(`[${SCOPE_ATTRIBUTE}]`) ?? null) {
-      const provider = providers.current.get(scope.getAttribute(SCOPE_ATTRIBUTE) ?? "");
-      if (provider) scoped.push(...provider(hit.entity));
-    }
-    const doc = hit.element.ownerDocument;
-    setMenu({ entity: hit.entity, x: event.clientX, y: event.clientY, container: doc.body, scoped });
+    openMenuFor(hit, event.clientX, event.clientY);
+  }, [openMenuFor]);
+
+  // Android opens the browser's own menu on a long press; ours replaces it on names.
+  const handleContextMenuCapture = useCallback((event: ReactMouseEvent) => {
+    if ((longPress.current || swallowClick.current) && closestEntity(event.target)) event.preventDefault();
   }, []);
 
   const closeMenu = useCallback(() => setMenu(null), []);
 
   const value = useMemo<EntityMenuContextValue>(() => ({
-    register: (id, provider) => {
-      providers.current.set(id, provider);
+    register: (id, scopeProviders) => {
+      providers.current.set(id, scopeProviders);
       return () => {
         providers.current.delete(id);
       };
@@ -195,7 +251,15 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
 
   return (
     <EntityMenuContext.Provider value={value}>
-      <div style={{ display: "contents" }} onClickCapture={handleClickCapture} onPointerMoveCapture={handlePointerMove}>
+      <div
+        style={{ display: "contents" }}
+        onClickCapture={handleClickCapture}
+        onPointerDownCapture={handlePointerDown}
+        onPointerMoveCapture={handlePointerMove}
+        onPointerUpCapture={cancelLongPress}
+        onPointerCancelCapture={cancelLongPress}
+        onContextMenuCapture={handleContextMenuCapture}
+      >
         {children}
         {/* Inside the listener so names in the tray and the full stats can be Alt+clicked too. */}
         <div className="pointer-events-none fixed bottom-4 left-4 z-40 sm:bottom-6 sm:left-6 [&>*]:pointer-events-auto">
@@ -222,7 +286,7 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
             menu={menu}
             actions={[
               ...menu.scoped,
-              compareAction(menu.entity, compare.pins, compare.toggle),
+              ...(isComparable(menu.entity) ? [compareAction(menu.entity, compare.pins, compare.toggle)] : []),
               ...globalActions(menu.entity),
             ]}
             onClose={closeMenu}
@@ -233,15 +297,29 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** Adds `actions` to the entity menu for anything Alt+clicked inside `children`. */
-export function EntityActionScope({ actions, children }: { actions: EntityActionProvider; children: ReactNode }) {
+/**
+ * Adds `actions`, and optionally a `details` card, to the entity menu for anything Alt+clicked
+ * inside `children`.
+ */
+export function EntityActionScope({
+  actions,
+  details,
+  children,
+}: EntityScopeProviders & { children: ReactNode }) {
   const context = useContext(EntityMenuContext);
   const id = useId();
-  const latest = useRef(actions);
+  const latest = useRef<EntityScopeProviders>({ actions, details });
   useLayoutEffect(() => {
-    latest.current = actions;
+    latest.current = { actions, details };
   });
-  useEffect(() => context?.register(id, (entity) => latest.current(entity)), [context, id]);
+  useEffect(
+    () =>
+      context?.register(id, {
+        actions: (entity) => latest.current.actions?.(entity) ?? [],
+        details: (entity) => latest.current.details?.(entity),
+      }),
+    [context, id],
+  );
   return (
     <div style={{ display: "contents" }} {...{ [SCOPE_ATTRIBUTE]: id }}>
       {children}
@@ -250,6 +328,9 @@ export function EntityActionScope({ actions, children }: { actions: EntityAction
 }
 
 const MENU_WIDTH = 220;
+/** Wider when a scope adds a details card. */
+const MENU_WIDTH_WITH_DETAILS = 264;
+const KIND_TITLE = { character: "Player", guild: "Guild", encounter: "Encounter" } as const;
 
 function EntityMenuPopover({ menu, actions, onClose }: { menu: OpenMenu; actions: EntityAction[]; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -298,7 +379,7 @@ function EntityMenuPopover({ menu, actions, onClose }: { menu: OpenMenu; actions
   }, [menu.container, onClose]);
 
   const itemClass =
-    "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground";
+    "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs pointer-coarse:py-2.5 pointer-coarse:text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground";
 
   return (
     <div
@@ -306,7 +387,7 @@ function EntityMenuPopover({ menu, actions, onClose }: { menu: OpenMenu; actions
       role="menu"
       aria-label={`${entity.name} actions`}
       className="fixed z-[100] rounded-md border bg-popover p-1 text-popover-foreground shadow-xl"
-      style={{ ...position, width: MENU_WIDTH }}
+      style={{ ...position, width: menu.details ? MENU_WIDTH_WITH_DETAILS : MENU_WIDTH }}
     >
       <div className="flex items-baseline gap-2 px-2 pt-1 pb-1.5">
         <span
@@ -316,9 +397,10 @@ function EntityMenuPopover({ menu, actions, onClose }: { menu: OpenMenu; actions
           {entity.name}
         </span>
         <span className="ml-auto shrink-0 text-[10px] font-medium uppercase tracking-wider" style={{ color: kindColor(entity.kind) }}>
-          {entity.kind === "character" ? "Player" : "Guild"}
+          {KIND_TITLE[entity.kind]}
         </span>
       </div>
+      {menu.details && <div className="mb-1 overflow-hidden rounded-md border border-white/10 bg-white/[0.03]">{menu.details}</div>}
       {actions.map((action, index) => {
         const Icon = action.icon;
         const divider = index === menu.scoped.length && index > 0;

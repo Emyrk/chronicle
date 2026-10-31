@@ -31,7 +31,6 @@ type Display = "parse" | "raw";
 const TAB_KEY = "chronicle.quick-stats-tab";
 const METRIC_KEY = "chronicle.quick-stats-metric";
 const DISPLAY_KEY = "chronicle.quick-stats-display";
-const RANGE_KEY = "chronicle.quick-stats-range";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function readStored<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
@@ -61,12 +60,15 @@ export default function QuickStats({
   entities,
   hidden,
   raid,
+  rangeDays,
 }: {
   kind: EntityKind;
   entities: EntityRef[];
   /** Entity keys to leave out; everyone else keeps the color they'd have with them shown. */
   hidden: ReadonlySet<string>;
   raid: EntityRaidContext | null;
+  /** Nights older than this are left out of the stats and chart. */
+  rangeDays: number;
 }) {
   const [tab, setTab] = useState<QuickTab>(() => readStored(TAB_KEY, ["score", "chart"], "score"));
   const [metric, setMetric] = useState<Metric>(() => readStored(METRIC_KEY, ["dps", "hps"], "dps"));
@@ -147,9 +149,10 @@ export default function QuickStats({
             metric={metric}
             requestedDisplay={display}
             hidden={hidden}
+            rangeDays={rangeDays}
           />
         ) : (
-          <GuildQuickStats key={guilds.map(entityKey).join()} guilds={guilds} hidden={hidden} raid={raid} tab={tab} />
+          <GuildQuickStats key={guilds.map(entityKey).join()} guilds={guilds} hidden={hidden} raid={raid} tab={tab} rangeDays={rangeDays} />
         )}
       </div>
     </div>
@@ -192,6 +195,7 @@ function PlayerQuickStats({
   metric,
   requestedDisplay,
   hidden,
+  rangeDays,
 }: {
   characters: Character[];
   raid: EntityRaidContext | null;
@@ -199,7 +203,10 @@ function PlayerQuickStats({
   metric: Metric;
   requestedDisplay: Display;
   hidden: ReadonlySet<string>;
+  rangeDays: number;
 }) {
+  const [now] = useState(() => Date.now());
+  const cutoff = new Date(now - rangeDays * DAY_MS).toISOString();
   const fights = usePlayerFights(characters, raid);
   const queries = useCharacterPerformances(
     characters.map((character) => ({
@@ -217,11 +224,13 @@ function PlayerQuickStats({
   const hasParses = allRuns.some((runs) => runs.some((run) => run.average_parse != null));
   const display: Display = requestedDisplay === "parse" && !hasParses ? "raw" : requestedDisplay;
   const allLines: PlayerLine[] = characters.map((character, index) => {
-    const runs = filterPerformanceRuns(allRuns[index], null, null, display);
+    const everyRun = filterPerformanceRuns(allRuns[index], null, null, display);
+    const runs = everyRun.filter((run) => run.started_at >= cutoff);
     const latest = [...runs].sort((a, b) => b.started_at.localeCompare(a.started_at))[0] ?? null;
     // Duplicate uploads of a night collapse to one run, which may point at another copy of this log.
+    // This log's night is found among all runs, so a short range still calls it out.
     const focus = fights.instanceId
-      ? runs.find((run) => run.representative_instance_id === fights.instanceId || (!!fights.instanceSlug && run.log_hashed_slug === fights.instanceSlug)) ?? null
+      ? everyRun.find((run) => run.representative_instance_id === fights.instanceId || (!!fights.instanceSlug && run.log_hashed_slug === fights.instanceSlug)) ?? null
       : latest;
     return { character, color: colors[index], runs, focus };
   });
@@ -253,6 +262,7 @@ function PlayerQuickStats({
         <Empty>No ranked {metric.toUpperCase()} runs on these fights yet.</Empty>
       ) : tab === "chart" ? (
         <MiniChart
+          rangeDays={rangeDays}
           series={lines.map((line) => ({
             key: entityKey(line.character),
             label: line.character.name,
@@ -364,12 +374,15 @@ function GuildQuickStats({
   hidden,
   raid,
   tab,
+  rangeDays,
 }: {
   guilds: Guild[];
   hidden: ReadonlySet<string>;
   raid: EntityRaidContext | null;
   tab: QuickTab;
+  rangeDays: number;
 }) {
+  const [now] = useState(() => Date.now());
   const clears = useGuildRaidClearsList(raid ? [] : guilds.slice(0, 1).map((guild) => guild.id));
   const latestRaid = [...(clears[0]?.data?.clears ?? [])].sort((a, b) => b.last_cleared_at.localeCompare(a.last_cleared_at))[0];
   // Clears are kept per raid size and difficulty, so compare the same variant.
@@ -390,9 +403,12 @@ function GuildQuickStats({
     variant.dynamicDifficulty,
   );
   const allLines: GuildLine[] = guilds.map((guild, index) => {
-    const runs = filterGuildRuns(histories[index]?.data?.runs ?? [], { includeUnqualified: false, rangeDays: 180 });
+    const everyRun = histories[index]?.data?.runs ?? [];
+    const runs = filterGuildRuns(everyRun, { includeUnqualified: false, rangeDays, now });
     const latest = [...runs].sort((a, b) => b.completion_time.localeCompare(a.completion_time))[0] ?? null;
-    const focus = raid?.instanceSlug ? runs.find((run) => run.slug === raid.instanceSlug) ?? null : latest;
+    const focus = raid?.instanceSlug
+      ? filterGuildRuns(everyRun, { includeUnqualified: false, rangeDays: 180, now }).find((run) => run.slug === raid.instanceSlug) ?? null
+      : latest;
     return { guild, color: GUILD_SERIES_COLORS[index % GUILD_SERIES_COLORS.length], runs, focus };
   });
   const lines = allLines.filter((line) => !hidden.has(entityKey(line.guild)));
@@ -410,6 +426,7 @@ function GuildQuickStats({
         <Empty>No qualified clears of this raid in the last 180 days.</Empty>
       ) : tab === "chart" ? (
         <MiniChart
+          rangeDays={rangeDays}
           series={lines.map((line) => ({
             key: entityKey(line.guild),
             label: line.guild.name,
@@ -570,8 +587,6 @@ interface ChartSeries {
   points: { time: number; value: number; highlight: boolean }[];
 }
 
-type ChartRange = "180d" | "60d" | "30d";
-const RANGE_DAYS: Record<ChartRange, number> = { "180d": 180, "60d": 60, "30d": 30 };
 
 const CHART_WIDTH = 352;
 const CHART_HEIGHT = 140;
@@ -587,39 +602,27 @@ const HOVER_MATCH_DAYS = 3;
  * every line's night under the cursor; one line, or the line hovered in the legend, shows its
  * typical band (middle half of its nights).
  */
-function MiniChart({ series, format, caption }: { series: ChartSeries[]; format: (value: number) => string; caption: string }) {
+function MiniChart({
+  series,
+  format,
+  caption,
+  rangeDays,
+}: {
+  series: ChartSeries[];
+  format: (value: number) => string;
+  caption: string;
+  rangeDays: number;
+}) {
   const [now] = useState(() => Date.now());
-  const [range, setRange] = useState<ChartRange>(() => readStored(RANGE_KEY, ["180d", "60d", "30d"], "180d"));
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null);
-  const start = now - RANGE_DAYS[range] * DAY_MS;
+  const start = now - rangeDays * DAY_MS;
   const visible = series.map((line) => ({
     ...line,
     points: line.points.filter((point) => point.time >= start).sort((a, b) => a.time - b.time),
   }));
   const values = visible.flatMap((line) => line.points.map((point) => point.value));
-  const chooseRange = (next: ChartRange) => {
-    setRange(next);
-    writeStored(RANGE_KEY, next);
-  };
-
-  const rangeControl = (
-    <Segmented
-      className="ml-auto"
-      label="Chart range"
-      options={(["30d", "60d", "180d"] as const).map((option) => ({ value: option, label: option }))}
-      value={range}
-      onChange={chooseRange}
-    />
-  );
-  if (values.length === 0) {
-    return (
-      <div className="space-y-1.5">
-        <div className="flex">{rangeControl}</div>
-        <Empty>No runs in the last {RANGE_DAYS[range]} days.</Empty>
-      </div>
-    );
-  }
+  if (values.length === 0) return <Empty>No runs in the last {rangeDays} days.</Empty>;
 
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -662,10 +665,7 @@ function MiniChart({ series, format, caption }: { series: ChartSeries[]; format:
 
   return (
     <figure className="space-y-1.5">
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] text-muted-foreground">{caption}</span>
-        {rangeControl}
-      </div>
+      <div className="text-[11px] text-muted-foreground">{caption}</div>
       <div className="relative">
         <svg
           viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
@@ -697,7 +697,7 @@ function MiniChart({ series, format, caption }: { series: ChartSeries[]; format:
             </g>
           ))}
           <text x={CHART_LEFT} y={CHART_HEIGHT - 3} fontSize={9} fill="currentColor" fillOpacity={0.55}>
-            {RANGE_DAYS[range]} days ago
+            {rangeDays} days ago
           </text>
           <text x={CHART_WIDTH - CHART_RIGHT} y={CHART_HEIGHT - 3} textAnchor="end" fontSize={9} fill="currentColor" fillOpacity={0.55}>
             Today

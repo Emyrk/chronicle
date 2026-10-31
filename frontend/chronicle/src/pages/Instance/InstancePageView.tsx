@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, ty
 import { createPortal } from "react-dom";
 import { useSearchParams, Link } from "react-router-dom";
 import { useSession, useCreateShare, fetchInstanceSpeedrun, fetchSharedView, toastError, type UserPanelLayout } from "@/api/queries";
-import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, LayoutPanelTop, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2, LockKeyhole, Pencil } from "lucide-react";
+import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, LayoutPanelTop, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2, LockKeyhole, Pencil, LayoutDashboard } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -35,7 +35,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { cn } from "@/lib/utils";
-import { entityAttributes } from "@/components/EntityMenu/entity";
+import { entityAttributes, type EntityRef } from "@/components/EntityMenu/entity";
+import { EntityActionScope, type EntityAction } from "@/components/EntityMenu/EntityMenu";
+import { EncounterKillReference } from "./EncounterKillReference";
 import { instanceEntityAttributes, instanceGuildEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { SeamlessLayoutContext } from "./EventsPanels/SeamlessLayoutContext";
 import { useFocusMode } from "@/hooks/useFocusMode";
@@ -546,6 +548,8 @@ function EncounterSidebar({
   onIncludeWipesChange,
   instanceStartTime,
   instanceId,
+  raidInstance,
+  onShowOverview,
   showRankings,
   hideAd = false,
   className,
@@ -565,6 +569,10 @@ function EncounterSidebar({
   onIncludeWipesChange: (value: boolean) => void;
   instanceStartTime: string;
   instanceId: string;
+  /** The raid, for an encounter's server kill-time spread. */
+  raidInstance: Pick<Instance, "name" | "difficultyName" | "maxPlayers">;
+  /** Switches the page to its Overview; omitted when the log has none. */
+  onShowOverview?: () => void;
   showRankings: boolean;
   hideAd?: boolean;
   className?: string;
@@ -629,7 +637,31 @@ function EncounterSidebar({
     }
   };
 
+  // Alt+click a boss: its kill times against the server, realm and guild, and a way to the overview.
+  const encounterDetails = (entity: EntityRef) => {
+    if (entity.kind !== "encounter") return null;
+    const encounter = encounters.find((item) => item.id === entity.id);
+    if (!encounter) return null;
+    return (
+      <EncounterKillReference
+        encounter={encounter}
+        instance={raidInstance}
+        parses={scopedKillParses?.get(encounter.id)}
+        lookbackDays={lookbackDays}
+      />
+    );
+  };
+  const encounterActions = (entity: EntityRef): EntityAction[] =>
+    entity.kind === "encounter" && onShowOverview
+      ? [{ id: "overview", label: "Go to overview", icon: LayoutDashboard, onSelect: onShowOverview }]
+      : [];
+  const encounterEntity = (encounter: Encounter) =>
+    encounter.boss
+      ? entityAttributes({ kind: "encounter", id: encounter.id, name: encounter.name, instanceName: raidInstance.name })
+      : undefined;
+
   return (
+    <EntityActionScope actions={encounterActions} details={encounterDetails}>
     <div 
       data-help-encounter-sidebar
       className={cn(
@@ -786,6 +818,7 @@ function EncounterSidebar({
               <div
                 role="button"
                 tabIndex={0}
+                {...encounterEntity(encounter)}
                 onClick={(e) => handleClick(encounter.id, e)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -860,6 +893,7 @@ function EncounterSidebar({
               <div
                 role="button"
                 tabIndex={0}
+                {...encounterEntity(encounter)}
                 onClick={(e) => handleClick(encounter.id, e)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -1062,6 +1096,7 @@ function EncounterSidebar({
         <AdSlot placement="instance-encounter-sidebar" format="sidebar" className="mt-5" />
       )}
     </div>
+    </EntityActionScope>
   );
 }
 
@@ -4541,6 +4576,8 @@ function InstancePageViewContent({
         {sidebarOpen && (
           <EncounterSidebar
             instanceId={instance.id}
+            raidInstance={instance}
+            onShowOverview={overviewEnabled ? () => setViewMode("overview") : undefined}
             onCollapse={() => setSidebarOpen(false)}
             encounters={instance.encounters}
             trashGroups={trashGroups}

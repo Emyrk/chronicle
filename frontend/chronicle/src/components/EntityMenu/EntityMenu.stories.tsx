@@ -9,11 +9,47 @@ import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
 import { EntityActionScope, EntityMenuProvider } from "./EntityMenu";
 import { EntityName } from "./EntityName";
 import { useEntityRaidContext } from "./entityMenuContext";
-import type { EntityRef } from "./entity";
+import { entityAttributes, type EntityRef } from "./entity";
+import { http, HttpResponse } from "msw";
+import { LayoutDashboard } from "lucide-react";
+import { EncounterKillReference } from "@/pages/Instance/EncounterKillReference";
+import type { Encounter } from "@/pages/Instance/InstancePage";
 import { performanceHandlers, PLAYERS, REALM } from "@/pages/ArmoryPage/AnalysisPage.mocks";
 import { GUILDS, guildHistoryHandlers, whoami } from "@/pages/GuildHistory/GuildHistoryPage.mocks";
 
-const tierHandlers = (tier: Parameters<typeof whoami>[0]) => [whoami(tier), ...performanceHandlers, ...guildHistoryHandlers];
+// The server's spread of Patchwerk kills, for the encounter menu.
+const spreadsHandler = http.get("/api/v1/rankings/time-parse-cohorts/spreads", () =>
+  HttpResponse.json({
+    cutoff: "",
+    lookback_days: 60,
+    instance_name: "Naxxramas",
+    spreads: [
+      { kind: "boss_kill", encounter_name: "Patchwerk", difficulty_name: "Normal", max_players: 40, sample_size: 212, status: "ok", min_ms: 118_000, median_ms: 161_000, max_ms: 290_000, cutoffs: [] },
+    ],
+  }),
+);
+
+const tierHandlers = (tier: Parameters<typeof whoami>[0]) => [whoami(tier), spreadsHandler, ...performanceHandlers, ...guildHistoryHandlers];
+
+const patchwerk: Encounter = {
+  id: "enc-patchwerk",
+  name: "Patchwerk",
+  boss: true,
+  mapId: 0,
+  kill_type: "clean",
+  start_time: "2026-10-28T20:41:00Z",
+  end_time: "2026-10-28T20:43:22Z",
+};
+const scoredKill = (rank: number, sample: number, score: number) => ({
+  duration_ms: 142_000,
+  precise_score: score,
+  display_score: Math.round(score),
+  rank,
+  sample_size: sample,
+  status: "ok",
+});
+const patchwerkParses = { server: scoredKill(24, 212, 89.4), realm: scoredKill(9, 61, 86.2), guild: scoredKill(2, 11, 91.0) };
+const patchwerkEntity: EntityRef = { kind: "encounter", id: patchwerk.id, name: patchwerk.name, instanceName: "Naxxramas" };
 
 // Players and guilds from the performance and guild history mocks, so "Show stats" has data.
 const rows: PlayerMetricChartData[] = [
@@ -83,6 +119,26 @@ function Playground() {
           <PlayerMetricChart data={rows} type="damage" panelTitle="Damage Done" rowEntity={rowEntity} />
         </EntityActionScope>
       </div>
+      <EntityActionScope
+        actions={(entity) =>
+          entity.kind === "encounter" ? [{ id: "overview", label: "Go to overview", icon: LayoutDashboard, onSelect: () => undefined }] : []
+        }
+        details={(entity) =>
+          entity.kind === "encounter" ? (
+            <EncounterKillReference
+              encounter={patchwerk}
+              instance={{ name: "Naxxramas", difficultyName: "Normal", maxPlayers: 40 }}
+              parses={patchwerkParses}
+              lookbackDays={60}
+            />
+          ) : null
+        }
+      >
+        <div className="flex w-56 items-center justify-between rounded-md border px-3 py-2" {...entityAttributes(patchwerkEntity)}>
+          <span>Patchwerk</span>
+          <span className="font-mono text-xs text-muted-foreground">2:22</span>
+        </div>
+      </EntityActionScope>
       <p>
         <EntityName entity={rowEntity(rows[0])} link /> and <EntityName entity={rowEntity(rows[4])} /> raid with{" "}
         <EntityName entity={guild} link className="font-medium" />, rivals of <EntityName entity={otherGuild} className="font-medium" />.
@@ -123,6 +179,34 @@ type Story = StoryObj<typeof meta>;
 /** Revered on a log page (Naxxramas, four bosses selected): Alt+click a name and pick Add to compare. */
 export const Default: Story = {
   render: () => <OnLogPage />,
+};
+
+/** Encounters are a third kind: kill times against the server, realm and guild, free for everyone. */
+export const EncounterKillTimes: Story = {
+  parameters: { msw: { handlers: tierHandlers("free") } },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    await altClick(canvasElement.querySelector('[data-entity-kind="encounter"]')!, 120, 200);
+    const menu = await body.findByRole("menu", { name: "Patchwerk actions" });
+    await expect(within(menu).getByText("Encounter")).toBeInTheDocument();
+    await expect(await within(menu).findByText("Median 2:41")).toBeInTheDocument();
+    await expect(within(menu).getByText("Rank 24 of 212 kills")).toBeInTheDocument();
+    const items = within(menu).getAllByRole("menuitem").map((item) => item.textContent);
+    await expect(items).toEqual(["Go to overview", "Kill time leaderboard", "Copy name"]);
+  },
+};
+
+/** On a touch screen, press and hold a name to open its menu; the tap that ends it doesn't click the row. */
+export const LongPress: Story = {
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    const row = canvasElement.querySelector('[data-entity*="Morthul"]')!;
+    fireEvent.pointerDown(row, { pointerType: "touch", clientX: 120, clientY: 160 });
+    const menu = await body.findByRole("menu", { name: "Morthul actions" }, { timeout: 2000 });
+    fireEvent.pointerUp(row, { pointerType: "touch" });
+    fireEvent.click(row);
+    await expect(menu).toBeInTheDocument();
+  },
 };
 
 /** Alt+click a meter row: the panel's Focus comes first, then Add to compare and the site-wide actions. */

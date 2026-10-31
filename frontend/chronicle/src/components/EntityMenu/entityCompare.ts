@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import type { PaidBillingTier } from "@/pages/Settings/billingPricing";
-import { entityKey, type EntityKind, type EntityRef } from "./entity";
+import { entityKey, type ComparableEntity, type EntityKind, type EntityRef } from "./entity";
 import type { EntityAction } from "./EntityMenu";
 
 /** Matches the comparison limit on the performance and guild history pages. */
@@ -11,15 +11,45 @@ export const STATS_TIER: PaidBillingTier = "revered";
 
 const STORAGE_KEY = "chronicle.entity-compare";
 const HIDDEN_KEY = "chronicle.entity-compare-hidden";
+const RANGE_KEY = "chronicle.quick-stats-range";
+
+/** How far back the tray's stats and chart look. */
+export type QuickRange = "30d" | "60d" | "180d";
+export const QUICK_RANGES: readonly QuickRange[] = ["30d", "60d", "180d"];
+export const QUICK_RANGE_DAYS: Record<QuickRange, number> = { "30d": 30, "60d": 60, "180d": 180 };
+
+/** The tray's range, remembered per browser. */
+export function useQuickRange(): [QuickRange, (range: QuickRange) => void] {
+  const [range, setRange] = useState<QuickRange>(() => {
+    try {
+      const stored = localStorage.getItem(RANGE_KEY);
+      return QUICK_RANGES.includes(stored as QuickRange) ? (stored as QuickRange) : "180d";
+    } catch {
+      return "180d";
+    }
+  });
+  const choose = useCallback((next: QuickRange) => {
+    setRange(next);
+    try {
+      localStorage.setItem(RANGE_KEY, next);
+    } catch {
+      // Remembering the range is a convenience.
+    }
+  }, []);
+  return [range, choose];
+}
 
 export const KIND_LABEL: Record<EntityKind, { one: string; many: string }> = {
   character: { one: "player", many: "players" },
   guild: { one: "guild", many: "guilds" },
+  encounter: { one: "encounter", many: "encounters" },
 };
 
 /** Same colors as the Alt outlines in index.css. */
 export function kindColor(kind: EntityKind): string {
-  return kind === "guild" ? "var(--color-amber-400)" : "var(--color-sky-400)";
+  if (kind === "guild") return "var(--color-amber-400)";
+  if (kind === "encounter") return "var(--color-rose-400)";
+  return "var(--color-sky-400)";
 }
 
 function readList<T>(key: string): T[] {
@@ -76,7 +106,7 @@ export function useComparePins() {
 }
 
 /** The menu's "Add to compare" entry, for everyone; disabled once that kind is full. */
-export function compareAction(entity: EntityRef, pins: EntityRef[], toggle: (entity: EntityRef) => void): EntityAction {
+export function compareAction(entity: ComparableEntity, pins: EntityRef[], toggle: (entity: EntityRef) => void): EntityAction {
   const key = entityKey(entity);
   if (pins.some((pin) => entityKey(pin) === key)) {
     return { id: "compare", label: "Remove from compare", icon: Minus, onSelect: () => toggle(entity) };

@@ -601,6 +601,17 @@
 [data-entity-kind="guild"] {
   --entity-color: var(--color-amber-400);
 }
+[data-entity-kind="encounter"] {
+  --entity-color: var(--color-rose-400);
+}
+/* Pressing and holding a name opens its menu on touch screens, so skip the text selection and link preview. */
+@media (pointer: coarse) {
+  [data-entity] {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
 html[data-entity-reveal] [data-entity] {
   outline: 1px dashed color-mix(in oklab, var(--entity-color) 55%, transparent);
   outline-offset: 1px;

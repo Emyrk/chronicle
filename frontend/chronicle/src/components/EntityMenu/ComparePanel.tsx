@@ -38,7 +38,7 @@ export default function ComparePanel({
   const guilds = entities.filter((entity): entity is Guild => entity.kind === "guild");
   const kinds = (["character", "guild"] as const).filter((kind) => (kind === "character" ? characters : guilds).length > 0);
   const [selected, setSelected] = useState<EntityKind>(initialKind);
-  const kind = kinds.includes(selected) ? selected : kinds[0];
+  const kind = (kinds as readonly EntityKind[]).includes(selected) ? selected : kinds[0];
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

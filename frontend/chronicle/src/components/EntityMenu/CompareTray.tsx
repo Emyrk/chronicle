@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { billingTierLabel, TIER_COLOR } from "@/pages/Settings/billingPricing";
 import { entityAttributes, entityKey, guildCompareUrl, performanceCompareUrl, type EntityKind, type EntityRef } from "./entity";
-import { KIND_LABEL, kindColor, MAX_COMPARE, STATS_TIER } from "./entityCompare";
+import { KIND_LABEL, kindColor, MAX_COMPARE, QUICK_RANGE_DAYS, QUICK_RANGES, STATS_TIER, useQuickRange } from "./entityCompare";
 import type { EntityRaidContext } from "./entityMenuContext";
 
 const QuickStats = lazy(() => import("./QuickStats"));
@@ -42,6 +42,7 @@ export function CompareTray({
   onExpand: (kind: EntityKind) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [range, setRange] = useQuickRange();
   // A choice holds until something new is added; then the card follows the newest pin.
   const [chosen, setChosen] = useState<{ kind: EntityKind; count: number } | null>(null);
   if (pins.length === 0) return null;
@@ -98,13 +99,34 @@ export function CompareTray({
               )}
             >
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: kindColor(group.kind) }} aria-hidden="true" />
-              {group.entities.length} {KIND_LABEL[group.kind][group.entities.length === 1 ? "one" : "many"]}
+              {group.entities.length}{" "}
+              {/* Just the dot and count on phones, where the title bar also holds the range. */}
+              <span className="max-sm:sr-only">{KIND_LABEL[group.kind][group.entities.length === 1 ? "one" : "many"]}</span>
             </button>
           ))
         ) : (
           <h2 className="text-xs font-semibold">Compare</h2>
         )}
         <span className="ml-auto" />
+        {canShowStats && (
+          <div className="flex gap-0.5 rounded-md bg-white/5 p-0.5" role="group" aria-label="Range">
+            {QUICK_RANGES.map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={range === option}
+                title={`Last ${QUICK_RANGE_DAYS[option]} days`}
+                onClick={() => setRange(option)}
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums",
+                  range === option ? "bg-white/15 text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        )}
         {canShowStats && (
           <button type="button" onClick={() => onExpand(kind)} className={iconButton} aria-label="Expand to full stats" title="Full stats">
             <Maximize2 className="h-3.5 w-3.5" />
@@ -166,7 +188,7 @@ export function CompareTray({
 
         {canShowStats ? (
           <Suspense fallback={<div className="h-32" />}>
-            <QuickStats kind={kind} entities={entities} hidden={hidden} raid={raid} />
+            <QuickStats kind={kind} entities={entities} hidden={hidden} raid={raid} rangeDays={QUICK_RANGE_DAYS[range]} />
           </Suspense>
         ) : (
           <LockedPreview kind={kind} entities={entities.filter((entity) => !hidden.has(entityKey(entity)))} />
