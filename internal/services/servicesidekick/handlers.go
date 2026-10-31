@@ -249,6 +249,13 @@ func (s *Service) DeleteMySidekick(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusNoContent, nil)
 }
 
+func sidekickStatusMissingRequiredFields(request chroniclesdk.SidekickStatusRequest) bool {
+	return request.SidekickVersion == "" ||
+		request.StartAtLogin == nil ||
+		request.AutoUploadCapabilities == nil ||
+		request.WoWDirectories == nil
+}
+
 func (s *Service) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 	claims := chronauth.MustAuthenticatedClaims(r.Context())
 	installationID, ok := serviceoauth.SidekickInstallationID(r.Context())
@@ -265,11 +272,7 @@ func (s *Service) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 	request.Platform = strings.TrimSpace(request.Platform)
 	request.SidekickVersion = strings.TrimSpace(request.SidekickVersion)
 	request.ConfigHash = strings.TrimSpace(request.ConfigHash)
-	if request.SidekickVersion == "" ||
-		request.StartAtLogin == nil ||
-		request.AutoUploadCapabilities == nil ||
-		request.WoWDirectories == nil ||
-		request.Issues == nil {
+	if sidekickStatusMissingRequiredFields(request) {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Sidekick status is missing required fields."})
 		return
 	}
