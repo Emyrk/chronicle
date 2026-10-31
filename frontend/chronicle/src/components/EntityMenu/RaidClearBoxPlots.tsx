@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { fetchInstanceSpeedrun } from "@/api/queries";
 import { Link } from "react-router-dom";
 import { useRankingsClearTimes } from "@/api/rankingsQueries";
 import type { SpeedrunLeaderboardEntry, TimeParseScore } from "@/api/typesGenerated";
@@ -26,7 +27,22 @@ export interface RaidGroupMember {
  * top three once. A raid name with no clear (on a leaderboard) has no log to define a realm or
  * guild, so a group without any log shows the server's clears.
  */
-export function RaidClearBoxPlots({ members }: { members: RaidGroupMember[] }) {
+export function RaidClearBoxPlots({ members: pinned }: { members: RaidGroupMember[] }) {
+  // Pins from a log list without a clear time (e.g. recent raids) get it from the log's speedrun result.
+  const lookups = useQueries({
+    queries: pinned.map(({ raid }) => ({
+      queryKey: ["instance-speedrun", raid.logId],
+      queryFn: () => fetchInstanceSpeedrun(raid.logId!),
+      staleTime: Infinity,
+      retry: false,
+      enabled: !!raid.logId && raid.clearMs === undefined,
+    })),
+  });
+  const members = pinned.map((member, index) => {
+    const result = lookups[index].data;
+    const clearMs = result?.qualified ? result.ranked_duration_ms || result.duration_ms : undefined;
+    return member.raid.clearMs === undefined && clearMs && clearMs > 0 ? { ...member, raid: { ...member.raid, clearMs } } : member;
+  });
   const [first] = members;
   // Clears of the same raid share the cohort; the first one from a log defines the realm and guild.
   const anchor = members.find((member) => member.raid.logId)?.raid;
