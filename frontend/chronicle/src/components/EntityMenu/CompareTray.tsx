@@ -1,7 +1,9 @@
 import { lazy, Suspense, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, ChevronUp, ExternalLink, EyeOff, GitCompareArrows, Lock, Maximize2, X } from "lucide-react";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
+import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { billingTierLabel, TIER_COLOR } from "@/pages/Settings/billingPricing";
 import {
@@ -14,7 +16,7 @@ import {
   type EntityKind,
   type EntityRef,
 } from "./entity";
-import { KIND_LABEL, kindColor, MAX_COMPARE, QUICK_RANGE_DAYS, QUICK_RANGES, STATS_TIER, useQuickRange } from "./entityCompare";
+import { KIND_LABEL, kindColor, MAX_COMPARE, QUICK_RANGE_DAYS, QUICK_RANGES, STATS_TIER, useQuickRange, type Pin } from "./entityCompare";
 import type { EntityRaidContext } from "./entityMenuContext";
 
 const QuickStats = lazy(() => import("./QuickStats"));
@@ -29,10 +31,12 @@ function pageLink(kind: EntityKind, entities: EntityRef[], hidden: ReadonlySet<s
   if (kind === "guild") {
     return { to: guildCompareUrl(entities as Extract<EntityRef, { kind: "guild" }>[], hidden), label: "Open clear-time history" };
   }
-  // Pulls from one log compare on its Overview; pulls from several fall back to the boss leaderboard.
+  // Pulls from one log compare on its Overview; anything else falls back to the boss leaderboard.
   const encounters = entities as Encounter[];
-  return new Set(encounters.map((encounter) => encounter.logId)).size === 1
-    ? { to: instanceOverviewUrl(encounters[0].logId), label: "Open log overview" }
+  const logIds = new Set(encounters.map((encounter) => encounter.logId));
+  const [logId] = logIds;
+  return logIds.size === 1 && logId
+    ? { to: instanceOverviewUrl(logId), label: "Open log overview" }
     : { to: killTimeLeaderboardUrl(encounters[0]), label: "Open kill time leaderboard" };
 }
 
@@ -52,7 +56,7 @@ export function CompareTray({
   onClear,
   onExpand,
 }: {
-  pins: EntityRef[];
+  pins: Pin[];
   /** Entity keys left out of the stats but kept in the tray (Shift+click a name). */
   hidden: ReadonlySet<string>;
   raid: EntityRaidContext | null;
@@ -177,23 +181,26 @@ export function CompareTray({
                   className={cn("inline-flex items-center gap-1 rounded-md border py-0.5 pr-0.5 pl-2 text-xs", isHidden && "border-dashed opacity-50")}
                   style={{ borderColor: `color-mix(in oklab, ${kindColor(kind)} 40%, transparent)` }}
                 >
-                  <button
-                    type="button"
-                    aria-pressed={isHidden}
-                    aria-label={isHidden ? `${entity.name}, hidden` : entity.name}
-                    title={[
-                      entity.kind === "encounter" ? new Date(entity.startTime).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "",
-                      isHidden ? "Hidden from the stats. Shift+click to show" : "Shift+click to hide from the stats",
-                    ].filter(Boolean).join(" · ")}
-                    // Keep Shift+click from selecting text.
-                    onMouseDown={(event) => event.shiftKey && event.preventDefault()}
-                    onClick={(event) => event.shiftKey && onToggleHidden(entity)}
-                    className="flex max-w-[120px] items-center gap-1 font-medium"
-                    style={entity.kind === "character" && entity.className ? { color: getClassColorVar(entity.className) } : undefined}
-                  >
-                    {isHidden && <EyeOff className="h-3 w-3 shrink-0" aria-hidden="true" />}
-                    <span className={cn("truncate", isHidden && "line-through")}>{entity.name}</span>
-                  </button>
+                  <HintTooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-pressed={isHidden}
+                        aria-label={isHidden ? `${entity.name}, hidden` : entity.name}
+                        // Keep Shift+click from selecting text.
+                        onMouseDown={(event) => event.shiftKey && event.preventDefault()}
+                        onClick={(event) => event.shiftKey && onToggleHidden(entity)}
+                        className="flex max-w-[120px] items-center gap-1 font-medium"
+                        style={entity.kind === "character" && entity.className ? { color: getClassColorVar(entity.className) } : undefined}
+                      >
+                        {isHidden && <EyeOff className="h-3 w-3 shrink-0" aria-hidden="true" />}
+                        <span className={cn("truncate", isHidden && "line-through")}>{entity.name}</span>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={6} className="w-64 p-0">
+                      <PinDetails pin={entity} hidden={isHidden} />
+                    </TooltipContent>
+                  </HintTooltip>
                   <button
                     type="button"
                     onClick={() => onRemove(entity)}
@@ -236,6 +243,59 @@ export function CompareTray({
         </Link>
       </div>
     </section>
+  );
+}
+
+const dateTime = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+/** What a pin is and where it was added, since the page it came from is long gone by the time you look. */
+function PinDetails({ pin, hidden }: { pin: Pin; hidden: boolean }) {
+  const details: string[] = [];
+  if (pin.kind === "character") {
+    details.push(pin.realm);
+    if (pin.className) details.push(pin.className);
+  } else if (pin.kind === "encounter") {
+    details.push([pin.instanceName, pin.difficultyName, pin.maxPlayers ? `${pin.maxPlayers}-player` : ""].filter(Boolean).join(" · "));
+    if (pin.startTime) details.push(`Pulled ${dateTime(pin.startTime)}`);
+    if (pin.durationMs !== undefined) {
+      const outcome = pin.killType === "wipe" ? "Wipe after" : pin.killType === "reset" ? "Reset after" : "Kill in";
+      details.push(`${outcome} ${formatClearDuration(pin.durationMs)}`);
+    } else {
+      details.push("The boss across the server, not one pull");
+    }
+  }
+  return (
+    <div className="text-xs">
+      <div className="flex items-baseline justify-between gap-2 px-3 pt-2">
+        <span className="truncate font-semibold">{pin.name}</span>
+        <span className="shrink-0 text-[10px] uppercase tracking-wider" style={{ color: kindColor(pin.kind) }}>
+          {KIND_LABEL[pin.kind].one}
+        </span>
+      </div>
+      {details.length > 0 && (
+        <ul className="space-y-0.5 px-3 pt-1 text-zinc-300">
+          {details.map((detail) => (
+            <li key={detail}>{detail}</li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-2 border-t border-white/10 px-3 py-2">
+        {pin.origin ? (
+          <>
+            <div className="text-[10px] uppercase tracking-wider text-zinc-400">Added from</div>
+            <Link to={pin.origin.path} className="block truncate text-sky-300 hover:underline">
+              {pin.origin.label}
+            </Link>
+            <div className="text-[10px] text-zinc-400">{dateTime(pin.origin.at)}</div>
+          </>
+        ) : (
+          <div className="text-zinc-400">Added before origins were tracked.</div>
+        )}
+      </div>
+      <div className="border-t border-white/10 px-3 py-1.5 text-[10px] text-zinc-400">
+        {hidden ? "Hidden from the stats. Shift+click to show." : "Shift+click to hide from the stats."}
+      </div>
+    </div>
   );
 }
 

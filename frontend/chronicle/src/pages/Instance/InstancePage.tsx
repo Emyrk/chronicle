@@ -489,6 +489,11 @@ export function InstancePage() {
       difficultyName: instance.difficultyName,
       maxPlayers: instance.maxPlayers,
       dynamicDifficulty: instance.dynamicDifficulty,
+      label: [
+        instance.name,
+        instance.guild ? `<${instance.guild.name}>` : "",
+        new Date(instance.startTime).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
+      ].filter(Boolean).join(" · "),
       bossNames: [...new Set(bossNames)],
     };
   }, [instance, selectedEncounterIds]);

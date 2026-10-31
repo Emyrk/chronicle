@@ -6,22 +6,23 @@ export type EntityRef =
   | { kind: "character"; realm: string; guid: string; name: string; className?: string }
   | { kind: "guild"; id: string; name: string }
   /**
-   * One pull of a boss in a log; `id` is the log's encounter id. It carries what the compare tray
-   * needs to show it on any page, so the same boss can be compared across nights.
+   * A boss. With a pull (from a log or a kill on the leaderboard) `id` is the log's encounter id and
+   * the pull's log and time come along, so the tray can show it on any page and compare the same
+   * boss across nights. Without one (a boss name on a leaderboard) `id` is `bossEncounterId(...)`.
    */
   | {
       kind: "encounter";
       id: string;
       name: string;
-      /** The log (instance) the pull is in. */
-      logId: string;
       instanceName: string;
       difficultyName?: string;
       maxPlayers?: number;
-      killType: "clean" | "partial" | "reset" | "wipe";
+      /** The log (instance) the pull is in; absent for a boss without a pull. */
+      logId?: string;
+      killType?: "clean" | "partial" | "reset" | "wipe";
       /** The ranked length of the pull. */
-      durationMs: number;
-      startTime: string;
+      durationMs?: number;
+      startTime?: string;
     };
 
 export type EntityKind = EntityRef["kind"];
@@ -43,7 +44,7 @@ export function parseEntity(value: string | null | undefined): EntityRef | null 
     const parsed = JSON.parse(value) as Partial<EntityRef> | null;
     if (parsed?.kind === "character" && parsed.realm && parsed.guid && parsed.name) return parsed as EntityRef;
     if (parsed?.kind === "guild" && parsed.id && parsed.name) return parsed as EntityRef;
-    if (parsed?.kind === "encounter" && parsed.id && parsed.name && parsed.logId && parsed.instanceName) return parsed as EntityRef;
+    if (parsed?.kind === "encounter" && parsed.id && parsed.name && parsed.instanceName) return parsed as EntityRef;
   } catch {
     // Not ours.
   }
@@ -60,6 +61,16 @@ export function closestEntity(target: EventTarget | null): { entity: EntityRef; 
 
 export function entityKey(entity: EntityRef): string {
   return entity.kind === "character" ? `character:${entity.realm}:${entity.guid}` : `${entity.kind}:${entity.id}`;
+}
+
+/** The id of a boss on its own, not a pull, e.g. a boss name on a leaderboard. */
+export function bossEncounterId(instanceName: string, encounterName: string): string {
+  return `boss:${instanceName}:${encounterName}`;
+}
+
+/** A boss name as an encounter to compare, without a particular pull. */
+export function bossEntity(instanceName: string, encounterName: string): EntityRef {
+  return { kind: "encounter", id: bossEncounterId(instanceName, encounterName), name: encounterName, instanceName };
 }
 
 /** A log's Overview view, which compares its kill times against the server. */

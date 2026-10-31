@@ -611,7 +611,12 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
   // The compare tray uses this board's raid; players keep their usual bosses within it.
   useEntityRaidContext(
     selectedInstance
-      ? { instanceName: selectedInstance, difficultyName: selectedDifficulty ?? undefined, bossNames: [] }
+      ? {
+          instanceName: selectedInstance,
+          difficultyName: selectedDifficulty ?? undefined,
+          bossNames: [],
+          label: `${selectedInstance} speedrun leaderboard`,
+        }
       : null,
   )
 

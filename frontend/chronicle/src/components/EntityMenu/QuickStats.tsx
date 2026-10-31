@@ -20,7 +20,7 @@ import { useGuildRaidClearsList, useGuildSpeedrunHistories } from "@/pages/Guild
 import { filterGuildRuns, formatClearTime, GUILD_SERIES_COLORS, summarizeClearTimes } from "@/pages/GuildHistory/guildHistoryModel";
 import { scopedKillParsesByEncounter } from "@/pages/Instance/Overview/encounterKillTimePopulation";
 import { useInstancesTimeParses } from "@/pages/Instance/Overview/overviewQueries";
-import { EncounterKillBoxPlots, ENCOUNTER_LOOKBACK_DAYS } from "./EncounterKillBoxPlots";
+import { EncounterKillBoxPlots } from "./EncounterKillBoxPlots";
 import { entityKey, type EntityKind, type EntityRef } from "./entity";
 import type { EntityRaidContext } from "./entityMenuContext";
 
@@ -534,7 +534,7 @@ function shortDate(iso: string): string {
  * realm's and guild's kill times with the pull and its parse marked.
  */
 function EncounterQuickStats({ encounters, hidden }: { encounters: EncounterPin[]; hidden: ReadonlySet<string> }) {
-  const logIds = [...new Set(encounters.map((encounter) => encounter.logId))];
+  const logIds = [...new Set(encounters.flatMap((encounter) => (encounter.logId ? [encounter.logId] : [])))];
   const parseQueries = useInstancesTimeParses(logIds);
   // The same boss from different nights needs the date to tell them apart.
   const nameCounts = new Map<string, number>();
@@ -547,7 +547,7 @@ function EncounterQuickStats({ encounters, hidden }: { encounters: EncounterPin[
   return (
     <div className="space-y-3">
       <p className="text-[11px] text-muted-foreground">
-        Kill times in the last {ENCOUNTER_LOOKBACK_DAYS} days, fastest on the left. The dot is the pull; the number is its parse.
+        Kill times, fastest on the left. The dot is the pull; the number is its parse.
       </p>
       <div className="styled-scrollbar max-h-[50vh] space-y-4 overflow-y-auto pr-1">
         {rows.map(({ encounter, color }) => (
@@ -555,8 +555,8 @@ function EncounterQuickStats({ encounters, hidden }: { encounters: EncounterPin[
             key={entityKey(encounter)}
             encounter={encounter}
             color={color}
-            label={(nameCounts.get(encounter.name) ?? 0) > 1 ? `${encounter.name} · ${shortDate(encounter.startTime)}` : encounter.name}
-            parses={scopedKillParsesByEncounter(parseQueries[logIds.indexOf(encounter.logId)]?.data)?.get(encounter.id)}
+            label={(nameCounts.get(encounter.name) ?? 0) > 1 && encounter.startTime ? `${encounter.name} · ${shortDate(encounter.startTime)}` : encounter.name}
+            parses={encounter.logId ? scopedKillParsesByEncounter(parseQueries[logIds.indexOf(encounter.logId)]?.data)?.get(encounter.id) : undefined}
           />
         ))}
       </div>

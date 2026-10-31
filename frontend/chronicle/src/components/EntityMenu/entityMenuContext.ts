@@ -18,6 +18,8 @@ export interface EntityRaidContext {
   maxPlayers?: number;
   dynamicDifficulty?: number;
   bossNames: string[];
+  /** How the page describes itself to things added to compare from it, e.g. "Naxxramas · <Guild> · Oct 28". */
+  label?: string;
 }
 
 export interface EntityMenuContextValue {

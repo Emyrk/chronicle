@@ -14,14 +14,14 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Copy, ExternalLink, History, Shield, Timer, Trophy, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useSupporterTier } from "@/hooks/useSupporterTier";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { CompareTray } from "./CompareTray";
-import { compareAction, kindColor, STATS_TIER, useComparePins } from "./entityCompare";
+import { compareAction, kindColor, originLabelForPath, STATS_TIER, useComparePins, type PinOrigin } from "./entityCompare";
 
 import {
   EntityMenuContext,
@@ -233,6 +233,12 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const closeMenu = useCallback(() => setMenu(null), []);
+  const location = useLocation();
+  const pinOrigin = (): PinOrigin => ({
+    path: `${location.pathname}${location.search}`,
+    label: raid?.label ?? originLabelForPath(location.pathname),
+    at: new Date().toISOString(),
+  });
 
   const value = useMemo<EntityMenuContextValue>(() => ({
     register: (id, provider) => {
@@ -281,7 +287,7 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
             menu={menu}
             actions={[
               ...menu.scoped,
-              compareAction(menu.entity, compare.pins, compare.toggle),
+              compareAction(menu.entity, compare.pins, compare.toggle, pinOrigin),
               ...globalActions(menu.entity),
             ]}
             onClose={closeMenu}

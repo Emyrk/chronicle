@@ -72,23 +72,47 @@ function writeList(key: string, values: unknown[]) {
   }
 }
 
+/** Where a pin was added, so the tray can say so after you've moved on. */
+export interface PinOrigin {
+  /** Path and query of the page. */
+  path: string;
+  label: string;
+  /** When it was added (ISO). */
+  at: string;
+}
+
+export type Pin = EntityRef & { origin?: PinOrigin };
+
+/** A name for pages that don't describe themselves, from their path. */
+export function originLabelForPath(pathname: string): string {
+  const routes: [string, string][] = [
+    ["/instances/", "A log"],
+    ["/performance-history", "Performance history"],
+    ["/guild-history", "Guild clear-time history"],
+    ["/armory", "Armory"],
+    ["/g/", "Guild page"],
+    ["/leaderboards", "Leaderboards"],
+  ];
+  return routes.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? "Chronicle";
+}
+
 /**
- * Players and guilds collected to compare, and which of them are hidden from the stats
+ * Players, guilds and encounters collected to compare, and which of them are hidden from the stats
  * (Shift+click, as on the history pages). Kept per browser so the tray follows you between pages.
  */
 export function useComparePins() {
-  const [pins, setPins] = useState<EntityRef[]>(() => readList<EntityRef>(STORAGE_KEY));
+  const [pins, setPins] = useState<Pin[]>(() => readList<Pin>(STORAGE_KEY));
   const [hiddenKeys, setHiddenKeys] = useState<string[]>(() => readList<string>(HIDDEN_KEY));
 
   useEffect(() => writeList(STORAGE_KEY, pins), [pins]);
   useEffect(() => writeList(HIDDEN_KEY, hiddenKeys), [hiddenKeys]);
 
-  const toggle = useCallback((entity: EntityRef) => {
+  const toggle = useCallback((entity: EntityRef, origin?: PinOrigin) => {
     const key = entityKey(entity);
     setPins((current) => {
       if (current.some((pin) => entityKey(pin) === key)) return current.filter((pin) => entityKey(pin) !== key);
       if (current.filter((pin) => pin.kind === entity.kind).length >= MAX_COMPARE) return current;
-      return [...current, entity];
+      return [...current, origin ? { ...entity, origin } : entity];
     });
     // Re-adding someone always shows them.
     setHiddenKeys((current) => current.filter((hidden) => hidden !== key));
@@ -109,7 +133,12 @@ export function useComparePins() {
 }
 
 /** The menu's "Add to compare" entry, for everyone; disabled once that kind is full. */
-export function compareAction(entity: EntityRef, pins: EntityRef[], toggle: (entity: EntityRef) => void): EntityAction {
+export function compareAction(
+  entity: EntityRef,
+  pins: EntityRef[],
+  toggle: (entity: EntityRef, origin?: PinOrigin) => void,
+  origin: () => PinOrigin,
+): EntityAction {
   const key = entityKey(entity);
   if (pins.some((pin) => entityKey(pin) === key)) {
     return { id: "compare", label: "Remove from compare", icon: Minus, onSelect: () => toggle(entity) };
@@ -119,7 +148,7 @@ export function compareAction(entity: EntityRef, pins: EntityRef[], toggle: (ent
     id: "compare",
     label: "Add to compare",
     icon: Plus,
-    onSelect: () => toggle(entity),
+    onSelect: () => toggle(entity, origin()),
     disabled: full ? `Compare holds ${MAX_COMPARE} ${KIND_LABEL[entity.kind].many}` : undefined,
   };
 }

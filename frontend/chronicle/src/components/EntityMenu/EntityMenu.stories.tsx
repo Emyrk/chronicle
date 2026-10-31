@@ -9,7 +9,7 @@ import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
 import { EntityActionScope, EntityMenuProvider } from "./EntityMenu";
 import { EntityName } from "./EntityName";
 import { useEntityRaidContext } from "./entityMenuContext";
-import { entityAttributes, type EntityRef } from "./entity";
+import { bossEntity, entityAttributes, type EntityRef } from "./entity";
 import { http, HttpResponse } from "msw";
 import { LayoutDashboard } from "lucide-react";
 import { performanceHandlers, PLAYERS, REALM } from "@/pages/ArmoryPage/AnalysisPage.mocks";
@@ -72,7 +72,12 @@ const timeParsesHandler = http.get("/api/v1/rankings/instances/:id/time-parses",
   }),
 );
 
-const tierHandlers = (tier: Parameters<typeof whoami>[0]) => [whoami(tier), cohortHandler, timeParsesHandler, ...performanceHandlers, ...guildHistoryHandlers];
+// Server kill-time stats, for a boss name with no pull (as on the leaderboards).
+const killTimesHandler = http.get("/api/v1/rankings/kill-times", () =>
+  HttpResponse.json([{ encounter_name: "Thaddius", min_secs: 150, q1_secs: 190, median_secs: 210, q3_secs: 240, max_secs: 330, count: 180 }]),
+);
+
+const tierHandlers = (tier: Parameters<typeof whoami>[0]) => [whoami(tier), cohortHandler, timeParsesHandler, killTimesHandler, ...performanceHandlers, ...guildHistoryHandlers];
 
 const encounterPin = (id: string, name: string, durationMs: number, startTime: string): EntityRef => ({
   kind: "encounter",
@@ -127,6 +132,7 @@ function OnLogPage() {
     difficultyName: "Normal",
     maxPlayers: 40,
     bossNames: ["Patchwerk", "Grobbulus", "Gluth", "Thaddius"],
+    label: "Naxxramas · <Once Upon> · Oct 28, 2026",
   });
   return <Playground />;
 }
@@ -169,6 +175,9 @@ function Playground() {
               <span className="font-mono text-xs text-muted-foreground">{encounter.id === "enc-patchwerk" ? "2:22" : "2:31"}</span>
             </div>
           ))}
+          <div className="rounded-md border border-dashed px-3 py-2 text-muted-foreground" {...entityAttributes(bossEntity("Naxxramas", "Thaddius"))}>
+            Thaddius <span className="text-xs">(a boss name, as on the leaderboards)</span>
+          </div>
         </div>
       </EntityActionScope>
       <p>
@@ -228,8 +237,11 @@ export const EncounterKillTimes: Story = {
     await expect(items).toEqual(["Go to overview", "Add to compare", "Kill time leaderboard", "Copy name"]);
     await userEvent.click(within(menu).getByRole("menuitem", { name: "Add to compare" }));
     const tray = await body.findByRole("region", { name: "Compare tray" });
-    await expect(await within(tray).findByTitle("Kill-time parse: rank 24 of 212 kills", {}, { timeout: 5000 })).toHaveTextContent("89");
-    await waitFor(() => expect(tray.querySelectorAll('[title^="Fastest"]')).toHaveLength(3));
+    await waitFor(() => expect(tray.querySelectorAll("[data-kill-box]")).toHaveLength(3), { timeout: 5000 });
+    await waitFor(() => expect(tray.querySelector('[data-kill-parse="server"]')).toHaveTextContent("89"));
+    await userEvent.hover(tray.querySelector('[data-kill-lane="server"]')!);
+    await expect((await body.findAllByText("Middle half"))[0]).toBeInTheDocument();
+    await expect(body.getAllByText("rank 24 of 212")[0]).toBeInTheDocument();
     await expect(within(tray).getByRole("link", { name: /Open log overview/ })).toHaveAttribute("href", `/instances/${LOG_ID}?view=overview`);
   },
 };
@@ -254,6 +266,35 @@ export const AllKinds: Story = {
   },
 };
 
+/** A boss name with no pull (as on the leaderboards): the server's kill times alone. */
+export const BossName: Story = {
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    await altClick(canvasElement.querySelector('[data-entity*="boss:Naxxramas:Thaddius"]')!, 120, 260);
+    const menu = await body.findByRole("menu", { name: "Thaddius actions" });
+    await userEvent.click(within(menu).getByRole("menuitem", { name: "Add to compare" }));
+    const tray = await body.findByRole("region", { name: "Compare tray" });
+    await expect(await within(tray).findByText("Server, last 90 days")).toBeInTheDocument();
+    await waitFor(() => expect(tray.querySelectorAll("[data-kill-lane]")).toHaveLength(1));
+  },
+};
+
+/** Hovering a name in the tray says what it is and where it was added, with a link back. */
+export const PinOrigin: Story = {
+  render: () => <OnLogPage />,
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    await altClick(canvasElement.querySelector('[data-entity*="Patchwerk"]')!, 120, 200);
+    const menu = await body.findByRole("menu", { name: "Patchwerk actions" });
+    await userEvent.click(within(menu).getByRole("menuitem", { name: "Add to compare" }));
+    const tray = await body.findByRole("region", { name: "Compare tray" });
+    await userEvent.hover(within(within(tray).getByRole("list")).getByRole("button", { name: "Patchwerk" }));
+    // Radix renders tooltip text twice (once for screen readers).
+    await expect((await body.findAllByText("Added from", {}, { timeout: 2000 }))[0]).toBeInTheDocument();
+    await expect(body.getAllByRole("link", { name: "Naxxramas · <Once Upon> · Oct 28, 2026" })[0]).toBeInTheDocument();
+  },
+};
+
 /** Several encounters stack, each with its own server, realm and guild box plots. */
 export const CompareEncounters: Story = {
   parameters: { msw: { handlers: tierHandlers("free") } },
@@ -265,8 +306,8 @@ export const CompareEncounters: Story = {
     const body = within(canvasElement.ownerDocument.body);
     const tray = await body.findByRole("region", { name: "Compare tray" });
     // Two encounters, three scopes each.
-    await waitFor(() => expect(tray.querySelectorAll('[title^="Fastest"]')).toHaveLength(6), { timeout: 5000 });
-    await expect(within(tray).getByTitle("Kill-time parse: rank 140 of 198 kills")).toHaveTextContent("31");
+    await waitFor(() => expect(tray.querySelectorAll("[data-kill-box]")).toHaveLength(6), { timeout: 5000 });
+    await waitFor(() => expect([...tray.querySelectorAll('[data-kill-parse="server"]')].map((node) => node.textContent)).toEqual(["89", "31"]));
   },
 };
 
