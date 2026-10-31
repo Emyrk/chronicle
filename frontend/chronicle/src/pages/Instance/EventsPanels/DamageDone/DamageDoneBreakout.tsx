@@ -1,7 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
-import { spellQueryOptions } from "@/api/queries";
-import { useDatasetId } from "@/hooks/useDatasetId";
+import { useCallback, useState } from "react";
 import { AbilityBreakout, type AbilityData, type TargetData, type BreakoutTab } from "@/components/ui/AbilityBreakout";
 import type { DamageDoneResult } from "./damageDone.processor";
 import type { PanelContext } from "../types";
@@ -156,25 +153,6 @@ function getAbilitiesBySpellIdForUnit(
 }
 
 /**
- * Collect all unique spell IDs from the result for fetching spell data.
- */
-function getAllSpellIds(result: DamageDoneResult | undefined): number[] {
-  if (!result) return [];
-  
-  const spellIds = new Set<number>();
-  
-  for (const unitMap of result.ByAbilityBySpellId.values()) {
-    for (const id of unitMap.keys()) spellIds.add(realSpellId(id));
-  }
-  
-  for (const unitMap of result.ExcludedByAbilityBySpellId?.values() ?? []) {
-    for (const id of unitMap.keys()) spellIds.add(realSpellId(id));
-  }
-
-  return Array.from(spellIds);
-}
-
-/**
  * Get the total damage for a unit from the ByAbility map.
  */
 function getTotalForUnit(
@@ -243,7 +221,7 @@ export interface UseDamageDoneBreakoutOptions {
   processing?: boolean;
   /** When true, shows spells by rank (spell ID) instead of combined by name */
   showRanks?: boolean;
-  /** When provided, bypasses spell API queries and uses this map directly (keyed by real spell ID). */
+  /** Optional preloaded spell data used by explainers and fixtures (keyed by real spell ID). */
   spellDataOverride?: Map<number, WoWSpell>;
 }
 
@@ -263,35 +241,7 @@ export function useDamageDoneBreakout({
   spellDataOverride,
 }: UseDamageDoneBreakoutOptions) {
   // Track tab selection per player so it persists across reloads
-  const datasetId = useDatasetId();
   const [tabByPlayer, setTabByPlayer] = useState<Map<string, BreakoutTab>>(new Map());
-  
-  // Collect all spell IDs for fetching spell data when showRanks is enabled
-  const spellIds = useMemo(() => {
-    if (!showRanks || spellDataOverride) return [];
-    return getAllSpellIds(result);
-  }, [result, showRanks, spellDataOverride]);
-  
-  // Fetch spell data for all spell IDs (only when showRanks is true and no override)
-  const spellQueries = useQueries({
-    queries: spellIds.map((id) => ({
-      ...spellQueryOptions(id.toString(), datasetId),
-      staleTime: Infinity,
-      enabled: showRanks && !spellDataOverride,
-    })),
-  });
-  
-  // Build spell data lookup map (use override if provided)
-  const spellDataMap = useMemo(() => {
-    if (spellDataOverride) return spellDataOverride;
-    const map = new Map<number, WoWSpell>();
-    spellQueries.forEach((query, index) => {
-      if (query.data) {
-        map.set(spellIds[index], query.data);
-      }
-    });
-    return map;
-  }, [spellQueries, spellIds, spellDataOverride]);
   
   const breakout = useCallback(
     (playerID: string, pinned: boolean) => {
@@ -319,12 +269,14 @@ export function useDamageDoneBreakout({
         const abilitiesWithSpellId = getAbilitiesBySpellIdForUnit(result, playerID);
         // Add spellId for icon/tooltip and rank as subtitle
         abilities = abilitiesWithSpellId.map((a) => {
-          const spellData = spellDataMap.get(a.spellId);
+          const spellData = spellDataOverride?.get(a.spellId);
           const rank = spellData?.subtext?.["0"]; // enUS locale (e.g., "Rank 7")
           return { 
             ...a, 
             key: `spell-${a.spellId}-${a.name}`,  // Unique key (name includes HoT/DoT suffix)
             spellId: a.spellId,  // Pass spellId for icon/tooltip
+            showRank: true,
+            spell: spellData,
             subtitle: rank || undefined,
           };
         });
@@ -397,7 +349,7 @@ export function useDamageDoneBreakout({
         />
       );
     },
-    [result, context, valueLabel, perSecond, durationMs, loading, processing, tabByPlayer, showRanks, spellDataMap]
+    [result, context, valueLabel, perSecond, durationMs, loading, processing, tabByPlayer, showRanks, spellDataOverride]
   );
 
   return breakout;

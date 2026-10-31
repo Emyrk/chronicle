@@ -1,12 +1,8 @@
-import { useCallback, useMemo, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
-import { spellQueryOptions } from "@/api/queries";
-import { useDatasetId } from "@/hooks/useDatasetId";
+import { useCallback, useState } from "react";
 import { AbilityBreakout, type AbilityData, type TargetData, type BreakoutTab } from "@/components/ui/AbilityBreakout";
 import type { UnifiedHealingResult } from "../processors";
 import type { PanelContext } from "../types";
 import type { HealingViewMode } from "./HealingTakenContent";
-import type { WoWSpell } from "@/api/wowdb";
 import { realSpellId } from "../processors/abilityBreakout";
 import { getBreakoutProgressLabel } from "../breakoutProgress";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -289,34 +285,7 @@ export function useHealingTakenBreakout({
 }: UseHealingTakenBreakoutOptions) {
   const isMobile = useIsMobile();
   // Track tab selection per player so it persists across reloads
-  const datasetId = useDatasetId();
   const [tabByPlayer, setTabByPlayer] = useState<Map<string, BreakoutTab>>(new Map());
-  
-  // Collect all spell IDs for fetching spell data when showRanks is enabled
-  const spellIds = useMemo(() => {
-    if (!showRanks) return [];
-    return getAllTargetSpellIds(result);
-  }, [result, showRanks]);
-  
-  // Fetch spell data for all spell IDs (only when showRanks is true)
-  const spellQueries = useQueries({
-    queries: spellIds.map((id) => ({
-      ...spellQueryOptions(id.toString(), datasetId),
-      staleTime: Infinity,
-      enabled: showRanks,
-    })),
-  });
-  
-  // Build spell data lookup map
-  const spellDataMap = useMemo(() => {
-    const map = new Map<number, WoWSpell>();
-    spellQueries.forEach((query, index) => {
-      if (query.data) {
-        map.set(spellIds[index], query.data);
-      }
-    });
-    return map;
-  }, [spellQueries, spellIds]);
   
   const breakout = useCallback(
     (playerID: string, pinned: boolean) => {
@@ -342,16 +311,12 @@ export function useHealingTakenBreakout({
       let abilities: AbilityData[];
       if (showRanks) {
         const abilitiesWithSpellId = getAbilitiesBySpellIdForUnit(result, playerID, viewMode);
-        abilities = abilitiesWithSpellId.map((a) => {
-          const spellData = spellDataMap.get(a.spellId);
-          const rank = spellData?.subtext?.["0"];
-          return {
-            ...a,
-            key: `spell-${a.spellId}`,
-            spellId: a.spellId,
-            subtitle: rank || undefined,
-          };
-        });
+        abilities = abilitiesWithSpellId.map((a) => ({
+          ...a,
+          key: `spell-${a.spellId}`,
+          spellId: a.spellId,
+          showRank: true,
+        }));
       } else {
         abilities = getAbilitiesForUnit(result, playerID, viewMode);
       }
@@ -414,7 +379,7 @@ export function useHealingTakenBreakout({
         />
       );
     },
-    [result, context, valueLabel, perSecond, durationMs, loading, processing, tabByPlayer, viewMode, showRanks, spellDataMap, isMobile]
+    [result, context, valueLabel, perSecond, durationMs, loading, processing, tabByPlayer, viewMode, showRanks, isMobile]
   );
 
   return breakout;
