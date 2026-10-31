@@ -1,12 +1,13 @@
 /** The built-in panel catalog shared by the panel dropdown and the panel explorer. */
 
 import { Leaf, Scale, Sword, Toolbox, User } from "lucide-react";
-import { PANELS, type EventsPanelType } from "./EventsPanel";
+import { PANELS, type BuiltinPanelType, type EventsPanelType } from "./EventsPanel";
 
 export interface PanelOption {
   value: EventsPanelType;
   label: string;
   icon: React.ReactNode;
+  description?: string;
 }
 
 export interface PanelCategory {
@@ -82,6 +83,68 @@ export const PANEL_CATEGORIES: PanelCategory[] = [
   },
 ];
 
+// One line each for the panel explorer's cards; search matches against these too.
+const PANEL_DESCRIPTIONS: Partial<Record<BuiltinPanelType, string>> = {
+  damage_done: "Damage dealt by players, with ability and target breakdowns.",
+  vulnerability_effect: "Extra damage from vulnerability debuffs on targets.",
+  enemy_damage_done: "Damage dealt by enemies.",
+  pet_damage_done: "Damage dealt by pets and guardians.",
+  damage_done_friendly_fire: "Damage players and pets dealt to friendlies.",
+  healing_done: "Healing done by players, including overhealing.",
+  healing_taken: "Healing each player received, and from whom.",
+  damage_taken: "Damage players took, by ability and source.",
+  enemy_damage_taken: "Damage each enemy took.",
+  mitigation: "Damage avoided by dodges, parries, blocks and misses.",
+  absorbed_damage: "Damage absorbed by shields, by caster and target.",
+  resists: "Full and partial spell resists.",
+  extra_attacks: "Extra attack procs like Windfury and Hand of Justice.",
+  resource_regen: "Mana, rage, energy and health gained, by source.",
+  consumables: "A timestamped log of every consumable used.",
+  consumables_ledger: "Potions, flasks and other consumables used per player.",
+  cooldown_usage: "When players used their major cooldowns.",
+  deaths: "Who died and how often.",
+  death_log: "The events leading up to each death.",
+  aura_uptime: "How long buffs and debuffs were up.",
+  unit_auras: "Every aura on a chosen unit over time.",
+  friendly_class_buffs: "Which class buffs each player had.",
+  dispels_done: "Dispels cast, by player and aura.",
+  dispels_received: "Dispels each unit received.",
+  dispel_log: "A timestamped log of every dispel.",
+  interrupts: "Spell interrupts, by player and spell.",
+  interrupt_log: "A timestamped log of every interrupt.",
+  innervate: "Innervate casts and the mana they returned.",
+  faerie_fire: "Faerie Fire uptime on bosses.",
+  sunder: "Sunder Armor casts and stacks.",
+  judgement: "Judgement uptime on bosses.",
+  map: "A 3D replay of positions over the fight.",
+  mini_map: "A compact overhead replay map.",
+  raid_frames: "Raid frames replayed in sync with the fight.",
+  activity_log: "A scrolling feed of events at the replay time.",
+  status: "Each unit's state at the replay time.",
+  healer_casts: "Healer cast bars replayed over time.",
+  roles: "Inferred tank, healer and damage roles.",
+  raid_composition: "The raid's classes and roles.",
+  timeline: "Charts of events over time, with filters.",
+  rotations: "Each player's casts laid out on a timeline.",
+  spell_count: "How many times each spell was cast.",
+  comparison: "Compare values from other panels side by side.",
+  all_activity: "Every raw event, for debugging.",
+  metrics: "Panel timing and processing diagnostics.",
+  periods: "When enemies were active across encounters.",
+  pulls_and_cleanup: "Pull and cleanup times for each encounter.",
+  possession: "Mind control and possession intervals.",
+  vehicle: "When units controlled vehicles.",
+  unit_lookup: "Look up any unit in the log.",
+  equipment: "Gear each player wore.",
+  guilds: "Guilds represented in the raid.",
+  loot: "Items looted during the raid.",
+  logging_metadata: "Log versions and recorder details.",
+  companion_stats: "Stats reported by the companion addon.",
+  leaderboard: "How this clear ranks on the speedrun leaderboards.",
+  ranking_records: "The DPS and HPS ranking rows recorded for this log.",
+  empty: "A blank panel.",
+};
+
 // Build panel options from registry
 export function getPanelOption(value: EventsPanelType): PanelOption {
   const panel = PANELS[value];
@@ -89,7 +152,30 @@ export function getPanelOption(value: EventsPanelType): PanelOption {
     value,
     label: panel?.label ?? value,
     icon: panel?.icon,
+    description: PANEL_DESCRIPTIONS[value as BuiltinPanelType],
   };
+}
+
+const RECENT_PANELS_KEY = "panel-recent";
+const RECENT_PANELS_LIMIT = 8;
+
+/** Panels this viewer picked lately, newest first. */
+export function readRecentPanels(): EventsPanelType[] {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(RECENT_PANELS_KEY) ?? "[]");
+    return Array.isArray(stored) ? stored.filter((value): value is EventsPanelType => typeof value === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function rememberRecentPanel(value: EventsPanelType) {
+  try {
+    const next = [value, ...readRecentPanels().filter((candidate) => candidate !== value)].slice(0, RECENT_PANELS_LIMIT);
+    localStorage.setItem(RECENT_PANELS_KEY, JSON.stringify(next));
+  } catch {
+    // Storage can be unavailable (private windows, blocked site data); recents are a convenience.
+  }
 }
 
 // Get category icon: explicit icon, first item's icon, or first subcategory's icon

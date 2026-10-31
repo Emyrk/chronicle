@@ -5,12 +5,12 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
-import { Blocks, ChevronDown, ChevronRight, Compass, Search } from "lucide-react";
+import { Blocks, ChevronDown, ChevronRight, Compass, Search, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { PANELS, type EventsPanelType } from "./EventsPanel";
-import { fuzzyMatch, getAllCategoryItems, getCategoryIcon, getCategoryItemCount, getPanelOption, PANEL_CATEGORIES, type PanelCategory, type PanelOption } from "./panelCategories";
+import { fuzzyMatch, getAllCategoryItems, getCategoryIcon, getCategoryItemCount, getPanelOption, PANEL_CATEGORIES, rememberRecentPanel, type PanelCategory, type PanelOption } from "./panelCategories";
 
 import { listSelectableCustomPanels, resolveCustomPanel, useCustomPanelRegistry } from "./custom/pluginRegistry";
 import { isCustomPanelRef } from "./custom/pluginTypes";
@@ -129,11 +129,11 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
   const luaPanels = useMemo(() => trackedLuaPanelOptions(luaCatalog.data ?? []), [luaCatalog.data]);
   const selectedLua = parseLuaPanelRef(value);
   const trackedSelection = luaPanels.find((candidate) => candidate.ref === value);
-  // A module picked from the explorer's public list may not be tracked; name it from that list.
+  // A saved or shared layout can name a module you don't track; name it from the public list.
   const publicModules = usePublicLuaPanels(!!selectedLua && !trackedSelection && luaCatalog.isFetched);
   const selectedCustom = isCustomPanelRef(value) ? resolveCustomPanel(value, customRegistry) : null;
   const selectedOption = selectedCustom
-    ? { value, label: selectedCustom.panel?.name ?? selectedCustom.panelId ?? "Unavailable developer panel", icon: <Blocks className="h-4 w-4" /> }
+    ? { value, label: selectedCustom.panel?.name ?? selectedCustom.panelId ?? "Unavailable developer panel", icon: <Wrench className="h-4 w-4" /> }
     : selectedLua ? (() => {
       const item = trackedSelection ?? publicLuaPanelOptions(publicModules.data ?? []).find((candidate) => candidate.ref === value);
       return { value, label: item?.label ?? `Module (${selectedLua.channel})`, icon: <ModuleIcon name={item?.icon} className="h-4 w-4" /> };
@@ -271,7 +271,7 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
       const haystack = `${item.panel.name} ${item.panel.description ?? ""} ${item.installation.manifest.plugin.name} ${item.installation.repository}`;
       const { match, score } = fuzzyMatch(searchQuery, haystack);
       if (match) results.push({
-        option: { value: item.ref, label: item.panel.name, icon: <Blocks className="h-4 w-4" /> },
+        option: { value: item.ref, label: item.panel.name, icon: <Wrench className="h-4 w-4" /> },
         category: `Developer › ${item.installation.manifest.plugin.name}`,
         score,
       });
@@ -286,12 +286,20 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
   }, [searchQuery, isPanelVisible, customPanels, luaPanels]);
 
   const handleSelect = (panelValue: EventsPanelType) => {
+    rememberRecentPanel(panelValue);
     onChange(panelValue);
     setIsOpen(false);
     setDropdownPosition(null);
     setSearchQuery("");
     setExpandedPaths(new Set());
+    closeExplorer();
+  };
+
+  // Give focus back to the panel header the explorer was opened from.
+  const closeExplorer = () => {
+    if (!explorerHost) return;
     setExplorerHost(null);
+    requestAnimationFrame(() => triggerRef.current?.focus());
   };
 
   // The explorer covers the panel this selector belongs to; without one it floats over the page.
@@ -434,12 +442,12 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
                     <div>
                       <button type="button" onClick={() => toggleExpanded("Custom")} className="w-full px-2 py-1.5 text-left text-sm font-medium rounded-sm flex items-center gap-1.5 hover:bg-accent/50">
                         <ChevronRight className={cn("size-4 transition-transform", expandedPaths.has("Custom") && "rotate-90")} />
-                        <Blocks className="h-4 w-4 text-muted-foreground" /> Developer
+                        <Wrench className="h-4 w-4 text-muted-foreground" /> Developer
                         <span className="ml-auto text-xs text-muted-foreground">{customPanels.length}</span>
                       </button>
                       {expandedPaths.has("Custom") && <div className="ml-2 border-l pl-1">{customPanels.map((item) => (
                         <button key={item.ref} type="button" onClick={() => handleSelect(item.ref)} className={cn("w-full pl-6 pr-2 py-1.5 text-left text-sm rounded-sm flex items-center gap-2 hover:bg-accent", item.ref === value && "bg-accent/50")}>
-                          <Blocks className="h-4 w-4 text-muted-foreground" /><span className="min-w-0"><span className="block truncate">{item.panel.name}</span><span className="block truncate text-[10px] text-muted-foreground">{item.installation.manifest.plugin.name}</span></span>
+                          <Wrench className="h-4 w-4 text-muted-foreground" /><span className="min-w-0"><span className="block truncate">{item.panel.name}</span><span className="block truncate text-[10px] text-muted-foreground">{item.installation.manifest.plugin.name}</span></span>
                         </button>
                       ))}</div>}
                     </div>
@@ -459,9 +467,11 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
         <PanelExplorer
           value={value}
           onSelect={handleSelect}
-          onClose={() => setExplorerHost(null)}
+          onClose={closeExplorer}
           isPanelVisible={isPanelVisible}
           trackedModules={luaPanels}
+          modulesStatus={luaCatalog.isError ? "error" : luaCatalog.isLoading ? "loading" : "ready"}
+          onRetryModules={() => void luaCatalog.refetch()}
           customPanels={customPanels}
           floating={explorerHost === "floating"}
         />,
