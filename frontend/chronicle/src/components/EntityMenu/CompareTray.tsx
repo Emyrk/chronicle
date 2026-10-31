@@ -110,7 +110,7 @@ export function CompareTray({
   return (
     <section
       aria-label="Compare tray"
-      className="w-[min(380px,calc(100vw-2rem))] rounded-lg border bg-popover text-popover-foreground shadow-xl"
+      className="w-[min(440px,calc(100vw-2rem))] rounded-lg border bg-popover text-popover-foreground shadow-xl"
     >
       <header className="flex min-w-0 items-center gap-1 border-b px-2 py-1.5">
         <GitCompareArrows className="mx-1 h-4 w-4 shrink-0 text-sky-400" aria-hidden="true" />

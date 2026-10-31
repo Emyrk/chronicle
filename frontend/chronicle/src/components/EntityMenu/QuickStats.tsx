@@ -298,7 +298,7 @@ function PlayerQuickStats({
         <SinglePlayerScore line={lines[0]} focusLabel={focusLabel} value={value} format={format} color={color} display={display} metric={metric} />
       ) : (
         <CompareTable
-          columns={[focusLabel, "Typical", "Best", "Nights"]}
+          columns={[focusLabel, "Recent", "Typical", "Best", "Nights"]}
           rows={lines.map((line) => {
             const summary = summarizePerformanceRuns(line.runs, metric, display);
             const focusValue = line.focus ? value(line.focus) : null;
@@ -309,6 +309,7 @@ function PlayerQuickStats({
               dot: line.color,
               cells: [
                 focusValue === null ? null : { text: format(focusValue), color: color(focusValue), strong: true },
+                summary?.recent != null ? { text: format(summary.recent), color: color(summary.recent) } : null,
                 summary ? { text: format(summary.typical), color: color(summary.typical) } : null,
                 summary ? { text: format(summary.best), color: color(summary.best) } : null,
                 { text: String(line.runs.length) },
@@ -462,7 +463,7 @@ function GuildQuickStats({
         <SingleGuildClear line={lines[0]} focusLabel={focusLabel} />
       ) : (
         <CompareTable
-          columns={[focusLabel, "Typical", "Best", "Clears"]}
+          columns={[focusLabel, "Recent", "Typical", "Best", "Clears"]}
           rows={lines.map((line) => {
             const summary = summarizeClearTimes(line.runs, "full");
             return {
@@ -471,6 +472,7 @@ function GuildQuickStats({
               dot: line.color,
               cells: [
                 line.focus ? { text: formatClearTime(line.focus.duration_ms), strong: true } : null,
+                summary?.recent != null ? { text: formatClearTime(summary.recent) } : null,
                 summary ? { text: formatClearTime(summary.typical) } : null,
                 summary ? { text: formatClearTime(summary.best) } : null,
                 { text: String(line.runs.length) },
@@ -649,7 +651,7 @@ interface ChartSeries {
 }
 
 
-const CHART_WIDTH = 352;
+const CHART_WIDTH = 412;
 const CHART_HEIGHT = 140;
 const CHART_LEFT = 40;
 const CHART_RIGHT = 6;
