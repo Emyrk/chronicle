@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom"
 import type { KillTimeLeaderboardEntry } from "@/api/typesGenerated"
 import { RankingsLoadingState } from "./RankingsLoadingState"
 import { navigateWithModifiers } from "@/lib/navigation"
+import { guildAttributes, killAttributes } from "@/components/EntityMenu/leaderboardEntities"
 
 const MEDAL_ICONS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" }
 
@@ -62,12 +63,12 @@ export function KillTimeTable({ entries, loading = false }: KillTimeTableProps) 
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
-                <span className="shrink-0 font-mono font-semibold">
+                <span className="shrink-0 font-mono font-semibold" {...killAttributes(entry)}>
                   {formatDuration(entry.duration_secs)}
                 </span>
               </div>
               <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
-                <span>{entry.guild_name || "—"}</span>
+                <span {...guildAttributes(entry.guild_id, entry.guild_name)}>{entry.guild_name || "—"}</span>
                 <span>{entry.realm_name}</span>
                 <span className="ml-auto">{formatDate(entry.killed_at)}</span>
               </div>
@@ -117,9 +118,11 @@ export function KillTimeTable({ entries, loading = false }: KillTimeTableProps) 
                   )}
                 </td>
                 <td className="px-4 py-3 text-right font-mono font-semibold">
-                  {formatDuration(entry.duration_secs)}
+                  <span {...killAttributes(entry)}>{formatDuration(entry.duration_secs)}</span>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{entry.guild_name || "—"}</td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  <span {...guildAttributes(entry.guild_id, entry.guild_name)}>{entry.guild_name || "—"}</span>
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">{entry.realm_name}</td>
                 <td className="px-4 py-3 text-right text-muted-foreground">
                   {formatDate(entry.killed_at)}

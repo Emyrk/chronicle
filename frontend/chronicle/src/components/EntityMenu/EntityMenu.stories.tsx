@@ -17,17 +17,37 @@ import { GUILDS, guildHistoryHandlers, whoami } from "@/pages/GuildHistory/Guild
 
 // The server's spread of kills and this log's kill-time parses, for encounters in the tray.
 const LOG_ID = "log-naxx";
-const spread = (encounter_name: string, min_ms: number, median_ms: number, max_ms: number, sample_size: number) => ({
-  kind: "boss_kill", encounter_name, difficulty_name: "Normal", max_players: 40, sample_size, status: "ok", min_ms, median_ms, max_ms, cutoffs: [],
+// Server, realm and guild cohorts of the raid: each run's Patchwerk and Grobbulus kill times.
+const COHORT_SIZE = { server: 60, realm: 24, guild: 9 } as const;
+const COHORT_PACE = { server: 1, realm: 0.95, guild: 0.9 } as const;
+const cohortHandler = http.get("/api/v1/raidlogs/instances/:id/speedrun/cohort", ({ request }) => {
+  const scope = (new URL(request.url).searchParams.get("scope") ?? "server") as keyof typeof COHORT_SIZE;
+  const runs = Array.from({ length: COHORT_SIZE[scope] }, (_, index) => {
+    // Deterministic spread around each boss's typical kill, a bit faster for smaller scopes.
+    const wobble = ((index * 37) % 23) / 22 - 0.5;
+    return {
+      instance_id: `${scope}-${index}`,
+      slug: `${scope}-${index}`,
+      start_time: "2026-10-01T20:00:00Z",
+      requirements_complete: true,
+      qualified: true,
+      requirements_satisfied: 1,
+      requirements_total: 1,
+      encounter_kill_times: [
+        { encounter_name: "Patchwerk", duration_ms: Math.round(COHORT_PACE[scope] * (160_000 + wobble * 90_000)) },
+        { encounter_name: "Grobbulus", duration_ms: Math.round(COHORT_PACE[scope] * (130_000 + wobble * 70_000)) },
+      ],
+    };
+  });
+  return HttpResponse.json({
+    cohort: {
+      scope, label: scope, instance_name: "Naxxramas", difficulty_name: "Normal", max_players: 40, lookback_days: 60,
+      window_start: "", window_end: "", eligible_runs: runs.length, runs_with_overview_metrics: 0, overview_metrics_version: 0,
+    },
+    overview: { runs: 0, top_incoming_damage_abilities: [] },
+    runs,
+  });
 });
-const spreadsHandler = http.get("/api/v1/rankings/time-parse-cohorts/spreads", () =>
-  HttpResponse.json({
-    cutoff: "",
-    lookback_days: 60,
-    instance_name: "Naxxramas",
-    spreads: [spread("Patchwerk", 118_000, 161_000, 290_000, 212), spread("Grobbulus", 96_000, 132_000, 240_000, 198)],
-  }),
-);
 const bossParse = (encounter_id: string, encounter_name: string, duration_ms: number, rank: number, sample_size: number, score: number) => ({
   encounter_id, encounter_name, duration_ms, precise_score: score, display_score: Math.round(score), rank, sample_size, status: "ok",
 });
@@ -52,7 +72,7 @@ const timeParsesHandler = http.get("/api/v1/rankings/instances/:id/time-parses",
   }),
 );
 
-const tierHandlers = (tier: Parameters<typeof whoami>[0]) => [whoami(tier), spreadsHandler, timeParsesHandler, ...performanceHandlers, ...guildHistoryHandlers];
+const tierHandlers = (tier: Parameters<typeof whoami>[0]) => [whoami(tier), cohortHandler, timeParsesHandler, ...performanceHandlers, ...guildHistoryHandlers];
 
 const encounterPin = (id: string, name: string, durationMs: number, startTime: string): EntityRef => ({
   kind: "encounter",
@@ -194,8 +214,8 @@ export const Default: Story = {
 };
 
 /**
- * Encounters are a third kind. Add one to compare and the tray shows its kill time against the
- * server's spread and its parse against the server, realm and guild, free for everyone.
+ * Encounters are a third kind. Add one to compare and the tray shows box plots of the server's,
+ * realm's and guild's kill times with the pull and its parse marked, free for everyone.
  */
 export const EncounterKillTimes: Story = {
   parameters: { msw: { handlers: tierHandlers("free") } },
@@ -208,8 +228,8 @@ export const EncounterKillTimes: Story = {
     await expect(items).toEqual(["Go to overview", "Add to compare", "Kill time leaderboard", "Copy name"]);
     await userEvent.click(within(menu).getByRole("menuitem", { name: "Add to compare" }));
     const tray = await body.findByRole("region", { name: "Compare tray" });
-    await expect(await within(tray).findByText("Median 2:41", {}, { timeout: 5000 })).toBeInTheDocument();
-    await expect(within(tray).getByText("Rank 24 of 212 kills")).toBeInTheDocument();
+    await expect(await within(tray).findByTitle("Kill-time parse: rank 24 of 212 kills", {}, { timeout: 5000 })).toHaveTextContent("89");
+    await waitFor(() => expect(tray.querySelectorAll('[title^="Fastest"]')).toHaveLength(3));
     await expect(within(tray).getByRole("link", { name: /Open log overview/ })).toHaveAttribute("href", `/instances/${LOG_ID}?view=overview`);
   },
 };
@@ -234,7 +254,7 @@ export const AllKinds: Story = {
   },
 };
 
-/** Several encounters: a table of times and parses, and the Spread tab with each pull on its boss's server kills. */
+/** Several encounters stack, each with its own server, realm and guild box plots. */
 export const CompareEncounters: Story = {
   parameters: { msw: { handlers: tierHandlers("free") } },
   beforeEach: () => {
@@ -244,9 +264,9 @@ export const CompareEncounters: Story = {
   play: async ({ canvasElement }) => {
     const body = within(canvasElement.ownerDocument.body);
     const tray = await body.findByRole("region", { name: "Compare tray" });
-    await expect(await within(tray).findByRole("columnheader", { name: "Realm" }, { timeout: 5000 })).toBeInTheDocument();
-    await userEvent.click(within(tray).getByRole("tab", { name: "Spread" }));
-    await expect(await within(tray).findByText("Median 2:12")).toBeInTheDocument();
+    // Two encounters, three scopes each.
+    await waitFor(() => expect(tray.querySelectorAll('[title^="Fastest"]')).toHaveLength(6), { timeout: 5000 });
+    await expect(within(tray).getByTitle("Kill-time parse: rank 140 of 198 kills")).toHaveTextContent("31");
   },
 };
 

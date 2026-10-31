@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react"
+import { useEntityRaidContext, type EntityRaidContext } from "@/components/EntityMenu/entityMenuContext"
 import { createPortal } from "react-dom"
 import { useSearchParams } from "react-router-dom"
 import { ArrowLeft, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, CircleDashed, List, Loader2, X } from "lucide-react"
@@ -661,6 +662,16 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     if (raw && bossNames.has(raw)) return raw
     return defaultBossList[0] ?? bossList[0] ?? ""
   }, [params, bossNames, bossList, defaultBossList])
+
+  // The compare tray compares players on the same raid, difficulty and bosses as this board.
+  const entityRaid = useMemo((): EntityRaidContext => ({
+    instanceName,
+    difficultyName: selectedDifficulties.size === 1 ? [...selectedDifficulties][0] : undefined,
+    bossNames: metric === "killtime"
+      ? (killTimeEncounter ? [killTimeEncounter] : [])
+      : [...selectedEncounters].filter((name) => bossNames.has(name)),
+  }), [instanceName, selectedDifficulties, metric, killTimeEncounter, selectedEncounters, bossNames])
+  useEntityRaidContext(entityRaid)
 
   const handleKillTimeEncounterChange = useCallback(
     (enc: string) => {

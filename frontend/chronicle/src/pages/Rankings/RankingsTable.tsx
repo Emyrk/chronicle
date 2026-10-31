@@ -4,6 +4,7 @@ import type { RankingsEntry } from "@/api/typesGenerated"
 import { RankingsLoadingState } from "./RankingsLoadingState"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "./classDisplay"
 import { navigateWithModifiers } from "@/lib/navigation"
+import { guildAttributes, rankingPlayerAttributes } from "@/components/EntityMenu/leaderboardEntities"
 
 const MEDAL_ICONS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" }
 
@@ -77,7 +78,7 @@ export function RankingsTable({ entries, loading = false, metric = "dps" }: Rank
                   className="h-5 w-5 shrink-0 rounded-sm"
                   onError={(e) => { e.currentTarget.src = "/c/icons/class_unknown.png" }}
                 />
-                <span className="min-w-0 flex-1 truncate font-semibold">{entry.player_name}</span>
+                <span className="min-w-0 flex-1 truncate font-semibold" {...rankingPlayerAttributes(entry)}>{entry.player_name}</span>
                 <span className="shrink-0 font-mono text-sm font-bold tabular-nums" title={metricTitle(entry, metric)}>
                   {Math.round(metricValue(entry, metric)).toLocaleString()}
                 </span>
@@ -145,7 +146,7 @@ export function RankingsTable({ entries, loading = false, metric = "dps" }: Rank
                       className="inline-block h-2.5 w-0.5 rounded-full"
                       style={{ backgroundColor: CLASS_CSS_VAR[entry.player_class] }}
                     />
-                    <span className="font-medium">{entry.player_name}</span>
+                    <span className="font-medium" {...rankingPlayerAttributes(entry)}>{entry.player_name}</span>
                   </span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{entry.realm_name}</td>
@@ -166,7 +167,9 @@ export function RankingsTable({ entries, loading = false, metric = "dps" }: Rank
                 <td className="px-4 py-3 text-right font-mono text-muted-foreground">
                   {formatDuration(entry.duration_secs)}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{entry.guild_name}</td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  <span {...guildAttributes(entry.guild_id, entry.guild_name)}>{entry.guild_name}</span>
+                </td>
                 <td className="px-4 py-3 text-right text-muted-foreground">
                   {formatDate(entry.killed_at)}
                 </td>

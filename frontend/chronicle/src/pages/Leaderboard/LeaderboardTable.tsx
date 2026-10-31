@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { Users } from "lucide-react"
 import type { SpeedrunLeaderboardEntry } from "../../api/typesGenerated"
 import { navigateWithModifiers } from "@/lib/navigation"
+import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities"
 
 function formatDuration(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000)
@@ -53,7 +54,7 @@ export function LeaderboardTable({ entries, startRank, className }: LeaderboardT
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium truncate">
+                  <span className="font-medium truncate" {...guildAttributes(entry.guild_id, entry.guild_name)}>
                     {entry.guild_name || "Unknown Guild"}
                   </span>
                   <span className="font-mono font-semibold shrink-0">
@@ -109,7 +110,7 @@ export function LeaderboardTable({ entries, startRank, className }: LeaderboardT
                     )}
                   </td>
                   <td className="px-4 py-3 font-medium">
-                    <span className="inline-flex items-center gap-2">
+                    <span className="inline-flex items-center gap-2" {...guildAttributes(entry.guild_id, entry.guild_name)}>
                       {entry.guild_logo_url && (
                         <img src={entry.guild_logo_url} alt="" className="h-5 w-5 rounded-full object-cover shrink-0" />
                       )}

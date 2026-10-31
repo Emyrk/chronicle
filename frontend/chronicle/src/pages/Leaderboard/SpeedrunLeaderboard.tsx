@@ -8,6 +8,8 @@ import {
   groupByRaidLevel,
 } from "../Logs/utils/instanceProgressionOrder"
 import { useSupportedInstances } from "@/api/queries"
+import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities"
+import { useEntityRaidContext } from "@/components/EntityMenu/entityMenuContext"
 import { useState, useEffect, useCallback, useRef } from "react"
 import type { SpeedrunInstanceBoard, SpeedrunLeaderboardEntry, SpeedrunRulesResponse } from "../../api/typesGenerated"
 import { Podium } from "./Podium"
@@ -498,7 +500,7 @@ function InstanceCard({ board, timing, to }: { board: SpeedrunInstanceBoard; tim
                   className="inline-block h-2 w-2 shrink-0 rounded-full"
                   style={{ backgroundColor: ["#FFD700", "#C0C0C0", "#CD7F32"][i] }}
                 />
-                <span className="truncate text-foreground/90">{entry.guild_name}</span>
+                <span className="truncate text-foreground/90" {...guildAttributes(entry.guild_id, entry.guild_name)}>{entry.guild_name}</span>
                 <span className="ml-auto font-mono font-semibold text-foreground/80">
                   {formatDuration(entry.duration_ms)}
                 </span>
@@ -605,6 +607,13 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
   const selectedDifficulty = searchParams.has("difficulty")
     ? (searchParams.get("difficulty") ?? "")
     : (difficulties?.[0] ?? null)
+
+  // The compare tray uses this board's raid; players keep their usual bosses within it.
+  useEntityRaidContext(
+    selectedInstance
+      ? { instanceName: selectedInstance, difficultyName: selectedDifficulty ?? undefined, bossNames: [] }
+      : null,
+  )
 
   const { data: entries, isLoading: entriesLoading } = useSpeedrunLeaderboard(
     selectedInstance,

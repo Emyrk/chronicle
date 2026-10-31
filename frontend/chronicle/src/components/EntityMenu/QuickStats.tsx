@@ -18,13 +18,9 @@ import {
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { useGuildRaidClearsList, useGuildSpeedrunHistories } from "@/pages/GuildHistory/guildHistoryQueries";
 import { filterGuildRuns, formatClearTime, GUILD_SERIES_COLORS, summarizeClearTimes } from "@/pages/GuildHistory/guildHistoryModel";
-import { useTimeParseSpreadsForInstances } from "@/api/rankingsQueries";
-import { ParseScopeList } from "@/pages/Instance/EncounterKillParse";
-import { findBossSpread } from "@/pages/Instance/encounterKillTimes";
-import { scopedKillParsesByEncounter, scoredKillParse } from "@/pages/Instance/Overview/encounterKillTimePopulation";
+import { scopedKillParsesByEncounter } from "@/pages/Instance/Overview/encounterKillTimePopulation";
 import { useInstancesTimeParses } from "@/pages/Instance/Overview/overviewQueries";
-import { parseHexColor } from "@/pages/Instance/parseColors";
-import { ServerSpread } from "@/pages/Instance/ServerKillSpread";
+import { EncounterKillBoxPlots, ENCOUNTER_LOOKBACK_DAYS } from "./EncounterKillBoxPlots";
 import { entityKey, type EntityKind, type EntityRef } from "./entity";
 import type { EntityRaidContext } from "./entityMenuContext";
 
@@ -36,7 +32,8 @@ type QuickTab = "score" | "chart";
 const TAB_LABELS: Record<EntityKind, Record<QuickTab, string>> = {
   character: { score: "Score", chart: "Chart" },
   guild: { score: "Clear", chart: "Chart" },
-  encounter: { score: "Kills", chart: "Spread" },
+  // Encounters have one view (box plots), so their tabs are hidden.
+  encounter: { score: "Kills", chart: "Kills" },
 };
 type Metric = "dps" | "hps";
 /** Parse (rank against others on the same fights) or the raw DPS/HPS value. */
@@ -106,7 +103,7 @@ export default function QuickStats({
   return (
     <div aria-label="Quick stats" role="region">
       <div className="flex items-center gap-1">
-        <div role="tablist" aria-label="Quick stats view" className="flex gap-0.5 rounded-md bg-white/5 p-0.5">
+        <div role="tablist" aria-label="Quick stats view" className={cn("flex gap-0.5 rounded-md bg-white/5 p-0.5", kind === "encounter" && "hidden")}>
           {(["score", "chart"] as const).map((option) => (
             <button
               key={option}
@@ -167,7 +164,7 @@ export default function QuickStats({
             rangeDays={rangeDays}
           />
         ) : kind === "encounter" ? (
-          <EncounterQuickStats encounters={encounters} hidden={hidden} tab={tab} />
+          <EncounterQuickStats encounters={encounters} hidden={hidden} />
         ) : (
           <GuildQuickStats key={guilds.map(entityKey).join()} guilds={guilds} hidden={hidden} raid={raid} tab={tab} rangeDays={rangeDays} />
         )}
@@ -176,15 +173,23 @@ export default function QuickStats({
   );
 }
 
-/** The fights to compare: the page's selected bosses, else the first player's most recent raid. */
+/**
+ * The fights to compare: the page's selected bosses; else the page's raid (a speedrun board has
+ * no boss selection) with the first player's usual bosses in it; else their most recent raid.
+ */
 function usePlayerFights(characters: Character[], raid: EntityRaidContext | null) {
-  const encounters = useCharacterEncounters(characters[0]?.guid, undefined, !raid);
+  const pageBosses = !!raid && raid.bossNames.length > 0;
+  const encounters = useCharacterEncounters(characters[0]?.guid, undefined, !pageBosses);
   const progression = useSupportedInstanceProgressionBosses();
   const rankingSets = useSupportedInstanceRankingEncounterSets();
-  if (raid) {
+  if (raid && pageBosses) {
     return { ...raid, fromPage: true, loading: false };
   }
-  const variant = buildPerformanceVariants(encounters.data?.encounters ?? [])[0];
+  const variants = buildPerformanceVariants(encounters.data?.encounters ?? []);
+  const variant = raid
+    ? variants.find((item) => item.instanceName === raid.instanceName && (!raid.difficultyName || item.difficultyName === raid.difficultyName))
+      ?? variants.find((item) => item.instanceName === raid.instanceName)
+    : variants[0];
   if (!variant) return { instanceName: "", bossNames: [] as string[], fromPage: false, loading: encounters.isLoading };
   return {
     instanceName: variant.instanceName,
@@ -264,7 +269,7 @@ function PlayerQuickStats({
         instanceName={fights.instanceName}
         detail={
           fights.bossNames.length > 0
-            ? `${fights.bossNames.length} ${fights.bossNames.length === 1 ? "boss" : "bosses"}${fights.fromPage ? " · same fights as this page" : " · most recent raid"}`
+            ? `${fights.bossNames.length} ${fights.bossNames.length === 1 ? "boss" : "bosses"}${fights.fromPage ? " · same fights as this page" : raid ? " · this page's raid" : " · most recent raid"}`
             : undefined
         }
       />
@@ -520,113 +525,42 @@ function SingleGuildClear({ line, focusLabel }: { line: GuildLine; focusLabel: s
   );
 }
 
-const KILL_TYPE_LABEL: Record<EncounterPin["killType"], string> = { clean: "Kill", partial: "Kill", wipe: "Wipe", reset: "Reset" };
-
-const isKill = (encounter: EncounterPin) => encounter.killType === "clean" || encounter.killType === "partial";
-
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 /**
- * Boss pulls added to compare, from this log or others: how long each took, where that sits in
- * the server's spread of kills, and its kill-time parse against the server, realm and guild.
+ * Boss pulls added to compare, from this log or others: each as box plots of the server's,
+ * realm's and guild's kill times with the pull and its parse marked.
  */
-function EncounterQuickStats({ encounters, hidden, tab }: { encounters: EncounterPin[]; hidden: ReadonlySet<string>; tab: QuickTab }) {
+function EncounterQuickStats({ encounters, hidden }: { encounters: EncounterPin[]; hidden: ReadonlySet<string> }) {
   const logIds = [...new Set(encounters.map((encounter) => encounter.logId))];
-  const instanceNames = [...new Set(encounters.map((encounter) => encounter.instanceName))];
   const parseQueries = useInstancesTimeParses(logIds);
-  const spreadQueries = useTimeParseSpreadsForInstances(instanceNames);
-  const loading = parseQueries.some((query) => query.isLoading) || spreadQueries.some((query) => query.isLoading);
-  const lookbackDays = parseQueries.find((query) => query.data)?.data?.lookback_days;
   // The same boss from different nights needs the date to tell them apart.
   const nameCounts = new Map<string, number>();
   for (const encounter of encounters) nameCounts.set(encounter.name, (nameCounts.get(encounter.name) ?? 0) + 1);
-
-  const rows = encounters.map((encounter, index) => ({
-    encounter,
-    color: GUILD_SERIES_COLORS[index % GUILD_SERIES_COLORS.length],
-    label: (nameCounts.get(encounter.name) ?? 0) > 1 ? `${encounter.name} · ${shortDate(encounter.startTime)}` : encounter.name,
-    parses: scopedKillParsesByEncounter(parseQueries[logIds.indexOf(encounter.logId)]?.data)?.get(encounter.id),
-    spread: findBossSpread(
-      spreadQueries[instanceNames.indexOf(encounter.instanceName)]?.data?.spreads,
-      encounter.name,
-      encounter.difficultyName,
-      encounter.maxPlayers,
-    ),
-  })).filter((row) => !hidden.has(entityKey(row.encounter)));
+  const rows = encounters
+    .map((encounter, index) => ({ encounter, color: GUILD_SERIES_COLORS[index % GUILD_SERIES_COLORS.length] }))
+    .filter(({ encounter }) => !hidden.has(entityKey(encounter)));
 
   if (rows.length === 0) return <Empty>Everyone here is hidden. Shift+click a name to show them again.</Empty>;
-  if (loading) return <Empty>Loading…</Empty>;
-
-  if (tab === "chart") {
-    return (
-      <div className="space-y-2.5">
-        <p className="text-[11px] text-muted-foreground">Each pull on its boss's server kills, fastest on the left</p>
-        {rows.map(({ encounter, color, label, spread }) => (
-          <div key={entityKey(encounter)} className="space-y-1">
-            <div className="flex items-center gap-1.5 text-xs">
-              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
-              <span className="truncate font-medium">{label}</span>
-              <span className="ml-auto font-mono tabular-nums">
-                {isKill(encounter) ? formatClearTime(encounter.durationMs) : `${KILL_TYPE_LABEL[encounter.killType]} ${formatClearTime(encounter.durationMs)}`}
-              </span>
-            </div>
-            {spread ? (
-              <ServerSpread spread={spread} valueMs={isKill(encounter) ? encounter.durationMs : null} color={color} />
-            ) : (
-              <p className="text-[10px] text-muted-foreground">No server kills of this boss yet.</p>
-            )}
-          </div>
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] text-muted-foreground">
+        Kill times in the last {ENCOUNTER_LOOKBACK_DAYS} days, fastest on the left. The dot is the pull; the number is its parse.
+      </p>
+      <div className="styled-scrollbar max-h-[50vh] space-y-4 overflow-y-auto pr-1">
+        {rows.map(({ encounter, color }) => (
+          <EncounterKillBoxPlots
+            key={entityKey(encounter)}
+            encounter={encounter}
+            color={color}
+            label={(nameCounts.get(encounter.name) ?? 0) > 1 ? `${encounter.name} · ${shortDate(encounter.startTime)}` : encounter.name}
+            parses={scopedKillParsesByEncounter(parseQueries[logIds.indexOf(encounter.logId)]?.data)?.get(encounter.id)}
+          />
         ))}
       </div>
-    );
-  }
-
-  if (rows.length === 1) {
-    const { encounter, parses, spread } = rows[0];
-    return (
-      <div className="space-y-2.5 text-xs">
-        <FightsLine instanceName={encounter.instanceName} detail={shortDate(encounter.startTime)} />
-        <div className="flex items-baseline gap-2">
-          <span className={cn("font-medium", isKill(encounter) ? "text-emerald-400" : "text-rose-400")}>{KILL_TYPE_LABEL[encounter.killType]}</span>
-          <span className="text-muted-foreground">{isKill(encounter) ? "in" : "after"}</span>
-          <span className="ml-auto font-mono text-2xl font-bold tabular-nums">{formatClearTime(encounter.durationMs)}</span>
-        </div>
-        {spread && (
-          <div className="space-y-1">
-            <ServerSpread spread={spread} valueMs={isKill(encounter) ? encounter.durationMs : null} />
-            <p className="text-[10px] text-muted-foreground">Server · {spread.sample_size} kills</p>
-          </div>
-        )}
-        {isKill(encounter) ? (
-          <div className="overflow-hidden rounded-md border border-white/10">
-            <ParseScopeList title="Kill time parse" unit="kills" parses={parses} lookbackDays={lookbackDays} />
-          </div>
-        ) : (
-          <p className="text-[11px] text-muted-foreground">Only kills are ranked.</p>
-        )}
-      </div>
-    );
-  }
-
-  const parseCell = (score: number | undefined) =>
-    score === undefined ? null : { text: String(score), color: parseHexColor(score) };
-  return (
-    <CompareTable
-      columns={["Time", "Server", "Realm", "Guild"]}
-      rows={rows.map(({ encounter, color, label, parses }) => ({
-        key: entityKey(encounter),
-        name: label,
-        dot: color,
-        cells: [
-          { text: isKill(encounter) ? formatClearTime(encounter.durationMs) : KILL_TYPE_LABEL[encounter.killType], strong: true },
-          parseCell(scoredKillParse(parses?.server)?.display_score),
-          parseCell(scoredKillParse(parses?.realm)?.display_score),
-          parseCell(scoredKillParse(parses?.guild)?.display_score),
-        ],
-      }))}
-    />
+    </div>
   );
 }
 
