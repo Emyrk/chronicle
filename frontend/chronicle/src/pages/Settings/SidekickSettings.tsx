@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   AlertTriangle,
   Archive,
+  BellRing,
   CheckCircle2,
   ChevronDown,
   Clock3,
@@ -38,6 +39,7 @@ import {
   SIDEKICK_REFRESH_INTERVAL_MS,
   useDeleteSidekick,
   useDisconnectSidekick,
+  useMyNotificationSettings,
   useMySidekicks,
   useRenameSidekick,
   useUpdateSidekickConfig,
@@ -46,6 +48,7 @@ import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/Switch/Switch";
+import { DiscordIcon } from "@/components/icons/DiscordIcon";
 
 const EMPTY_CONFIG: SidekickConfig = {
   version: 1,
@@ -669,6 +672,33 @@ export function SidekickCards({ sidekicks, readOnly = false }: { sidekicks: read
   );
 }
 
+// Nudges Discord users who haven't turned on the "upload processed" DM yet.
+function NotificationsCallout() {
+  const { data } = useMyNotificationSettings();
+  if (!data?.discord_linked) return null;
+  const enabled = data.settings.some((setting) => setting.channel === "discord" && setting.event === "upload_processed" && setting.enabled);
+  if (enabled) return null;
+  return (
+    <Card className="flex flex-col gap-3 border-[#5865F2]/40 bg-[#5865F2]/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-start gap-3">
+        <BellRing className="mt-0.5 h-5 w-5 shrink-0 text-[#5865F2]" />
+        <div>
+          <div className="font-medium">Know the moment your logs are ready</div>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Get a Discord DM with a link as soon as Sidekick's uploads finish processing.
+          </p>
+        </div>
+      </div>
+      <Link to="/account/notifications" className="shrink-0">
+        <Button variant="outline" size="sm" className="gap-2">
+          <DiscordIcon className="size-4 text-[#5865F2]" />
+          Turn on notifications
+        </Button>
+      </Link>
+    </Card>
+  );
+}
+
 export function SidekickSettings() {
   const { sidekickID } = useParams<{ sidekickID?: string }>();
   const { data, isLoading, error, dataUpdatedAt, isFetching, refetch } = useMySidekicks();
@@ -693,6 +723,8 @@ export function SidekickSettings() {
           Manage game formats and automatic uploads for each WoW installation reported by Chronicle Sidekick.
         </p>
       </div>
+
+      <NotificationsCallout />
 
       {isLoading ? (
         <div className="flex items-center gap-2 py-12 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading Sidekicks...</div>
