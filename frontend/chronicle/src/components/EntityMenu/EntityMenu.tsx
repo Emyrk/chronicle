@@ -277,7 +277,7 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
         </div>
         {expanded && (
           <Suspense fallback={null}>
-            <ComparePanel entities={compare.pins} hidden={compare.hidden} initialKind={expanded} onClose={closeExpanded} />
+            <ComparePanel entities={compare.pins} hidden={compare.hidden} raid={raid} initialKind={expanded} onClose={closeExpanded} />
           </Suspense>
         )}
       </div>

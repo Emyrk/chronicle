@@ -13,7 +13,8 @@ import { PerformanceExplorer } from "@/pages/ArmoryPage/overview/PerformanceExpl
 import { GuildHistoryExplorer } from "@/pages/GuildHistory/GuildHistoryExplorer";
 import { DEFAULT_GUILD_HISTORY_STATE, type GuildHistoryState } from "@/pages/GuildHistory/guildHistoryState";
 import { entityKey, guildCompareUrl, performanceCompareUrl, type EntityKind, type EntityRef } from "./entity";
-import { KIND_LABEL, kindColor } from "./entityCompare";
+import { KIND_LABEL, kindColor, useQuickRange, type QuickRange } from "./entityCompare";
+import type { EntityRaidContext } from "./entityMenuContext";
 
 type Character = Extract<EntityRef, { kind: "character" }>;
 type Guild = Extract<EntityRef, { kind: "guild" }>;
@@ -25,15 +26,19 @@ type Guild = Extract<EntityRef, { kind: "guild" }>;
 export default function ComparePanel({
   entities,
   hidden = new Set(),
+  raid = null,
   initialKind,
   onClose,
 }: {
   entities: EntityRef[];
   /** Entity keys that open hidden, as Shift+click hides them on the pages. */
   hidden?: ReadonlySet<string>;
+  /** The page's raid and selected bosses, so the full stats open on the same fights as the tray. */
+  raid?: EntityRaidContext | null;
   initialKind: EntityKind;
   onClose: () => void;
 }) {
+  const [range] = useQuickRange();
   const characters = entities.filter((entity): entity is Character => entity.kind === "character");
   const guilds = entities.filter((entity): entity is Guild => entity.kind === "guild");
   const kinds = (["character", "guild"] as const).filter((kind) => (kind === "character" ? characters : guilds).length > 0);
@@ -56,7 +61,8 @@ export default function ComparePanel({
   const fullPage = kind === "character" ? performanceCompareUrl(characters, hidden) : guildCompareUrl(guilds, hidden);
 
   return (
-    <div className="fixed inset-0 z-[60]">
+    // z-50, not above: the explorers' tooltips and menus portal to the body at z-50 and must show on top.
+    <div className="fixed inset-0 z-50">
       <button type="button" aria-label="Close stats" className="absolute inset-0 bg-black/50" onClick={onClose} />
       <section
         role="dialog"
@@ -106,9 +112,9 @@ export default function ComparePanel({
         <div className="min-h-0 flex-1 overflow-y-auto p-2 styled-scrollbar sm:p-4">
           <AdSuppressionProvider suppressed>
             {kind === "character" ? (
-              <PlayerStats key={characters.map(entityKey).join()} characters={characters} hidden={hidden} />
+              <PlayerStats key={characters.map(entityKey).join()} characters={characters} hidden={hidden} raid={raid} range={range} />
             ) : (
-              <GuildStats key={guilds.map(entityKey).join()} guilds={guilds} hidden={hidden} />
+              <GuildStats key={guilds.map(entityKey).join()} guilds={guilds} hidden={hidden} raid={raid} range={range} />
             )}
           </AdSuppressionProvider>
         </div>
@@ -117,9 +123,24 @@ export default function ComparePanel({
   );
 }
 
-function PlayerStats({ characters, hidden }: { characters: Character[]; hidden: ReadonlySet<string> }) {
+function PlayerStats({
+  characters,
+  hidden,
+  raid,
+  range,
+}: {
+  characters: Character[];
+  hidden: ReadonlySet<string>;
+  raid: EntityRaidContext | null;
+  range: QuickRange;
+}) {
   const [state, setState] = useState<PerformanceComparisonState>(() => ({
     ...DEFAULT_PERFORMANCE_COMPARISON_STATE,
+    instanceName: raid?.instanceName ?? "",
+    difficultyName: raid?.difficultyName ?? "",
+    maxPlayers: raid?.maxPlayers ?? 0,
+    encounters: raid?.bossNames ?? [],
+    dateRange: range,
     realmName: characters[0].realm,
     players: characters.map((character) => ({
       id: character.guid,
@@ -146,9 +167,24 @@ function PlayerStats({ characters, hidden }: { characters: Character[]; hidden: 
   );
 }
 
-function GuildStats({ guilds, hidden }: { guilds: Guild[]; hidden: ReadonlySet<string> }) {
+function GuildStats({
+  guilds,
+  hidden,
+  raid,
+  range,
+}: {
+  guilds: Guild[];
+  hidden: ReadonlySet<string>;
+  raid: EntityRaidContext | null;
+  range: QuickRange;
+}) {
   const [state, setState] = useState<GuildHistoryState>(() => ({
     ...DEFAULT_GUILD_HISTORY_STATE,
+    instanceName: raid?.instanceName ?? "",
+    difficultyName: raid?.difficultyName ?? null,
+    maxPlayers: raid?.maxPlayers ?? null,
+    dynamicDifficulty: raid?.dynamicDifficulty ?? null,
+    dateRange: range,
     guildIds: guilds.map((guild) => guild.id),
     hiddenGuildIds: guilds.filter((guild) => hidden.has(entityKey(guild))).map((guild) => guild.id),
   }));

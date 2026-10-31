@@ -144,11 +144,15 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
     color: seriesColors[index],
   }));
   const showPlayerRealms = new Set(selectedPlayers.map((player) => player.realmName)).size > 1;
+  // Callers that only know the raid (and maybe its difficulty) still land on it, not the latest raid.
   const variant = variants.find((item) => (
     item.instanceName === state.instanceName
     && item.difficultyName === state.difficultyName
     && item.maxPlayers === state.maxPlayers
-  )) ?? variants[0];
+  ))
+    ?? variants.find((item) => item.instanceName === state.instanceName && (!state.difficultyName || item.difficultyName === state.difficultyName))
+    ?? variants.find((item) => item.instanceName === state.instanceName)
+    ?? variants[0];
   const encounterSections = progressionBossesQuery.isLoading
     ? []
     : performanceEncounterSections(variant, progressionBossesQuery.data);
