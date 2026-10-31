@@ -3,6 +3,14 @@ import { useSupportedInstanceProgressionBosses, useSupportedInstanceRankingEncou
 import { useCharacterEncounters, useCharacterPerformances } from "@/api/rankingsQueries";
 import type { CharacterPerformanceRun, GuildSpeedrunRun } from "@/api/typesGenerated";
 import { cn } from "@/lib/utils";
+import { Check, ChevronDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/DropdownMenu/DropdownMenu";
 import {
   assignPerformanceSeriesColors,
   buildPerformanceVariants,
@@ -30,6 +38,18 @@ type Guild = Extract<EntityRef, { kind: "guild" }>;
 type EncounterPin = Extract<EntityRef, { kind: "encounter" }>;
 type RaidPin = Extract<EntityRef, { kind: "raid" }>;
 type QuickTab = "score" | "chart";
+
+/** A raid picked in the tray, used when the page doesn't show one. */
+export interface RaidChoice {
+  instanceName: string;
+  difficultyName?: string;
+  maxPlayers?: number;
+  dynamicDifficulty?: number;
+}
+
+const choiceKey = (choice: RaidChoice) => [choice.instanceName, choice.difficultyName ?? "", choice.maxPlayers ?? ""].join("\u0000");
+const choiceLabel = (choice: RaidChoice) =>
+  [choice.instanceName, choice.difficultyName, choice.maxPlayers ? `${choice.maxPlayers}-player` : ""].filter(Boolean).join(" · ");
 
 const TAB_LABELS: Record<EntityKind, Record<QuickTab, string>> = {
   character: { score: "Score", chart: "Chart" },
@@ -74,6 +94,8 @@ export default function QuickStats({
   entities,
   hidden,
   raid,
+  picked,
+  onPick,
   rangeDays,
 }: {
   kind: EntityKind;
@@ -81,6 +103,9 @@ export default function QuickStats({
   /** Entity keys to leave out; everyone else keeps the color they'd have with them shown. */
   hidden: ReadonlySet<string>;
   raid: EntityRaidContext | null;
+  /** The raid picked in the tray for this kind; the page's raid wins over it. */
+  picked: RaidChoice | null;
+  onPick: (choice: RaidChoice | null) => void;
   /** Nights older than this are left out of the stats and chart. */
   rangeDays: number;
 }) {
@@ -161,6 +186,8 @@ export default function QuickStats({
             key={characters.map(entityKey).join()}
             characters={characters}
             raid={raid}
+            picked={picked}
+            onPick={onPick}
             tab={tab}
             metric={metric}
             requestedDisplay={display}
@@ -172,7 +199,7 @@ export default function QuickStats({
         ) : kind === "raid" ? (
           <RaidQuickStats raids={raids} hidden={hidden} />
         ) : (
-          <GuildQuickStats key={guilds.map(entityKey).join()} guilds={guilds} hidden={hidden} raid={raid} tab={tab} rangeDays={rangeDays} />
+          <GuildQuickStats key={guilds.map(entityKey).join()} guilds={guilds} hidden={hidden} raid={raid} picked={picked} onPick={onPick} tab={tab} rangeDays={rangeDays} />
         )}
       </div>
     </div>
@@ -181,22 +208,25 @@ export default function QuickStats({
 
 /**
  * The fights to compare: the page's selected bosses; else the page's raid (a speedrun board has
- * no boss selection) with the first player's usual bosses in it; else their most recent raid.
+ * no boss selection) with the first player's usual bosses in it; else the raid picked in the
+ * tray; else their most recent raid. `choices` are the first player's raids, for the picker.
  */
-function usePlayerFights(characters: Character[], raid: EntityRaidContext | null) {
+function usePlayerFights(characters: Character[], pageRaid: EntityRaidContext | null, picked: RaidChoice | null) {
+  const raid: EntityRaidContext | null = pageRaid ?? (picked ? { ...picked, bossNames: [] } : null);
   const pageBosses = !!raid && raid.bossNames.length > 0;
   const encounters = useCharacterEncounters(characters[0]?.guid, undefined, !pageBosses);
   const progression = useSupportedInstanceProgressionBosses();
   const rankingSets = useSupportedInstanceRankingEncounterSets();
-  if (raid && pageBosses) {
-    return { ...raid, fromPage: true, loading: false };
-  }
   const variants = buildPerformanceVariants(encounters.data?.encounters ?? []);
+  if (raid && pageBosses) {
+    return { ...raid, fromPage: true, loading: false, choices: variants };
+  }
   const variant = raid
-    ? variants.find((item) => item.instanceName === raid.instanceName && (!raid.difficultyName || item.difficultyName === raid.difficultyName))
+    ? (picked && !pageRaid ? variants.find((item) => choiceKey(item) === choiceKey(picked)) : undefined)
+      ?? variants.find((item) => item.instanceName === raid.instanceName && (!raid.difficultyName || item.difficultyName === raid.difficultyName))
       ?? variants.find((item) => item.instanceName === raid.instanceName)
     : variants[0];
-  if (!variant) return { instanceName: "", bossNames: [] as string[], fromPage: false, loading: encounters.isLoading };
+  if (!variant) return { instanceName: "", bossNames: [] as string[], fromPage: false, loading: encounters.isLoading, choices: variants };
   return {
     instanceName: variant.instanceName,
     difficultyName: variant.difficultyName,
@@ -205,6 +235,7 @@ function usePlayerFights(characters: Character[], raid: EntityRaidContext | null
     instanceId: undefined,
     fromPage: false,
     loading: false,
+    choices: variants,
   };
 }
 
@@ -219,6 +250,8 @@ interface PlayerLine {
 function PlayerQuickStats({
   characters,
   raid,
+  picked,
+  onPick,
   tab,
   metric,
   requestedDisplay,
@@ -227,6 +260,8 @@ function PlayerQuickStats({
 }: {
   characters: Character[];
   raid: EntityRaidContext | null;
+  picked: RaidChoice | null;
+  onPick: (choice: RaidChoice | null) => void;
   tab: QuickTab;
   metric: Metric;
   requestedDisplay: Display;
@@ -235,7 +270,7 @@ function PlayerQuickStats({
 }) {
   const [now] = useState(() => Date.now());
   const cutoff = new Date(now - rangeDays * DAY_MS).toISOString();
-  const fights = usePlayerFights(characters, raid);
+  const fights = usePlayerFights(characters, raid, picked);
   const queries = useCharacterPerformances(
     characters.map((character) => ({
       playerGuid: character.guid,
@@ -275,9 +310,10 @@ function PlayerQuickStats({
         instanceName={fights.instanceName}
         detail={
           fights.bossNames.length > 0
-            ? `${fights.bossNames.length} ${fights.bossNames.length === 1 ? "boss" : "bosses"}${fights.fromPage ? " · same fights as this page" : raid ? " · this page's raid" : " · most recent raid"}`
+            ? `${fights.bossNames.length} ${fights.bossNames.length === 1 ? "boss" : "bosses"}${fights.fromPage ? " · same fights as this page" : raid ? " · this page's raid" : picked ? "" : " · most recent raid"}`
             : undefined
         }
+        picker={raid ? undefined : { choices: fights.choices, picked, onPick }}
       />
       {!loading && requestedDisplay === "parse" && display === "raw" && (
         <p className="text-[11px] text-muted-foreground">No parses on these fights yet, so these are {metric.toUpperCase()} values.</p>
@@ -402,27 +438,34 @@ function GuildQuickStats({
   guilds,
   hidden,
   raid,
+  picked,
+  onPick,
   tab,
   rangeDays,
 }: {
   guilds: Guild[];
   hidden: ReadonlySet<string>;
   raid: EntityRaidContext | null;
+  picked: RaidChoice | null;
+  onPick: (choice: RaidChoice | null) => void;
   tab: QuickTab;
   rangeDays: number;
 }) {
   const [now] = useState(() => Date.now());
   const clears = useGuildRaidClearsList(raid ? [] : guilds.slice(0, 1).map((guild) => guild.id));
-  const latestRaid = [...(clears[0]?.data?.clears ?? [])].sort((a, b) => b.last_cleared_at.localeCompare(a.last_cleared_at))[0];
+  const choices: RaidChoice[] = [...(clears[0]?.data?.clears ?? [])]
+    .sort((a, b) => b.last_cleared_at.localeCompare(a.last_cleared_at))
+    .map((clear) => ({
+      instanceName: clear.instance_name,
+      difficultyName: clear.difficulty_name,
+      maxPlayers: clear.max_players,
+      dynamicDifficulty: clear.dynamic_difficulty,
+    }));
+  const latestRaid = choices[0];
   // Clears are kept per raid size and difficulty, so compare the same variant.
-  const variant = raid
+  const variant: Partial<RaidChoice> = raid
     ? { instanceName: raid.instanceName, difficultyName: raid.difficultyName, maxPlayers: raid.maxPlayers, dynamicDifficulty: raid.dynamicDifficulty }
-    : {
-        instanceName: latestRaid?.instance_name,
-        difficultyName: latestRaid?.difficulty_name,
-        maxPlayers: latestRaid?.max_players,
-        dynamicDifficulty: latestRaid?.dynamic_difficulty,
-      };
+    : picked ?? latestRaid ?? {};
   const instanceName = variant.instanceName;
   const histories = useGuildSpeedrunHistories(
     guilds.map((guild) => guild.id),
@@ -441,12 +484,16 @@ function GuildQuickStats({
     return { guild, color: GUILD_SERIES_COLORS[index % GUILD_SERIES_COLORS.length], runs, focus };
   });
   const lines = allLines.filter((line) => !hidden.has(entityKey(line.guild)));
-  const loading = (!raid && clears[0]?.isLoading) || histories.some((query) => query.isLoading);
+  const loading = (!raid && !picked && clears[0]?.isLoading) || histories.some((query) => query.isLoading);
   const focusLabel = raid?.instanceSlug ? "This log" : "Latest";
 
   return (
     <div className="space-y-2.5">
-      <FightsLine instanceName={instanceName ?? ""} detail={raid ? "full clears · this page's raid" : "full clears · most recent raid"} />
+      <FightsLine
+        instanceName={instanceName ?? ""}
+        detail={raid ? "full clears · this page's raid" : picked ? "full clears" : "full clears · most recent raid"}
+        picker={raid ? undefined : { choices, picked, onPick }}
+      />
       {lines.length === 0 ? (
         <Empty>Everyone here is hidden. Shift+click a name to show them again.</Empty>
       ) : loading ? (
@@ -607,12 +654,54 @@ function RaidQuickStats({ raids, hidden }: { raids: RaidPin[]; hidden: ReadonlyS
   );
 }
 
-function FightsLine({ instanceName, detail }: { instanceName: string; detail?: string }) {
-  if (!instanceName) return null;
+/**
+ * Which raid the stats are on. With a `picker` (the page has no raid of its own), the raid name
+ * opens a menu of the first entity's raids; a page that shows a raid takes over again.
+ */
+function FightsLine({
+  instanceName,
+  detail,
+  picker,
+}: {
+  instanceName: string;
+  detail?: string;
+  picker?: { choices: RaidChoice[]; picked: RaidChoice | null; onPick: (choice: RaidChoice | null) => void };
+}) {
+  if (!instanceName && !picker?.choices.length) return null;
+  if (!picker || picker.choices.length === 0) {
+    return (
+      <p className="truncate text-[11px] text-muted-foreground">
+        <span className="font-medium text-foreground">{instanceName}</span>
+        {detail && ` · ${detail}`}
+      </p>
+    );
+  }
+  const pickedKey = picker.picked ? choiceKey(picker.picked) : null;
   return (
-    <p className="truncate text-[11px] text-muted-foreground">
-      <span className="font-medium text-foreground">{instanceName}</span>
-      {detail && ` · ${detail}`}
+    <p className="flex min-w-0 items-center text-[11px] text-muted-foreground">
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          className="-ml-1 flex shrink-0 items-center gap-0.5 rounded px-1 font-medium text-foreground hover:bg-white/10"
+          title="Pick the raid to compare on"
+        >
+          {picker.picked ? choiceLabel(picker.picked) : instanceName || "Pick a raid"}
+          <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="styled-scrollbar max-h-72 overflow-y-auto text-xs">
+          <DropdownMenuItem onSelect={() => picker.onPick(null)}>
+            <Check className={cn("h-3.5 w-3.5", pickedKey !== null && "invisible")} aria-hidden="true" />
+            Most recent raid
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          {picker.choices.map((choice) => (
+            <DropdownMenuItem key={choiceKey(choice)} onSelect={() => picker.onPick(choice)}>
+              <Check className={cn("h-3.5 w-3.5", choiceKey(choice) !== pickedKey && "invisible")} aria-hidden="true" />
+              {choiceLabel(choice)}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {detail && <span className="truncate">&nbsp;· {detail}</span>}
     </p>
   );
 }

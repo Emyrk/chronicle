@@ -16,6 +16,7 @@ import {
 } from "./entity";
 import { KIND_LABEL, kindColor, MAX_COMPARE, QUICK_RANGE_DAYS, QUICK_RANGES, STATS_TIER, useQuickRange, type Pin } from "./entityCompare";
 import type { EntityRaidContext } from "./entityMenuContext";
+import type { RaidChoice } from "./QuickStats";
 
 const QuickStats = lazy(() => import("./QuickStats"));
 
@@ -59,6 +60,8 @@ export function CompareTray({
   const [range, setRange] = useQuickRange();
   // A choice holds until something new is added; then the card follows the newest pin.
   const [chosen, setChosen] = useState<{ kind: EntityKind; count: number } | null>(null);
+  // A raid picked per kind, for pages that don't show one; a page's own raid takes over while open.
+  const [picked, setPicked] = useState<Partial<Record<EntityKind, RaidChoice>>>({});
   if (pins.length === 0) return null;
   const groups = (["character", "guild", "encounter", "raid"] as const)
     .map((kind) => ({ kind, entities: pins.filter((pin) => pin.kind === kind) }))
@@ -217,7 +220,11 @@ export function CompareTray({
 
         {showStats ? (
           <Suspense fallback={<div className="h-32" />}>
-            <QuickStats kind={kind} entities={entities} hidden={hidden} raid={raid} rangeDays={QUICK_RANGE_DAYS[range]} />
+            <QuickStats kind={kind} entities={entities} hidden={hidden} raid={raid}
+              picked={picked[kind] ?? null}
+              onPick={(choice) => setPicked((current) => ({ ...current, [kind]: choice ?? undefined }))}
+              rangeDays={QUICK_RANGE_DAYS[range]}
+            />
           </Suspense>
         ) : (
           <LockedPreview kind={kind} entities={entities.filter((entity) => !hidden.has(entityKey(entity)))} />
