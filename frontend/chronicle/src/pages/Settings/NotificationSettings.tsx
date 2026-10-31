@@ -11,14 +11,9 @@ import { useAuth } from "@/hooks/useAuth";
 
 const EVENTS: { event: NotificationEvent; label: string; description: string }[] = [
   {
-    event: "sidekick_upload_accepted",
-    label: "Sidekick upload accepted",
-    description: "Chronicle received a log that Sidekick uploaded for you.",
-  },
-  {
-    event: "sidekick_append_accepted",
-    label: "Sidekick log update accepted",
-    description: "Chronicle received new data that Sidekick appended to an existing log.",
+    event: "sidekick_notifications",
+    label: "Sidekick notifications",
+    description: "Sidekick uploads, log updates, and upload failures that need your attention.",
   },
   {
     event: "upload_processed",

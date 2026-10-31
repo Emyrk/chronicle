@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/bwmarrin/discordgo"
@@ -23,11 +24,13 @@ type DiscordDirectMessage struct {
 
 // ArgsSendDiscordDM delivers a direct message to a Discord user.
 type ArgsSendDiscordDM struct {
-	DiscordID string               `json:"discord_id"`
+	DiscordID string               `json:"discord_id" river:"unique"`
 	Message   DiscordDirectMessage `json:"message"`
-	// UniqueKey distinguishes otherwise identical messages while preserving
-	// River's active-job deduplication. Event or record IDs are good keys.
-	UniqueKey string `json:"unique_key,omitempty"`
+	// UniqueKey distinguishes otherwise identical messages. Event or record IDs
+	// are good keys. DeduplicateFor additionally suppresses completed duplicates
+	// during a time window.
+	UniqueKey      string        `json:"unique_key,omitempty" river:"unique"`
+	DeduplicateFor time.Duration `json:"-"`
 }
 
 func (ArgsSendDiscordDM) Kind() string { return KindSendDiscordDM }
@@ -38,7 +41,8 @@ func (a ArgsSendDiscordDM) InsertOpts() river.InsertOpts {
 	}
 	if a.UniqueKey != "" {
 		opts.UniqueOpts = river.UniqueOpts{
-			ByArgs: true,
+			ByArgs:   true,
+			ByPeriod: a.DeduplicateFor,
 			ByState: []rivertype.JobState{
 				rivertype.JobStateScheduled,
 				rivertype.JobStatePending,
@@ -46,6 +50,9 @@ func (a ArgsSendDiscordDM) InsertOpts() river.InsertOpts {
 				rivertype.JobStateRunning,
 				rivertype.JobStateRetryable,
 			},
+		}
+		if a.DeduplicateFor > 0 {
+			opts.UniqueOpts.ByState = nil
 		}
 	}
 	return opts

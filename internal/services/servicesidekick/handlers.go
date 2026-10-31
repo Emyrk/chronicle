@@ -411,6 +411,11 @@ func (s *Service) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusOK, response)
 }
 
+func (s *Service) IsSidekickRequest(ctx context.Context) bool {
+	_, ok := serviceoauth.SidekickInstallationID(ctx)
+	return ok
+}
+
 func (s *Service) RecordUpload(ctx context.Context) bool {
 	installationID, ok := serviceoauth.SidekickInstallationID(ctx)
 	if !ok {

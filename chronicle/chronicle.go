@@ -274,7 +274,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 	}
 	if user.ConsumedStorageBytes > user.MaxStorageBytes {
 		return nil, nil, httpapi.NewAPIError(
-			fmt.Errorf("storage limit exceeded"),
+			ErrUserStorageQuotaExceeded,
 			fmt.Sprintf("Reached storage limit of %s bytes, delete log files to free up space", humanize.Bytes(uint64(user.MaxStorageBytes))),
 			http.StatusBadRequest)
 	}
@@ -441,7 +441,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 	}
 	if user.ConsumedStorageBytes+incomingStorageBytes > user.MaxStorageBytes {
 		return nil, nil, httpapi.NewAPIError(
-			fmt.Errorf("storage limit exceeded"),
+			ErrUserStorageQuotaExceeded,
 			fmt.Sprintf("This upload would exceed the storage limit of %s; delete log files to free up space", humanize.Bytes(uint64(user.MaxStorageBytes))),
 			http.StatusBadRequest,
 		)
@@ -473,7 +473,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 		}
 		if lockedUser.ConsumedStorageBytes+incomingStorageBytes > lockedUser.MaxStorageBytes {
 			return httpapi.NewAPIError(
-				fmt.Errorf("storage limit exceeded"),
+				ErrUserStorageQuotaExceeded,
 				fmt.Sprintf("This upload would exceed the storage limit of %s; delete log files to free up space", humanize.Bytes(uint64(lockedUser.MaxStorageBytes))),
 				http.StatusBadRequest,
 			)
@@ -618,8 +618,9 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 }
 
 var (
-	ErrLogAppendInProgress = errors.New("log append with this upload ID is already in progress")
-	ErrUserLogAppendLimit  = errors.New("user log append limit reached")
+	ErrLogAppendInProgress      = errors.New("log append with this upload ID is already in progress")
+	ErrUserLogAppendLimit       = errors.New("user log append limit reached")
+	ErrUserStorageQuotaExceeded = errors.New("storage limit exceeded")
 )
 
 // ErrServerLogAppendInProgress is kept for compatibility with the server upload handler.
@@ -646,7 +647,7 @@ func userLogAppendQuotaError(owner database.ChronicleUser, compressedSize int64)
 		return nil
 	}
 	return httpapi.NewAPIError(
-		fmt.Errorf("storage limit exceeded"),
+		ErrUserStorageQuotaExceeded,
 		fmt.Sprintf("This append would exceed the storage limit of %s; delete log files to free up space", humanize.Bytes(uint64(owner.MaxStorageBytes))),
 		http.StatusBadRequest,
 	)

@@ -46,6 +46,35 @@ func enableDiscordNotification(ctx context.Context, t *testing.T, store database
 	require.NoError(t, err)
 }
 
+func TestNotifySidekickQuotaFailure(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	store, _ := dbtestutil.NewDB(t)
+
+	queue := &recordingJobInserter{}
+	bot := &Bot{config: Config{DB: store, AccessURL: "https://chronicle.example", PrimaryDomain: "chronicle.example"}, queue: queue}
+	userID := insertDiscordUser(ctx, t, store, "discord-sidekick-quota")
+	tenant := pgtype.Text{String: "capy", Valid: true}
+
+	// Unrelated notification settings do not opt the user into Sidekick notifications.
+	enableDiscordNotification(ctx, t, store, userID, chroniclesdk.NotificationEventUploadProcessed)
+	require.NoError(t, bot.NotifySidekickQuotaFailure(ctx, userID, tenant))
+	require.Zero(t, queue.calls)
+
+	enableDiscordNotification(ctx, t, store, userID, chroniclesdk.NotificationEventSidekickNotifications)
+	require.NoError(t, bot.NotifySidekickQuotaFailure(ctx, userID, tenant))
+	require.Equal(t, 1, queue.calls)
+	require.Equal(t, "discord-sidekick-quota", queue.args.DiscordID)
+	require.Len(t, queue.args.Message.Embeds, 1)
+	require.Equal(t, "Upload blocked: storage full", queue.args.Message.Embeds[0].Title)
+	require.Equal(t, "https://capy.chronicle.example/account/storage", queue.args.Message.Embeds[0].URL)
+	require.Equal(t, "sidekick-quota-failure", queue.args.UniqueKey)
+	require.Equal(t, time.Hour, queue.args.DeduplicateFor)
+	require.True(t, queue.args.InsertOpts().UniqueOpts.ByArgs)
+	require.Equal(t, time.Hour, queue.args.InsertOpts().UniqueOpts.ByPeriod)
+	require.Nil(t, queue.args.InsertOpts().UniqueOpts.ByState)
+}
+
 func TestNotifySidekickUploadAccepted(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitShort)
@@ -61,7 +90,7 @@ func TestNotifySidekickUploadAccepted(t *testing.T) {
 	require.NoError(t, bot.NotifySidekickUploadAccepted(ctx, userID, logGroupID, tenant))
 	require.Zero(t, queue.calls)
 
-	enableDiscordNotification(ctx, t, store, userID, chroniclesdk.NotificationEventSidekickUploadAccepted)
+	enableDiscordNotification(ctx, t, store, userID, chroniclesdk.NotificationEventSidekickNotifications)
 	require.NoError(t, bot.NotifySidekickUploadAccepted(ctx, userID, logGroupID, tenant))
 	require.Equal(t, 1, queue.calls)
 	require.Equal(t, "discord-sidekick", queue.args.DiscordID)
@@ -84,12 +113,11 @@ func TestNotifySidekickAppendAccepted(t *testing.T) {
 	uploadID := uuid.New()
 	tenant := pgtype.Text{String: "capy", Valid: true}
 
-	// The new-log setting does not opt the user into append notifications.
-	enableDiscordNotification(ctx, t, store, userID, chroniclesdk.NotificationEventSidekickUploadAccepted)
+	// Not opted in.
 	require.NoError(t, bot.NotifySidekickAppendAccepted(ctx, userID, logGroupID, uploadID, tenant))
 	require.Zero(t, queue.calls)
 
-	enableDiscordNotification(ctx, t, store, userID, chroniclesdk.NotificationEventSidekickAppendAccepted)
+	enableDiscordNotification(ctx, t, store, userID, chroniclesdk.NotificationEventSidekickNotifications)
 	require.NoError(t, bot.NotifySidekickAppendAccepted(ctx, userID, logGroupID, uploadID, tenant))
 	require.Equal(t, 1, queue.calls)
 	require.Equal(t, "discord-sidekick-append", queue.args.DiscordID)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/Emyrk/chronicle/internal/testutil"
@@ -65,6 +66,11 @@ func TestSendDiscordDMInsertOpts(t *testing.T) {
 	require.Contains(t, opts.UniqueOpts.ByState, rivertype.JobStatePending)
 	require.Contains(t, opts.UniqueOpts.ByState, rivertype.JobStateRetryable)
 	require.Contains(t, opts.UniqueOpts.ByState, rivertype.JobStateRunning)
+
+	opts = ArgsSendDiscordDM{UniqueKey: "quota", DeduplicateFor: time.Hour}.InsertOpts()
+	require.True(t, opts.UniqueOpts.ByArgs)
+	require.Equal(t, time.Hour, opts.UniqueOpts.ByPeriod)
+	require.Nil(t, opts.UniqueOpts.ByState)
 }
 
 func TestDiscordDirectMessage(t *testing.T) {

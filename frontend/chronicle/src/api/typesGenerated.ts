@@ -3145,9 +3145,9 @@ export type NotificationChannel = "discord";
 export const NotificationChannels: NotificationChannel[] = ["discord"];
 
 // From chroniclesdk/notifications.go
-export type NotificationEvent = "sidekick_append_accepted" | "sidekick_upload_accepted" | "upload_processed";
+export type NotificationEvent = "sidekick_notifications" | "upload_processed";
 
-export const NotificationEvents: NotificationEvent[] = ["sidekick_append_accepted", "sidekick_upload_accepted", "upload_processed"];
+export const NotificationEvents: NotificationEvent[] = ["sidekick_notifications", "upload_processed"];
 
 // From chroniclesdk/notifications.go
 /**

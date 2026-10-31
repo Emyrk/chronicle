@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
@@ -463,6 +464,9 @@ func (api *API) WoWLogAppend(w http.ResponseWriter, r *http.Request) {
 		realmID = realm.UUID
 	}
 	if err := api.Chronicle.AppendUserLog(ctx, group.WoWLogGroup, file, artifactInput, realmID, meta, maxAppends); err != nil {
+		if errors.Is(err, chronicle.ErrUserStorageQuotaExceeded) && api.Opts.Sidekick != nil && api.Opts.Sidekick.IsSidekickRequest(ctx) {
+			api.notifySidekickQuotaFailure(ctx, group.WoWLogGroup.Owner)
+		}
 		status := http.StatusInternalServerError
 		message := "Failed to append log file"
 		switch {
@@ -673,6 +677,9 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 
 	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{input}, artifactInputs, logType, uuid.Nil, meta)
 	if err != nil {
+		if errors.Is(err, chronicle.ErrUserStorageQuotaExceeded) && api.Opts.Sidekick != nil && api.Opts.Sidekick.IsSidekickRequest(ctx) {
+			api.notifySidekickQuotaFailure(ctx, chronauth.MustAuthenticatedClaims(ctx).Subject)
+		}
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
 				Message: "Failed to process uploaded log file",

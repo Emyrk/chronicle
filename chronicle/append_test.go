@@ -28,7 +28,7 @@ func TestUserLogAppendQuotaError(t *testing.T) {
 
 	require.NoError(t, userLogAppendQuotaError(owner, 20))
 	err := userLogAppendQuotaError(owner, 21)
-	require.ErrorContains(t, err, "storage limit exceeded")
+	require.ErrorIs(t, err, ErrUserStorageQuotaExceeded)
 }
 
 func TestAppendUserLogPersistsArtifactIdempotently(t *testing.T) {
