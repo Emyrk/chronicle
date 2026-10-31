@@ -41,6 +41,7 @@ function guildInfo(guild: MockGuild): GuildInfo {
     can_edit: false,
     can_view_roster: false,
     can_claim: false,
+    claim_locked: false,
   };
 }
 
