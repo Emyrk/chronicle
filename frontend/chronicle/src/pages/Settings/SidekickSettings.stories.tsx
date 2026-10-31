@@ -127,6 +127,7 @@ function handlers(sidekicks: SidekickInstallation[], opts: { delayMs?: number | 
       const body: ListSidekicksResponse = { sidekicks };
       return HttpResponse.json(body);
     }),
+    http.get("/api/v1/me/notifications", () => HttpResponse.json({ discord_linked: true, settings: [] })),
     // Mutations succeed without changing the fixture so controls can be clicked.
     http.put("/api/v1/me/sidekicks/:id/config", () => HttpResponse.json({})),
     http.patch("/api/v1/me/sidekicks/:id", () => HttpResponse.json(sidekicks[0])),
