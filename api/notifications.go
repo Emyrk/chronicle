@@ -18,6 +18,7 @@ import (
 
 var notificationEvents = map[chroniclesdk.NotificationEvent]struct{}{
 	chroniclesdk.NotificationEventSidekickUploadAccepted: {},
+	chroniclesdk.NotificationEventSidekickAppendAccepted: {},
 	chroniclesdk.NotificationEventUploadProcessed:        {},
 }
 
@@ -96,6 +97,20 @@ func (a *API) notificationSettings(ctx context.Context, userID uuid.UUID) (chron
 		})
 	}
 	return chroniclesdk.NotificationSettings{DiscordLinked: linked, Settings: settings}, nil
+}
+
+// notifySidekickAppendAccepted is best effort; a failed notification never
+// fails the append.
+func (a *API) notifySidekickAppendAccepted(ctx context.Context, logGroupID, uploadID uuid.UUID) {
+	claims := chronauth.MustAuthenticatedClaims(ctx)
+	var tenantSlug pgtype.Text
+	if tenant := servicetenant.TenantFromContext(ctx); tenant != nil {
+		tenantSlug = tenant.Slug
+	}
+	if err := a.Opts.Bot.NotifySidekickAppendAccepted(ctx, claims.Subject, logGroupID, uploadID, tenantSlug); err != nil {
+		a.Opts.Logger.WarnContext(ctx, "failed to notify sidekick append accepted",
+			slog.String("log_group_id", logGroupID.String()), slog.Any("error", err))
+	}
 }
 
 // notifySidekickUploadAccepted is best effort; a failed notification never

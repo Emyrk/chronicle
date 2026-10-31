@@ -16,6 +16,11 @@ const EVENTS: { event: NotificationEvent; label: string; description: string }[]
     description: "Chronicle received a log that Sidekick uploaded for you.",
   },
   {
+    event: "sidekick_append_accepted",
+    label: "Sidekick log update accepted",
+    description: "Chronicle received new data that Sidekick appended to an existing log.",
+  },
+  {
     event: "upload_processed",
     label: "Upload processed",
     description: "A log you uploaded finished processing. Reparses are not included.",

@@ -480,8 +480,8 @@ func (api *API) WoWLogAppend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if api.Opts.Sidekick != nil {
-		api.Opts.Sidekick.RecordUpload(ctx)
+	if api.Opts.Sidekick != nil && api.Opts.Sidekick.RecordUpload(ctx) {
+		api.notifySidekickAppendAccepted(ctx, logID, meta.UploadID)
 	}
 	files, err := api.Zed.GetWoWLogFilesByGroupID(ctx, logID)
 	if err != nil {
