@@ -66,7 +66,38 @@ func TestNotifySidekickUploadAccepted(t *testing.T) {
 	require.Equal(t, 1, queue.calls)
 	require.Equal(t, "discord-sidekick", queue.args.DiscordID)
 	require.Len(t, queue.args.Message.Embeds, 1)
+	require.Equal(t, "Upload accepted", queue.args.Message.Embeds[0].Title)
+	require.Equal(t, "Your combat log was received and is being processed.", queue.args.Message.Embeds[0].Description)
 	require.Equal(t, "https://capy.chronicle.example/logs/"+logGroupID.String(), queue.args.Message.Embeds[0].URL)
+	require.Equal(t, "sidekick-upload-accepted:"+logGroupID.String(), queue.args.UniqueKey)
+}
+
+func TestNotifySidekickAppendAccepted(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	store, _ := dbtestutil.NewDB(t)
+
+	queue := &recordingJobInserter{}
+	bot := &Bot{config: Config{DB: store, AccessURL: "https://chronicle.example", PrimaryDomain: "chronicle.example"}, queue: queue}
+	userID := insertDiscordUser(ctx, t, store, "discord-sidekick-append")
+	logGroupID := uuid.New()
+	uploadID := uuid.New()
+	tenant := pgtype.Text{String: "capy", Valid: true}
+
+	// The new-log setting does not opt the user into append notifications.
+	enableDiscordNotification(ctx, t, store, userID, chroniclesdk.NotificationEventSidekickUploadAccepted)
+	require.NoError(t, bot.NotifySidekickAppendAccepted(ctx, userID, logGroupID, uploadID, tenant))
+	require.Zero(t, queue.calls)
+
+	enableDiscordNotification(ctx, t, store, userID, chroniclesdk.NotificationEventSidekickAppendAccepted)
+	require.NoError(t, bot.NotifySidekickAppendAccepted(ctx, userID, logGroupID, uploadID, tenant))
+	require.Equal(t, 1, queue.calls)
+	require.Equal(t, "discord-sidekick-append", queue.args.DiscordID)
+	require.Len(t, queue.args.Message.Embeds, 1)
+	require.Equal(t, "Log update accepted", queue.args.Message.Embeds[0].Title)
+	require.Equal(t, "Your new combat log data was received. The previous log will automatically be updated.", queue.args.Message.Embeds[0].Description)
+	require.Equal(t, "https://capy.chronicle.example/logs/"+logGroupID.String(), queue.args.Message.Embeds[0].URL)
+	require.Equal(t, "sidekick-append-accepted:"+uploadID.String(), queue.args.UniqueKey)
 }
 
 func TestNotifyUploadProcessed(t *testing.T) {

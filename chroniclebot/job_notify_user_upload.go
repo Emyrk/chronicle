@@ -34,10 +34,44 @@ func (b *Bot) userDiscordNotificationTarget(ctx context.Context, userID uuid.UUI
 // NotifySidekickUploadAccepted DMs the uploader that a Sidekick upload was
 // accepted, if they opted in.
 func (b *Bot) NotifySidekickUploadAccepted(ctx context.Context, userID, logGroupID uuid.UUID, tenantSlug pgtype.Text) error {
+	return b.notifySidekickUploadAccepted(
+		ctx,
+		userID,
+		logGroupID,
+		tenantSlug,
+		chroniclesdk.NotificationEventSidekickUploadAccepted,
+		"Upload accepted",
+		"Your combat log was received and is being processed.",
+		"sidekick-upload-accepted:"+logGroupID.String(),
+	)
+}
+
+// NotifySidekickAppendAccepted DMs the uploader that a Sidekick append was
+// accepted, if they opted into Sidekick append notifications.
+func (b *Bot) NotifySidekickAppendAccepted(ctx context.Context, userID, logGroupID, uploadID uuid.UUID, tenantSlug pgtype.Text) error {
+	return b.notifySidekickUploadAccepted(
+		ctx,
+		userID,
+		logGroupID,
+		tenantSlug,
+		chroniclesdk.NotificationEventSidekickAppendAccepted,
+		"Log update accepted",
+		"Your new combat log data was received. The previous log will automatically be updated.",
+		"sidekick-append-accepted:"+uploadID.String(),
+	)
+}
+
+func (b *Bot) notifySidekickUploadAccepted(
+	ctx context.Context,
+	userID, logGroupID uuid.UUID,
+	tenantSlug pgtype.Text,
+	event chroniclesdk.NotificationEvent,
+	title, description, uniqueKey string,
+) error {
 	if !b.Available() {
 		return nil
 	}
-	discordID, err := b.userDiscordNotificationTarget(ctx, userID, chroniclesdk.NotificationEventSidekickUploadAccepted)
+	discordID, err := b.userDiscordNotificationTarget(ctx, userID, event)
 	if err != nil || discordID == "" {
 		return err
 	}
@@ -45,12 +79,12 @@ func (b *Bot) NotifySidekickUploadAccepted(ctx context.Context, userID, logGroup
 		DiscordID: discordID,
 		Message: DiscordDirectMessage{Embeds: []*discordgo.MessageEmbed{{
 			Author:      &discordgo.MessageEmbedAuthor{Name: "SIDEKICK"},
-			Title:       "Upload accepted",
-			Description: "Your combat log was received and is being processed.",
+			Title:       title,
+			Description: description,
 			URL:         fmt.Sprintf("%s/logs/%s", b.tenantBaseURL(tenantSlug), logGroupID),
 			Color:       0x5865F2,
 		}}},
-		UniqueKey: "sidekick-upload-accepted:" + logGroupID.String(),
+		UniqueKey: uniqueKey,
 	})
 }
 
