@@ -1,5 +1,7 @@
 # Mastery and Renown rating model
 
+**Start with the [white-paper pitch](mastery-renown-white-paper.md)** for the questions, motivation, and decision gate. This document is the technical companion, not the introduction.
+
 Status: exploratory specification
 
 Prototype: `Pages/Armory/Mastery & Renown` in Storybook
