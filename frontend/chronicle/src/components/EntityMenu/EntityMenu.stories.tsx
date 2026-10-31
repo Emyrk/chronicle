@@ -85,7 +85,8 @@ const killTimesHandler = http.get("/api/v1/rankings/kill-times", () =>
 
 // Server clear-time stats and the speedrun board, for raids.
 const clearTimesHandler = http.get("/api/v1/rankings/clear-times", () =>
-  HttpResponse.json([{ encounter_name: "Full clear", min_secs: 4_700, q1_secs: 5_300, median_secs: 5_700, q3_secs: 6_300, max_secs: 8_100, count: 140 }]),
+  // The slowest "clear" is a raid left open for a week, as happens in real data.
+  HttpResponse.json([{ encounter_name: "Full clear", min_secs: 4_700, q1_secs: 5_300, median_secs: 5_700, q3_secs: 6_300, max_secs: 646_946, count: 140 }]),
 );
 const speedrunBoardHandler = http.get("/api/v1/rankings/speedrun", () =>
   HttpResponse.json(
@@ -381,6 +382,8 @@ export const RaidName: Story = {
     const tray = await body.findByRole("region", { name: "Compare tray" });
     await waitFor(() => expect(tray.querySelectorAll("[data-kill-box]")).toHaveLength(1), { timeout: 5000 });
     await expect(within(tray).getByText("Server, last 90 days")).toBeInTheDocument();
+    // A week-long "clear" doesn't stretch the axis past 4 hours.
+    await expect(within(tray).getByText("4:00:00+")).toBeInTheDocument();
   },
 };
 

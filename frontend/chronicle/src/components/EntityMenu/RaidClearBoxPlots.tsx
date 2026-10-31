@@ -6,7 +6,7 @@ import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
 import { scoredKillParse } from "@/pages/Instance/Overview/encounterKillTimePopulation";
 import type { EntityRef } from "./entity";
 import { guildAttributes } from "./leaderboardEntities";
-import { PULL_LOOKBACK_DAYS, SERVER_STATS_LOOKBACK_DAYS, serverStatsSummary, summarizeClears, useScopeCohorts } from "./scopeCohorts";
+import { MAX_CLEAR_MS, PULL_LOOKBACK_DAYS, SERVER_STATS_LOOKBACK_DAYS, serverStatsSummary, summarizeClears, useScopeCohorts } from "./scopeCohorts";
 import { ScopeBoxPlots, type BoxMarker, type Scope, type ScopeLane } from "./ScopeBoxPlots";
 
 type RaidPin = Extract<EntityRef, { kind: "raid" }>;
@@ -92,6 +92,7 @@ export function RaidClearBoxPlots({ members }: { members: RaidGroupMember[] }) {
         subject={first.raid.name}
         unit="clears"
         lookbackDays={lookbackDays}
+        axisMaxMs={MAX_CLEAR_MS}
       />
       <TopSpeedruns instanceName={first.raid.name} difficultyName={first.raid.difficultyName} />
     </div>

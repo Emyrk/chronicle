@@ -31,10 +31,13 @@ export function serverStatsSummary(
   return { count: row.count, min: ms(row.min_secs), q1: ms(row.q1_secs), median: ms(row.median_secs), q3: ms(row.q3_secs), max: ms(row.max_secs), values: [] };
 }
 
-/** Full-clear times of a cohort's qualified runs as a box plot summary. */
+/** Clears longer than this are raids left open, not real clears, so they stay out of the clear stats. */
+export const MAX_CLEAR_MS = 4 * 60 * 60 * 1000;
+
+/** Full-clear times of a cohort's qualified runs (up to `MAX_CLEAR_MS`) as a box plot summary. */
 export function summarizeClears(runs: readonly SpeedrunCohortRun[]): EncounterKillTimeSummary | undefined {
   const values = runs
-    .filter((run) => run.qualified && (run.duration_ms ?? 0) > 0)
+    .filter((run) => run.qualified && (run.duration_ms ?? 0) > 0 && (run.duration_ms ?? 0) <= MAX_CLEAR_MS)
     .map((run) => run.duration_ms!)
     .sort((a, b) => a - b);
   if (values.length === 0) return undefined;
