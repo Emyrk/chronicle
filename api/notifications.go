@@ -17,9 +17,8 @@ import (
 )
 
 var notificationEvents = map[chroniclesdk.NotificationEvent]struct{}{
-	chroniclesdk.NotificationEventSidekickUploadAccepted: {},
-	chroniclesdk.NotificationEventSidekickAppendAccepted: {},
-	chroniclesdk.NotificationEventUploadProcessed:        {},
+	chroniclesdk.NotificationEventSidekickNotifications: {},
+	chroniclesdk.NotificationEventUploadProcessed:       {},
 }
 
 func (a *API) discordLinked(ctx context.Context, userID uuid.UUID) (bool, error) {
@@ -97,6 +96,19 @@ func (a *API) notificationSettings(ctx context.Context, userID uuid.UUID) (chron
 		})
 	}
 	return chroniclesdk.NotificationSettings{DiscordLinked: linked, Settings: settings}, nil
+}
+
+// notifySidekickQuotaFailure is best effort; a failed notification never
+// changes the upload response.
+func (a *API) notifySidekickQuotaFailure(ctx context.Context, userID uuid.UUID) {
+	var tenantSlug pgtype.Text
+	if tenant := servicetenant.TenantFromContext(ctx); tenant != nil {
+		tenantSlug = tenant.Slug
+	}
+	if err := a.Opts.Bot.NotifySidekickQuotaFailure(ctx, userID, tenantSlug); err != nil {
+		a.Opts.Logger.WarnContext(ctx, "failed to notify sidekick storage quota failure",
+			slog.String("user_id", userID.String()), slog.Any("error", err))
+	}
 }
 
 // notifySidekickAppendAccepted is best effort; a failed notification never

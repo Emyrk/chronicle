@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
@@ -31,6 +32,31 @@ func (b *Bot) userDiscordNotificationTarget(ctx context.Context, userID uuid.UUI
 	return discordID, err
 }
 
+// NotifySidekickQuotaFailure DMs the user when Sidekick cannot upload because
+// their Chronicle storage is full, if they opted in. Repeated failures are
+// limited to one notification per user per hour.
+func (b *Bot) NotifySidekickQuotaFailure(ctx context.Context, userID uuid.UUID, tenantSlug pgtype.Text) error {
+	if !b.Available() {
+		return nil
+	}
+	discordID, err := b.userDiscordNotificationTarget(ctx, userID, chroniclesdk.NotificationEventSidekickNotifications)
+	if err != nil || discordID == "" {
+		return err
+	}
+	return b.EnqueueDiscordDM(ctx, ArgsSendDiscordDM{
+		DiscordID: discordID,
+		Message: DiscordDirectMessage{Embeds: []*discordgo.MessageEmbed{{
+			Author:      &discordgo.MessageEmbedAuthor{Name: "SIDEKICK"},
+			Title:       "Upload blocked: storage full",
+			Description: "Sidekick could not upload your combat log because your Chronicle storage is full. Delete stored log files or increase your storage allowance, then try again.",
+			URL:         fmt.Sprintf("%s/account/storage", b.tenantBaseURL(tenantSlug)),
+			Color:       0xED4245,
+		}}},
+		UniqueKey:      "sidekick-quota-failure",
+		DeduplicateFor: time.Hour,
+	})
+}
+
 // NotifySidekickUploadAccepted DMs the uploader that a Sidekick upload was
 // accepted, if they opted in.
 func (b *Bot) NotifySidekickUploadAccepted(ctx context.Context, userID, logGroupID uuid.UUID, tenantSlug pgtype.Text) error {
@@ -39,7 +65,7 @@ func (b *Bot) NotifySidekickUploadAccepted(ctx context.Context, userID, logGroup
 		userID,
 		logGroupID,
 		tenantSlug,
-		chroniclesdk.NotificationEventSidekickUploadAccepted,
+		chroniclesdk.NotificationEventSidekickNotifications,
 		"Upload accepted",
 		"Your combat log was received and is being processed.",
 		"sidekick-upload-accepted:"+logGroupID.String(),
@@ -54,7 +80,7 @@ func (b *Bot) NotifySidekickAppendAccepted(ctx context.Context, userID, logGroup
 		userID,
 		logGroupID,
 		tenantSlug,
-		chroniclesdk.NotificationEventSidekickAppendAccepted,
+		chroniclesdk.NotificationEventSidekickNotifications,
 		"Log update accepted",
 		"Your new combat log data was received. The previous log will automatically be updated.",
 		"sidekick-append-accepted:"+uploadID.String(),

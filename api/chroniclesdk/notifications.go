@@ -11,12 +11,9 @@ const (
 type NotificationEvent string
 
 const (
-	// NotificationEventSidekickUploadAccepted fires when the server accepts a
-	// new log uploaded by Sidekick.
-	NotificationEventSidekickUploadAccepted NotificationEvent = "sidekick_upload_accepted"
-	// NotificationEventSidekickAppendAccepted fires when the server accepts new
-	// data that Sidekick appended to an existing log.
-	NotificationEventSidekickAppendAccepted NotificationEvent = "sidekick_append_accepted"
+	// NotificationEventSidekickNotifications covers Sidekick upload acceptance,
+	// append acceptance, and upload failures that need user action.
+	NotificationEventSidekickNotifications NotificationEvent = "sidekick_notifications"
 	// NotificationEventUploadProcessed fires when a newly uploaded log finishes
 	// its first parse. Reparses and appends do not fire it.
 	NotificationEventUploadProcessed NotificationEvent = "upload_processed"

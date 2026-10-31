@@ -2338,7 +2338,7 @@ CREATE TABLE user_notification_settings (
     enabled boolean DEFAULT false NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT user_notification_settings_channel_check CHECK ((channel = 'discord'::text)),
-    CONSTRAINT user_notification_settings_event_check CHECK ((event = ANY (ARRAY['sidekick_upload_accepted'::text, 'sidekick_append_accepted'::text, 'upload_processed'::text])))
+    CONSTRAINT user_notification_settings_event_check CHECK ((event = ANY (ARRAY['sidekick_notifications'::text, 'upload_processed'::text])))
 );
 
 CREATE TABLE user_panel_layouts (
