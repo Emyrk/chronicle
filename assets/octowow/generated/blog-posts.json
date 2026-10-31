@@ -1,5 +1,18 @@
 [
   {
+    "id": "alt-click-compare",
+    "title": "Alt+click to inspect and compare",
+    "description": "Hold Alt (Option on Mac) to outline every player, guild, boss and raid you can inspect. Alt+click one for a quick menu, or add it to the new compare tray: player parses on the same fights, and boss kills and raid clears against your server, realm and guild.",
+    "publishedAt": "2026-10-30",
+    "rarity": "epic",
+    "tag": "Feature",
+    "icon": "inv_misc_spyglass_02",
+    "flavor": "Know thy rivals.",
+    "hintTitle": "Alt+click to inspect",
+    "hintDescription": "Hold Alt (Option on Mac) to outline players, guilds, bosses and raids. Alt+click one for its menu, or Add to compare to line them up in the compare tray.",
+    "hintHref": "/recent"
+  },
+  {
     "id": "ranked-damage",
     "title": "Ranked damage and ranked time",
     "description": "Turn on Ranked in Damage Done to see the damage that counts toward rankings, with overkill and non-ranked targets moved to Excluded. Ranked DPS now stops the clock when the last ranked target dies, and the new Rulesets tab lists every encounter's targets.",
