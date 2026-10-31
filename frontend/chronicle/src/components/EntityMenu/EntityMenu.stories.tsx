@@ -301,6 +301,10 @@ export const AllKinds: Story = {
     await expect(range.getBoundingClientRect().right).toBeLessThanOrEqual(tray.getBoundingClientRect().right);
     await expect(minimize.getBoundingClientRect().right).toBeLessThanOrEqual(tray.getBoundingClientRect().right);
     await expect(within(tray).getByRole("button", { name: "2 encounters" })).toBeInTheDocument();
+    // Clear all empties every kind at once.
+    await userEvent.click(within(tray).getByRole("button", { name: "Clear all" }));
+    await waitFor(() => expect(body.queryByRole("region", { name: "Compare tray" })).toBeNull());
+    await expect(JSON.parse(localStorage.getItem(PINS_KEY) ?? "[]")).toEqual([]);
   },
 };
 

@@ -210,7 +210,7 @@ function DesktopInstanceAssistantChat({ instanceId, instanceName }: { instanceId
       onStartNewChat={startNewChat}
       onRunSettled={refreshThread}
       launcherLabel="Ask about this raid"
-      launcherClassName="fixed right-4 bottom-20 z-[90] rounded-full shadow-lg sm:right-6 sm:bottom-6"
+      launcherClassName="fixed right-4 bottom-[calc(5rem+var(--compare-tray-offset,0px))] z-[90] rounded-full shadow-lg sm:right-6 sm:bottom-6"
       title={`${instanceName} assistant`}
       description="Analyze this instance with its persisted conversation history. Responses can be inaccurate."
       configuration={selection.connections.length > 0 ? <AssistantConfiguration selection={selection} /> : undefined}

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import { ChevronDown, ChevronUp, ExternalLink, EyeOff, GitCompareArrows, Lock, Maximize2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, EyeOff, GitCompareArrows, Lock, Maximize2, Trash2, X } from "lucide-react";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
@@ -63,6 +63,7 @@ export function CompareTray({
   onRemove,
   onToggleHidden,
   onClear,
+  onClearAll,
   onExpand,
 }: {
   pins: Pin[];
@@ -73,6 +74,7 @@ export function CompareTray({
   onRemove: (entity: EntityRef) => void;
   onToggleHidden: (entity: EntityRef) => void;
   onClear: (kind: EntityKind) => void;
+  onClearAll: () => void;
   onExpand: (kind: EntityKind) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -174,6 +176,9 @@ export function CompareTray({
             <Maximize2 className="h-3.5 w-3.5" />
           </button>
         )}
+        <button type="button" onClick={onClearAll} className={iconButton} aria-label="Clear all" title="Clear everything from compare">
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
         <button type="button" onClick={() => setCollapsed(true)} className={iconButton} aria-label="Minimize compare tray">
           <ChevronDown className="h-3.5 w-3.5" />
         </button>

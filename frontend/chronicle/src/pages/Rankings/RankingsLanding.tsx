@@ -1,4 +1,5 @@
 import { useSearchParams } from "react-router-dom"
+import { entityAttributes } from "@/components/EntityMenu/entity"
 import { Skull, Loader2 } from "lucide-react"
 import { CLASS_CSS_VAR } from "./classDisplay"
 import { useRankingsInstances } from "@/api/rankingsQueries"
@@ -88,7 +89,14 @@ export function RankingsLanding({ showTopPlayers = true }: { showTopPlayers?: bo
                     className="inline-block h-2 w-2 shrink-0 rounded-full"
                     style={{ backgroundColor: CLASS_CSS_VAR[p.player_class] }}
                   />
-                  <span className="truncate text-foreground/90">{p.player_name}</span>
+                  <span
+                    className="truncate text-foreground/90"
+                    {...(p.player_guid
+                      ? entityAttributes({ kind: "character", realm: p.realm_name, guid: p.player_guid, name: p.player_name, className: p.player_class })
+                      : {})}
+                  >
+                    {p.player_name}
+                  </span>
                   <span className="ml-auto font-mono font-semibold text-foreground/80">
                     {Math.round(p.dps).toLocaleString()} dps
                   </span>

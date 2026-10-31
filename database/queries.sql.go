@@ -20707,7 +20707,7 @@ stats AS (
     SELECT COUNT(DISTINCT player_guid)::bigint AS total_kills FROM ranking_rows
 ),
 top3 AS (
-    SELECT player_name, realm_name, player_class, dps
+    SELECT player_guid, player_name, realm_name, player_class, dps
     FROM per_player WHERE dps > 0
     ORDER BY dps DESC LIMIT 3
 )
@@ -20719,6 +20719,7 @@ VALUES (
     $4,
     (SELECT total_kills FROM stats),
     COALESCE((SELECT json_agg(json_build_object(
+        'player_guid', t.player_guid,
         'player_name', t.player_name,
         'realm_name', t.realm_name,
         'player_class', t.player_class,

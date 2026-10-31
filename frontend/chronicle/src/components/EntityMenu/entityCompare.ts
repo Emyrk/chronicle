@@ -130,8 +130,13 @@ export function useComparePins() {
     setHiddenKeys((current) => current.filter((key) => !key.startsWith(`${kind}:`)));
   }, []);
 
+  const clearAll = useCallback(() => {
+    setPins([]);
+    setHiddenKeys([]);
+  }, []);
+
   const hidden = useMemo(() => new Set(hiddenKeys), [hiddenKeys]);
-  return { pins, hidden, toggle, toggleHidden, clear };
+  return { pins, hidden, toggle, toggleHidden, clear, clearAll };
 }
 
 /** The menu's "Add to compare" entry, for everyone; disabled once that kind is full. */

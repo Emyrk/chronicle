@@ -4544,7 +4544,7 @@ function InstancePageViewContent({
       )}
 
       {isEncounterView && actionBarOpen && !suppressActionBar && (
-        <div className="fixed bottom-5 left-0 right-0 z-[80] flex justify-center px-2 sm:left-1/2 sm:right-auto sm:w-auto sm:-translate-x-1/2 sm:px-0">
+        <div className="fixed bottom-[calc(1.25rem+var(--compare-tray-offset,0px))] left-0 right-0 z-[80] flex justify-center px-2 sm:left-1/2 sm:right-auto sm:w-auto sm:-translate-x-1/2 sm:px-0">
           <div className="inline-flex max-w-full flex-col items-center gap-2">
             {!isMobile && (
               <button
@@ -4685,7 +4685,8 @@ function InstancePageViewContent({
           size="icon"
           onClick={handleEncounterButtonClick}
           className={cn(
-            "fixed bottom-8 left-8 z-50 h-14 w-14 rounded-full",
+            // Above the compare tray when it's open on a phone.
+            "fixed bottom-[calc(2rem+var(--compare-tray-offset,0px))] left-8 z-50 h-14 w-14 rounded-full",
             !hasSeenSelector && !sidebarOpen ? "animate-pulse-ring" : "shadow-lg"
           )}
           title={sidebarOpen ? "Close encounters" : "Show encounters"}
@@ -4705,7 +4706,7 @@ function InstancePageViewContent({
             setSidebarOpen(false);
           }}
           data-floating-corner="bottom-right"
-          className="fixed bottom-8 right-8 z-50 h-14 w-14 rounded-full shadow-lg"
+          className="fixed bottom-[calc(2rem+var(--compare-tray-offset,0px))] right-8 z-50 h-14 w-14 rounded-full shadow-lg"
           title={actionBarOpen ? "Close action bar" : "Open action bar"}
         >
           {actionBarOpen ? <X className="h-5 w-5" /> : <BookOpen className="h-5 w-5" />}

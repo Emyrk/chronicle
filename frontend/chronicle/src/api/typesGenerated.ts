@@ -3726,6 +3726,10 @@ export interface RankingsInstanceSummary {
  * RankingsInstanceTopPlayer is a top-performing player for an instance summary.
  */
 export interface RankingsInstanceTopPlayer {
+    /**
+     * PlayerGUID is empty for summaries computed before it was stored.
+     */
+    readonly player_guid?: string;
     readonly player_name: string;
     readonly realm_name: string;
     readonly player_class: string;

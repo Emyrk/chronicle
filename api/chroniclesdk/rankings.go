@@ -19,6 +19,8 @@ type RankingsInstanceSummary struct {
 
 // RankingsInstanceTopPlayer is a top-performing player for an instance summary.
 type RankingsInstanceTopPlayer struct {
+	// PlayerGUID is empty for summaries computed before it was stored.
+	PlayerGUID  string  `json:"player_guid,omitempty"`
 	PlayerName  string  `json:"player_name"`
 	RealmName   string  `json:"realm_name"`
 	PlayerClass string  `json:"player_class"`

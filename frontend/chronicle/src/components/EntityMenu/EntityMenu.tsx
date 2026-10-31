@@ -258,6 +258,30 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const closeMenu = useCallback(() => setMenu(null), []);
+
+  // On phones the tray shares the bottom edge with the page's floating buttons. Publish its height
+  // as --compare-tray-offset so they can sit above it (see the instance page's buttons).
+  const trayRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const tray = trayRef.current;
+    if (!tray) return;
+    const root = document.documentElement;
+    const phone = window.matchMedia("(max-width: 639px)");
+    const update = () => {
+      const height = tray.getBoundingClientRect().height;
+      if (phone.matches && height > 0) root.style.setProperty("--compare-tray-offset", `${Math.ceil(height) + 12}px`);
+      else root.style.removeProperty("--compare-tray-offset");
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(tray);
+    phone.addEventListener("change", update);
+    update();
+    return () => {
+      observer.disconnect();
+      phone.removeEventListener("change", update);
+      root.style.removeProperty("--compare-tray-offset");
+    };
+  }, []);
   const location = useLocation();
   const pinOrigin = (): PinOrigin => ({
     path: `${location.pathname}${location.search}`,
@@ -288,7 +312,11 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
       >
         {children}
         {/* Inside the listener so names in the tray and the full stats can be Alt+clicked too. */}
-        <div className="pointer-events-none fixed bottom-4 left-4 z-40 sm:bottom-6 sm:left-6 [&>*]:pointer-events-auto">
+        {/* Centered on phones, where the instance page keeps its floating buttons in the corners. */}
+        <div
+          ref={trayRef}
+          className="pointer-events-none fixed bottom-4 left-1/2 z-40 -translate-x-1/2 sm:bottom-6 sm:left-6 sm:translate-x-0 [&>*]:pointer-events-auto"
+        >
           <CompareTray
             pins={compare.pins}
             hidden={compare.hidden}
@@ -297,6 +325,7 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
             onRemove={compare.toggle}
             onToggleHidden={compare.toggleHidden}
             onClear={compare.clear}
+            onClearAll={compare.clearAll}
             onExpand={setExpanded}
           />
         </div>

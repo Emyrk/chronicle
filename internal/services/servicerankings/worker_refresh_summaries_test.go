@@ -42,7 +42,7 @@ func TestWorkerRefreshRankingsSummaryTenant_PrunesStaleSummaryWhenRowCountUnchan
 			MaxPlayers:     25,
 			TenantID:       uuid.Nil,
 			LastRowCount:   rowCount,
-			QueryVersion:   2,
+			QueryVersion:   servicerankings.RankingsSummaryQueryVersion(),
 		})
 		require.NoError(t, err)
 	}
@@ -68,7 +68,7 @@ func TestWorkerRefreshRankingsSummaryTenant_PrunesStaleSummaryWhenRowCountUnchan
 	require.Equal(t, int64(1), status.SummaryCount)
 	require.Equal(t, int64(1), status.MinLastRowCount)
 	require.Equal(t, int64(1), status.MaxLastRowCount)
-	require.Equal(t, int16(2), status.QueryVersion)
+	require.Equal(t, servicerankings.RankingsSummaryQueryVersion(), status.QueryVersion)
 	require.True(t, status.LastRebuiltAt.Valid)
 
 	require.Equal(t, "Gruul's Lair", after[0].InstanceName)
