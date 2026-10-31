@@ -7,11 +7,18 @@ export function assetUrl(file: string) {
   return `${REPO}/releases/latest/download/${file}`;
 }
 
+interface Asset {
+  label: string;
+  file: string;
+}
+
 interface Platform {
   os: OS;
   label: string;
-  /** Primary download, then alternate architectures. */
-  files: { label: string; file: string }[];
+  /** The download most players want. */
+  primary: Asset;
+  /** Fallbacks, each introduced by who it's for, e.g. "ARM PC?". */
+  alternates: { prompt: string; links: Asset[] }[];
   /** Where the icon lives, e.g. "menu bar". */
   tray: string;
   install: string;
@@ -22,11 +29,16 @@ export const PLATFORMS: Platform[] = [
   {
     os: "windows",
     label: "Windows",
-    files: [
-      { label: "64-bit installer", file: "Chronicle-Sidekick-Setup-windows-amd64.exe" },
-      { label: "ARM64 installer", file: "Chronicle-Sidekick-Setup-windows-arm64.exe" },
-      { label: "Portable .exe", file: "Chronicle-Sidekick-windows-amd64.exe" },
-      { label: "Portable ARM64", file: "Chronicle-Sidekick-windows-arm64.exe" },
+    primary: { label: "Installer for most PCs", file: "Chronicle-Sidekick-Setup-windows-amd64.exe" },
+    alternates: [
+      { prompt: "Rather not install?", links: [{ label: "Portable .exe", file: "Chronicle-Sidekick-windows-amd64.exe" }] },
+      {
+        prompt: "ARM PC, like Snapdragon?",
+        links: [
+          { label: "Installer", file: "Chronicle-Sidekick-Setup-windows-arm64.exe" },
+          { label: "Portable", file: "Chronicle-Sidekick-windows-arm64.exe" },
+        ],
+      },
     ],
     tray: "system tray",
     install:
@@ -36,10 +48,8 @@ export const PLATFORMS: Platform[] = [
   {
     os: "macos",
     label: "macOS",
-    files: [
-      { label: "Universal: Apple silicon and Intel", file: "Chronicle-Sidekick-macos.dmg" },
-      { label: "Zipped app", file: "Chronicle-Sidekick-macos.zip" },
-    ],
+    primary: { label: "Works on Apple silicon and Intel", file: "Chronicle-Sidekick-macos.dmg" },
+    alternates: [{ prompt: "Prefer a zip?", links: [{ label: "Zipped app", file: "Chronicle-Sidekick-macos.zip" }] }],
     tray: "menu bar",
     install:
       "Open the .dmg, drag Chronicle Sidekick into Applications and open it from there. Sidekick appears in your menu bar. That is the whole install.",
@@ -48,10 +58,8 @@ export const PLATFORMS: Platform[] = [
   {
     os: "linux",
     label: "Linux",
-    files: [
-      { label: "64-bit", file: "Chronicle-Sidekick-linux-amd64.tar.gz" },
-      { label: "ARM64", file: "Chronicle-Sidekick-linux-arm64.tar.gz" },
-    ],
+    primary: { label: "For x86_64 PCs", file: "Chronicle-Sidekick-linux-amd64.tar.gz" },
+    alternates: [{ prompt: "ARM device?", links: [{ label: "ARM64 tarball", file: "Chronicle-Sidekick-linux-arm64.tar.gz" }] }],
     tray: "system tray",
     install: "Extract the archive and run chronicle-sidekick. Sidekick appears in your system tray. That is the whole install.",
     note: "Some desktops hide tray icons by default. If you don't see it, enable tray or AppIndicator icons in your desktop settings.",

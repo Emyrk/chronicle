@@ -172,7 +172,7 @@ function ModsStep({ addon, n }: { addon: CompanionAddon; n: number }) {
 
 export function DownloadView({ os, clients }: { os: OS; clients: ClientOption[] }) {
   const current = PLATFORMS.find((p) => p.os === os) ?? PLATFORMS[0];
-  const [primary, ...alternates] = current.files;
+  const { primary, alternates } = current;
   const others = PLATFORMS.filter((p) => p !== current);
   // The tenant's default format is first, so it's selected until the player picks another.
   const [picked, setPicked] = useState<string>();
@@ -213,18 +213,21 @@ export function DownloadView({ os, clients }: { os: OS; clients: ClientOption[] 
               Download for {current.label}
             </a>
             <div className={s.meta}>
+              <span>{primary.label}</span>
+              {alternates.map((a) => (
+                <span key={a.prompt}>
+                  {a.prompt}{" "}
+                  {a.links.map((l, i) => (
+                    <span key={l.file}>
+                      {i > 0 && " · "}
+                      <a href={assetUrl(l.file)}>{l.label}</a>
+                    </span>
+                  ))}
+                </span>
+              ))}
               <span>
-                {primary.label}
-                {alternates.map((a) => (
-                  <span key={a.file}>
-                    {" · "}
-                    <a href={assetUrl(a.file)}>{a.label}</a>
-                  </span>
-                ))}
-              </span>
-              <span>
-                Also for <a href={assetUrl(others[0].files[0].file)}>{others[0].label}</a> and{" "}
-                <a href={assetUrl(others[1].files[0].file)}>{others[1].label}</a>
+                Also for <a href={assetUrl(others[0].primary.file)}>{others[0].label}</a> and{" "}
+                <a href={assetUrl(others[1].primary.file)}>{others[1].label}</a>
               </span>
             </div>
           </div>
