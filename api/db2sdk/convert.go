@@ -694,6 +694,7 @@ func SpeedrunLeaderboardEntry(row database.SpeedrunLeaderboardRow) chroniclesdk.
 		Slug:           row.HashedSlug.String,
 		DifficultyName: row.DifficultyName,
 		DurationMs:     row.DurationMs,
+		GuildID:        row.GuildID.UUID,
 		GuildName:      row.GuildName,
 		RealmName:      row.RealmName,
 		StartTime:      row.StartTime.Time,

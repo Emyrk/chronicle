@@ -19,6 +19,7 @@ import { useCachedValue } from "@/hooks/useCachedValue";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { hasDeathLogEvents, isDeathAheadOfSyncCursor } from "./deathLogSync";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { hitTypeNames, HitTypeCrit } from "@/lib/hittype/hittype";
 
 import { extractDeathWindow, normalizeDeathWindow, updateDeathWindow } from "./deathBreakoutWindow";
@@ -318,7 +319,11 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
                         </button>
                       </td>
                       <td className="w-24 max-w-24 px-2 py-1 text-emerald-400">
-                        <span className="block truncate" title={`${event.resurrectorName} · ${event.spellName}`}>
+                        <span
+                          className="block truncate"
+                          title={`${event.resurrectorName} · ${event.spellName}`}
+                          {...instanceEntityAttributes(context.instance, event.resurrectorID)}
+                        >
                           {event.resurrectorName}
                         </span>
                       </td>
@@ -327,6 +332,7 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
                           <span
                             className="min-w-0 flex-1 truncate font-medium"
                             style={{ color: `var(--color-class-${event.className.toLowerCase()})` }}
+                            {...instanceEntityAttributes(context.instance, event.playerID)}
                           >
                             {event.playerName}
                           </span>
@@ -386,13 +392,16 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
                         {death.attribution ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="block truncate cursor-help underline decoration-dotted decoration-muted-foreground/50">
+                              <span
+                                className="block truncate cursor-help underline decoration-dotted decoration-muted-foreground/50"
+                                {...instanceEntityAttributes(context.instance, death.killerID)}
+                              >
                                 {death.killerName || "Unknown"}
                               </span>
                             </TooltipTrigger>
                             <TooltipContent side="left" hideArrow className="max-w-[250px] bg-popover text-popover-foreground border border-border">
                               <div className="space-y-1">
-                                <div className="font-medium">{death.killerName || "Unknown"}</div>
+                                <div className="font-medium" {...instanceEntityAttributes(context.instance, death.killerID)}>{death.killerName || "Unknown"}</div>
                                 <div className="text-xs text-muted-foreground">{death.attribution.sourceName}</div>
                                 <div className="flex items-center gap-2 text-xs">
                                   <span className={cn("font-medium", getSchoolColor(death.attribution.school))}>
@@ -416,7 +425,7 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
                             </TooltipContent>
                           </Tooltip>
                         ) : (
-                          <span className="block truncate" title={death.killerName}>
+                          <span className="block truncate" title={death.killerName} {...instanceEntityAttributes(context.instance, death.killerID)}>
                             {death.killerName || "Unknown"}
                           </span>
                         )}
@@ -426,6 +435,7 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
                           <span
                             className="min-w-0 flex-1 truncate font-medium"
                             style={{ color: `var(--color-class-${death.className.toLowerCase()})` }}
+                            {...instanceEntityAttributes(context.instance, death.playerID)}
                           >
                             {death.playerName}
                           </span>
@@ -452,6 +462,7 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
                             recap={death.recap.filter((entry) => entry.offsetMilli >= death.offsetMilli - 10_000)}
                             outgoingRecap={death.outgoingRecap.filter((entry) => entry.offsetMilli >= death.offsetMilli - 10_000)}
                             deathOffsetMilli={death.offsetMilli}
+                            instance={context.instance}
                           />
                         </td>
                       </tr>
@@ -472,6 +483,7 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
       >
         <IncomingEventsBreakout
           unitName={death.playerName}
+          unitGuid={death.playerID} instance={context.instance}
           className={death.className}
           anchorOffsetMilli={death.offsetMilli}
           anchorAbsoluteMilli={death.dateMilli}

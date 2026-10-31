@@ -5,6 +5,8 @@ import type { SpeedrunResult } from "@/api/typesGenerated";
 import type { ProcessorEvent } from "../processorTypes";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { shouldLoadPublicRankingData } from "../panelAvailability";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import {
   leaderboardProcessor,
   type LeaderboardPanelResult,
@@ -48,7 +50,7 @@ export function LeaderboardContent({
 }) {
   if (speedrunOverride !== undefined) {
     return speedrunOverride ? (
-      <LeaderboardDetails speedrun={speedrunOverride} />
+      <LeaderboardDetails speedrun={speedrunOverride} instance={props.context.instance} />
     ) : (
       <LeaderboardEmptyState />
     );
@@ -84,7 +86,7 @@ function LeaderboardQueryContent(
   }
 
   return speedrun ? (
-    <LeaderboardDetails speedrun={speedrun} />
+    <LeaderboardDetails speedrun={speedrun} instance={props.context.instance} />
   ) : (
     <LeaderboardEmptyState />
   );
@@ -102,7 +104,14 @@ function LeaderboardEmptyState({
   );
 }
 
-export function LeaderboardDetails({ speedrun }: { speedrun: SpeedrunResult }) {
+export function LeaderboardDetails({
+  speedrun,
+  instance,
+}: {
+  speedrun: SpeedrunResult;
+  /** The log the run is from, so violator names open the entity menu on Alt+click. */
+  instance?: Pick<Instance, "players" | "realm">;
+}) {
   const satisfied = speedrun.proof.filter((p) => p.satisfied).length;
   const total = speedrun.proof.length;
   const rankedDurationMs = speedrun.ranked_duration_ms;
@@ -365,6 +374,7 @@ export function LeaderboardDetails({ speedrun }: { speedrun: SpeedrunResult }) {
                 <div
                   key={v.player_name}
                   className="flex items-center gap-1.5 text-xs text-red-400"
+                  {...(instance ? instanceEntityAttributes(instance, String(v.player_guid)) : {})}
                 >
                   <XCircle className="h-3 w-3 text-red-500 shrink-0" />
                   {v.player_name}

@@ -11,6 +11,8 @@ import { type PlayerRoleData } from "../processors";
 import { formatNumber } from "@/lib/format";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { useInferredRoles } from "./useInferredRoles";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 
 // WoW class colors (same as PlayerMetricChart)
 const CLASS_COLORS: Record<string, string> = {
@@ -38,9 +40,10 @@ interface RoleGroupProps {
   onTogglePlayers?: (playerIds: string[]) => void;
   onTogglePlayer?: (playerId: string) => void;
   columns?: 1 | 2;
+  instance: Instance;
 }
 
-function RoleGroup({ title, icon, players, accentColor, selectedPlayerIds, onTogglePlayers, onTogglePlayer, columns = 1 }: RoleGroupProps) {
+function RoleGroup({ title, icon, players, accentColor, selectedPlayerIds, onTogglePlayers, onTogglePlayer, columns = 1, instance }: RoleGroupProps) {
   // Select all players in this role group
   const handleTitleClick = () => {
     if (!onTogglePlayers || players.length === 0) return;
@@ -82,6 +85,7 @@ function RoleGroup({ title, icon, players, accentColor, selectedPlayerIds, onTog
               key={player.playerID} 
               className="px-2 py-0.5 text-sm cursor-pointer hover:bg-accent/50 rounded-sm transition-colors"
               onClick={() => onTogglePlayer?.(player.playerID)}
+              {...instanceEntityAttributes(instance, player.playerID)}
             >
               <span 
                 className="font-medium"
@@ -116,9 +120,10 @@ interface DpsGroupProps {
   selectedPlayerIds: Set<string>;
   onTogglePlayers?: (playerIds: string[]) => void;
   onTogglePlayer?: (playerId: string) => void;
+  instance: Instance;
 }
 
-function DpsGroup({ players, selectedPlayerIds, onTogglePlayers, onTogglePlayer }: DpsGroupProps) {
+function DpsGroup({ players, selectedPlayerIds, onTogglePlayers, onTogglePlayer, instance }: DpsGroupProps) {
   // Select all DPS players
   const handleTitleClick = () => {
     if (!onTogglePlayers || players.length === 0) return;
@@ -208,6 +213,7 @@ function DpsGroup({ players, selectedPlayerIds, onTogglePlayers, onTogglePlayer 
                         textShadow: isSelected ? `0 0 8px ${color}, 0 0 12px ${color}` : undefined,
                       }}
                       onClick={() => onTogglePlayer?.(p.playerID)}
+                      {...instanceEntityAttributes(instance, p.playerID)}
                     >
                       {p.playerName}
                     </span>
@@ -271,6 +277,7 @@ export const RolesContent = ({ context }: RolesContentProps) => {
           selectedPlayerIds={context.entitySelection.playerIds}
           onTogglePlayers={context.onTogglePlayers}
           onTogglePlayer={context.onTogglePlayer}
+          instance={context.instance}
         />
         <RoleGroup
           title="Healers"
@@ -280,6 +287,7 @@ export const RolesContent = ({ context }: RolesContentProps) => {
           selectedPlayerIds={context.entitySelection.playerIds}
           onTogglePlayers={context.onTogglePlayers}
           onTogglePlayer={context.onTogglePlayer}
+          instance={context.instance}
           columns={2}
         />
       </div>
@@ -290,6 +298,7 @@ export const RolesContent = ({ context }: RolesContentProps) => {
         selectedPlayerIds={context.entitySelection.playerIds}
         onTogglePlayers={context.onTogglePlayers}
         onTogglePlayer={context.onTogglePlayer}
+        instance={context.instance}
       />
 
       {/* Detection info with debug thresholds */}

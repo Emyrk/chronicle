@@ -9,6 +9,7 @@ import { ItemTooltip } from "../../../../components/ui/ItemTooltip/ItemTooltip";
 import { getQualityTextClass, getQualityBorderClass, getClassColorVar } from "../../../ArmoryPage/types";
 import { getInstanceLootFilters, getInstanceTurninConfig, type InstanceTurninConfig } from "./lootFilters";
 import { cn } from "../../../../lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 
 function getItemIconUrl(icon: string): string {
   return iconUrl(icon);
@@ -67,8 +68,9 @@ function decodeInstanceFilters(panelOption: string | null | undefined, count: nu
 function PlayerName({ guid, context }: { guid: string; context: PanelRenderProps<LootResult>["context"] }) {
   const player = context.instance.players?.[guid];
   const name = player?.name ?? guid;
-  if (!player?.class) return <span>{name}</span>;
-  return <span style={{ color: getClassColorVar(player.class) }}>{name}</span>;
+  const entity = instanceEntityAttributes(context.instance, guid);
+  if (!player?.class) return <span {...entity}>{name}</span>;
+  return <span style={{ color: getClassColorVar(player.class) }} {...entity}>{name}</span>;
 }
 
 /** Format millisecond offset as H:MM:SS or M:SS */

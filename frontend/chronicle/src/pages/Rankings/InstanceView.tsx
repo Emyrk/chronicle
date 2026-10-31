@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
+import { useEntityRaidContext, type EntityRaidContext } from "@/components/EntityMenu/entityMenuContext"
+import { bossEntity, entityAttributes, raidEntity } from "@/components/EntityMenu/entity"
 import { createPortal } from "react-dom"
 import { useSearchParams } from "react-router-dom"
 import { ArrowLeft, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, CircleDashed, List, Loader2, X } from "lucide-react"
@@ -662,6 +664,17 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return defaultBossList[0] ?? bossList[0] ?? ""
   }, [params, bossNames, bossList, defaultBossList])
 
+  // The compare tray compares players on the same raid, difficulty and bosses as this board.
+  const entityRaid = useMemo((): EntityRaidContext => ({
+    instanceName,
+    label: `${instanceName} statistics leaderboard`,
+    difficultyName: selectedDifficulties.size === 1 ? [...selectedDifficulties][0] : undefined,
+    bossNames: metric === "killtime"
+      ? (killTimeEncounter ? [killTimeEncounter] : [])
+      : [...selectedEncounters].filter((name) => bossNames.has(name)),
+  }), [instanceName, selectedDifficulties, metric, killTimeEncounter, selectedEncounters, bossNames])
+  useEntityRaidContext(entityRaid)
+
   const handleKillTimeEncounterChange = useCallback(
     (enc: string) => {
       setParams((prev) => {
@@ -783,6 +796,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                       !isSelected && isSubdued && "text-muted-foreground",
                     )}
                     title={`${name}${hasRankings ? "" : " (no kills yet)"}. Click to select, Ctrl+Click to toggle`}
+                    {...(bossNames.has(name) ? entityAttributes(bossEntity(instanceName, name)) : {})}
                   >
                     <EncounterIcon
                       className={cn(
@@ -880,7 +894,9 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                   Back to Rankings
                 </button>
                 <h1 className="flex flex-wrap items-baseline gap-x-2 text-xl font-bold leading-tight sm:text-2xl">
-                  <span>{instanceName}</span>
+                  <span {...entityAttributes(raidEntity(instanceName, selectedDifficulties.size === 1 ? [...selectedDifficulties][0] : undefined))}>
+                    {instanceName}
+                  </span>
                   {headerDifficulty && (
                     <span className="text-sm font-normal text-muted-foreground sm:text-lg">{headerDifficulty}</span>
                   )}
@@ -1149,7 +1165,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
               {clearTimeStats.length > 0 && (
                 <KillTimeContent stats={clearTimeStats} loading={false} title="Full Clear Time" unit="clears" trimOutliers />
               )}
-              <KillTimeContent stats={killTimeStats} loading={killTimeStatsLoading} />
+              <KillTimeContent stats={killTimeStats} loading={killTimeStatsLoading} instanceName={instanceName} />
             </div>
           ) : (
             <>
@@ -1158,6 +1174,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                 {bossList.map((enc) => (
                   <button
                     key={enc}
+                    {...entityAttributes(bossEntity(instanceName, enc))}
                     onClick={() => handleKillTimeEncounterChange(enc)}
                     className={cn(
                       "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
@@ -1207,7 +1224,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         )}
 
         {metric === "success" && (
-          <SuccessRateContent rates={successRates} loading={successRatesLoading} />
+          <SuccessRateContent rates={successRates} loading={successRatesLoading} instanceName={instanceName} />
         )}
       </div>
     </div>
@@ -1238,9 +1255,12 @@ function KillTimeContent({
   title = "Kill Time by Encounter",
   unit = "kills",
   trimOutliers = false,
+  instanceName,
 }: {
   stats: RankingsKillTimeStats[]
   loading: boolean
+  /** Makes the boss names Alt+clickable; omitted for the full-clear row. */
+  instanceName?: string
   title?: string
   /** Plural noun for the sample count in tooltips. */
   unit?: string
@@ -1292,7 +1312,10 @@ function KillTimeContent({
                 <div className="relative h-10 rounded-md border-l-2 border-[#5F8FA6] pl-2 transition-colors hover:bg-muted/20 cursor-default sm:flex sm:h-auto sm:items-center sm:gap-3 sm:border-l-0 sm:px-1 sm:py-1.5">
                   {/* Encounter name and mobile median overlap the top of the plot. */}
                   <div className="absolute inset-x-2 top-0 z-10 flex items-center text-xs sm:static sm:w-40 sm:shrink-0">
-                    <span className="min-w-0 truncate bg-card/90 pr-2 font-medium backdrop-blur-[1px] sm:bg-transparent sm:pr-0 sm:backdrop-blur-none">
+                    <span
+                      className="min-w-0 truncate bg-card/90 pr-2 font-medium backdrop-blur-[1px] sm:bg-transparent sm:pr-0 sm:backdrop-blur-none"
+                      {...(instanceName ? entityAttributes(bossEntity(instanceName, s.encounter_name)) : {})}
+                    >
                       {s.encounter_name}
                     </span>
                     <span className="ml-auto shrink-0 bg-card/90 pl-2 font-mono font-semibold tabular-nums text-foreground backdrop-blur-[1px] sm:hidden">
@@ -1404,7 +1427,7 @@ function TimeStatLine({ label, desc, value, highlight }: { label: string; desc?:
 
 // ── Success Rate Content ─────────────────────────────────────────────────
 
-function SuccessRateContent({ rates, loading }: { rates: RankingsSuccessRate[]; loading: boolean }) {
+function SuccessRateContent({ rates, loading, instanceName }: { rates: RankingsSuccessRate[]; loading: boolean; instanceName: string }) {
   if (loading) return <RankingsLoadingState />
 
   if (rates.length === 0) {
@@ -1425,7 +1448,10 @@ function SuccessRateContent({ rates, loading }: { rates: RankingsSuccessRate[]; 
             <div key={r.encounter_name} className="relative h-10 rounded-md border-l-2 border-green-500/70 pl-2 transition-colors hover:bg-muted/20 sm:flex sm:h-auto sm:items-center sm:gap-3 sm:border-l-0 sm:px-1 sm:py-1.5">
               {/* Encounter and mobile counts overlap the top of the bar. */}
               <div className="absolute inset-x-2 top-0 z-10 flex items-center text-xs sm:static sm:w-40 sm:shrink-0">
-                <span className="min-w-0 truncate bg-card/90 pr-2 font-medium backdrop-blur-[1px] sm:bg-transparent sm:pr-0 sm:backdrop-blur-none">
+                <span
+                  className="min-w-0 truncate bg-card/90 pr-2 font-medium backdrop-blur-[1px] sm:bg-transparent sm:pr-0 sm:backdrop-blur-none"
+                  {...entityAttributes(bossEntity(instanceName, r.encounter_name))}
+                >
                   {r.encounter_name}
                 </span>
                 <span className="ml-auto shrink-0 bg-card/90 pl-2 text-[11px] backdrop-blur-[1px] sm:hidden">

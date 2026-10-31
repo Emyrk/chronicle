@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import type { DeathsSummaryResult } from "./deathsSummary.processor";
 import type { PanelContext } from "../types";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 
 // ============================================================================
 // Types
@@ -24,6 +26,7 @@ interface KillerDisplay {
 interface KillerTableProps {
   killers: KillerDisplay[];
   totalDeaths: number;
+  instance: Pick<Instance, "players" | "realm">;
 }
 
 /**
@@ -31,7 +34,7 @@ interface KillerTableProps {
  * @internal - Not exported, only used within breakout
  */
 // eslint-disable-next-line react-refresh/only-export-components
-function KillerTable({ killers, totalDeaths }: KillerTableProps) {
+function KillerTable({ killers, totalDeaths, instance }: KillerTableProps) {
   if (!killers || killers.length === 0) {
     return <p className="text-xs p-2 text-muted-foreground">No killer breakdown available</p>;
   }
@@ -55,7 +58,7 @@ function KillerTable({ killers, totalDeaths }: KillerTableProps) {
 
             return (
               <tr key={killer.killerID} className="border-b border-border/10 hover:bg-muted/50">
-                <td className="py-1 px-2 max-w-[180px] truncate" title={killer.killerName}>
+                <td className="py-1 px-2 max-w-[180px] truncate" title={killer.killerName} {...instanceEntityAttributes(instance, killer.killerID)}>
                   {killer.killerName}
                 </td>
                 <td className="text-right py-1 px-2 font-mono">
@@ -87,6 +90,7 @@ function KillerTable({ killers, totalDeaths }: KillerTableProps) {
 interface DeathsBreakoutProps {
   killers: KillerDisplay[];
   totalDeaths: number;
+  instance: Pick<Instance, "players" | "realm">;
 }
 
 /**
@@ -94,7 +98,7 @@ interface DeathsBreakoutProps {
  * @internal - Not exported, only used within hook
  */
 // eslint-disable-next-line react-refresh/only-export-components
-function DeathsBreakout({ killers, totalDeaths }: DeathsBreakoutProps) {
+function DeathsBreakout({ killers, totalDeaths, instance }: DeathsBreakoutProps) {
   const tabClass = "px-2 py-1 text-2xs font-medium transition-colors";
   const activeTabClass = "text-foreground border-b-2 border-foreground";
 
@@ -106,7 +110,7 @@ function DeathsBreakout({ killers, totalDeaths }: DeathsBreakoutProps) {
           Total: <span className="font-medium font-mono text-foreground">{totalDeaths}</span> deaths
         </span>
       </div>
-      <KillerTable killers={killers} totalDeaths={totalDeaths} />
+      <KillerTable killers={killers} totalDeaths={totalDeaths} instance={instance} />
     </div>
   );
 }
@@ -213,10 +217,11 @@ export function useDeathsBreakout({
         <DeathsBreakout
           killers={unitData.killers}
           totalDeaths={unitData.totalDeaths}
+          instance={context.instance}
         />
       );
     },
-    [result, context.selectedEncounterIds, loading, processing, mode]
+    [result, context.selectedEncounterIds, context.instance, loading, processing, mode]
   );
 
   return breakout;

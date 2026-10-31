@@ -6,6 +6,8 @@
 
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import { ItemCell } from "./ConsumablesContent";
 import { CoinAmount } from "./CoinAmount";
 import {
@@ -46,13 +48,22 @@ export interface LedgerItemBreakoutData {
 
 export interface PlayerItemBreakoutData {
   itemId: number;
+  guid: string;
   playerName: string;
   cls: string | undefined;
   rows: PlayerItemNamedEncounterRow[];
 }
 
 /** Player-view breakout: which fights one player used the item in, and when. */
-export function PlayerItemBreakout({ data, onClose }: { data: PlayerItemBreakoutData; onClose: () => void }) {
+export function PlayerItemBreakout({
+  data,
+  instance,
+  onClose,
+}: {
+  data: PlayerItemBreakoutData;
+  instance: Pick<Instance, "players" | "realm">;
+  onClose: () => void;
+}) {
   const totalUses = data.rows.reduce((sum, row) => sum + row.uses.length, 0);
   const fightRows = summarizePlayerItemFights(data.rows);
   return (
@@ -63,7 +74,9 @@ export function PlayerItemBreakout({ data, onClose }: { data: PlayerItemBreakout
             <ItemCell itemId={data.itemId} link newTab />
           </div>
           <div className="mt-0.5 font-mono text-2xs text-muted-foreground/70">
-            <span style={{ color: classColor(data.cls) }}>{data.playerName}</span>
+            <span style={{ color: classColor(data.cls) }} {...instanceEntityAttributes(instance, data.guid)}>
+              {data.playerName}
+            </span>
             {" · "}
             {totalUses} use{totalUses === 1 ? "" : "s"} in {data.rows.length} fight{data.rows.length === 1 ? "" : "s"}
           </div>
@@ -113,7 +126,16 @@ export function PlayerItemBreakout({ data, onClose }: { data: PlayerItemBreakout
   );
 }
 
-export function LedgerItemBreakout({ data, onClose }: { data: LedgerItemBreakoutData; onClose: () => void }) {
+export function LedgerItemBreakout({
+  data,
+  instance,
+  onClose,
+}: {
+  data: LedgerItemBreakoutData;
+  /** Makes player names Alt+clickable; omitted in standalone previews. */
+  instance?: Pick<Instance, "players" | "realm">;
+  onClose: () => void;
+}) {
   const totalUses = data.rows.reduce((sum, row) => sum + row.uses, 0);
   const repeats = totalUses - data.rows.length;
   const inCombatUses = data.rows.reduce((sum, row) => sum + row.inCombatUses, 0);
@@ -220,7 +242,12 @@ export function LedgerItemBreakout({ data, onClose }: { data: LedgerItemBreakout
             data-demo-consumables-breakout-user
           >
             <span className="h-3 w-0.5 shrink-0 rounded-full" style={{ background: classColor(row.cls) }} />
-            <span className="w-24 shrink-0 truncate text-xs text-foreground/80">{row.name}</span>
+            <span
+              className="w-24 shrink-0 truncate text-xs text-foreground/80"
+              {...(instance && instanceEntityAttributes(instance, row.guid))}
+            >
+              {row.name}
+            </span>
             <div className="h-1 flex-1 overflow-hidden rounded-sm bg-background/70">
               <div
                 className="h-full rounded-sm opacity-55"
@@ -271,6 +298,7 @@ export function LedgerItemBreakout({ data, onClose }: { data: LedgerItemBreakout
                   key={row.guid}
                   className="text-2xs opacity-75"
                   style={{ color: classColor(row.cls) }}
+                  {...(instance && instanceEntityAttributes(instance, row.guid))}
                 >
                   {row.name}
                 </span>

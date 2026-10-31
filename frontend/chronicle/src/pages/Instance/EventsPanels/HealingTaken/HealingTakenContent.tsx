@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { ChevronLeft, Layers } from "lucide-react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
-import { RowContextMenu, getArmoryUrl } from "@/components/ui/PlayerMetricChart/RowContextMenu";
+import { focusPlayerActions, instanceEntityAttributes, instanceRowEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import { EntityActionScope } from "@/components/EntityMenu/EntityMenu";
 import { AbilityBreakout, type AbilityData } from "@/components/ui/AbilityBreakout";
 import { GenericPanel } from "../GenericPanel";
 import type { EntitySelection, PanelRenderProps } from "../types";
@@ -94,7 +95,6 @@ function aggregateForEncounters(
   return Array.from(aggregated.values());
 }
 
-
 interface HealingTakenContentProps extends PanelRenderProps<UnifiedHealingResult> {
   targetType?: HealingTargetType;
 }
@@ -160,16 +160,6 @@ export const HealingTakenContent = (props: HealingTakenContentProps) => {
   });
 
   // ── Focus feature: right-click a player row to show per-ability view ──
-
-  const [contextMenu, setContextMenu] = useState<{
-    x: number; y: number; playerId: string; playerName: string
-  } | null>(null);
-
-  // Handler for Ctrl+click on player rows
-  const handleRowCtrlClick = useCallback((playerId: string, event: React.MouseEvent) => {
-    const playerName = healingData.find(d => d.playerID === playerId)?.playerName ?? playerId;
-    setContextMenu({ x: event.clientX, y: event.clientY, playerId, playerName });
-  }, [healingData]);
 
   useEffect(() => {
     if (!focusedPlayerId) return;
@@ -347,7 +337,7 @@ export const HealingTakenContent = (props: HealingTakenContentProps) => {
             <ChevronLeft className="h-3.5 w-3.5" />
             Back
           </button>
-          <span className="text-xs font-medium">
+          <span className="text-xs font-medium" {...instanceEntityAttributes(props.context.instance, focusedPlayerId)}>
             {focusedPlayer?.playerName}
           </span>
         </div>
@@ -366,29 +356,21 @@ export const HealingTakenContent = (props: HealingTakenContentProps) => {
           disableInteractions={props.context.renderMode === "layout_lab"}
         />
       ) : (
-        <PlayerMetricChart
-          data={healingData}
-          type="healing"
-          panelTitle={viewMode === "overheal" ? "Overhealing Received" : "Healing Taken"}
-          duration_millis={props.durationMs}
-          perSecond={props.perSecond}
-          animateValues={!syncMode?.enabled}
-          breakout={breakout}
-          onRowCtrlClick={handleRowCtrlClick}
-          disableInteractions={props.context.renderMode === "layout_lab"}
-        />
+        <EntityActionScope actions={focusPlayerActions(setFocusedPlayerId)}>
+          <PlayerMetricChart
+            data={healingData}
+            type="healing"
+            panelTitle={viewMode === "overheal" ? "Overhealing Received" : "Healing Taken"}
+            duration_millis={props.durationMs}
+            perSecond={props.perSecond}
+            animateValues={!syncMode?.enabled}
+            breakout={breakout}
+            rowEntity={instanceRowEntity(props.context.instance)}
+            disableInteractions={props.context.renderMode === "layout_lab"}
+          />
+        </EntityActionScope>
       )}
 
-      {/* Ctrl+click context menu */}
-      {contextMenu && (
-        <RowContextMenu
-          position={{ x: contextMenu.x, y: contextMenu.y }}
-          playerName={contextMenu.playerName}
-          onFocus={() => setFocusedPlayerId(contextMenu.playerId)}
-          onClose={() => setContextMenu(null)}
-          armoryUrl={getArmoryUrl(props.context.instance, contextMenu.playerId)}
-        />
-      )}
     </GenericPanel>
   );
 }

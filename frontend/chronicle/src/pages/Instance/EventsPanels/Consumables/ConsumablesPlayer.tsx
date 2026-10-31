@@ -15,6 +15,8 @@ import { useDatasetId } from "@/hooks/useDatasetId";
 import { useConsumableDisambiguations } from "@/api/queries";
 import type { ConsumableDisambiguation } from "@/api/typesGenerated";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import { buildConsumableDisambiguationMap, resolveConsumableUse } from "./consumableDisambiguation";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
@@ -58,11 +60,13 @@ function PlayerCombobox({
   usesByPlayer,
   selected,
   onSelect,
+  instance,
 }: {
   roster: RosterEntry[];
   usesByPlayer: ReadonlyMap<string, number>;
   selected: RosterEntry;
   onSelect: (guid: string) => void;
+  instance: Pick<Instance, "players" | "realm">;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -94,6 +98,7 @@ function PlayerCombobox({
           type="button"
           className="group flex w-28 shrink-0 cursor-pointer items-center gap-1 rounded px-0.5 transition-colors hover:bg-muted/40"
           title="Change player"
+          {...instanceEntityAttributes(instance, selected.guid)}
         >
           <span className="min-w-0 flex-1 truncate text-left text-sm font-medium" style={{ color: classColor(selected.cls) }}>
             {selected.name}
@@ -141,6 +146,7 @@ function PlayerCombobox({
                     "flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1 text-left text-xs hover:bg-accent",
                     player.guid === selected.guid && "bg-muted/50",
                   )}
+                  {...instanceEntityAttributes(instance, player.guid)}
                 >
                   <span
                     className="min-w-0 flex-1 truncate font-medium"
@@ -376,6 +382,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
       const player = players[breakout.guid];
       datas.set(breakout.key, {
         itemId: breakout.itemId,
+        guid: breakout.guid,
         playerName: player?.name ?? breakout.guid,
         cls: player?.class,
         rows,
@@ -427,6 +434,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                 usesByPlayer={usesByPlayer}
                 selected={selected}
                 onSelect={selectPlayer}
+                instance={context.instance}
               />
               <span className="w-18 shrink-0 truncate font-mono text-2xs capitalize text-muted-foreground/70">
                 {selected.cls?.toLowerCase() ?? "unknown"}
@@ -520,7 +528,11 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                     className="flex flex-col gap-0.5 border border-border bg-popover text-popover-foreground shadow-md"
                   >
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-xs font-medium" style={{ color: classColor(player.cls) }}>
+                      <span
+                        className="text-xs font-medium"
+                        style={{ color: classColor(player.cls) }}
+                        {...instanceEntityAttributes(context.instance, player.guid)}
+                      >
                         {player.name}
                       </span>
                       <span className="text-2xs capitalize text-muted-foreground">
@@ -600,7 +612,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
             initialPosition={breakout.initialPosition}
             onClose={() => closeBreakout(breakout.key)}
           >
-            <PlayerItemBreakout data={data} onClose={() => closeBreakout(breakout.key)} />
+            <PlayerItemBreakout data={data} instance={context.instance} onClose={() => closeBreakout(breakout.key)} />
           </FloatingIncomingEventsBreakout>
         );
       })}

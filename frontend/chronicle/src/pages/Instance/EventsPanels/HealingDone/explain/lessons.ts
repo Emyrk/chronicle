@@ -198,12 +198,12 @@ const focusPlayer: L = {
   title: "Focus a single healer",
   group: "advanced",
   description: () =>
-    "Ctrl+click a healer to swap the panel to just their spells.",
+    "Alt+click a healer to swap the panel to just their spells.",
   deriveState: () => "available",
   instruction:
-    "Ctrl+click a healer row (Cmd+click on Mac) and choose 'Focus' — the whole panel swaps to that healer's per-spell breakdown, overheal tails included. Click Back or press Esc to return to the roster.",
+    "Alt+click a healer row (Option+click on Mac) and choose 'Focus' — the whole panel swaps to that healer's per-spell breakdown, overheal tails included. Click Back or press Esc to return to the roster.",
   bullets: [
-    "Ctrl+click a healer row (Cmd+click on Mac)",
+    "Alt+click a healer row (Option+click on Mac)",
     "'Focus' swaps the panel to that healer's spells",
     "Back or Esc returns to the roster",
   ],

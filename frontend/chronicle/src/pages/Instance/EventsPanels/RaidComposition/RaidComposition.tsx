@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated render components are intentional. */
 import { useEffect, useState } from "react";
 import { ChevronLeft, ExternalLink, UsersRound } from "lucide-react";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import {
   Tooltip,
@@ -64,12 +65,15 @@ function PlayerSlot({
   specializationName,
   specializationIconUrl,
   compact,
+  entityProps,
 }: {
   className: string;
   name: string;
   specializationName?: string;
   specializationIconUrl?: string;
   compact: boolean;
+  /** Alt+click entity menu attributes for the player. */
+  entityProps?: ReturnType<typeof instanceEntityAttributes>;
 }) {
   const classColor = CLASS_CSS_VAR[className] ?? CLASS_CSS_VAR.UNKNOWN;
   const classLabel = CLASS_DISPLAY[className] ?? className;
@@ -78,6 +82,7 @@ function PlayerSlot({
     <Tooltip>
       <TooltipTrigger asChild>
         <span
+          {...entityProps}
           className={
             compact
               ? "inline-flex size-6 shrink-0"
@@ -209,6 +214,7 @@ function RaidCompositionContent(props: PanelRenderProps<RaidCompositionResult>) 
                           specializationName={specialization?.name}
                           specializationIconUrl={specialization?.iconUrl}
                           compact={compact}
+                          entityProps={instanceEntityAttributes(context.instance, guid)}
                         />
                       );
                     })}
@@ -245,6 +251,7 @@ function RaidCompositionContent(props: PanelRenderProps<RaidCompositionResult>) 
                       specializationIconUrl={specialization?.iconUrl}
                     />
                     <span
+                      {...instanceEntityAttributes(context.instance, guid)}
                       className="min-w-0 truncate text-sm font-medium"
                       style={{ color: CLASS_CSS_VAR[className] ?? CLASS_CSS_VAR.UNKNOWN }}
                     >

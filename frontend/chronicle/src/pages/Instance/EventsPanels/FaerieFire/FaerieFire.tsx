@@ -3,6 +3,8 @@ import { useCallback, useMemo } from "react";
 import { Leaf } from "lucide-react";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import {
@@ -116,13 +118,13 @@ function FaerieFireContent(props: PanelRenderProps<FaerieFireResult>) {
           onSelectTargetGuid={setSelectedTargetGuid}
         />
       ) : (
-        <DruidsView druids={druids} />
+        <DruidsView druids={druids} instance={context.instance} />
       )}
     </GenericPanel>
   );
 }
 
-function DruidsView({ druids }: { druids: DruidFaerieFireStats[] }) {
+function DruidsView({ druids, instance }: { druids: DruidFaerieFireStats[]; instance: Instance }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <ScrollArea className="min-h-0 flex-1">
@@ -145,7 +147,12 @@ function DruidsView({ druids }: { druids: DruidFaerieFireStats[] }) {
           <tbody>
             {druids.map((druid) => (
               <tr key={druid.guid} className="border-b border-border/10 hover:bg-muted/50">
-                <td className="px-2 py-1 font-medium text-[var(--color-class-druid)]">{druid.name}</td>
+                <td
+                  className="px-2 py-1 font-medium text-[var(--color-class-druid)]"
+                  {...instanceEntityAttributes(instance, druid.guid)}
+                >
+                  {druid.name}
+                </td>
                 <td className="px-2 py-1 text-right font-mono text-green-400">{druid.applications}</td>
                 <td className="px-2 py-1 text-right font-mono text-yellow-400">{druid.refreshes}</td>
                 <td className="px-2 py-1 text-right font-mono text-red-400">{druid.failures}</td>

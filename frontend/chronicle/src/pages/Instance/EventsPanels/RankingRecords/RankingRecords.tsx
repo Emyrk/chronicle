@@ -7,6 +7,7 @@ import type { PanelDefinition, PanelRenderProps } from "../types";
 import { shouldLoadPublicRankingData } from "../panelAvailability";
 import { rankingRecordsProcessor, type RankingRecordsResult } from "./rankingRecords.processor";
 import { filterRankingRecords } from "./rankingRecordsFilter";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 
 function formatNumber(value: number, maximumFractionDigits = 0): string {
   return value.toLocaleString(undefined, { maximumFractionDigits });
@@ -126,7 +127,7 @@ export function RankingRecordsContent({ context }: PanelRenderProps<RankingRecor
               <tr key={record.id} className="border-b border-border/60 last:border-0 hover:bg-muted/40">
                 <td className="whitespace-nowrap px-2 py-1.5 font-medium">{record.encounter_name}</td>
                 <td className="px-2 py-1.5">
-                  <div className="font-medium">{record.player_name}</div>
+                  <div className="font-medium" {...instanceEntityAttributes(context.instance, record.player_guid)}>{record.player_name}</div>
                   <div className="text-[10px] text-muted-foreground">{record.player_class}</div>
                 </td>
                 <td className="whitespace-nowrap px-2 py-1.5 text-muted-foreground">

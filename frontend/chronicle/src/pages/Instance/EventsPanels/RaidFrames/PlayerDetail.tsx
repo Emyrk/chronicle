@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip";
 import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
 import { cn } from "@/lib/utils";
@@ -308,7 +309,7 @@ export function PlayerDetail({
         />
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-[15px] font-semibold" style={{ color }}>{dead ? `☠ ${name}` : name}</span>
+            <span className="truncate text-[15px] font-semibold" style={{ color }} {...instanceEntityAttributes(context.instance, guid)}>{dead ? `☠ ${name}` : name}</span>
             {role && (
               <span className="shrink-0 rounded-sm border border-border px-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground">
                 {ROLE_LABELS[role]}

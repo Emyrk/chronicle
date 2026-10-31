@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { bossEntity, entityAttributes } from "@/components/EntityMenu/entity";
+import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities";
 import { Link } from "react-router-dom";
 import { Clock, Copy, Users, CheckCircle, XCircle, Youtube, Swords } from "lucide-react";
 import type { RecentInstance } from "@/api/typesGenerated";
@@ -211,12 +213,27 @@ export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCar
           {/* Header: Instance name */}
           <div className="mb-2">
             <h3 className="font-bold text-base text-white drop-shadow-lg group-hover:text-amber-300 transition-colors">
-              {activeInstance.name}
+              <span
+                {...entityAttributes({
+                  kind: "raid",
+                  id: activeInstance.id,
+                  name: activeInstance.name,
+                  difficultyName: activeInstance.difficulty_name,
+                  maxPlayers: activeInstance.max_players || undefined,
+                  logId: activeInstance.id,
+                  startTime: activeInstance.first_encounter_time,
+                  guildName: activeInstance.guild_name,
+                })}
+              >
+                {activeInstance.name}
+              </span>
             </h3>
             <p className="text-xs text-white/70 drop-shadow">
               {activeInstance.guild_name ? (
                 <>
-                  <span className="text-amber-300/90">&lt;{activeInstance.guild_name}&gt;</span>
+                  <span className="text-amber-300/90" {...guildAttributes(activeInstance.guild_id, activeInstance.guild_name)}>
+                    &lt;{activeInstance.guild_name}&gt;
+                  </span>
                   <span className="mx-1">·</span>
                   by {activeInstance.uploader_name}
                 </>
@@ -278,6 +295,7 @@ export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCar
                     <span
                       key={i}
                       className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${styleClasses}`}
+                      {...entityAttributes(bossEntity(activeInstance.name, enc.name))}
                     >
                       {enc.kill_type !== "wipe" ? (
                         <CheckCircle className="h-2.5 w-2.5" />

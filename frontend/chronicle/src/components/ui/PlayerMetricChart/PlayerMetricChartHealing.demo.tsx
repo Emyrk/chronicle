@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { ChevronDown, ChevronLeft, ExternalLink, Filter, Focus, Heart, HelpCircle, Layers, MoreVertical } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ExternalLink, Filter, Focus, History, Heart, HelpCircle, Layers, MoreVertical } from 'lucide-react'
 import {
   AbilityBreakout,
   BreakoutHoverProvider,
@@ -253,9 +253,9 @@ export function PlayerMetricChartHealingDemo({
   filterStage?: DemoFilterStage
   /** Typing/chip state of the editor's ability-name input (editor stage only). */
   filterEditor?: DemoFilterEditorState
-  /** Drives the focus lesson video: Ctrl+click menu → focused ability view. */
+  /** Drives the focus lesson video: Alt+click menu → focused ability view. */
   focusStage?: DemoFocusStage
-  /** Demo-local position of the Ctrl+click context menu (menu stage only). */
+  /** Demo-local position of the Alt+click context menu (menu stage only). */
   focusMenuAt?: { x: number; y: number }
 }) {
   const pinnedKey = pinnedPlayers ? [...pinnedPlayers.keys()].sort().join(',') : 'unpinned'
@@ -419,20 +419,30 @@ export function PlayerMetricChartHealingDemo({
       )}
         </>
       )}
-      {/* Ctrl+click's row context menu (Focus / View Armory). */}
+      {/* Alt+click's entity menu (mirrors EntityMenu: Focus, then the site-wide actions). */}
       {focusStage === 'menu' && focusMenuAt && (
         <div
-          className="absolute z-20 min-w-[160px] rounded-md border border-border bg-popover p-1 shadow-md"
+          className="absolute z-20 w-[200px] rounded-md border border-border bg-popover p-1 shadow-md"
           style={{ left: focusMenuAt.x, top: focusMenuAt.y }}
           data-demo-focus-menu
         >
+          <div className="flex items-baseline gap-2 px-2 pt-1 pb-1.5">
+            <span className="text-sm font-semibold" style={{ color: 'var(--color-class-paladin)' }}>Lightmender</span>
+            <span className="ml-auto text-[10px] uppercase tracking-wider text-muted-foreground">Player</span>
+          </div>
           <div className="flex items-center gap-2 rounded-sm bg-accent px-2 py-1.5 text-xs" data-demo-focus-item>
             <Focus className="h-3.5 w-3.5" />
             Focus Lightmender
           </div>
-          <div className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-muted-foreground">
-            <ExternalLink className="h-3.5 w-3.5" />
-            View Armory
+          <div className="mt-1 border-t border-border/60 pt-1">
+            <div className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-muted-foreground">
+              <ExternalLink className="h-3.5 w-3.5" />
+              View armory
+            </div>
+            <div className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-muted-foreground">
+              <History className="h-3.5 w-3.5" />
+              Performance history
+            </div>
           </div>
         </div>
       )}

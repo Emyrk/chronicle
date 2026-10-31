@@ -3,6 +3,7 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { RadioTower, Users } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { parseSelectedUnits } from "../UnitAuras/unitSelection";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
@@ -26,6 +27,9 @@ import {
 } from "./raidFrames.processor";
 import { deadEnemyFrameOpacity } from "../Map/mapDeathVisibility";
 import { INCOMING_HEAL_WINDOW_MS, POWER_COLORS, percent, useDisplayTimestamp } from "./raidFrameShared";
+
+/** Alt+click entity-menu attributes for a unit's name (empty for non-players). */
+type EntityAttributes = ReturnType<typeof instanceEntityAttributes>;
 
 export function selectRaidFramesEncounter(
   encounters: ReadonlyMap<string, RaidFramesEncounter>,
@@ -177,6 +181,7 @@ function RaidFrameTooltip({
   timestampMs,
   dead,
   nameplate = false,
+  entityAttributes,
 }: {
   name: string;
   classColor: string;
@@ -189,6 +194,7 @@ function RaidFrameTooltip({
   dead: boolean;
   /** Health and power as nameplate bars with their values on them, instead of rows. */
   nameplate?: boolean;
+  entityAttributes?: EntityAttributes;
 }) {
   const displayMs = useDisplayTimestamp(timestampMs);
   const pending = dead ? [] : incomingHeals.filter((heal) => heal.landMs > displayMs);
@@ -200,7 +206,7 @@ function RaidFrameTooltip({
   return (
     <div className={`flex flex-col gap-1.5 text-xs ${nameplate ? "w-60" : "min-w-52"}`}>
       <div className="flex items-baseline justify-between gap-3">
-        <span className="font-semibold" style={{ color: classColor }}>{name}</span>
+        <span className="font-semibold" style={{ color: classColor }} {...entityAttributes}>{name}</span>
         {dead && <span className="text-2xs uppercase tracking-wide text-red-400">Dead</span>}
       </div>
       {nameplate ? (
@@ -294,6 +300,7 @@ function RaidFrame({
   showValues,
   selected = false,
   onClick,
+  entityAttributes,
 }: {
   name: string;
   className: string;
@@ -306,6 +313,7 @@ function RaidFrame({
   /** This frame's player has a breakout open. */
   selected?: boolean;
   onClick?: (target: HTMLElement) => void;
+  entityAttributes?: EntityAttributes;
 }) {
   const [hoveredHeal, setHoveredHeal] = useState<RaidFrameHeal | null>(null);
   const healthWidth = sample ? percent(sample.currentHealth, sample.maximumHealth) : 0;
@@ -327,6 +335,7 @@ function RaidFrame({
           className={`min-w-0 overflow-hidden rounded-sm border border-border/60 bg-muted/30 ${dead ? "opacity-50 grayscale" : ""} ${onClick ? "cursor-pointer hover:border-foreground/40" : ""} ${selected ? "ring-2 ring-inset" : ""}`}
           style={selected ? { "--tw-ring-color": classColor } as CSSProperties : undefined}
           onClick={onClick && ((event) => onClick(event.currentTarget))}
+          {...entityAttributes}
         >
           <CastBar cast={cast} timestampMs={timestampMs} />
           <div className="relative h-8 overflow-hidden">
@@ -377,6 +386,7 @@ function RaidFrame({
           spellNames={spellNames}
           timestampMs={timestampMs}
           dead={dead}
+          entityAttributes={entityAttributes}
         />
       </TooltipContent>
     </Tooltip>
@@ -413,6 +423,7 @@ function OverlayRaidFrame({
   spellNames,
   timestampMs,
   opacity,
+  entityAttributes,
 }: {
   guid?: string;
   name: string;
@@ -423,6 +434,7 @@ function OverlayRaidFrame({
   spellNames: ReadonlyMap<number, string>;
   timestampMs: number;
   opacity?: number;
+  entityAttributes?: EntityAttributes;
 }) {
   const [hoveredHeal, setHoveredHeal] = useState<RaidFrameHeal | null>(null);
   const inspect = useUnitInspect();
@@ -439,6 +451,7 @@ function OverlayRaidFrame({
           className={`pointer-events-auto flex w-20 flex-col overflow-hidden rounded-sm border bg-black/80 transition-opacity duration-100 ease-linear ${inspected ? "border-white ring-1 ring-white/70" : "border-black/80"} ${dead && opacity === undefined ? "opacity-60" : ""} ${inspect && guid ? "cursor-pointer" : ""}`}
           style={opacity === undefined ? undefined : { opacity }}
           onClick={inspect && guid ? () => inspect.select(guid) : undefined}
+          {...entityAttributes}
         >
           <div className="relative h-4">
             <div className="absolute inset-y-0 left-0" style={{ width: `${healthWidth}%`, background: classColor }} />
@@ -478,6 +491,7 @@ function OverlayRaidFrame({
           timestampMs={timestampMs}
           dead={dead}
           nameplate
+          entityAttributes={entityAttributes}
         />
       </TooltipContent>
     </Tooltip>
@@ -518,7 +532,7 @@ function InspectFrame({
   return (
     <div className={`flex flex-col gap-0.5 ${dead ? "opacity-60" : ""}`}>
       <div className="flex items-baseline gap-2 pr-4 text-[11px] leading-tight">
-        <span className="truncate font-semibold" style={{ color }}>{name}</span>
+        <span className="truncate font-semibold" style={{ color }} {...instanceEntityAttributes(context.instance, guid)}>{name}</span>
         {dead && <span className="text-2xs uppercase tracking-wide text-red-400">Dead</span>}
       </div>
       {sample && sample.maximumHealth > 0 ? (
@@ -674,6 +688,7 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
               spellNames={props.result.spellNames}
               timestampMs={timestampMs}
               opacity={frame.opacity}
+              entityAttributes={instanceEntityAttributes(props.context.instance, frame.guid)}
             />
           ))}
         </div>
@@ -716,6 +731,7 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
               showValues={props.checkboxChecked}
               selected={breakouts.some((breakout) => breakout.guid === guid)}
               onClick={enemiesMode ? undefined : (target) => toggleBreakout(guid, target)}
+              entityAttributes={instanceEntityAttributes(props.context.instance, guid)}
             />
           );
         })}

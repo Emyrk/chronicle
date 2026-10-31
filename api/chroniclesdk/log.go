@@ -585,6 +585,7 @@ type SpeedrunLeaderboardEntry struct {
 	Slug             string     `json:"slug"`
 	DifficultyName   string     `json:"difficulty_name"`
 	DurationMs       int64      `json:"duration_ms"`
+	GuildID          uuid.UUID  `json:"guild_id"`
 	GuildName        string     `json:"guild_name"`
 	RealmName        string     `json:"realm_name"`
 	StartTime        time.Time  `json:"start_time"`

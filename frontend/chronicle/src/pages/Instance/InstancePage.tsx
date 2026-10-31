@@ -31,6 +31,7 @@ import { shouldShowAdPreview } from "@/components/Ads/adPreview";
 import { useAdSiteConfig } from "@/components/Ads/useAdSiteConfig";
 import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySelection";
 import { shouldShowInstanceAdRail } from "./instanceAdRail";
+import { useEntityRaidContext, type EntityRaidContext } from "@/components/EntityMenu/entityMenuContext";
 import { defaultPositionCoordinateSpace, type PositionCoordinateSpace } from "./positionCoordinateSpace";
 
 // Types for the Instance page
@@ -474,6 +475,29 @@ export function InstancePage() {
     if (userSelectedEncounterIds !== null) return userSelectedEncounterIds;
     return defaultEncounterIds;
   }, [userSelectedEncounterIds, defaultEncounterIds]);
+
+  // Quick stats from the entity menu compare players on the same boss kills selected here.
+  const entityRaid = useMemo((): EntityRaidContext | null => {
+    if (!instance) return null;
+    const bossNames = instance.encounters
+      .filter((e) => e.boss && (e.kill_type === "clean" || e.kill_type === "partial") && selectedEncounterIds.includes(e.id))
+      .map((e) => e.name);
+    return {
+      instanceId: instance.id,
+      instanceSlug: instance.slug,
+      instanceName: instance.name,
+      difficultyName: instance.difficultyName,
+      maxPlayers: instance.maxPlayers,
+      dynamicDifficulty: instance.dynamicDifficulty,
+      label: [
+        instance.name,
+        instance.guild ? `<${instance.guild.name}>` : "",
+        new Date(instance.startTime).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
+      ].filter(Boolean).join(" · "),
+      bossNames: [...new Set(bossNames)],
+    };
+  }, [instance, selectedEncounterIds]);
+  useEntityRaidContext(entityRaid);
 
   // Get the start/end time of selected encounters for video sync
   // When multiple selected: start of first, end of last (by time order)

@@ -15,7 +15,8 @@ import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import { ChevronLeft } from "lucide-react";
 import { useBreakoutHover } from "@/components/ui/AbilityBreakout/BreakoutHoverContext";
-import { RowContextMenu, getArmoryUrl } from "@/components/ui/PlayerMetricChart/RowContextMenu";
+import { focusPlayerActions, instanceEntityAttributes, instanceRowEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import { EntityActionScope } from "@/components/EntityMenu/EntityMenu";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
 import {
@@ -357,10 +358,6 @@ export interface DispelContentProps extends PanelRenderProps<DispelResult> {
 }
 
 export function DispelContent(props: DispelContentProps) {
-  // Ctrl+click context menu
-  const [contextMenu, setContextMenu] = useState<{
-    x: number; y: number; playerId: string; playerName: string;
-  } | null>(null);
 
   const focusedPlayerId = useMemo(() => parseFocusFromOption(props.panelOption), [props.panelOption]);
   const setFocusedPlayerId = useCallback((id: string | null) => {
@@ -433,11 +430,6 @@ export function DispelContent(props: DispelContentProps) {
     loading: hasData ? false : props.loading,
     processing: hasData ? false : props.processing,
   };
-
-  const handleRowCtrlClick = useCallback((playerId: string, event: React.MouseEvent) => {
-    const playerName = chartData.find(d => d.playerID === playerId)?.playerName ?? playerId;
-    setContextMenu({ x: event.clientX, y: event.clientY, playerId, playerName });
-  }, [chartData]);
 
   // ESC key to unfocus
   useEffect(() => {
@@ -546,7 +538,7 @@ export function DispelContent(props: DispelContentProps) {
             <ChevronLeft className="h-3.5 w-3.5" />
             Back
           </button>
-          <span className="text-xs font-medium">
+          <span className="text-xs font-medium" {...instanceEntityAttributes(props.context.instance, focusedPlayerId)}>
             {focusedPlayer?.playerName}
           </span>
         </div>
@@ -562,25 +554,18 @@ export function DispelContent(props: DispelContentProps) {
           disableInteractions={props.context.renderMode === "layout_lab"}
         />
       ) : (
-        <PlayerMetricChart
-          data={chartData}
-          type={"healing"}
-          panelTitle={perspective === "done" ? "Dispels Done" : "Dispels Received"}
-          duration_millis={props.durationMs}
-          perSecond={props.perSecond}
-          breakout={breakout}
-          onRowCtrlClick={handleRowCtrlClick}
-          disableInteractions={props.context.renderMode === "layout_lab"}
-        />
-      )}
-      {contextMenu && (
-        <RowContextMenu
-          position={{ x: contextMenu.x, y: contextMenu.y }}
-          playerName={contextMenu.playerName}
-          onFocus={() => { setFocusedPlayerId(contextMenu.playerId); setContextMenu(null); }}
-          onClose={() => setContextMenu(null)}
-          armoryUrl={getArmoryUrl(props.context.instance, contextMenu.playerId)}
-        />
+        <EntityActionScope actions={focusPlayerActions(setFocusedPlayerId)}>
+          <PlayerMetricChart
+            data={chartData}
+            type={"healing"}
+            panelTitle={perspective === "done" ? "Dispels Done" : "Dispels Received"}
+            duration_millis={props.durationMs}
+            perSecond={props.perSecond}
+            breakout={breakout}
+            rowEntity={instanceRowEntity(props.context.instance)}
+            disableInteractions={props.context.renderMode === "layout_lab"}
+          />
+        </EntityActionScope>
       )}
     </GenericPanel>
   );

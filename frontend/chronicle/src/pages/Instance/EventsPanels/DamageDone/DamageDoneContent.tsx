@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
-import { RowContextMenu, getArmoryUrl } from "@/components/ui/PlayerMetricChart/RowContextMenu";
+import { focusPlayerActions, instanceEntityAttributes, instanceRowEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import { EntityActionScope } from "@/components/EntityMenu/EntityMenu";
 import { AbilityBreakout, type AbilityData } from "@/components/ui/AbilityBreakout";
 import { GenericPanel } from "../GenericPanel";
 import type { EntitySelection, PanelRenderProps } from "../types";
@@ -105,7 +106,6 @@ function aggregateForEncounters(
   return Array.from(aggregated.values());
 }
 
-
 interface DamageDoneContentProps extends PanelRenderProps<DamageDoneResult> {
   sourceType?: DamageSourceType;
   /** When provided, bypasses useParsePills and uses these pills directly. */
@@ -206,17 +206,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
   // Use override if provided (e.g. in explainer example mode)
   const parsePills = props.parsePillsOverride ?? liveParsePills;
 
-  // ── Focus feature: Ctrl+click a player row to show per-ability view ──
-
-  const [contextMenu, setContextMenu] = useState<{
-    x: number; y: number; playerId: string; playerName: string
-  } | null>(null);
-
-  // Handler for Ctrl+click on player rows
-  const handleRowCtrlClick = useCallback((playerId: string, event: React.MouseEvent) => {
-    const playerName = damageData.find(d => d.playerID === playerId)?.playerName ?? playerId;
-    setContextMenu({ x: event.clientX, y: event.clientY, playerId, playerName });
-  }, [damageData]);
+  // ── Focus feature: Alt+click a player row and pick Focus for the per-ability view ──
 
   // ESC key to unfocus
   useEffect(() => {
@@ -507,7 +497,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
             <ChevronLeft className="h-3.5 w-3.5" />
             Back
           </button>
-          <span className="text-xs font-medium">
+          <span className="text-xs font-medium" {...instanceEntityAttributes(props.context.instance, focusedPlayerId)}>
             {focusedPlayer?.playerName}
           </span>
         </div>
@@ -527,31 +517,23 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
           disableInteractions={props.context.renderMode === "layout_lab"}
         />
       ) : (
-        <PlayerMetricChart
-          data={damageData}
-          type="damage"
-          panelTitle="Damage Done"
-          duration_millis={props.durationMs}
-          perSecond={props.perSecond}
-          animateValues={!syncMode?.enabled}
-          breakout={breakout}
-          stackedLabel="Excluded"
-          onRowCtrlClick={handleRowCtrlClick}
-          disableInteractions={props.context.renderMode === "layout_lab"}
-          parsePills={parsePills}
-        />
+        <EntityActionScope actions={focusPlayerActions(setFocusedPlayerId)}>
+          <PlayerMetricChart
+            data={damageData}
+            type="damage"
+            panelTitle="Damage Done"
+            duration_millis={props.durationMs}
+            perSecond={props.perSecond}
+            animateValues={!syncMode?.enabled}
+            breakout={breakout}
+            stackedLabel="Excluded"
+            rowEntity={instanceRowEntity(props.context.instance)}
+            disableInteractions={props.context.renderMode === "layout_lab"}
+            parsePills={parsePills}
+          />
+        </EntityActionScope>
       )}
 
-      {/* Ctrl+click context menu */}
-      {contextMenu && (
-        <RowContextMenu
-          position={{ x: contextMenu.x, y: contextMenu.y }}
-          playerName={contextMenu.playerName}
-          onFocus={() => setFocusedPlayerId(contextMenu.playerId)}
-          onClose={() => setContextMenu(null)}
-          armoryUrl={getArmoryUrl(props.context.instance, contextMenu.playerId)}
-        />
-      )}
     </GenericPanel>
   );
 }

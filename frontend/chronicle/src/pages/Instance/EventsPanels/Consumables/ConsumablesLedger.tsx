@@ -280,7 +280,7 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
             initialPosition={breakout.initialPosition}
             onClose={() => closeBreakout(breakout.itemId)}
           >
-            <LedgerItemBreakout data={data} onClose={() => closeBreakout(breakout.itemId)} />
+            <LedgerItemBreakout data={data} instance={context.instance} onClose={() => closeBreakout(breakout.itemId)} />
           </FloatingIncomingEventsBreakout>
         );
       })}

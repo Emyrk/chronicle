@@ -10,7 +10,7 @@ import { Link } from "react-router-dom";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { loggingMetadataProcessor, type LoggingMetadataResult } from "./loggingMetadata.processor";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
-import { getArmoryUrl } from "@/components/ui/PlayerMetricChart/RowContextMenu";
+import { getArmoryUrl, instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 
 /** Human-readable labels for version keys */
 const VERSION_LABELS: Record<string, string> = {
@@ -153,7 +153,7 @@ function RecorderPlayerName({ context }: { context: PanelContext }) {
 
   if (armoryUrl) {
     return (
-      <Link to={armoryUrl} className="font-medium hover:underline" style={colorStyle}>
+      <Link to={armoryUrl} className="font-medium hover:underline" style={colorStyle} {...instanceEntityAttributes(instance, guid)}>
         {name}
       </Link>
     );

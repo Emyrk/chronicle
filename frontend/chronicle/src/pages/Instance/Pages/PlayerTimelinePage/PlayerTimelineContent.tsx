@@ -395,9 +395,10 @@ function PlayerTimelineView({
   const instancePlayers = instance.players ?? {};
   const pickers = (
     <div className="flex items-center gap-2.5">
-      <PlayerPicker slot={0} value={picked[0]} ranked={ranked} players={instancePlayers} onChange={(g) => setPicked([g, picked[1]])} />
+      <PlayerPicker realm={instance.realm} slot={0} value={picked[0]} ranked={ranked} players={instancePlayers} onChange={(g) => setPicked([g, picked[1]])} />
       <span className="text-xs text-muted-foreground">vs</span>
       <PlayerPicker
+        realm={instance.realm}
         slot={1}
         value={picked[1]}
         ranked={ranked}
@@ -448,6 +449,7 @@ function PlayerTimelineView({
   const timeline = (
     <div className={cn("overflow-hidden", framed && "rounded-lg border border-border")}>
       <RotationTimeline
+        instance={instance}
         players={players}
         view={view}
         spellMeta={meta}
@@ -485,6 +487,7 @@ function PlayerTimelineView({
       back={
         <div className={cn("overflow-hidden", framed && "rounded-lg border border-border")}>
           <PlayerTimelineRules
+            instance={instance}
             players={players}
             spellMeta={meta}
             gcd={gcd}

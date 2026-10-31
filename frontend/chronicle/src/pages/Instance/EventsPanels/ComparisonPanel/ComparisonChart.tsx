@@ -21,6 +21,8 @@ import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { GripHorizontal, X } from "lucide-react";
 import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import { specializationIconUrl } from "@/config/specializationIcon";
 import {
   Tooltip,
@@ -58,7 +60,12 @@ export interface ComparisonChartProps {
   perSecond?: boolean;
   durationMs?: number;
   disableTransitions?: boolean;
+  /** Makes player names Alt+clickable. */
+  instance?: Pick<Instance, "players" | "realm">;
 }
+
+/** Alt+click entity-menu attributes for a player's name (empty for non-players). */
+type EntityAttributes = ReturnType<typeof instanceEntityAttributes>;
 
 interface PlayerRow {
   playerID: string;
@@ -76,6 +83,7 @@ export function ComparisonChart({
   perSecond,
   durationMs,
   disableTransitions,
+  instance,
 }: ComparisonChartProps) {
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const handleTogglePin = useCallback((id: string) => {
@@ -248,6 +256,7 @@ export function ComparisonChart({
             onTogglePin={() => handleTogglePin(row.playerID)}
             showMidLine={sources.length === 2}
             disableTransitions={disableTransitions}
+            entityAttributes={instance ? instanceEntityAttributes(instance, row.playerID) : undefined}
           />
         ))}
       </div>
@@ -492,10 +501,12 @@ function PlayerBreakoutContent({
   row,
   sourceColors,
   sources,
+  entityAttributes,
 }: {
   row: PlayerRow;
   sourceColors: string[];
   sources: ComparisonSource[];
+  entityAttributes?: EntityAttributes;
 }) {
   return (
     <>
@@ -513,7 +524,7 @@ function PlayerBreakoutContent({
               target.src = `/c/icons/class_${row.className.toLowerCase()}.png`;
             }}
           />
-          <span style={{ fontWeight: 500, fontSize: "13px" }}>
+          <span style={{ fontWeight: 500, fontSize: "13px" }} {...entityAttributes}>
             {row.playerName}
           </span>
           <span
@@ -830,6 +841,7 @@ function ComparisonRow({
   onTogglePin,
   showMidLine,
   disableTransitions,
+  entityAttributes,
 }: {
   row: PlayerRow;
   grandTotal: number;
@@ -839,6 +851,7 @@ function ComparisonRow({
   onTogglePin: () => void;
   showMidLine: boolean;
   disableTransitions?: boolean;
+  entityAttributes?: EntityAttributes;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [pinnedPosition, setPinnedPosition] = useState<{
@@ -928,6 +941,7 @@ function ComparisonRow({
             overflow: "hidden",
             textOverflow: "ellipsis",
           }}
+          {...entityAttributes}
         >
           {row.playerName}
         </span>
@@ -979,6 +993,7 @@ function ComparisonRow({
               row={row}
               sourceColors={sourceColors}
               sources={sources}
+              entityAttributes={entityAttributes}
             />
           </TooltipContent>
         </Tooltip>
@@ -996,6 +1011,7 @@ function ComparisonRow({
             row={row}
             sourceColors={sourceColors}
             sources={sources}
+            entityAttributes={entityAttributes}
           />
         </DraggableComparisonBreakout>
       )}

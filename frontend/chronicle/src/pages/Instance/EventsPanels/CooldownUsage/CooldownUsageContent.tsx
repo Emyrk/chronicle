@@ -8,6 +8,8 @@ import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Too
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import { classColor } from "../Consumables/consumablesLedgerLogic";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { GenericPanel } from "../GenericPanel";
@@ -157,7 +159,7 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
     if (cooldownsError) return <div className="p-3 text-center text-[11px] text-red-300">Failed to load cooldown data.</div>;
     if (cooldownsLoading) return <div className="p-3 text-center text-[11px] text-white/50">Loading cooldowns…</div>;
     const atMs = sync?.enabled && sync.currentTimestamp ? sync.currentTimestamp.getTime() : rangeEnd;
-    return <CooldownsNow rows={allRows} atMs={atMs} />;
+    return <CooldownsNow rows={allRows} atMs={atMs} instance={context.instance} />;
   }
 
   return (
@@ -247,12 +249,13 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
           ) : (compact ? rows : detailedRows).length === 0 ? (
             <div className="p-4 text-center text-muted-foreground">No cooldown casts in the selected encounters.</div>
           ) : compact ? (
-            <CompactTable rows={rows} />
+            <CompactTable rows={rows} instance={context.instance} />
           ) : (
             groupByPlayer(detailedRows).map((group) => (
               <PlayerGroup
                 key={group[0].playerID}
                 rows={group}
+                instance={context.instance}
                 windows={windows}
                 allWindows={allWindows}
                 encounters={encounters}
@@ -278,7 +281,7 @@ function CooldownIcon({ cooldown }: { cooldown: CooldownDef }) {
 }
 
 /** Players × cooldowns grid of cast counts. */
-function CompactTable({ rows }: { rows: readonly CooldownUsageRow[] }) {
+function CompactTable({ rows, instance }: { rows: readonly CooldownUsageRow[]; instance: Instance }) {
   const cooldowns = [...new Map(rows.map((row) => [row.cooldown.key, row.cooldown])).values()].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
@@ -305,7 +308,10 @@ function CompactTable({ rows }: { rows: readonly CooldownUsageRow[] }) {
           return (
             <tr key={player.playerID} className="hover:bg-muted/30">
               <td className="sticky left-0 z-10 whitespace-nowrap border-t border-border/30 bg-card py-1 pl-1 pr-3">
-                <span className="flex items-center gap-1.5 text-foreground">
+                <span
+                  className="flex items-center gap-1.5 text-foreground"
+                  {...instanceEntityAttributes(instance, player.playerID)}
+                >
                   <span
                     className="h-3 w-[3px] rounded-sm"
                     style={{ background: classColor(normalizeClassName(player.className)) }}
@@ -354,7 +360,7 @@ type TimelineProps = {
   rangeEnd: number;
 };
 
-function PlayerGroup({ rows, ...timeline }: TimelineProps & { rows: CooldownUsageRow[] }) {
+function PlayerGroup({ rows, instance, ...timeline }: TimelineProps & { rows: CooldownUsageRow[]; instance: Instance }) {
   const player = rows[0];
   const color = classColor(normalizeClassName(player.className));
   const totalCasts = rows.reduce((total, row) => total + row.casts.length, 0);
@@ -362,7 +368,10 @@ function PlayerGroup({ rows, ...timeline }: TimelineProps & { rows: CooldownUsag
   return (
     <div className="border-b border-border/40 py-2">
       <div className="mb-1 flex items-baseline gap-2">
-        <span className="flex items-center gap-1.5 font-medium text-foreground">
+        <span
+          className="flex items-center gap-1.5 font-medium text-foreground"
+          {...instanceEntityAttributes(instance, player.playerID)}
+        >
           <span className="h-3 w-[3px] rounded-sm" style={{ background: color }} />
           {player.playerName}
         </span>

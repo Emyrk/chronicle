@@ -19,6 +19,8 @@ type RankingsInstanceSummary struct {
 
 // RankingsInstanceTopPlayer is a top-performing player for an instance summary.
 type RankingsInstanceTopPlayer struct {
+	// PlayerGUID is empty for summaries computed before it was stored.
+	PlayerGUID  string  `json:"player_guid,omitempty"`
 	PlayerName  string  `json:"player_name"`
 	RealmName   string  `json:"realm_name"`
 	PlayerClass string  `json:"player_class"`
@@ -49,10 +51,12 @@ type RankingsEntry struct {
 	// TalentLayout is the player's talent build detected from the combat
 	// log: one digit (rank) per talent per tree, trees separated by '}',
 	// e.g. "05230...}30200...}0000". Empty when no build was detected.
-	TalentLayout    *string   `json:"talent_layout,omitempty"`
-	RealmID         uuid.UUID `json:"realm_id"`
-	RealmName       string    `json:"realm_name"`
-	GuildName       string    `json:"guild_name"`
+	TalentLayout *string   `json:"talent_layout,omitempty"`
+	RealmID      uuid.UUID `json:"realm_id"`
+	RealmName    string    `json:"realm_name"`
+	GuildName    string    `json:"guild_name"`
+	// GuildID is empty when the player was not in a known guild.
+	GuildID         string    `json:"guild_id,omitempty"`
 	DamageDone      int64     `json:"damage_done"`
 	HealingDone     int64     `json:"healing_done"`
 	AbsorbedDone    int64     `json:"absorbed_done"`
@@ -135,9 +139,14 @@ type RankingsKillTimeStats struct {
 
 // KillTimeLeaderboardEntry is a single row in the kill time leaderboard.
 type KillTimeLeaderboardEntry struct {
+	// EncounterID and InstanceID identify the kill in its log.
+	EncounterID   uuid.UUID `json:"encounter_id"`
+	InstanceID    uuid.UUID `json:"instance_id"`
 	EncounterName string    `json:"encounter_name"`
 	InstanceName  string    `json:"instance_name"`
 	GuildName     string    `json:"guild_name"`
+	// GuildID is empty when the log has no known guild.
+	GuildID       string    `json:"guild_id,omitempty"`
 	RealmName     string    `json:"realm_name"`
 	DurationSecs  float64   `json:"duration_secs"`
 	KilledAt      time.Time `json:"killed_at"`

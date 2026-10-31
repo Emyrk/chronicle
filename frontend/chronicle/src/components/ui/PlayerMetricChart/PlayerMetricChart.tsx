@@ -16,6 +16,7 @@ import { usePortalContainer } from '@/components/ui/PortalContainerContext';
 import { X, GripHorizontal } from 'lucide-react';
 import { usePlayerSpecializations } from './PlayerSpecializationContext';
 import { mergePlayerCosmetics, usePlayerCosmetics } from './PlayerCosmeticsContext';
+import { entityAttributes, type EntityRef } from "@/components/EntityMenu/entity";
 import { usePanelVariant } from '@/pages/Instance/EventsPanels/PanelVariantContext';
 import {
   createPlayerMetricChartModel,
@@ -81,8 +82,8 @@ interface PlayerMetricChartProps extends React.ComponentProps<"div"> {
   stackedLabel?: string
   /** Disable hover/click breakout interactions (used by layout editor previews) */
   disableInteractions?: boolean
-  /** Called when a row is Ctrl+clicked (or Cmd+clicked on Mac). Parent can use this to show a context menu. */
-  onRowCtrlClick?: (playerId: string, event: React.MouseEvent) => void
+  /** The character a row stands for, so Alt+click opens its entity menu. Undefined rows (pets, NPCs) get no menu. */
+  rowEntity?: (row: PlayerMetricChartData) => EntityRef | undefined
   /** Custom suffix appended to each row's value (e.g. '%'). Overrides the default '/s' from perSecond. */
   valueSuffix?: string
   /** Hide the primary value badge when it is zero, while preserving stacked secondary data. */
@@ -111,7 +112,7 @@ export function PlayerMetricChart({
   breakout,
   stackedLabel = 'Overheal',
   disableInteractions = false,
-  onRowCtrlClick,
+  rowEntity,
   valueSuffix,
   hideZeroValue = false,
   parsePills,
@@ -204,7 +205,7 @@ export function PlayerMetricChart({
             showStackedColumn={showStackedColumn}
             stackedLabel={stackedLabel}
             isFirstRow={index === 0}
-            onCtrlClick={onRowCtrlClick ? (e) => onRowCtrlClick(player.playerID, e) : undefined}
+            entity={rowEntity?.(player)}
             parsePill={dense ? undefined : parsePills?.get(player.playerID)}
             classIconBasePath={classIconBasePath}
             animateValues={animateValues}
@@ -237,8 +238,8 @@ export interface PlayerMetricRowProps {
   stackedLabel?: string
   /** Whether this is the first row (used for tutorial highlight) */
   isFirstRow?: boolean
-  /** Called when the row is Ctrl+clicked (or Cmd+clicked on Mac) */
-  onCtrlClick?: (event: React.MouseEvent) => void
+  /** Marks the row for the entity menu (Alt+click). */
+  entity?: EntityRef
   /** Optional parse score pill to show at the bar's right edge */
   parsePill?: ParsePillData
   classIconBasePath?: string
@@ -429,7 +430,7 @@ export function PlayerMetricRow({
   showStackedColumn = false,
   stackedLabel = 'Overheal',
   isFirstRow = false,
-  onCtrlClick: onCtrlClickProp,
+  entity,
   parsePill,
   classIconBasePath = '/c/icons',
   animateValues = true,
@@ -446,11 +447,6 @@ export function PlayerMetricRow({
   
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
-    // Ctrl+click (or Cmd+click on Mac) opens the focus menu
-    if ((e.ctrlKey || e.metaKey) && onCtrlClickProp) {
-      onCtrlClickProp(e)
-      return
-    }
     if (!breakout) return // No action if no breakout function
     if (!isPinned && rowRef.current) {
       // Calculate initial position for the pinned tooltip
@@ -461,7 +457,7 @@ export function PlayerMetricRow({
       })
     }
     onTogglePin?.()
-  }, [isPinned, onTogglePin, x, rowHeight, breakout, onCtrlClickProp])
+  }, [isPinned, onTogglePin, x, rowHeight, breakout])
 
   const handleClose = useCallback(() => {
     onTogglePin?.()
@@ -555,6 +551,7 @@ export function PlayerMetricRow({
     <div
       ref={setRefs}
       onClick={handleClick}
+      {...(entity ? entityAttributes(entity) : undefined)}
       data-panel-row={isFirstRow ? true : undefined}
       data-lesson-target={hasBreakout ? "pin-breakout" : undefined}
       style={{

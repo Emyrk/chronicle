@@ -3,6 +3,8 @@ import { Minus, Pin, Plus } from "lucide-react";
 import { formatNumber } from "@/lib/format";
 import { hitTypeNames } from "@/lib/hittype/hittype";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import {
   alignOffsetMs,
@@ -78,6 +80,8 @@ export interface RotationTimelineProps {
    */
   cooldownInfo: (spellId: number) => CooldownInfo | null;
   unitName: (guid: string) => string;
+  /** Makes player names Alt+clickable. */
+  instance?: Pick<Instance, "players" | "realm">;
   /** Rendered after the title, e.g. player pickers. */
   headerStart?: ReactNode;
   showOverview?: boolean;
@@ -161,6 +165,7 @@ export function RotationTimeline({
   gcd,
   cooldownInfo,
   unitName,
+  instance,
   headerStart,
   showOverview = true,
   idleThresholdMs = DEFAULT_IDLE_THRESHOLD_MS,
@@ -411,7 +416,7 @@ export function RotationTimeline({
                     Hidden casts
                     {players.map((p, slot) => (
                       <div key={p.guid} className="flex justify-between gap-4">
-                        <span style={{ color: SLOT_TEXT_COLORS[slot] }}>{p.name}</span>
+                        <span style={{ color: SLOT_TEXT_COLORS[slot] }} {...(instance ? instanceEntityAttributes(instance, p.guid) : {})}>{p.name}</span>
                         <span className="font-mono text-zinc-100">{hidden[slot]}</span>
                       </div>
                     ))}
@@ -533,6 +538,7 @@ export function RotationTimeline({
                     <span
                       className="truncate text-[13px] font-semibold"
                       style={{ color: `var(--color-class-${d.player.className.toLowerCase()})` }}
+                      {...(instance ? instanceEntityAttributes(instance, d.player.guid) : {})}
                     >
                       {d.player.name}
                     </span>

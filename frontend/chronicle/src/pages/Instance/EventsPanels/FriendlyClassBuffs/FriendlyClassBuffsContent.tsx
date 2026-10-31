@@ -5,6 +5,8 @@ import { useSpell } from "@/api/queries";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
 import { classColor } from "../Consumables/consumablesLedgerLogic";
 import { GenericPanel } from "../GenericPanel";
@@ -85,7 +87,15 @@ function cellTitle(
   return lines.join("\n");
 }
 
-function BuffMatrixTable({ matrix, view }: { matrix: FriendlyBuffMatrix; view: BuffView }) {
+function BuffMatrixTable({
+  matrix,
+  view,
+  instance,
+}: {
+  matrix: FriendlyBuffMatrix;
+  view: BuffView;
+  instance: Instance;
+}) {
   return (
     <table className="w-max border-separate border-spacing-0 text-xs">
       <thead>
@@ -104,7 +114,10 @@ function BuffMatrixTable({ matrix, view }: { matrix: FriendlyBuffMatrix; view: B
         {matrix.rows.map((row) => (
           <tr key={row.playerID} className="hover:bg-muted/30">
             <td className="sticky left-0 z-10 whitespace-nowrap border-t border-border/30 bg-card py-1 pl-1 pr-3">
-              <span className="flex items-center gap-1.5 text-foreground">
+              <span
+                className="flex items-center gap-1.5 text-foreground"
+                {...instanceEntityAttributes(instance, row.playerID)}
+              >
                 <span
                   className="h-3 w-[3px] rounded-sm"
                   style={{ background: classColor(normalizeClassName(row.className)) }}
@@ -266,7 +279,7 @@ export function FriendlyClassBuffsContent(props: PanelRenderProps<FriendlyClassB
           <EmptyState message={`No friendly buffs were ${options.view === "done" ? "applied" : "received"} in the selected encounters.`} />
         ) : (
           <div className="min-h-0 flex-1 overflow-auto styled-scrollbar">
-            <BuffMatrixTable matrix={matrix} view={options.view} />
+            <BuffMatrixTable matrix={matrix} view={options.view} instance={context.instance} />
           </div>
         )}
 

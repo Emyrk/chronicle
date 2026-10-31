@@ -11,6 +11,7 @@ import { innervateProcessor, type InnervateResult, type InnervateCast } from "./
 import { GenericPanel } from "../GenericPanel";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 
 /**
  * Format timestamp (ms since epoch) to HH:MM:SS format
@@ -164,7 +165,10 @@ function InnervateContent(props: PanelRenderProps<InnervateResult>) {
                         </button>
                       </td>
                       <td className="py-1 px-2">
-                        <span className="font-medium text-[var(--color-class-druid)]">
+                        <span
+                          className="font-medium text-[var(--color-class-druid)]"
+                          {...instanceEntityAttributes(context.instance, cast.casterGuid)}
+                        >
                           {cast.casterName}
                         </span>
                       </td>
@@ -172,7 +176,10 @@ function InnervateContent(props: PanelRenderProps<InnervateResult>) {
                         {isSelfCast ? (
                           <span className="text-muted-foreground">self</span>
                         ) : (
-                          <span className="text-green-400 font-medium">
+                          <span
+                            className="text-green-400 font-medium"
+                            {...instanceEntityAttributes(context.instance, cast.targetGuid)}
+                          >
                             {cast.targetName}
                           </span>
                         )}

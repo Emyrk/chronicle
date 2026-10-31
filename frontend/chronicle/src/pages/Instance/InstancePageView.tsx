@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, ty
 import { createPortal } from "react-dom";
 import { useSearchParams, Link } from "react-router-dom";
 import { useSession, useCreateShare, fetchInstanceSpeedrun, fetchSharedView, toastError, type UserPanelLayout } from "@/api/queries";
-import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, LayoutPanelTop, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2, LockKeyhole, Pencil } from "lucide-react";
+import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, LayoutPanelTop, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2, LockKeyhole, Pencil, LayoutDashboard } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -35,6 +35,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { cn } from "@/lib/utils";
+import { entityAttributes, type EntityRef } from "@/components/EntityMenu/entity";
+import { EntityActionScope, type EntityAction } from "@/components/EntityMenu/EntityMenu";
+import { pullDurationMs } from "./encounterKillTimes";
+import { instanceEntityAttributes, instanceGuildEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { SeamlessLayoutContext } from "./EventsPanels/SeamlessLayoutContext";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import type { Instance, Encounter, EnemyUnit } from "./InstancePage";
@@ -544,6 +548,8 @@ function EncounterSidebar({
   onIncludeWipesChange,
   instanceStartTime,
   instanceId,
+  raidInstance,
+  onShowOverview,
   showRankings,
   hideAd = false,
   className,
@@ -563,6 +569,10 @@ function EncounterSidebar({
   onIncludeWipesChange: (value: boolean) => void;
   instanceStartTime: string;
   instanceId: string;
+  /** The raid, carried by encounters added to compare. */
+  raidInstance: Pick<Instance, "name" | "difficultyName" | "maxPlayers">;
+  /** Switches the page to its Overview; omitted when the log has none. */
+  onShowOverview?: () => void;
   showRankings: boolean;
   hideAd?: boolean;
   className?: string;
@@ -627,7 +637,29 @@ function EncounterSidebar({
     }
   };
 
+  // Alt+click a boss to add it to compare (its kill times show in the tray) or jump to the overview.
+  const encounterActions = (entity: EntityRef): EntityAction[] =>
+    entity.kind === "encounter" && onShowOverview
+      ? [{ id: "overview", label: "Go to overview", icon: LayoutDashboard, onSelect: onShowOverview }]
+      : [];
+  const encounterEntity = (encounter: Encounter) =>
+    encounter.boss
+      ? entityAttributes({
+          kind: "encounter",
+          id: encounter.id,
+          name: encounter.name,
+          logId: instanceId,
+          instanceName: raidInstance.name,
+          difficultyName: raidInstance.difficultyName,
+          maxPlayers: raidInstance.maxPlayers,
+          killType: encounter.kill_type,
+          durationMs: pullDurationMs(encounter),
+          startTime: encounter.start_time,
+        })
+      : undefined;
+
   return (
+    <EntityActionScope actions={encounterActions}>
     <div 
       data-help-encounter-sidebar
       className={cn(
@@ -784,6 +816,7 @@ function EncounterSidebar({
               <div
                 role="button"
                 tabIndex={0}
+                {...encounterEntity(encounter)}
                 onClick={(e) => handleClick(encounter.id, e)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -858,6 +891,7 @@ function EncounterSidebar({
               <div
                 role="button"
                 tabIndex={0}
+                {...encounterEntity(encounter)}
                 onClick={(e) => handleClick(encounter.id, e)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -1060,6 +1094,7 @@ function EncounterSidebar({
         <AdSlot placement="instance-encounter-sidebar" format="sidebar" className="mt-5" />
       )}
     </div>
+    </EntityActionScope>
   );
 }
 
@@ -2166,6 +2201,7 @@ function EncounterDetail({
                               <HintTooltip key={player.guid}>
                                 <TooltipTrigger asChild>
                                   <button
+                                    {...instanceEntityAttributes(instance, player.guid)}
                                     onClick={() => onTogglePlayer(player.guid)}
                                     className={cn(
                                       "flex items-center gap-1.5 px-2.5 py-1 rounded text-xs cursor-pointer transition-all",
@@ -2193,7 +2229,10 @@ function EncounterDetail({
                                         className="w-2 h-2 rounded-full flex-shrink-0"
                                         style={{ backgroundColor: `var(--color-class-${player.class.toLowerCase()})` }}
                                       />
-                                      <span style={{ color: `var(--color-class-${player.class.toLowerCase()})` }}>
+                                      <span
+                                        {...instanceEntityAttributes(instance, player.guid)}
+                                        style={{ color: `var(--color-class-${player.class.toLowerCase()})` }}
+                                      >
                                         {player.name}
                                       </span>
                                       <span className="text-muted-foreground text-xs font-normal">
@@ -2440,7 +2479,10 @@ const INSTANCE_PAGE_KEYBINDS = [
   { keys: "Esc (while editing)", action: "Cancel layout editing" },
   { keys: "Shift + click panel", action: "Edit that panel's options" },
   { keys: "Click metric row", action: "Open its breakout" },
-  { keys: "Ctrl/Cmd + click metric row", action: "Open its actions menu" },
+  { keys: "Hold Alt / Option", action: "Outline every player, guild, boss and raid you can inspect" },
+  { keys: "Alt/Option + click a name, boss or raid", action: "Open its menu: focus, armory, history, add to compare" },
+  { keys: "Press and hold (touch)", action: "Open a name or boss's menu" },
+  { keys: "Shift + click a name in Compare", action: "Hide it from the comparison" },
 ] as const;
 
 export function InstancePageView(props: InstancePageViewProps) {
@@ -2553,6 +2595,20 @@ function InstancePageViewContent({
   );
 
   const isMobile = useIsMobile();
+  const guildEntity = instanceGuildEntity(instance);
+  // The raid name opens the raid's clear times, with this log's qualified clear marked.
+  const clearMs = instanceSpeedrun?.qualified ? instanceSpeedrun.ranked_duration_ms || instanceSpeedrun.duration_ms : undefined;
+  const raidEntityAttributes = entityAttributes({
+    kind: "raid",
+    id: instance.id,
+    name: instance.name,
+    difficultyName: instance.difficultyName,
+    maxPlayers: instance.maxPlayers,
+    logId: instance.id,
+    clearMs: clearMs && clearMs > 0 ? clearMs : undefined,
+    startTime: instance.startTime,
+    guildName: instance.guild?.name,
+  });
 
   const liveSession = useLiveSession();
   const canEditSharedView = liveSession.canEditSharedView;
@@ -4182,7 +4238,7 @@ function InstancePageViewContent({
         {/* Row 1: Title (+ mobile menu / desktop difficulty) */}
         <div className="flex items-start justify-between gap-4 mb-1">
           <h1 className={cn("font-bold flex items-center gap-2", isMobile ? "text-xl" : "text-2xl", heroic && "drop-shadow-[0_0_8px_rgba(147,51,234,0.3)]")}>
-            {instance.name}
+            <span {...raidEntityAttributes}>{instance.name}</span>
             {!instance.unlisted && (
               <ClearParseBadge
                 parses={scopedClearParses(instanceTimeParsesQuery.data)}
@@ -4279,7 +4335,7 @@ function InstancePageViewContent({
           <div className="text-muted-foreground text-sm">
             {instance.guild && (
               <p>
-                <Link to={`/g/${instance.guild.id}`} className="text-amber-500 hover:underline">&lt;{instance.guild.name}&gt;</Link>
+                <Link to={`/g/${instance.guild.id}`} className="text-amber-500 hover:underline" {...(guildEntity ? entityAttributes(guildEntity) : {})}>&lt;{instance.guild.name}&gt;</Link>
               </p>
             )}
             <p>
@@ -4291,7 +4347,7 @@ function InstancePageViewContent({
         ) : (
           <p className="text-muted-foreground text-sm">
             {instance.guild && (
-              <Link to={`/g/${instance.guild.id}`} className="text-amber-500 hover:underline">&lt;{instance.guild.name}&gt;</Link>
+              <Link to={`/g/${instance.guild.id}`} className="text-amber-500 hover:underline" {...(guildEntity ? entityAttributes(guildEntity) : {})}>&lt;{instance.guild.name}&gt;</Link>
             )}
             {instance.guild && instance.realm && " • "}
             {instance.realm && `${instance.realm}`}
@@ -4488,7 +4544,7 @@ function InstancePageViewContent({
       )}
 
       {isEncounterView && actionBarOpen && !suppressActionBar && (
-        <div className="fixed bottom-5 left-0 right-0 z-[80] flex justify-center px-2 sm:left-1/2 sm:right-auto sm:w-auto sm:-translate-x-1/2 sm:px-0">
+        <div className="fixed bottom-[calc(1.25rem+var(--compare-tray-offset,0px))] left-0 right-0 z-[80] flex justify-center px-2 sm:left-1/2 sm:right-auto sm:w-auto sm:-translate-x-1/2 sm:px-0">
           <div className="inline-flex max-w-full flex-col items-center gap-2">
             {!isMobile && (
               <button
@@ -4534,6 +4590,8 @@ function InstancePageViewContent({
         {sidebarOpen && (
           <EncounterSidebar
             instanceId={instance.id}
+            raidInstance={instance}
+            onShowOverview={overviewEnabled ? () => setViewMode("overview") : undefined}
             onCollapse={() => setSidebarOpen(false)}
             encounters={instance.encounters}
             trashGroups={trashGroups}
@@ -4627,7 +4685,8 @@ function InstancePageViewContent({
           size="icon"
           onClick={handleEncounterButtonClick}
           className={cn(
-            "fixed bottom-8 left-8 z-50 h-14 w-14 rounded-full",
+            // Above the compare tray when it's open on a phone.
+            "fixed bottom-[calc(2rem+var(--compare-tray-offset,0px))] left-8 z-50 h-14 w-14 rounded-full",
             !hasSeenSelector && !sidebarOpen ? "animate-pulse-ring" : "shadow-lg"
           )}
           title={sidebarOpen ? "Close encounters" : "Show encounters"}
@@ -4647,7 +4706,7 @@ function InstancePageViewContent({
             setSidebarOpen(false);
           }}
           data-floating-corner="bottom-right"
-          className="fixed bottom-8 right-8 z-50 h-14 w-14 rounded-full shadow-lg"
+          className="fixed bottom-[calc(2rem+var(--compare-tray-offset,0px))] right-8 z-50 h-14 w-14 rounded-full shadow-lg"
           title={actionBarOpen ? "Close action bar" : "Open action bar"}
         >
           {actionBarOpen ? <X className="h-5 w-5" /> : <BookOpen className="h-5 w-5" />}

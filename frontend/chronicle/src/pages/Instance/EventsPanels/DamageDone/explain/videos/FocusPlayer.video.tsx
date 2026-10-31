@@ -1,7 +1,7 @@
 /**
  * Lesson video: focus a single player.
  *
- * The cursor Ctrl+clicks Ragesmash's row (a "Ctrl" keycap floats beside the
+ * The cursor Alt+clicks Ragesmash's row (an "Alt" keycap floats beside the
  * cursor), picks "Focus Ragesmash" from the context menu — the panel swaps
  * to his per-ability chart with a Back header — then clicks Back to return.
  * 470 frames @ 30fps, 1280x720 (50-frame intro card + 420 frames of content).
@@ -18,10 +18,10 @@ const RAGESMASH_ROW = { x: 300, y: 258 };
 const FOCUS_ITEM = { x: 385, y: 284 };
 const BACK_BTN = { x: 108, y: 215 };
 
-// The context menu opens where the row was Ctrl+clicked (demo-local coords).
+// The context menu opens where the row was Alt+clicked (demo-local coords).
 const MENU_AT = { x: RAGESMASH_ROW.x - 72 + 4, y: RAGESMASH_ROW.y - 132 + 6 };
 
-const MENU_FRAME = 105; // Ctrl+click → row context menu
+const MENU_FRAME = 105; // Alt+click → row context menu
 const FOCUS_FRAME = 195; // "Focus Ragesmash" clicked → per-ability view
 const BACK_FRAME = 345; // "Back" clicked → roster returns
 
@@ -34,7 +34,7 @@ export default function FocusPlayerVideo() {
       <LessonIntro
         title="Focus a single player"
         bullets={[
-          "Ctrl+click a player row (Cmd on Mac)",
+          "Alt+click a player row (Option on Mac)",
           "Focus swaps the panel to their abilities",
           "Back or Esc returns to the roster",
         ]}
@@ -68,8 +68,8 @@ function Content() {
   const click3 = interpolate(frame, [BACK_FRAME - 4, BACK_FRAME, BACK_FRAME + 10], [0, 1, 0], clamp);
   const clickPulse = Math.max(click1, click2, click3);
 
-  // The held "Ctrl" keycap rides beside the cursor through the first click.
-  const ctrlFlash = interpolate(frame, [MENU_FRAME - 40, MENU_FRAME - 30, MENU_FRAME + 12, MENU_FRAME + 24], [0, 1, 1, 0], clamp);
+  // The held "Alt" keycap rides beside the cursor through the first click.
+  const altFlash = interpolate(frame, [MENU_FRAME - 40, MENU_FRAME - 30, MENU_FRAME + 12, MENU_FRAME + 24], [0, 1, 1, 0], clamp);
 
   const captionOpacity = interpolate(frame, [8, 18, 406, 420], [0, 1, 1, 0], clamp);
   const step = frame >= BACK_FRAME ? 3 : frame >= FOCUS_FRAME ? 2 : 1;
@@ -92,9 +92,9 @@ function Content() {
       {/* Held-modifier keycap riding beside the cursor. */}
       <div
         className="absolute rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] shadow-md"
-        style={{ left: cursorX + 18, top: cursorY + 18, opacity: ctrlFlash, zIndex: 220 }}
+        style={{ left: cursorX + 18, top: cursorY + 18, opacity: altFlash, zIndex: 220 }}
       >
-        Ctrl
+        Alt
       </div>
 
       <Cursor x={cursorX} y={cursorY} clicking={clickPulse} />
@@ -106,7 +106,7 @@ function Content() {
             ? "Back (or Esc) returns to the roster"
             : step === 2
               ? "The panel swaps to Ragesmash's abilities — every value is his alone"
-              : "Ctrl+click any player row (Cmd+click on Mac) to open its menu"
+              : "Alt+click any player row (Option+click on Mac) to open its menu"
         }
         opacity={captionOpacity}
       />

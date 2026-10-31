@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
-import { RowContextMenu, getArmoryUrl } from "@/components/ui/PlayerMetricChart/RowContextMenu";
+import { instanceRowEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
 import type { AbsorbedDamageResult } from "./absorbedDamage.processor";
@@ -99,16 +99,6 @@ export const AbsorbedDamageContent = (props: AbsorbedDamageContentProps) => {
     processing: hasData ? false : props.processing,
   };
 
-  // Ctrl+click context menu (armory link only — no focus/breakout)
-  const [contextMenu, setContextMenu] = useState<{
-    x: number; y: number; playerId: string; playerName: string;
-  } | null>(null);
-
-  const handleRowCtrlClick = useCallback((playerId: string, event: React.MouseEvent) => {
-    const playerName = absorbedData.find(d => d.playerID === playerId)?.playerName ?? playerId;
-    setContextMenu({ x: event.clientX, y: event.clientY, playerId, playerName });
-  }, [absorbedData]);
-
   // Compute display total
   const total = absorbedData.reduce((sum, d) => sum + d.value, 0);
   const displayTotal = formatNumber(total, 0);
@@ -125,23 +115,9 @@ export const AbsorbedDamageContent = (props: AbsorbedDamageContentProps) => {
         duration_millis={props.durationMs}
         perSecond={props.perSecond}
         breakout={breakout}
-        onRowCtrlClick={handleRowCtrlClick}
+        rowEntity={instanceRowEntity(props.context.instance)}
         disableInteractions={props.context.renderMode === "layout_lab"}
       />
-      {contextMenu && (() => {
-        const armoryUrl = getArmoryUrl(props.context.instance, contextMenu.playerId);
-        // Only show context menu if there's an armory link
-        return armoryUrl ? (
-          <RowContextMenu
-            position={{ x: contextMenu.x, y: contextMenu.y }}
-            playerName={contextMenu.playerName}
-            onFocus={() => setContextMenu(null)}
-            onClose={() => setContextMenu(null)}
-            armoryUrl={armoryUrl}
-            hideFocus
-          />
-        ) : null;
-      })()}
     </GenericPanel>
   );
 };

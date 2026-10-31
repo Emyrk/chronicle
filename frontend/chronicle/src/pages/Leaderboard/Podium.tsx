@@ -2,6 +2,7 @@ import { Link } from "react-router-dom"
 import { Users } from "lucide-react"
 import { useEffect, useRef } from "react"
 import type { SpeedrunLeaderboardEntry } from "../../api/typesGenerated"
+import { guildAttributes, speedrunClearAttributes } from "@/components/EntityMenu/leaderboardEntities"
 
 function formatDuration(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000)
@@ -798,11 +799,14 @@ export function Podium({ entries, instanceName }: PodiumProps) {
               ) : (
                 <span className={`${style.medal} mb-2`}>{colors.medal}</span>
               )}
-              <span className={`${style.name} font-bold ${isFirst ? "text-white" : colors.text} truncate w-full`}>
+              <span
+                className={`${style.name} font-bold ${isFirst ? "text-white" : colors.text} truncate w-full`}
+                {...guildAttributes(entry.guild_id, entry.guild_name)}
+              >
                 {entry.guild_name || "Unknown Guild"}
               </span>
               <span className={`${style.duration} font-mono font-bold text-foreground mt-1`}>
-                {formatDuration(entry.duration_ms)}
+                <span {...speedrunClearAttributes(entry, instanceName)}>{formatDuration(entry.duration_ms)}</span>
               </span>
               <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">

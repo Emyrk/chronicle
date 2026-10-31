@@ -424,6 +424,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 			RealmID:        row.RealmID,
 			RealmName:      row.RealmName,
 			GuildName:      row.GuildName,
+			GuildID:        row.GuildID,
 			DamageDone:     row.DamageDone,
 			HealingDone:    row.HealingDone,
 			AbsorbedDone:   row.AbsorbedDone,
@@ -800,9 +801,12 @@ func (s *Service) handleKillTimeLeaderboard(w http.ResponseWriter, r *http.Reque
 	for _, row := range rows {
 		totalCount = row.TotalCount
 		entries = append(entries, chroniclesdk.KillTimeLeaderboardEntry{
+			EncounterID:   row.EncounterID,
+			InstanceID:    row.InstanceID,
 			EncounterName: row.EncounterName,
 			InstanceName:  row.InstanceName,
 			GuildName:     row.GuildName,
+			GuildID:       row.GuildID,
 			RealmName:     row.RealmName,
 			DurationSecs:  row.DurationSecs,
 			KilledAt:      row.KilledAt.Time,

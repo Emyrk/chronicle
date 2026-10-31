@@ -5,10 +5,11 @@
  * Focus view: per-ability breakdown with 25/50/75/100% resist buckets.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { ChevronLeft } from "lucide-react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
-import { RowContextMenu, getArmoryUrl } from "@/components/ui/PlayerMetricChart/RowContextMenu";
+import { focusPlayerActions, instanceEntityAttributes, instanceRowEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import { EntityActionScope } from "@/components/EntityMenu/EntityMenu";
 import { GenericPanel } from "../GenericPanel";
 import type { EntitySelection, PanelRenderProps } from "../types";
 import type { ResistsResult } from "./resists.processor";
@@ -212,10 +213,6 @@ function buildAbilityRows(
 export const ResistsContent = (props: PanelRenderProps<ResistsResult>) => {
   const { result, context } = props;
 
-  const [contextMenu, setContextMenu] = useState<{
-    x: number; y: number; playerId: string; playerName: string;
-  } | null>(null);
-
   const focusedPlayerId = useMemo(() => parseFocusFromOption(props.panelOption), [props.panelOption]);
   const setFocusedPlayerId = useCallback((id: string | null) => {
     if (!props.setPanelOption) return;
@@ -263,11 +260,6 @@ export const ResistsContent = (props: PanelRenderProps<ResistsResult>) => {
   useEffect(() => {
     registerChartData?.(chartData);
   }, [registerChartData, chartData]);
-
-  const handleRowCtrlClick = useCallback((playerId: string, event: React.MouseEvent) => {
-    const playerName = chartData.find(d => d.playerID === playerId)?.playerName ?? playerId;
-    setContextMenu({ x: event.clientX, y: event.clientY, playerId, playerName });
-  }, [chartData]);
 
   // ESC to unfocus.
   useEffect(() => {
@@ -320,7 +312,7 @@ export const ResistsContent = (props: PanelRenderProps<ResistsResult>) => {
         <div className="text-xs text-muted-foreground">
           {focusedPlayer ? (
             <>
-              <span className="font-medium text-foreground">{focusedPlayer.unitName}</span>
+              <span className="font-medium text-foreground" {...instanceEntityAttributes(props.context.instance, focusedPlayer.unitID)}>{focusedPlayer.unitName}</span>
               {" — "}
               {formatNumber(focusedPlayer.totalResisted, 0)} resisted of {formatNumber(focusedPlayer.totalIncoming, 0)} incoming
             </>
@@ -346,7 +338,7 @@ export const ResistsContent = (props: PanelRenderProps<ResistsResult>) => {
               <ChevronLeft className="h-3.5 w-3.5" />
               Back
             </button>
-            <span className="text-xs font-medium">
+            <span className="text-xs font-medium" {...instanceEntityAttributes(props.context.instance, focusedPlayerId)}>
               {focusedPlayer?.unitName} — {groupBySchool ? "By School" : "By Ability"}
             </span>
           </div>
@@ -362,66 +354,59 @@ export const ResistsContent = (props: PanelRenderProps<ResistsResult>) => {
       {focusedPlayerId && abilityRows.length > 0 ? (
         <AbilityBreakoutTable rows={abilityRows} />
       ) : (
-        <PlayerMetricChart
-          data={chartData}
-          type="damage"
-          panelTitle="Resists"
-          valueSuffix="%"
-          onRowCtrlClick={handleRowCtrlClick}
-          disableInteractions={props.context.renderMode === "layout_lab"}
-          breakout={(playerId, _pinned) => {
-            const p = players.find(d => d.unitID === playerId);
-            if (!p) return null;
-            // Show per-ability breakdown in the hover tooltip
-            const rows = cachedResult ? buildAbilityRows(cachedResult, playerId, false) : [];
-            return (
-              <div className="p-2 text-xs space-y-1.5 min-w-[240px]">
-                <div className="font-medium">{p.unitName}</div>
-                <div className="text-muted-foreground">
-                  Count: {p.count} | Partial: {p.partialResistCount} | Full: {p.fullResistCount}
-                </div>
-                <div className="text-muted-foreground">
-                  Resisted: {formatNumber(p.totalResisted, 0)} of {formatNumber(p.totalIncoming, 0)}
-                </div>
-                {rows.length > 0 && (
-                  <table className="w-full mt-1 border-t border-border/30 pt-1">
-                    <thead>
-                      <tr className="text-muted-foreground">
-                        <th className="text-left pr-2 font-medium">Ability</th>
-                        <th className="text-right px-1 font-medium">Resisted</th>
-                        <th className="text-right pl-1 font-medium">%</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.slice(0, 8).map(row => (
-                        <tr key={row.abilityName}>
-                          <td className="pr-2">
-                            <span>{row.abilityName}</span>
-                            {" "}
-                            <SpellSchoolText school={SCHOOL_NAMES[row.school] ?? "Unknown"} className="text-[10px] opacity-70" />
-                          </td>
-                          <td className="text-right px-1 font-mono text-orange-400">{formatNumber(row.totalResisted, 0)}</td>
-                          <td className="text-right pl-1 font-mono">{row.resistRate.toFixed(0)}%</td>
+        <EntityActionScope actions={focusPlayerActions(setFocusedPlayerId)}>
+          <PlayerMetricChart
+            data={chartData}
+            type="damage"
+            panelTitle="Resists"
+            valueSuffix="%"
+            rowEntity={instanceRowEntity(props.context.instance)}
+            disableInteractions={props.context.renderMode === "layout_lab"}
+            breakout={(playerId, _pinned) => {
+              const p = players.find(d => d.unitID === playerId);
+              if (!p) return null;
+              // Show per-ability breakdown in the hover tooltip
+              const rows = cachedResult ? buildAbilityRows(cachedResult, playerId, false) : [];
+              return (
+                <div className="p-2 text-xs space-y-1.5 min-w-[240px]">
+                  <div className="font-medium" {...instanceEntityAttributes(props.context.instance, playerId)}>{p.unitName}</div>
+                  <div className="text-muted-foreground">
+                    Count: {p.count} | Partial: {p.partialResistCount} | Full: {p.fullResistCount}
+                  </div>
+                  <div className="text-muted-foreground">
+                    Resisted: {formatNumber(p.totalResisted, 0)} of {formatNumber(p.totalIncoming, 0)}
+                  </div>
+                  {rows.length > 0 && (
+                    <table className="w-full mt-1 border-t border-border/30 pt-1">
+                      <thead>
+                        <tr className="text-muted-foreground">
+                          <th className="text-left pr-2 font-medium">Ability</th>
+                          <th className="text-right px-1 font-medium">Resisted</th>
+                          <th className="text-right pl-1 font-medium">%</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            );
-          }}
-        />
+                      </thead>
+                      <tbody>
+                        {rows.slice(0, 8).map(row => (
+                          <tr key={row.abilityName}>
+                            <td className="pr-2">
+                              <span>{row.abilityName}</span>
+                              {" "}
+                              <SpellSchoolText school={SCHOOL_NAMES[row.school] ?? "Unknown"} className="text-[10px] opacity-70" />
+                            </td>
+                            <td className="text-right px-1 font-mono text-orange-400">{formatNumber(row.totalResisted, 0)}</td>
+                            <td className="text-right pl-1 font-mono">{row.resistRate.toFixed(0)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              );
+            }}
+          />
+        </EntityActionScope>
       )}
 
-      {contextMenu && (
-        <RowContextMenu
-          position={{ x: contextMenu.x, y: contextMenu.y }}
-          playerName={contextMenu.playerName}
-          onFocus={() => { setFocusedPlayerId(contextMenu.playerId); setContextMenu(null); }}
-          onClose={() => setContextMenu(null)}
-          armoryUrl={getArmoryUrl(props.context.instance, contextMenu.playerId)}
-        />
-      )}
     </GenericPanel>
   );
 };

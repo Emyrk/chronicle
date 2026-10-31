@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { ChevronLeft, Layers } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
-import { RowContextMenu, getArmoryUrl } from "@/components/ui/PlayerMetricChart/RowContextMenu";
+import { focusPlayerActions, instanceEntityAttributes, instanceRowEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import { EntityActionScope } from "@/components/EntityMenu/EntityMenu";
 import { GenericPanel } from "../GenericPanel";
 import type { EntitySelection, PanelRenderProps } from "../types";
 import type { DamageTakenResult, DamageTargetType } from "./damageTaken.processor";
@@ -66,7 +67,6 @@ function aggregateForEncounters(
   return Array.from(aggregated.values());
 }
 
-
 interface DamageTakenContentProps extends PanelRenderProps<DamageTakenResult> {
   targetType?: DamageTargetType;
 }
@@ -86,11 +86,6 @@ export const DamageTakenContent = (props: DamageTakenContentProps) => {
     () => parseMetricPanelLiveState(props.panelOption),
     [props.panelOption],
   );
-
-  // Ctrl+click context menu
-  const [contextMenu, setContextMenu] = useState<{
-    x: number; y: number; playerId: string; playerName: string;
-  } | null>(null);
 
   const setFocusedPlayerId = useCallback((id: string | null) => {
     if (!props.setPanelOption) return;
@@ -124,11 +119,6 @@ export const DamageTakenContent = (props: DamageTakenContentProps) => {
   useEffect(() => {
     registerChartData?.(damageData);
   }, [registerChartData, damageData]);
-
-  const handleRowCtrlClick = useCallback((playerId: string, event: React.MouseEvent) => {
-    const playerName = damageData.find(d => d.playerID === playerId)?.playerName ?? playerId;
-    setContextMenu({ x: event.clientX, y: event.clientY, playerId, playerName });
-  }, [damageData]);
 
   // ESC key to unfocus
   useEffect(() => {
@@ -233,7 +223,7 @@ export const DamageTakenContent = (props: DamageTakenContentProps) => {
             <ChevronLeft className="h-3.5 w-3.5" />
             Back
           </button>
-          <span className="text-xs font-medium">
+          <span className="text-xs font-medium" {...instanceEntityAttributes(props.context.instance, focusedPlayerId)}>
             {focusedPlayer?.playerName}
           </span>
         </div>
@@ -249,25 +239,18 @@ export const DamageTakenContent = (props: DamageTakenContentProps) => {
           disableInteractions={props.context.renderMode === "layout_lab"}
         />
       ) : (
-        <PlayerMetricChart 
-          data={damageData} 
-          type={"damage"} 
-          panelTitle={panelTitle}
-          duration_millis={props.durationMs}
-          perSecond={props.perSecond}
-          breakout={breakout}
-          onRowCtrlClick={handleRowCtrlClick}
-          disableInteractions={props.context.renderMode === "layout_lab"}
-        />
-      )}
-      {contextMenu && (
-        <RowContextMenu
-          position={{ x: contextMenu.x, y: contextMenu.y }}
-          playerName={contextMenu.playerName}
-          onFocus={() => { setFocusedPlayerId(contextMenu.playerId); setContextMenu(null); }}
-          onClose={() => setContextMenu(null)}
-          armoryUrl={getArmoryUrl(props.context.instance, contextMenu.playerId)}
-        />
+        <EntityActionScope actions={focusPlayerActions(setFocusedPlayerId)}>
+          <PlayerMetricChart
+            data={damageData} 
+            type={"damage"} 
+            panelTitle={panelTitle}
+            duration_millis={props.durationMs}
+            perSecond={props.perSecond}
+            breakout={breakout}
+            rowEntity={instanceRowEntity(props.context.instance)}
+            disableInteractions={props.context.renderMode === "layout_lab"}
+          />
+        </EntityActionScope>
       )}
     </GenericPanel>
   );

@@ -118,7 +118,7 @@ stats AS (
     SELECT COUNT(DISTINCT player_guid)::bigint AS total_kills FROM ranking_rows
 ),
 top3 AS (
-    SELECT player_name, realm_name, player_class, dps
+    SELECT player_guid, player_name, realm_name, player_class, dps
     FROM per_player WHERE dps > 0
     ORDER BY dps DESC LIMIT 3
 )
@@ -130,6 +130,7 @@ VALUES (
     @tenant_id,
     (SELECT total_kills FROM stats),
     COALESCE((SELECT json_agg(json_build_object(
+        'player_guid', t.player_guid,
         'player_name', t.player_name,
         'realm_name', t.realm_name,
         'player_class', t.player_class,
@@ -513,6 +514,7 @@ hydration_rows AS (
         edr.max_players,
         edr.realm_id,
         edr.realm_name,
+        edr.guild_id,
         edr.guild_name,
         edr.damage_done,
         edr.alive_percentage,
@@ -548,6 +550,7 @@ SELECT
     ((array_agg(d.realm_id ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::uuid AS realm_id,
     ((array_agg(d.realm_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS realm_name,
     ((array_agg(d.guild_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS guild_name,
+    COALESCE(((array_agg(d.guild_id ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text, '')::text AS guild_id,
     p.damage_done,
     p.healing_done,
     p.absorbed_done,
@@ -1140,6 +1143,7 @@ WITH deduped AS (
         li.hashed_slug AS log_hashed_slug,
         li.name AS instance_name,
         COALESCE(g.name, '')::text AS guild_name,
+        COALESCE(li.guild_id::text, '')::text AS guild_id,
         wsr.name AS realm_name,
         EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
         lie.end_time AS killed_at
@@ -1169,6 +1173,7 @@ SELECT
     d.log_hashed_slug,
     d.instance_name,
     d.guild_name,
+    d.guild_id,
     d.realm_name,
     d.duration_secs,
     d.killed_at,

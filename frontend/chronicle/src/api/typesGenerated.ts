@@ -2787,9 +2787,18 @@ export interface JoinLiveSessionResponse {
  * KillTimeLeaderboardEntry is a single row in the kill time leaderboard.
  */
 export interface KillTimeLeaderboardEntry {
+    /**
+     * EncounterID and InstanceID identify the kill in its log.
+     */
+    readonly encounter_id: string;
+    readonly instance_id: string;
     readonly encounter_name: string;
     readonly instance_name: string;
     readonly guild_name: string;
+    /**
+     * GuildID is empty when the log has no known guild.
+     */
+    readonly guild_id?: string;
     readonly realm_name: string;
     readonly duration_secs: number;
     readonly killed_at: string;
@@ -3664,6 +3673,10 @@ export interface RankingsEntry {
     readonly realm_id: string;
     readonly realm_name: string;
     readonly guild_name: string;
+    /**
+     * GuildID is empty when the player was not in a known guild.
+     */
+    readonly guild_id?: string;
     readonly damage_done: number;
     readonly healing_done: number;
     readonly absorbed_done: number;
@@ -3713,6 +3726,10 @@ export interface RankingsInstanceSummary {
  * RankingsInstanceTopPlayer is a top-performing player for an instance summary.
  */
 export interface RankingsInstanceTopPlayer {
+    /**
+     * PlayerGUID is empty for summaries computed before it was stored.
+     */
+    readonly player_guid?: string;
     readonly player_name: string;
     readonly realm_name: string;
     readonly player_class: string;
@@ -4584,6 +4601,7 @@ export interface SpeedrunLeaderboardEntry {
     readonly slug: string;
     readonly difficulty_name: string;
     readonly duration_ms: number;
+    readonly guild_id: string;
     readonly guild_name: string;
     readonly realm_name: string;
     readonly start_time: string;
