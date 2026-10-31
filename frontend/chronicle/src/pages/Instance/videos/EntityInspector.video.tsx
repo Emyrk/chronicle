@@ -716,8 +716,6 @@ function TrayFooter({ views }: { views: ReturnType<typeof trayViews> }) {
     <>
       {footer("player", "Open performance history", KIND_COLOR.player, views.players, true)}
       {footer("preview", "Open performance history", KIND_COLOR.player, views.preview)}
-      {footer("encounter", "Open log overview", KIND_COLOR.encounter, views.encounter)}
-      {footer("raid", "Open log overview", KIND_COLOR.raid, views.raid)}
     </>
   );
 }

@@ -280,7 +280,8 @@ export const EncounterKillTimes: Story = {
     await userEvent.hover(tray.querySelector('[data-kill-lane="server"]')!);
     await expect((await body.findAllByText("Middle half"))[0]).toBeInTheDocument();
     await expect(body.getAllByText("rank 24 of 212")[0]).toBeInTheDocument();
-    await expect(within(tray).getByRole("link", { name: /Open log overview/ })).toHaveAttribute("href", `/instances/${LOG_ID}?view=overview`);
+    // Bosses and raids are just the quick compare: no page link under it.
+    await expect(within(tray).queryByRole("link", { name: /Open log overview/ })).toBeNull();
   },
 };
 

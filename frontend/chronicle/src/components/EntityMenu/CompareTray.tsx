@@ -10,10 +10,7 @@ import {
   entityAttributes,
   entityKey,
   guildCompareUrl,
-  instanceOverviewUrl,
-  killTimeLeaderboardUrl,
   performanceCompareUrl,
-  speedrunLeaderboardUrl,
   type EntityKind,
   type EntityRef,
 } from "./entity";
@@ -22,31 +19,12 @@ import type { EntityRaidContext } from "./entityMenuContext";
 
 const QuickStats = lazy(() => import("./QuickStats"));
 
-type Encounter = Extract<EntityRef, { kind: "encounter" }>;
-
-/** Where the tray's footer link goes for the kind on show. */
-function pageLink(kind: EntityKind, entities: EntityRef[], hidden: ReadonlySet<string>): { to: string; label: string } {
+/** The history page behind the tray's footer, for players and guilds (bosses and raids have none). */
+function pageLink(kind: "character" | "guild", entities: EntityRef[], hidden: ReadonlySet<string>): { to: string; label: string } {
   if (kind === "character") {
     return { to: performanceCompareUrl(entities as Extract<EntityRef, { kind: "character" }>[], hidden), label: "Open performance history" };
   }
-  if (kind === "guild") {
-    return { to: guildCompareUrl(entities as Extract<EntityRef, { kind: "guild" }>[], hidden), label: "Open clear-time history" };
-  }
-  if (kind === "raid") {
-    const raids = entities as Extract<EntityRef, { kind: "raid" }>[];
-    const logIds = new Set(raids.map((raid) => raid.logId));
-    const [logId] = logIds;
-    return logIds.size === 1 && logId
-      ? { to: instanceOverviewUrl(logId), label: "Open log overview" }
-      : { to: speedrunLeaderboardUrl(raids[0].name, raids[0].difficultyName), label: "Open speedrun leaderboard" };
-  }
-  // Pulls from one log compare on its Overview; anything else falls back to the boss leaderboard.
-  const encounters = entities as Encounter[];
-  const logIds = new Set(encounters.map((encounter) => encounter.logId));
-  const [logId] = logIds;
-  return logIds.size === 1 && logId
-    ? { to: instanceOverviewUrl(logId), label: "Open log overview" }
-    : { to: killTimeLeaderboardUrl(encounters[0]), label: "Open kill time leaderboard" };
+  return { to: guildCompareUrl(entities as Extract<EntityRef, { kind: "guild" }>[], hidden), label: "Open clear-time history" };
 }
 
 /**
@@ -92,7 +70,7 @@ export function CompareTray({
   // Encounter kill times and raid clear times are free and have no range or full view.
   const isEncounter = kind === "encounter" || kind === "raid";
   const showStats = canShowStats || isEncounter;
-  const link = pageLink(kind, entities, hidden);
+  const link = kind === "character" || kind === "guild" ? pageLink(kind, entities, hidden) : null;
   const iconButton = "shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground";
   const footerClass =
     "flex w-full items-center justify-center gap-1.5 rounded-md bg-[color-mix(in_oklab,var(--kind)_15%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--kind)] transition-colors hover:bg-[color-mix(in_oklab,var(--kind)_25%,transparent)]";
@@ -246,17 +224,18 @@ export function CompareTray({
         )}
 
         {/* Supporters open player and guild history in the drawer, which links on to the full page. */}
-        {canShowStats && !isEncounter ? (
-          <button type="button" onClick={() => onExpand(kind)} className={footerClass} style={footerStyle}>
-            {link.label}
-            <PanelRightOpen className="h-3.5 w-3.5" />
-          </button>
-        ) : (
-          <Link to={link.to} target="_blank" className={footerClass} style={footerStyle}>
-            {link.label}
-            <ExternalLink className="h-3.5 w-3.5" />
-          </Link>
-        )}
+        {link &&
+          (canShowStats ? (
+            <button type="button" onClick={() => onExpand(kind)} className={footerClass} style={footerStyle}>
+              {link.label}
+              <PanelRightOpen className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <Link to={link.to} target="_blank" className={footerClass} style={footerStyle}>
+              {link.label}
+              <ExternalLink className="h-3.5 w-3.5" />
+            </Link>
+          ))}
       </div>
     </section>
   );
