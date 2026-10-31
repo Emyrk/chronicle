@@ -80,7 +80,7 @@ describe("DownloadView", () => {
   it("links the latest release asset for the detected OS", () => {
     const markup = render("macos", config("2.4.3-cc-addon"));
     expect(markup).toContain("Download for macOS");
-    expect(markup).toContain("releases/latest/download/Chronicle-Sidekick-macos.zip");
+    expect(markup).toContain("releases/latest/download/Chronicle-Sidekick-macos.dmg");
     expect(markup).toContain("ChronicleCompanionTBC");
   });
 

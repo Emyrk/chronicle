@@ -7,11 +7,16 @@ export function assetUrl(file: string) {
   return `${REPO}/releases/latest/download/${file}`;
 }
 
+interface Asset {
+  label: string;
+  file: string;
+}
+
 interface Platform {
   os: OS;
   label: string;
-  /** Primary download, then alternate architectures. */
-  files: { label: string; file: string }[];
+  /** The main button downloads the first; the OS picker lists them all. */
+  files: Asset[];
   /** Where the icon lives, e.g. "menu bar". */
   tray: string;
   install: string;
@@ -23,29 +28,34 @@ export const PLATFORMS: Platform[] = [
     os: "windows",
     label: "Windows",
     files: [
-      { label: "64-bit, no installer", file: "Chronicle-Sidekick-windows-amd64.exe" },
-      { label: "ARM64", file: "Chronicle-Sidekick-windows-arm64.exe" },
+      { label: "Installer", file: "Chronicle-Sidekick-Setup-windows-amd64.exe" },
+      { label: "Portable .exe", file: "Chronicle-Sidekick-windows-amd64.exe" },
+      { label: "ARM installer", file: "Chronicle-Sidekick-Setup-windows-arm64.exe" },
+      { label: "ARM portable", file: "Chronicle-Sidekick-windows-arm64.exe" },
     ],
     tray: "system tray",
     install:
-      "Double-click the downloaded .exe. Sidekick appears in your system tray, near the clock. That is the whole install.",
+      "Run the installer and leave Start Chronicle Sidekick checked on the last screen. Sidekick appears in your system tray, near the clock, and in your Start menu. No admin rights needed.",
     note: "Windows will warn you once because this build is not signed yet. On the SmartScreen prompt click More info, then Run anyway.",
   },
   {
     os: "macos",
     label: "macOS",
-    files: [{ label: "Universal: Apple silicon and Intel", file: "Chronicle-Sidekick-macos.zip" }],
+    files: [
+      { label: "Disk image (.dmg)", file: "Chronicle-Sidekick-macos.dmg" },
+      { label: "Zipped app", file: "Chronicle-Sidekick-macos.zip" },
+    ],
     tray: "menu bar",
     install:
-      "Unzip, drag Chronicle Sidekick into Applications and open it. Sidekick appears in your menu bar. That is the whole install.",
+      "Open the .dmg, drag Chronicle Sidekick into Applications and open it from there. Sidekick appears in your menu bar. That is the whole install.",
     note: "macOS will warn you once because this build is not notarized yet. Right-click the app, choose Open, then Open again.",
   },
   {
     os: "linux",
     label: "Linux",
     files: [
-      { label: "64-bit", file: "Chronicle-Sidekick-linux-amd64.tar.gz" },
-      { label: "ARM64", file: "Chronicle-Sidekick-linux-arm64.tar.gz" },
+      { label: "x86_64 tarball", file: "Chronicle-Sidekick-linux-amd64.tar.gz" },
+      { label: "ARM64 tarball", file: "Chronicle-Sidekick-linux-arm64.tar.gz" },
     ],
     tray: "system tray",
     install: "Extract the archive and run chronicle-sidekick. Sidekick appears in your system tray. That is the whole install.",

@@ -24,7 +24,13 @@
 .page a.cta:hover{color:#fff;transform:translateY(-2px);box-shadow:0 14px 40px rgba(59,130,246,.35),0 0 0 1px rgba(255,255,255,.08) inset}
 .arrow{transition:transform .25s ease}
 .cta:hover .arrow{transform:translateY(3px)}
-.meta{font-size:15px;color:#b8a995;display:flex;flex-wrap:wrap;gap:6px 18px}
+.meta{font-size:15px;color:#b8a995;display:flex;flex-direction:column;gap:10px}
+.osRow{display:flex;align-items:center;gap:6px}
+.osRow>span{margin-right:6px}
+.osButton{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid #3a2f26;border-radius:8px;background:transparent;color:#b8a995;cursor:pointer;transition:color .2s ease,border-color .2s ease,background .2s ease}
+.osButton:hover{color:#f3ead9;border-color:#5a4a3c}
+.osButton[aria-pressed=true]{color:#e6b450;border-color:#e6b450;background:rgba(230,180,80,.08)}
+.osFiles{display:flex;flex-wrap:wrap;gap:6px 18px}
 .sha{font-size:12px;word-break:break-all}
 
 .how{margin:0 auto 72px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid #3a2f26;border-bottom:1px solid #3a2f26}
