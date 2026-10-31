@@ -348,6 +348,68 @@ export function CooldownUsagePost({ post }: PostProps) {
   );
 }
 
+export function EntityInspectorPost({ post }: PostProps) {
+  return (
+    <ShortPost post={post}>
+      <p>
+        You can now inspect almost any name in Chronicle without leaving the page you&apos;re on. Hold{" "}
+        <kbd>Alt</kbd> (<kbd>Option</kbd> on a Mac) and everything you can inspect gets an outline:{" "}
+        <strong style={{ color: "#38bdf8" }}>players</strong> in blue, <strong style={{ color: "#f59e0b" }}>guilds</strong>{" "}
+        in amber, <strong style={{ color: "#fb7185" }}>bosses</strong> in rose and{" "}
+        <strong style={{ color: "#a78bfa" }}>raids</strong> in violet.
+      </p>
+      <p>
+        Alt+click one to open its menu. On a phone or tablet, press and hold instead. The menu has shortcuts for that
+        kind of name: focus a player in the meters, open their armory or performance history, jump to a guild&apos;s
+        page, or open a boss&apos;s kill time leaderboard. Every menu also has <strong>Add to compare</strong>.
+      </p>
+
+      <h2>The compare tray</h2>
+      <p>
+        <strong>Add to compare</strong> puts the name in a small tray in the bottom-left corner. It holds up to five of
+        each kind, and it stays with you as you move between pages. Tabs in its header switch between players, guilds,
+        bosses and raids, and the 30d, 60d and 180d buttons set how far back it looks. Hover a name in the tray to see
+        which page you added it from; <kbd>Shift</kbd>+click hides a name without removing it. Clear all (the trash
+        can) empties the tray, and ⤢ opens the full comparison in a drawer.
+      </p>
+      <ul>
+        <li>
+          <strong>Players:</strong> parses on the same bosses as the log you&apos;re viewing. The Score tab lists
+          this log, their recent nights, their typical night, their best and how many nights they&apos;ve logged.
+          The Chart tab plots every night, with their typical range shaded. Switch between Parse and Value, and
+          between DPS and HPS.
+        </li>
+        <li>
+          <strong>Guilds:</strong> their clear times.
+        </li>
+        <li>
+          <strong>Bosses:</strong> box plots of kill times on your server, your realm and the guild. The dot is the
+          kill you added, and the number beside each plot is its parse. Hover a plot for the fastest, median and
+          slowest kills, and how far this pull was from the median.
+        </li>
+        <li>
+          <strong>Raids:</strong> the same box plots for full clears, plus the server&apos;s three fastest clears. Add
+          several clears of the same raid and they share one plot, with a dot for each.
+        </li>
+      </ul>
+
+      <h2>Who gets what</h2>
+      <p>
+        The menu, the tray, and the boss and raid comparisons are free for everyone. Player scores and charts are a
+        Revered perk: Friendly and Honored members see a blurred preview, with a link to the full performance history
+        page. <a href="/supporter">Become a supporter</a> to see them right in the tray.
+      </p>
+
+      <h2>Where it works</h2>
+      <p>
+        Alt+click works across raid analysis, on the leaderboards (players, guilds, kills, raids and the top players on
+        each card), and on <a href="/recent">Recent raids</a>. Names that are already links still work as links when
+        you click them normally. The raid page&apos;s Help button lists these shortcuts too.
+      </p>
+    </ShortPost>
+  );
+}
+
 export function RankedDamagePost({ post }: PostProps) {
   return (
     <ShortPost post={post}>
