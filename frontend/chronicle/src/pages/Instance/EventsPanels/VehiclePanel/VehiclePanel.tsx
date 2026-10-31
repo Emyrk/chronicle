@@ -10,6 +10,7 @@ import type {
   VehicleControlInterval,
 } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import {
   TemporalTimeline,
@@ -247,7 +248,7 @@ function VehicleTimelineRow({
                     {row.guid}
                   </div>
                   <div className="border-b border-border pb-1 text-[10px] text-muted-foreground">
-                    Piloted by <span className="font-medium" style={{ color }}>{controllerName}</span>
+                    Piloted by <span className="font-medium" style={{ color }} {...instanceEntityAttributes(context.instance, interval.controller_guid)}>{controllerName}</span>
                   </div>
                   <div>
                     Start: <span className="font-medium">{formatClock(interval.assigned_at_ms)}</span>

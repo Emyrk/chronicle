@@ -4,6 +4,7 @@ import { ChevronDown, Search } from "lucide-react";
 import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import type { InstancePlayer } from "@/api/typesGenerated";
 import { SLOT_COLORS, SLOT_LABELS } from "../../EventsPanels/RotationTimeline/format";
 
@@ -13,6 +14,8 @@ interface PlayerPickerProps {
   /** Players by total damage, highest first. */
   ranked: readonly [string, number][];
   players: Record<string, InstancePlayer>;
+  /** The log's realm, so player names are Alt+clickable. */
+  realm?: string;
   /** Offer a "None" entry, which calls onChange(null). */
   allowNone?: boolean;
   onChange: (guid: string | null) => void;
@@ -28,7 +31,7 @@ interface Option {
 const classColor = (cls: string | null) => (cls ? `var(--color-class-${cls.toLowerCase()})` : undefined);
 
 /** Searchable player select: type to filter by name or class, arrows + Enter to pick. */
-export function PlayerPicker({ slot, value, ranked, players, allowNone, onChange }: PlayerPickerProps) {
+export function PlayerPicker({ slot, value, ranked, players, realm, allowNone, onChange }: PlayerPickerProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [active, setActive] = useState(0);
@@ -82,7 +85,7 @@ export function PlayerPicker({ slot, value, ranked, players, allowNone, onChange
           className="flex items-center gap-1 border-b-2 pb-0.5 text-sm font-semibold outline-none hover:opacity-80 focus-visible:opacity-80"
           style={{ borderColor: SLOT_COLORS[slot], color: current ? classColor(current.class) : undefined }}
         >
-          <span className={cn(!current && "text-muted-foreground")}>{current?.name ?? (allowNone ? "None" : "Pick player")}</span>
+          <span className={cn(!current && "text-muted-foreground")} {...instanceEntityAttributes({ players, realm }, value ?? undefined)}>{current?.name ?? (allowNone ? "None" : "Pick player")}</span>
           <ChevronDown className="size-3 text-muted-foreground" />
         </button>
       </PopoverPrimitive.Trigger>
@@ -128,6 +131,7 @@ export function PlayerPicker({ slot, value, ranked, players, allowNone, onChange
                 <span
                   className={cn("min-w-0 flex-1 truncate font-medium", option.guid == null && "text-muted-foreground")}
                   style={{ color: classColor(option.cls) }}
+                  {...instanceEntityAttributes({ players, realm }, option.guid ?? undefined)}
                 >
                   {option.name}
                 </span>

@@ -9,6 +9,7 @@ import { HintTooltip, Tooltip, TooltipContent, TooltipTrigger } from "@/componen
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import {
   materializeActiveUnitAuras,
   materializeCurrentUnitAuras,
@@ -198,6 +199,7 @@ function CompactAuraTile({
   durationMs,
   players,
   units,
+  realm,
   showUptime,
   dense = false,
   large = false,
@@ -206,6 +208,8 @@ function CompactAuraTile({
   durationMs: number;
   players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"];
   units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
+  /** The log's realm, so applier names are Alt+clickable. */
+  realm?: string;
   showUptime: boolean;
   /** Overlay size (map inspect cards): a small icon tile. */
   dense?: boolean;
@@ -233,6 +237,7 @@ function CompactAuraTile({
           <div
             key={applier.guid}
             style={applier.className ? { color: getClassColorVar(applier.className) } : undefined}
+            {...instanceEntityAttributes({ players, realm }, applier.guid)}
           >
             {applier.name}
           </div>
@@ -307,6 +312,7 @@ function CompactAuraGrid({
   durationMs,
   players,
   units,
+  realm,
   showUptime,
   dense = false,
   large = false,
@@ -316,6 +322,7 @@ function CompactAuraGrid({
   durationMs: number;
   players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"];
   units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
+  realm?: string;
   showUptime: boolean;
   dense?: boolean;
   large?: boolean;
@@ -332,6 +339,7 @@ function CompactAuraGrid({
           durationMs={durationMs}
           players={players}
           units={units}
+          realm={realm}
           showUptime={showUptime}
           dense={dense}
           large={large}
@@ -704,6 +712,7 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
               durationMs={uptimeDurationByUnit.get(guid) ?? durationMs}
               players={context.instance.players}
               units={context.instance.units}
+              realm={context.instance.realm}
               showUptime={showUptime}
               dense
               large={large}
@@ -725,6 +734,7 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
             </div>
             <UnitSearch
               units={searchUnits}
+              instance={context.instance}
               selectedGuids={selectedGuidSet}
               onToggle={toggleUnit}
               onClear={() => setPanelOption?.(serializeUnitAuraOptions([], auraSearchQuery))}
@@ -782,7 +792,7 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
                   <section key={unit.guid} className="min-w-0 py-1 first:pt-0 last:pb-0">
                     <div className="flex min-w-0 items-center gap-2 border-b border-border/40 bg-card/70 px-2.5 py-1.5">
                       <UnitIcon unit={unit} className="size-5" />
-                      <span className="min-w-0 flex-1 truncate text-xs font-semibold">{unit.name}</span>
+                      <span className="min-w-0 flex-1 truncate text-xs font-semibold" {...instanceEntityAttributes(context.instance, unit.guid)}>{unit.name}</span>
                       <span className="shrink-0 text-[10px] text-muted-foreground">
                         {rows.buffs.length} buffs · {rows.debuffs.length} debuffs
                       </span>
@@ -793,6 +803,7 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
                         durationMs={uptimeDurationByUnit.get(unit.guid) ?? durationMs}
                         players={context.instance.players}
                         units={context.instance.units}
+                        realm={context.instance.realm}
                         showUptime={showUptime}
                       />
                     ) : (
@@ -821,7 +832,7 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
                   )}
                 >
                   <UnitIcon unit={unit} className="size-4" />
-                  <span className="max-w-32 truncate">{unit.name}</span>
+                  <span className="max-w-32 truncate" {...instanceEntityAttributes(context.instance, unit.guid)}>{unit.name}</span>
                 </button>
               ))}
             </div>

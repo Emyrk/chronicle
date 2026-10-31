@@ -198,6 +198,7 @@ export function ComparisonContent(props: ComparisonContentProps) {
       {/* Chart */}
       <div className="flex-1 min-h-0">
         <ComparisonChart
+          instance={props.context.instance}
           sources={sources}
           matchedOnly={matchedOnly}
           perSecond={props.perSecond}

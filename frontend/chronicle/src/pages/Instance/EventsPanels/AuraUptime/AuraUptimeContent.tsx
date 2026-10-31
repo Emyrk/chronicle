@@ -14,6 +14,7 @@ import { UptimeTimeline, type DisplaySegment } from "./UptimeTimeline";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 
 /**
  * Format uptime as percentage
@@ -289,6 +290,7 @@ export function AuraUptimeContent(props: PanelRenderProps<AuraUptimeResult>) {
                         <td
                           className="py-0.5 px-1 font-medium truncate max-w-[85px]"
                           style={{ color: classColor }}
+                          {...instanceEntityAttributes(context.instance, row.targetGuid)}
                         >
                           {row.targetName}
                         </td>

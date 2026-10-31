@@ -1,5 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import {
   castEnds,
   castKind,
@@ -46,6 +48,8 @@ export interface CuratedCooldown {
 
 interface PlayerTimelineRulesProps {
   players: readonly RotationTimelinePlayer[];
+  /** Makes player names Alt+clickable. */
+  instance?: Pick<Instance, "players" | "realm">;
   spellMeta: (spellId: number | null) => SpellMeta;
   gcd: GcdLookup;
   cooldownInfo: (spellId: number) => CooldownInfo | null;
@@ -89,6 +93,7 @@ const MIN_CAST_TIME_MS = 250;
  */
 export function PlayerTimelineRules({
   players,
+  instance,
   spellMeta,
   gcd,
   cooldownInfo,
@@ -191,7 +196,7 @@ export function PlayerTimelineRules({
                 <Th>IsAbility</Th>
                 {players.map((p, i) => (
                   <Th key={p.guid} right>
-                    <span style={{ color: SLOT_TEXT_COLORS[i] }}>{p.name}</span>
+                    <span style={{ color: SLOT_TEXT_COLORS[i] }} {...(instance ? instanceEntityAttributes(instance, p.guid) : {})}>{p.name}</span>
                   </Th>
                 ))}
               </tr>

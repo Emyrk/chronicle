@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
-import { focusPlayerActions, instanceRowEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import { focusPlayerActions, instanceEntityAttributes, instanceRowEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { EntityActionScope } from "@/components/EntityMenu/EntityMenu";
 import { AbilityBreakout, type AbilityData } from "@/components/ui/AbilityBreakout";
 import { GenericPanel } from "../GenericPanel";
@@ -497,7 +497,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
             <ChevronLeft className="h-3.5 w-3.5" />
             Back
           </button>
-          <span className="text-xs font-medium">
+          <span className="text-xs font-medium" {...instanceEntityAttributes(props.context.instance, focusedPlayerId)}>
             {focusedPlayer?.playerName}
           </span>
         </div>

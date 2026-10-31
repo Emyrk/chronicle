@@ -3,6 +3,8 @@ import { useState } from "react";
 import { ScrollText } from "lucide-react";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { GenericPanel } from "../GenericPanel";
@@ -116,6 +118,7 @@ function ActivityLogContent(props: PanelRenderProps<ActivityLogResult>) {
               startMs={encounter?.startMs ?? 0}
               nameOf={nameOf}
               colorOf={colorOf}
+              instance={props.context.instance}
               striped={index % 2 === 1}
               dense={overlay}
             />
@@ -131,6 +134,7 @@ function ActivityRow({
   startMs,
   nameOf,
   colorOf,
+  instance,
   striped,
   dense,
 }: {
@@ -138,13 +142,14 @@ function ActivityRow({
   startMs: number;
   nameOf: (guid: string) => string;
   colorOf: (guid: string) => string;
+  instance: Pick<Instance, "players" | "realm">;
   striped: boolean;
   dense: boolean;
 }) {
   const heal = line.kind === "heal";
   const spellColor = heal ? HEAL_COLOR : line.kind === "aura_fade" ? "var(--muted-foreground)" : line.school ? schoolColor(line.school) : "var(--foreground)";
-  const source = line.source ? <span className="truncate" style={{ color: colorOf(line.source) }}>{nameOf(line.source)}</span> : null;
-  const target = line.target ? <span className="truncate" style={{ color: colorOf(line.target) }}>{nameOf(line.target)}</span> : null;
+  const source = line.source ? <span className="truncate" style={{ color: colorOf(line.source) }} {...instanceEntityAttributes(instance, line.source)}>{nameOf(line.source)}</span> : null;
+  const target = line.target ? <span className="truncate" style={{ color: colorOf(line.target) }} {...instanceEntityAttributes(instance, line.target)}>{nameOf(line.target)}</span> : null;
   const spell = line.spellName ? (
     <span className="flex min-w-0 items-center gap-1 truncate [&_img]:shrink-0" style={{ color: spellColor }}>
       <SpellIdTooltip spellId={line.spellId} name={line.spellName} size={dense ? 12 : 14} />

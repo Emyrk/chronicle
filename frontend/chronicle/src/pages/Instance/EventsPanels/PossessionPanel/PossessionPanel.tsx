@@ -8,6 +8,7 @@
 
 import { useMemo } from "react";
 import { Brain } from "lucide-react";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import {
   TemporalTimeline,
@@ -172,7 +173,7 @@ function PossessionTimeline(props: PanelRenderProps<PossessionResult>) {
                       </div>
                       <div className="pt-1">
                         <span className="text-emerald-400">Controlled by:</span>{" "}
-                        {cName}
+                        <span {...instanceEntityAttributes(context.instance, iv.controllerGuid)}>{cName}</span>
                       </div>
                       {iv.spellId > 0 && (
                         <div className="text-muted-foreground">Spell ID: {iv.spellId}</div>

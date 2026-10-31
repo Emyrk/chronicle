@@ -5,6 +5,7 @@ import { RelativeHealthBar } from "@/components/ui/RelativeHealthBar/RelativeHea
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelContext, PanelRenderProps } from "../types";
@@ -262,7 +263,11 @@ export function HealerCastsContent({ result, context }: PanelRenderProps<HealerC
                         ? "0.0"
                         : `+${startOffsetSeconds.toFixed(1)}`}
                   </span>
-                  <span className="min-w-0 truncate text-xs font-semibold" style={{ color: classColor(player.class) }}>
+                  <span
+                    className="min-w-0 truncate text-xs font-semibold"
+                    style={{ color: classColor(player.class) }}
+                    {...instanceEntityAttributes(context.instance, playerId)}
+                  >
                     {player.name}
                   </span>
                 </span>
@@ -347,6 +352,7 @@ export function HealerCastsContent({ result, context }: PanelRenderProps<HealerC
                     )}
                     style={targetClass ? { color: classColor(targetClass) } : undefined}
                     title={targetName}
+                    {...instanceEntityAttributes(context.instance, targetId)}
                   >
                     {cast ? `▸ ${targetName}` : targetName}
                   </span>

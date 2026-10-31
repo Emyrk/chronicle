@@ -2,6 +2,8 @@ import { useSpell } from "@/api/queries";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import { classColor } from "../Consumables/consumablesLedgerLogic";
 import { cooldownStateAt, normalizeClassName, type CooldownStateAt, type CooldownUsageRow } from "./cooldownUsage";
 
@@ -11,7 +13,15 @@ import { cooldownStateAt, normalizeClassName, type CooldownStateAt, type Cooldow
  * time left while cooling. Rows are the panel's own (casts from the whole log
  * carry in, classmates' cooldowns included), sorted by player.
  */
-export function CooldownsNow({ rows, atMs }: { rows: readonly CooldownUsageRow[]; atMs: number }) {
+export function CooldownsNow({
+  rows,
+  atMs,
+  instance,
+}: {
+  rows: readonly CooldownUsageRow[];
+  atMs: number;
+  instance: Pick<Instance, "players" | "realm">;
+}) {
   const players: CooldownUsageRow[][] = [];
   for (const row of rows) {
     const last = players[players.length - 1];
@@ -28,7 +38,10 @@ export function CooldownsNow({ rows, atMs }: { rows: readonly CooldownUsageRow[]
         const ready = states.filter((state) => state.ready).length;
         return (
           <div key={player.playerID} className="flex items-center gap-1.5">
-            <span className="flex w-24 min-w-0 shrink-0 items-center gap-1 text-[11px]">
+            <span
+              className="flex w-24 min-w-0 shrink-0 items-center gap-1 text-[11px]"
+              {...instanceEntityAttributes(instance, player.playerID)}
+            >
               <span className="h-3 w-[3px] shrink-0 rounded-sm" style={{ background: classColor(normalizeClassName(player.className)) }} />
               <span className="truncate">{player.playerName}</span>
             </span>

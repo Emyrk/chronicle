@@ -15,7 +15,7 @@ import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import { ChevronLeft } from "lucide-react";
 import { useBreakoutHover } from "@/components/ui/AbilityBreakout/BreakoutHoverContext";
-import { focusPlayerActions, instanceRowEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import { focusPlayerActions, instanceEntityAttributes, instanceRowEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { EntityActionScope } from "@/components/EntityMenu/EntityMenu";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
@@ -538,7 +538,7 @@ export function DispelContent(props: DispelContentProps) {
             <ChevronLeft className="h-3.5 w-3.5" />
             Back
           </button>
-          <span className="text-xs font-medium">
+          <span className="text-xs font-medium" {...instanceEntityAttributes(props.context.instance, focusedPlayerId)}>
             {focusedPlayer?.playerName}
           </span>
         </div>

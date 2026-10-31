@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { ChevronLeft } from "lucide-react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
-import { focusPlayerActions, instanceRowEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import { focusPlayerActions, instanceEntityAttributes, instanceRowEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { EntityActionScope } from "@/components/EntityMenu/EntityMenu";
 import { GenericPanel } from "../GenericPanel";
 import type { EntitySelection, PanelRenderProps } from "../types";
@@ -312,7 +312,7 @@ export const ResistsContent = (props: PanelRenderProps<ResistsResult>) => {
         <div className="text-xs text-muted-foreground">
           {focusedPlayer ? (
             <>
-              <span className="font-medium text-foreground">{focusedPlayer.unitName}</span>
+              <span className="font-medium text-foreground" {...instanceEntityAttributes(props.context.instance, focusedPlayer.unitID)}>{focusedPlayer.unitName}</span>
               {" — "}
               {formatNumber(focusedPlayer.totalResisted, 0)} resisted of {formatNumber(focusedPlayer.totalIncoming, 0)} incoming
             </>
@@ -338,7 +338,7 @@ export const ResistsContent = (props: PanelRenderProps<ResistsResult>) => {
               <ChevronLeft className="h-3.5 w-3.5" />
               Back
             </button>
-            <span className="text-xs font-medium">
+            <span className="text-xs font-medium" {...instanceEntityAttributes(props.context.instance, focusedPlayerId)}>
               {focusedPlayer?.unitName} — {groupBySchool ? "By School" : "By Ability"}
             </span>
           </div>
@@ -369,7 +369,7 @@ export const ResistsContent = (props: PanelRenderProps<ResistsResult>) => {
               const rows = cachedResult ? buildAbilityRows(cachedResult, playerId, false) : [];
               return (
                 <div className="p-2 text-xs space-y-1.5 min-w-[240px]">
-                  <div className="font-medium">{p.unitName}</div>
+                  <div className="font-medium" {...instanceEntityAttributes(props.context.instance, playerId)}>{p.unitName}</div>
                   <div className="text-muted-foreground">
                     Count: {p.count} | Partial: {p.partialResistCount} | Full: {p.fullResistCount}
                   </div>

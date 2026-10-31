@@ -18,6 +18,8 @@ import {
 import { GenericPanel } from "../GenericPanel";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 
 /**
  * Format milliseconds to MM:SS.mmm format
@@ -79,7 +81,7 @@ export function createSunderPanel(): PanelDefinition<SunderResult, any> {
 }
 
 function SunderContent(props: PanelRenderProps<SunderResult>) {
-  const { result, checkboxChecked: showTargets, panelOption, setPanelOption } = props;
+  const { result, context, checkboxChecked: showTargets, panelOption, setPanelOption } = props;
 
   const selectedTargetGuid = useMemo(() => {
     if (!panelOption) {
@@ -126,10 +128,11 @@ function SunderContent(props: PanelRenderProps<SunderResult>) {
           targets={targets}
           selectedTargetGuid={selectedTargetGuid}
           onSelectTargetGuid={updateSelectedTargetGuid}
+          instance={context.instance}
         />
       ) : (
         /* Summary view - shows warrior effectiveness */
-        <WarriorsView warriors={warriors} />
+        <WarriorsView warriors={warriors} instance={context.instance} />
       )}
     </GenericPanel>
   );
@@ -137,9 +140,10 @@ function SunderContent(props: PanelRenderProps<SunderResult>) {
 
 interface WarriorsViewProps {
   warriors: WarriorSunderStats[];
+  instance: Instance;
 }
 
-function WarriorsView({ warriors }: WarriorsViewProps) {
+function WarriorsView({ warriors, instance }: WarriorsViewProps) {
   return (
     <div className="flex h-full min-h-0 flex-col" data-sunder-warriors>
       <ScrollArea className="min-h-0 flex-1">
@@ -168,7 +172,10 @@ function WarriorsView({ warriors }: WarriorsViewProps) {
                   className="border-b border-border/10 hover:bg-muted/50"
                 >
                   <td className="py-1 px-2">
-                    <span className="font-medium text-[var(--color-class-warrior)]">
+                    <span
+                      className="font-medium text-[var(--color-class-warrior)]"
+                      {...instanceEntityAttributes(instance, warrior.guid)}
+                    >
                       {warrior.name}
                     </span>
                   </td>
@@ -198,9 +205,10 @@ interface TargetsViewProps {
   targets: TargetSunderStats[];
   selectedTargetGuid: string | null;
   onSelectTargetGuid: (guid: string | null) => void;
+  instance: Instance;
 }
 
-function TargetsView({ targets, selectedTargetGuid, onSelectTargetGuid }: TargetsViewProps) {
+function TargetsView({ targets, selectedTargetGuid, onSelectTargetGuid, instance }: TargetsViewProps) {
   
   // Filter to only targets that reached 5 stacks
   const targetsWithFive = targets.filter(t => t.timeToFiveStacksMs !== null);
@@ -255,7 +263,7 @@ function TargetsView({ targets, selectedTargetGuid, onSelectTargetGuid }: Target
                         : "—"}
                     </td>
                     <td className="py-1 px-2">
-                      <ContributorsList contributors={target.first5Contributors} />
+                      <ContributorsList contributors={target.first5Contributors} instance={instance} />
                     </td>
                   </tr>
                 ))}
@@ -385,25 +393,26 @@ function DebugBreakout({ target, onClose }: DebugBreakoutProps) {
 
 interface ContributorsListProps {
   contributors: { guid: string; name: string; stackNumber: number }[];
+  instance: Instance;
 }
 
-function ContributorsList({ contributors }: ContributorsListProps) {
+function ContributorsList({ contributors, instance }: ContributorsListProps) {
   // Group consecutive contributions by the same warrior
-  const grouped: { name: string; count: number }[] = [];
+  const grouped: { guid: string; name: string; count: number }[] = [];
   
   for (const contrib of contributors) {
     const last = grouped[grouped.length - 1];
     if (last && last.name === contrib.name) {
       last.count++;
     } else {
-      grouped.push({ name: contrib.name, count: 1 });
+      grouped.push({ guid: contrib.guid, name: contrib.name, count: 1 });
     }
   }
   
   return (
     <span className="flex flex-wrap gap-x-1 gap-y-0.5">
       {grouped.map((g, i) => (
-        <span key={i} className="text-[var(--color-class-warrior)]">
+        <span key={i} className="text-[var(--color-class-warrior)]" {...instanceEntityAttributes(instance, g.guid)}>
           {g.name}
           {g.count > 1 && <span className="text-muted-foreground">×{g.count}</span>}
           {i < grouped.length - 1 && <span className="text-muted-foreground">,</span>}

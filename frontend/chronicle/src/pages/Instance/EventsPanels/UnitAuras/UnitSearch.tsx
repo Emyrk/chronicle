@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { Check, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import { UnitIcon } from "./UnitIcon";
 import { compareUnitSearchOptions, scoreUnitSearchMatch } from "./unitSearchMatch";
 
@@ -17,12 +19,14 @@ export interface UnitSearchOption {
 
 interface UnitSearchProps {
   units: UnitSearchOption[];
+  /** Makes player options Alt+clickable. */
+  instance?: Pick<Instance, "players" | "realm">;
   selectedGuids: ReadonlySet<string>;
   onToggle: (guid: string) => void;
   onClear: () => void;
 }
 
-export function UnitSearch({ units, selectedGuids, onToggle, onClear }: UnitSearchProps) {
+export function UnitSearch({ units, instance, selectedGuids, onToggle, onClear }: UnitSearchProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -143,7 +147,12 @@ export function UnitSearch({ units, selectedGuids, onToggle, onClear }: UnitSear
                     {isSelected && <Check className="size-3" />}
                   </span>
                   <UnitIcon unit={unit} />
-                  <span className="min-w-0 flex-1 truncate font-medium">{unit.name}</span>
+                  <span
+                    className="min-w-0 flex-1 truncate font-medium"
+                    {...(instance && unit.group === "player" ? instanceEntityAttributes(instance, unit.guid) : {})}
+                  >
+                    {unit.name}
+                  </span>
                   <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                     {groupLabel}
                   </span>

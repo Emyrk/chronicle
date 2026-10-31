@@ -9,6 +9,8 @@ import { useDatasetId } from "@/hooks/useDatasetId";
 import { useConsumableDisambiguations } from "@/api/queries";
 import type { ConsumableDisambiguation } from "@/api/typesGenerated";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import { buildConsumableDisambiguationMap, resolveConsumableUse } from "./consumableDisambiguation";
 import { GenericPanel } from "../GenericPanel";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
@@ -195,10 +197,12 @@ function ComparisonHeader({
 function ConsumablesComparisonTable({
   rows,
   players,
+  realm,
   onOpenPossible,
 }: {
   rows: readonly PlayerConsumablesTotal[];
-  players: Record<string, { name?: string; class?: string }> | undefined;
+  players: Instance["players"];
+  realm: string | undefined;
   onOpenPossible: (consume: ConsumableCount, target: HTMLElement) => void;
 }) {
   const columns = buildConsumableComparisonColumns(rows);
@@ -233,7 +237,10 @@ function ConsumablesComparisonTable({
           return (
             <tr key={row.playerId} className="hover:bg-muted/30" data-demo-consumables-all-row>
               <td className="sticky left-0 z-10 whitespace-nowrap border-t border-border/30 bg-card px-2 py-1.5 font-medium">
-                <span style={{ color: `var(--color-class-${(player?.class ?? "unknown").toLowerCase()})` }}>
+                <span
+                  {...instanceEntityAttributes({ players, realm }, row.playerId)}
+                  style={{ color: `var(--color-class-${(player?.class ?? "unknown").toLowerCase()})` }}
+                >
                   {player?.name ?? row.playerId}
                 </span>
               </td>
@@ -409,6 +416,7 @@ export function ConsumablesTotalContent({ headerExtra, ...props }: ConsumablesTo
                 <ConsumablesComparisonTable
                   rows={filteredRows}
                   players={context.instance.players}
+                  realm={context.instance.realm}
                   onOpenPossible={openPossibleBreakout}
                 />
               ) : (
@@ -432,7 +440,10 @@ export function ConsumablesTotalContent({ headerExtra, ...props }: ConsumablesTo
                             : "border-b border-border/20 align-top bg-muted/25 hover:bg-muted/40"}
                         >
                           <td className="px-2 py-2 font-medium">
-                            <span style={{ color: `var(--color-class-${(player?.class ?? "unknown").toLowerCase()})` }}>
+                            <span
+                              {...instanceEntityAttributes(context.instance, row.playerId)}
+                              style={{ color: `var(--color-class-${(player?.class ?? "unknown").toLowerCase()})` }}
+                            >
                               {player?.name ?? row.playerId}
                             </span>
                           </td>

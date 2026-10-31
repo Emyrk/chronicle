@@ -35,6 +35,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { cn } from "@/lib/utils";
+import { entityAttributes } from "@/components/EntityMenu/entity";
+import { instanceEntityAttributes, instanceGuildEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { SeamlessLayoutContext } from "./EventsPanels/SeamlessLayoutContext";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import type { Instance, Encounter, EnemyUnit } from "./InstancePage";
@@ -2166,6 +2168,7 @@ function EncounterDetail({
                               <HintTooltip key={player.guid}>
                                 <TooltipTrigger asChild>
                                   <button
+                                    {...instanceEntityAttributes(instance, player.guid)}
                                     onClick={() => onTogglePlayer(player.guid)}
                                     className={cn(
                                       "flex items-center gap-1.5 px-2.5 py-1 rounded text-xs cursor-pointer transition-all",
@@ -2193,7 +2196,10 @@ function EncounterDetail({
                                         className="w-2 h-2 rounded-full flex-shrink-0"
                                         style={{ backgroundColor: `var(--color-class-${player.class.toLowerCase()})` }}
                                       />
-                                      <span style={{ color: `var(--color-class-${player.class.toLowerCase()})` }}>
+                                      <span
+                                        {...instanceEntityAttributes(instance, player.guid)}
+                                        style={{ color: `var(--color-class-${player.class.toLowerCase()})` }}
+                                      >
                                         {player.name}
                                       </span>
                                       <span className="text-muted-foreground text-xs font-normal">
@@ -2553,6 +2559,7 @@ function InstancePageViewContent({
   );
 
   const isMobile = useIsMobile();
+  const guildEntity = instanceGuildEntity(instance);
 
   const liveSession = useLiveSession();
   const canEditSharedView = liveSession.canEditSharedView;
@@ -4279,7 +4286,7 @@ function InstancePageViewContent({
           <div className="text-muted-foreground text-sm">
             {instance.guild && (
               <p>
-                <Link to={`/g/${instance.guild.id}`} className="text-amber-500 hover:underline">&lt;{instance.guild.name}&gt;</Link>
+                <Link to={`/g/${instance.guild.id}`} className="text-amber-500 hover:underline" {...(guildEntity ? entityAttributes(guildEntity) : {})}>&lt;{instance.guild.name}&gt;</Link>
               </p>
             )}
             <p>
@@ -4291,7 +4298,7 @@ function InstancePageViewContent({
         ) : (
           <p className="text-muted-foreground text-sm">
             {instance.guild && (
-              <Link to={`/g/${instance.guild.id}`} className="text-amber-500 hover:underline">&lt;{instance.guild.name}&gt;</Link>
+              <Link to={`/g/${instance.guild.id}`} className="text-amber-500 hover:underline" {...(guildEntity ? entityAttributes(guildEntity) : {})}>&lt;{instance.guild.name}&gt;</Link>
             )}
             {instance.guild && instance.realm && " • "}
             {instance.realm && `${instance.realm}`}

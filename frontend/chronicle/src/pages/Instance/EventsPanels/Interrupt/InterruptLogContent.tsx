@@ -4,6 +4,7 @@
 
 import { useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { GenericPanel } from "../GenericPanel";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { useSpell } from "@/api/queries";
@@ -203,6 +204,7 @@ export const InterruptLogContent = (props: InterruptLogContentProps) => {
                         <span
                           className="font-medium"
                           style={{ color: `var(--color-class-${evt.casterClass.toLowerCase()})` }}
+                          {...instanceEntityAttributes(context.instance, evt.casterID)}
                         >
                           {evt.casterName}
                         </span>

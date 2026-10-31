@@ -14,6 +14,7 @@ import type { PanelFilter } from "../processors/filters";
 import { useSpell } from "@/api/queries";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import {
   Tooltip,
   TooltipContent,
@@ -547,7 +548,7 @@ function RotationsContent({
               className="ml-2 flex items-center gap-1 rounded bg-zinc-800 px-1.5 py-0.5 hover:bg-zinc-700 text-[10px]"
               title="Click to unfocus"
             >
-              <span style={{ color: CLASS_COLORS[cls] || CLASS_COLORS.UNKNOWN }}>{name}</span>
+              <span style={{ color: CLASS_COLORS[cls] || CLASS_COLORS.UNKNOWN }} {...instanceEntityAttributes(context.instance, focusGuid)}>{name}</span>
               <span className="text-zinc-500">✕</span>
             </button>
           );

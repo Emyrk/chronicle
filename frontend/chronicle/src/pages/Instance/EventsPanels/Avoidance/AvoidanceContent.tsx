@@ -5,6 +5,7 @@ import type { EntitySelection, PanelRenderProps } from "../types";
 import type { AvoidanceResult } from "../processors";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
 
 /**
  * Aggregated avoidance data for a player across encounters.
@@ -142,7 +143,7 @@ export const AvoidanceContent = (props: AvoidanceContentProps) => {
                 )}
               >
                 <td className="py-1 pl-1 pr-2">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5" {...instanceEntityAttributes(context.instance, d.playerID)}>
                     <span 
                       className="w-2 h-2 rounded-full flex-shrink-0"
                       style={{ backgroundColor: `var(--color-class-${d.className.toLowerCase()})` }}

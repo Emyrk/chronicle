@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { RelativeHealthBar } from "@/components/ui/RelativeHealthBar/RelativeHealthBar";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
 import {
   IncomingEventsBreakout,
@@ -284,12 +286,14 @@ function StatusEventTooltipBody({
   events,
   relativeToMilli,
   emptyLabel,
+  instance,
 }: {
   title: string;
   meta: ReactNode;
   events: readonly StatusTimelineEvent[];
   relativeToMilli: number;
   emptyLabel: string;
+  instance?: Pick<Instance, "players" | "realm">;
 }) {
   return (
     <div className="text-2xs">
@@ -322,7 +326,10 @@ function StatusEventTooltipBody({
                 <StatusEventSpellIcon spellId={event.spellId} />
                 <span className="min-w-0 truncate">
                   <span className={cn("font-medium", style.text)}>{event.label}</span>
-                  <span className="ml-1 text-[9px] text-muted-foreground/70">{event.sourceName || "Unknown"}</span>
+                  <span
+                    className="ml-1 text-[9px] text-muted-foreground/70"
+                    {...(instance ? instanceEntityAttributes(instance, event.sourceId) : {})}
+                  >{event.sourceName || "Unknown"}</span>
                 </span>
                 <span className="font-mono tabular-nums text-foreground">
                   {style.sign}{formatNumber(event.amount - overheal)}
@@ -365,10 +372,12 @@ function RelativeChange({
   snapshot,
   density,
   cursorMilli,
+  instance,
 }: {
   snapshot: StatusUnitSnapshot;
   density: StatusDensity;
   cursorMilli: number;
+  instance: Pick<Instance, "players" | "realm">;
 }) {
   const {
     events: incoming,
@@ -414,6 +423,7 @@ function RelativeChange({
           events={incoming}
           relativeToMilli={cursorMilli}
           emptyLabel="No imminent damage or healing."
+          instance={instance}
         />
       </TooltipContent>
     </Tooltip>
@@ -834,6 +844,7 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
                       snapshot.dead && "line-through opacity-50",
                     )}
                     style={{ color: classColor(unit.className, unit.kind) }}
+                    {...instanceEntityAttributes(context.instance, unit.unitId)}
                   >
                     {unit.name}
                   </span>
@@ -845,7 +856,7 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
                     </span>
                   ) : null}
                 </span>
-                <RelativeChange snapshot={snapshot} density={density} cursorMilli={cursorMilli!} />
+                <RelativeChange snapshot={snapshot} density={density} cursorMilli={cursorMilli!} instance={context.instance} />
                 <ActivityLane
                   waveform={waveform}
                   cursorMilli={cursorMilli!}
@@ -889,6 +900,8 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
         >
           <IncomingEventsBreakout
             unitName={breakoutUnit.name}
+            unitGuid={unitId}
+            instance={context.instance}
             className={breakoutUnit.className}
             anchorOffsetMilli={cursorMilli - encounter.startMilli}
             anchorAbsoluteMilli={cursorMilli}

@@ -6,6 +6,9 @@ import { useCachedValue } from "@/hooks/useCachedValue";
 import { GenericPanel } from "../GenericPanel";
 import { useItemTooltip } from "@/api/gamedata";
 import { cn } from "@/lib/utils";
+import { entityAttributes } from "@/components/EntityMenu/entity";
+import { instanceEntityAttributes, instanceGuildEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import { getQualityBorderClass, getQualityTextClass, getClassColorVar } from "@/pages/ArmoryPage/types";
 import { formatRaceLabel } from "@/pages/ArmoryPage/characterDisplay";
 import { classNameToId } from "@/pages/Rankings/classDisplay";
@@ -119,7 +122,7 @@ function GearRow({ itemId, enchantId, gemEnchantIds, slotLabel, equippedItemIds 
   );
 }
 
-function DropdownList({ playerList, search, setSearch, searchRef, selectedGuid, onSelect, onClose }: {
+function DropdownList({ playerList, search, setSearch, searchRef, selectedGuid, onSelect, onClose, instance }: {
   playerList: PlayerSnapshot[];
   search: string;
   setSearch: (s: string) => void;
@@ -127,6 +130,7 @@ function DropdownList({ playerList, search, setSearch, searchRef, selectedGuid, 
   selectedGuid: string | null;
   onSelect: (guid: string) => void;
   onClose: () => void;
+  instance: Instance;
 }) {
   useEffect(() => { searchRef.current?.focus(); }, [searchRef]);
 
@@ -162,6 +166,7 @@ function DropdownList({ playerList, search, setSearch, searchRef, selectedGuid, 
                 selectedGuid === p.guid && "bg-accent",
               )}
               style={{ color: getClassColorVar(p.heroClass) }}
+              {...instanceEntityAttributes(instance, p.guid)}
             >
               {p.name}
             </button>
@@ -298,6 +303,7 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
   const equippedItemIds = selected
     ? new Set(selected.gear.filter((item) => item.itemId > 0).map((item) => item.itemId))
     : undefined;
+  const guildEntity = instanceGuildEntity(context.instance);
 
   if (!cachedValue || playerList.length === 0) {
     return (
@@ -320,6 +326,7 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
               onClick={() => setDropdownOpen((v) => !v)}
               className="bg-background border border-border rounded px-2 py-1 text-sm flex items-center gap-1 min-w-[120px]"
               data-lesson-target="compare-players"
+              {...instanceEntityAttributes(context.instance, selected?.guid)}
             >
               {selected ? (
                 <span style={{ color: getClassColorVar(selected.heroClass) }}>{selected.name}</span>
@@ -337,6 +344,7 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
                 selectedGuid={selected?.guid ?? null}
                 onSelect={(guid) => { selectPlayer(guid); setDropdownOpen(false); setSearch(""); }}
                 onClose={() => { setDropdownOpen(false); setSearch(""); }}
+                instance={context.instance}
               />
             )}
           </div>
@@ -345,7 +353,10 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
               {selected.heroClass} · {formatRaceLabel(selected.race)}
               {context.instance.players?.[selected.guid]?.level ? ` · Level ${context.instance.players[selected.guid].level}` : ""}
               {selected.talents && ` · ${selected.talents.summary.join("/")}`}
-              {selected.guildName && ` · <${selected.guildName}>`}
+              {selected.guildName && (selected.guildName === guildEntity?.name ? (
+                // Its own flex item here, so cancel the row gap to keep the text flowing as before.
+                <span {...entityAttributes(guildEntity)} className="-ml-1">{` · <${selected.guildName}>`}</span>
+              ) : ` · <${selected.guildName}>`)}
               {context.instance.realm && (
                 <Link
                   to={`/armory/${encodeURIComponent(context.instance.realm)}/${encodeURIComponent(selected.guid)}`}

@@ -4,6 +4,9 @@ import { GenericPanel } from "../GenericPanel";
 import { Users, ChevronRight } from "lucide-react";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { useState } from "react";
+import { entityAttributes } from "@/components/EntityMenu/entity";
+import { instanceEntityAttributes, instanceGuildEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 
 export function createGuildsPanel(): PanelDefinition<GuildsResult, any> {
   return {
@@ -18,7 +21,7 @@ export function createGuildsPanel(): PanelDefinition<GuildsResult, any> {
 }
 
 function GuildsContent(props: PanelRenderProps<GuildsResult>) {
-  const { result } = props;
+  const { result, context } = props;
   if (!result) return null;
 
   // Sort: named guilds by player count desc, "No Guild" always last
@@ -37,20 +40,22 @@ function GuildsContent(props: PanelRenderProps<GuildsResult>) {
     <GenericPanel {...props}>
       <div className="flex flex-col gap-1 p-2 overflow-y-auto styled-scrollbar">
         {entries.map(([key, guild]) => (
-          <GuildRow key={key} guild={guild} />
+          <GuildRow key={key} guild={guild} instance={context.instance} />
         ))}
       </div>
     </GenericPanel>
   );
 }
 
-function GuildRow({ guild }: { guild: GuildEntry }) {
+function GuildRow({ guild, instance }: { guild: GuildEntry; instance: Instance }) {
   const [open, setOpen] = useState(false);
   const players = Array.from(guild.players.values());
   // Sort players alphabetically by name
   players.sort((a, b) => a.name.localeCompare(b.name));
 
   const displayName = guild.name ?? "No Guild";
+  const guildEntity = instanceGuildEntity(instance);
+  const isLogGuild = !!guild.name && guild.name === guildEntity?.name;
 
   return (
     <div className="rounded-md border border-border bg-card">
@@ -62,7 +67,10 @@ function GuildRow({ guild }: { guild: GuildEntry }) {
         <ChevronRight
           className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-150 ${open ? "rotate-90" : ""}`}
         />
-        <span className={guild.name ? "text-foreground" : "text-muted-foreground italic"}>
+        <span
+          className={guild.name ? "text-foreground" : "text-muted-foreground italic"}
+          {...(isLogGuild && guildEntity ? entityAttributes(guildEntity) : {})}
+        >
           {displayName}
         </span>
         <span className="ml-auto text-xs text-muted-foreground tabular-nums">
@@ -76,6 +84,7 @@ function GuildRow({ guild }: { guild: GuildEntry }) {
               <span
                 className="font-medium"
                 style={{ color: getClassColorVar(p.heroClass) }}
+                {...instanceEntityAttributes(instance, p.guid)}
               >
                 {p.name}
               </span>

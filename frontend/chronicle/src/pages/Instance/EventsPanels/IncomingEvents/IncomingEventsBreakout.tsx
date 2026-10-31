@@ -5,6 +5,8 @@ import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { EventTimelinePreview } from "./EventTimelinePreview";
 import type { EventTimelinePreviewEvent } from "./eventTimelinePreviewLogic.ts";
 import { BreakoutIdentity } from "@/components/ui/BreakoutPanel/BreakoutIdentity";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
 import { RelativeHealthBar } from "@/components/ui/RelativeHealthBar/RelativeHealthBar";
 import { calculateRelativeHealth } from "@/components/ui/RelativeHealthBar/relativeHealth";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
@@ -35,6 +37,9 @@ export interface IncomingEventDisplay extends IncomingTimelineEvent {
 
 export interface IncomingEventsBreakoutProps {
   unitName: string;
+  /** With `instance`, makes the unit name Alt+clickable when it is a player. */
+  unitGuid?: string;
+  instance?: Pick<Instance, "players" | "realm">;
   className: string;
   anchorOffsetMilli: number;
   anchorAbsoluteMilli: number;
@@ -94,6 +99,8 @@ export function IncomingEventAmount({ entry }: { entry: IncomingEventDisplay }) 
 
 export function IncomingEventsBreakout({
   unitName,
+  unitGuid,
+  instance,
   className,
   anchorOffsetMilli,
   anchorAbsoluteMilli,
@@ -196,7 +203,9 @@ export function IncomingEventsBreakout({
     >
       <div className="flex items-center gap-2 border-b border-border px-2.5 py-1.5" data-drag-handle>
         <GripHorizontal className="h-3 w-3 shrink-0 text-muted-foreground" />
-        <BreakoutIdentity color={classColor} name={unitName} className={className} />
+        <div className="min-w-0" {...(instance ? instanceEntityAttributes(instance, unitGuid) : {})}>
+          <BreakoutIdentity color={classColor} name={unitName} className={className} />
+        </div>
         <div className="flex-1" />
         <span className="font-mono text-2xs text-amber-200/80">
           {cursorMilli === null ? (sync?.enabled ? "waiting for window" : "hover to compare") : `${formatRelativeTime(cursorMilli)} ${sync?.enabled ? "playhead" : "cursor"}`}

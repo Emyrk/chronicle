@@ -9,6 +9,10 @@ import { Shield, Swords, Heart, ShieldBan, Ban } from "lucide-react";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
+import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import type { Instance } from "@/pages/Instance/InstancePage";
+
+type EntityInstance = Pick<Instance, "players" | "realm">;
 
 /**
  * Get school color for styling
@@ -32,13 +36,14 @@ function formatRecapTime(entryOffsetMilli: number, deathOffsetMilli: number): st
 }
 
 /** Caster name styled by class (player) or red (hostile) */
-function CasterName({ entry }: { entry: DeathRecapEntry }) {
+function CasterName({ entry, instance }: { entry: DeathRecapEntry; instance?: EntityInstance }) {
   if (entry.casterClass) {
     return (
       <span
         className="truncate"
         style={{ color: `var(--color-class-${entry.casterClass.toLowerCase()})` }}
         title={entry.casterName}
+        {...(instance ? instanceEntityAttributes(instance, entry.casterID) : {})}
       >
         {entry.casterName}
       </span>
@@ -52,13 +57,14 @@ function CasterName({ entry }: { entry: DeathRecapEntry }) {
 }
 
 /** Target name styled by class (player) or red (hostile) */
-function TargetName({ entry }: { entry: DeathRecapEntry }) {
+function TargetName({ entry, instance }: { entry: DeathRecapEntry; instance?: EntityInstance }) {
   if (entry.targetClass) {
     return (
       <span
         className="truncate"
         style={{ color: `var(--color-class-${entry.targetClass.toLowerCase()})` }}
         title={entry.targetName}
+        {...(instance ? instanceEntityAttributes(instance, entry.targetID) : {})}
       >
         {entry.targetName}
       </span>
@@ -77,6 +83,8 @@ interface DeathRecapProps {
   recap: DeathRecapEntry[];
   outgoingRecap: DeathRecapEntry[];
   deathOffsetMilli: number;
+  /** The log the recap is from, so player names open the entity menu on Alt+click. */
+  instance?: EntityInstance;
 }
 
 /** Compute summary totals for a list of entries */
@@ -123,7 +131,7 @@ function mergeRecaps(a: DeathRecapEntry[], b: DeathRecapEntry[]): DeathRecapEntr
   return result;
 }
 
-export const DeathRecap = ({ recap, outgoingRecap, deathOffsetMilli }: DeathRecapProps) => {
+export const DeathRecap = ({ recap, outgoingRecap, deathOffsetMilli, instance }: DeathRecapProps) => {
   const [tab, setTab] = useState<RecapTab>("incoming");
 
   const merged = useMemo(() => mergeRecaps(recap, outgoingRecap), [recap, outgoingRecap]);
@@ -238,14 +246,14 @@ export const DeathRecap = ({ recap, outgoingRecap, deathOffsetMilli }: DeathReca
                   </td>
                   {/* Source (caster name) - colored by class or red for hostile */}
                   <td className="py-0.5 px-2 max-w-[100px]">
-                    <CasterName entry={entry} />
+                    <CasterName entry={entry} instance={instance} />
                   </td>
                   {/* Arrow + Target (shown on "From Me" and "Both" tabs) */}
                   {showTarget && (
                     <>
                       <td className="py-0.5 px-1 w-4 text-center text-muted-foreground/40">→</td>
                       <td className="py-0.5 px-2 max-w-[100px]">
-                        <TargetName entry={entry} />
+                        <TargetName entry={entry} instance={instance} />
                       </td>
                     </>
                   )}
