@@ -5,188 +5,18 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
-import { Blocks, ChevronDown, ChevronRight, Leaf, Scale, Search, Sword, Toolbox, User } from "lucide-react";
+import { Blocks, ChevronDown, ChevronRight, Compass, Search, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { PANELS, type EventsPanelType } from "./EventsPanel";
+import { fuzzyMatch, getAllCategoryItems, getCategoryIcon, getCategoryItemCount, getPanelOption, PANEL_CATEGORIES, rememberRecentPanel, type PanelCategory, type PanelOption } from "./panelCategories";
 
 import { listSelectableCustomPanels, resolveCustomPanel, useCustomPanelRegistry } from "./custom/pluginRegistry";
 import { isCustomPanelRef } from "./custom/pluginTypes";
-import { isLuaPanelRef, luaPanelRef, parseLuaPanelRef, useLuaPanelCatalog } from "./LuaPanel/luaPanelRegistry";
+import { isLuaPanelRef, parseLuaPanelRef, publicLuaPanelOptions, trackedLuaPanelOptions, useLuaPanelCatalog, usePublicLuaPanels } from "./LuaPanel/luaPanelRegistry";
 import { ModuleIcon } from "../../LuaProjects/ModuleIcon";
-
-interface PanelOption {
-  value: EventsPanelType;
-  label: string;
-  icon: React.ReactNode;
-}
-
-interface PanelCategory {
-  label: string;
-  /** Direct panel items (leaf nodes) */
-  items?: EventsPanelType[];
-  /** Nested subcategories */
-  subcategories?: PanelCategory[];
-  /** Optional explicit icon (defaults to first item's icon) */
-  icon?: React.ReactNode;
-}
-
-// Category organization - panels get their labels/icons from PANELS registry
-const PANEL_CATEGORIES: PanelCategory[] = [
-  {
-    label: "Damage",
-    items: ["damage_done", "vulnerability_effect", "enemy_damage_done", "pet_damage_done", "damage_done_friendly_fire"],
-  },
-  {
-    label: "Healing",
-    items: ["healing_done", "healing_taken"],
-  },
-  {
-    label: "Survivability",
-    items: ["damage_taken", "enemy_damage_taken", "mitigation", "absorbed_damage", "resists"], // TODO: Add "avoidance" when spell school data is available
-  },
-  {
-    label: "Resources",
-    items: ["extra_attacks", "resource_regen", "consumables", "consumables_ledger", "cooldown_usage"],
-  },
-  {
-    label: "Deaths",
-    items: ["deaths", "death_log"],
-  },
-  {
-    label: "Buffs",
-    items: ["aura_uptime", "unit_auras", "friendly_class_buffs"],
-  },
-  {
-    label: "Dispels & Interrupts",
-    items: ["dispels_done", "dispels_received", "dispel_log", "interrupts", "interrupt_log"],
-  },
-  {
-    label: "Class",
-    // TODO: Make class icons in this style
-    icon: <User className="h-4 w-4" />,
-    subcategories: [
-      {
-        label: "Druid",
-        items: ["innervate", "faerie_fire"],
-        icon: <Leaf className="h-4 w-4" />,
-      },
-      {
-        label: "Warrior",
-        items: ["sunder"],
-        icon: <Sword className="h-4 w-4" />,
-      },
-      {
-        label: "Paladin",
-        items: ["judgement"],
-        icon: <Scale className="h-4 w-4" />,
-      },
-    ],
-  },
-  {
-    label: "Replay",
-    items: ["map", "mini_map", "raid_frames", "activity_log", "status", "healer_casts"],
-  },
-  {
-    label: "Utility",
-    items: ["roles", "raid_composition", "timeline", "rotations", "spell_count", "comparison", "all_activity", "metrics", "periods", "pulls_and_cleanup", "possession", "vehicle", "unit_lookup", "equipment", "guilds", "loot", "logging_metadata", "companion_stats", "leaderboard", "ranking_records", "empty"],
-    icon: <Toolbox className="h-4 w-4" />,
-  },
-];
-
-// Build panel options from registry
-function getPanelOption(value: EventsPanelType): PanelOption {
-  const panel = PANELS[value];
-  return {
-    value,
-    label: panel?.label ?? value,
-    icon: panel?.icon,
-  };
-}
-
-// Get category icon: explicit icon, first item's icon, or first subcategory's icon
-function getCategoryIcon(category: PanelCategory): React.ReactNode {
-  if (category.icon) return category.icon;
-  if (category.items && category.items.length > 0) {
-    const firstPanel = PANELS[category.items[0]];
-    return firstPanel?.icon;
-  }
-  if (category.subcategories && category.subcategories.length > 0) {
-    return getCategoryIcon(category.subcategories[0]);
-  }
-  return null;
-}
-
-// Count total items in a category (including nested)
-function getCategoryItemCount(category: PanelCategory): number {
-  let count = category.items?.length ?? 0;
-  if (category.subcategories) {
-    for (const sub of category.subcategories) {
-      count += getCategoryItemCount(sub);
-    }
-  }
-  return count;
-}
-
-// Get all items from a category recursively (for search)
-function getAllCategoryItems(category: PanelCategory): { panelKey: EventsPanelType; categoryPath: string }[] {
-  const results: { panelKey: EventsPanelType; categoryPath: string }[] = [];
-  
-  if (category.items) {
-    for (const panelKey of category.items) {
-      results.push({ panelKey, categoryPath: category.label });
-    }
-  }
-  
-  if (category.subcategories) {
-    for (const sub of category.subcategories) {
-      const subItems = getAllCategoryItems(sub);
-      for (const item of subItems) {
-        results.push({
-          panelKey: item.panelKey,
-          categoryPath: `${category.label} › ${item.categoryPath}`,
-        });
-      }
-    }
-  }
-  
-  return results;
-}
-
-/**
- * Simple fuzzy match - checks if all characters in pattern appear in str in order
- */
-function fuzzyMatch(pattern: string, str: string): { match: boolean; score: number } {
-  const patternLower = pattern.toLowerCase();
-  const strLower = str.toLowerCase();
-
-  if (patternLower.length === 0) return { match: true, score: 0 };
-
-  let patternIdx = 0;
-  let score = 0;
-  let consecutiveBonus = 0;
-
-  for (let i = 0; i < strLower.length && patternIdx < patternLower.length; i++) {
-    if (strLower[i] === patternLower[patternIdx]) {
-      // Bonus for consecutive matches
-      score += 1 + consecutiveBonus;
-      consecutiveBonus += 1;
-      // Bonus for matching at word start
-      if (i === 0 || str[i - 1] === " ") {
-        score += 2;
-      }
-      patternIdx++;
-    } else {
-      consecutiveBonus = 0;
-    }
-  }
-
-  return {
-    match: patternIdx === patternLower.length,
-    score,
-  };
-}
+import { PanelExplorer } from "./PanelExplorer";
 
 /** Props for the recursive CategoryNode component */
 interface CategoryNodeProps {
@@ -294,18 +124,18 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
   const [isOpen, setIsOpen] = useState(false);
   const customRegistry = useCustomPanelRegistry(isOpen || isCustomPanelRef(value));
   const customPanels = useMemo(() => listSelectableCustomPanels(customRegistry), [customRegistry]);
-  const luaCatalog = useLuaPanelCatalog(isOpen || isLuaPanelRef(value));
-  const luaPanels = useMemo(() => (luaCatalog.data ?? []).flatMap((project) =>
-    (["release", "main"] as const).filter((channel) => project[channel]).map((channel) => ({
-      ref: luaPanelRef(project.id, channel), icon: project[channel]?.icon,
-      label: channel === "release" ? `${project.name} ${project.release?.tag ?? ""}`.trim() : `${project.name} (main)`,
-    }))), [luaCatalog.data]);
+  const [explorerHost, setExplorerHost] = useState<HTMLElement | "floating" | null>(null);
+  const luaCatalog = useLuaPanelCatalog(isOpen || explorerHost !== null || isLuaPanelRef(value));
+  const luaPanels = useMemo(() => trackedLuaPanelOptions(luaCatalog.data ?? []), [luaCatalog.data]);
   const selectedLua = parseLuaPanelRef(value);
+  const trackedSelection = luaPanels.find((candidate) => candidate.ref === value);
+  // A saved or shared layout can name a module you don't track; name it from the public list.
+  const publicModules = usePublicLuaPanels(!!selectedLua && !trackedSelection && luaCatalog.isFetched);
   const selectedCustom = isCustomPanelRef(value) ? resolveCustomPanel(value, customRegistry) : null;
   const selectedOption = selectedCustom
-    ? { value, label: selectedCustom.panel?.name ?? selectedCustom.panelId ?? "Unavailable developer panel", icon: <Blocks className="h-4 w-4" /> }
+    ? { value, label: selectedCustom.panel?.name ?? selectedCustom.panelId ?? "Unavailable developer panel", icon: <Wrench className="h-4 w-4" /> }
     : selectedLua ? (() => {
-      const item = luaPanels.find((candidate) => candidate.ref === value);
+      const item = trackedSelection ?? publicLuaPanelOptions(publicModules.data ?? []).find((candidate) => candidate.ref === value);
       return { value, label: item?.label ?? `Module (${selectedLua.channel})`, icon: <ModuleIcon name={item?.icon} className="h-4 w-4" /> };
     })()
     : getPanelOption(value);
@@ -441,7 +271,7 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
       const haystack = `${item.panel.name} ${item.panel.description ?? ""} ${item.installation.manifest.plugin.name} ${item.installation.repository}`;
       const { match, score } = fuzzyMatch(searchQuery, haystack);
       if (match) results.push({
-        option: { value: item.ref, label: item.panel.name, icon: <Blocks className="h-4 w-4" /> },
+        option: { value: item.ref, label: item.panel.name, icon: <Wrench className="h-4 w-4" /> },
         category: `Developer › ${item.installation.manifest.plugin.name}`,
         score,
       });
@@ -456,7 +286,25 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
   }, [searchQuery, isPanelVisible, customPanels, luaPanels]);
 
   const handleSelect = (panelValue: EventsPanelType) => {
+    rememberRecentPanel(panelValue);
     onChange(panelValue);
+    setIsOpen(false);
+    setDropdownPosition(null);
+    setSearchQuery("");
+    setExpandedPaths(new Set());
+    closeExplorer();
+  };
+
+  // Give focus back to the panel header the explorer was opened from.
+  const closeExplorer = () => {
+    if (!explorerHost) return;
+    setExplorerHost(null);
+    requestAnimationFrame(() => triggerRef.current?.focus());
+  };
+
+  // The explorer covers the panel this selector belongs to; without one it floats over the page.
+  const openExplorer = () => {
+    setExplorerHost(containerRef.current?.closest<HTMLElement>("[data-panel-explorer-host]") ?? "floating");
     setIsOpen(false);
     setDropdownPosition(null);
     setSearchQuery("");
@@ -509,8 +357,8 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
           onKeyDown={handleKeyDown}
         >
           {/* Search input */}
-          <div className="p-2 border-b">
-            <div className="relative">
+          <div className="flex items-center gap-1.5 p-2 border-b">
+            <div className="relative min-w-0 flex-1">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <input
                 ref={searchInputRef}
@@ -521,6 +369,14 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
                 className="w-full pl-8 pr-2 py-1.5 text-sm bg-transparent border rounded focus:outline-none focus:ring-1 focus:ring-ring"
               />
             </div>
+            <button
+              type="button"
+              onClick={openExplorer}
+              title="Browse every panel and module"
+              className="inline-flex shrink-0 items-center gap-1 rounded border px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <Compass className="size-3.5" /> Explore
+            </button>
           </div>
 
           {/* Results */}
@@ -572,7 +428,7 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
                     <div>
                       <button type="button" onClick={() => toggleExpanded("Lua")} className="w-full px-2 py-1.5 text-left text-sm font-medium rounded-sm flex items-center gap-1.5 hover:bg-accent/50">
                         <ChevronRight className={cn("size-4 transition-transform", expandedPaths.has("Lua") && "rotate-90")} />
-                        <Blocks className="h-4 w-4 text-muted-foreground" /> Addons
+                        <Blocks className="h-4 w-4 text-muted-foreground" /> Modules
                         <span className="ml-auto text-xs text-muted-foreground">{luaPanels.length}</span>
                       </button>
                       {expandedPaths.has("Lua") && <div className="ml-2 border-l pl-1">{luaPanels.map((item) => (
@@ -586,12 +442,12 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
                     <div>
                       <button type="button" onClick={() => toggleExpanded("Custom")} className="w-full px-2 py-1.5 text-left text-sm font-medium rounded-sm flex items-center gap-1.5 hover:bg-accent/50">
                         <ChevronRight className={cn("size-4 transition-transform", expandedPaths.has("Custom") && "rotate-90")} />
-                        <Blocks className="h-4 w-4 text-muted-foreground" /> Developer
+                        <Wrench className="h-4 w-4 text-muted-foreground" /> Developer
                         <span className="ml-auto text-xs text-muted-foreground">{customPanels.length}</span>
                       </button>
                       {expandedPaths.has("Custom") && <div className="ml-2 border-l pl-1">{customPanels.map((item) => (
                         <button key={item.ref} type="button" onClick={() => handleSelect(item.ref)} className={cn("w-full pl-6 pr-2 py-1.5 text-left text-sm rounded-sm flex items-center gap-2 hover:bg-accent", item.ref === value && "bg-accent/50")}>
-                          <Blocks className="h-4 w-4 text-muted-foreground" /><span className="min-w-0"><span className="block truncate">{item.panel.name}</span><span className="block truncate text-[10px] text-muted-foreground">{item.installation.manifest.plugin.name}</span></span>
+                          <Wrench className="h-4 w-4 text-muted-foreground" /><span className="min-w-0"><span className="block truncate">{item.panel.name}</span><span className="block truncate text-[10px] text-muted-foreground">{item.installation.manifest.plugin.name}</span></span>
                         </button>
                       ))}</div>}
                     </div>
@@ -605,6 +461,21 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
           </ScrollArea>
         </div>,
         portalContainer,
+      )}
+
+      {explorerHost && (explorerHost !== "floating" || portalContainer) && createPortal(
+        <PanelExplorer
+          value={value}
+          onSelect={handleSelect}
+          onClose={closeExplorer}
+          isPanelVisible={isPanelVisible}
+          trackedModules={luaPanels}
+          modulesStatus={luaCatalog.isError ? "error" : luaCatalog.isLoading ? "loading" : "ready"}
+          onRetryModules={() => void luaCatalog.refetch()}
+          customPanels={customPanels}
+          floating={explorerHost === "floating"}
+        />,
+        explorerHost === "floating" ? portalContainer! : explorerHost,
       )}
     </div>
   );
