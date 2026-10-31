@@ -40,6 +40,7 @@ import {
   TALENT_GRID_COLUMNS,
   TALENT_GRID_GAP,
   TALENT_GRID_WIDTH,
+  TALENT_MOBILE_MAX_WIDTH,
   TALENT_TOOLTIP_CLASS_NAME,
   TALENT_TOOLTIP_SSR_CLASS_NAME,
   canUseTalent,
@@ -1001,10 +1002,9 @@ export function TalentTreeViewer({
   const contextDatasetId = useDatasetId();
   const datasetId = datasetIdProp ?? contextDatasetId;
   const resolvedClassId = classId ?? data.id;
-  const isMobile = useIsMobile();
+  const isMobile = useIsMobile(TALENT_MOBILE_MAX_WIDTH);
   const [searchParams, setSearchParams] = useSearchParams();
   const tabTalentLists = useMemo(() => data.tabs.map((tab) => tab.talents), [data.tabs]);
-  const deepestTabRows = useMemo(() => Math.max(...data.tabs.map((tab) => talentGridRows(tab.talents)), 0), [data.tabs]);
   // Interactive mobile layout breaks out of the page's px-4 gutter (-mx-4)
   // so each tree card can use the whole screen width.
   const mobileLayout = isMobile && !compact && !readOnly;
@@ -1012,7 +1012,7 @@ export function TalentTreeViewer({
     ? "grid min-w-0 gap-2 grid-cols-3"
     : mobileLayout
       ? "-mx-4 grid min-w-0 gap-3"
-      : deepestTabRows > 7 ? "grid min-w-0 gap-4 xl:grid-cols-2 2xl:grid-cols-3" : "grid min-w-0 gap-4 xl:grid-cols-3";
+      : "grid min-w-0 gap-4 min-[768px]:grid-cols-2 min-[1100px]:grid-cols-3";
   const maxPoints = maxTalentPoints;
   const flavor = useMemo(() => ({ maxLevel, maxTalentPoints }), [maxLevel, maxTalentPoints]);
 

@@ -10,6 +10,7 @@ import { TalentTreeViewer } from "@/components/ui/TalentTreeViewer/TalentTreeVie
 import {
   TALENT_BUILD_PARAM,
   TALENT_COMPARE_PARAM,
+  TALENT_MOBILE_MAX_WIDTH,
   type TalentPopularity,
   type TalentPopularitySelection,
   aggregateTalentPopularity,
@@ -128,7 +129,7 @@ export function TalentCalculatorPage() {
     ? `Plan, compare, and share ${productName ? `${productName} ` : ""}${selectedOption.name} talent builds.`
     : `Plan, compare, and share ${productName ? `${productName} ` : ""}class talent builds.`;
 
-  const isMobile = useIsMobile();
+  const isMobile = useIsMobile(TALENT_MOBILE_MAX_WIDTH);
 
   // Top Builds "Show all" overlay: store the ranking cohort in a compact URL
   // value, then reload its current top-15 builds when the page is opened.
