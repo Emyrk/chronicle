@@ -1,6 +1,6 @@
 # Beyond the best parse: a Chronicle rating proposal
 
-> **Discussion draft, not an approved scoring policy.** Start here for the case and the questions. See the [mathematical specification](mastery-renown-rating.md) for the current candidate formulas, worked examples, and implementation constraints.
+> **Discussion draft, not an approved scoring policy.** Start here for the case and the questions. See the [research on other log sites](log-sites-question-research.md) for the external comparison, and the [mathematical specification](mastery-renown-rating.md) for candidate formulas and implementation constraints.
 
 ## The 30-second version
 
@@ -28,6 +28,18 @@ A conservative **Ranked Mastery** could be used for competitive comparisons when
 | **What has this character accomplished?** | A witnessed history of breadth, repetition, and completions. | Distinct bosses, repeated kills, complete raids, later explicit milestones. |
 
 These are different questions. **We should not force them all into one number.** Before tuning coefficients, we should agree which answers belong on a profile, which belong on a leaderboard, and which should never be inferred from logs alone.
+
+## One foundation, two subjects: players and guilds
+
+The **persisted parse is the fundamental observation**, not a player-only rating. A scoring framework built from eligible parses should be reusable for both **characters** and **guilds**. That gives us a useful test for every proposed measure: “What does the analogous question mean for a raid team?”
+
+| Player question | Guild analogue |
+| --- | --- |
+| Can this character repeat a strong boss performance? | Can this roster repeatedly deliver strong boss performances together? |
+| How much evidence supports their Mastery? | Across how many eligible clears, encounters, and roster configurations have we seen that performance? |
+| How broad is this character's witnessed career? | What content has this guild completed, and how consistently has it returned? |
+
+**Reusable building block does not imply identical aggregation.** Averaging members' Mastery would reward roster selection rather than measure the raid's joint result. Guild identity, changing rosters, encounter coverage, and team outcomes need an explicit policy. We should research how existing log sites frame guild rankings and add guild-specific questions before choosing guild formulas. For now, this is a design requirement and open research question, not a claim that the current player prototype already scores guilds.
 
 ## Why a best-parse list is not enough
 
