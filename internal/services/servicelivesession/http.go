@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
@@ -128,7 +130,23 @@ func (s *Service) WebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, err := websocket.Accept(w, r, nil)
+	var acceptOptions *websocket.AcceptOptions
+	if len(s.originPatterns) > 0 {
+		origin := r.Header.Get("Origin")
+		allowed := false
+		for _, pattern := range s.originPatterns {
+			if matched, _ := path.Match(strings.ToLower(pattern), strings.ToLower(origin)); matched {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "Live session origin is not allowed."})
+			return
+		}
+		acceptOptions = &websocket.AcceptOptions{OriginPatterns: s.originPatterns}
+	}
+	conn, err := websocket.Accept(w, r, acceptOptions)
 	if err != nil {
 		return
 	}
