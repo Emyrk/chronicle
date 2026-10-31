@@ -58,7 +58,7 @@ describe("RootCommunityContext", () => {
 
     expect(markup).toContain("You’re viewing Chronicle across every community");
     expect(markup).toContain("Pick where you play for its logs, rankings, and game data.");
-    expect(markup).toContain("Turtle WoW");
+    expect(markup).toContain('aria-label="Browse communities"');
     expect(markup).not.toContain("href=");
   });
 
