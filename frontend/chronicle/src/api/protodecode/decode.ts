@@ -5676,6 +5676,20 @@ export class StreamCursor<T extends DescMessage> {
     // Try to load next header
     return this._loadNextEncounterHeader();
   }
+
+  /**
+   * Skip to the next encounter without decoding events.
+   * Uses dataLength from header to jump directly by byte offset.
+   */
+  skipEncounter(): boolean {
+    if (!this._currentHeader) return false;
+    if (this._messagesReadInEncounter > 0 || this._peekedMessage) {
+      return this.nextEncounter();
+    }
+    this.offset += this._currentHeader.dataLength;
+    this._bytesProcessed += this._currentHeader.dataLength;
+    return this._loadNextEncounterHeader();
+  }
   
   private _bytesInCurrentEncounter(): number {
     // Bytes read so far in current encounter's message data
@@ -5822,7 +5836,7 @@ class MappedStreamCursor<T extends DescMessage, E> {
   }
 
   nextEncounter(): boolean { return this.cursor.nextEncounter(); }
-  skipEncounter(): boolean { return this.cursor.nextEncounter(); }
+  skipEncounter(): boolean { return this.cursor.skipEncounter(); }
 }
 
 function activityFromMeta(meta: { activity: { guid: string; eventType: string }[] } | undefined): ReusableActivityEntry[] {
