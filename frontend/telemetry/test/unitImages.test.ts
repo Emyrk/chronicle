@@ -84,14 +84,30 @@ function webp(): Uint8Array {
   return new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x04, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]);
 }
 
+function glb(): Uint8Array {
+  const bytes = new Uint8Array(24);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(0, 0x46546c67, true);
+  view.setUint32(4, 2, true);
+  view.setUint32(8, bytes.byteLength, true);
+  view.setUint32(12, 4, true);
+  view.setUint32(16, 0x4e4f534a, true);
+  bytes.set(new TextEncoder().encode("{}  "), 20);
+  return bytes;
+}
+
+function truncatedGlb(): Uint8Array {
+  return new Uint8Array([0x67, 0x6c, 0x54, 0x46, 0x02, 0, 0, 0, 0x0c, 0, 0, 0]);
+}
+
 async function request(bucket: FakeBucket, path: string, init?: RequestInit): Promise<Response> {
   return unitImages.request(`http://example.test${path}`, init, { MAPS: bucket } as never);
 }
 
 test("parses, sorts, and normalizes unit image assignments", () => {
   const parsed = parseUnitImageManifest(manifest([
-    { name: "Totem", display_name: "Totem", entry_ids: [3902, 2523], images: { full: "unit-images/totem.webp" } },
-    { name: "Boss", display_name: "Ragnaros", entry_ids: [11502], images: { headshot: "unit-images/boss.png" } },
+    { name: "Totem", display_name: "Totem", entry_ids: [3902, 2523], images: { full: "unit-images/totem.webp" }, models: { raw: "unit-images/shared.glb" } },
+    { name: "Boss", display_name: "Ragnaros", entry_ids: [11502], images: { headshot: "unit-images/boss.png" }, models: { raw: "unit-images/shared.glb" } },
   ]));
   assert.deepEqual(parsed.units.map((item: { name: string }) => item.name), ["Boss", "Totem"]);
   assert.deepEqual(parsed.units[1]?.entry_ids, [2523, 3902]);
@@ -113,6 +129,9 @@ test("rejects ambiguous IDs, duplicate paths, invalid labels, and unsafe paths",
     { name: "One", entry_ids: [1], images: { full: "other/one.webp" } },
   ])), /clean unit-images/);
   assert.throws(() => parseUnitImageManifest(manifest([
+    { name: "One", entry_ids: [1], images: { full: "unit-images/one.webp" }, models: { raw: "unit-images/one.webp" } },
+  ])), /clean unit-images model path/);
+  assert.throws(() => parseUnitImageManifest(manifest([
     { name: "One", display_name: "Onyxia", entry_ids: [1], images: { full: "unit-images/one.webp" } },
     { name: "Two", display_name: " onYXia ", entry_ids: [2], images: { full: "unit-images/two.webp" } },
   ])), /duplicate unit image display name/);
@@ -128,6 +147,8 @@ test("Unit Image Foundry preserves full sources and offers brightness controls",
   assert.match(page, /item\.images\.full=full\.path/);
   assert.match(page, /if\(label==='full'\)\{const full=await uploadImage\(crop\.sourceFile\)/);
   assert.match(page, /label==='full'&&!crop\.sourceFile/);
+  assert.match(page, /Choose raw GLB/);
+  assert.match(page, /item\.models\.raw=result\.path/);
   assert.match(page, /context\.filter='brightness\('/);
 });
 
@@ -146,7 +167,19 @@ test("Unit Image Foundry uploads, previews, drafts, and publishes images", async
   assert.equal(preview.headers.get("Content-Type"), "image/webp");
   assert.deepEqual(new Uint8Array(await preview.arrayBuffer()), webp());
 
-  const units = [{ name: "ony-onyxia", display_name: "Onyxia", entry_ids: [10184], images: { headshot: uploaded.path } }];
+  const modelForm = new FormData();
+  modelForm.append("file", new File([glb()], "Onyxia.glb", { type: "model/gltf-binary" }));
+  const modelUpload = await request(bucket, "/internal/api/v1/unit-images/assets", { method: "POST", body: modelForm });
+  assert.equal(modelUpload.status, 201);
+  const uploadedModel = await modelUpload.json() as { path: string; size: number };
+  assert.match(uploadedModel.path, /^unit-images\/[0-9a-f]{64}-onyxia\.glb$/);
+  assert.equal(uploadedModel.size, glb().byteLength);
+
+  const modelPreview = await request(bucket, `/internal/api/v1/unit-images/preview/${uploadedModel.path.split("/").pop()}`);
+  assert.equal(modelPreview.status, 200);
+  assert.equal(modelPreview.headers.get("Content-Type"), "model/gltf-binary");
+
+  const units = [{ name: "ony-onyxia", display_name: "Onyxia", entry_ids: [10184], images: { headshot: uploaded.path }, models: { raw: uploadedModel.path } }];
   const saved = await request(bucket, "/internal/api/v1/unit-images/draft", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -173,6 +206,7 @@ test("Unit Image Foundry uploads, previews, drafts, and publishes images", async
   assert.equal(stateBody.has_draft, false);
   assert.deepEqual(stateBody.published.units, units);
   assert.equal(stateBody.asset_sizes[uploaded.path], webp().byteLength);
+  assert.equal(stateBody.asset_sizes[uploadedModel.path], glb().byteLength);
 });
 
 test("Unit Image Foundry rejects invalid images and cross-site mutations", async () => {
@@ -181,11 +215,16 @@ test("Unit Image Foundry rejects invalid images and cross-site mutations", async
   form.append("file", new File([new Uint8Array([1, 2, 3])], "bad.webp", { type: "image/webp" }));
   const invalid = await request(bucket, "/internal/api/v1/unit-images/assets", { method: "POST", body: form });
   assert.equal(invalid.status, 400);
-  assert.match((await invalid.json() as { error: string }).error, /must be AVIF, JPEG, PNG, or WebP/);
+  assert.match((await invalid.json() as { error: string }).error, /must be AVIF, JPEG, PNG, WebP, or GLB/);
+
+  const truncatedModelForm = new FormData();
+  truncatedModelForm.append("file", new File([truncatedGlb()], "truncated.glb", { type: "model/gltf-binary" }));
+  const truncatedModel = await request(bucket, "/internal/api/v1/unit-images/assets", { method: "POST", body: truncatedModelForm });
+  assert.equal(truncatedModel.status, 400);
 
   const oversized = await request(bucket, "/internal/api/v1/unit-images/assets", {
     method: "POST",
-    body: new Uint8Array(21 * 1024 * 1024 + 1),
+    body: new Uint8Array(51 * 1024 * 1024 + 1),
   });
   assert.equal(oversized.status, 413);
 

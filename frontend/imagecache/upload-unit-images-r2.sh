@@ -43,7 +43,8 @@ stage = pathlib.Path(stage_path)
 assets = stage / "assets"
 assets.mkdir(parents=True)
 label_re = re.compile(r"^[a-z][a-z0-9_-]*$")
-extensions = {".avif", ".jpeg", ".jpg", ".png", ".webp"}
+image_extensions = {".avif", ".jpeg", ".jpg", ".png", ".webp"}
+model_extensions = {".glb"}
 
 try:
     request = urllib.request.Request(manifest_url, headers={"User-Agent": "Chronicle unit image publisher"})
@@ -75,6 +76,7 @@ for raw in plan:
         display_name = display_name.strip()
     entry_ids = raw.get("entry_ids")
     image_files = raw.get("images")
+    model_files = raw.get("models")
     if not name or not isinstance(entry_ids, list) or not entry_ids:
         raise SystemExit("every plan entry needs a name and entry_ids")
     if any(not isinstance(entry, int) or isinstance(entry, bool) or entry <= 0 or entry > 0xFFFFFFFF for entry in entry_ids):
@@ -95,14 +97,33 @@ for raw in plan:
             if not label_re.fullmatch(label):
                 raise SystemExit(f"{name}: invalid image label {label!r}")
             source = pathlib.Path(filename).expanduser().resolve()
-            if not source.is_file() or source.suffix.lower() not in extensions:
+            if not source.is_file() or source.suffix.lower() not in image_extensions:
                 raise SystemExit(f"{name}/{label}: unsupported or missing image {source}")
             digest = hashlib.sha256(source.read_bytes()).hexdigest()
             asset_name = f"{digest}-{source.name.lower()}"
             shutil.copyfile(source, assets / asset_name)
             images[label] = f"unit-images/{asset_name}"
 
+    if model_files is None:
+        models = dict(units[existing].get("models") or {}) if existing is not None else {}
+    else:
+        if not isinstance(model_files, dict) or not model_files:
+            raise SystemExit(f"{name}: models must be a non-empty label-to-file object")
+        models = {}
+        for label, filename in model_files.items():
+            if not label_re.fullmatch(label):
+                raise SystemExit(f"{name}: invalid model label {label!r}")
+            source = pathlib.Path(filename).expanduser().resolve()
+            if not source.is_file() or source.suffix.lower() not in model_extensions:
+                raise SystemExit(f"{name}/{label}: unsupported or missing model {source}")
+            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            asset_name = f"{digest}-{source.name.lower()}"
+            shutil.copyfile(source, assets / asset_name)
+            models[label] = f"unit-images/{asset_name}"
+
     entry = {"name": name, "entry_ids": entry_ids, "images": images}
+    if models:
+        entry["models"] = models
     if display_name is not None:
         entry["display_name"] = display_name
     elif existing is not None and units[existing].get("display_name") is not None:
@@ -148,9 +169,20 @@ for unit in units:
             raise SystemExit(f"duplicate image path: {asset_path}")
         paths.add(asset_path)
 
+    models = unit.get("models")
+    if models is not None:
+        if not isinstance(models, dict) or not models:
+            raise SystemExit(f"{name}: invalid models")
+        for label, asset_path in models.items():
+            if not label_re.fullmatch(label) or not isinstance(asset_path, str):
+                raise SystemExit(f"{name}: invalid model mapping")
+            if not re.fullmatch(r"unit-images/[^/\\]+\.glb", asset_path):
+                raise SystemExit(f"{name}/{label}: invalid model path {asset_path!r}")
+
 units.sort(key=lambda unit: unit["name"])
 (stage / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
-print(f"manifest: {len(units)} units, {len(assigned)} entry IDs, {len(paths)} images")
+model_refs = sum(len(unit.get("models", {})) for unit in units)
+print(f"manifest: {len(units)} units, {len(assigned)} entry IDs, {len(paths)} images, {model_refs} model refs")
 for asset in sorted(assets.iterdir()):
     mime = mimetypes.guess_type(asset.name)[0] or "application/octet-stream"
     print(f"asset: {asset.name} ({asset.stat().st_size} bytes, {mime})")
@@ -159,7 +191,7 @@ PY
 cat "$STAGE/manifest.json"
 
 if [[ "$PUBLISH" != "--publish" ]]; then
-  echo "Dry run only. Re-run with --publish to upload images and publish manifest.json last."
+  echo "Dry run only. Re-run with --publish to upload assets and publish manifest.json last."
   exit 0
 fi
 

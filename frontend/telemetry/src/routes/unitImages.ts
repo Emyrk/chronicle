@@ -4,6 +4,7 @@ import {
   UNIT_IMAGE_MANIFEST_FORMAT,
   emptyUnitImageManifest,
   isUnitImageAssetPath,
+  isUnitModelAssetPath,
   parseUnitImageManifest,
   type UnitImageManifest,
 } from "../unitImages/manifest";
@@ -15,11 +16,11 @@ const MANIFEST_KEY = "unit-images/manifest.json";
 const DRAFT_KEY = "unit-images/draft.json";
 const LOCK_KEY = "unit-images/publish.lock";
 const LOCK_STALE_AFTER_MS = 10 * 60 * 1000;
-const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
-const MAX_IMAGE_REQUEST_BYTES = MAX_IMAGE_BYTES + 1024 * 1024;
+const MAX_ASSET_BYTES = 50 * 1024 * 1024;
+const MAX_ASSET_REQUEST_BYTES = MAX_ASSET_BYTES + 1024 * 1024;
 
 interface LockLease { etag: string }
-interface ImageType { extension: "avif" | "jpg" | "png" | "webp"; contentType: string }
+interface AssetType { extension: "avif" | "glb" | "jpg" | "png" | "webp"; contentType: string }
 
 unitImages.use("/internal/api/v1/unit-images/*", async (c, next) => {
   if (c.req.method === "GET" || c.req.method === "HEAD") return next();
@@ -35,7 +36,7 @@ unitImages.use("/internal/api/v1/unit-images/*", async (c, next) => {
 unitImages.use(
   "/internal/api/v1/unit-images/assets",
   bodyLimit({
-    maxSize: MAX_IMAGE_REQUEST_BYTES,
+    maxSize: MAX_ASSET_REQUEST_BYTES,
     onError: (c) => c.json({ error: "Upload request is too large" }, 413),
   })
 );
@@ -73,7 +74,9 @@ async function loadState(bucket: R2Bucket) {
 }
 
 async function loadAssetSizes(bucket: R2Bucket, manifests: UnitImageManifest[]): Promise<Record<string, number>> {
-  const paths = new Set(manifests.flatMap((manifest) => manifest.units.flatMap((unit) => Object.values(unit.images))));
+  const paths = new Set(manifests.flatMap((manifest) => manifest.units.flatMap((unit) => [
+    ...Object.values(unit.images), ...Object.values(unit.models ?? {}),
+  ])));
   const entries = await Promise.all([...paths].map(async (path) => {
     const object = await bucket.head(path);
     return object ? [path, object.size] as const : undefined;
@@ -108,7 +111,34 @@ async function releaseLock(bucket: R2Bucket, lease: LockLease): Promise<void> {
   await putLock(bucket, lockBody("released"), { etagMatches: lease.etag });
 }
 
-function imageType(bytes: Uint8Array): ImageType | undefined {
+function isGlb(bytes: Uint8Array): boolean {
+  if (bytes.length < 20) return false;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(0, true) !== 0x46546c67 || view.getUint32(4, true) !== 2) return false;
+  if (view.getUint32(8, true) !== bytes.byteLength) return false;
+
+  let offset = 12;
+  let chunkIndex = 0;
+  while (offset < bytes.byteLength) {
+    if (offset + 8 > bytes.byteLength) return false;
+    const chunkLength = view.getUint32(offset, true);
+    const chunkType = view.getUint32(offset + 4, true);
+    if (chunkLength === 0 || chunkLength % 4 !== 0 || offset + 8 + chunkLength > bytes.byteLength) return false;
+    if (chunkIndex === 0) {
+      if (chunkType !== 0x4e4f534a) return false;
+      try {
+        JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes.slice(offset + 8, offset + 8 + chunkLength)));
+      } catch {
+        return false;
+      }
+    }
+    offset += 8 + chunkLength;
+    chunkIndex += 1;
+  }
+  return chunkIndex > 0 && offset === bytes.byteLength;
+}
+
+function assetType(bytes: Uint8Array): AssetType | undefined {
   if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
     && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
     return { extension: "webp", contentType: "image/webp" };
@@ -120,6 +150,9 @@ function imageType(bytes: Uint8Array): ImageType | undefined {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
     return { extension: "jpg", contentType: "image/jpeg" };
   }
+  if (isGlb(bytes)) {
+    return { extension: "glb", contentType: "model/gltf-binary" };
+  }
   if (bytes.length >= 12 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
     const brand = new TextDecoder().decode(bytes.slice(8, 12));
     if (brand === "avif" || brand === "avis") return { extension: "avif", contentType: "image/avif" };
@@ -127,7 +160,7 @@ function imageType(bytes: Uint8Array): ImageType | undefined {
   return undefined;
 }
 
-function safeFilename(name: string, extension: ImageType["extension"]): string {
+function safeFilename(name: string, extension: AssetType["extension"]): string {
   const stem = name.replace(/\.[^.]+$/, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return `${stem || "unit-image"}.${extension}`;
 }
@@ -155,7 +188,7 @@ unitImages.get("/internal/api/v1/unit-images", async (c) => {
 
 unitImages.get("/internal/api/v1/unit-images/preview/:filename", async (c) => {
   const path = `unit-images/${c.req.param("filename")}`;
-  if (!isUnitImageAssetPath(path)) return c.json({ error: "Invalid unit image asset path" }, 400);
+  if (!isUnitImageAssetPath(path) && !isUnitModelAssetPath(path)) return c.json({ error: "Invalid unit image asset path" }, 400);
   const object = await c.env.MAPS.get(path);
   if (!object) return c.json({ error: "Unit image asset not found" }, 404);
   const headers = new Headers();
@@ -171,10 +204,10 @@ unitImages.post("/internal/api/v1/unit-images/assets", async (c) => {
     const body = await c.req.parseBody();
     const file = body.file;
     if (!(file instanceof File)) throw new TypeError("file is required");
-    if (file.size === 0 || file.size > MAX_IMAGE_BYTES) throw new TypeError("unit image must be between 1 byte and 20 MB");
+    if (file.size === 0 || file.size > MAX_ASSET_BYTES) throw new TypeError("unit image asset must be between 1 byte and 50 MB");
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const type = imageType(bytes);
-    if (!type) throw new TypeError("unit image must be AVIF, JPEG, PNG, or WebP");
+    const type = assetType(bytes);
+    if (!type) throw new TypeError("unit image asset must be AVIF, JPEG, PNG, WebP, or GLB");
     const path = `unit-images/${await digest(bytes)}-${safeFilename(file.name, type.extension)}`;
     await c.env.MAPS.put(path, bytes, {
       httpMetadata: { contentType: type.contentType, cacheControl: "public, max-age=31536000, immutable" },
@@ -233,10 +266,12 @@ unitImages.post("/internal/api/v1/unit-images/publish", async (c) => {
     if (!state.draftObject) return c.json({ error: "There is no saved draft to publish" }, 400);
     if ((input.version ?? null) !== state.draftObject.httpEtag) return c.json({ error: "Draft changed in another tab. Reload before publishing." }, 409);
     const missing: string[] = [];
-    await Promise.all(state.draft.units.flatMap((unit) => Object.values(unit.images)).map(async (path) => {
+    await Promise.all(state.draft.units.flatMap((unit) => [
+      ...Object.values(unit.images), ...Object.values(unit.models ?? {}),
+    ]).map(async (path) => {
       if (!(await c.env.MAPS.head(path))) missing.push(path);
     }));
-    if (missing.length > 0) throw new TypeError(`missing uploaded unit images: ${missing.sort().join(", ")}`);
+    if (missing.length > 0) throw new TypeError(`missing uploaded unit image assets: ${missing.sort().join(", ")}`);
     await c.env.MAPS.put(MANIFEST_KEY, jsonText(state.draft), {
       httpMetadata: { contentType: "application/json", cacheControl: "public, max-age=3600" },
     });

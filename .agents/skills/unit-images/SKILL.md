@@ -18,7 +18,7 @@ Create square portraits from the real WoW creature models, review them as a set,
 - Treat the repository's encounter identities as the source of truth for creature entry IDs.
 - Use one manifest record per boss. Name records `<instance-prefix>-<boss-slug>`, for example `mc-ragnaros`, and set `display_name` to the canonical human-readable boss name used for name lookup.
 - Never publish a draft until the operator has reviewed the actual contact sheet and explicitly approved publication.
-- Publishing affects every Chronicle server. Upload immutable images first and publish `manifest.json` last.
+- Publishing affects every Chronicle server. Upload immutable images and raw models first, then publish `manifest.json` last.
 
 ## Workflow
 
@@ -57,6 +57,12 @@ go run ./scripts/dbcdata extract-models \
 ```
 
 The skin normally lives beside the model. Preserve client path capitalization. `CreatureModelData` may report legacy `.mdx` names, but the MPQ stores the converted model as `.m2`; change the extension to `.m2` before extraction.
+
+### 2a. Keep the raw animated model
+
+The extracted GLB is a publishable unit asset, not a temporary intermediate. It contains the skinned mesh, skeleton, embedded textures, and the available named locomotion clips. Preserve it byte-for-byte and attach it under `models.raw`. Shared model-and-skin outputs may use the same content-addressed path across several unit records.
+
+Animation consumers use the GLB clip names emitted by the extractor. In Three.js, load the scene and animations with `GLTFLoader`, create `new THREE.AnimationMixer(gltf.scene)`, select a clip such as `Stand`, `Walk`, or `Run`, call `mixer.clipAction(clip).play()`, then call `mixer.update(deltaSeconds)` every frame. Do not assume every clip exists; use `Stand` as the idle fallback.
 
 ### 3. Render headshots
 
@@ -114,6 +120,9 @@ The renderer always writes PNG. Convert approved full and cropped PNGs to high-q
     "images": {
       "full": "/absolute/path/to/ragnaros-full.webp",
       "headshot": "/absolute/path/to/ragnaros-headshot.webp"
+    },
+    "models": {
+      "raw": "/absolute/path/to/ragnaros.glb"
     }
   }
 ]
@@ -140,9 +149,9 @@ frontend/imagecache/upload-unit-images-r2.sh plan.json --publish
 Or publish the reviewed draft in the Unit Image Foundry. After publication:
 
 1. Fetch `https://icons.chronicleclassic.com/unit-images/manifest.json`.
-2. Confirm every expected name, entry ID, and `headshot` path.
-3. Fetch every new image URL and require HTTP 200.
-4. Confirm each object is an image and the expected byte size is nonzero.
+2. Confirm every expected name, entry ID, `headshot`, `full`, and `models.raw` path.
+3. Fetch every new image and model URL and require HTTP 200.
+4. Confirm each object has the expected content type and a nonzero byte size.
 5. Report the exact published boss count and any bosses intentionally omitted.
 
 ## Gotchas

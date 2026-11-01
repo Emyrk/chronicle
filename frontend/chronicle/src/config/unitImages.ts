@@ -7,6 +7,7 @@ export interface UnitImageSet {
   display_name?: string;
   entry_ids: number[];
   images: Record<string, string>;
+  models?: Record<string, string>;
 }
 
 export interface UnitImageManifest {
@@ -85,7 +86,22 @@ export function parseUnitImageManifest(value: unknown): UnitImageManifest {
     }));
     if (Object.keys(images).length === 0) throw new Error(`Unit image set ${index} has no images`);
 
-    return { name, ...(display_name === undefined ? {} : { display_name }), entry_ids, images };
+    let models: Record<string, string> | undefined;
+    if (item.models !== undefined) {
+      if (!item.models || typeof item.models !== "object" || Array.isArray(item.models)) {
+        throw new Error(`Unit image set ${index} must have labeled models`);
+      }
+      models = Object.fromEntries(Object.entries(item.models as Record<string, unknown>).map(([label, rawPath]) => {
+        if (!/^[a-z][a-z0-9_-]*$/.test(label)) throw new Error(`Unit image set ${index} has an invalid model label: ${label}`);
+        if (typeof rawPath !== "string" || !/^unit-images\/[^/\\]+\.glb$/.test(rawPath)) {
+          throw new Error(`Unit image set ${index} has an invalid model path for ${label}`);
+        }
+        return [label, rawPath];
+      }));
+      if (Object.keys(models).length === 0) throw new Error(`Unit image set ${index} has no models`);
+    }
+
+    return { name, ...(display_name === undefined ? {} : { display_name }), entry_ids, images, ...(models === undefined ? {} : { models }) };
   });
 
   return { format: UNIT_IMAGE_MANIFEST_FORMAT, units };
@@ -116,6 +132,16 @@ export function unitImageUrlByName(
   baseUrl = ICON_CDN,
 ): string | undefined {
   const path = displayName === undefined ? undefined : published?.get(normalizeUnitImageName(displayName))?.images[label];
+  return path === undefined ? undefined : unitImageAssetUrl(path, baseUrl);
+}
+
+export function unitImageModelUrl(
+  entry: number | undefined,
+  label: string,
+  published: UnitImageLookup | undefined,
+  baseUrl = ICON_CDN,
+): string | undefined {
+  const path = entry === undefined ? undefined : published?.get(entry)?.models?.[label];
   return path === undefined ? undefined : unitImageAssetUrl(path, baseUrl);
 }
 

@@ -7,6 +7,7 @@ import {
   parseUnitImageManifest,
   unitImageAssetUrl,
   unitImageManifestUrl,
+  unitImageModelUrl,
   unitImageUrl,
   unitImageUrlByName,
 } from "./unitImages";
@@ -20,6 +21,9 @@ const onyxia = {
   images: {
     headshot: "unit-images/abc-onyxia-headshot.webp",
     full: "unit-images/def-onyxia-full.webp",
+  },
+  models: {
+    raw: "unit-images/ghi-onyxia.glb",
   },
 };
 
@@ -35,6 +39,9 @@ describe("unitImages", () => {
     expect(unitImageAssetUrl(onyxia.images.headshot, "https://icons.example/root/")).toBe(
       "https://icons.example/root/unit-images/abc-onyxia-headshot.webp",
     );
+    expect(unitImageModelUrl(10184, "raw", new Map([[10184, onyxia]]), "https://icons.example/root/")).toBe(
+      "https://icons.example/root/unit-images/ghi-onyxia.glb",
+    );
   });
 
   it("rejects invalid or ambiguous assignments", () => {
@@ -47,6 +54,10 @@ describe("unitImages", () => {
       format: UNIT_IMAGE_MANIFEST_FORMAT,
       units: [{ ...onyxia, images: { headshot: "other/onyxia.webp" } }],
     })).toThrow(/invalid path/);
+    expect(() => parseUnitImageManifest({
+      format: UNIT_IMAGE_MANIFEST_FORMAT,
+      units: [{ ...onyxia, models: { raw: "unit-images/onyxia.webp" } }],
+    })).toThrow(/invalid model path/);
     expect(() => parseUnitImageManifest({
       format: UNIT_IMAGE_MANIFEST_FORMAT,
       units: [onyxia, { ...onyxia, name: "other", display_name: "Other" }],
