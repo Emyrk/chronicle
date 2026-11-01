@@ -46,6 +46,8 @@ interface PeekableCursor {
   streamType: StreamType;
   cursor: FastDamageCursor | FastHealCursor | FastUnitPositionCursor | FastUnitResourcesCursor | FastResourceChangeCursor | FastExtraAttackCursor | FastSlainCursor | FastResurrectionCursor | FastCastCursor | FastAuraCursor | FastSpellGoCursor | FastAuraCastCursor | FastSpellStartCursor | FastSpellFailCursor | FastUnitClassificationCursor | FastDispelCursor | FastInterruptCursor | FastCombatantInfoCursor | FastAbsorbedCursor | FastConsumeCursor | FastRaidGroupCursor;
   peeked: { event: AnyReusableEvent; encounterID: string; firstTimestamp: Date } | null;
+  /** When set, encounters other than this one are skipped without decoding. */
+  onlyEncounterID: string | null;
 }
 
 /**
@@ -55,9 +57,15 @@ interface PeekableCursor {
 function peekCursor(pc: PeekableCursor): { event: AnyReusableEvent; encounterID: string; firstTimestamp: Date } | null {
   if (pc.peeked) return pc.peeked;
   
-  // Advance to next encounter if needed
-  while (pc.cursor.currentHeader && !pc.cursor.hasMoreInEncounter) {
-    pc.cursor.nextEncounter();
+  // Advance to next encounter if needed, skipping unwanted encounters undecoded
+  while (pc.cursor.currentHeader) {
+    if (pc.onlyEncounterID !== null && pc.cursor.currentHeader.encounterID !== pc.onlyEncounterID) {
+      pc.cursor.skipEncounter();
+    } else if (!pc.cursor.hasMoreInEncounter) {
+      pc.cursor.nextEncounter();
+    } else {
+      break;
+    }
   }
   
   if (!pc.cursor.currentHeader) return null;
@@ -83,7 +91,7 @@ function consumePeeked(pc: PeekableCursor): void {
 /**
  * Create a cursor for a stream.
  */
-function createCursor(stream: WorkerRequest["streams"][0]): PeekableCursor {
+function createCursor(stream: WorkerRequest["streams"][0], onlyEncounterID: string | null): PeekableCursor {
   const cursor = stream.type === "heal" 
     ? new FastHealCursor(stream.data)
     : stream.type === "unit_position"
@@ -130,6 +138,8 @@ function createCursor(stream: WorkerRequest["streams"][0]): PeekableCursor {
     streamType: stream.type as StreamType,
     cursor,
     peeked: null,
+    // unit_classification feeds UnitState, which needs every encounter.
+    onlyEncounterID: stream.type === "unit_classification" ? null : onlyEncounterID,
   };
 }
 
@@ -173,8 +183,12 @@ function processStreams<TResult>(
   // is always fetched but should only be forwarded to processEvent when requested).
   const processorStreamSet = new Set(processor.streams);
   
-  // Create peekable cursors for all streams
-  const cursors = streams.map(createCursor);
+  // Create peekable cursors for all streams. Processors that opt in skip the
+  // segments of unselected encounters when exactly one is selected.
+  const onlyEncounterID = processor.skipUnselectedEncounters && context.selectedEncounterIds.size === 1
+    ? context.selectedEncounterIds.values().next().value ?? null
+    : null;
+  const cursors = streams.map((stream) => createCursor(stream, onlyEncounterID));
   
   // Track the base timestamp for computing globalOffsetMilli across encounters.
   // This is the firstTimestamp of the earliest encounter seen.
