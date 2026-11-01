@@ -12,6 +12,7 @@ const input = {
   client: { session_id: "session-1", capabilities: [{ id: "page", version: 1 }] },
   runId: "run-1",
   threadId: "thread-1",
+  webSearch: false,
   messages: [
     { id: "message-1", role: "user" as const, content: "Where are rankings?" },
     { id: "message-2", role: "assistant" as const, content: "Open Rankings." },
@@ -45,6 +46,13 @@ describe("inference request builders", () => {
       instance: "instance-1",
       message: input.messages[2],
     });
+  });
+
+  it("only requests web search when the composer toggle is enabled", () => {
+    expect(buildSiteHelpRunRequest({ ...input, webSearch: true }, selection)).toMatchObject({ web_search: true });
+    expect(buildInstanceAnalystRunRequest({ ...input, webSearch: true }, selection, "instance-1")).toMatchObject({ web_search: true });
+    expect(buildSiteHelpRunRequest(input, selection)).not.toHaveProperty("web_search");
+    expect(buildInstanceAnalystRunRequest(input, selection, "instance-1")).not.toHaveProperty("web_search");
   });
 
   it("only requests debug snapshots when the authorized toggle is enabled", () => {

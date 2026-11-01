@@ -17,6 +17,11 @@ const (
 type Message = contracts.Message
 type ToolCall = contracts.ToolCall
 type ToolDefinition = contracts.ToolDefinition
+type ServerToolKind = contracts.ServerToolKind
+type ServerToolDefinition = contracts.ServerToolDefinition
+
+const ServerToolWebSearch = contracts.ServerToolWebSearch
+
 type ModelCapabilities = contracts.ModelCapabilities
 type ModelDescriptor = contracts.ModelDescriptor
 type ChatRequest = contracts.ChatRequest

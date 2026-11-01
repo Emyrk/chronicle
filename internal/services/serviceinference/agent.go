@@ -43,6 +43,20 @@ type assistant struct {
 	// ClientCapability is the browser capability whose tools this assistant may call.
 	ClientCapability string
 	Tools            []ToolDefinition
+	ServerTools      []ServerToolDefinition
+}
+
+const webResearchPrompt = "\n\nWhen web search is available, use it for current or external information. Prefer authoritative sources, distinguish sourced facts from inference, and cite the sources used."
+
+var webResearchTools = []ServerToolDefinition{{
+	Kind: ServerToolWebSearch, MaxUses: 3, MaxResults: 5, MaxTotalResults: 12,
+}}
+
+func withServerTools(a assistant, enabled bool) assistant {
+	if !enabled {
+		a.ServerTools = nil
+	}
+	return a
 }
 
 var pageCatalog = []map[string]string{
@@ -54,15 +68,15 @@ var pageCatalog = []map[string]string{
 	{"path": "/account/ai", "name": "AI assistant settings", "description": "Turn AI features and individual assistants on or off, and connect OpenRouter"},
 }
 var assistants = map[string]assistant{
-	"site-help": {ID: "site-help", Name: "Ask Chronicle", Description: "Site help on every page: finding pages and answering rankings questions.", System: "You are Chronicle site help. Explain how to navigate Chronicle and answer rankings questions using tools. Never invent pages or ranking results.", Tools: []ToolDefinition{
+	"site-help": {ID: "site-help", Name: "Ask Chronicle", Description: "Site help on every page: finding pages, answering rankings questions, and researching external information.", System: "You are Chronicle site help. Explain how to navigate Chronicle and answer rankings questions using tools. Never invent pages or ranking results." + webResearchPrompt, Tools: []ToolDefinition{
 		{Name: "list_pages", Description: "List known Chronicle pages.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "find_pages", Description: "Find Chronicle pages by name or description.", Parameters: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","maxLength":100}},"required":["query"],"additionalProperties":false}`)},
 		{Name: "query_rankings", Description: "Query a bounded Chronicle player leaderboard.", Parameters: json.RawMessage(`{"type":"object","properties":{"instance_name":{"type":"string","maxLength":100},"encounter":{"type":"string","maxLength":100},"class":{"type":"string","maxLength":30},"spec":{"type":"string","maxLength":50},"role":{"type":"string","maxLength":30},"metric":{"type":"string","enum":["dps","hps"]},"limit":{"type":"integer","minimum":1,"maximum":10}},"required":["instance_name"],"additionalProperties":false}`)},
-	}},
-	addonWorkshopPanelAssistantID: {ID: addonWorkshopPanelAssistantID, Name: "Module Workshop: instance panels", Description: "Builds and edits Lua panel modules in the Module Workshop.", Durable: true, ContextType: "lua_project", ClientCapability: luaEditorCapabilityID, System: luaWorkshopSystem},
-	"instance-analyst": {ID: "instance-analyst", Name: "Raid instance analyst", Description: "Answers questions about a raid on its instance page and can adjust that page's panels.", Durable: true, ContextType: "instance", ClientCapability: instancePageCapabilityID, System: "You are a Chronicle raid instance analyst. Use instance_summary for bounded metadata, encounter, and roster context. You may inspect, query, or update the current instance UI only through advertised client tools. Do not claim access to raw event streams. If a client tool returns user_rejected or capability_unavailable, do not retry the same mutation; explain why it could not be completed. After stale_state, inspect once for fresh state before retrying at most once.", Tools: []ToolDefinition{
+	}, ServerTools: webResearchTools},
+	addonWorkshopPanelAssistantID: {ID: addonWorkshopPanelAssistantID, Name: "Module Workshop: instance panels", Description: "Builds and edits Lua panel modules in the Module Workshop.", Durable: true, ContextType: "lua_project", ClientCapability: luaEditorCapabilityID, System: luaWorkshopSystem + webResearchPrompt, ServerTools: webResearchTools},
+	"instance-analyst": {ID: "instance-analyst", Name: "Raid instance analyst", Description: "Answers questions about a raid on its instance page, researches external context, and can adjust that page's panels.", Durable: true, ContextType: "instance", ClientCapability: instancePageCapabilityID, System: "You are a Chronicle raid instance analyst. Use instance_summary for bounded metadata, encounter, and roster context. You may inspect, query, or update the current instance UI only through advertised client tools. Do not claim access to raw event streams. If a client tool returns user_rejected or capability_unavailable, do not retry the same mutation; explain why it could not be completed. After stale_state, inspect once for fresh state before retrying at most once." + webResearchPrompt, Tools: []ToolDefinition{
 		{Name: "instance_summary", Description: "Return bounded metadata, encounters, and players for this authorized raid instance.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
-	}},
+	}, ServerTools: webResearchTools},
 }
 
 type debugRunContext struct {
@@ -94,12 +108,24 @@ func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model strin
 		}
 		debugMessages = append(debugMessages, debugMessage)
 	}
-	debugTools := make([]agui.DebugTool, 0, len(a.Tools))
+	debugTools := make([]agui.DebugTool, 0, len(a.Tools)+len(a.ServerTools))
 	for _, tool := range a.Tools {
 		debugTools = append(debugTools, agui.DebugTool{
 			Name:        tool.Name,
 			Description: tool.Description,
 			Parameters:  slices.Clone(tool.Parameters),
+		})
+	}
+	for _, tool := range a.ServerTools {
+		parameters, _ := json.Marshal(map[string]int{
+			"max_uses":          tool.MaxUses,
+			"max_results":       tool.MaxResults,
+			"max_total_results": tool.MaxTotalResults,
+		})
+		debugTools = append(debugTools, agui.DebugTool{
+			Name:        string(tool.Kind),
+			Description: "Provider-hosted web search for current and external information.",
+			Parameters:  parameters,
 		})
 	}
 	return agui.DebugSnapshotEvent{
@@ -465,6 +491,7 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAssistantEnabled(w, r, a.ID) {
 		return
 	}
+	a = withServerTools(a, req.WebSearch)
 	if _, err := s.db.GetInferenceRunByIdempotencyKey(r.Context(), database.GetInferenceRunByIdempotencyKeyParams{UserID: uid, IdempotencyKey: req.RunID}); err == nil {
 		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "This run_id was already used."})
 		return
@@ -564,6 +591,7 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		Status:         "running",
 		IdempotencyKey: req.RunID,
 		Debug:          req.Debug,
+		WebSearch:      req.WebSearch,
 		LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(runLease), Valid: true},
 	}
 	var durableInput *Message
@@ -814,6 +842,7 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 		requestMessages := messages
 		if finalizationOnly {
 			requestAssistant.Tools = nil
+			requestAssistant.ServerTools = nil
 			requestMessages = append(slices.Clone(messages), Message{
 				Role:    RoleSystem,
 				Content: "The tool-step limit has been reached. Respond to the user now using the available results. Do not call any more tools.",
@@ -831,7 +860,7 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 		started := false
 		finish := FinishReasonOther
 		var callUsage *Usage
-		err := provider.StreamChat(ctx, credential, ChatRequest{Model: model, Messages: requestMessages, Tools: requestAssistant.Tools}, func(event StreamEvent) error {
+		err := provider.StreamChat(ctx, credential, ChatRequest{Model: model, Messages: requestMessages, Tools: requestAssistant.Tools, ServerTools: requestAssistant.ServerTools}, func(event StreamEvent) error {
 			switch event.Type {
 			case StreamEventTextDelta:
 				if !started {

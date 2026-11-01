@@ -67,7 +67,8 @@ Server-enforced limits include:
 - 256 KiB run request bodies.
 - At most 50 messages in ephemeral history.
 - At most the 50 most recent durable messages, additionally bounded to 256 KiB and trimmed to begin at a user message.
-- Five model iterations and ten tool calls per run.
+- Five model iterations and ten Chronicle-executed tool calls per run.
+- OpenRouter web research is off by default and enabled per message from the composer. When enabled, the provider-hosted tool is bounded to three searches, five results per search, and twelve total results per model call.
 - 16 KiB tool arguments, 64 KiB tool output, and 256 KiB assistant text.
 
 The runtime stores token usage and terminal run status. It does not persist hidden reasoning. Reconnect/replay of interrupted SSE output and managed Chronicle credits are intentionally outside the initial scope.
@@ -76,7 +77,7 @@ The runtime stores token usage and terminal run status. It does not persist hidd
 
 Tools are server-defined, allowlisted, and strictly decode bounded JSON arguments.
 
-`site-help` can list and search known Chronicle pages and issue bounded ranking queries. `instance-analyst` can request a bounded instance summary containing metadata, encounters, and roster information. It does not receive raw combat-event streams.
+All OpenRouter assistants may use the provider-hosted web-search tool only when the user enables the composer toggle for that message; the backend omits the tool otherwise. The choice is stored on durable runs so a client-tool continuation preserves the original opt-in. Their shared prompt asks them to prefer authoritative sources and cite what they use. `site-help` can also list and search known Chronicle pages and issue bounded ranking queries. `instance-analyst` can request a bounded instance summary containing metadata, encounters, and roster information. It does not receive raw combat-event streams.
 
 ## Extension points
 
