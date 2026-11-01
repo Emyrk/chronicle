@@ -195,24 +195,35 @@ if [[ "$PUBLISH" != "--publish" ]]; then
   exit 0
 fi
 
-if ! command -v rclone >/dev/null; then
-  echo "rclone is required to publish" >&2
-  exit 1
-fi
-if ! rclone listremotes | grep -qx "${R2_REMOTE}:"; then
-  echo "rclone remote '${R2_REMOTE}:' is not configured" >&2
+upload_file() {
+  local source="$1"
+  local name="$2"
+  local content_type="$3"
+  local cache_control="$4"
+  if [[ "$UPLOAD_TOOL" == "rclone" ]]; then
+    rclone copyto "$source" "${R2_REMOTE}:${R2_BUCKET%/}/${R2_PATH#/}/${name}" \
+      --header-upload "Cache-Control: ${cache_control}" \
+      --header-upload "Content-Type: ${content_type}"
+  else
+    pnpm -C "${SCRIPT_DIR}/../telemetry" exec wrangler r2 object put \
+      "${R2_BUCKET%/}/${R2_PATH#/}/${name}" --file "$source" --content-type "$content_type" \
+      --cache-control "$cache_control" --remote --force
+  fi
+}
+
+if command -v rclone >/dev/null && rclone listremotes | grep -qx "${R2_REMOTE}:"; then
+  UPLOAD_TOOL="rclone"
+elif command -v pnpm >/dev/null && [[ -x "${SCRIPT_DIR}/../telemetry/node_modules/.bin/wrangler" ]]; then
+  UPLOAD_TOOL="wrangler"
+else
+  echo "publishing requires either configured rclone remote '${R2_REMOTE}:' or frontend/telemetry's Wrangler install" >&2
   exit 1
 fi
 
-DEST="${R2_REMOTE}:${R2_BUCKET%/}/${R2_PATH#/}"
 for asset in "$STAGE"/assets/*; do
   content_type="$(python3 -c 'import mimetypes,sys; print(mimetypes.guess_type(sys.argv[1])[0] or "application/octet-stream")' "$asset")"
-  rclone copyto "$asset" "$DEST/$(basename "$asset")" \
-    --header-upload "Cache-Control: public, max-age=31536000, immutable" \
-    --header-upload "Content-Type: ${content_type}"
+  upload_file "$asset" "$(basename "$asset")" "$content_type" "public, max-age=31536000, immutable"
 done
-rclone copyto "$STAGE/manifest.json" "$DEST/manifest.json" \
-  --header-upload "Cache-Control: public, max-age=3600" \
-  --header-upload "Content-Type: application/json"
+upload_file "$STAGE/manifest.json" "manifest.json" "application/json" "public, max-age=3600"
 
 echo "Published: ${CDN_BASE%/}/${R2_PATH#/}/manifest.json"
