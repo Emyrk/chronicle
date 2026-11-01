@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
@@ -118,6 +119,16 @@ test("rejects ambiguous IDs, duplicate paths, invalid labels, and unsafe paths",
   assert.deepEqual(emptyUnitImageManifest(), { format: UNIT_IMAGE_MANIFEST_FORMAT, units: [] });
   assert.equal(isUnitImageAssetPath("unit-images/one.webp"), true);
   assert.equal(isUnitImageAssetPath("unit-images/nested/one.webp"), false);
+});
+
+test("Unit Image Foundry preserves full sources and offers brightness controls", () => {
+  const page = readFileSync(new URL("../src/dashboard/unitImages.tsx", import.meta.url), "utf8");
+  assert.match(page, /Start over from full/);
+  assert.match(page, /id="brightness"/);
+  assert.match(page, /item\.images\.full=full\.path/);
+  assert.match(page, /if\(label==='full'\)\{const full=await uploadImage\(crop\.sourceFile\)/);
+  assert.match(page, /label==='full'&&!crop\.sourceFile/);
+  assert.match(page, /context\.filter='brightness\('/);
 });
 
 test("Unit Image Foundry uploads, previews, drafts, and publishes images", async () => {

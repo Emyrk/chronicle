@@ -13,7 +13,7 @@ Create square portraits from the real WoW creature models, review them as a set,
 ## Rules
 
 - Render the source creature model and skin from the configured WoW client. Do not synthesize or redraw the creature.
-- Default to the `headshot` label. Add `full` only when the operator explicitly asks for a full-body variant.
+- Publish both `full` and `headshot` for crop-based portraits. `full` keeps the uncropped source; `headshot` is the reviewed square crop.
 - Keep generated images and extracted models out of git. Store them under `.tmp-unit-images/<set>/` or another ignored local work directory.
 - Treat the repository's encounter identities as the source of truth for creature entry IDs.
 - Use one manifest record per boss. Name records `<instance-prefix>-<boss-slug>`, for example `mc-ragnaros`, and set `display_name` to the canonical human-readable boss name used for name lookup.
@@ -103,7 +103,7 @@ Review for:
 
 ### 5. Prepare the manifest plan
 
-The renderer always writes PNG. Convert approved PNGs to high-quality WebP, then create a local plan containing only `headshot` unless another label was requested:
+The renderer always writes PNG. Convert approved full and cropped PNGs to high-quality WebP, then create a local plan containing both variants:
 
 ```json
 [
@@ -112,6 +112,7 @@ The renderer always writes PNG. Convert approved PNGs to high-quality WebP, then
     "display_name": "Ragnaros",
     "entry_ids": [11502],
     "images": {
+      "full": "/absolute/path/to/ragnaros-full.webp",
       "headshot": "/absolute/path/to/ragnaros-headshot.webp"
     }
   }
@@ -126,7 +127,7 @@ frontend/imagecache/upload-unit-images-r2.sh plan.json
 
 The dry run must show no duplicate entry ownership, duplicate paths, unsupported image types, or missing files.
 
-The browser Foundry at `/internal/unit-images` is an equivalent publishing path. Use it when interactive crop adjustments are easier. Save a draft first, then show the exact draft diff before requesting publish approval.
+The browser Foundry at `/internal/unit-images` is the preferred path for interactive cropping. Choosing a new source and uploading a crop automatically stores the uncropped source as `full`. Use **Start over from full** to discard an unsatisfactory crop, adjust zoom, position, and brightness, then upload a replacement `headshot`. Save a draft first, then show the exact draft diff before requesting publish approval.
 
 ### 6. Publish and verify
 
@@ -158,6 +159,7 @@ Or publish the reviewed draft in the Unit Image Foundry. After publication:
 - [ ] Roster matches repository encounter identities.
 - [ ] Every boss has a verified entry ID, display ID, model path, and skin.
 - [ ] Portraits use real client models, not AI art or miniature renders.
+- [ ] Every cropped portrait retains its uncropped source as `full`.
 - [ ] Contact sheet received explicit operator approval.
 - [ ] Dry run passed.
 - [ ] Publish received separate explicit approval.

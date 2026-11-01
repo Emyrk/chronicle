@@ -42,6 +42,10 @@ The manifest is deliberately separate from the miniature registry. A unit can ha
 
 The frontend parser and lookup helpers live in `frontend/chronicle/src/config/unitImages.ts`.
 
+## Foundry cropping
+
+The browser Foundry keeps every newly chosen source image as the unit's `full` variant before uploading the adjusted crop. The crop editor defaults to a small brightness lift, exposes a brightness slider, and provides **Start over from full** so an existing crop can be discarded and recreated without finding or uploading the source again. Resetting adjustments restores the default zoom, position, and brightness without replacing the stored full source.
+
 ## Publishing
 
 Create a local plan whose `images` values point to source files:
