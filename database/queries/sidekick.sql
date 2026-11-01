@@ -126,17 +126,18 @@ RETURNING *;
 
 -- name: UpsertSidekickWoWDirectory :exec
 INSERT INTO sidekick_wow_directories (
-  sidekick_id, id, path, tenant_name, tenant_base_url, realmlist, game_format
+  sidekick_id, id, path, tenant_name, tenant_base_url, realmlist, log_format, inspection
 )
 VALUES (
-  @sidekick_id, @id, @path, @tenant_name, @tenant_base_url, @realmlist, @game_format
+  @sidekick_id, @id, @path, @tenant_name, @tenant_base_url, @realmlist, @log_format, @inspection::jsonb
 )
 ON CONFLICT (sidekick_id, id) WHERE id IS NOT NULL DO UPDATE SET
   path = EXCLUDED.path,
   tenant_name = EXCLUDED.tenant_name,
   tenant_base_url = EXCLUDED.tenant_base_url,
   realmlist = EXCLUDED.realmlist,
-  game_format = EXCLUDED.game_format,
+  log_format = EXCLUDED.log_format,
+  inspection = EXCLUDED.inspection,
   updated_at = NOW();
 
 -- name: DeleteSidekickWoWDirectoriesExcept :execrows

@@ -44,13 +44,15 @@ func decodeSidekickCapabilities(payload []byte) (chroniclesdk.SidekickAutoUpload
 	return capabilities, nil
 }
 
-func supportsAutoUpload(capabilities chroniclesdk.SidekickAutoUploadCapabilities, format chroniclesdk.SidekickGameFormat, mode chroniclesdk.SidekickAutoUploadMode) bool {
+func supportsAutoUpload(capabilities chroniclesdk.SidekickAutoUploadCapabilities, mode chroniclesdk.SidekickAutoUploadMode) bool {
 	if mode == chroniclesdk.SidekickAutoUploadDisabled {
 		return true
 	}
-	for _, supported := range capabilities[format] {
-		if supported == mode {
-			return true
+	for _, modes := range capabilities {
+		for _, supported := range modes {
+			if supported == mode {
+				return true
+			}
 		}
 	}
 	return false
@@ -60,7 +62,7 @@ func normalizeSidekickConfig(config chroniclesdk.SidekickConfig, capabilities ch
 	normalized := chroniclesdk.DefaultSidekickConfig()
 	normalized.Archive = config.Archive
 	for id, directory := range config.WoWDirectories {
-		if !supportsAutoUpload(capabilities, directory.GameFormat, directory.AutoUpload) {
+		if !supportsAutoUpload(capabilities, directory.AutoUpload) {
 			directory.AutoUpload = chroniclesdk.SidekickAutoUploadDisabled
 		}
 		normalized.WoWDirectories[id] = directory
@@ -70,8 +72,8 @@ func normalizeSidekickConfig(config chroniclesdk.SidekickConfig, capabilities ch
 
 func validateSidekickCapabilities(config chroniclesdk.SidekickConfig, capabilities chroniclesdk.SidekickAutoUploadCapabilities) error {
 	for id, directory := range config.WoWDirectories {
-		if !supportsAutoUpload(capabilities, directory.GameFormat, directory.AutoUpload) {
-			return fmt.Errorf("auto-upload mode %q is not supported for %q by directory %q", directory.AutoUpload, directory.GameFormat, id)
+		if !supportsAutoUpload(capabilities, directory.AutoUpload) {
+			return fmt.Errorf("auto-upload mode %q is not supported by directory %q", directory.AutoUpload, id)
 		}
 	}
 	return nil
