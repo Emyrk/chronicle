@@ -17,6 +17,11 @@ import type {
 } from "@emyrk/chronicle-panel-sdk/v1";
 ```
 
+The snapshot includes instance and encounter timing, log capabilities, players,
+units, current selections, Sync state, panel dimensions, and theme. When a log
+is associated with a guild, `snapshot.instance.guild` contains its `id` and
+`name`; the field is absent for logs without a guild.
+
 ## Event streams and protobuf
 
 ```ts

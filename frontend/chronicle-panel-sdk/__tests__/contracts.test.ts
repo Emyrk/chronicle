@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { ChroniclePanelBreakoutOptionsV1 } from "../src/v1";
+import type {
+  ChroniclePanelBreakoutOptionsV1,
+  ChroniclePanelSnapshotV1,
+} from "../src/v1";
 import {
   canonicalizeCustomPanelRef,
   createCustomPanelRef,
@@ -23,6 +26,41 @@ describe("custom panel SDK contracts", () => {
     };
 
     expect(options.onClose).toBeTypeOf("function");
+  });
+
+  it("exposes optional guild context in panel snapshots", () => {
+    const snapshot: ChroniclePanelSnapshotV1 = {
+      instance: {
+        id: "instance-id",
+        title: "Molten Core",
+        guild: { id: "guild-id", name: "Raid Guild" },
+        startTime: "2026-01-01T00:00:00Z",
+        endTime: "2026-01-01T01:00:00Z",
+        capabilities: [],
+        encounters: [],
+        players: {},
+        units: {},
+      },
+      selection: { encounterIds: [], playerIds: [], enemyIds: [] },
+      sync: { enabled: false, playing: false, timestampMs: null },
+      panel: {
+        panelInstanceId: "panel-id",
+        option: null,
+        width: 800,
+        height: 600,
+        renderMode: "default",
+        poppedOut: false,
+      },
+      theme: { mode: "dark" },
+    };
+
+    expect(snapshot.instance.guild).toEqual({
+      id: "guild-id",
+      name: "Raid Guild",
+    });
+
+    delete snapshot.instance.guild;
+    expect(snapshot.instance.guild).toBeUndefined();
   });
 
   it("normalizes GitHub repository inputs", () => {
