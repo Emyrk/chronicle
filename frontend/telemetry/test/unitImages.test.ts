@@ -149,6 +149,12 @@ test("Unit Image Foundry preserves full sources and offers brightness controls",
   assert.match(page, /label==='full'&&!crop\.sourceFile/);
   assert.match(page, /Choose raw GLB/);
   assert.match(page, /item\.models\.raw=result\.path/);
+  assert.match(page, /model-viewer\/4\.1\.0\/model-viewer\.min\.js/);
+  assert.match(page, /id=\"model-preview\"/);
+  assert.match(page, /camera-controls auto-rotate autoplay/);
+  assert.match(page, /viewer\.availableAnimations/);
+  assert.match(page, /id=\"model-animation\"/);
+  assert.match(page, /id=\"model-playback\"/);
   assert.match(page, /context\.filter='brightness\('/);
 });
 
