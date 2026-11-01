@@ -17,6 +17,7 @@ func TestLuaWorkshopIsDurableAndUsesOnlyLuaEditorTools(t *testing.T) {
 	require.True(t, a.Durable)
 	require.Equal(t, "lua_project", a.ContextType)
 	require.Empty(t, a.Tools)
+	require.Equal(t, webResearchTools, a.ServerTools)
 
 	capability, err := advertisedClient(&chroniclesdk.InferenceClient{SessionID: "session-1", Capabilities: []chroniclesdk.InferenceClientCapability{
 		{ID: "instance-page", Version: 2, ScopeType: "instance", ScopeID: "instance-1"},

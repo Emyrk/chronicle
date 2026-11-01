@@ -115,6 +115,7 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAssistantEnabled(w, r, assistantDefinition.ID) {
 		return
 	}
+	assistantDefinition = withServerTools(assistantDefinition, run.WebSearch)
 	assistantDefinition = withClientTools(assistantDefinition, capability)
 	writer := agui.NewWriter(w)
 	if err := writer.Write(agui.RunStartedEvent{ThreadID: thread.ID.String(), RunID: run.IdempotencyKey, ProtocolVersion: "1.0"}); err != nil {

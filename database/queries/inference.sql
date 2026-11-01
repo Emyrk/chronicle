@@ -108,8 +108,8 @@ ORDER BY created_at, id;
 INSERT INTO inference_runs (
   thread_id, user_id, connection_id, assistant_id, model, status,
   idempotency_key, input_tokens, output_tokens, error_code, completed_at,
-  lease_expires_at, debug, iteration_count, tool_call_count
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+  lease_expires_at, debug, iteration_count, tool_call_count, web_search
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 RETURNING *;
 
 -- name: GetInferenceRunByOwner :one

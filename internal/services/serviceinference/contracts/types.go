@@ -46,6 +46,22 @@ type ToolDefinition struct {
 	Parameters  json.RawMessage
 }
 
+// ServerToolKind identifies a provider-hosted tool that executes inside one
+// model call rather than returning a tool call for Chronicle to execute.
+type ServerToolKind string
+
+const (
+	ServerToolWebSearch ServerToolKind = "web_search"
+)
+
+// ServerToolDefinition configures a bounded provider-hosted tool.
+type ServerToolDefinition struct {
+	Kind            ServerToolKind
+	MaxUses         int
+	MaxResults      int
+	MaxTotalResults int
+}
+
 // ModelCapabilities describes features Chronicle can safely request.
 type ModelCapabilities struct {
 	Streaming bool
@@ -66,6 +82,7 @@ type ChatRequest struct {
 	Model       string
 	Messages    []Message
 	Tools       []ToolDefinition
+	ServerTools []ServerToolDefinition
 	Temperature *float64
 	MaxTokens   *int
 }
