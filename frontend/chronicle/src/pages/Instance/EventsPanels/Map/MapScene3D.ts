@@ -48,10 +48,11 @@ import {
 } from "./dungeonMeshes";
 import { MAP_CURSOR, MAP_HOSTILE_CURSOR, MAP_UNIT_CURSOR } from "./mapCursors";
 import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, topDownMapDistance, type MapPoint, type MapViewport } from "./mapModel";
-import { deepBreathLaneForSpell, extendedDeepBreathLane } from "./deepBreathLanes";
-import { projectMapDebugPath, type MapDebugOverlay } from "./mapDebugOverlays";
+import { deepBreathPathForPrimarySpell, ONYXIA_DEEP_BREATH_RADIUS_YARDS } from "./deepBreathLanes";
+import { projectMapDebugPoints, type MapDebugOverlay } from "./mapDebugOverlays";
 import {
   DEFAULT_EFFECT_OPTIONS,
+  DEEP_BREATH_POINT_LINGER_MS,
   deriveActiveDeepBreaths,
   deriveActiveEffects,
   deriveCastIcons,
@@ -90,7 +91,9 @@ const MAX_EXTRAPOLATE_MS = 250;
 const BEAM_HEIGHT = 1.5;
 const BOLT_WIDTH = 0.18;
 const DEBUG_PATH_SEGMENT_YARDS = 4;
-const DEEP_BREATH_WIDTH_YARDS = 18;
+const MAX_DEEP_BREATH_POINTS = 20;
+const DEEP_BREATH_AREA_OPACITY = 0.12;
+const DEEP_BREATH_POINT_SIZE_PX = 7;
 const DEEP_BREATH_GROUND_LIFT = 0.12;
 // How far a melee attacker steps toward its target, at most.
 const LUNGE_DISTANCE = 1.2;
@@ -496,6 +499,8 @@ interface UnitObject {
 }
 
 export interface MapScene3DEffects {
+  /** Active server world map, used to gate encounter-specific effects. */
+  mapId: number | undefined;
   fx: EncounterEffects | null;
   /** `visibleGuids` is ignored: the scene limits effects to its own units. */
   options: DeriveEffectsOptions;
@@ -848,10 +853,13 @@ export class MapScene3D {
   private effectCursorMs = 0;
   private readonly activeEffects: ActiveEffect[] = [];
   private readonly activeDeepBreaths: ActiveDeepBreath[] = [];
-  // The lane of the breath being drawn, fixed when it starts: Onyxia keeps
-  // flying and turning afterwards, but the fire stays where she breathed.
-  private deepBreathLaneLock: { routeSpellId: number; startMs: number; dx: number; dz: number; laneX: number; laneZ: number; length: number; floorY: number } | null = null;
-  private readonly deepBreathLane: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  // The server path being drawn, fixed when it starts: Onyxia keeps flying and
+  // turning afterwards, but the ground-target sequence stays in room space.
+  private deepBreathPathLock: { primarySpellId: number; startMs: number } | null = null;
+  private readonly deepBreathAreaPositions: THREE.Vector3[] = [];
+  private readonly deepBreathAreas: THREE.InstancedMesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>;
+  private readonly deepBreathLine: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  private readonly deepBreathPoints: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
   private readonly effectOptions: DeriveEffectsOptions = { ...DEFAULT_EFFECT_OPTIONS };
   private readonly visibleUnits = { has: (guid: string) => this.units.has(guid) };
   private readonly effectColors = new Map<string, THREE.Color>();
@@ -1045,19 +1053,53 @@ export class MapScene3D {
       glow(),
       MAX_EFFECT_PRIMITIVES,
     );
-    const breathMaterial = new THREE.MeshBasicMaterial({
-      color: 0xff6a00,
-      transparent: true,
-      opacity: 0.55,
-      blending: THREE.AdditiveBlending,
-      depthTest: false,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-    this.deepBreathLane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), breathMaterial);
-    this.deepBreathLane.visible = false;
-    this.deepBreathLane.frustumCulled = false;
-    this.deepBreathLane.renderOrder = 2;
+    this.deepBreathAreas = new THREE.InstancedMesh(
+      new THREE.CircleGeometry(1, 64).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({
+        color: 0xff6a00,
+        transparent: true,
+        opacity: DEEP_BREATH_AREA_OPACITY,
+        depthTest: false,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+      MAX_DEEP_BREATH_POINTS,
+    );
+    this.deepBreathAreas.count = 0;
+    this.deepBreathAreas.visible = false;
+    this.deepBreathAreas.frustumCulled = false;
+    this.deepBreathAreas.renderOrder = 1;
+    this.deepBreathAreas.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.deepBreathLine = new THREE.Line(
+      new THREE.BufferGeometry(),
+      new THREE.LineBasicMaterial({
+        color: 0xff6a00,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+      }),
+    );
+    this.deepBreathLine.visible = false;
+    this.deepBreathLine.frustumCulled = false;
+    this.deepBreathLine.renderOrder = 2;
+    this.deepBreathPoints = new THREE.Points(
+      new THREE.BufferGeometry(),
+      new THREE.PointsMaterial({
+        color: 0xffa040,
+        size: DEEP_BREATH_POINT_SIZE_PX,
+        sizeAttenuation: false,
+        transparent: true,
+        opacity: 0.95,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+      }),
+    );
+    this.deepBreathPoints.visible = false;
+    this.deepBreathPoints.frustumCulled = false;
+    this.deepBreathPoints.renderOrder = 3;
     // Health bars: camera-facing quads drawn over everything, in instance order.
     this.bars = this.createPool(
       new THREE.PlaneGeometry(1, 1),
@@ -1070,7 +1112,9 @@ export class MapScene3D {
       this.rings,
       this.bolts,
       this.slashes,
-      this.deepBreathLane,
+      this.deepBreathAreas,
+      this.deepBreathLine,
+      this.deepBreathPoints,
       this.bars,
     );
     for (let index = 0; index < MAX_COMBAT_TEXT; index++) {
@@ -1306,34 +1350,44 @@ export class MapScene3D {
     if (!dungeon) return;
     for (const overlay of this.debugOverlays) {
       if (overlay.kind !== "path") continue;
-      const projected = projectMapDebugPath(overlay, dungeon.bounds, this.aspect, GROUND_WIDTH);
-      if (!projected) continue;
-      // A single room-sized plane disappears below Onyxia's uneven floor except
-      // near its centre. Build short independently height-probed strips so the
-      // fixed footprint follows the mesh and remains visible end to end.
-      const segmentCount = Math.max(1, Math.ceil(projected.length / (DEBUG_PATH_SEGMENT_YARDS * dungeon.scale)));
-      const segmentLength = projected.length / segmentCount;
-      const yaw = Math.atan2(-projected.direction.x, -projected.direction.z);
-      for (let index = 0; index < segmentCount; index++) {
-        const distance = segmentLength * (index + 0.5);
-        const x = projected.from.x + projected.direction.x * distance;
-        const z = projected.from.z + projected.direction.z * distance;
-        const floor = this.floorHeights.heightAt(`debug-overlay-${overlay.id}-${index}`, x, z);
-        const material = new THREE.MeshBasicMaterial({
-          color: overlay.color,
-          transparent: true,
-          opacity: overlay.opacity,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          side: THREE.DoubleSide,
-        });
-        const path = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material);
-        path.position.set(x, floor + DEEP_BREATH_GROUND_LIFT * dungeon.scale, z);
-        path.rotation.y = yaw;
-        path.scale.set(overlay.widthYards * dungeon.scale, 1, segmentLength * 1.05);
-        path.renderOrder = 2;
-        path.userData.debugOverlayId = overlay.id;
-        this.debugOverlayGroup.add(path);
+      const projected = projectMapDebugPoints(overlay.points, overlay.mapId, dungeon.bounds, this.aspect, GROUND_WIDTH);
+      if (projected.length < 2) continue;
+      // Independently height-probe short strips along every polyline segment so
+      // non-straight server paths follow both their exact centerline and the mesh.
+      let stripIndex = 0;
+      for (let pointIndex = 1; pointIndex < projected.length; pointIndex++) {
+        const from = projected[pointIndex - 1];
+        const to = projected[pointIndex];
+        const dx = to.x - from.x;
+        const dz = to.z - from.z;
+        const length = Math.hypot(dx, dz);
+        if (length <= 1e-4) continue;
+        const directionX = dx / length;
+        const directionZ = dz / length;
+        const stripCount = Math.max(1, Math.ceil(length / (DEBUG_PATH_SEGMENT_YARDS * dungeon.scale)));
+        const stripLength = length / stripCount;
+        const yaw = Math.atan2(-directionX, -directionZ);
+        for (let index = 0; index < stripCount; index++, stripIndex++) {
+          const distance = stripLength * (index + 0.5);
+          const x = from.x + directionX * distance;
+          const z = from.z + directionZ * distance;
+          const floor = this.floorHeights.heightAt(`debug-overlay-${overlay.id}-${stripIndex}`, x, z);
+          const material = new THREE.MeshBasicMaterial({
+            color: overlay.color,
+            transparent: true,
+            opacity: overlay.opacity,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+          });
+          const path = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material);
+          path.position.set(x, floor + DEEP_BREATH_GROUND_LIFT * dungeon.scale, z);
+          path.rotation.y = yaw;
+          path.scale.set(overlay.widthYards * dungeon.scale, 1, stripLength * 1.05);
+          path.renderOrder = 2;
+          path.userData.debugOverlayId = overlay.id;
+          this.debugOverlayGroup.add(path);
+        }
       }
     }
   }
@@ -2099,8 +2153,13 @@ export class MapScene3D {
     this.ownerLines.material.dispose();
     this.trailLines.geometry.dispose();
     this.trailLines.material.dispose();
-    this.deepBreathLane.geometry.dispose();
-    this.deepBreathLane.material.dispose();
+    this.deepBreathAreas.geometry.dispose();
+    this.deepBreathAreas.material.dispose();
+    this.deepBreathAreas.dispose();
+    this.deepBreathLine.geometry.dispose();
+    this.deepBreathLine.material.dispose();
+    this.deepBreathPoints.geometry.dispose();
+    this.deepBreathPoints.material.dispose();
     for (const pool of [this.rings, this.bolts, this.slashes, this.bars]) {
       pool.geometry.dispose();
       pool.material.dispose();
@@ -2472,45 +2531,51 @@ export class MapScene3D {
   }
 
   private hideDeepBreath() {
-    this.deepBreathLane.visible = false;
-    this.deepBreathLaneLock = null;
+    this.deepBreathAreas.count = 0;
+    this.deepBreathAreas.visible = false;
+    this.deepBreathLine.visible = false;
+    this.deepBreathPoints.visible = false;
+    this.deepBreathPathLock = null;
   }
 
-  // Resolves the fixed room-space footprint from the Breath spell sequence;
-  // Onyxia's current position and facing never alter the geometry.
-  private deepBreathLaneFrom(routeSpellId: number) {
+  // Projects the authoritative ordered server targets into room space. Onyxia's
+  // current position and facing never alter this fixed geometry.
+  private setDeepBreathPath(primarySpellId: number, startMs: number): boolean {
     const mesh = this.dungeonMesh;
-    const selected = deepBreathLaneForSpell(routeSpellId);
-    if (!mesh || !selected) return null;
-    const [from, to] = extendedDeepBreathLane(selected.from, selected.to);
-    const projected = projectMapDebugPath({
-      kind: "path",
-      id: `onyxia-deep-breath-${selected.lane.id}`,
-      mapId: 249,
-      label: "Onyxia Deep Breath",
-      points: [from, to],
-      widthYards: DEEP_BREATH_WIDTH_YARDS,
-      color: "#ff6a00",
-      opacity: 1,
-    }, mesh.bounds, this.aspect, GROUND_WIDTH);
-    if (!projected) return null;
-    return {
-      dx: projected.direction.x,
-      dz: projected.direction.z,
-      laneX: projected.centre.x,
-      laneZ: projected.centre.z,
-      length: projected.length,
-      floorY: this.floorHeights.heightAt(`deep-breath-${selected.lane.id}`, projected.centre.x, projected.centre.z),
-    };
+    const path = deepBreathPathForPrimarySpell(primarySpellId);
+    if (!mesh || !path) return false;
+    const projected = projectMapDebugPoints(path.points, path.mapId, mesh.bounds, this.aspect, GROUND_WIDTH);
+    if (projected.length !== path.points.length || projected.length > MAX_DEEP_BREATH_POINTS) return false;
+
+    const positions = new Float32Array(projected.length * 3);
+    this.deepBreathAreaPositions.length = 0;
+    for (let index = 0; index < projected.length; index++) {
+      const point = projected[index];
+      const floor = this.floorHeights.heightAt(`deep-breath-${path.key}-${index}`, point.x, point.z);
+      const floorY = floor + DEEP_BREATH_GROUND_LIFT * mesh.scale;
+      positions[index * 3] = point.x;
+      positions[index * 3 + 1] = floorY;
+      positions[index * 3 + 2] = point.z;
+      this.deepBreathAreaPositions.push(new THREE.Vector3(point.x, floorY, point.z));
+    }
+    this.deepBreathLine.geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    this.deepBreathPoints.geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    this.deepBreathPathLock = { primarySpellId, startMs };
+    return true;
   }
 
   /**
-   * Lights the entire fixed Deep Breath footprint for the event's duration.
-   * The first Breath spell in the sequence selects the room-space lane;
-   * Onyxia's position, facing, and later movement never affect its geometry.
+   * Keeps the complete server centerline visible while the chain advances, but
+   * only shows the 30-yard damage circle for the ground spell resolving now.
    */
   private updateDeepBreath(fx: EncounterEffects | null, cursorMs: number) {
-    const breaths = fx ? deriveActiveDeepBreaths(fx, cursorMs, this.activeDeepBreaths) : this.activeDeepBreaths;
+    if (this.effects?.mapId !== 249) {
+      this.hideDeepBreath();
+      return;
+    }
+    const breaths = fx
+      ? deriveActiveDeepBreaths(fx, cursorMs, this.activeDeepBreaths, this.effects?.mapId)
+      : this.activeDeepBreaths;
     if (!fx) breaths.length = 0;
     const breath = breaths[0];
     const yardScale = this.yardScale();
@@ -2519,21 +2584,29 @@ export class MapScene3D {
       return;
     }
 
-    let lock = this.deepBreathLaneLock;
-    if (!lock || lock.routeSpellId !== breath.routeSpellId || lock.startMs !== breath.startMs) {
-      const lane = this.deepBreathLaneFrom(breath.routeSpellId);
-      if (!lane) {
+    const lock = this.deepBreathPathLock;
+    if (!lock || lock.primarySpellId !== breath.routeSpellId || lock.startMs !== breath.startMs) {
+      if (!this.setDeepBreathPath(breath.routeSpellId, breath.startMs)) {
         this.hideDeepBreath();
         return;
       }
-      lock = this.deepBreathLaneLock = { routeSpellId: breath.routeSpellId, startMs: breath.startMs, ...lane };
     }
-    const { dx, dz, laneX, laneZ, length } = lock;
-    const floorY = lock.floorY + DEEP_BREATH_GROUND_LIFT * yardScale;
-    this.deepBreathLane.position.set(laneX, floorY, laneZ);
-    this.deepBreathLane.rotation.set(0, Math.atan2(-dx, -dz), 0);
-    this.deepBreathLane.scale.set(DEEP_BREATH_WIDTH_YARDS * yardScale, 1, length);
-    this.deepBreathLane.visible = true;
+    const point = this.deepBreathAreaPositions[breath.pointIndex];
+    if (!point) {
+      this.hideDeepBreath();
+      return;
+    }
+    const radius = ONYXIA_DEEP_BREATH_RADIUS_YARDS * yardScale;
+    this.matrix.makeScale(radius, radius, radius);
+    this.matrix.setPosition(point);
+    this.deepBreathAreas.setMatrixAt(0, this.matrix);
+    this.deepBreathAreas.count = 1;
+    this.deepBreathAreas.instanceMatrix.needsUpdate = true;
+    this.deepBreathAreas.material.opacity = DEEP_BREATH_AREA_OPACITY
+      * Math.max(0, 1 - (cursorMs - breath.pointStartedMs) / DEEP_BREATH_POINT_LINGER_MS);
+    this.deepBreathAreas.visible = true;
+    this.deepBreathLine.visible = true;
+    this.deepBreathPoints.visible = true;
   }
 
   // Applies the effects at the effect clock's current time. Returns whether

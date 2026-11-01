@@ -35,6 +35,8 @@ import { MapCompass } from "./MapCompass";
 
 export interface MapView3DProps {
   ground: MapSceneGround;
+  /** Active server world map for encounter-specific replay effects. */
+  worldMapId?: number;
   /** Preferred 2D artwork to blend over the mesh for alignment debugging. */
   alignmentGround?: MapSceneGround | null;
   markers: MapSceneMarker[];
@@ -165,6 +167,7 @@ function EffectTooltip({ hover }: { hover: MapScene3DEffectHover }) {
 
 export default function MapView3D({
   ground,
+  worldMapId,
   alignmentGround = null,
   markers,
   projectSample,
@@ -426,6 +429,7 @@ export default function MapView3D({
     const scene = sceneRef.current;
     if (!container || !scene || frozen) return;
     scene.setEffects(effectSettings.enabled && effects ? {
+      mapId: worldMapId,
       fx: effects,
       options: effectOptions,
       resolveColor: (color) => resolveCssColor(color, container, colorCacheRef.current),
@@ -446,7 +450,7 @@ export default function MapView3D({
       healTextGuids: effectOptions.healText,
       castSchoolColor: (spellId) => schoolNameColor(spellMeta(spellId).spell?.school?.string),
     } : null);
-  }, [castGuids, effectOptions, effectSettings.enabled, effects, frozen, isCooldown, isProc, spellMeta]);
+  }, [castGuids, effectOptions, effectSettings.enabled, effects, frozen, isCooldown, isProc, spellMeta, worldMapId]);
 
   useEffect(() => {
     if (!frozen) sceneRef.current?.setEffectClock(cursorMs, playing, playbackSpeed);
