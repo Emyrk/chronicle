@@ -68,7 +68,7 @@ A player's profile might read:
 Molten Core · Enhancement · DPS
 Mastery estimate       93.4    What the performances suggest
 Confidence             97%     About 14 eligible kills per observed boss
-Ranked Mastery         92.2    Conservative comparison value
+Ranked Mastery         93.4    Conservative comparison value
 Peak                   100     Best recorded moment
 Renown                3,301    Career breadth and repetition across the portfolio
 ```
@@ -82,17 +82,18 @@ The proposed method has four steps. The [specification](mastery-renown-rating.md
 1. **Start with eligible locked parse results.** Count a logical kill only once; compare like with like (server, metric, spec, difficulty, raid size, scoring period). Do not mistake duplicate uploads for extra experience.
 2. **Summarize each boss separately.** Peak remembers the best parse. Form asks what has been typical, favoring recent kills. Floor asks what the weaker-but-not-worst nights look like.
 3. **Estimate Mastery.** The current candidate gives Form the most weight, then Peak, then Floor. This remains on a 0–100 scale; a player can have high Mastery after one kill, but the estimate is uncertain.
-4. **Express uncertainty explicitly.** Confidence rises quickly over the first few kills and then saturates. Ranked Mastery discounts the estimate when evidence is sparse. Missing eligible bosses reduce *scope confidence*, not the observed performance estimate.
+4. **Express uncertainty explicitly.** Confidence describes how much eligible evidence we have. In the current prototype, the separate Ranked Mastery discount ends at five kills per boss; Confidence can keep growing. Missing eligible bosses reduce *scope confidence*, not the observed performance estimate.
 
 For the current candidate only:
 
 ```text
 Mastery estimate = 30% Peak + 50% Form + 20% Floor
 Confidence       = 1 - exp(-eligible kills / 4)
-Ranked Mastery   = Mastery estimate × (55% + 45% × Confidence)
+Ranking weight   = 65% at one kill, then +8.75% per kill through five
+Ranked Mastery   = Mastery estimate × Ranking weight
 ```
 
-A perfect parse with one eligible kill therefore means **100 Mastery estimate, 22% Confidence, 65 Ranked Mastery**. Fourteen equally strong kills mean **100 Mastery estimate, 97% Confidence, 98.6 Ranked Mastery**. The underlying observed parse does not get smaller; only the conservative comparison changes.
+A perfect parse with one eligible kill therefore means **100 Mastery estimate, 22% Confidence, 65 Ranked Mastery**. Five equally strong kills mean **100 Mastery estimate, 71% Confidence, 100 Ranked Mastery**. Confidence keeps describing evidence after the provisional ranking discount ends. The underlying observed parse does not get smaller; only the conservative comparison changes.
 
 The coefficients are **hypotheses to test**, not numbers to defend for their own sake. Before shipping, calculate distributions on real eligible logs and test whether the outputs align with the questions above.
 
@@ -119,19 +120,19 @@ A normalized Mastery estimate does not automatically grow just because another r
 - Scores from different specs, roles, servers, or rule periods are interchangeable without an explicit policy.
 - The Storybook's aggregate examples are production-equivalent: production must calculate per boss before aggregating.
 
-## The decision gate before implementation
+## Product direction and the checks still needed
 
-We should first agree on these **product** answers, in this order:
+**Four distinct promises:** Renown celebrates a witnessed career. Mastery is a recruiting aid describing the quality of a character's recorded performance, analogous in purpose to an aggregate game rating such as WN8, not a prediction of one exact next kill. Peak is a competitive one-shot min/max attempt, like a speedrun. Ranked Mastery is a separate competitive ladder for consistently strong players. The intended launch includes **boss Peak, a raid Peak scorecard, and Ranked Mastery together**.
 
-1. **Primary use:** Is this principally a player-facing profile, a competitive leaderboard, a recruiting aid, or several explicitly different views?
-2. **Promise:** Should Mastery mean an estimate of the *next kill*, the player's *recent typical play*, or their *body of work this period*? These need not yield the same formula.
-3. **Scope and opportunity:** Which bosses count, and how do we treat missing bosses, new players, obsolete raids, and incomplete logs?
-4. **Confidence policy:** How much should one kill count? Should low-evidence players be labeled provisional, ranked conservatively, or omitted from a leaderboard?
-5. **Recency:** Do we want older performance to fade relative to newer performance? Should inactivity change only freshness, or leaderboard eligibility too?
-6. **Renown identity:** Is Renown career-wide, seasonal, or both? Which milestones are truly worth recognizing?
-7. **Fairness check:** Which real player histories would cause the proposed result to feel misleading? Identify those counterexamples before choosing weights.
+**Scope and time:** Every eligible boss kill can count even when the raid log is incomplete. Compare the same encounter within raid, difficulty, player size, spec, and sub-spec; server boundaries and sparse cohorts still need an explicit policy. The proposed default period is a rolling **180 days**. All-time Peak retains all eligible history, while Period Peak uses the period's raw results and rank one; its *normalized score* can still move when rank one changes. Inactivity does not erase an all-time best. Period Mastery and Ranked Mastery ask for repeated play. An all-raids view still needs a policy for weighting current-tier raids against older raids.
 
-Only then should we lock a v1 formula, run it against representative histories, inspect its failures, and version the policy. The interactive [Storybook field guide](../frontend/chronicle/src/pages/ArmoryPage/overview/MasteryRenown.stories.tsx) is a conversation aid, not a substitute for that decision.
+**Renown over time:** Career Renown is primary, with period-earned Renown and a cumulative graph also useful. Earned Renown should remain when an underlying log is deleted. That requires a deliberate retention and privacy policy before implementation. Guild Renown should reflect the age and durability of the guild; team identity across roster changes remains to be defined.
+
+**What the fairness check means:** Run each candidate rule against cases that could expose a broken promise: one perfect kill versus five consistently strong kills; two poor nights in roughly 25 weekly raids; excellent results on only a few bosses; a sparse sub-spec; an older-tier specialist versus a current-tier raider; duplicate or incomplete uploads; and a deleted log whose earned Renown must remain. Ask whether the ordering and labels still say what we claim they say. If not, change the rule before publishing a leaderboard.
+
+**Still open:** the exact period and drop ratio for Mastery; entry and evidence rules for Ranked Mastery; missing-boss treatment for raid Peak; current-tier weights in an all-raids view; sparse-spec and server cohort boundaries; and deletion obligations for retained Renown. The Workshop's five-kill cutoff is a candidate to test, not an approved rule. The interactive [Storybook field guide](../frontend/chronicle/src/pages/ArmoryPage/overview/MasteryRenown.stories.tsx) helps explore those choices; it does not decide them.
+
+The [ratings preview Storybook](../frontend/chronicle/src/pages/ArmoryPage/overview/RatingPreviews.stories.tsx) sketches the three launch leaderboards alongside a character dossier. Its raw-DPS Peak, raid scorecard, and career Renown values are explicitly **mocked**; the existing four Octo-derived parse summaries supply only the illustrative Mastery inputs. The read-only production connection was unavailable during this preview pass, so fairness comparisons with fresh player histories remain outstanding.
 
 ## How to read further
 

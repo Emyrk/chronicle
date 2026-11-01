@@ -157,7 +157,7 @@ Selected values:
 | 14 | 97.0% | established |
 | 20 | 99.3% | effectively saturated |
 
-Confidence never reaches exactly 100%. Additional kills remain evidence, but have very small rating effects after the curve saturates.
+Confidence never reaches exactly 100%. Additional kills remain evidence, but the provisional ranking discount ends at five kills per boss; Confidence is descriptive rather than the ranking multiplier.
 
 Suggested display labels:
 
@@ -173,35 +173,24 @@ Suggested display labels:
 
 Mastery is the estimate. Ranked Mastery is the conservative comparison value.
 
-First convert Confidence into an evidence multiplier:
+The prototype now uses a separate ranking weight, reaching full weight at five eligible kills per boss rather than waiting for descriptive Confidence to approach 100%:
 
 ```text
-E_b = 0.55 + 0.45 * C_b
-```
-
-Then:
-
-```text
-R_b = M_b * E_b
-```
-
-The `0.55` prior floor means one real result is meaningful, but cannot immediately produce an established leaderboard score. It is a policy constant and must be versioned.
-
-The maximum Ranked Mastery possible at kill count `n` is:
-
-```text
-RankedCeiling(n) = 100 * (0.55 + 0.45 * (1 - exp(-n / 4)))
+E_b(n) = 0.55 + 0.10 * min(n, 1)
+         + 0.35 * min(max(n - 1, 0) / 4, 1)
+R_b = M_b * E_b(n)
+RankedCeiling(n) = 100 * E_b(n)
 ```
 
 | Kills | Ranked ceiling for a 100 Mastery estimate |
 | ---: | ---: |
 | 1 | 65.0 |
-| 2 | 72.7 |
-| 3 | 78.7 |
-| 5 | 87.1 |
-| 8 | 93.9 |
-| 14 | 98.6 |
-| 20 | 99.7 |
+| 2 | 73.8 |
+| 3 | 82.5 |
+| 4 | 91.3 |
+| 5 or more | 100.0 |
+
+The five-kill cutoff and one-kill 65% weight are **illustrative policy choices**, not approved leaderboard rules. Confidence can continue to grow after full ranking weight is reached. Unlike the former asymptotic discount, this does not imply a 20-kill grind to approach Mastery.
 
 The UI must show Mastery, Confidence, and Ranked Mastery together. It must not label Ranked Mastery simply as Mastery.
 
@@ -233,10 +222,7 @@ ScopeConfidence = sum(a_b * C_b for every eligible boss)
 
 This means one excellent boss does not look like complete instance mastery. Missing bosses reduce confidence rather than pretending the player performed badly.
 
-```text
-ScopeEvidenceMultiplier = 0.55 + 0.45 * ScopeConfidence
-ScopeRankedMastery = ScopeMastery * ScopeEvidenceMultiplier
-```
+A production scope ranking weight still needs an explicit **coverage policy**: do not average per-boss weights over only observed bosses and quietly award full instance ranking credit for one boss. The Storybook applies its five-kill adjustment to average kills per observed boss, without production-equivalent coverage handling. Scope Confidence above remains a descriptive signal, not the multiplier for boss Ranked Mastery.
 
 If no boss has an eligible parse, Scope Mastery is absent rather than zero.
 
@@ -254,11 +240,11 @@ Instance Mastery remains directly comparable because it is always normalized to 
 
 ### Identical-performance prediction
 
-If future kills follow the current Peak/Form/Floor profile, Mastery remains unchanged and only confidence changes:
+If future kills follow the current Peak/Form/Floor profile, Mastery remains unchanged while Confidence grows and the ranking weight rises until five kills per boss:
 
 ```text
 ProjectedConfidence(n + k) = 1 - exp(-(n + k) / 4)
-ProjectedRankedMastery = Mastery * (0.55 + 0.45 * ProjectedConfidence)
+ProjectedRankedMastery = Mastery * E_b(n + k)
 ```
 
 This prediction answers: “What would repeating this level of play prove?”
@@ -303,8 +289,8 @@ Confidence and ranking:
 
 ```text
 C = 1 - exp(-1 / 4) = 0.2212
-E = 0.55 + 0.45(0.2212) = 0.6495
-R = 100.0 * 0.6495 = 65.0
+E(1) = 0.65
+R = 100.0 * 0.65 = 65.0
 ```
 
 Display:
@@ -338,8 +324,8 @@ Confidence and ranking:
 
 ```text
 C = 1 - exp(-14 / 4) = 0.9698
-E = 0.55 + 0.45(0.9698) = 0.9864
-R = 93.42 * 0.9864 = 92.15
+E(14) = 1.00 (ranking discount ended at five kills)
+R = 93.42 * 1.00 = 93.42
 ```
 
 Display:
@@ -347,7 +333,7 @@ Display:
 ```text
 Mastery:         93.4
 Confidence:      97.0% — Established
-Ranked Mastery:  92.2
+Ranked Mastery:  93.4
 ```
 
 ### Example C: high peak, volatile record
@@ -367,8 +353,8 @@ M = 29.73 + 31.45 + 7.58
 M = 68.76
 
 C = 1 - exp(-6 / 4) = 0.7769
-E = 0.55 + 0.45(0.7769) = 0.8996
-R = 68.76 * 0.8996 = 61.86
+E(6) = 1.00
+R = 68.76 * 1.00 = 68.76
 ```
 
 The 99.1 Peak remains visible, but the Form and Floor correctly prevent it from defining the player's expected performance.

@@ -8,18 +8,17 @@ describe("Mastery", () => {
 
     expect(result.estimate).toBe(100);
     expect(result.confidence).toBeCloseTo(0.2212, 4);
-    expect(result.rankedCeiling).toBeCloseTo(64.95, 2);
-    expect(result.rankedMastery).toBeCloseTo(64.95, 2);
+    expect(result.rankedCeiling).toBe(65);
+    expect(result.rankedMastery).toBe(65);
   });
 
-  it("rewards repeat evidence with diminishing returns", () => {
-    const ceilings = [1, 2, 3, 5, 8, 14].map(masteryCeiling);
-    const gains = ceilings.slice(1).map((ceiling, index) => ceiling - ceilings[index]);
-
-    expect(ceilings).toEqual([...ceilings].sort((a, b) => a - b));
-    expect(gains[0]).toBeGreaterThan(gains[gains.length - 1]);
-    expect(ceilings[ceilings.length - 1]).toBeGreaterThan(98);
-    expect(ceilings[ceilings.length - 1]).toBeLessThan(100);
+  it("ends the provisional ranking discount at five kills per boss", () => {
+    [55, 65, 73.75, 82.5, 91.25, 100, 100].forEach((ceiling, index) => {
+      expect(masteryCeiling([0, 1, 2, 3, 4, 5, 20][index])).toBeCloseTo(ceiling, 5);
+    });
+    const fiveKills = calculateMastery({ peak: 90, form: 80, floor: 70, kills: 5 });
+    expect(fiveKills.rankedMastery).toBe(fiveKills.estimate);
+    expect(fiveKills.confidence).toBeLessThan(1);
   });
 
   it("keeps a lucky peak from overpowering weak form and floor", () => {
