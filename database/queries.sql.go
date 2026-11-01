@@ -22579,7 +22579,7 @@ func (q *sqlQuerier) ListSidekickOAuthGrantRequestIDs(ctx context.Context, sidek
 }
 
 const listSidekickWoWDirectories = `-- name: ListSidekickWoWDirectories :many
-SELECT sidekick_id, path, tenant_name, tenant_base_url, realmlist, created_at, updated_at, id, game_format
+SELECT sidekick_id, path, tenant_name, tenant_base_url, realmlist, created_at, updated_at, id, log_format, inspection
 FROM sidekick_wow_directories
 WHERE sidekick_id = $1
 ORDER BY tenant_name, path
@@ -22603,7 +22603,8 @@ func (q *sqlQuerier) ListSidekickWoWDirectories(ctx context.Context, sidekickID 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ID,
-			&i.GameFormat,
+			&i.LogFormat,
+			&i.Inspection,
 		); err != nil {
 			return nil, err
 		}
@@ -22887,17 +22888,18 @@ func (q *sqlQuerier) UpsertSidekickInstallation(ctx context.Context, arg UpsertS
 
 const upsertSidekickWoWDirectory = `-- name: UpsertSidekickWoWDirectory :exec
 INSERT INTO sidekick_wow_directories (
-  sidekick_id, id, path, tenant_name, tenant_base_url, realmlist, game_format
+  sidekick_id, id, path, tenant_name, tenant_base_url, realmlist, log_format, inspection
 )
 VALUES (
-  $1, $2, $3, $4, $5, $6, $7
+  $1, $2, $3, $4, $5, $6, $7, $8::jsonb
 )
 ON CONFLICT (sidekick_id, id) WHERE id IS NOT NULL DO UPDATE SET
   path = EXCLUDED.path,
   tenant_name = EXCLUDED.tenant_name,
   tenant_base_url = EXCLUDED.tenant_base_url,
   realmlist = EXCLUDED.realmlist,
-  game_format = EXCLUDED.game_format,
+  log_format = EXCLUDED.log_format,
+  inspection = EXCLUDED.inspection,
   updated_at = NOW()
 `
 
@@ -22908,7 +22910,8 @@ type UpsertSidekickWoWDirectoryParams struct {
 	TenantName    string      `db:"tenant_name" json:"tenant_name"`
 	TenantBaseUrl string      `db:"tenant_base_url" json:"tenant_base_url"`
 	Realmlist     string      `db:"realmlist" json:"realmlist"`
-	GameFormat    string      `db:"game_format" json:"game_format"`
+	LogFormat     string      `db:"log_format" json:"log_format"`
+	Inspection    []byte      `db:"inspection" json:"inspection"`
 }
 
 func (q *sqlQuerier) UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertSidekickWoWDirectoryParams) error {
@@ -22919,7 +22922,8 @@ func (q *sqlQuerier) UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertS
 		arg.TenantName,
 		arg.TenantBaseUrl,
 		arg.Realmlist,
-		arg.GameFormat,
+		arg.LogFormat,
+		arg.Inspection,
 	)
 	return err
 }

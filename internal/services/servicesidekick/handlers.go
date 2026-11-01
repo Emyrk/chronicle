@@ -43,6 +43,17 @@ func sidekickIssue(issue database.SidekickIssue) chroniclesdk.SidekickIssue {
 	}
 }
 
+func sidekickInspection(payload []byte) (chroniclesdk.SidekickInspection, error) {
+	var inspection chroniclesdk.SidekickInspection
+	if err := json.Unmarshal(payload, &inspection); err != nil {
+		return chroniclesdk.SidekickInspection{}, err
+	}
+	if err := inspection.Validate(); err != nil {
+		return chroniclesdk.SidekickInspection{}, err
+	}
+	return inspection, nil
+}
+
 func (s *Service) sidekickInstallation(ctx context.Context, installation database.SidekickInstallation) (chroniclesdk.SidekickInstallation, error) {
 	issues, err := s.zed.ListSidekickIssues(ctx, database.ListSidekickIssuesParams{
 		SidekickID: installation.ID,
@@ -57,10 +68,14 @@ func (s *Service) sidekickInstallation(ctx context.Context, installation databas
 	}
 	convertedDirectories := make([]chroniclesdk.SidekickWoWDirectory, len(wowDirectories))
 	for i, directory := range wowDirectories {
+		inspection, decodeErr := sidekickInspection(directory.Inspection)
+		if decodeErr != nil {
+			return chroniclesdk.SidekickInstallation{}, decodeErr
+		}
 		convertedDirectories[i] = chroniclesdk.SidekickWoWDirectory{
 			ID: directory.ID.String, Path: directory.Path, TenantName: directory.TenantName,
 			TenantBaseURL: directory.TenantBaseUrl, Realmlist: directory.Realmlist,
-			GameFormat: chroniclesdk.SidekickGameFormat(directory.GameFormat),
+			LogFormat: chroniclesdk.SidekickLogFormat(directory.LogFormat), Inspection: inspection,
 		}
 	}
 	capabilities, err := decodeSidekickCapabilities(installation.AutoUploadCapabilities)
@@ -317,10 +332,15 @@ func (s *Service) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 		directory.TenantName = strings.TrimSpace(directory.TenantName)
 		directory.TenantBaseURL = strings.TrimRight(strings.TrimSpace(directory.TenantBaseURL), "/")
 		directory.Realmlist = strings.TrimSpace(directory.Realmlist)
-		directory.GameFormat = chroniclesdk.SidekickGameFormat(strings.TrimSpace(string(directory.GameFormat)))
+		directory.LogFormat = chroniclesdk.SidekickLogFormat(strings.TrimSpace(string(directory.LogFormat)))
+		for checkIndex := range directory.Inspection.Checks {
+			check := &directory.Inspection.Checks[checkIndex]
+			check.ID = strings.TrimSpace(check.ID)
+			check.Name = strings.TrimSpace(check.Name)
+		}
 		if !chroniclesdk.IsValidSidekickWoWDirectoryID(directory.ID) || directory.Path == "" || len(directory.Path) > 2000 ||
 			len(directory.TenantName) > 100 || len(directory.TenantBaseURL) > 500 || len(directory.Realmlist) > 255 ||
-			(directory.GameFormat != "" && directory.GameFormat != chroniclesdk.SidekickGameFormatWotLK335a) {
+			!directory.LogFormat.Valid() || directory.Inspection.Validate() != nil {
 			httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "World of Warcraft directory payload is invalid."})
 			return
 		}
@@ -375,10 +395,14 @@ func (s *Service) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		for _, directory := range request.WoWDirectories {
+			inspectionJSON, marshalErr := json.Marshal(directory.Inspection)
+			if marshalErr != nil {
+				return marshalErr
+			}
 			if err := tx.UpsertSidekickWoWDirectory(r.Context(), database.UpsertSidekickWoWDirectoryParams{
 				SidekickID: installationID, ID: pgtype.Text{String: directory.ID, Valid: true}, Path: directory.Path, TenantName: directory.TenantName,
 				TenantBaseUrl: directory.TenantBaseURL, Realmlist: directory.Realmlist,
-				GameFormat: string(directory.GameFormat),
+				LogFormat: string(directory.LogFormat), Inspection: inspectionJSON,
 			}); err != nil {
 				return err
 			}

@@ -96,7 +96,6 @@ func TestNormalizeSidekickConfigDisablesUnsupportedModes(t *testing.T) {
 	id := "wowdir_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	config := chroniclesdk.DefaultSidekickConfig()
 	config.WoWDirectories[id] = chroniclesdk.SidekickDirectoryConfig{
-		GameFormat: chroniclesdk.SidekickGameFormatWotLK335a,
 		AutoUpload: chroniclesdk.SidekickAutoUploadOnGameExit,
 	}
 
@@ -104,7 +103,7 @@ func TestNormalizeSidekickConfigDisablesUnsupportedModes(t *testing.T) {
 	require.Equal(t, chroniclesdk.SidekickAutoUploadDisabled, normalized.WoWDirectories[id].AutoUpload)
 
 	capabilities := chroniclesdk.SidekickAutoUploadCapabilities{
-		chroniclesdk.SidekickGameFormatWotLK335a: {chroniclesdk.SidekickAutoUploadOnGameExit},
+		chroniclesdk.SidekickLogFormat335aCcAddon: {chroniclesdk.SidekickAutoUploadOnGameExit},
 	}
 	normalized = normalizeSidekickConfig(config, capabilities)
 	require.Equal(t, chroniclesdk.SidekickAutoUploadOnGameExit, normalized.WoWDirectories[id].AutoUpload)
@@ -260,7 +259,6 @@ func TestSidekickConfigStorageAndOwnership(t *testing.T) {
 
 	override := chroniclesdk.DefaultSidekickConfig()
 	override.WoWDirectories["wowdir_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] = chroniclesdk.SidekickDirectoryConfig{
-		GameFormat: chroniclesdk.SidekickGameFormatWotLK335a,
 		AutoUpload: chroniclesdk.SidekickAutoUploadDisabled,
 	}
 	overrideJSON, err := override.CanonicalJSON()

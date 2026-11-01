@@ -2441,7 +2441,8 @@ type SidekickWowDirectory struct {
 	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	ID            pgtype.Text        `db:"id" json:"id"`
-	GameFormat    string             `db:"game_format" json:"game_format"`
+	LogFormat     string             `db:"log_format" json:"log_format"`
+	Inspection    []byte             `db:"inspection" json:"inspection"`
 }
 
 type SiteConfig struct {

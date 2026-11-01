@@ -4209,7 +4209,7 @@ export const SidekickArchiveRetentionDaysMax = 365;
 export const SidekickArchiveRetentionDaysMin = 1;
 
 // From chroniclesdk/sidekick.go
-export type SidekickAutoUploadCapabilities = Record<SidekickGameFormat, SidekickAutoUploadMode[]>;
+export type SidekickAutoUploadCapabilities = Record<SidekickLogFormat, SidekickAutoUploadMode[]>;
 
 // From chroniclesdk/sidekick.go
 export type SidekickAutoUploadMode = "disabled" | "on_game_exit";
@@ -4234,14 +4234,38 @@ export const SidekickConfigVersion = 1;
 
 // From chroniclesdk/sidekick.go
 export interface SidekickDirectoryConfig {
-    readonly game_format: SidekickGameFormat;
     readonly auto_upload: SidekickAutoUploadMode;
 }
 
 // From chroniclesdk/sidekick.go
-export type SidekickGameFormat = "wotlk_3.3.5a";
+export interface SidekickInspection {
+    readonly status: SidekickInspectionStatus;
+    readonly checks: readonly SidekickInspectionCheck[];
+}
 
-export const SidekickGameFormats: SidekickGameFormat[] = ["wotlk_3.3.5a"];
+// From chroniclesdk/sidekick.go
+export type SidekickInspectionCategory = "addon" | "dll";
+
+export const SidekickInspectionCategorys: SidekickInspectionCategory[] = ["addon", "dll"];
+
+// From chroniclesdk/sidekick.go
+export interface SidekickInspectionCheck {
+    readonly id: string;
+    readonly category: SidekickInspectionCategory;
+    readonly name: string;
+    readonly required: boolean;
+    readonly status: SidekickInspectionCheckStatus;
+}
+
+// From chroniclesdk/sidekick.go
+export type SidekickInspectionCheckStatus = "missing" | "present";
+
+export const SidekickInspectionCheckStatuses: SidekickInspectionCheckStatus[] = ["missing", "present"];
+
+// From chroniclesdk/sidekick.go
+export type SidekickInspectionStatus = "action_required" | "ready" | "unknown";
+
+export const SidekickInspectionStatuses: SidekickInspectionStatus[] = ["action_required", "ready", "unknown"];
 
 // From chroniclesdk/sidekick.go
 export interface SidekickInstallation {
@@ -4280,6 +4304,11 @@ export interface SidekickIssueReport {
 }
 
 // From chroniclesdk/sidekick.go
+export type SidekickLogFormat = "1.12a-cc-addon" | "2.4.3-cc-addon" | "3.3.5a-cc-addon" | "hermesproxy_1_14_2_cc";
+
+export const SidekickLogFormats: SidekickLogFormat[] = ["1.12a-cc-addon", "2.4.3-cc-addon", "3.3.5a-cc-addon", "hermesproxy_1_14_2_cc"];
+
+// From chroniclesdk/sidekick.go
 export interface SidekickStatusRequest {
     readonly platform?: string;
     readonly sidekick_version?: string;
@@ -4304,7 +4333,8 @@ export interface SidekickWoWDirectory {
     readonly tenant_name?: string;
     readonly tenant_base_url?: string;
     readonly realmlist?: string;
-    readonly game_format?: SidekickGameFormat;
+    readonly log_format?: SidekickLogFormat;
+    readonly inspection: SidekickInspection;
 }
 
 // From chroniclesdk/sim.go
