@@ -89,8 +89,8 @@ async function request(bucket: FakeBucket, path: string, init?: RequestInit): Pr
 
 test("parses, sorts, and normalizes unit image assignments", () => {
   const parsed = parseUnitImageManifest(manifest([
-    { name: "Totem", entry_ids: [3902, 2523], images: { full: "unit-images/totem.webp" } },
-    { name: "Boss", entry_ids: [11502], images: { headshot: "unit-images/boss.png" } },
+    { name: "Totem", display_name: "Totem", entry_ids: [3902, 2523], images: { full: "unit-images/totem.webp" } },
+    { name: "Boss", display_name: "Ragnaros", entry_ids: [11502], images: { headshot: "unit-images/boss.png" } },
   ]));
   assert.deepEqual(parsed.units.map((item: { name: string }) => item.name), ["Boss", "Totem"]);
   assert.deepEqual(parsed.units[1]?.entry_ids, [2523, 3902]);
@@ -111,6 +111,10 @@ test("rejects ambiguous IDs, duplicate paths, invalid labels, and unsafe paths",
   assert.throws(() => parseUnitImageManifest(manifest([
     { name: "One", entry_ids: [1], images: { full: "other/one.webp" } },
   ])), /clean unit-images/);
+  assert.throws(() => parseUnitImageManifest(manifest([
+    { name: "One", display_name: "Onyxia", entry_ids: [1], images: { full: "unit-images/one.webp" } },
+    { name: "Two", display_name: " onYXia ", entry_ids: [2], images: { full: "unit-images/two.webp" } },
+  ])), /duplicate unit image display name/);
   assert.deepEqual(emptyUnitImageManifest(), { format: UNIT_IMAGE_MANIFEST_FORMAT, units: [] });
   assert.equal(isUnitImageAssetPath("unit-images/one.webp"), true);
   assert.equal(isUnitImageAssetPath("unit-images/nested/one.webp"), false);
@@ -131,7 +135,7 @@ test("Unit Image Foundry uploads, previews, drafts, and publishes images", async
   assert.equal(preview.headers.get("Content-Type"), "image/webp");
   assert.deepEqual(new Uint8Array(await preview.arrayBuffer()), webp());
 
-  const units = [{ name: "ony-onyxia", entry_ids: [10184], images: { headshot: uploaded.path } }];
+  const units = [{ name: "ony-onyxia", display_name: "Onyxia", entry_ids: [10184], images: { headshot: uploaded.path } }];
   const saved = await request(bucket, "/internal/api/v1/unit-images/draft", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

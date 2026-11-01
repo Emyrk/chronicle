@@ -124,3 +124,6 @@ research/nampower-original.dll
 .design-sync/node_modules
 .ds-sync/
 ds-bundle/
+
+# Local generated unit portraits
+.tmp-unit-images/

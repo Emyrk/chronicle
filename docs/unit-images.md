@@ -16,6 +16,7 @@ The manifest is deliberately separate from the miniature registry. A unit can ha
   "units": [
     {
       "name": "ony-onyxia",
+      "display_name": "Onyxia",
       "entry_ids": [10184],
       "images": {
         "headshot": "unit-images/<content-hash>-onyxia-headshot.webp",
@@ -32,7 +33,8 @@ The manifest is deliberately separate from the miniature registry. A unit can ha
 
 - One unit record may own several creature entry IDs.
 - A creature entry ID may belong to only one unit record.
-- Unit names and asset paths must be unique.
+- Registry `name` slugs, case-insensitive `display_name` values, and asset paths must be unique.
+- `display_name` is the canonical human-readable lookup key. It is optional for backward compatibility with older records.
 - Labels use lowercase letters, numbers, underscores, and hyphens, starting with a letter.
 - Assets live directly under `unit-images/` and use AVIF, JPEG, PNG, or WebP.
 - Asset filenames should be content-addressed so replacements are immutable and cache-safe.
@@ -48,6 +50,7 @@ Create a local plan whose `images` values point to source files:
 [
   {
     "name": "ony-onyxia",
+    "display_name": "Onyxia",
     "entry_ids": [10184],
     "images": {
       "headshot": "/path/to/onyxia-headshot.webp",
@@ -56,6 +59,8 @@ Create a local plan whose `images` values point to source files:
   }
 ]
 ```
+
+For a metadata-only update to an existing record, such as adding `display_name`, omit `images`. The publisher preserves the record's current image paths. New records must include images.
 
 Then run:
 

@@ -68,31 +68,45 @@ for raw in plan:
     if not isinstance(raw, dict):
         raise SystemExit("every plan entry must be an object")
     name = str(raw.get("name", "")).strip()
+    display_name = raw.get("display_name")
+    if display_name is not None:
+        if not isinstance(display_name, str) or not display_name.strip():
+            raise SystemExit(f"{name or 'unit'}: display_name must be a non-blank string")
+        display_name = display_name.strip()
     entry_ids = raw.get("entry_ids")
     image_files = raw.get("images")
     if not name or not isinstance(entry_ids, list) or not entry_ids:
         raise SystemExit("every plan entry needs a name and entry_ids")
-    if not isinstance(image_files, dict) or not image_files:
-        raise SystemExit(f"{name}: images must be a non-empty label-to-file object")
     if any(not isinstance(entry, int) or isinstance(entry, bool) or entry <= 0 or entry > 0xFFFFFFFF for entry in entry_ids):
         raise SystemExit(f"{name}: invalid entry ID")
     if len(set(entry_ids)) != len(entry_ids):
         raise SystemExit(f"{name}: duplicate entry ID")
 
-    images = {}
-    for label, filename in image_files.items():
-        if not label_re.fullmatch(label):
-            raise SystemExit(f"{name}: invalid image label {label!r}")
-        source = pathlib.Path(filename).expanduser().resolve()
-        if not source.is_file() or source.suffix.lower() not in extensions:
-            raise SystemExit(f"{name}/{label}: unsupported or missing image {source}")
-        digest = hashlib.sha256(source.read_bytes()).hexdigest()
-        asset_name = f"{digest}-{source.name.lower()}"
-        shutil.copyfile(source, assets / asset_name)
-        images[label] = f"unit-images/{asset_name}"
+    existing = next((index for index, unit in enumerate(units) if unit.get("name") == name), None)
+    if image_files is None:
+        if existing is None:
+            raise SystemExit(f"{name}: images are required for a new unit")
+        images = dict(units[existing].get("images") or {})
+    else:
+        if not isinstance(image_files, dict) or not image_files:
+            raise SystemExit(f"{name}: images must be a non-empty label-to-file object")
+        images = {}
+        for label, filename in image_files.items():
+            if not label_re.fullmatch(label):
+                raise SystemExit(f"{name}: invalid image label {label!r}")
+            source = pathlib.Path(filename).expanduser().resolve()
+            if not source.is_file() or source.suffix.lower() not in extensions:
+                raise SystemExit(f"{name}/{label}: unsupported or missing image {source}")
+            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            asset_name = f"{digest}-{source.name.lower()}"
+            shutil.copyfile(source, assets / asset_name)
+            images[label] = f"unit-images/{asset_name}"
 
     entry = {"name": name, "entry_ids": entry_ids, "images": images}
-    existing = next((index for index, unit in enumerate(units) if unit.get("name") == name), None)
+    if display_name is not None:
+        entry["display_name"] = display_name
+    elif existing is not None and units[existing].get("display_name") is not None:
+        entry["display_name"] = units[existing]["display_name"]
     print(("replace " if existing is not None else "add     ") + name)
     if existing is None:
         units.append(entry)
@@ -100,6 +114,7 @@ for raw in plan:
         units[existing] = entry
 
 names = set()
+display_names = set()
 assigned = {}
 paths = set()
 for unit in units:
@@ -107,6 +122,14 @@ for unit in units:
     if not isinstance(name, str) or not name or name in names:
         raise SystemExit(f"duplicate or invalid unit name: {name!r}")
     names.add(name)
+    display_name = unit.get("display_name")
+    if display_name is not None:
+        if not isinstance(display_name, str) or not display_name.strip():
+            raise SystemExit(f"{name}: invalid display_name")
+        normalized = display_name.strip().casefold()
+        if normalized in display_names:
+            raise SystemExit(f"duplicate unit display_name: {display_name}")
+        display_names.add(normalized)
     if not isinstance(unit.get("entry_ids"), list) or not unit["entry_ids"]:
         raise SystemExit(f"{name}: missing entry IDs")
     for entry_id in unit["entry_ids"]:

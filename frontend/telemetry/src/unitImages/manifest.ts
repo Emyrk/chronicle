@@ -2,6 +2,7 @@ export const UNIT_IMAGE_MANIFEST_FORMAT = "chronicle-unit-images-v1" as const;
 
 export interface UnitImageDefinition {
   name: string;
+  display_name?: string;
   entry_ids: number[];
   images: Record<string, string>;
 }
@@ -56,14 +57,24 @@ export function parseUnitImageManifest(value: unknown): UnitImageManifest {
 
   const assignedEntries = new Map<number, string>();
   const names = new Set<string>();
+  const displayNames = new Set<string>();
   const paths = new Set<string>();
   const units = array(input.units, "unit image manifest.units").map((raw, index) => {
     const context = `unit image manifest.units[${index}]`;
-    const item = object(raw, context, ["name", "entry_ids", "images"]);
+    const item = object(raw, context, ["name", "display_name", "entry_ids", "images"]);
     const name = string(item.name, `${context}.name`).trim();
     if (name === "") throw new TypeError(`${context}.name must not be blank`);
     if (names.has(name)) throw new TypeError(`duplicate unit image name ${name}`);
     names.add(name);
+
+    let display_name: string | undefined;
+    if (item.display_name !== undefined) {
+      display_name = string(item.display_name, `${context}.display_name`).trim();
+      if (display_name === "") throw new TypeError(`${context}.display_name must not be blank`);
+      const normalized = display_name.toLocaleLowerCase("en-US");
+      if (displayNames.has(normalized)) throw new TypeError(`duplicate unit image display name ${display_name}`);
+      displayNames.add(normalized);
+    }
 
     const ids = array(item.entry_ids, `${context}.entry_ids`).map((id, idIndex) => entryID(id, `${context}.entry_ids[${idIndex}]`));
     if (ids.length === 0) throw new TypeError(`${context}.entry_ids must not be empty`);
@@ -86,7 +97,7 @@ export function parseUnitImageManifest(value: unknown): UnitImageManifest {
       images[label] = path;
     }
     if (Object.keys(images).length === 0) throw new TypeError(`${context}.images must not be empty`);
-    return { name, entry_ids, images };
+    return { name, ...(display_name === undefined ? {} : { display_name }), entry_ids, images };
   });
 
   units.sort((left, right) => left.name.localeCompare(right.name));
