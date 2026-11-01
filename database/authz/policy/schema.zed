@@ -88,6 +88,7 @@ definition chronicle {
   permission inference_available = inference_capable + administer
   permission debug_inference_chat = inference_debug_capable + administer
   permission use_inference_chat = inference_available - inference_disabled
+  permission create_live_session = has_revered
   // Module creation requires Revered status; technical admins retain their site-wide override.
   permission create_lua_project = has_revered + technical_admin
   permission create_layout = chronicle_guild_member + chronicle_member

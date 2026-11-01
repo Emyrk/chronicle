@@ -116,6 +116,60 @@ func TestManageConsumablesRole(t *testing.T) {
 	require.False(t, canManageWorldData)
 }
 
+func TestCreateLiveSessionPermission(t *testing.T) {
+	t.Parallel()
+
+	zed := serviceauthz.Authz(testservices.Authz(t))
+	ctx := testutil.Context(t, testutil.WaitLong)
+	checkCreate := func(t *testing.T, userID uuid.UUID, want bool) {
+		t.Helper()
+		b := policy.New()
+		allowed, err := zed.CheckOne(ctx, nil, b.GlobalChronicle().CanCreate_live_session_User(b.User(userID)))
+		require.NoError(t, err)
+		require.Equal(t, want, allowed)
+	}
+
+	for _, tc := range []struct {
+		name       string
+		role       string
+		stripeRole bool
+		allowed    bool
+	}{
+		{name: "ordinary"},
+		{name: "honored", role: "honored"},
+		{name: "Stripe honored", role: "stripe_honored", stripeRole: true},
+		{name: "admin", role: "admin"},
+		{name: "technical admin", role: "technical_admin"},
+		{name: "revered", role: "revered", allowed: true},
+		{name: "exalted", role: "exalted", allowed: true},
+		{name: "Stripe revered", role: "stripe_revered", stripeRole: true, allowed: true},
+		{name: "Stripe exalted", role: "stripe_exalted", stripeRole: true, allowed: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			userID := uuid.New()
+			if tc.stripeRole {
+				require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, tc.role, true))
+			} else if tc.role != "" {
+				require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{tc.role}))
+			}
+			checkCreate(t, userID, tc.allowed)
+			if tc.stripeRole {
+				require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, tc.role, false))
+				checkCreate(t, userID, false)
+			}
+		})
+	}
+
+	// Revoking a Stripe tier must not remove an independent administrator-managed tier.
+	userID := uuid.New()
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"revered"}))
+	require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, "stripe_revered", true))
+	require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, "stripe_revered", false))
+	checkCreate(t, userID, true)
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, nil))
+	checkCreate(t, userID, false)
+}
+
 func TestLuaProjectPermissions(t *testing.T) {
 	t.Parallel()
 	broker := testservices.Authz(t)
