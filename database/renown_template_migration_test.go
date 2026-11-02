@@ -176,6 +176,11 @@ func TestVanillaPlusRenownDefaults(t *testing.T) {
         WHERE group_id = $1 AND instance_name = 'Zul''Gurub' AND encounter_name = 'The Nameless Hermit'`, groupID).Scan(&hermitPoints))
 	require.Equal(t, 1.0, hermitPoints)
 
+	var azusPoints float64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT renown_points FROM rating_group_boss_policies
+        WHERE group_id = $1 AND instance_name = 'Zul''Gurub' AND encounter_name = 'Azus the Bloodseeker'`, groupID).Scan(&azusPoints))
+	require.Equal(t, 1.0, azusPoints)
+
 	for name, want := range map[string]float64{
 		"Master Elemental Shaper Krixix": 2,
 		"Elementium Decapitator Mk III":  2,
