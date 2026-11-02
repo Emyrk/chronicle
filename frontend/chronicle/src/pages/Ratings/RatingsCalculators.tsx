@@ -212,7 +212,7 @@ export function RaidPeakCalculator({ bosses = 12 }: { bosses?: number }) {
       id="raid-peak-calculator"
       title="Raid Peak"
       accent={PEAK.accent}
-      description={`A raid's Peak averages your best parse on all ${bosses} bosses. A boss you have not killed counts as zero.`}
+      description={`A single raid's Peak averages your best parse on all ${bosses} bosses. A boss you have not killed counts as zero.`}
       inputs={
         <>
           <Slider label="Bosses killed" hint={`of ${bosses}`} value={killed} onChange={setKilled} min={0} max={bosses} accent={PEAK.accent} />

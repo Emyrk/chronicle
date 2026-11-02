@@ -68,8 +68,8 @@ export function RatingsLaunchPost({ post }: PostProps) {
       <h2>A closer look</h2>
       <ul>
         <li>
-          <strong>Peak</strong> is your best kill. A raid's Peak averages every boss, so it rewards a full set of strong
-          kills.
+          <strong>Peak</strong> is your best kill. A single raid's Peak averages every boss, so it rewards a full set of
+          strong kills.
         </li>
         <li>
           <strong>Ranked Mastery</strong> blends your Peak, your typical recent play (Form), and your weaker nights
