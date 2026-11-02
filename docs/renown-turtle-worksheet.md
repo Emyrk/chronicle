@@ -6,7 +6,7 @@ The clear times are the operator's approximate figures from [Capybara speedruns]
 
 ## Draft raid budgets
 
-| Raid | Size | Difficulty | Est. clean clear | Proposed tier/role | Reset used for this draft | Draft points per eligible clear | Approx. points per 7 days | Notes |
+| Raid | Size | Difficulty | Est. clean clear | Proposed tier/role | Reset | Total | Normalized (7d) | Notes |
 | --- | ---: | --- | ---: | --- | ---: | ---: | ---: | --- |
 | Lower Tower of Karazhan (K10) | 10 | base (verify) | 40m | custom 10-player | 5d | 30 | 42 | Verify source support. |
 | Upper Tower of Karazhan (K40) | 40 | base (verify) | 40m | custom 40-player | 7d | 95 | 95 | Verify source support. |
@@ -23,18 +23,18 @@ The draft uses a **70-point BWL clear**, not 1,000. Given all 13 known ZG boss n
 
 ### Draft boss allocations
 
-| Reset | Raid | Bosses and actual points per eligible kill | Total |
-| ---: | --- | --- | ---: |
-| 3d | ZG | High Priestess Jeklik 1; High Priest Venoxis 1; High Priestess Mar'li 1; Bloodlord Mandokir 1; High Priest Thekal 1; High Priestess Arlokk 1; Jin'do the Hexxer 1; Hakkar 3; Gahz'ranka 1; Gri'lek 1; Hazza'rah 1; Renataki 1; Wushoolay 1 | 15 |
-| 3d | AQ20 | Kurinnaxx 3; General Rajaxx 3; Moam 3; Buru the Gorger 3; Ayamiss the Hunter 3; Ossirian the Unscarred 9 | 24 |
-| 5d | Onyxia | Onyxia 4; Broodcommander Axelus 2 | 6 |
-| 5d | K10 | Lord Blackwald II 5; Brood Queen Araxxna 5; Grizikil 5; Clawlord Howlfang 5; Moroes 10 | 30 |
-| 7d | MC | Lucifron 2; Magmadar 2; Garr 2; Shazzrah 2; Baron Geddon 2; Sulfuron Harbinger 2; Golemagg the Incinerator 2; Incindis 2; Basalthar & Smoldaris 2; Sorcerer-Thane Thaurissan 2; Gehennas 4; Majordomo Executus 6; Ragnaros 10 | 40 |
-| 7d | BWL | Razorgore the Untamed 7; Vaelastrasz the Corrupt 7; Broodlord Lashlayer 7; Firemaw 7; Ebonroc 7; Flamegor 7; Chromaggus 7; Nefarian 14; Ezzel Darkbrewer 7 | 70 |
-| 7d | AQ40 | The Prophet Skeram 9; Bug Family 9; Battleguard Sartura 9; Fankriss the Unyielding 9; Viscidus 9; Princess Huhuran 9; Twin Emperors 9; Ouro 9; C'Thun 18 | 90 |
-| 7d | K40 | Keeper Gnarlmoon 10; Anomalus 10; Rupturan the Broken 10; Mephistroth 10; Ley-Watcher Incantagos 10; Echo of Medivh 10; King 10; Sanv Tas'dal 10; Kruul 15 | 95 |
-| 7d | Naxxramas | Anub'Rekhan 7; Grand Widow Faerlina 7; Maexxna 7; Noth the Plaguebringer 7; Heigan the Unclean 7; Loatheb 7; Instructor Razuvious 7; Gothik the Harvester 7; Four Horsemen 7; Patchwerk 7; Grobbulus 7; Gluth 7; Thaddius 7; Sapphiron 7; Kel'Thuzad 22 | 120 |
-| 7d | Emerald Sanctum | Erennius **TBD**; Solnius **TBD**; Solnius (Hard Mode) **TBD** | **TBD** |
+| Reset | Raid | Bosses and actual points per eligible kill | Total | Normalized (7d) |
+| ---: | --- | --- | ---: | ---: |
+| 3d | ZG | High Priestess Jeklik 1; High Priest Venoxis 1; High Priestess Mar'li 1; Bloodlord Mandokir 1; High Priest Thekal 1; High Priestess Arlokk 1; Jin'do the Hexxer 1; Hakkar 3; Gahz'ranka 1; Gri'lek 1; Hazza'rah 1; Renataki 1; Wushoolay 1 | 15 | 35 |
+| 3d | AQ20 | Kurinnaxx 3; General Rajaxx 3; Moam 3; Buru the Gorger 3; Ayamiss the Hunter 3; Ossirian the Unscarred 9 | 24 | 56 |
+| 5d | Onyxia | Onyxia 4; Broodcommander Axelus 2 | 6 | 8.4 |
+| 5d | K10 | Lord Blackwald II 5; Brood Queen Araxxna 5; Grizikil 5; Clawlord Howlfang 5; Moroes 10 | 30 | 42 |
+| 7d | MC | Lucifron 2; Magmadar 2; Garr 2; Shazzrah 2; Baron Geddon 2; Sulfuron Harbinger 2; Golemagg the Incinerator 2; Incindis 2; Basalthar & Smoldaris 2; Sorcerer-Thane Thaurissan 2; Gehennas 4; Majordomo Executus 6; Ragnaros 10 | 40 | 40 |
+| 7d | BWL | Razorgore the Untamed 7; Vaelastrasz the Corrupt 7; Broodlord Lashlayer 7; Firemaw 7; Ebonroc 7; Flamegor 7; Chromaggus 7; Nefarian 14; Ezzel Darkbrewer 7 | 70 | 70 |
+| 7d | AQ40 | The Prophet Skeram 9; Bug Family 9; Battleguard Sartura 9; Fankriss the Unyielding 9; Viscidus 9; Princess Huhuran 9; Twin Emperors 9; Ouro 9; C'Thun 18 | 90 | 90 |
+| 7d | K40 | Keeper Gnarlmoon 10; Anomalus 10; Rupturan the Broken 10; Mephistroth 10; Ley-Watcher Incantagos 10; Echo of Medivh 10; King 10; Sanv Tas'dal 10; Kruul 15 | 95 | 95 |
+| 7d | Naxxramas | Anub'Rekhan 7; Grand Widow Faerlina 7; Maexxna 7; Noth the Plaguebringer 7; Heigan the Unclean 7; Loatheb 7; Instructor Razuvious 7; Gothik the Harvester 7; Four Horsemen 7; Patchwerk 7; Grobbulus 7; Gluth 7; Thaddius 7; Sapphiron 7; Kel'Thuzad 22 | 120 | 120 |
+| 7d | Emerald Sanctum | Erennius **TBD**; Solnius **TBD**; Solnius (Hard Mode) **TBD** | **TBD** | **TBD** |
 
 **Verify MC before seeding.** Its progression list names 12 encounters, while `Bosses` also includes Gehennas. Its progression label and ranking-fact eligibility need review; this provisional split includes Gehennas at four points instead of silently excluding that kill. ZG's five non-progression bosses and both Turtle-specific custom encounters are listed so the proposed totals do not depend on an incomplete speedrun requirement list. K10 and K40 are derived names under the Tower of Karazhan instance; its parent has no `ProgressionBosses` list. Treat these as separate raid budgets.
 
