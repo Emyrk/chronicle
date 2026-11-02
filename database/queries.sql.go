@@ -22258,6 +22258,204 @@ func (q *sqlQuerier) PutRatingGroupPolicy(ctx context.Context, arg PutRatingGrou
 	return result.RowsAffected(), nil
 }
 
+const abortRatingRebuild = `-- name: AbortRatingRebuild :execrows
+WITH aborted AS (
+    UPDATE rating_rebuild_checkpoints cp SET phase = 'aborted', heartbeat_at = now()
+    FROM rating_score_generations gen
+    WHERE cp.generation_id = $1 AND cp.tenant_id = $2
+      AND gen.id = cp.generation_id AND gen.tenant_id = cp.tenant_id
+      AND gen.status = 'building' AND cp.phase <> 'complete'
+    RETURNING cp.generation_id
+)
+UPDATE rating_score_generations gen SET status = 'retired'
+FROM aborted WHERE gen.id = aborted.generation_id
+`
+
+type AbortRatingRebuildParams struct {
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) AbortRatingRebuild(ctx context.Context, arg AbortRatingRebuildParams) (int64, error) {
+	result, err := q.db.Exec(ctx, abortRatingRebuild, arg.GenerationID, arg.TenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const advanceRatingRebuildCheckpoint = `-- name: AdvanceRatingRebuildCheckpoint :execrows
+UPDATE rating_rebuild_checkpoints cp
+SET phase = $1, cursor = $2::jsonb, heartbeat_at = now()
+FROM rating_score_generations gen
+WHERE cp.generation_id = $3 AND cp.tenant_id = $4
+  AND gen.id = cp.generation_id AND gen.tenant_id = cp.tenant_id
+  AND gen.status = 'building' AND cp.phase = $5
+  AND cp.cursor = $6::jsonb
+  AND length(btrim($1::text)) > 0
+`
+
+type AdvanceRatingRebuildCheckpointParams struct {
+	NextPhase      string    `db:"next_phase" json:"next_phase"`
+	NextCursor     []byte    `db:"next_cursor" json:"next_cursor"`
+	GenerationID   uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	ExpectedPhase  string    `db:"expected_phase" json:"expected_phase"`
+	ExpectedCursor []byte    `db:"expected_cursor" json:"expected_cursor"`
+}
+
+// Caller owns phase-specific JSON cursor keys. CAS prevents stale workers from
+// overwriting another worker's progress. Do not advance before staging writes
+// commit; use the same transaction for inserts and this checkpoint update.
+func (q *sqlQuerier) AdvanceRatingRebuildCheckpoint(ctx context.Context, arg AdvanceRatingRebuildCheckpointParams) (int64, error) {
+	result, err := q.db.Exec(ctx, advanceRatingRebuildCheckpoint,
+		arg.NextPhase,
+		arg.NextCursor,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.ExpectedPhase,
+		arg.ExpectedCursor,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getBuildingRatingRebuildCheckpoint = `-- name: GetBuildingRatingRebuildCheckpoint :one
+SELECT cp.generation_id, cp.tenant_id, cp.config_revision, cp.as_of, cp.source_cutoff, cp.phase, cp.cursor, cp.manifest, cp.heartbeat_at FROM rating_rebuild_checkpoints cp
+JOIN rating_score_generations gen ON gen.id = cp.generation_id
+WHERE cp.tenant_id = $1 AND gen.tenant_id = $1
+  AND gen.status = 'building'
+`
+
+func (q *sqlQuerier) GetBuildingRatingRebuildCheckpoint(ctx context.Context, tenantID uuid.UUID) (RatingRebuildCheckpoint, error) {
+	row := q.db.QueryRow(ctx, getBuildingRatingRebuildCheckpoint, tenantID)
+	var i RatingRebuildCheckpoint
+	err := row.Scan(
+		&i.GenerationID,
+		&i.TenantID,
+		&i.ConfigRevision,
+		&i.AsOf,
+		&i.SourceCutoff,
+		&i.Phase,
+		&i.Cursor,
+		&i.Manifest,
+		&i.HeartbeatAt,
+	)
+	return i, err
+}
+
+const getRatingConfigRevision = `-- name: GetRatingConfigRevision :one
+SELECT revision FROM rating_config_revisions WHERE tenant_id = $1
+`
+
+func (q *sqlQuerier) GetRatingConfigRevision(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, getRatingConfigRevision, tenantID)
+	var revision int64
+	err := row.Scan(&revision)
+	return revision, err
+}
+
+const getRatingRebuildCheckpoint = `-- name: GetRatingRebuildCheckpoint :one
+SELECT generation_id, tenant_id, config_revision, as_of, source_cutoff, phase, cursor, manifest, heartbeat_at FROM rating_rebuild_checkpoints
+WHERE tenant_id = $1 AND generation_id = $2
+`
+
+type GetRatingRebuildCheckpointParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+}
+
+func (q *sqlQuerier) GetRatingRebuildCheckpoint(ctx context.Context, arg GetRatingRebuildCheckpointParams) (RatingRebuildCheckpoint, error) {
+	row := q.db.QueryRow(ctx, getRatingRebuildCheckpoint, arg.TenantID, arg.GenerationID)
+	var i RatingRebuildCheckpoint
+	err := row.Scan(
+		&i.GenerationID,
+		&i.TenantID,
+		&i.ConfigRevision,
+		&i.AsOf,
+		&i.SourceCutoff,
+		&i.Phase,
+		&i.Cursor,
+		&i.Manifest,
+		&i.HeartbeatAt,
+	)
+	return i, err
+}
+
+const heartbeatRatingRebuildCheckpoint = `-- name: HeartbeatRatingRebuildCheckpoint :execrows
+UPDATE rating_rebuild_checkpoints cp SET heartbeat_at = now()
+FROM rating_score_generations gen
+WHERE cp.generation_id = $1 AND cp.tenant_id = $2
+  AND gen.id = cp.generation_id AND gen.status = 'building'
+  AND cp.phase = $3 AND cp.cursor = $4::jsonb
+`
+
+type HeartbeatRatingRebuildCheckpointParams struct {
+	GenerationID   uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	ExpectedPhase  string    `db:"expected_phase" json:"expected_phase"`
+	ExpectedCursor []byte    `db:"expected_cursor" json:"expected_cursor"`
+}
+
+func (q *sqlQuerier) HeartbeatRatingRebuildCheckpoint(ctx context.Context, arg HeartbeatRatingRebuildCheckpointParams) (int64, error) {
+	result, err := q.db.Exec(ctx, heartbeatRatingRebuildCheckpoint,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.ExpectedPhase,
+		arg.ExpectedCursor,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const publishRatingRebuild = `-- name: PublishRatingRebuild :one
+SELECT publish_rating_rebuild($1::uuid, $2::uuid)::boolean
+`
+
+type PublishRatingRebuildParams struct {
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+// Publish is atomic and gates on the revision row. Returns false for a stale
+// config snapshot or an unfinished/non-building generation.
+func (q *sqlQuerier) PublishRatingRebuild(ctx context.Context, arg PublishRatingRebuildParams) (bool, error) {
+	row := q.db.QueryRow(ctx, publishRatingRebuild, arg.GenerationID, arg.TenantID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const startRatingRebuild = `-- name: StartRatingRebuild :one
+SELECT start_rating_rebuild($1::uuid, $2::int,
+                            $3::timestamptz, $4::timestamptz)::uuid
+`
+
+type StartRatingRebuildParams struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int32              `db:"policy_version" json:"policy_version"`
+	AsOf          pgtype.Timestamptz `db:"as_of" json:"as_of"`
+	SourceCutoff  pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+}
+
+// The start function atomically locks the tenant revision, snapshots all config,
+// creates a building generation and checkpoint, or returns the unfinished one.
+func (q *sqlQuerier) StartRatingRebuild(ctx context.Context, arg StartRatingRebuildParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, startRatingRebuild,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.AsOf,
+		arg.SourceCutoff,
+	)
+	var column_1 uuid.UUID
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const deleteRatingRaidPolicy = `-- name: DeleteRatingRaidPolicy :execrows
 DELETE FROM rating_group_raid_policies raid
 USING rating_realm_groups grp, wow_servers server

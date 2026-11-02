@@ -2349,6 +2349,11 @@ type RatingBossScore struct {
 	GroupID           uuid.NullUUID      `db:"group_id" json:"group_id"`
 }
 
+type RatingConfigRevision struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Revision int64     `db:"revision" json:"revision"`
+}
+
 type RatingGroupBossPolicy struct {
 	GroupID        uuid.UUID `db:"group_id" json:"group_id"`
 	InstanceName   string    `db:"instance_name" json:"instance_name"`
@@ -2389,6 +2394,18 @@ type RatingRealmGroupMembership struct {
 	RealmID  uuid.UUID `db:"realm_id" json:"realm_id"`
 	ServerID uuid.UUID `db:"server_id" json:"server_id"`
 	GroupID  uuid.UUID `db:"group_id" json:"group_id"`
+}
+
+type RatingRebuildCheckpoint struct {
+	GenerationID   uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	ConfigRevision int64              `db:"config_revision" json:"config_revision"`
+	AsOf           pgtype.Timestamptz `db:"as_of" json:"as_of"`
+	SourceCutoff   pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	Phase          string             `db:"phase" json:"phase"`
+	Cursor         []byte             `db:"cursor" json:"cursor"`
+	Manifest       []byte             `db:"manifest" json:"manifest"`
+	HeartbeatAt    pgtype.Timestamptz `db:"heartbeat_at" json:"heartbeat_at"`
 }
 
 type RatingScopeScore struct {

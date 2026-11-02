@@ -122,6 +122,52 @@ CREATE TYPE wow_playable_race AS ENUM (
     'Draenei'
 );
 
+CREATE FUNCTION bump_rating_config_revision() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    old_tenant UUID;
+    new_tenant UUID;
+BEGIN
+    IF TG_OP = 'UPDATE' AND OLD IS NOT DISTINCT FROM NEW THEN
+        RETURN NEW;
+    END IF;
+    IF TG_TABLE_NAME = 'rating_realm_groups' THEN
+        IF TG_OP <> 'INSERT' THEN
+            SELECT COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid)
+              INTO old_tenant FROM wow_servers WHERE id = OLD.server_id;
+        END IF;
+        IF TG_OP <> 'DELETE' THEN
+            SELECT COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid)
+              INTO new_tenant FROM wow_servers WHERE id = NEW.server_id;
+        END IF;
+    ELSE
+        IF TG_OP <> 'INSERT' THEN
+            SELECT COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid)
+              INTO old_tenant FROM rating_realm_groups grp
+              JOIN wow_servers server ON server.id = grp.server_id
+              WHERE grp.id = OLD.group_id;
+        END IF;
+        IF TG_OP <> 'DELETE' THEN
+            SELECT COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid)
+              INTO new_tenant FROM rating_realm_groups grp
+              JOIN wow_servers server ON server.id = grp.server_id
+              WHERE grp.id = NEW.group_id;
+        END IF;
+    END IF;
+    IF old_tenant IS NOT NULL THEN
+        INSERT INTO rating_config_revisions (tenant_id, revision) VALUES (old_tenant, 1)
+        ON CONFLICT (tenant_id) DO UPDATE
+    END IF;
+    IF new_tenant IS NOT NULL AND new_tenant IS DISTINCT FROM old_tenant THEN
+        INSERT INTO rating_config_revisions (tenant_id, revision) VALUES (new_tenant, 1)
+        ON CONFLICT (tenant_id) DO UPDATE
+    END IF;
+    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    RETURN NEW;
+END;
+$$;
+
 CREATE FUNCTION bump_rating_group_policy_version() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -165,6 +211,29 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION gate_rating_checkpoint_activation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    checkpoint_revision BIGINT;
+    checkpoint_phase TEXT;
+    current_revision BIGINT;
+BEGIN
+    IF NEW.status = 'active' AND OLD.status IS DISTINCT FROM 'active' THEN
+        SELECT config_revision, phase INTO checkpoint_revision, checkpoint_phase FROM rating_rebuild_checkpoints
+        WHERE generation_id = NEW.id AND tenant_id = NEW.tenant_id;
+        IF FOUND THEN
+            SELECT revision INTO current_revision FROM rating_config_revisions
+            WHERE tenant_id = NEW.tenant_id FOR UPDATE;
+            IF current_revision IS DISTINCT FROM checkpoint_revision OR checkpoint_phase <> 'ready' THEN
+                RAISE EXCEPTION 'rating rebuild not ready or configuration changed for tenant %', NEW.tenant_id;
+            END IF;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
 CREATE FUNCTION insert_default_data_grant() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -175,15 +244,29 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION lock_rating_rebuild_config() RETURNS trigger
+CREATE FUNCTION publish_rating_rebuild(p_generation_id uuid, p_tenant_id uuid) RETURNS boolean
     LANGUAGE plpgsql
     AS $$
+DECLARE
+    checkpoint_revision BIGINT;
+    current_revision BIGINT;
 BEGIN
-    PERFORM pg_advisory_xact_lock(1131453276, 1);
-    IF TG_OP = 'DELETE' THEN
-        RETURN OLD;
-    END IF;
-    RETURN NEW;
+    SELECT revision INTO current_revision FROM rating_config_revisions
+    WHERE tenant_id = p_tenant_id FOR UPDATE;
+    SELECT cp.config_revision INTO checkpoint_revision
+    FROM rating_rebuild_checkpoints cp
+    JOIN rating_score_generations gen ON gen.id = cp.generation_id
+    WHERE cp.generation_id = p_generation_id AND cp.tenant_id = p_tenant_id
+      AND gen.tenant_id = p_tenant_id AND gen.status = 'building'
+      AND cp.phase = 'ready'
+    FOR UPDATE OF cp, gen;
+    IF NOT FOUND OR current_revision IS DISTINCT FROM checkpoint_revision THEN RETURN false; END IF;
+    UPDATE rating_score_generations SET status = 'retired'
+    WHERE tenant_id = p_tenant_id AND status = 'active';
+    UPDATE rating_score_generations
+    UPDATE rating_rebuild_checkpoints SET phase = 'complete', heartbeat_at = now()
+    WHERE generation_id = p_generation_id;
+    RETURN true;
 END;
 $$;
 
@@ -218,6 +301,55 @@ CREATE FUNCTION river_job_state_in_bitmask(bitmask bit, state river_job_state) R
         WHEN 'scheduled' THEN get_bit(bitmask, 0)
         ELSE 0
     END = 1;
+$$;
+
+CREATE FUNCTION start_rating_rebuild(p_tenant_id uuid, p_policy_version integer, p_as_of timestamp with time zone, p_source_cutoff timestamp with time zone) RETURNS uuid
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    revision_now BIGINT;
+    existing_id UUID;
+    new_id UUID;
+    frozen JSONB;
+BEGIN
+    IF p_source_cutoff > p_as_of THEN RAISE EXCEPTION 'source cutoff exceeds as_of'; END IF;
+    INSERT INTO rating_config_revisions (tenant_id) VALUES (p_tenant_id)
+    ON CONFLICT (tenant_id) DO NOTHING;
+    SELECT revision INTO revision_now FROM rating_config_revisions
+    WHERE tenant_id = p_tenant_id FOR UPDATE;
+    SELECT gen.id INTO existing_id FROM rating_rebuild_checkpoints cp
+    JOIN rating_score_generations gen ON gen.id = cp.generation_id
+    WHERE cp.tenant_id = p_tenant_id AND gen.status = 'building'
+      AND cp.phase NOT IN ('complete', 'aborted');
+    IF FOUND THEN RETURN existing_id; END IF;
+    SELECT jsonb_build_object(
+        'groups', (SELECT COALESCE(jsonb_agg(to_jsonb(grp) ORDER BY grp.id), '[]'::jsonb)
+                   FROM rating_realm_groups grp JOIN wow_servers server ON server.id = grp.server_id
+                   WHERE COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = p_tenant_id),
+        'memberships', (SELECT COALESCE(jsonb_agg(to_jsonb(member) ORDER BY member.realm_id), '[]'::jsonb)
+                        FROM rating_realm_group_memberships member
+                        JOIN rating_realm_groups grp ON grp.id = member.group_id
+                        JOIN wow_servers server ON server.id = grp.server_id
+                        WHERE COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = p_tenant_id),
+        'policies', (SELECT COALESCE(jsonb_agg(to_jsonb(policy) ORDER BY policy.group_id), '[]'::jsonb)
+                     FROM rating_group_policies policy JOIN rating_realm_groups grp ON grp.id = policy.group_id
+                     JOIN wow_servers server ON server.id = grp.server_id
+                     WHERE COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = p_tenant_id),
+        'boss_policies', (SELECT COALESCE(jsonb_agg(to_jsonb(boss) ORDER BY boss.group_id, boss.instance_name, boss.encounter_name), '[]'::jsonb)
+                          FROM rating_group_boss_policies boss JOIN rating_realm_groups grp ON grp.id = boss.group_id
+                          JOIN wow_servers server ON server.id = grp.server_id
+                          WHERE COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = p_tenant_id),
+        'raid_policies', (SELECT COALESCE(jsonb_agg(to_jsonb(raid) ORDER BY raid.group_id, raid.instance_name), '[]'::jsonb)
+                          FROM rating_group_raid_policies raid JOIN rating_realm_groups grp ON grp.id = raid.group_id
+                          JOIN wow_servers server ON server.id = grp.server_id
+                          WHERE COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = p_tenant_id)
+    ) INTO frozen;
+    INSERT INTO rating_score_generations (tenant_id, policy_version, as_of)
+    VALUES (p_tenant_id, p_policy_version, p_as_of) RETURNING id INTO new_id;
+    INSERT INTO rating_rebuild_checkpoints (generation_id, tenant_id, config_revision, as_of, source_cutoff, manifest)
+    VALUES (new_id, p_tenant_id, revision_now, p_as_of, p_source_cutoff, frozen);
+    RETURN new_id;
+END;
 $$;
 
 CREATE TABLE account_purges (
@@ -2013,6 +2145,12 @@ CREATE TABLE rating_boss_scores (
 
 ALTER TABLE ONLY rating_boss_scores FORCE ROW LEVEL SECURITY;
 
+CREATE TABLE rating_config_revisions (
+    tenant_id uuid NOT NULL,
+    revision bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT rating_config_revisions_revision_check CHECK ((revision >= 0))
+);
+
 CREATE TABLE rating_group_boss_policies (
     group_id uuid NOT NULL,
     instance_name text NOT NULL,
@@ -2080,6 +2218,21 @@ CREATE TABLE rating_realm_groups (
 );
 
 ALTER TABLE ONLY rating_realm_groups FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE rating_rebuild_checkpoints (
+    generation_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    config_revision bigint NOT NULL,
+    as_of timestamp with time zone NOT NULL,
+    source_cutoff timestamp with time zone NOT NULL,
+    phase text DEFAULT 'runs'::text NOT NULL,
+    cursor jsonb DEFAULT '{}'::jsonb NOT NULL,
+    manifest jsonb NOT NULL,
+    heartbeat_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT rating_rebuild_checkpoints_check CHECK ((source_cutoff <= as_of)),
+    CONSTRAINT rating_rebuild_checkpoints_cursor_check CHECK ((jsonb_typeof(cursor) = 'object'::text)),
+    CONSTRAINT rating_rebuild_checkpoints_phase_check CHECK ((length(btrim(phase)) > 0))
+);
 
 CREATE TABLE rating_scope_scores (
     generation_id uuid NOT NULL,
@@ -3330,6 +3483,9 @@ ALTER TABLE ONLY rankings_instance_summaries
 ALTER TABLE ONLY rating_boss_scores
     ADD CONSTRAINT rating_boss_scores_pkey PRIMARY KEY (generation_id, realm_id, player_guid, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind);
 
+ALTER TABLE ONLY rating_config_revisions
+    ADD CONSTRAINT rating_config_revisions_pkey PRIMARY KEY (tenant_id);
+
 ALTER TABLE ONLY rating_group_boss_policies
     ADD CONSTRAINT rating_group_boss_policies_pkey PRIMARY KEY (group_id, instance_name, encounter_name);
 
@@ -3350,6 +3506,12 @@ ALTER TABLE ONLY rating_realm_groups
 
 ALTER TABLE ONLY rating_realm_groups
     ADD CONSTRAINT rating_realm_groups_server_id_name_key UNIQUE (server_id, name);
+
+ALTER TABLE ONLY rating_rebuild_checkpoints
+    ADD CONSTRAINT rating_rebuild_checkpoints_generation_id_tenant_id_key UNIQUE (generation_id, tenant_id);
+
+ALTER TABLE ONLY rating_rebuild_checkpoints
+    ADD CONSTRAINT rating_rebuild_checkpoints_pkey PRIMARY KEY (generation_id);
 
 ALTER TABLE ONLY rating_scope_scores
     ADD CONSTRAINT rating_scope_scores_pkey PRIMARY KEY (generation_id, group_id, realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind);
@@ -3889,6 +4051,10 @@ CREATE UNIQUE INDEX rating_group_final_boss_idx ON rating_group_boss_policies US
 
 CREATE INDEX rating_realm_group_memberships_group_idx ON rating_realm_group_memberships USING btree (group_id, realm_id);
 
+CREATE UNIQUE INDEX rating_rebuild_checkpoints_building_idx ON rating_rebuild_checkpoints USING btree (tenant_id) WHERE (phase <> ALL (ARRAY['complete'::text, 'aborted'::text]));
+
+CREATE INDEX rating_rebuild_checkpoints_tenant_idx ON rating_rebuild_checkpoints USING btree (tenant_id, heartbeat_at);
+
 CREATE INDEX rating_scope_scores_board_idx ON rating_scope_scores USING btree (generation_id, group_id, instance_name, rating_metric, window_kind, performance_metric, difficulty_name, max_players, player_class, player_spec, player_sub_spec, score DESC, realm_id, player_guid);
 
 CREATE UNIQUE INDEX rating_score_generations_active_idx ON rating_score_generations USING btree (tenant_id) WHERE (status = 'active'::text);
@@ -3939,17 +4105,19 @@ CREATE UNIQUE INDEX user_talent_builds_user_name_ci_uidx ON user_talent_builds U
 
 CREATE INDEX user_talent_builds_user_tenant_idx ON user_talent_builds USING btree (user_id, tenant_id);
 
-CREATE TRIGGER rating_boss_policy_rebuild_lock BEFORE INSERT OR DELETE OR UPDATE ON rating_group_boss_policies FOR EACH ROW EXECUTE FUNCTION lock_rating_rebuild_config();
+CREATE TRIGGER rating_boss_policy_revision AFTER INSERT OR DELETE OR UPDATE ON rating_group_boss_policies FOR EACH ROW EXECUTE FUNCTION bump_rating_config_revision();
 
 CREATE TRIGGER rating_boss_policy_version AFTER INSERT OR DELETE OR UPDATE ON rating_group_boss_policies FOR EACH ROW EXECUTE FUNCTION bump_rating_group_policy_version();
 
-CREATE TRIGGER rating_group_rebuild_lock BEFORE INSERT OR DELETE OR UPDATE ON rating_realm_groups FOR EACH ROW EXECUTE FUNCTION lock_rating_rebuild_config();
+CREATE TRIGGER rating_checkpoint_activation BEFORE UPDATE OF status ON rating_score_generations FOR EACH ROW EXECUTE FUNCTION gate_rating_checkpoint_activation();
 
-CREATE TRIGGER rating_membership_rebuild_lock BEFORE INSERT OR DELETE OR UPDATE ON rating_realm_group_memberships FOR EACH ROW EXECUTE FUNCTION lock_rating_rebuild_config();
+CREATE TRIGGER rating_group_revision BEFORE INSERT OR DELETE OR UPDATE ON rating_realm_groups FOR EACH ROW EXECUTE FUNCTION bump_rating_config_revision();
 
-CREATE TRIGGER rating_policy_rebuild_lock BEFORE INSERT OR DELETE OR UPDATE ON rating_group_policies FOR EACH ROW EXECUTE FUNCTION lock_rating_rebuild_config();
+CREATE TRIGGER rating_membership_revision AFTER INSERT OR DELETE OR UPDATE ON rating_realm_group_memberships FOR EACH ROW EXECUTE FUNCTION bump_rating_config_revision();
 
-CREATE TRIGGER rating_raid_policy_rebuild_lock BEFORE INSERT OR DELETE OR UPDATE ON rating_group_raid_policies FOR EACH ROW EXECUTE FUNCTION lock_rating_rebuild_config();
+CREATE TRIGGER rating_policy_revision AFTER INSERT OR DELETE OR UPDATE ON rating_group_policies FOR EACH ROW EXECUTE FUNCTION bump_rating_config_revision();
+
+CREATE TRIGGER rating_raid_policy_revision AFTER INSERT OR DELETE OR UPDATE ON rating_group_raid_policies FOR EACH ROW EXECUTE FUNCTION bump_rating_config_revision();
 
 CREATE TRIGGER rating_raid_policy_version AFTER INSERT OR DELETE OR UPDATE ON rating_group_raid_policies FOR EACH ROW EXECUTE FUNCTION bump_rating_group_policy_version();
 
@@ -4425,6 +4593,9 @@ ALTER TABLE ONLY rating_realm_group_memberships
 
 ALTER TABLE ONLY rating_realm_groups
     ADD CONSTRAINT rating_realm_groups_server_id_fkey FOREIGN KEY (server_id) REFERENCES wow_servers(id);
+
+ALTER TABLE ONLY rating_rebuild_checkpoints
+    ADD CONSTRAINT rating_rebuild_checkpoints_generation_id_fkey FOREIGN KEY (generation_id) REFERENCES rating_score_generations(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY rating_scope_scores
     ADD CONSTRAINT rating_scope_scores_generation_id_fkey FOREIGN KEY (generation_id) REFERENCES rating_score_generations(id) ON DELETE CASCADE;

@@ -14,6 +14,7 @@ import (
 
 type sqlcQuerier interface {
 	AbandonAwaitingInferenceRun(ctx context.Context, arg AbandonAwaitingInferenceRunParams) (InferenceRun, error)
+	AbortRatingRebuild(ctx context.Context, arg AbortRatingRebuildParams) (int64, error)
 	AcquireParseScoreLock(ctx context.Context, lockKey string) error
 	// Serialize refresh snapshots and commits across logical-run identity changes.
 	AcquireRankingRunRefreshLock(ctx context.Context) error
@@ -28,6 +29,10 @@ type sqlcQuerier interface {
 	AddUserFavoriteGuild(ctx context.Context, arg AddUserFavoriteGuildParams) (pgtype.Bool, error)
 	AddUserFavoritePlayer(ctx context.Context, arg AddUserFavoritePlayerParams) error
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
+	// Caller owns phase-specific JSON cursor keys. CAS prevents stale workers from
+	// overwriting another worker's progress. Do not advance before staging writes
+	// commit; use the same transaction for inserts and this checkpoint update.
+	AdvanceRatingRebuildCheckpoint(ctx context.Context, arg AdvanceRatingRebuildCheckpointParams) (int64, error)
 	AdvanceWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	AssignRatingRealmToGroup(ctx context.Context, arg AssignRatingRealmToGroupParams) (int64, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
@@ -265,6 +270,7 @@ type sqlcQuerier interface {
 	GetBillingSubscriptionByProviderID(ctx context.Context, arg GetBillingSubscriptionByProviderIDParams) (BillingSubscription, error)
 	GetBillingSubscriptionByUserID(ctx context.Context, userID uuid.UUID) (BillingSubscription, error)
 	GetBillingWebhookEvent(ctx context.Context, stripeEventID string) (BillingWebhookEvent, error)
+	GetBuildingRatingRebuildCheckpoint(ctx context.Context, tenantID uuid.UUID) (RatingRebuildCheckpoint, error)
 	GetCacheGeneration(ctx context.Context, arg GetCacheGenerationParams) (CacheGeneration, error)
 	GetCanonicalSpellByID(ctx context.Context, arg GetCanonicalSpellByIDParams) (GetCanonicalSpellByIDRow, error)
 	GetCanonicalSpellsByName(ctx context.Context, arg GetCanonicalSpellsByNameParams) ([]GetCanonicalSpellsByNameRow, error)
@@ -436,6 +442,8 @@ type sqlcQuerier interface {
 	GetPublicLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error)
 	GetPublishedLuaProjectArtifact(ctx context.Context, arg GetPublishedLuaProjectArtifactParams) (GetPublishedLuaProjectArtifactRow, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
+	GetRatingConfigRevision(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	GetRatingRebuildCheckpoint(ctx context.Context, arg GetRatingRebuildCheckpointParams) (RatingRebuildCheckpoint, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).
 	GetRealmsWithRetentionPolicies(ctx context.Context) ([]uuid.UUID, error)
@@ -579,6 +587,7 @@ type sqlcQuerier interface {
 	HasBillingEntitlement(ctx context.Context, arg HasBillingEntitlementParams) (bool, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
+	HeartbeatRatingRebuildCheckpoint(ctx context.Context, arg HeartbeatRatingRebuildCheckpointParams) (int64, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
 	InitializeUserWhatsNewState(ctx context.Context, arg InitializeUserWhatsNewStateParams) (UserWhatsNewState, error)
 	InsertAccountPurge(ctx context.Context, arg InsertAccountPurgeParams) (AccountPurge, error)
@@ -931,6 +940,9 @@ type sqlcQuerier interface {
 	PublicInstance(ctx context.Context, id uuid.UUID) (LogInstancesGuild, error)
 	PublicInstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
 	PublishCacheGeneration(ctx context.Context, arg PublishCacheGenerationParams) (PublishCacheGenerationRow, error)
+	// Publish is atomic and gates on the revision row. Returns false for a stale
+	// config snapshot or an unfinished/non-building generation.
+	PublishRatingRebuild(ctx context.Context, arg PublishRatingRebuildParams) (bool, error)
 	PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjectArtifactParams) (string, error)
 	PutRatingBossPolicy(ctx context.Context, arg PutRatingBossPolicyParams) (int64, error)
 	PutRatingGroupPolicy(ctx context.Context, arg PutRatingGroupPolicyParams) (int64, error)
@@ -1117,6 +1129,9 @@ type sqlcQuerier interface {
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
 	StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error
+	// The start function atomically locks the tenant revision, snapshots all config,
+	// creates a building generation and checkpoint, or returns the unfinished one.
+	StartRatingRebuild(ctx context.Context, arg StartRatingRebuildParams) (uuid.UUID, error)
 	TelemetryGetActiveFileBytes(ctx context.Context) (int64, error)
 	TelemetryGetDeletedFileBytes(ctx context.Context) (int64, error)
 	TelemetryGetLogCountByZone(ctx context.Context) ([]TelemetryGetLogCountByZoneRow, error)

@@ -376,7 +376,7 @@ func TestRatingGroupRLSFollowsServerTenant(t *testing.T) {
 	require.Empty(t, hidden, "RLS must hide another tenant's groups despite a forged tenant parameter")
 }
 
-func TestRatingRebuildConfigLockIsTransactional(t *testing.T) {
+func TestRatingConfigRevisionLockIsTenantScoped(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitMedium)
 	pool, _ := dbtestutil.NewPGXPool(t)
@@ -386,19 +386,24 @@ func TestRatingRebuildConfigLockIsTransactional(t *testing.T) {
 	second, err := pool.Acquire(ctx)
 	require.NoError(t, err)
 	defer second.Release()
+	var triggerCount int
+	require.NoError(t, first.QueryRow(ctx, `SELECT count(*) FROM pg_trigger
+        WHERE tgname IN ('rating_group_revision', 'rating_membership_revision',
+        'rating_policy_revision', 'rating_boss_policy_revision', 'rating_raid_policy_revision')`).Scan(&triggerCount))
+	require.Equal(t, 5, triggerCount, "all rating configuration tables bump their tenant revision")
+	tenantA, tenantB := uuid.New(), uuid.New()
+	_, err = first.Exec(ctx, "INSERT INTO rating_config_revisions (tenant_id) VALUES ($1), ($2)", tenantA, tenantB)
+	require.NoError(t, err)
 	tx, err := first.Begin(ctx)
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
-	var triggerCount int
-	require.NoError(t, tx.QueryRow(ctx, `SELECT count(*) FROM pg_trigger
-		WHERE tgname IN ('rating_group_rebuild_lock', 'rating_membership_rebuild_lock',
-		'rating_policy_rebuild_lock', 'rating_boss_policy_rebuild_lock', 'rating_raid_policy_rebuild_lock')`).Scan(&triggerCount))
-	require.Equal(t, 5, triggerCount, "all configuration mutations share the rebuild fence")
-	require.NoError(t, database.NewQueries(tx).AcquireRatingRebuildConfigLock(ctx))
-	var acquired bool
-	require.NoError(t, second.QueryRow(ctx, "SELECT pg_try_advisory_xact_lock(1131453276, 1)").Scan(&acquired))
-	require.False(t, acquired, "a competing rebuild or config mutation must wait")
+	_, err = tx.Exec(ctx, "SELECT revision FROM rating_config_revisions WHERE tenant_id=$1 FOR UPDATE", tenantA)
+	require.NoError(t, err)
+	_, err = second.Exec(ctx, "SELECT revision FROM rating_config_revisions WHERE tenant_id=$1 FOR UPDATE NOWAIT", tenantB)
+	require.NoError(t, err, "a different tenant does not wait for this build")
+	_, err = second.Exec(ctx, "SELECT revision FROM rating_config_revisions WHERE tenant_id=$1 FOR UPDATE NOWAIT", tenantA)
+	require.Error(t, err, "same-tenant config edits serialize on the revision row")
 	require.NoError(t, tx.Commit(ctx))
-	require.NoError(t, second.QueryRow(ctx, "SELECT pg_try_advisory_xact_lock(1131453276, 1)").Scan(&acquired))
-	require.True(t, acquired, "the lock is released with the build transaction")
+	_, err = second.Exec(ctx, "SELECT revision FROM rating_config_revisions WHERE tenant_id=$1 FOR UPDATE NOWAIT", tenantA)
+	require.NoError(t, err)
 }
