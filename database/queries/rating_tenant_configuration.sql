@@ -3,8 +3,14 @@
 -- name: GetTenantRatingPolicy :one
 SELECT * FROM rating_tenant_policies WHERE tenant_id = @tenant_id;
 
--- A tenant policy is optional. Do not gate Peak/Mastery encounter eligibility
--- on this table: scoring defaults need explicit product calibration approval.
+-- Non-serving tenant checkpoint entry point. The group writer must not use it.
+-- Missing tenant policy raises an error rather than inventing scoring defaults.
+-- name: StartTenantRatingRebuild :one
+SELECT start_tenant_rating_rebuild(@tenant_id::uuid, @as_of::timestamptz,
+                                   @source_cutoff::timestamptz)::uuid;
+
+-- Tenant policy values are maintained through migrations. Its absence must
+-- fail the tenant writer closed, not restrict Peak/Mastery boss eligibility.
 -- name: PutTenantRatingPolicy :execrows
 INSERT INTO rating_tenant_policies (
     tenant_id, version, half_life_days, best_weight, form_weight,

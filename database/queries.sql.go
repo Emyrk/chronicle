@@ -25812,8 +25812,8 @@ type PutTenantRatingPolicyParams struct {
 	FullRankKills int32     `db:"full_rank_kills" json:"full_rank_kills"`
 }
 
-// A tenant policy is optional. Do not gate Peak/Mastery encounter eligibility
-// on this table: scoring defaults need explicit product calibration approval.
+// Tenant policy values are maintained through migrations. Its absence must
+// fail the tenant writer closed, not restrict Peak/Mastery boss eligibility.
 func (q *sqlQuerier) PutTenantRatingPolicy(ctx context.Context, arg PutTenantRatingPolicyParams) (int64, error) {
 	result, err := q.db.Exec(ctx, putTenantRatingPolicy,
 		arg.TenantID,
@@ -25858,6 +25858,26 @@ func (q *sqlQuerier) PutTenantRenownBoss(ctx context.Context, arg PutTenantRenow
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const startTenantRatingRebuild = `-- name: StartTenantRatingRebuild :one
+SELECT start_tenant_rating_rebuild($1::uuid, $2::timestamptz,
+                                   $3::timestamptz)::uuid
+`
+
+type StartTenantRatingRebuildParams struct {
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	AsOf         pgtype.Timestamptz `db:"as_of" json:"as_of"`
+	SourceCutoff pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+}
+
+// Non-serving tenant checkpoint entry point. The group writer must not use it.
+// Missing tenant policy raises an error rather than inventing scoring defaults.
+func (q *sqlQuerier) StartTenantRatingRebuild(ctx context.Context, arg StartTenantRatingRebuildParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, startTenantRatingRebuild, arg.TenantID, arg.AsOf, arg.SourceCutoff)
+	var column_1 uuid.UUID
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const insertGuildTenantBossScore = `-- name: InsertGuildTenantBossScore :execrows

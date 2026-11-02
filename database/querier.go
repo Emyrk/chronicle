@@ -1046,8 +1046,8 @@ type sqlcQuerier interface {
 	PutRatingBossPolicy(ctx context.Context, arg PutRatingBossPolicyParams) (int64, error)
 	PutRatingGroupPolicy(ctx context.Context, arg PutRatingGroupPolicyParams) (int64, error)
 	PutRatingRaidPolicy(ctx context.Context, arg PutRatingRaidPolicyParams) (int64, error)
-	// A tenant policy is optional. Do not gate Peak/Mastery encounter eligibility
-	// on this table: scoring defaults need explicit product calibration approval.
+	// Tenant policy values are maintained through migrations. Its absence must
+	// fail the tenant writer closed, not restrict Peak/Mastery boss eligibility.
 	PutTenantRatingPolicy(ctx context.Context, arg PutTenantRatingPolicyParams) (int64, error)
 	// Curated Renown points are independent of Peak/Mastery boss eligibility.
 	PutTenantRenownBoss(ctx context.Context, arg PutTenantRenownBossParams) (int64, error)
@@ -1257,6 +1257,9 @@ type sqlcQuerier interface {
 	// The start function atomically locks the tenant revision, snapshots all config,
 	// creates a building generation and checkpoint, or returns the unfinished one.
 	StartRatingRebuild(ctx context.Context, arg StartRatingRebuildParams) (uuid.UUID, error)
+	// Non-serving tenant checkpoint entry point. The group writer must not use it.
+	// Missing tenant policy raises an error rather than inventing scoring defaults.
+	StartTenantRatingRebuild(ctx context.Context, arg StartTenantRatingRebuildParams) (uuid.UUID, error)
 	TelemetryGetActiveFileBytes(ctx context.Context) (int64, error)
 	TelemetryGetDeletedFileBytes(ctx context.Context) (int64, error)
 	TelemetryGetLogCountByZone(ctx context.Context) ([]TelemetryGetLogCountByZoneRow, error)

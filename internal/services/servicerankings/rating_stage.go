@@ -47,13 +47,26 @@ func advanceRatingStage(ctx context.Context, tx database.Store, cp database.Rati
 // stageRatingEvidencePage stages one bounded source page, or transitions a
 // completed source phase. It deliberately never marks the build ready: only a
 // completed projection may do so. Return true once the projection may begin.
-func stageRatingEvidencePage(ctx context.Context, store database.Store, tenant, generation uuid.UUID) (bool, error) {
+func stageRatingEvidencePage(ctx context.Context, store database.Store, tenant, generation uuid.UUID, tenantWriter bool) (bool, error) {
 	staged := false
 	stale := false
 	err := store.InTx(ctx, func(tx database.Store) error {
 		cp, err := tx.GetRatingRebuildCheckpoint(ctx, database.GetRatingRebuildCheckpointParams{TenantID: tenant, GenerationID: generation})
 		if err != nil {
 			return err
+		}
+		// Never let the scheduled group pipeline resume and publish a tenant
+		// checkpoint before its tenant score and scope projections exist.
+		var writer struct {
+			Writer string `json:"writer"`
+		}
+		if len(cp.Manifest) > 0 {
+			if err := json.Unmarshal(cp.Manifest, &writer); err != nil {
+				return fmt.Errorf("invalid rating checkpoint manifest: %w", err)
+			}
+		}
+		if (writer.Writer == "tenant") != tenantWriter {
+			return fmt.Errorf("rating checkpoint belongs to a different writer")
 		}
 		revision, err := tx.GetRatingConfigRevision(ctx, tenant)
 		if err != nil {
@@ -184,7 +197,7 @@ func StageRatingEvidenceStep(ctx context.Context, store database.Store, tenant u
 		if err != nil {
 			return uuid.Nil, false, err
 		}
-		staged, err := stageRatingEvidencePage(ctx, store, tenant, cp.GenerationID)
+		staged, err := stageRatingEvidencePage(ctx, store, tenant, cp.GenerationID, false)
 		return cp.GenerationID, staged, err
 	}
 	var version int32
@@ -199,7 +212,21 @@ func StageRatingEvidenceStep(ctx context.Context, store database.Store, tenant u
 	if err != nil {
 		return uuid.Nil, false, err
 	}
-	staged, err := stageRatingEvidencePage(ctx, store, tenant, generation)
+	staged, err := stageRatingEvidencePage(ctx, store, tenant, generation, false)
+	return generation, staged, err
+}
+
+// StageTenantRatingEvidenceStep only stages bounded tenant-wide evidence. It is
+// intentionally not called by River: a tenant generation cannot be projected
+// or published until the tenant-only score and scope phases are available.
+func StageTenantRatingEvidenceStep(ctx context.Context, store database.Store, tenant uuid.UUID, asOf time.Time) (uuid.UUID, bool, error) {
+	generation, err := store.StartTenantRatingRebuild(ctx, database.StartTenantRatingRebuildParams{
+		TenantID: tenant, AsOf: database.Timestamptz(asOf), SourceCutoff: database.Timestamptz(asOf),
+	})
+	if err != nil {
+		return uuid.Nil, false, err
+	}
+	staged, err := stageRatingEvidencePage(ctx, store, tenant, generation, true)
 	return generation, staged, err
 }
 
@@ -222,7 +249,7 @@ func StageRatingEvidence(ctx context.Context, store database.Store, tenant uuid.
 			return uuid.Nil, err
 		}
 		// An existing build must still be examined for a stale configuration.
-		_, err = stageRatingEvidencePage(ctx, store, tenant, cp.GenerationID)
+		_, err = stageRatingEvidencePage(ctx, store, tenant, cp.GenerationID, false)
 		return cp.GenerationID, err
 	}
 	var version int32
@@ -237,7 +264,7 @@ func StageRatingEvidence(ctx context.Context, store database.Store, tenant uuid.
 		return uuid.Nil, err
 	}
 	for {
-		staged, err := stageRatingEvidencePage(ctx, store, tenant, generation)
+		staged, err := stageRatingEvidencePage(ctx, store, tenant, generation, false)
 		if err != nil {
 			return generation, err
 		}

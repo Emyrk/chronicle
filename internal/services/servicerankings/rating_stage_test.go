@@ -75,7 +75,7 @@ func (s *stageStore) AbortRatingRebuild(context.Context, database.AbortRatingReb
 func newStageStore() *stageStore {
 	tenant, generation := uuid.New(), uuid.New()
 	return &stageStore{tenant: tenant, generation: generation, revision: 3, cp: database.RatingRebuildCheckpoint{
-		TenantID: tenant, GenerationID: generation, ConfigRevision: 3, Phase: "runs", Cursor: []byte(`{}`),
+		TenantID: tenant, GenerationID: generation, ConfigRevision: 3, Phase: "runs", Cursor: []byte(`{}`), Manifest: []byte(`{}`),
 		SourceCutoff: database.Timestamptz(time.Now().UTC()),
 	}, runs: []uuid.UUID{uuid.New()}}
 }
@@ -83,7 +83,7 @@ func newStageStore() *stageStore {
 func TestRatingStageRunPageCheckpoint(t *testing.T) {
 	t.Parallel()
 	s := newStageStore()
-	staged, err := stageRatingEvidencePage(t.Context(), s, s.tenant, s.generation)
+	staged, err := stageRatingEvidencePage(t.Context(), s, s.tenant, s.generation, false)
 	require.NoError(t, err)
 	require.False(t, staged)
 	require.Equal(t, []string{"dps", "hps", "guild"}, s.staged)
@@ -94,12 +94,12 @@ func TestRatingStageFailureDoesNotAdvance(t *testing.T) {
 	t.Parallel()
 	s := newStageStore()
 	s.failMetric = "hps"
-	_, err := stageRatingEvidencePage(t.Context(), s, s.tenant, s.generation)
+	_, err := stageRatingEvidencePage(t.Context(), s, s.tenant, s.generation, false)
 	require.ErrorContains(t, err, "injected stage failure")
 	require.Zero(t, s.advances)
 	require.Empty(t, s.staged)
 	s.failMetric = ""
-	staged, err := stageRatingEvidencePage(t.Context(), s, s.tenant, s.generation)
+	staged, err := stageRatingEvidencePage(t.Context(), s, s.tenant, s.generation, false)
 	require.NoError(t, err)
 	require.False(t, staged)
 	require.Equal(t, 1, s.advances)
@@ -109,11 +109,24 @@ func TestRatingStageStaleConfigurationAborts(t *testing.T) {
 	t.Parallel()
 	s := newStageStore()
 	s.revision++
-	_, err := stageRatingEvidencePage(t.Context(), s, s.tenant, s.generation)
+	_, err := stageRatingEvidencePage(t.Context(), s, s.tenant, s.generation, false)
 	require.ErrorContains(t, err, "configuration changed")
 	require.True(t, s.aborted)
 	require.Empty(t, s.staged)
 	require.Zero(t, s.advances)
+}
+
+func TestRatingStageRejectsOtherWriterCheckpoint(t *testing.T) {
+	t.Parallel()
+	s := newStageStore()
+	s.cp.Manifest = []byte(`{"writer":"tenant"}`)
+	_, err := stageRatingEvidencePage(t.Context(), s, s.tenant, s.generation, false)
+	require.ErrorContains(t, err, "different writer")
+	require.Zero(t, s.advances)
+	require.Empty(t, s.staged)
+	_, err = stageRatingEvidencePage(t.Context(), s, s.tenant, s.generation, true)
+	require.NoError(t, err)
+	require.Equal(t, []string{"dps", "hps", "guild"}, s.staged)
 }
 
 func TestRatingStageGuildRenownEndsAtProjection(t *testing.T) {
