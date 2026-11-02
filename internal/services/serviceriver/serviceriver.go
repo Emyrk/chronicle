@@ -273,6 +273,10 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.RatingDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.RatingDispatchWorker)
 	riverqueue.AddWorker(q, rank.RatingTenantWorker)
+	rank.RenownRepairWorker.Queue = q
+	rank.RenownDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.RenownRepairWorker)
+	riverqueue.AddWorker(q, rank.RenownDispatchWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
 		MaxWorkers: 1,
 	})
