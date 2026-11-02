@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionForKey, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, keyLabel, MAP_CONTROL_ACTIONS, MAP_CONTROL_KEYBINDS, mobileJoystickAxis, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY } from "./mapControls";
+import { actionForKey, cameraCollisionDistance, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, keyLabel, MAP_CONTROL_ACTIONS, MAP_CONTROL_KEYBINDS, mobileJoystickAxis, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY } from "./mapControls";
 
 describe("easeAngleToward", () => {
   it("eases toward the target without snapping", () => {
@@ -138,5 +138,33 @@ describe("mapControls", () => {
     expect(keyLabel("ArrowUp")).toBe("↑");
     expect(keyLabel("Numpad8")).toBe("Num 8");
     expect(keyLabel("Space")).toBe("Space");
+  });
+});
+
+describe("cameraCollisionDistance", () => {
+  it("stays at the wanted distance when nothing is in the way", () => {
+    expect(cameraCollisionDistance(10, 10, null, 0.5, 0, 6, 0.016)).toBe(10);
+  });
+
+  it("pulls in at once, short of the wall", () => {
+    expect(cameraCollisionDistance(10, 10, 4, 0.5, 0, 6, 0.016)).toBe(3.5);
+    expect(cameraCollisionDistance(10, 10, 4, 0.5, 0, 6, 0)).toBe(3.5);
+  });
+
+  it("eases back out once the wall is gone instead of popping", () => {
+    const next = cameraCollisionDistance(3.5, 10, null, 0.5, 0, 6, 0.016);
+    expect(next).toBeGreaterThan(3.5);
+    expect(next).toBeLessThan(10);
+    let shown = 3.5;
+    for (let frame = 0; frame < 240; frame++) shown = cameraCollisionDistance(shown, 10, null, 0.5, 0, 6, 0.016);
+    expect(shown).toBe(10);
+  });
+
+  it("never goes closer than the minimum, even against the wall", () => {
+    expect(cameraCollisionDistance(10, 10, 0.2, 0.5, 1, 6, 0.016)).toBe(1);
+  });
+
+  it("follows a zoom in immediately", () => {
+    expect(cameraCollisionDistance(10, 5, null, 0.5, 0, 6, 0.016)).toBe(5);
   });
 });

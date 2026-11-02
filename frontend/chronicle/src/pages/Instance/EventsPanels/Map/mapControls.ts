@@ -76,6 +76,28 @@ export function easeAngleToward(current: number, target: number, rate: number, d
   return current + delta * (1 - Math.exp(-rate * dt));
 }
 
+/**
+ * How far the camera may sit from its pivot this frame when the mesh may be
+ * in the way, WoW-style. A wall (`hit`: the distance to the first surface on
+ * the line from the pivot out to `desired`, null when clear) pulls the camera
+ * in at once, `padding` short of the wall; once clear, the camera eases back
+ * out toward `desired` instead of popping. Never closer than `min`.
+ */
+export function cameraCollisionDistance(
+  shown: number,
+  desired: number,
+  hit: number | null,
+  padding: number,
+  min: number,
+  rate: number,
+  dt: number,
+): number {
+  const allowed = Math.max(min, Math.min(desired, hit === null ? desired : hit - padding));
+  if (allowed <= shown || dt <= 0) return Math.min(allowed, Math.max(shown, min));
+  const next = shown + (allowed - shown) * (1 - Math.exp(-rate * dt));
+  return allowed - next < 1e-4 * Math.max(1, allowed) ? allowed : next;
+}
+
 /** Tracks left/right mouse state without relying on browser `event.buttons` updates. */
 export function setWalkMouseButton(buttons: number, button: number, down: boolean): number {
   const bit = button === 0 ? 1 : button === 2 ? 2 : 0;
