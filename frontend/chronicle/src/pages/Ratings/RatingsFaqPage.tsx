@@ -42,7 +42,7 @@ export function RatingsFaqPage() {
         <MetricIntro
           metric="mastery"
           question="What do you reliably deliver?"
-          body="Your typical play, your best, and your weaker nights together, held back a little until five kills prove it."
+          body="Your typical play, your best, and your weaker nights together."
         />
         <MetricIntro
           metric="renown"
