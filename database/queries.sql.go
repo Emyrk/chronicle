@@ -22045,6 +22045,402 @@ func (q *sqlQuerier) UnassignRatingRealmFromGroup(ctx context.Context, arg Unass
 	return result.RowsAffected(), nil
 }
 
+const advanceRatingMasteryAccumulator = `-- name: AdvanceRatingMasteryAccumulator :execrows
+UPDATE rating_mastery_accumulators AS acc
+SET pass = $1, version = acc.version + 1,
+    cursor_score = $2::double precision,
+    cursor_killed_at = $3::timestamptz,
+    cursor_run_id = $4::uuid,
+    position = $5, eligible_kills = $6,
+    excluded_kills = $7, best = $8,
+    latest_retained_at = $9::timestamptz,
+    total_weight = $10, cumulative_weight = $11,
+    floor_score = $12::double precision,
+    form_score = $13::double precision,
+    last_retained_score = $14::double precision
+WHERE acc.generation_id = $15 AND acc.tenant_id = $16
+  AND acc.subject_kind = $17 AND acc.realm_id = $18 AND acc.subject_id = $19
+  AND acc.instance_name = $20 AND acc.encounter_name = $21
+  AND acc.difficulty_name = $22 AND acc.max_players = $23
+  AND acc.player_class = $24 AND acc.player_spec = $25
+  AND acc.player_sub_spec = $26 AND acc.performance_metric = $27
+  AND acc.window_kind = $28 AND acc.pass = $29 AND acc.version = $30
+  AND EXISTS (SELECT 1 FROM rating_score_generations gen
+              WHERE gen.id = $15 AND gen.tenant_id = $16
+                AND gen.status = 'building')
+`
+
+type AdvanceRatingMasteryAccumulatorParams struct {
+	NextPass              string             `db:"next_pass" json:"next_pass"`
+	NextCursorScore       pgtype.Float8      `db:"next_cursor_score" json:"next_cursor_score"`
+	NextCursorKilledAt    pgtype.Timestamptz `db:"next_cursor_killed_at" json:"next_cursor_killed_at"`
+	NextCursorRunID       uuid.NullUUID      `db:"next_cursor_run_id" json:"next_cursor_run_id"`
+	NextPosition          int64              `db:"next_position" json:"next_position"`
+	NextEligibleKills     int64              `db:"next_eligible_kills" json:"next_eligible_kills"`
+	NextExcludedKills     int64              `db:"next_excluded_kills" json:"next_excluded_kills"`
+	NextBest              float64            `db:"next_best" json:"next_best"`
+	NextLatestRetainedAt  pgtype.Timestamptz `db:"next_latest_retained_at" json:"next_latest_retained_at"`
+	NextTotalWeight       float64            `db:"next_total_weight" json:"next_total_weight"`
+	NextCumulativeWeight  float64            `db:"next_cumulative_weight" json:"next_cumulative_weight"`
+	NextFloorScore        pgtype.Float8      `db:"next_floor_score" json:"next_floor_score"`
+	NextFormScore         pgtype.Float8      `db:"next_form_score" json:"next_form_score"`
+	NextLastRetainedScore pgtype.Float8      `db:"next_last_retained_score" json:"next_last_retained_score"`
+	GenerationID          uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID              uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SubjectKind           string             `db:"subject_kind" json:"subject_kind"`
+	RealmID               uuid.UUID          `db:"realm_id" json:"realm_id"`
+	SubjectID             string             `db:"subject_id" json:"subject_id"`
+	InstanceName          string             `db:"instance_name" json:"instance_name"`
+	EncounterName         string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName        string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers            int16              `db:"max_players" json:"max_players"`
+	PlayerClass           string             `db:"player_class" json:"player_class"`
+	PlayerSpec            string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec         string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric     string             `db:"performance_metric" json:"performance_metric"`
+	WindowKind            string             `db:"window_kind" json:"window_kind"`
+	ExpectedPass          string             `db:"expected_pass" json:"expected_pass"`
+	ExpectedVersion       int64              `db:"expected_version" json:"expected_version"`
+}
+
+// All page fields are supplied together in a short transaction. The version
+// and pass CAS reject stale/replayed pages. On pass transition clear cursor,
+// set position=0; preserve completed pass aggregates. Caller verifies exactly
+// one updated row and advances the rebuild checkpoint in this SAME transaction.
+// Never commit an accumulator update if the checkpoint CAS returned zero.
+func (q *sqlQuerier) AdvanceRatingMasteryAccumulator(ctx context.Context, arg AdvanceRatingMasteryAccumulatorParams) (int64, error) {
+	result, err := q.db.Exec(ctx, advanceRatingMasteryAccumulator,
+		arg.NextPass,
+		arg.NextCursorScore,
+		arg.NextCursorKilledAt,
+		arg.NextCursorRunID,
+		arg.NextPosition,
+		arg.NextEligibleKills,
+		arg.NextExcludedKills,
+		arg.NextBest,
+		arg.NextLatestRetainedAt,
+		arg.NextTotalWeight,
+		arg.NextCumulativeWeight,
+		arg.NextFloorScore,
+		arg.NextFormScore,
+		arg.NextLastRetainedScore,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.RealmID,
+		arg.SubjectID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.WindowKind,
+		arg.ExpectedPass,
+		arg.ExpectedVersion,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getRatingMasteryAccumulator = `-- name: GetRatingMasteryAccumulator :one
+SELECT generation_id, tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, window_kind, pass, version, cursor_score, cursor_killed_at, cursor_run_id, position, eligible_kills, excluded_kills, best, latest_retained_at, total_weight, cumulative_weight, floor_score, form_score, last_retained_score FROM rating_mastery_accumulators
+WHERE generation_id = $1 AND tenant_id = $2
+  AND subject_kind = $3 AND realm_id = $4 AND subject_id = $5
+  AND instance_name = $6 AND encounter_name = $7
+  AND difficulty_name = $8 AND max_players = $9
+  AND player_class = $10 AND player_spec = $11
+  AND player_sub_spec = $12 AND performance_metric = $13
+  AND window_kind = $14
+`
+
+type GetRatingMasteryAccumulatorParams struct {
+	GenerationID      uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string    `db:"subject_kind" json:"subject_kind"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID         string    `db:"subject_id" json:"subject_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	WindowKind        string    `db:"window_kind" json:"window_kind"`
+}
+
+func (q *sqlQuerier) GetRatingMasteryAccumulator(ctx context.Context, arg GetRatingMasteryAccumulatorParams) (RatingMasteryAccumulator, error) {
+	row := q.db.QueryRow(ctx, getRatingMasteryAccumulator,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.RealmID,
+		arg.SubjectID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.WindowKind,
+	)
+	var i RatingMasteryAccumulator
+	err := row.Scan(
+		&i.GenerationID,
+		&i.TenantID,
+		&i.SubjectKind,
+		&i.RealmID,
+		&i.SubjectID,
+		&i.InstanceName,
+		&i.EncounterName,
+		&i.DifficultyName,
+		&i.MaxPlayers,
+		&i.PlayerClass,
+		&i.PlayerSpec,
+		&i.PlayerSubSpec,
+		&i.PerformanceMetric,
+		&i.WindowKind,
+		&i.Pass,
+		&i.Version,
+		&i.CursorScore,
+		&i.CursorKilledAt,
+		&i.CursorRunID,
+		&i.Position,
+		&i.EligibleKills,
+		&i.ExcludedKills,
+		&i.Best,
+		&i.LatestRetainedAt,
+		&i.TotalWeight,
+		&i.CumulativeWeight,
+		&i.FloorScore,
+		&i.FormScore,
+		&i.LastRetainedScore,
+	)
+	return i, err
+}
+
+const initRatingMasteryAccumulator = `-- name: InitRatingMasteryAccumulator :exec
+INSERT INTO rating_mastery_accumulators
+    (generation_id, tenant_id, subject_kind, realm_id, subject_id, instance_name,
+     encounter_name, difficulty_name, max_players, player_class, player_spec,
+     player_sub_spec, performance_metric, window_kind)
+VALUES ($1, $2, $3, $4, $5,
+        $6, $7, $8, $9,
+        $10, $11, $12, $13,
+        $14)
+ON CONFLICT DO NOTHING
+`
+
+type InitRatingMasteryAccumulatorParams struct {
+	GenerationID      uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string    `db:"subject_kind" json:"subject_kind"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID         string    `db:"subject_id" json:"subject_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	WindowKind        string    `db:"window_kind" json:"window_kind"`
+}
+
+// Persist one constant-size state per subject/window. The caller must use the
+// frozen manifest to select the window, half-life and rank weight. Replays do
+// not modify staging. Insert and update may share the checkpoint CAS transaction.
+func (q *sqlQuerier) InitRatingMasteryAccumulator(ctx context.Context, arg InitRatingMasteryAccumulatorParams) error {
+	_, err := q.db.Exec(ctx, initRatingMasteryAccumulator,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.RealmID,
+		arg.SubjectID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.WindowKind,
+	)
+	return err
+}
+
+const listRatingMasteryGuildPage = `-- name: ListRatingMasteryGuildPage :many
+SELECT locked_parse, killed_at, run_id FROM rating_stage_guild_observations
+WHERE generation_id = $1 AND tenant_id = $2
+  AND realm_id = $3 AND guild_id = $4
+  AND instance_name = $5 AND encounter_name = $6
+  AND difficulty_name = $7 AND max_players = $8
+  AND locked_parse BETWEEN 0 AND 100
+  AND killed_at >= $9::timestamptz AND killed_at <= $10::timestamptz
+  AND ($11::boolean OR (locked_parse, killed_at, run_id) >
+       ($12::double precision, $13::timestamptz, $14::uuid))
+ORDER BY locked_parse ASC, killed_at ASC, run_id ASC
+LIMIT LEAST(GREATEST($15::int, 0), 200)
+`
+
+type ListRatingMasteryGuildPageParams struct {
+	GenerationID   uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	AsOf           pgtype.Timestamptz `db:"as_of" json:"as_of"`
+	FirstPage      bool               `db:"first_page" json:"first_page"`
+	AfterScore     float64            `db:"after_score" json:"after_score"`
+	AfterKilledAt  pgtype.Timestamptz `db:"after_killed_at" json:"after_killed_at"`
+	AfterRunID     uuid.UUID          `db:"after_run_id" json:"after_run_id"`
+	BatchSize      int32              `db:"batch_size" json:"batch_size"`
+}
+
+type ListRatingMasteryGuildPageRow struct {
+	LockedParse pgtype.Float8      `db:"locked_parse" json:"locked_parse"`
+	KilledAt    pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	RunID       uuid.UUID          `db:"run_id" json:"run_id"`
+}
+
+func (q *sqlQuerier) ListRatingMasteryGuildPage(ctx context.Context, arg ListRatingMasteryGuildPageParams) ([]ListRatingMasteryGuildPageRow, error) {
+	rows, err := q.db.Query(ctx, listRatingMasteryGuildPage,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.WindowStart,
+		arg.AsOf,
+		arg.FirstPage,
+		arg.AfterScore,
+		arg.AfterKilledAt,
+		arg.AfterRunID,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRatingMasteryGuildPageRow
+	for rows.Next() {
+		var i ListRatingMasteryGuildPageRow
+		if err := rows.Scan(&i.LockedParse, &i.KilledAt, &i.RunID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingMasteryPlayerPage = `-- name: ListRatingMasteryPlayerPage :many
+SELECT locked_parse, killed_at, run_id FROM rating_stage_player_observations
+WHERE generation_id = $1 AND tenant_id = $2
+  AND realm_id = $3 AND player_guid = $4
+  AND instance_name = $5 AND encounter_name = $6
+  AND difficulty_name = $7 AND max_players = $8
+  AND player_class = $9 AND player_spec = $10
+  AND player_sub_spec = $11 AND performance_metric = $12
+  AND locked_parse BETWEEN 0 AND 100
+  AND killed_at >= $13::timestamptz AND killed_at <= $14::timestamptz
+  AND ($15::boolean OR (locked_parse, killed_at, run_id) >
+       ($16::double precision, $17::timestamptz, $18::uuid))
+ORDER BY locked_parse ASC, killed_at ASC, run_id ASC
+LIMIT LEAST(GREATEST($19::int, 0), 200)
+`
+
+type ListRatingMasteryPlayerPageParams struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	AsOf              pgtype.Timestamptz `db:"as_of" json:"as_of"`
+	FirstPage         bool               `db:"first_page" json:"first_page"`
+	AfterScore        float64            `db:"after_score" json:"after_score"`
+	AfterKilledAt     pgtype.Timestamptz `db:"after_killed_at" json:"after_killed_at"`
+	AfterRunID        uuid.UUID          `db:"after_run_id" json:"after_run_id"`
+	BatchSize         int32              `db:"batch_size" json:"batch_size"`
+}
+
+type ListRatingMasteryPlayerPageRow struct {
+	LockedParse pgtype.Float8      `db:"locked_parse" json:"locked_parse"`
+	KilledAt    pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	RunID       uuid.UUID          `db:"run_id" json:"run_id"`
+}
+
+// Stable ascending tie order is required to exclude exactly floor(N*0.2)
+// observations. NULL (unlocked) parses are never eligible. The page limit is
+// hard capped even if a caller supplies an excessive size. The first page
+// uses first_page=true; subsequent pages use the previous row's complete key.
+func (q *sqlQuerier) ListRatingMasteryPlayerPage(ctx context.Context, arg ListRatingMasteryPlayerPageParams) ([]ListRatingMasteryPlayerPageRow, error) {
+	rows, err := q.db.Query(ctx, listRatingMasteryPlayerPage,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.WindowStart,
+		arg.AsOf,
+		arg.FirstPage,
+		arg.AfterScore,
+		arg.AfterKilledAt,
+		arg.AfterRunID,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRatingMasteryPlayerPageRow
+	for rows.Next() {
+		var i ListRatingMasteryPlayerPageRow
+		if err := rows.Scan(&i.LockedParse, &i.KilledAt, &i.RunID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteRatingBossPolicy = `-- name: DeleteRatingBossPolicy :execrows
 DELETE FROM rating_group_boss_policies boss
 USING rating_realm_groups grp, wow_servers server

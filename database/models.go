@@ -2384,6 +2384,38 @@ type RatingGroupRaidPolicy struct {
 	MasteryWeight float64   `db:"mastery_weight" json:"mastery_weight"`
 }
 
+type RatingMasteryAccumulator struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string             `db:"subject_kind" json:"subject_kind"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	SubjectID         string             `db:"subject_id" json:"subject_id"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	Pass              string             `db:"pass" json:"pass"`
+	Version           int64              `db:"version" json:"version"`
+	CursorScore       pgtype.Float8      `db:"cursor_score" json:"cursor_score"`
+	CursorKilledAt    pgtype.Timestamptz `db:"cursor_killed_at" json:"cursor_killed_at"`
+	CursorRunID       uuid.NullUUID      `db:"cursor_run_id" json:"cursor_run_id"`
+	Position          int64              `db:"position" json:"position"`
+	EligibleKills     int64              `db:"eligible_kills" json:"eligible_kills"`
+	ExcludedKills     int64              `db:"excluded_kills" json:"excluded_kills"`
+	Best              float64            `db:"best" json:"best"`
+	LatestRetainedAt  pgtype.Timestamptz `db:"latest_retained_at" json:"latest_retained_at"`
+	TotalWeight       float64            `db:"total_weight" json:"total_weight"`
+	CumulativeWeight  float64            `db:"cumulative_weight" json:"cumulative_weight"`
+	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
+	FormScore         pgtype.Float8      `db:"form_score" json:"form_score"`
+	LastRetainedScore pgtype.Float8      `db:"last_retained_score" json:"last_retained_score"`
+}
+
 type RatingRealmGroup struct {
 	ID       uuid.UUID `db:"id" json:"id"`
 	ServerID uuid.UUID `db:"server_id" json:"server_id"`

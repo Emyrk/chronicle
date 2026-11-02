@@ -2202,6 +2202,57 @@ CREATE TABLE rating_group_raid_policies (
 
 ALTER TABLE ONLY rating_group_raid_policies FORCE ROW LEVEL SECURITY;
 
+CREATE TABLE rating_mastery_accumulators (
+    generation_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    subject_kind text NOT NULL,
+    realm_id uuid NOT NULL,
+    subject_id text NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    player_class text DEFAULT ''::text NOT NULL,
+    player_spec text DEFAULT ''::text NOT NULL,
+    player_sub_spec text DEFAULT ''::text NOT NULL,
+    performance_metric text NOT NULL,
+    window_kind text NOT NULL,
+    pass text DEFAULT 'count'::text NOT NULL,
+    version bigint DEFAULT 0 NOT NULL,
+    cursor_score double precision,
+    cursor_killed_at timestamp with time zone,
+    cursor_run_id uuid,
+    "position" bigint DEFAULT 0 NOT NULL,
+    eligible_kills bigint DEFAULT 0 NOT NULL,
+    excluded_kills bigint DEFAULT 0 NOT NULL,
+    best double precision DEFAULT 0 NOT NULL,
+    latest_retained_at timestamp with time zone,
+    total_weight double precision DEFAULT 0 NOT NULL,
+    cumulative_weight double precision DEFAULT 0 NOT NULL,
+    floor_score double precision,
+    form_score double precision,
+    last_retained_score double precision,
+    CONSTRAINT rating_mastery_accumulators_best_check CHECK (((best >= (0)::double precision) AND (best <= (100)::double precision))),
+    CONSTRAINT rating_mastery_accumulators_check CHECK (((excluded_kills >= 0) AND (excluded_kills <= eligible_kills))),
+    CONSTRAINT rating_mastery_accumulators_check1 CHECK ((((cursor_score IS NULL) AND (cursor_killed_at IS NULL) AND (cursor_run_id IS NULL)) OR (((cursor_score >= (0)::double precision) AND (cursor_score <= (100)::double precision)) AND (cursor_killed_at IS NOT NULL) AND (cursor_run_id IS NOT NULL)))),
+    CONSTRAINT rating_mastery_accumulators_check2 CHECK ((((subject_kind = 'guild'::text) AND (performance_metric = 'none'::text) AND (player_class = ''::text) AND (player_spec = ''::text) AND (player_sub_spec = ''::text)) OR ((subject_kind = 'player'::text) AND (performance_metric = ANY (ARRAY['dps'::text, 'hps'::text]))))),
+    CONSTRAINT rating_mastery_accumulators_cumulative_weight_check CHECK (((cumulative_weight >= (0)::double precision) AND (cumulative_weight < 'Infinity'::double precision))),
+    CONSTRAINT rating_mastery_accumulators_eligible_kills_check CHECK ((eligible_kills >= 0)),
+    CONSTRAINT rating_mastery_accumulators_floor_score_check CHECK (((floor_score IS NULL) OR ((floor_score >= (0)::double precision) AND (floor_score <= (100)::double precision)))),
+    CONSTRAINT rating_mastery_accumulators_form_score_check CHECK (((form_score IS NULL) OR ((form_score >= (0)::double precision) AND (form_score <= (100)::double precision)))),
+    CONSTRAINT rating_mastery_accumulators_last_retained_score_check CHECK (((last_retained_score IS NULL) OR ((last_retained_score >= (0)::double precision) AND (last_retained_score <= (100)::double precision)))),
+    CONSTRAINT rating_mastery_accumulators_pass_check CHECK ((pass = ANY (ARRAY['count'::text, 'latest'::text, 'weight'::text, 'quantile'::text, 'complete'::text]))),
+    CONSTRAINT rating_mastery_accumulators_performance_metric_check CHECK ((performance_metric = ANY (ARRAY['dps'::text, 'hps'::text, 'none'::text]))),
+    CONSTRAINT rating_mastery_accumulators_position_check CHECK (("position" >= 0)),
+    CONSTRAINT rating_mastery_accumulators_subject_id_check CHECK ((length(subject_id) > 0)),
+    CONSTRAINT rating_mastery_accumulators_subject_kind_check CHECK ((subject_kind = ANY (ARRAY['player'::text, 'guild'::text]))),
+    CONSTRAINT rating_mastery_accumulators_total_weight_check CHECK (((total_weight >= (0)::double precision) AND (total_weight < 'Infinity'::double precision))),
+    CONSTRAINT rating_mastery_accumulators_version_check CHECK ((version >= 0)),
+    CONSTRAINT rating_mastery_accumulators_window_kind_check CHECK ((window_kind = ANY (ARRAY['period'::text, 'all_time'::text])))
+);
+
+ALTER TABLE ONLY rating_mastery_accumulators FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE rating_realm_group_memberships (
     realm_id uuid NOT NULL,
     server_id uuid NOT NULL,
@@ -3562,6 +3613,9 @@ ALTER TABLE ONLY rating_group_policies
 ALTER TABLE ONLY rating_group_raid_policies
     ADD CONSTRAINT rating_group_raid_policies_pkey PRIMARY KEY (group_id, instance_name);
 
+ALTER TABLE ONLY rating_mastery_accumulators
+    ADD CONSTRAINT rating_mastery_accumulators_pkey PRIMARY KEY (generation_id, subject_kind, realm_id, subject_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, window_kind);
+
 ALTER TABLE ONLY rating_realm_group_memberships
     ADD CONSTRAINT rating_realm_group_memberships_pkey PRIMARY KEY (realm_id);
 
@@ -4676,6 +4730,9 @@ ALTER TABLE ONLY rating_group_policies
 ALTER TABLE ONLY rating_group_raid_policies
     ADD CONSTRAINT rating_group_raid_policies_group_id_fkey FOREIGN KEY (group_id) REFERENCES rating_group_policies(group_id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY rating_mastery_accumulators
+    ADD CONSTRAINT rating_mastery_accumulators_generation_id_tenant_id_fkey FOREIGN KEY (generation_id, tenant_id) REFERENCES rating_rebuild_checkpoints(generation_id, tenant_id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY rating_realm_group_memberships
     ADD CONSTRAINT rating_realm_group_memberships_group_id_server_id_fkey FOREIGN KEY (group_id, server_id) REFERENCES rating_realm_groups(id, server_id);
 
@@ -4952,6 +5009,8 @@ ALTER TABLE rating_group_policies ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_group_raid_policies ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE rating_mastery_accumulators ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE rating_realm_group_memberships ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_realm_groups ENABLE ROW LEVEL SECURITY;
@@ -4985,6 +5044,8 @@ CREATE POLICY tenant_admin_bypass ON rating_group_boss_policies USING ((current_
 CREATE POLICY tenant_admin_bypass ON rating_group_policies USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_group_raid_policies USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_mastery_accumulators USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_realm_group_memberships USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -5044,6 +5105,9 @@ CREATE POLICY tenant_isolation ON rating_group_policies USING ((group_id IN ( SE
 
 CREATE POLICY tenant_isolation ON rating_group_raid_policies USING ((group_id IN ( SELECT rating_realm_groups.id
    FROM rating_realm_groups)));
+
+CREATE POLICY tenant_isolation ON rating_mastery_accumulators USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
 
 CREATE POLICY tenant_isolation ON rating_realm_group_memberships USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));

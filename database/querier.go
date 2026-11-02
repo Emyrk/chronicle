@@ -29,6 +29,12 @@ type sqlcQuerier interface {
 	AddUserFavoriteGuild(ctx context.Context, arg AddUserFavoriteGuildParams) (pgtype.Bool, error)
 	AddUserFavoritePlayer(ctx context.Context, arg AddUserFavoritePlayerParams) error
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
+	// All page fields are supplied together in a short transaction. The version
+	// and pass CAS reject stale/replayed pages. On pass transition clear cursor,
+	// set position=0; preserve completed pass aggregates. Caller verifies exactly
+	// one updated row and advances the rebuild checkpoint in this SAME transaction.
+	// Never commit an accumulator update if the checkpoint CAS returned zero.
+	AdvanceRatingMasteryAccumulator(ctx context.Context, arg AdvanceRatingMasteryAccumulatorParams) (int64, error)
 	// Caller owns phase-specific JSON cursor keys. CAS prevents stale workers from
 	// overwriting another worker's progress. Do not advance before staging writes
 	// commit; use the same transaction for inserts and this checkpoint update.
@@ -443,6 +449,7 @@ type sqlcQuerier interface {
 	GetPublishedLuaProjectArtifact(ctx context.Context, arg GetPublishedLuaProjectArtifactParams) (GetPublishedLuaProjectArtifactRow, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
 	GetRatingConfigRevision(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	GetRatingMasteryAccumulator(ctx context.Context, arg GetRatingMasteryAccumulatorParams) (RatingMasteryAccumulator, error)
 	GetRatingRebuildCheckpoint(ctx context.Context, arg GetRatingRebuildCheckpointParams) (RatingRebuildCheckpoint, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).
@@ -589,6 +596,10 @@ type sqlcQuerier interface {
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	HeartbeatRatingRebuildCheckpoint(ctx context.Context, arg HeartbeatRatingRebuildCheckpointParams) (int64, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
+	// Persist one constant-size state per subject/window. The caller must use the
+	// frozen manifest to select the window, half-life and rank weight. Replays do
+	// not modify staging. Insert and update may share the checkpoint CAS transaction.
+	InitRatingMasteryAccumulator(ctx context.Context, arg InitRatingMasteryAccumulatorParams) error
 	InitializeUserWhatsNewState(ctx context.Context, arg InitializeUserWhatsNewStateParams) (UserWhatsNewState, error)
 	InsertAccountPurge(ctx context.Context, arg InsertAccountPurgeParams) (AccountPurge, error)
 	InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults
@@ -822,6 +833,12 @@ type sqlcQuerier interface {
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error)
 	ListRatingBossPolicies(ctx context.Context, arg ListRatingBossPoliciesParams) ([]RatingGroupBossPolicy, error)
 	ListRatingGuildRenownSourcePage(ctx context.Context, arg ListRatingGuildRenownSourcePageParams) ([]GuildRenownKillFact, error)
+	ListRatingMasteryGuildPage(ctx context.Context, arg ListRatingMasteryGuildPageParams) ([]ListRatingMasteryGuildPageRow, error)
+	// Stable ascending tie order is required to exclude exactly floor(N*0.2)
+	// observations. NULL (unlocked) parses are never eligible. The page limit is
+	// hard capped even if a caller supplies an excessive size. The first page
+	// uses first_page=true; subsequent pages use the previous row's complete key.
+	ListRatingMasteryPlayerPage(ctx context.Context, arg ListRatingMasteryPlayerPageParams) ([]ListRatingMasteryPlayerPageRow, error)
 	ListRatingPlayerRenownSourcePage(ctx context.Context, arg ListRatingPlayerRenownSourcePageParams) ([]RenownKillFact, error)
 	ListRatingRaidPolicies(ctx context.Context, arg ListRatingRaidPoliciesParams) ([]RatingGroupRaidPolicy, error)
 	ListRatingRealmGroupMembers(ctx context.Context, arg ListRatingRealmGroupMembersParams) ([]ListRatingRealmGroupMembersRow, error)
