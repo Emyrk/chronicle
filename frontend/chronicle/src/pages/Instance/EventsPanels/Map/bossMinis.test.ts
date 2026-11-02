@@ -65,6 +65,17 @@ describe("bossMinis", () => {
     }
   });
 
+  it("validates client-derived world heights by assigned entry", () => {
+    expect(parseMiniatureManifest({
+      format: MINIATURE_MANIFEST_FORMAT,
+      miniatures: [{ name: "Shared", path: "miniatures/shared.glb", entry_ids: [1, 2], world_heights: { 1: 4.5, 2: 7 } }],
+    }).miniatures[0]?.world_heights).toEqual({ 1: 4.5, 2: 7 });
+    expect(() => parseMiniatureManifest({
+      format: MINIATURE_MANIFEST_FORMAT,
+      miniatures: [{ name: "Invalid", path: "miniatures/invalid.glb", entry_ids: [1], world_heights: { 2: 4 } }],
+    })).toThrow(/unassigned entry ID/);
+  });
+
   it("accepts existing v1 manifests without game models", () => {
     const manifest = parseMiniatureManifest({
       format: MINIATURE_MANIFEST_FORMAT,
@@ -81,7 +92,7 @@ describe("bossMinis", () => {
         { name: "Firelord", path: "miniatures/firelord.glb", entry_ids: [11502], map_scale: 1.5 },
       ],
       game_models: [
-        { name: "Firelord game model", path: "miniatures/firelord-game.glb", entry_ids: [11502], map_scale: 2 },
+        { name: "Firelord game model", path: "miniatures/firelord-game.glb", entry_ids: [11502], map_scale: 2, world_heights: { 11502: 54.4 } },
       ],
     };
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => payload });
@@ -109,7 +120,7 @@ describe("bossMinis", () => {
         [11502, { url: "https://icons.example/root/miniatures/firelord.glb", mapScale: 1.5 }],
       ]),
       gameModels: new Map([
-        [11502, { url: "https://icons.example/root/miniatures/firelord-game.glb", mapScale: 2 }],
+        [11502, { url: "https://icons.example/root/miniatures/firelord-game.glb", mapScale: 2, worldHeight: 54.4 }],
       ]),
     });
     expect(gameModelUrl(11502, new Map([[11502, "https://icons.example/game.glb"]]))).toBe("https://icons.example/game.glb");

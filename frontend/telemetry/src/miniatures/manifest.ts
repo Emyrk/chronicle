@@ -7,8 +7,10 @@ export interface UnitModelDefinition {
   name: string;
   path: string;
   entry_ids: number[];
-  /** Relative size on the 3D replay map after the model's baseline normalization. */
+  /** Manual multiplier applied after the client-derived default size. */
   map_scale: number;
+  /** Client-derived standing height in world yards, keyed by creature entry ID. */
+  world_heights?: Readonly<Record<number, number>>;
 }
 
 export interface MiniatureManifest {
@@ -55,6 +57,22 @@ function mapScale(value: unknown, context: string): number {
   return value;
 }
 
+function worldHeights(value: unknown, entries: readonly number[], context: string): Readonly<Record<number, number>> | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new TypeError(`${context} must be an object`);
+  const assigned = new Set(entries);
+  const heights: Record<number, number> = {};
+  for (const [rawEntry, rawHeight] of Object.entries(value)) {
+    const entry = Number(rawEntry);
+    if (!Number.isSafeInteger(entry) || !assigned.has(entry)) throw new TypeError(`${context} has unassigned entry ID ${rawEntry}`);
+    if (typeof rawHeight !== "number" || !Number.isFinite(rawHeight) || rawHeight < 0.1 || rawHeight > 100) {
+      throw new TypeError(`${context}.${entry} must be a finite number from 0.1 to 100`);
+    }
+    heights[entry] = rawHeight;
+  }
+  return heights;
+}
+
 export function isMiniatureAssetPath(path: string): boolean {
   return /^miniatures\/[^/\\]+\.glb$/.test(path);
 }
@@ -64,7 +82,7 @@ function parseModelCollection(value: unknown, context: string): UnitModelDefinit
   const paths = new Set<string>();
   const models = array(value, context).map((raw, index) => {
     const itemContext = `${context}[${index}]`;
-    const item = object(raw, itemContext, ["name", "path", "entry_ids", "map_scale"]);
+    const item = object(raw, itemContext, ["name", "path", "entry_ids", "map_scale", "world_heights"]);
     const name = string(item.name, `${itemContext}.name`).trim();
     const path = string(item.path, `${itemContext}.path`);
     const map_scale = mapScale(item.map_scale, `${itemContext}.map_scale`);
@@ -82,7 +100,8 @@ function parseModelCollection(value: unknown, context: string): UnitModelDefinit
       if (existing) throw new TypeError(`entry ID ${id} is assigned to both ${existing} and ${path} in ${context}`);
       assignedEntries.set(id, path);
     }
-    return { name, path, entry_ids, map_scale };
+    const world_heights = worldHeights(item.world_heights, entry_ids, `${itemContext}.world_heights`);
+    return { name, path, entry_ids, map_scale, ...(world_heights === undefined ? {} : { world_heights }) };
   });
 
   models.sort((left, right) => left.name.localeCompare(right.name) || left.path.localeCompare(right.path));

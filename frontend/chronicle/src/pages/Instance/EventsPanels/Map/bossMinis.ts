@@ -11,6 +11,8 @@ export interface UnitModelDefinition {
   path: string;
   entry_ids: number[];
   map_scale: number;
+  /** Client-derived standing height in world yards, keyed by creature entry ID. */
+  world_heights?: Readonly<Record<number, number>>;
 }
 
 export interface MiniatureManifest {
@@ -22,6 +24,8 @@ export interface MiniatureManifest {
 export interface PublishedUnitModel {
   url: string;
   mapScale: number;
+  /** Client-derived standing height in world yards. */
+  worldHeight?: number;
 }
 
 export interface PublishedUnitModelUrls {
@@ -43,6 +47,22 @@ export function miniatureManifestUrl(baseUrl = ICON_CDN): string {
 
 export function miniatureAssetUrl(path: string, baseUrl = ICON_CDN): string {
   return `${stripTrailingSlash(baseUrl)}/${path.replace(/^\/+/, "")}`;
+}
+
+function parseWorldHeights(value: unknown, entries: readonly number[], label: string): Readonly<Record<number, number>> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} world heights must be an object`);
+  const assigned = new Set(entries);
+  const heights: Record<number, number> = {};
+  for (const [rawEntry, rawHeight] of Object.entries(value)) {
+    const entry = Number(rawEntry);
+    if (!Number.isSafeInteger(entry) || !assigned.has(entry)) throw new Error(`${label} has a world height for unassigned entry ID ${rawEntry}`);
+    if (typeof rawHeight !== "number" || !Number.isFinite(rawHeight) || rawHeight < 0.1 || rawHeight > 100) {
+      throw new Error(`${label} entry ${entry} has an invalid world height`);
+    }
+    heights[entry] = rawHeight;
+  }
+  return heights;
 }
 
 function parseModelCollection(value: unknown, label: string): UnitModelDefinition[] {
@@ -72,7 +92,8 @@ function parseModelCollection(value: unknown, label: string): UnitModelDefinitio
       assigned.add(id);
       return id;
     });
-    return { name, path, entry_ids, map_scale };
+    const world_heights = parseWorldHeights(item.world_heights, entry_ids, `${label} ${index}`);
+    return { name, path, entry_ids, map_scale, ...(world_heights === undefined ? {} : { world_heights }) };
   });
 }
 
@@ -98,6 +119,7 @@ function modelCollectionUrls(models: UnitModelDefinition[], baseUrl: string): Re
     model.entry_ids.map((entry) => [entry, {
       url: miniatureAssetUrl(model.path, baseUrl),
       mapScale: model.map_scale,
+      ...(model.world_heights?.[entry] === undefined ? {} : { worldHeight: model.world_heights[entry] }),
     }] as const),
   ));
 }

@@ -77,7 +77,7 @@ import {
 } from "./replayEffects";
 import { deadUnitVisualState } from "./mapDeathVisibility";
 import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene";
-import { publishedModelGeometryScale } from "./modelSizing";
+import { publishedModelGeometryScale, publishedModelGroupScale } from "./modelSizing";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
 export const GROUND_WIDTH = 100;
@@ -184,9 +184,8 @@ const FLAT_PLAYER_TOKEN_DIAMETER_YARDS = 1.25;
 // (constant on-screen) size, so the raid stays visible without being giants
 // at Fit.
 const MESH_MIN_SCREEN_SCALE = 0.5;
-// Boss minis are this many times a player's true scale on the mesh, so Kresh
-// (a 2.6-unit footprint) comes out around 4.5 yd across. Guardians (pets,
-// totems) keep a player's scale: they stand on their own small chip.
+// Legacy fallback for published models without a client-derived world height.
+// Guardians (pets, totems) keep a player's scale: they stand on their chip.
 const MESH_BOSS_SCALE = 2.5;
 // A guardian's model is grown to at least this tall (geometry units; a
 // player capsule is 3), so a totem published at its true, tiny size reads.
@@ -375,10 +374,12 @@ export interface MapScene3DUnit {
   health: MapUnitHealth | null;
   /** Published model URL from the shared miniature manifest. */
   miniatureUrl: string | undefined;
-  /** The published model is an original game model and needs native-size normalization. */
+  /** The published model is an original game model. */
   gameModel?: boolean;
-  /** Per-model size correction configured in the Miniature Foundry. */
+  /** Manual size multiplier configured in the Miniature Foundry. */
   mapScale?: number;
+  /** Client-derived standing height in world yards. */
+  worldHeight?: number;
   /** Logged world height (yards), when the log has one; picks the floor on the mesh. */
   z?: number;
   /** The token's icon (a player's class, a pet's paw), or null for none. */
@@ -496,6 +497,8 @@ interface UnitObject {
   miniatureUrl: string | undefined;
   gameModel: boolean;
   mapScale: number;
+  /** Client-derived standing height in world yards. */
+  worldHeight: number | undefined;
   barHeight: number;
   labelHeight: number;
   deadLift: number;
@@ -796,6 +799,8 @@ export class MapScene3D {
   // The camera's viewport when the user's current gesture began.
   private gestureStart: MapViewport | null = null;
   private unitScale = 1;
+  /** Scene units per world yard, when the active map is calibrated. */
+  private worldUnitScale: number | null = null;
   private chipScale = 1;
   private frame = 0;
   private disposed = false;
@@ -1281,7 +1286,7 @@ export class MapScene3D {
     for (const unit of units) {
       seen.add(unit.guid);
       let object = this.units.get(unit.guid);
-      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl || object.gameModel !== Boolean(unit.gameModel) || object.mapScale !== (unit.mapScale ?? 1))) {
+      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl || object.gameModel !== Boolean(unit.gameModel) || object.mapScale !== (unit.mapScale ?? 1) || object.worldHeight !== unit.worldHeight)) {
         this.removeUnit(unit.guid);
         object = undefined;
       }
@@ -1658,8 +1663,10 @@ export class MapScene3D {
       : this.dungeonMesh ? Math.max(trueScale, MESH_MIN_SCREEN_SCALE * screenScale)
       : trueScale;
     const scale = baseScale * this.chipScale;
-    if (scale === this.unitScale && !force) return;
+    const worldScale = yards === null ? null : yards * this.chipScale;
+    if (scale === this.unitScale && worldScale === this.worldUnitScale && !force) return;
     this.unitScale = scale;
+    this.worldUnitScale = worldScale;
     for (const object of this.units.values()) {
       object.group.scale.setScalar(this.scaleOf(object));
       this.layoutDrop(object);
@@ -1668,9 +1675,10 @@ export class MapScene3D {
     this.updateLabel();
   }
 
-  // Models (bosses, adds) stand larger than players on the mesh; guardians'
-  // models stand on their chip at a player's scale, like everything else.
+  // Client-sized models use true world yards on calibrated maps. On artwork
+  // without yard calibration, keep the old readable baseline instead.
   private scaleOf(object: UnitObject): number {
+    if (object.worldHeight !== undefined) return publishedModelGroupScale(object.worldHeight, this.worldUnitScale, this.unitScale);
     return this.dungeonMesh && object.miniatureUrl && object.kind !== "pet" ? this.unitScale * MESH_BOSS_SCALE : this.unitScale;
   }
 
@@ -2273,6 +2281,7 @@ export class MapScene3D {
       miniatureUrl: unit.miniatureUrl,
       gameModel: Boolean(unit.gameModel),
       mapScale: unit.mapScale ?? 1,
+      worldHeight: unit.worldHeight,
       barHeight: BAR_HEIGHT,
       labelHeight: LABEL_HEIGHT,
       deadLift: DEAD_LIFT,
@@ -2284,7 +2293,7 @@ export class MapScene3D {
     group.scale.setScalar(this.scaleOf(object));
     this.units.set(unit.guid, object);
     if (object.miniatureUrl) {
-      const mini = this.requestBossMini(object.miniatureUrl, object.gameModel, object.mapScale);
+      const mini = this.requestBossMini(object.miniatureUrl, object.gameModel, object.mapScale, object.worldHeight);
       if (mini) this.applyBossMini(object, mini);
     }
     return object;
@@ -2347,11 +2356,11 @@ export class MapScene3D {
   }
 
   // Returns the published unit model if loaded, starting its load on first use.
-  private requestBossMini(url: string, gameModel: boolean, mapScale: number): BossMini | null {
-    const cacheKey = `${gameModel ? "game" : "miniature"}:${mapScale}:${url}`;
+  private requestBossMini(url: string, gameModel: boolean, mapScale: number, worldHeight?: number): BossMini | null {
+    const cacheKey = `${gameModel ? "game" : "miniature"}:${worldHeight ?? "baseline"}:${mapScale}:${url}`;
     if (this.bossMinis.has(cacheKey)) return this.bossMinis.get(cacheKey) ?? null;
     this.bossMinis.set(cacheKey, null);
-    void this.loadBossMiniCandidate(url, gameModel, mapScale).then((mini) => {
+    void this.loadBossMiniCandidate(url, gameModel, mapScale, worldHeight).then((mini) => {
       if (!mini) return;
       if (this.disposed) {
         mini.geometry.dispose();
@@ -2363,7 +2372,7 @@ export class MapScene3D {
       }
       this.bossMinis.set(cacheKey, mini);
       for (const object of this.units.values()) {
-        if (object.miniatureUrl === url && object.gameModel === gameModel && object.mapScale === mapScale) this.applyBossMini(object, mini);
+        if (object.miniatureUrl === url && object.gameModel === gameModel && object.mapScale === mapScale && object.worldHeight === worldHeight) this.applyBossMini(object, mini);
       }
       this.updateLabel();
       this.requestRender();
@@ -2374,7 +2383,7 @@ export class MapScene3D {
   // Loads every primitive in a published model as plain float geometry, sized
   // and turned to face -z. Original models commonly split their creature skin
   // across several materials, so preserve a material group for each primitive.
-  private async loadBossMiniCandidate(url: string, gameModel: boolean, mapScale: number): Promise<BossMini | null> {
+  private async loadBossMiniCandidate(url: string, gameModel: boolean, mapScale: number, worldHeight?: number): Promise<BossMini | null> {
     const sourceMaterials: THREE.Material[] = [];
     try {
       const gltf = await (await gltfLoader()).loadAsync(url);
@@ -2415,7 +2424,7 @@ export class MapScene3D {
       mini.computeBoundingBox();
       const nativeBox = mini.boundingBox!;
       const nativeHeight = Math.max(1e-3, nativeBox.max.y - nativeBox.min.y);
-      const modelScale = publishedModelGeometryScale(gameModel, nativeHeight, mapScale);
+      const modelScale = publishedModelGeometryScale(gameModel, nativeHeight, mapScale, worldHeight);
       mini.scale(modelScale, modelScale, modelScale);
       mini.computeBoundingBox();
       if (gameModel) {

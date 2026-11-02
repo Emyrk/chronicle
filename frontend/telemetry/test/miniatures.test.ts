@@ -53,6 +53,16 @@ test("normalizes and validates per-model map scale", () => {
   }
 });
 
+test("validates client-derived world heights by assigned entry", () => {
+  const parsed = parseMiniatureManifest(manifest([
+    { name: "Shared", path: "miniatures/shared.glb", entry_ids: [1, 2], world_heights: { 1: 4.5, 2: 7 } },
+  ]));
+  assert.deepEqual(parsed.miniatures[0]?.world_heights, { 1: 4.5, 2: 7 });
+  assert.throws(() => parseMiniatureManifest(manifest([
+    { name: "Invalid", path: "miniatures/invalid.glb", entry_ids: [1], world_heights: { 2: 4 } },
+  ])), /unassigned entry ID/);
+});
+
 test("rejects duplicate entry assignments across models", () => {
   assert.throws(() => parseMiniatureManifest(manifest([
     { name: "One", path: "miniatures/one.glb", entry_ids: [42] },
