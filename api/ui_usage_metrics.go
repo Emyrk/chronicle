@@ -5,6 +5,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -13,6 +14,7 @@ const (
 	maxUIUsagePanels     = 8
 	maxUIUsageSelections = 32
 	maxUIUsageBodyBytes  = 4 * 1024
+	uiUsageRootTenant    = "root"
 )
 
 var knownUIPanels = map[string]struct{}{
@@ -102,14 +104,14 @@ func newUIUsageMetrics(registerer prometheus.Registerer) *uiUsageMetrics {
 			Namespace: "chronicle",
 			Subsystem: "ui",
 			Name:      "panel_views_total",
-			Help:      "Panels present in stable layouts reported by the browser.",
-		}, []string{"panel"}),
+			Help:      "Panels present in stable layouts reported by the browser, by tenant.",
+		}, []string{"panel", "tenant"}),
 		panelChoices: factory.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "chronicle",
 			Subsystem: "ui",
 			Name:      "panel_choices_total",
-			Help:      "Panels explicitly selected by users.",
-		}, []string{"panel"}),
+			Help:      "Panels explicitly selected by users, by tenant.",
+		}, []string{"panel", "tenant"}),
 		presetViews: factory.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "chronicle",
 			Subsystem: "ui",
@@ -156,14 +158,18 @@ func (api *API) RecordUIUsage(w http.ResponseWriter, r *http.Request) {
 	if req.Preset != nil && *req.Preset != "" {
 		api.uiUsageMetrics.presetViews.WithLabelValues(normalizeUIPreset(*req.Preset)).Inc()
 	}
+	tenant := uiUsageRootTenant
+	if current := servicetenant.TenantFromContext(ctx); current != nil && current.Slug.Valid && current.Slug.String != "" {
+		tenant = current.Slug.String
+	}
 	for _, selected := range req.Selected {
 		if selected != "" {
-			api.uiUsageMetrics.panelChoices.WithLabelValues(normalizeUIPanel(selected)).Inc()
+			api.uiUsageMetrics.panelChoices.WithLabelValues(normalizeUIPanel(selected), tenant).Inc()
 		}
 	}
 	for _, panel := range req.Panels {
 		if panel != "" {
-			api.uiUsageMetrics.panelViews.WithLabelValues(normalizeUIPanel(panel)).Inc()
+			api.uiUsageMetrics.panelViews.WithLabelValues(normalizeUIPanel(panel), tenant).Inc()
 		}
 	}
 
