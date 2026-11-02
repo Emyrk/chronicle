@@ -1883,6 +1883,68 @@ CREATE TABLE rankings_instance_summaries (
     query_version smallint DEFAULT 0 NOT NULL
 );
 
+CREATE TABLE rating_boss_scores (
+    generation_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    player_guid text NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    difficulty_name text DEFAULT ''::text NOT NULL,
+    max_players smallint DEFAULT 0 NOT NULL,
+    player_class text DEFAULT ''::text NOT NULL,
+    player_spec text DEFAULT ''::text NOT NULL,
+    player_sub_spec text DEFAULT ''::text NOT NULL,
+    performance_metric text NOT NULL,
+    rating_metric text NOT NULL,
+    window_kind text NOT NULL,
+    window_start timestamp with time zone,
+    window_end timestamp with time zone,
+    score double precision NOT NULL,
+    best_raw double precision,
+    rank_one_raw double precision,
+    best_locked_parse double precision,
+    form double precision,
+    floor_score double precision,
+    eligible_kills integer DEFAULT 0 NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    group_id uuid,
+    CONSTRAINT rating_boss_scores_check CHECK ((((window_kind = 'period'::text) AND (window_start IS NOT NULL) AND (window_end IS NOT NULL) AND (window_start < window_end)) OR ((window_kind = ANY (ARRAY['all_time'::text, 'career'::text])) AND (window_start IS NULL) AND (window_end IS NULL)))),
+    CONSTRAINT rating_boss_scores_check1 CHECK (((eligible_kills >= 0) AND (score >= (0)::double precision))),
+    CONSTRAINT rating_boss_scores_performance_metric_check CHECK ((performance_metric = ANY (ARRAY['dps'::text, 'hps'::text, 'none'::text]))),
+    CONSTRAINT rating_boss_scores_rating_metric_check CHECK ((rating_metric = ANY (ARRAY['peak'::text, 'mastery'::text, 'ranked_mastery'::text, 'renown'::text]))),
+    CONSTRAINT rating_boss_scores_window_kind_check CHECK ((window_kind = ANY (ARRAY['period'::text, 'all_time'::text, 'career'::text])))
+);
+
+ALTER TABLE ONLY rating_boss_scores FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE rating_realm_group_memberships (
+    realm_id uuid NOT NULL,
+    server_id uuid NOT NULL,
+    group_id uuid NOT NULL
+);
+
+ALTER TABLE ONLY rating_realm_group_memberships FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE rating_realm_groups (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    server_id uuid NOT NULL,
+    name text NOT NULL,
+    CONSTRAINT rating_realm_groups_name_check CHECK ((length(btrim(name)) > 0))
+);
+
+ALTER TABLE ONLY rating_realm_groups FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE rating_score_generations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    policy_version integer NOT NULL,
+    as_of timestamp with time zone NOT NULL,
+    status text DEFAULT 'building'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT rating_score_generations_status_check CHECK ((status = ANY (ARRAY['building'::text, 'active'::text, 'retired'::text])))
+);
+
 CREATE TABLE regression_fixtures (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     log_group_id uuid NOT NULL,
@@ -1900,6 +1962,19 @@ CREATE TABLE regression_snapshots (
     matches_previous boolean,
     previous_snapshot_id uuid
 );
+
+CREATE TABLE renown_kill_facts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    realm_id uuid NOT NULL,
+    player_guid text NOT NULL,
+    run_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    killed_at timestamp with time zone NOT NULL,
+    recorded_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY renown_kill_facts FORCE ROW LEVEL SECURITY;
 
 CREATE TABLE retention_policies (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
@@ -3069,6 +3144,24 @@ ALTER TABLE ONLY ranking_runs
 ALTER TABLE ONLY rankings_instance_summaries
     ADD CONSTRAINT rankings_instance_summaries_pkey PRIMARY KEY (instance_name, difficulty_name, max_players, tenant_id);
 
+ALTER TABLE ONLY rating_boss_scores
+    ADD CONSTRAINT rating_boss_scores_pkey PRIMARY KEY (generation_id, realm_id, player_guid, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind);
+
+ALTER TABLE ONLY rating_realm_group_memberships
+    ADD CONSTRAINT rating_realm_group_memberships_pkey PRIMARY KEY (realm_id);
+
+ALTER TABLE ONLY rating_realm_groups
+    ADD CONSTRAINT rating_realm_groups_id_server_id_key UNIQUE (id, server_id);
+
+ALTER TABLE ONLY rating_realm_groups
+    ADD CONSTRAINT rating_realm_groups_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY rating_realm_groups
+    ADD CONSTRAINT rating_realm_groups_server_id_name_key UNIQUE (server_id, name);
+
+ALTER TABLE ONLY rating_score_generations
+    ADD CONSTRAINT rating_score_generations_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY regression_fixtures
     ADD CONSTRAINT regression_fixtures_log_group_id_key UNIQUE (log_group_id);
 
@@ -3077,6 +3170,12 @@ ALTER TABLE ONLY regression_fixtures
 
 ALTER TABLE ONLY regression_snapshots
     ADD CONSTRAINT regression_snapshots_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY renown_kill_facts
+    ADD CONSTRAINT renown_kill_facts_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY renown_kill_facts
+    ADD CONSTRAINT renown_kill_facts_realm_id_player_guid_run_id_encounter_nam_key UNIQUE (realm_id, player_guid, run_id, encounter_name);
 
 ALTER TABLE ONLY retention_policies
     ADD CONSTRAINT retention_policies_pkey PRIMARY KEY (id);
@@ -3278,6 +3377,9 @@ ALTER TABLE ONLY world_spell_threat
 
 ALTER TABLE ONLY wow_log_groups
     ADD CONSTRAINT wow_log_groups_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY wow_server_realms
+    ADD CONSTRAINT wow_server_realms_id_server_id_unique UNIQUE (id, server_id);
 
 ALTER TABLE ONLY wow_server_realms
     ADD CONSTRAINT wow_server_realms_pkey PRIMARY KEY (id);
@@ -3571,6 +3673,20 @@ CREATE INDEX ranking_runs_instance_filter_idx ON ranking_runs USING btree (insta
 CREATE INDEX ranking_runs_realm_end_time_idx ON ranking_runs USING btree (realm_id, end_time DESC);
 
 CREATE UNIQUE INDEX ranking_runs_representative_instance_idx ON ranking_runs USING btree (representative_instance_id);
+
+CREATE INDEX rating_boss_scores_character_idx ON rating_boss_scores USING btree (realm_id, player_guid, generation_id, rating_metric, window_kind);
+
+CREATE INDEX rating_boss_scores_group_idx ON rating_boss_scores USING btree (generation_id, group_id, rating_metric, window_kind, instance_name, encounter_name, score DESC);
+
+CREATE INDEX rating_boss_scores_leaderboard_idx ON rating_boss_scores USING btree (generation_id, tenant_id, rating_metric, window_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, score DESC);
+
+CREATE INDEX rating_realm_group_memberships_group_idx ON rating_realm_group_memberships USING btree (group_id, realm_id);
+
+CREATE UNIQUE INDEX rating_score_generations_active_idx ON rating_score_generations USING btree (tenant_id) WHERE (status = 'active'::text);
+
+CREATE INDEX renown_kill_facts_boss_idx ON renown_kill_facts USING btree (realm_id, instance_name, encounter_name, killed_at);
+
+CREATE INDEX renown_kill_facts_character_time_idx ON renown_kill_facts USING btree (realm_id, player_guid, killed_at, id);
 
 CREATE INDEX river_job_args_index ON river_job USING gin (args);
 
@@ -4030,6 +4146,24 @@ ALTER TABLE ONLY ranking_runs
 ALTER TABLE ONLY ranking_runs
     ADD CONSTRAINT ranking_runs_representative_instance_id_fkey FOREIGN KEY (representative_instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY rating_boss_scores
+    ADD CONSTRAINT rating_boss_scores_generation_id_fkey FOREIGN KEY (generation_id) REFERENCES rating_score_generations(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY rating_boss_scores
+    ADD CONSTRAINT rating_boss_scores_group_id_fkey FOREIGN KEY (group_id) REFERENCES rating_realm_groups(id);
+
+ALTER TABLE ONLY rating_boss_scores
+    ADD CONSTRAINT rating_boss_scores_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY rating_realm_group_memberships
+    ADD CONSTRAINT rating_realm_group_memberships_group_id_server_id_fkey FOREIGN KEY (group_id, server_id) REFERENCES rating_realm_groups(id, server_id);
+
+ALTER TABLE ONLY rating_realm_group_memberships
+    ADD CONSTRAINT rating_realm_group_memberships_realm_id_server_id_fkey FOREIGN KEY (realm_id, server_id) REFERENCES wow_server_realms(id, server_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY rating_realm_groups
+    ADD CONSTRAINT rating_realm_groups_server_id_fkey FOREIGN KEY (server_id) REFERENCES wow_servers(id);
+
 ALTER TABLE ONLY regression_fixtures
     ADD CONSTRAINT regression_fixtures_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
 
@@ -4038,6 +4172,9 @@ ALTER TABLE ONLY regression_snapshots
 
 ALTER TABLE ONLY regression_snapshots
     ADD CONSTRAINT regression_snapshots_previous_snapshot_id_fkey FOREIGN KEY (previous_snapshot_id) REFERENCES regression_snapshots(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY renown_kill_facts
+    ADD CONSTRAINT renown_kill_facts_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
 
 ALTER TABLE ONLY retention_policies
     ADD CONSTRAINT retention_policies_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id) ON DELETE CASCADE;
@@ -4256,15 +4393,43 @@ ALTER TABLE encounter_dps_rankings ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE item_daily_prices ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE rating_boss_scores ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE rating_realm_group_memberships ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE rating_realm_groups ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE renown_kill_facts ENABLE ROW LEVEL SECURITY;
+
 CREATE POLICY tenant_admin_bypass ON encounter_dps_rankings USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON item_daily_prices USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_boss_scores USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_realm_group_memberships USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_realm_groups USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON renown_kill_facts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON wow_server_realms USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON wow_servers USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_isolation ON encounter_dps_rankings USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON rating_boss_scores USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON rating_realm_group_memberships USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON rating_realm_groups USING ((server_id IN ( SELECT wow_servers.id
+   FROM wow_servers)));
+
+CREATE POLICY tenant_isolation ON renown_kill_facts USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
 
 CREATE POLICY tenant_isolation ON wow_servers USING (

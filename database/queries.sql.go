@@ -20815,6 +20815,843 @@ func (q *sqlQuerier) UpsertTalentBuild(ctx context.Context, arg UpsertTalentBuil
 	return id, err
 }
 
+const assignRatingRealmToGroup = `-- name: AssignRatingRealmToGroup :execrows
+INSERT INTO rating_realm_group_memberships (realm_id, server_id, group_id)
+SELECT realm.id, realm.server_id, grp.id
+FROM wow_server_realms realm
+JOIN rating_realm_groups grp ON grp.server_id = realm.server_id
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE realm.id = $1 AND grp.id = $2 AND server.tenant_id = $3
+ON CONFLICT (realm_id) DO UPDATE SET group_id = EXCLUDED.group_id
+`
+
+type AssignRatingRealmToGroupParams struct {
+	RealmID  uuid.UUID     `db:"realm_id" json:"realm_id"`
+	GroupID  uuid.UUID     `db:"group_id" json:"group_id"`
+	TenantID uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) AssignRatingRealmToGroup(ctx context.Context, arg AssignRatingRealmToGroupParams) (int64, error) {
+	result, err := q.db.Exec(ctx, assignRatingRealmToGroup, arg.RealmID, arg.GroupID, arg.TenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const createRatingRealmGroup = `-- name: CreateRatingRealmGroup :one
+INSERT INTO rating_realm_groups (server_id, name)
+SELECT server.id, $1
+FROM wow_servers server
+WHERE server.id = $2 AND server.tenant_id = $3
+RETURNING id, server_id, name
+`
+
+type CreateRatingRealmGroupParams struct {
+	Name     string        `db:"name" json:"name"`
+	ServerID uuid.UUID     `db:"server_id" json:"server_id"`
+	TenantID uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+}
+
+// Current-state named groups. A realm move changes its present cohort, not
+// its realm-scoped evidence. All management queries require tenant ownership.
+func (q *sqlQuerier) CreateRatingRealmGroup(ctx context.Context, arg CreateRatingRealmGroupParams) (RatingRealmGroup, error) {
+	row := q.db.QueryRow(ctx, createRatingRealmGroup, arg.Name, arg.ServerID, arg.TenantID)
+	var i RatingRealmGroup
+	err := row.Scan(&i.ID, &i.ServerID, &i.Name)
+	return i, err
+}
+
+const deleteRatingRealmGroup = `-- name: DeleteRatingRealmGroup :execrows
+DELETE FROM rating_realm_groups grp
+USING wow_servers server
+WHERE grp.id = $1 AND server.id = grp.server_id AND server.tenant_id = $2
+`
+
+type DeleteRatingRealmGroupParams struct {
+	GroupID  uuid.UUID     `db:"group_id" json:"group_id"`
+	TenantID uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) DeleteRatingRealmGroup(ctx context.Context, arg DeleteRatingRealmGroupParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRatingRealmGroup, arg.GroupID, arg.TenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listActiveGroupBossRatingScores = `-- name: ListActiveGroupBossRatingScores :many
+SELECT score.generation_id, score.tenant_id, score.realm_id, score.player_guid, score.instance_name, score.encounter_name, score.difficulty_name, score.max_players, score.player_class, score.player_spec, score.player_sub_spec, score.performance_metric, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.best_raw, score.rank_one_raw, score.best_locked_parse, score.form, score.floor_score, score.eligible_kills, score.computed_at, score.group_id
+FROM rating_boss_scores score
+JOIN rating_score_generations generation
+  ON generation.id = score.generation_id
+ AND generation.tenant_id = score.tenant_id
+ AND generation.status = 'active'
+JOIN rating_realm_group_memberships membership ON membership.realm_id = score.realm_id
+JOIN rating_realm_groups grp ON grp.id = membership.group_id
+JOIN wow_servers server ON server.id = grp.server_id
+WHERE server.tenant_id = $1 AND score.tenant_id = $1
+  AND grp.id = $2 AND score.group_id = grp.id
+  AND score.instance_name = $3
+  AND score.encounter_name = $4
+  AND score.difficulty_name = $5
+  AND score.max_players = $6
+  AND score.player_class = $7
+  AND score.player_spec = $8
+  AND score.player_sub_spec = $9
+  AND score.performance_metric = $10
+  AND score.rating_metric = $11
+  AND score.window_kind = $12
+ORDER BY score.score DESC, score.realm_id, score.player_guid
+LIMIT $13
+`
+
+type ListActiveGroupBossRatingScoresParams struct {
+	TenantID          uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+	GroupID           uuid.UUID     `db:"group_id" json:"group_id"`
+	InstanceName      string        `db:"instance_name" json:"instance_name"`
+	EncounterName     string        `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string        `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16         `db:"max_players" json:"max_players"`
+	PlayerClass       string        `db:"player_class" json:"player_class"`
+	PlayerSpec        string        `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string        `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string        `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string        `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string        `db:"window_kind" json:"window_kind"`
+	LimitCount        int32         `db:"limit_count" json:"limit_count"`
+}
+
+func (q *sqlQuerier) ListActiveGroupBossRatingScores(ctx context.Context, arg ListActiveGroupBossRatingScoresParams) ([]RatingBossScore, error) {
+	rows, err := q.db.Query(ctx, listActiveGroupBossRatingScores,
+		arg.TenantID,
+		arg.GroupID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RatingBossScore
+	for rows.Next() {
+		var i RatingBossScore
+		if err := rows.Scan(
+			&i.GenerationID,
+			&i.TenantID,
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.PerformanceMetric,
+			&i.RatingMetric,
+			&i.WindowKind,
+			&i.WindowStart,
+			&i.WindowEnd,
+			&i.Score,
+			&i.BestRaw,
+			&i.RankOneRaw,
+			&i.BestLockedParse,
+			&i.Form,
+			&i.FloorScore,
+			&i.EligibleKills,
+			&i.ComputedAt,
+			&i.GroupID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGroupRenownFacts = `-- name: ListGroupRenownFacts :many
+SELECT fact.realm_id, fact.player_guid, fact.instance_name, fact.encounter_name,
+       fact.killed_at, fact.id
+FROM renown_kill_facts fact
+JOIN rating_realm_group_memberships membership ON membership.realm_id = fact.realm_id
+JOIN rating_realm_groups grp ON grp.id = membership.group_id
+JOIN wow_servers server ON server.id = grp.server_id
+WHERE server.tenant_id = $1 AND grp.id = $2
+  AND ($3::timestamptz IS NULL OR fact.killed_at >= $3)
+  AND ($4::timestamptz IS NULL OR fact.killed_at < $4)
+  AND (fact.killed_at, fact.id) > ($5::timestamptz, $6::uuid)
+ORDER BY fact.killed_at, fact.id
+LIMIT GREATEST($7::int, 0)
+`
+
+type ListGroupRenownFactsParams struct {
+	TenantID      uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
+	GroupID       uuid.UUID          `db:"group_id" json:"group_id"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd     pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	AfterKilledAt pgtype.Timestamptz `db:"after_killed_at" json:"after_killed_at"`
+	AfterID       uuid.UUID          `db:"after_id" json:"after_id"`
+	BatchSize     int32              `db:"batch_size" json:"batch_size"`
+}
+
+type ListGroupRenownFactsRow struct {
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	ID            uuid.UUID          `db:"id" json:"id"`
+}
+
+// Read retained evidence for the current group. Weight and boss eligibility
+// are applied by the versioned group policy when computing career/period totals.
+func (q *sqlQuerier) ListGroupRenownFacts(ctx context.Context, arg ListGroupRenownFactsParams) ([]ListGroupRenownFactsRow, error) {
+	rows, err := q.db.Query(ctx, listGroupRenownFacts,
+		arg.TenantID,
+		arg.GroupID,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.AfterKilledAt,
+		arg.AfterID,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGroupRenownFactsRow
+	for rows.Next() {
+		var i ListGroupRenownFactsRow
+		if err := rows.Scan(
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.KilledAt,
+			&i.ID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingRealmGroupMembers = `-- name: ListRatingRealmGroupMembers :many
+SELECT realm.id, realm.name
+FROM rating_realm_group_memberships membership
+JOIN wow_server_realms realm ON realm.id = membership.realm_id
+JOIN rating_realm_groups grp ON grp.id = membership.group_id
+JOIN wow_servers server ON server.id = grp.server_id
+WHERE grp.id = $1 AND server.tenant_id = $2
+ORDER BY realm.name, realm.id
+`
+
+type ListRatingRealmGroupMembersParams struct {
+	GroupID  uuid.UUID     `db:"group_id" json:"group_id"`
+	TenantID uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+}
+
+type ListRatingRealmGroupMembersRow struct {
+	ID   uuid.UUID `db:"id" json:"id"`
+	Name string    `db:"name" json:"name"`
+}
+
+func (q *sqlQuerier) ListRatingRealmGroupMembers(ctx context.Context, arg ListRatingRealmGroupMembersParams) ([]ListRatingRealmGroupMembersRow, error) {
+	rows, err := q.db.Query(ctx, listRatingRealmGroupMembers, arg.GroupID, arg.TenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRatingRealmGroupMembersRow
+	for rows.Next() {
+		var i ListRatingRealmGroupMembersRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingRealmGroups = `-- name: ListRatingRealmGroups :many
+SELECT grp.id, grp.server_id, grp.name
+FROM rating_realm_groups grp
+JOIN wow_servers server ON server.id = grp.server_id
+WHERE server.tenant_id = $1
+ORDER BY grp.server_id, grp.name, grp.id
+`
+
+func (q *sqlQuerier) ListRatingRealmGroups(ctx context.Context, tenantID uuid.NullUUID) ([]RatingRealmGroup, error) {
+	rows, err := q.db.Query(ctx, listRatingRealmGroups, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RatingRealmGroup
+	for rows.Next() {
+		var i RatingRealmGroup
+		if err := rows.Scan(&i.ID, &i.ServerID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const renameRatingRealmGroup = `-- name: RenameRatingRealmGroup :execrows
+UPDATE rating_realm_groups grp
+SET name = $1
+FROM wow_servers server
+WHERE grp.id = $2 AND server.id = grp.server_id AND server.tenant_id = $3
+`
+
+type RenameRatingRealmGroupParams struct {
+	Name     string        `db:"name" json:"name"`
+	GroupID  uuid.UUID     `db:"group_id" json:"group_id"`
+	TenantID uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) RenameRatingRealmGroup(ctx context.Context, arg RenameRatingRealmGroupParams) (int64, error) {
+	result, err := q.db.Exec(ctx, renameRatingRealmGroup, arg.Name, arg.GroupID, arg.TenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const unassignRatingRealmFromGroup = `-- name: UnassignRatingRealmFromGroup :execrows
+DELETE FROM rating_realm_group_memberships membership
+USING wow_server_realms realm, wow_servers server
+WHERE membership.realm_id = $1
+  AND realm.id = membership.realm_id AND server.id = realm.server_id
+  AND server.tenant_id = $2
+`
+
+type UnassignRatingRealmFromGroupParams struct {
+	RealmID  uuid.UUID     `db:"realm_id" json:"realm_id"`
+	TenantID uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) UnassignRatingRealmFromGroup(ctx context.Context, arg UnassignRatingRealmFromGroupParams) (int64, error) {
+	result, err := q.db.Exec(ctx, unassignRatingRealmFromGroup, arg.RealmID, arg.TenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const activateRatingScoreGeneration = `-- name: ActivateRatingScoreGeneration :execrows
+UPDATE rating_score_generations
+SET status = 'active'
+WHERE id = $1 AND tenant_id = $2 AND status = 'building'
+`
+
+type ActivateRatingScoreGenerationParams struct {
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) ActivateRatingScoreGeneration(ctx context.Context, arg ActivateRatingScoreGenerationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, activateRatingScoreGeneration, arg.GenerationID, arg.TenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const backfillRenownFactsForRun = `-- name: BackfillRenownFactsForRun :execrows
+INSERT INTO renown_kill_facts (
+    realm_id, player_guid, run_id, instance_name, encounter_name, killed_at
+)
+SELECT DISTINCT ON (ranking.player_guid, ranking.encounter_name)
+    rr.realm_id, ranking.player_guid, rr.run_id,
+    ranking.instance_name, ranking.encounter_name, ranking.killed_at
+FROM ranking_runs rr
+JOIN log_instances instance ON instance.id = rr.representative_instance_id
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+JOIN encounter_dps_rankings ranking ON ranking.instance_id = instance.id
+WHERE rr.run_id = $1
+  AND instance.invalidated_at IS NULL
+  AND ranking.encounter_id IS NOT NULL
+  AND ranking.duration_secs > 0
+ORDER BY ranking.player_guid, ranking.encounter_name, ranking.killed_at DESC, ranking.id
+ON CONFLICT (realm_id, player_guid, run_id, encounter_name) DO NOTHING
+`
+
+func (q *sqlQuerier) BackfillRenownFactsForRun(ctx context.Context, runID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, backfillRenownFactsForRun, runID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const insertRatingBossScore = `-- name: InsertRatingBossScore :exec
+INSERT INTO rating_boss_scores (
+    generation_id, tenant_id, realm_id, group_id, player_guid, instance_name, encounter_name,
+    difficulty_name, max_players, player_class, player_spec, player_sub_spec,
+    performance_metric, rating_metric, window_kind, window_start, window_end,
+    score, best_raw, rank_one_raw, best_locked_parse, form, floor_score, eligible_kills
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7,
+    $8, $9, $10, $11, $12,
+    $13, $14, $15, $16, $17,
+    $18, $19, $20, $21, $22, $23, $24
+)
+`
+
+type InsertRatingBossScoreParams struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GroupID           uuid.NullUUID      `db:"group_id" json:"group_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	BestRaw           pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	RankOneRaw        pgtype.Float8      `db:"rank_one_raw" json:"rank_one_raw"`
+	BestLockedParse   pgtype.Float8      `db:"best_locked_parse" json:"best_locked_parse"`
+	Form              pgtype.Float8      `db:"form" json:"form"`
+	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
+	EligibleKills     int32              `db:"eligible_kills" json:"eligible_kills"`
+}
+
+func (q *sqlQuerier) InsertRatingBossScore(ctx context.Context, arg InsertRatingBossScoreParams) error {
+	_, err := q.db.Exec(ctx, insertRatingBossScore,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.RealmID,
+		arg.GroupID,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.BestRaw,
+		arg.RankOneRaw,
+		arg.BestLockedParse,
+		arg.Form,
+		arg.FloorScore,
+		arg.EligibleKills,
+	)
+	return err
+}
+
+const insertRatingScoreGeneration = `-- name: InsertRatingScoreGeneration :one
+INSERT INTO rating_score_generations (tenant_id, policy_version, as_of)
+VALUES ($1, $2, $3)
+RETURNING id, tenant_id, policy_version, as_of, status, created_at
+`
+
+type InsertRatingScoreGenerationParams struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int32              `db:"policy_version" json:"policy_version"`
+	AsOf          pgtype.Timestamptz `db:"as_of" json:"as_of"`
+}
+
+func (q *sqlQuerier) InsertRatingScoreGeneration(ctx context.Context, arg InsertRatingScoreGenerationParams) (RatingScoreGeneration, error) {
+	row := q.db.QueryRow(ctx, insertRatingScoreGeneration, arg.TenantID, arg.PolicyVersion, arg.AsOf)
+	var i RatingScoreGeneration
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.PolicyVersion,
+		&i.AsOf,
+		&i.Status,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertRenownKillFact = `-- name: InsertRenownKillFact :execrows
+INSERT INTO renown_kill_facts (
+    realm_id, player_guid, run_id, instance_name, encounter_name, killed_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+)
+ON CONFLICT (realm_id, player_guid, run_id, encounter_name) DO NOTHING
+`
+
+type InsertRenownKillFactParams struct {
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	RunID         uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+}
+
+func (q *sqlQuerier) InsertRenownKillFact(ctx context.Context, arg InsertRenownKillFactParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertRenownKillFact,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.RunID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.KilledAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listActiveBossRatingScores = `-- name: ListActiveBossRatingScores :many
+SELECT score.generation_id, score.tenant_id, score.realm_id, score.player_guid, score.instance_name, score.encounter_name, score.difficulty_name, score.max_players, score.player_class, score.player_spec, score.player_sub_spec, score.performance_metric, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.best_raw, score.rank_one_raw, score.best_locked_parse, score.form, score.floor_score, score.eligible_kills, score.computed_at, score.group_id
+FROM rating_boss_scores score
+JOIN rating_score_generations generation
+  ON generation.id = score.generation_id
+ AND generation.tenant_id = score.tenant_id
+ AND generation.status = 'active'
+WHERE score.tenant_id = $1
+  AND score.instance_name = $2
+  AND score.encounter_name = $3
+  AND score.difficulty_name = $4
+  AND score.max_players = $5
+  AND score.player_class = $6
+  AND score.player_spec = $7
+  AND score.player_sub_spec = $8
+  AND score.performance_metric = $9
+  AND score.rating_metric = $10
+  AND score.window_kind = $11
+ORDER BY score.score DESC, score.realm_id, score.player_guid
+LIMIT $12
+`
+
+type ListActiveBossRatingScoresParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string    `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string    `db:"window_kind" json:"window_kind"`
+	LimitCount        int32     `db:"limit_count" json:"limit_count"`
+}
+
+func (q *sqlQuerier) ListActiveBossRatingScores(ctx context.Context, arg ListActiveBossRatingScoresParams) ([]RatingBossScore, error) {
+	rows, err := q.db.Query(ctx, listActiveBossRatingScores,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RatingBossScore
+	for rows.Next() {
+		var i RatingBossScore
+		if err := rows.Scan(
+			&i.GenerationID,
+			&i.TenantID,
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.PerformanceMetric,
+			&i.RatingMetric,
+			&i.WindowKind,
+			&i.WindowStart,
+			&i.WindowEnd,
+			&i.Score,
+			&i.BestRaw,
+			&i.RankOneRaw,
+			&i.BestLockedParse,
+			&i.Form,
+			&i.FloorScore,
+			&i.EligibleKills,
+			&i.ComputedAt,
+			&i.GroupID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRenownBackfillRunIDs = `-- name: ListRenownBackfillRunIDs :many
+SELECT rr.run_id
+FROM ranking_runs rr
+JOIN wow_server_realms realm ON realm.id = rr.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE server.tenant_id = $1
+  AND rr.run_id > $2
+ORDER BY rr.run_id
+LIMIT $3
+`
+
+type ListRenownBackfillRunIDsParams struct {
+	TenantID   uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+	AfterRunID uuid.UUID     `db:"after_run_id" json:"after_run_id"`
+	BatchSize  int32         `db:"batch_size" json:"batch_size"`
+}
+
+// Bounded, deterministic keyset scan for an operator-initiated historical
+// Renown evidence backfill. Never run a whole-history scan in a migration.
+func (q *sqlQuerier) ListRenownBackfillRunIDs(ctx context.Context, arg ListRenownBackfillRunIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRenownBackfillRunIDs, arg.TenantID, arg.AfterRunID, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var run_id uuid.UUID
+		if err := rows.Scan(&run_id); err != nil {
+			return nil, err
+		}
+		items = append(items, run_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRenownFactsByCharacter = `-- name: ListRenownFactsByCharacter :many
+SELECT id, realm_id, player_guid, run_id, instance_name, encounter_name, killed_at
+FROM renown_kill_facts
+WHERE realm_id = $1 AND player_guid = $2
+ORDER BY killed_at, id
+`
+
+type ListRenownFactsByCharacterParams struct {
+	RealmID    uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid string    `db:"player_guid" json:"player_guid"`
+}
+
+type ListRenownFactsByCharacterRow struct {
+	ID            uuid.UUID          `db:"id" json:"id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	RunID         uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+}
+
+func (q *sqlQuerier) ListRenownFactsByCharacter(ctx context.Context, arg ListRenownFactsByCharacterParams) ([]ListRenownFactsByCharacterRow, error) {
+	rows, err := q.db.Query(ctx, listRenownFactsByCharacter, arg.RealmID, arg.PlayerGuid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRenownFactsByCharacterRow
+	for rows.Next() {
+		var i ListRenownFactsByCharacterRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.RunID,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.KilledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ratingObservationsForRun = `-- name: RatingObservationsForRun :many
+SELECT
+    rr.realm_id,
+    rr.run_id,
+    ranking.player_guid,
+    ranking.instance_name,
+    ranking.encounter_name,
+    ranking.difficulty_name,
+    ranking.max_players,
+    ranking.player_class,
+    ranking.player_spec,
+    ranking.player_sub_spec,
+    ranking.killed_at,
+    $1::text AS performance_metric,
+    (CASE WHEN $1::text = 'hps' THEN ranking.hps ELSE ranking.dps END)::double precision AS raw_value,
+    (locked.precise_score IS NOT NULL)::boolean AS has_locked_parse,
+    COALESCE(locked.precise_score, 0)::double precision AS locked_parse
+FROM ranking_runs rr
+JOIN wow_server_realms realm ON realm.id = rr.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+JOIN log_instances representative ON representative.id = rr.representative_instance_id
+JOIN wow_log_groups log_group ON log_group.id = representative.log_group_id AND NOT log_group.unlisted
+JOIN encounter_dps_rankings ranking ON ranking.instance_id = representative.id
+LEFT JOIN LATERAL (
+    SELECT psr.precise_score
+    FROM parse_score_results psr
+    JOIN log_instances scored_instance ON scored_instance.id = psr.instance_id
+    JOIN wow_log_groups scored_group ON scored_group.id = scored_instance.log_group_id AND NOT scored_group.unlisted
+    WHERE psr.tenant_id = $2
+      AND psr.run_id = rr.run_id
+      AND psr.encounter_name = ranking.encounter_name
+      AND psr.player_guid = ranking.player_guid
+      AND psr.instance_name = ranking.instance_name
+      AND psr.difficulty_name = ranking.difficulty_name
+      AND psr.max_players = ranking.max_players
+      AND psr.player_class = ranking.player_class
+      AND psr.player_spec = ranking.player_spec
+      AND psr.player_sub_spec = ranking.player_sub_spec
+      AND psr.metric = $1
+      AND psr.status IN ('ok', 'low_confidence')
+    ORDER BY psr.created_at DESC, psr.precise_score DESC, psr.id
+    LIMIT 1
+) locked ON true
+WHERE rr.run_id = $3
+  AND server.tenant_id = $2
+  AND representative.invalidated_at IS NULL
+  AND ranking.encounter_id IS NOT NULL
+  AND ranking.duration_secs > 0
+  AND $1::text IN ('dps', 'hps')
+  AND (CASE WHEN $1::text = 'hps' THEN ranking.hps ELSE ranking.dps END) > 0
+ORDER BY ranking.player_guid, ranking.encounter_name
+`
+
+type RatingObservationsForRunParams struct {
+	Metric   string    `db:"metric" json:"metric"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+}
+
+type RatingObservationsForRunRow struct {
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RunID             uuid.UUID          `db:"run_id" json:"run_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	KilledAt          pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RawValue          float64            `db:"raw_value" json:"raw_value"`
+	HasLockedParse    bool               `db:"has_locked_parse" json:"has_locked_parse"`
+	LockedParse       float64            `db:"locked_parse" json:"locked_parse"`
+}
+
+// Per-boss canonical raw metric and its newest eligible locked parse for the
+// requested DPS or HPS metric. has_locked_parse distinguishes missing parses
+// from zero scores, so raw Peak need not invent a Mastery observation.
+func (q *sqlQuerier) RatingObservationsForRun(ctx context.Context, arg RatingObservationsForRunParams) ([]RatingObservationsForRunRow, error) {
+	rows, err := q.db.Query(ctx, ratingObservationsForRun, arg.Metric, arg.TenantID, arg.RunID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RatingObservationsForRunRow
+	for rows.Next() {
+		var i RatingObservationsForRunRow
+		if err := rows.Scan(
+			&i.RealmID,
+			&i.RunID,
+			&i.PlayerGuid,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.KilledAt,
+			&i.PerformanceMetric,
+			&i.RawValue,
+			&i.HasLockedParse,
+			&i.LockedParse,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const retireActiveRatingScoreGeneration = `-- name: RetireActiveRatingScoreGeneration :exec
+UPDATE rating_score_generations
+SET status = 'retired'
+WHERE tenant_id = $1 AND status = 'active'
+`
+
+func (q *sqlQuerier) RetireActiveRatingScoreGeneration(ctx context.Context, tenantID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, retireActiveRatingScoreGeneration, tenantID)
+	return err
+}
+
 const adminListOutdatedParserVersionInstances = `-- name: AdminListOutdatedParserVersionInstances :many
 SELECT
   li.id,

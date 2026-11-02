@@ -2270,6 +2270,55 @@ type RankingsInstanceSummary struct {
 	QueryVersion   int16              `db:"query_version" json:"query_version"`
 }
 
+type RatingBossScore struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	BestRaw           pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	RankOneRaw        pgtype.Float8      `db:"rank_one_raw" json:"rank_one_raw"`
+	BestLockedParse   pgtype.Float8      `db:"best_locked_parse" json:"best_locked_parse"`
+	Form              pgtype.Float8      `db:"form" json:"form"`
+	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
+	EligibleKills     int32              `db:"eligible_kills" json:"eligible_kills"`
+	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	GroupID           uuid.NullUUID      `db:"group_id" json:"group_id"`
+}
+
+type RatingRealmGroup struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	ServerID uuid.UUID `db:"server_id" json:"server_id"`
+	Name     string    `db:"name" json:"name"`
+}
+
+type RatingRealmGroupMembership struct {
+	RealmID  uuid.UUID `db:"realm_id" json:"realm_id"`
+	ServerID uuid.UUID `db:"server_id" json:"server_id"`
+	GroupID  uuid.UUID `db:"group_id" json:"group_id"`
+}
+
+type RatingScoreGeneration struct {
+	ID            uuid.UUID          `db:"id" json:"id"`
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int32              `db:"policy_version" json:"policy_version"`
+	AsOf          pgtype.Timestamptz `db:"as_of" json:"as_of"`
+	Status        string             `db:"status" json:"status"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type RegressionFixture struct {
 	ID         uuid.UUID          `db:"id" json:"id"`
 	LogGroupID uuid.UUID          `db:"log_group_id" json:"log_group_id"`
@@ -2286,6 +2335,17 @@ type RegressionSnapshot struct {
 	BuildTime          string             `db:"build_time" json:"build_time"`
 	MatchesPrevious    pgtype.Bool        `db:"matches_previous" json:"matches_previous"`
 	PreviousSnapshotID uuid.NullUUID      `db:"previous_snapshot_id" json:"previous_snapshot_id"`
+}
+
+type RenownKillFact struct {
+	ID            uuid.UUID          `db:"id" json:"id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	RunID         uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	RecordedAt    pgtype.Timestamptz `db:"recorded_at" json:"recorded_at"`
 }
 
 type RetentionPolicy struct {
