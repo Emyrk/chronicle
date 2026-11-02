@@ -86,8 +86,9 @@ export function RatingsFaqPage() {
           <Section id="basics" title="The basics">
             <Faq q="How is a rating different from a parse?" open>
               <p>
-                A <strong>parse</strong> scores one kill against everyone else of your spec on that boss: 99 means the kill beat 99% of comparable
-                kills. Ratings are built from your parses. They summarize many kills into an answer about you, not about a single night.
+                A <strong>parse</strong> is a 0–100 score for one kill: your DPS or HPS compared with your spec on the same boss, difficulty, and raid
+                size. <a href="/parsing">How parses work</a> explains how the score is computed and how to read it. Ratings are built from your parses
+                and span many raid nights.
               </p>
             </Faq>
             <Faq q="Why three numbers instead of one?">
