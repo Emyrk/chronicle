@@ -32,9 +32,13 @@ type sqlcQuerier interface {
 	AssignRatingRealmToGroup(ctx context.Context, arg AssignRatingRealmToGroupParams) (int64, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
 	BackfillGuildRenownFactsForRun(ctx context.Context, arg BackfillGuildRenownFactsForRunParams) (int64, error)
+	// Repair a bounded page of canonical runs; parse refresh normally earns these facts.
+	BackfillGuildRenownFactsForRuns(ctx context.Context, arg BackfillGuildRenownFactsForRunsParams) (int64, error)
 	// Retain precisely one boss kill per guild/run, even if the source is later deleted.
 	BackfillGuildRenownFactsForSource(ctx context.Context, arg BackfillGuildRenownFactsForSourceParams) (int64, error)
 	BackfillRenownFactsForRun(ctx context.Context, runID uuid.UUID) (int64, error)
+	// Repair a bounded page of canonical runs; parse refresh normally earns these facts.
+	BackfillRenownFactsForRuns(ctx context.Context, runIds []uuid.UUID) (int64, error)
 	// Preserve canonical attendance even when a log is deleted before the
 	// asynchronous ranking_runs refresh has persisted its representative.
 	BackfillRenownFactsForSource(ctx context.Context, arg BackfillRenownFactsForSourceParams) (int64, error)

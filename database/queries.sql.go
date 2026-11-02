@@ -9235,6 +9235,40 @@ func (q *sqlQuerier) BackfillGuildRenownFactsForRun(ctx context.Context, arg Bac
 	return result.RowsAffected(), nil
 }
 
+const backfillGuildRenownFactsForRuns = `-- name: BackfillGuildRenownFactsForRuns :execrows
+INSERT INTO guild_renown_kill_facts (tenant_id, realm_id, guild_id, run_id, instance_name, encounter_name, killed_at)
+SELECT DISTINCT ON (rr.run_id, encounter.name)
+    COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    rr.realm_id, instance.guild_id, rr.run_id,
+    instance.name, encounter.name, encounter.end_time
+FROM ranking_runs rr
+JOIN log_instances instance ON instance.id = rr.representative_instance_id
+JOIN wow_server_realms realm ON realm.id = rr.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+JOIN log_instance_encounters encounter ON encounter.instance_id = instance.id
+  AND encounter.boss = true AND encounter.kill_type = 'clean'
+WHERE rr.run_id = ANY($1::uuid[]) AND instance.guild_id IS NOT NULL
+  AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR server.tenant_id = $2)
+  AND instance.invalidated_at IS NULL AND encounter.end_time > encounter.start_time
+ORDER BY rr.run_id, encounter.name, encounter.end_time DESC, encounter.id
+ON CONFLICT DO NOTHING
+`
+
+type BackfillGuildRenownFactsForRunsParams struct {
+	RunIds   []uuid.UUID `db:"run_ids" json:"run_ids"`
+	TenantID uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+}
+
+// Repair a bounded page of canonical runs; parse refresh normally earns these facts.
+func (q *sqlQuerier) BackfillGuildRenownFactsForRuns(ctx context.Context, arg BackfillGuildRenownFactsForRunsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, backfillGuildRenownFactsForRuns, arg.RunIds, arg.TenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const backfillGuildRenownFactsForSource = `-- name: BackfillGuildRenownFactsForSource :execrows
 INSERT INTO guild_renown_kill_facts (tenant_id, realm_id, guild_id, run_id, instance_name, encounter_name, killed_at)
 SELECT DISTINCT ON (encounter.name)
@@ -22499,6 +22533,34 @@ ON CONFLICT (realm_id, player_guid, run_id, encounter_name) DO NOTHING
 
 func (q *sqlQuerier) BackfillRenownFactsForRun(ctx context.Context, runID uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, backfillRenownFactsForRun, runID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const backfillRenownFactsForRuns = `-- name: BackfillRenownFactsForRuns :execrows
+INSERT INTO renown_kill_facts (
+    realm_id, player_guid, run_id, instance_name, encounter_name, killed_at
+)
+SELECT DISTINCT ON (rr.run_id, ranking.player_guid, ranking.encounter_name)
+    rr.realm_id, ranking.player_guid, rr.run_id,
+    ranking.instance_name, ranking.encounter_name, ranking.killed_at
+FROM ranking_runs rr
+JOIN log_instances instance ON instance.id = rr.representative_instance_id
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+JOIN encounter_dps_rankings ranking ON ranking.instance_id = instance.id
+WHERE rr.run_id = ANY($1::uuid[])
+  AND instance.invalidated_at IS NULL
+  AND ranking.encounter_id IS NOT NULL
+  AND ranking.duration_secs > 0
+ORDER BY rr.run_id, ranking.player_guid, ranking.encounter_name, ranking.killed_at DESC, ranking.id
+ON CONFLICT (realm_id, player_guid, run_id, encounter_name) DO NOTHING
+`
+
+// Repair a bounded page of canonical runs; parse refresh normally earns these facts.
+func (q *sqlQuerier) BackfillRenownFactsForRuns(ctx context.Context, runIds []uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, backfillRenownFactsForRuns, runIds)
 	if err != nil {
 		return 0, err
 	}

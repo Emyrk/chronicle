@@ -50,12 +50,10 @@ func tenantTimeRankOne(ctx context.Context, store ratingStore, tenant uuid.UUID,
 			return nil, fmt.Errorf("guild rating run safety bound exceeded")
 		}
 		runs += len(ids)
-		for _, run := range ids {
-			if _, err := store.BackfillGuildRenownFactsForRun(ctx, database.BackfillGuildRenownFactsForRunParams{
-				TenantID: tenant, RunID: run,
-			}); err != nil {
-				return nil, err
-			}
+		if _, err := store.BackfillGuildRenownFactsForRuns(ctx, database.BackfillGuildRenownFactsForRunsParams{
+			TenantID: tenant, RunIds: ids,
+		}); err != nil {
+			return nil, err
 		}
 		rows, err := store.GuildRatingObservationsForRuns(ctx, database.GuildRatingObservationsForRunsParams{
 			TenantID: tenant, RunIds: ids,

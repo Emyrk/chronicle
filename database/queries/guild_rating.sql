@@ -84,6 +84,26 @@ WHERE rr.run_id = @run_id AND instance.guild_id IS NOT NULL
 ORDER BY encounter.name, encounter.end_time DESC, encounter.id
 ON CONFLICT DO NOTHING;
 
+-- name: BackfillGuildRenownFactsForRuns :execrows
+-- Repair a bounded page of canonical runs; parse refresh normally earns these facts.
+INSERT INTO guild_renown_kill_facts (tenant_id, realm_id, guild_id, run_id, instance_name, encounter_name, killed_at)
+SELECT DISTINCT ON (rr.run_id, encounter.name)
+    COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    rr.realm_id, instance.guild_id, rr.run_id,
+    instance.name, encounter.name, encounter.end_time
+FROM ranking_runs rr
+JOIN log_instances instance ON instance.id = rr.representative_instance_id
+JOIN wow_server_realms realm ON realm.id = rr.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+JOIN log_instance_encounters encounter ON encounter.instance_id = instance.id
+  AND encounter.boss = true AND encounter.kill_type = 'clean'
+WHERE rr.run_id = ANY(@run_ids::uuid[]) AND instance.guild_id IS NOT NULL
+  AND (@tenant_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR server.tenant_id = @tenant_id)
+  AND instance.invalidated_at IS NULL AND encounter.end_time > encounter.start_time
+ORDER BY rr.run_id, encounter.name, encounter.end_time DESC, encounter.id
+ON CONFLICT DO NOTHING;
+
 -- name: ListGuildRenownFacts :many
 SELECT * FROM guild_renown_kill_facts
 WHERE tenant_id = @tenant_id AND realm_id = @realm_id AND guild_id = @guild_id

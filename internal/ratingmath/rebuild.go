@@ -27,11 +27,11 @@ type ratingStore interface {
 	ListRatingRunsForTenant(context.Context, database.ListRatingRunsForTenantParams) ([]uuid.UUID, error)
 	RatingObservationsForRuns(context.Context, database.RatingObservationsForRunsParams) ([]database.RatingObservationsForRunsRow, error)
 	GuildRatingObservationsForRuns(context.Context, database.GuildRatingObservationsForRunsParams) ([]database.GuildRatingObservationsForRunsRow, error)
-	BackfillGuildRenownFactsForRun(context.Context, database.BackfillGuildRenownFactsForRunParams) (int64, error)
+	BackfillGuildRenownFactsForRuns(context.Context, database.BackfillGuildRenownFactsForRunsParams) (int64, error)
 	ListGroupGuildRenownFacts(context.Context, database.ListGroupGuildRenownFactsParams) ([]database.ListGroupGuildRenownFactsRow, error)
 	InsertGuildRatingBossScore(context.Context, database.InsertGuildRatingBossScoreParams) error
 	InsertGuildRatingScopeScore(context.Context, database.InsertGuildRatingScopeScoreParams) error
-	BackfillRenownFactsForRun(context.Context, uuid.UUID) (int64, error)
+	BackfillRenownFactsForRuns(context.Context, []uuid.UUID) (int64, error)
 	ListGroupRenownFacts(context.Context, database.ListGroupRenownFactsParams) ([]database.ListGroupRenownFactsRow, error)
 	InsertRatingScoreGeneration(context.Context, database.InsertRatingScoreGenerationParams) (database.RatingScoreGeneration, error)
 	InsertRatingBossScore(context.Context, database.InsertRatingBossScoreParams) error
@@ -211,12 +211,10 @@ func BuildTenantRatings(ctx context.Context, store ratingStore, tenant uuid.UUID
 				return generation, written, fmt.Errorf("rating run safety bound exceeded")
 			}
 			runs += len(ids)
-			// Earned credit is independent of parse quality. Persist the minimal
-			// facts before source logs can be removed, even if a parse is absent.
-			for _, runID := range ids {
-				if _, err := store.BackfillRenownFactsForRun(ctx, runID); err != nil {
-					return generation, written, err
-				}
+			// Parse refresh normally earns credit; repair any missing facts
+			// for this bounded page independently of parse quality.
+			if _, err := store.BackfillRenownFactsForRuns(ctx, ids); err != nil {
+				return generation, written, err
 			}
 			for _, metric := range []string{"dps", "hps"} {
 				rows, err := store.RatingObservationsForRuns(ctx, database.RatingObservationsForRunsParams{

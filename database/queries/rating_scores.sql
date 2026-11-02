@@ -28,6 +28,25 @@ WHERE rr.run_id = @run_id
 ORDER BY ranking.player_guid, ranking.encounter_name, ranking.killed_at DESC, ranking.id
 ON CONFLICT (realm_id, player_guid, run_id, encounter_name) DO NOTHING;
 
+-- name: BackfillRenownFactsForRuns :execrows
+-- Repair a bounded page of canonical runs; parse refresh normally earns these facts.
+INSERT INTO renown_kill_facts (
+    realm_id, player_guid, run_id, instance_name, encounter_name, killed_at
+)
+SELECT DISTINCT ON (rr.run_id, ranking.player_guid, ranking.encounter_name)
+    rr.realm_id, ranking.player_guid, rr.run_id,
+    ranking.instance_name, ranking.encounter_name, ranking.killed_at
+FROM ranking_runs rr
+JOIN log_instances instance ON instance.id = rr.representative_instance_id
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+JOIN encounter_dps_rankings ranking ON ranking.instance_id = instance.id
+WHERE rr.run_id = ANY(@run_ids::uuid[])
+  AND instance.invalidated_at IS NULL
+  AND ranking.encounter_id IS NOT NULL
+  AND ranking.duration_secs > 0
+ORDER BY rr.run_id, ranking.player_guid, ranking.encounter_name, ranking.killed_at DESC, ranking.id
+ON CONFLICT (realm_id, player_guid, run_id, encounter_name) DO NOTHING;
+
 -- name: BackfillRenownFactsForSource :execrows
 -- Preserve canonical attendance even when a log is deleted before the
 -- asynchronous ranking_runs refresh has persisted its representative.
