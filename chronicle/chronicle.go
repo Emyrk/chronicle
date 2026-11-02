@@ -32,6 +32,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/cleanup"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/ptr"
+	"github.com/Emyrk/chronicle/internal/ratingfacts"
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/dustin/go-humanize"
@@ -1139,9 +1140,8 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 		return err
 	}
 
-	// Delete and persist witnessed Renown in one transaction, serialized with
-	// canonical representative refresh. A user can delete immediately after
-	// upload without waiting for the daily rating rebuild.
+	// Reconcile earned credit in the same transaction as source deletion.
+	// Remaining duplicate uploads may still back the logical run.
 	err = c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
 			return fmt.Errorf("lock ranking representatives before log deletion: %w", err)
@@ -1150,27 +1150,24 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 		if err != nil {
 			return fmt.Errorf("load current ranking identities: %w", err)
 		}
-		seeds := rankingRunLogGroupIdentitySeeds(current)
-		sources, err := tx.RankingRunSources(ctx, seeds)
-		if err != nil {
-			return fmt.Errorf("resolve canonical ranking sources before log deletion: %w", err)
+		instanceIDs := make([]uuid.UUID, 0, len(current))
+		runIDs := make([]uuid.UUID, 0, len(current))
+		for _, identity := range current {
+			instanceIDs = append(instanceIDs, identity.InstanceID)
+			runIDs = append(runIDs, identity.RunID)
 		}
-		for _, source := range sources {
-			if _, err := tx.BackfillRenownFactsForSource(ctx, database.BackfillRenownFactsForSourceParams{
-				RealmID: source.RealmID, RunID: source.RunID,
-				RepresentativeInstanceID: source.RepresentativeInstanceID,
-			}); err != nil {
-				return fmt.Errorf("preserve Renown for run %s before log deletion: %w", source.RunID, err)
-			}
-			if _, err := tx.BackfillGuildRenownFactsForSource(ctx, database.BackfillGuildRenownFactsForSourceParams{
-				TenantID: uuid.Nil, RunID: source.RunID,
-				RepresentativeInstanceID: source.RepresentativeInstanceID,
-			}); err != nil {
-				return fmt.Errorf("preserve guild Renown for run %s before log deletion: %w", source.RunID, err)
-			}
+		realms, err := tx.RatingRealmsByInstanceIDs(ctx, instanceIDs)
+		if err != nil {
+			return err
+		}
+		if err := tx.DeleteWoWLogGroup(ctx, logID); err != nil {
+			return err
+		}
+		if err := ratingfacts.ReconcileDeletedRuns(ctx, tx, runIDs, realms); err != nil {
+			return err
 		}
 		identities = current
-		return tx.DeleteWoWLogGroup(ctx, logID)
+		return nil
 	}, nil)
 	if err != nil {
 		return fmt.Errorf("delete log group: %w", err)
@@ -1248,38 +1245,35 @@ func (c *Chronicle) DeleteWoWLogInstance(ctx context.Context, logID, instanceID 
 		}
 		replacementLogGroups = append(replacementLogGroups, groups...)
 	}
-	// Preserve earned credit before this source is removed, under the same
-	// representative-refresh lock used for whole-log and retention deletion.
+	// Remove credit from deleted evidence, retaining only credit reproduced
+	// from other copies of the logical run under the refresh lock.
 	err = c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
 			return err
 		}
-		seeds := []uuid.UUID{instanceID}
-		for _, identity := range identities {
-			seeds = append(seeds, identity.RunID)
-		}
-		sources, err := tx.RankingRunSources(ctx, seeds)
+		current, err := tx.RankingRunIdentitiesByInstanceIDs(ctx, []uuid.UUID{instanceID})
 		if err != nil {
 			return err
 		}
-		for _, source := range sources {
-			if _, err := tx.BackfillRenownFactsForSource(ctx, database.BackfillRenownFactsForSourceParams{
-				RealmID: source.RealmID, RunID: source.RunID,
-				RepresentativeInstanceID: source.RepresentativeInstanceID,
-			}); err != nil {
-				return err
-			}
-			if _, err := tx.BackfillGuildRenownFactsForSource(ctx, database.BackfillGuildRenownFactsForSourceParams{
-				TenantID: uuid.Nil, RunID: source.RunID,
-				RepresentativeInstanceID: source.RepresentativeInstanceID,
-			}); err != nil {
-				return err
-			}
+		realms, err := tx.RatingRealmsByInstanceIDs(ctx, []uuid.UUID{instanceID})
+		if err != nil {
+			return err
 		}
 		_, err = tx.DeleteLogInstanceByIDAndGroup(ctx, database.DeleteLogInstanceByIDAndGroupParams{
 			ID: instanceID, LogGroupID: logID,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		runIDs := make([]uuid.UUID, 0, len(current))
+		for _, identity := range current {
+			runIDs = append(runIDs, identity.RunID)
+		}
+		if err := ratingfacts.ReconcileDeletedRuns(ctx, tx, runIDs, realms); err != nil {
+			return err
+		}
+		identities = current
+		return nil
 	}, nil)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

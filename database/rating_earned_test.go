@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRankingRunRefreshEarnsRenownBeforeSourceDeletion(t *testing.T) {
+func TestRankingRunRefreshEarnsRenownUntilSourceDeletion(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)
 	pool, _ := dbtestutil.NewPGXPool(t)
@@ -54,16 +54,15 @@ func TestRankingRunRefreshEarnsRenownBeforeSourceDeletion(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, guildFacts, 1, "guild retries must not award twice")
-	_, err = store.DeleteLogInstancesByIDs(ctx, []uuid.UUID{instance})
-	require.NoError(t, err)
+	deleteRatingInstanceEvidence(t, ctx, store, instance)
 	facts, err = store.ListRenownFactsByCharacter(ctx, database.ListRenownFactsByCharacterParams{RealmID: realm.ID, PlayerGuid: "attendance"})
 	require.NoError(t, err)
-	require.Len(t, facts, 1, "earned Renown survives source deletion")
+	require.Empty(t, facts, "last source deletion removes earned player evidence")
 	guildFacts, err = store.ListGuildRenownFacts(ctx, database.ListGuildRenownFactsParams{
 		TenantID: uuid.Nil, RealmID: realm.ID, GuildID: guild, LimitCount: 10,
 	})
 	require.NoError(t, err)
-	require.Len(t, guildFacts, 1, "earned guild Renown survives source deletion")
+	require.Empty(t, guildFacts, "last source deletion removes earned guild evidence")
 }
 
 func TestBatchRenownRepairIdempotentAndExcludesGuildless(t *testing.T) {
@@ -127,7 +126,7 @@ func TestBatchRenownRepairIdempotentAndExcludesGuildless(t *testing.T) {
 	require.Equal(t, runs[0], guildFacts[0].RunID)
 }
 
-func TestRenownFactsPreservedBeforeRunRefresh(t *testing.T) {
+func TestRenownFactsRemovedBeforeRunRefresh(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)
 	pool, _ := dbtestutil.NewPGXPool(t)
@@ -163,14 +162,13 @@ func TestRenownFactsPreservedBeforeRunRefresh(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), guildInserted)
-	_, err = store.DeleteLogInstancesByIDs(ctx, []uuid.UUID{instance})
-	require.NoError(t, err)
+	deleteRatingInstanceEvidence(t, ctx, store, instance)
 	facts, err := store.ListRenownFactsByCharacter(ctx, database.ListRenownFactsByCharacterParams{RealmID: realm.ID, PlayerGuid: "attendance"})
 	require.NoError(t, err)
-	require.Len(t, facts, 1)
+	require.Empty(t, facts)
 	guildFacts, err := store.ListGuildRenownFacts(ctx, database.ListGuildRenownFactsParams{
 		TenantID: uuid.Nil, RealmID: realm.ID, GuildID: guild, LimitCount: 10,
 	})
 	require.NoError(t, err)
-	require.Len(t, guildFacts, 1, "guild kill credit survives deletion before run refresh")
+	require.Empty(t, guildFacts, "deleting the last source removes credit before run refresh")
 }

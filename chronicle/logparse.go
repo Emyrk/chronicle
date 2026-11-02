@@ -926,15 +926,15 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		}
 		if playerRankings || (rankableLog && publicLog && cleanBossKill) {
 			rankErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
-				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
-					return err
-				}
-				// Keep the same lock order as refresh and deletion before writing
-				// rankings, so concurrent fact repair cannot deadlock this parse.
+				// Acquire the refresh lock before the parse-generation row lock,
+				// matching deletion and reparse, to avoid a lock-order cycle.
 				if publicLog {
 					if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
 						return err
 					}
+				}
+				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
+					return err
 				}
 				if playerRankings {
 					if err := insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, resolved.DatasetID, flavor, talentTreeData); err != nil {

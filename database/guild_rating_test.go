@@ -136,13 +136,12 @@ func TestGuildRatingCanonicalGuildlessAndDurableFacts(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Zero(t, added, "a corrected duplicate cannot award a second guild for the same boss kill")
-	_, err = q.DeleteLogInstancesByIDs(ctx, []uuid.UUID{guildInstance})
-	require.NoError(t, err)
+	deleteRatingInstanceEvidence(t, ctx, store, guildInstance)
 	facts, err := q.ListGuildRenownFacts(ctx, database.ListGuildRenownFactsParams{
 		TenantID: uuid.Nil, RealmID: realm, GuildID: guild, LimitCount: 10,
 	})
 	require.NoError(t, err)
-	require.Len(t, facts, 1, "earned guild attendance survives source deletion")
+	require.Empty(t, facts, "last source deletion removes guild attendance")
 }
 
 func TestGuildRatingActiveProjection(t *testing.T) {

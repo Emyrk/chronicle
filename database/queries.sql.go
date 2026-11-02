@@ -19189,6 +19189,34 @@ func (q *sqlQuerier) RankingRunSources(ctx context.Context, affectedIds []uuid.U
 	return items, nil
 }
 
+const ratingRealmsByInstanceIDs = `-- name: RatingRealmsByInstanceIDs :many
+SELECT DISTINCT realm_id FROM log_instances
+WHERE id = ANY($1::uuid[])
+ORDER BY realm_id
+`
+
+// Capture affected tenants before deleting instances, including invalidated
+// sources that RankingRunSources deliberately excludes.
+func (q *sqlQuerier) RatingRealmsByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, ratingRealmsByInstanceIDs, instanceIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var realm_id uuid.UUID
+		if err := rows.Scan(&realm_id); err != nil {
+			return nil, err
+		}
+		items = append(items, realm_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const touchLogInstanceRankingSource = `-- name: TouchLogInstanceRankingSource :exec
 UPDATE log_instances
 SET updated_at = now()

@@ -1099,6 +1099,9 @@ type sqlcQuerier interface {
 	RatingObservationsForRuns(ctx context.Context, arg RatingObservationsForRunsParams) ([]RatingObservationsForRunsRow, error)
 	RatingProjectionGuildRankOne(ctx context.Context, arg RatingProjectionGuildRankOneParams) (RatingProjectionGuildRankOneRow, error)
 	RatingProjectionPlayerRankOne(ctx context.Context, arg RatingProjectionPlayerRankOneParams) (RatingProjectionPlayerRankOneRow, error)
+	// Capture affected tenants before deleting instances, including invalidated
+	// sources that RankingRunSources deliberately excludes.
+	RatingRealmsByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]uuid.UUID, error)
 	RatingStageGuildPeak(ctx context.Context, arg RatingStageGuildPeakParams) (RatingStageGuildPeakRow, error)
 	RatingStageGuildRankOne(ctx context.Context, arg RatingStageGuildRankOneParams) (float64, error)
 	RatingStageGuildRenownTotals(ctx context.Context, arg RatingStageGuildRenownTotalsParams) (RatingStageGuildRenownTotalsRow, error)

@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/storage"
+	"github.com/Emyrk/chronicle/internal/ratingfacts"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river"
@@ -208,8 +209,8 @@ func (w *RealmWorker) Work(ctx context.Context, job *river.Job[ArgsRetentionReal
 			_, _ = w.Storage.RemoveFile(ctx, "raidlogs", []string{groupID.String()})
 		}
 
-		// Serialize against representative refresh and commit earned facts
-		// alongside source deletion, so a failed insert cannot lose credit.
+		// Serialize deletion and fact reconciliation with ranking refresh. A
+		// surviving duplicate retains credit; a deleted run does not.
 		var identities []database.RankingRunIdentitiesByInstanceIDsRow
 		var deleted int64
 		if err := w.Store.InTx(ctx, func(tx database.Store) error {
@@ -221,32 +222,21 @@ func (w *RealmWorker) Work(ctx context.Context, job *river.Job[ArgsRetentionReal
 			if err != nil {
 				return fmt.Errorf("load ranking run identities: %w", err)
 			}
-			seeds := make([]uuid.UUID, 0, len(identities)*2)
-			for _, identity := range identities {
-				seeds = append(seeds, identity.InstanceID, identity.RunID)
-			}
-			sources, err := tx.RankingRunSources(ctx, seeds)
+			realms, err := tx.RatingRealmsByInstanceIDs(ctx, toDelete)
 			if err != nil {
-				return fmt.Errorf("resolve canonical ranking sources before retention: %w", err)
-			}
-			for _, source := range sources {
-				if _, err := tx.BackfillRenownFactsForSource(ctx, database.BackfillRenownFactsForSourceParams{
-					RealmID: source.RealmID, RunID: source.RunID,
-					RepresentativeInstanceID: source.RepresentativeInstanceID,
-				}); err != nil {
-					return fmt.Errorf("preserve Renown for run %s before retention deletion: %w", source.RunID, err)
-				}
-				if _, err := tx.BackfillGuildRenownFactsForSource(ctx, database.BackfillGuildRenownFactsForSourceParams{
-					TenantID: uuid.Nil, RunID: source.RunID,
-					RepresentativeInstanceID: source.RepresentativeInstanceID,
-				}); err != nil {
-					return fmt.Errorf("preserve guild Renown for run %s before retention deletion: %w", source.RunID, err)
-				}
+				return err
 			}
 			deleted, err = tx.DeleteLogInstancesByIDs(ctx, toDelete)
-			return err
+			if err != nil {
+				return err
+			}
+			runIDs := make([]uuid.UUID, 0, len(identities))
+			for _, identity := range identities {
+				runIDs = append(runIDs, identity.RunID)
+			}
+			return ratingfacts.ReconcileDeletedRuns(ctx, tx, runIDs, realms)
 		}, nil); err != nil {
-			return fmt.Errorf("preserve Renown and delete retained instances: %w", err)
+			return fmt.Errorf("remove Renown and delete retained instances: %w", err)
 		}
 		affectedIDs := make([]uuid.UUID, 0, len(identities)*2)
 		for _, identity := range identities {
