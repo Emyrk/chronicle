@@ -2,8 +2,8 @@ package chroniclesdk
 
 import "github.com/google/uuid"
 
-// Admin rating configuration is tenant-scoped to the request host. The root
-// domain uses the nil UUID. Clients cannot select another tenant in a payload.
+// Legacy rating group configuration types are retained for Go compatibility.
+// Their admin HTTP routes are no longer registered; configuration is migration-owned.
 type AdminCreateRatingGroupRequest struct {
 	ServerID uuid.UUID `json:"server_id"`
 	Name     string    `json:"name"`

@@ -14,11 +14,50 @@ import (
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/stretchr/testify/require"
 )
+
+// Rating configuration is migration-owned; none of its former admin routes
+// should match, even though the legacy handlers remain available to Go callers.
+func TestAdminRatingConfigurationRoutesRemoved(t *testing.T) {
+	t.Parallel()
+	routes := chi.NewRouter()
+	routes.Route("/api/v1/admin/ratings", (&API{}).adminRatingRoutes)
+	groupID := uuid.New().String()
+	realmID := uuid.New().String()
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodGet, "/groups"},
+		{http.MethodPost, "/groups"},
+		{http.MethodPut, "/groups/" + groupID},
+		{http.MethodDelete, "/groups/" + groupID},
+		{http.MethodPut, "/groups/" + groupID + "/realms/" + realmID},
+		{http.MethodDelete, "/realms/" + realmID + "/group"},
+		{http.MethodGet, "/policies"},
+		{http.MethodPut, "/groups/" + groupID + "/policy"},
+		{http.MethodGet, "/groups/" + groupID + "/raids"},
+		{http.MethodPut, "/groups/" + groupID + "/raids"},
+		{http.MethodDelete, "/groups/" + groupID + "/raids"},
+		{http.MethodGet, "/groups/" + groupID + "/bosses"},
+		{http.MethodPut, "/groups/" + groupID + "/bosses"},
+		{http.MethodDelete, "/groups/" + groupID + "/bosses"},
+	} {
+		path := "/api/v1/admin/ratings" + tc.path
+		t.Run(tc.method+" "+path, func(t *testing.T) {
+			t.Parallel()
+			require.False(t, routes.Match(chi.NewRouteContext(), tc.method, path))
+		})
+	}
+	for _, path := range []string{"/api/v1/admin/ratings/rebuild", "/api/v1/admin/ratings/renown/repair"} {
+		require.True(t, routes.Match(chi.NewRouteContext(), http.MethodPost, path), path)
+		rec := httptest.NewRecorder()
+		routes.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, nil))
+		require.Equal(t, http.StatusForbidden, rec.Code, "anonymous maintenance request: %s", path)
+	}
+}
 
 // The endpoint uses River's unique insertion contract rather than creating
 // duplicate maintenance jobs. A tenant rebuild never targets another tenant.

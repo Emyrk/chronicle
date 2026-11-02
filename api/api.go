@@ -504,25 +504,7 @@ func (api *API) Routes() chi.Router {
 					})
 				})
 
-				r.Route("/ratings", func(r chi.Router) {
-					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
-					r.Post("/renown/repair", api.AdminDispatchRenownRepair)
-					r.Post("/rebuild", api.AdminRebuildRatings)
-					r.Get("/groups", api.AdminListRatingGroups)
-					r.Post("/groups", api.AdminCreateRatingGroup)
-					r.Put("/groups/{groupID}", api.AdminRenameRatingGroup)
-					r.Delete("/groups/{groupID}", api.AdminDeleteRatingGroup)
-					r.Put("/groups/{groupID}/realms/{realmID}", api.AdminAssignRatingRealm)
-					r.Delete("/realms/{realmID}/group", api.AdminUnassignRatingRealm)
-					r.Get("/policies", api.AdminListRatingPolicies)
-					r.Put("/groups/{groupID}/policy", api.AdminPutRatingPolicy)
-					r.Get("/groups/{groupID}/raids", api.AdminListRatingRaidPolicies)
-					r.Put("/groups/{groupID}/raids", api.AdminPutRatingRaidPolicy)
-					r.Delete("/groups/{groupID}/raids", api.AdminDeleteRatingRaidPolicy)
-					r.Get("/groups/{groupID}/bosses", api.AdminListRatingBossPolicies)
-					r.Put("/groups/{groupID}/bosses", api.AdminPutRatingBossPolicy)
-					r.Delete("/groups/{groupID}/bosses", api.AdminDeleteRatingBossPolicy)
-				})
+				r.Route("/ratings", api.adminRatingRoutes)
 
 				r.Route("/parses", func(r chi.Router) {
 					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))

@@ -9,7 +9,9 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/go-chi/chi/v5"
@@ -71,6 +73,14 @@ func (api *API) ratingAdminRebuild(r *http.Request) error {
 	return nil
 }
 
+// adminRatingRoutes exposes only maintenance jobs. Rating configuration is
+// migration-owned, so the legacy handlers below must not be registered here.
+func (api *API) adminRatingRoutes(r chi.Router) {
+	r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
+	r.Post("/renown/repair", api.AdminDispatchRenownRepair)
+	r.Post("/rebuild", api.AdminRebuildRatings)
+}
+
 // AdminDispatchRenownRepair starts a bounded historical repair pass across all
 // tenants, including root. It does not wait for the repair pages to complete.
 // For complete rating history, wait for the repair jobs to finish before
@@ -107,6 +117,8 @@ func (api *API) adminEnqueueRatingJob(w http.ResponseWriter, r *http.Request, ar
 	})
 }
 
+// Legacy group configuration handlers below are no longer registered as HTTP
+// routes. Keep them while the group-based database logic is being migrated.
 func (api *API) AdminListRatingGroups(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenant := servicetenant.TenantIDFromContext(ctx)
