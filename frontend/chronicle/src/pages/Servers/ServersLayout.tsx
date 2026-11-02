@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import {
   Server,
   Key,
-  Archive,
   Menu,
   X,
   Loader2,
@@ -29,7 +28,6 @@ const baseTabs: Tab[] = [
 ];
 
 const tenantsTab: Tab = { path: "/servers/tenants", label: "Tenants", icon: Building2 };
-const retentionTab: Tab = { path: "/servers/retention", label: "Log Retention", icon: Archive };
 
 export function ServersLayout() {
   const location = useLocation();
@@ -42,20 +40,17 @@ export function ServersLayout() {
     adminServers: "chronicle:chronicle#admin_servers",
     adminTenants: "chronicle:chronicle#admin_tenants",
     canAdminSomeServer: "lookup:wow_server#administer",
-    canManageRetention: "lookup:wow_server#manage_log_retention",
   }), []);
   const { data: authz, isLoading: authzLoading } = useAuthorizationCheck(authzChecks, {
     enabled: isAuthenticated,
   });
   const canManageServers = (authz?.canAdminSomeServer ?? false) || (authz?.adminServers ?? false);
-  const canManageRetention = (authz?.canManageRetention ?? false) || (authz?.adminServers ?? false);
 
   const tabs = useMemo(() => {
     const t = [...baseTabs];
     if (authz?.adminTenants) t.splice(1, 0, tenantsTab);
-    if (canManageRetention) t.push(retentionTab);
     return t;
-  }, [canManageRetention, authz?.adminTenants]);
+  }, [authz?.adminTenants]);
 
   const sessionLoading = authLoading || authzLoading;
 

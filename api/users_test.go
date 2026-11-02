@@ -95,10 +95,8 @@ func TestUpdateMyPreferencesCharacterCosmetics(t *testing.T) {
 	handler := (&API{Opts: &Options{Zed: authz.NewDatabaseOnly(testutil.Logger(t), store)}}).UpdateMyPreferences
 
 	disabled := chroniclesdk.CharacterCosmeticsDisabled
-	retention := int32(24)
 	body, err := json.Marshal(chroniclesdk.UpdatePreferencesRequest{
-		CharacterCosmetics:   &disabled,
-		RawLogRetentionHours: &retention,
+		CharacterCosmetics: &disabled,
 	})
 	require.NoError(t, err)
 	request := httptest.NewRequest(http.MethodPatch, "/me/preferences", bytes.NewReader(body))
@@ -110,8 +108,6 @@ func TestUpdateMyPreferencesCharacterCosmetics(t *testing.T) {
 	var preferences chroniclesdk.Preferences
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &preferences))
 	require.Equal(t, chroniclesdk.CharacterCosmeticsDisabled, preferences.CharacterCosmetics)
-	require.NotNil(t, preferences.RawLogRetentionHours)
-	require.Equal(t, int32(24), *preferences.RawLogRetentionHours)
 
 	invalid := chroniclesdk.CharacterCosmeticsDisplayMode("invalid")
 	body, err = json.Marshal(chroniclesdk.UpdatePreferencesRequest{CharacterCosmetics: &invalid})
@@ -125,6 +121,4 @@ func TestUpdateMyPreferencesCharacterCosmetics(t *testing.T) {
 	user, err = store.GetUserByID(ctx, userID)
 	require.NoError(t, err)
 	require.Equal(t, string(chroniclesdk.CharacterCosmeticsDisabled), user.CharacterCosmetics)
-	require.True(t, user.RawLogRetentionHours.Valid)
-	require.Equal(t, int32(24), user.RawLogRetentionHours.Int32)
 }

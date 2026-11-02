@@ -6,6 +6,7 @@ type CheckConstraint string
 
 // CheckConstraint enums.
 const (
+	CheckAccountPurgesStatusCheck                               CheckConstraint = "account_purges_status_check"                                   // account_purges
 	CheckAddonAuthorsNameCheck                                  CheckConstraint = "addon_authors_name_check"                                      // addon_authors
 	CheckCacheGenerationsGenerationCheck                        CheckConstraint = "cache_generations_generation_check"                            // cache_generations
 	CheckCacheGenerationsScopeCheck                             CheckConstraint = "cache_generations_scope_check"                                 // cache_generations
@@ -37,10 +38,6 @@ const (
 	CheckGuildDiscordLogAnnouncementSourcesInstanceOrdinalCheck CheckConstraint = "guild_discord_log_announcement_sources_instance_ordinal_check" // guild_discord_log_announcement_sources
 	CheckGuildResourceDailyStatsUniqueVisitorsCheck             CheckConstraint = "guild_resource_daily_stats_unique_visitors_check"              // guild_resource_daily_stats
 	CheckGuildResourceDailyStatsViewsCheck                      CheckConstraint = "guild_resource_daily_stats_views_check"                        // guild_resource_daily_stats
-	CheckInstanceSpeedrunsBossToBossDurationNonnegative         CheckConstraint = "instance_speedruns_boss_to_boss_duration_nonnegative"          // instance_speedruns
-	CheckInstanceSpeedrunsBossToBossTimingComplete              CheckConstraint = "instance_speedruns_boss_to_boss_timing_complete"               // instance_speedruns
-	CheckInstanceSpeedrunsRankedDurationNonnegative             CheckConstraint = "instance_speedruns_ranked_duration_nonnegative"                // instance_speedruns
-	CheckInstanceSpeedrunsRankedTimingComplete                  CheckConstraint = "instance_speedruns_ranked_timing_complete"                     // instance_speedruns
 	CheckInferenceClientToolRequestsCheck                       CheckConstraint = "inference_client_tool_requests_check"                          // inference_client_tool_requests
 	CheckInferenceClientToolRequestsConfirmationCheck           CheckConstraint = "inference_client_tool_requests_confirmation_check"             // inference_client_tool_requests
 	CheckInferenceClientToolRequestsEffectCheck                 CheckConstraint = "inference_client_tool_requests_effect_check"                   // inference_client_tool_requests
@@ -56,6 +53,10 @@ const (
 	CheckInstanceOverviewMetricsEncounterSpanNonnegative        CheckConstraint = "instance_overview_metrics_encounter_span_nonnegative"          // instance_overview_metrics
 	CheckInstanceOverviewMetricsPlayerDeathsNonnegative         CheckConstraint = "instance_overview_metrics_player_deaths_nonnegative"           // instance_overview_metrics
 	CheckInstanceOverviewMetricsWipeCountNonnegative            CheckConstraint = "instance_overview_metrics_wipe_count_nonnegative"              // instance_overview_metrics
+	CheckInstanceSpeedrunsBossToBossDurationNonnegative         CheckConstraint = "instance_speedruns_boss_to_boss_duration_nonnegative"          // instance_speedruns
+	CheckInstanceSpeedrunsBossToBossTimingComplete              CheckConstraint = "instance_speedruns_boss_to_boss_timing_complete"               // instance_speedruns
+	CheckInstanceSpeedrunsRankedDurationNonnegative             CheckConstraint = "instance_speedruns_ranked_duration_nonnegative"                // instance_speedruns
+	CheckInstanceSpeedrunsRankedTimingComplete                  CheckConstraint = "instance_speedruns_ranked_timing_complete"                     // instance_speedruns
 	CheckItemDailyPricesAuctionHouseFactionCheck                CheckConstraint = "item_daily_prices_auction_house_faction_check"                 // item_daily_prices
 	CheckItemDailyPricesItemIDCheck                             CheckConstraint = "item_daily_prices_item_id_check"                               // item_daily_prices
 	CheckItemDailyPricesPriceCopperCheck                        CheckConstraint = "item_daily_prices_price_copper_check"                          // item_daily_prices
@@ -93,8 +94,6 @@ const (
 	CheckProofRequestsStatusCheck                               CheckConstraint = "proof_requests_status_check"                                   // proof_requests
 	CheckRaidCompositionsDataSizeChk                            CheckConstraint = "raid_compositions_data_size_chk"                               // raid_compositions
 	CheckRaidCompositionsNameLengthChk                          CheckConstraint = "raid_compositions_name_length_chk"                             // raid_compositions
-	CheckRetentionPoliciesScope                                 CheckConstraint = "retention_policies_scope"                                      // retention_policies
-	CheckRetentionRulesActionCheck                              CheckConstraint = "retention_rules_action_check"                                  // retention_rules
 	CheckFinalizedOrFinalizedAtNull                             CheckConstraint = "finalized_or_finalized_at_null"                                // river_job
 	CheckKindLength                                             CheckConstraint = "kind_length"                                                   // river_job
 	CheckMaxAttemptsIsPositive                                  CheckConstraint = "max_attempts_is_positive"                                      // river_job
@@ -106,12 +105,15 @@ const (
 	CheckSharedViewsPayloadMax10Kb                              CheckConstraint = "shared_views_payload_max_10kb"                                 // shared_views
 	CheckSidekickAccountConfigsConfigObject                     CheckConstraint = "sidekick_account_configs_config_object"                        // sidekick_account_configs
 	CheckSidekickConfigOverridesConfigObject                    CheckConstraint = "sidekick_config_overrides_config_object"                       // sidekick_config_overrides
+	CheckSidekickInstallationsAutoUploadCapabilitiesObject      CheckConstraint = "sidekick_installations_auto_upload_capabilities_object"        // sidekick_installations
 	CheckSidekickInstallationsNameCheck                         CheckConstraint = "sidekick_installations_name_check"                             // sidekick_installations
 	CheckSidekickInstallationsPlatformCheck                     CheckConstraint = "sidekick_installations_platform_check"                         // sidekick_installations
 	CheckSidekickInstallationsVersionCheck                      CheckConstraint = "sidekick_installations_version_check"                          // sidekick_installations
 	CheckSidekickIssuesCodeCheck                                CheckConstraint = "sidekick_issues_code_check"                                    // sidekick_issues
 	CheckSidekickIssuesDetailsCheck                             CheckConstraint = "sidekick_issues_details_check"                                 // sidekick_issues
 	CheckSidekickIssuesMessageCheck                             CheckConstraint = "sidekick_issues_message_check"                                 // sidekick_issues
+	CheckSidekickWowDirectoriesIDLength                         CheckConstraint = "sidekick_wow_directories_id_length"                            // sidekick_wow_directories
+	CheckSidekickWowDirectoriesInspectionObject                 CheckConstraint = "sidekick_wow_directories_inspection_object"                    // sidekick_wow_directories
 	CheckSidekickWowDirectoriesPathCheck                        CheckConstraint = "sidekick_wow_directories_path_check"                           // sidekick_wow_directories
 	CheckSidekickWowDirectoriesRealmlistCheck                   CheckConstraint = "sidekick_wow_directories_realmlist_check"                      // sidekick_wow_directories
 	CheckSidekickWowDirectoriesTenantBaseUrlCheck               CheckConstraint = "sidekick_wow_directories_tenant_base_url_check"                // sidekick_wow_directories
@@ -124,6 +126,8 @@ const (
 	CheckTimeParseScoresCheck                                   CheckConstraint = "time_parse_scores_check"                                       // time_parse_scores
 	CheckUserCustomPanelInstallationsRepositoryFormat           CheckConstraint = "user_custom_panel_installations_repository_format"             // user_custom_panel_installations
 	CheckUserFavoriteGuildsSlotCheck                            CheckConstraint = "user_favorite_guilds_slot_check"                               // user_favorite_guilds
+	CheckUserNotificationSettingsChannelCheck                   CheckConstraint = "user_notification_settings_channel_check"                      // user_notification_settings
+	CheckUserNotificationSettingsEventCheck                     CheckConstraint = "user_notification_settings_event_check"                        // user_notification_settings
 	CheckUserPanelLayoutsPayloadSizeChk                         CheckConstraint = "user_panel_layouts_payload_size_chk"                           // user_panel_layouts
 	CheckUserPanelLayoutsTitleFormatChk                         CheckConstraint = "user_panel_layouts_title_format_chk"                           // user_panel_layouts
 	CheckUserTalentBuildsBuildLengthChk                         CheckConstraint = "user_talent_builds_build_length_chk"                           // user_talent_builds

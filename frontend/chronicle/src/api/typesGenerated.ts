@@ -504,18 +504,6 @@ export interface AdminRenameRatingGroupRequest {
 }
 
 // From chroniclesdk/user.go
-/**
- * AdminSetUserRetentionRequest is the request body for setting a user's raw log retention.
- */
-export interface AdminSetUserRetentionRequest {
-    /**
-     * RawLogRetentionHours is the number of hours to retain raw log files.
-     * 0 means keep forever (sets NULL in DB).
-     */
-    readonly raw_log_retention_hours: number;
-}
-
-// From chroniclesdk/user.go
 export interface AdminUsersResponse {
     readonly users: readonly User[];
 }
@@ -4235,11 +4223,6 @@ export const PositionCoordinateSpaces: PositionCoordinateSpace[] = ["ui-map-norm
 export interface Preferences {
     readonly helpful_hints: boolean;
     readonly character_cosmetics: CharacterCosmeticsDisplayMode;
-    /**
-     * RawLogRetentionHours is how long to keep raw log files in object storage
-     * after upload. nil means keep forever.
-     */
-    readonly raw_log_retention_hours: number | null;
 }
 
 // From chroniclesdk/azerothcore.go
@@ -4857,76 +4840,6 @@ export interface Response {
      * - "stat: too many open files"
      */
     readonly detail?: string;
-}
-
-// From chroniclesdk/retention.go
-/**
- * RetentionPolicy is a retention policy scoped to a server or realm.
- */
-export interface RetentionPolicy {
-    readonly id: string;
-    readonly server_id: string | null;
-    readonly realm_id: string | null;
-    readonly enabled: boolean;
-    readonly last_run_at: string | null;
-    readonly total_deleted: number;
-    readonly total_kept: number;
-    readonly created_at: string;
-    readonly updated_at: string;
-    readonly rules?: readonly RetentionRule[];
-}
-
-// From chroniclesdk/retention.go
-/**
- * RetentionPreviewItem describes a single instance's retention evaluation.
- */
-export interface RetentionPreviewItem {
-    readonly instance_id: string;
-    readonly instance_name: string;
-    readonly end_time: string;
-    readonly matched_rule?: string;
-}
-
-// From chroniclesdk/retention.go
-/**
- * RetentionPreviewRequest triggers a dry-run of retention evaluation.
- */
-export interface RetentionPreviewRequest {
-    readonly realm_id?: string;
-    readonly server_id?: string;
-}
-
-// From chroniclesdk/retention.go
-/**
- * RetentionPreviewResponse is the result of a dry-run evaluation.
- */
-export interface RetentionPreviewResponse {
-    readonly total_evaluated: number;
-    readonly to_delete: readonly RetentionPreviewItem[];
-    readonly to_keep: readonly RetentionPreviewItem[];
-    readonly no_match: readonly RetentionPreviewItem[];
-}
-
-// From chroniclesdk/retention.go
-/**
- * RetentionRule is an ordered rule within a retention policy.
- */
-export interface RetentionRule {
-    readonly id: string;
-    readonly policy_id: string;
-    readonly priority: number;
-    readonly action: string; // "keep" | "delete"
-    readonly conditions: Record<string, string>;
-    readonly description: string;
-    readonly created_at: string;
-}
-
-// From chroniclesdk/retention.go
-/**
- * RetentionRunRequest triggers a manual retention run.
- */
-export interface RetentionRunRequest {
-    readonly dry_run: boolean;
 }
 
 // From chroniclesdk/server_application.go
@@ -6286,10 +6199,6 @@ export interface UpdateLuaProjectRequest {
  */
 export interface UpdatePreferencesRequest {
     /**
-     * RawLogRetentionHours controls raw log file retention. nil = no change, 0 = keep forever.
-     */
-    readonly raw_log_retention_hours: number | null;
-    /**
      * CharacterCosmetics controls how character cosmetics are displayed. nil means no change.
      */
     readonly character_cosmetics: CharacterCosmeticsDisplayMode | null;
@@ -6397,27 +6306,6 @@ export interface UpsertDatasetRequest {
     readonly icon_base_url: string | null;
 }
 
-// From chroniclesdk/retention.go
-/**
- * UpsertRetentionPolicyRequest creates or updates a retention policy.
- */
-export interface UpsertRetentionPolicyRequest {
-    readonly server_id: string | null;
-    readonly realm_id: string | null;
-    readonly enabled: boolean;
-}
-
-// From chroniclesdk/retention.go
-/**
- * UpsertRetentionRuleRequest creates or updates a retention rule.
- */
-export interface UpsertRetentionRuleRequest {
-    readonly priority: number;
-    readonly action: string;
-    readonly conditions: Record<string, string>;
-    readonly description: string;
-}
-
 // From chroniclesdk/tenant.go
 /**
  * UpsertTenantRequest is the request body for creating or updating a tenant.
@@ -6457,10 +6345,6 @@ export interface User {
     readonly max_storage_bytes: number;
     readonly max_storage_bytes_updated: string;
     readonly consumed_storage_bytes: number;
-    /**
-     * RawLogRetentionHours is how long to keep raw log files. nil means keep forever.
-     */
-    readonly raw_log_retention_hours: number | null;
 }
 
 // From chroniclesdk/favorites.go

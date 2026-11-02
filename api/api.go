@@ -22,7 +22,6 @@ import (
 	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/api/linkedapi"
 	"github.com/Emyrk/chronicle/api/panellayoutapi"
-	"github.com/Emyrk/chronicle/api/retentionapi"
 	"github.com/Emyrk/chronicle/api/serviceazerothcore"
 	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
@@ -475,7 +474,6 @@ func (api *API) Routes() chi.Router {
 					r.Get("/", api.AdminListUsers)
 					r.Post("/{userID}/resync", api.AdminResyncUserRoles)
 					r.Put("/{userID}/roles", api.AdminSetUserRoles)
-					r.Put("/{userID}/retention", api.AdminSetUserRetention)
 					r.Get("/{userID}/grants", api.GetUserGrants)
 					if api.Opts.Sidekick != nil {
 						r.Mount("/{userID}/sidekicks", api.Opts.Sidekick.AdminRoutes())
@@ -552,7 +550,6 @@ func (api *API) Routes() chi.Router {
 					r.Post("/cache-stats/purge", api.AdminPurgeCache)
 					r.Post("/cache-stats/purge/{name}", api.AdminPurgeCache)
 
-					r.Mount("/retention", retentionapi.New(api.Zed, api.Queues).Routes())
 				})
 			})
 

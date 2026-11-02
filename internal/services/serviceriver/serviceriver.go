@@ -8,7 +8,6 @@ import (
 	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/chronicle/custompanel"
 	"github.com/Emyrk/chronicle/chronicle/guildanalytics"
-	"github.com/Emyrk/chronicle/chronicle/retention"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/chroniclebot"
@@ -26,7 +25,6 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
-	"github.com/Emyrk/chronicle/internal/services/serviceretention"
 	"github.com/Emyrk/chronicle/internal/services/servicetelemetry"
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -75,7 +73,6 @@ func (s *Service) DependsOn() []string {
 		servicedbstore.OnDatabaseStore(),
 		servicechronicle.OnChronicle(),
 		servicebot.OnDiscordBot(),
-		serviceretention.OnRetention(),
 		servicetelemetry.OnTelemetry(),
 		servicerankings.OnRankings(),
 	}
@@ -183,36 +180,10 @@ func (s *Service) Start(ctx context.Context) error {
 		return cosmetics.EnqueueUserAudit(ctx, q, userID)
 	})
 
-	// Register retention workers and periodic job.
-	ret := serviceretention.RetentionService(s.broker)
-	ret.Worker.Queue = q
-	ret.RealmWorker.Queue = q
-	riverqueue.AddWorker(q, ret.Worker)
-	riverqueue.AddWorker(q, ret.RealmWorker)
-	riverqueue.AddWorker(q, ret.RawLogWorker)
+	// Shared queue for low-priority cleanup work.
 	q.AddQueue(riverqueue.QueueRetention, river.QueueConfig{
 		MaxWorkers: 3,
 	})
-	if ret.Schedule > 0 {
-		q.AddPeriodicJob(
-			river.NewPeriodicJob(
-				river.PeriodicInterval(ret.Schedule),
-				func() (river.JobArgs, *river.InsertOpts) {
-					return retention.ArgsRetention{DryRun: false}, nil
-				},
-				&river.PeriodicJobOpts{RunOnStart: false},
-			),
-		)
-		q.AddPeriodicJob(
-			river.NewPeriodicJob(
-				river.PeriodicInterval(ret.Schedule),
-				func() (river.JobArgs, *river.InsertOpts) {
-					return retention.ArgsRawLogRetention{}, nil
-				},
-				&river.PeriodicJobOpts{RunOnStart: false},
-			),
-		)
-	}
 
 	customPanelCleanup := &custompanel.CleanupWorker{Store: chron.Zed}
 	riverqueue.AddWorker(q, customPanelCleanup)
