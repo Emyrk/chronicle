@@ -1518,6 +1518,58 @@ CREATE VIEW guild_speedrun_ranks AS
    FROM instance_speedruns
   WHERE ((instance_speedruns.qualified = true) AND (instance_speedruns.guild_id IS NOT NULL));
 
+CREATE TABLE guild_tenant_rating_boss_scores (
+    generation_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    difficulty_name text DEFAULT ''::text NOT NULL,
+    max_players smallint DEFAULT 0 NOT NULL,
+    rating_metric text NOT NULL,
+    window_kind text NOT NULL,
+    window_start timestamp with time zone,
+    window_end timestamp with time zone,
+    score double precision NOT NULL,
+    best_raw double precision,
+    rank_one_raw double precision,
+    best_locked_parse double precision,
+    form double precision,
+    floor_score double precision,
+    eligible_kills integer DEFAULT 0 NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT guild_tenant_rating_boss_scores_check CHECK ((((window_kind = 'period'::text) AND (window_start IS NOT NULL) AND (window_end IS NOT NULL) AND (window_start < window_end)) OR ((window_kind = ANY (ARRAY['all_time'::text, 'career'::text])) AND (window_start IS NULL) AND (window_end IS NULL)))),
+    CONSTRAINT guild_tenant_rating_boss_scores_eligible_kills_check CHECK ((eligible_kills >= 0)),
+    CONSTRAINT guild_tenant_rating_boss_scores_rating_metric_check CHECK ((rating_metric = ANY (ARRAY['peak'::text, 'mastery'::text, 'ranked_mastery'::text, 'renown'::text]))),
+    CONSTRAINT guild_tenant_rating_boss_scores_score_check CHECK ((score >= (0)::double precision)),
+    CONSTRAINT guild_tenant_rating_boss_scores_window_kind_check CHECK ((window_kind = ANY (ARRAY['period'::text, 'all_time'::text, 'career'::text])))
+);
+
+ALTER TABLE ONLY guild_tenant_rating_boss_scores FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE guild_tenant_rating_scope_scores (
+    generation_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    instance_name text DEFAULT ''::text NOT NULL,
+    difficulty_name text DEFAULT ''::text NOT NULL,
+    max_players smallint DEFAULT 0 NOT NULL,
+    rating_metric text NOT NULL,
+    window_kind text NOT NULL,
+    window_start timestamp with time zone,
+    window_end timestamp with time zone,
+    score double precision NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT guild_tenant_rating_scope_scores_check CHECK ((((window_kind = 'period'::text) AND (window_start IS NOT NULL) AND (window_end IS NOT NULL) AND (window_start < window_end)) OR ((window_kind = ANY (ARRAY['all_time'::text, 'career'::text])) AND (window_start IS NULL) AND (window_end IS NULL)))),
+    CONSTRAINT guild_tenant_rating_scope_scores_rating_metric_check CHECK ((rating_metric = ANY (ARRAY['peak'::text, 'mastery'::text, 'ranked_mastery'::text, 'renown'::text]))),
+    CONSTRAINT guild_tenant_rating_scope_scores_score_check CHECK ((score >= (0)::double precision)),
+    CONSTRAINT guild_tenant_rating_scope_scores_window_kind_check CHECK ((window_kind = ANY (ARRAY['period'::text, 'all_time'::text, 'career'::text])))
+);
+
+ALTER TABLE ONLY guild_tenant_rating_scope_scores FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE guilds (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     realm_id uuid NOT NULL,
@@ -2104,6 +2156,68 @@ CREATE TABLE parse_score_results (
     player_sub_spec text DEFAULT ''::text NOT NULL,
     CONSTRAINT parse_score_results_metric_check CHECK ((metric = ANY (ARRAY['dps'::text, 'hps'::text])))
 );
+
+CREATE TABLE player_tenant_rating_boss_scores (
+    generation_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    player_guid text NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    difficulty_name text DEFAULT ''::text NOT NULL,
+    max_players smallint DEFAULT 0 NOT NULL,
+    player_class text DEFAULT ''::text NOT NULL,
+    player_spec text DEFAULT ''::text NOT NULL,
+    player_sub_spec text DEFAULT ''::text NOT NULL,
+    performance_metric text NOT NULL,
+    rating_metric text NOT NULL,
+    window_kind text NOT NULL,
+    window_start timestamp with time zone,
+    window_end timestamp with time zone,
+    score double precision NOT NULL,
+    best_raw double precision,
+    rank_one_raw double precision,
+    best_locked_parse double precision,
+    form double precision,
+    floor_score double precision,
+    eligible_kills integer DEFAULT 0 NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT player_tenant_rating_boss_scores_check CHECK ((((window_kind = 'period'::text) AND (window_start IS NOT NULL) AND (window_end IS NOT NULL) AND (window_start < window_end)) OR ((window_kind = ANY (ARRAY['all_time'::text, 'career'::text])) AND (window_start IS NULL) AND (window_end IS NULL)))),
+    CONSTRAINT player_tenant_rating_boss_scores_eligible_kills_check CHECK ((eligible_kills >= 0)),
+    CONSTRAINT player_tenant_rating_boss_scores_performance_metric_check CHECK ((performance_metric = ANY (ARRAY['dps'::text, 'hps'::text, 'none'::text]))),
+    CONSTRAINT player_tenant_rating_boss_scores_rating_metric_check CHECK ((rating_metric = ANY (ARRAY['peak'::text, 'mastery'::text, 'ranked_mastery'::text, 'renown'::text]))),
+    CONSTRAINT player_tenant_rating_boss_scores_score_check CHECK ((score >= (0)::double precision)),
+    CONSTRAINT player_tenant_rating_boss_scores_window_kind_check CHECK ((window_kind = ANY (ARRAY['period'::text, 'all_time'::text, 'career'::text])))
+);
+
+ALTER TABLE ONLY player_tenant_rating_boss_scores FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE player_tenant_rating_scope_scores (
+    generation_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    player_guid text NOT NULL,
+    instance_name text DEFAULT ''::text NOT NULL,
+    difficulty_name text DEFAULT ''::text NOT NULL,
+    max_players smallint DEFAULT 0 NOT NULL,
+    player_class text DEFAULT ''::text NOT NULL,
+    player_spec text DEFAULT ''::text NOT NULL,
+    player_sub_spec text DEFAULT ''::text NOT NULL,
+    performance_metric text NOT NULL,
+    rating_metric text NOT NULL,
+    window_kind text NOT NULL,
+    window_start timestamp with time zone,
+    window_end timestamp with time zone,
+    score double precision NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT player_tenant_rating_scope_scores_check CHECK ((((window_kind = 'period'::text) AND (window_start IS NOT NULL) AND (window_end IS NOT NULL) AND (window_start < window_end)) OR ((window_kind = ANY (ARRAY['all_time'::text, 'career'::text])) AND (window_start IS NULL) AND (window_end IS NULL)))),
+    CONSTRAINT player_tenant_rating_scope_scores_performance_metric_check CHECK ((performance_metric = ANY (ARRAY['dps'::text, 'hps'::text, 'none'::text]))),
+    CONSTRAINT player_tenant_rating_scope_scores_rating_metric_check CHECK ((rating_metric = ANY (ARRAY['peak'::text, 'mastery'::text, 'ranked_mastery'::text, 'renown'::text]))),
+    CONSTRAINT player_tenant_rating_scope_scores_score_check CHECK ((score >= (0)::double precision)),
+    CONSTRAINT player_tenant_rating_scope_scores_window_kind_check CHECK ((window_kind = ANY (ARRAY['period'::text, 'all_time'::text, 'career'::text])))
+);
+
+ALTER TABLE ONLY player_tenant_rating_scope_scores FORCE ROW LEVEL SECURITY;
 
 CREATE TABLE proof_request_subjects (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
@@ -3545,6 +3659,12 @@ ALTER TABLE ONLY guild_resource_recent_visitors
 ALTER TABLE ONLY guild_settings
     ADD CONSTRAINT guild_settings_pkey PRIMARY KEY (guild_id);
 
+ALTER TABLE ONLY guild_tenant_rating_boss_scores
+    ADD CONSTRAINT guild_tenant_rating_boss_scores_pkey PRIMARY KEY (generation_id, tenant_id, realm_id, guild_id, instance_name, encounter_name, difficulty_name, max_players, rating_metric, window_kind);
+
+ALTER TABLE ONLY guild_tenant_rating_scope_scores
+    ADD CONSTRAINT guild_tenant_rating_scope_scores_pkey PRIMARY KEY (generation_id, tenant_id, realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind);
+
 ALTER TABLE ONLY guilds
     ADD CONSTRAINT guilds_pkey PRIMARY KEY (id);
 
@@ -3697,6 +3817,12 @@ ALTER TABLE ONLY parse_score_results
 
 ALTER TABLE ONLY parsed_log_group
     ADD CONSTRAINT parsed_log_group_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY player_tenant_rating_boss_scores
+    ADD CONSTRAINT player_tenant_rating_boss_scores_pkey PRIMARY KEY (generation_id, tenant_id, realm_id, player_guid, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind);
+
+ALTER TABLE ONLY player_tenant_rating_scope_scores
+    ADD CONSTRAINT player_tenant_rating_scope_scores_pkey PRIMARY KEY (generation_id, tenant_id, realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind);
 
 ALTER TABLE ONLY proof_request_subjects
     ADD CONSTRAINT proof_request_subjects_pkey PRIMARY KEY (id);
@@ -4058,6 +4184,14 @@ CREATE INDEX guild_resource_daily_stats_guild_date_idx ON guild_resource_daily_s
 
 CREATE INDEX guild_resource_recent_visitors_date_idx ON guild_resource_recent_visitors USING btree (viewed_on);
 
+CREATE INDEX guild_tenant_rating_boss_scores_board_idx ON guild_tenant_rating_boss_scores USING btree (tenant_id, generation_id, instance_name, encounter_name, difficulty_name, max_players, rating_metric, window_kind, score DESC, realm_id, guild_id);
+
+CREATE INDEX guild_tenant_rating_boss_scores_subject_idx ON guild_tenant_rating_boss_scores USING btree (tenant_id, realm_id, guild_id, generation_id, rating_metric, window_kind);
+
+CREATE INDEX guild_tenant_rating_scope_scores_board_idx ON guild_tenant_rating_scope_scores USING btree (tenant_id, generation_id, instance_name, difficulty_name, max_players, rating_metric, window_kind, score DESC, realm_id, guild_id);
+
+CREATE INDEX guild_tenant_rating_scope_scores_subject_idx ON guild_tenant_rating_scope_scores USING btree (tenant_id, realm_id, guild_id, generation_id, rating_metric, window_kind);
+
 CREATE INDEX idx_data_grants_user_id ON data_grants USING btree (user_id);
 
 CREATE INDEX idx_dbc_cooldown_spells_class ON dbc_cooldown_spells USING btree (dataset_id, spell_class_set);
@@ -4284,6 +4418,14 @@ CREATE INDEX oauth_token_sessions_expires_at_idx ON oauth_token_sessions USING b
 
 CREATE INDEX oauth_token_sessions_request_id_idx ON oauth_token_sessions USING btree (request_id, token_type);
 
+CREATE INDEX player_tenant_rating_boss_scores_board_idx ON player_tenant_rating_boss_scores USING btree (tenant_id, generation_id, instance_name, encounter_name, difficulty_name, max_players, rating_metric, window_kind, player_class, player_spec, player_sub_spec, performance_metric, score DESC, realm_id, player_guid);
+
+CREATE INDEX player_tenant_rating_boss_scores_subject_idx ON player_tenant_rating_boss_scores USING btree (tenant_id, realm_id, player_guid, generation_id, rating_metric, window_kind);
+
+CREATE INDEX player_tenant_rating_scope_scores_board_idx ON player_tenant_rating_scope_scores USING btree (tenant_id, generation_id, instance_name, difficulty_name, max_players, rating_metric, window_kind, player_class, player_spec, player_sub_spec, performance_metric, score DESC, realm_id, player_guid);
+
+CREATE INDEX player_tenant_rating_scope_scores_subject_idx ON player_tenant_rating_scope_scores USING btree (tenant_id, realm_id, player_guid, generation_id, rating_metric, window_kind);
+
 CREATE UNIQUE INDEX proof_request_subjects_pending_character ON proof_request_subjects USING btree (realm_id, character_guid) WHERE ((subject_type = 'character'::text) AND (status = 'pending'::text));
 
 CREATE UNIQUE INDEX proof_request_subjects_pending_guild ON proof_request_subjects USING btree (guild_id) WHERE ((subject_type = 'guild'::text) AND (status = 'pending'::text));
@@ -4321,6 +4463,8 @@ CREATE INDEX rating_rebuild_checkpoints_tenant_idx ON rating_rebuild_checkpoints
 CREATE INDEX rating_scope_scores_board_idx ON rating_scope_scores USING btree (generation_id, group_id, instance_name, rating_metric, window_kind, performance_metric, difficulty_name, max_players, player_class, player_spec, player_sub_spec, score DESC, realm_id, player_guid);
 
 CREATE UNIQUE INDEX rating_score_generations_active_idx ON rating_score_generations USING btree (tenant_id) WHERE (status = 'active'::text);
+
+CREATE UNIQUE INDEX rating_score_generations_tenant_fk_idx ON rating_score_generations USING btree (id, tenant_id);
 
 CREATE INDEX rating_stage_guild_cohort_idx ON rating_stage_guild_observations USING btree (generation_id, instance_name, encounter_name, difficulty_name, max_players, raw_duration_ms, run_id);
 
@@ -4655,6 +4799,24 @@ ALTER TABLE ONLY guild_resource_recent_visitors
 ALTER TABLE ONLY guild_settings
     ADD CONSTRAINT guild_settings_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY guild_tenant_rating_boss_scores
+    ADD CONSTRAINT guild_tenant_rating_boss_scores_generation_id_tenant_id_fkey FOREIGN KEY (generation_id, tenant_id) REFERENCES rating_score_generations(id, tenant_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_tenant_rating_boss_scores
+    ADD CONSTRAINT guild_tenant_rating_boss_scores_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id);
+
+ALTER TABLE ONLY guild_tenant_rating_boss_scores
+    ADD CONSTRAINT guild_tenant_rating_boss_scores_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY guild_tenant_rating_scope_scores
+    ADD CONSTRAINT guild_tenant_rating_scope_scores_generation_id_tenant_id_fkey FOREIGN KEY (generation_id, tenant_id) REFERENCES rating_score_generations(id, tenant_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_tenant_rating_scope_scores
+    ADD CONSTRAINT guild_tenant_rating_scope_scores_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id);
+
+ALTER TABLE ONLY guild_tenant_rating_scope_scores
+    ADD CONSTRAINT guild_tenant_rating_scope_scores_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
 ALTER TABLE ONLY guilds
     ADD CONSTRAINT guilds_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
 
@@ -4822,6 +4984,18 @@ ALTER TABLE ONLY parse_score_results
 
 ALTER TABLE ONLY parsed_log_group
     ADD CONSTRAINT parsed_log_group_id_fkey FOREIGN KEY (id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY player_tenant_rating_boss_scores
+    ADD CONSTRAINT player_tenant_rating_boss_scores_generation_id_tenant_id_fkey FOREIGN KEY (generation_id, tenant_id) REFERENCES rating_score_generations(id, tenant_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY player_tenant_rating_boss_scores
+    ADD CONSTRAINT player_tenant_rating_boss_scores_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY player_tenant_rating_scope_scores
+    ADD CONSTRAINT player_tenant_rating_scope_scores_generation_id_tenant_id_fkey FOREIGN KEY (generation_id, tenant_id) REFERENCES rating_score_generations(id, tenant_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY player_tenant_rating_scope_scores
+    ADD CONSTRAINT player_tenant_rating_scope_scores_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
 
 ALTER TABLE ONLY proof_request_subjects
     ADD CONSTRAINT proof_request_subjects_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id);
@@ -5140,7 +5314,15 @@ ALTER TABLE guild_rating_scope_scores ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE guild_renown_kill_facts ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE guild_tenant_rating_boss_scores ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE guild_tenant_rating_scope_scores ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE item_daily_prices ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE player_tenant_rating_boss_scores ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE player_tenant_rating_scope_scores ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_boss_scores ENABLE ROW LEVEL SECURITY;
 
@@ -5180,7 +5362,15 @@ CREATE POLICY tenant_admin_bypass ON guild_rating_scope_scores USING ((current_s
 
 CREATE POLICY tenant_admin_bypass ON guild_renown_kill_facts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
+CREATE POLICY tenant_admin_bypass ON guild_tenant_rating_boss_scores USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON guild_tenant_rating_scope_scores USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
 CREATE POLICY tenant_admin_bypass ON item_daily_prices USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON player_tenant_rating_boss_scores USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON player_tenant_rating_scope_scores USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_boss_scores USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -5242,6 +5432,14 @@ CREATE POLICY tenant_isolation ON guild_renown_kill_facts USING ((realm_id IN ( 
    FROM (public.wow_server_realms realm
      JOIN wow_servers server ON ((server.id = realm.server_id)))
   WHERE (COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = guild_renown_kill_facts.tenant_id))));
+
+CREATE POLICY tenant_isolation ON guild_tenant_rating_boss_scores USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON guild_tenant_rating_scope_scores USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON player_tenant_rating_boss_scores USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON player_tenant_rating_scope_scores USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON rating_boss_scores USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
