@@ -234,7 +234,7 @@ func ProjectRatingStagePage(ctx context.Context, store database.Store, tenant, g
 
 func projectPlayerPeak(ctx context.Context, tx database.Store, cp database.RatingRebuildCheckpoint, k database.ListRatingStagePlayerKeysRow, p database.RatingGroupPolicy) error {
 	start := cp.AsOf.Time.AddDate(0, 0, -int(p.PeriodDays))
-	args := database.RatingStagePlayerPeakParams{GenerationID: cp.GenerationID, RealmID: k.RealmID, PlayerGuid: k.PlayerGuid, InstanceName: k.InstanceName, EncounterName: k.EncounterName, DifficultyName: k.DifficultyName, MaxPlayers: k.MaxPlayers, PlayerClass: k.PlayerClass, PlayerSpec: k.PlayerSpec, PlayerSubSpec: k.PlayerSubSpec, PerformanceMetric: k.PerformanceMetric, PeriodStart: database.Timestamptz(start)}
+	args := database.RatingStagePlayerPeakParams{GenerationID: cp.GenerationID, RealmID: k.RealmID, PlayerGuid: k.PlayerGuid, InstanceName: k.InstanceName, EncounterName: k.EncounterName, DifficultyName: k.DifficultyName, MaxPlayers: k.MaxPlayers, PlayerClass: k.PlayerClass, PlayerSpec: k.PlayerSpec, PlayerSubSpec: k.PlayerSubSpec, PerformanceMetric: k.PerformanceMetric, PeriodStart: database.Timestamptz(start), WindowEnd: cp.AsOf}
 	best, err := tx.RatingStagePlayerPeak(ctx, args)
 	if err != nil {
 		return err
