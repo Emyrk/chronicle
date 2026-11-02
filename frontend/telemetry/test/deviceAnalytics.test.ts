@@ -34,6 +34,24 @@ const operations = {
     refreshAttempts24h: 2000,
     deletions24h: 3,
   },
+  uiUsage: {
+    available: true,
+    panelViews24h: 2840,
+    panelChoices24h: 614,
+    presetViews24h: 1032,
+    topPanels: [
+      { name: "damage_done", count: 1204 },
+      { name: "healing_done", count: 708 },
+    ],
+    topChoices: [
+      { name: "damage_done", count: 244 },
+      { name: "deaths", count: 151 },
+    ],
+    topPresets: [
+      { name: "summary", count: 582 },
+      { name: "damage", count: 311 },
+    ],
+  },
   parsing: {
     instances24h: 228,
     lines24h: 9842738,
@@ -65,7 +83,7 @@ test("projects the GA4 dashboard into a compact device payload", () => {
   const source = createMockAnalyticsDashboard(30);
   const projected = projectDeviceAnalytics(source);
 
-  assert.equal(projected.schemaVersion, 5);
+  assert.equal(projected.schemaVersion, 6);
   assert.equal(projected.operations, null);
   assert.deepEqual(projected.overview, source.overview);
   assert.equal(projected.trend.length, source.timeseries.length);
