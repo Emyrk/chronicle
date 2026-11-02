@@ -234,6 +234,29 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION bump_tenant_rating_revision() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    old_tenant UUID;
+    new_tenant UUID;
+BEGIN
+    IF TG_OP = 'UPDATE' AND OLD IS NOT DISTINCT FROM NEW THEN RETURN NEW; END IF;
+    IF TG_OP <> 'INSERT' THEN old_tenant := OLD.tenant_id; END IF;
+    IF TG_OP <> 'DELETE' THEN new_tenant := NEW.tenant_id; END IF;
+    IF old_tenant IS NOT NULL THEN
+        INSERT INTO rating_config_revisions (tenant_id, revision) VALUES (old_tenant, 1)
+        ON CONFLICT (tenant_id) DO UPDATE
+    END IF;
+    IF new_tenant IS NOT NULL AND new_tenant IS DISTINCT FROM old_tenant THEN
+        INSERT INTO rating_config_revisions (tenant_id, revision) VALUES (new_tenant, 1)
+        ON CONFLICT (tenant_id) DO UPDATE
+    END IF;
+    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    RETURN NEW;
+END;
+$$;
+
 CREATE FUNCTION cleanup_orphaned_layout() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -2448,6 +2471,40 @@ CREATE TABLE rating_stage_player_renown (
 
 ALTER TABLE ONLY rating_stage_player_renown FORCE ROW LEVEL SECURITY;
 
+CREATE TABLE rating_tenant_policies (
+    tenant_id uuid NOT NULL,
+    version integer NOT NULL,
+    half_life_days double precision NOT NULL,
+    best_weight double precision NOT NULL,
+    form_weight double precision NOT NULL,
+    floor_weight double precision NOT NULL,
+    rank_one_weight double precision NOT NULL,
+    full_rank_kills integer NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT rating_tenant_policies_best_weight_check CHECK ((best_weight >= (0)::double precision)),
+    CONSTRAINT rating_tenant_policies_check CHECK ((abs((((best_weight + form_weight) + floor_weight) - (1)::double precision)) < (0.000000001)::double precision)),
+    CONSTRAINT rating_tenant_policies_floor_weight_check CHECK ((floor_weight >= (0)::double precision)),
+    CONSTRAINT rating_tenant_policies_form_weight_check CHECK ((form_weight >= (0)::double precision)),
+    CONSTRAINT rating_tenant_policies_full_rank_kills_check CHECK (((full_rank_kills >= 1) AND (full_rank_kills <= 10000))),
+    CONSTRAINT rating_tenant_policies_half_life_days_check CHECK (((half_life_days > (0)::double precision) AND (half_life_days <= (3650)::double precision))),
+    CONSTRAINT rating_tenant_policies_rank_one_weight_check CHECK (((rank_one_weight >= (0)::double precision) AND (rank_one_weight <= (1)::double precision))),
+    CONSTRAINT rating_tenant_policies_version_check CHECK ((version > 0))
+);
+
+ALTER TABLE ONLY rating_tenant_policies FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE rating_tenant_renown_bosses (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    renown_points double precision NOT NULL,
+    CONSTRAINT rating_tenant_renown_bosses_encounter_name_check CHECK ((length(btrim(encounter_name)) > 0)),
+    CONSTRAINT rating_tenant_renown_bosses_instance_name_check CHECK ((length(btrim(instance_name)) > 0)),
+    CONSTRAINT rating_tenant_renown_bosses_renown_points_check CHECK ((renown_points >= (0)::double precision))
+);
+
+ALTER TABLE ONLY rating_tenant_renown_bosses FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE regression_fixtures (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     log_group_id uuid NOT NULL,
@@ -3719,6 +3776,12 @@ ALTER TABLE ONLY rating_stage_player_observations
 ALTER TABLE ONLY rating_stage_player_renown
     ADD CONSTRAINT rating_stage_player_renown_pkey PRIMARY KEY (generation_id, source_id);
 
+ALTER TABLE ONLY rating_tenant_policies
+    ADD CONSTRAINT rating_tenant_policies_pkey PRIMARY KEY (tenant_id);
+
+ALTER TABLE ONLY rating_tenant_renown_bosses
+    ADD CONSTRAINT rating_tenant_renown_bosses_pkey PRIMARY KEY (tenant_id, instance_name, encounter_name);
+
 ALTER TABLE ONLY regression_fixtures
     ADD CONSTRAINT regression_fixtures_log_group_id_key UNIQUE (log_group_id);
 
@@ -4336,6 +4399,10 @@ CREATE TRIGGER rating_policy_seed_renown AFTER INSERT ON rating_group_policies F
 CREATE TRIGGER rating_raid_policy_revision AFTER INSERT OR DELETE OR UPDATE ON rating_group_raid_policies FOR EACH ROW EXECUTE FUNCTION bump_rating_config_revision();
 
 CREATE TRIGGER rating_raid_policy_version AFTER INSERT OR DELETE OR UPDATE ON rating_group_raid_policies FOR EACH ROW EXECUTE FUNCTION bump_rating_group_policy_version();
+
+CREATE TRIGGER rating_tenant_policy_revision AFTER INSERT OR DELETE OR UPDATE ON rating_tenant_policies FOR EACH ROW EXECUTE FUNCTION bump_tenant_rating_revision();
+
+CREATE TRIGGER rating_tenant_renown_revision AFTER INSERT OR DELETE OR UPDATE ON rating_tenant_renown_bosses FOR EACH ROW EXECUTE FUNCTION bump_tenant_rating_revision();
 
 CREATE TRIGGER trg_cleanup_after_soft_delete AFTER UPDATE OF user_id ON user_panel_layouts FOR EACH ROW WHEN ((new.user_id IS NULL)) EXECUTE FUNCTION cleanup_orphaned_layout();
 
@@ -5099,6 +5166,10 @@ ALTER TABLE rating_stage_player_observations ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_stage_player_renown ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE rating_tenant_policies ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE rating_tenant_renown_bosses ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE renown_kill_facts ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_admin_bypass ON encounter_dps_rankings USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
@@ -5134,6 +5205,10 @@ CREATE POLICY tenant_admin_bypass ON rating_stage_guild_renown USING ((current_s
 CREATE POLICY tenant_admin_bypass ON rating_stage_player_observations USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_stage_player_renown USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_tenant_policies USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_tenant_renown_bosses USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON renown_kill_facts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -5203,6 +5278,10 @@ CREATE POLICY tenant_isolation ON rating_stage_player_observations USING ((realm
 
 CREATE POLICY tenant_isolation ON rating_stage_player_renown USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON rating_tenant_policies USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON rating_tenant_renown_bosses USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON renown_kill_facts USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));

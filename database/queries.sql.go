@@ -25713,6 +25713,153 @@ func (q *sqlQuerier) NextRetiredRatingStageGeneration(ctx context.Context) (uuid
 	return id, err
 }
 
+const deleteTenantRenownBoss = `-- name: DeleteTenantRenownBoss :execrows
+DELETE FROM rating_tenant_renown_bosses
+WHERE tenant_id = $1 AND instance_name = $2 AND encounter_name = $3
+`
+
+type DeleteTenantRenownBossParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+}
+
+func (q *sqlQuerier) DeleteTenantRenownBoss(ctx context.Context, arg DeleteTenantRenownBossParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteTenantRenownBoss, arg.TenantID, arg.InstanceName, arg.EncounterName)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getTenantRatingPolicy = `-- name: GetTenantRatingPolicy :one
+SELECT tenant_id, version, half_life_days, best_weight, form_weight, floor_weight, rank_one_weight, full_rank_kills, updated_at FROM rating_tenant_policies WHERE tenant_id = $1
+`
+
+// Future tenant-wide writer configuration; old group readers remain unchanged.
+// The 180-day window is a fixed scoring rule, not an admin policy column.
+func (q *sqlQuerier) GetTenantRatingPolicy(ctx context.Context, tenantID uuid.UUID) (RatingTenantPolicy, error) {
+	row := q.db.QueryRow(ctx, getTenantRatingPolicy, tenantID)
+	var i RatingTenantPolicy
+	err := row.Scan(
+		&i.TenantID,
+		&i.Version,
+		&i.HalfLifeDays,
+		&i.BestWeight,
+		&i.FormWeight,
+		&i.FloorWeight,
+		&i.RankOneWeight,
+		&i.FullRankKills,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listTenantRenownBosses = `-- name: ListTenantRenownBosses :many
+SELECT tenant_id, instance_name, encounter_name, renown_points FROM rating_tenant_renown_bosses
+WHERE tenant_id = $1 ORDER BY instance_name, encounter_name
+`
+
+func (q *sqlQuerier) ListTenantRenownBosses(ctx context.Context, tenantID uuid.UUID) ([]RatingTenantRenownBoss, error) {
+	rows, err := q.db.Query(ctx, listTenantRenownBosses, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RatingTenantRenownBoss
+	for rows.Next() {
+		var i RatingTenantRenownBoss
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.RenownPoints,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const putTenantRatingPolicy = `-- name: PutTenantRatingPolicy :execrows
+INSERT INTO rating_tenant_policies (
+    tenant_id, version, half_life_days, best_weight, form_weight,
+    floor_weight, rank_one_weight, full_rank_kills
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8
+)
+ON CONFLICT (tenant_id) DO UPDATE SET
+    version = EXCLUDED.version, half_life_days = EXCLUDED.half_life_days,
+    best_weight = EXCLUDED.best_weight, form_weight = EXCLUDED.form_weight,
+    floor_weight = EXCLUDED.floor_weight, rank_one_weight = EXCLUDED.rank_one_weight,
+    full_rank_kills = EXCLUDED.full_rank_kills, updated_at = now()
+WHERE rating_tenant_policies.version < EXCLUDED.version
+`
+
+type PutTenantRatingPolicyParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Version       int32     `db:"version" json:"version"`
+	HalfLifeDays  float64   `db:"half_life_days" json:"half_life_days"`
+	BestWeight    float64   `db:"best_weight" json:"best_weight"`
+	FormWeight    float64   `db:"form_weight" json:"form_weight"`
+	FloorWeight   float64   `db:"floor_weight" json:"floor_weight"`
+	RankOneWeight float64   `db:"rank_one_weight" json:"rank_one_weight"`
+	FullRankKills int32     `db:"full_rank_kills" json:"full_rank_kills"`
+}
+
+// A tenant policy is optional. Do not gate Peak/Mastery encounter eligibility
+// on this table: scoring defaults need explicit product calibration approval.
+func (q *sqlQuerier) PutTenantRatingPolicy(ctx context.Context, arg PutTenantRatingPolicyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, putTenantRatingPolicy,
+		arg.TenantID,
+		arg.Version,
+		arg.HalfLifeDays,
+		arg.BestWeight,
+		arg.FormWeight,
+		arg.FloorWeight,
+		arg.RankOneWeight,
+		arg.FullRankKills,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const putTenantRenownBoss = `-- name: PutTenantRenownBoss :execrows
+INSERT INTO rating_tenant_renown_bosses (tenant_id, instance_name, encounter_name, renown_points)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (tenant_id, instance_name, encounter_name) DO UPDATE
+SET renown_points = EXCLUDED.renown_points
+WHERE rating_tenant_renown_bosses.renown_points IS DISTINCT FROM EXCLUDED.renown_points
+`
+
+type PutTenantRenownBossParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+	RenownPoints  float64   `db:"renown_points" json:"renown_points"`
+}
+
+// Curated Renown points are independent of Peak/Mastery boss eligibility.
+func (q *sqlQuerier) PutTenantRenownBoss(ctx context.Context, arg PutTenantRenownBossParams) (int64, error) {
+	result, err := q.db.Exec(ctx, putTenantRenownBoss,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.RenownPoints,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const adminListOutdatedParserVersionInstances = `-- name: AdminListOutdatedParserVersionInstances :many
 SELECT
   li.id,

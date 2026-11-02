@@ -220,6 +220,7 @@ type sqlcQuerier interface {
 	DeleteSidekickInstallation(ctx context.Context, arg DeleteSidekickInstallationParams) (SidekickInstallation, error)
 	DeleteSidekickWoWDirectoriesExcept(ctx context.Context, arg DeleteSidekickWoWDirectoriesExceptParams) (int64, error)
 	DeleteTenant(ctx context.Context, id uuid.UUID) error
+	DeleteTenantRenownBoss(ctx context.Context, arg DeleteTenantRenownBossParams) (int64, error)
 	DeleteTimeParseBossKillMembershipSeries(ctx context.Context, arg DeleteTimeParseBossKillMembershipSeriesParams) error
 	DeleteTimeParseBossKillMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
 	DeleteTimeParseBossKillMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error
@@ -502,6 +503,9 @@ type sqlcQuerier interface {
 	// itself is not behind RLS (only wow_servers/wow_server_realms are).
 	GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Tenant, error)
 	GetTenantProofRequest(ctx context.Context, arg GetTenantProofRequestParams) (ProofRequest, error)
+	// Future tenant-wide writer configuration; old group readers remain unchanged.
+	// The 180-day window is a fixed scoring rule, not an admin policy column.
+	GetTenantRatingPolicy(ctx context.Context, tenantID uuid.UUID) (RatingTenantPolicy, error)
 	GetTimeParseBossKillCohortEntries(ctx context.Context, arg GetTimeParseBossKillCohortEntriesParams) ([]GetTimeParseBossKillCohortEntriesRow, error)
 	GetTimeParseBossKillMembershipCohort(ctx context.Context, arg GetTimeParseBossKillMembershipCohortParams) ([]int64, error)
 	GetTimeParseClearTimeCohortEntries(ctx context.Context, arg GetTimeParseClearTimeCohortEntriesParams) ([]GetTimeParseClearTimeCohortEntriesRow, error)
@@ -941,6 +945,7 @@ type sqlcQuerier interface {
 	// Group configuration is explicit: no group has score eligibility until both
 	// a policy and eligible boss rows have been configured by an operator.
 	ListTenantRatingPolicies(ctx context.Context, tenantID uuid.UUID) ([]RatingGroupPolicy, error)
+	ListTenantRenownBosses(ctx context.Context, tenantID uuid.UUID) ([]RatingTenantRenownBoss, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)
 	// Tenants that use this dataset, either directly (tenant.default_dataset_id)
 	// or via a server they own (wow_servers.default_dataset_id).
@@ -1018,6 +1023,11 @@ type sqlcQuerier interface {
 	PutRatingBossPolicy(ctx context.Context, arg PutRatingBossPolicyParams) (int64, error)
 	PutRatingGroupPolicy(ctx context.Context, arg PutRatingGroupPolicyParams) (int64, error)
 	PutRatingRaidPolicy(ctx context.Context, arg PutRatingRaidPolicyParams) (int64, error)
+	// A tenant policy is optional. Do not gate Peak/Mastery encounter eligibility
+	// on this table: scoring defaults need explicit product calibration approval.
+	PutTenantRatingPolicy(ctx context.Context, arg PutTenantRatingPolicyParams) (int64, error)
+	// Curated Renown points are independent of Peak/Mastery boss eligibility.
+	PutTenantRenownBoss(ctx context.Context, arg PutTenantRenownBossParams) (int64, error)
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
 	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)
