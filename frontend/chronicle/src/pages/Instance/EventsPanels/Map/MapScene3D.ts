@@ -77,6 +77,7 @@ import {
 } from "./replayEffects";
 import { deadUnitVisualState } from "./mapDeathVisibility";
 import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene";
+import { publishedModelGeometryScale } from "./modelSizing";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
 export const GROUND_WIDTH = 100;
@@ -150,9 +151,8 @@ const CAST_ARC_SIZE = 1.25;
 const MAX_ICON_TEXTURES = 128;
 // A failed icon load is retried after this long (real time).
 const ICON_RETRY_MS = 30_000;
-// Boss minis have a 1-unit footprint; scaled a little wider than the 1.8-unit
-// hostile box so they read at boss-fight zoom.
-const BOSS_MINI_SIZE = 2.6;
+// Published tabletop models have a 1-unit footprint; modelSizing scales them
+// a little wider than the 1.8-unit hostile box so they read at boss-fight zoom.
 // The minis face +z (glTF front); the facing cone and WoW facing use -z.
 const BOSS_MINI_YAW = Math.PI;
 // Gap between the top of a boss mini and its health bar.
@@ -377,6 +377,8 @@ export interface MapScene3DUnit {
   miniatureUrl: string | undefined;
   /** The published model is an original game model and needs native-size normalization. */
   gameModel?: boolean;
+  /** Per-model size correction configured in the Miniature Foundry. */
+  mapScale?: number;
   /** Logged world height (yards), when the log has one; picks the floor on the mesh. */
   z?: number;
   /** The token's icon (a player's class, a pet's paw), or null for none. */
@@ -493,6 +495,7 @@ interface UnitObject {
   /** Published miniature or original-model URL; the primitive shows until it loads. */
   miniatureUrl: string | undefined;
   gameModel: boolean;
+  mapScale: number;
   barHeight: number;
   labelHeight: number;
   deadLift: number;
@@ -1278,7 +1281,7 @@ export class MapScene3D {
     for (const unit of units) {
       seen.add(unit.guid);
       let object = this.units.get(unit.guid);
-      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl || object.gameModel !== Boolean(unit.gameModel))) {
+      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl || object.gameModel !== Boolean(unit.gameModel) || object.mapScale !== (unit.mapScale ?? 1))) {
         this.removeUnit(unit.guid);
         object = undefined;
       }
@@ -2269,6 +2272,7 @@ export class MapScene3D {
       health: unit.health,
       miniatureUrl: unit.miniatureUrl,
       gameModel: Boolean(unit.gameModel),
+      mapScale: unit.mapScale ?? 1,
       barHeight: BAR_HEIGHT,
       labelHeight: LABEL_HEIGHT,
       deadLift: DEAD_LIFT,
@@ -2280,7 +2284,7 @@ export class MapScene3D {
     group.scale.setScalar(this.scaleOf(object));
     this.units.set(unit.guid, object);
     if (object.miniatureUrl) {
-      const mini = this.requestBossMini(object.miniatureUrl, object.gameModel);
+      const mini = this.requestBossMini(object.miniatureUrl, object.gameModel, object.mapScale);
       if (mini) this.applyBossMini(object, mini);
     }
     return object;
@@ -2343,11 +2347,11 @@ export class MapScene3D {
   }
 
   // Returns the published unit model if loaded, starting its load on first use.
-  private requestBossMini(url: string, gameModel: boolean): BossMini | null {
-    const cacheKey = `${gameModel ? "game" : "miniature"}:${url}`;
+  private requestBossMini(url: string, gameModel: boolean, mapScale: number): BossMini | null {
+    const cacheKey = `${gameModel ? "game" : "miniature"}:${mapScale}:${url}`;
     if (this.bossMinis.has(cacheKey)) return this.bossMinis.get(cacheKey) ?? null;
     this.bossMinis.set(cacheKey, null);
-    void this.loadBossMiniCandidate(url, gameModel).then((mini) => {
+    void this.loadBossMiniCandidate(url, gameModel, mapScale).then((mini) => {
       if (!mini) return;
       if (this.disposed) {
         mini.geometry.dispose();
@@ -2359,7 +2363,7 @@ export class MapScene3D {
       }
       this.bossMinis.set(cacheKey, mini);
       for (const object of this.units.values()) {
-        if (object.miniatureUrl === url && object.gameModel === gameModel) this.applyBossMini(object, mini);
+        if (object.miniatureUrl === url && object.gameModel === gameModel && object.mapScale === mapScale) this.applyBossMini(object, mini);
       }
       this.updateLabel();
       this.requestRender();
@@ -2370,7 +2374,7 @@ export class MapScene3D {
   // Loads every primitive in a published model as plain float geometry, sized
   // and turned to face -z. Original models commonly split their creature skin
   // across several materials, so preserve a material group for each primitive.
-  private async loadBossMiniCandidate(url: string, gameModel: boolean): Promise<BossMini | null> {
+  private async loadBossMiniCandidate(url: string, gameModel: boolean, mapScale: number): Promise<BossMini | null> {
     const sourceMaterials: THREE.Material[] = [];
     try {
       const gltf = await (await gltfLoader()).loadAsync(url);
@@ -2411,7 +2415,7 @@ export class MapScene3D {
       mini.computeBoundingBox();
       const nativeBox = mini.boundingBox!;
       const nativeHeight = Math.max(1e-3, nativeBox.max.y - nativeBox.min.y);
-      const modelScale = gameModel ? BOSS_MINI_SIZE / nativeHeight : BOSS_MINI_SIZE;
+      const modelScale = publishedModelGeometryScale(gameModel, nativeHeight, mapScale);
       mini.scale(modelScale, modelScale, modelScale);
       mini.computeBoundingBox();
       if (gameModel) {

@@ -342,6 +342,7 @@ export default function MapView3D({
         health: showBars ? marker.health : null,
         miniatureUrl: model?.url,
         gameModel: model?.kind === "game",
+        mapScale: model?.mapScale ?? 1,
         z: sample.z,
         icon: specializations.get(marker.guid)?.iconUrl ?? marker.icon,
         boss: bossGuids?.has(marker.guid) ?? false,

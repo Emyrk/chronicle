@@ -27,7 +27,7 @@ test("parses original game models independently from tabletop miniatures", () =>
     [{ name: "Boss game model", path: "miniatures/boss-game.glb", entry_ids: [11502] }],
   ));
   assert.deepEqual(parsed.game_models, [
-    { name: "Boss game model", path: "miniatures/boss-game.glb", entry_ids: [11502] },
+    { name: "Boss game model", path: "miniatures/boss-game.glb", entry_ids: [11502], map_scale: 1 },
   ]);
 });
 
@@ -37,6 +37,20 @@ test("defaults game models for existing v1 manifests", () => {
     miniatures: [{ name: "Boss", path: "miniatures/boss.glb", entry_ids: [11502] }],
   });
   assert.deepEqual(parsed.game_models, []);
+});
+
+test("normalizes and validates per-model map scale", () => {
+  const parsed = parseMiniatureManifest(manifest([
+    { name: "Default", path: "miniatures/default.glb", entry_ids: [1] },
+    { name: "Large", path: "miniatures/large.glb", entry_ids: [2], map_scale: 1.75 },
+  ]));
+  assert.equal(parsed.miniatures.find((item) => item.name === "Default")?.map_scale, 1);
+  assert.equal(parsed.miniatures.find((item) => item.name === "Large")?.map_scale, 1.75);
+  for (const map_scale of [0, -1, 10.1, Number.NaN, Number.POSITIVE_INFINITY, "2"]) {
+    assert.throws(() => parseMiniatureManifest(manifest([
+      { name: "Invalid", path: "miniatures/invalid.glb", entry_ids: [3], map_scale },
+    ])), /map_scale/);
+  }
 });
 
 test("rejects duplicate entry assignments across models", () => {
@@ -82,6 +96,9 @@ test("Miniature Foundry edits tabletop and original game models", async () => {
   assert.match(page, /id="add-game-model"/);
   assert.match(page, /game_models/);
   assert.match(page, /original animated GLB extracted from the game files/);
+  assert.match(page, /id="map-scale"/);
+  assert.match(page, /Blue capsule/);
+  assert.match(page, /new THREE\.CapsuleGeometry/);
 });
 
 test("provides an empty manifest for first-time setup", () => {

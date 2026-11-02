@@ -5,11 +5,11 @@ import { filterRegistryModels, registryModels } from "./modelRegistry";
 const manifest: MiniatureManifest = {
   format: MINIATURE_MANIFEST_FORMAT,
   miniatures: [
-    { name: "mc-ragnaros-mini", path: "miniatures/ragnaros-mini.glb", entry_ids: [11502] },
+    { name: "mc-ragnaros-mini", path: "miniatures/ragnaros-mini.glb", entry_ids: [11502], map_scale: 1 },
   ],
   game_models: [
-    { name: "mc-ragnaros", path: "miniatures/ragnaros-game.glb", entry_ids: [11502] },
-    { name: "bwl-nefarian", path: "miniatures/nefarian-game.glb", entry_ids: [11583] },
+    { name: "mc-ragnaros", path: "miniatures/ragnaros-game.glb", entry_ids: [11502], map_scale: 1.5 },
+    { name: "bwl-nefarian", path: "miniatures/nefarian-game.glb", entry_ids: [11583], map_scale: 1 },
   ],
 };
 

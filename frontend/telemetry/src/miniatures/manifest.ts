@@ -1,9 +1,14 @@
 export const MINIATURE_MANIFEST_FORMAT = "chronicle-unit-miniatures-v1" as const;
 
+export const MIN_MAP_SCALE = 0.1;
+export const MAX_MAP_SCALE = 10;
+
 export interface UnitModelDefinition {
   name: string;
   path: string;
   entry_ids: number[];
+  /** Relative size on the 3D replay map after the model's baseline normalization. */
+  map_scale: number;
 }
 
 export interface MiniatureManifest {
@@ -42,6 +47,14 @@ function entryID(value: unknown, context: string): number {
   return value as number;
 }
 
+function mapScale(value: unknown, context: string): number {
+  if (value === undefined) return 1;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < MIN_MAP_SCALE || value > MAX_MAP_SCALE) {
+    throw new TypeError(`${context} must be a finite number from ${MIN_MAP_SCALE} to ${MAX_MAP_SCALE}`);
+  }
+  return value;
+}
+
 export function isMiniatureAssetPath(path: string): boolean {
   return /^miniatures\/[^/\\]+\.glb$/.test(path);
 }
@@ -51,9 +64,10 @@ function parseModelCollection(value: unknown, context: string): UnitModelDefinit
   const paths = new Set<string>();
   const models = array(value, context).map((raw, index) => {
     const itemContext = `${context}[${index}]`;
-    const item = object(raw, itemContext, ["name", "path", "entry_ids"]);
+    const item = object(raw, itemContext, ["name", "path", "entry_ids", "map_scale"]);
     const name = string(item.name, `${itemContext}.name`).trim();
     const path = string(item.path, `${itemContext}.path`);
+    const map_scale = mapScale(item.map_scale, `${itemContext}.map_scale`);
     if (name === "") throw new TypeError(`${itemContext}.name must not be blank`);
     if (!isMiniatureAssetPath(path)) throw new TypeError(`${itemContext}.path must be a clean miniatures/*.glb path`);
     if (paths.has(path)) throw new TypeError(`duplicate model path ${path} in ${context}`);
@@ -68,7 +82,7 @@ function parseModelCollection(value: unknown, context: string): UnitModelDefinit
       if (existing) throw new TypeError(`entry ID ${id} is assigned to both ${existing} and ${path} in ${context}`);
       assignedEntries.set(id, path);
     }
-    return { name, path, entry_ids };
+    return { name, path, entry_ids, map_scale };
   });
 
   models.sort((left, right) => left.name.localeCompare(right.name) || left.path.localeCompare(right.path));

@@ -3,10 +3,14 @@ import { ICON_CDN } from "@/config/iconUrl";
 /** Shared tabletop miniatures and original game models, published in the root-level registry. */
 export const MINIATURE_MANIFEST_FORMAT = "chronicle-unit-miniatures-v1";
 
+export const MIN_MAP_SCALE = 0.1;
+export const MAX_MAP_SCALE = 10;
+
 export interface UnitModelDefinition {
   name: string;
   path: string;
   entry_ids: number[];
+  map_scale: number;
 }
 
 export interface MiniatureManifest {
@@ -15,13 +19,17 @@ export interface MiniatureManifest {
   game_models: UnitModelDefinition[];
 }
 
-export interface PublishedUnitModelUrls {
-  miniatures: ReadonlyMap<number, string>;
-  gameModels: ReadonlyMap<number, string>;
+export interface PublishedUnitModel {
+  url: string;
+  mapScale: number;
 }
 
-export interface ReplayModelSelection {
-  url: string;
+export interface PublishedUnitModelUrls {
+  miniatures: ReadonlyMap<number, PublishedUnitModel>;
+  gameModels: ReadonlyMap<number, PublishedUnitModel>;
+}
+
+export interface ReplayModelSelection extends PublishedUnitModel {
   kind: "miniature" | "game";
 }
 
@@ -46,8 +54,12 @@ function parseModelCollection(value: unknown, label: string): UnitModelDefinitio
     const item = raw as Record<string, unknown>;
     const name = typeof item.name === "string" ? item.name.trim() : "";
     const path = typeof item.path === "string" ? item.path : "";
+    const map_scale = item.map_scale === undefined ? 1 : item.map_scale;
     if (!name) throw new Error(`${label} ${index} has no name`);
     if (!/^miniatures\/[^/\\]+\.glb$/.test(path)) throw new Error(`${label} ${index} has an invalid path`);
+    if (typeof map_scale !== "number" || !Number.isFinite(map_scale) || map_scale < MIN_MAP_SCALE || map_scale > MAX_MAP_SCALE) {
+      throw new Error(`${label} ${index} has an invalid map scale`);
+    }
     if (paths.has(path)) throw new Error(`Duplicate ${label.toLowerCase()} path: ${path}`);
     paths.add(path);
     if (!Array.isArray(item.entry_ids) || item.entry_ids.length === 0) throw new Error(`${label} ${index} has no entry IDs`);
@@ -60,7 +72,7 @@ function parseModelCollection(value: unknown, label: string): UnitModelDefinitio
       assigned.add(id);
       return id;
     });
-    return { name, path, entry_ids };
+    return { name, path, entry_ids, map_scale };
   });
 }
 
@@ -81,9 +93,12 @@ export async function fetchMiniatureManifest(baseUrl = ICON_CDN): Promise<Miniat
   return parseMiniatureManifest(await response.json());
 }
 
-function modelCollectionUrls(models: UnitModelDefinition[], baseUrl: string): ReadonlyMap<number, string> {
+function modelCollectionUrls(models: UnitModelDefinition[], baseUrl: string): ReadonlyMap<number, PublishedUnitModel> {
   return new Map(models.flatMap((model) =>
-    model.entry_ids.map((entry) => [entry, miniatureAssetUrl(model.path, baseUrl)] as const),
+    model.entry_ids.map((entry) => [entry, {
+      url: miniatureAssetUrl(model.path, baseUrl),
+      mapScale: model.map_scale,
+    }] as const),
   ));
 }
 
@@ -96,11 +111,13 @@ export async function fetchUnitModelUrls(baseUrl = ICON_CDN): Promise<PublishedU
 }
 
 export async function fetchMiniatureUrls(baseUrl = ICON_CDN): Promise<ReadonlyMap<number, string>> {
-  return (await fetchUnitModelUrls(baseUrl)).miniatures;
+  const models = (await fetchUnitModelUrls(baseUrl)).miniatures;
+  return new Map([...models].map(([entry, model]) => [entry, model.url]));
 }
 
 export async function fetchGameModelUrls(baseUrl = ICON_CDN): Promise<ReadonlyMap<number, string>> {
-  return (await fetchUnitModelUrls(baseUrl)).gameModels;
+  const models = (await fetchUnitModelUrls(baseUrl)).gameModels;
+  return new Map([...models].map(([entry, model]) => [entry, model.url]));
 }
 
 export function gameModelUrl(entry: number | undefined, published: ReadonlyMap<number, string> | undefined): string | undefined {
@@ -123,8 +140,8 @@ export function replayModel(
 ): ReplayModelSelection | undefined {
   if (entry === undefined || !published) return undefined;
   const gameModel = published.gameModels.get(entry);
-  if (gameModelsOnly) return gameModel ? { url: gameModel, kind: "game" } : undefined;
+  if (gameModelsOnly) return gameModel ? { ...gameModel, kind: "game" } : undefined;
   const miniature = published.miniatures.get(entry);
-  if (miniature) return { url: miniature, kind: "miniature" };
-  return gameModel ? { url: gameModel, kind: "game" } : undefined;
+  if (miniature) return { ...miniature, kind: "miniature" };
+  return gameModel ? { ...gameModel, kind: "game" } : undefined;
 }
