@@ -75,6 +75,13 @@ INSERT INTO renown_kill_facts (
 )
 ON CONFLICT (realm_id, player_guid, run_id, encounter_name) DO NOTHING;
 
+-- Remove stale earned attendance only for the explicitly affected canonical runs.
+-- Keep batches bounded to match the refresh page size; never use a group filter.
+-- name: DeletePlayerRenownFactsForRuns :execrows
+DELETE FROM renown_kill_facts
+WHERE run_id = ANY(@run_ids::uuid[])
+  AND cardinality(@run_ids::uuid[]) BETWEEN 1 AND 100;
+
 -- name: RatingObservationsForRun :many
 -- Per-boss canonical raw metric and its newest eligible locked parse for the
 -- requested DPS or HPS metric. has_locked_parse distinguishes missing parses

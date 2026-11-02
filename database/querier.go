@@ -54,6 +54,10 @@ type sqlcQuerier interface {
 	// asynchronous ranking_runs refresh has persisted its representative.
 	BackfillRenownFactsForSource(ctx context.Context, arg BackfillRenownFactsForSourceParams) (int64, error)
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
+	// Invalidate checkpoints staged before a canonical run's facts were removed.
+	// Caller supplies the affected realms in the same transaction as deletion.
+	// The realm list is bounded by the canonical refresh page size.
+	BumpRatingConfigRevisionForRealms(ctx context.Context, realmIds []uuid.UUID) (int64, error)
 	CarryForwardFinalizedParsedLogGroup(ctx context.Context, arg CarryForwardFinalizedParsedLogGroupParams) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
@@ -162,6 +166,8 @@ type sqlcQuerier interface {
 	DeleteGuildPagePanelsByTab(ctx context.Context, tabID uuid.UUID) error
 	DeleteGuildPageTab(ctx context.Context, id uuid.UUID) error
 	DeleteGuildPageTabsByPage(ctx context.Context, pageID uuid.UUID) error
+	// Same bounded canonical-run repair as player Renown; no group membership gate.
+	DeleteGuildRenownFactsForRuns(ctx context.Context, runIds []uuid.UUID) (int64, error)
 	DeleteInferenceConnectionByOwner(ctx context.Context, arg DeleteInferenceConnectionByOwnerParams) error
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
@@ -182,6 +188,9 @@ type sqlcQuerier interface {
 	// Remove parse score results for a tenant+instance (before re-computation).
 	// Scoped to tenant_id so one tenant's recompute cannot erase another's projections.
 	DeleteParseScoreResultsForTenantInstance(ctx context.Context, arg DeleteParseScoreResultsForTenantInstanceParams) error
+	// Remove stale earned attendance only for the explicitly affected canonical runs.
+	// Keep batches bounded to match the refresh page size; never use a group filter.
+	DeletePlayerRenownFactsForRuns(ctx context.Context, runIds []uuid.UUID) (int64, error)
 	DeleteRaidCompositionByID(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteRatingBossPolicy(ctx context.Context, arg DeleteRatingBossPolicyParams) (int64, error)
 	DeleteRatingRaidPolicy(ctx context.Context, arg DeleteRatingRaidPolicyParams) (int64, error)

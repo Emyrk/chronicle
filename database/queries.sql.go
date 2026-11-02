@@ -9303,6 +9303,21 @@ func (q *sqlQuerier) BackfillGuildRenownFactsForSource(ctx context.Context, arg 
 	return result.RowsAffected(), nil
 }
 
+const deleteGuildRenownFactsForRuns = `-- name: DeleteGuildRenownFactsForRuns :execrows
+DELETE FROM guild_renown_kill_facts
+WHERE run_id = ANY($1::uuid[])
+  AND cardinality($1::uuid[]) BETWEEN 1 AND 100
+`
+
+// Same bounded canonical-run repair as player Renown; no group membership gate.
+func (q *sqlQuerier) DeleteGuildRenownFactsForRuns(ctx context.Context, runIds []uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteGuildRenownFactsForRuns, runIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const guildRatingObservationsForRuns = `-- name: GuildRatingObservationsForRuns :many
 SELECT DISTINCT ON (rr.run_id, encounter.name)
        rr.realm_id, rr.run_id, representative.guild_id,
@@ -23433,6 +23448,28 @@ func (q *sqlQuerier) AdvanceRatingRebuildCheckpoint(ctx context.Context, arg Adv
 	return result.RowsAffected(), nil
 }
 
+const bumpRatingConfigRevisionForRealms = `-- name: BumpRatingConfigRevisionForRealms :execrows
+INSERT INTO rating_config_revisions (tenant_id, revision)
+SELECT DISTINCT COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), 1
+FROM wow_server_realms realm
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE realm.id = ANY($1::uuid[])
+  AND cardinality($1::uuid[]) BETWEEN 1 AND 100
+ON CONFLICT (tenant_id) DO UPDATE
+SET revision = rating_config_revisions.revision + 1
+`
+
+// Invalidate checkpoints staged before a canonical run's facts were removed.
+// Caller supplies the affected realms in the same transaction as deletion.
+// The realm list is bounded by the canonical refresh page size.
+func (q *sqlQuerier) BumpRatingConfigRevisionForRealms(ctx context.Context, realmIds []uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, bumpRatingConfigRevisionForRealms, realmIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getBuildingRatingRebuildCheckpoint = `-- name: GetBuildingRatingRebuildCheckpoint :one
 SELECT cp.generation_id, cp.tenant_id, cp.config_revision, cp.as_of, cp.source_cutoff, cp.phase, cp.cursor, cp.manifest, cp.heartbeat_at FROM rating_rebuild_checkpoints cp
 JOIN rating_score_generations gen ON gen.id = cp.generation_id
@@ -24932,6 +24969,22 @@ type BackfillRenownFactsForSourceParams struct {
 // asynchronous ranking_runs refresh has persisted its representative.
 func (q *sqlQuerier) BackfillRenownFactsForSource(ctx context.Context, arg BackfillRenownFactsForSourceParams) (int64, error) {
 	result, err := q.db.Exec(ctx, backfillRenownFactsForSource, arg.RealmID, arg.RunID, arg.RepresentativeInstanceID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deletePlayerRenownFactsForRuns = `-- name: DeletePlayerRenownFactsForRuns :execrows
+DELETE FROM renown_kill_facts
+WHERE run_id = ANY($1::uuid[])
+  AND cardinality($1::uuid[]) BETWEEN 1 AND 100
+`
+
+// Remove stale earned attendance only for the explicitly affected canonical runs.
+// Keep batches bounded to match the refresh page size; never use a group filter.
+func (q *sqlQuerier) DeletePlayerRenownFactsForRuns(ctx context.Context, runIds []uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePlayerRenownFactsForRuns, runIds)
 	if err != nil {
 		return 0, err
 	}

@@ -3918,6 +3918,8 @@ CREATE INDEX guild_rating_scope_scores_board_idx ON guild_rating_scope_scores US
 
 CREATE INDEX guild_renown_kill_facts_guild_time_idx ON guild_renown_kill_facts USING btree (tenant_id, realm_id, guild_id, killed_at, id);
 
+CREATE INDEX guild_renown_kill_facts_run_idx ON guild_renown_kill_facts USING btree (run_id);
+
 CREATE UNIQUE INDEX guild_renown_one_guild_per_run_idx ON guild_renown_kill_facts USING btree (realm_id, run_id, encounter_name);
 
 CREATE INDEX guild_renown_tenant_time_idx ON guild_renown_kill_facts USING btree (tenant_id, killed_at, id);
@@ -4207,6 +4209,8 @@ CREATE INDEX rating_stage_player_subject_idx ON rating_stage_player_observations
 CREATE INDEX renown_kill_facts_boss_idx ON renown_kill_facts USING btree (realm_id, instance_name, encounter_name, killed_at);
 
 CREATE INDEX renown_kill_facts_character_time_idx ON renown_kill_facts USING btree (realm_id, player_guid, killed_at, id);
+
+CREATE INDEX renown_kill_facts_run_idx ON renown_kill_facts USING btree (run_id);
 
 CREATE INDEX river_job_args_index ON river_job USING gin (args);
 

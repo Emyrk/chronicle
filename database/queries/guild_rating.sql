@@ -104,6 +104,12 @@ WHERE rr.run_id = ANY(@run_ids::uuid[]) AND instance.guild_id IS NOT NULL
 ORDER BY rr.run_id, encounter.name, encounter.end_time DESC, encounter.id
 ON CONFLICT DO NOTHING;
 
+-- Same bounded canonical-run repair as player Renown; no group membership gate.
+-- name: DeleteGuildRenownFactsForRuns :execrows
+DELETE FROM guild_renown_kill_facts
+WHERE run_id = ANY(@run_ids::uuid[])
+  AND cardinality(@run_ids::uuid[]) BETWEEN 1 AND 100;
+
 -- name: ListGuildRenownFacts :many
 SELECT * FROM guild_renown_kill_facts
 WHERE tenant_id = @tenant_id AND realm_id = @realm_id AND guild_id = @guild_id

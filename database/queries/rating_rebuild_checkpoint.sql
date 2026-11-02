@@ -7,6 +7,19 @@ SELECT start_rating_rebuild(@tenant_id::uuid, @policy_version::int,
 -- name: GetRatingConfigRevision :one
 SELECT revision FROM rating_config_revisions WHERE tenant_id = @tenant_id;
 
+-- Invalidate checkpoints staged before a canonical run's facts were removed.
+-- Caller supplies the affected realms in the same transaction as deletion.
+-- The realm list is bounded by the canonical refresh page size.
+-- name: BumpRatingConfigRevisionForRealms :execrows
+INSERT INTO rating_config_revisions (tenant_id, revision)
+SELECT DISTINCT COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), 1
+FROM wow_server_realms realm
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE realm.id = ANY(@realm_ids::uuid[])
+  AND cardinality(@realm_ids::uuid[]) BETWEEN 1 AND 100
+ON CONFLICT (tenant_id) DO UPDATE
+SET revision = rating_config_revisions.revision + 1;
+
 -- name: GetRatingRebuildCheckpoint :one
 SELECT * FROM rating_rebuild_checkpoints
 WHERE tenant_id = @tenant_id AND generation_id = @generation_id;
