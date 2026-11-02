@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { MeshBVH } from "three-mesh-bvh";
 import { mapAssetUrl, type WowMapFloorBounds, type WowMapLayer, type WowMapMeshLiquid } from "@/pages/Technical/mapGallery";
 import type { MapCameraPose } from "./cameraPath";
@@ -374,6 +375,8 @@ export interface MapScene3DUnit {
   health: MapUnitHealth | null;
   /** Published model URL from the shared miniature manifest. */
   miniatureUrl: string | undefined;
+  /** The published model is an original game model and needs native-size normalization. */
+  gameModel?: boolean;
   /** Logged world height (yards), when the log has one; picks the floor on the mesh. */
   z?: number;
   /** The token's icon (a player's class, a pet's paw), or null for none. */
@@ -439,8 +442,8 @@ interface UnitToken {
 
 interface BossMini {
   geometry: THREE.BufferGeometry;
-  /** The model's own material when it has a base-colour texture; cloned per unit. */
-  material: THREE.MeshStandardMaterial | null;
+  /** The model's own materials when every primitive has a base-colour texture; cloned per unit. */
+  materials: THREE.MeshStandardMaterial[] | null;
   /** Health bar height, above the model's bounding box. */
   barHeight: number;
   /** Hover label height, the same distance above the bar as for primitives. */
@@ -452,8 +455,9 @@ interface BossMini {
 interface UnitObject {
   group: THREE.Group;
   body: THREE.Mesh;
-  // Lambert with the unit's tint, or a textured mini's cloned material.
+  // Lambert with the unit's tint, or a textured model's cloned materials.
   bodyMaterial: THREE.MeshLambertMaterial | THREE.MeshStandardMaterial;
+  bodyMaterials: (THREE.MeshLambertMaterial | THREE.MeshStandardMaterial)[];
   textured: boolean;
   /** The facing notch (diamonds too, for bosses), turning with the unit. */
   coneMaterial: THREE.MeshBasicMaterial;
@@ -486,8 +490,9 @@ interface UnitObject {
   /** Logged world height (yards), or undefined when the log has none. */
   loggedZ: number | undefined;
   health: MapUnitHealth | null;
-  /** Published miniature URL; the primitive shows until it loads. */
+  /** Published miniature or original-model URL; the primitive shows until it loads. */
   miniatureUrl: string | undefined;
+  gameModel: boolean;
   barHeight: number;
   labelHeight: number;
   deadLift: number;
@@ -1273,7 +1278,7 @@ export class MapScene3D {
     for (const unit of units) {
       seen.add(unit.guid);
       let object = this.units.get(unit.guid);
-      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl)) {
+      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl || object.gameModel !== Boolean(unit.gameModel))) {
         this.removeUnit(unit.guid);
         object = undefined;
       }
@@ -1304,10 +1309,11 @@ export class MapScene3D {
       object.group.scale.setScalar(this.scaleOf(object));
       this.layoutDrop(object);
       const opacity = unit.muted ? MUTED_OPACITY : 1;
-      for (const material of [object.bodyMaterial, object.coneMaterial]) {
+      for (const material of object.bodyMaterials) {
         material.opacity = opacity;
-        material.depthWrite = !unit.muted && material === object.bodyMaterial && object.mini;
+        material.depthWrite = !unit.muted && object.mini;
       }
+      object.coneMaterial.opacity = opacity;
       object.token.shadow.material.opacity = opacity;
       object.token.edge.material.opacity = opacity;
       setBodyColor(object);
@@ -2144,8 +2150,10 @@ export class MapScene3D {
     for (const geometry of Object.values(this.geometries)) geometry.dispose();
     for (const mini of this.bossMinis.values()) {
       mini?.geometry.dispose();
-      mini?.material?.map?.dispose();
-      mini?.material?.dispose();
+      for (const material of new Set(mini?.materials ?? [])) {
+        material.map?.dispose();
+        material.dispose();
+      }
     }
     this.beams.geometry.dispose();
     this.beams.material.dispose();
@@ -2235,6 +2243,7 @@ export class MapScene3D {
       group,
       body,
       bodyMaterial,
+      bodyMaterials: [bodyMaterial],
       coneMaterial,
       cone,
       token: { radius, face, edge, shadow, halo, pin, arc, debuff, columns, column, columnTrack, power, powerTrack, ticks, sigil: null, chip: null, bossSpire },
@@ -2259,6 +2268,7 @@ export class MapScene3D {
       loggedZ: unit.z,
       health: unit.health,
       miniatureUrl: unit.miniatureUrl,
+      gameModel: Boolean(unit.gameModel),
       barHeight: BAR_HEIGHT,
       labelHeight: LABEL_HEIGHT,
       deadLift: DEAD_LIFT,
@@ -2270,7 +2280,7 @@ export class MapScene3D {
     group.scale.setScalar(this.scaleOf(object));
     this.units.set(unit.guid, object);
     if (object.miniatureUrl) {
-      const mini = this.requestBossMini(object.miniatureUrl);
+      const mini = this.requestBossMini(object.miniatureUrl, object.gameModel);
       if (mini) this.applyBossMini(object, mini);
     }
     return object;
@@ -2332,21 +2342,24 @@ export class MapScene3D {
     object.bodyMaterial.color.setHex(object.boss && object.dead ? 0x777777 : 0xffffff);
   }
 
-  // Returns the published miniature if loaded, starting its load on first use.
-  private requestBossMini(url: string): BossMini | null {
-    if (this.bossMinis.has(url)) return this.bossMinis.get(url) ?? null;
-    this.bossMinis.set(url, null);
-    void this.loadBossMiniCandidate(url).then((mini) => {
+  // Returns the published unit model if loaded, starting its load on first use.
+  private requestBossMini(url: string, gameModel: boolean): BossMini | null {
+    const cacheKey = `${gameModel ? "game" : "miniature"}:${url}`;
+    if (this.bossMinis.has(cacheKey)) return this.bossMinis.get(cacheKey) ?? null;
+    this.bossMinis.set(cacheKey, null);
+    void this.loadBossMiniCandidate(url, gameModel).then((mini) => {
       if (!mini) return;
       if (this.disposed) {
         mini.geometry.dispose();
-        mini.material?.map?.dispose();
-        mini.material?.dispose();
+        for (const material of new Set(mini.materials ?? [])) {
+          material.map?.dispose();
+          material.dispose();
+        }
         return;
       }
-      this.bossMinis.set(url, mini);
+      this.bossMinis.set(cacheKey, mini);
       for (const object of this.units.values()) {
-        if (object.miniatureUrl === url) this.applyBossMini(object, mini);
+        if (object.miniatureUrl === url && object.gameModel === gameModel) this.applyBossMini(object, mini);
       }
       this.updateLabel();
       this.requestRender();
@@ -2354,48 +2367,102 @@ export class MapScene3D {
     return null;
   }
 
-  // Loads a published mini's first mesh as plain float geometry, sized and
-  // turned to face -z, keeping its material only if it has a base-colour texture.
-  private async loadBossMiniCandidate(url: string): Promise<BossMini | null> {
+  // Loads every primitive in a published model as plain float geometry, sized
+  // and turned to face -z. Original models commonly split their creature skin
+  // across several materials, so preserve a material group for each primitive.
+  private async loadBossMiniCandidate(url: string, gameModel: boolean): Promise<BossMini | null> {
+    const sourceMaterials: THREE.Material[] = [];
     try {
       const gltf = await (await gltfLoader()).loadAsync(url);
       gltf.scene.updateMatrixWorld(true);
-      let geometry: THREE.BufferGeometry | null = null;
-      let material: THREE.MeshStandardMaterial | null = null;
+      const geometries: THREE.BufferGeometry[] = [];
+      const sourceGeometries = new Set<THREE.BufferGeometry>();
+      let allTextured = true;
       gltf.scene.traverse((child) => {
-        const mesh = child as THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
+        const mesh = child as THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>;
         if (!mesh.isMesh) return;
-        const source = mesh.material as THREE.MeshStandardMaterial;
-        if (!geometry) {
-          geometry = bakedGeometry(mesh);
-          if (source.isMeshStandardMaterial && source.map) material = source;
-        }
-        mesh.geometry.dispose();
-        if (source !== material) {
-          source.map?.dispose();
-          source.dispose();
-        }
+        geometries.push(bakedGeometry(mesh));
+        sourceGeometries.add(mesh.geometry);
+        const source = Array.isArray(mesh.material) ? null : mesh.material;
+        sourceMaterials.push(...(Array.isArray(mesh.material) ? mesh.material : [mesh.material]));
+        if (!(source instanceof THREE.MeshStandardMaterial) || !source.map) allTextured = false;
       });
-      if (!geometry) return null;
-      if (material) (material as THREE.MeshStandardMaterial).map!.colorSpace = THREE.SRGBColorSpace;
-      const mini = geometry as THREE.BufferGeometry;
-      mini.rotateY(BOSS_MINI_YAW).scale(BOSS_MINI_SIZE, BOSS_MINI_SIZE, BOSS_MINI_SIZE);
+      for (const geometry of sourceGeometries) geometry.dispose();
+      if (geometries.length === 0) {
+        disposeModelMaterials(sourceMaterials);
+        return null;
+      }
+      const mini = mergeGeometries(geometries, allTextured);
+      for (const geometry of geometries) geometry.dispose();
+      if (!mini) {
+        disposeModelMaterials(sourceMaterials);
+        return null;
+      }
+      const materials = allTextured
+        ? sourceMaterials.map((material) => material as THREE.MeshStandardMaterial)
+        : null;
+      if (materials) {
+        for (const material of new Set(materials)) material.map!.colorSpace = THREE.SRGBColorSpace;
+      } else {
+        disposeModelMaterials(sourceMaterials);
+        sourceMaterials.length = 0;
+      }
+      mini.rotateY(BOSS_MINI_YAW);
       mini.computeBoundingBox();
+      const nativeBox = mini.boundingBox!;
+      const nativeHeight = Math.max(1e-3, nativeBox.max.y - nativeBox.min.y);
+      const modelScale = gameModel ? BOSS_MINI_SIZE / nativeHeight : BOSS_MINI_SIZE;
+      mini.scale(modelScale, modelScale, modelScale);
+      mini.computeBoundingBox();
+      if (gameModel) {
+        mini.translate(0, -mini.boundingBox!.min.y, 0);
+        mini.computeBoundingBox();
+      }
       mini.computeBoundingSphere();
       const box = mini.boundingBox!;
       const barHeight = Math.max(BAR_HEIGHT, box.max.y + BOSS_MINI_BAR_GAP);
-      return {
+      const result = {
         geometry: mini,
-        material,
+        materials,
         barHeight,
         labelHeight: barHeight + LABEL_HEIGHT - BAR_HEIGHT,
         // Lying down turns -z into +y, so the back of the model rests on the ground.
         deadLift: -box.min.z,
       };
+      sourceMaterials.length = 0;
+      return result;
     } catch (error) {
-      console.error("Failed to load published miniature", url, error);
+      disposeModelMaterials(sourceMaterials);
+      console.error("Failed to load published unit model", url, error);
       return null;
     }
+  }
+
+  private applyUnitModelMaterials(object: UnitObject, mini: BossMini) {
+    const opacity = object.bodyMaterial.opacity;
+    if (!mini.materials) {
+      const material = object.bodyMaterial;
+      material.map = null;
+      material.depthWrite = opacity >= 1;
+      material.polygonOffset = false;
+      material.needsUpdate = true;
+      object.body.material = material;
+      object.bodyMaterials = [material];
+      object.textured = false;
+      return;
+    }
+    const materials = mini.materials.map((source) => {
+      const material = source.clone();
+      material.transparent = true;
+      material.opacity = opacity;
+      material.depthWrite = opacity >= 1;
+      return material;
+    });
+    for (const material of object.bodyMaterials) material.dispose();
+    object.body.material = materials.length === 1 ? materials[0]! : materials;
+    object.bodyMaterial = materials[0]!;
+    object.bodyMaterials = materials;
+    object.textured = true;
   }
 
   private applyBossMini(object: UnitObject, mini: BossMini) {
@@ -2408,11 +2475,7 @@ export class MapScene3D {
     object.body.scale.setScalar(1);
     object.body.position.y = 0;
     object.body.rotation.set(0, 0, 0);
-    const bodyMaterial = object.bodyMaterial;
-    bodyMaterial.map = null;
-    bodyMaterial.depthWrite = bodyMaterial.opacity >= 1;
-    bodyMaterial.polygonOffset = false;
-    bodyMaterial.needsUpdate = true;
+    this.applyUnitModelMaterials(object, mini);
     const { token } = object;
     token.radius = MINI_TOKEN_RADIUS;
     token.edge.visible = false;
@@ -2443,19 +2506,6 @@ export class MapScene3D {
     if (object.boss) object.cone.scale.setScalar(MINI_TOKEN_RADIUS * MARKS_SCALE);
     else object.cone.visible = false;
     setBodyColor(object);
-    if (mini.material) {
-      // Keep the texture: the per-unit clone carries opacity, the hit flash
-      // (emissive) and the death grey (colour multiply).
-      const material = mini.material.clone();
-      material.transparent = true;
-      material.opacity = object.bodyMaterial.opacity;
-      material.depthWrite = object.bodyMaterial.depthWrite;
-      object.bodyMaterial.dispose();
-      object.body.material = material;
-      object.bodyMaterial = material;
-      object.textured = true;
-      setBodyColor(object);
-    }
     object.barHeight = mini.barHeight;
     object.labelHeight = mini.labelHeight;
     object.deadLift = mini.deadLift;
@@ -2486,21 +2536,7 @@ export class MapScene3D {
     object.deadLift = token.face + mini.deadLift * scale;
     object.body.position.y = object.dead ? object.deadLift : object.modelBase;
     if (object.dead) object.body.rotation.x = -Math.PI / 2;
-    const bodyMaterial = object.bodyMaterial;
-    bodyMaterial.map = null;
-    bodyMaterial.depthWrite = bodyMaterial.opacity >= 1;
-    bodyMaterial.polygonOffset = false;
-    bodyMaterial.needsUpdate = true;
-    if (mini.material) {
-      const material = mini.material.clone();
-      material.transparent = true;
-      material.opacity = bodyMaterial.opacity;
-      material.depthWrite = bodyMaterial.depthWrite;
-      bodyMaterial.dispose();
-      object.body.material = material;
-      object.bodyMaterial = material;
-      object.textured = true;
-    }
+    this.applyUnitModelMaterials(object, mini);
     setBodyColor(object);
     this.applyTokenFace(object);
     object.barHeight = Math.max(BAR_HEIGHT, token.face + box.max.y * scale + BOSS_MINI_BAR_GAP);
@@ -2511,7 +2547,7 @@ export class MapScene3D {
     const object = this.units.get(guid);
     if (!object) return;
     this.unitsGroup.remove(object.group);
-    object.bodyMaterial.dispose();
+    for (const material of object.bodyMaterials) material.dispose();
     object.coneMaterial.dispose();
     const { token } = object;
     for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.debuff, token.column, token.columnTrack, token.power, token.powerTrack, token.ticks, token.sigil, token.chip]) part?.material.dispose();
@@ -2614,7 +2650,7 @@ export class MapScene3D {
   private updateEffects(now: number): boolean {
     for (const object of this.wobbling) {
       object.body.rotation.z = 0;
-      object.bodyMaterial.emissive.setRGB(0, 0, 0);
+      for (const material of object.bodyMaterials) material.emissive.setRGB(0, 0, 0);
     }
     this.wobbling.length = 0;
     for (const object of this.lunging) object.group.position.copy(object.base);
@@ -2715,7 +2751,9 @@ export class MapScene3D {
         if (target.dead) continue;
         // Damped shake about the unit's facing axis plus an emissive flash.
         target.body.rotation.z = Math.sin(effect.progress * Math.PI * 6) * 0.3 * fade * Math.min(2, effect.intensity);
-        target.bodyMaterial.emissive.copy(color).multiplyScalar(fade * 0.6 * Math.min(2, effect.intensity));
+        for (const material of target.bodyMaterials) {
+          material.emissive.copy(color).multiplyScalar(fade * 0.6 * Math.min(2, effect.intensity));
+        }
         if (!this.wobbling.includes(target)) this.wobbling.push(target);
       } else if (ringCount < MAX_EFFECT_PRIMITIVES) {
         // "impact": a small quick burst under a melee ability's target;
@@ -3171,8 +3209,10 @@ export class MapScene3D {
     object.group.visible = state.unitVisible;
     if (!hostileModel) return;
     object.body.visible = state.modelOpacity > 0;
-    object.bodyMaterial.opacity = state.modelOpacity;
-    object.bodyMaterial.depthWrite = state.modelOpacity >= 1;
+    for (const material of object.bodyMaterials) {
+      material.opacity = state.modelOpacity;
+      material.depthWrite = state.modelOpacity >= 1;
+    }
     object.token.shadow.material.opacity = state.shadowOpacity;
   }
 
@@ -4389,7 +4429,9 @@ export class MapScene3D {
 // (white multiply). Both turn grey when dead.
 function setBodyColor(object: UnitObject) {
   if (!object.mini) return;
-  object.bodyMaterial.color.set(object.dead ? DEAD_COLOR : object.textured ? 0xffffff : object.color);
+  for (const material of object.bodyMaterials) {
+    material.color.set(object.dead ? DEAD_COLOR : object.textured ? 0xffffff : object.color);
+  }
 }
 
 // Loaded on first use so the glTF loader and meshopt decoder stay out of the
@@ -4488,6 +4530,14 @@ async function createGltfLoader(): Promise<GLTFLoader> {
   return new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 }
 
+function disposeModelMaterials(materials: readonly THREE.Material[]) {
+  for (const material of new Set(materials)) {
+    const map = (material as THREE.MeshStandardMaterial).map;
+    map?.dispose();
+    material.dispose();
+  }
+}
+
 // The minis' positions are quantized (KHR_mesh_quantization) with the scale in
 // the node transform; bake that into float positions, float UVs and fresh
 // normals.
@@ -4495,8 +4545,12 @@ function bakedGeometry(mesh: THREE.Mesh): THREE.BufferGeometry {
   const source = mesh.geometry.getAttribute("position");
   const positions = new Float32Array(source.count * 3);
   const vertex = new THREE.Vector3();
+  const skinned = mesh instanceof THREE.SkinnedMesh ? mesh : null;
+  skinned?.skeleton.update();
   for (let index = 0; index < source.count; index++) {
-    vertex.fromBufferAttribute(source, index).applyMatrix4(mesh.matrixWorld).toArray(positions, index * 3);
+    vertex.fromBufferAttribute(source, index);
+    skinned?.applyBoneTransform(index, vertex);
+    vertex.applyMatrix4(mesh.matrixWorld).toArray(positions, index * 3);
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));

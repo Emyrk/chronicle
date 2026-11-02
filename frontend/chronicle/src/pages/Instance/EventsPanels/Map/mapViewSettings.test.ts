@@ -41,6 +41,22 @@ describe("map view settings", () => {
     expect(readStoredEffectSettings().showHiddenUnits).toBe(true);
   });
 
+  it("uses miniatures with game-model fallback by default", () => {
+    expect(readStoredEffectSettings().gameModelsOnly).toBe(false);
+  });
+
+  it("restores the original-model-only setting", () => {
+    localStorage.setItem(EFFECTS_STORAGE_KEY, JSON.stringify({ gameModelsOnly: true }));
+
+    expect(readStoredEffectSettings().gameModelsOnly).toBe(true);
+  });
+
+  it("rejects a non-boolean original-model-only setting", () => {
+    localStorage.setItem(EFFECTS_STORAGE_KEY, JSON.stringify({ gameModelsOnly: "yes" }));
+
+    expect(readStoredEffectSettings().gameModelsOnly).toBe(false);
+  });
+
   it("defaults the 3D chip scale to 100 percent", () => {
     expect(readStoredEffectSettings().chipScalePercent).toBe(100);
   });

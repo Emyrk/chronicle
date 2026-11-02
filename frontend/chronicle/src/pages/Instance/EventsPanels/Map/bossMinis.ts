@@ -15,6 +15,16 @@ export interface MiniatureManifest {
   game_models: UnitModelDefinition[];
 }
 
+export interface PublishedUnitModelUrls {
+  miniatures: ReadonlyMap<number, string>;
+  gameModels: ReadonlyMap<number, string>;
+}
+
+export interface ReplayModelSelection {
+  url: string;
+  kind: "miniature" | "game";
+}
+
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -71,18 +81,26 @@ export async function fetchMiniatureManifest(baseUrl = ICON_CDN): Promise<Miniat
   return parseMiniatureManifest(await response.json());
 }
 
-export async function fetchMiniatureUrls(baseUrl = ICON_CDN): Promise<ReadonlyMap<number, string>> {
-  const manifest = await fetchMiniatureManifest(baseUrl);
-  return new Map(manifest.miniatures.flatMap((miniature) =>
-    miniature.entry_ids.map((entry) => [entry, miniatureAssetUrl(miniature.path, baseUrl)] as const),
+function modelCollectionUrls(models: UnitModelDefinition[], baseUrl: string): ReadonlyMap<number, string> {
+  return new Map(models.flatMap((model) =>
+    model.entry_ids.map((entry) => [entry, miniatureAssetUrl(model.path, baseUrl)] as const),
   ));
 }
 
-export async function fetchGameModelUrls(baseUrl = ICON_CDN): Promise<ReadonlyMap<number, string>> {
+export async function fetchUnitModelUrls(baseUrl = ICON_CDN): Promise<PublishedUnitModelUrls> {
   const manifest = await fetchMiniatureManifest(baseUrl);
-  return new Map(manifest.game_models.flatMap((model) =>
-    model.entry_ids.map((entry) => [entry, miniatureAssetUrl(model.path, baseUrl)] as const),
-  ));
+  return {
+    miniatures: modelCollectionUrls(manifest.miniatures, baseUrl),
+    gameModels: modelCollectionUrls(manifest.game_models, baseUrl),
+  };
+}
+
+export async function fetchMiniatureUrls(baseUrl = ICON_CDN): Promise<ReadonlyMap<number, string>> {
+  return (await fetchUnitModelUrls(baseUrl)).miniatures;
+}
+
+export async function fetchGameModelUrls(baseUrl = ICON_CDN): Promise<ReadonlyMap<number, string>> {
+  return (await fetchUnitModelUrls(baseUrl)).gameModels;
 }
 
 export function gameModelUrl(entry: number | undefined, published: ReadonlyMap<number, string> | undefined): string | undefined {
@@ -91,4 +109,22 @@ export function gameModelUrl(entry: number | undefined, published: ReadonlyMap<n
 
 export function miniatureUrl(entry: number | undefined, published: ReadonlyMap<number, string> | undefined): string | undefined {
   return entry === undefined ? undefined : published?.get(entry);
+}
+
+/**
+ * Picks the model shown on the replay map. Miniatures win by default, with an
+ * original game model as the fallback. Original-model-only mode deliberately
+ * leaves units without a published game model on their standard map marker.
+ */
+export function replayModel(
+  entry: number | undefined,
+  published: PublishedUnitModelUrls | undefined,
+  gameModelsOnly: boolean,
+): ReplayModelSelection | undefined {
+  if (entry === undefined || !published) return undefined;
+  const gameModel = published.gameModels.get(entry);
+  if (gameModelsOnly) return gameModel ? { url: gameModel, kind: "game" } : undefined;
+  const miniature = published.miniatures.get(entry);
+  if (miniature) return { url: miniature, kind: "miniature" };
+  return gameModel ? { url: gameModel, kind: "game" } : undefined;
 }

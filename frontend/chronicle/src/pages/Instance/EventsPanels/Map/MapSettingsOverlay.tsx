@@ -59,7 +59,7 @@ interface SettingsTab {
 const TAB_STORAGE_KEY = "chronicle.map.settingsTab";
 
 // The effect settings each tab owns, for its reset and its changed marks.
-const UNIT_KEYS = ["chipScalePercent", "bars", "aboveDisc", "trailSeconds"] as const satisfies readonly (keyof EffectSettings)[];
+const UNIT_KEYS = ["chipScalePercent", "gameModelsOnly", "bars", "aboveDisc", "trailSeconds"] as const satisfies readonly (keyof EffectSettings)[];
 const COMBAT_KEYS = ["enabled", "heals", "overheal", "periodic", "castMode", "onlySelected", "maxEffects"] as const satisfies readonly (keyof EffectSettings)[];
 const WORLD_KEYS = ["alignmentOverlay"] as const satisfies readonly (keyof EffectSettings)[];
 const DEVELOPER_KEYS = ["showHiddenUnits"] as const satisfies readonly (keyof EffectSettings)[];
@@ -125,6 +125,13 @@ export function MapSettingsOverlay({
             step={CHIP_SCALE_STEP_PERCENT}
             changed={changed("chipScalePercent")}
             onChange={(chipScalePercent) => onEffectSettings({ chipScalePercent })}
+          />
+          <Toggle
+            label="Original models only"
+            detail="Use original game models; units without one keep their standard map marker"
+            checked={effectSettings.gameModelsOnly}
+            changed={changed("gameModelsOnly")}
+            onChange={(gameModelsOnly) => onEffectSettings({ gameModelsOnly })}
           />
           <Toggle
             label="Health bars"

@@ -20,6 +20,8 @@ export interface EffectSettings {
   trailSeconds: number;
   /** Size of units on the 3D map, as a percentage of their normal size. */
   chipScalePercent: number;
+  /** Use only original game models, leaving the standard marker when none is published. */
+  gameModelsOnly: boolean;
   /** Translucent 2D artwork over the dungeon mesh for coordinate debugging. */
   alignmentOverlay: boolean;
   /** Reveal units suppressed by map-specific cleanup rules. */
@@ -43,6 +45,7 @@ export const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
   aboveDisc: "none",
   trailSeconds: 0,
   chipScalePercent: 100,
+  gameModelsOnly: false,
   alignmentOverlay: false,
   showHiddenUnits: false,
 };
@@ -74,6 +77,7 @@ export function readStoredEffectSettings(): EffectSettings {
     if (!DENSITY_OPTIONS.includes(settings.maxEffects)) settings.maxEffects = MAX_EFFECT_PRIMITIVES;
     if (!ABOVE_DISC_MODES.some((mode) => mode.value === settings.aboveDisc)) settings.aboveDisc = DEFAULT_EFFECT_SETTINGS.aboveDisc;
     if (!TRAIL_OPTIONS.some((option) => option.value === settings.trailSeconds)) settings.trailSeconds = DEFAULT_EFFECT_SETTINGS.trailSeconds;
+    if (typeof stored.gameModelsOnly !== "boolean") settings.gameModelsOnly = DEFAULT_EFFECT_SETTINGS.gameModelsOnly;
     settings.chipScalePercent = typeof settings.chipScalePercent === "number" && Number.isFinite(settings.chipScalePercent)
       ? Math.min(MAX_CHIP_SCALE_PERCENT, Math.max(MIN_CHIP_SCALE_PERCENT, settings.chipScalePercent))
       : DEFAULT_EFFECT_SETTINGS.chipScalePercent;

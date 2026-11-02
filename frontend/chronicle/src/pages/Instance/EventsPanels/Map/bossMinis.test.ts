@@ -4,11 +4,13 @@ import {
   fetchGameModelUrls,
   fetchMiniatureManifest,
   fetchMiniatureUrls,
+  fetchUnitModelUrls,
   gameModelUrl,
   miniatureAssetUrl,
   miniatureManifestUrl,
   miniatureUrl,
   parseMiniatureManifest,
+  replayModel,
 } from "./bossMinis";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -80,9 +82,38 @@ describe("bossMinis", () => {
     await expect(fetchGameModelUrls("https://icons.example/root/")).resolves.toEqual(new Map([
       [11502, "https://icons.example/root/miniatures/firelord-game.glb"],
     ]));
+    await expect(fetchUnitModelUrls("https://icons.example/root/")).resolves.toEqual({
+      miniatures: new Map([
+        [3670, "https://icons.example/root/miniatures/serpent.glb"],
+        [3671, "https://icons.example/root/miniatures/serpent.glb"],
+        [11502, "https://icons.example/root/miniatures/firelord.glb"],
+      ]),
+      gameModels: new Map([
+        [11502, "https://icons.example/root/miniatures/firelord-game.glb"],
+      ]),
+    });
     expect(gameModelUrl(11502, new Map([[11502, "https://icons.example/game.glb"]]))).toBe("https://icons.example/game.glb");
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fetchMock).toHaveBeenCalledWith("https://icons.example/root/miniatures/manifest.json");
+  });
+
+  it("prefers miniatures, falls back to game models, and supports game-model-only mode", () => {
+    const published = {
+      miniatures: new Map([
+        [1, "https://icons.example/miniature-one.glb"],
+        [2, "https://icons.example/miniature-two.glb"],
+      ]),
+      gameModels: new Map([
+        [1, "https://icons.example/game-one.glb"],
+        [3, "https://icons.example/game-three.glb"],
+      ]),
+    };
+
+    expect(replayModel(1, published, false)).toEqual({ url: "https://icons.example/miniature-one.glb", kind: "miniature" });
+    expect(replayModel(3, published, false)).toEqual({ url: "https://icons.example/game-three.glb", kind: "game" });
+    expect(replayModel(1, published, true)).toEqual({ url: "https://icons.example/game-one.glb", kind: "game" });
+    expect(replayModel(2, published, true)).toBeUndefined();
+    expect(replayModel(4, published, false)).toBeUndefined();
   });
 
   it("uses only models published by the manifest", () => {
