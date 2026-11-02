@@ -128,6 +128,11 @@ func refreshRankingRunsTx(ctx context.Context, tx database.Store, ids []uuid.UUI
 		if _, err := tx.BackfillRenownFactsForRun(ctx, source.RunID); err != nil {
 			return output, fmt.Errorf("record Renown kill facts for run %s: %w", source.RunID, err)
 		}
+		if _, err := tx.BackfillGuildRenownFactsForRun(ctx, database.BackfillGuildRenownFactsForRunParams{
+			TenantID: uuid.Nil, RunID: source.RunID,
+		}); err != nil {
+			return output, fmt.Errorf("record guild Renown kill facts for run %s: %w", source.RunID, err)
+		}
 	}
 	return output, nil
 }

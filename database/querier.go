@@ -532,6 +532,9 @@ type sqlcQuerier interface {
 	// completion_time and a negative sentinel duration (see chronicle/logparse.go).
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	GuildRaidClears(ctx context.Context, arg GuildRaidClearsParams) ([]GuildRaidClearsRow, error)
+	// Clean boss encounter duration, not the player DPS/HPS ranking's fight duration.
+	// The fastest repeated clean encounter in a canonical run is its single boss
+	// time datapoint, matching the existing time-parse membership contract.
 	GuildRatingObservationsForRuns(ctx context.Context, arg GuildRatingObservationsForRunsParams) ([]GuildRatingObservationsForRunsRow, error)
 	GuildResourceAnalytics(ctx context.Context, arg GuildResourceAnalyticsParams) ([]GuildResourceAnalyticsRow, error)
 	// Returns the guild's average parse per encounter for each raid night (run),

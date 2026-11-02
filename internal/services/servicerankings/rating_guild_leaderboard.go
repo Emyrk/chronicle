@@ -89,8 +89,9 @@ func handleGuildRatingBossLeaderboardWithStore(store guildRatingBossLeaderboardQ
 		return
 	}
 	maxPlayers, err := strconv.ParseInt(q.Get("max_players"), 10, 16)
-	if err != nil || maxPlayers <= 0 {
-		guildRatingBadRequest(w, r, "max_players must be a positive 16-bit integer")
+	if err != nil || (metric == "renown" && (maxPlayers != 0 || q.Get("difficulty_name") != "")) ||
+		(metric != "renown" && maxPlayers <= 0) {
+		guildRatingBadRequest(w, r, "max_players and difficulty_name must match the rating cohort")
 		return
 	}
 	ctx := r.Context()

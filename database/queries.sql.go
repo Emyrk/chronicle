@@ -9204,29 +9204,31 @@ func (q *sqlQuerier) GuildTopParses(ctx context.Context, arg GuildTopParsesParam
 
 const backfillGuildRenownFactsForRun = `-- name: BackfillGuildRenownFactsForRun :execrows
 INSERT INTO guild_renown_kill_facts (tenant_id, realm_id, guild_id, run_id, instance_name, encounter_name, killed_at)
-SELECT DISTINCT ON (ranking.encounter_name)
-    $1, rr.realm_id, instance.guild_id, rr.run_id,
-    ranking.instance_name, ranking.encounter_name, ranking.killed_at
+SELECT DISTINCT ON (encounter.name)
+    COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    rr.realm_id, instance.guild_id, rr.run_id,
+    instance.name, encounter.name, encounter.end_time
 FROM ranking_runs rr
 JOIN log_instances instance ON instance.id = rr.representative_instance_id
 JOIN wow_server_realms realm ON realm.id = rr.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
 JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
-JOIN encounter_dps_rankings ranking ON ranking.instance_id = instance.id
-WHERE rr.run_id = $2 AND instance.guild_id IS NOT NULL
-  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-  AND instance.invalidated_at IS NULL AND ranking.encounter_id IS NOT NULL AND ranking.duration_secs > 0
-ORDER BY ranking.encounter_name, ranking.killed_at DESC, ranking.id
-ON CONFLICT (realm_id, guild_id, run_id, encounter_name) DO NOTHING
+JOIN log_instance_encounters encounter ON encounter.instance_id = instance.id
+  AND encounter.boss = true AND encounter.kill_type = 'clean'
+WHERE rr.run_id = $1 AND instance.guild_id IS NOT NULL
+  AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR server.tenant_id = $2)
+  AND instance.invalidated_at IS NULL AND encounter.end_time > encounter.start_time
+ORDER BY encounter.name, encounter.end_time DESC, encounter.id
+ON CONFLICT DO NOTHING
 `
 
 type BackfillGuildRenownFactsForRunParams struct {
-	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
 	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
 }
 
 func (q *sqlQuerier) BackfillGuildRenownFactsForRun(ctx context.Context, arg BackfillGuildRenownFactsForRunParams) (int64, error) {
-	result, err := q.db.Exec(ctx, backfillGuildRenownFactsForRun, arg.TenantID, arg.RunID)
+	result, err := q.db.Exec(ctx, backfillGuildRenownFactsForRun, arg.RunID, arg.TenantID)
 	if err != nil {
 		return 0, err
 	}
@@ -9235,30 +9237,32 @@ func (q *sqlQuerier) BackfillGuildRenownFactsForRun(ctx context.Context, arg Bac
 
 const backfillGuildRenownFactsForSource = `-- name: BackfillGuildRenownFactsForSource :execrows
 INSERT INTO guild_renown_kill_facts (tenant_id, realm_id, guild_id, run_id, instance_name, encounter_name, killed_at)
-SELECT DISTINCT ON (ranking.encounter_name)
-    $1, instance.realm_id, instance.guild_id, $2,
-    ranking.instance_name, ranking.encounter_name, ranking.killed_at
+SELECT DISTINCT ON (encounter.name)
+    COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    instance.realm_id, instance.guild_id, $1,
+    instance.name, encounter.name, encounter.end_time
 FROM log_instances instance
 JOIN wow_server_realms realm ON realm.id = instance.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
 JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
-JOIN encounter_dps_rankings ranking ON ranking.instance_id = instance.id
-WHERE instance.id = $3 AND instance.guild_id IS NOT NULL
-  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-  AND instance.invalidated_at IS NULL AND ranking.encounter_id IS NOT NULL AND ranking.duration_secs > 0
-ORDER BY ranking.encounter_name, ranking.killed_at DESC, ranking.id
-ON CONFLICT (realm_id, guild_id, run_id, encounter_name) DO NOTHING
+JOIN log_instance_encounters encounter ON encounter.instance_id = instance.id
+  AND encounter.boss = true AND encounter.kill_type = 'clean'
+WHERE instance.id = $2 AND instance.guild_id IS NOT NULL
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR server.tenant_id = $3)
+  AND instance.invalidated_at IS NULL AND encounter.end_time > encounter.start_time
+ORDER BY encounter.name, encounter.end_time DESC, encounter.id
+ON CONFLICT DO NOTHING
 `
 
 type BackfillGuildRenownFactsForSourceParams struct {
-	TenantID                 uuid.UUID `db:"tenant_id" json:"tenant_id"`
 	RunID                    uuid.UUID `db:"run_id" json:"run_id"`
 	RepresentativeInstanceID uuid.UUID `db:"representative_instance_id" json:"representative_instance_id"`
+	TenantID                 uuid.UUID `db:"tenant_id" json:"tenant_id"`
 }
 
 // Retain precisely one boss kill per guild/run, even if the source is later deleted.
 func (q *sqlQuerier) BackfillGuildRenownFactsForSource(ctx context.Context, arg BackfillGuildRenownFactsForSourceParams) (int64, error) {
-	result, err := q.db.Exec(ctx, backfillGuildRenownFactsForSource, arg.TenantID, arg.RunID, arg.RepresentativeInstanceID)
+	result, err := q.db.Exec(ctx, backfillGuildRenownFactsForSource, arg.RunID, arg.RepresentativeInstanceID, arg.TenantID)
 	if err != nil {
 		return 0, err
 	}
@@ -9266,11 +9270,12 @@ func (q *sqlQuerier) BackfillGuildRenownFactsForSource(ctx context.Context, arg 
 }
 
 const guildRatingObservationsForRuns = `-- name: GuildRatingObservationsForRuns :many
-SELECT DISTINCT ON (rr.run_id, ranking.encounter_name)
+SELECT DISTINCT ON (rr.run_id, encounter.name)
        rr.realm_id, rr.run_id, representative.guild_id,
-       ranking.instance_name, ranking.encounter_name, ranking.difficulty_name,
-       ranking.max_players, ranking.killed_at,
-       (ranking.duration_secs * 1000)::double precision AS raw_duration_ms,
+       representative.name AS instance_name, encounter.name AS encounter_name,
+       representative.difficulty_name, representative.max_players::smallint AS max_players,
+       encounter.end_time AS killed_at,
+       (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::double precision AS raw_duration_ms,
        (boss.server_precise_score IS NOT NULL)::boolean AS has_locked_parse,
        COALESCE(boss.server_precise_score, 0)::double precision AS locked_parse
 FROM ranking_runs rr
@@ -9278,24 +9283,26 @@ JOIN wow_server_realms realm ON realm.id = rr.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
 JOIN log_instances representative ON representative.id = rr.representative_instance_id
 JOIN wow_log_groups log_group ON log_group.id = representative.log_group_id AND NOT log_group.unlisted
-JOIN encounter_dps_rankings ranking ON ranking.instance_id = representative.id
+JOIN log_instance_encounters encounter ON encounter.instance_id = representative.id
 LEFT JOIN LATERAL (
-    SELECT b.duration_ms, b.server_precise_score
+    SELECT b.server_precise_score
     FROM time_parse_scores score
     JOIN time_parse_boss_scores b ON b.time_parse_score_id = score.id
     JOIN log_instances scored_instance ON scored_instance.id = score.instance_id
     JOIN wow_log_groups scored_group ON scored_group.id = scored_instance.log_group_id AND NOT scored_group.unlisted
     WHERE score.tenant_id = $1 AND score.run_id = rr.run_id
       AND score.realm_id = rr.realm_id AND score.guild_id IS NOT DISTINCT FROM representative.guild_id
-      AND b.encounter_name = ranking.encounter_name
+      AND b.encounter_name = encounter.name
+      AND b.server_status IN ('ok', 'low_confidence')
     ORDER BY score.computed_at DESC, score.id DESC
     LIMIT 1
 ) boss ON true
 WHERE rr.run_id = ANY($2::uuid[])
   AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-  AND representative.invalidated_at IS NULL AND ranking.encounter_id IS NOT NULL
-  AND ranking.duration_secs > 0
-ORDER BY rr.run_id, ranking.encounter_name, ranking.id
+  AND representative.invalidated_at IS NULL AND encounter.boss = true
+  AND encounter.kill_type = 'clean' AND encounter.end_time > encounter.start_time
+ORDER BY rr.run_id, encounter.name,
+         (encounter.end_time - encounter.start_time) ASC, encounter.end_time ASC, encounter.id
 `
 
 type GuildRatingObservationsForRunsParams struct {
@@ -9317,6 +9324,9 @@ type GuildRatingObservationsForRunsRow struct {
 	LockedParse    float64            `db:"locked_parse" json:"locked_parse"`
 }
 
+// Clean boss encounter duration, not the player DPS/HPS ranking's fight duration.
+// The fastest repeated clean encounter in a canonical run is its single boss
+// time datapoint, matching the existing time-parse membership contract.
 func (q *sqlQuerier) GuildRatingObservationsForRuns(ctx context.Context, arg GuildRatingObservationsForRunsParams) ([]GuildRatingObservationsForRunsRow, error) {
 	rows, err := q.db.Query(ctx, guildRatingObservationsForRuns, arg.TenantID, arg.RunIds)
 	if err != nil {
@@ -9457,7 +9467,11 @@ JOIN rating_score_generations generation ON generation.id = score.generation_id
   AND generation.tenant_id = score.tenant_id AND generation.status = 'active'
 JOIN rating_realm_group_memberships membership ON membership.realm_id = score.realm_id
   AND membership.group_id = score.group_id
-WHERE score.tenant_id = $1 AND score.group_id = $2 AND score.instance_name = $3
+JOIN rating_realm_groups grp ON grp.id = membership.group_id
+JOIN wow_servers server ON server.id = grp.server_id
+WHERE score.tenant_id = $1
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND score.group_id = $2 AND score.instance_name = $3
   AND score.encounter_name = $4 AND score.difficulty_name = $5
   AND score.max_players = $6 AND score.rating_metric = $7
   AND score.window_kind = $8
@@ -9534,7 +9548,11 @@ JOIN rating_score_generations generation ON generation.id = score.generation_id
   AND generation.tenant_id = score.tenant_id AND generation.status = 'active'
 JOIN rating_realm_group_memberships membership ON membership.realm_id = score.realm_id
   AND membership.group_id = score.group_id
-WHERE score.tenant_id = $1 AND score.group_id = $2 AND score.instance_name = $3
+JOIN rating_realm_groups grp ON grp.id = membership.group_id
+JOIN wow_servers server ON server.id = grp.server_id
+WHERE score.tenant_id = $1
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND score.group_id = $2 AND score.instance_name = $3
   AND score.difficulty_name = $4 AND score.max_players = $5
   AND score.rating_metric = $6 AND score.window_kind = $7
 ORDER BY score.score DESC, score.realm_id, score.guild_id LIMIT $8

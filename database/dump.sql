@@ -3623,6 +3623,10 @@ CREATE INDEX guild_rating_scope_scores_board_idx ON guild_rating_scope_scores US
 
 CREATE INDEX guild_renown_kill_facts_guild_time_idx ON guild_renown_kill_facts USING btree (tenant_id, realm_id, guild_id, killed_at, id);
 
+CREATE UNIQUE INDEX guild_renown_one_guild_per_run_idx ON guild_renown_kill_facts USING btree (realm_id, run_id, encounter_name);
+
+CREATE INDEX guild_renown_tenant_time_idx ON guild_renown_kill_facts USING btree (tenant_id, killed_at, id);
+
 CREATE INDEX guild_resource_daily_stats_guild_date_idx ON guild_resource_daily_stats USING btree (guild_id, viewed_on DESC);
 
 CREATE INDEX guild_resource_recent_visitors_date_idx ON guild_resource_recent_visitors USING btree (viewed_on);
@@ -4715,14 +4719,29 @@ CREATE POLICY tenant_admin_bypass ON wow_servers USING ((current_setting('app.te
 CREATE POLICY tenant_isolation ON encounter_dps_rankings USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
 
-CREATE POLICY tenant_isolation ON guild_rating_boss_scores USING ((realm_id IN ( SELECT wow_server_realms.id
-   FROM wow_server_realms)));
+CREATE POLICY tenant_isolation ON guild_rating_boss_scores USING ((realm_id IN ( SELECT realm.id
+   FROM (public.wow_server_realms realm
+     JOIN wow_servers server ON ((server.id = realm.server_id)))
+  WHERE (COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = guild_rating_boss_scores.tenant_id)))) WITH CHECK ((realm_id IN ( SELECT realm.id
+   FROM (public.wow_server_realms realm
+     JOIN wow_servers server ON ((server.id = realm.server_id)))
+  WHERE (COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = guild_rating_boss_scores.tenant_id))));
 
-CREATE POLICY tenant_isolation ON guild_rating_scope_scores USING ((realm_id IN ( SELECT wow_server_realms.id
-   FROM wow_server_realms)));
+CREATE POLICY tenant_isolation ON guild_rating_scope_scores USING ((realm_id IN ( SELECT realm.id
+   FROM (public.wow_server_realms realm
+     JOIN wow_servers server ON ((server.id = realm.server_id)))
+  WHERE (COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = guild_rating_scope_scores.tenant_id)))) WITH CHECK ((realm_id IN ( SELECT realm.id
+   FROM (public.wow_server_realms realm
+     JOIN wow_servers server ON ((server.id = realm.server_id)))
+  WHERE (COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = guild_rating_scope_scores.tenant_id))));
 
-CREATE POLICY tenant_isolation ON guild_renown_kill_facts USING ((realm_id IN ( SELECT wow_server_realms.id
-   FROM wow_server_realms)));
+CREATE POLICY tenant_isolation ON guild_renown_kill_facts USING ((realm_id IN ( SELECT realm.id
+   FROM (public.wow_server_realms realm
+     JOIN wow_servers server ON ((server.id = realm.server_id)))
+  WHERE (COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = guild_renown_kill_facts.tenant_id)))) WITH CHECK ((realm_id IN ( SELECT realm.id
+   FROM (public.wow_server_realms realm
+     JOIN wow_servers server ON ((server.id = realm.server_id)))
+  WHERE (COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = guild_renown_kill_facts.tenant_id))));
 
 CREATE POLICY tenant_isolation ON rating_boss_scores USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));

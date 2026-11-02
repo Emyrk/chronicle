@@ -1162,6 +1162,12 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 			}); err != nil {
 				return fmt.Errorf("preserve Renown for run %s before log deletion: %w", source.RunID, err)
 			}
+			if _, err := tx.BackfillGuildRenownFactsForSource(ctx, database.BackfillGuildRenownFactsForSourceParams{
+				TenantID: uuid.Nil, RunID: source.RunID,
+				RepresentativeInstanceID: source.RepresentativeInstanceID,
+			}); err != nil {
+				return fmt.Errorf("preserve guild Renown for run %s before log deletion: %w", source.RunID, err)
+			}
 		}
 		identities = current
 		return tx.DeleteWoWLogGroup(ctx, logID)
@@ -1242,15 +1248,44 @@ func (c *Chronicle) DeleteWoWLogInstance(ctx context.Context, logID, instanceID 
 		}
 		replacementLogGroups = append(replacementLogGroups, groups...)
 	}
-	_, err = c.Zed.DeleteLogInstanceByIDAndGroup(ctx, database.DeleteLogInstanceByIDAndGroupParams{
-		ID:         instanceID,
-		LogGroupID: logID,
-	})
+	// Preserve earned credit before this source is removed, under the same
+	// representative-refresh lock used for whole-log and retention deletion.
+	err = c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
+			return err
+		}
+		seeds := []uuid.UUID{instanceID}
+		for _, identity := range identities {
+			seeds = append(seeds, identity.RunID)
+		}
+		sources, err := tx.RankingRunSources(ctx, seeds)
+		if err != nil {
+			return err
+		}
+		for _, source := range sources {
+			if _, err := tx.BackfillRenownFactsForSource(ctx, database.BackfillRenownFactsForSourceParams{
+				RealmID: source.RealmID, RunID: source.RunID,
+				RepresentativeInstanceID: source.RepresentativeInstanceID,
+			}); err != nil {
+				return err
+			}
+			if _, err := tx.BackfillGuildRenownFactsForSource(ctx, database.BackfillGuildRenownFactsForSourceParams{
+				TenantID: uuid.Nil, RunID: source.RunID,
+				RepresentativeInstanceID: source.RepresentativeInstanceID,
+			}); err != nil {
+				return err
+			}
+		}
+		_, err = tx.DeleteLogInstanceByIDAndGroup(ctx, database.DeleteLogInstanceByIDAndGroupParams{
+			ID: instanceID, LogGroupID: logID,
+		})
+		return err
+	}, nil)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return sql.ErrNoRows
 		}
-		return fmt.Errorf("delete log instance: %w", err)
+		return fmt.Errorf("preserve Renown and delete log instance: %w", err)
 	}
 
 	if err := c.Zed.DeleteTimeParseClearTimeMembershipsByInstance(ctx, instanceID); err != nil {

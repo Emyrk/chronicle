@@ -24,7 +24,13 @@ type ratingStore interface {
 	InsertRatingScopeScore(context.Context, database.InsertRatingScopeScoreParams) error
 	ListRatingBossPolicies(context.Context, database.ListRatingBossPoliciesParams) ([]database.RatingGroupBossPolicy, error)
 	ListRatingRunsForGroup(context.Context, database.ListRatingRunsForGroupParams) ([]uuid.UUID, error)
+	ListRatingRunsForTenant(context.Context, database.ListRatingRunsForTenantParams) ([]uuid.UUID, error)
 	RatingObservationsForRuns(context.Context, database.RatingObservationsForRunsParams) ([]database.RatingObservationsForRunsRow, error)
+	GuildRatingObservationsForRuns(context.Context, database.GuildRatingObservationsForRunsParams) ([]database.GuildRatingObservationsForRunsRow, error)
+	BackfillGuildRenownFactsForRun(context.Context, database.BackfillGuildRenownFactsForRunParams) (int64, error)
+	ListGroupGuildRenownFacts(context.Context, database.ListGroupGuildRenownFactsParams) ([]database.ListGroupGuildRenownFactsRow, error)
+	InsertGuildRatingBossScore(context.Context, database.InsertGuildRatingBossScoreParams) error
+	InsertGuildRatingScopeScore(context.Context, database.InsertGuildRatingScopeScoreParams) error
 	BackfillRenownFactsForRun(context.Context, uuid.UUID) (int64, error)
 	ListGroupRenownFacts(context.Context, database.ListGroupRenownFactsParams) ([]database.ListGroupRenownFactsRow, error)
 	InsertRatingScoreGeneration(context.Context, database.InsertRatingScoreGenerationParams) (database.RatingScoreGeneration, error)
@@ -59,6 +65,60 @@ type renownTotals struct {
 	careerKills, periodKills int32
 }
 
+// tenantPeakRankOne includes eligible unassigned and guild-less runs in the
+// tenant's comparison cohort. Rating groups select eligible content and policy,
+// but never narrow the competitive denominator within a server.
+func tenantPeakRankOne(ctx context.Context, store ratingStore, tenant uuid.UUID, asOf time.Time, limits RebuildLimits,
+	periodStarts []time.Time) (map[scoredKey]float64, int, error) {
+	rankOne := make(map[scoredKey]float64)
+	runs := 0
+	for after := uuid.Nil; ; {
+		ids, err := store.ListRatingRunsForTenant(ctx, database.ListRatingRunsForTenantParams{
+			TenantID: tenant, AfterRunID: after, BatchSize: pageSize,
+		})
+		if err != nil {
+			return nil, runs, err
+		}
+		if runs+len(ids) > limits.MaxRuns {
+			return nil, runs, fmt.Errorf("rating run safety bound exceeded")
+		}
+		runs += len(ids)
+		for _, metric := range []string{"dps", "hps"} {
+			rows, err := store.RatingObservationsForRuns(ctx, database.RatingObservationsForRunsParams{
+				TenantID: tenant, RunIds: ids, Metric: metric,
+			})
+			if err != nil {
+				return nil, runs, err
+			}
+			for _, row := range rows {
+				if !row.KilledAt.Valid || !row.KilledAt.Time.Before(asOf) || row.RawValue <= 0 {
+					continue
+				}
+				key := scoredKey{instance: row.InstanceName, boss: row.EncounterName,
+					difficulty: row.DifficultyName, class: row.PlayerClass, spec: row.PlayerSpec,
+					subSpec: row.PlayerSubSpec, metric: metric, size: row.MaxPlayers}
+				if row.RawValue > rankOne[key] {
+					rankOne[key] = row.RawValue
+				}
+				for _, start := range periodStarts {
+					if !row.KilledAt.Time.Before(start) {
+						periodKey := key
+						periodKey.metric += ":period:" + start.Format(time.RFC3339Nano)
+						if row.RawValue > rankOne[periodKey] {
+							rankOne[periodKey] = row.RawValue
+						}
+					}
+				}
+			}
+		}
+		if len(ids) < int(pageSize) {
+			break
+		}
+		after = ids[len(ids)-1]
+	}
+	return rankOne, runs, nil
+}
+
 // BuildTenantRatings reads canonical observations in bounded pages and builds
 // an unpublished generation. The caller must verify current policy and group
 // membership before activating it; a failed build leaves the active generation.
@@ -85,8 +145,20 @@ func BuildTenantRatings(ctx context.Context, store ratingStore, tenant uuid.UUID
 	if err != nil {
 		return generation, 0, err
 	}
+	periodStarts := make([]time.Time, 0, len(policies))
+	for _, policy := range policies {
+		periodStarts = append(periodStarts, asOf.AddDate(0, 0, -int(policy.PeriodDays)))
+	}
+	rankOne, _, err := tenantPeakRankOne(ctx, store, tenant, asOf, limits, periodStarts)
+	if err != nil {
+		return generation, 0, err
+	}
+	fastest, err := tenantTimeRankOne(ctx, store, tenant, asOf, limits, periodStarts)
+	if err != nil {
+		return generation, 0, err
+	}
 	written := 0
-	runs, facts := 0, 0
+	runs, facts, guildFacts := 0, 0, 0
 	for _, policy := range policies {
 		group := policy.GroupID
 		bosses, err := store.ListRatingBossPolicies(ctx, database.ListRatingBossPoliciesParams{
@@ -127,7 +199,6 @@ func BuildTenantRatings(ctx context.Context, store ratingStore, tenant uuid.UUID
 		}
 		periodStart := asOf.AddDate(0, 0, -int(policy.PeriodDays))
 		observations := make(map[scoredKey]*scoredEvidence)
-		rankOne := make(map[scoredKey]float64)
 		for after := uuid.Nil; ; {
 			ids, err := store.ListRatingRunsForGroup(ctx, database.ListRatingRunsForGroupParams{
 				TenantID: tenant, GroupID: group,
@@ -172,19 +243,9 @@ func BuildTenantRatings(ctx context.Context, store ratingStore, tenant uuid.UUID
 					if row.RawValue > entry.bestRaw {
 						entry.bestRaw = row.RawValue
 					}
-					cohort := key
-					cohort.realm = uuid.Nil
-					cohort.player = ""
-					if row.RawValue > rankOne[cohort] {
-						rankOne[cohort] = row.RawValue
-					}
 					if !row.KilledAt.Time.Before(periodStart) {
 						if row.RawValue > entry.periodRaw {
 							entry.periodRaw = row.RawValue
-						}
-						cohort.metric += ":period"
-						if row.RawValue > rankOne[cohort] {
-							rankOne[cohort] = row.RawValue
 						}
 						if row.HasLockedParse {
 							entry.parses = append(entry.parses, ParseObservation{Score: row.LockedParse, KilledAt: row.KilledAt.Time, ID: row.RunID.String()})
@@ -207,7 +268,7 @@ func BuildTenantRatings(ctx context.Context, store ratingStore, tenant uuid.UUID
 				rank float64
 			}{
 				{"all_time", entry.bestRaw, rankOne[cohort]},
-				{"period", entry.periodRaw, rankOne[func() scoredKey { c := cohort; c.metric += ":period"; return c }()]},
+				{"period", entry.periodRaw, rankOne[func() scoredKey { c := cohort; c.metric += ":period:" + periodStart.Format(time.RFC3339Nano); return c }()]},
 			} {
 				if window.raw <= 0 || window.rank <= 0 {
 					continue
@@ -324,6 +385,11 @@ func BuildTenantRatings(ctx context.Context, store ratingStore, tenant uuid.UUID
 			return generation, written, err
 		}
 		written += scopesWritten
+		guildWritten, err := buildGuildGroup(ctx, store, generation.ID, tenant, group, policy, bosses, raids, asOf, limits, fastest, &guildFacts)
+		if err != nil {
+			return generation, written, err
+		}
+		written += guildWritten
 	}
 	return generation, written, nil
 }

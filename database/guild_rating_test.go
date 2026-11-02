@@ -96,6 +96,8 @@ func TestGuildRatingCanonicalGuildlessAndDurableFacts(t *testing.T) {
 		}
 		require.Equal(t, row.RunID == guildInstance, row.GuildID.Valid)
 	}
+	_, err = conn.Exec(ctx, "DELETE FROM encounter_dps_rankings WHERE instance_id = $1", guildInstance)
+	require.NoError(t, err, "guild clean-kill credit must not depend on player damage rows")
 	added, err := q.BackfillGuildRenownFactsForSource(ctx, database.BackfillGuildRenownFactsForSourceParams{
 		TenantID: uuid.Nil, RunID: guildInstance, RepresentativeInstanceID: guildInstance,
 	})
@@ -124,6 +126,16 @@ func TestGuildRatingCanonicalGuildlessAndDurableFacts(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, nextFacts)
+	otherGuild := uuid.New()
+	_, err = conn.Exec(ctx, "INSERT INTO guilds(id, realm_id, name) VALUES ($1, $2, 'Corrected Guild')", otherGuild, realm)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "UPDATE log_instances SET guild_id = $1 WHERE id = $2", otherGuild, guildInstance)
+	require.NoError(t, err)
+	added, err = q.BackfillGuildRenownFactsForRun(ctx, database.BackfillGuildRenownFactsForRunParams{
+		TenantID: uuid.Nil, RunID: guildInstance,
+	})
+	require.NoError(t, err)
+	require.Zero(t, added, "a corrected duplicate cannot award a second guild for the same boss kill")
 	_, err = q.DeleteLogInstancesByIDs(ctx, []uuid.UUID{guildInstance})
 	require.NoError(t, err)
 	facts, err := q.ListGuildRenownFacts(ctx, database.ListGuildRenownFactsParams{

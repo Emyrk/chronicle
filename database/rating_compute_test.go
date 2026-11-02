@@ -153,11 +153,11 @@ func TestBuildTenantRatingsPolicyAndPublication(t *testing.T) {
 		rows := scores(group.ID, "peak", "period", metric.name)
 		require.Len(t, rows, 2)
 		require.Equal(t, "player-a", rows[0].PlayerGuid)
-		require.InDelta(t, 100, rows[0].Score, 0.0001)
+		require.InDelta(t, 50, rows[0].Score, 0.0001, "other group on the same server participates in the Peak denominator")
 		require.InDelta(t, metric.high, rows[0].BestRaw.Float64, 0.0001)
-		require.InDelta(t, metric.high, rows[1].RankOneRaw.Float64, 0.0001)
+		require.InDelta(t, metric.high*2, rows[1].RankOneRaw.Float64, 0.0001)
 		require.Equal(t, "player-b", rows[1].PlayerGuid)
-		require.InDelta(t, 50, rows[1].Score, 0.0001)
+		require.InDelta(t, 25, rows[1].Score, 0.0001)
 		require.InDelta(t, metric.low, rows[1].BestRaw.Float64, 0.0001)
 		require.Len(t, scores(group.ID, "peak", "all_time", metric.name), 2)
 		require.Len(t, scores(otherGroup.ID, "peak", "period", metric.name), 1)
@@ -199,7 +199,7 @@ func TestBuildTenantRatingsPolicyAndPublication(t *testing.T) {
 	}
 	initialRaid := scopeScores(group.ID, "Molten Core", "peak", "period", "dps")
 	require.Len(t, initialRaid, 2)
-	require.Equal(t, 100.0, initialRaid[0].Score)
+	require.Equal(t, 50.0, initialRaid[0].Score)
 	require.Len(t, scopeScores(group.ID, "", "peak", "period", "dps"), 2, "global scope is stored independently")
 	_, err = q.PutRatingBossPolicy(ctx, database.PutRatingBossPolicyParams{
 		GroupID: group.ID, TenantID: tenantArg, InstanceName: "Molten Core", EncounterName: "Garr",
@@ -216,8 +216,8 @@ func TestBuildTenantRatingsPolicyAndPublication(t *testing.T) {
 	}, nil))
 	weightedRaid := scopeScores(group.ID, "Molten Core", "peak", "period", "dps")
 	require.Len(t, weightedRaid, 2)
-	require.Equal(t, 25.0, weightedRaid[0].Score, "missing eligible boss retains its weight in denominator")
-	require.Equal(t, 25.0, scopeScores(group.ID, "", "peak", "period", "dps")[0].Score)
+	require.Equal(t, 12.5, weightedRaid[0].Score, "missing eligible boss retains its weight in denominator")
+	require.Equal(t, 12.5, scopeScores(group.ID, "", "peak", "period", "dps")[0].Score)
 	masteryScope := scopeScores(group.ID, "Molten Core", "mastery", "period", "dps")
 	require.Len(t, masteryScope, 1)
 	require.Equal(t, 23.0, masteryScope[0].Score, "Mastery uses its separately configured boss weight")
@@ -238,8 +238,8 @@ func TestBuildTenantRatingsPolicyAndPublication(t *testing.T) {
 		}
 		return ratingmath.PublishTenantRatings(ctx, tx, tenant.ID, multiRaidGen.ID)
 	}, nil))
-	require.Equal(t, 25.0, scopeScores(group.ID, "Molten Core", "peak", "period", "dps")[0].Score)
-	require.Equal(t, 6.25, scopeScores(group.ID, "", "peak", "period", "dps")[0].Score,
+	require.Equal(t, 12.5, scopeScores(group.ID, "Molten Core", "peak", "period", "dps")[0].Score)
+	require.Equal(t, 3.125, scopeScores(group.ID, "", "peak", "period", "dps")[0].Score,
 		"missing eligible raid contributes zero to fixed global denominator")
 	// A later failed build can leave a building generation but must never publish it.
 	failed, _, err := ratingmath.BuildTenantRatings(ctx, q, tenant.ID, asOf, ratingmath.RebuildLimits{MaxRuns: 1, MaxFacts: 10})

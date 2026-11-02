@@ -119,6 +119,16 @@ func Peak(best, rankOne float64) (float64, error) {
 	return 100 * best / rankOne, nil
 }
 
+// PeakTime compares a guild's fastest eligible boss kill to the fastest
+// eligible kill in its tenant cohort. Lower durations are better.
+func PeakTime(best, rankOne float64) (float64, error) {
+	if math.IsNaN(best) || math.IsNaN(rankOne) || math.IsInf(best, 0) || math.IsInf(rankOne, 0) ||
+		best <= 0 || rankOne <= 0 || best < rankOne {
+		return 0, errors.New("invalid time Peak comparison")
+	}
+	return 100 * rankOne / best, nil
+}
+
 // RenownAward adds the configured boss credit and designated final-boss
 // bonus. It deliberately does not inspect parse score or raw performance.
 func RenownAward(bossPoints, finalBossBonus float64, isFinalBoss bool) (float64, error) {

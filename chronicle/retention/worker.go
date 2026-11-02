@@ -236,6 +236,12 @@ func (w *RealmWorker) Work(ctx context.Context, job *river.Job[ArgsRetentionReal
 				}); err != nil {
 					return fmt.Errorf("preserve Renown for run %s before retention deletion: %w", source.RunID, err)
 				}
+				if _, err := tx.BackfillGuildRenownFactsForSource(ctx, database.BackfillGuildRenownFactsForSourceParams{
+					TenantID: uuid.Nil, RunID: source.RunID,
+					RepresentativeInstanceID: source.RepresentativeInstanceID,
+				}); err != nil {
+					return fmt.Errorf("preserve guild Renown for run %s before retention deletion: %w", source.RunID, err)
+				}
 			}
 			deleted, err = tx.DeleteLogInstancesByIDs(ctx, toDelete)
 			return err

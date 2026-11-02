@@ -28,8 +28,18 @@ func TestRankingRunRefreshEarnsRenownBeforeSourceDeletion(t *testing.T) {
 		difficultyName: "Normal", maxPlayers: 40, damageDone: 10_000,
 		durationSecs: 10, dps: 1000, killedAt: time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC), isBoss: true,
 	})
+	guild := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO guilds (id,realm_id,name) VALUES ($1,$2,'Earned Guild')", guild, realm.ID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, "UPDATE log_instances SET guild_id=$1 WHERE id=$2", guild, instance)
+	require.NoError(t, err)
 	_, err = servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{instance})
 	require.NoError(t, err)
+	guildFacts, err := store.ListGuildRenownFacts(ctx, database.ListGuildRenownFactsParams{
+		TenantID: uuid.Nil, RealmID: realm.ID, GuildID: guild, LimitCount: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, guildFacts, 1, "refresh records guild credit before source deletion")
 	facts, err := store.ListRenownFactsByCharacter(ctx, database.ListRenownFactsByCharacterParams{RealmID: realm.ID, PlayerGuid: "attendance"})
 	require.NoError(t, err)
 	require.Len(t, facts, 1)
@@ -39,11 +49,21 @@ func TestRankingRunRefreshEarnsRenownBeforeSourceDeletion(t *testing.T) {
 	facts, err = store.ListRenownFactsByCharacter(ctx, database.ListRenownFactsByCharacterParams{RealmID: realm.ID, PlayerGuid: "attendance"})
 	require.NoError(t, err)
 	require.Len(t, facts, 1, "retries must not award twice")
+	guildFacts, err = store.ListGuildRenownFacts(ctx, database.ListGuildRenownFactsParams{
+		TenantID: uuid.Nil, RealmID: realm.ID, GuildID: guild, LimitCount: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, guildFacts, 1, "guild retries must not award twice")
 	_, err = store.DeleteLogInstancesByIDs(ctx, []uuid.UUID{instance})
 	require.NoError(t, err)
 	facts, err = store.ListRenownFactsByCharacter(ctx, database.ListRenownFactsByCharacterParams{RealmID: realm.ID, PlayerGuid: "attendance"})
 	require.NoError(t, err)
 	require.Len(t, facts, 1, "earned Renown survives source deletion")
+	guildFacts, err = store.ListGuildRenownFacts(ctx, database.ListGuildRenownFactsParams{
+		TenantID: uuid.Nil, RealmID: realm.ID, GuildID: guild, LimitCount: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, guildFacts, 1, "earned guild Renown survives source deletion")
 }
 
 func TestRenownFactsPreservedBeforeRunRefresh(t *testing.T) {
@@ -62,6 +82,11 @@ func TestRenownFactsPreservedBeforeRunRefresh(t *testing.T) {
 		difficultyName: "Normal", maxPlayers: 40, damageDone: 10_000,
 		durationSecs: 10, dps: 1000, killedAt: time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC), isBoss: true,
 	})
+	guild := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO guilds (id,realm_id,name) VALUES ($1,$2,'Early Guild')", guild, realm.ID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, "UPDATE log_instances SET guild_id=$1 WHERE id=$2", guild, instance)
+	require.NoError(t, err)
 	resolved, err := store.RankingRunSources(ctx, []uuid.UUID{instance})
 	require.NoError(t, err)
 	require.Len(t, resolved, 1)
@@ -71,9 +96,20 @@ func TestRenownFactsPreservedBeforeRunRefresh(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), inserted)
+	guildInserted, err := store.BackfillGuildRenownFactsForSource(ctx, database.BackfillGuildRenownFactsForSourceParams{
+		TenantID: uuid.Nil, RunID: resolved[0].RunID,
+		RepresentativeInstanceID: resolved[0].RepresentativeInstanceID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), guildInserted)
 	_, err = store.DeleteLogInstancesByIDs(ctx, []uuid.UUID{instance})
 	require.NoError(t, err)
 	facts, err := store.ListRenownFactsByCharacter(ctx, database.ListRenownFactsByCharacterParams{RealmID: realm.ID, PlayerGuid: "attendance"})
 	require.NoError(t, err)
 	require.Len(t, facts, 1)
+	guildFacts, err := store.ListGuildRenownFacts(ctx, database.ListGuildRenownFactsParams{
+		TenantID: uuid.Nil, RealmID: realm.ID, GuildID: guild, LimitCount: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, guildFacts, 1, "guild kill credit survives deletion before run refresh")
 }

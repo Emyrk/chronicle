@@ -72,6 +72,20 @@ func TestScoreMastery(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestPeakTime(t *testing.T) {
+	t.Parallel()
+	peak, err := PeakTime(120000, 90000)
+	require.NoError(t, err)
+	require.Equal(t, 75.0, peak)
+	peak, err = PeakTime(90000, 90000)
+	require.NoError(t, err)
+	require.Equal(t, 100.0, peak)
+	_, err = PeakTime(89000, 90000)
+	require.Error(t, err)
+	_, err = PeakTime(120000, 0)
+	require.Error(t, err)
+}
+
 func TestPeakAndRenownAward(t *testing.T) {
 	t.Parallel()
 	peak, err := Peak(900, 1200)

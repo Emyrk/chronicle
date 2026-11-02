@@ -112,6 +112,16 @@ func TestGuildRatingLeaderboards(t *testing.T) {
 		require.Equal(t, http.StatusOK, guildLeaderboardRequest(q, tenant, false, stub).Code)
 		require.Equal(t, "career", stub.scope.WindowKind)
 	})
+	t.Run("renown boss without a size cohort", func(t *testing.T) {
+		t.Parallel()
+		q := clone(boss)
+		q.Set("max_players", "0")
+		q.Set("rating_metric", "renown")
+		q.Set("window_kind", "career")
+		stub := &guildLeaderboardStub{}
+		require.Equal(t, http.StatusOK, guildLeaderboardRequest(q, tenant, true, stub).Code)
+		require.Zero(t, stub.boss.MaxPlayers)
+	})
 	for _, tc := range []struct {
 		name, metric, window string
 		boss                 bool
@@ -131,6 +141,9 @@ func TestGuildRatingLeaderboards(t *testing.T) {
 			}
 			q.Set("rating_metric", tc.metric)
 			q.Set("window_kind", tc.window)
+			if tc.metric == "renown" {
+				q.Set("max_players", "0")
+			}
 			stub := &guildLeaderboardStub{}
 			rec := guildLeaderboardRequest(q, uuid.Nil, tc.boss, stub)
 			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
