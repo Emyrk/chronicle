@@ -31,6 +31,9 @@ type sqlcQuerier interface {
 	AdvanceWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	AssignRatingRealmToGroup(ctx context.Context, arg AssignRatingRealmToGroupParams) (int64, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
+	BackfillGuildRenownFactsForRun(ctx context.Context, arg BackfillGuildRenownFactsForRunParams) (int64, error)
+	// Retain precisely one boss kill per guild/run, even if the source is later deleted.
+	BackfillGuildRenownFactsForSource(ctx context.Context, arg BackfillGuildRenownFactsForSourceParams) (int64, error)
 	BackfillRenownFactsForRun(ctx context.Context, runID uuid.UUID) (int64, error)
 	// Preserve canonical attendance even when a log is deleted before the
 	// asynchronous ranking_runs refresh has persisted its representative.
@@ -529,6 +532,7 @@ type sqlcQuerier interface {
 	// completion_time and a negative sentinel duration (see chronicle/logparse.go).
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	GuildRaidClears(ctx context.Context, arg GuildRaidClearsParams) ([]GuildRaidClearsRow, error)
+	GuildRatingObservationsForRuns(ctx context.Context, arg GuildRatingObservationsForRunsParams) ([]GuildRatingObservationsForRunsRow, error)
 	GuildResourceAnalytics(ctx context.Context, arg GuildResourceAnalyticsParams) ([]GuildResourceAnalyticsRow, error)
 	// Returns the guild's average parse per encounter for each raid night (run),
 	// for the guild page "Recent" panel (per-boss bars; callers weight by
@@ -590,6 +594,8 @@ type sqlcQuerier interface {
 	InsertEncounterPhase(ctx context.Context, arg InsertEncounterPhaseParams) error
 	InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error)
 	InsertGuildPageTab(ctx context.Context, arg InsertGuildPageTabParams) (GuildPageTab, error)
+	InsertGuildRatingBossScore(ctx context.Context, arg InsertGuildRatingBossScoreParams) error
+	InsertGuildRatingScopeScore(ctx context.Context, arg InsertGuildRatingScopeScoreParams) error
 	InsertInferenceClientToolRequest(ctx context.Context, arg InsertInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
 	InsertInferenceConnection(ctx context.Context, arg InsertInferenceConnectionParams) (InferenceConnection, error)
 	InsertInferenceMessage(ctx context.Context, arg InsertInferenceMessageParams) (InsertInferenceMessageRow, error)
@@ -674,6 +680,8 @@ type sqlcQuerier interface {
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActiveBossRatingScores(ctx context.Context, arg ListActiveBossRatingScoresParams) ([]RatingBossScore, error)
 	ListActiveGroupBossRatingScores(ctx context.Context, arg ListActiveGroupBossRatingScoresParams) ([]RatingBossScore, error)
+	ListActiveGuildRatingBossScores(ctx context.Context, arg ListActiveGuildRatingBossScoresParams) ([]GuildRatingBossScore, error)
+	ListActiveGuildRatingScopeScores(ctx context.Context, arg ListActiveGuildRatingScopeScoresParams) ([]GuildRatingScopeScore, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActiveRatingScopeScores(ctx context.Context, arg ListActiveRatingScopeScoresParams) ([]RatingScopeScore, error)
 	ListAdminActiveCustomPanelInstallations(ctx context.Context) ([]ListAdminActiveCustomPanelInstallationsRow, error)
@@ -720,6 +728,7 @@ type sqlcQuerier interface {
 	ListGearListsByUser(ctx context.Context, arg ListGearListsByUserParams) ([]GearList, error)
 	ListGearProgressionsByUser(ctx context.Context, arg ListGearProgressionsByUserParams) ([]GearProgression, error)
 	ListGearStatWeightsByUser(ctx context.Context, arg ListGearStatWeightsByUserParams) ([]GearStatWeight, error)
+	ListGroupGuildRenownFacts(ctx context.Context, arg ListGroupGuildRenownFactsParams) ([]ListGroupGuildRenownFactsRow, error)
 	ListGroupRatingBossScores(ctx context.Context, arg ListGroupRatingBossScoresParams) ([]RatingBossScore, error)
 	// Read retained evidence for the current group. Weight and boss eligibility
 	// are applied by the versioned group policy when computing career/period totals.
@@ -731,6 +740,7 @@ type sqlcQuerier interface {
 	ListGuildPagePanels(ctx context.Context, tabID uuid.UUID) ([]GuildPagePanel, error)
 	// Guild Page Tabs
 	ListGuildPageTabs(ctx context.Context, pageID uuid.UUID) ([]GuildPageTab, error)
+	ListGuildRenownFacts(ctx context.Context, arg ListGuildRenownFactsParams) ([]GuildRenownKillFact, error)
 	ListGuildsWithPages(ctx context.Context, arg ListGuildsWithPagesParams) ([]ListGuildsWithPagesRow, error)
 	ListInferenceConnectionsByOwner(ctx context.Context, userID uuid.UUID) ([]InferenceConnection, error)
 	// Everyone's usage for one context, e.g. each contributor's Workshop chats on a module.
@@ -799,6 +809,8 @@ type sqlcQuerier interface {
 	ListRatingRealmGroupMembers(ctx context.Context, arg ListRatingRealmGroupMembersParams) ([]ListRatingRealmGroupMembersRow, error)
 	ListRatingRealmGroups(ctx context.Context, tenantID uuid.UUID) ([]RatingRealmGroup, error)
 	ListRatingRunsForGroup(ctx context.Context, arg ListRatingRunsForGroupParams) ([]uuid.UUID, error)
+	// Tenant-wide canonical cohort, independent of rating group membership.
+	ListRatingRunsForTenant(ctx context.Context, arg ListRatingRunsForTenantParams) ([]uuid.UUID, error)
 	ListRatingScoreTenants(ctx context.Context) ([]uuid.NullUUID, error)
 	ListReadyLogFileParts(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListRecentBillingReconciliationRuns(ctx context.Context, limit int32) ([]BillingReconciliationRun, error)

@@ -1188,6 +1188,71 @@ CREATE TABLE guild_pages (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE guild_rating_boss_scores (
+    generation_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    group_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    difficulty_name text DEFAULT ''::text NOT NULL,
+    max_players smallint DEFAULT 0 NOT NULL,
+    rating_metric text NOT NULL,
+    window_kind text NOT NULL,
+    window_start timestamp with time zone,
+    window_end timestamp with time zone,
+    score double precision NOT NULL,
+    best_raw double precision,
+    rank_one_raw double precision,
+    best_locked_parse double precision,
+    form double precision,
+    floor_score double precision,
+    eligible_kills integer DEFAULT 0 NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT guild_rating_boss_scores_check CHECK ((((window_kind = 'period'::text) AND (window_start IS NOT NULL) AND (window_end IS NOT NULL) AND (window_start < window_end)) OR ((window_kind = ANY (ARRAY['all_time'::text, 'career'::text])) AND (window_start IS NULL) AND (window_end IS NULL)))),
+    CONSTRAINT guild_rating_boss_scores_eligible_kills_check CHECK ((eligible_kills >= 0)),
+    CONSTRAINT guild_rating_boss_scores_rating_metric_check CHECK ((rating_metric = ANY (ARRAY['peak'::text, 'mastery'::text, 'ranked_mastery'::text, 'renown'::text]))),
+    CONSTRAINT guild_rating_boss_scores_score_check CHECK ((score >= (0)::double precision)),
+    CONSTRAINT guild_rating_boss_scores_window_kind_check CHECK ((window_kind = ANY (ARRAY['period'::text, 'all_time'::text, 'career'::text])))
+);
+
+ALTER TABLE ONLY guild_rating_boss_scores FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE guild_rating_scope_scores (
+    generation_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    group_id uuid NOT NULL,
+    instance_name text DEFAULT ''::text NOT NULL,
+    difficulty_name text DEFAULT ''::text NOT NULL,
+    max_players smallint DEFAULT 0 NOT NULL,
+    rating_metric text NOT NULL,
+    window_kind text NOT NULL,
+    score double precision NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT guild_rating_scope_scores_rating_metric_check CHECK ((rating_metric = ANY (ARRAY['peak'::text, 'mastery'::text, 'ranked_mastery'::text, 'renown'::text]))),
+    CONSTRAINT guild_rating_scope_scores_score_check CHECK ((score >= (0)::double precision)),
+    CONSTRAINT guild_rating_scope_scores_window_kind_check CHECK ((window_kind = ANY (ARRAY['period'::text, 'all_time'::text, 'career'::text])))
+);
+
+ALTER TABLE ONLY guild_rating_scope_scores FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE guild_renown_kill_facts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    killed_at timestamp with time zone NOT NULL,
+    recorded_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY guild_renown_kill_facts FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE guild_resource_daily_stats (
     guild_id uuid NOT NULL,
     resource_kind text NOT NULL,
@@ -3070,6 +3135,18 @@ ALTER TABLE ONLY guild_pages
 ALTER TABLE ONLY guild_pages
     ADD CONSTRAINT guild_pages_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY guild_rating_boss_scores
+    ADD CONSTRAINT guild_rating_boss_scores_pkey PRIMARY KEY (generation_id, group_id, realm_id, guild_id, instance_name, encounter_name, difficulty_name, max_players, rating_metric, window_kind);
+
+ALTER TABLE ONLY guild_rating_scope_scores
+    ADD CONSTRAINT guild_rating_scope_scores_pkey PRIMARY KEY (generation_id, group_id, realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind);
+
+ALTER TABLE ONLY guild_renown_kill_facts
+    ADD CONSTRAINT guild_renown_kill_facts_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY guild_renown_kill_facts
+    ADD CONSTRAINT guild_renown_kill_facts_realm_id_guild_id_run_id_encounter__key UNIQUE (realm_id, guild_id, run_id, encounter_name);
+
 ALTER TABLE ONLY guild_resource_daily_stats
     ADD CONSTRAINT guild_resource_daily_stats_pkey PRIMARY KEY (guild_id, resource_kind, resource_key, viewed_on);
 
@@ -3539,6 +3616,12 @@ CREATE INDEX guild_discord_installations_discord_guild_id_idx ON guild_discord_i
 CREATE INDEX guild_discord_log_announcement_sources_announcement_id_idx ON guild_discord_log_announcement_sources USING btree (announcement_id);
 
 CREATE UNIQUE INDEX guild_discord_log_announcement_sources_slug_idx ON guild_discord_log_announcement_sources USING btree (instance_slug) WHERE (instance_slug IS NOT NULL);
+
+CREATE INDEX guild_rating_boss_scores_board_idx ON guild_rating_boss_scores USING btree (generation_id, tenant_id, group_id, instance_name, encounter_name, difficulty_name, max_players, rating_metric, window_kind, score DESC, realm_id, guild_id);
+
+CREATE INDEX guild_rating_scope_scores_board_idx ON guild_rating_scope_scores USING btree (generation_id, tenant_id, group_id, instance_name, difficulty_name, max_players, rating_metric, window_kind, score DESC, realm_id, guild_id);
+
+CREATE INDEX guild_renown_kill_facts_guild_time_idx ON guild_renown_kill_facts USING btree (tenant_id, realm_id, guild_id, killed_at, id);
 
 CREATE INDEX guild_resource_daily_stats_guild_date_idx ON guild_resource_daily_stats USING btree (guild_id, viewed_on DESC);
 
@@ -4078,6 +4161,36 @@ ALTER TABLE ONLY guild_page_tabs
 ALTER TABLE ONLY guild_pages
     ADD CONSTRAINT guild_pages_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY guild_rating_boss_scores
+    ADD CONSTRAINT guild_rating_boss_scores_generation_id_fkey FOREIGN KEY (generation_id) REFERENCES rating_score_generations(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_rating_boss_scores
+    ADD CONSTRAINT guild_rating_boss_scores_group_id_fkey FOREIGN KEY (group_id) REFERENCES rating_realm_groups(id);
+
+ALTER TABLE ONLY guild_rating_boss_scores
+    ADD CONSTRAINT guild_rating_boss_scores_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id);
+
+ALTER TABLE ONLY guild_rating_boss_scores
+    ADD CONSTRAINT guild_rating_boss_scores_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY guild_rating_scope_scores
+    ADD CONSTRAINT guild_rating_scope_scores_generation_id_fkey FOREIGN KEY (generation_id) REFERENCES rating_score_generations(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_rating_scope_scores
+    ADD CONSTRAINT guild_rating_scope_scores_group_id_fkey FOREIGN KEY (group_id) REFERENCES rating_realm_groups(id);
+
+ALTER TABLE ONLY guild_rating_scope_scores
+    ADD CONSTRAINT guild_rating_scope_scores_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id);
+
+ALTER TABLE ONLY guild_rating_scope_scores
+    ADD CONSTRAINT guild_rating_scope_scores_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY guild_renown_kill_facts
+    ADD CONSTRAINT guild_renown_kill_facts_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id);
+
+ALTER TABLE ONLY guild_renown_kill_facts
+    ADD CONSTRAINT guild_renown_kill_facts_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
 ALTER TABLE ONLY guild_resource_daily_stats
     ADD CONSTRAINT guild_resource_daily_stats_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;
 
@@ -4545,6 +4658,12 @@ ALTER TABLE ONLY wow_servers
 
 ALTER TABLE encounter_dps_rankings ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE guild_rating_boss_scores ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE guild_rating_scope_scores ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE guild_renown_kill_facts ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE item_daily_prices ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_boss_scores ENABLE ROW LEVEL SECURITY;
@@ -4564,6 +4683,12 @@ ALTER TABLE rating_scope_scores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE renown_kill_facts ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_admin_bypass ON encounter_dps_rankings USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON guild_rating_boss_scores USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON guild_rating_scope_scores USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON guild_renown_kill_facts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON item_daily_prices USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -4588,6 +4713,15 @@ CREATE POLICY tenant_admin_bypass ON wow_server_realms USING ((current_setting('
 CREATE POLICY tenant_admin_bypass ON wow_servers USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_isolation ON encounter_dps_rankings USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON guild_rating_boss_scores USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON guild_rating_scope_scores USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON guild_renown_kill_facts USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
 
 CREATE POLICY tenant_isolation ON rating_boss_scores USING ((realm_id IN ( SELECT wow_server_realms.id
