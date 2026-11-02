@@ -15,9 +15,9 @@ import (
 
 type masteryProjectionStore struct {
 	*masteryFakeStore
-	revision                  int64
-	key                       database.ListRatingMasteryPlayerKeysRow
-	playerScores, guildScores []database.InsertRatingBossScoreParams
+	revision     int64
+	key          database.ListRatingMasteryPlayerKeysRow
+	playerScores []database.InsertRatingBossScoreParams
 }
 
 func (f *masteryProjectionStore) InTx(_ context.Context, run func(database.Store) error, _ *pgx.TxOptions) error {
