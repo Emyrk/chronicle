@@ -17,7 +17,7 @@ import { POWER_COLORS } from "../RaidFrames/raidFrameShared";
 import { activeDebuffsAt, type MapDebuff, type MapEncounterPositions, type MapPositionSample, type MapResult } from "./map.processor";
 import { inferRoles } from "../Roles/roles.processor";
 import { deriveRecentHealGain, isDeadAt, type EncounterEffects } from "./replayEffects";
-import { shouldShowMapUnit } from "./mapUnitVisibility";
+import { isMapUnitPositionExpired, shouldShowMapUnit } from "./mapUnitVisibility";
 import {
   AUTO_FIT_MIN_SPAN_YARDS,
   autoFitViewport,
@@ -351,6 +351,13 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       if (!sample) return [];
       // Across a run, nobody should glide between distant encounter samples or linger after telemetry stops.
       if (wholeRun && isStaleRunSample(sample, cursorMs)) return [];
+      if (!player && isMapUnitPositionExpired(
+        props.context.instance.name,
+        props.context.instance.flavor ?? [],
+        metadata?.entry,
+        sample.timestampMs,
+        cursorMs,
+      )) return [];
       return [{ guid, sample, positions }];
     });
   }, [
