@@ -31,6 +31,21 @@ func TestScoreMastery(t *testing.T) {
 	require.Equal(t, 65.0, result.Ranked)
 	require.InDelta(t, 1-math.Exp(-.25), result.Confidence, 1e-12)
 
+	fiveKills := []ParseObservation{
+		{Score: 10, KilledAt: now}, {Score: 20, KilledAt: now},
+		{Score: 30, KilledAt: now}, {Score: 40, KilledAt: now},
+		{Score: 100, KilledAt: now},
+	}
+	result, err = ScoreMastery(fiveKills, policy)
+	require.NoError(t, err)
+	require.Equal(t, 5, result.EligibleKills)
+	require.Equal(t, 1, result.ExcludedKills)
+	require.Equal(t, 100.0, result.Best)
+	require.Equal(t, 30.0, result.Form)
+	require.Equal(t, 20.0, result.Floor)
+	require.Equal(t, 49.0, result.Mastery)
+	require.Equal(t, result.Mastery, result.Ranked)
+
 	observations := []ParseObservation{
 		{Score: 10, KilledAt: now.Add(-24 * time.Hour)},
 		{Score: 80, KilledAt: now.Add(-42 * 24 * time.Hour)},
