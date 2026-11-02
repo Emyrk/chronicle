@@ -34,6 +34,9 @@ export function LeaderboardsHubApp({
       {!instance && (
         <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
           <div className="mx-auto flex w-full max-w-[1920px] items-center px-2 sm:px-4">
+            {/* Realm first: it scopes every card in the grid. */}
+            <RealmPicker realm={realm} realms={HUB_REALMS} onChange={setRealm} className="my-1.5 mr-3 shrink-0" />
+            <span className="mr-2 h-6 w-px shrink-0 bg-border" aria-hidden />
             <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" aria-label="Leaderboard section">
               {TABS.map((t) => (
                 <button
@@ -53,7 +56,6 @@ export function LeaderboardsHubApp({
                 </button>
               ))}
             </nav>
-            <RealmPicker realm={realm} realms={HUB_REALMS} onChange={setRealm} className="my-1.5 ml-2 shrink-0" />
           </div>
         </div>
       )}

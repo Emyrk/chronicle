@@ -81,7 +81,7 @@ export function RealmPicker({
         </span>
         <ChevronDown className="ml-1 size-4 text-muted-foreground" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-44">
+      <DropdownMenuContent align="start" className="min-w-44">
         {realms.map((name) => (
           <DropdownMenuItem key={name} onSelect={() => onChange(name)} className="cursor-pointer justify-between">
             {name}
@@ -292,10 +292,13 @@ export function LeaderboardHub({
                   ))}
                   {scope.boss && OPTIONAL_BOSSES.has(scope.boss) && <span className="text-muted-foreground/70">· Optional</span>}
                 </nav>
-                <InstanceTitle instanceName={instanceName} instances={instances} onSwitch={onSwitchInstance} />
+                {/* The realm sits beside the title: together they name what every board below ranks. */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <InstanceTitle instanceName={instanceName} instances={instances} onSwitch={onSwitchInstance} />
+                  <RealmPicker realm={realm} realms={HUB_REALMS} onChange={setRealm} />
+                </div>
                 {set && <p className="mt-1 text-xs text-muted-foreground">Combined: {set.join(", ")} · ratings averaged, time is total kill time</p>}
               </div>
-              <RealmPicker realm={realm} realms={HUB_REALMS} onChange={setRealm} className="ml-auto" />
             </div>
             <nav className="relative flex overflow-x-auto border-t border-white/5 px-2 sm:px-4" aria-label="Leaderboard section">
               {TABS.map((t) => (
