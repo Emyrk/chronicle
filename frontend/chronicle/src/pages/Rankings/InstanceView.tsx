@@ -1249,7 +1249,7 @@ function formatTime(seconds: number): string {
   return `${m}:${String(sWhole).padStart(2, "0")}${fracStr}`
 }
 
-function KillTimeContent({
+export function KillTimeContent({
   stats,
   loading,
   title = "Kill Time by Encounter",
@@ -1427,7 +1427,7 @@ function TimeStatLine({ label, desc, value, highlight }: { label: string; desc?:
 
 // ── Success Rate Content ─────────────────────────────────────────────────
 
-function SuccessRateContent({ rates, loading, instanceName }: { rates: RankingsSuccessRate[]; loading: boolean; instanceName: string }) {
+export function SuccessRateContent({ rates, loading, instanceName }: { rates: RankingsSuccessRate[]; loading: boolean; instanceName: string }) {
   if (loading) return <RankingsLoadingState />
 
   if (rates.length === 0) {

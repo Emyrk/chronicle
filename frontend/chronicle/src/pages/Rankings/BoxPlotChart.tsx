@@ -15,9 +15,11 @@ interface BoxPlotRowProps {
   stats: RankingsBoxPlotStats
   scaleMax: number
   onClick?: () => void
+  /** Fade the row so highlighted rows stand out. */
+  dimmed?: boolean
 }
 
-function BoxPlotRow({ stats, scaleMax, onClick }: BoxPlotRowProps) {
+function BoxPlotRow({ stats, scaleMax, onClick, dimmed }: BoxPlotRowProps) {
   const pct = (v: number) => `${(v / scaleMax) * 100}%`
   const color = CLASS_CSS_VAR[stats.player_class]
   const iqr = stats.q3_dps - stats.q1_dps
@@ -30,7 +32,7 @@ function BoxPlotRow({ stats, scaleMax, onClick }: BoxPlotRowProps) {
     <Tooltip>
       <TooltipTrigger asChild>
         <div
-          className={`group relative h-10 rounded-md border-l-2 pl-2 transition-colors hover:bg-muted/20 sm:flex sm:h-auto sm:items-center sm:gap-3 sm:border-l-0 sm:px-1 sm:py-1.5 ${onClick ? "cursor-pointer" : "cursor-default"}`}
+          className={`group relative h-10 rounded-md border-l-2 pl-2 transition-colors hover:bg-muted/20 sm:flex sm:h-auto sm:items-center sm:gap-3 sm:border-l-0 sm:px-1 sm:py-1.5 ${onClick ? "cursor-pointer" : "cursor-default"} ${dimmed ? "opacity-40 hover:opacity-100" : ""}`}
           style={{ borderLeftColor: color }}
           onClick={onClick}
           role={onClick ? "button" : undefined}
@@ -162,6 +164,8 @@ interface BoxPlotChartProps {
   title?: string
   subtitle?: string
   onRowClick?: (playerClass: string, playerSpec: string, playerSubSpec: string) => void
+  /** When set, rows it rejects are dimmed (e.g. every spec shown, one class lit). */
+  highlight?: (stats: RankingsBoxPlotStats) => boolean
 }
 
 export function BoxPlotChart({
@@ -170,6 +174,7 @@ export function BoxPlotChart({
   title = "DPS Distribution by Class",
   subtitle,
   onRowClick,
+  highlight,
 }: BoxPlotChartProps) {
   const scaleMax = useMemo(() => {
     if (stats.length === 0) return 1200
@@ -203,6 +208,7 @@ export function BoxPlotChart({
                 key={`${s.player_class}-${s.player_spec ?? ""}-${s.player_sub_spec ?? ""}`}
                 stats={s}
                 scaleMax={ticks.max}
+                dimmed={highlight ? !highlight(s) : false}
                 onClick={onRowClick ? () => onRowClick(s.player_class, s.player_spec, s.player_sub_spec ?? "") : undefined}
               />
             ))}
