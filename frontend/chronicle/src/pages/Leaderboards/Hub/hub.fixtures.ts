@@ -14,6 +14,7 @@ import type {
   TimeParseSpread,
 } from "@/api/typesGenerated"
 import { calculateMastery } from "@/pages/ArmoryPage/overview/masteryRenownModel"
+import { mockRealm, mockRealmSeed } from "@/pages/Leaderboards/Ratings/mockRealm"
 import { MOLTEN_CORE_BOSSES, type MasteryParts, type RatingMetric, type RatingScope } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 
 export type HubRole = "dps" | "healing"
@@ -136,7 +137,6 @@ export const HUB_GUILDS = [
   "Amnesia",
   "Die Gilde",
 ]
-const REALMS = ["Nordanaar", "Tel'Abim", "Ambershire"]
 const NAME_A = [
   "Ash",
   "Brin",
@@ -180,8 +180,18 @@ function hash(s: string): number {
   return h >>> 0
 }
 
-const PLAYERS: HubPlayer[] = (() => {
-  const rand = mulberry32(11)
+/** The current realm's players: each realm has its own roster. */
+const playerCache = new Map<string, HubPlayer[]>()
+function realmPlayers(): HubPlayer[] {
+  const hit = playerCache.get(mockRealm())
+  if (hit) return hit
+  const out = buildHubPlayers()
+  playerCache.set(mockRealm(), out)
+  return out
+}
+
+function buildHubPlayers(): HubPlayer[] {
+  const rand = mulberry32(11 + mockRealmSeed())
   const used = new Set<string>()
   const out: HubPlayer[] = []
   while (out.length < 220) {
@@ -203,7 +213,7 @@ const PLAYERS: HubPlayer[] = (() => {
     })
   }
   return out
-})()
+}
 
 function inScope(p: HubPlayer, scope: RatingScope, role: HubRole): boolean {
   return (
@@ -216,14 +226,16 @@ function inScope(p: HubPlayer, scope: RatingScope, role: HubRole): boolean {
 
 /** A per-scope random stream so each boss gets its own (stable) numbers. */
 function scopedRand(...parts: (string | undefined)[]) {
-  return mulberry32(hash(parts.filter(Boolean).join("|")))
+  // Every stream is per realm: ratings, runs, and spreads differ between realms.
+  return mulberry32(hash([mockRealm(), ...parts].filter(Boolean).join("|")))
 }
 
 /** Best DPS or HPS on a boss, or best boss average across the raid. */
 export function topThroughput(scope: RatingScope, role: HubRole, limit = 10): ThroughputRow[] {
   const rand = scopedRand("tp", scope.boss, role)
   const base = role === "dps" ? 1250 : 1050
-  return PLAYERS.map((player) => ({ player, value: Math.round(base * player.skill + rand() * 260 - (scope.boss ? 0 : 90)) }))
+  return realmPlayers()
+    .map((player) => ({ player, value: Math.round(base * player.skill + rand() * 260 - (scope.boss ? 0 : 90)) }))
     .filter((r) => inScope(r.player, scope, role))
     .sort((a, b) => b.value - a.value)
     .slice(0, limit)
@@ -264,10 +276,12 @@ export function specSpreads(scope: RatingScope, role: HubRole, limit = 6): SpecS
 export function ratingLeaders(scope: RatingScope, role: HubRole): Record<RatingMetric, RatingLeader[]> {
   const pick = (metric: RatingMetric, spread: number, offset: number) => {
     const rand = scopedRand("rating", metric, scope.boss, role)
-    const scored = PLAYERS.filter((p) => inScope(p, scope, role)).map((player) => ({
-      player,
-      score: Math.min(100, player.skill * spread + rand() * offset),
-    }))
+    const scored = realmPlayers()
+      .filter((p) => inScope(p, scope, role))
+      .map((player) => ({
+        player,
+        score: Math.min(100, player.skill * spread + rand() * offset),
+      }))
     if (metric === "peak" && scope.boss) {
       // Boss Peak is a parse: the best kill in each spec (and subspec) cohort is 100 by definition.
       const best = new Map<string, number>()
@@ -278,7 +292,8 @@ export function ratingLeaders(scope: RatingScope, role: HubRole): Record<RatingM
     return scored.sort((a, b) => b.score - a.score).slice(0, 5)
   }
   const renownRand = scopedRand("renown", scope.boss, role)
-  const renown = PLAYERS.filter((p) => inScope(p, scope, role))
+  const renown = realmPlayers()
+    .filter((p) => inScope(p, scope, role))
     .map((player) => ({ player, score: Math.round((scope.boss ? 900 : 9000) * player.skill * (0.5 + renownRand())) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 5)
@@ -301,7 +316,7 @@ export function fastest(scope: RatingScope, instanceName: string): SpeedrunLeade
       guild_id: `g-${guild}`,
       guild_name: guild,
       guild_logo_url: guildLogo(guild),
-      realm_name: REALMS[i % REALMS.length],
+      realm_name: mockRealm(),
       start_time: new Date(Date.UTC(2026, 9, 11 + i * 7, 19)).toISOString(),
       completion_time: new Date(Date.UTC(2026, 9, 11 + i * 7, 20)).toISOString(),
       player_count: 30 - (i % 2),
@@ -454,7 +469,7 @@ export function instanceHeadlines(): InstanceHeadline[] {
   return LANDING_INSTANCES.map((inst) => {
     const rand = scopedRand("landing", inst.name)
     const pick = <T>(list: readonly T[]) => list[Math.floor(rand() * list.length)]
-    const player = () => PLAYERS.filter((p) => p.role === "dps")[Math.floor(rand() * 160)]
+    const player = () => realmPlayers().filter((p) => p.role === "dps")[Math.floor(rand() * 160)]
     const clear = inst.clearMinutes * 60_000
     const top = Math.round(inst.dps * (0.97 + rand() * 0.06))
     return {
@@ -560,7 +575,7 @@ export function speedruns(
     guild_logo_url: guildLogo(guild),
     duration_ms: Math.round(top * (1 + i * 0.035 + rand() * 0.02)),
     player_count: 30 - (i % 3),
-    realm_name: REALMS[hash(guild) % REALMS.length],
+    realm_name: mockRealm(),
     completion_time: new Date(Date.UTC(2026, 9, 3 + i * 2, 21)).toISOString(),
   }))
 }
@@ -593,7 +608,7 @@ function cohortsInRole(scope: RatingScope, role: HubRole): Cohort[] {
   return classStanding({ boss: scope.boss, cls: scope.cls, spec: scope.spec }, role).map((s) => {
     const sc: RatingScope = { boss: scope.boss, cls: s.cls, spec: s.spec, subSpec: s.subSpec }
     const rand = scopedRand("cohort", scope.boss, s.cls, s.spec, s.subSpec)
-    const players = PLAYERS.filter((p) => inScope(p, sc, role)).length
+    const players = realmPlayers().filter((p) => inScope(p, sc, role)).length
     return {
       ...s,
       role,
@@ -824,7 +839,7 @@ export function performanceEntries(
           max_players: MOCK_DIFFICULTY.players,
           sub_spec: player.subSpec,
           realm_id: "r1",
-          realm_name: REALMS[hash(player.guild) % REALMS.length],
+          realm_name: mockRealm(),
           guild_name: player.guild,
           damage_done: role === "dps" ? value * secs : 0,
           healing_done: role === "healing" ? Math.round(value * secs * 0.9) : 0,
@@ -905,7 +920,7 @@ export function parseCohort(metric: "dps" | "hps", boss: string, cls: string, sp
   const entries = Array.from({ length: count }, (_, i) => {
     const t = 1 - i / (count - 1)
     const value = spread ? Math.round(spread.min + (spread.max - spread.min) * Math.pow(t, 0.8)) : 0
-    const name = PLAYERS[Math.floor(rand() * PLAYERS.length)].name
+    const name = realmPlayers()[Math.floor(rand() * realmPlayers().length)].name
     return {
       rank: i + 1,
       sample_size: 1,
