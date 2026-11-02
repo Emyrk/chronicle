@@ -41,7 +41,7 @@ func TestBuildGuildRatingsTenantCohortAndGuildlessRun(t *testing.T) {
 	require.NoError(t, err)
 	_, err = q.PutRatingBossPolicy(ctx, database.PutRatingBossPolicyParams{
 		GroupID: group.ID, TenantID: uuid.Nil, InstanceName: "Molten Core", EncounterName: "Ragnaros",
-		PeakWeight: 1, MasteryWeight: 1, RenownPoints: 12, FinalBossBonus: 3,
+		PeakWeight: 1, MasteryWeight: 1, RenownPoints: 15,
 	})
 	require.NoError(t, err)
 	_, err = q.PutRatingBossPolicy(ctx, database.PutRatingBossPolicyParams{

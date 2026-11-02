@@ -239,7 +239,7 @@ func buildGuildGroup(ctx context.Context, store ratingStore, generation, tenant,
 				entry = &guildTotals{}
 				totals[key] = entry
 			}
-			points, err := RenownAward(boss.RenownPoints, boss.FinalBossBonus, boss.FinalBossBonus > 0)
+			points, err := RenownAward(boss.RenownPoints)
 			if err != nil {
 				return written, err
 			}

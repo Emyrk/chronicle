@@ -69,13 +69,12 @@ type AdminDeleteRatingRaidPolicyRequest struct {
 }
 
 type AdminRatingBossPolicy struct {
-	GroupID        uuid.UUID `json:"group_id"`
-	InstanceName   string    `json:"instance_name"`
-	EncounterName  string    `json:"encounter_name"`
-	PeakWeight     float64   `json:"peak_weight"`
-	MasteryWeight  float64   `json:"mastery_weight"`
-	RenownPoints   float64   `json:"renown_points"`
-	FinalBossBonus float64   `json:"final_boss_bonus"`
+	GroupID       uuid.UUID `json:"group_id"`
+	InstanceName  string    `json:"instance_name"`
+	EncounterName string    `json:"encounter_name"`
+	PeakWeight    float64   `json:"peak_weight"`
+	MasteryWeight float64   `json:"mastery_weight"`
+	RenownPoints  float64   `json:"renown_points"`
 }
 type AdminRatingBossPoliciesResponse struct {
 	Bosses []AdminRatingBossPolicy `json:"bosses"`
@@ -87,7 +86,6 @@ type AdminPutRatingBossPolicyRequest struct {
 	PeakWeight      float64 `json:"peak_weight"`
 	MasteryWeight   float64 `json:"mastery_weight"`
 	RenownPoints    float64 `json:"renown_points"`
-	FinalBossBonus  float64 `json:"final_boss_bonus"`
 }
 type AdminDeleteRatingBossPolicyRequest struct {
 	ExpectedVersion int32  `json:"expected_version"`

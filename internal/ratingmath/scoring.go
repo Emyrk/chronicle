@@ -129,18 +129,11 @@ func PeakTime(best, rankOne float64) (float64, error) {
 	return 100 * rankOne / best, nil
 }
 
-// RenownAward adds the configured boss credit and designated final-boss
-// bonus. It deliberately does not inspect parse score or raw performance.
-func RenownAward(bossPoints, finalBossBonus float64, isFinalBoss bool) (float64, error) {
-	if math.IsNaN(bossPoints) || math.IsInf(bossPoints, 0) || bossPoints < 0 || math.IsNaN(finalBossBonus) || math.IsInf(finalBossBonus, 0) || finalBossBonus < 0 {
+// RenownAward credits the configured points for one eligible boss kill.
+// It deliberately does not inspect parse score or raw performance.
+func RenownAward(bossPoints float64) (float64, error) {
+	if math.IsNaN(bossPoints) || math.IsInf(bossPoints, 0) || bossPoints < 0 {
 		return 0, errors.New("invalid Renown points")
-	}
-	if isFinalBoss {
-		award := bossPoints + finalBossBonus
-		if math.IsInf(award, 0) {
-			return 0, errors.New("renown award overflows")
-		}
-		return award, nil
 	}
 	return bossPoints, nil
 }

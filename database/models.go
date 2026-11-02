@@ -2355,13 +2355,12 @@ type RatingConfigRevision struct {
 }
 
 type RatingGroupBossPolicy struct {
-	GroupID        uuid.UUID `db:"group_id" json:"group_id"`
-	InstanceName   string    `db:"instance_name" json:"instance_name"`
-	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
-	PeakWeight     float64   `db:"peak_weight" json:"peak_weight"`
-	MasteryWeight  float64   `db:"mastery_weight" json:"mastery_weight"`
-	RenownPoints   float64   `db:"renown_points" json:"renown_points"`
-	FinalBossBonus float64   `db:"final_boss_bonus" json:"final_boss_bonus"`
+	GroupID       uuid.UUID `db:"group_id" json:"group_id"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+	PeakWeight    float64   `db:"peak_weight" json:"peak_weight"`
+	MasteryWeight float64   `db:"mastery_weight" json:"mastery_weight"`
+	RenownPoints  float64   `db:"renown_points" json:"renown_points"`
 }
 
 type RatingGroupPolicy struct {
@@ -2438,6 +2437,19 @@ type RatingRebuildCheckpoint struct {
 	Cursor         []byte             `db:"cursor" json:"cursor"`
 	Manifest       []byte             `db:"manifest" json:"manifest"`
 	HeartbeatAt    pgtype.Timestamptz `db:"heartbeat_at" json:"heartbeat_at"`
+}
+
+type RatingRenownTemplate struct {
+	Flavor  string `db:"flavor" json:"flavor"`
+	Version int32  `db:"version" json:"version"`
+}
+
+type RatingRenownTemplateBoss struct {
+	Flavor        string  `db:"flavor" json:"flavor"`
+	Version       int32   `db:"version" json:"version"`
+	InstanceName  string  `db:"instance_name" json:"instance_name"`
+	EncounterName string  `db:"encounter_name" json:"encounter_name"`
+	RenownPoints  float64 `db:"renown_points" json:"renown_points"`
 }
 
 type RatingScopeScore struct {

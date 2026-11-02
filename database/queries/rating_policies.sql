@@ -41,10 +41,10 @@ WHERE rating_group_policies.version < EXCLUDED.version;
 -- name: PutRatingBossPolicy :execrows
 INSERT INTO rating_group_boss_policies (
     group_id, instance_name, encounter_name, peak_weight, mastery_weight,
-    renown_points, final_boss_bonus
+    renown_points
 )
 SELECT policy.group_id, @instance_name, @encounter_name, @peak_weight,
-       @mastery_weight, @renown_points, @final_boss_bonus
+       @mastery_weight, @renown_points
 FROM rating_group_policies policy
 JOIN rating_realm_groups grp ON grp.id = policy.group_id
 JOIN wow_servers server ON server.id = grp.server_id
@@ -52,8 +52,7 @@ WHERE policy.group_id = @group_id AND server.tenant_id IS NOT DISTINCT FROM NULL
 ON CONFLICT (group_id, instance_name, encounter_name) DO UPDATE SET
     peak_weight = EXCLUDED.peak_weight,
     mastery_weight = EXCLUDED.mastery_weight,
-    renown_points = EXCLUDED.renown_points,
-    final_boss_bonus = EXCLUDED.final_boss_bonus;
+    renown_points = EXCLUDED.renown_points;
 
 -- name: DeleteRatingBossPolicy :execrows
 DELETE FROM rating_group_boss_policies boss

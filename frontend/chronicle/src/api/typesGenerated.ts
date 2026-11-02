@@ -225,6 +225,29 @@ export interface AdminCosmeticsResponse {
     readonly catalog: readonly CosmeticDefinition[];
 }
 
+// From chroniclesdk/admin_ratings.go
+/**
+ * Admin rating configuration is tenant-scoped to the request host. The root
+ * domain uses the nil UUID. Clients cannot select another tenant in a payload.
+ */
+export interface AdminCreateRatingGroupRequest {
+    readonly server_id: string;
+    readonly name: string;
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminDeleteRatingBossPolicyRequest {
+    readonly expected_version: number;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminDeleteRatingRaidPolicyRequest {
+    readonly expected_version: number;
+    readonly instance_name: string;
+}
+
 // From chroniclesdk/user.go
 export interface AdminInvalidateLogsRequest {
     readonly log_ids: readonly string[];
@@ -284,6 +307,39 @@ export interface AdminOutdatedInstancesResponse {
     readonly min_version: string;
 }
 
+// From chroniclesdk/admin_ratings.go
+export interface AdminPutRatingBossPolicyRequest {
+    readonly expected_version: number;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly peak_weight: number;
+    readonly mastery_weight: number;
+    readonly renown_points: number;
+}
+
+// From chroniclesdk/admin_ratings.go
+/**
+ * A policy write must use a version strictly greater than the stored version.
+ */
+export interface AdminPutRatingGroupPolicyRequest {
+    readonly version: number;
+    readonly period_days: number;
+    readonly half_life_days: number;
+    readonly best_weight: number;
+    readonly form_weight: number;
+    readonly floor_weight: number;
+    readonly rank_one_weight: number;
+    readonly full_rank_kills: number;
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminPutRatingRaidPolicyRequest {
+    readonly expected_version: number;
+    readonly instance_name: string;
+    readonly peak_weight: number;
+    readonly mastery_weight: number;
+}
+
 // From chroniclesdk/rankings.go
 /**
  * AdminRankingsRefreshStatusResponse lists rankings summary freshness by tenant.
@@ -309,6 +365,68 @@ export interface AdminRankingsRefreshTenantStatus {
     readonly refresh_needed: boolean;
 }
 
+// From chroniclesdk/admin_ratings.go
+export interface AdminRatingBossPoliciesResponse {
+    readonly bosses: readonly AdminRatingBossPolicy[];
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminRatingBossPolicy {
+    readonly group_id: string;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly peak_weight: number;
+    readonly mastery_weight: number;
+    readonly renown_points: number;
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminRatingGroup {
+    readonly id: string;
+    readonly server_id: string;
+    readonly name: string;
+    readonly realms: readonly RatingRealmGroupRealm[];
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminRatingGroupPolicy {
+    readonly group_id: string;
+    readonly version: number;
+    readonly period_days: number;
+    readonly half_life_days: number;
+    readonly best_weight: number;
+    readonly form_weight: number;
+    readonly floor_weight: number;
+    readonly rank_one_weight: number;
+    readonly full_rank_kills: number;
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminRatingGroupsResponse {
+    readonly groups: readonly AdminRatingGroup[];
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminRatingPoliciesResponse {
+    readonly policies: readonly AdminRatingGroupPolicy[];
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminRatingRaidPoliciesResponse {
+    readonly raids: readonly AdminRatingRaidPolicy[];
+}
+
+// From chroniclesdk/admin_ratings.go
+/**
+ * Raid policies explicitly configure instance-level rating weights.
+ */
+export interface AdminRatingRaidPolicy {
+    readonly group_id: string;
+    readonly instance_name: string;
+    readonly peak_weight: number;
+    readonly mastery_weight: number;
+}
+
 // From chroniclesdk/rankings.go
 /**
  * AdminRefreshRankingsJob describes one tenant summary refresh job.
@@ -325,6 +443,11 @@ export interface AdminRefreshRankingsJob {
  */
 export interface AdminRefreshRankingsResponse {
     readonly jobs: readonly AdminRefreshRankingsJob[];
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminRenameRatingGroupRequest {
+    readonly name: string;
 }
 
 // From chroniclesdk/user.go
@@ -1845,6 +1968,62 @@ export interface GuildRaidClear {
 // From chroniclesdk/guild_page.go
 export interface GuildRaidClearsResponse {
     readonly clears: readonly GuildRaidClear[];
+}
+
+// From chroniclesdk/rating_guild_leaderboard.go
+export interface GuildRatingBossLeaderboardEntry {
+    readonly generation_id: string;
+    readonly group_id: string;
+    readonly realm_id: string;
+    readonly guild_id: string;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly window_start?: string;
+    readonly window_end?: string;
+    readonly score: number;
+    readonly best_raw?: number;
+    readonly rank_one_raw?: number;
+    readonly best_locked_parse?: number;
+    readonly form?: number;
+    readonly floor_score?: number;
+    readonly eligible_kills: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_guild_leaderboard.go
+/**
+ * GuildRatingBossLeaderboardResponse lists published guild scores for one exact boss cohort.
+ */
+export interface GuildRatingBossLeaderboardResponse {
+    readonly entries: readonly GuildRatingBossLeaderboardEntry[];
+}
+
+// From chroniclesdk/rating_guild_leaderboard.go
+export interface GuildRatingScopeLeaderboardEntry {
+    readonly generation_id: string;
+    readonly group_id: string;
+    readonly realm_id: string;
+    readonly guild_id: string;
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly score: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_guild_leaderboard.go
+/**
+ * GuildRatingScopeLeaderboardResponse lists published guild scores for an exact raid or global cohort.
+ */
+export interface GuildRatingScopeLeaderboardResponse {
+    readonly scope: string; // raid or global
+    readonly entries: readonly GuildRatingScopeLeaderboardEntry[];
 }
 
 // From chroniclesdk/guild_page.go
@@ -3773,6 +3952,102 @@ export interface RankingsSuccessRate {
     readonly kills: number;
     readonly wipes: number;
     readonly total: number;
+}
+
+// From chroniclesdk/rating_leaderboard.go
+export interface RatingBossLeaderboardEntry {
+    readonly generation_id: string;
+    readonly group_id: string;
+    readonly realm_id: string;
+    readonly player_guid: string;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly performance_metric: string;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly window_start?: string;
+    readonly window_end?: string;
+    readonly score: number;
+    readonly best_raw?: number;
+    readonly rank_one_raw?: number;
+    readonly best_locked_parse?: number;
+    readonly form?: number;
+    readonly floor_score?: number;
+    readonly eligible_kills: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_leaderboard.go
+/**
+ * RatingBossLeaderboardResponse lists persisted per-boss player scores from the
+ * active rating generation. A group-wide request returns rows across bosses; it
+ * does not aggregate scores across bosses.
+ */
+export interface RatingBossLeaderboardResponse {
+    readonly entries: readonly RatingBossLeaderboardEntry[];
+}
+
+// From chroniclesdk/rating_groups.go
+export interface RatingEligibleBoss {
+    readonly instance_name: string;
+    readonly encounter_name: string;
+}
+
+// From chroniclesdk/rating_groups.go
+/**
+ * RatingRealmGroup identifies a currently configured comparison cohort.
+ */
+export interface RatingRealmGroup {
+    readonly id: string;
+    readonly server_id: string;
+    readonly name: string;
+    readonly realms: readonly RatingRealmGroupRealm[];
+    readonly eligible_bosses: readonly RatingEligibleBoss[];
+}
+
+// From chroniclesdk/rating_groups.go
+export interface RatingRealmGroupRealm {
+    readonly id: string;
+    readonly name: string;
+}
+
+// From chroniclesdk/rating_groups.go
+export interface RatingRealmGroupsResponse {
+    readonly groups: readonly RatingRealmGroup[];
+}
+
+// From chroniclesdk/rating_leaderboard.go
+export interface RatingScopeLeaderboardEntry {
+    readonly generation_id: string;
+    readonly group_id: string;
+    readonly realm_id: string;
+    readonly player_guid: string;
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly performance_metric: string;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly score: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_leaderboard.go
+/**
+ * RatingScopeLeaderboardResponse is one materialized raid or global board for
+ * an exact cohort. Scores never combine character specs on demand.
+ */
+export interface RatingScopeLeaderboardResponse {
+    readonly scope: string; // raid or global
+    readonly entries: readonly RatingScopeLeaderboardEntry[];
 }
 
 // From chroniclesdk/server_application.go

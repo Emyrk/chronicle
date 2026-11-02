@@ -341,7 +341,7 @@ func BuildTenantRatings(ctx context.Context, store ratingStore, tenant uuid.UUID
 					entry = &renownTotals{}
 					totals[key] = entry
 				}
-				points, err := RenownAward(boss.RenownPoints, boss.FinalBossBonus, boss.FinalBossBonus > 0)
+				points, err := RenownAward(boss.RenownPoints)
 				if err != nil {
 					return generation, written, err
 				}

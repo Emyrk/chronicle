@@ -89,7 +89,7 @@ func TestBuildTenantRatingsPolicyAndPublication(t *testing.T) {
 		require.Equal(t, int64(1), affected)
 		affected, err = q.PutRatingBossPolicy(ctx, database.PutRatingBossPolicyParams{
 			GroupID: g, TenantID: tenantArg, InstanceName: "Molten Core", EncounterName: "Ragnaros",
-			PeakWeight: 1, MasteryWeight: 1, RenownPoints: 12, FinalBossBonus: 3,
+			PeakWeight: 1, MasteryWeight: 1, RenownPoints: 15,
 		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), affected)
@@ -99,11 +99,6 @@ func TestBuildTenantRatingsPolicyAndPublication(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, int64(1), affected)
 	}
-	_, err = q.PutRatingBossPolicy(ctx, database.PutRatingBossPolicyParams{
-		GroupID: group.ID, TenantID: tenantArg, InstanceName: "Molten Core", EncounterName: "Garr",
-		PeakWeight: 1, MasteryWeight: 1, RenownPoints: 12, FinalBossBonus: 3,
-	})
-	require.Error(t, err, "only one designated final boss per group and raid")
 	policies, err := q.ListTenantRatingPolicies(ctx, tenantArg)
 	require.NoError(t, err)
 	require.Len(t, policies, 2)
@@ -203,7 +198,7 @@ func TestBuildTenantRatingsPolicyAndPublication(t *testing.T) {
 	require.Len(t, scopeScores(group.ID, "", "peak", "period", "dps"), 2, "global scope is stored independently")
 	_, err = q.PutRatingBossPolicy(ctx, database.PutRatingBossPolicyParams{
 		GroupID: group.ID, TenantID: tenantArg, InstanceName: "Molten Core", EncounterName: "Garr",
-		PeakWeight: 3, MasteryWeight: 3, RenownPoints: 12, FinalBossBonus: 0,
+		PeakWeight: 3, MasteryWeight: 3, RenownPoints: 12,
 	})
 	require.NoError(t, err)
 	weightedGen, _, err := ratingmath.BuildTenantRatings(ctx, q, tenant.ID, asOf, ratingmath.RebuildLimits{MaxRuns: 10, MaxFacts: 20})
@@ -227,7 +222,7 @@ func TestBuildTenantRatingsPolicyAndPublication(t *testing.T) {
 	require.NoError(t, err)
 	_, err = q.PutRatingBossPolicy(ctx, database.PutRatingBossPolicyParams{
 		GroupID: group.ID, TenantID: tenantArg, InstanceName: "Zul'Gurub", EncounterName: "Hakkar",
-		PeakWeight: 1, MasteryWeight: 1, RenownPoints: 10, FinalBossBonus: 2,
+		PeakWeight: 1, MasteryWeight: 1, RenownPoints: 12,
 	})
 	require.NoError(t, err)
 	multiRaidGen, _, err := ratingmath.BuildTenantRatings(ctx, q, tenant.ID, asOf, ratingmath.RebuildLimits{MaxRuns: 10, MaxFacts: 20})
@@ -310,7 +305,7 @@ func TestBuildRootRealmRatings(t *testing.T) {
 	require.NoError(t, err)
 	_, err = q.PutRatingBossPolicy(ctx, database.PutRatingBossPolicyParams{
 		GroupID: group.ID, InstanceName: "Molten Core", EncounterName: "Ragnaros",
-		PeakWeight: 1, MasteryWeight: 1, RenownPoints: 12, FinalBossBonus: 3,
+		PeakWeight: 1, MasteryWeight: 1, RenownPoints: 15,
 	})
 	require.NoError(t, err)
 	_, err = q.PutRatingRaidPolicy(ctx, database.PutRatingRaidPolicyParams{

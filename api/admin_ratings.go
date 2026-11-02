@@ -388,7 +388,7 @@ func (api *API) AdminListRatingBossPolicies(w http.ResponseWriter, r *http.Reque
 	}
 	out := make([]chroniclesdk.AdminRatingBossPolicy, 0, len(bosses))
 	for _, b := range bosses {
-		out = append(out, chroniclesdk.AdminRatingBossPolicy{GroupID: b.GroupID, InstanceName: b.InstanceName, EncounterName: b.EncounterName, PeakWeight: b.PeakWeight, MasteryWeight: b.MasteryWeight, RenownPoints: b.RenownPoints, FinalBossBonus: b.FinalBossBonus})
+		out = append(out, chroniclesdk.AdminRatingBossPolicy{GroupID: b.GroupID, InstanceName: b.InstanceName, EncounterName: b.EncounterName, PeakWeight: b.PeakWeight, MasteryWeight: b.MasteryWeight, RenownPoints: b.RenownPoints})
 	}
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.AdminRatingBossPoliciesResponse{Bosses: out})
 }
@@ -420,7 +420,7 @@ func (api *API) AdminPutRatingBossPolicy(w http.ResponseWriter, r *http.Request)
 	if !ratingAdminRead(w, r, &req) {
 		return
 	}
-	if req.ExpectedVersion <= 0 || !ratingBossName(req.InstanceName) || !ratingBossName(req.EncounterName) || !ratingFinite(req.PeakWeight) || req.PeakWeight <= 0 || !ratingFinite(req.MasteryWeight) || req.MasteryWeight <= 0 || !ratingFinite(req.RenownPoints) || req.RenownPoints < 0 || !ratingFinite(req.FinalBossBonus) || req.FinalBossBonus < 0 {
+	if req.ExpectedVersion <= 0 || !ratingBossName(req.InstanceName) || !ratingBossName(req.EncounterName) || !ratingFinite(req.PeakWeight) || req.PeakWeight <= 0 || !ratingFinite(req.MasteryWeight) || req.MasteryWeight <= 0 || !ratingFinite(req.RenownPoints) || req.RenownPoints < 0 {
 		ratingAdminError(w, r, http.StatusBadRequest, "Invalid boss policy, expected_version, names, weights, or points")
 		return
 	}
@@ -430,7 +430,7 @@ func (api *API) AdminPutRatingBossPolicy(w http.ResponseWriter, r *http.Request)
 		if err := ratingBossVersion(tx, r, id, req.ExpectedVersion); err != nil {
 			return err
 		}
-		n, err := tx.PutRatingBossPolicy(ctx, database.PutRatingBossPolicyParams{GroupID: id, TenantID: servicetenant.TenantIDFromContext(ctx), InstanceName: req.InstanceName, EncounterName: req.EncounterName, PeakWeight: req.PeakWeight, MasteryWeight: req.MasteryWeight, RenownPoints: req.RenownPoints, FinalBossBonus: req.FinalBossBonus})
+		n, err := tx.PutRatingBossPolicy(ctx, database.PutRatingBossPolicyParams{GroupID: id, TenantID: servicetenant.TenantIDFromContext(ctx), InstanceName: req.InstanceName, EncounterName: req.EncounterName, PeakWeight: req.PeakWeight, MasteryWeight: req.MasteryWeight, RenownPoints: req.RenownPoints})
 		if err != nil {
 			return err
 		}

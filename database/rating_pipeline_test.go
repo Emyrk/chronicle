@@ -43,7 +43,7 @@ func TestRatingWorkerStagedPipelineAndStalePublication(t *testing.T) {
 	require.NoError(t, err)
 	_, err = q.PutRatingBossPolicy(ctx, database.PutRatingBossPolicyParams{
 		GroupID: group.ID, InstanceName: "Molten Core", EncounterName: "Ragnaros",
-		PeakWeight: 1, MasteryWeight: 1, RenownPoints: 12, FinalBossBonus: 3,
+		PeakWeight: 1, MasteryWeight: 1, RenownPoints: 15,
 	})
 	require.NoError(t, err)
 	_, err = q.PutRatingRaidPolicy(ctx, database.PutRatingRaidPolicyParams{
@@ -257,7 +257,7 @@ func TestRatingWorkerStagedPipelineAndStalePublication(t *testing.T) {
 	require.Equal(t, "ready", checkpoint(next).Phase)
 	_, err = q.PutRatingBossPolicy(ctx, database.PutRatingBossPolicyParams{
 		GroupID: group.ID, InstanceName: "Molten Core", EncounterName: "Ragnaros",
-		PeakWeight: 2, MasteryWeight: 1, RenownPoints: 12, FinalBossBonus: 3,
+		PeakWeight: 2, MasteryWeight: 1, RenownPoints: 15,
 	})
 	require.NoError(t, err)
 	require.Error(t, worker.Work(ctx, job))

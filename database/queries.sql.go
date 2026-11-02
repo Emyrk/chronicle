@@ -22680,7 +22680,7 @@ func (q *sqlQuerier) DeleteRatingBossPolicy(ctx context.Context, arg DeleteRatin
 }
 
 const listRatingBossPolicies = `-- name: ListRatingBossPolicies :many
-SELECT boss.group_id, boss.instance_name, boss.encounter_name, boss.peak_weight, boss.mastery_weight, boss.renown_points, boss.final_boss_bonus
+SELECT boss.group_id, boss.instance_name, boss.encounter_name, boss.peak_weight, boss.mastery_weight, boss.renown_points
 FROM rating_group_boss_policies boss
 JOIN rating_realm_groups grp ON grp.id = boss.group_id
 JOIN wow_servers server ON server.id = grp.server_id
@@ -22709,7 +22709,6 @@ func (q *sqlQuerier) ListRatingBossPolicies(ctx context.Context, arg ListRatingB
 			&i.PeakWeight,
 			&i.MasteryWeight,
 			&i.RenownPoints,
-			&i.FinalBossBonus,
 		); err != nil {
 			return nil, err
 		}
@@ -22766,30 +22765,28 @@ func (q *sqlQuerier) ListTenantRatingPolicies(ctx context.Context, tenantID uuid
 const putRatingBossPolicy = `-- name: PutRatingBossPolicy :execrows
 INSERT INTO rating_group_boss_policies (
     group_id, instance_name, encounter_name, peak_weight, mastery_weight,
-    renown_points, final_boss_bonus
+    renown_points
 )
 SELECT policy.group_id, $1, $2, $3,
-       $4, $5, $6
+       $4, $5
 FROM rating_group_policies policy
 JOIN rating_realm_groups grp ON grp.id = policy.group_id
 JOIN wow_servers server ON server.id = grp.server_id
-WHERE policy.group_id = $7 AND server.tenant_id IS NOT DISTINCT FROM NULLIF($8::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+WHERE policy.group_id = $6 AND server.tenant_id IS NOT DISTINCT FROM NULLIF($7::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
 ON CONFLICT (group_id, instance_name, encounter_name) DO UPDATE SET
     peak_weight = EXCLUDED.peak_weight,
     mastery_weight = EXCLUDED.mastery_weight,
-    renown_points = EXCLUDED.renown_points,
-    final_boss_bonus = EXCLUDED.final_boss_bonus
+    renown_points = EXCLUDED.renown_points
 `
 
 type PutRatingBossPolicyParams struct {
-	InstanceName   string    `db:"instance_name" json:"instance_name"`
-	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
-	PeakWeight     float64   `db:"peak_weight" json:"peak_weight"`
-	MasteryWeight  float64   `db:"mastery_weight" json:"mastery_weight"`
-	RenownPoints   float64   `db:"renown_points" json:"renown_points"`
-	FinalBossBonus float64   `db:"final_boss_bonus" json:"final_boss_bonus"`
-	GroupID        uuid.UUID `db:"group_id" json:"group_id"`
-	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+	PeakWeight    float64   `db:"peak_weight" json:"peak_weight"`
+	MasteryWeight float64   `db:"mastery_weight" json:"mastery_weight"`
+	RenownPoints  float64   `db:"renown_points" json:"renown_points"`
+	GroupID       uuid.UUID `db:"group_id" json:"group_id"`
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
 }
 
 func (q *sqlQuerier) PutRatingBossPolicy(ctx context.Context, arg PutRatingBossPolicyParams) (int64, error) {
@@ -22799,7 +22796,6 @@ func (q *sqlQuerier) PutRatingBossPolicy(ctx context.Context, arg PutRatingBossP
 		arg.PeakWeight,
 		arg.MasteryWeight,
 		arg.RenownPoints,
-		arg.FinalBossBonus,
 		arg.GroupID,
 		arg.TenantID,
 	)

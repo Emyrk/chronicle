@@ -303,7 +303,7 @@ func projectPlayerRenown(ctx context.Context, tx database.Store, cp database.Rat
 	if err != nil {
 		return err
 	}
-	award, err := RenownAward(b.RenownPoints, b.FinalBossBonus, b.FinalBossBonus > 0)
+	award, err := RenownAward(b.RenownPoints)
 	if err != nil {
 		return err
 	}
@@ -330,7 +330,7 @@ func projectGuildRenown(ctx context.Context, tx database.Store, cp database.Rati
 	if err != nil {
 		return err
 	}
-	award, err := RenownAward(b.RenownPoints, b.FinalBossBonus, b.FinalBossBonus > 0)
+	award, err := RenownAward(b.RenownPoints)
 	if err != nil {
 		return err
 	}

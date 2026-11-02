@@ -122,6 +122,47 @@ CREATE TYPE wow_playable_race AS ENUM (
     'Draenei'
 );
 
+CREATE FUNCTION apply_rating_renown_template() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    selected_flavor TEXT;
+    template_version INT;
+BEGIN
+    SELECT CASE
+        WHEN server.id = '10ac9e23-ff74-43ed-83ad-96c123017097'::uuid THEN 'turtle'
+        WHEN 'vanilla' = ANY(dataset.default_flavor) THEN 'vanilla'
+        ELSE NULL END INTO selected_flavor
+    FROM rating_realm_groups grp
+    JOIN wow_servers server ON server.id = grp.server_id
+    LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
+    LEFT JOIN datasets dataset ON dataset.id = COALESCE(server.default_dataset_id, tenant.default_dataset_id)
+    WHERE grp.id = NEW.group_id;
+
+    IF selected_flavor IS NOT NULL THEN
+        SELECT max(version) INTO template_version FROM rating_renown_templates
+        WHERE flavor = selected_flavor;
+        INSERT INTO rating_group_raid_policies (group_id, instance_name, peak_weight, mastery_weight)
+        SELECT NEW.group_id, instance_name, 1, 1
+        FROM rating_renown_template_bosses
+        WHERE flavor = selected_flavor AND version = template_version
+        GROUP BY instance_name
+        ON CONFLICT (group_id, instance_name) DO NOTHING;
+
+        INSERT INTO rating_group_boss_policies
+            (group_id, instance_name, encounter_name, peak_weight, mastery_weight, renown_points)
+        SELECT NEW.group_id, instance_name, encounter_name, 1, 1, renown_points
+        FROM rating_renown_template_bosses
+        WHERE flavor = selected_flavor AND version = template_version
+        ON CONFLICT (group_id, instance_name, encounter_name) DO NOTHING;
+        -- Child-row version triggers record edits. Initial defaults are part of
+        -- this initial policy, not subsequent administrative revisions.
+        UPDATE rating_group_policies
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
 CREATE FUNCTION bump_rating_config_revision() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -2158,8 +2199,6 @@ CREATE TABLE rating_group_boss_policies (
     peak_weight double precision NOT NULL,
     mastery_weight double precision NOT NULL,
     renown_points double precision NOT NULL,
-    final_boss_bonus double precision NOT NULL,
-    CONSTRAINT rating_group_boss_policies_final_boss_bonus_check CHECK ((final_boss_bonus >= (0)::double precision)),
     CONSTRAINT rating_group_boss_policies_mastery_weight_check CHECK ((mastery_weight > (0)::double precision)),
     CONSTRAINT rating_group_boss_policies_peak_weight_check CHECK ((peak_weight > (0)::double precision)),
     CONSTRAINT rating_group_boss_policies_renown_points_check CHECK ((renown_points >= (0)::double precision))
@@ -2283,6 +2322,21 @@ CREATE TABLE rating_rebuild_checkpoints (
     CONSTRAINT rating_rebuild_checkpoints_check CHECK ((source_cutoff <= as_of)),
     CONSTRAINT rating_rebuild_checkpoints_cursor_check CHECK ((jsonb_typeof(cursor) = 'object'::text)),
     CONSTRAINT rating_rebuild_checkpoints_phase_check CHECK ((length(btrim(phase)) > 0))
+);
+
+CREATE TABLE rating_renown_template_bosses (
+    flavor text NOT NULL,
+    version integer NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    renown_points double precision NOT NULL,
+    CONSTRAINT rating_renown_template_bosses_renown_points_check CHECK ((renown_points >= (0)::double precision))
+);
+
+CREATE TABLE rating_renown_templates (
+    flavor text NOT NULL,
+    version integer NOT NULL,
+    CONSTRAINT rating_renown_templates_version_check CHECK ((version > 0))
 );
 
 CREATE TABLE rating_scope_scores (
@@ -3634,6 +3688,12 @@ ALTER TABLE ONLY rating_rebuild_checkpoints
 ALTER TABLE ONLY rating_rebuild_checkpoints
     ADD CONSTRAINT rating_rebuild_checkpoints_pkey PRIMARY KEY (generation_id);
 
+ALTER TABLE ONLY rating_renown_template_bosses
+    ADD CONSTRAINT rating_renown_template_bosses_pkey PRIMARY KEY (flavor, version, instance_name, encounter_name);
+
+ALTER TABLE ONLY rating_renown_templates
+    ADD CONSTRAINT rating_renown_templates_pkey PRIMARY KEY (flavor, version);
+
 ALTER TABLE ONLY rating_scope_scores
     ADD CONSTRAINT rating_scope_scores_pkey PRIMARY KEY (generation_id, group_id, realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind);
 
@@ -4182,8 +4242,6 @@ CREATE INDEX rating_boss_scores_group_idx ON rating_boss_scores USING btree (gen
 
 CREATE INDEX rating_boss_scores_leaderboard_idx ON rating_boss_scores USING btree (generation_id, tenant_id, rating_metric, window_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, score DESC);
 
-CREATE UNIQUE INDEX rating_group_final_boss_idx ON rating_group_boss_policies USING btree (group_id, instance_name) WHERE (final_boss_bonus > (0)::double precision);
-
 CREATE INDEX rating_realm_group_memberships_group_idx ON rating_realm_group_memberships USING btree (group_id, realm_id);
 
 CREATE UNIQUE INDEX rating_rebuild_checkpoints_building_idx ON rating_rebuild_checkpoints USING btree (tenant_id) WHERE (phase <> ALL (ARRAY['complete'::text, 'aborted'::text]));
@@ -4265,6 +4323,8 @@ CREATE TRIGGER rating_group_revision BEFORE INSERT OR DELETE OR UPDATE ON rating
 CREATE TRIGGER rating_membership_revision AFTER INSERT OR DELETE OR UPDATE ON rating_realm_group_memberships FOR EACH ROW EXECUTE FUNCTION bump_rating_config_revision();
 
 CREATE TRIGGER rating_policy_revision AFTER INSERT OR DELETE OR UPDATE ON rating_group_policies FOR EACH ROW EXECUTE FUNCTION bump_rating_config_revision();
+
+CREATE TRIGGER rating_policy_seed_renown AFTER INSERT ON rating_group_policies FOR EACH ROW EXECUTE FUNCTION apply_rating_renown_template();
 
 CREATE TRIGGER rating_raid_policy_revision AFTER INSERT OR DELETE OR UPDATE ON rating_group_raid_policies FOR EACH ROW EXECUTE FUNCTION bump_rating_config_revision();
 
@@ -4748,6 +4808,9 @@ ALTER TABLE ONLY rating_realm_groups
 
 ALTER TABLE ONLY rating_rebuild_checkpoints
     ADD CONSTRAINT rating_rebuild_checkpoints_generation_id_fkey FOREIGN KEY (generation_id) REFERENCES rating_score_generations(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY rating_renown_template_bosses
+    ADD CONSTRAINT rating_renown_template_bosses_flavor_version_fkey FOREIGN KEY (flavor, version) REFERENCES rating_renown_templates(flavor, version);
 
 ALTER TABLE ONLY rating_scope_scores
     ADD CONSTRAINT rating_scope_scores_generation_id_fkey FOREIGN KEY (generation_id) REFERENCES rating_score_generations(id) ON DELETE CASCADE;
