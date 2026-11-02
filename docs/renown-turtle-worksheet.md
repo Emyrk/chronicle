@@ -17,7 +17,7 @@ The clear times are the operator's approximate figures from [Capybara speedruns]
 | Ruins of Ahn'Qiraj (AQ20) | 20 | base (verify) | 50m | catch-up / late | 3d | 24 | 56 | Lower size, but substantial time. |
 | Zul'Gurub (ZG) | 20 | base (verify) | 25m | catch-up | 3d | 7 | ≈16.33 | Five High Priests award 0; only one Edge of Madness boss is available per reset. |
 | Blackwing Lair (BWL) | 40 | base (verify) | 40m | mid / high | 7d | 70 | 70 | Revised ZG offers about 23% of BWL's weekly opportunity. |
-| Onyxia's Lair | 40 | base (verify) | 6m | entry / short | 5d | 6 | 8.4 | Includes Broodcommander Axelus. |
+| Onyxia's Lair | 40 | base (verify) | 6m | entry / short | 5d | 3 | 4.2 | Onyxia 2; Broodcommander Axelus 1. |
 | Emerald Sanctum | 40 | normal / hard (verify) | ~20m | custom (verify) | 7d | **E + S (either mode)** | **E + S (either mode)** | E = Erennius points; S = normal Solnius points. Hard-mode Solnius earns E + S as a single encounter instead of Erennius + normal Solnius. |
 | Timbermaw Hold | 20 | hard | **unknown** | custom 20-player | 7d | **TBD** | **TBD** | Hard raid; clear time and points pending. |
 | Molten Core (MC) | 40 | base (verify) | 45m | entry | 7d | 40 | 40 | Turtle omits Gehennas; Kronos vanilla needs a separate Gehennas award. |
@@ -30,7 +30,7 @@ The draft uses a **70-point BWL clear**, not 1,000. ZG's five High Priest encoun
 | ---: | --- | --- | ---: | ---: |
 | 3d | ZG | High Priestess Jeklik 0; High Priest Venoxis 0; High Priestess Mar'li 0; Bloodlord Mandokir 1; High Priest Thekal 0; High Priestess Arlokk 0; Jin'do the Hexxer 1; Hakkar 3; Gahz'ranka 1; Edge of Madness 1 (one of Gri'lek, Hazza'rah, Renataki, Wushoolay) | 7 | ≈16.33 |
 | 3d | AQ20 | Kurinnaxx 3; General Rajaxx 3; Moam 3; Buru the Gorger 3; Ayamiss the Hunter 3; Ossirian the Unscarred 9 | 24 | 56 |
-| 5d | Onyxia | Onyxia 4; Broodcommander Axelus 2 | 6 | 8.4 |
+| 5d | Onyxia | Onyxia 2; Broodcommander Axelus 1 | 3 | 4.2 |
 | 5d | K10 | Lord Blackwald II 5; Brood Queen Araxxna 5; Grizikil 5; Clawlord Howlfang 5; Moroes 10 | 30 | 42 |
 | 7d | MC | Lucifron 2; Magmadar 2; Garr 2; Shazzrah 2; Baron Geddon 2; Sulfuron Harbinger 2; Golemagg the Incinerator 2; Incindis 2; Basalthar & Smoldaris 2; Sorcerer-Thane Thaurissan 2; Majordomo Executus 6; Ragnaros 14 | 40 | 40 |
 | 7d | BWL | Razorgore the Untamed 7; Vaelastrasz the Corrupt 7; Broodlord Lashlayer 7; Firemaw 7; Ebonroc 7; Flamegor 7; Chromaggus 7; Nefarian 14; Ezzel Darkbrewer 7 | 70 | 70 |
