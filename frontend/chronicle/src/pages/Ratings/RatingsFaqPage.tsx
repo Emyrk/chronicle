@@ -101,8 +101,9 @@ export function RatingsFaqPage() {
             <Faq q="Who am I compared against?">
               <p>
                 Parses compare you with your own <strong>spec on the same boss</strong>, and with your <a href="/subspecs">subspec</a> where one
-                exists, so a Feral (Bear) is not ranked against Feral (Cat) damage. Ratings are calculated <strong>per realm</strong>: pick your realm
-                at the top of the leaderboards, and the choice is remembered for your next visit.
+                exists, so a Feral (Bear) is not ranked against Feral (Cat) damage. Ratings are calculated across the <strong>whole server</strong>,
+                every realm together. The realm picker at the top of the leaderboards only filters who is listed, so a player keeps the same rating
+                whichever realm you view; your choice is remembered for your next visit.
               </p>
             </Faq>
             <Faq q="Which kills count, and for how long?">
@@ -228,7 +229,7 @@ export function RatingsFaqPage() {
             <Faq q="Do guilds have ratings too?" open>
               <p>
                 Yes. Switch the leaderboards to <strong>Guilds</strong> and the same three ratings rank guilds. A guild's parse is its{" "}
-                <strong>kill time</strong> on a boss: the fastest kill of that boss on the realm scores 100, and slower kills score less in
+                <strong>kill time</strong> on a boss: the fastest kill of that boss on the server scores 100, and slower kills score less in
                 proportion.
               </p>
               <ul>

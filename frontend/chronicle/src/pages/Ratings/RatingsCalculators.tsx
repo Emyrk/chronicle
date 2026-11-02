@@ -281,12 +281,12 @@ export function GuildPeakCalculator() {
       id="guild-peak-calculator"
       title="Guild Peak"
       accent={PEAK.accent}
-      description="A guild's kill is scored by its time: the fastest kill of that boss on the realm is 100, and a kill twice as long scores 50."
+      description="A guild's kill is scored by its time: the fastest kill of that boss on the server is 100, and a kill twice as long scores 50."
       inputs={
         <>
           <Slider
             label="Fastest kill"
-            hint="of this boss on your realm"
+            hint="of this boss on the server"
             value={fastest}
             onChange={(v) => {
               setFastest(v)

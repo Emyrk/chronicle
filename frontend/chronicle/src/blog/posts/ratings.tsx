@@ -81,8 +81,8 @@ export function RatingsLaunchPost({ post }: PostProps) {
         </li>
       </ul>
       <p>
-        Peak and Ranked Mastery compare you with your own spec and subspec. Every rating is per realm and covers the
-        last 180 days by default; switch to All time to see everything.
+        Peak and Ranked Mastery compare you with your own spec and subspec. Every rating is calculated across the whole
+        server and covers the last 180 days by default; switch to All time to see everything.
       </p>
 
       <h2>Rebuilt leaderboards</h2>
@@ -98,7 +98,8 @@ export function RatingsLaunchPost({ post }: PostProps) {
           <strong>Pick a class</strong> by its icon, then a spec and subspec. DPS or healing, characters or guilds.
         </li>
         <li>
-          <strong>Pick your realm</strong> once; it is remembered for next time.
+          <strong>Filter by realm</strong> to see your own realm's players; ratings stay server-wide, and the choice is
+          remembered for next time.
         </li>
         <li>
           <strong>Overview</strong> shows the fastest clears, the rating leaders, best performances, and a card for
@@ -113,8 +114,8 @@ export function RatingsLaunchPost({ post }: PostProps) {
       <h2>Guilds get ratings too</h2>
       <p>
         Switch to <strong>Guilds</strong> and the same three ratings rank guilds. A guild's parse is its kill time on
-        each boss: the fastest kill on the realm scores 100. Guild Mastery rewards fast kills week after week, and Guild
-        Renown rewards a long raiding history. Full clear times stay on the Speedruns tab.
+        each boss: the fastest kill on the server scores 100. Guild Mastery rewards fast kills week after week, and
+        Guild Renown rewards a long raiding history. Full clear times stay on the Speedruns tab.
       </p>
 
       <h2>How it all works</h2>
