@@ -46,7 +46,7 @@ func TestRatingMasteryAccumulatorPagesAndCheckpointCAS(t *testing.T) {
 	for i := range 211 {
 		killed := asOf.Add(-time.Duration(211-i) * time.Hour)
 		if i == 0 {
-			killed = asOf
+			killed = asOf.Add(-time.Minute)
 		}
 		rows = append(rows, []any{generation, uuid.Nil, realm, uuid.New(), "player", "Raid", "Boss",
 			"Normal", int16(40), "MAGE", "", "", killed, "dps", 100.0, float64(i / 5)})

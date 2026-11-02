@@ -64,7 +64,7 @@ WHERE generation_id = @generation_id AND tenant_id = @tenant_id
   AND player_class = @player_class AND player_spec = @player_spec
   AND player_sub_spec = @player_sub_spec AND performance_metric = @performance_metric
   AND locked_parse BETWEEN 0 AND 100
-  AND killed_at >= @window_start::timestamptz AND killed_at <= @as_of::timestamptz
+  AND killed_at >= @window_start::timestamptz AND killed_at < @as_of::timestamptz
   AND (@first_page::boolean OR (locked_parse, killed_at, run_id) >
        (@after_score::double precision, @after_killed_at::timestamptz, @after_run_id::uuid))
 ORDER BY locked_parse ASC, killed_at ASC, run_id ASC
@@ -77,7 +77,7 @@ WHERE generation_id = @generation_id AND tenant_id = @tenant_id
   AND instance_name = @instance_name AND encounter_name = @encounter_name
   AND difficulty_name = @difficulty_name AND max_players = @max_players
   AND locked_parse BETWEEN 0 AND 100
-  AND killed_at >= @window_start::timestamptz AND killed_at <= @as_of::timestamptz
+  AND killed_at >= @window_start::timestamptz AND killed_at < @as_of::timestamptz
   AND (@first_page::boolean OR (locked_parse, killed_at, run_id) >
        (@after_score::double precision, @after_killed_at::timestamptz, @after_run_id::uuid))
 ORDER BY locked_parse ASC, killed_at ASC, run_id ASC

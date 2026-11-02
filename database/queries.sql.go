@@ -22286,7 +22286,7 @@ WHERE generation_id = $1 AND tenant_id = $2
   AND instance_name = $5 AND encounter_name = $6
   AND difficulty_name = $7 AND max_players = $8
   AND locked_parse BETWEEN 0 AND 100
-  AND killed_at >= $9::timestamptz AND killed_at <= $10::timestamptz
+  AND killed_at >= $9::timestamptz AND killed_at < $10::timestamptz
   AND ($11::boolean OR (locked_parse, killed_at, run_id) >
        ($12::double precision, $13::timestamptz, $14::uuid))
 ORDER BY locked_parse ASC, killed_at ASC, run_id ASC
@@ -22362,7 +22362,7 @@ WHERE generation_id = $1 AND tenant_id = $2
   AND player_class = $9 AND player_spec = $10
   AND player_sub_spec = $11 AND performance_metric = $12
   AND locked_parse BETWEEN 0 AND 100
-  AND killed_at >= $13::timestamptz AND killed_at <= $14::timestamptz
+  AND killed_at >= $13::timestamptz AND killed_at < $14::timestamptz
   AND ($15::boolean OR (locked_parse, killed_at, run_id) >
        ($16::double precision, $17::timestamptz, $18::uuid))
 ORDER BY locked_parse ASC, killed_at ASC, run_id ASC
