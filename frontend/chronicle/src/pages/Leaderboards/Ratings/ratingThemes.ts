@@ -52,7 +52,7 @@ export const RANK_COLORS = ["#e6c36a", "#c3c9d2", "#c4824a"]
 export function scopeTitle(scope: RatingScope, instanceName: string): string {
   switch (scopeKind(scope)) {
     case "spec":
-      return `${scope.spec} ${CLASS_DISPLAY[scope.cls!] ?? scope.cls}`
+      return `${scope.spec}${scope.subSpec ? ` (${scope.subSpec})` : ""} ${CLASS_DISPLAY[scope.cls!] ?? scope.cls}`
     case "class":
       return CLASS_DISPLAY[scope.cls!] ?? scope.cls!
     case "boss":

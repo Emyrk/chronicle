@@ -1,0 +1,1312 @@
+[
+ {
+  "name": "Blackwing Lair",
+  "category": "raid",
+  "zone_names": [
+   "blackwing lair",
+   "\u9ed1\u7ffc\u4e4b\u5de2"
+  ],
+  "boss_count": 9,
+  "progression_bosses": [
+   "Razorgore the Untamed",
+   "Vaelastrasz the Corrupt",
+   "Broodlord Lashlayer",
+   "Firemaw",
+   "Ebonroc",
+   "Flamegor",
+   "Chromaggus",
+   "Nefarian",
+   "Ezzel Darkbrewer"
+  ],
+  "damage_by_encounter": {
+   "Broodlord Lashlayer": {
+    "mode": "boss-only"
+   }
+  },
+  "speedrun_rules": {
+   "requirements": [
+    {
+     "name": "Razorgore the Untamed",
+     "entry_ids": [
+      12435
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Vaelastrasz the Corrupt",
+     "entry_ids": [
+      13020
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Broodlord Lashlayer",
+     "entry_ids": [
+      12017
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Firemaw",
+     "entry_ids": [
+      11983
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Ebonroc",
+     "entry_ids": [
+      14601
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Flamegor",
+     "entry_ids": [
+      11981
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Chromaggus",
+     "entry_ids": [
+      14020
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Nefarian",
+     "entry_ids": [
+      11583
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Ezzel Darkbrewer",
+     "entry_ids": [
+      65148
+     ],
+     "count": 1,
+     "category": "Bosses"
+    }
+   ]
+  },
+  "raid_progression_order": 300,
+  "bosses": [
+   {
+    "entry_id": 12017,
+    "name": "Broodlord Lashlayer"
+   },
+   {
+    "entry_id": 14020,
+    "name": "Chromaggus"
+   },
+   {
+    "entry_id": 14601,
+    "name": "Ebonroc"
+   },
+   {
+    "entry_id": 65148,
+    "name": "Ezzel Darkbrewer"
+   },
+   {
+    "entry_id": 11983,
+    "name": "Firemaw"
+   },
+   {
+    "entry_id": 11981,
+    "name": "Flamegor"
+   },
+   {
+    "entry_id": 11583,
+    "name": "Nefarian"
+   },
+   {
+    "entry_id": 12435,
+    "name": "Razorgore the Untamed"
+   },
+   {
+    "entry_id": 13020,
+    "name": "Vaelastrasz the Corrupt"
+   }
+  ]
+ },
+ {
+  "name": "Deadmines",
+  "category": "dungeon",
+  "zone_names": [
+   "the deadmines",
+   "deadmines",
+   "\u6b7b\u4ea1\u77ff\u4e95"
+  ],
+  "boss_count": 7,
+  "progression_bosses": [
+   "Cookie",
+   "Rhahk'Zor",
+   "Sneed",
+   "Gilnid",
+   "Mr. Smite",
+   "Captain Greenskin",
+   "Edwin VanCleef"
+  ],
+  "speedrun_rules": {
+   "requirements": [
+    {
+     "name": "Cookie",
+     "entry_ids": [
+      645
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Rhahk'Zor",
+     "entry_ids": [
+      644
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Sneed's Shredder",
+     "entry_ids": [
+      642
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Sneed",
+     "entry_ids": [
+      643
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Gilnid",
+     "entry_ids": [
+      1763
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Mr. Smite",
+     "entry_ids": [
+      646
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Captain Greenskin",
+     "entry_ids": [
+      647
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Edwin VanCleef",
+     "entry_ids": [
+      639
+     ],
+     "count": 1,
+     "category": "Bosses"
+    }
+   ],
+   "level_range": {
+    "min_level": 0,
+    "max_level": 26
+   }
+  },
+  "bosses": [
+   {
+    "entry_id": 647,
+    "name": "Captain Greenskin"
+   },
+   {
+    "entry_id": 645,
+    "name": "Cookie"
+   },
+   {
+    "entry_id": 639,
+    "name": "Edwin VanCleef"
+   },
+   {
+    "entry_id": 1763,
+    "name": "Gilnid"
+   },
+   {
+    "entry_id": 61961,
+    "name": "Jared Voss"
+   },
+   {
+    "entry_id": 3586,
+    "name": "Miner Johnson"
+   },
+   {
+    "entry_id": 646,
+    "name": "Mr. Smite"
+   },
+   {
+    "entry_id": 644,
+    "name": "Rhahk'Zor"
+   },
+   {
+    "entry_id": 643,
+    "name": "Sneed"
+   },
+   {
+    "entry_id": 642,
+    "name": "Sneed's Shredder"
+   }
+  ]
+ },
+ {
+  "name": "Molten Core",
+  "category": "raid",
+  "zone_names": [
+   "molten core",
+   "\u7194\u706b\u4e4b\u5fc3"
+  ],
+  "boss_count": 12,
+  "progression_bosses": [
+   "Lucifron",
+   "Magmadar",
+   "Garr",
+   "Shazzrah",
+   "Baron Geddon",
+   "Sulfuron Harbinger",
+   "Golemagg the Incinerator",
+   "Incindis",
+   "Basalthar & Smoldaris",
+   "Sorcerer-Thane Thaurissan",
+   "Majordomo Executus",
+   "Ragnaros"
+  ],
+  "damage_by_encounter": {
+   "Baron Geddon": {
+    "mode": "boss-only"
+   },
+   "Basalthar & Smoldaris": {
+    "mode": "boss-only"
+   },
+   "Garr": {
+    "mode": "entries",
+    "entry_ids": [
+     12057,
+     12099
+    ]
+   },
+   "Golemagg the Incinerator": {
+    "mode": "entries",
+    "entry_ids": [
+     11988,
+     11672
+    ]
+   },
+   "Incindis": {
+    "mode": "boss-only"
+   },
+   "Lucifron": {
+    "mode": "entries",
+    "entry_ids": [
+     12118,
+     12119
+    ]
+   },
+   "Magmadar": {
+    "mode": "entries",
+    "entry_ids": [
+     11982
+    ]
+   },
+   "Majordomo Executus": {
+    "mode": "entries",
+    "entry_ids": [
+     12018,
+     11663,
+     11664
+    ]
+   },
+   "Ragnaros": {
+    "mode": "entries",
+    "entry_ids": [
+     11502,
+     12143
+    ]
+   },
+   "Shazzrah": {
+    "mode": "boss-only"
+   },
+   "Sorcerer-Thane Thaurissan": {
+    "mode": "entries",
+    "entry_ids": [
+     57642,
+     57643
+    ]
+   },
+   "Sulfuron Harbinger": {
+    "mode": "entries",
+    "entry_ids": [
+     12098,
+     11662,
+     12143
+    ]
+   }
+  },
+  "speedrun_rules": {
+   "requirements": [
+    {
+     "name": "Lucifron",
+     "entry_ids": [
+      12118
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Magmadar",
+     "entry_ids": [
+      11982
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Garr",
+     "entry_ids": [
+      12057
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Shazzrah",
+     "entry_ids": [
+      12264
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Baron Geddon",
+     "entry_ids": [
+      12056
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Sulfuron Harbinger",
+     "entry_ids": [
+      12098
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Golemagg the Incinerator",
+     "entry_ids": [
+      11988
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Incindis",
+     "entry_ids": [
+      52145
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Basalthar",
+     "entry_ids": [
+      65020
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Smoldaris",
+     "entry_ids": [
+      65021
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Sorcerer-Thane Thaurissan",
+     "entry_ids": [
+      57642
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Majordomo Executus",
+     "entry_ids": [
+      12018
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Ragnaros",
+     "entry_ids": [
+      11502
+     ],
+     "count": 1,
+     "category": "Bosses"
+    }
+   ]
+  },
+  "raid_progression_order": 100,
+  "bosses": [
+   {
+    "entry_id": 12056,
+    "name": "Baron Geddon"
+   },
+   {
+    "entry_id": 65020,
+    "name": "Basalthar & Smoldaris"
+   },
+   {
+    "entry_id": 65021,
+    "name": "Basalthar & Smoldaris"
+   },
+   {
+    "entry_id": 12057,
+    "name": "Garr"
+   },
+   {
+    "entry_id": 12259,
+    "name": "Gehennas"
+   },
+   {
+    "entry_id": 11988,
+    "name": "Golemagg the Incinerator"
+   },
+   {
+    "entry_id": 52145,
+    "name": "Incindis"
+   },
+   {
+    "entry_id": 12118,
+    "name": "Lucifron"
+   },
+   {
+    "entry_id": 11982,
+    "name": "Magmadar"
+   },
+   {
+    "entry_id": 12018,
+    "name": "Majordomo Executus"
+   },
+   {
+    "entry_id": 11502,
+    "name": "Ragnaros"
+   },
+   {
+    "entry_id": 12264,
+    "name": "Shazzrah"
+   },
+   {
+    "entry_id": 57642,
+    "name": "Sorcerer-Thane Thaurissan"
+   },
+   {
+    "entry_id": 12098,
+    "name": "Sulfuron Harbinger"
+   }
+  ]
+ },
+ {
+  "name": "Naxxramas",
+  "category": "raid",
+  "zone_names": [
+   "naxxramas",
+   "the upper necropolis",
+   "\u7eb3\u514b\u8428\u739b\u65af",
+   "\u4e0a\u5c42\u5927\u5893\u5730"
+  ],
+  "boss_count": 15,
+  "progression_bosses": [
+   "Anub'Rekhan",
+   "Grand Widow Faerlina",
+   "Maexxna",
+   "Noth the Plaguebringer",
+   "Heigan the Unclean",
+   "Loatheb",
+   "Instructor Razuvious",
+   "Gothik the Harvester",
+   "Four Horsemen",
+   "Patchwerk",
+   "Grobbulus",
+   "Gluth",
+   "Thaddius",
+   "Sapphiron",
+   "Kel'Thuzad"
+  ],
+  "speedrun_rules": {
+   "requirements": [
+    {
+     "name": "Anub'Rekhan",
+     "entry_ids": [
+      15956
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Grand Widow Faerlina",
+     "entry_ids": [
+      15953
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Maexxna",
+     "entry_ids": [
+      15952
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Noth the Plaguebringer",
+     "entry_ids": [
+      15954
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Heigan the Unclean",
+     "entry_ids": [
+      15936
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Loatheb",
+     "entry_ids": [
+      16011
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Instructor Razuvious",
+     "entry_ids": [
+      16061
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Gothik the Harvester",
+     "entry_ids": [
+      16060
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Four Horsemen: Thane Korth'azz",
+     "entry_ids": [
+      16064
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Four Horsemen: Lady Blaumeux",
+     "entry_ids": [
+      16065
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Four Horsemen: Sir Zeliek",
+     "entry_ids": [
+      16063
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Four Horsemen: Highlord Mograine",
+     "entry_ids": [
+      16062
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Patchwerk",
+     "entry_ids": [
+      16028
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Grobbulus",
+     "entry_ids": [
+      15931
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Gluth",
+     "entry_ids": [
+      15932
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Thaddius",
+     "entry_ids": [
+      15928
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Stalagg",
+     "entry_ids": [
+      15929
+     ],
+     "count": 1,
+     "category": "Trash"
+    },
+    {
+     "name": "Feugen",
+     "entry_ids": [
+      15930
+     ],
+     "count": 1,
+     "category": "Trash"
+    },
+    {
+     "name": "Sapphiron",
+     "entry_ids": [
+      15989
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Kel'Thuzad",
+     "entry_ids": [
+      15990
+     ],
+     "count": 1,
+     "category": "Bosses"
+    }
+   ]
+  },
+  "raid_progression_order": 700,
+  "bosses": [
+   {
+    "entry_id": 15956,
+    "name": "Anub'Rekhan"
+   },
+   {
+    "entry_id": 16064,
+    "name": "Four Horsemen"
+   },
+   {
+    "entry_id": 16065,
+    "name": "Four Horsemen"
+   },
+   {
+    "entry_id": 16063,
+    "name": "Four Horsemen"
+   },
+   {
+    "entry_id": 16062,
+    "name": "Four Horsemen"
+   },
+   {
+    "entry_id": 15932,
+    "name": "Gluth"
+   },
+   {
+    "entry_id": 16060,
+    "name": "Gothik the Harvester"
+   },
+   {
+    "entry_id": 15953,
+    "name": "Grand Widow Faerlina"
+   },
+   {
+    "entry_id": 15931,
+    "name": "Grobbulus"
+   },
+   {
+    "entry_id": 15936,
+    "name": "Heigan the Unclean"
+   },
+   {
+    "entry_id": 16061,
+    "name": "Instructor Razuvious"
+   },
+   {
+    "entry_id": 15990,
+    "name": "Kel'Thuzad"
+   },
+   {
+    "entry_id": 16011,
+    "name": "Loatheb"
+   },
+   {
+    "entry_id": 15952,
+    "name": "Maexxna"
+   },
+   {
+    "entry_id": 15954,
+    "name": "Noth the Plaguebringer"
+   },
+   {
+    "entry_id": 16028,
+    "name": "Patchwerk"
+   },
+   {
+    "entry_id": 15989,
+    "name": "Sapphiron"
+   },
+   {
+    "entry_id": 15928,
+    "name": "Thaddius"
+   }
+  ]
+ },
+ {
+  "name": "Onyxia's Lair",
+  "category": "raid",
+  "zone_names": [
+   "onyxia's lair",
+   "\u5965\u59ae\u514b\u5e0c\u4e9a\u7684\u5de2\u7a74"
+  ],
+  "boss_count": 1,
+  "progression_bosses": [
+   "Onyxia"
+  ],
+  "speedrun_rules": {
+   "requirements": [
+    {
+     "name": "Onyxia",
+     "entry_ids": [
+      10184,
+      45133
+     ],
+     "count": 1,
+     "category": "Bosses"
+    }
+   ]
+  },
+  "raid_progression_order": 200,
+  "bosses": [
+   {
+    "entry_id": 10184,
+    "name": "Onyxia"
+   }
+  ]
+ },
+ {
+  "name": "Ragefire Chasm",
+  "category": "dungeon",
+  "zone_names": [
+   "ragefire chasm",
+   "\u6012\u7130\u88c2\u8c37"
+  ],
+  "boss_count": 4,
+  "progression_bosses": [
+   "Taragaman the Hungerer",
+   "Jergosh the Invoker",
+   "Oggleflint",
+   "Bazzalan"
+  ],
+  "speedrun_rules": {
+   "requirements": [
+    {
+     "name": "Taragaman the Hungerer",
+     "entry_ids": [
+      11520
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Jergosh the Invoker",
+     "entry_ids": [
+      11518
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Oggleflint",
+     "entry_ids": [
+      11517
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Bazzalan",
+     "entry_ids": [
+      11519
+     ],
+     "count": 1,
+     "category": "Bosses"
+    }
+   ],
+   "level_range": {
+    "min_level": 0,
+    "max_level": 20
+   }
+  },
+  "bosses": [
+   {
+    "entry_id": 11519,
+    "name": "Bazzalan"
+   },
+   {
+    "entry_id": 11518,
+    "name": "Jergosh the Invoker"
+   },
+   {
+    "entry_id": 11517,
+    "name": "Oggleflint"
+   },
+   {
+    "entry_id": 11520,
+    "name": "Taragaman the Hungerer"
+   }
+  ]
+ },
+ {
+  "name": "Ruins of Ahn'Qiraj",
+  "category": "raid",
+  "zone_names": [
+   "ruins of ahn'qiraj",
+   "\u5b89\u5176\u62c9\u5e9f\u589f"
+  ],
+  "boss_count": 6,
+  "progression_bosses": [
+   "Kurinnaxx",
+   "General Rajaxx",
+   "Moam",
+   "Buru the Gorger",
+   "Ayamiss the Hunter",
+   "Ossirian the Unscarred"
+  ],
+  "speedrun_rules": {
+   "requirements": [
+    {
+     "name": "Kurinnaxx",
+     "entry_ids": [
+      15348
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "General Rajaxx",
+     "entry_ids": [
+      15341
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Moam",
+     "entry_ids": [
+      15340
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Buru the Gorger",
+     "entry_ids": [
+      15370
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Ayamiss the Hunter",
+     "entry_ids": [
+      15369
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Ossirian the Unscarred",
+     "entry_ids": [
+      15339
+     ],
+     "count": 1,
+     "category": "Bosses"
+    }
+   ]
+  },
+  "raid_progression_order": 500,
+  "bosses": [
+   {
+    "entry_id": 15369,
+    "name": "Ayamiss the Hunter"
+   },
+   {
+    "entry_id": 15370,
+    "name": "Buru the Gorger"
+   },
+   {
+    "entry_id": 15341,
+    "name": "General Rajaxx"
+   },
+   {
+    "entry_id": 15348,
+    "name": "Kurinnaxx"
+   },
+   {
+    "entry_id": 15340,
+    "name": "Moam"
+   },
+   {
+    "entry_id": 15339,
+    "name": "Ossirian the Unscarred"
+   }
+  ]
+ },
+ {
+  "name": "Temple of Ahn'Qiraj",
+  "category": "raid",
+  "zone_names": [
+   "ahn'qiraj",
+   "temple of ahn'qiraj",
+   "ahn'qiraj temple",
+   "\u5b89\u5176\u62c9\u795e\u5e99",
+   "\u5b89\u5176\u62c9"
+  ],
+  "boss_count": 9,
+  "progression_bosses": [
+   "The Prophet Skeram",
+   "Bug Family",
+   "Battleguard Sartura",
+   "Fankriss the Unyielding",
+   "Viscidus",
+   "Princess Huhuran",
+   "Twin Emperors",
+   "Ouro",
+   "C'Thun"
+  ],
+  "speedrun_rules": {
+   "requirements": [
+    {
+     "name": "The Prophet Skeram",
+     "entry_ids": [
+      15263
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Bug Family: Princess Yauj",
+     "entry_ids": [
+      15543
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Bug Family: Lord Kri",
+     "entry_ids": [
+      15511
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Bug Family: Vem",
+     "entry_ids": [
+      15544
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Battleguard Sartura",
+     "entry_ids": [
+      15516
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Fankriss the Unyielding",
+     "entry_ids": [
+      15510
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Viscidus",
+     "entry_ids": [
+      15299
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Princess Huhuran",
+     "entry_ids": [
+      15509
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Twin Emperors: Vek'nilash",
+     "entry_ids": [
+      15275
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Twin Emperors: Vek'lor",
+     "entry_ids": [
+      15276
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Ouro",
+     "entry_ids": [
+      15517
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "C'Thun",
+     "entry_ids": [
+      15727
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Eye of C'Thun",
+     "entry_ids": [
+      15589
+     ],
+     "count": 1,
+     "category": "Bosses"
+    }
+   ]
+  },
+  "raid_progression_order": 600,
+  "bosses": [
+   {
+    "entry_id": 15516,
+    "name": "Battleguard Sartura"
+   },
+   {
+    "entry_id": 15544,
+    "name": "Bug Family"
+   },
+   {
+    "entry_id": 15511,
+    "name": "Bug Family"
+   },
+   {
+    "entry_id": 15543,
+    "name": "Bug Family"
+   },
+   {
+    "entry_id": 15727,
+    "name": "C'Thun"
+   },
+   {
+    "entry_id": 15589,
+    "name": "C'Thun"
+   },
+   {
+    "entry_id": 15510,
+    "name": "Fankriss the Unyielding"
+   },
+   {
+    "entry_id": 15517,
+    "name": "Ouro"
+   },
+   {
+    "entry_id": 15957,
+    "name": "Ouro"
+   },
+   {
+    "entry_id": 15509,
+    "name": "Princess Huhuran"
+   },
+   {
+    "entry_id": 15263,
+    "name": "The Prophet Skeram"
+   },
+   {
+    "entry_id": 15275,
+    "name": "Twin Emperors"
+   },
+   {
+    "entry_id": 15276,
+    "name": "Twin Emperors"
+   },
+   {
+    "entry_id": 15299,
+    "name": "Viscidus"
+   }
+  ]
+ },
+ {
+  "name": "Zul'Gurub",
+  "category": "raid",
+  "zone_names": [
+   "zul'gurub",
+   "\u7956\u5c14\u683c\u62c9\u5e03"
+  ],
+  "boss_count": 8,
+  "progression_bosses": [
+   "High Priestess Jeklik",
+   "High Priest Venoxis",
+   "High Priestess Mar'li",
+   "Bloodlord Mandokir",
+   "High Priest Thekal",
+   "High Priestess Arlokk",
+   "Jin'do the Hexxer",
+   "Hakkar"
+  ],
+  "speedrun_rules": {
+   "requirements": [
+    {
+     "name": "Bloodlord Mandokir",
+     "entry_ids": [
+      11382
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Jin'do the Hexxer",
+     "entry_ids": [
+      11380
+     ],
+     "count": 1,
+     "category": "Bosses"
+    },
+    {
+     "name": "Hakkar",
+     "entry_ids": [
+      14834
+     ],
+     "count": 1,
+     "category": "Bosses"
+    }
+   ]
+  },
+  "raid_progression_order": 400,
+  "bosses": [
+   {
+    "entry_id": 14988,
+    "name": "Bloodlord Mandokir"
+   },
+   {
+    "entry_id": 11382,
+    "name": "Bloodlord Mandokir"
+   },
+   {
+    "entry_id": 15114,
+    "name": "Gahz'ranka"
+   },
+   {
+    "entry_id": 15082,
+    "name": "Gri'lek"
+   },
+   {
+    "entry_id": 14834,
+    "name": "Hakkar"
+   },
+   {
+    "entry_id": 15083,
+    "name": "Hazza'rah"
+   },
+   {
+    "entry_id": 11347,
+    "name": "High Priest Thekal"
+   },
+   {
+    "entry_id": 14509,
+    "name": "High Priest Thekal"
+   },
+   {
+    "entry_id": 11348,
+    "name": "High Priest Thekal"
+   },
+   {
+    "entry_id": 14599,
+    "name": "High Priest Thekal"
+   },
+   {
+    "entry_id": 14507,
+    "name": "High Priest Venoxis"
+   },
+   {
+    "entry_id": 14515,
+    "name": "High Priestess Arlokk"
+   },
+   {
+    "entry_id": 14517,
+    "name": "High Priestess Jeklik"
+   },
+   {
+    "entry_id": 14510,
+    "name": "High Priestess Mar'li"
+   },
+   {
+    "entry_id": 11380,
+    "name": "Jin'do the Hexxer"
+   },
+   {
+    "entry_id": 15084,
+    "name": "Renataki"
+   },
+   {
+    "entry_id": 15085,
+    "name": "Wushoolay"
+   }
+  ]
+ }
+]

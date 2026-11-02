@@ -32,6 +32,7 @@ export function SpreadsView({
   onShowOffRoleChange,
   onHiddenChange,
   onOpenSpec,
+  hideClassChips = false,
 }: {
   spreads: readonly ParseScoreSpread[]
   hidden: ReadonlySet<string>
@@ -41,6 +42,8 @@ export function SpreadsView({
   onShowOffRoleChange: (show: boolean) => void
   onHiddenChange: (hide: string) => void
   onOpenSpec: (spread: ParseScoreSpread) => void
+  /** Hide the class show/hide chips when a page-level class picker already filters the spreads. */
+  hideClassChips?: boolean
 }) {
   const classes = useMemo(() => {
     const byClass = new Map<string, ParseScoreSpread[]>()
@@ -67,7 +70,7 @@ export function SpreadsView({
   return (
     <div className="rounded-xl border bg-card p-3 sm:p-5">
       <div className="mb-4 flex flex-wrap items-center gap-1.5">
-        {classes.map(([playerClass, classSpreads]) => {
+        {!hideClassChips && classes.map(([playerClass, classSpreads]) => {
           const shown = classSpreads.filter((s) => !isHidden(hidden, playerClass, s.player_spec ?? "", s.player_sub_spec ?? "")).length
           const state = shown === 0 ? "hidden" : shown < classSpreads.length ? "partial" : "shown"
           const className = CLASS_DISPLAY[playerClass] ?? playerClass

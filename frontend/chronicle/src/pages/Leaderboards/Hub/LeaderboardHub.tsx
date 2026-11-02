@@ -1,0 +1,1289 @@
+import { Fragment, useState, type ReactNode } from "react"
+import { ArrowRight, Check, ChevronDown, ChevronLeft, HeartPulse, Swords, Timer, PanelLeft } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import type { SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/DropdownMenu/DropdownMenu"
+import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
+import { getInstanceBackground, getInstanceConfig } from "@/pages/Logs/utils/instanceImages"
+import { Podium } from "@/pages/Leaderboard/Podium"
+import { RATING_METRICS, scopeKind, type RatingMetric, type RatingPeriod, type RatingScope } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
+import { MetricTabs, PeriodToggle, RatingBoards } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
+import { BossPortrait, SpecIcon } from "@/pages/Leaderboards/Ratings/RatingParts"
+import { METRIC_THEMES, scopeTitle, type RatingView } from "@/pages/Leaderboards/Ratings/ratingThemes"
+import { ScopeBar } from "@/pages/Leaderboards/Ratings/ScopeBar"
+import { useBossModelImage } from "./bossModels"
+import { TABS, type HubTab } from "./hubTabs"
+import { EncounterSidebar } from "./EncounterSidebar"
+import { GuildName, GuildRatingBoards, GuildRatingLeaders, MetricColumns } from "./GuildRatings"
+import { StatisticsTab, type StatisticsView } from "./StatisticsTab"
+import { SpeedrunsTab } from "./SpeedrunsTab"
+import { PerformancesTab } from "./PerformancesTab"
+import { ParsingTab } from "./ParsingTab"
+import { RulesetInstanceView } from "@/pages/Leaderboards/RulesetInstanceView"
+import { FULL_CLEAR, type EncounterSelection } from "./encounterSelection"
+import {
+  bossSummaries,
+  bossSummary,
+  cohorts,
+  specStanding,
+  formatClock,
+  guildLogo,
+  guildTimeSpreads,
+  speedruns,
+  instanceBosses,
+  OPTIONAL_BOSSES,
+  guildRows,
+  ratingLeaders,
+  specSpreads,
+  specsFor,
+  subSpecsFor,
+  topThroughput,
+  type BossSummary,
+  type Cohort,
+  type GuildRow,
+  type GuildTimeSpread,
+  type HubPlayer,
+  type HubRole,
+  type HubSubject,
+} from "./hub.fixtures"
+
+/** Remembers whether the encounter column is collapsed, per browser. */
+const ENCOUNTERS_KEY = "chronicle.leaderboards.hub.encounters"
+
+function readEncountersOpen(): boolean {
+  try {
+    return localStorage.getItem(ENCOUNTERS_KEY) !== "closed"
+  } catch {
+    return true
+  }
+}
+
+/** Guilds mode's color: the toggle, the page tint, and the guild time box plots. */
+const GUILD_GOLD = "#e6c36a"
+
+export interface LeaderboardHubProps {
+  instanceName?: string
+  initialScope?: RatingScope
+  /** Start on a combined set of bosses instead of the full clear or one boss. */
+  initialBosses?: string[]
+  initialRole?: HubRole
+  initialSubject?: HubSubject
+  initialTab?: HubTab
+  /** Which rating board the Ratings tab opens on. */
+  initialRatingView?: RatingView
+  /** Which statistics view the Statistics tab opens on. */
+  initialStatisticsView?: StatisticsView
+  /** Back to the instance grid. */
+  onAllInstances?: () => void
+  /** Instances the title can switch to; switching keeps the tab and filters. */
+  instances?: readonly string[]
+  onSwitchInstance?: (instance: string) => void
+  /** Controlled tab, so the choice carries between the instance grid and the instance. */
+  tab?: HubTab
+  onTab?: (tab: HubTab) => void
+}
+
+/**
+ * Leaderboards hub mock: one scope (boss, class, spec) shared by every tab. The
+ * Overview is a dashboard of summary cards for that scope; each card opens the
+ * tab that holds its full board.
+ */
+export function LeaderboardHub({
+  instanceName = "Molten Core",
+  initialScope = {},
+  initialBosses,
+  initialRole = "dps",
+  initialSubject = "characters",
+  initialTab = "overview",
+  initialRatingView = "overview",
+  initialStatisticsView = "specs",
+  onAllInstances,
+  instances,
+  onSwitchInstance,
+  tab: controlledTab,
+  onTab,
+}: LeaderboardHubProps) {
+  const [selection, setSelection] = useState<EncounterSelection>(
+    initialBosses ? { kind: "bosses", bosses: initialBosses } : initialScope.boss ? { kind: "bosses", bosses: [initialScope.boss] } : FULL_CLEAR,
+  )
+  const [classScope, setClassScope] = useState<RatingScope>({ cls: initialScope.cls, spec: initialScope.spec, subSpec: initialScope.subSpec })
+  // Switching instance keeps tab and filters; only the encounter choice resets, since bosses differ.
+  const [shownInstance, setShownInstance] = useState(instanceName)
+  if (shownInstance !== instanceName) {
+    setShownInstance(instanceName)
+    setSelection(FULL_CLEAR)
+  }
+  const chosen = selection.kind === "bosses" ? selection.bosses : []
+  /** Two or more bosses combined; one boss is the boss view, none is the full clear. */
+  const set = chosen.length > 1 ? chosen : undefined
+  const [subject, setSubject] = useState<HubSubject>(initialSubject)
+  const [encountersOpen, setEncountersOpenState] = useState(() => readEncountersOpen())
+  const setEncountersOpen = (open: boolean) => {
+    setEncountersOpenState(open)
+    try {
+      localStorage.setItem(ENCOUNTERS_KEY, open ? "open" : "closed")
+    } catch {
+      // Storage can be unavailable (private mode); the toggle still works for this visit.
+    }
+  }
+  // Guilds have no class or spec: Guilds mode sets the class filter aside (kept for switching back).
+  const scope: RatingScope = { boss: chosen.length === 1 ? chosen[0] : undefined, ...(subject === "guilds" ? {} : classScope) }
+  /** Boards and cards narrow by scope: a boss opens that boss, a class/spec narrows the class filter. */
+  const setScope = (next: RatingScope) => {
+    if (next.boss !== scope.boss) setSelection(next.boss ? { kind: "bosses", bosses: [next.boss] } : FULL_CLEAR)
+    setClassScope({ cls: next.cls, spec: next.spec, subSpec: next.subSpec })
+  }
+  const bosses = instanceBosses(instanceName)
+  const [role, setRole] = useState<HubRole>(initialRole)
+  const [ownTab, setOwnTab] = useState<HubTab>(initialTab)
+  const tab = controlledTab ?? ownTab
+  const setTab = onTab ?? setOwnTab
+  const [ratingView, setRatingView] = useState<RatingView>(initialRatingView)
+  const [period, setPeriod] = useState<RatingPeriod>("180d")
+  const [statisticsView, setStatisticsView] = useState<StatisticsView>(initialStatisticsView)
+  const openRatings = (view: RatingView) => {
+    setRatingView(view)
+    setTab("ratings")
+  }
+  const ratingToolbar = (
+    <div className="flex flex-wrap items-center gap-2">
+      <MetricTabs view={ratingView} onView={setRatingView} />
+      <PeriodToggle value={period} onChange={setPeriod} />
+    </div>
+  )
+  const openStatistics = (view: StatisticsView) => {
+    setStatisticsView(view)
+    setTab("statistics")
+  }
+  const kind = scopeKind(scope)
+  const where = set ? `${set.length} bosses` : (scope.boss ?? getInstanceConfig(instanceName)?.abbrev ?? instanceName)
+  const title = set ? `${instanceName} · ${set.length} bosses` : scopeTitle(scope, instanceName)
+  const crumbs: { label: string; color?: string }[] = [
+    { label: set ? `${set.length} bosses` : (scope.boss ?? "Full clear") },
+    ...(scope.cls ? [{ label: CLASS_DISPLAY[scope.cls], color: CLASS_CSS_VAR[scope.cls] }] : []),
+    ...(scope.spec ? [{ label: scope.spec, color: CLASS_CSS_VAR[scope.cls!] }] : []),
+    ...(scope.subSpec ? [{ label: scope.subSpec, color: CLASS_CSS_VAR[scope.cls!] }] : []),
+  ]
+
+  const changeRole = (next: HubRole) => {
+    setRole(next)
+    // A spec belongs to one role; drop it when it no longer fits.
+    if (scope.cls && scope.spec && !specsFor(scope.cls, next).includes(scope.spec)) setClassScope({ cls: scope.cls })
+  }
+
+  // Guilds mode tints the page gold, the Guilds toggle's color: a faint wash from the top, a gold-edged
+  // banner, and a "Guilds" crumb. Characters is the default and stays neutral.
+  const guildMode = subject === "guilds"
+  return (
+    <div
+      className="min-h-screen w-full bg-background text-foreground transition-[background] duration-500"
+      style={
+        guildMode
+          ? { backgroundImage: `radial-gradient(ellipse 90% 520px at 50% 0%, color-mix(in srgb, ${GUILD_GOLD} 7%, transparent), transparent)` }
+          : undefined
+      }
+    >
+      {/* Full width like the statistics leaderboard. */}
+      <div className="mx-auto w-full max-w-[1920px] px-3 py-4 sm:px-4 sm:py-8">
+        <div className="min-w-0 space-y-5">
+          <header
+            className="relative overflow-hidden rounded-xl border bg-card transition-[border-color,box-shadow] duration-500"
+            style={
+              guildMode
+                ? {
+                    borderColor: `color-mix(in srgb, ${GUILD_GOLD} 35%, transparent)`,
+                    boxShadow: `0 0 0 1px color-mix(in srgb, ${GUILD_GOLD} 10%, transparent), 0 8px 40px -12px color-mix(in srgb, ${GUILD_GOLD} 25%, transparent)`,
+                  }
+                : undefined
+            }
+          >
+            <img src={getInstanceBackground(instanceName)} alt="" className="absolute inset-0 h-full w-full object-cover opacity-60" />
+            <div className="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-card/30" />
+            <div className="relative flex min-w-0 items-end gap-4 px-4 pt-6 pb-4 sm:px-6 sm:pt-10">
+              <div className="min-w-0">
+                {/* Breadcrumb: the parent is the way back to the grid; the rest names the current scope. */}
+                <nav
+                  aria-label="Breadcrumb"
+                  className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium tracking-wider text-muted-foreground uppercase"
+                >
+                  {onAllInstances ? (
+                    <button
+                      type="button"
+                      onClick={onAllInstances}
+                      title="All instances"
+                      className="-ml-0.5 inline-flex cursor-pointer items-center gap-1 uppercase transition-colors hover:text-foreground"
+                    >
+                      <ChevronLeft className="size-3.5" />
+                      Leaderboards
+                    </button>
+                  ) : (
+                    <span>Leaderboards</span>
+                  )}
+                  {guildMode && (
+                    <>
+                      <span className="opacity-50">/</span>
+                      <span style={{ color: GUILD_GOLD }}>Guilds</span>
+                    </>
+                  )}
+                  {crumbs.map((c) => (
+                    <Fragment key={c.label}>
+                      <span className="opacity-50">/</span>
+                      <span style={c.color ? { color: c.color } : undefined}>{c.label}</span>
+                    </Fragment>
+                  ))}
+                  {scope.boss && OPTIONAL_BOSSES.has(scope.boss) && <span className="text-muted-foreground/70">· Optional</span>}
+                </nav>
+                <InstanceTitle instanceName={instanceName} instances={instances} onSwitch={onSwitchInstance} />
+                {set && <p className="mt-1 text-xs text-muted-foreground">Combined: {set.join(", ")} · ratings averaged, time is total kill time</p>}
+              </div>
+            </div>
+            <nav className="relative flex overflow-x-auto border-t border-white/5 px-2 sm:px-4" aria-label="Leaderboard section">
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  aria-pressed={t.id === tab}
+                  onClick={() => setTab(t.id)}
+                  className={cn(
+                    "cursor-pointer flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4",
+                    t.id === tab
+                      ? "border-primary text-foreground"
+                      : "border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
+                  )}
+                >
+                  <t.icon className={cn("size-4", t.id === tab && "text-primary")} />
+                  {t.label}
+                </button>
+              ))}
+            </nav>
+            <ScopeBar
+              scope={scope}
+              classDisabled={subject === "guilds" ? "Guild ratings don't split by class. Switch to Characters to filter by class." : undefined}
+              showBoss={false}
+              specs={scope.cls ? specsFor(scope.cls, role) : []}
+              subSpecs={scope.cls && scope.spec ? subSpecsFor(scope.cls, scope.spec) : []}
+              onChange={(next) => {
+                // "Whole raid" clears everything, the encounter choice included.
+                if (!next.boss && !next.cls && !next.spec) setSelection(FULL_CLEAR)
+                setClassScope({ cls: next.cls, spec: next.spec, subSpec: next.subSpec })
+              }}
+              extra={
+                <>
+                  <Segmented
+                    label="Role"
+                    value={role}
+                    options={[
+                      { value: "dps", label: "DPS", color: "#e5484d" },
+                      { value: "healing", label: "Healing", color: "#46a758" },
+                    ]}
+                    onChange={changeRole}
+                  />
+                  <Segmented
+                    label="Rank"
+                    value={subject}
+                    options={[
+                      { value: "characters", label: "Characters", color: "#5b9bd5" },
+                      { value: "guilds", label: "Guilds", color: GUILD_GOLD },
+                    ]}
+                    onChange={setSubject}
+                  />
+                </>
+              }
+            />
+          </header>
+
+          {/* Banner spans the page; below it, the site's encounter column sits beside the content. */}
+          <div className="flex flex-col gap-5 lg:flex-row lg:gap-0">
+            {/* Rulesets describe the whole instance; encounter selection does not apply. */}
+            {tab !== "rulesets" &&
+              (encountersOpen ? (
+                <div className="shrink-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:w-[267px] lg:self-start lg:overflow-y-auto lg:border-r lg:pt-1 lg:pr-4 styled-scrollbar">
+                  <EncounterSidebar
+                    bosses={bosses}
+                    optional={OPTIONAL_BOSSES}
+                    selection={selection}
+                    onSelect={setSelection}
+                    onCollapse={() => setEncountersOpen(false)}
+                  />
+                </div>
+              ) : (
+                // Collapsed to the left: a slim rail keeps the way back in the same place.
+                <div className="hidden shrink-0 lg:sticky lg:top-4 lg:block lg:self-start lg:pt-1">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setEncountersOpen(true)}
+                    title="Show encounter sidebar"
+                    aria-label="Show encounters"
+                    className="bg-card text-foreground shadow-sm hover:text-foreground"
+                  >
+                    <PanelLeft className="h-5 w-5" />
+                  </Button>
+                </div>
+              ))}
+            <div className={cn("min-w-0 flex-1 space-y-5", tab !== "rulesets" && (encountersOpen ? "lg:pl-6" : "lg:pl-4"))}>
+              {tab === "overview" ? (
+                <Overview
+                  instanceName={instanceName}
+                  scope={scope}
+                  role={role}
+                  subject={subject}
+                  kind={kind}
+                  set={set}
+                  where={where}
+                  onScope={setScope}
+                  onTab={setTab}
+                  onRatings={openRatings}
+                  onStatistics={openStatistics}
+                  onRole={changeRole}
+                />
+              ) : tab === "ratings" ? (
+                <div className="space-y-5">
+                  {/* The metric switch and period sit in the board's own header: no second tab bar under the page tabs. */}
+                  {subject === "guilds" ? (
+                    <GuildRatingBoards
+                      toolbar={ratingToolbar}
+                      instanceName={instanceName}
+                      view={ratingView}
+                      onView={setRatingView}
+                      bosses={chosen.length ? chosen : undefined}
+                      allBosses={bosses}
+                      where={where}
+                      onBoss={(boss) => setSelection({ kind: "bosses", bosses: [boss] })}
+                    />
+                  ) : (
+                    <RatingBoards
+                      toolbar={ratingToolbar}
+                      instanceName={instanceName}
+                      scope={scope}
+                      onScope={setScope}
+                      view={ratingView}
+                      onView={setRatingView}
+                      period={period}
+                      bosses={set}
+                      title={set ? `${set.length} bosses` : undefined}
+                    />
+                  )}
+                </div>
+              ) : tab === "rulesets" ? (
+                <RulesetInstanceView instanceName={instanceName} embedded />
+              ) : tab === "performances" ? (
+                <PerformancesTab
+                  instanceName={instanceName}
+                  scope={scope}
+                  role={role}
+                  subject={subject}
+                  bosses={set ?? bosses}
+                  where={where}
+                  onSpeedruns={() => setTab("speedruns")}
+                />
+              ) : tab === "parsing" ? (
+                <ParsingTab
+                  instanceName={instanceName}
+                  allBosses={bosses}
+                  selection={selection}
+                  scope={scope}
+                  role={role}
+                  subject={subject}
+                  onBoss={(boss) => setSelection({ kind: "bosses", bosses: [boss] })}
+                  onClear={() => setSelection(FULL_CLEAR)}
+                  onScope={setScope}
+                />
+              ) : tab === "speedruns" ? (
+                <SpeedrunsTab instanceName={instanceName} bosses={bosses} selection={selection} />
+              ) : tab === "statistics" ? (
+                <StatisticsTab
+                  instanceName={instanceName}
+                  bosses={bosses}
+                  optional={OPTIONAL_BOSSES}
+                  selection={selection}
+                  view={statisticsView}
+                  onView={setStatisticsView}
+                  scope={scope}
+                  role={role}
+                  onScope={setScope}
+                />
+              ) : (
+                <TabPlaceholder tab={tab} title={title} />
+              )}
+            </div>
+          </div>
+
+          <p className="px-1 text-xs text-muted-foreground/70">Mock data for design review. Names, guilds, and numbers are generated.</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** The instance name; with a list to choose from, it opens a menu that switches instance in place. */
+function InstanceTitle({
+  instanceName,
+  instances,
+  onSwitch,
+}: {
+  instanceName: string
+  instances?: readonly string[]
+  onSwitch?: (instance: string) => void
+}) {
+  const heading = <h1 className="font-wow text-2xl sm:text-3xl">{instanceName}</h1>
+  if (!instances?.length || !onSwitch) return <div className="mt-1">{heading}</div>
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={`${instanceName}, switch instance`}
+        className="mt-0.5 -ml-2 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-0.5 outline-none hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {heading}
+        <ChevronDown className="size-5 text-muted-foreground" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-72">
+        {instances.map((name) => (
+          <DropdownMenuItem key={name} onSelect={() => onSwitch(name)} className="cursor-pointer justify-between">
+            {name}
+            {name === instanceName && <Check className="size-4 text-muted-foreground" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function Overview({
+  instanceName,
+  scope,
+  role,
+  subject,
+  kind,
+  set,
+  where,
+  onScope,
+  onTab,
+  onRatings,
+  onStatistics,
+  onRole,
+}: {
+  instanceName: string
+  scope: RatingScope
+  role: HubRole
+  subject: HubSubject
+  kind: ReturnType<typeof scopeKind>
+  /** Combined bosses, when two or more are chosen. */
+  set?: readonly string[]
+  where: string
+  onScope: (scope: RatingScope) => void
+  onTab: (tab: HubTab) => void
+  onRatings: (view: RatingView) => void
+  onStatistics: (view: StatisticsView) => void
+  onRole: (role: HubRole) => void
+}) {
+  const roleLabel = role === "dps" ? "DPS" : "HPS"
+  const guilds = subject === "guilds"
+  const noRole = scope.cls && specsFor(scope.cls, role).length === 0
+  const spreadCard = (
+    <Card title={`Typical ${roleLabel} parse by spec`} action={{ label: "Box plot", onClick: () => onStatistics("specs") }}>
+      <SpecSpreads scope={scope} role={role} />
+    </Card>
+  )
+
+  // A class view swaps out guild results (speed, guild Renown) for how the class's specs fare.
+  const cohort = kind === "class" || kind === "spec"
+  const cohortName = scope.spec ? `${scope.spec} ${CLASS_DISPLAY[scope.cls!]}` : scope.cls ? CLASS_DISPLAY[scope.cls] : ""
+
+  return (
+    <div className="space-y-5">
+      {cohort ? (
+        <CohortHero scope={scope} role={role} onScope={onScope} onRole={onRole} />
+      ) : (
+        <SpeedHero instanceName={instanceName} scope={scope} set={set} onOpen={() => onTab("speedruns")} />
+      )}
+      {scope.boss && <BossStats boss={bossSummary(scope.boss, instanceBosses(instanceName))} />}
+
+      {noRole ? (
+        <div className="rounded-xl border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
+          This class has no {role === "dps" ? "damage" : "healing"} specs. Switch the role to see its boards.
+        </div>
+      ) : (
+        <div className="grid gap-5 lg:grid-cols-[1.55fr_1fr]">
+          {/* Filled row by row, so each pair of cards shares a top edge and height. */}
+          <Card title={`${guilds ? "Guild Ratings" : "Ratings"} · ${where}`} action={{ label: "Ratings", onClick: () => onRatings("overview") }}>
+            {guilds ? (
+              // A guild run is rated like a player's parse: its time against the fastest.
+              <GuildRatingLeaders
+                bosses={set ?? (scope.boss ? [scope.boss] : undefined)}
+                allBosses={instanceBosses(instanceName)}
+                instanceName={instanceName}
+                onOpen={onRatings}
+              />
+            ) : (
+              <RatingLeaders scope={scope} role={role} onOpen={onRatings} />
+            )}
+          </Card>
+          {cohort ? (
+            <Card
+              title={`Where ${cohortName} stands · ${where}`}
+              action={{ label: "Box plot", onClick: () => onStatistics("specs") }}
+              className="lg:row-span-2"
+            >
+              <SpecStandingList scope={scope} role={role} onPick={(cls, spec, subSpec) => onScope({ boss: scope.boss, cls, spec, subSpec })} />
+            </Card>
+          ) : guilds ? (
+            // Renown is already a column of Guild Ratings; this slot counts clears instead.
+            <Card
+              title={`${scope.boss || set ? "Kills" : "# Clears"} by guild · ${where}`}
+              action={{ label: "Speedruns", onClick: () => onTab("speedruns") }}
+            >
+              <GuildList rows={guildRows("clears", scope, role, 5, !!scope.boss || !!set)} format={(v) => String(v)} bars />
+            </Card>
+          ) : (
+            <Card title={`Guild Renown · ${where}`} metric="renown" action={{ label: "Renown", onClick: () => onRatings("renown") }}>
+              <GuildList
+                rows={guildRows("renown", scope, role, 5, !!scope.boss || !!set)}
+                format={(v) => v.toLocaleString()}
+                bars
+                showDetail
+                accent={METRIC_THEMES.renown.accent}
+              />
+            </Card>
+          )}
+          {guilds ? (
+            // A guild's performance is its run: best clear time, best kill time, or best total over a set.
+            <Card
+              title={`Best Performances (${set ? "Total kill time" : scope.boss ? "Kill time" : "Clear time"}) · ${where}`}
+              action={{ label: "Speedruns", onClick: () => onTab("speedruns") }}
+            >
+              <RunList runs={speedruns(set ?? (scope.boss ? [scope.boss] : undefined), instanceBosses(instanceName), instanceName, 8)} />
+            </Card>
+          ) : (
+            <Card title={`Best Performances (${roleLabel}) · ${where}`} action={{ label: "Performances", onClick: () => onTab("performances") }}>
+              <ThroughputList scope={scope} role={role} />
+            </Card>
+          )}
+          {guilds ? (
+            <Card
+              title={`Typical ${set ? "total kill time" : scope.boss ? "kill time" : "clear time"} by guild · ${where}`}
+              action={{ label: "Kill times", onClick: () => onStatistics("killtimes") }}
+            >
+              <GuildSpreads spreads={guildTimeSpreads(set ?? (scope.boss ? [scope.boss] : undefined), instanceBosses(instanceName), instanceName)} />
+            </Card>
+          ) : (
+            !cohort && spreadCard
+          )}
+        </div>
+      )}
+
+      {!scope.boss && <BossGrid instanceName={instanceName} scope={scope} role={role} only={set} onBoss={(boss) => onScope({ ...scope, boss })} />}
+    </div>
+  )
+}
+
+/**
+ * Class overview headline, in the speed podium's place: a card per spec (or
+ * per subspec once a spec with subspecs is chosen). Clicking narrows to it.
+ */
+function CohortHero({
+  scope,
+  role,
+  onScope,
+  onRole,
+}: {
+  scope: RatingScope
+  role: HubRole
+  onScope: (scope: RatingScope) => void
+  onRole: (role: HubRole) => void
+}) {
+  const list = cohorts(scope, role)
+  const single = list.length === 1
+  return (
+    <section
+      aria-label="Specs"
+      className={cn("grid gap-4", !single && "sm:grid-cols-2", list.length === 3 && "xl:grid-cols-3", list.length >= 4 && "xl:grid-cols-4")}
+    >
+      {list.map((c) => {
+        const current = single || (c.role === role && scope.spec === c.spec && (!c.subSpec || scope.subSpec === c.subSpec))
+        const narrow = { boss: scope.boss, cls: c.cls, spec: c.spec, subSpec: c.subSpec }
+        return (
+          <CohortCard
+            key={c.role + c.spec + (c.subSpec ?? "")}
+            cohort={c}
+            offRole={c.role !== role}
+            current={current}
+            onOpen={
+              single
+                ? undefined
+                : () => {
+                    // A spec from the other role switches the role with it.
+                    if (c.role !== role) onRole(c.role)
+                    onScope(narrow)
+                  }
+            }
+          />
+        )
+      })}
+    </section>
+  )
+}
+
+function CohortCard({ cohort: c, offRole, current, onOpen }: { cohort: Cohort; offRole: boolean; current: boolean; onOpen?: () => void }) {
+  const color = CLASS_CSS_VAR[c.cls]
+  const unit = c.role === "dps" ? "DPS" : "HPS"
+  const name = specName(c)
+  const body = (
+    <>
+      {/* The spec icon, large and faded, stands in for the boss model. */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -top-8 -right-8 -z-10 size-44 opacity-[.16] transition-opacity group-hover:opacity-30"
+        style={{
+          maskImage: "radial-gradient(circle, black 20%, transparent 68%)",
+          WebkitMaskImage: "radial-gradient(circle, black 20%, transparent 68%)",
+        }}
+      >
+        <SpecIcon cls={c.cls} spec={c.spec} className="size-full" />
+      </span>
+      <div
+        aria-hidden
+        className="absolute inset-0 -z-20"
+        style={{ background: `linear-gradient(120deg, color-mix(in srgb, ${color} 14%, transparent), transparent 65%)` }}
+      />
+      <div className="flex items-center gap-3">
+        <SpecIcon cls={c.cls} spec={c.spec} className="size-9 shrink-0 rounded-md" />
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <span className="truncate font-wow text-xl leading-tight" style={{ color }}>
+              {name}
+            </span>
+            {offRole && (
+              <span className="shrink-0 rounded border border-white/15 px-1 py-px text-[9px] font-medium tracking-wider text-muted-foreground uppercase">
+                {c.role === "healing" ? "Healing" : "DPS"}
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            <span className="font-mono tabular-nums">{c.characters.toLocaleString()}</span> ranked characters
+          </div>
+        </div>
+      </div>
+      {/* The headline is the spec's median and where it ranks; leaders sit below in the boss cards' row style. */}
+      <div className="mt-3 flex items-baseline gap-2" title={`Ranked by median ${unit}: ${ordinal(c.rank)} of ${c.of} ${unit} specs`}>
+        <span className="font-mono text-2xl tabular-nums">{c.median}/s</span>
+        <span className="text-xs text-muted-foreground">
+          median {unit} · <span className="text-foreground">{ordinal(c.rank)}</span> of {c.of}
+        </span>
+      </div>
+      <dl className="-mx-1.5 mt-2 text-xs">
+        <BossStat
+          icon={<METRIC_THEMES.peak.icon className="size-3.5" style={{ color: METRIC_THEMES.peak.accent }} />}
+          label="#1 Peak"
+          value={c.peak ? METRIC_THEMES.peak.format(c.peak.score) : "—"}
+        >
+          {c.peak && (
+            <span className="truncate" style={{ color }}>
+              {c.peak.player.name}
+            </span>
+          )}
+        </BossStat>
+        <BossStat
+          icon={c.role === "dps" ? <Swords className="size-3.5 text-muted-foreground" /> : <HeartPulse className="size-3.5 text-muted-foreground" />}
+          label={`Best performance (${unit})`}
+          value={c.best ? `${c.best.value}/s` : "—"}
+        >
+          {c.best && (
+            <span className="truncate" style={{ color }}>
+              {c.best.player.name}
+            </span>
+          )}
+        </BossStat>
+      </dl>
+    </>
+  )
+  const frame = "group @container relative isolate overflow-hidden rounded-xl border bg-card p-4 text-left"
+  return onOpen ? (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={name}
+      aria-pressed={current}
+      className={cn(frame, "cursor-pointer transition-colors hover:border-white/25")}
+      style={current ? { borderColor: color } : undefined}
+    >
+      {body}
+    </button>
+  ) : (
+    <section aria-label={name} className={frame}>
+      {body}
+    </section>
+  )
+}
+
+function ordinal(n: number) {
+  const suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th")
+  return `${n}${suffix}`
+}
+
+/** "Feral (Cat)": a subspec reads as a spec of its own. */
+function specName(s: { spec: string; subSpec?: string }) {
+  return s.subSpec ? `${s.spec} (${s.subSpec})` : s.spec
+}
+
+/** Healers share spec names (Holy, Restoration); add the class when a name repeats in the list. */
+function specLabel(s: { cls: string; spec: string; subSpec?: string }, rows: readonly { spec: string }[]) {
+  return rows.filter((r) => r.spec === s.spec).length > 1 && !s.subSpec ? `${s.spec} ${CLASS_DISPLAY[s.cls]}` : specName(s)
+}
+
+/**
+ * Every spec in the role, ranked by median parse, with the chosen class lit
+ * and the rest dimmed: is this class good here? Any row opens that spec.
+ */
+function SpecStandingList({
+  scope,
+  role,
+  onPick,
+}: {
+  scope: RatingScope
+  role: HubRole
+  onPick: (cls: string, spec: string, subSpec?: string) => void
+}) {
+  const rows = specStanding(scope.boss, role)
+  const lo = Math.min(...rows.map((r) => r.min))
+  const hi = Math.max(...rows.map((r) => r.max))
+  const pct = (v: number) => ((v - lo) / (hi - lo || 1)) * 100
+  return (
+    <ol className="flex flex-1 flex-col justify-around px-2 py-2">
+      {rows.map((s, i) => {
+        const color = CLASS_CSS_VAR[s.cls]
+        const mine = s.cls === scope.cls && (!scope.spec || s.spec === scope.spec) && (!scope.subSpec || s.subSpec === scope.subSpec)
+        return (
+          <li key={`${s.cls}-${s.spec}-${s.subSpec ?? ""}`}>
+            <button
+              type="button"
+              onClick={() => onPick(s.cls, s.spec, s.subSpec)}
+              title={`${specName(s)} ${CLASS_DISPLAY[s.cls]}: #${i + 1}, median ${s.median}`}
+              className={cn(
+                "flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2 py-1 transition-opacity hover:bg-white/[.04] hover:opacity-100",
+                mine ? "bg-white/[.04]" : "opacity-40",
+              )}
+              style={mine ? { boxShadow: `inset 2px 0 0 ${color}` } : undefined}
+            >
+              <span className="w-5 text-right font-mono text-[11px] text-muted-foreground">{i + 1}</span>
+              <span className="flex w-36 min-w-0 items-center gap-1.5 text-xs" style={{ color }}>
+                <SpecIcon cls={s.cls} spec={s.spec} className="size-4 shrink-0 rounded-sm" />
+                <span className={cn("truncate", mine && "font-semibold")}>{specLabel(s, rows)}</span>
+              </span>
+              <span className="relative h-2.5 flex-1">
+                <span
+                  className="absolute top-1/2 h-px -translate-y-1/2 opacity-50"
+                  style={{ left: `${pct(s.min)}%`, width: `${pct(s.max) - pct(s.min)}%`, backgroundColor: color }}
+                />
+                <span
+                  className="absolute inset-y-0 rounded-xs opacity-70"
+                  style={{ left: `${pct(s.q1)}%`, width: `${pct(s.q3) - pct(s.q1)}%`, backgroundColor: color }}
+                />
+                <span className="absolute inset-y-0 w-0.5 bg-foreground" style={{ left: `${pct(s.median)}%` }} />
+              </span>
+              <span className={cn("w-9 text-right font-mono text-xs", mine ? "text-foreground" : "text-muted-foreground")}>{s.median}</span>
+            </button>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+function SpeedHero({ instanceName, scope, set, onOpen }: { instanceName: string; scope: RatingScope; set?: readonly string[]; onOpen: () => void }) {
+  return (
+    <section
+      className="relative overflow-hidden rounded-xl border bg-cover bg-center"
+      style={{ backgroundImage: `url('${getInstanceBackground(instanceName)}')` }}
+    >
+      <div className="absolute inset-0 bg-background/80" />
+      <span className="absolute top-3 left-4 z-10 text-xs font-medium text-muted-foreground">
+        {set ? `Fastest total kill time · ${set.length} bosses` : scope.boss ? `Fastest ${scope.boss} kills` : "Fastest full clears"}
+      </span>
+      <CardLink label="Speedruns" onClick={onOpen} className="absolute top-3 right-4 z-10" />
+      <div className="relative px-4 pt-10">
+        <Podium
+          entries={speedruns(set ?? (scope.boss ? [scope.boss] : undefined), instanceBosses(instanceName), instanceName, 3)}
+          instanceName={instanceName}
+        />
+      </div>
+    </section>
+  )
+}
+
+function BossStats({ boss }: { boss: BossSummary }) {
+  const rate = (boss.kills / boss.attempts) * 100
+  const stats = [
+    { label: "Success rate", value: `${rate.toFixed(0)}%`, bar: rate },
+    { label: "Kills / pulls", value: `${boss.kills.toLocaleString()} / ${boss.attempts.toLocaleString()}` },
+    { label: "Median kill", value: formatClock(boss.medianKillMs) },
+    { label: "Fastest kill", value: formatClock(boss.best.ms), sub: boss.best.guild },
+  ]
+  return (
+    <section aria-label={`${boss.boss} stats`} className="grid grid-cols-2 overflow-hidden rounded-xl border bg-card sm:grid-cols-4 sm:divide-x">
+      {stats.map((s) => (
+        <div key={s.label} className="px-4 py-3">
+          <div className="text-[11px] tracking-wider text-muted-foreground uppercase">{s.label}</div>
+          <div className="mt-0.5 font-mono text-xl tabular-nums">{s.value}</div>
+          {s.bar !== undefined && (
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-red-500/30">
+              <div className="h-full bg-green-500/70" style={{ width: `${s.bar}%` }} />
+            </div>
+          )}
+          {s.sub && <div className="text-xs text-muted-foreground">{s.sub}</div>}
+        </div>
+      ))}
+    </section>
+  )
+}
+
+/** One card per boss, its model standing behind the stats: the raid overview's answer to "MC has twelve bosses". */
+function BossGrid({
+  instanceName,
+  scope,
+  role,
+  only,
+  onBoss,
+}: {
+  instanceName: string
+  scope: RatingScope
+  role: HubRole
+  /** Limit to a combined set of bosses. */
+  only?: readonly string[]
+  onBoss: (boss: string) => void
+}) {
+  const rows = bossSummaries(scope, role, instanceBosses(instanceName)).filter((b) => !only || only.includes(b.boss))
+  const required = rows.filter((b) => !OPTIONAL_BOSSES.has(b.boss))
+  const optional = rows.filter((b) => OPTIONAL_BOSSES.has(b.boss))
+  const grid = (list: BossSummary[], isOptional: boolean) => (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+      {list.map((b) => (
+        <BossCard key={b.boss} summary={b} role={role} optional={isOptional} onOpen={() => onBoss(b.boss)} />
+      ))}
+    </div>
+  )
+  return (
+    <section aria-label="Bosses" className="space-y-3">
+      <h2 className="px-1 text-sm font-semibold">Bosses</h2>
+      {grid(required, false)}
+      {optional.length > 0 && (
+        <section aria-label="Optional bosses" className="space-y-3 pt-3">
+          <div className="flex items-center gap-3 px-1">
+            <h3 className="text-sm font-semibold text-muted-foreground">Optional bosses</h3>
+            <span className="text-xs text-muted-foreground/70">Not needed for a full clear</span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          {grid(optional, true)}
+        </section>
+      )}
+    </section>
+  )
+}
+
+function BossCard({ summary: b, role, optional, onOpen }: { summary: BossSummary; role: HubRole; optional: boolean; onOpen: () => void }) {
+  const model = useBossModelImage(b.boss)
+  const rate = (b.kills / b.attempts) * 100
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={b.boss}
+      className={cn(
+        "group relative isolate flex cursor-pointer flex-col overflow-hidden rounded-xl border text-left transition-colors hover:border-white/20",
+        // Optional bosses read as secondary: dashed frame, darker card, muted model.
+        optional ? "border-dashed bg-card/40" : "bg-card",
+      )}
+    >
+      {/* The model stands at the right edge, fading out behind the stats. */}
+      <div aria-hidden className="absolute inset-y-0 right-0 -z-10 w-1/2">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_65%_45%,rgba(255,255,255,.08),transparent_70%)]" />
+        {model ? (
+          <img
+            src={model}
+            alt=""
+            className={cn(
+              "absolute inset-0 size-full scale-110 object-cover object-[50%_30%] transition duration-300 group-hover:scale-[1.32] group-hover:opacity-100 group-hover:grayscale-0",
+              optional ? "opacity-50 grayscale-[60%]" : "opacity-80",
+            )}
+            style={{
+              maskImage: "linear-gradient(to right, transparent, black 30%)",
+              WebkitMaskImage: "linear-gradient(to right, transparent, black 30%)",
+            }}
+          />
+        ) : (
+          <span className="absolute top-3 right-3 opacity-60">
+            <BossPortrait boss={b.boss} size="lg" />
+          </span>
+        )}
+      </div>
+
+      <div className="w-[56%] px-3 pt-3 pb-2">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className={cn("truncate font-wow text-lg leading-tight group-hover:text-primary", optional && "text-foreground/75")}>{b.boss}</span>
+          {optional && (
+            <span className="shrink-0 rounded border border-white/15 px-1 py-px text-[9px] font-medium tracking-wider text-muted-foreground uppercase">
+              Optional
+            </span>
+          )}
+        </div>
+        <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span className="h-1 w-10 overflow-hidden rounded-full bg-red-500/30">
+            <span className="block h-full bg-green-500/70" style={{ width: `${rate}%` }} />
+          </span>
+          <span className="font-mono tabular-nums">{rate.toFixed(0)}%</span>
+          <span>·</span>
+          <span className="font-mono tabular-nums">{formatClock(b.medianKillMs)}</span>
+          <span>median</span>
+        </div>
+      </div>
+      <dl className="w-[56%] space-y-0.5 px-3 pb-3 text-xs">
+        {b.standing ? (
+          // With a class chosen, the guild's fastest kill gives way to where the class's best spec ranks here.
+          <BossStat
+            icon={<SpecIcon cls={b.standing.cls} spec={b.standing.spec} className="size-3.5 rounded-xs" />}
+            label={`${specName(b.standing)} rank by median ${role === "dps" ? "DPS" : "HPS"}`}
+            value={`${b.standing.median}/s`}
+          >
+            <span className="truncate" style={{ color: CLASS_CSS_VAR[b.standing.cls] }}>
+              {specName(b.standing)}
+            </span>
+            <span className="shrink-0 text-muted-foreground">
+              #{b.standing.rank}
+              <span className="text-muted-foreground/60">/{b.standing.of}</span>
+            </span>
+          </BossStat>
+        ) : (
+          <BossStat icon={<Timer className="size-3.5 text-muted-foreground" />} label="Fastest" value={formatClock(b.best.ms)}>
+            <span className="truncate text-muted-foreground">{b.best.guild}</span>
+          </BossStat>
+        )}
+        {RATING_METRICS.map((m) => {
+          const t = METRIC_THEMES[m]
+          const leader = b.ratings[m]
+          return (
+            <BossStat
+              key={m}
+              icon={<t.icon className="size-3.5" style={{ color: t.accent }} />}
+              label={t.label}
+              value={leader ? t.format(leader.score) : "—"}
+            >
+              {leader && <PlayerName player={leader.player} />}
+            </BossStat>
+          )
+        })}
+        <BossStat
+          icon={role === "dps" ? <Swords className="size-3.5 text-muted-foreground" /> : <HeartPulse className="size-3.5 text-muted-foreground" />}
+          label={`Best performance (${role === "dps" ? "DPS" : "HPS"})`}
+          value={b.performance ? `${b.performance.value}/s` : "—"}
+        >
+          {b.performance && <PlayerName player={b.performance.player} />}
+        </BossStat>
+      </dl>
+    </button>
+  )
+}
+
+function BossStat({ icon, label, value, children }: { icon: ReactNode; label: string; value: string; children?: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 rounded px-1.5 py-1 [text-shadow:0_1px_2px_rgba(0,0,0,.8)]">
+      <dt className="shrink-0" title={label}>
+        {icon}
+        <span className="sr-only">{label}</span>
+      </dt>
+      <dd className="flex min-w-0 flex-1 items-center gap-1.5 truncate">{children}</dd>
+      <dd className="shrink-0 font-mono tabular-nums">{value}</dd>
+    </div>
+  )
+}
+
+function PlayerName({ player }: { player: HubPlayer }) {
+  return (
+    <>
+      <SpecIcon cls={player.cls} spec={player.spec} className="size-4 shrink-0 rounded-sm" />
+      <span className="truncate" style={{ color: CLASS_CSS_VAR[player.cls] }}>
+        {player.name}
+      </span>
+    </>
+  )
+}
+
+function RatingLeaders({ scope, role, onOpen }: { scope: RatingScope; role: HubRole; onOpen: (metric: RatingMetric) => void }) {
+  const leaders = ratingLeaders(scope, role)
+  const rows = (m: RatingMetric) =>
+    leaders[m].map((l) => ({
+      id: l.player.id,
+      name: (
+        <>
+          <SpecIcon cls={l.player.cls} spec={l.player.spec} className="size-5 shrink-0 rounded-sm" />
+          <span className="truncate" style={{ color: CLASS_CSS_VAR[l.player.cls] }}>
+            {l.player.name}
+          </span>
+        </>
+      ),
+      score: l.score,
+    }))
+  return <MetricColumns columns={{ peak: rows("peak"), mastery: rows("mastery"), renown: rows("renown") }} onOpen={onOpen} />
+}
+
+/** A guild's best runs, fastest first: the guild counterpart of a player's best parses. */
+function RunList({ runs }: { runs: SpeedrunLeaderboardEntry[] }) {
+  return (
+    <ol>
+      {runs.map((r, i) => (
+        <li
+          key={r.instance_id}
+          className="grid grid-cols-[24px_1fr_70px] items-center gap-2 border-b border-white/5 px-4 py-2 text-sm last:border-b-0 md:grid-cols-[24px_1fr_70px_1fr]"
+        >
+          <span className="font-mono text-xs text-muted-foreground">{i + 1}</span>
+          <span className="flex min-w-0 items-center gap-2 font-medium">
+            <GuildName guild={r.guild_name} logo={r.guild_logo_url} />
+          </span>
+          <span className="text-right font-mono font-bold tabular-nums">{formatClock(r.duration_ms)}</span>
+          <span className="hidden truncate text-right text-xs text-muted-foreground md:block">
+            {r.player_count} players ·{" "}
+            {new Date(r.completion_time).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" })}
+          </span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+function ThroughputList({ scope, role }: { scope: RatingScope; role: HubRole }) {
+  const rows = topThroughput(scope, role, 8)
+  return (
+    <ol>
+      {rows.map((r, i) => (
+        <li
+          key={r.player.id}
+          className="grid grid-cols-[24px_1fr_70px] items-center gap-2 border-b border-white/5 px-4 py-2 text-sm last:border-b-0 md:grid-cols-[24px_1fr_120px_70px_1fr]"
+        >
+          <span className="font-mono text-xs text-muted-foreground">{i + 1}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <SpecIcon cls={r.player.cls} spec={r.player.spec} className="size-5 shrink-0 rounded-sm" />
+            <span className="truncate font-medium" style={{ color: CLASS_CSS_VAR[r.player.cls] }}>
+              {r.player.name}
+            </span>
+          </span>
+          <span className="hidden truncate text-xs opacity-80 md:block" style={{ color: CLASS_CSS_VAR[r.player.cls] }}>
+            {r.player.spec}
+          </span>
+          <span className="text-right font-mono font-bold tabular-nums">{r.value}/s</span>
+          <span className="hidden truncate text-right text-xs text-muted-foreground md:block">{r.player.guild}</span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+function GuildList({
+  rows,
+  format,
+  bars,
+  showDetail = !bars,
+  accent,
+}: {
+  rows: GuildRow[]
+  format: (v: number) => string
+  bars?: boolean
+  showDetail?: boolean
+  /** Bar color; defaults to the site primary. */
+  accent?: string
+}) {
+  const max = rows[0]?.value ?? 1
+  return (
+    <ol>
+      {rows.map((g, i) => (
+        <li key={g.guild} className="flex items-center gap-3 border-b border-white/5 px-4 py-2.5 text-sm last:border-b-0">
+          <span className="w-4 font-mono text-xs text-muted-foreground">{i + 1}</span>
+          <span className="min-w-0 flex-1">
+            <span className="flex min-w-0 items-center gap-2 font-medium">
+              <GuildName guild={g.guild} logo={guildLogo(g.guild)} />
+            </span>
+            {showDetail && <span className="block text-[11px] text-muted-foreground">{g.detail}</span>}
+          </span>
+          {bars && (
+            <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+              <span className="block h-full bg-primary" style={{ width: `${(g.value / max) * 100}%`, backgroundColor: accent }} />
+            </span>
+          )}
+          <span className="w-16 text-right font-mono text-xs font-bold tabular-nums">{format(g.value)}</span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+/**
+ * Each guild's run times as a box plot, fastest median first. Shorter is
+ * better, so the axis runs fast (left) to slow (right); a tight box is a
+ * guild that clears the same way every week.
+ */
+function GuildSpreads({ spreads }: { spreads: GuildTimeSpread[] }) {
+  const lo = Math.min(...spreads.map((s) => s.min))
+  const hi = Math.max(...spreads.map((s) => s.max))
+  const pct = (v: number) => ((v - lo) / (hi - lo || 1)) * 100
+  const color = GUILD_GOLD
+  return (
+    <div className="flex flex-1 flex-col justify-around px-4 py-3">
+      {spreads.map((s) => (
+        <div
+          key={s.guild}
+          className="flex items-center gap-2.5 py-1.5"
+          title={`${s.guild}: best ${formatClock(s.min)}, typical ${formatClock(s.median)}, slowest ${formatClock(s.max)} over ${s.runs} runs`}
+        >
+          <span className="flex w-36 min-w-0 items-center gap-1.5 text-xs">
+            <GuildName guild={s.guild} logo={s.logo} size="size-4" />
+          </span>
+          <div className="relative h-3 flex-1">
+            <div
+              className="absolute top-1/2 h-px -translate-y-1/2 opacity-50"
+              style={{ left: `${pct(s.min)}%`, width: `${pct(s.max) - pct(s.min)}%`, backgroundColor: color }}
+            />
+            <div
+              className="absolute inset-y-0 rounded-xs opacity-60"
+              style={{ left: `${pct(s.q1)}%`, width: `${pct(s.q3) - pct(s.q1)}%`, backgroundColor: color }}
+            />
+            <div className="absolute inset-y-0 w-0.5 bg-foreground" style={{ left: `${pct(s.median)}%` }} />
+          </div>
+          <span className="w-11 text-right font-mono text-xs text-muted-foreground">{formatClock(s.median)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function SpecSpreads({ scope, role }: { scope: RatingScope; role: HubRole }) {
+  const rows = specSpreads(scope, role, 8)
+  const lo = Math.min(...rows.map((r) => r.min))
+  const hi = Math.max(...rows.map((r) => r.max))
+  const pct = (v: number) => ((v - lo) / (hi - lo || 1)) * 100
+  // Rows spread over the card's full height so it lines up with its row partner.
+  return (
+    <div className="flex flex-1 flex-col justify-around px-4 py-3">
+      {rows.map((s) => {
+        const color = CLASS_CSS_VAR[s.cls]
+        return (
+          <div key={`${s.cls}-${s.spec}-${s.subSpec ?? ""}`} className="flex items-center gap-2.5 py-1.5">
+            <span className="flex w-36 min-w-0 items-center gap-1.5 text-xs" style={{ color }}>
+              <SpecIcon cls={s.cls} spec={s.spec} className="size-4 shrink-0 rounded-sm" />
+              <span className="truncate">{specLabel(s, rows)}</span>
+            </span>
+            <div className="relative h-3 flex-1">
+              <div
+                className="absolute top-1/2 h-px -translate-y-1/2 opacity-50"
+                style={{ left: `${pct(s.min)}%`, width: `${pct(s.max) - pct(s.min)}%`, backgroundColor: color }}
+              />
+              <div
+                className="absolute inset-y-0 rounded-xs opacity-70"
+                style={{ left: `${pct(s.q1)}%`, width: `${pct(s.q3) - pct(s.q1)}%`, backgroundColor: color }}
+              />
+              <div className="absolute inset-y-0 w-0.5 bg-foreground" style={{ left: `${pct(s.median)}%` }} />
+            </div>
+            <span className="w-10 text-right font-mono text-xs text-muted-foreground">{s.median}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function Card({
+  title,
+  action,
+  metric,
+  className,
+  children,
+}: {
+  title: string
+  className?: string
+  action?: { label: string; onClick: () => void }
+  /** Marks the card as a rating metric's card: its icon, and an accent line under the header. */
+  metric?: RatingMetric
+  children: ReactNode
+}) {
+  const theme = metric ? METRIC_THEMES[metric] : undefined
+  return (
+    <section aria-label={title} className={cn("flex min-w-0 flex-col overflow-hidden rounded-xl border bg-card", className)}>
+      <div
+        className="flex items-center justify-between border-b bg-black/10 px-4 py-3"
+        style={theme ? { boxShadow: `inset 0 -2px 0 ${theme.accent}` } : undefined}
+      >
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          {theme && <theme.icon className="size-4" style={{ color: theme.accent }} aria-hidden />}
+          {title}
+        </h2>
+        {action && <CardLink label={action.label} onClick={action.onClick} />}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function CardLink({ label, onClick, className }: { label: string; onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn("cursor-pointer inline-flex items-center gap-1 text-xs text-primary hover:underline", className)}
+    >
+      {label}
+      <ArrowRight className="size-3" />
+    </button>
+  )
+}
+
+function Segmented<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: T
+  /** `color` tints the chosen option so the choice reads at a glance. */
+  options: { value: T; label: string; color?: string }[]
+  onChange: (value: T) => void
+}) {
+  return (
+    <div className="flex rounded-md border bg-background/60 p-0.5 text-xs" role="group" aria-label={label}>
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          aria-pressed={value === o.value}
+          onClick={() => onChange(o.value)}
+          className={cn(
+            "cursor-pointer rounded px-2.5 py-1.5 font-medium transition-colors",
+            value === o.value ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+          style={
+            value === o.value && o.color
+              ? {
+                  color: o.color,
+                  backgroundColor: `color-mix(in srgb, ${o.color} 16%, transparent)`,
+                  boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${o.color} 45%, transparent)`,
+                }
+              : undefined
+          }
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function TabPlaceholder({ tab, title }: { tab: HubTab; title: string }) {
+  const t = TABS.find((x) => x.id === tab)!
+  return (
+    <div className="rounded-xl border border-dashed bg-card/40 px-6 py-16 text-center">
+      <t.icon className="mx-auto size-8 text-primary" />
+      <h2 className="mt-3 font-wow text-xl">
+        {t.label} · {title}
+      </h2>
+      <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">Full boards for this tab, scoped by the picker bar above: {t.holds}</p>
+    </div>
+  )
+}

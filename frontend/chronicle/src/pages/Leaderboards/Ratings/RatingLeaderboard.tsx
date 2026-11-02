@@ -1,301 +1,207 @@
-import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
-import { ArrowDown, ChevronDown, ChevronRight, RotateCcw, ZoomIn } from "lucide-react"
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react"
+import { ArrowDown, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/DropdownMenu/DropdownMenu"
-import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
-import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages"
 import {
-  CLASS_ORDER,
-  MOLTEN_CORE_BOSSES,
   RATING_METRICS,
   childScopes,
   scopeBoard,
-  scopeEntries,
-  scopeKind,
   type RatingBoardData,
   type RatingEntry,
   type RatingMetric,
   type RatingPeriod,
   type RatingScope,
-  type ScopeKind,
 } from "./ratingBoards.fixtures"
-import { RatingFullList } from "./RatingFullList"
-import { BossPortrait, Emblem, EntryRow, ScopeMark, SpecIcon } from "./RatingParts"
+import { BoardSearch, RatingFullList } from "./RatingFullList"
+import { Emblem, EntryRow, ScopeMark, SpecIcon } from "./RatingParts"
 import { METRIC_THEMES, VIEW_ORDER, scopeTitle, type MetricTheme, type RatingView } from "./ratingThemes"
 
-const KIND_LABEL: Record<ScopeKind, string> = { raid: "Raid", boss: "Boss", class: "Class", spec: "Spec" }
-
-export interface RatingLeaderboardProps {
-  instanceName?: string
-  initialView?: RatingView
-  initialScope?: RatingScope
-  initialPeriod?: RatingPeriod
-}
+/** What the cards under the board split by. */
+type ChildKind = "boss" | "class" | "spec"
 
 /**
- * One leaderboard design shared by Peak, Ranked Mastery, and Renown, plus an
- * Overview that shows all three side by side.
- *
- * Navigation is one scope (boss, class, spec) shown in the picker bar. Each
- * scope puts its own board in the center, the next level's boards around it,
- * and the complete ranked table underneath. Clicking a board narrows the
- * pickers to that board; the pickers widen it again.
+ * The boards for one scope and view: center board, the next level's boards
+ * around it, and the full ranked table underneath. The leaderboard hub's
+ * Ratings tab renders this.
  */
-export function RatingLeaderboard({
-  instanceName = "Molten Core",
-  initialView = "overview",
-  initialScope = {},
-  initialPeriod = "180d",
-}: RatingLeaderboardProps) {
-  const [view, setView] = useState<RatingView>(initialView)
-  const [period, setPeriod] = useState<RatingPeriod>(initialPeriod)
-  const [scope, setScope] = useState<RatingScope>(initialScope)
-  const tableRef = useRef<HTMLDivElement>(null)
+export function RatingBoards({
+  instanceName,
+  scope,
+  onScope,
+  view,
+  onView,
+  period,
+  bosses,
+  title: titleOverride,
+  toolbar,
+}: {
+  instanceName: string
+  scope: RatingScope
+  onScope: (scope: RatingScope) => void
+  view: RatingView
+  onView: (view: RatingView) => void
+  period: RatingPeriod
+  /** A combined boss set: only these bosses get side boards. */
+  bosses?: readonly string[]
+  title?: string
+  /** Metric switch and period, shown in the board's (or table's) header. */
+  toolbar?: ReactNode
+}) {
   const theme = METRIC_THEMES[view]
-  const kind = scopeKind(scope)
-  const title = scopeTitle(scope, instanceName)
-  const go = setScope
-  const showTable = () => tableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  const title = titleOverride ?? scopeTitle(scope, instanceName)
+  // "All N ranked" swaps the boards for the full table in place. It stays open across metrics and
+  // periods; a new boss or filter shows the boards again.
+  const boardKey = JSON.stringify(scope)
+  const [expandedKey, setExpandedKey] = useState<string>()
+  // Search lives in the board header; typing opens the table already filtered.
+  const [search, setSearch] = useState({ key: "", text: "" })
+  const query = search.key === boardKey ? search.text : ""
+  const setQuery = (text: string) => setSearch({ key: boardKey, text })
+  const expanded = expandedKey === boardKey || query.trim() !== ""
+  const showTable = () => setExpandedKey(boardKey)
+  const collapse = () => {
+    setExpandedKey(undefined)
+    setQuery("")
+  }
+  const searchBox = <BoardSearch query={query} onQuery={setQuery} />
 
+  // Full clear: the board, then a card per boss (filtered by any class or spec). One boss: its full
+  // table straight away; the encounter list already moves between bosses.
+  const childBy: ChildKind = "boss"
+  const tableOnly = !!scope.boss
   const boards = useMemo(
     () =>
       RATING_METRICS.map((m) => ({
         metric: m,
-        center: scopeBoard(m, period, scope, 8),
-        around: childScopes(scope)
-          .map((child) => scopeBoard(m, period, child, 5))
+        center: scopeBoard(m, period, scope, 10),
+        around: (scope.boss ? [] : childScopes({}).map((c) => ({ ...scope, boss: c.boss })))
+          .filter((child) => !bosses || !child.boss || bosses.includes(child.boss))
+          .map((child) => scopeBoard(m, period, child, 3))
           .filter((b) => b.total > 0),
       })),
-    [scope, period],
+    [scope, period, bosses],
   )
   const single = view === "overview" ? undefined : boards.find((b) => b.metric === view)!
-  const specs = scope.cls
-    ? childScopes({ cls: scope.cls })
-        .filter((c) => scopeEntries("peak", period, c).length > 0)
-        .map((c) => c.spec!)
-    : []
 
   return (
-    <div className="min-h-screen w-full bg-background text-foreground" style={{ "--metric": theme.accent } as CSSProperties} data-metric={view}>
-      <div className="mx-auto w-full max-w-[1600px] space-y-5 px-3 py-4 sm:px-4 sm:py-8">
-        <header className="relative overflow-hidden rounded-xl border bg-card">
-          <img src={getInstanceBackground(instanceName)} alt="" className="absolute inset-0 h-full w-full object-cover opacity-60" />
-          <div className="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-card/30" />
-          <div className="absolute inset-x-0 top-0 h-0.5 bg-[color:var(--metric)]" />
-          <div className="relative flex flex-wrap items-end justify-between gap-4 px-4 pt-6 pb-4 sm:px-6 sm:pt-10">
-            <div className="flex min-w-0 items-end gap-4">
-              {kind !== "raid" && <HeaderMark scope={scope} />}
-              <div className="min-w-0">
-                <p className="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
-                  {instanceName}
-                  <span className="ml-1.5 text-[color:var(--metric)]">· {theme.label}</span>
-                </p>
-                <h1 className="mt-1 font-wow text-2xl sm:text-3xl" style={kind === "class" || kind === "spec" ? { color: CLASS_CSS_VAR[scope.cls!] } : undefined}>
-                  {title}
-                </h1>
-              </div>
+    <div className="space-y-5" style={{ "--metric": theme.accent } as CSSProperties} data-metric={view}>
+      {/* Metric taglines (METRIC_THEMES[*].tagline) are hidden for now to save vertical space; they come back later. */}
+      {/* The top: the board, or (opened, searched, or a spec, which has no smaller boards) the full table. */}
+      {tableOnly || expanded ? (
+        <RatingFullList
+          key={`${boardKey}|${view}|${period}`}
+          scope={scope}
+          title={title}
+          period={period}
+          view={view}
+          query={query}
+          onQuery={setQuery}
+          onCollapse={tableOnly ? undefined : collapse}
+          toolbar={toolbar}
+        />
+      ) : single ? (
+        <CenterBoard board={single.center} theme={theme} title={title} onShowAll={showTable} search={searchBox} toolbar={toolbar} />
+      ) : (
+        <OverviewCenter
+          boards={boards.map((b) => ({ metric: b.metric, board: b.center }))}
+          theme={theme}
+          title={title}
+          onSelect={onView}
+          onShowAll={showTable}
+          search={searchBox}
+          toolbar={toolbar}
+        />
+      )}
+
+      {!tableOnly && (
+        <>
+          {/* One compact card per boss (or class, or spec), the same size as the guild boards' cards. */}
+          <section aria-label={`By ${childBy}`} className="space-y-3">
+            <h2 className="px-1 text-sm font-semibold">By {childBy}</h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+              {(single ?? boards[0]).around.map((board) => (
+                <SideFrame key={board.id} board={board} by={childBy} label={theme.label} onOpen={() => onScope(board.scope)}>
+                  {single
+                    ? board.entries.map((entry, i) => (
+                        <CompactRow
+                          key={entry.id}
+                          entry={entry}
+                          theme={theme}
+                          lead={<span className="w-3.5 font-mono text-[10px] text-muted-foreground">{i + 1}</span>}
+                        />
+                      ))
+                    : boards.map((b) => {
+                        const t = METRIC_THEMES[b.metric]
+                        const entry = b.around.find((x) => x.id === board.id)?.entries[0]
+                        return entry ? (
+                          <CompactRow
+                            key={b.metric}
+                            entry={entry}
+                            theme={t}
+                            lead={<t.icon className="size-3.5 shrink-0" style={{ color: t.accent }} aria-label={t.label} />}
+                          />
+                        ) : (
+                          <li key={b.metric} className="px-3 py-1.5 text-xs text-muted-foreground">
+                            No ranked kills
+                          </li>
+                        )
+                      })}
+                </SideFrame>
+              ))}
             </div>
-            <PeriodToggle value={period} onChange={setPeriod} />
-          </div>
-          <nav className="relative flex overflow-x-auto border-t border-white/5 px-2 sm:px-4" aria-label="Rating metric">
-            {VIEW_ORDER.map((m) => {
-              const t = METRIC_THEMES[m]
-              const active = m === view
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setView(m)}
-                  style={active ? { borderColor: t.accent } : undefined}
-                  className={cn(
-                    "flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4",
-                    active ? "text-foreground" : "border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
-                  )}
-                >
-                  <t.icon className="size-4" style={active ? { color: t.accent } : undefined} />
-                  {t.label}
-                </button>
-              )
-            })}
-          </nav>
-          <ScopeBar scope={scope} specs={specs} onChange={go} />
-        </header>
+          </section>
+        </>
+      )}
+    </div>
+  )
+}
 
-        <p className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
-          <theme.icon className="size-4 shrink-0 text-[color:var(--metric)]" />
-          {theme.tagline}
-        </p>
-
-        {kind !== "spec" && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-flow-dense lg:grid-cols-4">
-            {single ? (
-              <CenterBoard board={single.center} theme={theme} title={title} onShowAll={showTable} />
-            ) : (
-              <OverviewCenter
-                boards={boards.map((b) => ({ metric: b.metric, board: b.center }))}
-                theme={theme}
-                title={title}
-                onSelect={setView}
-                onShowAll={showTable}
-              />
+/**
+ * Overview / Peak / Ranked Mastery / Renown, as a compact segmented switch that lives in the board's
+ * header: a setting of the board, not another row of page tabs. The chosen one takes its metric color.
+ */
+export function MetricTabs({ view, onView, className }: { view: RatingView; onView: (view: RatingView) => void; className?: string }) {
+  return (
+    <nav className={cn("relative flex rounded-md border bg-background/60 p-0.5", className)} aria-label="Rating metric">
+      {VIEW_ORDER.map((m) => {
+        const t = METRIC_THEMES[m]
+        const active = m === view
+        return (
+          <button
+            key={m}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onView(m)}
+            style={
+              active
+                ? {
+                    color: t.accent,
+                    backgroundColor: `color-mix(in srgb, ${t.accent} 14%, transparent)`,
+                    boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${t.accent} 40%, transparent)`,
+                  }
+                : undefined
+            }
+            className={cn(
+              "flex shrink-0 cursor-pointer items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition-colors",
+              !active && "text-muted-foreground hover:text-foreground",
             )}
-            {(single ?? boards[0]).around.map((board) => (
-              <SideFrame key={board.id} board={board} label={theme.label} instanceName={instanceName} onOpen={() => go(board.scope)}>
-                {single
-                  ? board.entries.map((entry, i) => <EntryRow key={entry.id} entry={entry} rank={i + 1} theme={theme} size="sm" />)
-                  : boards.map((b) => (
-                      <OverviewRow key={b.metric} metric={b.metric} entry={b.around.find((x) => x.id === board.id)?.entries[0]} />
-                    ))}
-              </SideFrame>
-            ))}
-          </div>
-        )}
-
-        <div ref={tableRef} className="scroll-mt-4">
-          <RatingFullList key={`${JSON.stringify(scope)}-${view}-${period}`} scope={scope} title={title} period={period} view={view} />
-        </div>
-
-        <p className="px-1 text-xs text-muted-foreground/70">
-          Mock data for design review. Names and scores are generated and do not represent real characters.
-        </p>
-      </div>
-    </div>
+          >
+            <t.icon className="size-3.5" />
+            {t.label}
+          </button>
+        )
+      })}
+    </nav>
   )
 }
 
-/** Boss, class, and spec pickers: where you are, and the way to go anywhere else. */
-function ScopeBar({ scope, specs, onChange }: { scope: RatingScope; specs: string[]; onChange: (scope: RatingScope) => void }) {
-  const ALL = "all"
-  return (
-    <div className="relative flex flex-wrap items-center gap-2 border-t border-white/5 bg-black/20 px-3 py-2.5 sm:px-5" role="group" aria-label="Leaderboard scope">
-      <Picker
-        label="Boss"
-        value={scope.boss ?? ALL}
-        options={[{ value: ALL, label: "All bosses" }, ...MOLTEN_CORE_BOSSES.map((b) => ({ value: b, label: b, icon: <BossPortrait boss={b} size="sm" /> }))]}
-        onChange={(v) => onChange({ ...scope, boss: v === ALL ? undefined : v })}
-      />
-      <ChevronRight className="size-3.5 text-muted-foreground/50" aria-hidden />
-      <Picker
-        label="Class"
-        value={scope.cls ?? ALL}
-        options={[
-          { value: ALL, label: "All classes" },
-          ...CLASS_ORDER.map((c) => ({ value: c, label: CLASS_DISPLAY[c], icon: <ClassIcon cls={c} className="size-5 rounded-sm" />, color: CLASS_CSS_VAR[c] })),
-        ]}
-        onChange={(v) => onChange({ boss: scope.boss, cls: v === ALL ? undefined : v })}
-      />
-      <ChevronRight className="size-3.5 text-muted-foreground/50" aria-hidden />
-      <Picker
-        label="Spec"
-        value={scope.spec ?? ALL}
-        disabled={!scope.cls}
-        placeholder="Pick a class first"
-        options={[
-          { value: ALL, label: "All specs" },
-          ...specs.map((sp) => ({ value: sp, label: sp, icon: <SpecIcon cls={scope.cls!} spec={sp} className="size-5 rounded-sm" /> })),
-        ]}
-        onChange={(v) => onChange({ ...scope, spec: v === ALL ? undefined : v })}
-      />
-      {scopeKind(scope) !== "raid" && (
-        <button
-          type="button"
-          onClick={() => onChange({})}
-          className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
-        >
-          <RotateCcw className="size-3.5" />
-          Whole raid
-        </button>
-      )}
-    </div>
-  )
-}
-
-interface PickerOption {
-  value: string
-  label: string
-  icon?: ReactNode
-  color?: string
-}
-
-function Picker({
-  label,
-  value,
-  options,
-  onChange,
-  disabled,
-  placeholder,
-}: {
-  label: string
-  value: string
-  options: PickerOption[]
-  onChange: (value: string) => void
-  disabled?: boolean
-  placeholder?: string
-}) {
-  const current = options.find((o) => o.value === value) ?? options[0]
-  const narrowed = current !== options[0]
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        disabled={disabled}
-        aria-label={`${label}: ${disabled && placeholder ? placeholder : current.label}`}
-        className={cn(
-          "flex h-9 min-w-36 items-center gap-2 rounded-md border bg-background/60 pr-2 pl-2.5 text-left text-sm transition-colors outline-none hover:bg-white/5 focus-visible:border-ring disabled:pointer-events-none disabled:opacity-50",
-          narrowed && "border-[color:var(--metric)]/60",
-        )}
-      >
-        {current.icon}
-        <span className="flex min-w-0 flex-col leading-tight">
-          <span className="text-[10px] tracking-wider text-muted-foreground uppercase">{label}</span>
-          <span className={cn("truncate", !narrowed && "text-muted-foreground")} style={{ color: narrowed ? current.color : undefined }}>
-            {disabled && placeholder ? placeholder : current.label}
-          </span>
-        </span>
-        <ChevronDown className="ml-auto size-4 shrink-0 text-muted-foreground" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="styled-scrollbar min-w-48">
-        <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
-          {options.map((o) => (
-            <DropdownMenuRadioItem key={o.value} value={o.value} className="gap-2">
-              {o.icon}
-              <span style={{ color: o.color }}>{o.label}</span>
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-/** Banner art for the current scope. Boss pages lead with the boss face. */
-function HeaderMark({ scope }: { scope: RatingScope }) {
-  return (
-    <div className="flex shrink-0 items-end gap-2">
-      {scope.boss && <BossPortrait boss={scope.boss} size="lg" />}
-      {scope.cls && (
-        <span className="mb-0.5 flex size-10 items-center justify-center rounded-md border border-white/10 bg-black/30">
-          {scope.spec ? <SpecIcon cls={scope.cls} spec={scope.spec} className="size-7 rounded-sm" /> : <ScopeMark scope={{ cls: scope.cls }} size="sm" />}
-        </span>
-      )}
-    </div>
-  )
-}
-
-function PeriodToggle({ value, onChange }: { value: RatingPeriod; onChange: (v: RatingPeriod) => void }) {
+export function PeriodToggle({ value, onChange }: { value: RatingPeriod; onChange: (v: RatingPeriod) => void }) {
   const options: { id: RatingPeriod; label: string }[] = [
     { id: "180d", label: "180 days" },
     { id: "all", label: "All time" },
   ]
   return (
-    <div className="flex rounded-md border bg-background/70 p-0.5 text-xs backdrop-blur-sm" role="group" aria-label="Period">
+    <div className="flex rounded-md border bg-background/60 p-0.5 text-xs" role="group" aria-label="Period">
       {options.map((o) => (
         <button
           key={o.id}
@@ -303,7 +209,7 @@ function PeriodToggle({ value, onChange }: { value: RatingPeriod; onChange: (v: 
           aria-pressed={value === o.id}
           onClick={() => onChange(o.id)}
           className={cn(
-            "rounded px-3 py-1.5 font-medium transition-colors",
+            "cursor-pointer rounded px-2.5 py-1.5 font-medium transition-colors",
             value === o.id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >
@@ -319,39 +225,43 @@ function CenterFrame({
   theme,
   title,
   onShowAll,
+  search,
+  toolbar,
   children,
 }: {
   board: RatingBoardData
   theme: MetricTheme
   title: string
   onShowAll: () => void
+  search: ReactNode
+  toolbar?: ReactNode
   children: ReactNode
 }) {
   return (
-    <section
-      aria-label={`${title} ${theme.label} leaderboard`}
-      className="relative flex flex-col overflow-hidden rounded-xl border bg-card sm:col-span-2 lg:col-start-2 lg:row-span-2 lg:row-start-1"
-    >
+    <section aria-label={`${title} ${theme.label} leaderboard`} className="relative flex flex-col overflow-hidden rounded-xl border bg-card">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-80"
-        style={{ background: "radial-gradient(ellipse 60% 70% at 50% 0%, color-mix(in oklab, var(--metric) 14%, transparent), transparent 70%)" }}
+        className="pointer-events-none absolute inset-x-0 top-0 h-40"
+        style={{ background: "radial-gradient(ellipse 50% 100% at 0% 0%, color-mix(in oklab, var(--metric) 14%, transparent), transparent 70%)" }}
       />
-      <div className="relative flex flex-col items-center px-4 pt-6 pb-4 text-center">
-        <Emblem size="lg" accent>
-          {board.kind === "raid" ? <theme.icon className="size-7 text-[color:var(--metric)]" /> : <ScopeMark scope={board.scope} size="lg" />}
-        </Emblem>
-        <span className="mt-2 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
-          {KIND_LABEL[board.kind]} · {theme.label}
-        </span>
-        <h2 className="mt-0.5 font-wow text-xl sm:text-2xl">{title}</h2>
-        <span className="text-xs text-muted-foreground">{board.subtitle}</span>
+      <div className="relative flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <Emblem size="sm" accent>
+            {board.kind === "raid" ? <theme.icon className="size-5 text-[color:var(--metric)]" /> : <ScopeMark scope={board.scope} size="sm" />}
+          </Emblem>
+          <div className="min-w-0">
+            <h2 className="truncate font-wow text-xl leading-tight">{title}</h2>
+            <span className="block truncate text-xs text-muted-foreground">{board.subtitle}</span>
+          </div>
+        </div>
+        {toolbar}
+        <div className="ml-auto">{search}</div>
       </div>
       {children}
       <button
         type="button"
         onClick={onShowAll}
-        className="relative mt-auto flex items-center justify-center gap-1.5 border-t px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-white/[.03] hover:text-foreground"
+        className="cursor-pointer relative mt-auto flex items-center justify-center gap-1.5 border-t px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-white/[.03] hover:text-foreground"
       >
         <ArrowDown className="size-3.5" />
         All {board.total} ranked
@@ -360,19 +270,36 @@ function CenterFrame({
   )
 }
 
-function CenterBoard({ board, theme, title, onShowAll }: { board: RatingBoardData; theme: MetricTheme; title: string; onShowAll: () => void }) {
+function CenterBoard({
+  board,
+  theme,
+  title,
+  onShowAll,
+  search,
+  toolbar,
+}: {
+  board: RatingBoardData
+  theme: MetricTheme
+  title: string
+  onShowAll: () => void
+  search: ReactNode
+  toolbar?: ReactNode
+}) {
   return (
-    <CenterFrame board={board} theme={theme} title={title} onShowAll={onShowAll}>
-      <ol className="relative border-t">
-        {board.entries.slice(0, 3).map((entry, i) => (
-          <EntryRow key={entry.id} entry={entry} rank={i + 1} theme={theme} size="lg" />
-        ))}
-      </ol>
-      <ol className="relative border-t bg-black/10">
-        {board.entries.slice(3).map((entry, i) => (
-          <EntryRow key={entry.id} entry={entry} rank={i + 4} theme={theme} size="sm" />
-        ))}
-      </ol>
+    <CenterFrame board={board} theme={theme} title={title} onShowAll={onShowAll} search={search} toolbar={toolbar}>
+      {/* Top ten in two columns: 1–5 and 6–10, so the full-width board stays short. */}
+      <div className="relative grid border-t max-lg:divide-y lg:grid-cols-2 lg:divide-x">
+        <ol>
+          {board.entries.slice(0, 5).map((entry, i) => (
+            <EntryRow key={entry.id} entry={entry} rank={i + 1} theme={theme} size="sm" />
+          ))}
+        </ol>
+        <ol>
+          {board.entries.slice(5, 10).map((entry, i) => (
+            <EntryRow key={entry.id} entry={entry} rank={i + 6} theme={theme} size="sm" />
+          ))}
+        </ol>
+      </div>
     </CenterFrame>
   )
 }
@@ -384,15 +311,19 @@ function OverviewCenter({
   title,
   onSelect,
   onShowAll,
+  search,
+  toolbar,
 }: {
   boards: { metric: RatingMetric; board: RatingBoardData }[]
   theme: MetricTheme
   title: string
   onSelect: (metric: RatingMetric) => void
   onShowAll: () => void
+  search: ReactNode
+  toolbar?: ReactNode
 }) {
   return (
-    <CenterFrame board={boards[0].board} theme={theme} title={title} onShowAll={onShowAll}>
+    <CenterFrame board={boards[0].board} theme={theme} title={title} onShowAll={onShowAll} search={search} toolbar={toolbar}>
       <div className="relative grid border-t max-lg:divide-y lg:grid-cols-3 lg:divide-x">
         {boards.map(({ metric, board }) => {
           const t = METRIC_THEMES[metric]
@@ -401,7 +332,7 @@ function OverviewCenter({
               <button
                 type="button"
                 onClick={() => onSelect(metric)}
-                className="group/col flex items-center gap-2 border-b px-3 py-2.5 text-left transition-colors hover:bg-white/[.03]"
+                className="cursor-pointer group/col flex items-center gap-2 border-b px-3 py-2.5 text-left transition-colors hover:bg-white/[.03]"
                 style={{ boxShadow: `inset 0 2px 0 ${t.accent}` }}
               >
                 <t.icon className="size-4 shrink-0" style={{ color: t.accent }} />
@@ -421,35 +352,19 @@ function OverviewCenter({
   )
 }
 
-/** One metric's leader inside an Overview side board. */
-function OverviewRow({ metric, entry }: { metric: RatingMetric; entry?: RatingEntry }) {
-  const t = METRIC_THEMES[metric]
+/** One line per entry in a compact card: rank or metric icon, spec icon, name, score. Detail on hover. */
+function CompactRow({ entry, theme, lead }: { entry: RatingEntry; theme: MetricTheme; lead: ReactNode }) {
   return (
-    <li className="flex items-center gap-3 border-b border-white/5 px-3 py-2 last:border-b-0">
-      <span className="flex size-6 shrink-0 items-center justify-center" title={t.label}>
-        <t.icon className="size-4" style={{ color: t.accent }} aria-label={t.label} />
+    <li
+      className="flex items-center gap-2 px-3 py-1.5"
+      title={`${entry.name}${entry.guild ? ` <${entry.guild}>` : ""} · ${entry.spec} · ${entry.detail}`}
+    >
+      {lead}
+      <SpecIcon cls={entry.cls} spec={entry.spec} className="size-4 shrink-0 rounded-sm" />
+      <span className="min-w-0 flex-1 truncate" style={{ color: CLASS_CSS_VAR[entry.cls] }}>
+        {entry.name}
       </span>
-      {entry ? (
-        <>
-          <SpecIcon cls={entry.cls} spec={entry.spec} className="size-5 shrink-0 rounded-sm" />
-          <span className="min-w-0 flex-1">
-            <span className="flex min-w-0 items-baseline gap-1.5">
-              <span className="max-w-full shrink-0 truncate text-sm font-medium" style={{ color: CLASS_CSS_VAR[entry.cls] }}>
-                {entry.name}
-              </span>
-              {entry.guild && <span className="min-w-0 truncate text-xs text-muted-foreground">&lt;{entry.guild}&gt;</span>}
-            </span>
-            <span className="block truncate text-[11px] text-muted-foreground">
-              {entry.spec} · {entry.detail}
-            </span>
-          </span>
-          <span className="shrink-0 text-right font-mono text-sm tabular-nums" style={{ color: t.accent }}>
-            {t.format(entry.score)}
-          </span>
-        </>
-      ) : (
-        <span className="text-xs text-muted-foreground">No ranked kills</span>
-      )}
+      <span className="shrink-0 font-mono tabular-nums">{theme.format(entry.score)}</span>
     </li>
   )
 }
@@ -457,39 +372,39 @@ function OverviewRow({ metric, entry }: { metric: RatingMetric; entry?: RatingEn
 /** A board one level down. The whole header narrows the pickers to it. */
 function SideFrame({
   board,
+  by,
   label,
-  instanceName,
   onOpen,
   children,
 }: {
   board: RatingBoardData
+  /** What this card stands for: a boss card under a class or spec filter is still a boss card. */
+  by: ChildKind
   label: string
-  instanceName: string
   onOpen: () => void
   children: ReactNode
 }) {
-  const title = board.kind === "spec" ? board.scope.spec! : scopeTitle(board.scope, instanceName)
-  const color = board.kind === "class" || board.kind === "spec" ? CLASS_CSS_VAR[board.scope.cls!] : undefined
+  const s = board.scope
+  const title = by === "boss" ? s.boss! : by === "class" ? (CLASS_DISPLAY[s.cls!] ?? s.cls!) : s.spec!
+  const color = by === "boss" ? undefined : CLASS_CSS_VAR[s.cls!]
   return (
-    <section aria-label={`${title} ${label} leaderboard`} className="flex flex-col overflow-hidden rounded-xl border bg-card/60 transition-colors hover:border-white/15">
+    <section
+      aria-label={`${title} ${label} leaderboard`}
+      className="flex flex-col overflow-hidden rounded-xl border bg-card/60 transition-colors hover:border-white/15"
+    >
       <button
         type="button"
         onClick={onOpen}
         title={`Show ${title}`}
-        className="group/open flex min-w-0 items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-white/[.03]"
+        className="group/open flex min-w-0 cursor-pointer items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-white/[.03]"
       >
-        <Emblem size="sm">
-          <ScopeMark scope={board.scope} size="sm" />
-        </Emblem>
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-semibold tracking-wide uppercase" style={{ color }}>
-            {title}
-          </span>
-          <span className="block text-[11px] text-muted-foreground">{board.subtitle}</span>
+        <ScopeMark scope={by === "boss" ? { boss: s.boss } : by === "class" ? { cls: s.cls } : { cls: s.cls, spec: s.spec }} size="sm" />
+        <span className="truncate font-wow text-base group-hover/open:text-[color:var(--metric)]" style={{ color }}>
+          {title}
         </span>
-        <ZoomIn aria-hidden className="ml-auto size-4 shrink-0 text-muted-foreground/60 transition-colors group-hover/open:text-[color:var(--metric)]" />
+        <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{board.total} ranked</span>
       </button>
-      <ol className="border-t">{children}</ol>
+      <ol className="border-t py-0.5 text-xs">{children}</ol>
     </section>
   )
 }

@@ -19,6 +19,22 @@ export interface RatingEntry {
   subSpec: string
   score: number
   detail: string
+  /** Ranked Mastery entries: the parts it is built from. Across a raid, Peak/Form/Floor average every boss. */
+  mastery?: MasteryParts
+}
+
+export interface MasteryParts {
+  peak: number
+  form: number
+  floor: number
+  /** 0–1, from the number of kills behind the estimate. */
+  confidence: number
+  kills: number
+  /**
+   * 0–1: how much of the five-kill evidence that ends the ranking discount is in. On a boss, its kills
+   * out of five; across a raid, every boss's (capped) kills out of five per boss, a missed boss adding 0.
+   */
+  evidence: number
 }
 
 /** Where a board sits in the drill-down: raid → boss → class → spec. */
@@ -26,6 +42,8 @@ export interface RatingScope {
   boss?: string
   cls?: string
   spec?: string
+  /** Talent-build cohort inside a spec, e.g. Feral (Cat) vs Feral (Bear). */
+  subSpec?: string
 }
 
 export type ScopeKind = "raid" | "boss" | "class" | "spec"
@@ -57,13 +75,50 @@ export const MOLTEN_CORE_BOSSES = [
 ] as const
 
 const SPECS: [string, string][] = [
-  ["WARRIOR", "Fury"], ["WARRIOR", "Arms"], ["ROGUE", "Combat"], ["ROGUE", "Assassination"],
-  ["MAGE", "Fire"], ["MAGE", "Frost"], ["WARLOCK", "Destruction"], ["WARLOCK", "Affliction"],
-  ["HUNTER", "Marksmanship"], ["HUNTER", "Survival"], ["SHAMAN", "Enhancement"], ["SHAMAN", "Elemental"],
-  ["DRUID", "Feral"], ["DRUID", "Balance"], ["PRIEST", "Shadow"], ["PALADIN", "Retribution"],
+  ["WARRIOR", "Fury"],
+  ["WARRIOR", "Arms"],
+  ["ROGUE", "Combat"],
+  ["ROGUE", "Assassination"],
+  ["MAGE", "Fire"],
+  ["MAGE", "Frost"],
+  ["WARLOCK", "Destruction"],
+  ["WARLOCK", "Affliction"],
+  ["HUNTER", "Marksmanship"],
+  ["HUNTER", "Survival"],
+  ["SHAMAN", "Enhancement"],
+  ["SHAMAN", "Elemental"],
+  ["DRUID", "Feral"],
+  ["DRUID", "Balance"],
+  ["PRIEST", "Shadow"],
+  ["PALADIN", "Retribution"],
 ]
 
-const NAME_A = ["Ash", "Brin", "Cael", "Dra", "El", "Fen", "Gor", "Hal", "Ith", "Jor", "Kel", "Lor", "Mor", "Nyx", "Or", "Pyr", "Quel", "Ryn", "Syl", "Thal", "Ul", "Vex", "Wyn", "Zar"]
+const NAME_A = [
+  "Ash",
+  "Brin",
+  "Cael",
+  "Dra",
+  "El",
+  "Fen",
+  "Gor",
+  "Hal",
+  "Ith",
+  "Jor",
+  "Kel",
+  "Lor",
+  "Mor",
+  "Nyx",
+  "Or",
+  "Pyr",
+  "Quel",
+  "Ryn",
+  "Syl",
+  "Thal",
+  "Ul",
+  "Vex",
+  "Wyn",
+  "Zar",
+]
 const NAME_B = ["ric", "wen", "dor", "mira", "las", "drin", "gash", "ion", "ka", "ven", "thas", "ra", "nok", "elle", "ius", "vyn"]
 const GUILDS = ["Ember Oath", "Ashen Vigil", "Molten Crown", "Sulfuron Rising", "Last Light", "Iron Rook", undefined]
 
@@ -90,6 +145,8 @@ interface MockPlayer {
 
 interface MockBossResult {
   peak: number
+  form: number
+  floor: number
   dps: number
   mastery: number
   kills: number
@@ -131,6 +188,8 @@ function bossResult(player: MockPlayer, rand: () => number, period: RatingPeriod
   const repetition = 1 - Math.exp(-Math.max(0, kills - 1) / 6)
   return {
     peak,
+    form,
+    floor,
     dps: Math.round(900 + peak * 14 + rand() * 60),
     mastery: m.rankedMastery,
     kills,
@@ -165,8 +224,8 @@ function mockRatings(period: RatingPeriod): MockRatings {
   return out
 }
 
-function entryFor(p: MockPlayer, score: number, detail: string): RatingEntry {
-  return { id: p.id, name: p.name, guild: p.guild, cls: p.cls, spec: p.spec, subSpec: p.subSpec, score, detail }
+function entryFor(p: MockPlayer, score: number, detail: string, mastery?: MasteryParts): RatingEntry {
+  return { id: p.id, name: p.name, guild: p.guild, cls: p.cls, spec: p.spec, subSpec: p.subSpec, score, detail, mastery }
 }
 
 function bossEntries(data: MockRatings, boss: string, metric: RatingMetric): RatingEntry[] {
@@ -177,7 +236,14 @@ function bossEntries(data: MockRatings, boss: string, metric: RatingMetric): Rat
       case "peak":
         return entryFor(p, r.peak, `${r.dps.toLocaleString()} DPS`)
       case "mastery":
-        return entryFor(p, r.mastery, `${r.kills} kills · ${Math.round(r.confidence * 100)}% conf.`)
+        return entryFor(p, r.mastery, `${r.kills} kills · ${Math.round(r.confidence * 100)}% conf.`, {
+          peak: r.peak,
+          form: r.form,
+          floor: r.floor,
+          confidence: r.confidence,
+          kills: r.kills,
+          evidence: Math.min(r.kills, 5) / 5,
+        })
       case "renown":
         return entryFor(p, r.renown, `${r.kills} kills`)
     }
@@ -200,7 +266,19 @@ function raidEntries(data: MockRatings, metric: RatingMetric): RatingEntry[] {
     const sum = results.reduce((s, r) => s + (metric === "peak" ? r.peak : r.mastery), 0)
     const kills = results.reduce((s, r) => s + r.kills, 0)
     const detail = metric === "peak" ? `${covered}/${totalBosses} bosses` : `${covered}/${totalBosses} bosses · ${kills} kills`
-    return [entryFor(p, sum / totalBosses, detail)]
+    const avg = (pick: (r: MockBossResult) => number) => results.reduce((s, r) => s + pick(r), 0) / totalBosses
+    const parts =
+      metric === "mastery"
+        ? {
+            peak: avg((r) => r.peak),
+            form: avg((r) => r.form),
+            floor: avg((r) => r.floor),
+            confidence: results.reduce((s, r) => s + r.confidence, 0) / covered,
+            kills,
+            evidence: results.reduce((s, r) => s + Math.min(r.kills, 5), 0) / (5 * totalBosses),
+          }
+        : undefined
+    return [entryFor(p, sum / totalBosses, detail, parts)]
   })
 }
 
@@ -217,9 +295,7 @@ export function scopeKind(scope: RatingScope): ScopeKind {
 export function scopeEntries(metric: RatingMetric, period: RatingPeriod, scope: RatingScope): RatingEntry[] {
   const data = mockRatings(period)
   const all = scope.boss ? bossEntries(data, scope.boss, metric) : raidEntries(data, metric)
-  return all
-    .filter((e) => (!scope.cls || e.cls === scope.cls) && (!scope.spec || e.spec === scope.spec))
-    .sort((a, b) => b.score - a.score)
+  return all.filter((e) => (!scope.cls || e.cls === scope.cls) && (!scope.spec || e.spec === scope.spec)).sort((a, b) => b.score - a.score)
 }
 
 export function scopeBoard(metric: RatingMetric, period: RatingPeriod, scope: RatingScope, limit = 25): RatingBoardData {
