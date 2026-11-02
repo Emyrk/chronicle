@@ -29,7 +29,7 @@ import {
   type DirectorUnit,
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
-import { actionForKey, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, IDLE_MOBILE_MAP_INPUT, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, type MapControlAction, type MobileMapInput } from "./mapControls";
+import { actionForKey, cameraCollisionDistance, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, IDLE_MOBILE_MAP_INPUT, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { unwrapCompassRadians } from "./mapCompassModel";
 import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
@@ -266,6 +266,12 @@ const TARGET_LINE_SPEED = TARGET_LINE.speed;
 
 const ORBIT_NEAR = 0.5;
 const ORBIT_FAR = 2000;
+// Camera collision (chronicle-1513): a wall between the pivot and the camera
+// pulls the camera in this far short of it (orbit in scene units, walk in
+// yards), past the near plane's reach, and it eases back out at this rate.
+const ORBIT_COLLISION_PADDING = ORBIT_NEAR * 1.5;
+const WALK_COLLISION_PADDING_YARDS = 0.3;
+const CAMERA_COLLISION_RETURN_RATE = 6;
 
 // --- Walk mode ("join the fight"): a WoW-style character on the mesh floor ---
 // Speeds and sizes in yards (seconds), scaled by the mesh's scene units per yard.
@@ -644,6 +650,8 @@ interface WalkState {
   camPitch: number;
   /** Camera distance from the head, yards; 0 is first person. */
   camDistance: number;
+  /** The distance the camera actually sits at, yards: `camDistance`, or closer while a wall is in the way. */
+  camShown: number;
   lastMs: number;
   /** Held left/right mouse buttons (`PointerEvent.buttons`) and the last drag point. */
   drag: { buttons: number; x: number; y: number } | null;
@@ -844,6 +852,15 @@ export class MapScene3D {
   private readonly directorTo = new THREE.Vector3();
   private readonly directorAim = new THREE.Vector3();
   private readonly directorEye = new THREE.Vector3();
+  // Camera collision scratch, and the orbit distance the user wants (the
+  // camera may sit closer while a wall is in the way) and the one last set.
+  private readonly collisionEye = new THREE.Vector3();
+  private readonly collisionPoint = new THREE.Vector3();
+  private readonly collisionBefore = new THREE.Vector3();
+  private readonly collisionFrom = new THREE.Vector3();
+  private orbitWantDistance: number | null = null;
+  private orbitShownDistance: number | null = null;
+  private collisionLastMs = 0;
   // Who the last frame held, for the straggler hysteresis.
   private readonly directorInFrame = new Set<string>();
   // Refilled per frame so the Director allocates nothing while it runs.
@@ -1826,11 +1843,18 @@ export class MapScene3D {
   // On the mesh: keeps the target within the pan radius of the focus and on
   // the floor, and the camera above the floor beneath it, moving the camera
   // with the target so the view does not swing.
-  private constrainCamera() {
+  private constrainCamera(dt = 0): boolean {
     const mesh = this.dungeonMesh;
-    if (!mesh || this.constraining || this.walk) return;
+    if (this.constraining) return false;
+    if (!mesh || this.walk) {
+      this.orbitWantDistance = this.orbitShownDistance = null;
+      return false;
+    }
     const { target } = this.controls;
     const { position } = this.camera;
+    // Measured before this pass's own clamps, so only a change something else
+    // made (a zoom, a new shot) counts as a new distance to come back out to.
+    const arrived = position.distanceTo(target);
     let moved = false;
     if (this.focusCentre) {
       const clamped = clampToRadius(target, this.focusCentre, MESH_PAN_RADIUS_YARDS * mesh.scale);
@@ -1848,15 +1872,25 @@ export class MapScene3D {
       target.y = floor;
       moved = true;
     }
-    const minY = this.floorHeights.heightAt("camera", position.x, position.z) + MESH_CAMERA_CLEARANCE;
-    if (position.y < minY) {
-      position.y = minY;
+    // Only the floor below the camera lifts it: the highest surface over its
+    // spot may be a wall top, a ledge or a roof, and lifting the camera onto
+    // that tips the view straight down. Walls between the camera and the
+    // target are the collision pass's job.
+    const below = this.castFloor(position.x, position.z, position.y + MESH_CAMERA_CLEARANCE);
+    if (below !== null && position.y < below + MESH_CAMERA_CLEARANCE) {
+      position.y = below + MESH_CAMERA_CLEARANCE;
       moved = true;
     }
-    if (!moved) return;
-    this.constraining = true;
-    this.controls.update();
-    this.constraining = false;
+    const before = this.collisionBefore.copy(position);
+    const easing = this.collideOrbitCamera(dt, arrived);
+    if (!position.equals(before)) moved = true;
+    if (moved) {
+      this.constraining = true;
+      this.controls.update();
+      this.constraining = false;
+    }
+    this.orbitShownDistance = position.distanceTo(target);
+    return easing;
   }
 
   // The camera's elevation above the horizon, in degrees.
@@ -1897,8 +1931,15 @@ export class MapScene3D {
 
   // Whether the cave stands between the two points (the camera's line to the fight).
   private meshBlocks(from: THREE.Vector3, to: THREE.Vector3): boolean {
+    return this.meshHitDistance(from, to) !== null;
+  }
+
+  // How far (scene units) from `from` toward `to` the first cave surface is,
+  // or null when the segment is clear. Walls count from either side.
+  private meshHitDistance(from: THREE.Vector3, to: THREE.Vector3): number | null {
     const mesh = this.dungeonMesh;
-    if (!mesh) return false;
+    if (!mesh) return null;
+    let nearest: number | null = null;
     for (const cave of mesh.caves) {
       const origin = this.directorFrom.copy(from).applyMatrix4(cave.inverse);
       const end = this.directorTo.copy(to).applyMatrix4(cave.inverse);
@@ -1907,9 +1948,37 @@ export class MapScene3D {
       this.floorRay.origin.copy(origin);
       this.floorRay.direction.copy(end).sub(origin).divideScalar(length);
       const hit = cave.bvh.raycastFirst(this.floorRay, THREE.DoubleSide);
-      if (hit && hit.distance < length) return true;
+      if (!hit || hit.distance >= length) continue;
+      const distance = from.distanceTo(this.collisionPoint.copy(hit.point).applyMatrix4(cave.mesh.matrixWorld));
+      if (nearest === null || distance < nearest) nearest = distance;
     }
-    return false;
+    return nearest;
+  }
+
+  // Keeps the cave from standing between the orbit target and the camera: a
+  // wall pulls the camera in along its line of sight, and once clear it eases
+  // back out to the distance the user (or the Director) chose. `arrived` is
+  // the distance before this constrain pass: when it differs from the one the
+  // last pass left, something else moved the camera (a zoom, a new shot) and
+  // that becomes the new choice. True while it is still easing out.
+  private collideOrbitCamera(dt: number, arrived: number): boolean {
+    const { target } = this.controls;
+    const { position } = this.camera;
+    const shown = position.distanceTo(target);
+    const mesh = this.dungeonMesh;
+    if (!mesh || shown <= 1e-6) return false;
+    const last = this.orbitShownDistance;
+    if (last === null || this.orbitWantDistance === null || Math.abs(arrived - last) > 1e-4 * Math.max(1, arrived)) this.orbitWantDistance = arrived;
+    const want = this.orbitWantDistance;
+    // From the fight's height, as clearShot does: the target sits on the
+    // floor, which a ray from it would graze at once.
+    const from = this.collisionFrom.copy(target);
+    from.y += MESH_PLAYER_HEIGHT_YARDS * mesh.scale;
+    const eye = this.collisionEye.copy(position).sub(target).multiplyScalar(want / shown).add(from);
+    const hit = this.meshHitDistance(from, eye);
+    const next = cameraCollisionDistance(shown, want, hit, ORBIT_COLLISION_PADDING, Math.min(want, this.controls.minDistance), CAMERA_COLLISION_RETURN_RATE, dt);
+    if (next !== shown) position.sub(target).multiplyScalar(next / shown).add(target);
+    return next < want && (hit === null || hit - ORBIT_COLLISION_PADDING > next);
   }
 
   // The lowest cinematic elevation with a clear line to the fight, climbing in
@@ -4117,6 +4186,7 @@ export class MapScene3D {
       camYaw,
       camPitch: WALK_START_PITCH,
       camDistance: WALK_START_DISTANCE_YARDS,
+      camShown: WALK_START_DISTANCE_YARDS,
       lastMs: 0,
       drag: null,
       avatar,
@@ -4338,17 +4408,27 @@ export class MapScene3D {
     walk.avatar.position.copy(walk.position);
     walk.avatar.rotation.y = walk.yaw + walk.bodyTurn;
     const head = this.walkHead.set(walk.position.x, walk.position.y + WALK_EYE_YARDS * scale, walk.position.z);
-    const firstPerson = walk.camDistance <= WALK_FIRST_PERSON_YARDS;
-    walk.avatar.visible = !firstPerson;
     const pitchCos = Math.cos(walk.camPitch);
     const pitchSin = Math.sin(walk.camPitch);
     const yawSin = Math.sin(walk.camYaw);
     const yawCos = Math.cos(walk.camYaw);
+    // A wall between the head and the camera pulls the camera in front of it,
+    // down to first person, so the character stays in view (chronicle-1513).
+    let hit: number | null = null;
+    if (walk.camDistance > 0) {
+      const want = walk.camDistance * scale;
+      const eye = this.collisionEye.set(head.x + yawSin * pitchCos * want, head.y + pitchSin * want, head.z + yawCos * pitchCos * want);
+      const distance = this.meshHitDistance(head, eye);
+      hit = distance === null ? null : distance / scale;
+    }
+    walk.camShown = cameraCollisionDistance(walk.camShown, walk.camDistance, hit, WALK_COLLISION_PADDING_YARDS, 0, CAMERA_COLLISION_RETURN_RATE, dt);
+    const firstPerson = walk.camShown <= WALK_FIRST_PERSON_YARDS;
+    walk.avatar.visible = !firstPerson;
     if (firstPerson) {
       this.camera.position.copy(head);
       this.camera.lookAt(head.x - yawSin * pitchCos, head.y - pitchSin, head.z - yawCos * pitchCos);
     } else {
-      const distance = walk.camDistance * scale;
+      const distance = walk.camShown * scale;
       this.camera.position.set(head.x + yawSin * pitchCos * distance, head.y + pitchSin * distance, head.z + yawCos * pitchCos * distance);
       this.camera.lookAt(head);
     }
@@ -4424,7 +4504,12 @@ export class MapScene3D {
       // whether it is still moving, so the loop idles again once it settles.
       // Walking, the character places the camera; OrbitControls would clamp it back.
       const damping = !walking && this.controls.update();
-      const animating = this.updateEffects(now) || reframing || moving || directing || keyMoving || (!this.walkCaptureActive && walking) || presencesMoving || damping;
+      const collisionDt = this.collisionLastMs ? Math.min(KEY_MAX_STEP_S, (now - this.collisionLastMs) / 1000) : 0;
+      this.collisionLastMs = now;
+      // A camera pulled in by a wall eases back out once the wall is gone.
+      const uncolliding = !walking && this.constrainCamera(collisionDt);
+      if (!uncolliding && !damping) this.collisionLastMs = 0;
+      const animating = this.updateEffects(now) || reframing || moving || directing || keyMoving || (!this.walkCaptureActive && walking) || presencesMoving || damping || uncolliding;
       this.updateTokens(now);
       this.updateBars();
       this.updateEffectHover();
