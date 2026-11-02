@@ -64,7 +64,9 @@ func Log500(logger *slog.Logger) func(http.Handler) http.Handler {
 			startedAt := time.Now()
 			sw := &statusWriter{ResponseWriter: rw}
 			next.ServeHTTP(sw, r)
-			if sw.status == http.StatusInternalServerError {
+			// Client disconnects cancel the request context and can surface as database
+			// "conn closed" errors. There is no server failure to report in that case.
+			if sw.status == http.StatusInternalServerError && r.Context().Err() == nil {
 				body := sw.body
 				// Decompress gzip body so error messages are readable in logs.
 				if len(body) >= 2 && body[0] == 0x1f && body[1] == 0x8b {
