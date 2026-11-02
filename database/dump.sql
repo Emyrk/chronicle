@@ -126,34 +126,39 @@ CREATE FUNCTION apply_rating_renown_template() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 DECLARE
-    selected_flavor TEXT;
-    template_version INT;
+    selected_flavors TEXT[];
 BEGIN
     SELECT CASE
-        WHEN server.id = '10ac9e23-ff74-43ed-83ad-96c123017097'::uuid THEN 'turtle'
-        WHEN 'vanilla' = ANY(dataset.default_flavor) THEN 'vanilla'
-        ELSE NULL END INTO selected_flavor
+        WHEN server.id = '10ac9e23-ff74-43ed-83ad-96c123017097'::uuid
+            OR 'nightmare-of-ursol' = ANY(dataset.default_flavor)
+            THEN ARRAY['vanilla', 'nightmare-of-ursol']::text[]
+        WHEN 'vanilla' = ANY(dataset.default_flavor) THEN ARRAY['vanilla']::text[]
+        ELSE '{}'::text[] END INTO selected_flavors
     FROM rating_realm_groups grp
     JOIN wow_servers server ON server.id = grp.server_id
     LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
     LEFT JOIN datasets dataset ON dataset.id = COALESCE(server.default_dataset_id, tenant.default_dataset_id)
     WHERE grp.id = NEW.group_id;
 
-    IF selected_flavor IS NOT NULL THEN
-        SELECT max(version) INTO template_version FROM rating_renown_templates
-        WHERE flavor = selected_flavor;
+    IF cardinality(selected_flavors) > 0 THEN
         INSERT INTO rating_group_raid_policies (group_id, instance_name, peak_weight, mastery_weight)
-        SELECT NEW.group_id, instance_name, 1, 1
-        FROM rating_renown_template_bosses
-        WHERE flavor = selected_flavor AND version = template_version
-        GROUP BY instance_name
+        SELECT NEW.group_id, boss.instance_name, 1, 1
+        FROM rating_renown_template_bosses boss
+        WHERE boss.flavor = ANY(selected_flavors)
+          AND boss.version = (SELECT max(version) FROM rating_renown_templates WHERE flavor = boss.flavor)
+          AND NOT (boss.instance_name = 'Molten Core' AND boss.encounter_name = 'Gehennas'
+                   AND 'nightmare-of-ursol' = ANY(selected_flavors))
+        GROUP BY boss.instance_name
         ON CONFLICT (group_id, instance_name) DO NOTHING;
 
         INSERT INTO rating_group_boss_policies
             (group_id, instance_name, encounter_name, peak_weight, mastery_weight, renown_points)
-        SELECT NEW.group_id, instance_name, encounter_name, 1, 1, renown_points
-        FROM rating_renown_template_bosses
-        WHERE flavor = selected_flavor AND version = template_version
+        SELECT NEW.group_id, boss.instance_name, boss.encounter_name, 1, 1, boss.renown_points
+        FROM rating_renown_template_bosses boss
+        WHERE boss.flavor = ANY(selected_flavors)
+          AND boss.version = (SELECT max(version) FROM rating_renown_templates WHERE flavor = boss.flavor)
+          AND NOT (boss.instance_name = 'Molten Core' AND boss.encounter_name = 'Gehennas'
+                   AND 'nightmare-of-ursol' = ANY(selected_flavors))
         ON CONFLICT (group_id, instance_name, encounter_name) DO NOTHING;
         -- Child-row version triggers record edits. Initial defaults are part of
         -- this initial policy, not subsequent administrative revisions.

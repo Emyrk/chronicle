@@ -91,7 +91,62 @@ func TestRenownTemplateAppliesOnlyToNewGroupPolicies(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT renown_points FROM rating_group_boss_policies
         WHERE group_id = $1 AND instance_name = 'Molten Core' AND encounter_name = 'Gehennas'`, vanillaGroup).Scan(&points))
 	require.Equal(t, 1.0, points)
+	// Every vanilla boss is shared, while custom Turtle bosses are tagged only
+	// nightmare-of-ursol and never seeded on a vanilla-only server.
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM rating_group_boss_policies WHERE group_id = $1
-        AND instance_name <> 'Molten Core'`, vanillaGroup).Scan(&count))
-	require.Zero(t, count, "vanilla template only defines MC")
+        AND instance_name = 'Naxxramas'`, vanillaGroup).Scan(&count))
+	require.Equal(t, 15, count)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM rating_group_boss_policies WHERE group_id = $1
+        AND instance_name = 'Lower Tower of Karazhan'`, vanillaGroup).Scan(&count))
+	require.Zero(t, count)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM (
+        SELECT instance_name, encounter_name FROM rating_group_boss_policies WHERE group_id = $1
+        EXCEPT
+        SELECT instance_name, encounter_name FROM rating_renown_template_bosses WHERE flavor = 'vanilla' AND version = 1
+    ) unexpected`, vanillaGroup).Scan(&count))
+	require.Zero(t, count)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM (
+        SELECT instance_name, encounter_name FROM rating_renown_template_bosses WHERE flavor = 'vanilla' AND version = 1
+        EXCEPT
+        SELECT instance_name, encounter_name FROM rating_group_boss_policies WHERE group_id = $1
+    ) missing`, vanillaGroup).Scan(&count))
+	require.Zero(t, count)
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM (
+        SELECT instance_name, encounter_name FROM rating_group_boss_policies WHERE group_id = $1
+        EXCEPT
+        SELECT instance_name, encounter_name FROM rating_renown_template_bosses
+        WHERE version = 1 AND NOT (instance_name = 'Molten Core' AND encounter_name = 'Gehennas')
+    ) unexpected`, turtleGroup).Scan(&count))
+	require.Zero(t, count)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM (
+        SELECT instance_name, encounter_name FROM rating_renown_template_bosses
+        WHERE version = 1 AND NOT (instance_name = 'Molten Core' AND encounter_name = 'Gehennas')
+        EXCEPT
+        SELECT instance_name, encounter_name FROM rating_group_boss_policies WHERE group_id = $1
+    ) missing`, turtleGroup).Scan(&count))
+	require.Zero(t, count)
+
+	// A Nightmare-flavored dataset composes the same shared vanilla inventory
+	// with Turtle additions, even when the server is not the legacy Turtle UUID.
+	nightmareDataset := uuid.New()
+	nightmareServer := uuid.New()
+	nightmareGroup := uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO datasets (id, name, slug, wow_version, default_flavor)
+        VALUES ($1, 'Nightmare test', $2, '1.12', ARRAY['nightmare-of-ursol']::text[])`, nightmareDataset, "nightmare-"+uuid.NewString())
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO wow_servers (id, name, default_dataset_id)
+        VALUES ($1, 'Nightmare test', $2)`, nightmareServer, nightmareDataset)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO rating_realm_groups (id, server_id, name)
+        VALUES ($1, $2, 'Nightmare')`, nightmareGroup, nightmareServer)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, createRenownGroupPolicy, nightmareGroup)
+	require.NoError(t, err)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM rating_group_boss_policies
+        WHERE group_id = $1 AND instance_name = 'Molten Core' AND encounter_name = 'Gehennas'`, nightmareGroup).Scan(&count))
+	require.Zero(t, count)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT renown_points FROM rating_group_boss_policies
+        WHERE group_id = $1 AND instance_name = 'Lower Tower of Karazhan' AND encounter_name = 'Moroes'`, nightmareGroup).Scan(&points))
+	require.Equal(t, 2.0, points)
 }
