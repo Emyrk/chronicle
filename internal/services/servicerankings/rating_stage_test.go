@@ -115,3 +115,12 @@ func TestRatingStageStaleConfigurationAborts(t *testing.T) {
 	require.Empty(t, s.staged)
 	require.Zero(t, s.advances)
 }
+
+func TestRatingStageGuildRenownEndsAtProjection(t *testing.T) {
+	t.Parallel()
+	s := newStageStore()
+	s.cp.Phase = "guild_renown"
+	require.NoError(t, finishRatingStage(t.Context(), s, s.cp))
+	require.Equal(t, "players", s.cp.Phase)
+	require.Equal(t, 1, s.advances)
+}

@@ -1151,11 +1151,6 @@ type sqlcQuerier interface {
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
 	StageRatingGuildRenownPage(ctx context.Context, arg StageRatingGuildRenownPageParams) (int64, error)
 	StageRatingGuildRuns(ctx context.Context, arg StageRatingGuildRunsParams) (int64, error)
-	StageRatingMissingGuildRenownRuns(ctx context.Context, arg StageRatingMissingGuildRenownRunsParams) (int64, error)
-	// Repair historical attendance into this generation without changing durable
-	// facts or moving the frozen source cutoff. Persisted facts take precedence.
-	// The source page is bounded to 100 runs by the worker.
-	StageRatingMissingPlayerRenownRuns(ctx context.Context, arg StageRatingMissingPlayerRenownRunsParams) (int64, error)
 	StageRatingPlayerRenownPage(ctx context.Context, arg StageRatingPlayerRenownPageParams) (int64, error)
 	// Only a bounded page is passed to each insertion. Caller advances the
 	// checkpoint cursor in the same transaction. ON CONFLICT never rewrites the

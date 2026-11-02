@@ -93,30 +93,6 @@ func stageRatingEvidencePage(ctx context.Context, store database.Store, tenant, 
 				return err
 			}
 			next.Run = ids[len(ids)-1]
-		case "repair_runs":
-			ids, err := tx.ListRatingStageRunsForTenant(ctx, database.ListRatingStageRunsForTenantParams{
-				TenantID: tenant, AfterRunID: c.Run, SourceCutoff: cutoff, BatchSize: ratingStagePageSize,
-			})
-			if err != nil {
-				return err
-			}
-			if len(ids) == 0 {
-				staged = true
-				return advanceRatingStage(ctx, tx, cp, "players", ratingStageCursor{})
-			}
-			_, err = tx.StageRatingMissingPlayerRenownRuns(ctx, database.StageRatingMissingPlayerRenownRunsParams{
-				TenantID: tenant, GenerationID: generation, SourceCutoff: cutoff, RunIds: ids,
-			})
-			if err != nil {
-				return err
-			}
-			_, err = tx.StageRatingMissingGuildRenownRuns(ctx, database.StageRatingMissingGuildRenownRunsParams{
-				TenantID: tenant, GenerationID: generation, SourceCutoff: cutoff, RunIds: ids,
-			})
-			if err != nil {
-				return err
-			}
-			next.Run = ids[len(ids)-1]
 		case "player_renown", "guild_renown":
 			if c.Realm == uuid.Nil {
 				realms, err := tx.ListRatingStageRealms(ctx, database.ListRatingStageRealmsParams{TenantID: tenant, AfterRealmID: uuid.Nil, BatchSize: 1})
@@ -188,12 +164,14 @@ func finishRatingStage(ctx context.Context, tx database.Store, cp database.Ratin
 	if cp.Phase == "player_renown" {
 		return advanceRatingStage(ctx, tx, cp, "guild_renown", ratingStageCursor{})
 	}
-	return advanceRatingStage(ctx, tx, cp, "repair_runs", ratingStageCursor{})
+	return advanceRatingStage(ctx, tx, cp, "players", ratingStageCursor{})
 }
 
 // StageRatingEvidence resumes the existing generation if possible, or freezes
 // a new snapshot. It does not publish or project: callers must project all four
 // metrics and scope rows before transitioning the checkpoint to ready.
+// Historical Renown repair is a separate job run before starting a generation;
+// this snapshot never imports evidence written after its source cutoff.
 func StageRatingEvidence(ctx context.Context, store database.Store, tenant uuid.UUID, asOf time.Time) (uuid.UUID, error) {
 	policies, err := store.ListTenantRatingPolicies(ctx, tenant)
 	if err != nil {
