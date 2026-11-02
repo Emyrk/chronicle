@@ -651,6 +651,8 @@ type sqlcQuerier interface {
 	InsertGuildPageTab(ctx context.Context, arg InsertGuildPageTabParams) (GuildPageTab, error)
 	InsertGuildRatingBossScore(ctx context.Context, arg InsertGuildRatingBossScoreParams) error
 	InsertGuildRatingScopeScore(ctx context.Context, arg InsertGuildRatingScopeScoreParams) error
+	InsertGuildTenantBossScore(ctx context.Context, arg InsertGuildTenantBossScoreParams) (int64, error)
+	InsertGuildTenantScopeScore(ctx context.Context, arg InsertGuildTenantScopeScoreParams) (int64, error)
 	InsertInferenceClientToolRequest(ctx context.Context, arg InsertInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
 	InsertInferenceConnection(ctx context.Context, arg InsertInferenceConnectionParams) (InferenceConnection, error)
 	InsertInferenceMessage(ctx context.Context, arg InsertInferenceMessageParams) (InsertInferenceMessageRow, error)
@@ -675,6 +677,11 @@ type sqlcQuerier interface {
 	// No unique constraint: duplicate uploads are collapsed at read time via run_id DISTINCT ON.
 	InsertParseScoreResult(ctx context.Context, arg InsertParseScoreResultParams) error
 	InsertParsedLogGroup(ctx context.Context, id uuid.UUID) error
+	// Immutable, generation-local writes. A replay does not change a previously
+	// projected score. Lock the building generation against concurrent activation
+	// or retirement while selecting the tenant-owned realm and subject.
+	InsertPlayerTenantBossScore(ctx context.Context, arg InsertPlayerTenantBossScoreParams) (int64, error)
+	InsertPlayerTenantScopeScore(ctx context.Context, arg InsertPlayerTenantScopeScoreParams) (int64, error)
 	InsertProofRequest(ctx context.Context, arg InsertProofRequestParams) (ProofRequest, error)
 	InsertProofSubject(ctx context.Context, arg InsertProofSubjectParams) error
 	InsertRatingBossScore(ctx context.Context, arg InsertRatingBossScoreParams) error

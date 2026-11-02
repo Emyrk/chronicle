@@ -25860,6 +25860,260 @@ func (q *sqlQuerier) PutTenantRenownBoss(ctx context.Context, arg PutTenantRenow
 	return result.RowsAffected(), nil
 }
 
+const insertGuildTenantBossScore = `-- name: InsertGuildTenantBossScore :execrows
+INSERT INTO guild_tenant_rating_boss_scores (
+    generation_id, tenant_id, realm_id, guild_id, instance_name, encounter_name, difficulty_name, max_players, rating_metric, window_kind, window_start, window_end, score, best_raw, rank_one_raw, best_locked_parse, form, floor_score, eligible_kills
+)
+SELECT generation.id, generation.tenant_id, realm.id, guild.id, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+FROM rating_score_generations generation
+JOIN wow_server_realms realm ON realm.id = $16
+JOIN wow_servers server ON server.id = realm.server_id
+JOIN guilds guild ON guild.id = $17 AND guild.realm_id = realm.id
+WHERE generation.id = $18 AND generation.tenant_id = $19
+  AND generation.status = 'building'
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($19::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+FOR SHARE OF generation
+ON CONFLICT DO NOTHING
+`
+
+type InsertGuildTenantBossScoreParams struct {
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16              `db:"max_players" json:"max_players"`
+	RatingMetric    string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind      string             `db:"window_kind" json:"window_kind"`
+	WindowStart     pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd       pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score           float64            `db:"score" json:"score"`
+	BestRaw         pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	RankOneRaw      pgtype.Float8      `db:"rank_one_raw" json:"rank_one_raw"`
+	BestLockedParse pgtype.Float8      `db:"best_locked_parse" json:"best_locked_parse"`
+	Form            pgtype.Float8      `db:"form" json:"form"`
+	FloorScore      pgtype.Float8      `db:"floor_score" json:"floor_score"`
+	EligibleKills   int32              `db:"eligible_kills" json:"eligible_kills"`
+	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID         uuid.UUID          `db:"guild_id" json:"guild_id"`
+	GenerationID    uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) InsertGuildTenantBossScore(ctx context.Context, arg InsertGuildTenantBossScoreParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertGuildTenantBossScore,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.BestRaw,
+		arg.RankOneRaw,
+		arg.BestLockedParse,
+		arg.Form,
+		arg.FloorScore,
+		arg.EligibleKills,
+		arg.RealmID,
+		arg.GuildID,
+		arg.GenerationID,
+		arg.TenantID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const insertGuildTenantScopeScore = `-- name: InsertGuildTenantScopeScore :execrows
+INSERT INTO guild_tenant_rating_scope_scores (
+    generation_id, tenant_id, realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind, window_start, window_end, score
+)
+SELECT generation.id, generation.tenant_id, realm.id, guild.id, $1, $2, $3, $4, $5, $6, $7, $8
+FROM rating_score_generations generation
+JOIN wow_server_realms realm ON realm.id = $9
+JOIN wow_servers server ON server.id = realm.server_id
+JOIN guilds guild ON guild.id = $10 AND guild.realm_id = realm.id
+WHERE generation.id = $11 AND generation.tenant_id = $12
+  AND generation.status = 'building'
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($12::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+FOR SHARE OF generation
+ON CONFLICT DO NOTHING
+`
+
+type InsertGuildTenantScopeScoreParams struct {
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	RatingMetric   string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind     string             `db:"window_kind" json:"window_kind"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd      pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score          float64            `db:"score" json:"score"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID          `db:"guild_id" json:"guild_id"`
+	GenerationID   uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) InsertGuildTenantScopeScore(ctx context.Context, arg InsertGuildTenantScopeScoreParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertGuildTenantScopeScore,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.RealmID,
+		arg.GuildID,
+		arg.GenerationID,
+		arg.TenantID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const insertPlayerTenantBossScore = `-- name: InsertPlayerTenantBossScore :execrows
+
+INSERT INTO player_tenant_rating_boss_scores (
+    generation_id, tenant_id, realm_id, player_guid, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind, window_start, window_end, score, best_raw, rank_one_raw, best_locked_parse, form, floor_score, eligible_kills
+)
+SELECT generation.id, generation.tenant_id, realm.id, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+FROM rating_score_generations generation
+JOIN wow_server_realms realm ON realm.id = $21
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE generation.id = $22 AND generation.tenant_id = $23
+  AND generation.status = 'building' AND $1::text <> ''
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($23::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+FOR SHARE OF generation
+ON CONFLICT DO NOTHING
+`
+
+type InsertPlayerTenantBossScoreParams struct {
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	BestRaw           pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	RankOneRaw        pgtype.Float8      `db:"rank_one_raw" json:"rank_one_raw"`
+	BestLockedParse   pgtype.Float8      `db:"best_locked_parse" json:"best_locked_parse"`
+	Form              pgtype.Float8      `db:"form" json:"form"`
+	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
+	EligibleKills     int32              `db:"eligible_kills" json:"eligible_kills"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+}
+
+// Immutable, generation-local writes. A replay does not change a previously
+// projected score. Lock the building generation against concurrent activation
+// or retirement while selecting the tenant-owned realm and subject.
+func (q *sqlQuerier) InsertPlayerTenantBossScore(ctx context.Context, arg InsertPlayerTenantBossScoreParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertPlayerTenantBossScore,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.BestRaw,
+		arg.RankOneRaw,
+		arg.BestLockedParse,
+		arg.Form,
+		arg.FloorScore,
+		arg.EligibleKills,
+		arg.RealmID,
+		arg.GenerationID,
+		arg.TenantID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const insertPlayerTenantScopeScore = `-- name: InsertPlayerTenantScopeScore :execrows
+INSERT INTO player_tenant_rating_scope_scores (
+    generation_id, tenant_id, realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind, window_start, window_end, score
+)
+SELECT generation.id, generation.tenant_id, realm.id, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+FROM rating_score_generations generation
+JOIN wow_server_realms realm ON realm.id = $14
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE generation.id = $15 AND generation.tenant_id = $16
+  AND generation.status = 'building' AND $1::text <> ''
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($16::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+FOR SHARE OF generation
+ON CONFLICT DO NOTHING
+`
+
+type InsertPlayerTenantScopeScoreParams struct {
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) InsertPlayerTenantScopeScore(ctx context.Context, arg InsertPlayerTenantScopeScoreParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertPlayerTenantScopeScore,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.RealmID,
+		arg.GenerationID,
+		arg.TenantID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const listActiveGuildTenantBossScores = `-- name: ListActiveGuildTenantBossScores :many
 SELECT score.generation_id, score.tenant_id, score.realm_id, score.guild_id, score.instance_name, score.encounter_name, score.difficulty_name, score.max_players, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.best_raw, score.rank_one_raw, score.best_locked_parse, score.form, score.floor_score, score.eligible_kills, score.computed_at
 FROM guild_tenant_rating_boss_scores score
