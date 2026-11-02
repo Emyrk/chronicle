@@ -36,17 +36,17 @@ func TestRatingRealmGroupsMoveCurrentScoresAndRenownEvidence(t *testing.T) {
 		AvailableFormats: []string{},
 	})
 	require.NoError(t, err)
-	tenantArg := uuid.NullUUID{UUID: tenant.ID, Valid: true}
-	otherArg := uuid.NullUUID{UUID: otherTenant.ID, Valid: true}
+	tenantArg := tenant.ID
+	otherArg := otherTenant.ID
 	server, err := store.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: uuid.New(), Name: "Group Server"})
 	require.NoError(t, err)
 	otherServer, err := store.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: uuid.New(), Name: "Other Group Server"})
 	require.NoError(t, err)
-	require.NoError(t, store.SetServerTenant(ctx, database.SetServerTenantParams{ID: server.ID, TenantID: tenantArg}))
-	require.NoError(t, store.SetServerTenant(ctx, database.SetServerTenantParams{ID: otherServer.ID, TenantID: otherArg}))
+	require.NoError(t, store.SetServerTenant(ctx, database.SetServerTenantParams{ID: server.ID, TenantID: uuid.NullUUID{UUID: tenantArg, Valid: true}}))
+	require.NoError(t, store.SetServerTenant(ctx, database.SetServerTenantParams{ID: otherServer.ID, TenantID: uuid.NullUUID{UUID: otherArg, Valid: true}}))
 	sameTenantServer, err := store.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: uuid.New(), Name: "Same Tenant Other Server"})
 	require.NoError(t, err)
-	require.NoError(t, store.SetServerTenant(ctx, database.SetServerTenantParams{ID: sameTenantServer.ID, TenantID: tenantArg}))
+	require.NoError(t, store.SetServerTenant(ctx, database.SetServerTenantParams{ID: sameTenantServer.ID, TenantID: uuid.NullUUID{UUID: tenantArg, Valid: true}}))
 	sameTenantRealm, err := store.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{
 		ID: uuid.New(), ServerID: sameTenantServer.ID, Name: "Same Tenant Other Realm",
 	})
@@ -150,7 +150,7 @@ func TestRatingRealmGroupsMoveCurrentScoresAndRenownEvidence(t *testing.T) {
 
 func mustAssignGroup(t *testing.T, ctx context.Context, store interface {
 	AssignRatingRealmToGroup(context.Context, database.AssignRatingRealmToGroupParams) (int64, error)
-}, tenant uuid.NullUUID, realm, group uuid.UUID) int64 {
+}, tenant uuid.UUID, realm, group uuid.UUID) int64 {
 	t.Helper()
 	count, err := store.AssignRatingRealmToGroup(ctx, database.AssignRatingRealmToGroupParams{
 		TenantID: tenant, RealmID: realm, GroupID: group,

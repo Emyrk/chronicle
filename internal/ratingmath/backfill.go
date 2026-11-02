@@ -34,7 +34,7 @@ func BackfillRenownFacts(ctx context.Context, store renownBackfillStore, tenantI
 	}
 	for batch := int32(0); batch < maxBatches; batch++ {
 		ids, err := store.ListRenownBackfillRunIDs(ctx, database.ListRenownBackfillRunIDsParams{
-			TenantID:   uuid.NullUUID{UUID: tenantID, Valid: true},
+			TenantID:   tenantID,
 			AfterRunID: progress.AfterRunID,
 			BatchSize:  batchSize,
 		})

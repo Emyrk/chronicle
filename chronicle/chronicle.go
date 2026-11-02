@@ -1139,7 +1139,33 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 		return err
 	}
 
-	err = c.Zed.DeleteWoWLogGroup(ctx, logID)
+	// Delete and persist witnessed Renown in one transaction, serialized with
+	// canonical representative refresh. A user can delete immediately after
+	// upload without waiting for the daily rating rebuild.
+	err = c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
+			return fmt.Errorf("lock ranking representatives before log deletion: %w", err)
+		}
+		current, err := tx.RankingRunIdentitiesByLogGroupID(ctx, logID)
+		if err != nil {
+			return fmt.Errorf("load current ranking identities: %w", err)
+		}
+		seeds := rankingRunLogGroupIdentitySeeds(current)
+		sources, err := tx.RankingRunSources(ctx, seeds)
+		if err != nil {
+			return fmt.Errorf("resolve canonical ranking sources before log deletion: %w", err)
+		}
+		for _, source := range sources {
+			if _, err := tx.BackfillRenownFactsForSource(ctx, database.BackfillRenownFactsForSourceParams{
+				RealmID: source.RealmID, RunID: source.RunID,
+				RepresentativeInstanceID: source.RepresentativeInstanceID,
+			}); err != nil {
+				return fmt.Errorf("preserve Renown for run %s before log deletion: %w", source.RunID, err)
+			}
+		}
+		identities = current
+		return tx.DeleteWoWLogGroup(ctx, logID)
+	}, nil)
 	if err != nil {
 		return fmt.Errorf("delete log group: %w", err)
 	}

@@ -5,7 +5,7 @@ SELECT rr.run_id
 FROM ranking_runs rr
 JOIN wow_server_realms realm ON realm.id = rr.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
-WHERE server.tenant_id = @tenant_id
+WHERE server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
   AND rr.run_id > @after_run_id
 ORDER BY rr.run_id
 LIMIT @batch_size;
@@ -22,6 +22,26 @@ JOIN log_instances instance ON instance.id = rr.representative_instance_id
 JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 JOIN encounter_dps_rankings ranking ON ranking.instance_id = instance.id
 WHERE rr.run_id = @run_id
+  AND instance.invalidated_at IS NULL
+  AND ranking.encounter_id IS NOT NULL
+  AND ranking.duration_secs > 0
+ORDER BY ranking.player_guid, ranking.encounter_name, ranking.killed_at DESC, ranking.id
+ON CONFLICT (realm_id, player_guid, run_id, encounter_name) DO NOTHING;
+
+-- name: BackfillRenownFactsForSource :execrows
+-- Preserve canonical attendance even when a log is deleted before the
+-- asynchronous ranking_runs refresh has persisted its representative.
+INSERT INTO renown_kill_facts (
+    realm_id, player_guid, run_id, instance_name, encounter_name, killed_at
+)
+SELECT DISTINCT ON (ranking.player_guid, ranking.encounter_name)
+    @realm_id, ranking.player_guid, @run_id,
+    ranking.instance_name, ranking.encounter_name, ranking.killed_at
+FROM log_instances instance
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+JOIN encounter_dps_rankings ranking ON ranking.instance_id = instance.id
+WHERE instance.id = @representative_instance_id
+  AND instance.realm_id = @realm_id
   AND instance.invalidated_at IS NULL
   AND ranking.encounter_id IS NOT NULL
   AND ranking.duration_secs > 0
@@ -83,7 +103,7 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) locked ON true
 WHERE rr.run_id = @run_id
-  AND server.tenant_id = @tenant_id
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
   AND representative.invalidated_at IS NULL
   AND ranking.encounter_id IS NOT NULL
   AND ranking.duration_secs > 0

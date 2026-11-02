@@ -208,13 +208,39 @@ func (w *RealmWorker) Work(ctx context.Context, job *river.Job[ArgsRetentionReal
 			_, _ = w.Storage.RemoveFile(ctx, "raidlogs", []string{groupID.String()})
 		}
 
-		identities, err := w.Store.RankingRunIdentitiesByInstanceIDs(ctx, toDelete)
-		if err != nil {
-			return fmt.Errorf("load ranking run identities: %w", err)
-		}
-		deleted, err := w.Store.DeleteLogInstancesByIDs(ctx, toDelete)
-		if err != nil {
-			return fmt.Errorf("delete instances: %w", err)
+		// Serialize against representative refresh and commit earned facts
+		// alongside source deletion, so a failed insert cannot lose credit.
+		var identities []database.RankingRunIdentitiesByInstanceIDsRow
+		var deleted int64
+		if err := w.Store.InTx(ctx, func(tx database.Store) error {
+			if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
+				return fmt.Errorf("lock ranking representatives before retention: %w", err)
+			}
+			var err error
+			identities, err = tx.RankingRunIdentitiesByInstanceIDs(ctx, toDelete)
+			if err != nil {
+				return fmt.Errorf("load ranking run identities: %w", err)
+			}
+			seeds := make([]uuid.UUID, 0, len(identities)*2)
+			for _, identity := range identities {
+				seeds = append(seeds, identity.InstanceID, identity.RunID)
+			}
+			sources, err := tx.RankingRunSources(ctx, seeds)
+			if err != nil {
+				return fmt.Errorf("resolve canonical ranking sources before retention: %w", err)
+			}
+			for _, source := range sources {
+				if _, err := tx.BackfillRenownFactsForSource(ctx, database.BackfillRenownFactsForSourceParams{
+					RealmID: source.RealmID, RunID: source.RunID,
+					RepresentativeInstanceID: source.RepresentativeInstanceID,
+				}); err != nil {
+					return fmt.Errorf("preserve Renown for run %s before retention deletion: %w", source.RunID, err)
+				}
+			}
+			deleted, err = tx.DeleteLogInstancesByIDs(ctx, toDelete)
+			return err
+		}, nil); err != nil {
+			return fmt.Errorf("preserve Renown and delete retained instances: %w", err)
 		}
 		affectedIDs := make([]uuid.UUID, 0, len(identities)*2)
 		for _, identity := range identities {

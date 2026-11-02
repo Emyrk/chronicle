@@ -270,6 +270,9 @@ func (s *Service) Start(ctx context.Context) error {
 	riverqueue.AddWorker(q, rank.RepairParseScoresWorker)
 	riverqueue.AddWorker(q, rank.RankingRunRefreshWorker)
 	riverqueue.AddWorker(q, rank.RankingRunRepairWorker)
+	rank.RatingDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.RatingDispatchWorker)
+	riverqueue.AddWorker(q, rank.RatingTenantWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
 		MaxWorkers: 1,
 	})
@@ -300,6 +303,17 @@ func (s *Service) Start(ctx context.Context) error {
 				return rankingargs.ArgsRepairRankingRuns{}, nil
 			},
 			&river.PeriodicJobOpts{RunOnStart: false},
+		),
+	)
+
+	// Daily rating reconciliation for tenants with configured group policies.
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			river.PeriodicInterval(24*time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return servicerankings.ArgsDispatchRatingScores{}, nil
+			},
+			&river.PeriodicJobOpts{ID: "daily-rating-score-reconciliation", RunOnStart: false},
 		),
 	)
 

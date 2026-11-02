@@ -17,6 +17,7 @@ type sqlcQuerier interface {
 	AcquireParseScoreLock(ctx context.Context, lockKey string) error
 	// Serialize refresh snapshots and commits across logical-run identity changes.
 	AcquireRankingRunRefreshLock(ctx context.Context) error
+	AcquireRatingRebuildConfigLock(ctx context.Context) error
 	AcquireTimeParseScoreLock(ctx context.Context, instanceID string) error
 	ActivateDiscordMembershipGrantCheckOnLogin(ctx context.Context, arg ActivateDiscordMembershipGrantCheckOnLoginParams) (ActivateDiscordMembershipGrantCheckOnLoginRow, error)
 	ActivateRatingScoreGeneration(ctx context.Context, arg ActivateRatingScoreGenerationParams) (int64, error)
@@ -31,6 +32,9 @@ type sqlcQuerier interface {
 	AssignRatingRealmToGroup(ctx context.Context, arg AssignRatingRealmToGroupParams) (int64, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
 	BackfillRenownFactsForRun(ctx context.Context, runID uuid.UUID) (int64, error)
+	// Preserve canonical attendance even when a log is deleted before the
+	// asynchronous ranking_runs refresh has persisted its representative.
+	BackfillRenownFactsForSource(ctx context.Context, arg BackfillRenownFactsForSourceParams) (int64, error)
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	CarryForwardFinalizedParsedLogGroup(ctx context.Context, arg CarryForwardFinalizedParsedLogGroupParams) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
@@ -161,11 +165,14 @@ type sqlcQuerier interface {
 	// Scoped to tenant_id so one tenant's recompute cannot erase another's projections.
 	DeleteParseScoreResultsForTenantInstance(ctx context.Context, arg DeleteParseScoreResultsForTenantInstanceParams) error
 	DeleteRaidCompositionByID(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteRatingBossPolicy(ctx context.Context, arg DeleteRatingBossPolicyParams) (int64, error)
+	DeleteRatingRaidPolicy(ctx context.Context, arg DeleteRatingRaidPolicyParams) (int64, error)
 	DeleteRatingRealmGroup(ctx context.Context, arg DeleteRatingRealmGroupParams) (int64, error)
 	DeleteRegressionFixture(ctx context.Context, id uuid.UUID) error
 	DeleteRegressionSnapshot(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionPolicy(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionRule(ctx context.Context, id uuid.UUID) error
+	DeleteRetiredRatingGeneration(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	DeleteServerApplicationsByInitiator(ctx context.Context, userID uuid.UUID) error
 	DeleteSidekickConfigOverride(ctx context.Context, arg DeleteSidekickConfigOverrideParams) ([]byte, error)
 	DeleteSidekickInstallation(ctx context.Context, arg DeleteSidekickInstallationParams) (SidekickInstallation, error)
@@ -610,6 +617,7 @@ type sqlcQuerier interface {
 	InsertProofRequest(ctx context.Context, arg InsertProofRequestParams) (ProofRequest, error)
 	InsertProofSubject(ctx context.Context, arg InsertProofSubjectParams) error
 	InsertRatingBossScore(ctx context.Context, arg InsertRatingBossScoreParams) error
+	InsertRatingScopeScore(ctx context.Context, arg InsertRatingScopeScoreParams) error
 	InsertRatingScoreGeneration(ctx context.Context, arg InsertRatingScoreGenerationParams) (RatingScoreGeneration, error)
 	InsertRegressionFixture(ctx context.Context, arg InsertRegressionFixtureParams) (RegressionFixture, error)
 	InsertRegressionSnapshot(ctx context.Context, arg InsertRegressionSnapshotParams) (RegressionSnapshot, error)
@@ -667,6 +675,7 @@ type sqlcQuerier interface {
 	ListActiveBossRatingScores(ctx context.Context, arg ListActiveBossRatingScoresParams) ([]RatingBossScore, error)
 	ListActiveGroupBossRatingScores(ctx context.Context, arg ListActiveGroupBossRatingScoresParams) ([]RatingBossScore, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
+	ListActiveRatingScopeScores(ctx context.Context, arg ListActiveRatingScopeScoresParams) ([]RatingScopeScore, error)
 	ListAdminActiveCustomPanelInstallations(ctx context.Context) ([]ListAdminActiveCustomPanelInstallationsRow, error)
 	ListAdminProofRequests(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error)
 	ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error)
@@ -711,6 +720,7 @@ type sqlcQuerier interface {
 	ListGearListsByUser(ctx context.Context, arg ListGearListsByUserParams) ([]GearList, error)
 	ListGearProgressionsByUser(ctx context.Context, arg ListGearProgressionsByUserParams) ([]GearProgression, error)
 	ListGearStatWeightsByUser(ctx context.Context, arg ListGearStatWeightsByUserParams) ([]GearStatWeight, error)
+	ListGroupRatingBossScores(ctx context.Context, arg ListGroupRatingBossScoresParams) ([]RatingBossScore, error)
 	// Read retained evidence for the current group. Weight and boss eligibility
 	// are applied by the versioned group policy when computing career/period totals.
 	ListGroupRenownFacts(ctx context.Context, arg ListGroupRenownFactsParams) ([]ListGroupRenownFactsRow, error)
@@ -784,8 +794,12 @@ type sqlcQuerier interface {
 	// independent of snapshot membership (the instance may not be a member of the
 	// snapshot it scores against, e.g. historical canonical snapshots).
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error)
+	ListRatingBossPolicies(ctx context.Context, arg ListRatingBossPoliciesParams) ([]RatingGroupBossPolicy, error)
+	ListRatingRaidPolicies(ctx context.Context, arg ListRatingRaidPoliciesParams) ([]RatingGroupRaidPolicy, error)
 	ListRatingRealmGroupMembers(ctx context.Context, arg ListRatingRealmGroupMembersParams) ([]ListRatingRealmGroupMembersRow, error)
-	ListRatingRealmGroups(ctx context.Context, tenantID uuid.NullUUID) ([]RatingRealmGroup, error)
+	ListRatingRealmGroups(ctx context.Context, tenantID uuid.UUID) ([]RatingRealmGroup, error)
+	ListRatingRunsForGroup(ctx context.Context, arg ListRatingRunsForGroupParams) ([]uuid.UUID, error)
+	ListRatingScoreTenants(ctx context.Context) ([]uuid.NullUUID, error)
 	ListReadyLogFileParts(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListRecentBillingReconciliationRuns(ctx context.Context, limit int32) ([]BillingReconciliationRun, error)
 	ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]ListRecentBillingSubscriptionsRow, error)
@@ -828,6 +842,9 @@ type sqlcQuerier interface {
 	// Modules the user tracks, most recently starred first.
 	ListStarredLuaProjects(ctx context.Context, userID uuid.UUID) ([]LuaProject, error)
 	ListTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
+	// Group configuration is explicit: no group has score eligibility until both
+	// a policy and eligible boss rows have been configured by an operator.
+	ListTenantRatingPolicies(ctx context.Context, tenantID uuid.UUID) ([]RatingGroupPolicy, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)
 	// Tenants that use this dataset, either directly (tenant.default_dataset_id)
 	// or via a server they own (wow_servers.default_dataset_id).
@@ -896,6 +913,9 @@ type sqlcQuerier interface {
 	PublicInstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
 	PublishCacheGeneration(ctx context.Context, arg PublishCacheGenerationParams) (PublishCacheGenerationRow, error)
 	PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjectArtifactParams) (string, error)
+	PutRatingBossPolicy(ctx context.Context, arg PutRatingBossPolicyParams) (int64, error)
+	PutRatingGroupPolicy(ctx context.Context, arg PutRatingGroupPolicyParams) (int64, error)
+	PutRatingRaidPolicy(ctx context.Context, arg PutRatingRaidPolicyParams) (int64, error)
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
 	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)
@@ -973,6 +993,8 @@ type sqlcQuerier interface {
 	// requested DPS or HPS metric. has_locked_parse distinguishes missing parses
 	// from zero scores, so raw Peak need not invent a Mastery observation.
 	RatingObservationsForRun(ctx context.Context, arg RatingObservationsForRunParams) ([]RatingObservationsForRunRow, error)
+	// Set-based source extraction for one bounded page of canonical runs.
+	RatingObservationsForRuns(ctx context.Context, arg RatingObservationsForRunsParams) ([]RatingObservationsForRunsRow, error)
 	ReactivateDiscordMembershipGrantCheck(ctx context.Context, arg ReactivateDiscordMembershipGrantCheckParams) (ReactivateDiscordMembershipGrantCheckRow, error)
 	// Files the user appended to someone else's log group belong to that raid.
 	ReassignAppendedLogFilesToGroupOwner(ctx context.Context, userID uuid.UUID) error

@@ -1,0 +1,7 @@
+BEGIN;
+DROP TRIGGER rating_boss_policy_rebuild_lock ON rating_group_boss_policies;
+DROP TRIGGER rating_policy_rebuild_lock ON rating_group_policies;
+DROP TRIGGER rating_membership_rebuild_lock ON rating_realm_group_memberships;
+DROP TRIGGER rating_group_rebuild_lock ON rating_realm_groups;
+DROP FUNCTION lock_rating_rebuild_config();
+COMMIT;

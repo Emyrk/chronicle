@@ -4,26 +4,26 @@
 INSERT INTO rating_realm_groups (server_id, name)
 SELECT server.id, @name
 FROM wow_servers server
-WHERE server.id = @server_id AND server.tenant_id = @tenant_id
+WHERE server.id = @server_id AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
 RETURNING *;
 
 -- name: ListRatingRealmGroups :many
 SELECT grp.*
 FROM rating_realm_groups grp
 JOIN wow_servers server ON server.id = grp.server_id
-WHERE server.tenant_id = @tenant_id
+WHERE server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
 ORDER BY grp.server_id, grp.name, grp.id;
 
 -- name: RenameRatingRealmGroup :execrows
 UPDATE rating_realm_groups grp
 SET name = @name
 FROM wow_servers server
-WHERE grp.id = @group_id AND server.id = grp.server_id AND server.tenant_id = @tenant_id;
+WHERE grp.id = @group_id AND server.id = grp.server_id AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid);
 
 -- name: DeleteRatingRealmGroup :execrows
 DELETE FROM rating_realm_groups grp
 USING wow_servers server
-WHERE grp.id = @group_id AND server.id = grp.server_id AND server.tenant_id = @tenant_id;
+WHERE grp.id = @group_id AND server.id = grp.server_id AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid);
 
 -- name: AssignRatingRealmToGroup :execrows
 INSERT INTO rating_realm_group_memberships (realm_id, server_id, group_id)
@@ -31,7 +31,7 @@ SELECT realm.id, realm.server_id, grp.id
 FROM wow_server_realms realm
 JOIN rating_realm_groups grp ON grp.server_id = realm.server_id
 JOIN wow_servers server ON server.id = realm.server_id
-WHERE realm.id = @realm_id AND grp.id = @group_id AND server.tenant_id = @tenant_id
+WHERE realm.id = @realm_id AND grp.id = @group_id AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
 ON CONFLICT (realm_id) DO UPDATE SET group_id = EXCLUDED.group_id;
 
 -- name: UnassignRatingRealmFromGroup :execrows
@@ -39,7 +39,7 @@ DELETE FROM rating_realm_group_memberships membership
 USING wow_server_realms realm, wow_servers server
 WHERE membership.realm_id = @realm_id
   AND realm.id = membership.realm_id AND server.id = realm.server_id
-  AND server.tenant_id = @tenant_id;
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid);
 
 -- name: ListRatingRealmGroupMembers :many
 SELECT realm.id, realm.name
@@ -47,7 +47,7 @@ FROM rating_realm_group_memberships membership
 JOIN wow_server_realms realm ON realm.id = membership.realm_id
 JOIN rating_realm_groups grp ON grp.id = membership.group_id
 JOIN wow_servers server ON server.id = grp.server_id
-WHERE grp.id = @group_id AND server.tenant_id = @tenant_id
+WHERE grp.id = @group_id AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
 ORDER BY realm.name, realm.id;
 
 -- name: ListActiveGroupBossRatingScores :many
@@ -60,7 +60,7 @@ JOIN rating_score_generations generation
 JOIN rating_realm_group_memberships membership ON membership.realm_id = score.realm_id
 JOIN rating_realm_groups grp ON grp.id = membership.group_id
 JOIN wow_servers server ON server.id = grp.server_id
-WHERE server.tenant_id = @tenant_id AND score.tenant_id = @tenant_id
+WHERE server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid) AND score.tenant_id = @tenant_id
   AND grp.id = @group_id AND score.group_id = grp.id
   AND score.instance_name = @instance_name
   AND score.encounter_name = @encounter_name
@@ -84,7 +84,7 @@ FROM renown_kill_facts fact
 JOIN rating_realm_group_memberships membership ON membership.realm_id = fact.realm_id
 JOIN rating_realm_groups grp ON grp.id = membership.group_id
 JOIN wow_servers server ON server.id = grp.server_id
-WHERE server.tenant_id = @tenant_id AND grp.id = @group_id
+WHERE server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid) AND grp.id = @group_id
   AND (@window_start::timestamptz IS NULL OR fact.killed_at >= @window_start)
   AND (@window_end::timestamptz IS NULL OR fact.killed_at < @window_end)
   AND (fact.killed_at, fact.id) > (@after_killed_at::timestamptz, @after_id::uuid)

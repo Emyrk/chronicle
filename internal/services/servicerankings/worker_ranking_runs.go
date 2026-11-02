@@ -122,6 +122,12 @@ func refreshRankingRunsTx(ctx context.Context, tx database.Store, ids []uuid.UUI
 		default:
 			output.UpdatedCount++
 		}
+		// Record qualifying attendance in the same transaction as the canonical
+		// representative, before a source log can be deleted. The unique fact key
+		// makes retries and representative changes idempotent.
+		if _, err := tx.BackfillRenownFactsForRun(ctx, source.RunID); err != nil {
+			return output, fmt.Errorf("record Renown kill facts for run %s: %w", source.RunID, err)
+		}
 	}
 	return output, nil
 }

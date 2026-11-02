@@ -42,13 +42,9 @@ func ScoreMastery(observations []ParseObservation, policy MasteryPolicy) (Master
 		return result, errors.New("invalid Mastery policy")
 	}
 	items := slices.Clone(observations)
-	latest := items[0].KilledAt
 	for _, observation := range items {
 		if math.IsNaN(observation.Score) || math.IsInf(observation.Score, 0) || observation.Score < 0 || observation.Score > 100 {
 			return result, errors.New("locked parse must be between 0 and 100")
-		}
-		if observation.KilledAt.After(latest) {
-			latest = observation.KilledAt
 		}
 		if observation.Score > result.Best {
 			result.Best = observation.Score
@@ -75,6 +71,15 @@ func ScoreMastery(observations []ParseObservation, policy MasteryPolicy) (Master
 	result.EligibleKills = len(items)
 	result.ExcludedKills = DropCount(len(items))
 	items = items[result.ExcludedKills:]
+	// Normalizing to the newest retained observation does not change weighted
+	// quantiles: the excluded latest kill would multiply every retained weight
+	// by the same factor, which cancels in each cumulative threshold.
+	latest := items[0].KilledAt
+	for _, item := range items {
+		if item.KilledAt.After(latest) {
+			latest = item.KilledAt
+		}
+	}
 	weights := make([]float64, len(items))
 	var total float64
 	for i, item := range items {
@@ -121,7 +126,11 @@ func RenownAward(bossPoints, finalBossBonus float64, isFinalBoss bool) (float64,
 		return 0, errors.New("invalid Renown points")
 	}
 	if isFinalBoss {
-		return bossPoints + finalBossBonus, nil
+		award := bossPoints + finalBossBonus
+		if math.IsInf(award, 0) {
+			return 0, errors.New("renown award overflows")
+		}
+		return award, nil
 	}
 	return bossPoints, nil
 }

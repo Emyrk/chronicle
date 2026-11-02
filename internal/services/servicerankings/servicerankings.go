@@ -70,6 +70,10 @@ type Service struct {
 	RankingRunRefreshWorker *WorkerRefreshRankingRuns
 	// RankingRunRepairWorker discovers missed or stale representative rows.
 	RankingRunRepairWorker *WorkerRepairRankingRuns
+	// RatingDispatchWorker fans daily rating rebuilds out to configured tenants.
+	RatingDispatchWorker *WorkerDispatchRatingScores
+	// RatingTenantWorker builds and publishes one tenant's rating generation.
+	RatingTenantWorker *WorkerRebuildTenantRatings
 }
 
 func New(broker *services.Services) *Service {
@@ -145,6 +149,8 @@ func (s *Service) Start(_ context.Context) error {
 		Store:  store,
 		Logger: namedLogger,
 	}
+	s.RatingDispatchWorker = &WorkerDispatchRatingScores{Store: store, Logger: namedLogger}
+	s.RatingTenantWorker = &WorkerRebuildTenantRatings{Store: store, Logger: namedLogger}
 
 	s.router = chi.NewRouter()
 	s.setupRoutes()
@@ -203,6 +209,11 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/time-parse-cohorts/buckets", s.handleTimeParseCohortBuckets)
 	s.router.Get("/time-parse-cohorts/cohort", s.handleTimeParseCohort)
 	s.router.Get("/time-parse-cohorts/spreads", s.handleTimeParseSpreads)
+
+	// Published rating leaderboards
+	s.router.Get("/ratings/groups", s.handleRatingRealmGroups)
+	s.router.Get("/ratings/scope-leaderboard", s.handleRatingScopeLeaderboard)
+	s.router.Get("/ratings/boss-leaderboard", s.handleRatingBossLeaderboard)
 
 	// Speedrun leaderboard
 	s.router.Get("/speedrun", s.handleSpeedrunLeaderboard)
