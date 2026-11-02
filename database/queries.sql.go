@@ -22756,13 +22756,11 @@ SELECT generation_id, tenant_id, realm_id, run_id, guild_id, instance_name, enco
 WHERE generation_id = $1 AND realm_id = $2 AND guild_id = $3
   AND instance_name = $4 AND encounter_name = $5
   AND difficulty_name = $6 AND max_players = $7
-  AND (CASE WHEN $8::double precision IS NULL THEN
-        locked_parse IS NULL AND (killed_at, run_id) > ($9::timestamptz, $10::uuid)
-      ELSE locked_parse < $8 OR locked_parse IS NULL
-        OR (locked_parse = $8 AND
-            (killed_at, run_id) > ($9::timestamptz, $10::uuid)) END)
-ORDER BY locked_parse DESC NULLS LAST, killed_at, run_id
-LIMIT LEAST(GREATEST($11::int, 0), 200)
+  AND locked_parse IS NOT NULL AND killed_at >= $8
+  AND (locked_parse, killed_at, run_id) >
+      ($9::double precision, $10::timestamptz, $11::uuid)
+ORDER BY locked_parse, killed_at, run_id
+LIMIT LEAST(GREATEST($12::int, 0), 200)
 `
 
 type ListRatingStageGuildSubjectParams struct {
@@ -22773,6 +22771,7 @@ type ListRatingStageGuildSubjectParams struct {
 	EncounterName    string             `db:"encounter_name" json:"encounter_name"`
 	DifficultyName   string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers       int16              `db:"max_players" json:"max_players"`
+	PeriodStart      pgtype.Timestamptz `db:"period_start" json:"period_start"`
 	AfterLockedParse float64            `db:"after_locked_parse" json:"after_locked_parse"`
 	AfterKilledAt    pgtype.Timestamptz `db:"after_killed_at" json:"after_killed_at"`
 	AfterRunID       uuid.UUID          `db:"after_run_id" json:"after_run_id"`
@@ -22788,6 +22787,7 @@ func (q *sqlQuerier) ListRatingStageGuildSubject(ctx context.Context, arg ListRa
 		arg.EncounterName,
 		arg.DifficultyName,
 		arg.MaxPlayers,
+		arg.PeriodStart,
 		arg.AfterLockedParse,
 		arg.AfterKilledAt,
 		arg.AfterRunID,
@@ -23036,13 +23036,11 @@ WHERE generation_id = $1 AND realm_id = $2 AND player_guid = $3
   AND difficulty_name = $6 AND max_players = $7
   AND player_class = $8 AND player_spec = $9
   AND player_sub_spec = $10 AND performance_metric = $11
-  AND (CASE WHEN $12::double precision IS NULL THEN
-        locked_parse IS NULL AND (killed_at, run_id) > ($13::timestamptz, $14::uuid)
-      ELSE locked_parse < $12 OR locked_parse IS NULL
-        OR (locked_parse = $12 AND
-            (killed_at, run_id) > ($13::timestamptz, $14::uuid)) END)
-ORDER BY locked_parse DESC NULLS LAST, killed_at, run_id
-LIMIT LEAST(GREATEST($15::int, 0), 200)
+  AND locked_parse IS NOT NULL AND killed_at >= $12
+  AND (locked_parse, killed_at, run_id) >
+      ($13::double precision, $14::timestamptz, $15::uuid)
+ORDER BY locked_parse, killed_at, run_id
+LIMIT LEAST(GREATEST($16::int, 0), 200)
 `
 
 type ListRatingStagePlayerSubjectParams struct {
@@ -23057,6 +23055,7 @@ type ListRatingStagePlayerSubjectParams struct {
 	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
 	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
 	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	PeriodStart       pgtype.Timestamptz `db:"period_start" json:"period_start"`
 	AfterLockedParse  float64            `db:"after_locked_parse" json:"after_locked_parse"`
 	AfterKilledAt     pgtype.Timestamptz `db:"after_killed_at" json:"after_killed_at"`
 	AfterRunID        uuid.UUID          `db:"after_run_id" json:"after_run_id"`
@@ -23077,6 +23076,7 @@ func (q *sqlQuerier) ListRatingStagePlayerSubject(ctx context.Context, arg ListR
 		arg.PlayerSpec,
 		arg.PlayerSubSpec,
 		arg.PerformanceMetric,
+		arg.PeriodStart,
 		arg.AfterLockedParse,
 		arg.AfterKilledAt,
 		arg.AfterRunID,
@@ -23199,15 +23199,16 @@ const ratingStageGuildRankOne = `-- name: RatingStageGuildRankOne :one
 SELECT min(raw_duration_ms)::double precision FROM rating_stage_guild_observations
 WHERE generation_id = $1 AND instance_name = $2
   AND encounter_name = $3 AND difficulty_name = $4
-  AND max_players = $5
+  AND max_players = $5 AND killed_at >= $6
 `
 
 type RatingStageGuildRankOneParams struct {
-	GenerationID   uuid.UUID `db:"generation_id" json:"generation_id"`
-	InstanceName   string    `db:"instance_name" json:"instance_name"`
-	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
-	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	GenerationID   uuid.UUID          `db:"generation_id" json:"generation_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	PeriodStart    pgtype.Timestamptz `db:"period_start" json:"period_start"`
 }
 
 func (q *sqlQuerier) RatingStageGuildRankOne(ctx context.Context, arg RatingStageGuildRankOneParams) (float64, error) {
@@ -23217,6 +23218,7 @@ func (q *sqlQuerier) RatingStageGuildRankOne(ctx context.Context, arg RatingStag
 		arg.EncounterName,
 		arg.DifficultyName,
 		arg.MaxPlayers,
+		arg.PeriodStart,
 	)
 	var column_1 float64
 	err := row.Scan(&column_1)
@@ -23229,19 +23231,20 @@ WHERE generation_id = $1 AND instance_name = $2
   AND encounter_name = $3 AND difficulty_name = $4
   AND max_players = $5 AND player_class = $6
   AND player_spec = $7 AND player_sub_spec = $8
-  AND performance_metric = $9
+  AND performance_metric = $9 AND killed_at >= $10
 `
 
 type RatingStagePlayerRankOneParams struct {
-	GenerationID      uuid.UUID `db:"generation_id" json:"generation_id"`
-	InstanceName      string    `db:"instance_name" json:"instance_name"`
-	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
-	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers        int16     `db:"max_players" json:"max_players"`
-	PlayerClass       string    `db:"player_class" json:"player_class"`
-	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
-	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
-	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	PeriodStart       pgtype.Timestamptz `db:"period_start" json:"period_start"`
 }
 
 // Rank-one derives from *all* tenant runs (including unassigned realms and
@@ -23257,6 +23260,7 @@ func (q *sqlQuerier) RatingStagePlayerRankOne(ctx context.Context, arg RatingSta
 		arg.PlayerSpec,
 		arg.PlayerSubSpec,
 		arg.PerformanceMetric,
+		arg.PeriodStart,
 	)
 	var column_1 float64
 	err := row.Scan(&column_1)
@@ -23361,6 +23365,107 @@ func (q *sqlQuerier) StageRatingGuildRuns(ctx context.Context, arg StageRatingGu
 		arg.SourceCutoff,
 		arg.RunIds,
 		arg.GenerationID,
+	)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const stageRatingMissingGuildRenownRuns = `-- name: StageRatingMissingGuildRenownRuns :one
+WITH source AS (
+  SELECT DISTINCT ON (rr.run_id, encounter.name)
+    rr.realm_id, representative.guild_id, rr.run_id, representative.name AS instance_name,
+    encounter.name AS encounter_name, encounter.end_time AS killed_at,
+    encounter.id AS source_id
+  FROM ranking_runs rr
+  JOIN log_instances representative ON representative.id = rr.representative_instance_id
+  JOIN wow_log_groups log_group ON log_group.id = representative.log_group_id AND NOT log_group.unlisted
+  JOIN log_instance_encounters encounter ON encounter.instance_id = representative.id
+  WHERE rr.run_id = ANY($1::uuid[]) AND cardinality($1::uuid[]) <= 100
+    AND rr.updated_at <= $2 AND rr.source_updated_at <= $2
+    AND representative.invalidated_at IS NULL AND representative.guild_id IS NOT NULL
+    AND encounter.boss AND encounter.kill_type = 'clean'
+    AND encounter.end_time > encounter.start_time AND encounter.end_time <= $2
+  ORDER BY rr.run_id, encounter.name, encounter.end_time DESC, encounter.id
+), inserted AS (
+  INSERT INTO rating_stage_guild_renown
+    (generation_id, tenant_id, realm_id, guild_id, run_id, instance_name, encounter_name, killed_at, source_id)
+  SELECT $3, $4, src.realm_id, src.guild_id, src.run_id, src.instance_name, src.encounter_name, src.killed_at, src.source_id FROM source src
+  WHERE NOT EXISTS (
+    SELECT 1 FROM rating_stage_guild_renown stage
+    WHERE stage.generation_id = $3 AND stage.realm_id = src.realm_id
+      AND stage.guild_id = src.guild_id AND stage.run_id = src.run_id
+      AND stage.encounter_name = src.encounter_name
+  )
+  ON CONFLICT DO NOTHING RETURNING 1
+)
+SELECT count(*)::bigint FROM inserted
+`
+
+type StageRatingMissingGuildRenownRunsParams struct {
+	RunIds       []uuid.UUID        `db:"run_ids" json:"run_ids"`
+	SourceCutoff pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	GenerationID uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) StageRatingMissingGuildRenownRuns(ctx context.Context, arg StageRatingMissingGuildRenownRunsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, stageRatingMissingGuildRenownRuns,
+		arg.RunIds,
+		arg.SourceCutoff,
+		arg.GenerationID,
+		arg.TenantID,
+	)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const stageRatingMissingPlayerRenownRuns = `-- name: StageRatingMissingPlayerRenownRuns :one
+WITH source AS (
+  SELECT DISTINCT ON (rr.run_id, ranking.player_guid, ranking.encounter_name)
+    rr.realm_id, ranking.player_guid, rr.run_id, ranking.instance_name,
+    ranking.encounter_name, ranking.killed_at, ranking.id AS source_id
+  FROM ranking_runs rr
+  JOIN log_instances representative ON representative.id = rr.representative_instance_id
+  JOIN wow_log_groups log_group ON log_group.id = representative.log_group_id AND NOT log_group.unlisted
+  JOIN encounter_dps_rankings ranking ON ranking.instance_id = representative.id
+  WHERE rr.run_id = ANY($1::uuid[]) AND cardinality($1::uuid[]) <= 100
+    AND rr.updated_at <= $2 AND rr.source_updated_at <= $2
+    AND representative.invalidated_at IS NULL AND ranking.encounter_id IS NOT NULL
+    AND ranking.duration_secs > 0 AND ranking.killed_at <= $2
+  ORDER BY rr.run_id, ranking.player_guid, ranking.encounter_name, ranking.killed_at DESC, ranking.id
+), inserted AS (
+  INSERT INTO rating_stage_player_renown
+    (generation_id, tenant_id, realm_id, player_guid, run_id, instance_name, encounter_name, killed_at, source_id)
+  SELECT $3, $4, src.realm_id, src.player_guid, src.run_id, src.instance_name, src.encounter_name, src.killed_at, src.source_id FROM source src
+  WHERE NOT EXISTS (
+    SELECT 1 FROM rating_stage_player_renown stage
+    WHERE stage.generation_id = $3 AND stage.realm_id = src.realm_id
+      AND stage.player_guid = src.player_guid AND stage.run_id = src.run_id
+      AND stage.encounter_name = src.encounter_name
+  )
+  ON CONFLICT DO NOTHING RETURNING 1
+)
+SELECT count(*)::bigint FROM inserted
+`
+
+type StageRatingMissingPlayerRenownRunsParams struct {
+	RunIds       []uuid.UUID        `db:"run_ids" json:"run_ids"`
+	SourceCutoff pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	GenerationID uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+}
+
+// Repair historical attendance into this generation without changing durable
+// facts or moving the frozen source cutoff. Persisted facts take precedence.
+// The source page is bounded to 100 runs by the worker.
+func (q *sqlQuerier) StageRatingMissingPlayerRenownRuns(ctx context.Context, arg StageRatingMissingPlayerRenownRunsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, stageRatingMissingPlayerRenownRuns,
+		arg.RunIds,
+		arg.SourceCutoff,
+		arg.GenerationID,
+		arg.TenantID,
 	)
 	var column_1 int64
 	err := row.Scan(&column_1)

@@ -151,12 +151,10 @@ WHERE generation_id = @generation_id AND realm_id = @realm_id AND player_guid = 
   AND difficulty_name = @difficulty_name AND max_players = @max_players
   AND player_class = @player_class AND player_spec = @player_spec
   AND player_sub_spec = @player_sub_spec AND performance_metric = @performance_metric
-  AND (CASE WHEN @after_locked_parse::double precision IS NULL THEN
-        locked_parse IS NULL AND (killed_at, run_id) > (@after_killed_at::timestamptz, @after_run_id::uuid)
-      ELSE locked_parse < @after_locked_parse OR locked_parse IS NULL
-        OR (locked_parse = @after_locked_parse AND
-            (killed_at, run_id) > (@after_killed_at::timestamptz, @after_run_id::uuid)) END)
-ORDER BY locked_parse DESC NULLS LAST, killed_at, run_id
+  AND locked_parse IS NOT NULL AND killed_at >= @period_start
+  AND (locked_parse, killed_at, run_id) >
+      (@after_locked_parse::double precision, @after_killed_at::timestamptz, @after_run_id::uuid)
+ORDER BY locked_parse, killed_at, run_id
 LIMIT LEAST(GREATEST(@batch_size::int, 0), 200);
 
 -- name: ListRatingStageGuildSubject :many
@@ -164,12 +162,10 @@ SELECT * FROM rating_stage_guild_observations
 WHERE generation_id = @generation_id AND realm_id = @realm_id AND guild_id = @guild_id
   AND instance_name = @instance_name AND encounter_name = @encounter_name
   AND difficulty_name = @difficulty_name AND max_players = @max_players
-  AND (CASE WHEN @after_locked_parse::double precision IS NULL THEN
-        locked_parse IS NULL AND (killed_at, run_id) > (@after_killed_at::timestamptz, @after_run_id::uuid)
-      ELSE locked_parse < @after_locked_parse OR locked_parse IS NULL
-        OR (locked_parse = @after_locked_parse AND
-            (killed_at, run_id) > (@after_killed_at::timestamptz, @after_run_id::uuid)) END)
-ORDER BY locked_parse DESC NULLS LAST, killed_at, run_id
+  AND locked_parse IS NOT NULL AND killed_at >= @period_start
+  AND (locked_parse, killed_at, run_id) >
+      (@after_locked_parse::double precision, @after_killed_at::timestamptz, @after_run_id::uuid)
+ORDER BY locked_parse, killed_at, run_id
 LIMIT LEAST(GREATEST(@batch_size::int, 0), 200);
 
 -- Rank-one derives from *all* tenant runs (including unassigned realms and
@@ -180,13 +176,13 @@ WHERE generation_id = @generation_id AND instance_name = @instance_name
   AND encounter_name = @encounter_name AND difficulty_name = @difficulty_name
   AND max_players = @max_players AND player_class = @player_class
   AND player_spec = @player_spec AND player_sub_spec = @player_sub_spec
-  AND performance_metric = @performance_metric;
+  AND performance_metric = @performance_metric AND killed_at >= @period_start;
 
 -- name: RatingStageGuildRankOne :one
 SELECT min(raw_duration_ms)::double precision FROM rating_stage_guild_observations
 WHERE generation_id = @generation_id AND instance_name = @instance_name
   AND encounter_name = @encounter_name AND difficulty_name = @difficulty_name
-  AND max_players = @max_players;
+  AND max_players = @max_players AND killed_at >= @period_start;
 
 -- Enumerate a bounded set of distinct player or guild subjects. The after-key
 -- is the last emitted key, not the last raw row in the staging table.
@@ -253,3 +249,64 @@ WHERE server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0
   AND rr.run_id > @after_run_id AND rr.updated_at <= @source_cutoff
   AND rr.source_updated_at <= @source_cutoff
 ORDER BY rr.run_id LIMIT LEAST(GREATEST(@batch_size::int, 0), 200);
+
+-- Repair historical attendance into this generation without changing durable
+-- facts or moving the frozen source cutoff. Persisted facts take precedence.
+-- The source page is bounded to 100 runs by the worker.
+-- name: StageRatingMissingPlayerRenownRuns :one
+WITH source AS (
+  SELECT DISTINCT ON (rr.run_id, ranking.player_guid, ranking.encounter_name)
+    rr.realm_id, ranking.player_guid, rr.run_id, ranking.instance_name,
+    ranking.encounter_name, ranking.killed_at, ranking.id AS source_id
+  FROM ranking_runs rr
+  JOIN log_instances representative ON representative.id = rr.representative_instance_id
+  JOIN wow_log_groups log_group ON log_group.id = representative.log_group_id AND NOT log_group.unlisted
+  JOIN encounter_dps_rankings ranking ON ranking.instance_id = representative.id
+  WHERE rr.run_id = ANY(@run_ids::uuid[]) AND cardinality(@run_ids::uuid[]) <= 100
+    AND rr.updated_at <= @source_cutoff AND rr.source_updated_at <= @source_cutoff
+    AND representative.invalidated_at IS NULL AND ranking.encounter_id IS NOT NULL
+    AND ranking.duration_secs > 0 AND ranking.killed_at <= @source_cutoff
+  ORDER BY rr.run_id, ranking.player_guid, ranking.encounter_name, ranking.killed_at DESC, ranking.id
+), inserted AS (
+  INSERT INTO rating_stage_player_renown
+    (generation_id, tenant_id, realm_id, player_guid, run_id, instance_name, encounter_name, killed_at, source_id)
+  SELECT @generation_id, @tenant_id, src.* FROM source src
+  WHERE NOT EXISTS (
+    SELECT 1 FROM rating_stage_player_renown stage
+    WHERE stage.generation_id = @generation_id AND stage.realm_id = src.realm_id
+      AND stage.player_guid = src.player_guid AND stage.run_id = src.run_id
+      AND stage.encounter_name = src.encounter_name
+  )
+  ON CONFLICT DO NOTHING RETURNING 1
+)
+SELECT count(*)::bigint FROM inserted;
+
+-- name: StageRatingMissingGuildRenownRuns :one
+WITH source AS (
+  SELECT DISTINCT ON (rr.run_id, encounter.name)
+    rr.realm_id, representative.guild_id, rr.run_id, representative.name AS instance_name,
+    encounter.name AS encounter_name, encounter.end_time AS killed_at,
+    encounter.id AS source_id
+  FROM ranking_runs rr
+  JOIN log_instances representative ON representative.id = rr.representative_instance_id
+  JOIN wow_log_groups log_group ON log_group.id = representative.log_group_id AND NOT log_group.unlisted
+  JOIN log_instance_encounters encounter ON encounter.instance_id = representative.id
+  WHERE rr.run_id = ANY(@run_ids::uuid[]) AND cardinality(@run_ids::uuid[]) <= 100
+    AND rr.updated_at <= @source_cutoff AND rr.source_updated_at <= @source_cutoff
+    AND representative.invalidated_at IS NULL AND representative.guild_id IS NOT NULL
+    AND encounter.boss AND encounter.kill_type = 'clean'
+    AND encounter.end_time > encounter.start_time AND encounter.end_time <= @source_cutoff
+  ORDER BY rr.run_id, encounter.name, encounter.end_time DESC, encounter.id
+), inserted AS (
+  INSERT INTO rating_stage_guild_renown
+    (generation_id, tenant_id, realm_id, guild_id, run_id, instance_name, encounter_name, killed_at, source_id)
+  SELECT @generation_id, @tenant_id, src.* FROM source src
+  WHERE NOT EXISTS (
+    SELECT 1 FROM rating_stage_guild_renown stage
+    WHERE stage.generation_id = @generation_id AND stage.realm_id = src.realm_id
+      AND stage.guild_id = src.guild_id AND stage.run_id = src.run_id
+      AND stage.encounter_name = src.encounter_name
+  )
+  ON CONFLICT DO NOTHING RETURNING 1
+)
+SELECT count(*)::bigint FROM inserted;
