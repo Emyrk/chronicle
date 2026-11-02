@@ -34,7 +34,7 @@ export function LeaderboardsV2() {
           <div className="relative px-5 pt-8 pb-5 sm:px-6 sm:pt-10">
             {instance && <button type="button" className="mb-2 flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground" onClick={() => select("instance")}> <ChevronLeft className="size-4" /> All instances</button>}
             <p className="text-xs uppercase tracking-widest text-muted-foreground">Leaderboards · live preview</p>
-            <h1 className="mt-1 text-3xl font-semibold">{instance ?? "All instances"}</h1>
+            <h1 className="font-wow mt-1 text-3xl leading-tight sm:text-4xl">{instance ?? "All instances"}</h1>
             <p className="mt-2 text-sm text-muted-foreground">Published rankings only. Ratings use realm groups; other tabs retain their current live filters.</p>
           </div>
           <nav aria-label="Leaderboard section" className="styled-scrollbar relative flex overflow-x-auto border-t border-white/5 px-2 sm:px-4">
@@ -52,7 +52,7 @@ export function LeaderboardsV2() {
           tab === "parsing" ? <ParsingInstanceView key={instance} instanceName={instance} /> :
           tab === "speedruns" ? <SpeedrunLeaderboard overrideInstance={instance} /> :
           tab === "rulesets" ? <RulesetInstanceView instanceName={instance} /> :
-          <p className="rounded-xl border p-8 text-muted-foreground">A combined overview is not published. Choose a tab for live results.</p>
+          <InstanceView instanceName={instance} />
         ) : tab === "rulesets" ? <div onClickCapture={(event) => {
             const link = (event.target as HTMLElement).closest("a")
             const name = link && new URL(link.href).searchParams.get("instance")
