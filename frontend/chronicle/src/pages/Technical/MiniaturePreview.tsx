@@ -24,7 +24,7 @@ export function MiniaturePreview({ name, url }: { name: string; url: string }) {
     void miniatureThumbnail(url).then((image) => {
       if (!cancelled) setThumbnail(image);
     }).catch((error: unknown) => {
-      console.error(`Unable to render miniature preview for ${name}`, error);
+      console.error(`Unable to render 3D model preview for ${name}`, error);
       if (!cancelled) setFailed(true);
     });
     return () => {
@@ -36,7 +36,7 @@ export function MiniaturePreview({ name, url }: { name: string; url: string }) {
     <div
       ref={hostRef}
       className="relative aspect-[4/3] w-full overflow-hidden bg-[radial-gradient(circle_at_50%_42%,rgba(251,191,36,0.16),transparent_48%),linear-gradient(180deg,#15140f_0%,#090907_100%)]"
-      aria-label={`${name} 3D miniature preview`}
+      aria-label={`${name} 3D model preview`}
       role="img"
     >
       <div className="pointer-events-none absolute inset-x-[18%] bottom-[12%] h-[12%] rounded-[50%] bg-black/60 blur-md" />
