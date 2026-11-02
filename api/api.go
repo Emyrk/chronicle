@@ -506,6 +506,8 @@ func (api *API) Routes() chi.Router {
 
 				r.Route("/ratings", func(r chi.Router) {
 					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
+					r.Post("/renown/repair", api.AdminDispatchRenownRepair)
+					r.Post("/rebuild", api.AdminRebuildRatings)
 					r.Get("/groups", api.AdminListRatingGroups)
 					r.Post("/groups", api.AdminCreateRatingGroup)
 					r.Put("/groups/{groupID}", api.AdminRenameRatingGroup)

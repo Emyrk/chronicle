@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/riverqueue/river/rivertype"
 )
 
 const ratingAdminBodyLimit = 16 << 10
@@ -69,6 +70,43 @@ func (api *API) ratingAdminRebuild(r *http.Request) error {
 	}
 	return nil
 }
+
+// AdminDispatchRenownRepair starts a bounded historical repair pass across all
+// tenants, including root. It does not wait for the repair pages to complete.
+// For complete rating history, wait for the repair jobs to finish before
+// calling /rebuild for the current tenant.
+//
+// POST /api/v1/admin/ratings/renown/repair (no request body)
+func (api *API) AdminDispatchRenownRepair(w http.ResponseWriter, r *http.Request) {
+	api.adminEnqueueRatingJob(w, r, servicerankings.ArgsDispatchRenownRepair{})
+}
+
+// AdminRebuildRatings rebuilds only the tenant resolved from the request host.
+// It does not dispatch an all-tenant rating rebuild or wait for Renown repairs.
+//
+// POST /api/v1/admin/ratings/rebuild (no request body)
+func (api *API) AdminRebuildRatings(w http.ResponseWriter, r *http.Request) {
+	api.adminEnqueueRatingJob(w, r, servicerankings.ArgsRebuildTenantRatings{TenantID: servicetenant.TenantIDFromContext(r.Context())})
+}
+
+func (api *API) adminEnqueueRatingJob(w http.ResponseWriter, r *http.Request, args rivertype.JobArgs) {
+	ctx := r.Context()
+	if api.Queues == nil || api.Queues.Client == nil {
+		ratingAdminError(w, r, http.StatusServiceUnavailable, "Ranking queue is unavailable")
+		return
+	}
+	result, err := api.Queues.Insert(ctx, args, nil)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusAccepted, chroniclesdk.AdminRatingJobResponse{
+		JobID:                    result.Job.ID,
+		JobState:                 string(result.Job.State),
+		UniqueSkippedAsDuplicate: result.UniqueSkippedAsDuplicate,
+	})
+}
+
 func (api *API) AdminListRatingGroups(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenant := servicetenant.TenantIDFromContext(ctx)

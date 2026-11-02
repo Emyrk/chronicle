@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -9,8 +10,74 @@ import (
 	"testing"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue"
+	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/services/servicerankings"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/google/uuid"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/stretchr/testify/require"
 )
+
+// The endpoint uses River's unique insertion contract rather than creating
+// duplicate maintenance jobs. A tenant rebuild never targets another tenant.
+func TestAdminRatingMaintenanceJobs(t *testing.T) {
+	t.Parallel()
+	pool, _ := dbtestutil.NewPGXPool(t)
+	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
+	require.NoError(t, err)
+	api := &API{Queues: &riverqueue.Queues{Client: client}}
+
+	call := func(handler http.HandlerFunc, tenant uuid.UUID) chroniclesdk.AdminRatingJobResponse {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		if tenant != uuid.Nil {
+			req = req.WithContext(servicetenant.WithTenantID(req.Context(), tenant))
+		}
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+		var response chroniclesdk.AdminRatingJobResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		require.Positive(t, response.JobID)
+		require.Equal(t, "available", response.JobState)
+		return response
+	}
+
+	repair := call(api.AdminDispatchRenownRepair, uuid.Nil)
+	repairDuplicate := call(api.AdminDispatchRenownRepair, uuid.Nil)
+	require.True(t, repairDuplicate.UniqueSkippedAsDuplicate)
+	require.Equal(t, repair.JobID, repairDuplicate.JobID)
+
+	tenant := uuid.New()
+	rebuild := call(api.AdminRebuildRatings, tenant)
+	rebuildDuplicate := call(api.AdminRebuildRatings, tenant)
+	require.True(t, rebuildDuplicate.UniqueSkippedAsDuplicate)
+	require.Equal(t, rebuild.JobID, rebuildDuplicate.JobID)
+	other := call(api.AdminRebuildRatings, uuid.New())
+	require.NotEqual(t, rebuild.JobID, other.JobID)
+
+	root := call(api.AdminRebuildRatings, uuid.Nil)
+	require.NotEqual(t, rebuild.JobID, root.JobID)
+
+	job, err := client.JobGet(t.Context(), rebuild.JobID)
+	require.NoError(t, err)
+	var args servicerankings.ArgsRebuildTenantRatings
+	require.NoError(t, json.Unmarshal(job.EncodedArgs, &args))
+	require.Equal(t, tenant, args.TenantID)
+}
+
+func TestAdminRatingMaintenanceQueueUnavailable(t *testing.T) {
+	t.Parallel()
+	for _, api := range []*API{{}, {Queues: &riverqueue.Queues{}}} {
+		for _, handler := range []http.HandlerFunc{api.AdminDispatchRenownRepair, api.AdminRebuildRatings} {
+			rec := httptest.NewRecorder()
+			handler(rec, httptest.NewRequest(http.MethodPost, "/", nil))
+			require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+		}
+	}
+}
 
 func TestAdminRatingPolicyValidation(t *testing.T) {
 	t.Parallel()

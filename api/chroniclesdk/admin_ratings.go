@@ -35,6 +35,14 @@ type AdminRatingGroupPolicy struct {
 	FullRankKills int32     `json:"full_rank_kills"`
 }
 
+// AdminRatingJobResponse reports an accepted River job. When unique_skipped_as_duplicate
+// is true, job_id identifies the existing queued or running job, not a new job.
+type AdminRatingJobResponse struct {
+	JobID                    int64  `json:"job_id"`
+	JobState                 string `json:"job_state"`
+	UniqueSkippedAsDuplicate bool   `json:"unique_skipped_as_duplicate"`
+}
+
 // A policy write must use a version strictly greater than the stored version.
 type AdminPutRatingGroupPolicyRequest struct {
 	Version       int32   `json:"version"`
