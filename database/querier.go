@@ -821,6 +821,8 @@ type sqlcQuerier interface {
 	// snapshot it scores against, e.g. historical canonical snapshots).
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error)
 	ListRatingBossPolicies(ctx context.Context, arg ListRatingBossPoliciesParams) ([]RatingGroupBossPolicy, error)
+	ListRatingGuildRenownSourcePage(ctx context.Context, arg ListRatingGuildRenownSourcePageParams) ([]GuildRenownKillFact, error)
+	ListRatingPlayerRenownSourcePage(ctx context.Context, arg ListRatingPlayerRenownSourcePageParams) ([]RenownKillFact, error)
 	ListRatingRaidPolicies(ctx context.Context, arg ListRatingRaidPoliciesParams) ([]RatingGroupRaidPolicy, error)
 	ListRatingRealmGroupMembers(ctx context.Context, arg ListRatingRealmGroupMembersParams) ([]ListRatingRealmGroupMembersRow, error)
 	ListRatingRealmGroups(ctx context.Context, tenantID uuid.UUID) ([]RatingRealmGroup, error)
@@ -828,6 +830,21 @@ type sqlcQuerier interface {
 	// Tenant-wide canonical cohort, independent of rating group membership.
 	ListRatingRunsForTenant(ctx context.Context, arg ListRatingRunsForTenantParams) ([]uuid.UUID, error)
 	ListRatingScoreTenants(ctx context.Context) ([]uuid.NullUUID, error)
+	ListRatingStageGuildKeys(ctx context.Context, arg ListRatingStageGuildKeysParams) ([]ListRatingStageGuildKeysRow, error)
+	ListRatingStageGuildRenownKeys(ctx context.Context, arg ListRatingStageGuildRenownKeysParams) ([]ListRatingStageGuildRenownKeysRow, error)
+	ListRatingStageGuildRenownSubject(ctx context.Context, arg ListRatingStageGuildRenownSubjectParams) ([]RatingStageGuildRenown, error)
+	ListRatingStageGuildSubject(ctx context.Context, arg ListRatingStageGuildSubjectParams) ([]RatingStageGuildObservation, error)
+	// Enumerate a bounded set of distinct player or guild subjects. The after-key
+	// is the last emitted key, not the last raw row in the staging table.
+	ListRatingStagePlayerKeys(ctx context.Context, arg ListRatingStagePlayerKeysParams) ([]ListRatingStagePlayerKeysRow, error)
+	ListRatingStagePlayerRenownKeys(ctx context.Context, arg ListRatingStagePlayerRenownKeysParams) ([]ListRatingStagePlayerRenownKeysRow, error)
+	ListRatingStagePlayerRenownSubject(ctx context.Context, arg ListRatingStagePlayerRenownSubjectParams) ([]RatingStagePlayerRenown, error)
+	// Ordered locked observations support exact Mastery replay and bounded reading.
+	ListRatingStagePlayerSubject(ctx context.Context, arg ListRatingStagePlayerSubjectParams) ([]RatingStagePlayerObservation, error)
+	// Tenant realms are a small configuration set; page independently within each
+	// realm using the existing source unique keys (no startup index/backfill).
+	ListRatingStageRealms(ctx context.Context, arg ListRatingStageRealmsParams) ([]uuid.UUID, error)
+	ListRatingStageRunsForTenant(ctx context.Context, arg ListRatingStageRunsForTenantParams) ([]uuid.UUID, error)
 	ListReadyLogFileParts(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListRecentBillingReconciliationRuns(ctx context.Context, limit int32) ([]BillingReconciliationRun, error)
 	ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]ListRecentBillingSubscriptionsRow, error)
@@ -1026,6 +1043,10 @@ type sqlcQuerier interface {
 	RatingObservationsForRun(ctx context.Context, arg RatingObservationsForRunParams) ([]RatingObservationsForRunRow, error)
 	// Set-based source extraction for one bounded page of canonical runs.
 	RatingObservationsForRuns(ctx context.Context, arg RatingObservationsForRunsParams) ([]RatingObservationsForRunsRow, error)
+	RatingStageGuildRankOne(ctx context.Context, arg RatingStageGuildRankOneParams) (float64, error)
+	// Rank-one derives from *all* tenant runs (including unassigned realms and
+	// guild-less observations); the worker applies frozen membership afterwards.
+	RatingStagePlayerRankOne(ctx context.Context, arg RatingStagePlayerRankOneParams) (float64, error)
 	ReactivateDiscordMembershipGrantCheck(ctx context.Context, arg ReactivateDiscordMembershipGrantCheckParams) (ReactivateDiscordMembershipGrantCheckRow, error)
 	// Files the user appended to someone else's log group belong to that raid.
 	ReassignAppendedLogFilesToGroupOwner(ctx context.Context, userID uuid.UUID) error
@@ -1128,6 +1149,13 @@ type sqlcQuerier interface {
 	SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeaderboardParams) ([]SpeedrunLeaderboardRow, error)
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
+	StageRatingGuildRenownPage(ctx context.Context, arg StageRatingGuildRenownPageParams) (int64, error)
+	StageRatingGuildRuns(ctx context.Context, arg StageRatingGuildRunsParams) (int64, error)
+	StageRatingPlayerRenownPage(ctx context.Context, arg StageRatingPlayerRenownPageParams) (int64, error)
+	// Only a bounded page is passed to each insertion. Caller advances the
+	// checkpoint cursor in the same transaction. ON CONFLICT never rewrites the
+	// original evidence if a page is replayed after a crash.
+	StageRatingPlayerRuns(ctx context.Context, arg StageRatingPlayerRunsParams) (int64, error)
 	StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error
 	// The start function atomically locks the tenant revision, snapshots all config,
 	// creates a building generation and checkpoint, or returns the unfinished one.

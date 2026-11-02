@@ -2269,6 +2269,73 @@ CREATE TABLE rating_score_generations (
     CONSTRAINT rating_score_generations_status_check CHECK ((status = ANY (ARRAY['building'::text, 'active'::text, 'retired'::text])))
 );
 
+CREATE TABLE rating_stage_guild_observations (
+    generation_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    guild_id uuid,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    killed_at timestamp with time zone NOT NULL,
+    raw_duration_ms double precision NOT NULL,
+    locked_parse double precision
+);
+
+ALTER TABLE ONLY rating_stage_guild_observations FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE rating_stage_guild_renown (
+    generation_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    killed_at timestamp with time zone NOT NULL,
+    source_id uuid NOT NULL
+);
+
+ALTER TABLE ONLY rating_stage_guild_renown FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE rating_stage_player_observations (
+    generation_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    player_guid text NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    player_class text NOT NULL,
+    player_spec text NOT NULL,
+    player_sub_spec text NOT NULL,
+    killed_at timestamp with time zone NOT NULL,
+    performance_metric text NOT NULL,
+    raw_value double precision NOT NULL,
+    locked_parse double precision,
+    CONSTRAINT rating_stage_player_observations_performance_metric_check CHECK ((performance_metric = ANY (ARRAY['dps'::text, 'hps'::text])))
+);
+
+ALTER TABLE ONLY rating_stage_player_observations FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE rating_stage_player_renown (
+    generation_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    player_guid text NOT NULL,
+    run_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    killed_at timestamp with time zone NOT NULL,
+    source_id uuid NOT NULL
+);
+
+ALTER TABLE ONLY rating_stage_player_renown FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE regression_fixtures (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     log_group_id uuid NOT NULL,
@@ -3519,6 +3586,18 @@ ALTER TABLE ONLY rating_scope_scores
 ALTER TABLE ONLY rating_score_generations
     ADD CONSTRAINT rating_score_generations_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY rating_stage_guild_observations
+    ADD CONSTRAINT rating_stage_guild_observations_pkey PRIMARY KEY (generation_id, run_id, encounter_name);
+
+ALTER TABLE ONLY rating_stage_guild_renown
+    ADD CONSTRAINT rating_stage_guild_renown_pkey PRIMARY KEY (generation_id, source_id);
+
+ALTER TABLE ONLY rating_stage_player_observations
+    ADD CONSTRAINT rating_stage_player_observations_pkey PRIMARY KEY (generation_id, run_id, player_guid, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric);
+
+ALTER TABLE ONLY rating_stage_player_renown
+    ADD CONSTRAINT rating_stage_player_renown_pkey PRIMARY KEY (generation_id, source_id);
+
 ALTER TABLE ONLY regression_fixtures
     ADD CONSTRAINT regression_fixtures_log_group_id_key UNIQUE (log_group_id);
 
@@ -4058,6 +4137,18 @@ CREATE INDEX rating_rebuild_checkpoints_tenant_idx ON rating_rebuild_checkpoints
 CREATE INDEX rating_scope_scores_board_idx ON rating_scope_scores USING btree (generation_id, group_id, instance_name, rating_metric, window_kind, performance_metric, difficulty_name, max_players, player_class, player_spec, player_sub_spec, score DESC, realm_id, player_guid);
 
 CREATE UNIQUE INDEX rating_score_generations_active_idx ON rating_score_generations USING btree (tenant_id) WHERE (status = 'active'::text);
+
+CREATE INDEX rating_stage_guild_cohort_idx ON rating_stage_guild_observations USING btree (generation_id, instance_name, encounter_name, difficulty_name, max_players, raw_duration_ms, run_id);
+
+CREATE INDEX rating_stage_guild_renown_subject_idx ON rating_stage_guild_renown USING btree (generation_id, realm_id, guild_id, instance_name, encounter_name, killed_at, source_id);
+
+CREATE INDEX rating_stage_guild_subject_idx ON rating_stage_guild_observations USING btree (generation_id, realm_id, guild_id, instance_name, encounter_name, difficulty_name, max_players, locked_parse DESC NULLS LAST, killed_at, run_id);
+
+CREATE INDEX rating_stage_player_cohort_idx ON rating_stage_player_observations USING btree (generation_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, raw_value DESC, run_id);
+
+CREATE INDEX rating_stage_player_renown_subject_idx ON rating_stage_player_renown USING btree (generation_id, realm_id, player_guid, instance_name, encounter_name, killed_at, source_id);
+
+CREATE INDEX rating_stage_player_subject_idx ON rating_stage_player_observations USING btree (generation_id, realm_id, player_guid, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, locked_parse DESC NULLS LAST, killed_at, run_id);
 
 CREATE INDEX renown_kill_facts_boss_idx ON renown_kill_facts USING btree (realm_id, instance_name, encounter_name, killed_at);
 
@@ -4606,6 +4697,18 @@ ALTER TABLE ONLY rating_scope_scores
 ALTER TABLE ONLY rating_scope_scores
     ADD CONSTRAINT rating_scope_scores_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
 
+ALTER TABLE ONLY rating_stage_guild_observations
+    ADD CONSTRAINT rating_stage_guild_observations_generation_id_fkey FOREIGN KEY (generation_id) REFERENCES rating_score_generations(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY rating_stage_guild_renown
+    ADD CONSTRAINT rating_stage_guild_renown_generation_id_fkey FOREIGN KEY (generation_id) REFERENCES rating_score_generations(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY rating_stage_player_observations
+    ADD CONSTRAINT rating_stage_player_observations_generation_id_fkey FOREIGN KEY (generation_id) REFERENCES rating_score_generations(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY rating_stage_player_renown
+    ADD CONSTRAINT rating_stage_player_renown_generation_id_fkey FOREIGN KEY (generation_id) REFERENCES rating_score_generations(id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY regression_fixtures
     ADD CONSTRAINT regression_fixtures_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
 
@@ -4855,6 +4958,14 @@ ALTER TABLE rating_realm_groups ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_scope_scores ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE rating_stage_guild_observations ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE rating_stage_guild_renown ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE rating_stage_player_observations ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE rating_stage_player_renown ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE renown_kill_facts ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_admin_bypass ON encounter_dps_rankings USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
@@ -4880,6 +4991,14 @@ CREATE POLICY tenant_admin_bypass ON rating_realm_group_memberships USING ((curr
 CREATE POLICY tenant_admin_bypass ON rating_realm_groups USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_scope_scores USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_stage_guild_observations USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_stage_guild_renown USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_stage_player_observations USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_stage_player_renown USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON renown_kill_facts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -4933,6 +5052,18 @@ CREATE POLICY tenant_isolation ON rating_realm_groups USING ((server_id IN ( SEL
    FROM wow_servers)));
 
 CREATE POLICY tenant_isolation ON rating_scope_scores USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON rating_stage_guild_observations USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON rating_stage_guild_renown USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON rating_stage_player_observations USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON rating_stage_player_renown USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
 
 CREATE POLICY tenant_isolation ON renown_kill_facts USING ((realm_id IN ( SELECT wow_server_realms.id

@@ -22456,6 +22456,1029 @@ func (q *sqlQuerier) StartRatingRebuild(ctx context.Context, arg StartRatingRebu
 	return column_1, err
 }
 
+const listRatingGuildRenownSourcePage = `-- name: ListRatingGuildRenownSourcePage :many
+SELECT fact.id, fact.tenant_id, fact.realm_id, fact.guild_id, fact.run_id, fact.instance_name, fact.encounter_name, fact.killed_at, fact.recorded_at FROM guild_renown_kill_facts fact
+WHERE fact.tenant_id = $1 AND fact.realm_id = $2
+  AND (fact.guild_id, fact.run_id, fact.encounter_name) >
+      ($3::uuid, $4::uuid, $5::text)
+  AND fact.recorded_at <= $6
+ORDER BY fact.guild_id, fact.run_id, fact.encounter_name
+LIMIT LEAST(GREATEST($7::int, 0), 200)
+`
+
+type ListRatingGuildRenownSourcePageParams struct {
+	TenantID           uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID            uuid.UUID          `db:"realm_id" json:"realm_id"`
+	AfterGuildID       uuid.UUID          `db:"after_guild_id" json:"after_guild_id"`
+	AfterRunID         uuid.UUID          `db:"after_run_id" json:"after_run_id"`
+	AfterEncounterName string             `db:"after_encounter_name" json:"after_encounter_name"`
+	SourceCutoff       pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	BatchSize          int32              `db:"batch_size" json:"batch_size"`
+}
+
+func (q *sqlQuerier) ListRatingGuildRenownSourcePage(ctx context.Context, arg ListRatingGuildRenownSourcePageParams) ([]GuildRenownKillFact, error) {
+	rows, err := q.db.Query(ctx, listRatingGuildRenownSourcePage,
+		arg.TenantID,
+		arg.RealmID,
+		arg.AfterGuildID,
+		arg.AfterRunID,
+		arg.AfterEncounterName,
+		arg.SourceCutoff,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildRenownKillFact
+	for rows.Next() {
+		var i GuildRenownKillFact
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.RealmID,
+			&i.GuildID,
+			&i.RunID,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.KilledAt,
+			&i.RecordedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingPlayerRenownSourcePage = `-- name: ListRatingPlayerRenownSourcePage :many
+SELECT fact.id, fact.realm_id, fact.player_guid, fact.run_id, fact.instance_name, fact.encounter_name, fact.killed_at, fact.recorded_at FROM renown_kill_facts fact
+WHERE fact.realm_id = $1
+  AND (fact.player_guid, fact.run_id, fact.encounter_name) >
+      ($2::text, $3::uuid, $4::text)
+  AND fact.recorded_at <= $5
+ORDER BY fact.player_guid, fact.run_id, fact.encounter_name
+LIMIT LEAST(GREATEST($6::int, 0), 200)
+`
+
+type ListRatingPlayerRenownSourcePageParams struct {
+	RealmID            uuid.UUID          `db:"realm_id" json:"realm_id"`
+	AfterPlayerGuid    string             `db:"after_player_guid" json:"after_player_guid"`
+	AfterRunID         uuid.UUID          `db:"after_run_id" json:"after_run_id"`
+	AfterEncounterName string             `db:"after_encounter_name" json:"after_encounter_name"`
+	SourceCutoff       pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	BatchSize          int32              `db:"batch_size" json:"batch_size"`
+}
+
+func (q *sqlQuerier) ListRatingPlayerRenownSourcePage(ctx context.Context, arg ListRatingPlayerRenownSourcePageParams) ([]RenownKillFact, error) {
+	rows, err := q.db.Query(ctx, listRatingPlayerRenownSourcePage,
+		arg.RealmID,
+		arg.AfterPlayerGuid,
+		arg.AfterRunID,
+		arg.AfterEncounterName,
+		arg.SourceCutoff,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RenownKillFact
+	for rows.Next() {
+		var i RenownKillFact
+		if err := rows.Scan(
+			&i.ID,
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.RunID,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.KilledAt,
+			&i.RecordedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingStageGuildKeys = `-- name: ListRatingStageGuildKeys :many
+SELECT DISTINCT realm_id, guild_id, instance_name, encounter_name, difficulty_name, max_players
+FROM rating_stage_guild_observations
+WHERE generation_id = $1 AND guild_id IS NOT NULL
+  AND (realm_id, guild_id, instance_name, encounter_name, difficulty_name, max_players) >
+      ($2::uuid, $3::uuid, $4::text,
+       $5::text, $6::text, $7::smallint)
+ORDER BY realm_id, guild_id, instance_name, encounter_name, difficulty_name, max_players
+LIMIT LEAST(GREATEST($8::int, 0), 200)
+`
+
+type ListRatingStageGuildKeysParams struct {
+	GenerationID        uuid.UUID `db:"generation_id" json:"generation_id"`
+	AfterRealmID        uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
+	AfterGuildID        uuid.UUID `db:"after_guild_id" json:"after_guild_id"`
+	AfterInstanceName   string    `db:"after_instance_name" json:"after_instance_name"`
+	AfterEncounterName  string    `db:"after_encounter_name" json:"after_encounter_name"`
+	AfterDifficultyName string    `db:"after_difficulty_name" json:"after_difficulty_name"`
+	AfterMaxPlayers     int16     `db:"after_max_players" json:"after_max_players"`
+	BatchSize           int32     `db:"batch_size" json:"batch_size"`
+}
+
+type ListRatingStageGuildKeysRow struct {
+	RealmID        uuid.UUID     `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.NullUUID `db:"guild_id" json:"guild_id"`
+	InstanceName   string        `db:"instance_name" json:"instance_name"`
+	EncounterName  string        `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string        `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16         `db:"max_players" json:"max_players"`
+}
+
+func (q *sqlQuerier) ListRatingStageGuildKeys(ctx context.Context, arg ListRatingStageGuildKeysParams) ([]ListRatingStageGuildKeysRow, error) {
+	rows, err := q.db.Query(ctx, listRatingStageGuildKeys,
+		arg.GenerationID,
+		arg.AfterRealmID,
+		arg.AfterGuildID,
+		arg.AfterInstanceName,
+		arg.AfterEncounterName,
+		arg.AfterDifficultyName,
+		arg.AfterMaxPlayers,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRatingStageGuildKeysRow
+	for rows.Next() {
+		var i ListRatingStageGuildKeysRow
+		if err := rows.Scan(
+			&i.RealmID,
+			&i.GuildID,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingStageGuildRenownKeys = `-- name: ListRatingStageGuildRenownKeys :many
+SELECT DISTINCT realm_id, guild_id, instance_name, encounter_name
+FROM rating_stage_guild_renown WHERE generation_id = $1
+  AND (realm_id, guild_id, instance_name, encounter_name) >
+      ($2::uuid, $3::uuid, $4::text, $5::text)
+ORDER BY realm_id, guild_id, instance_name, encounter_name
+LIMIT LEAST(GREATEST($6::int, 0), 200)
+`
+
+type ListRatingStageGuildRenownKeysParams struct {
+	GenerationID       uuid.UUID `db:"generation_id" json:"generation_id"`
+	AfterRealmID       uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
+	AfterGuildID       uuid.UUID `db:"after_guild_id" json:"after_guild_id"`
+	AfterInstanceName  string    `db:"after_instance_name" json:"after_instance_name"`
+	AfterEncounterName string    `db:"after_encounter_name" json:"after_encounter_name"`
+	BatchSize          int32     `db:"batch_size" json:"batch_size"`
+}
+
+type ListRatingStageGuildRenownKeysRow struct {
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID       uuid.UUID `db:"guild_id" json:"guild_id"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+}
+
+func (q *sqlQuerier) ListRatingStageGuildRenownKeys(ctx context.Context, arg ListRatingStageGuildRenownKeysParams) ([]ListRatingStageGuildRenownKeysRow, error) {
+	rows, err := q.db.Query(ctx, listRatingStageGuildRenownKeys,
+		arg.GenerationID,
+		arg.AfterRealmID,
+		arg.AfterGuildID,
+		arg.AfterInstanceName,
+		arg.AfterEncounterName,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRatingStageGuildRenownKeysRow
+	for rows.Next() {
+		var i ListRatingStageGuildRenownKeysRow
+		if err := rows.Scan(
+			&i.RealmID,
+			&i.GuildID,
+			&i.InstanceName,
+			&i.EncounterName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingStageGuildRenownSubject = `-- name: ListRatingStageGuildRenownSubject :many
+SELECT generation_id, tenant_id, realm_id, guild_id, run_id, instance_name, encounter_name, killed_at, source_id FROM rating_stage_guild_renown
+WHERE generation_id = $1 AND realm_id = $2 AND guild_id = $3
+  AND instance_name = $4 AND encounter_name = $5
+  AND (killed_at, source_id) > ($6::timestamptz, $7::uuid)
+ORDER BY killed_at, source_id LIMIT LEAST(GREATEST($8::int, 0), 200)
+`
+
+type ListRatingStageGuildRenownSubjectParams struct {
+	GenerationID  uuid.UUID          `db:"generation_id" json:"generation_id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	AfterKilledAt pgtype.Timestamptz `db:"after_killed_at" json:"after_killed_at"`
+	AfterSourceID uuid.UUID          `db:"after_source_id" json:"after_source_id"`
+	BatchSize     int32              `db:"batch_size" json:"batch_size"`
+}
+
+func (q *sqlQuerier) ListRatingStageGuildRenownSubject(ctx context.Context, arg ListRatingStageGuildRenownSubjectParams) ([]RatingStageGuildRenown, error) {
+	rows, err := q.db.Query(ctx, listRatingStageGuildRenownSubject,
+		arg.GenerationID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.AfterKilledAt,
+		arg.AfterSourceID,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RatingStageGuildRenown
+	for rows.Next() {
+		var i RatingStageGuildRenown
+		if err := rows.Scan(
+			&i.GenerationID,
+			&i.TenantID,
+			&i.RealmID,
+			&i.GuildID,
+			&i.RunID,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.KilledAt,
+			&i.SourceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingStageGuildSubject = `-- name: ListRatingStageGuildSubject :many
+SELECT generation_id, tenant_id, realm_id, run_id, guild_id, instance_name, encounter_name, difficulty_name, max_players, killed_at, raw_duration_ms, locked_parse FROM rating_stage_guild_observations
+WHERE generation_id = $1 AND realm_id = $2 AND guild_id = $3
+  AND instance_name = $4 AND encounter_name = $5
+  AND difficulty_name = $6 AND max_players = $7
+  AND (CASE WHEN $8::double precision IS NULL THEN
+        locked_parse IS NULL AND (killed_at, run_id) > ($9::timestamptz, $10::uuid)
+      ELSE locked_parse < $8 OR locked_parse IS NULL
+        OR (locked_parse = $8 AND
+            (killed_at, run_id) > ($9::timestamptz, $10::uuid)) END)
+ORDER BY locked_parse DESC NULLS LAST, killed_at, run_id
+LIMIT LEAST(GREATEST($11::int, 0), 200)
+`
+
+type ListRatingStageGuildSubjectParams struct {
+	GenerationID     uuid.UUID          `db:"generation_id" json:"generation_id"`
+	RealmID          uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID          uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	InstanceName     string             `db:"instance_name" json:"instance_name"`
+	EncounterName    string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName   string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16              `db:"max_players" json:"max_players"`
+	AfterLockedParse float64            `db:"after_locked_parse" json:"after_locked_parse"`
+	AfterKilledAt    pgtype.Timestamptz `db:"after_killed_at" json:"after_killed_at"`
+	AfterRunID       uuid.UUID          `db:"after_run_id" json:"after_run_id"`
+	BatchSize        int32              `db:"batch_size" json:"batch_size"`
+}
+
+func (q *sqlQuerier) ListRatingStageGuildSubject(ctx context.Context, arg ListRatingStageGuildSubjectParams) ([]RatingStageGuildObservation, error) {
+	rows, err := q.db.Query(ctx, listRatingStageGuildSubject,
+		arg.GenerationID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.AfterLockedParse,
+		arg.AfterKilledAt,
+		arg.AfterRunID,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RatingStageGuildObservation
+	for rows.Next() {
+		var i RatingStageGuildObservation
+		if err := rows.Scan(
+			&i.GenerationID,
+			&i.TenantID,
+			&i.RealmID,
+			&i.RunID,
+			&i.GuildID,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.KilledAt,
+			&i.RawDurationMs,
+			&i.LockedParse,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingStagePlayerKeys = `-- name: ListRatingStagePlayerKeys :many
+SELECT DISTINCT realm_id, player_guid, instance_name, encounter_name,
+       difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric
+FROM rating_stage_player_observations
+WHERE generation_id = $1
+  AND (realm_id, player_guid, instance_name, encounter_name, difficulty_name,
+       max_players, player_class, player_spec, player_sub_spec, performance_metric) >
+      ($2::uuid, $3::text, $4::text,
+       $5::text, $6::text, $7::smallint,
+       $8::text, $9::text, $10::text,
+       $11::text)
+ORDER BY realm_id, player_guid, instance_name, encounter_name, difficulty_name,
+         max_players, player_class, player_spec, player_sub_spec, performance_metric
+LIMIT LEAST(GREATEST($12::int, 0), 200)
+`
+
+type ListRatingStagePlayerKeysParams struct {
+	GenerationID           uuid.UUID `db:"generation_id" json:"generation_id"`
+	AfterRealmID           uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
+	AfterPlayerGuid        string    `db:"after_player_guid" json:"after_player_guid"`
+	AfterInstanceName      string    `db:"after_instance_name" json:"after_instance_name"`
+	AfterEncounterName     string    `db:"after_encounter_name" json:"after_encounter_name"`
+	AfterDifficultyName    string    `db:"after_difficulty_name" json:"after_difficulty_name"`
+	AfterMaxPlayers        int16     `db:"after_max_players" json:"after_max_players"`
+	AfterPlayerClass       string    `db:"after_player_class" json:"after_player_class"`
+	AfterPlayerSpec        string    `db:"after_player_spec" json:"after_player_spec"`
+	AfterPlayerSubSpec     string    `db:"after_player_sub_spec" json:"after_player_sub_spec"`
+	AfterPerformanceMetric string    `db:"after_performance_metric" json:"after_performance_metric"`
+	BatchSize              int32     `db:"batch_size" json:"batch_size"`
+}
+
+type ListRatingStagePlayerKeysRow struct {
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string    `db:"player_guid" json:"player_guid"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+}
+
+// Enumerate a bounded set of distinct player or guild subjects. The after-key
+// is the last emitted key, not the last raw row in the staging table.
+func (q *sqlQuerier) ListRatingStagePlayerKeys(ctx context.Context, arg ListRatingStagePlayerKeysParams) ([]ListRatingStagePlayerKeysRow, error) {
+	rows, err := q.db.Query(ctx, listRatingStagePlayerKeys,
+		arg.GenerationID,
+		arg.AfterRealmID,
+		arg.AfterPlayerGuid,
+		arg.AfterInstanceName,
+		arg.AfterEncounterName,
+		arg.AfterDifficultyName,
+		arg.AfterMaxPlayers,
+		arg.AfterPlayerClass,
+		arg.AfterPlayerSpec,
+		arg.AfterPlayerSubSpec,
+		arg.AfterPerformanceMetric,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRatingStagePlayerKeysRow
+	for rows.Next() {
+		var i ListRatingStagePlayerKeysRow
+		if err := rows.Scan(
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.PerformanceMetric,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingStagePlayerRenownKeys = `-- name: ListRatingStagePlayerRenownKeys :many
+SELECT DISTINCT realm_id, player_guid, instance_name, encounter_name
+FROM rating_stage_player_renown WHERE generation_id = $1
+  AND (realm_id, player_guid, instance_name, encounter_name) >
+      ($2::uuid, $3::text, $4::text, $5::text)
+ORDER BY realm_id, player_guid, instance_name, encounter_name
+LIMIT LEAST(GREATEST($6::int, 0), 200)
+`
+
+type ListRatingStagePlayerRenownKeysParams struct {
+	GenerationID       uuid.UUID `db:"generation_id" json:"generation_id"`
+	AfterRealmID       uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
+	AfterPlayerGuid    string    `db:"after_player_guid" json:"after_player_guid"`
+	AfterInstanceName  string    `db:"after_instance_name" json:"after_instance_name"`
+	AfterEncounterName string    `db:"after_encounter_name" json:"after_encounter_name"`
+	BatchSize          int32     `db:"batch_size" json:"batch_size"`
+}
+
+type ListRatingStagePlayerRenownKeysRow struct {
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid    string    `db:"player_guid" json:"player_guid"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+}
+
+func (q *sqlQuerier) ListRatingStagePlayerRenownKeys(ctx context.Context, arg ListRatingStagePlayerRenownKeysParams) ([]ListRatingStagePlayerRenownKeysRow, error) {
+	rows, err := q.db.Query(ctx, listRatingStagePlayerRenownKeys,
+		arg.GenerationID,
+		arg.AfterRealmID,
+		arg.AfterPlayerGuid,
+		arg.AfterInstanceName,
+		arg.AfterEncounterName,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRatingStagePlayerRenownKeysRow
+	for rows.Next() {
+		var i ListRatingStagePlayerRenownKeysRow
+		if err := rows.Scan(
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.InstanceName,
+			&i.EncounterName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingStagePlayerRenownSubject = `-- name: ListRatingStagePlayerRenownSubject :many
+SELECT generation_id, tenant_id, realm_id, player_guid, run_id, instance_name, encounter_name, killed_at, source_id FROM rating_stage_player_renown
+WHERE generation_id = $1 AND realm_id = $2 AND player_guid = $3
+  AND instance_name = $4 AND encounter_name = $5
+  AND (killed_at, source_id) > ($6::timestamptz, $7::uuid)
+ORDER BY killed_at, source_id LIMIT LEAST(GREATEST($8::int, 0), 200)
+`
+
+type ListRatingStagePlayerRenownSubjectParams struct {
+	GenerationID  uuid.UUID          `db:"generation_id" json:"generation_id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	AfterKilledAt pgtype.Timestamptz `db:"after_killed_at" json:"after_killed_at"`
+	AfterSourceID uuid.UUID          `db:"after_source_id" json:"after_source_id"`
+	BatchSize     int32              `db:"batch_size" json:"batch_size"`
+}
+
+func (q *sqlQuerier) ListRatingStagePlayerRenownSubject(ctx context.Context, arg ListRatingStagePlayerRenownSubjectParams) ([]RatingStagePlayerRenown, error) {
+	rows, err := q.db.Query(ctx, listRatingStagePlayerRenownSubject,
+		arg.GenerationID,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.AfterKilledAt,
+		arg.AfterSourceID,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RatingStagePlayerRenown
+	for rows.Next() {
+		var i RatingStagePlayerRenown
+		if err := rows.Scan(
+			&i.GenerationID,
+			&i.TenantID,
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.RunID,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.KilledAt,
+			&i.SourceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingStagePlayerSubject = `-- name: ListRatingStagePlayerSubject :many
+SELECT generation_id, tenant_id, realm_id, run_id, player_guid, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, killed_at, performance_metric, raw_value, locked_parse FROM rating_stage_player_observations
+WHERE generation_id = $1 AND realm_id = $2 AND player_guid = $3
+  AND instance_name = $4 AND encounter_name = $5
+  AND difficulty_name = $6 AND max_players = $7
+  AND player_class = $8 AND player_spec = $9
+  AND player_sub_spec = $10 AND performance_metric = $11
+  AND (CASE WHEN $12::double precision IS NULL THEN
+        locked_parse IS NULL AND (killed_at, run_id) > ($13::timestamptz, $14::uuid)
+      ELSE locked_parse < $12 OR locked_parse IS NULL
+        OR (locked_parse = $12 AND
+            (killed_at, run_id) > ($13::timestamptz, $14::uuid)) END)
+ORDER BY locked_parse DESC NULLS LAST, killed_at, run_id
+LIMIT LEAST(GREATEST($15::int, 0), 200)
+`
+
+type ListRatingStagePlayerSubjectParams struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	AfterLockedParse  float64            `db:"after_locked_parse" json:"after_locked_parse"`
+	AfterKilledAt     pgtype.Timestamptz `db:"after_killed_at" json:"after_killed_at"`
+	AfterRunID        uuid.UUID          `db:"after_run_id" json:"after_run_id"`
+	BatchSize         int32              `db:"batch_size" json:"batch_size"`
+}
+
+// Ordered locked observations support exact Mastery replay and bounded reading.
+func (q *sqlQuerier) ListRatingStagePlayerSubject(ctx context.Context, arg ListRatingStagePlayerSubjectParams) ([]RatingStagePlayerObservation, error) {
+	rows, err := q.db.Query(ctx, listRatingStagePlayerSubject,
+		arg.GenerationID,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.AfterLockedParse,
+		arg.AfterKilledAt,
+		arg.AfterRunID,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RatingStagePlayerObservation
+	for rows.Next() {
+		var i RatingStagePlayerObservation
+		if err := rows.Scan(
+			&i.GenerationID,
+			&i.TenantID,
+			&i.RealmID,
+			&i.RunID,
+			&i.PlayerGuid,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.KilledAt,
+			&i.PerformanceMetric,
+			&i.RawValue,
+			&i.LockedParse,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingStageRealms = `-- name: ListRatingStageRealms :many
+SELECT realm.id FROM wow_server_realms realm
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND realm.id > $2
+ORDER BY realm.id LIMIT LEAST(GREATEST($3::int, 0), 200)
+`
+
+type ListRatingStageRealmsParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	AfterRealmID uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
+	BatchSize    int32     `db:"batch_size" json:"batch_size"`
+}
+
+// Tenant realms are a small configuration set; page independently within each
+// realm using the existing source unique keys (no startup index/backfill).
+func (q *sqlQuerier) ListRatingStageRealms(ctx context.Context, arg ListRatingStageRealmsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRatingStageRealms, arg.TenantID, arg.AfterRealmID, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingStageRunsForTenant = `-- name: ListRatingStageRunsForTenant :many
+SELECT rr.run_id FROM ranking_runs rr
+JOIN wow_server_realms realm ON realm.id = rr.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND rr.run_id > $2 AND rr.updated_at <= $3
+  AND rr.source_updated_at <= $3
+ORDER BY rr.run_id LIMIT LEAST(GREATEST($4::int, 0), 200)
+`
+
+type ListRatingStageRunsForTenantParams struct {
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	AfterRunID   uuid.UUID          `db:"after_run_id" json:"after_run_id"`
+	SourceCutoff pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	BatchSize    int32              `db:"batch_size" json:"batch_size"`
+}
+
+func (q *sqlQuerier) ListRatingStageRunsForTenant(ctx context.Context, arg ListRatingStageRunsForTenantParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRatingStageRunsForTenant,
+		arg.TenantID,
+		arg.AfterRunID,
+		arg.SourceCutoff,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var run_id uuid.UUID
+		if err := rows.Scan(&run_id); err != nil {
+			return nil, err
+		}
+		items = append(items, run_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ratingStageGuildRankOne = `-- name: RatingStageGuildRankOne :one
+SELECT min(raw_duration_ms)::double precision FROM rating_stage_guild_observations
+WHERE generation_id = $1 AND instance_name = $2
+  AND encounter_name = $3 AND difficulty_name = $4
+  AND max_players = $5
+`
+
+type RatingStageGuildRankOneParams struct {
+	GenerationID   uuid.UUID `db:"generation_id" json:"generation_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+}
+
+func (q *sqlQuerier) RatingStageGuildRankOne(ctx context.Context, arg RatingStageGuildRankOneParams) (float64, error) {
+	row := q.db.QueryRow(ctx, ratingStageGuildRankOne,
+		arg.GenerationID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+	)
+	var column_1 float64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const ratingStagePlayerRankOne = `-- name: RatingStagePlayerRankOne :one
+SELECT max(raw_value)::double precision FROM rating_stage_player_observations
+WHERE generation_id = $1 AND instance_name = $2
+  AND encounter_name = $3 AND difficulty_name = $4
+  AND max_players = $5 AND player_class = $6
+  AND player_spec = $7 AND player_sub_spec = $8
+  AND performance_metric = $9
+`
+
+type RatingStagePlayerRankOneParams struct {
+	GenerationID      uuid.UUID `db:"generation_id" json:"generation_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+}
+
+// Rank-one derives from *all* tenant runs (including unassigned realms and
+// guild-less observations); the worker applies frozen membership afterwards.
+func (q *sqlQuerier) RatingStagePlayerRankOne(ctx context.Context, arg RatingStagePlayerRankOneParams) (float64, error) {
+	row := q.db.QueryRow(ctx, ratingStagePlayerRankOne,
+		arg.GenerationID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+	)
+	var column_1 float64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const stageRatingGuildRenownPage = `-- name: StageRatingGuildRenownPage :one
+WITH inserted AS (
+    INSERT INTO rating_stage_guild_renown
+      (generation_id, tenant_id, realm_id, guild_id, run_id, instance_name, encounter_name, killed_at, source_id)
+    SELECT $1, $2, fact.realm_id, fact.guild_id, fact.run_id,
+           fact.instance_name, fact.encounter_name, fact.killed_at, fact.id
+    FROM guild_renown_kill_facts fact
+    WHERE fact.tenant_id = $2 AND fact.realm_id = $3
+      AND (fact.guild_id, fact.run_id, fact.encounter_name) >
+          ($4::uuid, $5::uuid, $6::text)
+      AND fact.recorded_at <= $7
+    ORDER BY fact.guild_id, fact.run_id, fact.encounter_name
+    LIMIT LEAST(GREATEST($8::int, 0), 200)
+    ON CONFLICT DO NOTHING RETURNING 1
+)
+SELECT count(*)::bigint FROM inserted
+`
+
+type StageRatingGuildRenownPageParams struct {
+	GenerationID       uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID           uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID            uuid.UUID          `db:"realm_id" json:"realm_id"`
+	AfterGuildID       uuid.UUID          `db:"after_guild_id" json:"after_guild_id"`
+	AfterRunID         uuid.UUID          `db:"after_run_id" json:"after_run_id"`
+	AfterEncounterName string             `db:"after_encounter_name" json:"after_encounter_name"`
+	SourceCutoff       pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	BatchSize          int32              `db:"batch_size" json:"batch_size"`
+}
+
+func (q *sqlQuerier) StageRatingGuildRenownPage(ctx context.Context, arg StageRatingGuildRenownPageParams) (int64, error) {
+	row := q.db.QueryRow(ctx, stageRatingGuildRenownPage,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.RealmID,
+		arg.AfterGuildID,
+		arg.AfterRunID,
+		arg.AfterEncounterName,
+		arg.SourceCutoff,
+		arg.BatchSize,
+	)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const stageRatingGuildRuns = `-- name: StageRatingGuildRuns :one
+WITH source AS (
+    SELECT DISTINCT ON (rr.run_id, encounter.name)
+        rr.realm_id, rr.run_id, representative.guild_id, representative.name AS instance_name,
+        encounter.name AS encounter_name, representative.difficulty_name,
+        representative.max_players::smallint AS max_players, encounter.end_time AS killed_at,
+        (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::double precision AS raw_duration_ms,
+        boss.server_precise_score AS locked_parse
+    FROM ranking_runs rr
+    JOIN wow_server_realms realm ON realm.id = rr.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    JOIN log_instances representative ON representative.id = rr.representative_instance_id
+    JOIN wow_log_groups log_group ON log_group.id = representative.log_group_id AND NOT log_group.unlisted
+    JOIN log_instance_encounters encounter ON encounter.instance_id = representative.id
+    LEFT JOIN LATERAL (
+        SELECT b.server_precise_score FROM time_parse_scores score
+        JOIN time_parse_boss_scores b ON b.time_parse_score_id = score.id
+        JOIN log_instances scored_instance ON scored_instance.id = score.instance_id
+        JOIN wow_log_groups scored_group ON scored_group.id = scored_instance.log_group_id AND NOT scored_group.unlisted
+        WHERE score.tenant_id = $1 AND score.computed_at <= $2 AND score.run_id = rr.run_id
+          AND score.realm_id = rr.realm_id AND score.guild_id IS NOT DISTINCT FROM representative.guild_id
+          AND b.encounter_name = encounter.name AND b.server_status IN ('ok', 'low_confidence')
+        ORDER BY score.computed_at DESC, score.id DESC LIMIT 1
+    ) boss ON true
+    WHERE rr.run_id = ANY($3::uuid[]) AND cardinality($3::uuid[]) <= 200 AND rr.updated_at <= $2 AND rr.source_updated_at <= $2
+      AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND representative.invalidated_at IS NULL AND encounter.end_time <= $2 AND encounter.boss = true
+      AND encounter.kill_type = 'clean' AND encounter.end_time > encounter.start_time
+    ORDER BY rr.run_id, encounter.name,
+             (encounter.end_time - encounter.start_time), encounter.end_time, encounter.id
+), inserted AS (
+    INSERT INTO rating_stage_guild_observations
+      (generation_id, tenant_id, realm_id, run_id, guild_id, instance_name, encounter_name,
+       difficulty_name, max_players, killed_at, raw_duration_ms, locked_parse)
+    SELECT $4, $1, source.realm_id, source.run_id, source.guild_id, source.instance_name, source.encounter_name, source.difficulty_name, source.max_players, source.killed_at, source.raw_duration_ms, source.locked_parse FROM source
+    ON CONFLICT DO NOTHING RETURNING 1
+)
+SELECT count(*)::bigint FROM inserted
+`
+
+type StageRatingGuildRunsParams struct {
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SourceCutoff pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	RunIds       []uuid.UUID        `db:"run_ids" json:"run_ids"`
+	GenerationID uuid.UUID          `db:"generation_id" json:"generation_id"`
+}
+
+func (q *sqlQuerier) StageRatingGuildRuns(ctx context.Context, arg StageRatingGuildRunsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, stageRatingGuildRuns,
+		arg.TenantID,
+		arg.SourceCutoff,
+		arg.RunIds,
+		arg.GenerationID,
+	)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const stageRatingPlayerRenownPage = `-- name: StageRatingPlayerRenownPage :one
+WITH inserted AS (
+    INSERT INTO rating_stage_player_renown
+      (generation_id, tenant_id, realm_id, player_guid, run_id, instance_name, encounter_name, killed_at, source_id)
+    SELECT $1, $2, fact.realm_id, fact.player_guid, fact.run_id,
+           fact.instance_name, fact.encounter_name, fact.killed_at, fact.id
+    FROM renown_kill_facts fact
+    WHERE fact.realm_id = $3
+      AND (fact.player_guid, fact.run_id, fact.encounter_name) >
+          ($4::text, $5::uuid, $6::text)
+      AND fact.recorded_at <= $7
+    ORDER BY fact.player_guid, fact.run_id, fact.encounter_name
+    LIMIT LEAST(GREATEST($8::int, 0), 200)
+    ON CONFLICT DO NOTHING RETURNING 1
+)
+SELECT count(*)::bigint FROM inserted
+`
+
+type StageRatingPlayerRenownPageParams struct {
+	GenerationID       uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID           uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID            uuid.UUID          `db:"realm_id" json:"realm_id"`
+	AfterPlayerGuid    string             `db:"after_player_guid" json:"after_player_guid"`
+	AfterRunID         uuid.UUID          `db:"after_run_id" json:"after_run_id"`
+	AfterEncounterName string             `db:"after_encounter_name" json:"after_encounter_name"`
+	SourceCutoff       pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	BatchSize          int32              `db:"batch_size" json:"batch_size"`
+}
+
+func (q *sqlQuerier) StageRatingPlayerRenownPage(ctx context.Context, arg StageRatingPlayerRenownPageParams) (int64, error) {
+	row := q.db.QueryRow(ctx, stageRatingPlayerRenownPage,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.RealmID,
+		arg.AfterPlayerGuid,
+		arg.AfterRunID,
+		arg.AfterEncounterName,
+		arg.SourceCutoff,
+		arg.BatchSize,
+	)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const stageRatingPlayerRuns = `-- name: StageRatingPlayerRuns :one
+WITH source AS (
+    SELECT rr.realm_id, rr.run_id, ranking.player_guid, ranking.instance_name,
+           ranking.encounter_name, ranking.difficulty_name, ranking.max_players,
+           ranking.player_class, ranking.player_spec, ranking.player_sub_spec,
+           ranking.killed_at, $1::text AS performance_metric,
+           CASE WHEN $1::text = 'hps' THEN ranking.hps ELSE ranking.dps END AS raw_value,
+           locked.precise_score AS locked_parse
+    FROM ranking_runs rr
+    JOIN wow_server_realms realm ON realm.id = rr.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    JOIN log_instances representative ON representative.id = rr.representative_instance_id
+    JOIN wow_log_groups log_group ON log_group.id = representative.log_group_id AND NOT log_group.unlisted
+    JOIN encounter_dps_rankings ranking ON ranking.instance_id = representative.id
+    LEFT JOIN LATERAL (
+        SELECT psr.precise_score FROM parse_score_results psr
+        JOIN log_instances scored_instance ON scored_instance.id = psr.instance_id
+        JOIN wow_log_groups scored_group ON scored_group.id = scored_instance.log_group_id AND NOT scored_group.unlisted
+        WHERE psr.tenant_id = $2 AND psr.created_at <= $3 AND psr.run_id = rr.run_id
+          AND psr.encounter_name = ranking.encounter_name AND psr.player_guid = ranking.player_guid
+          AND psr.instance_name = ranking.instance_name AND psr.difficulty_name = ranking.difficulty_name
+          AND psr.max_players = ranking.max_players AND psr.player_class = ranking.player_class
+          AND psr.player_spec = ranking.player_spec AND psr.player_sub_spec = ranking.player_sub_spec
+          AND psr.metric = $1::text AND psr.status IN ('ok', 'low_confidence')
+        ORDER BY psr.created_at DESC, psr.precise_score DESC, psr.id LIMIT 1
+    ) locked ON true
+    WHERE rr.run_id = ANY($4::uuid[]) AND cardinality($4::uuid[]) <= 200 AND rr.updated_at <= $3 AND rr.source_updated_at <= $3
+      AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND representative.invalidated_at IS NULL AND ranking.killed_at <= $3 AND ranking.encounter_id IS NOT NULL
+      AND ranking.duration_secs > 0
+      AND $1::text IN ('dps', 'hps')
+      AND (CASE WHEN $1::text = 'hps' THEN ranking.hps ELSE ranking.dps END) > 0
+), inserted AS (
+    INSERT INTO rating_stage_player_observations
+      (generation_id, tenant_id, realm_id, run_id, player_guid, instance_name, encounter_name,
+       difficulty_name, max_players, player_class, player_spec, player_sub_spec, killed_at,
+       performance_metric, raw_value, locked_parse)
+    SELECT $5, $2, source.realm_id, source.run_id, source.player_guid, source.instance_name, source.encounter_name, source.difficulty_name, source.max_players, source.player_class, source.player_spec, source.player_sub_spec, source.killed_at, source.performance_metric, source.raw_value, source.locked_parse FROM source
+    ON CONFLICT DO NOTHING RETURNING 1
+)
+SELECT count(*)::bigint FROM inserted
+`
+
+type StageRatingPlayerRunsParams struct {
+	Metric       string             `db:"metric" json:"metric"`
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SourceCutoff pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	RunIds       []uuid.UUID        `db:"run_ids" json:"run_ids"`
+	GenerationID uuid.UUID          `db:"generation_id" json:"generation_id"`
+}
+
+// Only a bounded page is passed to each insertion. Caller advances the
+// checkpoint cursor in the same transaction. ON CONFLICT never rewrites the
+// original evidence if a page is replayed after a crash.
+func (q *sqlQuerier) StageRatingPlayerRuns(ctx context.Context, arg StageRatingPlayerRunsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, stageRatingPlayerRuns,
+		arg.Metric,
+		arg.TenantID,
+		arg.SourceCutoff,
+		arg.RunIds,
+		arg.GenerationID,
+	)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const deleteRatingRaidPolicy = `-- name: DeleteRatingRaidPolicy :execrows
 DELETE FROM rating_group_raid_policies raid
 USING rating_realm_groups grp, wow_servers server
