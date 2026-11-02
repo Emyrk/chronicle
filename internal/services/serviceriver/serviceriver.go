@@ -322,6 +322,18 @@ func (s *Service) Start(ctx context.Context) error {
 			&river.PeriodicJobOpts{ID: "daily-rating-stage-gc", RunOnStart: false},
 		),
 	)
+	// Repair historical missing Renown facts in bounded pages each day.
+	// Dispatch is independent of the rating snapshot; a pass completing after
+	// that snapshot is incorporated by the next daily rebuild.
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			river.PeriodicInterval(24*time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return servicerankings.ArgsDispatchRenownRepair{}, nil
+			},
+			&river.PeriodicJobOpts{ID: "daily-renown-fact-repair", RunOnStart: false},
+		),
+	)
 	// Daily rating reconciliation for tenants with configured group policies.
 	q.AddPeriodicJob(
 		river.NewPeriodicJob(

@@ -14,7 +14,7 @@ import (
 
 const renownRepairPageSize = 200
 
-// ArgsRepairRenownFacts is an operator-initiated, durable keyset repair.
+// ArgsRepairRenownFacts is a daily or operator-initiated durable keyset repair.
 // A nil tenant UUID denotes the root tenant. Each page schedules its successor
 // before completing, so a failed enqueue retries the current idempotent page.
 type ArgsRepairRenownFacts struct {
@@ -80,8 +80,8 @@ func (w *WorkerRepairRenownFacts) Work(ctx context.Context, job *river.Job[ArgsR
 	return nil
 }
 
-// ArgsDispatchRenownRepair explicitly starts a pass for root and every tenant.
-// No periodic job is registered: re-scanning all history daily is wasteful.
+// ArgsDispatchRenownRepair starts a bounded pass for root and every tenant.
+// River schedules it daily; operators can dispatch another pass as needed.
 type ArgsDispatchRenownRepair struct{}
 
 func (ArgsDispatchRenownRepair) Kind() string { return "dispatch-renown-repair" }
