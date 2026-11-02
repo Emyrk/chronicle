@@ -2142,6 +2142,7 @@ export interface InferenceDebugPreviewRequest {
     readonly instance?: string;
     readonly model: string;
     readonly client?: InferenceClient;
+    readonly web_search?: boolean;
 }
 
 // From chroniclesdk/inference.go
@@ -2182,6 +2183,10 @@ export interface InferenceRunRequest {
     readonly client?: InferenceClient;
     readonly messages?: readonly InferenceMessage[];
     readonly message?: InferenceMessage;
+    /**
+     * WebSearch enables the provider-hosted web-search tool for this run only.
+     */
+    readonly web_search?: boolean;
     /**
      * UsageEvents asks for a USAGE event after each model call. Older clients reject unknown events, so it is opt-in.
      */

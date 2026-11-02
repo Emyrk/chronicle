@@ -91,6 +91,7 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
     const snapshot = await debugPreview.mutateAsync({
       assistant_id: "module-workshop-panel", thread_id: threadId, model: selection.modelId,
       ...(input.client ? { client: input.client } : {}),
+      ...(input.webSearch ? { web_search: true } : {}),
     })
     setDebugEnabled(true)
     return { snapshot }

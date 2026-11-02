@@ -178,7 +178,19 @@ func TestDebugPreviewDoesNotInvokeProvider(t *testing.T) {
 	require.NotEmpty(t, snapshot.Messages)
 	require.Equal(t, "system", snapshot.Messages[0].Role)
 	require.Len(t, snapshot.Tools, len(assistants["site-help"].Tools))
+	for _, tool := range snapshot.Tools {
+		require.NotEqual(t, "web_search", tool.Name)
+	}
 	require.Empty(t, snapshot.Skills)
+}
+
+func TestWebSearchIsOptInPerRun(t *testing.T) {
+	t.Parallel()
+
+	a := assistants["site-help"]
+	require.NotEmpty(t, a.ServerTools)
+	require.Empty(t, withServerTools(a, false).ServerTools)
+	require.Equal(t, a.ServerTools, withServerTools(a, true).ServerTools)
 }
 
 func TestInferenceRunErrorEventUsesSafeProviderDetails(t *testing.T) {
@@ -347,6 +359,7 @@ func TestAgentLoopUsesARequiredFinalResponseAfterToolStepLimit(t *testing.T) {
 	require.Equal(t, maxIterations, result.State.IterationCount)
 	require.Equal(t, maxIterations+1, provider.calls)
 	require.Empty(t, provider.requests[len(provider.requests)-1].Tools)
+	require.Empty(t, provider.requests[len(provider.requests)-1].ServerTools)
 	require.Equal(t, RoleSystem, provider.requests[len(provider.requests)-1].Messages[len(provider.requests[len(provider.requests)-1].Messages)-1].Role)
 	require.Equal(t, "I couldn't make further changes, but here is what I found.", persisted[len(persisted)-1].Content)
 }
@@ -390,6 +403,9 @@ func TestAgentLoopDebugSnapshotsMatchProviderRequestsAndResults(t *testing.T) {
 	require.Equal(t, assistants["site-help"].System, request.Messages[0].Content)
 	require.Equal(t, "Where are rankings?", request.Messages[1].Content)
 	require.Equal(t, "list_pages", request.Tools[0].Name)
+	require.Equal(t, "web_search", request.Tools[len(request.Tools)-1].Name)
+	require.JSONEq(t, `{"max_results":5,"max_total_results":12,"max_uses":3}`, string(request.Tools[len(request.Tools)-1].Parameters))
+	require.Equal(t, assistants["site-help"].ServerTools, provider.requests[0].ServerTools)
 	require.Empty(t, request.Skills)
 	require.Equal(t, maxHistoryMessages, request.Limits.MaxHistoryMessages)
 	require.Equal(t, maxToolOutput, request.Limits.MaxToolOutput)

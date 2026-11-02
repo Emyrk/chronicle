@@ -12,6 +12,8 @@ const controller: AssistantChatController = {
   status: "idle",
   usageTotal: EMPTY_USAGE,
   isRunning: false,
+  webSearchEnabled: false,
+  setWebSearchEnabled: vi.fn(),
   submit: vi.fn(async () => true),
   startNewChat: vi.fn(async () => true),
   cancel: vi.fn(),
@@ -51,6 +53,16 @@ describe("ChatPanel client tool controls", () => {
     expect(markup).toContain("New chat");
     expect(markup).toContain("/debug");
     expect(markup).toContain("/clear");
+  });
+
+  it("renders web search as an off-by-default per-message opt-in", () => {
+    const offMarkup = renderToStaticMarkup(<ChatPanel controller={controller} />);
+    expect(offMarkup).toContain("Allow messages in this conversation to use OpenRouter web search");
+    expect(offMarkup).toContain('aria-pressed="false"');
+
+    const onMarkup = renderToStaticMarkup(<ChatPanel controller={{ ...controller, webSearchEnabled: true }} />);
+    expect(onMarkup).toContain("Web search is enabled for messages in this conversation");
+    expect(onMarkup).toContain('aria-pressed="true"');
   });
 
   it("shows animated typing dots while waiting for the assistant to respond", () => {

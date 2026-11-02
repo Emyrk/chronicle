@@ -134,6 +134,7 @@ type InferenceDebugPreviewRequest struct {
 	Instance    string           `json:"instance,omitempty"`
 	Model       string           `json:"model"`
 	Client      *InferenceClient `json:"client,omitempty"`
+	WebSearch   bool             `json:"web_search,omitempty"`
 }
 
 type InferenceRunRequest struct {
@@ -147,6 +148,8 @@ type InferenceRunRequest struct {
 	Client       *InferenceClient   `json:"client,omitempty"`
 	Messages     []InferenceMessage `json:"messages,omitempty"`
 	Message      *InferenceMessage  `json:"message,omitempty"`
+	// WebSearch enables the provider-hosted web-search tool for this run only.
+	WebSearch bool `json:"web_search,omitempty"`
 	// UsageEvents asks for a USAGE event after each model call. Older clients reject unknown events, so it is opt-in.
 	UsageEvents bool `json:"usage_events,omitempty"`
 }

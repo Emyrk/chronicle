@@ -1306,7 +1306,8 @@ CREATE TABLE inference_runs (
     lease_expires_at timestamp with time zone,
     debug boolean DEFAULT false NOT NULL,
     iteration_count integer DEFAULT 0 NOT NULL,
-    tool_call_count integer DEFAULT 0 NOT NULL
+    tool_call_count integer DEFAULT 0 NOT NULL,
+    web_search boolean DEFAULT false NOT NULL
 );
 
 CREATE TABLE inference_threads (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { AgUiClientError, runAgUi, type RunAgUiOptions } from "./client";
 import { useOptionalInferenceRuntime, type InferenceClientDescriptor } from "./runtime";
 import {
@@ -15,6 +15,7 @@ export interface CreateChatRunRequestInput {
   messages: ChatMessage[];
   runId: string;
   threadId: string;
+  webSearch: boolean;
   client?: InferenceClientDescriptor;
 }
 
@@ -22,11 +23,13 @@ export interface DefaultChatRunRequest {
   messages: ChatMessage[];
   runId: string;
   threadId: string;
+  webSearch: boolean;
   client?: InferenceClientDescriptor;
 }
 
 export interface DebugCommandInput {
   threadId: string;
+  webSearch: boolean;
   client?: InferenceClientDescriptor;
 }
 
@@ -53,6 +56,8 @@ export interface UseAssistantChatOptions {
 
 export interface AssistantChatController extends ChatState {
   isRunning: boolean;
+  webSearchEnabled: boolean;
+  setWebSearchEnabled: (enabled: boolean) => void;
   submit: (content: string) => Promise<boolean>;
   startNewChat: () => Promise<boolean>;
   cancel: () => void;
@@ -97,6 +102,7 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
   );
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRunRef = useRef(false);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const messagesRef = useRef(state.messages);
   const threadIdRef = useRef(options.threadId ?? createId("thread"));
   const onMessagesChange = options.onMessagesChange;
@@ -127,6 +133,7 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
     try {
       const messages = await options.onStartNewChat?.();
       dispatch({ type: "reset_conversation", messages: messages ?? [] });
+      setWebSearchEnabled(false);
       return true;
     } catch (error) {
       dispatch({ type: "run_failed", message: getErrorMessage(error) });
@@ -149,6 +156,7 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
         try {
           const result = await options.onDebugCommand({
             threadId: threadIdRef.current,
+            webSearch: webSearchEnabled,
             ...(runtime ? { client: runtime.getClientDescriptor() } : {}),
           });
           dispatch({
@@ -192,6 +200,7 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
         messages,
         runId,
         threadId,
+        webSearch: webSearchEnabled,
         ...(runtime ? { client: runtime.getClientDescriptor() } : {}),
       };
       const onEvent = (event: AgUiEvent) => dispatch({ type: "apply_event", event });
@@ -226,12 +235,14 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
         }
       }
     },
-    [options, runtime, startNewChat],
+    [options, runtime, startNewChat, webSearchEnabled],
   );
 
   return {
     ...state,
     isRunning: state.status === "running",
+    webSearchEnabled,
+    setWebSearchEnabled,
     submit,
     startNewChat,
     cancel,

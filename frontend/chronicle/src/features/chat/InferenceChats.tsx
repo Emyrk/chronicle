@@ -82,11 +82,12 @@ function DesktopGlobalSiteHelpChat() {
   const debugPreview = useInferenceDebugPreview();
   const chatWindow = useChatWindow("site-help", "Chronicle site help");
   const [debugEnabled, setDebugEnabled] = useState(false);
-  const previewDebug = useCallback(async () => {
+  const previewDebug = useCallback(async (input: DebugCommandInput) => {
     if (!selection.modelId) throw new Error("Select a model first.");
     const snapshot = await debugPreview.mutateAsync({
       assistant_id: "site-help",
       model: selection.modelId,
+      ...(input.webSearch ? { web_search: true } : {}),
     });
     setDebugEnabled(true);
     return { snapshot };
@@ -174,6 +175,7 @@ function DesktopInstanceAssistantChat({ instanceId, instanceName }: { instanceId
       instance: instanceId,
       model: selection.modelId,
       ...(input.client ? { client: input.client } : {}),
+      ...(input.webSearch ? { web_search: true } : {}),
     });
     setDebugEnabled(true);
     return { snapshot };

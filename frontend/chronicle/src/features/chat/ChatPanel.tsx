@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { AlertCircle, Bot, Check, CircleStop, LoaderCircle, LockKeyhole, RotateCcw, ScanSearch, Send, ShieldAlert, SlidersHorizontal, Wrench } from "lucide-react";
+import { AlertCircle, Bot, Check, CircleStop, Globe2, LoaderCircle, LockKeyhole, RotateCcw, ScanSearch, Send, ShieldAlert, SlidersHorizontal, Wrench } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert";
@@ -376,6 +376,21 @@ export function ChatPanel({
                 className="placeholder:text-muted-foreground styled-scrollbar max-h-40 min-h-14 w-full resize-none bg-transparent px-3.5 pt-3 text-sm outline-none disabled:opacity-60"
               />
               <div className="flex items-center justify-between px-2.5 pb-2.5">
+                <Button
+                  type="button"
+                  variant={controller.webSearchEnabled ? "secondary" : "ghost"}
+                  size="sm"
+                  className="mr-2 h-7 shrink-0 gap-1.5 px-2 text-xs"
+                  onClick={() => controller.setWebSearchEnabled(!controller.webSearchEnabled)}
+                  disabled={controller.isRunning}
+                  aria-pressed={controller.webSearchEnabled}
+                  title={controller.webSearchEnabled
+                    ? "Web search is enabled for messages in this conversation. Click to turn it off."
+                    : "Allow messages in this conversation to use OpenRouter web search. This may add provider cost."}
+                >
+                  <Globe2 className="size-3.5" />
+                  Web
+                </Button>
                 <span className="text-muted-foreground min-w-0 truncate text-[11px]" title="Enter to send · Shift+Enter for a new line">
                   /clear starts over{debugAvailable ? " · /debug previews the prompt" : ""}
                 </span>

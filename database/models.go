@@ -1724,6 +1724,7 @@ type InferenceRun struct {
 	Debug          bool               `db:"debug" json:"debug"`
 	IterationCount int32              `db:"iteration_count" json:"iteration_count"`
 	ToolCallCount  int32              `db:"tool_call_count" json:"tool_call_count"`
+	WebSearch      bool               `db:"web_search" json:"web_search"`
 }
 
 type InferenceThread struct {
