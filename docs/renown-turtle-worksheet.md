@@ -11,18 +11,18 @@ The clear times are the operator's approximate figures from [Capybara speedruns]
 | Raid | Size | Difficulty | Est. clean clear | Proposed tier/role | Reset | Total | Normalized (7d) | Notes |
 | --- | ---: | --- | ---: | --- | ---: | ---: | ---: | --- |
 | Lower Tower of Karazhan (K10) | 10 | base (verify) | 40m | custom 10-player | 5d | 6 | 8.4 | Four bosses at 1; Moroes at 2. Verify source support. |
-| Upper Tower of Karazhan (K40) | 40 | base (verify) | 40m | custom 40-player | 7d | 95 | 95 | Verify source support. |
-| Naxxramas | 40 | base (verify) | 90m | endgame | 7d | 120 | 120 | Long clear and high tier. |
-| Temple of Ahn'Qiraj (AQ40) | 40 | base (verify) | 50m | late | 7d | 90 | 90 | Bug Family is one canonical encounter. |
+| Upper Tower of Karazhan (K40) | 40 | base (verify) | 40m | custom 40-player | 7d | 55 | 55 | Provisional per-boss split; verify source support. |
+| Naxxramas | 40 | base (verify) | 90m | endgame | 7d | 50 | 50 | Long clear and high tier. |
+| Temple of Ahn'Qiraj (AQ40) | 40 | base (verify) | 50m | late | 7d | 35 | 35 | Bug Family is one canonical encounter. |
 | Ruins of Ahn'Qiraj (AQ20) | 20 | base (verify) | 50m | catch-up / late | 3d | 8 | ≈18.67 | Five bosses at 1; Ossirian at 3. |
 | Zul'Gurub (ZG) | 20 | base (verify) | 25m | catch-up | 3d | 7 | ≈16.33 | Five High Priests award 0; only one Edge of Madness boss is available per reset. |
-| Blackwing Lair (BWL) | 40 | base (verify) | 40m | mid / high | 7d | 70 | 70 | Revised ZG offers about 23% of BWL's weekly opportunity. |
+| Blackwing Lair (BWL) | 40 | base (verify) | 40m | mid / high | 7d | 25 | 25 | Compare with ZG at about 16.33 normalized. |
 | Onyxia's Lair | 40 | base (verify) | 6m | entry / short | 5d | 3 | 4.2 | Onyxia 2; Broodcommander Axelus 1. |
 | Emerald Sanctum | 40 | normal / hard (verify) | ~20m | custom (verify) | 7d | 5 | 5 | Normal: Erennius 2 + Solnius 3. Hard: Solnius (Hard Mode) 5 as a single award. |
-| Timbermaw Hold | 20 | hard | **unknown** | custom 20-player | 7d | **TBD** | **TBD** | Hard raid; clear time and points pending. |
-| Molten Core (MC) | 40 | base (verify) | 45m | entry | 7d | 40 | 40 | Turtle omits Gehennas; Kronos vanilla needs a separate Gehennas award. |
+| Timbermaw Hold | 20 | hard | **unknown** | custom 20-player | 7d | 35 | 35 | Hard raid; clear time pending. |
+| Molten Core (MC) | 40 | base (verify) | 45m | entry | 7d | 17 | 17 | Turtle omits Gehennas; Kronos vanilla needs a separate Gehennas award. |
 
-The draft uses a **70-point BWL clear**, not 1,000. ZG's five High Priest encounters award zero Renown because their kills are not required to kill Hakkar; they remain visible in logs and progression panels. The achievable non-priest kills include Mandokir, Jin'do, Hakkar, Gahz'ranka, and exactly one Edge of Madness variant: `7 × 7 / 3 = 16⅓` points per week, about 23% of BWL's 70. This is a provisional allocation, not an approved balance target. Clear time is one input, not a points-per-minute formula. Character and guild point awards currently share the same configured boss values.
+The operator chose a **25-point BWL clear** rather than an arbitrary 1,000-point scale. ZG's five High Priest encounters award zero Renown because their kills are not required to kill Hakkar; they remain visible in logs and progression panels. The achievable non-priest kills include Mandokir, Jin'do, Hakkar, Gahz'ranka, and exactly one Edge of Madness variant: `7 × 7 / 3 = 16⅓` points per week, about 65% of BWL's 25. This is a provisional allocation, not an approved balance target. Clear time is one input, not a points-per-minute formula. Character and guild point awards currently share the same configured boss values.
 
 ### Draft boss allocations
 
@@ -33,16 +33,16 @@ The draft uses a **70-point BWL clear**, not 1,000. ZG's five High Priest encoun
 | 5d | Onyxia | Onyxia 2; Broodcommander Axelus 1 | 3 | 4.2 |
 | 5d | K10 | Lord Blackwald II 1; Brood Queen Araxxna 1; Grizikil 1; Clawlord Howlfang 1; Moroes 2 | 6 | 8.4 |
 | 7d | Emerald Sanctum | Normal: Erennius 2; Solnius 3. Hard: Solnius (Hard Mode) 5 only. | 5 | 5 |
-| 7d | MC | Lucifron 2; Magmadar 2; Garr 2; Shazzrah 2; Baron Geddon 2; Sulfuron Harbinger 2; Golemagg the Incinerator 2; Incindis 2; Basalthar & Smoldaris 2; Sorcerer-Thane Thaurissan 2; Majordomo Executus 6; Ragnaros 14 | 40 | 40 |
-| 7d | BWL | Razorgore the Untamed 7; Vaelastrasz the Corrupt 7; Broodlord Lashlayer 7; Firemaw 7; Ebonroc 7; Flamegor 7; Chromaggus 7; Nefarian 14; Ezzel Darkbrewer 7 | 70 | 70 |
-| 7d | AQ40 | The Prophet Skeram 9; Bug Family 9; Battleguard Sartura 9; Fankriss the Unyielding 9; Viscidus 9; Princess Huhuran 9; Twin Emperors 9; Ouro 9; C'Thun 18 | 90 | 90 |
-| 7d | K40 | Keeper Gnarlmoon 10; Anomalus 10; Rupturan the Broken 10; Mephistroth 10; Ley-Watcher Incantagos 10; Echo of Medivh 10; King 10; Sanv Tas'dal 10; Kruul 15 | 95 | 95 |
-| 7d | Naxxramas | Anub'Rekhan 7; Grand Widow Faerlina 7; Maexxna 7; Noth the Plaguebringer 7; Heigan the Unclean 7; Loatheb 7; Instructor Razuvious 7; Gothik the Harvester 7; Four Horsemen 7; Patchwerk 7; Grobbulus 7; Gluth 7; Thaddius 7; Sapphiron 7; Kel'Thuzad 22 | 120 | 120 |
-| 7d | Timbermaw Hold | Kodiak & Rotgrowl **TBD**; Trioch the Devourer **TBD**; Karrsh the Sentinel **TBD**; Chieftain Partath **TBD**; Archdruid Kronn **TBD**; Selenaxx Foulheart **TBD**; Loktanag the Vile **TBD**; Ormanos the Cracked **TBD**; Ursol **TBD**; Peroth'arn **TBD** | **TBD** | **TBD** |
+| 7d | MC | Lucifron 1; Magmadar 1; Garr 1; Shazzrah 1; Baron Geddon 1; Sulfuron Harbinger 1; Golemagg the Incinerator 1; Incindis 1; Basalthar & Smoldaris 1; Sorcerer-Thane Thaurissan 1; Majordomo Executus 2; Ragnaros 5 | 17 | 17 |
+| 7d | BWL | Razorgore the Untamed 2; Vaelastrasz the Corrupt 2; Broodlord Lashlayer 2; Firemaw 2; Ebonroc 2; Flamegor 2; Chromaggus 2; Ezzel Darkbrewer 2; Nefarian 9 | 25 | 25 |
+| 7d | AQ40 | The Prophet Skeram 3; Bug Family 3; Battleguard Sartura 3; Fankriss the Unyielding 3; Viscidus 3; Princess Huhuran 3; Twin Emperors 3; Ouro 3; C'Thun 11 | 35 | 35 |
+| 7d | Timbermaw Hold | Kodiak & Rotgrowl 3; Trioch the Devourer 3; Karrsh the Sentinel 3; Chieftain Partath 3; Archdruid Kronn 3; Selenaxx Foulheart 3; Loktanag the Vile 3; Ormanos the Cracked 3; Ursol 3; Peroth'arn 8 | 35 | 35 |
+| 7d | Naxxramas | Anub'Rekhan 3; Grand Widow Faerlina 3; Maexxna 3; Noth the Plaguebringer 3; Heigan the Unclean 3; Loatheb 3; Instructor Razuvious 3; Gothik the Harvester 3; Four Horsemen 3; Patchwerk 3; Grobbulus 3; Gluth 3; Thaddius 3; Sapphiron 3; Kel'Thuzad 8 | 50 | 50 |
+| 7d | K40 | Keeper Gnarlmoon 6; Anomalus 6; Rupturan the Broken 6; Mephistroth 6; Ley-Watcher Incantagos 6; Echo of Medivh 6; King 6; Sanv Tas'dal 6; Kruul 7 | 55 | 55 |
 
 **Turtle MC excludes Gehennas.** The registry's hostile inventory lists Gehennas, but the Turtle flavor's progression and speedrun requirements instead list its custom bosses. This Turtle allocation gives no Gehennas points and assigns the provisional 40-point total across Turtle encounters. Vanilla Kronos MC will require a separate Gehennas award in its flavor-specific policy. ZG's four Edge of Madness encounter names share one award in the worksheet because only one is killable per reset. The actual SQL policy must still map each distinct canonical encounter name to one point; `Edge of Madness` is a worksheet label, not an existing canonical kill name. Gahz'ranka remains a separate optional award. Turtle-specific custom MC encounters remain listed rather than relying on a vanilla boss list. K10 and K40 are derived names under the Tower of Karazhan instance; its parent has no `ProgressionBosses` list. Treat these as separate raid budgets.
 
-**Emerald Sanctum** is a seven-day, 40-player raid taking approximately 20 minutes, per the operator. Its registry lists `Erennius`, `Solnius`, and `Solnius (Hard Mode)`; the default rankings set contains Erennius and Solnius, while a separate hard-mode set contains Solnius (Hard Mode). The operator assigns Erennius 2 and normal Solnius 3 points. A hard-mode Solnius kill earns 5, equal to their combined normal-mode points, not an additional award on top. Before seeding, confirm which encounters actually produce credited kills on a hard-mode run so both modes total 5 without double counting. **Timbermaw Hold** is a hard, 20-player raid on a seven-day reset, per the operator. Its clear time and points remain TBD. The worksheet contains allocations for ten raids and a Timbermaw Hold placeholder; it is not yet a finalized Turtle policy.
+**Emerald Sanctum** is a seven-day, 40-player raid taking approximately 20 minutes, per the operator. Its registry lists `Erennius`, `Solnius`, and `Solnius (Hard Mode)`; the default rankings set contains Erennius and Solnius, while a separate hard-mode set contains Solnius (Hard Mode). The operator assigns Erennius 2 and normal Solnius 3 points. A hard-mode Solnius kill earns 5, equal to their combined normal-mode points, not an additional award on top. Before seeding, confirm which encounters actually produce credited kills on a hard-mode run so both modes total 5 without double counting. **Timbermaw Hold** is a hard, 20-player raid on a seven-day reset, per the operator. Its total is 35 points; its clear time remains unknown. The boss splits across all raids are provisional allocations of the chosen raid totals, not yet a seeded Turtle policy.
 
 ## Policy implementation after review
 
@@ -54,7 +54,7 @@ The draft uses a **70-point BWL clear**, not 1,000. ZG's five High Priest encoun
 ## Required review before default seeding
 
 1. Reset periods were supplied by the operator: K10/Onyxia 5d; AQ20/ZG 3d; K40/Naxx/AQ40/BWL/MC/Emerald Sanctum/Timbermaw Hold 7d.
-2. Review ZG at about 16.33, AQ20 at about 18.67, and K10 at 8.4 points per seven days, plus the other proposed tier/size relationships.
+2. Review the proposed per-boss splits and cross-raid balance: ZG ~16.33, AQ20 ~18.67, MC 17, BWL 25, AQ40/Timbermaw 35, Naxx 50, and K40 55 per seven days.
 3. Keep MC Gehennas in a non-Turtle (for example Kronos) policy, and confirm boss identity and eligibility for BWL Ezzel, Onyxia Axelus, and optional ZG encounters. Check whether every named encounter can produce a canonical ranking fact.
 4. Confirm K10/K40 as separately derived instances; decide whether the two Solnius modes are mutually exclusive award variants, and gather Timbermaw Hold's approximate clear time.
 5. Confirm which difficulty partitions these base awards should cover, especially Emerald Sanctum hard mode.
