@@ -37,7 +37,7 @@ export function RatingsFaqPage() {
         <MetricIntro
           metric="peak"
           question="How high have you reached?"
-          body="Your best parse on each boss. One great kill is enough, and it stays until someone beats it."
+          body="Your best parse on each boss. One great kill is enough, and it holds until you beat it."
         />
         <MetricIntro
           metric="mastery"

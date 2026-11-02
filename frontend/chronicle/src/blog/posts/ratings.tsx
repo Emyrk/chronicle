@@ -11,7 +11,7 @@ const RATINGS = [
   {
     metric: "peak" as const,
     question: "How high have you reached?",
-    body: "Your best parse on each boss. One great kill is enough, and it holds until someone beats it.",
+    body: "Your best parse on each boss. One great kill is enough, and it holds until you beat it.",
   },
   {
     metric: "mastery" as const,
