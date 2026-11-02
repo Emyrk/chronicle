@@ -367,7 +367,7 @@ export async function fetchDeviceOperations(env: Env): Promise<DeviceOperations>
       'label_replace(sum(increase(chronicle_ui_panel_views_total[24h])), "kind", "panel_views_total", "", ".*")',
       'label_replace(sum(increase(chronicle_ui_panel_choices_total[24h])), "kind", "panel_choices_total", "", ".*")',
       'label_replace(sum(increase(chronicle_ui_preset_views_total[24h])), "kind", "preset_views_total", "", ".*")',
-      'label_replace(topk(6, sum by (panel) (increase(chronicle_ui_panel_views_total[24h]))), "kind", "top_panels", "", ".*")',
+      'label_replace(topk(12, sum by (panel) (increase(chronicle_ui_panel_views_total[24h]))), "kind", "top_panels", "", ".*")',
       'label_replace(topk(6, sum by (panel) (increase(chronicle_ui_panel_choices_total[24h]))), "kind", "top_choices", "", ".*")',
       'label_replace(topk(6, sum by (preset) (increase(chronicle_ui_preset_views_total[24h]))), "kind", "top_presets", "", ".*")',
     ].join(" or ")),
