@@ -184,11 +184,15 @@ miniatures.put("/internal/api/v1/miniatures/draft", async (c) => {
   const lease = await acquireLock(c.env.MAPS);
   if (!lease) return c.json({ error: "Miniatures are being modified. Reload and try again." }, 409);
   try {
-    const input = await c.req.json<{ version?: string | null; miniatures?: unknown }>();
+    const input = await c.req.json<{ version?: string | null; miniatures?: unknown; game_models?: unknown }>();
     const state = await loadState(c.env.MAPS);
     const currentVersion = state.draftObject?.httpEtag ?? null;
     if ((input.version ?? null) !== currentVersion) return c.json({ error: "Draft changed in another tab. Reload before saving." }, 409);
-    const draft = parseMiniatureManifest({ format: MINIATURE_MANIFEST_FORMAT, miniatures: input.miniatures ?? [] });
+    const draft = parseMiniatureManifest({
+      format: MINIATURE_MANIFEST_FORMAT,
+      miniatures: input.miniatures ?? [],
+      game_models: input.game_models ?? [],
+    });
     const object = await c.env.MAPS.put(DRAFT_KEY, jsonText(draft), {
       onlyIf: state.draftObject ? { etagMatches: state.draftObject.etag } : { etagDoesNotMatch: "*" },
       httpMetadata: { contentType: "application/json", cacheControl: "private, no-store" },
@@ -228,10 +232,10 @@ miniatures.post("/internal/api/v1/miniatures/publish", async (c) => {
     if (!state.draftObject) return c.json({ error: "There is no saved draft to publish" }, 400);
     if ((input.version ?? null) !== state.draftObject.httpEtag) return c.json({ error: "Draft changed in another tab. Reload before publishing." }, 409);
     const missing: string[] = [];
-    await Promise.all(state.draft.miniatures.map(async (item) => {
+    await Promise.all([...state.draft.miniatures, ...state.draft.game_models].map(async (item) => {
       if (!(await c.env.MAPS.head(item.path))) missing.push(item.path);
     }));
-    if (missing.length > 0) throw new TypeError(`missing uploaded miniatures: ${missing.sort().join(", ")}`);
+    if (missing.length > 0) throw new TypeError(`missing uploaded miniature assets: ${missing.sort().join(", ")}`);
     await c.env.MAPS.put(MANIFEST_KEY, jsonText(state.draft), {
       httpMetadata: { contentType: "application/json", cacheControl: "public, max-age=3600" },
     });

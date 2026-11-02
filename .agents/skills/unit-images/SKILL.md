@@ -60,7 +60,7 @@ The skin normally lives beside the model. Preserve client path capitalization. `
 
 ### 2a. Keep the raw animated model
 
-The extracted GLB is a publishable unit asset, not a temporary intermediate. It contains the skinned mesh, skeleton, embedded textures, and the available named locomotion clips. Preserve it byte-for-byte and attach it under `models.raw`. Shared model-and-skin outputs may use the same content-addressed path across several unit records.
+The extracted GLB is a publishable unit asset, not a temporary intermediate. It contains the skinned mesh, skeleton, embedded textures, and the available named locomotion clips. Preserve it byte-for-byte and register it in the Miniature Foundry's `game_models` collection. Do not attach new game models to the unit-images manifest. Existing `models.raw` entries remain readable for compatibility. Shared model-and-skin outputs may use the same content-addressed path across several unit records.
 
 Animation consumers use the GLB clip names emitted by the extractor. In Three.js, load the scene and animations with `GLTFLoader`, create `new THREE.AnimationMixer(gltf.scene)`, select a clip such as `Stand`, `Walk`, or `Run`, call `mixer.clipAction(clip).play()`, then call `mixer.update(deltaSeconds)` every frame. Do not assume every clip exists; use `Stand` as the idle fallback.
 
@@ -120,9 +120,6 @@ The renderer always writes PNG. Convert approved full and cropped PNGs to high-q
     "images": {
       "full": "/absolute/path/to/ragnaros-full.webp",
       "headshot": "/absolute/path/to/ragnaros-headshot.webp"
-    },
-    "models": {
-      "raw": "/absolute/path/to/ragnaros.glb"
     }
   }
 ]
@@ -138,6 +135,8 @@ The dry run must show no duplicate entry ownership, duplicate paths, unsupported
 
 The browser Foundry at `/internal/unit-images` is the preferred path for interactive cropping. Choosing a new source and uploading a crop automatically stores the uncropped source as `full`. Use **Start over from full** to discard an unsatisfactory crop, adjust zoom, position, and brightness, then upload a replacement `headshot`. Save a draft first, then show the exact draft diff before requesting publish approval.
 
+Register each extracted GLB separately in `/internal/miniatures` with **Add game model**. Use the same canonical entry IDs, upload the raw GLB, and save it under the miniature manifest's `game_models` collection. Show the exact miniature-manifest draft before requesting publish approval.
+
 ### 6. Publish and verify
 
 Only after explicit operator approval:
@@ -148,11 +147,12 @@ frontend/imagecache/upload-unit-images-r2.sh plan.json --publish
 
 Or publish the reviewed draft in the Unit Image Foundry. After publication:
 
-1. Fetch `https://icons.chronicleclassic.com/unit-images/manifest.json`.
-2. Confirm every expected name, entry ID, `headshot`, `full`, and `models.raw` path.
-3. Fetch every new image and model URL and require HTTP 200.
-4. Confirm each object has the expected content type and a nonzero byte size.
-5. Report the exact published boss count and any bosses intentionally omitted.
+1. Fetch `https://icons.chronicleclassic.com/unit-images/manifest.json` and `https://icons.chronicleclassic.com/miniatures/manifest.json`.
+2. Confirm every expected name, entry ID, `headshot`, and `full` path in the unit-images manifest.
+3. Confirm every extracted GLB appears under `game_models` in the miniature manifest.
+4. Fetch every new image and model URL and require HTTP 200.
+5. Confirm each object has the expected content type and a nonzero byte size.
+6. Report the exact published boss count and any bosses intentionally omitted.
 
 ## Gotchas
 
@@ -172,4 +172,4 @@ Or publish the reviewed draft in the Unit Image Foundry. After publication:
 - [ ] Contact sheet received explicit operator approval.
 - [ ] Dry run passed.
 - [ ] Publish received separate explicit approval.
-- [ ] Live manifest and every CDN image were verified.
+- [ ] Live unit-image and miniature manifests, every CDN image, and every `game_models` GLB were verified.

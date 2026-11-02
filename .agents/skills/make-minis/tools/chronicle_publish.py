@@ -43,7 +43,7 @@ for p in plan:
     print(("replace " if i is not None else "add     ") + p["name"], p["path"])
     if i is None: minis.append(entry)
     else: minis[i] = entry
-saved = cf(API + "/draft", "-X", "PUT", "-H", "Content-Type: application/json", "--data", json.dumps({"version": None, "miniatures": minis}))
+saved = cf(API + "/draft", "-X", "PUT", "-H", "Content-Type: application/json", "--data", json.dumps({"version": None, "miniatures": minis, "game_models": state["published"].get("game_models", [])}))
 print("draft saved:", len(saved["draft"]["miniatures"]), "entries")
 if not publish: sys.exit("not published (pass --publish once the operator has said yes)")
 print(cf(API + "/publish", "-X", "POST", "-H", "Content-Type: application/json", "--data", json.dumps({"version": saved["draft_version"]})))

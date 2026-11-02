@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MINIATURE_MANIFEST_FORMAT,
+  fetchGameModelUrls,
   fetchMiniatureManifest,
   fetchMiniatureUrls,
+  gameModelUrl,
   miniatureAssetUrl,
   miniatureManifestUrl,
   miniatureUrl,
@@ -20,8 +22,14 @@ describe("bossMinis", () => {
         path: "miniatures/abc-serpent.glb",
         entry_ids: [3670, 3671],
       }],
+      game_models: [{
+        name: "Serpent game model",
+        path: "miniatures/def-serpent-game.glb",
+        entry_ids: [3670, 3671],
+      }],
     });
     expect(manifest.miniatures[0]?.entry_ids).toEqual([3670, 3671]);
+    expect(manifest.game_models[0]?.path).toBe("miniatures/def-serpent-game.glb");
     expect(miniatureManifestUrl("https://icons.example/root/")).toBe("https://icons.example/root/miniatures/manifest.json");
     expect(miniatureAssetUrl("miniatures/abc-serpent.glb", "https://icons.example/root/")).toBe("https://icons.example/root/miniatures/abc-serpent.glb");
   });
@@ -41,12 +49,23 @@ describe("bossMinis", () => {
     })).toThrow(/Duplicate miniature entry ID/);
   });
 
+  it("accepts existing v1 manifests without game models", () => {
+    const manifest = parseMiniatureManifest({
+      format: MINIATURE_MANIFEST_FORMAT,
+      miniatures: [{ name: "Boss", path: "miniatures/boss.glb", entry_ids: [1] }],
+    });
+    expect(manifest.game_models).toEqual([]);
+  });
+
   it("fetches the full manifest and derives the replay lookup from it", async () => {
     const payload = {
       format: MINIATURE_MANIFEST_FORMAT,
       miniatures: [
         { name: "Shared serpent", path: "miniatures/serpent.glb", entry_ids: [3670, 3671] },
         { name: "Firelord", path: "miniatures/firelord.glb", entry_ids: [11502] },
+      ],
+      game_models: [
+        { name: "Firelord game model", path: "miniatures/firelord-game.glb", entry_ids: [11502] },
       ],
     };
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => payload });
@@ -58,7 +77,11 @@ describe("bossMinis", () => {
       [3671, "https://icons.example/root/miniatures/serpent.glb"],
       [11502, "https://icons.example/root/miniatures/firelord.glb"],
     ]));
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await expect(fetchGameModelUrls("https://icons.example/root/")).resolves.toEqual(new Map([
+      [11502, "https://icons.example/root/miniatures/firelord-game.glb"],
+    ]));
+    expect(gameModelUrl(11502, new Map([[11502, "https://icons.example/game.glb"]]))).toBe("https://icons.example/game.glb");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock).toHaveBeenCalledWith("https://icons.example/root/miniatures/manifest.json");
   });
 

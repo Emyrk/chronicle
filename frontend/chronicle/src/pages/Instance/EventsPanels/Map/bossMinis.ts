@@ -1,15 +1,18 @@
 import { ICON_CDN } from "@/config/iconUrl";
 
-/** Shared unit miniatures for the 3D Replay Map, published in the root-level registry. */
+/** Shared tabletop miniatures and original game models, published in the root-level registry. */
 export const MINIATURE_MANIFEST_FORMAT = "chronicle-unit-miniatures-v1";
+
+export interface UnitModelDefinition {
+  name: string;
+  path: string;
+  entry_ids: number[];
+}
 
 export interface MiniatureManifest {
   format: typeof MINIATURE_MANIFEST_FORMAT;
-  miniatures: {
-    name: string;
-    path: string;
-    entry_ids: number[];
-  }[];
+  miniatures: UnitModelDefinition[];
+  game_models: UnitModelDefinition[];
 }
 
 function stripTrailingSlash(value: string): string {
@@ -24,35 +27,42 @@ export function miniatureAssetUrl(path: string, baseUrl = ICON_CDN): string {
   return `${stripTrailingSlash(baseUrl)}/${path.replace(/^\/+/, "")}`;
 }
 
-export function parseMiniatureManifest(value: unknown): MiniatureManifest {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Miniature manifest must be an object");
-  const input = value as Record<string, unknown>;
-  if (input.format !== MINIATURE_MANIFEST_FORMAT) throw new Error(`Unsupported miniature manifest format: ${String(input.format || "missing")}`);
-  if (!Array.isArray(input.miniatures)) throw new Error("Miniature manifest entries must be an array");
+function parseModelCollection(value: unknown, label: string): UnitModelDefinition[] {
+  if (!Array.isArray(value)) throw new Error(`${label} entries must be an array`);
   const assigned = new Set<number>();
   const paths = new Set<string>();
-  const miniatures = input.miniatures.map((raw, index) => {
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`Miniature ${index} must be an object`);
+  return value.map((raw, index) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${label} ${index} must be an object`);
     const item = raw as Record<string, unknown>;
     const name = typeof item.name === "string" ? item.name.trim() : "";
     const path = typeof item.path === "string" ? item.path : "";
-    if (!name) throw new Error(`Miniature ${index} has no name`);
-    if (!/^miniatures\/[^/\\]+\.glb$/.test(path)) throw new Error(`Miniature ${index} has an invalid path`);
-    if (paths.has(path)) throw new Error(`Duplicate miniature path: ${path}`);
+    if (!name) throw new Error(`${label} ${index} has no name`);
+    if (!/^miniatures\/[^/\\]+\.glb$/.test(path)) throw new Error(`${label} ${index} has an invalid path`);
+    if (paths.has(path)) throw new Error(`Duplicate ${label.toLowerCase()} path: ${path}`);
     paths.add(path);
-    if (!Array.isArray(item.entry_ids) || item.entry_ids.length === 0) throw new Error(`Miniature ${index} has no entry IDs`);
+    if (!Array.isArray(item.entry_ids) || item.entry_ids.length === 0) throw new Error(`${label} ${index} has no entry IDs`);
     const entry_ids = item.entry_ids.map((entry) => {
       if (!Number.isSafeInteger(entry) || (entry as number) <= 0 || (entry as number) > 0xffff_ffff) {
-        throw new Error(`Miniature ${index} has an invalid entry ID`);
+        throw new Error(`${label} ${index} has an invalid entry ID`);
       }
       const id = entry as number;
-      if (assigned.has(id)) throw new Error(`Duplicate miniature entry ID: ${id}`);
+      if (assigned.has(id)) throw new Error(`Duplicate ${label.toLowerCase()} entry ID: ${id}`);
       assigned.add(id);
       return id;
     });
     return { name, path, entry_ids };
   });
-  return { format: MINIATURE_MANIFEST_FORMAT, miniatures };
+}
+
+export function parseMiniatureManifest(value: unknown): MiniatureManifest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Miniature manifest must be an object");
+  const input = value as Record<string, unknown>;
+  if (input.format !== MINIATURE_MANIFEST_FORMAT) throw new Error(`Unsupported miniature manifest format: ${String(input.format || "missing")}`);
+  return {
+    format: MINIATURE_MANIFEST_FORMAT,
+    miniatures: parseModelCollection(input.miniatures, "Miniature"),
+    game_models: parseModelCollection(input.game_models ?? [], "Game model"),
+  };
 }
 
 export async function fetchMiniatureManifest(baseUrl = ICON_CDN): Promise<MiniatureManifest> {
@@ -66,6 +76,17 @@ export async function fetchMiniatureUrls(baseUrl = ICON_CDN): Promise<ReadonlyMa
   return new Map(manifest.miniatures.flatMap((miniature) =>
     miniature.entry_ids.map((entry) => [entry, miniatureAssetUrl(miniature.path, baseUrl)] as const),
   ));
+}
+
+export async function fetchGameModelUrls(baseUrl = ICON_CDN): Promise<ReadonlyMap<number, string>> {
+  const manifest = await fetchMiniatureManifest(baseUrl);
+  return new Map(manifest.game_models.flatMap((model) =>
+    model.entry_ids.map((entry) => [entry, miniatureAssetUrl(model.path, baseUrl)] as const),
+  ));
+}
+
+export function gameModelUrl(entry: number | undefined, published: ReadonlyMap<number, string> | undefined): string | undefined {
+  return entry === undefined ? undefined : published?.get(entry);
 }
 
 export function miniatureUrl(entry: number | undefined, published: ReadonlyMap<number, string> | undefined): string | undefined {

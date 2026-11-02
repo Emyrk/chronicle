@@ -91,21 +91,21 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
     <body>
       <main>
         <header>
-          <div><div class="eyebrow">Shared creature tokens</div><h1>Miniature foundry</h1><p>Map many creature entries to one reusable GLB, shared by every Chronicle server.</p></div>
+          <div><div class="eyebrow">Shared creature models</div><h1>Miniature foundry</h1><p>Publish tabletop miniatures and original game-file GLBs for every Chronicle server.</p></div>
           <div class="header-actions"><a class="back" href="/internal">← Telemetry</a><a class="back" href="/internal/unit-images">Unit image foundry →</a><a class="back" href="/internal/maps">Map foundry →</a></div>
         </header>
         <section class="toolbar">
           <input id="search" type="search" aria-label="Search miniatures" placeholder="Search name, path, or entry ID" />
-          <div class="toolbar-actions"><button id="add">Add model</button><button id="discard" class="danger" disabled>Discard draft</button><button id="save" class="primary" disabled>Save draft</button><button id="publish" class="publish" disabled>Publish</button></div>
+          <div class="toolbar-actions"><button id="add-miniature">Add miniature</button><button id="add-game-model">Add game model</button><button id="discard" class="danger" disabled>Discard draft</button><button id="save" class="primary" disabled>Save draft</button><button id="publish" class="publish" disabled>Publish</button></div>
         </section>
         <div class="status" id="status" role="status" aria-live="polite"><span class="dot"></span><span>Loading the shared miniature manifest…</span></div>
         <div class="workspace">
           <section class="panel"><div class="panel-head"><h2>Model registry</h2><span class="count" id="count">0 models</span></div><div class="model-list" id="list"></div></section>
-          <section class="panel editor" id="editor" aria-live="polite"><div class="empty-editor"><div><strong>No model selected</strong>Add or select a miniature.</div></div></section>
+          <section class="panel editor" id="editor" aria-live="polite"><div class="empty-editor"><div><strong>No model selected</strong>Add or select a miniature or game model.</div></div></section>
         </div>
       </main>
       {html`<script>
-        const els = Object.fromEntries(['search','add','discard','save','publish','status','count','list','editor'].map(id => [id,document.getElementById(id)]));
+        const els = Object.fromEntries(['search','add-miniature','add-game-model','discard','save','publish','status','count','list','editor'].map(id => [id,document.getElementById(id)]));
         let state = null;
         let selected = null;
         let dirty = false;
@@ -113,37 +113,42 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
         function escapeHTML(value) { return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
         function setStatus(message,error=false) { els.status.className='status'+(error?' error':''); els.status.innerHTML='<span class="dot '+(!error&&state?.has_draft?'draft':'')+'"></span><span>'+escapeHTML(message)+'</span>'; }
         function setBusy(value) { busy=value; els.search.disabled=value; updateButtons(); }
-        function updateButtons() { els.add.disabled=busy||!state; els.save.disabled=busy||!state||!dirty; els.publish.disabled=busy||!state?.has_draft||dirty; els.discard.disabled=busy||!state?.has_draft; }
-        function items() { return state?.draft?.miniatures || []; }
-        function current() { return items().find(item => item.path === selected) || null; }
+        function updateButtons() { els['add-miniature'].disabled=busy||!state; els['add-game-model'].disabled=busy||!state; els.save.disabled=busy||!state||!dirty; els.publish.disabled=busy||!state?.has_draft||dirty; els.discard.disabled=busy||!state?.has_draft; }
+        function collection(kind) { return state?.draft?.[kind] || []; }
+        function items() { return ['miniatures','game_models'].flatMap(kind => collection(kind).map(item => ({kind,item}))); }
+        function itemKey(kind,item) { return kind+':'+item.path; }
+        function current() { return items().find(({kind,item}) => itemKey(kind,item) === selected) || null; }
         function markDirty() { dirty=true; updateButtons(); renderJSON(); }
         function renderList() {
           const query=els.search.value.trim().toLowerCase();
-          const rows=items().filter(item => (item.name+' '+item.path+' '+item.entry_ids.join(' ')).toLowerCase().includes(query));
+          const rows=items().filter(({kind,item}) => (kind+' '+item.name+' '+item.path+' '+item.entry_ids.join(' ')).toLowerCase().includes(query));
           els.count.textContent=rows.length+' models';
-          els.list.innerHTML=rows.map(item => '<button class="model-row '+(item.path===selected?'active':'')+'" data-path="'+escapeHTML(item.path)+'"><span><span class="model-name">'+escapeHTML(item.name)+'</span><span class="model-path">'+escapeHTML(item.path||'Upload required')+'</span></span><span class="id-count">'+item.entry_ids.length+' IDs</span></button>').join('') || '<div class="empty-editor"><div><strong>No miniatures</strong>Add a shared GLB model.</div></div>';
-          document.querySelectorAll('.model-row').forEach(row => row.addEventListener('click',()=>{if(busy)return;syncEditor();selected=row.dataset.path;renderList();renderEditor();}));
+          els.list.innerHTML=rows.map(({kind,item}) => {const key=itemKey(kind,item);const type=kind==='miniatures'?'tabletop':'game file';return '<button class="model-row '+(key===selected?'active':'')+'" data-key="'+escapeHTML(key)+'"><span><span class="model-name">'+escapeHTML(item.name)+'</span><span class="model-path">'+type+' · '+escapeHTML(item.path||'Upload required')+'</span></span><span class="id-count">'+item.entry_ids.length+' IDs</span></button>';}).join('') || '<div class="empty-editor"><div><strong>No models</strong>Add a tabletop miniature or original game model.</div></div>';
+          document.querySelectorAll('.model-row').forEach(row => row.addEventListener('click',()=>{if(busy)return;syncEditor();selected=row.dataset.key;renderList();renderEditor();}));
         }
         function parseIDs(value) { return value.split(/[\s,]+/).filter(Boolean).map(raw=>Number(raw)); }
         function syncEditor() {
-          const item=current(); if(!item)return;
-          item.name=document.getElementById('name').value.trim();
-          item.entry_ids=parseIDs(document.getElementById('entry-ids').value);
+          const selectedItem=current(); if(!selectedItem)return;
+          selectedItem.item.name=document.getElementById('name').value.trim();
+          selectedItem.item.entry_ids=parseIDs(document.getElementById('entry-ids').value);
         }
         function previewURL(path) { const filename=path.split('/').pop(); return '/internal/api/v1/miniatures/preview/'+encodeURIComponent(filename); }
         function renderEditor() {
-          const item=current();
-          if(!item){els.editor.innerHTML='<div class="empty-editor"><div><strong>No model selected</strong>Add or select a miniature.</div></div>';return;}
+          const selectedItem=current();
+          if(!selectedItem){els.editor.innerHTML='<div class="empty-editor"><div><strong>No model selected</strong>Add or select a miniature or game model.</div></div>';return;}
+          const {kind,item}=selectedItem;
+          const isGameModel=kind==='game_models';
+          const typeLabel=isGameModel?'Game model':'Miniature';
           const hasPath=item.path.startsWith('miniatures/');
-          els.editor.innerHTML='<div class="panel-head"><h2>Miniature editor</h2><span class="count">shared globally</span></div><div class="editor-body"><div class="editor-grid">'+
-            '<article class="form-card"><h3>'+escapeHTML(item.name||'New miniature')+'</h3><p class="hint">One model can represent many bosses, creatures, pets, or totems. Each entry ID may belong to only one model.</p>'+
+          els.editor.innerHTML='<div class="panel-head"><h2>'+typeLabel+' editor</h2><span class="count">shared globally</span></div><div class="editor-body"><div class="editor-grid">'+
+            '<article class="form-card"><h3>'+escapeHTML(item.name||('New '+typeLabel.toLowerCase()))+'</h3><p class="hint">'+(isGameModel?'Upload the original animated GLB extracted from the game files.':'Upload the tabletop-style GLB used by the 3D replay map.')+' Each entry ID may belong to only one '+typeLabel.toLowerCase()+'.</p>'+
             '<label>Display name<input id="name" type="text" value="'+escapeHTML(item.name)+'" placeholder="Deviate serpent" /></label>'+
             '<div class="path '+(!hasPath?'empty':'')+'">'+escapeHTML(item.path||'Upload a GLB to create its immutable path')+'</div>'+
             '<label class="upload">Upload or replace GLB<input id="file" type="file" accept="model/gltf-binary,.glb" /></label>'+
             '<label>Creature entry IDs<textarea id="entry-ids" placeholder="3669, 3670, 3671">'+escapeHTML(item.entry_ids.join('\\n'))+'</textarea></label>'+
             '<p class="hint">Separate IDs with commas, spaces, or new lines. Positive 32-bit IDs only.</p><div class="form-actions"><button id="remove" class="danger">Remove model</button></div></article>'+
-            '<article class="preview-card"><h3>Model preview</h3><p class="hint">Drag to orbit and scroll to zoom. The replay client integration will follow separately.</p>'+
-            (hasPath?'<model-viewer src="'+previewURL(item.path)+'" alt="'+escapeHTML((item.name||'Miniature')+' preview')+'" camera-controls auto-rotate shadow-intensity="1" environment-image="neutral"></model-viewer><div class="preview-meta"><span>GLB 2.0</span><a href="'+previewURL(item.path)+'" target="_blank" rel="noreferrer">Open asset ↗</a></div>':'<div class="preview-empty"><div><strong>No GLB uploaded</strong>Upload a model to inspect it here.</div></div>')+'</article></div><details><summary>Draft manifest</summary><pre id="json"></pre></details></div>';
+            '<article class="preview-card"><h3>Model preview</h3><p class="hint">Drag to orbit and scroll to zoom.'+(isGameModel?' Animation clips from the extracted game model are available in compatible viewers.':' This model is optimized for the replay map.')+'</p>'+
+            (hasPath?'<model-viewer src="'+previewURL(item.path)+'" alt="'+escapeHTML((item.name||typeLabel)+' preview')+'" camera-controls auto-rotate autoplay shadow-intensity="1" environment-image="neutral"></model-viewer><div class="preview-meta"><span>GLB 2.0</span><a href="'+previewURL(item.path)+'" target="_blank" rel="noreferrer">Open asset ↗</a></div>':'<div class="preview-empty"><div><strong>No GLB uploaded</strong>Upload a model to inspect it here.</div></div>')+'</article></div><details><summary>Draft manifest</summary><pre id="json"></pre></details></div>';
           document.getElementById('name').addEventListener('input',()=>{syncEditor();markDirty();renderList();});
           document.getElementById('entry-ids').addEventListener('input',()=>{syncEditor();markDirty();renderList();});
           document.getElementById('file').addEventListener('change',event=>upload(event.target.files[0]));
@@ -151,18 +156,21 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
           renderJSON();
         }
         function renderJSON(){const pre=document.getElementById('json');if(pre&&state)pre.textContent=JSON.stringify(state.draft,null,2);}
-        function remove(){const item=current();if(!item)return;if(!confirm('Remove "'+(item.name||'this model')+'" from the draft? The uploaded GLB will remain in R2 until cleaned up separately.'))return;state.draft.miniatures=items().filter(candidate=>candidate!==item);selected=items()[0]?.path||null;markDirty();renderList();renderEditor();}
+        function remove(){const selectedItem=current();if(!selectedItem)return;const {kind,item}=selectedItem;if(!confirm('Remove "'+(item.name||'this model')+'" from the draft? The uploaded GLB will remain in R2 until cleaned up separately.'))return;state.draft[kind]=collection(kind).filter(candidate=>candidate!==item);selected=items()[0] ? itemKey(items()[0].kind,items()[0].item) : null;markDirty();renderList();renderEditor();}
         async function upload(file){
-          if(!file||!state)return;syncEditor();const item=current();if(!item)return;setBusy(true);setStatus('Uploading '+file.name+'…');
-          try{const data=new FormData();data.append('file',file);const response=await fetch('/internal/api/v1/miniatures/assets',{method:'POST',body:data});const result=await response.json();if(!response.ok)throw new Error(result.error||'Upload failed');item.path=result.path;selected=result.path;dirty=true;setStatus('GLB uploaded. Save the draft to register it.');renderList();renderEditor();}
+          if(!file||!state)return;syncEditor();const selectedItem=current();if(!selectedItem)return;setBusy(true);setStatus('Uploading '+file.name+'…');
+          try{const data=new FormData();data.append('file',file);const response=await fetch('/internal/api/v1/miniatures/assets',{method:'POST',body:data});const result=await response.json();if(!response.ok)throw new Error(result.error||'Upload failed');selectedItem.item.path=result.path;selected=itemKey(selectedItem.kind,selectedItem.item);dirty=true;setStatus('GLB uploaded. Save the draft to register it.');renderList();renderEditor();}
           catch(error){setStatus(error.message,true);}finally{setBusy(false);}
         }
-        async function load(){setBusy(true);setStatus('Loading the shared miniature manifest…');try{const response=await fetch('/internal/api/v1/miniatures');const result=await response.json();if(!response.ok)throw new Error(result.error||'Load failed');state=result;selected=state.draft.miniatures[0]?.path||null;dirty=false;setStatus(state.has_draft?'Saved draft loaded. Publish when ready.':'Published manifest loaded. Changes remain private until saved and published.');renderList();renderEditor();}catch(error){setStatus(error.message,true);}finally{setBusy(false);}}
-        async function save(){syncEditor();setBusy(true);setStatus('Validating and saving draft…');try{const response=await fetch('/internal/api/v1/miniatures/draft',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({version:state.draft_version,miniatures:items()})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Save failed');state.draft=result.draft;state.draft_version=result.draft_version;state.has_draft=true;selected=state.draft.miniatures.find(item=>item.path===selected)?.path||state.draft.miniatures[0]?.path||null;dirty=false;setStatus('Draft saved to R2. The public manifest is unchanged.');renderList();renderEditor();}catch(error){setStatus(error.message,true);}finally{setBusy(false);}}
+        function firstKey(){const first=items()[0];return first?itemKey(first.kind,first.item):null;}
+        async function load(){setBusy(true);setStatus('Loading the shared miniature manifest…');try{const response=await fetch('/internal/api/v1/miniatures');const result=await response.json();if(!response.ok)throw new Error(result.error||'Load failed');state=result;selected=firstKey();dirty=false;setStatus(state.has_draft?'Saved draft loaded. Publish when ready.':'Published manifest loaded. Changes remain private until saved and published.');renderList();renderEditor();}catch(error){setStatus(error.message,true);}finally{setBusy(false);}}
+        async function save(){syncEditor();setBusy(true);setStatus('Validating and saving draft…');try{const response=await fetch('/internal/api/v1/miniatures/draft',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({version:state.draft_version,miniatures:collection('miniatures'),game_models:collection('game_models')})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Save failed');state.draft=result.draft;state.draft_version=result.draft_version;state.has_draft=true;if(!current())selected=firstKey();dirty=false;setStatus('Draft saved to R2. The public manifest is unchanged.');renderList();renderEditor();}catch(error){setStatus(error.message,true);}finally{setBusy(false);}}
         async function discard(){if(!confirm('Discard the saved miniature draft? Uploaded but unpublished GLBs remain in R2.'))return;setBusy(true);try{const response=await fetch('/internal/api/v1/miniatures/draft',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({version:state.draft_version})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Discard failed');await load();}catch(error){setStatus(error.message,true);setBusy(false);}}
         async function publish(){if(!confirm('Publish miniatures/manifest.json for every Chronicle server?'))return;setBusy(true);setStatus('Checking assets and publishing the shared manifest…');try{const response=await fetch('/internal/api/v1/miniatures/publish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({version:state.draft_version})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Publish failed');await load();setStatus('Published '+result.manifest+'. CDN caches may take up to one hour to refresh.');}catch(error){setStatus(error.message,true);setBusy(false);}}
+        function add(kind){syncEditor();const temporary='__new__'+crypto.randomUUID();const item={name:'',path:temporary,entry_ids:[]};state.draft[kind].push(item);selected=itemKey(kind,item);markDirty();renderList();renderEditor();}
         els.search.addEventListener('input',renderList);
-        els.add.addEventListener('click',()=>{syncEditor();const temporary='__new__'+crypto.randomUUID();const item={name:'',path:temporary,entry_ids:[]};state.draft.miniatures.push(item);selected=temporary;markDirty();renderList();renderEditor();});
+        els['add-miniature'].addEventListener('click',()=>add('miniatures'));
+        els['add-game-model'].addEventListener('click',()=>add('game_models'));
         els.save.addEventListener('click',save);els.discard.addEventListener('click',discard);els.publish.addEventListener('click',publish);load();
       </script>`}
     </body>
