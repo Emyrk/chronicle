@@ -4,7 +4,7 @@
 
 The clear times are the operator's approximate figures from [Capybara speedruns](https://capy.chronicleclassic.com/leaderboards/speedruns), **not** independently measured or verified here. Reset periods for these ten raids were supplied by the operator. Tier labels, difficulty, and points remain calibration proposals. The existing `RaidProgressionOrder` is display ordering, not a numeric difficulty/tier rating. Confirm the precise Turtle eligible manifests before a seed migration.
 
-> **Recalibration pending:** The operator considers the ZG and AQ20 point totals below too high relative to MC. Do not seed them or use their current normalized totals as approved policy. Emerald Sanctum's points should be in the revised ZG range. Every optional boss should still earn positive points; reducing ZG well below its current 35 normalized points requires fractional per-boss awards or a larger display scale.
+> **Recalibration pending:** ZG's High Priest encounters are now zero-point progression labels, reducing its provisional normalized total to 23⅓; the operator also considers AQ20's 56 too high relative to MC. Do not seed either total as approved policy. Emerald Sanctum's points should be in the revised ZG range. Optional ZG bosses still earn points.
 
 ## Draft raid budgets
 
@@ -15,20 +15,20 @@ The clear times are the operator's approximate figures from [Capybara speedruns]
 | Naxxramas | 40 | base (verify) | 90m | endgame | 7d | 120 | 120 | Long clear and high tier. |
 | Temple of Ahn'Qiraj (AQ40) | 40 | base (verify) | 50m | late | 7d | 90 | 90 | Bug Family is one canonical encounter. |
 | Ruins of Ahn'Qiraj (AQ20) | 20 | base (verify) | 50m | catch-up / late | 3d | 24 | 56 | Lower size, but substantial time. |
-| Zul'Gurub (ZG) | 20 | base (verify) | 25m | catch-up | 3d | 15 | 35 | Includes five non-progression encounters. |
-| Blackwing Lair (BWL) | 40 | base (verify) | 40m | mid / high | 7d | 70 | 70 | ZG offers half the BWL weekly opportunity in this draft. |
+| Zul'Gurub (ZG) | 20 | base (verify) | 25m | catch-up | 3d | 10 | ≈23.33 | Five High Priest encounters award 0; five optional encounters still award points. |
+| Blackwing Lair (BWL) | 40 | base (verify) | 40m | mid / high | 7d | 70 | 70 | Revised ZG offers about one third of BWL's weekly opportunity. |
 | Onyxia's Lair | 40 | base (verify) | 6m | entry / short | 5d | 6 | 8.4 | Includes Broodcommander Axelus. |
 | Emerald Sanctum | 40 | normal / hard (verify) | ~20m | custom (verify) | 7d | **E + S (either mode)** | **E + S (either mode)** | E = Erennius points; S = normal Solnius points. Hard-mode Solnius earns E + S as a single encounter instead of Erennius + normal Solnius. |
 | Timbermaw Hold | 20 | hard | **unknown** | custom 20-player | 7d | **TBD** | **TBD** | Hard raid; clear time and points pending. |
 | Molten Core (MC) | 40 | base (verify) | 45m | entry | 7d | 40 | 40 | Turtle omits Gehennas; Kronos vanilla needs a separate Gehennas award. |
 
-The draft uses a **70-point BWL clear**, not 1,000. Given all 13 known ZG boss names earning at least one whole point and Hakkar earning more than an ordinary boss, the proposed 15-point ZG clear is near the smallest useful whole-number split. With the confirmed three-day reset it offers `15 × 7 / 3 = 35` points per week, half the proposed BWL weekly opportunity. This half ratio is a *hypothesis*, not an approved rule. Clear time is one input, not a points-per-minute formula. Character and guild point awards currently share the same configured boss values.
+The draft uses a **70-point BWL clear**, not 1,000. ZG's five High Priest encounters award zero Renown because their kills are not required to kill Hakkar; they remain visible in logs and progression panels. The remaining eight encounters retain their draft awards, including the five optional bosses: `10 × 7 / 3 = 23⅓` points per week, about one third of BWL's 70. This is a provisional allocation, not an approved balance target. Clear time is one input, not a points-per-minute formula. Character and guild point awards currently share the same configured boss values.
 
 ### Draft boss allocations
 
 | Reset | Raid | Bosses and actual points per eligible kill | Total | Normalized (7d) |
 | ---: | --- | --- | ---: | ---: |
-| 3d | ZG | High Priestess Jeklik 1; High Priest Venoxis 1; High Priestess Mar'li 1; Bloodlord Mandokir 1; High Priest Thekal 1; High Priestess Arlokk 1; Jin'do the Hexxer 1; Hakkar 3; Gahz'ranka 1; Gri'lek 1; Hazza'rah 1; Renataki 1; Wushoolay 1 | 15 | 35 |
+| 3d | ZG | High Priestess Jeklik 0; High Priest Venoxis 0; High Priestess Mar'li 0; Bloodlord Mandokir 1; High Priest Thekal 0; High Priestess Arlokk 0; Jin'do the Hexxer 1; Hakkar 3; Gahz'ranka 1; Gri'lek 1; Hazza'rah 1; Renataki 1; Wushoolay 1 | 10 | ≈23.33 |
 | 3d | AQ20 | Kurinnaxx 3; General Rajaxx 3; Moam 3; Buru the Gorger 3; Ayamiss the Hunter 3; Ossirian the Unscarred 9 | 24 | 56 |
 | 5d | Onyxia | Onyxia 4; Broodcommander Axelus 2 | 6 | 8.4 |
 | 5d | K10 | Lord Blackwald II 5; Brood Queen Araxxna 5; Grizikil 5; Clawlord Howlfang 5; Moroes 10 | 30 | 42 |
@@ -54,7 +54,7 @@ The draft uses a **70-point BWL clear**, not 1,000. Given all 13 known ZG boss n
 ## Required review before default seeding
 
 1. Reset periods were supplied by the operator: K10/Onyxia 5d; AQ20/ZG 3d; K40/Naxx/AQ40/BWL/MC/Emerald Sanctum/Timbermaw Hold 7d.
-2. Agree whether a complete ZG is worth half of BWL per week and whether the other proposed tier/size relationships feel fair.
+2. Review ZG's revised one-third-of-BWL weekly opportunity, reduce AQ20's still-high 56-point normalized total, and check the other tier/size relationships.
 3. Keep MC Gehennas in a non-Turtle (for example Kronos) policy, and confirm boss identity and eligibility for BWL Ezzel, Onyxia Axelus, and optional ZG encounters. Check whether every named encounter can produce a canonical ranking fact.
 4. Confirm K10/K40 as separately derived instances; decide whether the two Solnius modes are mutually exclusive award variants, and gather Timbermaw Hold's approximate clear time.
 5. Confirm which difficulty partitions these base awards should cover, especially Emerald Sanctum hard mode.
