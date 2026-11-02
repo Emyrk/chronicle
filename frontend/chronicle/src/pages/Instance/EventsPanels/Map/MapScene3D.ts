@@ -1845,9 +1845,16 @@ export class MapScene3D {
   // with the target so the view does not swing.
   private constrainCamera(dt = 0): boolean {
     const mesh = this.dungeonMesh;
-    if (!mesh || this.constraining || this.walk) return false;
+    if (this.constraining) return false;
+    if (!mesh || this.walk) {
+      this.orbitWantDistance = this.orbitShownDistance = null;
+      return false;
+    }
     const { target } = this.controls;
     const { position } = this.camera;
+    // Measured before this pass's own clamps, so only a change something else
+    // made (a zoom, a new shot) counts as a new distance to come back out to.
+    const arrived = position.distanceTo(target);
     let moved = false;
     if (this.focusCentre) {
       const clamped = clampToRadius(target, this.focusCentre, MESH_PAN_RADIUS_YARDS * mesh.scale);
@@ -1865,18 +1872,24 @@ export class MapScene3D {
       target.y = floor;
       moved = true;
     }
-    const minY = this.floorHeights.heightAt("camera", position.x, position.z) + MESH_CAMERA_CLEARANCE;
-    if (position.y < minY) {
-      position.y = minY;
+    // Only the floor below the camera lifts it: the highest surface over its
+    // spot may be a wall top, a ledge or a roof, and lifting the camera onto
+    // that tips the view straight down. Walls between the camera and the
+    // target are the collision pass's job.
+    const below = this.castFloor(position.x, position.z, position.y + MESH_CAMERA_CLEARANCE);
+    if (below !== null && position.y < below + MESH_CAMERA_CLEARANCE) {
+      position.y = below + MESH_CAMERA_CLEARANCE;
       moved = true;
     }
     const before = this.collisionBefore.copy(position);
-    const easing = this.collideOrbitCamera(dt);
+    const easing = this.collideOrbitCamera(dt, arrived);
     if (!position.equals(before)) moved = true;
-    if (!moved) return easing;
-    this.constraining = true;
-    this.controls.update();
-    this.constraining = false;
+    if (moved) {
+      this.constraining = true;
+      this.controls.update();
+      this.constraining = false;
+    }
+    this.orbitShownDistance = position.distanceTo(target);
     return easing;
   }
 
@@ -1944,20 +1957,18 @@ export class MapScene3D {
 
   // Keeps the cave from standing between the orbit target and the camera: a
   // wall pulls the camera in along its line of sight, and once clear it eases
-  // back out to the distance the user (or the Director) chose. Any distance
-  // change this did not make, a zoom or a new shot, becomes the new choice.
-  // True while it is still easing out.
-  private collideOrbitCamera(dt: number): boolean {
+  // back out to the distance the user (or the Director) chose. `arrived` is
+  // the distance before this constrain pass: when it differs from the one the
+  // last pass left, something else moved the camera (a zoom, a new shot) and
+  // that becomes the new choice. True while it is still easing out.
+  private collideOrbitCamera(dt: number, arrived: number): boolean {
     const { target } = this.controls;
     const { position } = this.camera;
     const shown = position.distanceTo(target);
     const mesh = this.dungeonMesh;
-    if (!mesh || this.walk || shown <= 1e-6) {
-      this.orbitWantDistance = this.orbitShownDistance = null;
-      return false;
-    }
+    if (!mesh || shown <= 1e-6) return false;
     const last = this.orbitShownDistance;
-    if (last === null || this.orbitWantDistance === null || Math.abs(shown - last) > 1e-4 * Math.max(1, shown)) this.orbitWantDistance = shown;
+    if (last === null || this.orbitWantDistance === null || Math.abs(arrived - last) > 1e-4 * Math.max(1, arrived)) this.orbitWantDistance = arrived;
     const want = this.orbitWantDistance;
     // From the fight's height, as clearShot does: the target sits on the
     // floor, which a ray from it would graze at once.
@@ -1966,7 +1977,6 @@ export class MapScene3D {
     const eye = this.collisionEye.copy(position).sub(target).multiplyScalar(want / shown).add(from);
     const hit = this.meshHitDistance(from, eye);
     const next = cameraCollisionDistance(shown, want, hit, ORBIT_COLLISION_PADDING, Math.min(want, this.controls.minDistance), CAMERA_COLLISION_RETURN_RATE, dt);
-    this.orbitShownDistance = next;
     if (next !== shown) position.sub(target).multiplyScalar(next / shown).add(target);
     return next < want && (hit === null || hit - ORBIT_COLLISION_PADDING > next);
   }
