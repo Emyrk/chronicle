@@ -914,15 +914,56 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 		// Rankings are supplementary. Persist them atomically in a separate
 		// transaction so a ranking error cannot roll back the parsed instance.
-		if rankableLog && finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
+		playerRankings := rankableLog && finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil
+		// Guild credit (and guild-less competition evidence) does not require
+		// a DPS ranking; clean boss kills alone are sufficient.
+		cleanBossKill := false
+		for _, enc := range finalized.Encounters {
+			if enc.Boss && enc.KillType == encounter.KillTypeClean {
+				cleanBossKill = true
+				break
+			}
+		}
+		if playerRankings || (rankableLog && publicLog && cleanBossKill) {
 			rankErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
 				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 					return err
 				}
-				if err := insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, resolved.DatasetID, flavor, talentTreeData); err != nil {
+				if playerRankings {
+					if err := insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, resolved.DatasetID, flavor, talentTreeData); err != nil {
+						return err
+					}
+				}
+				if err := tx.TouchLogInstanceRankingSource(ctx, dbinstance.ID); err != nil {
 					return err
 				}
-				return tx.TouchLogInstanceRankingSource(ctx, dbinstance.ID)
+				if !publicLog {
+					return nil
+				}
+				// Record earned credit at parse time. Async ranking-run refresh
+				// remains an idempotent repair; deletion holds the same lock.
+				if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
+					return err
+				}
+				sources, err := tx.RankingRunSources(ctx, rankingRunAffectedIDs)
+				if err != nil {
+					return err
+				}
+				for _, source := range sources {
+					if _, err := tx.BackfillRenownFactsForSource(ctx, database.BackfillRenownFactsForSourceParams{
+						RealmID: source.RealmID, RunID: source.RunID,
+						RepresentativeInstanceID: source.RepresentativeInstanceID,
+					}); err != nil {
+						return err
+					}
+					if _, err := tx.BackfillGuildRenownFactsForSource(ctx, database.BackfillGuildRenownFactsForSourceParams{
+						TenantID: uuid.Nil, RunID: source.RunID,
+						RepresentativeInstanceID: source.RepresentativeInstanceID,
+					}); err != nil {
+						return err
+					}
+				}
+				return nil
 			}, nil)
 			if errors.Is(rankErr, errStaleParseGeneration) {
 				jobResult = "cancelled"
