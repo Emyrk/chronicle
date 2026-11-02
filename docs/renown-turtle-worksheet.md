@@ -2,21 +2,21 @@
 
 **Draft for review, not a deployed policy or migration.** Points below are actual points per eligible canonical boss kill, not a seven-day baseline. Every eligible kill earns points. `Progression` is a panel label only: a boss omitted from progression can still earn Renown. **The proposed policy** has no separate final-boss bonus or runtime reset multiplier; the current backend still has a `final_boss_bonus` field that must be removed before these numbers can be seeded. A single character normally has one eligible kill per boss per lockout, while separate guild teams can each earn eligible credit.
 
-The clear times are the operator's approximate figures from [Capybara speedruns](https://capy.chronicleclassic.com/leaderboards/speedruns), **not** independently measured or verified here. Tier labels, resets, and points below are calibration proposals, not verified Turtle lockout or difficulty metadata. The existing `RaidProgressionOrder` is display ordering, not a numeric difficulty/tier rating. Confirm the reset periods and the precise Turtle eligible manifests before a seed migration.
+The clear times are the operator's approximate figures from [Capybara speedruns](https://capy.chronicleclassic.com/leaderboards/speedruns), **not** independently measured or verified here. Tier labels, difficulty, resets, and points below are calibration proposals, not verified Turtle lockout or difficulty metadata. The existing `RaidProgressionOrder` is display ordering, not a numeric difficulty/tier rating. Confirm the reset periods and the precise Turtle eligible manifests before a seed migration.
 
 ## Draft raid budgets
 
-| Raid | Size | Est. clean clear | Proposed tier/role | Reset used for this draft | Draft points per eligible clear | Approx. points per 7 days | Notes |
-| --- | ---: | ---: | --- | ---: | ---: | ---: | --- |
-| Lower Tower of Karazhan (K10) | 10 | 40m | custom 10-player | 7d? | 30 | 30 | Verify reset and source support. |
-| Upper Tower of Karazhan (K40) | 40 | 40m | custom 40-player | 7d? | 95 | 95 | Verify reset and source support. |
-| Naxxramas | 40 | 90m | endgame | 7d? | 120 | 120 | Long clear and high tier. |
-| Temple of Ahn'Qiraj (AQ40) | 40 | 50m | late | 7d? | 90 | 90 | Bug Family is one canonical encounter. |
-| Ruins of Ahn'Qiraj (AQ20) | 20 | 50m | catch-up / late | 3d? | 24 | 56 | Lower size, but substantial time. |
-| Zul'Gurub (ZG) | 20 | 25m | catch-up | 3d? | 15 | 35 | Includes five non-progression encounters. |
-| Blackwing Lair (BWL) | 40 | 40m | mid / high | 7d? | 70 | 70 | ZG offers half the BWL weekly opportunity in this draft. |
-| Onyxia's Lair | 40 | 6m | entry / short | **verify** | 6 | **TBD** | Do not assume a 3- or 7-day reset. |
-| Molten Core (MC) | 40 | 45m | entry | 7d? | 40 | 40 | Gehennas appears in `Bosses`, but not `ProgressionBosses`. |
+| Raid | Size | Difficulty | Est. clean clear | Proposed tier/role | Reset used for this draft | Draft points per eligible clear | Approx. points per 7 days | Notes |
+| --- | ---: | --- | ---: | --- | ---: | ---: | ---: | --- |
+| Lower Tower of Karazhan (K10) | 10 | base (verify) | 40m | custom 10-player | 7d? | 30 | 30 | Verify reset and source support. |
+| Upper Tower of Karazhan (K40) | 40 | base (verify) | 40m | custom 40-player | 7d? | 95 | 95 | Verify reset and source support. |
+| Naxxramas | 40 | base (verify) | 90m | endgame | 7d? | 120 | 120 | Long clear and high tier. |
+| Temple of Ahn'Qiraj (AQ40) | 40 | base (verify) | 50m | late | 7d? | 90 | 90 | Bug Family is one canonical encounter. |
+| Ruins of Ahn'Qiraj (AQ20) | 20 | base (verify) | 50m | catch-up / late | 3d? | 24 | 56 | Lower size, but substantial time. |
+| Zul'Gurub (ZG) | 20 | base (verify) | 25m | catch-up | 3d? | 15 | 35 | Includes five non-progression encounters. |
+| Blackwing Lair (BWL) | 40 | base (verify) | 40m | mid / high | 7d? | 70 | 70 | ZG offers half the BWL weekly opportunity in this draft. |
+| Onyxia's Lair | 40 | base (verify) | 6m | entry / short | **verify** | 6 | **TBD** | Do not assume a 3- or 7-day reset. |
+| Molten Core (MC) | 40 | base (verify) | 45m | entry | 7d? | 40 | 40 | Gehennas appears in `Bosses`, but not `ProgressionBosses`. |
 
 The draft uses a **70-point BWL clear**, not 1,000. Given all 13 known ZG boss names earning at least one whole point and Hakkar earning more than an ordinary boss, the proposed 15-point ZG clear is near the smallest useful whole-number split. At a tentative three-day reset it offers `15 × 7 / 3 = 35` points per week, half the proposed BWL weekly opportunity. This half ratio is a *hypothesis*, not an approved rule. Clear time is one input, not a points-per-minute formula. Character and guild point awards currently share the same configured boss values.
 
@@ -51,4 +51,5 @@ The Turtle registry also includes **Emerald Sanctum** and **Timbermaw Hold**. No
 2. Agree whether a complete ZG is worth half of BWL per week and whether the other proposed tier/size relationships feel fair.
 3. Confirm boss identity and eligibility for MC Gehennas, BWL Ezzel, Onyxia Axelus, and optional ZG encounters. Check whether every named encounter can produce a canonical ranking fact.
 4. Confirm K10/K40 as separately derived instances; decide how to award and label Emerald Sanctum and Timbermaw Hold.
-5. Decide whether defaults are a versioned SQL template for future realm groups or a one-time seed only for existing Turtle groups.
+5. Confirm which difficulty partitions these base awards should cover, especially Emerald Sanctum hard mode.
+6. Decide whether defaults are a versioned SQL template for future realm groups or a one-time seed only for existing Turtle groups.
