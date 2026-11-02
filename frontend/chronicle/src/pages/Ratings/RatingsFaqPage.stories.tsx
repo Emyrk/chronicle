@@ -34,8 +34,8 @@ export const Calculators: Story = {
     await expect(raid.getByText("87.1")).toBeInTheDocument()
 
     const guild = within(canvas.getByRole("region", { name: "Guild Peak calculator" }))
-    fireEvent.change(guild.getByRole("slider", { name: "Fastest run" }), { target: { value: String(30 * 60) } })
-    fireEvent.change(guild.getByRole("slider", { name: "Your run" }), { target: { value: String(60 * 60) } })
+    fireEvent.change(guild.getByRole("slider", { name: "Fastest kill" }), { target: { value: "120" } })
+    fireEvent.change(guild.getByRole("slider", { name: "Your kill" }), { target: { value: "240" } })
     await expect(guild.getByText("50.0")).toBeInTheDocument()
   },
 }

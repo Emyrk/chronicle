@@ -271,41 +271,41 @@ function clock(totalSeconds: number) {
   return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`
 }
 
-/** Guild Peak: a run's time against the fastest run, the fastest scoring 100. */
+/** Guild Peak on a boss: the guild's kill time against the fastest kill, the fastest scoring 100. */
 export function GuildPeakCalculator() {
-  const [fastest, setFastest] = useState(32 * 60 + 30)
-  const [yours, setYours] = useState(36 * 60 + 15)
+  const [fastest, setFastest] = useState(2 * 60 + 10)
+  const [yours, setYours] = useState(2 * 60 + 35)
   const score = (fastest / Math.max(yours, fastest)) * 100
   return (
     <CalculatorCard
       id="guild-peak-calculator"
       title="Guild Peak"
       accent={PEAK.accent}
-      description="A guild run is scored by time: the fastest run on the realm is 100, and a run twice as long scores 50."
+      description="A guild's kill is scored by its time: the fastest kill of that boss on the realm is 100, and a kill twice as long scores 50."
       inputs={
         <>
           <Slider
-            label="Fastest run"
-            hint="on your realm"
+            label="Fastest kill"
+            hint="of this boss on your realm"
             value={fastest}
             onChange={(v) => {
               setFastest(v)
               if (yours < v) setYours(v)
             }}
-            min={20 * 60}
-            max={60 * 60}
-            step={5}
+            min={30}
+            max={6 * 60}
+            step={1}
             format={clock}
             accent={PEAK.accent}
           />
           <Slider
-            label="Your run"
-            hint="clear or kill time"
+            label="Your kill"
+            hint="your guild's kill time"
             value={yours}
             onChange={(v) => setYours(Math.max(v, fastest))}
-            min={20 * 60}
-            max={90 * 60}
-            step={5}
+            min={30}
+            max={10 * 60}
+            step={1}
             format={clock}
             accent={PEAK.accent}
           />
@@ -317,7 +317,9 @@ export function GuildPeakCalculator() {
             {clock(fastest)} ÷ {clock(yours)} × 100
           </p>
           <ResultLine label="Guild Peak" value={score.toFixed(1)} strong color={PEAK.accent} />
-          <p className="mt-2 text-xs text-muted-foreground">Guild Mastery and Renown then use the same rules as characters.</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            A single raid's guild Peak averages every boss. Guild Mastery and Renown then use the same rules as characters.
+          </p>
         </>
       }
     />

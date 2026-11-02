@@ -112,9 +112,9 @@ export function RatingsLaunchPost({ post }: PostProps) {
 
       <h2>Guilds get ratings too</h2>
       <p>
-        Switch to <strong>Guilds</strong> and the same three ratings rank guilds. A guild's parse is its run time: the
-        fastest run on the realm scores 100. Guild Mastery rewards fast clears week after week, and Guild Renown rewards
-        a long raiding history.
+        Switch to <strong>Guilds</strong> and the same three ratings rank guilds. A guild's parse is its kill time on
+        each boss: the fastest kill on the realm scores 100. Guild Mastery rewards fast kills week after week, and Guild
+        Renown rewards a long raiding history. Full clear times stay on the Speedruns tab.
       </p>
 
       <h2>How it all works</h2>

@@ -227,20 +227,24 @@ export function RatingsFaqPage() {
             <Faq q="Do guilds have ratings too?" open>
               <p>
                 Yes. Switch the leaderboards to <strong>Guilds</strong> and the same three ratings rank guilds. A guild's parse is its{" "}
-                <strong>run time</strong>: the fastest run on the realm scores 100, and slower runs score less in proportion.
+                <strong>kill time</strong> on a boss: the fastest kill of that boss on the realm scores 100, and slower kills score less in
+                proportion.
               </p>
               <ul>
-                <li>On a full clear, the clear time is scored.</li>
-                <li>On a boss, that boss's kill time is scored.</li>
-                <li>Across several bosses, the kill scores are averaged.</li>
+                <li>On a boss, the guild's best kill time is its Peak.</li>
+                <li>A single raid's guild Peak averages every boss, a missed boss counting as zero, just like characters.</li>
+                <li>Guild Ranked Mastery and Renown follow exactly the same rules as characters.</li>
               </ul>
-              <p>Guild Ranked Mastery and Renown then follow exactly the same rules as characters.</p>
+              <p>
+                Ratings are built on <strong>kill times</strong>. Full clear times belong to the <strong>Speedruns</strong> tab, which ranks
+                whole-raid runs on their own.
+              </p>
             </Faq>
             <GuildPeakCalculator />
-            <Faq q="Which runs count for a guild?">
+            <Faq q="Which kills count for a guild?">
               <p>
-                The same runs the speedrun boards credit to that guild. Class and spec filters do not apply to guilds, so they turn off in Guilds
-                mode.
+                Kills from the raids the speedrun boards credit to that guild. Class and spec filters do not apply to guilds, so they turn off in
+                Guilds mode.
               </p>
             </Faq>
           </Section>
