@@ -2,15 +2,7 @@ import type { ReactNode } from "react"
 import { ChevronDown } from "lucide-react"
 import { calculateMastery } from "@/pages/ArmoryPage/overview/masteryRenownModel"
 import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes"
-import {
-  EvidenceBadge,
-  EvidenceChart,
-  GuildPeakCalculator,
-  MasteryCalculator,
-  PeakCalculator,
-  RaidPeakCalculator,
-  RenownCalculator,
-} from "./RatingsCalculators"
+import { EvidenceBadge, EvidenceChart, GuildPeakCalculator, MasteryCalculator, PeakCalculator, RaidPeakCalculator } from "./RatingsCalculators"
 
 const PEAK = METRIC_THEMES.peak
 const MASTERY = METRIC_THEMES.mastery
@@ -77,7 +69,6 @@ export function RatingsFaqPage() {
               ["mastery-calculator", "Ranked Mastery"],
               ["peak-calculator", "Peak"],
               ["raid-peak-calculator", "Raid Peak"],
-              ["renown-calculator", "Renown"],
               ["guild-peak-calculator", "Guild Peak"],
             ].map(([id, label]) => (
               <a
@@ -241,12 +232,12 @@ export function RatingsFaqPage() {
             </Faq>
             <Faq q="How is it calculated?">
               <ul>
-                <li>Each boss is worth up to 100. The first kill earns 50, and returning keeps adding, with each kill adding less.</li>
-                <li>Each full clear of a raid adds 250.</li>
-                <li>Renown earns a title as it grows: Known, Respected, Celebrated, Exalted, and Legendary.</li>
+                <li>Every boss kill earns Renown, and bosses are weighted differently, so some are worth more than others.</li>
+                <li>Returning to a boss keeps adding Renown, with each repeat kill adding a little less.</li>
+                <li>Full clears of a raid add a bonus on top.</li>
               </ul>
+              <p>Renown only ever grows: it is your career total.</p>
             </Faq>
-            <RenownCalculator />
           </Section>
 
           <Section id="guilds" title="Guild ratings">

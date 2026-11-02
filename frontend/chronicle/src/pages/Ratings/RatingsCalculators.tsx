@@ -1,12 +1,11 @@
 import { useState, type ReactNode } from "react"
 import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { calculateMastery, calculateRenown, masteryCeiling, renownTitle } from "@/pages/ArmoryPage/overview/masteryRenownModel"
+import { calculateMastery, masteryCeiling } from "@/pages/ArmoryPage/overview/masteryRenownModel"
 import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes"
 
 const PEAK = METRIC_THEMES.peak
 const MASTERY = METRIC_THEMES.mastery
-const RENOWN = METRIC_THEMES.renown
 
 /** Kills per boss that end the Ranked Mastery discount. */
 export const FULL_EVIDENCE_KILLS = 5
@@ -287,36 +286,6 @@ export function RaidPeakCalculator({ bosses = 12 }: { bosses?: number }) {
               {average.toFixed(1)}.
             </p>
           )}
-        </>
-      }
-    />
-  )
-}
-
-/** Renown from bosses, kills, and full clears, with the title it earns. */
-export function RenownCalculator() {
-  const [bosses, setBosses] = useState(12)
-  const [killsPerBoss, setKillsPerBoss] = useState(8)
-  const [clears, setClears] = useState(6)
-  const renown = calculateRenown({ kills: bosses * killsPerBoss, bosses, completedRaids: clears })
-  return (
-    <CalculatorCard
-      id="renown-calculator"
-      title="Renown"
-      accent={RENOWN.accent}
-      description="Renown is your career total. Each boss is worth more the more often you return, with diminishing returns; full clears add a bonus."
-      inputs={
-        <>
-          <Slider label="Bosses killed" hint="distinct bosses" value={bosses} onChange={setBosses} min={1} max={40} accent={RENOWN.accent} />
-          <Slider label="Kills per boss" hint="on average" value={killsPerBoss} onChange={setKillsPerBoss} min={1} max={40} accent={RENOWN.accent} />
-          <Slider label="Full clears" hint="whole-raid runs" value={clears} onChange={setClears} min={0} max={40} accent={RENOWN.accent} />
-        </>
-      }
-      result={
-        <>
-          <ResultLine label="Renown" value={renown.toLocaleString()} strong color={RENOWN.accent} />
-          <ResultLine label="Title" value={renownTitle(renown)} />
-          <p className="mt-2 text-xs text-muted-foreground">Up to 100 per boss, plus 250 per full clear. Parses never change it.</p>
         </>
       }
     />

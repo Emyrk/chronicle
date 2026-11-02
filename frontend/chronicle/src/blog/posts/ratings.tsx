@@ -121,8 +121,8 @@ export function RatingsLaunchPost({ post }: PostProps) {
       <h2>How it all works</h2>
       <p>
         The <a href={FAQ}>ratings FAQ</a> explains each rating in detail, with worked examples and calculators you can
-        play with: see how Form and Floor move your Ranked Mastery, what a missing boss does to a raid Peak, and how
-        Renown grows.
+        play with: see how Form and Floor move your Ranked Mastery, how a new #1 moves your Peak, and what a missing
+        boss does to a raid Peak.
       </p>
       <p>
         <strong>Please share your feedback!</strong> The formulas may be tuned as more data comes in.
