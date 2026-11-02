@@ -1,4 +1,5 @@
 import { calculateMastery } from "@/pages/ArmoryPage/overview/masteryRenownModel"
+import { mockRealm, mockRealmSeed } from "./mockRealm"
 
 /**
  * Display-only mock data for the rating leaderboard design. Names, guilds, and
@@ -203,13 +204,15 @@ interface MockRatings {
   byBoss: Map<string, Map<string, MockBossResult>>
 }
 
-const cache = new Map<RatingPeriod, MockRatings>()
+const cache = new Map<string, MockRatings>()
 
+/** Ratings are per realm: each realm has its own players and results. */
 function mockRatings(period: RatingPeriod): MockRatings {
-  const hit = cache.get(period)
+  const key = `${mockRealm()}|${period}`
+  const hit = cache.get(key)
   if (hit) return hit
-  const rand = mulberry32(period === "180d" ? 1337 : 4242)
-  const players = buildPlayers(mulberry32(7))
+  const rand = mulberry32((period === "180d" ? 1337 : 4242) + mockRealmSeed())
+  const players = buildPlayers(mulberry32(7 + mockRealmSeed()))
   const byBoss = new Map<string, Map<string, MockBossResult>>()
   for (const boss of MOLTEN_CORE_BOSSES) {
     const results = new Map<string, MockBossResult>()
@@ -220,7 +223,7 @@ function mockRatings(period: RatingPeriod): MockRatings {
     byBoss.set(boss, results)
   }
   const out = { players: new Map(players.map((p) => [p.id, p])), byBoss }
-  cache.set(period, out)
+  cache.set(key, out)
   return out
 }
 

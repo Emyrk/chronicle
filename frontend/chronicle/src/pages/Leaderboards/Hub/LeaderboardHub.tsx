@@ -1,5 +1,5 @@
 import { Fragment, useState, type ReactNode } from "react"
-import { ArrowRight, Check, ChevronDown, ChevronLeft, HeartPulse, Swords, Timer, PanelLeft } from "lucide-react"
+import { ArrowRight, Check, ChevronDown, ChevronLeft, HeartPulse, Swords, Timer, PanelLeft, Globe } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import type { SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
@@ -22,6 +22,8 @@ import { PerformancesTab } from "./PerformancesTab"
 import { ParsingTab } from "./ParsingTab"
 import { RulesetInstanceView } from "@/pages/Leaderboards/RulesetInstanceView"
 import { FULL_CLEAR, type EncounterSelection } from "./encounterSelection"
+import { HUB_REALMS, useHubRealm } from "./hubRealm"
+import { setMockRealm } from "@/pages/Leaderboards/Ratings/mockRealm"
 import {
   bossSummaries,
   bossSummary,
@@ -47,6 +49,49 @@ import {
   type HubRole,
   type HubSubject,
 } from "./hub.fixtures"
+
+/**
+ * Realm switch. Ratings, runs, and parses are per realm, so it sits in the banner and scopes every
+ * tab; the choice is remembered per browser.
+ */
+export function RealmPicker({
+  realm,
+  realms,
+  onChange,
+  className,
+}: {
+  realm: string
+  realms: readonly string[]
+  onChange: (realm: string) => void
+  className?: string
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={`Realm: ${realm}`}
+        className={cn(
+          "flex h-9 cursor-pointer items-center gap-2 rounded-md border bg-background/60 pr-2 pl-2.5 text-left text-sm backdrop-blur-sm transition-colors outline-none hover:bg-white/5 focus-visible:border-ring",
+          className,
+        )}
+      >
+        <Globe className="size-4 text-muted-foreground" />
+        <span className="flex flex-col leading-tight">
+          <span className="text-[10px] tracking-wider text-muted-foreground uppercase">Realm</span>
+          <span className="font-medium">{realm}</span>
+        </span>
+        <ChevronDown className="ml-1 size-4 text-muted-foreground" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-44">
+        {realms.map((name) => (
+          <DropdownMenuItem key={name} onSelect={() => onChange(name)} className="cursor-pointer justify-between">
+            {name}
+            {name === realm && <Check className="size-4 text-primary" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 /** Remembers whether the encounter column is collapsed, per browser. */
 const ENCOUNTERS_KEY = "chronicle.leaderboards.hub.encounters"
@@ -82,6 +127,11 @@ export interface LeaderboardHubProps {
   /** Controlled tab, so the choice carries between the instance grid and the instance. */
   tab?: HubTab
   onTab?: (tab: HubTab) => void
+  /** Controlled realm (the app shares it with the instance grid); otherwise the page keeps its own. */
+  realm?: string
+  onRealm?: (realm: string) => void
+  /** Realm for a first visit with nothing stored (stories). */
+  initialRealm?: string
 }
 
 /**
@@ -103,7 +153,15 @@ export function LeaderboardHub({
   onSwitchInstance,
   tab: controlledTab,
   onTab,
+  realm: controlledRealm,
+  onRealm,
+  initialRealm,
 }: LeaderboardHubProps) {
+  // Ratings are per realm, so the realm scopes the whole page. Stored per browser.
+  const [ownRealm, setOwnRealm] = useHubRealm(HUB_REALMS, initialRealm)
+  const realm = controlledRealm ?? ownRealm
+  const setRealm = onRealm ?? setOwnRealm
+  setMockRealm(realm)
   const [selection, setSelection] = useState<EncounterSelection>(
     initialBosses ? { kind: "bosses", bosses: initialBosses } : initialScope.boss ? { kind: "bosses", bosses: [initialScope.boss] } : FULL_CLEAR,
   )
@@ -200,7 +258,7 @@ export function LeaderboardHub({
           >
             <img src={getInstanceBackground(instanceName)} alt="" className="absolute inset-0 h-full w-full object-cover opacity-60" />
             <div className="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-card/30" />
-            <div className="relative flex min-w-0 items-end gap-4 px-4 pt-6 pb-4 sm:px-6 sm:pt-10">
+            <div className="relative flex min-w-0 flex-wrap items-end gap-4 px-4 pt-6 pb-4 sm:px-6 sm:pt-10">
               <div className="min-w-0">
                 {/* Breadcrumb: the parent is the way back to the grid; the rest names the current scope. */}
                 <nav
@@ -237,6 +295,7 @@ export function LeaderboardHub({
                 <InstanceTitle instanceName={instanceName} instances={instances} onSwitch={onSwitchInstance} />
                 {set && <p className="mt-1 text-xs text-muted-foreground">Combined: {set.join(", ")} · ratings averaged, time is total kill time</p>}
               </div>
+              <RealmPicker realm={realm} realms={HUB_REALMS} onChange={setRealm} className="ml-auto" />
             </div>
             <nav className="relative flex overflow-x-auto border-t border-white/5 px-2 sm:px-4" aria-label="Leaderboard section">
               {TABS.map((t) => (
@@ -294,7 +353,8 @@ export function LeaderboardHub({
           </header>
 
           {/* Banner spans the page; below it, the site's encounter column sits beside the content. */}
-          <div className="flex flex-col gap-5 lg:flex-row lg:gap-0">
+          {/* Keyed by realm: every board below is that realm's, so a switch rebuilds them. */}
+          <div key={realm} className="flex flex-col gap-5 lg:flex-row lg:gap-0">
             {/* Rulesets describe the whole instance; encounter selection does not apply. */}
             {tab !== "rulesets" &&
               (encountersOpen ? (

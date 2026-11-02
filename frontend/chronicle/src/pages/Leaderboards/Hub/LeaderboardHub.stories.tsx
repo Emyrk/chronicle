@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom"
 import { expect, fireEvent, userEvent, within } from "storybook/test"
 import { LeaderboardHub } from "./LeaderboardHub"
 import { LeaderboardsHubApp } from "./HubLanding"
+import { REALM_KEY } from "./hubRealm"
 import supportedInstances from "./supportedInstances.fixture.json"
 import { instanceBosses, parseCohort, parseSpreads, timeParseCohort } from "./hub.fixtures"
 
@@ -324,6 +325,29 @@ export const AllInstances: StoryObj<typeof LeaderboardsHubApp> = {
     await expect(await canvas.findByRole("heading", { level: 1, name: "Molten Core" })).toBeInTheDocument()
     await userEvent.click(canvas.getByRole("button", { name: "Leaderboards" }))
     await expect(await canvas.findByRole("link", { name: /Zul'Gurub/ })).toBeInTheDocument()
+  },
+}
+
+/**
+ * Ratings are per realm: the banner's realm picker scopes every tab and the instance grid, and the
+ * choice is remembered in this browser for the next visit.
+ */
+export const RealmSwitch: StoryObj<typeof LeaderboardsHubApp> = {
+  render: () => <LeaderboardsHubApp initialInstance="Molten Core" initialTab="ratings" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const body = within(canvasElement.ownerDocument.body)
+    const leader = () => within(canvas.getByRole("region", { name: "Molten Core Overview leaderboard" })).getAllByRole("listitem")[0].textContent
+    const before = leader()
+    await userEvent.click(canvas.getByRole("button", { name: /^Realm: / }))
+    await userEvent.click(await body.findByRole("menuitem", { name: "Tel'Abim" }), { delay: 100 })
+    await expect(await canvas.findByRole("button", { name: "Realm: Tel'Abim" })).toBeInTheDocument()
+    await expect(leader()).not.toBe(before)
+    await expect(localStorage.getItem(REALM_KEY)).toBe("Tel'Abim")
+    // Back to the default so other stories start from it.
+    await userEvent.click(canvas.getByRole("button", { name: "Realm: Tel'Abim" }))
+    await userEvent.click(await body.findByRole("menuitem", { name: "Nordanaar" }), { delay: 100 })
+    await expect(await canvas.findByRole("button", { name: "Realm: Nordanaar" })).toBeInTheDocument()
   },
 }
 

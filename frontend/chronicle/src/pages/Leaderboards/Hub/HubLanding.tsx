@@ -6,7 +6,9 @@ import { InstanceCard } from "@/pages/Rankings/InstanceCard"
 import { RATING_METRICS } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { formatClock, instanceHeadlines, specStanding, type HubPlayer, type InstanceHeadline } from "./hub.fixtures"
-import { LeaderboardHub, type LeaderboardHubProps } from "./LeaderboardHub"
+import { LeaderboardHub, RealmPicker, type LeaderboardHubProps } from "./LeaderboardHub"
+import { HUB_REALMS, useHubRealm } from "./hubRealm"
+import { setMockRealm } from "@/pages/Leaderboards/Ratings/mockRealm"
 import { TABS, type HubTab } from "./hubTabs"
 import { RulesetsLanding } from "@/pages/Leaderboards/RulesetsLanding"
 
@@ -23,6 +25,9 @@ export function LeaderboardsHubApp({
 }: Omit<LeaderboardHubProps, "instanceName" | "onAllInstances" | "tab" | "onTab"> & { initialInstance?: string }) {
   const [instance, setInstance] = useState(initialInstance)
   const [tab, setTab] = useState<HubTab>(initialTab)
+  // One realm for the grid and every instance, remembered per browser.
+  const [realm, setRealm] = useHubRealm(HUB_REALMS, hub.initialRealm)
+  setMockRealm(realm)
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       {/* The grid has no banner, so it carries the tabs; an open instance shows them in its banner. */}
@@ -48,6 +53,7 @@ export function LeaderboardsHubApp({
                 </button>
               ))}
             </nav>
+            <RealmPicker realm={realm} realms={HUB_REALMS} onChange={setRealm} className="my-1.5 ml-2 shrink-0" />
           </div>
         </div>
       )}
@@ -58,11 +64,13 @@ export function LeaderboardsHubApp({
           tab={tab}
           onTab={setTab}
           onAllInstances={() => setInstance(undefined)}
+          realm={realm}
+          onRealm={setRealm}
           instances={instanceHeadlines().map((i) => i.name)}
           onSwitchInstance={setInstance}
         />
       ) : (
-        <HubLanding tab={tab} onOpen={setInstance} />
+        <HubLanding key={realm} tab={tab} onOpen={setInstance} />
       )}
     </div>
   )
