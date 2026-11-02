@@ -407,6 +407,17 @@ export interface AdminRatingGroupsResponse {
 }
 
 // From chroniclesdk/admin_ratings.go
+/**
+ * AdminRatingJobResponse reports an accepted River job. When unique_skipped_as_duplicate
+ * is true, job_id identifies the existing queued or running job, not a new job.
+ */
+export interface AdminRatingJobResponse {
+    readonly job_id: number;
+    readonly job_state: string;
+    readonly unique_skipped_as_duplicate: boolean;
+}
+
+// From chroniclesdk/admin_ratings.go
 export interface AdminRatingPoliciesResponse {
     readonly policies: readonly AdminRatingGroupPolicy[];
 }
