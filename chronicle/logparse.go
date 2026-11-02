@@ -929,6 +929,13 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 					return err
 				}
+				// Keep the same lock order as refresh and deletion before writing
+				// rankings, so concurrent fact repair cannot deadlock this parse.
+				if publicLog {
+					if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
+						return err
+					}
+				}
 				if playerRankings {
 					if err := insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, resolved.DatasetID, flavor, talentTreeData); err != nil {
 						return err
@@ -942,9 +949,6 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				}
 				// Record earned credit at parse time. Async ranking-run refresh
 				// remains an idempotent repair; deletion holds the same lock.
-				if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
-					return err
-				}
 				sources, err := tx.RankingRunSources(ctx, rankingRunAffectedIDs)
 				if err != nil {
 					return err
