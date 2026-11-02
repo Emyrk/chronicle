@@ -13,6 +13,21 @@ export interface OperationsInstance {
   count: number;
 }
 
+export interface UIUsageItem {
+  name: string;
+  count: number;
+}
+
+export interface DeviceUIUsage {
+  available: boolean;
+  panelViews24h: number;
+  panelChoices24h: number;
+  presetViews24h: number;
+  topPanels: UIUsageItem[];
+  topChoices: UIUsageItem[];
+  topPresets: UIUsageItem[];
+}
+
 export interface DeviceOperations {
   status: "healthy" | "degraded" | "down";
   healthyReplicas: number;
@@ -40,6 +55,7 @@ export interface DeviceOperations {
     refreshAttempts24h: number;
     deletions24h: number;
   };
+  uiUsage: DeviceUIUsage;
   parsing: {
     instances24h: number;
     lines24h: number;
@@ -253,6 +269,25 @@ function queueName(name: string): string {
   return labels[name] ?? name;
 }
 
+function uiUsageValue(
+  samples: PrometheusVectorSample[],
+  kind: string
+): number {
+  const sample = samples.find((candidate) => candidate.metric.kind === kind);
+  return Math.round(Number(sample?.value[1]) || 0);
+}
+
+function uiUsageItems(
+  samples: PrometheusVectorSample[],
+  kind: string,
+  label: "panel" | "preset"
+): UIUsageItem[] {
+  return samples.filter((sample) => sample.metric.kind === kind).map((sample) => ({
+    name: sample.metric[label] ?? "unknown",
+    count: Math.round(Number(sample.value[1]) || 0),
+  })).sort((a, b) => b.count - a.count);
+}
+
 async function mapInBatches<T, U>(
   values: T[],
   batchSize: number,
@@ -315,12 +350,27 @@ export async function fetchDeviceOperations(env: Env): Promise<DeviceOperations>
     sampleValue(scalarResults[index]),
   ])) as Record<keyof typeof queries, number>;
 
-  const [topInstances, queueJobs, queueAges, requestTrend, encounterTrend] = await Promise.all([
+  const [
+    topInstances,
+    queueJobs,
+    queueAges,
+    requestTrend,
+    encounterTrend,
+    uiUsage,
+  ] = await Promise.all([
     instant(env, "topk(5, sum by (instance_name) (increase(chronicle_logparse_instance_duration_seconds_count[24h])))"),
     instant(env, "max by (queue, state) (chronicle_river_queue_jobs)"),
     instant(env, "max by (queue) (chronicle_river_queue_oldest_job_age_seconds{state=~\"available|pending|retryable\"})"),
     range(env, "sum(increase(chronicle_api_requests_processed_total[1d]))", now - 6 * day, now, day),
     range(env, "sum(increase(chronicle_logparse_encounters_parsed_total[1d]))", now - 6 * day, now, day),
+    instant(env, [
+      'label_replace(sum(increase(chronicle_ui_panel_views_total[24h])), "kind", "panel_views_total", "", ".*")',
+      'label_replace(sum(increase(chronicle_ui_panel_choices_total[24h])), "kind", "panel_choices_total", "", ".*")',
+      'label_replace(sum(increase(chronicle_ui_preset_views_total[24h])), "kind", "preset_views_total", "", ".*")',
+      'label_replace(topk(12, sum by (panel) (increase(chronicle_ui_panel_views_total[24h]))), "kind", "top_panels", "", ".*")',
+      'label_replace(topk(6, sum by (panel) (increase(chronicle_ui_panel_choices_total[24h]))), "kind", "top_choices", "", ".*")',
+      'label_replace(topk(6, sum by (preset) (increase(chronicle_ui_preset_views_total[24h]))), "kind", "top_presets", "", ".*")',
+    ].join(" or ")),
   ]);
 
   const queues = new Map<string, OperationsQueue>();
@@ -381,6 +431,15 @@ export async function fetchDeviceOperations(env: Env): Promise<DeviceOperations>
       refreshErrors24h: Math.round(values.refreshErrors),
       refreshAttempts24h: Math.round(values.refreshAttempts),
       deletions24h: Math.round(values.deletions),
+    },
+    uiUsage: {
+      available: uiUsage.length > 0,
+      panelViews24h: uiUsageValue(uiUsage, "panel_views_total"),
+      panelChoices24h: uiUsageValue(uiUsage, "panel_choices_total"),
+      presetViews24h: uiUsageValue(uiUsage, "preset_views_total"),
+      topPanels: uiUsageItems(uiUsage, "top_panels", "panel"),
+      topChoices: uiUsageItems(uiUsage, "top_choices", "panel"),
+      topPresets: uiUsageItems(uiUsage, "top_presets", "preset"),
     },
     parsing: {
       instances24h: Math.round(values.instances),

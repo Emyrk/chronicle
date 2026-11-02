@@ -32,6 +32,7 @@ export function SpecView({
   playerSubSpec,
   onSelectBoss,
   onSelectSpec,
+  hideClassFilter = false,
 }: {
   instanceName: string
   bosses: readonly string[]
@@ -46,6 +47,8 @@ export function SpecView({
   playerSubSpec: string
   onSelectBoss: (boss: string) => void
   onSelectSpec: (changes: { class?: string; spec?: string; sub_spec?: string }) => void
+  /** Hide the class/spec chips when a page-level picker already chooses them. */
+  hideClassFilter?: boolean
 }) {
   const metricLabel = metric.toUpperCase()
   const specMode = cohortMode === "spec"
@@ -101,17 +104,19 @@ export function SpecView({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border bg-card p-3 sm:p-4">
-        <ClassSpecFilter
-          selectedClass={playerClass || null}
-          selectedSpec={playerSpec || null}
-          selectedSubSpec={subSpec || null}
-          options={options}
-          onClassSelect={(cls) => onSelectSpec({ class: cls ?? "", spec: "", sub_spec: "" })}
-          onSpecSelect={(spec) => onSelectSpec({ spec: spec ?? "", sub_spec: "" })}
-          onSubSpecSelect={(value) => onSelectSpec({ sub_spec: value ?? "" })}
-        />
-      </div>
+      {!hideClassFilter && (
+        <div className="rounded-xl border bg-card p-3 sm:p-4">
+          <ClassSpecFilter
+            selectedClass={playerClass || null}
+            selectedSpec={playerSpec || null}
+            selectedSubSpec={subSpec || null}
+            options={options}
+            onClassSelect={(cls) => onSelectSpec({ class: cls ?? "", spec: "", sub_spec: "" })}
+            onSpecSelect={(spec) => onSelectSpec({ spec: spec ?? "", sub_spec: "" })}
+            onSubSpecSelect={(value) => onSelectSpec({ sub_spec: value ?? "" })}
+          />
+        </div>
+      )}
 
       {!ready ? (
         <SpecPicker

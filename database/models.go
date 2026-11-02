@@ -1724,6 +1724,7 @@ type InferenceRun struct {
 	Debug          bool               `db:"debug" json:"debug"`
 	IterationCount int32              `db:"iteration_count" json:"iteration_count"`
 	ToolCallCount  int32              `db:"tool_call_count" json:"tool_call_count"`
+	WebSearch      bool               `db:"web_search" json:"web_search"`
 }
 
 type InferenceThread struct {
@@ -2441,7 +2442,8 @@ type SidekickWowDirectory struct {
 	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	ID            pgtype.Text        `db:"id" json:"id"`
-	GameFormat    string             `db:"game_format" json:"game_format"`
+	LogFormat     string             `db:"log_format" json:"log_format"`
+	Inspection    []byte             `db:"inspection" json:"inspection"`
 }
 
 type SiteConfig struct {

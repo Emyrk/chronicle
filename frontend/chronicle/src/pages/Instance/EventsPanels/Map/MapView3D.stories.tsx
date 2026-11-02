@@ -13,7 +13,7 @@ import type { InstanceUnit, KillType, WoWHeroClasses } from "@/api/typesGenerate
 import type { WoWSpell } from "@/api/wowdb";
 import type { WowMapInstance, WowMapManifest, WowMapMeshInstance } from "@/pages/Technical/mapGallery";
 import type { PanelContext } from "../types";
-import { fetchMiniatureUrls } from "./bossMinis";
+import { fetchUnitModelUrls, type PublishedUnitModelUrls } from "./bossMinis";
 import { dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
 import type { MapHealthSample, MapPositionSample, MapResult } from "./map.processor";
 import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt, renderedDungeonMapPoint, selectHealthBars, unitFocusBounds, type MapPoint } from "./mapModel";
@@ -698,12 +698,12 @@ const STORY_BOSSES = [
 const BOSS_ENTRIES = STORY_BOSSES.map(({ entry }) => entry);
 const BOSS_MINI_VIEW = { viewport: { centerX: 0.5, centerY: 0.5, zoom: 3 }, key: "manifest-miniatures" };
 
-function useStoryMiniatureUrls(): ReadonlyMap<number, string> | undefined {
+function useStoryUnitModelUrls(): PublishedUnitModelUrls | undefined {
   return useQuery({
-    queryKey: ["unit-miniatures"],
+    queryKey: ["unit-models"],
     staleTime: 60 * 60 * 1000,
     retry: false,
-    queryFn: () => fetchMiniatureUrls(),
+    queryFn: () => fetchUnitModelUrls(),
   }).data;
 }
 
@@ -744,7 +744,7 @@ function bossMiniEffects(): EncounterEffects {
 }
 
 function BossMiniReplay({ playbackSpeed }: { playbackSpeed: number }) {
-  const miniatureUrls = useStoryMiniatureUrls();
+  const unitModelUrls = useStoryUnitModelUrls();
   const [fx] = useState(bossMiniEffects);
   const [cursorMs, setCursorMs] = useState(0);
 
@@ -764,7 +764,7 @@ function BossMiniReplay({ playbackSpeed }: { playbackSpeed: number }) {
         playbackSpeed={playbackSpeed}
         view={BOSS_MINI_VIEW}
         effects={fx}
-        miniatureUrls={miniatureUrls}
+        unitModelUrls={unitModelUrls}
         onUnavailable={() => console.warn("WebGL unavailable")}
       />
     </div>
@@ -891,7 +891,7 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
   captureWalkStartGuid?: string;
   captureWalkLookAtGuid?: string;
 }) {
-  const miniatureUrls = useStoryMiniatureUrls();
+  const unitModelUrls = useStoryUnitModelUrls();
   const { instance } = fixture.props.context;
   const sync = useSyncModeContext();
   const { enabled, isPlaying, currentTimestamp, enable, setEncounterBounds, setTimestamp, play, pause } = sync;
@@ -1042,7 +1042,7 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
           effects={scene.effects}
           bossGuids={scene.bossGuids}
           tankGuids={scene.tankGuids}
-          miniatureUrls={miniatureUrls}
+          unitModelUrls={unitModelUrls}
           onUnavailable={() => console.warn("WebGL unavailable")}
           dungeonMesh={dungeonMesh}
           onDungeonMeshState={setMeshState}

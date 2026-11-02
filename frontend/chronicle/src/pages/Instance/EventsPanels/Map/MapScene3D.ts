@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { MeshBVH } from "three-mesh-bvh";
 import { mapAssetUrl, type WowMapFloorBounds, type WowMapLayer, type WowMapMeshLiquid } from "@/pages/Technical/mapGallery";
 import type { MapCameraPose } from "./cameraPath";
@@ -48,10 +49,11 @@ import {
 } from "./dungeonMeshes";
 import { MAP_CURSOR, MAP_HOSTILE_CURSOR, MAP_UNIT_CURSOR } from "./mapCursors";
 import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, topDownMapDistance, type MapPoint, type MapViewport } from "./mapModel";
-import { deepBreathLaneForSpell, extendedDeepBreathLane } from "./deepBreathLanes";
-import { projectMapDebugPath, type MapDebugOverlay } from "./mapDebugOverlays";
+import { deepBreathPathForPrimarySpell, ONYXIA_DEEP_BREATH_RADIUS_YARDS } from "./deepBreathLanes";
+import { projectMapDebugPoints, type MapDebugOverlay } from "./mapDebugOverlays";
 import {
   DEFAULT_EFFECT_OPTIONS,
+  DEEP_BREATH_POINT_LINGER_MS,
   deriveActiveDeepBreaths,
   deriveActiveEffects,
   deriveCastIcons,
@@ -75,6 +77,7 @@ import {
 } from "./replayEffects";
 import { deadUnitVisualState } from "./mapDeathVisibility";
 import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene";
+import { publishedModelGeometryScale, publishedModelGroupScale } from "./modelSizing";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
 export const GROUND_WIDTH = 100;
@@ -90,7 +93,9 @@ const MAX_EXTRAPOLATE_MS = 250;
 const BEAM_HEIGHT = 1.5;
 const BOLT_WIDTH = 0.18;
 const DEBUG_PATH_SEGMENT_YARDS = 4;
-const DEEP_BREATH_WIDTH_YARDS = 18;
+const MAX_DEEP_BREATH_POINTS = 20;
+const DEEP_BREATH_AREA_OPACITY = 0.12;
+const DEEP_BREATH_POINT_SIZE_PX = 7;
 const DEEP_BREATH_GROUND_LIFT = 0.12;
 // How far a melee attacker steps toward its target, at most.
 const LUNGE_DISTANCE = 1.2;
@@ -146,9 +151,8 @@ const CAST_ARC_SIZE = 1.25;
 const MAX_ICON_TEXTURES = 128;
 // A failed icon load is retried after this long (real time).
 const ICON_RETRY_MS = 30_000;
-// Boss minis have a 1-unit footprint; scaled a little wider than the 1.8-unit
-// hostile box so they read at boss-fight zoom.
-const BOSS_MINI_SIZE = 2.6;
+// Published tabletop models have a 1-unit footprint; modelSizing scales them
+// a little wider than the 1.8-unit hostile box so they read at boss-fight zoom.
 // The minis face +z (glTF front); the facing cone and WoW facing use -z.
 const BOSS_MINI_YAW = Math.PI;
 // Gap between the top of a boss mini and its health bar.
@@ -180,9 +184,8 @@ const FLAT_PLAYER_TOKEN_DIAMETER_YARDS = 1.25;
 // (constant on-screen) size, so the raid stays visible without being giants
 // at Fit.
 const MESH_MIN_SCREEN_SCALE = 0.5;
-// Boss minis are this many times a player's true scale on the mesh, so Kresh
-// (a 2.6-unit footprint) comes out around 4.5 yd across. Guardians (pets,
-// totems) keep a player's scale: they stand on their own small chip.
+// Legacy fallback for published models without a client-derived world height.
+// Guardians (pets, totems) keep a player's scale: they stand on their chip.
 const MESH_BOSS_SCALE = 2.5;
 // A guardian's model is grown to at least this tall (geometry units; a
 // player capsule is 3), so a totem published at its true, tiny size reads.
@@ -371,6 +374,12 @@ export interface MapScene3DUnit {
   health: MapUnitHealth | null;
   /** Published model URL from the shared miniature manifest. */
   miniatureUrl: string | undefined;
+  /** The published model is an original game model. */
+  gameModel?: boolean;
+  /** Manual size multiplier configured in the Miniature Foundry. */
+  mapScale?: number;
+  /** Client-derived standing height in world yards. */
+  worldHeight?: number;
   /** Logged world height (yards), when the log has one; picks the floor on the mesh. */
   z?: number;
   /** The token's icon (a player's class, a pet's paw), or null for none. */
@@ -436,8 +445,8 @@ interface UnitToken {
 
 interface BossMini {
   geometry: THREE.BufferGeometry;
-  /** The model's own material when it has a base-colour texture; cloned per unit. */
-  material: THREE.MeshStandardMaterial | null;
+  /** The model's own materials when every primitive has a base-colour texture; cloned per unit. */
+  materials: THREE.MeshStandardMaterial[] | null;
   /** Health bar height, above the model's bounding box. */
   barHeight: number;
   /** Hover label height, the same distance above the bar as for primitives. */
@@ -449,8 +458,9 @@ interface BossMini {
 interface UnitObject {
   group: THREE.Group;
   body: THREE.Mesh;
-  // Lambert with the unit's tint, or a textured mini's cloned material.
+  // Lambert with the unit's tint, or a textured model's cloned materials.
   bodyMaterial: THREE.MeshLambertMaterial | THREE.MeshStandardMaterial;
+  bodyMaterials: (THREE.MeshLambertMaterial | THREE.MeshStandardMaterial)[];
   textured: boolean;
   /** The facing notch (diamonds too, for bosses), turning with the unit. */
   coneMaterial: THREE.MeshBasicMaterial;
@@ -483,8 +493,12 @@ interface UnitObject {
   /** Logged world height (yards), or undefined when the log has none. */
   loggedZ: number | undefined;
   health: MapUnitHealth | null;
-  /** Published miniature URL; the primitive shows until it loads. */
+  /** Published miniature or original-model URL; the primitive shows until it loads. */
   miniatureUrl: string | undefined;
+  gameModel: boolean;
+  mapScale: number;
+  /** Client-derived standing height in world yards. */
+  worldHeight: number | undefined;
   barHeight: number;
   labelHeight: number;
   deadLift: number;
@@ -496,6 +510,8 @@ interface UnitObject {
 }
 
 export interface MapScene3DEffects {
+  /** Active server world map, used to gate encounter-specific effects. */
+  mapId: number | undefined;
   fx: EncounterEffects | null;
   /** `visibleGuids` is ignored: the scene limits effects to its own units. */
   options: DeriveEffectsOptions;
@@ -783,6 +799,8 @@ export class MapScene3D {
   // The camera's viewport when the user's current gesture began.
   private gestureStart: MapViewport | null = null;
   private unitScale = 1;
+  /** Scene units per world yard, when the active map is calibrated. */
+  private worldUnitScale: number | null = null;
   private chipScale = 1;
   private frame = 0;
   private disposed = false;
@@ -848,10 +866,13 @@ export class MapScene3D {
   private effectCursorMs = 0;
   private readonly activeEffects: ActiveEffect[] = [];
   private readonly activeDeepBreaths: ActiveDeepBreath[] = [];
-  // The lane of the breath being drawn, fixed when it starts: Onyxia keeps
-  // flying and turning afterwards, but the fire stays where she breathed.
-  private deepBreathLaneLock: { routeSpellId: number; startMs: number; dx: number; dz: number; laneX: number; laneZ: number; length: number; floorY: number } | null = null;
-  private readonly deepBreathLane: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  // The server path being drawn, fixed when it starts: Onyxia keeps flying and
+  // turning afterwards, but the ground-target sequence stays in room space.
+  private deepBreathPathLock: { primarySpellId: number; startMs: number } | null = null;
+  private readonly deepBreathAreaPositions: THREE.Vector3[] = [];
+  private readonly deepBreathAreas: THREE.InstancedMesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>;
+  private readonly deepBreathLine: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  private readonly deepBreathPoints: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
   private readonly effectOptions: DeriveEffectsOptions = { ...DEFAULT_EFFECT_OPTIONS };
   private readonly visibleUnits = { has: (guid: string) => this.units.has(guid) };
   private readonly effectColors = new Map<string, THREE.Color>();
@@ -1045,19 +1066,53 @@ export class MapScene3D {
       glow(),
       MAX_EFFECT_PRIMITIVES,
     );
-    const breathMaterial = new THREE.MeshBasicMaterial({
-      color: 0xff6a00,
-      transparent: true,
-      opacity: 0.55,
-      blending: THREE.AdditiveBlending,
-      depthTest: false,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-    this.deepBreathLane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), breathMaterial);
-    this.deepBreathLane.visible = false;
-    this.deepBreathLane.frustumCulled = false;
-    this.deepBreathLane.renderOrder = 2;
+    this.deepBreathAreas = new THREE.InstancedMesh(
+      new THREE.CircleGeometry(1, 64).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({
+        color: 0xff6a00,
+        transparent: true,
+        opacity: DEEP_BREATH_AREA_OPACITY,
+        depthTest: false,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+      MAX_DEEP_BREATH_POINTS,
+    );
+    this.deepBreathAreas.count = 0;
+    this.deepBreathAreas.visible = false;
+    this.deepBreathAreas.frustumCulled = false;
+    this.deepBreathAreas.renderOrder = 1;
+    this.deepBreathAreas.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.deepBreathLine = new THREE.Line(
+      new THREE.BufferGeometry(),
+      new THREE.LineBasicMaterial({
+        color: 0xff6a00,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+      }),
+    );
+    this.deepBreathLine.visible = false;
+    this.deepBreathLine.frustumCulled = false;
+    this.deepBreathLine.renderOrder = 2;
+    this.deepBreathPoints = new THREE.Points(
+      new THREE.BufferGeometry(),
+      new THREE.PointsMaterial({
+        color: 0xffa040,
+        size: DEEP_BREATH_POINT_SIZE_PX,
+        sizeAttenuation: false,
+        transparent: true,
+        opacity: 0.95,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+      }),
+    );
+    this.deepBreathPoints.visible = false;
+    this.deepBreathPoints.frustumCulled = false;
+    this.deepBreathPoints.renderOrder = 3;
     // Health bars: camera-facing quads drawn over everything, in instance order.
     this.bars = this.createPool(
       new THREE.PlaneGeometry(1, 1),
@@ -1070,7 +1125,9 @@ export class MapScene3D {
       this.rings,
       this.bolts,
       this.slashes,
-      this.deepBreathLane,
+      this.deepBreathAreas,
+      this.deepBreathLine,
+      this.deepBreathPoints,
       this.bars,
     );
     for (let index = 0; index < MAX_COMBAT_TEXT; index++) {
@@ -1229,7 +1286,7 @@ export class MapScene3D {
     for (const unit of units) {
       seen.add(unit.guid);
       let object = this.units.get(unit.guid);
-      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl)) {
+      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl || object.gameModel !== Boolean(unit.gameModel) || object.mapScale !== (unit.mapScale ?? 1) || object.worldHeight !== unit.worldHeight)) {
         this.removeUnit(unit.guid);
         object = undefined;
       }
@@ -1260,10 +1317,11 @@ export class MapScene3D {
       object.group.scale.setScalar(this.scaleOf(object));
       this.layoutDrop(object);
       const opacity = unit.muted ? MUTED_OPACITY : 1;
-      for (const material of [object.bodyMaterial, object.coneMaterial]) {
+      for (const material of object.bodyMaterials) {
         material.opacity = opacity;
-        material.depthWrite = !unit.muted && material === object.bodyMaterial && object.mini;
+        material.depthWrite = !unit.muted && object.mini;
       }
+      object.coneMaterial.opacity = opacity;
       object.token.shadow.material.opacity = opacity;
       object.token.edge.material.opacity = opacity;
       setBodyColor(object);
@@ -1306,34 +1364,44 @@ export class MapScene3D {
     if (!dungeon) return;
     for (const overlay of this.debugOverlays) {
       if (overlay.kind !== "path") continue;
-      const projected = projectMapDebugPath(overlay, dungeon.bounds, this.aspect, GROUND_WIDTH);
-      if (!projected) continue;
-      // A single room-sized plane disappears below Onyxia's uneven floor except
-      // near its centre. Build short independently height-probed strips so the
-      // fixed footprint follows the mesh and remains visible end to end.
-      const segmentCount = Math.max(1, Math.ceil(projected.length / (DEBUG_PATH_SEGMENT_YARDS * dungeon.scale)));
-      const segmentLength = projected.length / segmentCount;
-      const yaw = Math.atan2(-projected.direction.x, -projected.direction.z);
-      for (let index = 0; index < segmentCount; index++) {
-        const distance = segmentLength * (index + 0.5);
-        const x = projected.from.x + projected.direction.x * distance;
-        const z = projected.from.z + projected.direction.z * distance;
-        const floor = this.floorHeights.heightAt(`debug-overlay-${overlay.id}-${index}`, x, z);
-        const material = new THREE.MeshBasicMaterial({
-          color: overlay.color,
-          transparent: true,
-          opacity: overlay.opacity,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          side: THREE.DoubleSide,
-        });
-        const path = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material);
-        path.position.set(x, floor + DEEP_BREATH_GROUND_LIFT * dungeon.scale, z);
-        path.rotation.y = yaw;
-        path.scale.set(overlay.widthYards * dungeon.scale, 1, segmentLength * 1.05);
-        path.renderOrder = 2;
-        path.userData.debugOverlayId = overlay.id;
-        this.debugOverlayGroup.add(path);
+      const projected = projectMapDebugPoints(overlay.points, overlay.mapId, dungeon.bounds, this.aspect, GROUND_WIDTH);
+      if (projected.length < 2) continue;
+      // Independently height-probe short strips along every polyline segment so
+      // non-straight server paths follow both their exact centerline and the mesh.
+      let stripIndex = 0;
+      for (let pointIndex = 1; pointIndex < projected.length; pointIndex++) {
+        const from = projected[pointIndex - 1];
+        const to = projected[pointIndex];
+        const dx = to.x - from.x;
+        const dz = to.z - from.z;
+        const length = Math.hypot(dx, dz);
+        if (length <= 1e-4) continue;
+        const directionX = dx / length;
+        const directionZ = dz / length;
+        const stripCount = Math.max(1, Math.ceil(length / (DEBUG_PATH_SEGMENT_YARDS * dungeon.scale)));
+        const stripLength = length / stripCount;
+        const yaw = Math.atan2(-directionX, -directionZ);
+        for (let index = 0; index < stripCount; index++, stripIndex++) {
+          const distance = stripLength * (index + 0.5);
+          const x = from.x + directionX * distance;
+          const z = from.z + directionZ * distance;
+          const floor = this.floorHeights.heightAt(`debug-overlay-${overlay.id}-${stripIndex}`, x, z);
+          const material = new THREE.MeshBasicMaterial({
+            color: overlay.color,
+            transparent: true,
+            opacity: overlay.opacity,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+          });
+          const path = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material);
+          path.position.set(x, floor + DEEP_BREATH_GROUND_LIFT * dungeon.scale, z);
+          path.rotation.y = yaw;
+          path.scale.set(overlay.widthYards * dungeon.scale, 1, stripLength * 1.05);
+          path.renderOrder = 2;
+          path.userData.debugOverlayId = overlay.id;
+          this.debugOverlayGroup.add(path);
+        }
       }
     }
   }
@@ -1595,8 +1663,10 @@ export class MapScene3D {
       : this.dungeonMesh ? Math.max(trueScale, MESH_MIN_SCREEN_SCALE * screenScale)
       : trueScale;
     const scale = baseScale * this.chipScale;
-    if (scale === this.unitScale && !force) return;
+    const worldScale = yards === null ? null : yards * this.chipScale;
+    if (scale === this.unitScale && worldScale === this.worldUnitScale && !force) return;
     this.unitScale = scale;
+    this.worldUnitScale = worldScale;
     for (const object of this.units.values()) {
       object.group.scale.setScalar(this.scaleOf(object));
       this.layoutDrop(object);
@@ -1605,9 +1675,10 @@ export class MapScene3D {
     this.updateLabel();
   }
 
-  // Models (bosses, adds) stand larger than players on the mesh; guardians'
-  // models stand on their chip at a player's scale, like everything else.
+  // Client-sized models use true world yards on calibrated maps. On artwork
+  // without yard calibration, keep the old readable baseline instead.
   private scaleOf(object: UnitObject): number {
+    if (object.worldHeight !== undefined) return publishedModelGroupScale(object.worldHeight, this.worldUnitScale, this.unitScale);
     return this.dungeonMesh && object.miniatureUrl && object.kind !== "pet" ? this.unitScale * MESH_BOSS_SCALE : this.unitScale;
   }
 
@@ -2090,8 +2161,10 @@ export class MapScene3D {
     for (const geometry of Object.values(this.geometries)) geometry.dispose();
     for (const mini of this.bossMinis.values()) {
       mini?.geometry.dispose();
-      mini?.material?.map?.dispose();
-      mini?.material?.dispose();
+      for (const material of new Set(mini?.materials ?? [])) {
+        material.map?.dispose();
+        material.dispose();
+      }
     }
     this.beams.geometry.dispose();
     this.beams.material.dispose();
@@ -2099,8 +2172,13 @@ export class MapScene3D {
     this.ownerLines.material.dispose();
     this.trailLines.geometry.dispose();
     this.trailLines.material.dispose();
-    this.deepBreathLane.geometry.dispose();
-    this.deepBreathLane.material.dispose();
+    this.deepBreathAreas.geometry.dispose();
+    this.deepBreathAreas.material.dispose();
+    this.deepBreathAreas.dispose();
+    this.deepBreathLine.geometry.dispose();
+    this.deepBreathLine.material.dispose();
+    this.deepBreathPoints.geometry.dispose();
+    this.deepBreathPoints.material.dispose();
     for (const pool of [this.rings, this.bolts, this.slashes, this.bars]) {
       pool.geometry.dispose();
       pool.material.dispose();
@@ -2176,6 +2254,7 @@ export class MapScene3D {
       group,
       body,
       bodyMaterial,
+      bodyMaterials: [bodyMaterial],
       coneMaterial,
       cone,
       token: { radius, face, edge, shadow, halo, pin, arc, debuff, columns, column, columnTrack, power, powerTrack, ticks, sigil: null, chip: null, bossSpire },
@@ -2200,6 +2279,9 @@ export class MapScene3D {
       loggedZ: unit.z,
       health: unit.health,
       miniatureUrl: unit.miniatureUrl,
+      gameModel: Boolean(unit.gameModel),
+      mapScale: unit.mapScale ?? 1,
+      worldHeight: unit.worldHeight,
       barHeight: BAR_HEIGHT,
       labelHeight: LABEL_HEIGHT,
       deadLift: DEAD_LIFT,
@@ -2211,7 +2293,7 @@ export class MapScene3D {
     group.scale.setScalar(this.scaleOf(object));
     this.units.set(unit.guid, object);
     if (object.miniatureUrl) {
-      const mini = this.requestBossMini(object.miniatureUrl);
+      const mini = this.requestBossMini(object.miniatureUrl, object.gameModel, object.mapScale, object.worldHeight);
       if (mini) this.applyBossMini(object, mini);
     }
     return object;
@@ -2273,21 +2355,24 @@ export class MapScene3D {
     object.bodyMaterial.color.setHex(object.boss && object.dead ? 0x777777 : 0xffffff);
   }
 
-  // Returns the published miniature if loaded, starting its load on first use.
-  private requestBossMini(url: string): BossMini | null {
-    if (this.bossMinis.has(url)) return this.bossMinis.get(url) ?? null;
-    this.bossMinis.set(url, null);
-    void this.loadBossMiniCandidate(url).then((mini) => {
+  // Returns the published unit model if loaded, starting its load on first use.
+  private requestBossMini(url: string, gameModel: boolean, mapScale: number, worldHeight?: number): BossMini | null {
+    const cacheKey = `${gameModel ? "game" : "miniature"}:${worldHeight ?? "baseline"}:${mapScale}:${url}`;
+    if (this.bossMinis.has(cacheKey)) return this.bossMinis.get(cacheKey) ?? null;
+    this.bossMinis.set(cacheKey, null);
+    void this.loadBossMiniCandidate(url, gameModel, mapScale, worldHeight).then((mini) => {
       if (!mini) return;
       if (this.disposed) {
         mini.geometry.dispose();
-        mini.material?.map?.dispose();
-        mini.material?.dispose();
+        for (const material of new Set(mini.materials ?? [])) {
+          material.map?.dispose();
+          material.dispose();
+        }
         return;
       }
-      this.bossMinis.set(url, mini);
+      this.bossMinis.set(cacheKey, mini);
       for (const object of this.units.values()) {
-        if (object.miniatureUrl === url) this.applyBossMini(object, mini);
+        if (object.miniatureUrl === url && object.gameModel === gameModel && object.mapScale === mapScale && object.worldHeight === worldHeight) this.applyBossMini(object, mini);
       }
       this.updateLabel();
       this.requestRender();
@@ -2295,48 +2380,102 @@ export class MapScene3D {
     return null;
   }
 
-  // Loads a published mini's first mesh as plain float geometry, sized and
-  // turned to face -z, keeping its material only if it has a base-colour texture.
-  private async loadBossMiniCandidate(url: string): Promise<BossMini | null> {
+  // Loads every primitive in a published model as plain float geometry, sized
+  // and turned to face -z. Original models commonly split their creature skin
+  // across several materials, so preserve a material group for each primitive.
+  private async loadBossMiniCandidate(url: string, gameModel: boolean, mapScale: number, worldHeight?: number): Promise<BossMini | null> {
+    const sourceMaterials: THREE.Material[] = [];
     try {
       const gltf = await (await gltfLoader()).loadAsync(url);
       gltf.scene.updateMatrixWorld(true);
-      let geometry: THREE.BufferGeometry | null = null;
-      let material: THREE.MeshStandardMaterial | null = null;
+      const geometries: THREE.BufferGeometry[] = [];
+      const sourceGeometries = new Set<THREE.BufferGeometry>();
+      let allTextured = true;
       gltf.scene.traverse((child) => {
-        const mesh = child as THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
+        const mesh = child as THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>;
         if (!mesh.isMesh) return;
-        const source = mesh.material as THREE.MeshStandardMaterial;
-        if (!geometry) {
-          geometry = bakedGeometry(mesh);
-          if (source.isMeshStandardMaterial && source.map) material = source;
-        }
-        mesh.geometry.dispose();
-        if (source !== material) {
-          source.map?.dispose();
-          source.dispose();
-        }
+        geometries.push(bakedGeometry(mesh));
+        sourceGeometries.add(mesh.geometry);
+        const source = Array.isArray(mesh.material) ? null : mesh.material;
+        sourceMaterials.push(...(Array.isArray(mesh.material) ? mesh.material : [mesh.material]));
+        if (!(source instanceof THREE.MeshStandardMaterial) || !source.map) allTextured = false;
       });
-      if (!geometry) return null;
-      if (material) (material as THREE.MeshStandardMaterial).map!.colorSpace = THREE.SRGBColorSpace;
-      const mini = geometry as THREE.BufferGeometry;
-      mini.rotateY(BOSS_MINI_YAW).scale(BOSS_MINI_SIZE, BOSS_MINI_SIZE, BOSS_MINI_SIZE);
+      for (const geometry of sourceGeometries) geometry.dispose();
+      if (geometries.length === 0) {
+        disposeModelMaterials(sourceMaterials);
+        return null;
+      }
+      const mini = mergeGeometries(geometries, allTextured);
+      for (const geometry of geometries) geometry.dispose();
+      if (!mini) {
+        disposeModelMaterials(sourceMaterials);
+        return null;
+      }
+      const materials = allTextured
+        ? sourceMaterials.map((material) => material as THREE.MeshStandardMaterial)
+        : null;
+      if (materials) {
+        for (const material of new Set(materials)) material.map!.colorSpace = THREE.SRGBColorSpace;
+      } else {
+        disposeModelMaterials(sourceMaterials);
+        sourceMaterials.length = 0;
+      }
+      mini.rotateY(BOSS_MINI_YAW);
       mini.computeBoundingBox();
+      const nativeBox = mini.boundingBox!;
+      const nativeHeight = Math.max(1e-3, nativeBox.max.y - nativeBox.min.y);
+      const modelScale = publishedModelGeometryScale(gameModel, nativeHeight, mapScale, worldHeight);
+      mini.scale(modelScale, modelScale, modelScale);
+      mini.computeBoundingBox();
+      if (gameModel) {
+        mini.translate(0, -mini.boundingBox!.min.y, 0);
+        mini.computeBoundingBox();
+      }
       mini.computeBoundingSphere();
       const box = mini.boundingBox!;
       const barHeight = Math.max(BAR_HEIGHT, box.max.y + BOSS_MINI_BAR_GAP);
-      return {
+      const result = {
         geometry: mini,
-        material,
+        materials,
         barHeight,
         labelHeight: barHeight + LABEL_HEIGHT - BAR_HEIGHT,
         // Lying down turns -z into +y, so the back of the model rests on the ground.
         deadLift: -box.min.z,
       };
+      sourceMaterials.length = 0;
+      return result;
     } catch (error) {
-      console.error("Failed to load published miniature", url, error);
+      disposeModelMaterials(sourceMaterials);
+      console.error("Failed to load published unit model", url, error);
       return null;
     }
+  }
+
+  private applyUnitModelMaterials(object: UnitObject, mini: BossMini) {
+    const opacity = object.bodyMaterial.opacity;
+    if (!mini.materials) {
+      const material = object.bodyMaterial;
+      material.map = null;
+      material.depthWrite = opacity >= 1;
+      material.polygonOffset = false;
+      material.needsUpdate = true;
+      object.body.material = material;
+      object.bodyMaterials = [material];
+      object.textured = false;
+      return;
+    }
+    const materials = mini.materials.map((source) => {
+      const material = source.clone();
+      material.transparent = true;
+      material.opacity = opacity;
+      material.depthWrite = opacity >= 1;
+      return material;
+    });
+    for (const material of object.bodyMaterials) material.dispose();
+    object.body.material = materials.length === 1 ? materials[0]! : materials;
+    object.bodyMaterial = materials[0]!;
+    object.bodyMaterials = materials;
+    object.textured = true;
   }
 
   private applyBossMini(object: UnitObject, mini: BossMini) {
@@ -2349,11 +2488,7 @@ export class MapScene3D {
     object.body.scale.setScalar(1);
     object.body.position.y = 0;
     object.body.rotation.set(0, 0, 0);
-    const bodyMaterial = object.bodyMaterial;
-    bodyMaterial.map = null;
-    bodyMaterial.depthWrite = bodyMaterial.opacity >= 1;
-    bodyMaterial.polygonOffset = false;
-    bodyMaterial.needsUpdate = true;
+    this.applyUnitModelMaterials(object, mini);
     const { token } = object;
     token.radius = MINI_TOKEN_RADIUS;
     token.edge.visible = false;
@@ -2384,19 +2519,6 @@ export class MapScene3D {
     if (object.boss) object.cone.scale.setScalar(MINI_TOKEN_RADIUS * MARKS_SCALE);
     else object.cone.visible = false;
     setBodyColor(object);
-    if (mini.material) {
-      // Keep the texture: the per-unit clone carries opacity, the hit flash
-      // (emissive) and the death grey (colour multiply).
-      const material = mini.material.clone();
-      material.transparent = true;
-      material.opacity = object.bodyMaterial.opacity;
-      material.depthWrite = object.bodyMaterial.depthWrite;
-      object.bodyMaterial.dispose();
-      object.body.material = material;
-      object.bodyMaterial = material;
-      object.textured = true;
-      setBodyColor(object);
-    }
     object.barHeight = mini.barHeight;
     object.labelHeight = mini.labelHeight;
     object.deadLift = mini.deadLift;
@@ -2427,21 +2549,7 @@ export class MapScene3D {
     object.deadLift = token.face + mini.deadLift * scale;
     object.body.position.y = object.dead ? object.deadLift : object.modelBase;
     if (object.dead) object.body.rotation.x = -Math.PI / 2;
-    const bodyMaterial = object.bodyMaterial;
-    bodyMaterial.map = null;
-    bodyMaterial.depthWrite = bodyMaterial.opacity >= 1;
-    bodyMaterial.polygonOffset = false;
-    bodyMaterial.needsUpdate = true;
-    if (mini.material) {
-      const material = mini.material.clone();
-      material.transparent = true;
-      material.opacity = bodyMaterial.opacity;
-      material.depthWrite = bodyMaterial.depthWrite;
-      bodyMaterial.dispose();
-      object.body.material = material;
-      object.bodyMaterial = material;
-      object.textured = true;
-    }
+    this.applyUnitModelMaterials(object, mini);
     setBodyColor(object);
     this.applyTokenFace(object);
     object.barHeight = Math.max(BAR_HEIGHT, token.face + box.max.y * scale + BOSS_MINI_BAR_GAP);
@@ -2452,7 +2560,7 @@ export class MapScene3D {
     const object = this.units.get(guid);
     if (!object) return;
     this.unitsGroup.remove(object.group);
-    object.bodyMaterial.dispose();
+    for (const material of object.bodyMaterials) material.dispose();
     object.coneMaterial.dispose();
     const { token } = object;
     for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.debuff, token.column, token.columnTrack, token.power, token.powerTrack, token.ticks, token.sigil, token.chip]) part?.material.dispose();
@@ -2472,45 +2580,51 @@ export class MapScene3D {
   }
 
   private hideDeepBreath() {
-    this.deepBreathLane.visible = false;
-    this.deepBreathLaneLock = null;
+    this.deepBreathAreas.count = 0;
+    this.deepBreathAreas.visible = false;
+    this.deepBreathLine.visible = false;
+    this.deepBreathPoints.visible = false;
+    this.deepBreathPathLock = null;
   }
 
-  // Resolves the fixed room-space footprint from the Breath spell sequence;
-  // Onyxia's current position and facing never alter the geometry.
-  private deepBreathLaneFrom(routeSpellId: number) {
+  // Projects the authoritative ordered server targets into room space. Onyxia's
+  // current position and facing never alter this fixed geometry.
+  private setDeepBreathPath(primarySpellId: number, startMs: number): boolean {
     const mesh = this.dungeonMesh;
-    const selected = deepBreathLaneForSpell(routeSpellId);
-    if (!mesh || !selected) return null;
-    const [from, to] = extendedDeepBreathLane(selected.from, selected.to);
-    const projected = projectMapDebugPath({
-      kind: "path",
-      id: `onyxia-deep-breath-${selected.lane.id}`,
-      mapId: 249,
-      label: "Onyxia Deep Breath",
-      points: [from, to],
-      widthYards: DEEP_BREATH_WIDTH_YARDS,
-      color: "#ff6a00",
-      opacity: 1,
-    }, mesh.bounds, this.aspect, GROUND_WIDTH);
-    if (!projected) return null;
-    return {
-      dx: projected.direction.x,
-      dz: projected.direction.z,
-      laneX: projected.centre.x,
-      laneZ: projected.centre.z,
-      length: projected.length,
-      floorY: this.floorHeights.heightAt(`deep-breath-${selected.lane.id}`, projected.centre.x, projected.centre.z),
-    };
+    const path = deepBreathPathForPrimarySpell(primarySpellId);
+    if (!mesh || !path) return false;
+    const projected = projectMapDebugPoints(path.points, path.mapId, mesh.bounds, this.aspect, GROUND_WIDTH);
+    if (projected.length !== path.points.length || projected.length > MAX_DEEP_BREATH_POINTS) return false;
+
+    const positions = new Float32Array(projected.length * 3);
+    this.deepBreathAreaPositions.length = 0;
+    for (let index = 0; index < projected.length; index++) {
+      const point = projected[index];
+      const floor = this.floorHeights.heightAt(`deep-breath-${path.key}-${index}`, point.x, point.z);
+      const floorY = floor + DEEP_BREATH_GROUND_LIFT * mesh.scale;
+      positions[index * 3] = point.x;
+      positions[index * 3 + 1] = floorY;
+      positions[index * 3 + 2] = point.z;
+      this.deepBreathAreaPositions.push(new THREE.Vector3(point.x, floorY, point.z));
+    }
+    this.deepBreathLine.geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    this.deepBreathPoints.geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    this.deepBreathPathLock = { primarySpellId, startMs };
+    return true;
   }
 
   /**
-   * Lights the entire fixed Deep Breath footprint for the event's duration.
-   * The first Breath spell in the sequence selects the room-space lane;
-   * Onyxia's position, facing, and later movement never affect its geometry.
+   * Keeps the complete server centerline visible while the chain advances, but
+   * only shows the 30-yard damage circle for the ground spell resolving now.
    */
   private updateDeepBreath(fx: EncounterEffects | null, cursorMs: number) {
-    const breaths = fx ? deriveActiveDeepBreaths(fx, cursorMs, this.activeDeepBreaths) : this.activeDeepBreaths;
+    if (this.effects?.mapId !== 249) {
+      this.hideDeepBreath();
+      return;
+    }
+    const breaths = fx
+      ? deriveActiveDeepBreaths(fx, cursorMs, this.activeDeepBreaths, this.effects?.mapId)
+      : this.activeDeepBreaths;
     if (!fx) breaths.length = 0;
     const breath = breaths[0];
     const yardScale = this.yardScale();
@@ -2519,21 +2633,29 @@ export class MapScene3D {
       return;
     }
 
-    let lock = this.deepBreathLaneLock;
-    if (!lock || lock.routeSpellId !== breath.routeSpellId || lock.startMs !== breath.startMs) {
-      const lane = this.deepBreathLaneFrom(breath.routeSpellId);
-      if (!lane) {
+    const lock = this.deepBreathPathLock;
+    if (!lock || lock.primarySpellId !== breath.routeSpellId || lock.startMs !== breath.startMs) {
+      if (!this.setDeepBreathPath(breath.routeSpellId, breath.startMs)) {
         this.hideDeepBreath();
         return;
       }
-      lock = this.deepBreathLaneLock = { routeSpellId: breath.routeSpellId, startMs: breath.startMs, ...lane };
     }
-    const { dx, dz, laneX, laneZ, length } = lock;
-    const floorY = lock.floorY + DEEP_BREATH_GROUND_LIFT * yardScale;
-    this.deepBreathLane.position.set(laneX, floorY, laneZ);
-    this.deepBreathLane.rotation.set(0, Math.atan2(-dx, -dz), 0);
-    this.deepBreathLane.scale.set(DEEP_BREATH_WIDTH_YARDS * yardScale, 1, length);
-    this.deepBreathLane.visible = true;
+    const point = this.deepBreathAreaPositions[breath.pointIndex];
+    if (!point) {
+      this.hideDeepBreath();
+      return;
+    }
+    const radius = ONYXIA_DEEP_BREATH_RADIUS_YARDS * yardScale;
+    this.matrix.makeScale(radius, radius, radius);
+    this.matrix.setPosition(point);
+    this.deepBreathAreas.setMatrixAt(0, this.matrix);
+    this.deepBreathAreas.count = 1;
+    this.deepBreathAreas.instanceMatrix.needsUpdate = true;
+    this.deepBreathAreas.material.opacity = DEEP_BREATH_AREA_OPACITY
+      * Math.max(0, 1 - (cursorMs - breath.pointStartedMs) / DEEP_BREATH_POINT_LINGER_MS);
+    this.deepBreathAreas.visible = true;
+    this.deepBreathLine.visible = true;
+    this.deepBreathPoints.visible = true;
   }
 
   // Applies the effects at the effect clock's current time. Returns whether
@@ -2541,7 +2663,7 @@ export class MapScene3D {
   private updateEffects(now: number): boolean {
     for (const object of this.wobbling) {
       object.body.rotation.z = 0;
-      object.bodyMaterial.emissive.setRGB(0, 0, 0);
+      for (const material of object.bodyMaterials) material.emissive.setRGB(0, 0, 0);
     }
     this.wobbling.length = 0;
     for (const object of this.lunging) object.group.position.copy(object.base);
@@ -2642,7 +2764,9 @@ export class MapScene3D {
         if (target.dead) continue;
         // Damped shake about the unit's facing axis plus an emissive flash.
         target.body.rotation.z = Math.sin(effect.progress * Math.PI * 6) * 0.3 * fade * Math.min(2, effect.intensity);
-        target.bodyMaterial.emissive.copy(color).multiplyScalar(fade * 0.6 * Math.min(2, effect.intensity));
+        for (const material of target.bodyMaterials) {
+          material.emissive.copy(color).multiplyScalar(fade * 0.6 * Math.min(2, effect.intensity));
+        }
         if (!this.wobbling.includes(target)) this.wobbling.push(target);
       } else if (ringCount < MAX_EFFECT_PRIMITIVES) {
         // "impact": a small quick burst under a melee ability's target;
@@ -3098,8 +3222,10 @@ export class MapScene3D {
     object.group.visible = state.unitVisible;
     if (!hostileModel) return;
     object.body.visible = state.modelOpacity > 0;
-    object.bodyMaterial.opacity = state.modelOpacity;
-    object.bodyMaterial.depthWrite = state.modelOpacity >= 1;
+    for (const material of object.bodyMaterials) {
+      material.opacity = state.modelOpacity;
+      material.depthWrite = state.modelOpacity >= 1;
+    }
     object.token.shadow.material.opacity = state.shadowOpacity;
   }
 
@@ -4316,7 +4442,9 @@ export class MapScene3D {
 // (white multiply). Both turn grey when dead.
 function setBodyColor(object: UnitObject) {
   if (!object.mini) return;
-  object.bodyMaterial.color.set(object.dead ? DEAD_COLOR : object.textured ? 0xffffff : object.color);
+  for (const material of object.bodyMaterials) {
+    material.color.set(object.dead ? DEAD_COLOR : object.textured ? 0xffffff : object.color);
+  }
 }
 
 // Loaded on first use so the glTF loader and meshopt decoder stay out of the
@@ -4415,6 +4543,14 @@ async function createGltfLoader(): Promise<GLTFLoader> {
   return new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 }
 
+function disposeModelMaterials(materials: readonly THREE.Material[]) {
+  for (const material of new Set(materials)) {
+    const map = (material as THREE.MeshStandardMaterial).map;
+    map?.dispose();
+    material.dispose();
+  }
+}
+
 // The minis' positions are quantized (KHR_mesh_quantization) with the scale in
 // the node transform; bake that into float positions, float UVs and fresh
 // normals.
@@ -4422,8 +4558,12 @@ function bakedGeometry(mesh: THREE.Mesh): THREE.BufferGeometry {
   const source = mesh.geometry.getAttribute("position");
   const positions = new Float32Array(source.count * 3);
   const vertex = new THREE.Vector3();
+  const skinned = mesh instanceof THREE.SkinnedMesh ? mesh : null;
+  skinned?.skeleton.update();
   for (let index = 0; index < source.count; index++) {
-    vertex.fromBufferAttribute(source, index).applyMatrix4(mesh.matrixWorld).toArray(positions, index * 3);
+    vertex.fromBufferAttribute(source, index);
+    skinned?.applyBoneTransform(index, vertex);
+    vertex.applyMatrix4(mesh.matrixWorld).toArray(positions, index * 3);
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));

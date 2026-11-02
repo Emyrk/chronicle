@@ -528,6 +528,7 @@ func (s *Service) previewDebug(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, r, "A model is required.")
 		return
 	}
+	assistantDefinition = withServerTools(assistantDefinition, request.WebSearch)
 
 	debug := debugRunContext{Enabled: true, RunID: "preview-" + uuid.NewString(), Persistence: "ephemeral"}
 	messages := make([]Message, 0, maxHistoryMessages+1)

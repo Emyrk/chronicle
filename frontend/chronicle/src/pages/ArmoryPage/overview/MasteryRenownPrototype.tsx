@@ -23,7 +23,7 @@ interface MasteryRenownPrototypeProps {
   initialScopeId?: string;
 }
 
-const confidenceStops = [1, 2, 3, 5, 8, 14];
+const confidenceStops = [1, 2, 3, 4, 5];
 
 export function MasteryRenownPrototype({ initialPlayerId = "port", initialScopeId = "all" }: MasteryRenownPrototypeProps) {
   const [selectedId, setSelectedId] = useState(initialPlayerId);
@@ -241,7 +241,7 @@ function PlayerCaseStudy({
                 <Stat label="Ranked Mastery" value={mastery.rankedMastery.toFixed(1)} accent />
               </div>
               <p className="mt-5 text-sm leading-6 text-zinc-400">
-                Mastery reports what the parses suggest. Confidence only discounts the separate Ranked Mastery used for comparison.
+                Mastery reports what the parses suggest. In this candidate, Ranked Mastery gets full weight at five kills per boss; Confidence remains a separate description of the evidence.
               </p>
             </div>
           </div>
@@ -422,7 +422,8 @@ function MasteryLab({
 }) {
   const [inputs, setInputs] = useState<MasteryInputs>(initial);
   const result = calculateMastery(inputs);
-  const predictionKills = [inputs.kills + 1, inputs.kills + 3, Math.max(inputs.kills + 6, 14)];
+  const predictionKills = [...new Set([Math.min(inputs.kills + 1, 5), Math.min(inputs.kills + 2, 5), 5])]
+    .filter((kills) => kills > inputs.kills);
 
   const setInput = (key: keyof MasteryInputs, value: number) => {
     setInputs((current) => ({ ...current, [key]: value }));
@@ -445,7 +446,7 @@ function MasteryLab({
             <MasterySlider label="Peak" description="Best locked parse" value={inputs.peak} onChange={(value) => setInput("peak", value)} />
             <MasterySlider label="Form" description="Typical performance" value={inputs.form} onChange={(value) => setInput("form", value)} />
             <MasterySlider label="Floor" description="Lower-quartile reliability" value={inputs.floor} onChange={(value) => setInput("floor", value)} />
-            <MasterySlider label="Kills" description="Average evidence per boss" value={inputs.kills} max={20} step={1} onChange={(value) => setInput("kills", value)} />
+            <MasterySlider label="Kills" description="Eligible kills per boss (five removes the ranking discount)" value={inputs.kills} max={20} step={1} onChange={(value) => setInput("kills", value)} />
           </div>
 
           <button
@@ -465,7 +466,7 @@ function MasteryLab({
           </div>
 
           <div className="mt-7 rounded-2xl border border-white/8 bg-black/20 p-5">
-            <div className="text-[10px] tracking-[.18em] text-zinc-600 uppercase">Live equation</div>
+            <div className="text-[10px] tracking-[.18em] text-zinc-600 uppercase">Live equation · illustrative five-kill rule</div>
             <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2 font-mono text-sm text-zinc-400">
               <FormulaToken value={inputs.peak * 0.3} label="30% Peak" />
               <span>+</span>
@@ -478,7 +479,7 @@ function MasteryLab({
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/8 pt-4 font-mono text-sm text-zinc-400">
               <span>{result.estimate.toFixed(1)}</span>
               <span>×</span>
-              <span>{result.confidenceMultiplier.toFixed(3)} evidence</span>
+              <span>{result.rankingMultiplier.toFixed(3)} ranking weight</span>
               <span>=</span>
               <strong style={{ color: parseHexColor(result.rankedMastery) }}>{result.rankedMastery.toFixed(1)} Ranked Mastery</strong>
             </div>
@@ -492,7 +493,10 @@ function MasteryLab({
               </div>
               <span className="text-xs text-zinc-600">No parse inflation assumed</span>
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
+            {predictionKills.length === 0 ? (
+              <p className="text-sm text-zinc-400">The ranking discount ends at five kills per boss. More kills can still change Form, Floor, and descriptive Confidence.</p>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-3">
               {predictionKills.map((kills, index) => {
                 const projected = calculateMastery({ ...inputs, kills });
                 const gain = projected.rankedMastery - result.rankedMastery;
@@ -504,12 +508,13 @@ function MasteryLab({
                       <span className="font-mono text-xs text-emerald-300">+{gain.toFixed(1)}</span>
                     </div>
                     <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-black/30">
-                      <div className="h-full rounded-full bg-emerald-400" style={{ width: `${projected.confidence * 100}%` }} />
+                      <div className="h-full rounded-full bg-emerald-400" style={{ width: `${projected.rankingMultiplier * 100}%` }} />
                     </div>
                   </div>
                 );
               })}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -581,7 +586,7 @@ function ConfidenceStory() {
           <Eyebrow>The sellable promise</Eyebrow>
           <h2 className="font-wow text-3xl leading-tight sm:text-4xl">One brilliant kill opens the door. Repetition raises the roof.</h2>
           <p className="mt-5 font-serif text-lg leading-8 text-zinc-400">
-            A perfect locked parse remains visible forever, and its Mastery estimate can still be 100. Until it is repeated, Ranked Mastery stays conservative.
+            A perfect locked parse remains visible forever, and its Mastery estimate can still be 100. This candidate gives full ranking weight after five eligible kills per boss.
           </p>
           <div className="mt-7 rounded-2xl border border-amber-200/10 bg-amber-200/[.035] p-5 text-sm leading-6 text-zinc-300">
             <strong className="text-amber-200">The visual rule:</strong> never hide the estimate. Show Mastery, Confidence, and Ranked Mastery together so the discount is explainable.
@@ -612,7 +617,7 @@ function ConfidenceStory() {
           </div>
           <div className="mt-6 flex items-center gap-3 text-xs text-zinc-500">
             <span className="h-px flex-1 bg-white/8" />
-            Confidence has diminishing returns
+            Provisional ranking weight reaches 100% at five kills
             <span className="h-px flex-1 bg-white/8" />
           </div>
         </div>

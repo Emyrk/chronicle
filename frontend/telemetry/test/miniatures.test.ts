@@ -8,8 +8,8 @@ import {
   parseMiniatureManifest,
 } from "../src/miniatures/manifest.ts";
 
-function manifest(miniatures: unknown[]) {
-  return { format: MINIATURE_MANIFEST_FORMAT, miniatures };
+function manifest(miniatures: unknown[], game_models: unknown[] = []) {
+  return { format: MINIATURE_MANIFEST_FORMAT, miniatures, game_models };
 }
 
 test("parses, sorts, and normalizes shared miniature assignments", () => {
@@ -19,6 +19,48 @@ test("parses, sorts, and normalizes shared miniature assignments", () => {
   ]));
   assert.deepEqual(parsed.miniatures.map((item) => item.name), ["Boss", "Totem"]);
   assert.deepEqual(parsed.miniatures[1]?.entry_ids, [2523, 3902]);
+});
+
+test("parses original game models independently from tabletop miniatures", () => {
+  const parsed = parseMiniatureManifest(manifest(
+    [{ name: "Boss miniature", path: "miniatures/boss-mini.glb", entry_ids: [11502] }],
+    [{ name: "Boss game model", path: "miniatures/boss-game.glb", entry_ids: [11502] }],
+  ));
+  assert.deepEqual(parsed.game_models, [
+    { name: "Boss game model", path: "miniatures/boss-game.glb", entry_ids: [11502], map_scale: 1 },
+  ]);
+});
+
+test("defaults game models for existing v1 manifests", () => {
+  const parsed = parseMiniatureManifest({
+    format: MINIATURE_MANIFEST_FORMAT,
+    miniatures: [{ name: "Boss", path: "miniatures/boss.glb", entry_ids: [11502] }],
+  });
+  assert.deepEqual(parsed.game_models, []);
+});
+
+test("normalizes and validates per-model map scale", () => {
+  const parsed = parseMiniatureManifest(manifest([
+    { name: "Default", path: "miniatures/default.glb", entry_ids: [1] },
+    { name: "Large", path: "miniatures/large.glb", entry_ids: [2], map_scale: 1.75 },
+  ]));
+  assert.equal(parsed.miniatures.find((item) => item.name === "Default")?.map_scale, 1);
+  assert.equal(parsed.miniatures.find((item) => item.name === "Large")?.map_scale, 1.75);
+  for (const map_scale of [0, -1, 10.1, Number.NaN, Number.POSITIVE_INFINITY, "2"]) {
+    assert.throws(() => parseMiniatureManifest(manifest([
+      { name: "Invalid", path: "miniatures/invalid.glb", entry_ids: [3], map_scale },
+    ])), /map_scale/);
+  }
+});
+
+test("validates client-derived world heights by assigned entry", () => {
+  const parsed = parseMiniatureManifest(manifest([
+    { name: "Shared", path: "miniatures/shared.glb", entry_ids: [1, 2], world_heights: { 1: 4.5, 2: 7 } },
+  ]));
+  assert.deepEqual(parsed.miniatures[0]?.world_heights, { 1: 4.5, 2: 7 });
+  assert.throws(() => parseMiniatureManifest(manifest([
+    { name: "Invalid", path: "miniatures/invalid.glb", entry_ids: [1], world_heights: { 2: 4 } },
+  ])), /unassigned entry ID/);
 });
 
 test("rejects duplicate entry assignments across models", () => {
@@ -32,7 +74,7 @@ test("rejects duplicate paths and entry IDs", () => {
   assert.throws(() => parseMiniatureManifest(manifest([
     { name: "One", path: "miniatures/shared.glb", entry_ids: [1] },
     { name: "Two", path: "miniatures/shared.glb", entry_ids: [2] },
-  ])), /duplicate miniature path/);
+  ])), /duplicate model path/);
   assert.throws(() => parseMiniatureManifest(manifest([
     { name: "One", path: "miniatures/one.glb", entry_ids: [1, 1] },
   ])), /contains duplicates/);
@@ -58,6 +100,17 @@ test("rejects unknown fields and unsafe asset paths", () => {
   for (const path of ["", "miniatures/.glb", "miniatures/../a.glb", "miniatures/nested/a.glb", "miniatures//a.glb", "miniatures\\a.glb"]) assert.equal(isMiniatureAssetPath(path), false);
 });
 
+test("Miniature Foundry edits tabletop and original game models", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const page = await readFile(new URL("../src/dashboard/miniatures.tsx", import.meta.url), "utf8");
+  assert.match(page, /id="add-game-model"/);
+  assert.match(page, /game_models/);
+  assert.match(page, /original animated GLB extracted from the game files/);
+  assert.match(page, /id="map-scale"/);
+  assert.match(page, /Blue capsule/);
+  assert.match(page, /new THREE\.CapsuleGeometry/);
+});
+
 test("provides an empty manifest for first-time setup", () => {
-  assert.deepEqual(emptyMiniatureManifest(), { format: MINIATURE_MANIFEST_FORMAT, miniatures: [] });
+  assert.deepEqual(emptyMiniatureManifest(), { format: MINIATURE_MANIFEST_FORMAT, miniatures: [], game_models: [] });
 });

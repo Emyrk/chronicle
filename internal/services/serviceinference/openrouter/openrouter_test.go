@@ -120,6 +120,9 @@ func TestStreamChatTextAndUsage(t *testing.T) {
 			Name:       "lookup",
 			Parameters: json.RawMessage(`{"type":"object"}`),
 		}},
+		ServerTools: []serviceinference.ServerToolDefinition{{
+			Kind: serviceinference.ServerToolWebSearch, MaxUses: 3, MaxResults: 5, MaxTotalResults: 12,
+		}},
 	}, func(event serviceinference.StreamEvent) error {
 		events = append(events, event)
 		return nil
@@ -135,6 +138,9 @@ func TestStreamChatTextAndUsage(t *testing.T) {
 	require.Equal(t, "hello", request.request.Messages[0].Content)
 	require.Equal(t, "lookup", request.request.Tools[0].Function.Name)
 	require.JSONEq(t, `{"type":"object"}`, string(request.request.Tools[0].Function.Parameters))
+	require.Equal(t, "openrouter:web_search", request.request.Tools[1].Type)
+	require.Nil(t, request.request.Tools[1].Function)
+	require.Equal(t, &serverToolParameters{MaxUses: 3, MaxResults: 5, MaxTotalResults: 12}, request.request.Tools[1].Parameters)
 	require.Equal(t, []serviceinference.StreamEvent{
 		{Type: serviceinference.StreamEventTextDelta, Text: "Hello\n"},
 		{Type: serviceinference.StreamEventTextDelta, Text: "world"},
@@ -180,6 +186,18 @@ func TestStreamChatToolCallDeltas(t *testing.T) {
 		{Type: serviceinference.StreamEventToolCallDelta, ToolCall: serviceinference.ToolCallDelta{Index: 0, Name: "up", Arguments: `42}`}},
 		{Type: serviceinference.StreamEventFinish, FinishReason: serviceinference.FinishReasonToolCalls},
 	}, events)
+}
+
+func TestStreamChatRejectsUnsupportedServerTool(t *testing.T) {
+	t.Parallel()
+
+	client, err := New(Config{})
+	require.NoError(t, err)
+	err = client.StreamChat(testutil.Context(t, testutil.WaitShort), nil, serviceinference.ChatRequest{
+		Model:       "model",
+		ServerTools: []serviceinference.ServerToolDefinition{{Kind: "unknown"}},
+	}, func(serviceinference.StreamEvent) error { return nil })
+	require.ErrorContains(t, err, `unsupported OpenRouter server tool "unknown"`)
 }
 
 func TestStreamChatHTTPErrorRedactsCredential(t *testing.T) {

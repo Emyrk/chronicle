@@ -116,6 +116,7 @@ export interface ChroniclePanelSnapshotV1 {
   instance: {
     id: string;
     title: string;
+    guild?: { id: string; name: string };
     startTime: string;
     endTime: string;
     capabilities: string[];

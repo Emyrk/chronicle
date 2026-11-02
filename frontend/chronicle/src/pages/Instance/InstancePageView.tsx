@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, ty
 import { createPortal } from "react-dom";
 import { useSearchParams, Link } from "react-router-dom";
 import { useSession, useCreateShare, fetchInstanceSpeedrun, fetchSharedView, toastError, type UserPanelLayout } from "@/api/queries";
+import { buildUIUsagePayload, createPanelChoiceBatcher, reportUIUsage, uiUsageSignature } from "@/api/uiUsage";
 import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, LayoutPanelTop, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2, LockKeyhole, Pencil, LayoutDashboard } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { toast } from "sonner";
@@ -2524,6 +2525,7 @@ function InstancePageViewContent({
 
   // URL state for explainer mode (simple ?explain=panel_type)
   const [searchParams, setSearchParams] = useSearchParams();
+  const importCode = searchParams.get("import");
   const overviewEnabled = isInstanceOverviewEnabled(supportsOverview) && !instance.unlisted;
   const requestedViewMode = parseInstanceViewMode(searchParams.get("view"));
   const viewMode: InstanceViewMode = overviewEnabled ? requestedViewMode : "encounters";
@@ -3045,6 +3047,35 @@ function InstancePageViewContent({
     return next;
   }, [activeLayoutItems, defaultPanelTypesByID, viewState.panels]);
 
+  const activeUsagePanelTypes = useMemo(() => activeLayoutItems.flatMap((item) =>
+    item.kind === "strip" || item.kind === "group" ? [] : [panelTypesByID[item.id] ?? "empty"],
+  ), [activeLayoutItems, panelTypesByID]);
+  const usagePreset = activeLayoutId === null ? activePresetId : null;
+  const uiUsagePayload = useMemo(
+    () => buildUIUsagePayload(usagePreset, activeUsagePanelTypes),
+    [activeUsagePanelTypes, usagePreset],
+  );
+  const uiUsagePayloadSignature = useMemo(
+    () => uiUsageSignature(usagePreset, activeUsagePanelTypes),
+    [activeUsagePanelTypes, usagePreset],
+  );
+  const panelChoiceBatcher = useMemo(() => createPanelChoiceBatcher(), []);
+
+  useEffect(() => () => panelChoiceBatcher.dispose(), [panelChoiceBatcher]);
+  const lastReportedUIUsageRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isEncounterView || importCode || (isLoggedIn && instanceDefaults === null) || lastReportedUIUsageRef.current === uiUsagePayloadSignature) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      lastReportedUIUsageRef.current = uiUsagePayloadSignature;
+      reportUIUsage(uiUsagePayload);
+    }, 750);
+    return () => window.clearTimeout(timeout);
+  }, [importCode, instanceDefaults, isEncounterView, isLoggedIn, uiUsagePayload, uiUsagePayloadSignature]);
+
   const panelOptionsByID = useMemo<Record<string, string | null>>(() => {
     const next: Record<string, string | null> = {};
     activeLayoutItems.forEach((item, index) => {
@@ -3344,6 +3375,7 @@ function InstancePageViewContent({
     if (!canEditSharedView) return;
     const idx = activeLayoutItems.findIndex((item) => item.id === itemID);
     if (idx === -1) return;
+    panelChoiceBatcher.select(type);
     setPanelType(idx, type as PanelType);
     // Clear stale filters / set defaults for the new panel type.
     const newPanel = PANELS[type as keyof typeof PANELS];
@@ -3358,7 +3390,7 @@ function InstancePageViewContent({
       return rest;
     });
     setActivePresetId(null); // User customized panels – clear preset
-  }, [activeLayoutItems, canEditSharedView, setPanelType]);
+  }, [activeLayoutItems, canEditSharedView, panelChoiceBatcher, setPanelType]);
 
   const handleStripTypeChangeByID = useCallback((itemID: string, type: StripType) => {
     if (!canEditSharedView) return;
@@ -3969,7 +4001,6 @@ function InstancePageViewContent({
 
   // Applying the imported payload changes callbacks used to build the view. Keep
   // the fetch keyed only to the URL code so those changes cannot re-import it.
-  const importCode = searchParams.get("import");
   const applySharedViewPayloadRef = useRef(applySharedViewPayload);
   useEffect(() => {
     applySharedViewPayloadRef.current = applySharedViewPayload;

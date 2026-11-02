@@ -663,6 +663,14 @@ export interface PanelProcessor<TResult, TEvent extends ProcessorEvent = Process
   processAllEvents?: boolean;
 
   /**
+   * If true and exactly one encounter is selected, the worker skips the other
+   * encounters' segments without decoding them (unit_classification is still
+   * read for every encounter). Only for processors whose result for the
+   * selected encounter does not depend on other encounters.
+   */
+  skipUnselectedEncounters?: boolean;
+
+  /**
    * Process a single event and update the state.
    */
   processEvent: (

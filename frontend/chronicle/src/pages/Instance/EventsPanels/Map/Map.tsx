@@ -18,7 +18,7 @@ import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Too
 import { PortalContainerProvider, usePortalContainer } from "@/components/ui/PortalContainerContext";
 import type { Encounter } from "../../InstancePage";
 import type { PanelDefinition, PanelRenderProps } from "../types";
-import { fetchMiniatureUrls } from "./bossMinis";
+import { fetchUnitModelUrls } from "./bossMinis";
 import { dungeonMeshBytes, dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
 import { mapProcessor, type MapProcessorEvent, type MapResult } from "./map.processor";
 import type { MapLivePresence } from "./MapView3D";
@@ -437,11 +437,11 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
       document.body.style.overflow = previousOverflow;
     };
   }, [windowed]);
-  const miniatureQuery = useQuery({
-    queryKey: ["unit-miniatures"],
+  const unitModelsQuery = useQuery({
+    queryKey: ["unit-models"],
     staleTime: 60 * 60 * 1000,
     retry: false,
-    queryFn: () => fetchMiniatureUrls(),
+    queryFn: () => fetchUnitModelUrls(),
   });
   // Display settings and the settings overlay that sets them (all kept in local storage).
   const [effectSettings, updateEffectSettings] = useEffectSettings();
@@ -853,6 +853,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           <Suspense fallback={<MapMessage title="Loading 3D view" detail="Fetching the 3D renderer…" />}>
             <MapView3D
               ground={ready.ground}
+              worldMapId={ready.worldMapId}
               alignmentGround={ready.alignmentGround}
               markers={ready.markers}
               projectSample={ready.projectSample}
@@ -865,7 +866,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               effects={ready.effects}
               bossGuids={ready.bossGuids}
               tankGuids={ready.tankGuids}
-              miniatureUrls={miniatureQuery.data}
+              unitModelUrls={unitModelsQuery.data}
               onUnavailable={() => setWebglUnavailable(true)}
               dungeonMesh={dungeonMesh}
               onDungeonMeshState={setMeshState}

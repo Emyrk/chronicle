@@ -22,7 +22,10 @@ const (
 )
 
 const (
-	SidekickGameFormatWotLK335a SidekickGameFormat = "wotlk_3.3.5a"
+	SidekickLogFormat112aCcAddon       SidekickLogFormat = "1.12a-cc-addon"
+	SidekickLogFormat335aCcAddon       SidekickLogFormat = "3.3.5a-cc-addon"
+	SidekickLogFormat243CcAddon        SidekickLogFormat = "2.4.3-cc-addon"
+	SidekickLogFormatHermesproxy1142Cc SidekickLogFormat = "hermesproxy_1_14_2_cc"
 
 	SidekickAutoUploadDisabled   SidekickAutoUploadMode = "disabled"
 	SidekickAutoUploadOnGameExit SidekickAutoUploadMode = "on_game_exit"
@@ -34,12 +37,23 @@ func IsValidSidekickWoWDirectoryID(id string) bool {
 	return sidekickWoWDirectoryIDPattern.MatchString(id)
 }
 
-type SidekickGameFormat string
+type SidekickLogFormat string
+
+func (f SidekickLogFormat) Valid() bool {
+	switch f {
+	case SidekickLogFormat112aCcAddon,
+		SidekickLogFormat335aCcAddon,
+		SidekickLogFormat243CcAddon,
+		SidekickLogFormatHermesproxy1142Cc:
+		return true
+	default:
+		return false
+	}
+}
 
 type SidekickAutoUploadMode string
 
 type SidekickDirectoryConfig struct {
-	GameFormat SidekickGameFormat     `json:"game_format"`
 	AutoUpload SidekickAutoUploadMode `json:"auto_upload"`
 }
 
@@ -79,9 +93,6 @@ func (c SidekickConfig) Validate() error {
 		if !sidekickWoWDirectoryIDPattern.MatchString(id) {
 			return fmt.Errorf("invalid World of Warcraft directory ID %q", id)
 		}
-		if directory.GameFormat != SidekickGameFormatWotLK335a {
-			return fmt.Errorf("unsupported game format %q", directory.GameFormat)
-		}
 		switch directory.AutoUpload {
 		case SidekickAutoUploadDisabled, SidekickAutoUploadOnGameExit:
 		default:
@@ -118,7 +129,7 @@ type SidekickStatusResponse struct {
 	Config      *SidekickConfig `json:"config,omitempty"`
 }
 
-type SidekickAutoUploadCapabilities map[SidekickGameFormat][]SidekickAutoUploadMode
+type SidekickAutoUploadCapabilities map[SidekickLogFormat][]SidekickAutoUploadMode
 
 type SidekickInstallation struct {
 	ID                     uuid.UUID                      `json:"id"`
@@ -137,13 +148,80 @@ type SidekickInstallation struct {
 	Configuration          *SidekickConfigState           `json:"configuration,omitempty"`
 }
 
+type SidekickInspectionStatus string
+
+type SidekickInspectionCategory string
+
+type SidekickInspectionCheckStatus string
+
+const (
+	SidekickInspectionReady          SidekickInspectionStatus = "ready"
+	SidekickInspectionActionRequired SidekickInspectionStatus = "action_required"
+	SidekickInspectionUnknown        SidekickInspectionStatus = "unknown"
+
+	SidekickInspectionAddon SidekickInspectionCategory = "addon"
+	SidekickInspectionDLL   SidekickInspectionCategory = "dll"
+
+	SidekickInspectionPresent SidekickInspectionCheckStatus = "present"
+	SidekickInspectionMissing SidekickInspectionCheckStatus = "missing"
+)
+
+type SidekickInspectionCheck struct {
+	ID       string                        `json:"id"`
+	Category SidekickInspectionCategory    `json:"category"`
+	Name     string                        `json:"name"`
+	Required bool                          `json:"required"`
+	Status   SidekickInspectionCheckStatus `json:"status"`
+}
+
+type SidekickInspection struct {
+	Status SidekickInspectionStatus  `json:"status"`
+	Checks []SidekickInspectionCheck `json:"checks"`
+}
+
+func (i SidekickInspection) Validate() error {
+	switch i.Status {
+	case SidekickInspectionReady, SidekickInspectionActionRequired, SidekickInspectionUnknown:
+	default:
+		return fmt.Errorf("unsupported inspection status %q", i.Status)
+	}
+	if i.Checks == nil {
+		return fmt.Errorf("inspection checks must be an array")
+	}
+	if len(i.Checks) > 20 {
+		return fmt.Errorf("inspection has too many checks")
+	}
+	seen := make(map[string]struct{}, len(i.Checks))
+	for _, check := range i.Checks {
+		if check.ID == "" || len(check.ID) > 100 || check.Name == "" || len(check.Name) > 200 {
+			return fmt.Errorf("inspection check is invalid")
+		}
+		switch check.Category {
+		case SidekickInspectionAddon, SidekickInspectionDLL:
+		default:
+			return fmt.Errorf("unsupported inspection category %q", check.Category)
+		}
+		switch check.Status {
+		case SidekickInspectionPresent, SidekickInspectionMissing:
+		default:
+			return fmt.Errorf("unsupported inspection check status %q", check.Status)
+		}
+		if _, ok := seen[check.ID]; ok {
+			return fmt.Errorf("inspection check IDs must be unique")
+		}
+		seen[check.ID] = struct{}{}
+	}
+	return nil
+}
+
 type SidekickWoWDirectory struct {
 	ID            string             `json:"id"`
 	Path          string             `json:"path"`
 	TenantName    string             `json:"tenant_name,omitempty"`
 	TenantBaseURL string             `json:"tenant_base_url,omitempty"`
 	Realmlist     string             `json:"realmlist,omitempty"`
-	GameFormat    SidekickGameFormat `json:"game_format,omitempty"`
+	LogFormat     SidekickLogFormat  `json:"log_format,omitempty"`
+	Inspection    SidekickInspection `json:"inspection"`
 }
 
 type SidekickIssue struct {

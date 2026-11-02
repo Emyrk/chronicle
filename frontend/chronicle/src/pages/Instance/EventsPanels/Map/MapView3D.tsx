@@ -8,7 +8,7 @@ import type { LiveMapPresence } from "../../liveSessionProtocol";
 import type { MapPresenceListener } from "../../LiveSessionContext";
 import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
-import { miniatureUrl } from "./bossMinis";
+import { replayModel, type PublishedUnitModelUrls } from "./bossMinis";
 import type { MapPositionSample } from "./map.processor";
 import { cameraPoseAt, type MapCameraMark, type MapCameraPose } from "./cameraPath";
 import { DISPEL_KINDS, DISPEL_ORDER, type DispelKind } from "./unitTokenArt";
@@ -35,6 +35,8 @@ import { MapCompass } from "./MapCompass";
 
 export interface MapView3DProps {
   ground: MapSceneGround;
+  /** Active server world map for encounter-specific replay effects. */
+  worldMapId?: number;
   /** Preferred 2D artwork to blend over the mesh for alignment debugging. */
   alignmentGround?: MapSceneGround | null;
   markers: MapSceneMarker[];
@@ -52,8 +54,8 @@ export interface MapView3DProps {
   bossGuids?: ReadonlySet<string>;
   /** Tanks: their heals are kept when effects are capped and float numbers. */
   tankGuids?: ReadonlySet<string>;
-  /** Published entry-ID miniature URLs from the shared manifest. */
-  miniatureUrls?: ReadonlyMap<number, string>;
+  /** Published entry-ID miniature and original-model URLs from the shared manifest. */
+  unitModelUrls?: PublishedUnitModelUrls;
   /** Called when WebGL cannot be created or the context is lost. */
   onUnavailable: () => void;
   /** The real dungeon mesh to stand the units on instead of the tiles ("3D map"), or null for the tiles. */
@@ -165,6 +167,7 @@ function EffectTooltip({ hover }: { hover: MapScene3DEffectHover }) {
 
 export default function MapView3D({
   ground,
+  worldMapId,
   alignmentGround = null,
   markers,
   projectSample,
@@ -177,7 +180,7 @@ export default function MapView3D({
   effects,
   bossGuids,
   tankGuids,
-  miniatureUrls,
+  unitModelUrls,
   onUnavailable,
   dungeonMesh = null,
   onDungeonMeshState,
@@ -322,7 +325,7 @@ export default function MapView3D({
         ? replayPositionAt(marker.positions, smoothMs, marker.kind === "player") ?? marker.sample
         : marker.sample;
       const point = sample === marker.sample ? marker.point : projectSample(sample) ?? marker.point;
-      const modelUrl = miniatureUrl(marker.entry, miniatureUrls);
+      const model = replayModel(marker.entry, unitModelUrls, effectSettings.gameModelsOnly);
       const trail = effectSettings.trailSeconds > 0
         ? movementTrailPoints(marker.positions, sample, effectSettings.trailSeconds * 1000, marker.kind === "player", projectSample)
         : undefined;
@@ -337,7 +340,10 @@ export default function MapView3D({
         muted: marker.muted,
         name: marker.name,
         health: showBars ? marker.health : null,
-        miniatureUrl: modelUrl,
+        miniatureUrl: model?.url,
+        gameModel: model?.kind === "game",
+        mapScale: model?.mapScale ?? 1,
+        worldHeight: model?.worldHeight,
         z: sample.z,
         icon: specializations.get(marker.guid)?.iconUrl ?? marker.icon,
         boss: bossGuids?.has(marker.guid) ?? false,
@@ -349,7 +355,7 @@ export default function MapView3D({
       }];
     });
     scene.setUnits(units);
-  }, [bossGuids, dispelOf, effectSettings.trailSeconds, frozen, markers, miniatureUrls, projectSample, showBars, smoothMs, specializations]);
+  }, [bossGuids, dispelOf, effectSettings.gameModelsOnly, effectSettings.trailSeconds, frozen, markers, projectSample, showBars, smoothMs, specializations, unitModelUrls]);
 
   useEffect(() => {
     sceneRef.current?.setUnitRoles(unitRoles ?? NO_ROLES);
@@ -426,6 +432,7 @@ export default function MapView3D({
     const scene = sceneRef.current;
     if (!container || !scene || frozen) return;
     scene.setEffects(effectSettings.enabled && effects ? {
+      mapId: worldMapId,
       fx: effects,
       options: effectOptions,
       resolveColor: (color) => resolveCssColor(color, container, colorCacheRef.current),
@@ -446,7 +453,7 @@ export default function MapView3D({
       healTextGuids: effectOptions.healText,
       castSchoolColor: (spellId) => schoolNameColor(spellMeta(spellId).spell?.school?.string),
     } : null);
-  }, [castGuids, effectOptions, effectSettings.enabled, effects, frozen, isCooldown, isProc, spellMeta]);
+  }, [castGuids, effectOptions, effectSettings.enabled, effects, frozen, isCooldown, isProc, spellMeta, worldMapId]);
 
   useEffect(() => {
     if (!frozen) sceneRef.current?.setEffectClock(cursorMs, playing, playbackSpeed);

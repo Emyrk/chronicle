@@ -14,24 +14,35 @@ import {
   fetchMiniatureManifest,
   miniatureAssetUrl,
   miniatureManifestUrl,
-  type MiniatureManifest,
 } from "@/pages/Instance/EventsPanels/Map/bossMinis";
 import { GalleryPagination } from "./GalleryPagination";
 import { galleryPage } from "./galleryPage";
 import { MiniaturePreview } from "./MiniaturePreview";
+import { filterRegistryModels, registryModels, type ModelRegistryTab, type RegistryModel } from "./modelRegistry";
 
-type Miniature = MiniatureManifest["miniatures"][number];
-const EMPTY_MINIATURES: Miniature[] = [];
+const TAB_DETAILS: Record<ModelRegistryTab, { shortLabel: string; description: string; badge: string }> = {
+  miniatures: {
+    shortLabel: "Miniatures",
+    description: "Stylized tabletop figures optimized for the 3D Replay Map.",
+    badge: "tabletop miniature",
+  },
+  game_models: {
+    shortLabel: "Game Models",
+    description: "Animated GLBs extracted from the original game files with their creature skins.",
+    badge: "original game model",
+  },
+};
 
-function matchingImageSets(miniature: Miniature, imageSetsByEntry: ReadonlyMap<number, UnitImageSet>): UnitImageSet[] {
-  return Array.from(new Map(miniature.entry_ids.flatMap((entry) => {
+function matchingImageSets(model: RegistryModel, imageSetsByEntry: ReadonlyMap<number, UnitImageSet>): UnitImageSet[] {
+  return Array.from(new Map(model.entry_ids.flatMap((entry) => {
     const imageSet = imageSetsByEntry.get(entry);
     return imageSet === undefined ? [] : [[imageSet.name, imageSet] as const];
   })).values());
 }
 
-function MiniatureCard({ miniature, imageSets }: { miniature: Miniature; imageSets: UnitImageSet[] }) {
-  const url = miniatureAssetUrl(miniature.path);
+function ModelCard({ model, imageSets, tab }: { model: RegistryModel; imageSets: UnitImageSet[]; tab: ModelRegistryTab }) {
+  const url = miniatureAssetUrl(model.path);
+  const details = TAB_DETAILS[tab];
   const registeredImages = imageSets.flatMap((imageSet) => Object.entries(imageSet.images).map(([label, path]) => ({
     key: `${imageSet.name}:${label}`,
     label,
@@ -40,10 +51,10 @@ function MiniatureCard({ miniature, imageSets }: { miniature: Miniature; imageSe
   return (
     <Card className="group gap-0 overflow-hidden border-amber-950/45 bg-[#171611] py-0 shadow-[0_20px_45px_-34px_rgba(0,0,0,0.95)] transition duration-200 hover:-translate-y-0.5 hover:border-amber-700/55">
       <div className="relative border-b border-amber-950/45">
-        <MiniaturePreview name={miniature.name} url={url} />
+        <MiniaturePreview name={model.name} url={url} />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,transparent_44%,rgba(255,236,187,0.08)_50%,transparent_56%)] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
         <span className="absolute left-3 top-3 rounded border border-amber-100/10 bg-black/65 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-amber-100/55 backdrop-blur-sm">
-          glTF binary
+          {details.badge}
         </span>
       </div>
       {registeredImages.length > 0 && (
@@ -63,11 +74,11 @@ function MiniatureCard({ miniature, imageSets }: { miniature: Miniature; imageSe
                 target="_blank"
                 rel="noreferrer"
                 className="group/image relative aspect-square overflow-hidden rounded-md border border-amber-100/10 bg-[#0c0909] transition hover:border-amber-500/45"
-                aria-label={`Open ${miniature.name} ${label} image`}
+                aria-label={`Open ${model.name} ${label} image`}
               >
                 <img
                   src={unitImageAssetUrl(path)}
-                  alt={`${miniature.name} ${label}`}
+                  alt={`${model.name} ${label}`}
                   className="h-full w-full object-cover transition duration-300 group-hover/image:scale-[1.025]"
                 />
                 <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-2 pb-1.5 pt-5 font-mono text-[9px] uppercase tracking-[0.13em] text-amber-50/80">
@@ -82,10 +93,10 @@ function MiniatureCard({ miniature, imageSets }: { miniature: Miniature; imageSe
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="truncate font-serif text-base font-semibold tracking-wide text-amber-50">
-              {miniature.name}
+              {model.name}
             </h2>
-            <p className="mt-1 truncate font-mono text-[10px] text-amber-200/45" title={miniature.path}>
-              {miniature.path}
+            <p className="mt-1 truncate font-mono text-[10px] text-amber-200/45" title={model.path}>
+              {model.path}
             </p>
           </div>
           <a
@@ -93,13 +104,13 @@ function MiniatureCard({ miniature, imageSets }: { miniature: Miniature; imageSe
             target="_blank"
             rel="noreferrer"
             className="relative z-10 rounded-md border border-amber-100/10 bg-black/25 p-1.5 text-amber-100/45 transition hover:border-amber-500/30 hover:text-amber-100"
-            aria-label={`Open ${miniature.name} model file`}
+            aria-label={`Open ${model.name} model file`}
           >
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {miniature.entry_ids.map((entry) => (
+          {model.entry_ids.map((entry) => (
             <code
               key={entry}
               className="rounded border border-white/7 bg-black/25 px-1.5 py-0.5 text-[10px] text-muted-foreground"
@@ -114,6 +125,7 @@ function MiniatureCard({ miniature, imageSets }: { miniature: Miniature; imageSe
 }
 
 export function MiniaturesPage() {
+  const [activeTab, setActiveTab] = useState<ModelRegistryTab>("miniatures");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const manifestQuery = useQuery({
@@ -128,7 +140,8 @@ export function MiniaturesPage() {
     retry: false,
     queryFn: () => fetchUnitImageManifest(),
   });
-  const miniatures = manifestQuery.data?.miniatures ?? EMPTY_MINIATURES;
+  const models = registryModels(manifestQuery.data, activeTab);
+  const tabDetails = TAB_DETAILS[activeTab];
   const imageSetsByEntry = useMemo(() => new Map(
     imageManifestQuery.data?.units.flatMap((unit) => unit.entry_ids.map((entry) => [entry, unit] as const)) ?? [],
   ), [imageManifestQuery.data]);
@@ -137,19 +150,11 @@ export function MiniaturesPage() {
     [imageManifestQuery.data],
   );
   const entryCount = useMemo(
-    () => miniatures.reduce((total, miniature) => total + miniature.entry_ids.length, 0),
-    [miniatures],
+    () => models.reduce((total, model) => total + model.entry_ids.length, 0),
+    [models],
   );
-  const filteredMiniatures = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return miniatures;
-    return miniatures.filter((miniature) =>
-      miniature.name.toLowerCase().includes(query)
-      || miniature.path.toLowerCase().includes(query)
-      || miniature.entry_ids.some((entry) => String(entry).includes(query)),
-    );
-  }, [miniatures, search]);
-  const visibleMiniatures = useMemo(() => galleryPage(filteredMiniatures, page), [filteredMiniatures, page]);
+  const filteredModels = useMemo(() => filterRegistryModels(models, search), [models, search]);
+  const visibleModels = useMemo(() => galleryPage(filteredModels, page), [filteredModels, page]);
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(120,88,36,0.14),transparent_32%)]">
@@ -167,17 +172,17 @@ export function MiniaturesPage() {
             <div>
               <div className="mb-1 flex items-center gap-2 text-amber-100">
                 <Box className="h-5 w-5" />
-                <h1 className="font-serif text-2xl font-semibold tracking-wide">Miniature Registry</h1>
+                <h1 className="font-serif text-2xl font-semibold tracking-wide">3D Model Registry</h1>
               </div>
               <p className="max-w-2xl text-sm text-muted-foreground">
-                Every published unit miniature available to the 3D Replay Map, loaded directly from the shared manifest.
+                Browse the stylized replay miniatures and original animated models published in the shared manifest.
               </p>
             </div>
 
             {manifestQuery.data && (
               <div className="flex gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-amber-100/55">
                 <span className="rounded-md border border-amber-950/55 bg-black/20 px-3 py-2">
-                  {miniatures.length} models
+                  {models.length} {tabDetails.shortLabel.toLowerCase()}
                 </span>
                 <span className="rounded-md border border-amber-950/55 bg-black/20 px-3 py-2">
                   {entryCount} NPC entries
@@ -190,6 +195,44 @@ export function MiniaturesPage() {
               </div>
             )}
           </div>
+
+          <div
+            className="mt-5 inline-flex w-full max-w-xl rounded-lg border border-amber-950/55 bg-black/25 p-1 shadow-inner shadow-black/30 sm:w-auto"
+            role="tablist"
+            aria-label="3D model type"
+          >
+            {(["miniatures", "game_models"] as const).map((tab) => {
+              const details = TAB_DETAILS[tab];
+              const count = registryModels(manifestQuery.data, tab).length;
+              const selected = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  id={`model-tab-${tab}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-controls="model-registry-gallery"
+                  onClick={() => {
+                    setActiveTab(tab);
+                    setPage(1);
+                  }}
+                  className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-left transition sm:min-w-56 ${
+                    selected
+                      ? "border border-amber-700/45 bg-[linear-gradient(180deg,rgba(112,76,30,0.6),rgba(55,35,18,0.72))] text-amber-50 shadow-[0_8px_24px_-16px_rgba(245,158,11,0.7)]"
+                      : "border border-transparent text-muted-foreground hover:bg-amber-950/20 hover:text-amber-100"
+                  }`}
+                >
+                  {tab === "miniatures" ? <Box className="h-4 w-4 shrink-0" /> : <Database className="h-4 w-4 shrink-0" />}
+                  <span className="truncate font-mono text-[10px] uppercase tracking-[0.13em]">{details.shortLabel}</span>
+                  <span className={`rounded px-1.5 py-0.5 font-mono text-[9px] ${selected ? "bg-black/30 text-amber-100/70" : "bg-white/5 text-muted-foreground/70"}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">{tabDetails.description}</p>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <label className="relative block max-w-md flex-1">
@@ -235,7 +278,7 @@ export function MiniaturesPage() {
           </div>
           {imageManifestQuery.isError && (
             <p className="mt-2 text-xs text-amber-300/70">
-              Registered images are unavailable; miniature models can still be browsed normally.
+              Registered images are unavailable; 3D models can still be browsed normally.
             </p>
           )}
         </header>
@@ -250,50 +293,56 @@ export function MiniaturesPage() {
 
         {manifestQuery.isError && (
           <Card className="p-6">
-            <h2 className="font-medium text-destructive">Miniature registry unavailable</h2>
+            <h2 className="font-medium text-destructive">3D model registry unavailable</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {manifestQuery.error instanceof Error ? manifestQuery.error.message : "Unable to load the miniature manifest."}
+              {manifestQuery.error instanceof Error ? manifestQuery.error.message : "Unable to load the 3D model manifest."}
             </p>
             <p className="mt-2 break-all font-mono text-xs text-muted-foreground">{miniatureManifestUrl()}</p>
           </Card>
         )}
 
-        {manifestQuery.data && filteredMiniatures.length === 0 && (
-          <Card className="p-8 text-center text-sm text-muted-foreground">
-            No miniatures match “{search}”.
+        {manifestQuery.data && filteredModels.length === 0 && (
+          <Card
+            id="model-registry-gallery"
+            role="tabpanel"
+            aria-labelledby={`model-tab-${activeTab}`}
+            className="p-8 text-center text-sm text-muted-foreground"
+          >
+            {search ? `No ${tabDetails.shortLabel.toLowerCase()} match “${search}”.` : `No ${tabDetails.shortLabel.toLowerCase()} have been published yet.`}
           </Card>
         )}
 
-        {filteredMiniatures.length > 0 && (
-          <>
+        {filteredModels.length > 0 && (
+          <section id="model-registry-gallery" role="tabpanel" aria-labelledby={`model-tab-${activeTab}`}>
             <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">
-                Showing {visibleMiniatures.start}–{visibleMiniatures.end} of {filteredMiniatures.length} matching miniatures
-                {filteredMiniatures.length !== miniatures.length ? ` (${miniatures.length} total)` : ""}. Previews load as they approach the viewport.
+                Showing {visibleModels.start}–{visibleModels.end} of {filteredModels.length} matching {tabDetails.shortLabel.toLowerCase()}
+                {filteredModels.length !== models.length ? ` (${models.length} total)` : ""}. Previews load as they approach the viewport.
               </p>
               <GalleryPagination
-                page={visibleMiniatures.page}
-                totalPages={visibleMiniatures.totalPages}
+                page={visibleModels.page}
+                totalPages={visibleModels.totalPages}
                 onPageChange={setPage}
               />
             </div>
             <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-              {visibleMiniatures.items.map((miniature) => (
-                <MiniatureCard
-                  key={miniature.path}
-                  miniature={miniature}
-                  imageSets={matchingImageSets(miniature, imageSetsByEntry)}
+              {visibleModels.items.map((model) => (
+                <ModelCard
+                  key={model.path}
+                  model={model}
+                  tab={activeTab}
+                  imageSets={matchingImageSets(model, imageSetsByEntry)}
                 />
               ))}
             </div>
             <div className="mt-5">
               <GalleryPagination
-                page={visibleMiniatures.page}
-                totalPages={visibleMiniatures.totalPages}
+                page={visibleModels.page}
+                totalPages={visibleModels.totalPages}
                 onPageChange={setPage}
               />
             </div>
-          </>
+          </section>
         )}
       </div>
     </div>

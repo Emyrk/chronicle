@@ -23,6 +23,13 @@ type UserPanelLayout struct {
 	UpdatedAt     time.Time       `json:"updated_at"`
 }
 
+// UIUsageRequest records anonymous, bounded UI usage telemetry.
+type UIUsageRequest struct {
+	Preset   *string  `json:"preset,omitempty"`
+	Panels   []string `json:"panels,omitempty"`
+	Selected []string `json:"selected,omitempty"`
+}
+
 // TrackLayoutRequest identifies a layout to track.
 type TrackLayoutRequest struct {
 	LayoutID uuid.UUID `json:"layout_id"`

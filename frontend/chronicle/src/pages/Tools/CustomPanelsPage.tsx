@@ -250,7 +250,7 @@ export function CustomPanelsPage() {
                   <span className="whitespace-nowrap font-mono text-[11px] font-normal text-muted-foreground">↻ repeats</span>
                 </span>
               }
-              detail="On every snapshot change: encounter, players, enemies, Sync, theme, option, size, popup. Coalesced per frame."
+              detail="On every snapshot change: instance and optional guild, encounter, players, enemies, Sync, theme, option, size, popup. Coalesced per frame."
             />
             <ArrowDown />
             <Node

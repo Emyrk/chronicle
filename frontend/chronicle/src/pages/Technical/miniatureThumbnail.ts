@@ -70,7 +70,7 @@ async function renderThumbnail(url: string): Promise<string> {
   try {
     model.updateMatrixWorld(true);
     const bounds = new THREE.Box3().setFromObject(model);
-    if (bounds.isEmpty()) throw new Error("Miniature has no renderable geometry");
+    if (bounds.isEmpty()) throw new Error("3D model has no renderable geometry");
     const center = bounds.getCenter(new THREE.Vector3());
     const size = bounds.getSize(new THREE.Vector3());
     model.position.sub(center);

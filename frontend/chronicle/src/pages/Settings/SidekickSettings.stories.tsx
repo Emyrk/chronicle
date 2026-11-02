@@ -18,7 +18,7 @@ const baseSidekick: SidekickInstallation = {
   platform: "windows/amd64",
   sidekick_version: "0.4.2",
   start_at_login: true,
-  auto_upload_capabilities: { "wotlk_3.3.5a": ["on_game_exit"] },
+  auto_upload_capabilities: { "3.3.5a-cc-addon": ["on_game_exit"] },
   online: true,
   last_seen_at: ago(18 * SECOND),
   last_upload_at: ago(2 * HOUR),
@@ -30,12 +30,21 @@ const baseSidekick: SidekickInstallation = {
       realmlist: "logon.project-ascension.com",
       tenant_name: "Ascension",
       tenant_base_url: "https://ascension.chronicleclassic.com",
-      game_format: "wotlk_3.3.5a",
+      log_format: "3.3.5a-cc-addon",
+      inspection: {
+        status: "action_required",
+        checks: [
+          { id: "addon.chronicle_companion_wotlk", category: "addon", name: "ChronicleCompanionWoTLK", required: true, status: "present" },
+          { id: "dll.nampower", category: "dll", name: "nampower.dll", required: true, status: "missing" },
+        ],
+      },
     },
     {
       id: wowdir(2),
       path: "D:\\WoW\\Warmane 3.3.5a",
       realmlist: "logon.warmane.com",
+      log_format: "3.3.5a-cc-addon",
+      inspection: { status: "ready", checks: [] },
     },
   ],
   issues: [],
@@ -44,7 +53,7 @@ const baseSidekick: SidekickInstallation = {
       version: 1,
       archive: { enabled: true, retention_days: 7 },
       wow_directories: {
-        [wowdir(1)]: { game_format: "wotlk_3.3.5a", auto_upload: "on_game_exit" },
+        [wowdir(1)]: { auto_upload: "on_game_exit" },
       },
     },
     hash: "abc123",
@@ -62,13 +71,13 @@ const laptop: SidekickInstallation = {
   last_seen_at: ago(5 * HOUR),
   last_upload_at: ago(4 * DAY),
   created_at: ago(40 * DAY),
-  wow_directories: [{ id: wowdir(3), path: "/Users/me/Games/WoW 3.3.5a", game_format: "wotlk_3.3.5a" }],
+  wow_directories: [{ id: wowdir(3), path: "/Users/me/Games/WoW 3.3.5a", log_format: "3.3.5a-cc-addon", inspection: { status: "ready", checks: [] } }],
   configuration: {
     ...baseSidekick.configuration!,
     config: {
       version: 1,
       archive: { enabled: false, retention_days: 30 },
-      wow_directories: { [wowdir(3)]: { game_format: "wotlk_3.3.5a", auto_upload: "disabled" } },
+      wow_directories: { [wowdir(3)]: { auto_upload: "disabled" } },
     },
   },
 };

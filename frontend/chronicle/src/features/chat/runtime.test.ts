@@ -102,6 +102,19 @@ describe("InferenceRuntime", () => {
     expect(yoloConfirm).not.toHaveBeenCalled();
   });
 
+  it("allows a chat-scoped YOLO override", async () => {
+    const confirm = vi.fn(async () => false);
+    const runtime = new InferenceRuntime({ sessionId: "session-1", confirm, isYoloEnabled: () => false });
+    register(runtime);
+
+    await expect(runtime.executeClientTool(
+      request({ effect: "view_mutation", confirmation: "unless_yolo" }),
+      new AbortController().signal,
+      { yoloEnabled: true },
+    )).resolves.toMatchObject({ status: "success" });
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
   it("returns stale_state when the capability revision changes during confirmation", async () => {
     let resolveConfirmation!: (approved: boolean) => void;
     const runtime = new InferenceRuntime({

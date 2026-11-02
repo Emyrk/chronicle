@@ -219,7 +219,7 @@ func (s *Service) PasswordRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.metrics.observeSignup(authMethodEmailPassword)
+	s.metrics.observeSignup(authMethodEmailPassword, s.authMetricTenant(r))
 
 	err = s.SetSessionCookie(w, r, PasswordProvider, session)
 	if err != nil {
@@ -333,7 +333,7 @@ func (s *Service) PasswordLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.metrics.observeLogin(authMethodEmailPassword)
+	s.metrics.observeLogin(authMethodEmailPassword, s.authMetricTenant(r))
 
 	httpapi.Write(ctx, w, http.StatusOK, map[string]string{
 		"message": "Login successful.",

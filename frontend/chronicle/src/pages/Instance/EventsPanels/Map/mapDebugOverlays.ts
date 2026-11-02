@@ -1,5 +1,5 @@
 import type { WowMapFloorBounds } from "@/pages/Technical/mapGallery";
-import { extendedDeepBreathLane, ONYXIA_DEEP_BREATH_LANES } from "./deepBreathLanes";
+import { ONYXIA_DEEP_BREATH_PATHS } from "./deepBreathLanes";
 import { mapPointToScene, renderedDungeonMapPoint } from "./mapModel";
 
 export interface MapDebugWorldPoint {
@@ -57,18 +57,37 @@ export function projectMapDebugPath(
   };
 }
 
-const ONYXIA_LANE_COLORS = ["#ffb347", "#ff6b35", "#ff3158"] as const;
+export function projectMapDebugPoints(
+  points: readonly MapDebugWorldPoint[],
+  mapId: number,
+  bounds: WowMapFloorBounds,
+  aspect: number,
+  sceneWidth: number,
+): { x: number; z: number }[] {
+  const projected: { x: number; z: number }[] = [];
+  for (const point of points) {
+    const mapped = renderedDungeonMapPoint({ timestampMs: 0, x: point.x, y: point.y, mapId }, bounds);
+    if (!mapped) return [];
+    projected.push(mapPointToScene(mapped, aspect, sceneWidth));
+  }
+  return projected;
+}
+
+const ONYXIA_PATH_COLORS = [
+  "#ffb347", "#ff6b35", "#ff3158", "#ff8c42",
+  "#f97316", "#fb7185", "#f59e0b", "#ef4444",
+] as const;
 
 const OVERLAYS_BY_MAP = new Map<number, readonly MapDebugOverlay[]>([
-  [249, ONYXIA_DEEP_BREATH_LANES.map((lane, index): MapDebugPathOverlay => ({
+  [249, ONYXIA_DEEP_BREATH_PATHS.map((path, index): MapDebugPathOverlay => ({
     kind: "path",
-    id: `onyxia-deep-breath-${lane.id}`,
-    mapId: 249,
-    label: `Deep Breath: ${lane.id.replaceAll("_", " ")}`,
-    points: extendedDeepBreathLane(lane.from, lane.to),
-    widthYards: 18,
-    color: ONYXIA_LANE_COLORS[index],
-    opacity: 0.34,
+    id: `onyxia-deep-breath-${path.key.toLowerCase()}`,
+    mapId: path.mapId,
+    label: `Deep Breath: ${path.displayName}`,
+    points: path.points,
+    widthYards: 0.5,
+    color: ONYXIA_PATH_COLORS[index],
+    opacity: 0.7,
   }))],
 ]);
 

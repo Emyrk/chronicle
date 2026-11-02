@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MINIATURE_MANIFEST_FORMAT,
+  fetchGameModelUrls,
   fetchMiniatureManifest,
   fetchMiniatureUrls,
+  fetchUnitModelUrls,
+  gameModelUrl,
   miniatureAssetUrl,
   miniatureManifestUrl,
   miniatureUrl,
   parseMiniatureManifest,
+  replayModel,
 } from "./bossMinis";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -20,8 +24,15 @@ describe("bossMinis", () => {
         path: "miniatures/abc-serpent.glb",
         entry_ids: [3670, 3671],
       }],
+      game_models: [{
+        name: "Serpent game model",
+        path: "miniatures/def-serpent-game.glb",
+        entry_ids: [3670, 3671],
+      }],
     });
+    expect(manifest.miniatures[0]?.map_scale).toBe(1);
     expect(manifest.miniatures[0]?.entry_ids).toEqual([3670, 3671]);
+    expect(manifest.game_models[0]?.path).toBe("miniatures/def-serpent-game.glb");
     expect(miniatureManifestUrl("https://icons.example/root/")).toBe("https://icons.example/root/miniatures/manifest.json");
     expect(miniatureAssetUrl("miniatures/abc-serpent.glb", "https://icons.example/root/")).toBe("https://icons.example/root/miniatures/abc-serpent.glb");
   });
@@ -41,25 +52,99 @@ describe("bossMinis", () => {
     })).toThrow(/Duplicate miniature entry ID/);
   });
 
+  it("validates per-model map scale", () => {
+    expect(parseMiniatureManifest({
+      format: MINIATURE_MANIFEST_FORMAT,
+      miniatures: [{ name: "Large", path: "miniatures/large.glb", entry_ids: [1], map_scale: 1.75 }],
+    }).miniatures[0]?.map_scale).toBe(1.75);
+    for (const map_scale of [0, -1, 10.1, Number.NaN, Number.POSITIVE_INFINITY, "2"]) {
+      expect(() => parseMiniatureManifest({
+        format: MINIATURE_MANIFEST_FORMAT,
+        miniatures: [{ name: "Invalid", path: "miniatures/invalid.glb", entry_ids: [1], map_scale }],
+      })).toThrow(/map scale/);
+    }
+  });
+
+  it("validates client-derived world heights by assigned entry", () => {
+    expect(parseMiniatureManifest({
+      format: MINIATURE_MANIFEST_FORMAT,
+      miniatures: [{ name: "Shared", path: "miniatures/shared.glb", entry_ids: [1, 2], world_heights: { 1: 4.5, 2: 7 } }],
+    }).miniatures[0]?.world_heights).toEqual({ 1: 4.5, 2: 7 });
+    expect(() => parseMiniatureManifest({
+      format: MINIATURE_MANIFEST_FORMAT,
+      miniatures: [{ name: "Invalid", path: "miniatures/invalid.glb", entry_ids: [1], world_heights: { 2: 4 } }],
+    })).toThrow(/unassigned entry ID/);
+  });
+
+  it("accepts existing v1 manifests without game models", () => {
+    const manifest = parseMiniatureManifest({
+      format: MINIATURE_MANIFEST_FORMAT,
+      miniatures: [{ name: "Boss", path: "miniatures/boss.glb", entry_ids: [1] }],
+    });
+    expect(manifest.game_models).toEqual([]);
+  });
+
   it("fetches the full manifest and derives the replay lookup from it", async () => {
     const payload = {
       format: MINIATURE_MANIFEST_FORMAT,
       miniatures: [
         { name: "Shared serpent", path: "miniatures/serpent.glb", entry_ids: [3670, 3671] },
-        { name: "Firelord", path: "miniatures/firelord.glb", entry_ids: [11502] },
+        { name: "Firelord", path: "miniatures/firelord.glb", entry_ids: [11502], map_scale: 1.5 },
+      ],
+      game_models: [
+        { name: "Firelord game model", path: "miniatures/firelord-game.glb", entry_ids: [11502], map_scale: 2, world_heights: { 11502: 54.4 } },
       ],
     };
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => payload });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(fetchMiniatureManifest("https://icons.example/root/")).resolves.toEqual(payload);
+    await expect(fetchMiniatureManifest("https://icons.example/root/")).resolves.toEqual({
+      ...payload,
+      miniatures: [
+        { ...payload.miniatures[0], map_scale: 1 },
+        payload.miniatures[1],
+      ],
+    });
     await expect(fetchMiniatureUrls("https://icons.example/root/")).resolves.toEqual(new Map([
       [3670, "https://icons.example/root/miniatures/serpent.glb"],
       [3671, "https://icons.example/root/miniatures/serpent.glb"],
       [11502, "https://icons.example/root/miniatures/firelord.glb"],
     ]));
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await expect(fetchGameModelUrls("https://icons.example/root/")).resolves.toEqual(new Map([
+      [11502, "https://icons.example/root/miniatures/firelord-game.glb"],
+    ]));
+    await expect(fetchUnitModelUrls("https://icons.example/root/")).resolves.toEqual({
+      miniatures: new Map([
+        [3670, { url: "https://icons.example/root/miniatures/serpent.glb", mapScale: 1 }],
+        [3671, { url: "https://icons.example/root/miniatures/serpent.glb", mapScale: 1 }],
+        [11502, { url: "https://icons.example/root/miniatures/firelord.glb", mapScale: 1.5 }],
+      ]),
+      gameModels: new Map([
+        [11502, { url: "https://icons.example/root/miniatures/firelord-game.glb", mapScale: 2, worldHeight: 54.4 }],
+      ]),
+    });
+    expect(gameModelUrl(11502, new Map([[11502, "https://icons.example/game.glb"]]))).toBe("https://icons.example/game.glb");
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fetchMock).toHaveBeenCalledWith("https://icons.example/root/miniatures/manifest.json");
+  });
+
+  it("prefers miniatures, falls back to game models, and supports game-model-only mode", () => {
+    const published = {
+      miniatures: new Map([
+        [1, { url: "https://icons.example/miniature-one.glb", mapScale: 1.25 }],
+        [2, { url: "https://icons.example/miniature-two.glb", mapScale: 1 }],
+      ]),
+      gameModels: new Map([
+        [1, { url: "https://icons.example/game-one.glb", mapScale: 2 }],
+        [3, { url: "https://icons.example/game-three.glb", mapScale: 1.5 }],
+      ]),
+    };
+
+    expect(replayModel(1, published, false)).toEqual({ url: "https://icons.example/miniature-one.glb", mapScale: 1.25, kind: "miniature" });
+    expect(replayModel(3, published, false)).toEqual({ url: "https://icons.example/game-three.glb", mapScale: 1.5, kind: "game" });
+    expect(replayModel(1, published, true)).toEqual({ url: "https://icons.example/game-one.glb", mapScale: 2, kind: "game" });
+    expect(replayModel(2, published, true)).toBeUndefined();
+    expect(replayModel(4, published, false)).toBeUndefined();
   });
 
   it("uses only models published by the manifest", () => {

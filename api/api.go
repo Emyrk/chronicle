@@ -164,6 +164,7 @@ type API struct {
 	CustomPanels       *custompanelapi.Handler
 	liveSessions       *servicelivesession.Service
 	luaArtifactBacklog prometheus.Gauge
+	uiUsageMetrics     *uiUsageMetrics
 	discoveryStats     discoveryStatsCache
 }
 
@@ -229,6 +230,7 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	}
 	api := &API{
 		luaArtifactBacklog: luaArtifactBacklog,
+		uiUsageMetrics:     newUIUsageMetrics(opts.Registry),
 		Opts:               &opts,
 		AppContext:         ctx,
 		Auth:               service,
@@ -298,7 +300,10 @@ func (api *API) Routes() chi.Router {
 		r.Mount("/oauth", api.Opts.OAuth)
 	}
 
+	// UI usage is anonymous, browser-only, and records process-local counters.
 	r.Route("/api/v1", func(r chi.Router) {
+		r.With(browserOnlyMiddleware(api.Opts.AccessURL)).Post("/ui-usage", api.RecordUIUsage)
+
 		r.Group(func(r chi.Router) {
 			// Not browser-only
 			r.Get("/discovery", api.Discovery)

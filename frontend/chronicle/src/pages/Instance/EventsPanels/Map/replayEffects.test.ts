@@ -11,7 +11,7 @@ import {
   COMBAT_TEXT_MS,
   createEncounterEffects,
   DEFAULT_EFFECT_OPTIONS,
-  DEEP_BREATH_MS,
+  DEEP_BREATH_POINT_LINGER_MS,
   deriveActiveDeepBreaths,
   deriveActiveEffects,
   deriveCastIcons,
@@ -187,34 +187,85 @@ describe("deriveActiveEffects", () => {
 });
 
 describe("deriveActiveDeepBreaths", () => {
-  const heatedGround = (timestampMs: number, spellId: number) => event(timestampMs, "cast_go", "onyxia", "", {
+  const breath = (timestampMs: number, spellId: number) => event(timestampMs, "cast_go", "onyxia", "", {
     spellId,
-    spellName: "Heated Ground",
+    spellName: "Breath",
   });
 
-  it("groups the Heated Ground volley into one timed room crossing", () => {
-    const fx = effects(
-      ...Array.from({ length: 12 }, (_, index) => heatedGround(1_000, 22_191 + index)),
-      event(1_050, "cast_go", "onyxia", "", { spellId: 17_086, spellName: "Breath" }),
-    );
-
+  it.each([
+    17_086, 18_351, 18_576, 18_609, 18_564, 18_584, 18_596, 18_617,
+  ])("starts primary direction %i at its first damage point", (spellId) => {
+    const fx = effects(breath(1_000, spellId));
     expect(deriveActiveDeepBreaths(fx, 999)).toEqual([]);
-    expect(deriveActiveDeepBreaths(fx, 1_000 + DEEP_BREATH_MS / 2)).toEqual([{
+    expect(deriveActiveDeepBreaths(fx, 1_000)).toEqual([{
       source: "onyxia",
-      routeSpellId: 17_086,
-      progress: 0.5,
+      routeSpellId: spellId,
+      pointIndex: 0,
+      progress: 0,
       startMs: 1_000,
-      endMs: 1_000 + DEEP_BREATH_MS,
+      pointStartedMs: 1_000,
+      endMs: 1_000 + DEEP_BREATH_POINT_LINGER_MS,
     }]);
-    expect(deriveActiveDeepBreaths(fx, 1_000 + DEEP_BREATH_MS)).toEqual([]);
+    expect(deriveActiveDeepBreaths(fx, 1_000 + DEEP_BREATH_POINT_LINGER_MS)).toEqual([]);
   });
 
-  it("ignores ordinary Breath and non-canonical Heated Ground segments", () => {
+  it("advances the active radius with the observed server chain", () => {
     const fx = effects(
-      heatedGround(1_000, 22_192),
-      event(1_100, "cast_go", "onyxia", "", { spellId: 17_086, spellName: "Breath" }),
+      breath(1_000, 18_584),
+      breath(1_290, 18_585),
+      breath(1_545, 18_586),
     );
-    expect(deriveActiveDeepBreaths(fx, 1_200)).toEqual([]);
+    expect(deriveActiveDeepBreaths(fx, 1_200)).toEqual([expect.objectContaining({
+      routeSpellId: 18_584,
+      pointIndex: 0,
+      startMs: 1_000,
+      pointStartedMs: 1_000,
+    })]);
+    expect(deriveActiveDeepBreaths(fx, 1_300)).toEqual([expect.objectContaining({
+      pointIndex: 1,
+      pointStartedMs: 1_290,
+    })]);
+    expect(deriveActiveDeepBreaths(fx, 1_600)).toEqual([expect.objectContaining({
+      pointIndex: 2,
+      progress: 2 / 11,
+      pointStartedMs: 1_545,
+    })]);
+  });
+
+  it("infers the route and point when only a secondary chain spell is visible", () => {
+    const fx = effects(breath(1_000, 17_087));
+    expect(deriveActiveDeepBreaths(fx, 1_100)).toEqual([expect.objectContaining({
+      routeSpellId: 17_086,
+      pointIndex: 1,
+      startMs: 1_000,
+      pointStartedMs: 1_000,
+    })]);
+  });
+
+  it("replaces an active route when a different direction appears", () => {
+    const fx = effects(
+      breath(1_000, 17_086),
+      breath(1_200, 18_351),
+    );
+    expect(deriveActiveDeepBreaths(fx, 1_250)).toEqual([expect.objectContaining({
+      routeSpellId: 18_351,
+      pointIndex: 0,
+      startMs: 1_200,
+    })]);
+  });
+
+  it("rejects directional spells outside Onyxia's Lair context", () => {
+    const fx = effects(breath(1_000, 17_086));
+    expect(deriveActiveDeepBreaths(fx, 1_100, [], 409)).toEqual([]);
+  });
+
+  it("ignores Heated Ground, unknown spells, and non-cast events", () => {
+    const fx = effects(
+      breath(1_000, 22_191),
+      breath(1_100, 1),
+      event(1_200, "damage", "onyxia", "tank", { spellId: 17_086 }),
+    );
+    expect(deriveActiveDeepBreaths(fx, 1_300)).toEqual([]);
   });
 });
 

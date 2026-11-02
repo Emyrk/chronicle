@@ -67,6 +67,9 @@ export function CustomPanelHost({
       instance: {
         id: context.instance.id,
         title: context.instance.name,
+        guild: context.instance.guild
+          ? { ...context.instance.guild }
+          : undefined,
         startTime: context.instance.startTime,
         endTime: context.instance.endTime ?? context.instance.startTime,
         capabilities: [...(context.instance.capabilities ?? [])],

@@ -3,20 +3,27 @@ import {
   UNIT_IMAGE_MANIFEST_FORMAT,
   fetchUnitImageLookup,
   fetchUnitImageManifest,
+  fetchUnitImageNameLookup,
   parseUnitImageManifest,
   unitImageAssetUrl,
   unitImageManifestUrl,
+  unitImageModelUrl,
   unitImageUrl,
+  unitImageUrlByName,
 } from "./unitImages";
 
 afterEach(() => vi.unstubAllGlobals());
 
 const onyxia = {
   name: "ony-onyxia",
+  display_name: "Onyxia",
   entry_ids: [10184],
   images: {
     headshot: "unit-images/abc-onyxia-headshot.webp",
     full: "unit-images/def-onyxia-full.webp",
+  },
+  models: {
+    raw: "unit-images/ghi-onyxia.glb",
   },
 };
 
@@ -32,6 +39,9 @@ describe("unitImages", () => {
     expect(unitImageAssetUrl(onyxia.images.headshot, "https://icons.example/root/")).toBe(
       "https://icons.example/root/unit-images/abc-onyxia-headshot.webp",
     );
+    expect(unitImageModelUrl(10184, "raw", new Map([[10184, onyxia]]), "https://icons.example/root/")).toBe(
+      "https://icons.example/root/unit-images/ghi-onyxia.glb",
+    );
   });
 
   it("rejects invalid or ambiguous assignments", () => {
@@ -46,8 +56,16 @@ describe("unitImages", () => {
     })).toThrow(/invalid path/);
     expect(() => parseUnitImageManifest({
       format: UNIT_IMAGE_MANIFEST_FORMAT,
-      units: [onyxia, { ...onyxia, name: "other" }],
+      units: [{ ...onyxia, models: { raw: "unit-images/onyxia.webp" } }],
+    })).toThrow(/invalid model path/);
+    expect(() => parseUnitImageManifest({
+      format: UNIT_IMAGE_MANIFEST_FORMAT,
+      units: [onyxia, { ...onyxia, name: "other", display_name: "Other" }],
     })).toThrow(/Duplicate unit image entry ID/);
+    expect(() => parseUnitImageManifest({
+      format: UNIT_IMAGE_MANIFEST_FORMAT,
+      units: [onyxia, { ...onyxia, name: "other", display_name: " onYXia ", entry_ids: [2], images: { headshot: "unit-images/other.webp" } }],
+    })).toThrow(/Duplicate unit image display name/);
   });
 
   it("fetches the manifest and derives an entry lookup", async () => {
@@ -57,7 +75,8 @@ describe("unitImages", () => {
 
     await expect(fetchUnitImageManifest("https://icons.example/root/")).resolves.toEqual(payload);
     await expect(fetchUnitImageLookup("https://icons.example/root/")).resolves.toEqual(new Map([[10184, onyxia]]));
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await expect(fetchUnitImageNameLookup("https://icons.example/root/")).resolves.toEqual(new Map([["onyxia", onyxia]]));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock).toHaveBeenCalledWith(
       "https://icons.example/root/unit-images/manifest.json?format=chronicle-unit-images-v1",
     );
@@ -74,5 +93,8 @@ describe("unitImages", () => {
     expect(unitImageUrl(10184, "profile", published)).toBeUndefined();
     expect(unitImageUrl(999, "headshot", published)).toBeUndefined();
     expect(unitImageUrl(undefined, "headshot", published)).toBeUndefined();
+    expect(unitImageUrlByName("  ONYXIA ", "headshot", new Map([["onyxia", onyxia]]), "https://icons.example")).toBe(
+      "https://icons.example/unit-images/abc-onyxia-headshot.webp",
+    );
   });
 });

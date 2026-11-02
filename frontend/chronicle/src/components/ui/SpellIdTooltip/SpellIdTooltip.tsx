@@ -4,6 +4,7 @@ import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../Tooltip/tooltip";
 import { SpellIconWithTooltip } from "../SpellIconWithTooltip";
+import type { WoWSpell } from "@/api/wowdb";
 
 interface SpellIdTooltipProps {
   /** Spell ID to look up. If null, just shows the name as plain text. */
@@ -14,6 +15,10 @@ interface SpellIdTooltipProps {
   size?: number;
   /** Fetch spell data only after the tooltip is opened and render a text-only trigger. Defaults to false. */
   loadOnHover?: boolean;
+  /** Show the spell rank once metadata has loaded. */
+  showRank?: boolean;
+  /** Optional preloaded spell metadata. When provided, no spell query is made. */
+  spell?: WoWSpell;
   /** Additional class name for the wrapper */
   className?: string;
   /** Optional content rendered above the spell tooltip. */
@@ -34,6 +39,8 @@ export function SpellIdTooltip({
   name, 
   size = 16,
   loadOnHover = false,
+  showRank = false,
+  spell: preloadedSpell,
   className,
   tooltipHeader,
   tooltipFooter,
@@ -63,22 +70,33 @@ export function SpellIdTooltip({
   
   // Only fetch when visible and we have a spell ID
   const datasetId = useDatasetId();
-  const { data: spell } = useSpell(
+  const { data: queriedSpell } = useSpell(
     spellId?.toString() ?? "",
     datasetId,
-    { enabled: spellId != null && (loadOnHover ? tooltipRequested : isVisible) },
+    {
+      enabled:
+        preloadedSpell == null &&
+        spellId != null &&
+        (loadOnHover ? tooltipRequested : isVisible),
+    },
   );
+  const spell = preloadedSpell ?? queriedSpell;
 
   // No spell ID - render plain text
   if (spellId == null) {
     return <span className={className}>{name}</span>;
   }
 
+  const rank = showRank ? spell?.subtext?.["0"] : undefined;
+
   if (loadOnHover) {
     return (
       <Tooltip onOpenChange={(open) => open && setTooltipRequested(true)}>
         <TooltipTrigger asChild>
-          <span ref={ref} className={className}>{name}</span>
+          <span ref={ref} className={className}>
+            {name}
+            {rank && <span className="text-2xs text-muted-foreground/70">{rank}</span>}
+          </span>
         </TooltipTrigger>
         <TooltipContent
           side="right"
@@ -110,6 +128,7 @@ export function SpellIdTooltip({
         // Show name while loading or if fetch fails
         <span>{name}</span>
       )}
+      {rank && <span className="text-2xs text-muted-foreground/70">{rank}</span>}
     </span>
   );
 }

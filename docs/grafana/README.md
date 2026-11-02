@@ -13,6 +13,7 @@ The operations dashboard includes rows for:
 - River queue depth, job age, saturation, retries, and durations
 - Cache effectiveness and capacity
 - Billing reconciliation and Stripe entitlement synchronization
+- UI panel views, explicit panel choices, and preset popularity
 - Authentication activity and leader election
 
 Both dashboards target Grafana 10 or newer and use only built-in panels.
@@ -105,6 +106,10 @@ Panel thresholds are starting points, not service-level objectives. In particula
 Tune these values for upload volume, worker capacity, PostgreSQL performance, and the expected response time for each deployment.
 
 The dashboard does not provision Grafana-managed alert rules. Use the Prometheus rule examples in [`docs/prometheus-grafana.md`](../prometheus-grafana.md), or translate them into the alerting system used by the deployment.
+
+## Counter resets
+
+Dashboard panels that summarize counters over a time range use Prometheus `increase()`. This function accounts for counters returning to zero after Chronicle deploys, process restarts, and replica replacement. UI usage panels sum the reset-adjusted increases across the selected replicas rather than reading the current counter value directly.
 
 ## Metric availability
 

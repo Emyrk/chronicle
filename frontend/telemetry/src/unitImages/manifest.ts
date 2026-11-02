@@ -2,8 +2,10 @@ export const UNIT_IMAGE_MANIFEST_FORMAT = "chronicle-unit-images-v1" as const;
 
 export interface UnitImageDefinition {
   name: string;
+  display_name?: string;
   entry_ids: number[];
   images: Record<string, string>;
+  models?: Record<string, string>;
 }
 
 export interface UnitImageManifest {
@@ -48,6 +50,10 @@ export function isUnitImageAssetPath(path: string): boolean {
   return /^unit-images\/[^/\\]+\.(?:avif|jpe?g|png|webp)$/.test(path);
 }
 
+export function isUnitModelAssetPath(path: string): boolean {
+  return /^unit-images\/[^/\\]+\.glb$/.test(path);
+}
+
 export function parseUnitImageManifest(value: unknown): UnitImageManifest {
   const input = object(value, "unit image manifest", ["format", "units"]);
   if (input.format !== UNIT_IMAGE_MANIFEST_FORMAT) {
@@ -56,14 +62,24 @@ export function parseUnitImageManifest(value: unknown): UnitImageManifest {
 
   const assignedEntries = new Map<number, string>();
   const names = new Set<string>();
+  const displayNames = new Set<string>();
   const paths = new Set<string>();
   const units = array(input.units, "unit image manifest.units").map((raw, index) => {
     const context = `unit image manifest.units[${index}]`;
-    const item = object(raw, context, ["name", "entry_ids", "images"]);
+    const item = object(raw, context, ["name", "display_name", "entry_ids", "images", "models"]);
     const name = string(item.name, `${context}.name`).trim();
     if (name === "") throw new TypeError(`${context}.name must not be blank`);
     if (names.has(name)) throw new TypeError(`duplicate unit image name ${name}`);
     names.add(name);
+
+    let display_name: string | undefined;
+    if (item.display_name !== undefined) {
+      display_name = string(item.display_name, `${context}.display_name`).trim();
+      if (display_name === "") throw new TypeError(`${context}.display_name must not be blank`);
+      const normalized = display_name.toLocaleLowerCase("en-US");
+      if (displayNames.has(normalized)) throw new TypeError(`duplicate unit image display name ${display_name}`);
+      displayNames.add(normalized);
+    }
 
     const ids = array(item.entry_ids, `${context}.entry_ids`).map((id, idIndex) => entryID(id, `${context}.entry_ids[${idIndex}]`));
     if (ids.length === 0) throw new TypeError(`${context}.entry_ids must not be empty`);
@@ -86,7 +102,19 @@ export function parseUnitImageManifest(value: unknown): UnitImageManifest {
       images[label] = path;
     }
     if (Object.keys(images).length === 0) throw new TypeError(`${context}.images must not be empty`);
-    return { name, entry_ids, images };
+
+    let models: Record<string, string> | undefined;
+    if (item.models !== undefined) {
+      models = {};
+      for (const [label, rawPath] of Object.entries(record(item.models, `${context}.models`))) {
+        if (!/^[a-z][a-z0-9_-]*$/.test(label)) throw new TypeError(`${context}.models has invalid label ${JSON.stringify(label)}`);
+        const path = string(rawPath, `${context}.models.${label}`);
+        if (!isUnitModelAssetPath(path)) throw new TypeError(`${context}.models.${label} must be a clean unit-images model path`);
+        models[label] = path;
+      }
+      if (Object.keys(models).length === 0) throw new TypeError(`${context}.models must not be empty`);
+    }
+    return { name, ...(display_name === undefined ? {} : { display_name }), entry_ids, images, ...(models === undefined ? {} : { models }) };
   });
 
   units.sort((left, right) => left.name.localeCompare(right.name));

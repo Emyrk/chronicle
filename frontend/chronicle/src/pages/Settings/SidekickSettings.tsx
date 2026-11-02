@@ -32,8 +32,8 @@ import type {
   SidekickAutoUploadMode,
   SidekickConfig,
   SidekickDirectoryConfig,
-  SidekickGameFormat,
   SidekickInstallation,
+  SidekickLogFormat,
 } from "@/api/typesGenerated";
 import {
   SIDEKICK_REFRESH_INTERVAL_MS,
@@ -55,7 +55,6 @@ const EMPTY_CONFIG: SidekickConfig = {
   archive: { enabled: true, retention_days: SidekickArchiveRetentionDaysDefault },
   wow_directories: {},
 };
-const WOTLK_FORMAT: SidekickGameFormat = "wotlk_3.3.5a";
 // Sidekick reports status every minute. The server marks it offline after
 // chroniclesdk.SidekickOnlineThreshold (3m) without a heartbeat.
 const SIDEKICK_HEARTBEAT_INTERVAL_MS = 60_000;
@@ -179,12 +178,18 @@ function tenantHost(baseURL?: string): string {
   }
 }
 
-function gameFormatLabel(format?: string): string {
+function logFormatLabel(format?: SidekickLogFormat): string {
   switch (format) {
-    case WOTLK_FORMAT:
+    case "1.12a-cc-addon":
+      return "Vanilla 1.12a";
+    case "hermesproxy_1_14_2_cc":
+      return "Classic 1.14.2 through HermesProxy";
+    case "2.4.3-cc-addon":
+      return "TBC 2.4.3";
+    case "3.3.5a-cc-addon":
       return "Wrath 3.3.5a";
     default:
-      return "Not configured";
+      return "Unknown";
   }
 }
 
@@ -305,28 +310,12 @@ function DirectorySettings({
       {sidekick.wow_directories.map((directory) => {
         const hasID = Boolean(directory.id);
         const desired = hasID ? config.wow_directories[directory.id] : undefined;
-        const supportedModes = sidekick.auto_upload_capabilities[desired?.game_format ?? WOTLK_FORMAT] ?? [];
-        const applied = directory.game_format ?? "";
-        const desiredFormat = desired?.game_format ?? "";
-        const waitingForApply = !hasID || applied !== desiredFormat;
+        const supportedModes = directory.log_format ? sidekick.auto_upload_capabilities[directory.log_format] ?? [] : [];
         const controlsDisabled = readOnly || disconnected || busy || !onConfigChange || !hasID;
 
-        const setFormat = async (value: string) => {
-          if (!onConfigChange) return;
-          if (!value) {
-            await onConfigChange(updateDirectoryConfig(config, directory.id));
-            return;
-          }
-          await onConfigChange(updateDirectoryConfig(config, directory.id, {
-            game_format: value as SidekickGameFormat,
-            auto_upload: desired?.auto_upload ?? "disabled",
-          }));
-        };
-
         const setAutoUpload = async (value: string) => {
-          if (!onConfigChange || !desired) return;
+          if (!onConfigChange) return;
           await onConfigChange(updateDirectoryConfig(config, directory.id, {
-            ...desired,
             auto_upload: value as SidekickAutoUploadMode,
           }));
         };
@@ -345,51 +334,53 @@ function DirectorySettings({
                   </span>
                 ) : null}
               </div>
-              <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
-                <span>Applied: {gameFormatLabel(directory.game_format)}</span>
-                {waitingForApply ? (
-                  <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-600 dark:text-amber-400">
-                    Waiting for Sidekick
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-600 dark:text-emerald-400">
-                    Applied
-                  </span>
-                )}
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                <span>Client: {logFormatLabel(directory.log_format)}</span>
+                <span className={directory.inspection.status === "action_required"
+                  ? "rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-600 dark:text-amber-400"
+                  : directory.inspection.status === "ready"
+                    ? "rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-600 dark:text-emerald-400"
+                    : "rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground"}
+                >
+                  {directory.inspection.status === "action_required" ? "Action required" : directory.inspection.status === "ready" ? "Ready" : "Inspection unavailable"}
+                </span>
               </div>
+              {directory.inspection.checks.length > 0 ? (
+                <div className="mt-3 grid gap-1.5 text-xs">
+                  {directory.inspection.checks.map((check) => (
+                    <div key={check.id} className="flex items-center gap-2">
+                      {check.status === "present" ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                      ) : check.required ? (
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                      ) : (
+                        <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center text-muted-foreground">–</span>
+                      )}
+                      <span>{check.name}</span>
+                      {!check.required ? <span className="text-muted-foreground">Optional</span> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1.5 text-xs font-medium">
-                <span className="text-muted-foreground">Game format</span>
-                <select
-                  value={desiredFormat}
-                  disabled={controlsDisabled}
-                  onChange={(event) => void setFormat(event.target.value)}
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="">Not configured</option>
-                  <option value={WOTLK_FORMAT}>Wrath 3.3.5a</option>
-                </select>
-              </label>
-              <label className="space-y-1.5 text-xs font-medium">
-                <span className="text-muted-foreground">Automatic upload</span>
-                <select
-                  value={desired?.auto_upload ?? "disabled"}
-                  disabled={controlsDisabled || !desired}
-                  onChange={(event) => void setAutoUpload(event.target.value)}
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="disabled">Disabled</option>
-                  {supportedModes.includes("on_game_exit") ? (
-                    <option value="on_game_exit">When this game exits</option>
-                  ) : null}
-                </select>
-                {desired && !supportedModes.includes("on_game_exit") ? (
-                  <span className="block font-normal text-muted-foreground">This Sidekick version does not support automatic uploads for this format.</span>
+            <label className="space-y-1.5 text-xs font-medium">
+              <span className="text-muted-foreground">Automatic upload</span>
+              <select
+                value={desired?.auto_upload ?? "disabled"}
+                disabled={controlsDisabled}
+                onChange={(event) => void setAutoUpload(event.target.value)}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="disabled">Disabled</option>
+                {supportedModes.includes("on_game_exit") ? (
+                  <option value="on_game_exit">When this game exits</option>
                 ) : null}
-              </label>
-            </div>
+              </select>
+              {!supportedModes.includes("on_game_exit") ? (
+                <span className="block font-normal text-muted-foreground">This Sidekick version does not support automatic uploads for this format.</span>
+              ) : null}
+            </label>
           </div>
         );
       })}

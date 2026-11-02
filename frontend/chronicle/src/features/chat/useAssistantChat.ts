@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { AgUiClientError, runAgUi, type RunAgUiOptions } from "./client";
 import { useOptionalInferenceRuntime, type InferenceClientDescriptor } from "./runtime";
 import {
@@ -15,6 +15,7 @@ export interface CreateChatRunRequestInput {
   messages: ChatMessage[];
   runId: string;
   threadId: string;
+  webSearch: boolean;
   client?: InferenceClientDescriptor;
 }
 
@@ -22,11 +23,13 @@ export interface DefaultChatRunRequest {
   messages: ChatMessage[];
   runId: string;
   threadId: string;
+  webSearch: boolean;
   client?: InferenceClientDescriptor;
 }
 
 export interface DebugCommandInput {
   threadId: string;
+  webSearch: boolean;
   client?: InferenceClientDescriptor;
 }
 
@@ -48,11 +51,14 @@ export interface UseAssistantChatOptions {
   onRunSettled?: () => void | Promise<void>;
   onDebugCommand?: (input: DebugCommandInput) => DebugCommandResult | Promise<DebugCommandResult>;
   onStartNewChat?: () => void | ChatMessage[] | Promise<void | ChatMessage[]>;
+  yoloEnabled?: boolean;
   runClient?: (options: RunAgUiOptions) => Promise<void>;
 }
 
 export interface AssistantChatController extends ChatState {
   isRunning: boolean;
+  webSearchEnabled: boolean;
+  setWebSearchEnabled: (enabled: boolean) => void;
   submit: (content: string) => Promise<boolean>;
   startNewChat: () => Promise<boolean>;
   cancel: () => void;
@@ -90,6 +96,12 @@ function getErrorMessage(error: unknown): string {
 
 export function useAssistantChat(options: UseAssistantChatOptions): AssistantChatController {
   const runtime = useOptionalInferenceRuntime();
+  const runRuntime = useMemo(() => runtime ? {
+    getClientDescriptor: runtime.getClientDescriptor,
+    executeClientTool: (request: Parameters<typeof runtime.executeClientTool>[0], signal: AbortSignal) => (
+      runtime.executeClientTool(request, signal, { yoloEnabled: options.yoloEnabled })
+    ),
+  } : undefined, [options.yoloEnabled, runtime]);
   const [state, dispatch] = useReducer(
     chatReducer,
     options,
@@ -97,6 +109,7 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
   );
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRunRef = useRef(false);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const messagesRef = useRef(state.messages);
   const threadIdRef = useRef(options.threadId ?? createId("thread"));
   const onMessagesChange = options.onMessagesChange;
@@ -127,6 +140,7 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
     try {
       const messages = await options.onStartNewChat?.();
       dispatch({ type: "reset_conversation", messages: messages ?? [] });
+      setWebSearchEnabled(false);
       return true;
     } catch (error) {
       dispatch({ type: "run_failed", message: getErrorMessage(error) });
@@ -149,7 +163,8 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
         try {
           const result = await options.onDebugCommand({
             threadId: threadIdRef.current,
-            ...(runtime ? { client: runtime.getClientDescriptor() } : {}),
+            webSearch: webSearchEnabled,
+            ...(runRuntime ? { client: runRuntime.getClientDescriptor() } : {}),
           });
           dispatch({
             type: "debug_preview",
@@ -192,7 +207,8 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
         messages,
         runId,
         threadId,
-        ...(runtime ? { client: runtime.getClientDescriptor() } : {}),
+        webSearch: webSearchEnabled,
+        ...(runRuntime ? { client: runRuntime.getClientDescriptor() } : {}),
       };
       const onEvent = (event: AgUiEvent) => dispatch({ type: "apply_event", event });
 
@@ -203,7 +219,7 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
           body,
           headers: options.headers,
           signal: abortController.signal,
-          runtime: runtime ?? undefined,
+          runtime: runRuntime,
           onEvent,
         });
         await options.onRunComplete?.();
@@ -226,12 +242,14 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
         }
       }
     },
-    [options, runtime, startNewChat],
+    [options, runRuntime, startNewChat, webSearchEnabled],
   );
 
   return {
     ...state,
     isRunning: state.status === "running",
+    webSearchEnabled,
+    setWebSearchEnabled,
     submit,
     startNewChat,
     cancel,

@@ -1,16 +1,16 @@
 # Mastery and Renown rating model
 
-**Start with the [white-paper pitch](mastery-renown-white-paper.md)** for the questions, motivation, and decision gate. This document is the technical companion, not the introduction.
+**Start with the [white-paper overview](mastery-renown-white-paper.md)** for the questions and motivation. This document is the technical companion, not the introduction.
 
-Status: exploratory specification
+Status: implementation-aligned specification for the backend in #1516. Numerical policy is configurable, not a universal default.
 
-Prototype: `Pages/Armory/Mastery & Renown` in Storybook
+The existing Storybook examples on `main` are illustrative; they are not production score fixtures.
 
 ## Summary
 
-Chronicle persists each successful parse as a 0–100 measurement of how close that performance was to the best result in the cohort and 60-day window used at scoring time. This document uses “locked parse” as shorthand for that persisted score result; it does not imply an immutable cohort snapshot. Mastery and Renown build on those persisted observations without changing them.
+Chronicle persists each successful parse as a 0–100 measurement of how close that performance was to the best result in the cohort and 60-day window used at scoring time. This document uses “locked parse” as shorthand for that persisted score result; it does not imply an immutable cohort snapshot. Mastery uses those locked observations without changing them; Renown instead credits eligible source-backed boss kills, and Peak uses raw performance or kill time.
 
-The model deliberately exposes five different concepts instead of hiding them in one opaque number:
+The model deliberately exposes distinct concepts instead of hiding them in one opaque number:
 
 | Concept | Question | Range |
 | --- | --- | ---: |
@@ -18,9 +18,9 @@ The model deliberately exposes five different concepts instead of hiding them in
 | Mastery | What repeatable performance does the observed record suggest? | 0–100 |
 | Confidence | How much evidence supports that estimate? | 0–100% |
 | Ranked Mastery | What conservative value should a leaderboard compare? | 0–100 |
-| Renown | How much breadth and repeated history has Chronicle witnessed? | unbounded career points |
+| Renown | How many configured eligible boss-kill points has Chronicle witnessed? | unbounded career and period points |
 
-A player with one locked 100 parse therefore keeps a **100 Mastery estimate**, but has only **22.1% Confidence** and **65.0 Ranked Mastery**. The player is not described as mediocre; the leaderboard is merely honest about uncertainty.
+Under the illustrative 30/50/20 and 65% one-kill policy, a player with one locked 100 parse keeps a **100 Mastery estimate**, but has only **22.1% Confidence** and **65.0 Ranked Mastery**. The player is not described as mediocre; the leaderboard is merely honest about uncertainty.
 
 ## Goals
 
@@ -46,7 +46,7 @@ For a player, metric, specialization, scoring period, and boss `b`:
 
 - `p_i`: locked Chronicle parse for kill `i`, from 0 through 100.
 - `t_i`: kill timestamp.
-- `P_b`: Peak, the highest eligible locked parse.
+- `P_b`: best eligible locked parse used in Mastery (distinct from raw-performance Peak).
 - `F_b`: Form, the recency-weighted median parse.
 - `Q_b`: Floor, the recency-weighted 25th percentile parse.
 - `n_b`: number of eligible canonical kills.
@@ -55,11 +55,11 @@ For a player, metric, specialization, scoring period, and boss `b`:
 - `E_b`: evidence multiplier used for ranking.
 - `R_b`: boss Ranked Mastery.
 
-All calculations are partitioned by tenant/server, rating-policy version, exact scoring-period boundaries, instance, encounter, difficulty, raid size, metric, role where applicable, class, specialization, and sub-specialization where applicable. Current `parse_score_results` rows do not contain every provenance field directly; production computation must join the authoritative `parse_score_receipts` metadata or persist an equivalent rating-specific source projection.
+Scores are partitioned by tenant/server, policy, selected window, content, difficulty, raid size, metric, and player class/spec/sub-spec where applicable. The competitive rank-one reference spans the tenant/server across realms; realm-group membership selects eligible content and the realm on each published score identifies its subject. Guild Peak uses clean per-boss kill time rather than a player parse. Guild Mastery uses locked, server-scoped boss time parses. Current `parse_score_results` rows do not contain every provenance field directly; production computation must join the authoritative `parse_score_receipts` metadata or persist an equivalent rating-specific source projection.
 
-## Eligible kills
+## Eligible Mastery observations
 
-A kill contributes once when all of these are true:
+A locked parse contributes once when all of these are true:
 
 1. It has a successful locked parse result.
 2. Its logical run is canonical under `ranking_runs`.
@@ -73,52 +73,57 @@ Duplicate uploads must not create duplicate evidence. Reparse, invalidation, del
 
 Form and Floor emphasize recent evidence while retaining older evidence.
 
-Default half-life:
+Illustrative half-life (configured per group):
 
 ```text
 H = 42 days
 ```
 
-For a kill that is `d_i` days older than the most recent eligible kill in the selected scoring period:
+For a retained kill that is `d_i` days older than the most recent retained kill in the selected period:
 
 ```text
 w_i = 2 ^ (-d_i / H)
 ```
 
-The most recent kill has weight `1`. A kill 42 days older has weight `0.5`; a kill 84 days older has weight `0.25`.
+The most recent *retained* kill has weight `1`. A retained kill 42 days older has weight `0.5`; one 84 days older has weight `0.25`. The half-life is configured per group.
 
-Age is measured relative to the most recent eligible kill inside the exact selected scoring-period boundaries, not wall-clock time. A player does not become worse merely by taking a break. Freshness may be displayed separately. The period start, period end/cutoff, and latest-observation timestamp must be persisted as rating provenance because changing the selected period can change the eligible observations and weights.
+Age is measured relative to the most recent retained kill inside the selected scoring-period boundaries, not wall-clock time. Recency weights do not decay solely because time passes, though a rolling period can eventually exclude older observations. Freshness may be displayed separately. The period start, period end/cutoff, and latest-observation timestamp must be persisted as rating provenance because changing the selected period can change the eligible observations and weights.
 
 ### Weighted quantile algorithm
 
 To compute a weighted quantile at probability `q`:
 
-1. Sort observations by parse ascending.
-2. Sum all weights as `W`.
-3. Walk the sorted observations until cumulative weight is at least `q * W`.
-4. Return that observation's parse.
+1. Sort eligible observations by parse ascending, then timestamp and stable result ID.
+2. Starting at five eligible kills, exclude the lowest `floor(n_b * 0.2)` from Form and Floor only.
+3. Sum the retained observations' recency weights as `W`.
+4. Walk retained observations until cumulative weight is at least `q * W`.
+5. Return that observation's parse.
 
 The first version does not interpolate between observations. Deterministic tie-breaking is parse, timestamp, then result ID.
 
-## 2. Peak, Form, and Floor
+## 2. Best parse, Form, and Floor
 
 For each boss:
 
 ```text
-Peak  P_b = max(p_i)
-Form  F_b = weighted_quantile(p_i, w_i, 0.50)
-Floor Q_b = weighted_quantile(p_i, w_i, 0.25)
+Best  P_b = max(p_i) over all eligible kills
+Form  F_b = weighted_quantile(retained p_i, w_i, 0.50)
+Floor Q_b = weighted_quantile(retained p_i, w_i, 0.25)
 ```
 
 Interpretation:
 
-- **Peak** preserves demonstrated ceiling.
+- **Best parse** preserves demonstrated ceiling within Mastery; the competitive Peak rating separately compares raw DPS/HPS against the current tenant-wide rank one.
 - **Form** carries most of the rating and describes typical recent play.
 - **Floor** rewards a strong bad night and distinguishes consistent players from volatile players.
 
+### Competitive Peak (distinct from the best locked parse)
+
+For a player, Peak is `100 * best eligible raw DPS or HPS / tenant rank-one raw DPS or HPS` in the same boss, window, and player cohort. For a guild, Peak is `100 * tenant fastest clean boss kill time / guild fastest clean boss kill time`. Guild-less qualifying kills can establish the fastest comparison time but never earn guild credit. Rank one can improve, so an unchanged best result can receive a different normalized Peak on a later rebuild. Neither calculation replaces the existing Performance or full-clear Speedrun boards.
+
 ## 3. Boss Mastery estimate
 
-The proposed initial blend is:
+The illustrative 30/50/20 group policy blend is:
 
 ```text
 M_b = 0.30 * P_b + 0.50 * F_b + 0.20 * Q_b
@@ -126,7 +131,7 @@ M_b = 0.30 * P_b + 0.50 * F_b + 0.20 * Q_b
 
 The weights sum to one, so Mastery remains on the locked parse scale from 0 through 100.
 
-This is the number labeled **Mastery** in the UI. Confidence never changes it.
+This is the number labeled **Mastery** in the UI. Confidence never changes it. The lowest-fifth exclusion changes Form and Floor starting at five eligible kills, while best parse and evidence count still include all eligible observations.
 
 ### Why these weights?
 
@@ -157,7 +162,7 @@ Selected values:
 | 14 | 97.0% | established |
 | 20 | 99.3% | effectively saturated |
 
-Confidence never reaches exactly 100%. Additional kills remain evidence, but have very small rating effects after the curve saturates.
+Confidence never reaches exactly 100%. Additional kills remain evidence, but the provisional ranking discount ends at five kills per boss; Confidence is descriptive rather than the ranking multiplier.
 
 Suggested display labels:
 
@@ -173,35 +178,24 @@ Suggested display labels:
 
 Mastery is the estimate. Ranked Mastery is the conservative comparison value.
 
-First convert Confidence into an evidence multiplier:
+The prototype now uses a separate ranking weight, reaching full weight at five eligible kills per boss rather than waiting for descriptive Confidence to approach 100%:
 
 ```text
-E_b = 0.55 + 0.45 * C_b
-```
-
-Then:
-
-```text
-R_b = M_b * E_b
-```
-
-The `0.55` prior floor means one real result is meaningful, but cannot immediately produce an established leaderboard score. It is a policy constant and must be versioned.
-
-The maximum Ranked Mastery possible at kill count `n` is:
-
-```text
-RankedCeiling(n) = 100 * (0.55 + 0.45 * (1 - exp(-n / 4)))
+E_b(n) = 0.55 + 0.10 * min(n, 1)
+         + 0.35 * min(max(n - 1, 0) / 4, 1)
+R_b = M_b * E_b(n)
+RankedCeiling(n) = 100 * E_b(n)
 ```
 
 | Kills | Ranked ceiling for a 100 Mastery estimate |
 | ---: | ---: |
 | 1 | 65.0 |
-| 2 | 72.7 |
-| 3 | 78.7 |
-| 5 | 87.1 |
-| 8 | 93.9 |
-| 14 | 98.6 |
-| 20 | 99.7 |
+| 2 | 73.8 |
+| 3 | 82.5 |
+| 4 | 91.3 |
+| 5 or more | 100.0 |
+
+The five-kill full-ranking-weight cutoff and one-kill 65% weight are the current example policy; the backend stores these constants per rating group. Confidence can continue to grow after full ranking weight is reached. Unlike the former asymptotic discount, this does not imply a 20-kill grind to approach Mastery.
 
 The UI must show Mastery, Confidence, and Ranked Mastery together. It must not label Ranked Mastery simply as Mastery.
 
@@ -215,38 +209,24 @@ The same model can be viewed at three levels:
 
 ### Production aggregation
 
-Calculate boss values first. For a scope with eligible boss weights `a_b`:
+Compute each eligible boss first. For a complete, configured boss manifest with positive weights `a_b`, missing boss scores contribute zero while their weights remain in the denominator:
 
 ```text
-ScopeMastery = sum(a_b * M_b for observed bosses)
-             / sum(a_b for observed bosses)
+ScopeScore = sum(a_b * BossScore_b for all eligible bosses)
+           / sum(a_b for all eligible bosses)
 ```
 
-Initial boss weights are all `1`. Boss-specific weights are deliberately deferred.
+This weighted average applies to raid and group Peak, Mastery, and Ranked Mastery. Renown instead sums awarded points across bosses and raids, without a denominator. One excellent boss cannot grant full scope credit for unobserved bosses. Policy selects which bosses are eligible; changing the manifest creates a new policy revision and rebuilt generation. No scope-level Confidence multiplier is applied to Ranked Mastery: aggregate already-discounted boss scores.
 
-Scope evidence includes missing eligible bosses as zero confidence:
-
-```text
-ScopeConfidence = sum(a_b * C_b for every eligible boss)
-                / sum(a_b for every eligible boss)
-```
-
-This means one excellent boss does not look like complete instance mastery. Missing bosses reduce confidence rather than pretending the player performed badly.
-
-```text
-ScopeEvidenceMultiplier = 0.55 + 0.45 * ScopeConfidence
-ScopeRankedMastery = ScopeMastery * ScopeEvidenceMultiplier
-```
-
-If no boss has an eligible parse, Scope Mastery is absent rather than zero.
+An absent score is not a zero-valued *parse*. Zero enters only at the scope-aggregation step. Do not display a scope score for a subject with no eligible observations.
 
 ### Prototype simplification
 
-The current Storybook uses aggregate Peak/Form/Floor values and average kills per observed boss. Production must calculate per-boss values first using the equations above. Weighted quantiles and nonlinear evidence/Renown curves do not commute with averaging, so the Storybook numbers are illustrative rather than production-equivalent. The primary display labels this as a prototype approximation.
+The existing Storybook uses curated aggregate values and average kills per observed boss. Backend scores calculate per boss first, exclude low observations where applicable, and aggregate against the full manifest. Storybook numbers must not be presented as production ratings.
 
 ### Adding new raids
 
-A portfolio policy contains an immutable list of eligible instances and bosses. Adding a raid creates a new policy version or scoring period. It must not silently alter frozen historical standings.
+A rating group has a configured list of eligible raids and bosses. Changing it increments the policy revision and rebuilds a complete new generation before publication.
 
 Instance Mastery remains directly comparable because it is always normalized to 0–100. Renown may grow as the content catalog grows.
 
@@ -254,11 +234,11 @@ Instance Mastery remains directly comparable because it is always normalized to 
 
 ### Identical-performance prediction
 
-If future kills follow the current Peak/Form/Floor profile, Mastery remains unchanged and only confidence changes:
+The Storybook prediction holds Mastery fixed as a simplifying assumption. With actual per-kill observations, new kills can change the trimmed set, Form, and Floor even if performance looks similar; Confidence and the ranking weight grow until the configured full-weight kill count:
 
 ```text
 ProjectedConfidence(n + k) = 1 - exp(-(n + k) / 4)
-ProjectedRankedMastery = Mastery * (0.55 + 0.45 * ProjectedConfidence)
+ProjectedRankedMastery = Mastery * E_b(n + k)
 ```
 
 This prediction answers: “What would repeating this level of play prove?”
@@ -268,25 +248,25 @@ This prediction answers: “What would repeating this level of play prove?”
 For an entered next parse `x` at timestamp `t`:
 
 1. Append `(x, t)` to the eligible kill set.
-2. Recompute recency weights.
-3. Recompute Peak, weighted Form, and weighted Floor.
+2. Recompute best parse and trim the lowest fifth from Form/Floor if at least five eligible kills exist.
+3. Recompute recency weights on retained observations, then weighted Form and Floor.
 4. Recompute Mastery, Confidence, and Ranked Mastery.
 5. Display before/after values and explain which component changed.
 
 This answers: “What happens if my next parse is 85?”
 
-The simulator must be labeled hypothetical and must never write production scores.
+The simulator must be labeled hypothetical and must never write production scores. Its aggregate Storybook approximation does not simulate per-boss outlier exclusion.
 
 ## 8. Worked examples
 
-The following examples use curated OctoWoW/N'Zoth production-derived summaries from the 180 days ending October 31, 2026. They explain the formula; they are not published ratings.
+These examples use curated Storybook summaries to illustrate the formula. The multi-kill aggregate inputs are not recomputed from per-boss retained observations and do not validate the low-kill exclusion. They are not published ratings.
 
 ### Example A: one perfect kill
 
 Inputs:
 
 ```text
-Peak = 100
+Best parse = 100
 Form = 100
 Floor = 100
 Kills = 1
@@ -303,8 +283,8 @@ Confidence and ranking:
 
 ```text
 C = 1 - exp(-1 / 4) = 0.2212
-E = 0.55 + 0.45(0.2212) = 0.6495
-R = 100.0 * 0.6495 = 65.0
+E(1) = 0.65
+R = 100.0 * 0.65 = 65.0
 ```
 
 Display:
@@ -317,10 +297,10 @@ Ranked Mastery:  65.0
 
 ### Example B: Port in Molten Core
 
-Prototype aggregate inputs:
+Illustrative Storybook aggregate inputs (not computed from the per-boss observation histories):
 
 ```text
-Peak = 100.0
+Best parse = 100.0
 Form = 93.6
 Floor = 83.1
 Average kills per boss = 14
@@ -338,8 +318,8 @@ Confidence and ranking:
 
 ```text
 C = 1 - exp(-14 / 4) = 0.9698
-E = 0.55 + 0.45(0.9698) = 0.9864
-R = 93.42 * 0.9864 = 92.15
+E(14) = 1.00 (ranking discount ended at five kills)
+R = 93.42 * 1.00 = 93.42
 ```
 
 Display:
@@ -347,15 +327,15 @@ Display:
 ```text
 Mastery:         93.4
 Confidence:      97.0% — Established
-Ranked Mastery:  92.2
+Ranked Mastery:  93.4
 ```
 
 ### Example C: high peak, volatile record
 
-Prototype Zul'Gurub aggregate:
+Illustrative Storybook aggregate (not computed from the per-boss observation histories):
 
 ```text
-Peak = 99.1
+Best parse = 99.1
 Form = 62.9
 Floor = 37.9
 Average kills per boss = 6
@@ -367,80 +347,35 @@ M = 29.73 + 31.45 + 7.58
 M = 68.76
 
 C = 1 - exp(-6 / 4) = 0.7769
-E = 0.55 + 0.45(0.7769) = 0.8996
-R = 68.76 * 0.8996 = 61.86
+E(6) = 1.00
+R = 68.76 * 1.00 = 68.76
 ```
 
-The 99.1 Peak remains visible, but the Form and Floor correctly prevent it from defining the player's expected performance.
+The 99.1 best locked parse remains visible, but the Form and Floor keep it from defining the entire Mastery estimate. Competitive Peak uses raw DPS/HPS instead.
 
 ## 9. Renown
 
-Renown is a separate career ledger. It contains no parse, Mastery, or Ranked Mastery term.
+Renown is a separate source-backed kill ledger with career and configured period projections. It contains no parse, Mastery, or Ranked Mastery term.
 
-For each eligible boss with `n_b` canonical kills:
-
-```text
-BossRenown(n_b) = 0                                      when n_b = 0
-BossRenown(n_b) = 50 + 50 * (1 - exp(-(n_b - 1) / 6))  when n_b >= 1
-```
-
-Properties:
-
-- The first witnessed kill awards 50 Renown.
-- Repetition adds up to another 50 with diminishing returns.
-- Each boss is therefore bounded below 100 Renown for repetition.
-- Farming one boss forever cannot dominate breadth.
-
-A complete eligible instance awards:
+For each eligible canonical boss kill, award the configured `boss_points` plus the configured `final_boss_bonus` if that boss is designated for the bonus:
 
 ```text
-InstanceCompletionBonus = 250
+KillAward = boss_points + final_boss_bonus (when configured)
+Renown = sum(KillAward for eligible canonical boss kills)
 ```
 
-An instance is complete only when one canonical logical run contains a qualifying kill for every encounter in that policy version's eligible boss manifest. Combining bosses from unrelated partial runs does not award the completion bonus.
+Each additional eligible kill earns the same configured award. There is no diminishing-return curve, fixed 50-point award, per-boss cap, or full-instance completion bonus in this implementation. A final-boss bonus is awarded on that boss's kill, not on a completed full clear. Players and guilds have separate source-backed facts and scores. A guild-less kill does not earn guild Renown.
 
-Total:
+The career window includes retained eligible evidence; the period window includes only eligible kills in the configured policy period. Deleting a source log removes facts supported only by that source. When a duplicate source remains, canonical credit survives and is reattributed; deleting the last source and re-uploading earns credit once, not twice. Daily bounded fact repair recovers missing historical facts, and complete daily generations publish the score projections. Renown repaired after a day's rating snapshot appears in the next published generation.
 
-```text
-Renown = sum(BossRenown(n_b))
-        + 250 * completed_instances
-        + explicit_versioned_milestone_awards
-```
-
-Milestone awards are zero in v1. If added later, every award type and value must be explicit in the policy.
-
-Suggested presentation titles:
-
-| Renown | Title |
-| ---: | --- |
-| 0–499 | Known |
-| 500–1,499 | Respected |
-| 1,500–2,999 | Celebrated |
-| 3,000–4,999 | Exalted |
-| 5,000+ | Legendary |
-
-Titles are presentation only and may be retuned without changing stored Renown if title-versioning is preserved.
-
-### Renown examples
-
-Using the prototype's average-kills approximation:
-
-| Player profile | Kills | Bosses | Completed raids | Approx. Renown |
-| --- | ---: | ---: | ---: | ---: |
-| one perfect flash | 1 | 1 | 0 | 50 |
-| Port sample | 247 | 30 | 3 | 3,301 |
-| Lebron sample | 360 | 31 | 4 | 3,836 |
-| Jinocide sample | 211 | 31 | 4 | 3,511 |
-
-The lower-Mastery player can have high Renown because Chronicle has witnessed a broad career. That separation is intentional.
+The former Storybook's sample Renown totals and presentation titles were exploration fixtures, not guaranteed production values. Actual points depend on the group policy and eligible manifest.
 
 ## 10. Persistence and versioning
 
-Recommended persisted summary key:
+Rating summaries identify the active generation, tenant, realm group, realm, subject, window, and score partition. Relevant source provenance includes:
 
 ```text
 policy_version
-season_id
 period_start
 period_end_or_cutoff
 parse_score_receipt_id_or_source_generation
@@ -454,7 +389,7 @@ spec
 sub_spec
 ```
 
-Recommended summary fields:
+Illustrative boss Mastery fields:
 
 ```text
 peak
@@ -482,7 +417,7 @@ Every result must store or reference:
 - recency half-life;
 - formula constants.
 
-Live standings are provisional. A frozen scoring period stores immutable final summaries and policy metadata.
+Published standings read only a complete active generation. Daily River jobs rebuild bounded batches from a captured manifest; a policy revision change prevents a stale generation from publishing. The implementation does not promise permanently frozen historical standings.
 
 ## 11. Update model
 
@@ -498,7 +433,7 @@ Recompute affected boss partitions after:
 - duplicate-group changes;
 - policy changes.
 
-Then rebuild affected instance and portfolio summaries. A periodic reconciliation job should repair drift.
+The daily bounded rebuild computes boss, raid, and group projections and publishes a complete matching-revision generation. Independent daily Renown fact repair fills missing historical facts in durable pages; its results may first appear in the next daily rating generation.
 
 ## 12. Product presentation requirements
 
@@ -515,17 +450,6 @@ Never show a confidence-discounted value labeled only “Mastery.”
 
 Renown must be visually separate and described as career history, not player skill.
 
-## 13. Open decisions
+## 13. Policy and QA questions
 
-The formulas above are the proposed v1 policy. Before backend implementation, decide:
-
-1. Whether Form should use weighted median or weighted mean.
-2. Whether the half-life should be 42, 56, or another number of days.
-3. Whether progression periods and farm periods should be separate policies.
-4. Whether healers need role-specific components beyond HPS parse.
-5. Whether encounter weights should all remain equal.
-6. Whether portfolio confidence should include every historical raid or only the active policy manifest.
-7. Whether Renown should reset by season, remain career-wide, or expose both.
-8. Whether confidence labels are global or localized per game/server.
-
-Any change to numerical scoring semantics requires a new policy version and recomputation rather than silently changing historical meaning.
+The backend makes periods, half-life, blend weights, evidence cutoff, eligible bosses, boss weights, and Renown awards group-configurable. Before launch, configure and review each group's actual numeric policy, sparse cohorts, player and guild example histories, and the public labels. Do not treat Storybook fixtures as proof of production outcomes. A numerical or content-policy change creates a new revision and requires a complete rebuild before publication.

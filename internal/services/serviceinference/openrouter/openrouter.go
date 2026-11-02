@@ -166,12 +166,27 @@ func (c *Client) StreamChat(ctx context.Context, credential []byte, request serv
 	for _, tool := range request.Tools {
 		payload.Tools = append(payload.Tools, chatTool{
 			Type: "function",
-			Function: chatFunctionDefinition{
+			Function: &chatFunctionDefinition{
 				Name:        tool.Name,
 				Description: tool.Description,
 				Parameters:  tool.Parameters,
 			},
 		})
+	}
+	for _, tool := range request.ServerTools {
+		switch tool.Kind {
+		case serviceinference.ServerToolWebSearch:
+			payload.Tools = append(payload.Tools, chatTool{
+				Type: "openrouter:web_search",
+				Parameters: &serverToolParameters{
+					MaxUses:         tool.MaxUses,
+					MaxResults:      tool.MaxResults,
+					MaxTotalResults: tool.MaxTotalResults,
+				},
+			})
+		default:
+			return fmt.Errorf("unsupported OpenRouter server tool %q", tool.Kind)
+		}
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -512,8 +527,15 @@ type chatMessage struct {
 }
 
 type chatTool struct {
-	Type     string                 `json:"type"`
-	Function chatFunctionDefinition `json:"function"`
+	Type       string                  `json:"type"`
+	Function   *chatFunctionDefinition `json:"function,omitempty"`
+	Parameters *serverToolParameters   `json:"parameters,omitempty"`
+}
+
+type serverToolParameters struct {
+	MaxUses         int `json:"max_uses,omitempty"`
+	MaxResults      int `json:"max_results,omitempty"`
+	MaxTotalResults int `json:"max_total_results,omitempty"`
 }
 
 type chatFunctionDefinition struct {

@@ -40,7 +40,7 @@ func TestSidekickLifecycleAndIssues(t *testing.T) {
 
 	installation, err = db.UpdateSidekickHeartbeat(ctx, database.UpdateSidekickHeartbeatParams{
 		ID: installationID, UserID: userID, Platform: "linux", SidekickVersion: "1.2.4",
-		StartAtLogin: true, AutoUploadCapabilities: []byte(`{"wotlk_3.3.5a":["on_game_exit"]}`),
+		StartAtLogin: true, AutoUploadCapabilities: []byte(`{"3.3.5a-cc-addon":["on_game_exit"]}`),
 	})
 	require.NoError(t, err)
 	require.True(t, installation.LastSeenAt.Valid)
@@ -48,15 +48,15 @@ func TestSidekickLifecycleAndIssues(t *testing.T) {
 
 	require.NoError(t, db.UpsertSidekickWoWDirectory(ctx, database.UpsertSidekickWoWDirectoryParams{
 		SidekickID: installationID, ID: pgtype.Text{}, Path: `C:\\Games\\Legacy`, TenantName: "Legacy",
-		TenantBaseUrl: "https://legacy.chronicleclassic.com", Realmlist: "", GameFormat: "",
+		TenantBaseUrl: "https://legacy.chronicleclassic.com", Realmlist: "", LogFormat: "1.12a-cc-addon", Inspection: []byte(`{"status":"unknown","checks":[]}`),
 	}))
 	require.NoError(t, db.UpsertSidekickWoWDirectory(ctx, database.UpsertSidekickWoWDirectoryParams{
 		SidekickID: installationID, ID: pgtype.Text{String: "wowdir_capy", Valid: true}, Path: `C:\\Games\\CapyCraft`, TenantName: "CapyCraft",
-		TenantBaseUrl: "https://capy.chronicleclassic.com", Realmlist: "apac.capycraft.io", GameFormat: "",
+		TenantBaseUrl: "https://capy.chronicleclassic.com", Realmlist: "apac.capycraft.io", LogFormat: "1.12a-cc-addon", Inspection: []byte(`{"status":"ready","checks":[]}`),
 	}))
 	require.NoError(t, db.UpsertSidekickWoWDirectory(ctx, database.UpsertSidekickWoWDirectoryParams{
 		SidekickID: installationID, ID: pgtype.Text{String: "wowdir_warmane", Valid: true}, Path: `C:\\Games\\Warmane`, TenantName: "Warmane",
-		TenantBaseUrl: "https://warmane.chronicleclassic.com", Realmlist: "logon.warmane.com", GameFormat: "wotlk_3.3.5a",
+		TenantBaseUrl: "https://warmane.chronicleclassic.com", Realmlist: "logon.warmane.com", LogFormat: "3.3.5a-cc-addon", Inspection: []byte(`{"status":"action_required","checks":[]}`),
 	}))
 	directories, err := db.ListSidekickWoWDirectories(ctx, installationID)
 	require.NoError(t, err)
@@ -69,6 +69,8 @@ func TestSidekickLifecycleAndIssues(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, directories, 1)
 	require.Equal(t, "Warmane", directories[0].TenantName)
+	require.Equal(t, "3.3.5a-cc-addon", directories[0].LogFormat)
+	require.JSONEq(t, `{"status":"action_required","checks":[]}`, string(directories[0].Inspection))
 
 	issue, err := db.UpsertActiveSidekickIssue(ctx, database.UpsertActiveSidekickIssueParams{
 		SidekickID: installationID, Code: "upload_failed", Message: "Upload failed", Details: "connection reset",

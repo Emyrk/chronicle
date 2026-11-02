@@ -9,7 +9,7 @@ export interface MasteryResult extends MasteryInputs {
   /** The repeatable performance suggested by the observed parses. */
   estimate: number;
   confidence: number;
-  confidenceMultiplier: number;
+  rankingMultiplier: number;
   /** Highest Ranked Mastery possible at this evidence level. */
   rankedCeiling: number;
   /** Conservative leaderboard value after evidence adjustment. */
@@ -17,7 +17,9 @@ export interface MasteryResult extends MasteryInputs {
 }
 
 const CONFIDENCE_KILLS = 4;
-const PROVISIONAL_FLOOR = 0.55;
+const FULL_RANKING_KILLS = 5;
+const NO_KILL_RANKING_WEIGHT = 0.55;
+const ONE_KILL_RANKING_WEIGHT = 0.65;
 
 function finiteOrZero(value: number): number {
   return Number.isFinite(value) ? value : 0;
@@ -35,10 +37,17 @@ export function masteryConfidence(kills: number): number {
   return 1 - Math.exp(-Math.max(0, finiteOrZero(kills)) / CONFIDENCE_KILLS);
 }
 
+/** Provisional ranking adjustment ends after five eligible kills per boss. */
+function rankingEvidenceMultiplier(kills: number): number {
+  const count = Math.max(0, finiteOrZero(kills));
+  return NO_KILL_RANKING_WEIGHT
+    + (ONE_KILL_RANKING_WEIGHT - NO_KILL_RANKING_WEIGHT) * Math.min(count, 1)
+    + (1 - ONE_KILL_RANKING_WEIGHT) * Math.min(Math.max(count - 1, 0) / (FULL_RANKING_KILLS - 1), 1);
+}
+
 /** The highest Ranked Mastery a perfect estimate can earn at this sample size. */
 export function masteryCeiling(kills: number): number {
-  const confidence = masteryConfidence(kills);
-  return 100 * (PROVISIONAL_FLOOR + (1 - PROVISIONAL_FLOOR) * confidence);
+  return 100 * rankingEvidenceMultiplier(kills);
 }
 
 /**
@@ -46,7 +55,8 @@ export function masteryCeiling(kills: number): number {
  * - Peak preserves the player's ceiling.
  * - Form carries most of the score.
  * - Floor rewards nights that remain strong even when they are not exceptional.
- * - Evidence does not alter the estimate; it only discounts Ranked Mastery.
+ * - The provisional ranking adjustment does not alter the estimate and ends at five kills.
+ * - Confidence remains descriptive and can keep growing after the ranking adjustment ends.
  */
 export function calculateMastery(inputs: MasteryInputs): MasteryResult {
   const peak = clampScore(inputs.peak);
@@ -55,7 +65,7 @@ export function calculateMastery(inputs: MasteryInputs): MasteryResult {
   const kills = Math.max(0, finiteOrZero(inputs.kills));
   const estimate = 0.3 * peak + 0.5 * form + 0.2 * floor;
   const confidence = masteryConfidence(kills);
-  const confidenceMultiplier = PROVISIONAL_FLOOR + (1 - PROVISIONAL_FLOOR) * confidence;
+  const rankingMultiplier = rankingEvidenceMultiplier(kills);
 
   return {
     peak,
@@ -64,9 +74,9 @@ export function calculateMastery(inputs: MasteryInputs): MasteryResult {
     kills,
     estimate,
     confidence,
-    confidenceMultiplier,
-    rankedCeiling: 100 * confidenceMultiplier,
-    rankedMastery: estimate * confidenceMultiplier,
+    rankingMultiplier,
+    rankedCeiling: 100 * rankingMultiplier,
+    rankedMastery: estimate * rankingMultiplier,
   };
 }
 

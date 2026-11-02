@@ -227,6 +227,9 @@ function toEffectEvent(
 export const mapProcessor: PanelProcessor<MapResult, MapProcessorEvent> = {
   id: "map",
   streams: ["unit_position", "unit_resources", "damage", "heal", "spell_start", "spell_go", "interrupt", "slain", "ressurection", "aura"],
+  // Each encounter is built on its own. One selected encounter is replayed
+  // alone; whole-run mode (zero or several selected) still gets every encounter.
+  skipUnselectedEncounters: true,
   createState: () => ({ encounters: new Map() }),
   processEvent: (state, event, encounterId, firstTimestamp, _streamType, context) => {
     const timestampMs = firstTimestamp.getTime() + event.offsetMilli;

@@ -63,7 +63,8 @@ function RankedTimeCell({ rankedTime, mode }: { rankedTime: RankedTime; mode: st
   )
 }
 
-export function RulesetInstanceView({ instanceName }: { instanceName: string }) {
+/** `embedded`: inside a page that already shows the instance banner, so only the summary chips are drawn. */
+export function RulesetInstanceView({ instanceName, embedded = false }: { instanceName: string; embedded?: boolean }) {
   const { data, isLoading, isError } = useSupportedInstances()
   const entry = rulesetEntries(data ?? []).find((item) => item.name === instanceName)
   const instance = entry?.instance ?? data?.find((item) => item.name === instanceName)
@@ -74,52 +75,60 @@ export function RulesetInstanceView({ instanceName }: { instanceName: string }) 
   if (isError) return <p className="py-12 text-center text-muted-foreground">Could not load rulesets. Please try again later.</p>
   if (!instance) return <p className="py-12 text-center text-muted-foreground">No rules found for {instanceName}.</p>
 
+  const chips = (
+    <div className={cn("flex flex-wrap gap-2 text-xs font-medium", !embedded && "mt-3")}>
+      {entry?.speedrunRules && (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 ring-1 ring-red-500/30 backdrop-blur-sm">
+          <Skull className="h-3 w-3 text-red-300" />
+          {bossCount} required {bossCount === 1 ? "boss" : "bosses"}
+        </span>
+      )}
+      {entry?.speedrunRules && (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 ring-1 ring-sky-500/30 backdrop-blur-sm">
+          <Users className="h-3 w-3 text-sky-300" />
+          {entry.speedrunRules.level_range ? `Level ${formatLevelRange(entry.speedrunRules.level_range)}` : "Any level"}
+        </span>
+      )}
+      {rows.length > 0 && (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 ring-1 ring-[color:var(--tertiary)]/40 backdrop-blur-sm">
+          <Swords className="h-3 w-3 text-[color:var(--tertiary)]" />
+          {rows.length} DPS target {rows.length === 1 ? "rule" : "rules"}
+        </span>
+      )}
+    </div>
+  )
+
   return (
     <div className="space-y-4 sm:space-y-5">
-      {/* Hero header with instance background, matching the Statistics view */}
-      <div className="relative overflow-hidden rounded-xl border">
-        <div className="absolute inset-0 z-0">
-          <img
-            src={getInstanceBackground(instanceName)}
-            alt=""
-            className="h-full w-full object-cover opacity-45 sm:opacity-70"
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/75 to-background/95 sm:bg-gradient-to-r sm:from-background/90 sm:via-background/70 sm:to-background/50" />
-        </div>
-        <div className="relative z-10 p-3 sm:p-4">
-          <Link
-            to="/leaderboards/rulesets"
-            className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            All rulesets
-          </Link>
-          <h1 className="flex flex-wrap items-baseline gap-x-2 text-xl font-bold leading-tight sm:text-2xl">
-            <span>{instanceName}</span>
-            <span className="text-sm font-normal text-muted-foreground sm:text-lg">Ruleset</span>
-          </h1>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium">
-            {entry?.speedrunRules && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 ring-1 ring-red-500/30 backdrop-blur-sm">
-                <Skull className="h-3 w-3 text-red-300" />
-                {bossCount} required {bossCount === 1 ? "boss" : "bosses"}
-              </span>
-            )}
-            {entry?.speedrunRules && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 ring-1 ring-sky-500/30 backdrop-blur-sm">
-                <Users className="h-3 w-3 text-sky-300" />
-                {entry.speedrunRules.level_range ? `Level ${formatLevelRange(entry.speedrunRules.level_range)}` : "Any level"}
-              </span>
-            )}
-            {rows.length > 0 && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 ring-1 ring-[color:var(--tertiary)]/40 backdrop-blur-sm">
-                <Swords className="h-3 w-3 text-[color:var(--tertiary)]" />
-                {rows.length} DPS target {rows.length === 1 ? "rule" : "rules"}
-              </span>
-            )}
+      {embedded ? (
+        chips
+      ) : (
+        /* Hero header with instance background, matching the Statistics view */
+        <div className="relative overflow-hidden rounded-xl border">
+          <div className="absolute inset-0 z-0">
+            <img
+              src={getInstanceBackground(instanceName)}
+              alt=""
+              className="h-full w-full object-cover opacity-45 sm:opacity-70"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/75 to-background/95 sm:bg-gradient-to-r sm:from-background/90 sm:via-background/70 sm:to-background/50" />
+          </div>
+          <div className="relative z-10 p-3 sm:p-4">
+            <Link
+              to="/leaderboards/rulesets"
+              className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              All rulesets
+            </Link>
+            <h1 className="flex flex-wrap items-baseline gap-x-2 text-xl font-bold leading-tight sm:text-2xl">
+              <span>{instanceName}</span>
+              <span className="text-sm font-normal text-muted-foreground sm:text-lg">Ruleset</span>
+            </h1>
+            {chips}
           </div>
         </div>
-      </div>
+      )}
 
       {entry?.speedrunRules ? (
         <RulesSection

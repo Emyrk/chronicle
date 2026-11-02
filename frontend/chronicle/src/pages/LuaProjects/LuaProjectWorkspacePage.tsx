@@ -23,13 +23,13 @@ import { EncounterStrip } from "./EncounterStrip"
 import { PaneResizer } from "./PaneResizer"
 import { MIN_SIDE_WIDTH } from "./paneWidth"
 import { readPreviewSelection, restoredEncounters, writePreviewSelection } from "./previewSelection"
+import { isInstanceIdentifier } from "./instanceIdentifier"
 
 const LuaSourceEditor = lazy(() => import("./LuaSourceEditor").then(module => ({ default: module.LuaSourceEditor })))
 const LuaWorkshopChat = lazy(() => import("./LuaWorkshopChat").then(module => ({ default: module.LuaWorkshopChat })))
 const LuaDiffReview = lazy(() => import("./LuaDiffReview").then(module => ({ default: module.LuaDiffReview })))
 const LuaInstancePreview = lazy(() => import("./LuaInstancePreview").then(module => ({ default: module.LuaInstancePreview })))
 const events = createCachedStreamProvider()
-const instanceIDPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 const proposalTimeoutMs = 5_000
 const layoutKey = "lua-workshop-layout"
 
@@ -104,8 +104,8 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
     setRestoredInput(true)
     if (!recent.data.instances.some(item => item.id === instanceId)) setInstanceInput(instanceId)
   }
-  const validInstanceID = instanceIDPattern.test(instanceId)
-  const instance = useInstance(instanceId, { enabled: validInstanceID, retry: false })
+  const validInstanceIdentifier = isInstanceIdentifier(instanceId)
+  const instance = useInstance(instanceId, { enabled: validInstanceIdentifier, retry: false })
   const previewUnits = useMemo(() => instance.data && buildPanelUnits(instance.data.players,
     resolveInstanceUnits(instance.data.units, instance.data.names_by_entry, instance.data.summons_by_owner)), [instance.data])
   // Start each newly loaded instance on its first boss kill so the preview runs without extra clicks.
@@ -119,8 +119,10 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
     setEncounterIds(restored.length ? restored : first ? [first.id] : [])
   }
   useEffect(() => {
-    if (projectId && validInstanceID && defaultedFor === instanceId) writePreviewSelection(projectId, { instanceId, encounterIds })
-  }, [projectId, validInstanceID, defaultedFor, instanceId, encounterIds])
+    if (projectId && instance.data && defaultedFor === instance.data.id) {
+      writePreviewSelection(projectId, { instanceId: instance.data.id, encounterIds })
+    }
+  }, [projectId, instance.data, defaultedFor, encounterIds])
   const project = projectQuery.data
   const onUploaded = useCallback(async () => {
     await projectQuery.refetch()
@@ -395,7 +397,7 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
             {recent.data.instances.map(item => <option key={item.id} value={item.id}>{item.name} · {item.realm_name} · {new Date(item.uploaded_at).toLocaleDateString()}</option>)}
           </select>}
           <form className="flex min-w-0 flex-1 basis-56 gap-2" onSubmit={event => { event.preventDefault(); selectInstance(instanceInput.trim()) }}>
-            <input aria-label="Instance ID" className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs" value={instanceInput} onChange={event => setInstanceInput(event.target.value)} placeholder={recent.data ? "…or paste an instance ID" : "Paste an instance ID"} />
+            <input aria-label="Instance ID or slug" className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs" value={instanceInput} onChange={event => setInstanceInput(event.target.value)} placeholder={recent.data ? "…or paste an instance ID or slug" : "Paste an instance ID or slug"} />
             <button className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50" type="submit" disabled={!instanceInput.trim()}>Load</button>
           </form>
           {instance.data && <button type="button" className="rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setChoosingInstance(false)}>Cancel</button>}
@@ -404,7 +406,7 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
         </div>
         <div className="styled-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
           {!instanceId && <p className="text-xs text-muted-foreground">Choose an instance to run your unsaved source against its encounters in the browser.</p>}
-          {instanceId && !validInstanceID && <p role="alert" className="text-xs text-destructive">Enter a valid instance UUID.</p>}
+          {instanceId && !validInstanceIdentifier && <p role="alert" className="text-xs text-destructive">Enter a valid instance ID or slug.</p>}
           {instance.isFetching && <p role="status" className="text-xs text-muted-foreground">Loading encounters…</p>}
           {instance.isError && <p role="alert" className="text-xs text-destructive">Instance unavailable.</p>}
           {localPanel?.error && <p role="alert" className="text-xs text-destructive">{localPanel.error}</p>}

@@ -25,17 +25,44 @@ func TestSidekickConfigCanonicalJSONSortsDirectories(t *testing.T) {
 
 	config := DefaultSidekickConfig()
 	config.WoWDirectories["wowdir_"+strings.Repeat("b", 64)] = SidekickDirectoryConfig{
-		GameFormat: SidekickGameFormatWotLK335a,
 		AutoUpload: SidekickAutoUploadDisabled,
 	}
 	config.WoWDirectories["wowdir_"+strings.Repeat("a", 64)] = SidekickDirectoryConfig{
-		GameFormat: SidekickGameFormatWotLK335a,
 		AutoUpload: SidekickAutoUploadOnGameExit,
 	}
 
 	payload, err := config.CanonicalJSON()
 	require.NoError(t, err)
-	require.Equal(t, `{"version":1,"archive":{"enabled":true,"retention_days":7},"wow_directories":{"wowdir_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":{"game_format":"wotlk_3.3.5a","auto_upload":"on_game_exit"},"wowdir_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb":{"game_format":"wotlk_3.3.5a","auto_upload":"disabled"}}}`, string(payload))
+	require.Equal(t, `{"version":1,"archive":{"enabled":true,"retention_days":7},"wow_directories":{"wowdir_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":{"auto_upload":"on_game_exit"},"wowdir_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb":{"auto_upload":"disabled"}}}`, string(payload))
+}
+
+func TestSidekickLogFormatValid(t *testing.T) {
+	t.Parallel()
+	for _, format := range []SidekickLogFormat{
+		SidekickLogFormat112aCcAddon,
+		SidekickLogFormat335aCcAddon,
+		SidekickLogFormat243CcAddon,
+		SidekickLogFormatHermesproxy1142Cc,
+	} {
+		require.True(t, format.Valid())
+	}
+	require.False(t, SidekickLogFormat("future").Valid())
+}
+
+func TestSidekickInspectionValidate(t *testing.T) {
+	t.Parallel()
+	valid := SidekickInspection{
+		Status: SidekickInspectionActionRequired,
+		Checks: []SidekickInspectionCheck{{
+			ID: "dll.nampower", Category: SidekickInspectionDLL, Name: "nampower.dll",
+			Required: true, Status: SidekickInspectionMissing,
+		}},
+	}
+	require.NoError(t, valid.Validate())
+
+	invalid := valid
+	invalid.Checks = append(invalid.Checks, invalid.Checks[0])
+	require.ErrorContains(t, invalid.Validate(), "unique")
 }
 
 func TestSidekickConfigValidate(t *testing.T) {
@@ -58,17 +85,12 @@ func TestSidekickConfigValidate(t *testing.T) {
 	})
 	t.Run("directory ID", func(t *testing.T) {
 		config := DefaultSidekickConfig()
-		config.WoWDirectories["wowdir_bad"] = SidekickDirectoryConfig{GameFormat: SidekickGameFormatWotLK335a, AutoUpload: SidekickAutoUploadDisabled}
+		config.WoWDirectories["wowdir_bad"] = SidekickDirectoryConfig{AutoUpload: SidekickAutoUploadDisabled}
 		require.ErrorContains(t, config.Validate(), "invalid World of Warcraft directory ID")
-	})
-	t.Run("game format", func(t *testing.T) {
-		config := DefaultSidekickConfig()
-		config.WoWDirectories["wowdir_"+strings.Repeat("a", 64)] = SidekickDirectoryConfig{GameFormat: "vanilla", AutoUpload: SidekickAutoUploadDisabled}
-		require.ErrorContains(t, config.Validate(), "unsupported game format")
 	})
 	t.Run("auto upload", func(t *testing.T) {
 		config := DefaultSidekickConfig()
-		config.WoWDirectories["wowdir_"+strings.Repeat("a", 64)] = SidekickDirectoryConfig{GameFormat: SidekickGameFormatWotLK335a, AutoUpload: "always"}
+		config.WoWDirectories["wowdir_"+strings.Repeat("a", 64)] = SidekickDirectoryConfig{AutoUpload: "always"}
 		require.ErrorContains(t, config.Validate(), "unsupported auto-upload mode")
 	})
 }
