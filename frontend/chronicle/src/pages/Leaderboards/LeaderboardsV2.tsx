@@ -4,7 +4,8 @@ import { Link, useSearchParams } from "react-router-dom"
 import { ChevronLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRankingsFilters, useRankingsInstances } from "@/api/rankingsQueries"
-import type { RatingRealmGroupsResponse, RankingsInstanceSummary } from "@/api/typesGenerated"
+import { useRealms } from "@/api/queries"
+import type { RankingsInstanceSummary } from "@/api/typesGenerated"
 import { InstanceCard } from "../Rankings/InstanceCard"
 import { getInstanceBackground } from "../Logs/utils/instanceImages"
 import { InstanceView } from "../Rankings/InstanceView"
@@ -19,8 +20,8 @@ import { ratingScopeURL, fetchLiveRating, type LiveRatingRequest } from "./ratin
 
 export function LeaderboardsV2() {
   const [params, setParams] = useSearchParams()
-  const { tab, instance } = v2Selection(params)
-  const select = (key: "tab" | "instance", value?: string) => {
+  const { tab, instance, realmIDs } = v2Selection(params)
+  const select = (key: "tab" | "instance" | "realm_ids", value?: string) => {
     const next = new URLSearchParams(params)
     if (value) next.set(key, value)
     else next.delete(key)
@@ -35,7 +36,7 @@ export function LeaderboardsV2() {
             {instance && <button type="button" className="mb-2 flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground" onClick={() => select("instance")}> <ChevronLeft className="size-4" /> All instances</button>}
             <p className="text-xs uppercase tracking-widest text-muted-foreground">Leaderboards · live preview</p>
             <h1 className="font-wow mt-1 text-3xl leading-tight sm:text-4xl">{instance ?? "All instances"}</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Published rankings only. Ratings use realm groups; other tabs retain their current live filters.</p>
+            <p className="mt-2 text-sm text-muted-foreground">Published rankings only. Ratings cover all realms by default; the realm filter only changes which rows are shown.</p>
           </div>
           <nav aria-label="Leaderboard section" className="styled-scrollbar relative flex overflow-x-auto border-t border-white/5 px-2 sm:px-4">
             {TABS.map(({ id, icon: Icon, label }) => (
@@ -46,7 +47,7 @@ export function LeaderboardsV2() {
             ))}
           </nav>
         </header>
-        {tab === "ratings" ? <LiveRatings instance={instance} /> : instance ? (
+        {tab === "ratings" ? <LiveRatings instance={instance} realmIDs={realmIDs} onRealmChange={(ids) => select("realm_ids", ids.join(","))} /> : instance ? (
           tab === "statistics" ? <InstanceView instanceName={instance} /> :
           tab === "performances" ? <p className="rounded-xl border p-8 text-muted-foreground">A dedicated live performances view is not available yet. The Statistics tab includes the current performance leaderboard.</p> :
           tab === "parsing" ? <ParsingInstanceView key={instance} instanceName={instance} /> :
@@ -77,23 +78,15 @@ function LiveInstanceGrid() {
   ))}</div>
 }
 
-function LiveRatings({ instance }: { instance: string | null }) {
-  const groups = useQuery({
-    queryKey: ["rankings", "ratings", "groups"],
-    queryFn: async () => {
-      const response = await fetch("/api/v1/rankings/ratings/groups")
-      if (!response.ok) throw new Error(`Groups request failed (${response.status})`)
-      return response.json() as Promise<RatingRealmGroupsResponse>
-    },
-  })
+function LiveRatings({ instance, realmIDs, onRealmChange }: { instance: string | null; realmIDs: string[]; onRealmChange: (ids: string[]) => void }) {
+  const realms = useRealms()
+  const selectedRealmIDs = realmIDs.filter((id) => realms.data?.some((realm) => realm.id === id))
   const summaries = useRankingsInstances()
   const filters = useRankingsFilters(instance ?? undefined)
-  const [groupID, setGroupID] = useState("")
   const [metric, setMetric] = useState<LiveRatingRequest["metric"]>("renown")
   const [window, setWindow] = useState<LiveRatingRequest["window"]>("period")
   const [performance, setPerformance] = useState<"dps" | "hps">("dps")
   const [cohortKey, setCohortKey] = useState("")
-  const group = groups.data?.groups.find((g) => g.id === groupID) ?? groups.data?.groups[0]
   // A raid summary supplies the exact difficulty/size. Do not infer a global cohort from a random raid.
   const cohorts = (summaries.data ?? []).filter((s) => instance && s.instance_name === instance)
   const cohort = cohorts.find((s) => `${s.instance_name}|${s.difficulty_name}|${s.max_players}` === cohortKey) ?? cohorts[0]
@@ -104,22 +97,28 @@ function LiveRatings({ instance }: { instance: string | null }) {
   const spec = cls?.specs.find((s) => s.spec === specName) ?? cls?.specs[0]
   const selectedSubSpec = spec?.sub_specs.includes(subSpec) ? subSpec : spec?.sub_specs[0] ?? ""
   const request: LiveRatingRequest = {
-    groupID: group?.id ?? "", instanceName: instance ?? undefined, metric, window,
+    realmIDs: selectedRealmIDs, instanceName: instance ?? undefined, metric, window,
     cohort: metric === "renown" ? undefined : cohort && cls && spec ? {
       difficulty: cohort.difficulty_name, maxPlayers: cohort.max_players,
       playerClass: cls.player_class, spec: spec.spec, subSpec: selectedSubSpec, performance,
     } : undefined,
   }
   const url = ratingScopeURL(request)
-  const ratings = useQuery({ queryKey: ["rankings", "ratings", url], queryFn: () => fetchLiveRating(url!), enabled: !!url, retry: false })
-  if (groups.isPending || (metric !== "renown" && (summaries.isPending || filters.isPending))) return <p role="status">Loading rating cohorts…</p>
-  if (groups.isError || (metric !== "renown" && (summaries.isError || filters.isError))) return <p role="alert">Could not load rating cohorts. Please try again later.</p>
-  if (!groups.data?.groups.length) return <p>No published realm groups are configured.</p>
+  const ratings = useQuery({ queryKey: ["rankings", "ratings", url], queryFn: () => fetchLiveRating(url!), enabled: !!url && realms.isSuccess, retry: false })
+  if (realms.isPending || (metric !== "renown" && (summaries.isPending || filters.isPending))) return <p role="status">Loading rating cohorts…</p>
+  if (realms.isError || (metric !== "renown" && (summaries.isError || filters.isError))) return <p role="alert">Could not load rating cohorts. Please try again later.</p>
   return <section className="space-y-5 rounded-xl border bg-card p-5">
     <div className="flex flex-wrap gap-3">
-      <label>Realm group <select aria-label="Realm group" className="ml-2 rounded border bg-background p-2" value={group?.id} onChange={(e) => setGroupID(e.target.value)}>
-        {groups.data.groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.realms.map((r) => r.name).join(", ")})</option>)}
-      </select></label>
+      <details className="relative rounded border bg-background p-2 text-sm">
+        <summary className="cursor-pointer">Realms: {selectedRealmIDs.length ? `${selectedRealmIDs.length} selected` : "All"}</summary>
+        <div className="styled-scrollbar absolute left-0 top-full z-10 mt-1 max-h-52 min-w-48 overflow-y-auto rounded border bg-background p-2 shadow-lg">
+          <button type="button" className="block w-full p-1 text-left underline" onClick={() => onRealmChange([])}>All realms</button>
+          {realms.data?.map((realm) => <label key={realm.id} className="flex items-center gap-2 p-1">
+            <input type="checkbox" checked={selectedRealmIDs.includes(realm.id)} onChange={() => onRealmChange(selectedRealmIDs.includes(realm.id) ? selectedRealmIDs.filter((id) => id !== realm.id) : [...selectedRealmIDs, realm.id])} />
+            {realm.name}
+          </label>)}
+        </div>
+      </details>
       <label>Rating <select aria-label="Rating metric" className="ml-2 rounded border bg-background p-2" value={metric} onChange={(e) => { setMetric(e.target.value as LiveRatingRequest["metric"]); setWindow("period") }}>
         <option value="renown">Renown</option><option value="peak">Peak</option><option value="mastery">Mastery</option><option value="ranked_mastery">Ranked Mastery</option>
       </select></label>
@@ -144,13 +143,13 @@ function LiveRatings({ instance }: { instance: string | null }) {
         <option value="dps">DPS</option><option value="hps">HPS</option>
       </select></label>
     </div>}
-    <p className="text-sm text-muted-foreground">{metric === "renown" ? "Renown has no class or spec cohort." : "Scores compare only the selected class, spec, performance metric and raid size."} Realm filtering within a group is not available. Character names are not included in the published response; IDs are shown instead.</p>
+    <p className="text-sm text-muted-foreground">{metric === "renown" ? "Renown has no class or spec cohort." : "Scores compare only the selected class, spec, performance metric and raid size."} Realm selection filters displayed entries without recomputing scores. Character names are not included in the published response; IDs are shown instead.</p>
     {!url ? <p>{!instance && metric !== "renown" ? "Select an instance from the Overview tab to choose an exact raid cohort." : "No supported rating cohort is available for this selection."}</p> : ratings.isPending ? <p role="status">Loading ratings…</p> : ratings.isError ? <p role="alert">Could not load published ratings.</p> : !ratings.data?.entries.length ? <p>No published scores in this cohort yet.</p> :
-      <ol className="divide-y">{ratings.data.entries.map((entry, index) => <li key={`${entry.player_guid}-${index}`} className="flex flex-wrap items-center gap-3 py-3 text-sm">
-        <span className="w-8 text-muted-foreground">#{index + 1}</span><span className="font-mono text-xs">{entry.player_guid}</span>
-        <span className="text-muted-foreground">{entry.player_class ? `${entry.player_class} · ${entry.player_spec} · ` : ""}{entry.instance_name || "Global"} · {group?.realms.find((r) => r.id === entry.realm_id)?.name ?? entry.realm_id}</span>
+      <ul className="divide-y">{ratings.data.entries.map((entry, index) => <li key={`${entry.player_guid}-${index}`} className="flex flex-wrap items-center gap-3 py-3 text-sm">
+        <span className="font-mono text-xs">{entry.player_guid}</span>
+        <span className="text-muted-foreground">{entry.player_class ? `${entry.player_class} · ${entry.player_spec} · ` : ""}{entry.instance_name || "Global"} · {realms.data?.find((realm) => realm.id === entry.realm_id)?.name ?? entry.realm_id}</span>
         <strong className="ml-auto tabular-nums">{entry.score.toLocaleString()}</strong>
-      </li>)}</ol>}
+      </li>)}</ul>}
     <Link to="/leaderboards/statistics" className="text-xs text-muted-foreground underline">Current leaderboards</Link>
   </section>
 }
