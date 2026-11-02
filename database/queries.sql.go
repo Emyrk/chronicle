@@ -22654,6 +22654,554 @@ func (q *sqlQuerier) PutRatingGroupPolicy(ctx context.Context, arg PutRatingGrou
 	return result.RowsAffected(), nil
 }
 
+const listRatingProjectionGuildBosses = `-- name: ListRatingProjectionGuildBosses :many
+SELECT instance_name, encounter_name, score FROM guild_rating_boss_scores
+WHERE generation_id = $1 AND group_id = $2 AND realm_id = $3
+  AND guild_id = $4 AND difficulty_name = $5 AND max_players = $6
+  AND rating_metric = $7 AND window_kind = $8
+LIMIT 201
+`
+
+type ListRatingProjectionGuildBossesParams struct {
+	GenerationID   uuid.UUID `db:"generation_id" json:"generation_id"`
+	GroupID        uuid.UUID `db:"group_id" json:"group_id"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	RatingMetric   string    `db:"rating_metric" json:"rating_metric"`
+	WindowKind     string    `db:"window_kind" json:"window_kind"`
+}
+
+type ListRatingProjectionGuildBossesRow struct {
+	InstanceName  string  `db:"instance_name" json:"instance_name"`
+	EncounterName string  `db:"encounter_name" json:"encounter_name"`
+	Score         float64 `db:"score" json:"score"`
+}
+
+func (q *sqlQuerier) ListRatingProjectionGuildBosses(ctx context.Context, arg ListRatingProjectionGuildBossesParams) ([]ListRatingProjectionGuildBossesRow, error) {
+	rows, err := q.db.Query(ctx, listRatingProjectionGuildBosses,
+		arg.GenerationID,
+		arg.GroupID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RatingMetric,
+		arg.WindowKind,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRatingProjectionGuildBossesRow
+	for rows.Next() {
+		var i ListRatingProjectionGuildBossesRow
+		if err := rows.Scan(&i.InstanceName, &i.EncounterName, &i.Score); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingProjectionGuildScopes = `-- name: ListRatingProjectionGuildScopes :many
+SELECT DISTINCT group_id, realm_id, guild_id, difficulty_name, max_players, rating_metric, window_kind
+FROM guild_rating_boss_scores WHERE generation_id = $1
+  AND (group_id, realm_id, guild_id, difficulty_name, max_players, rating_metric, window_kind) >
+      ($2::uuid, $3::uuid, $4::uuid,
+       $5::text, $6::smallint,
+       $7::text, $8::text)
+ORDER BY group_id, realm_id, guild_id, difficulty_name, max_players, rating_metric, window_kind
+LIMIT LEAST(GREATEST($9::int, 0), 100)
+`
+
+type ListRatingProjectionGuildScopesParams struct {
+	GenerationID        uuid.UUID `db:"generation_id" json:"generation_id"`
+	AfterGroupID        uuid.UUID `db:"after_group_id" json:"after_group_id"`
+	AfterRealmID        uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
+	AfterGuildID        uuid.UUID `db:"after_guild_id" json:"after_guild_id"`
+	AfterDifficultyName string    `db:"after_difficulty_name" json:"after_difficulty_name"`
+	AfterMaxPlayers     int16     `db:"after_max_players" json:"after_max_players"`
+	AfterRatingMetric   string    `db:"after_rating_metric" json:"after_rating_metric"`
+	AfterWindowKind     string    `db:"after_window_kind" json:"after_window_kind"`
+	BatchSize           int32     `db:"batch_size" json:"batch_size"`
+}
+
+type ListRatingProjectionGuildScopesRow struct {
+	GroupID        uuid.UUID `db:"group_id" json:"group_id"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	RatingMetric   string    `db:"rating_metric" json:"rating_metric"`
+	WindowKind     string    `db:"window_kind" json:"window_kind"`
+}
+
+func (q *sqlQuerier) ListRatingProjectionGuildScopes(ctx context.Context, arg ListRatingProjectionGuildScopesParams) ([]ListRatingProjectionGuildScopesRow, error) {
+	rows, err := q.db.Query(ctx, listRatingProjectionGuildScopes,
+		arg.GenerationID,
+		arg.AfterGroupID,
+		arg.AfterRealmID,
+		arg.AfterGuildID,
+		arg.AfterDifficultyName,
+		arg.AfterMaxPlayers,
+		arg.AfterRatingMetric,
+		arg.AfterWindowKind,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRatingProjectionGuildScopesRow
+	for rows.Next() {
+		var i ListRatingProjectionGuildScopesRow
+		if err := rows.Scan(
+			&i.GroupID,
+			&i.RealmID,
+			&i.GuildID,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.RatingMetric,
+			&i.WindowKind,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingProjectionPlayerBosses = `-- name: ListRatingProjectionPlayerBosses :many
+SELECT instance_name, encounter_name, score FROM rating_boss_scores
+WHERE generation_id = $1 AND group_id = $2 AND realm_id = $3
+  AND player_guid = $4 AND difficulty_name = $5 AND max_players = $6
+  AND player_class = $7 AND player_spec = $8
+  AND player_sub_spec = $9 AND performance_metric = $10
+  AND rating_metric = $11 AND window_kind = $12
+LIMIT 201
+`
+
+type ListRatingProjectionPlayerBossesParams struct {
+	GenerationID      uuid.UUID     `db:"generation_id" json:"generation_id"`
+	GroupID           uuid.NullUUID `db:"group_id" json:"group_id"`
+	RealmID           uuid.UUID     `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string        `db:"player_guid" json:"player_guid"`
+	DifficultyName    string        `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16         `db:"max_players" json:"max_players"`
+	PlayerClass       string        `db:"player_class" json:"player_class"`
+	PlayerSpec        string        `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string        `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string        `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string        `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string        `db:"window_kind" json:"window_kind"`
+}
+
+type ListRatingProjectionPlayerBossesRow struct {
+	InstanceName  string  `db:"instance_name" json:"instance_name"`
+	EncounterName string  `db:"encounter_name" json:"encounter_name"`
+	Score         float64 `db:"score" json:"score"`
+}
+
+func (q *sqlQuerier) ListRatingProjectionPlayerBosses(ctx context.Context, arg ListRatingProjectionPlayerBossesParams) ([]ListRatingProjectionPlayerBossesRow, error) {
+	rows, err := q.db.Query(ctx, listRatingProjectionPlayerBosses,
+		arg.GenerationID,
+		arg.GroupID,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRatingProjectionPlayerBossesRow
+	for rows.Next() {
+		var i ListRatingProjectionPlayerBossesRow
+		if err := rows.Scan(&i.InstanceName, &i.EncounterName, &i.Score); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingProjectionPlayerScopes = `-- name: ListRatingProjectionPlayerScopes :many
+SELECT DISTINCT group_id, realm_id, player_guid, difficulty_name, max_players,
+       player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind
+FROM rating_boss_scores
+WHERE generation_id = $1 AND group_id IS NOT NULL
+  AND (group_id, realm_id, player_guid, difficulty_name, max_players,
+       player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind) >
+      ($2::uuid, $3::uuid, $4::text,
+       $5::text, $6::smallint, $7::text,
+       $8::text, $9::text, $10::text,
+       $11::text, $12::text)
+ORDER BY group_id, realm_id, player_guid, difficulty_name, max_players,
+         player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind
+LIMIT LEAST(GREATEST($13::int, 0), 100)
+`
+
+type ListRatingProjectionPlayerScopesParams struct {
+	GenerationID           uuid.UUID `db:"generation_id" json:"generation_id"`
+	AfterGroupID           uuid.UUID `db:"after_group_id" json:"after_group_id"`
+	AfterRealmID           uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
+	AfterPlayerGuid        string    `db:"after_player_guid" json:"after_player_guid"`
+	AfterDifficultyName    string    `db:"after_difficulty_name" json:"after_difficulty_name"`
+	AfterMaxPlayers        int16     `db:"after_max_players" json:"after_max_players"`
+	AfterPlayerClass       string    `db:"after_player_class" json:"after_player_class"`
+	AfterPlayerSpec        string    `db:"after_player_spec" json:"after_player_spec"`
+	AfterPlayerSubSpec     string    `db:"after_player_sub_spec" json:"after_player_sub_spec"`
+	AfterPerformanceMetric string    `db:"after_performance_metric" json:"after_performance_metric"`
+	AfterRatingMetric      string    `db:"after_rating_metric" json:"after_rating_metric"`
+	AfterWindowKind        string    `db:"after_window_kind" json:"after_window_kind"`
+	BatchSize              int32     `db:"batch_size" json:"batch_size"`
+}
+
+type ListRatingProjectionPlayerScopesRow struct {
+	GroupID           uuid.NullUUID `db:"group_id" json:"group_id"`
+	RealmID           uuid.UUID     `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string        `db:"player_guid" json:"player_guid"`
+	DifficultyName    string        `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16         `db:"max_players" json:"max_players"`
+	PlayerClass       string        `db:"player_class" json:"player_class"`
+	PlayerSpec        string        `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string        `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string        `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string        `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string        `db:"window_kind" json:"window_kind"`
+}
+
+// A scope subject is a distinct character/cohort/rating/window. Each page is
+// bounded; the caller reads only that subject's configured boss rows.
+func (q *sqlQuerier) ListRatingProjectionPlayerScopes(ctx context.Context, arg ListRatingProjectionPlayerScopesParams) ([]ListRatingProjectionPlayerScopesRow, error) {
+	rows, err := q.db.Query(ctx, listRatingProjectionPlayerScopes,
+		arg.GenerationID,
+		arg.AfterGroupID,
+		arg.AfterRealmID,
+		arg.AfterPlayerGuid,
+		arg.AfterDifficultyName,
+		arg.AfterMaxPlayers,
+		arg.AfterPlayerClass,
+		arg.AfterPlayerSpec,
+		arg.AfterPlayerSubSpec,
+		arg.AfterPerformanceMetric,
+		arg.AfterRatingMetric,
+		arg.AfterWindowKind,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRatingProjectionPlayerScopesRow
+	for rows.Next() {
+		var i ListRatingProjectionPlayerScopesRow
+		if err := rows.Scan(
+			&i.GroupID,
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.PerformanceMetric,
+			&i.RatingMetric,
+			&i.WindowKind,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ratingProjectionGuildRankOne = `-- name: RatingProjectionGuildRankOne :one
+SELECT coalesce(min(raw_duration_ms), 0)::double precision AS career_raw,
+       coalesce(min(raw_duration_ms) FILTER (WHERE killed_at >= $1), 0)::double precision AS period_raw
+FROM rating_stage_guild_observations
+WHERE generation_id = $2 AND instance_name = $3
+  AND encounter_name = $4 AND difficulty_name = $5
+  AND max_players = $6 AND killed_at < $7
+`
+
+type RatingProjectionGuildRankOneParams struct {
+	PeriodStart    pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	GenerationID   uuid.UUID          `db:"generation_id" json:"generation_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	WindowEnd      pgtype.Timestamptz `db:"window_end" json:"window_end"`
+}
+
+type RatingProjectionGuildRankOneRow struct {
+	CareerRaw float64 `db:"career_raw" json:"career_raw"`
+	PeriodRaw float64 `db:"period_raw" json:"period_raw"`
+}
+
+func (q *sqlQuerier) RatingProjectionGuildRankOne(ctx context.Context, arg RatingProjectionGuildRankOneParams) (RatingProjectionGuildRankOneRow, error) {
+	row := q.db.QueryRow(ctx, ratingProjectionGuildRankOne,
+		arg.PeriodStart,
+		arg.GenerationID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.WindowEnd,
+	)
+	var i RatingProjectionGuildRankOneRow
+	err := row.Scan(&i.CareerRaw, &i.PeriodRaw)
+	return i, err
+}
+
+const ratingProjectionPlayerRankOne = `-- name: RatingProjectionPlayerRankOne :one
+SELECT coalesce(max(raw_value), 0)::double precision AS career_raw,
+       coalesce(max(raw_value) FILTER (WHERE killed_at >= $1), 0)::double precision AS period_raw
+FROM rating_stage_player_observations
+WHERE generation_id = $2 AND instance_name = $3
+  AND encounter_name = $4 AND difficulty_name = $5
+  AND max_players = $6 AND player_class = $7
+  AND player_spec = $8 AND player_sub_spec = $9
+  AND performance_metric = $10 AND killed_at < $11
+`
+
+type RatingProjectionPlayerRankOneParams struct {
+	PeriodStart       pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+}
+
+type RatingProjectionPlayerRankOneRow struct {
+	CareerRaw float64 `db:"career_raw" json:"career_raw"`
+	PeriodRaw float64 `db:"period_raw" json:"period_raw"`
+}
+
+func (q *sqlQuerier) RatingProjectionPlayerRankOne(ctx context.Context, arg RatingProjectionPlayerRankOneParams) (RatingProjectionPlayerRankOneRow, error) {
+	row := q.db.QueryRow(ctx, ratingProjectionPlayerRankOne,
+		arg.PeriodStart,
+		arg.GenerationID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.WindowEnd,
+	)
+	var i RatingProjectionPlayerRankOneRow
+	err := row.Scan(&i.CareerRaw, &i.PeriodRaw)
+	return i, err
+}
+
+const ratingStageGuildPeak = `-- name: RatingStageGuildPeak :one
+SELECT coalesce(min(raw_duration_ms), 0)::double precision AS career_raw,
+       coalesce(min(raw_duration_ms) FILTER (WHERE killed_at >= $1), 0)::double precision AS period_raw
+FROM rating_stage_guild_observations
+WHERE generation_id = $2 AND realm_id = $3 AND guild_id = $4
+  AND instance_name = $5 AND encounter_name = $6
+  AND difficulty_name = $7 AND max_players = $8
+  AND killed_at < $9
+`
+
+type RatingStageGuildPeakParams struct {
+	PeriodStart    pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	GenerationID   uuid.UUID          `db:"generation_id" json:"generation_id"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	WindowEnd      pgtype.Timestamptz `db:"window_end" json:"window_end"`
+}
+
+type RatingStageGuildPeakRow struct {
+	CareerRaw float64 `db:"career_raw" json:"career_raw"`
+	PeriodRaw float64 `db:"period_raw" json:"period_raw"`
+}
+
+func (q *sqlQuerier) RatingStageGuildPeak(ctx context.Context, arg RatingStageGuildPeakParams) (RatingStageGuildPeakRow, error) {
+	row := q.db.QueryRow(ctx, ratingStageGuildPeak,
+		arg.PeriodStart,
+		arg.GenerationID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.WindowEnd,
+	)
+	var i RatingStageGuildPeakRow
+	err := row.Scan(&i.CareerRaw, &i.PeriodRaw)
+	return i, err
+}
+
+const ratingStageGuildRenownTotals = `-- name: RatingStageGuildRenownTotals :one
+SELECT count(*)::integer AS career_kills,
+       count(*) FILTER (WHERE killed_at >= $1)::integer AS period_kills
+FROM rating_stage_guild_renown
+WHERE generation_id = $2 AND realm_id = $3 AND guild_id = $4
+  AND instance_name = $5 AND encounter_name = $6
+  AND killed_at < $7
+`
+
+type RatingStageGuildRenownTotalsParams struct {
+	PeriodStart   pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	GenerationID  uuid.UUID          `db:"generation_id" json:"generation_id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	WindowEnd     pgtype.Timestamptz `db:"window_end" json:"window_end"`
+}
+
+type RatingStageGuildRenownTotalsRow struct {
+	CareerKills int32 `db:"career_kills" json:"career_kills"`
+	PeriodKills int32 `db:"period_kills" json:"period_kills"`
+}
+
+func (q *sqlQuerier) RatingStageGuildRenownTotals(ctx context.Context, arg RatingStageGuildRenownTotalsParams) (RatingStageGuildRenownTotalsRow, error) {
+	row := q.db.QueryRow(ctx, ratingStageGuildRenownTotals,
+		arg.PeriodStart,
+		arg.GenerationID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.WindowEnd,
+	)
+	var i RatingStageGuildRenownTotalsRow
+	err := row.Scan(&i.CareerKills, &i.PeriodKills)
+	return i, err
+}
+
+const ratingStagePlayerPeak = `-- name: RatingStagePlayerPeak :one
+SELECT coalesce(max(raw_value), 0)::double precision AS career_raw,
+       coalesce(max(raw_value) FILTER (WHERE killed_at >= $1), 0)::double precision AS period_raw
+FROM rating_stage_player_observations
+WHERE generation_id = $2 AND realm_id = $3 AND player_guid = $4
+  AND instance_name = $5 AND encounter_name = $6
+  AND difficulty_name = $7 AND max_players = $8
+  AND player_class = $9 AND player_spec = $10
+  AND player_sub_spec = $11 AND performance_metric = $12
+  AND killed_at < $13
+`
+
+type RatingStagePlayerPeakParams struct {
+	PeriodStart       pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+}
+
+type RatingStagePlayerPeakRow struct {
+	CareerRaw float64 `db:"career_raw" json:"career_raw"`
+	PeriodRaw float64 `db:"period_raw" json:"period_raw"`
+}
+
+// Aggregate a single immutable subject, never retaining its history in Go.
+func (q *sqlQuerier) RatingStagePlayerPeak(ctx context.Context, arg RatingStagePlayerPeakParams) (RatingStagePlayerPeakRow, error) {
+	row := q.db.QueryRow(ctx, ratingStagePlayerPeak,
+		arg.PeriodStart,
+		arg.GenerationID,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.WindowEnd,
+	)
+	var i RatingStagePlayerPeakRow
+	err := row.Scan(&i.CareerRaw, &i.PeriodRaw)
+	return i, err
+}
+
+const ratingStagePlayerRenownTotals = `-- name: RatingStagePlayerRenownTotals :one
+SELECT count(*)::integer AS career_kills,
+       count(*) FILTER (WHERE killed_at >= $1)::integer AS period_kills
+FROM rating_stage_player_renown
+WHERE generation_id = $2 AND realm_id = $3 AND player_guid = $4
+  AND instance_name = $5 AND encounter_name = $6
+  AND killed_at < $7
+`
+
+type RatingStagePlayerRenownTotalsParams struct {
+	PeriodStart   pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	GenerationID  uuid.UUID          `db:"generation_id" json:"generation_id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	WindowEnd     pgtype.Timestamptz `db:"window_end" json:"window_end"`
+}
+
+type RatingStagePlayerRenownTotalsRow struct {
+	CareerKills int32 `db:"career_kills" json:"career_kills"`
+	PeriodKills int32 `db:"period_kills" json:"period_kills"`
+}
+
+func (q *sqlQuerier) RatingStagePlayerRenownTotals(ctx context.Context, arg RatingStagePlayerRenownTotalsParams) (RatingStagePlayerRenownTotalsRow, error) {
+	row := q.db.QueryRow(ctx, ratingStagePlayerRenownTotals,
+		arg.PeriodStart,
+		arg.GenerationID,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.WindowEnd,
+	)
+	var i RatingStagePlayerRenownTotalsRow
+	err := row.Scan(&i.CareerKills, &i.PeriodKills)
+	return i, err
+}
+
 const abortRatingRebuild = `-- name: AbortRatingRebuild :execrows
 WITH aborted AS (
     UPDATE rating_rebuild_checkpoints cp SET phase = 'aborted', heartbeat_at = now()
