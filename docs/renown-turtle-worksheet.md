@@ -16,6 +16,7 @@ The clear times are the operator's approximate figures from [Capybara speedruns]
 | Zul'Gurub (ZG) | 20 | base (verify) | 25m | catch-up | 3d | 15 | 35 | Includes five non-progression encounters. |
 | Blackwing Lair (BWL) | 40 | base (verify) | 40m | mid / high | 7d | 70 | 70 | ZG offers half the BWL weekly opportunity in this draft. |
 | Onyxia's Lair | 40 | base (verify) | 6m | entry / short | 5d | 6 | 8.4 | Includes Broodcommander Axelus. |
+| Emerald Sanctum | **verify** | normal / hard (verify) | **unknown** | custom / high (verify) | 7d | **TBD** | **TBD** | Erennius, Solnius, and Solnius (Hard Mode); clarify whether normal and hard Solnius are alternatives. |
 | Molten Core (MC) | 40 | base (verify) | 45m | entry | 7d | 40 | 40 | Gehennas appears in `Bosses`, but not `ProgressionBosses`. |
 
 The draft uses a **70-point BWL clear**, not 1,000. Given all 13 known ZG boss names earning at least one whole point and Hakkar earning more than an ordinary boss, the proposed 15-point ZG clear is near the smallest useful whole-number split. With the confirmed three-day reset it offers `15 × 7 / 3 = 35` points per week, half the proposed BWL weekly opportunity. This half ratio is a *hypothesis*, not an approved rule. Clear time is one input, not a points-per-minute formula. Character and guild point awards currently share the same configured boss values.
@@ -32,11 +33,12 @@ The draft uses a **70-point BWL clear**, not 1,000. Given all 13 known ZG boss n
 | ZG | High Priestess Jeklik 1; High Priest Venoxis 1; High Priestess Mar'li 1; Bloodlord Mandokir 1; High Priest Thekal 1; High Priestess Arlokk 1; Jin'do the Hexxer 1; Hakkar 3; Gahz'ranka 1; Gri'lek 1; Hazza'rah 1; Renataki 1; Wushoolay 1 | 15 |
 | BWL | Razorgore the Untamed 7; Vaelastrasz the Corrupt 7; Broodlord Lashlayer 7; Firemaw 7; Ebonroc 7; Flamegor 7; Chromaggus 7; Nefarian 14; Ezzel Darkbrewer 7 | 70 |
 | Onyxia | Onyxia 4; Broodcommander Axelus 2 | 6 |
+| Emerald Sanctum | Erennius **TBD**; Solnius **TBD**; Solnius (Hard Mode) **TBD** | **TBD** |
 | MC | Lucifron 2; Magmadar 2; Garr 2; Shazzrah 2; Baron Geddon 2; Sulfuron Harbinger 2; Golemagg the Incinerator 2; Incindis 2; Basalthar & Smoldaris 2; Sorcerer-Thane Thaurissan 2; Gehennas 4; Majordomo Executus 6; Ragnaros 10 | 40 |
 
 **Verify MC before seeding.** Its progression list names 12 encounters, while `Bosses` also includes Gehennas. Its progression label and ranking-fact eligibility need review; this provisional split includes Gehennas at four points instead of silently excluding that kill. ZG's five non-progression bosses and both Turtle-specific custom encounters are listed so the proposed totals do not depend on an incomplete speedrun requirement list. K10 and K40 are derived names under the Tower of Karazhan instance; its parent has no `ProgressionBosses` list. Treat these as separate raid budgets.
 
-The Turtle registry also includes **Emerald Sanctum** and **Timbermaw Hold**. No times, resets, difficulty treatment, or budgets were supplied for them, so neither is assigned points here. Emerald Sanctum lists both `Solnius` and `Solnius (Hard Mode)`; decide whether those are separate eligible kills/award variants before setting points. The worksheet covers the nine raids with supplied time estimates, not the full Turtle catalog.
+**Emerald Sanctum** is a seven-day raid per the operator. Its registry lists `Erennius`, `Solnius`, and `Solnius (Hard Mode)`; the default rankings set contains Erennius and Solnius, while a separate hard-mode set contains Solnius (Hard Mode). Its size, clear time, difficulty-specific award treatment, and points remain TBD. **Timbermaw Hold** is also registered as a Turtle raid, but no clear time or reset was supplied for it. The worksheet contains draft allocations for the nine raids with supplied times, plus an explicit Emerald Sanctum placeholder; it is not yet a complete Turtle catalog.
 
 ## Policy implementation after review
 
@@ -47,9 +49,9 @@ The Turtle registry also includes **Emerald Sanctum** and **Timbermaw Hold**. No
 
 ## Required review before default seeding
 
-1. Reset periods for these nine raids were supplied by the operator: K10/Onyxia 5d; AQ20/ZG 3d; K40/Naxx/AQ40/BWL/MC 7d. Verify reset periods for Emerald Sanctum and Timbermaw Hold before assigning their points.
+1. Reset periods were supplied by the operator: K10/Onyxia 5d; AQ20/ZG 3d; K40/Naxx/AQ40/BWL/MC/Emerald Sanctum 7d. Verify Timbermaw Hold's reset before assigning its points.
 2. Agree whether a complete ZG is worth half of BWL per week and whether the other proposed tier/size relationships feel fair.
 3. Confirm boss identity and eligibility for MC Gehennas, BWL Ezzel, Onyxia Axelus, and optional ZG encounters. Check whether every named encounter can produce a canonical ranking fact.
-4. Confirm K10/K40 as separately derived instances; decide how to award and label Emerald Sanctum and Timbermaw Hold.
+4. Confirm K10/K40 as separately derived instances; get Emerald Sanctum's size and approximate clear time, decide whether the two Solnius modes are mutually exclusive award variants, and gather Timbermaw Hold's reset and clear time.
 5. Confirm which difficulty partitions these base awards should cover, especially Emerald Sanctum hard mode.
 6. Decide whether defaults are a versioned SQL template for future realm groups or a one-time seed only for existing Turtle groups.
