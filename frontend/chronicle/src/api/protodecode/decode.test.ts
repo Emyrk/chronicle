@@ -215,6 +215,24 @@ describe('unit telemetry cursors', () => {
     });
   });
 
+  it('skips a whole position encounter without decoding it', () => {
+    const segment = (encounterID: string, unit: string) => {
+      const encoded = toBinary(UnitPositionSchema, create(UnitPositionSchema, { meta: create(EventMetaSchema, { index: 1 }), unit, mapId: 1 }));
+      const messageData = new Uint8Array([...encodeVarint(encoded.length), ...encoded]);
+      return buildPayload(encounterID, 1706000000000n, 1, messageData.length, messageData);
+    };
+    const first = segment('first', '0xFIRST');
+    const second = segment('second', '0xSECOND');
+    const payload = new Uint8Array([...first, ...second]);
+
+    const cursor = new FastUnitPositionCursor(payload);
+    expect(cursor.skipEncounter()).toBe(true);
+    expect(cursor.currentHeader?.encounterID).toBe('second');
+    expect(cursor.next()).toMatchObject({ unit: '0xSECOND' });
+    expect(cursor.skipEncounter()).toBe(false);
+    expect(cursor.currentHeader).toBeNull();
+  });
+
   it('preserves missing optional position fields', () => {
     const message = create(UnitPositionSchema, {
       meta: create(EventMetaSchema, { index: 2, offsetMilli: 500n }),
