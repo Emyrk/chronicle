@@ -273,6 +273,9 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.RatingDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.RatingDispatchWorker)
 	riverqueue.AddWorker(q, rank.RatingTenantWorker)
+	// One bounded GC page per job; daily scheduling recovers lost continuations.
+	ratingStageGC := &servicerankings.WorkerRatingStageGC{Store: rank.RatingTenantWorker.Store, Queue: q}
+	riverqueue.AddWorker(q, ratingStageGC)
 	rank.RenownRepairWorker.Queue = q
 	rank.RenownDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.RenownRepairWorker)
@@ -310,6 +313,15 @@ func (s *Service) Start(ctx context.Context) error {
 		),
 	)
 
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			river.PeriodicInterval(24*time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return servicerankings.ArgsRatingStageGC{}, nil
+			},
+			&river.PeriodicJobOpts{ID: "daily-rating-stage-gc", RunOnStart: false},
+		),
+	)
 	// Daily rating reconciliation for tenants with configured group policies.
 	q.AddPeriodicJob(
 		river.NewPeriodicJob(

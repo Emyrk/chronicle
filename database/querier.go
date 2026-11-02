@@ -191,6 +191,21 @@ type sqlcQuerier interface {
 	DeleteRetentionPolicy(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionRule(ctx context.Context, id uuid.UUID) error
 	DeleteRetiredRatingGeneration(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	// A single invocation deletes at most 200 rows. The PK begins with
+	// generation_id, so both selection and deletion are generation-local.
+	DeleteRetiredRatingStageGuildObservationsPage(ctx context.Context, arg DeleteRetiredRatingStageGuildObservationsPageParams) (int32, error)
+	// A single invocation deletes at most 200 rows. The PK begins with
+	// generation_id, so both selection and deletion are generation-local.
+	DeleteRetiredRatingStageGuildRenownPage(ctx context.Context, arg DeleteRetiredRatingStageGuildRenownPageParams) (int32, error)
+	// A single invocation deletes at most 200 rows. The PK begins with
+	// generation_id, so both selection and deletion are generation-local.
+	DeleteRetiredRatingStageMasteryAccumulatorsPage(ctx context.Context, arg DeleteRetiredRatingStageMasteryAccumulatorsPageParams) (int32, error)
+	// A single invocation deletes at most 200 rows. The PK begins with
+	// generation_id, so both selection and deletion are generation-local.
+	DeleteRetiredRatingStagePlayerObservationsPage(ctx context.Context, arg DeleteRetiredRatingStagePlayerObservationsPageParams) (int32, error)
+	// A single invocation deletes at most 200 rows. The PK begins with
+	// generation_id, so both selection and deletion are generation-local.
+	DeleteRetiredRatingStagePlayerRenownPage(ctx context.Context, arg DeleteRetiredRatingStagePlayerRenownPageParams) (int32, error)
 	DeleteServerApplicationsByInitiator(ctx context.Context, userID uuid.UUID) error
 	DeleteSidekickConfigOverride(ctx context.Context, arg DeleteSidekickConfigOverrideParams) ([]byte, error)
 	DeleteSidekickInstallation(ctx context.Context, arg DeleteSidekickInstallationParams) (SidekickInstallation, error)
@@ -975,6 +990,9 @@ type sqlcQuerier interface {
 	MarkWhatsNewRead(ctx context.Context, arg MarkWhatsNewReadParams) (UserWhatsNewState, error)
 	MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
+	// Only retired generations with remaining ephemeral state are eligible. This
+	// preserves published score rows and generation identities independently.
+	NextRetiredRatingStageGeneration(ctx context.Context) (uuid.UUID, error)
 	PauseInferenceRun(ctx context.Context, arg PauseInferenceRunParams) (InferenceRun, error)
 	PruneLuaProjectArtifacts(ctx context.Context, id uuid.UUID) error
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error
