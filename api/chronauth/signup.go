@@ -128,10 +128,11 @@ func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User)
 		return session, false
 	}
 
+	tenant := s.authMetricTenant(r)
 	if registered {
-		s.metrics.observeSignup(authMethod(provider.Name()))
+		s.metrics.observeSignup(authMethod(provider.Name()), tenant)
 	} else {
-		s.metrics.observeLogin(authMethod(provider.Name()))
+		s.metrics.observeLogin(authMethod(provider.Name()), tenant)
 	}
 
 	if provider.Name() == authMethodDiscord && s.Bot != nil {

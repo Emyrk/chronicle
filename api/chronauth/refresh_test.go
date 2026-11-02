@@ -177,7 +177,7 @@ func TestRefreshSessionUsesTransactionConnection(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int32(1), provider.calls.Load())
-	require.Equal(t, float64(1), authMetricValue(t, service.metrics.refreshes.WithLabelValues("test", authResultSuccess)))
+	require.Equal(t, float64(1), authMetricValue(t, service.metrics.refreshes.WithLabelValues("test", authResultSuccess, authTenantRoot)))
 	updated, err := store.GetUserAuthSessionByID(ctx, session.ID)
 	require.NoError(t, err)
 	require.Equal(t, "new-refresh-token", updated.RefreshToken)
@@ -279,7 +279,7 @@ func TestRefreshSessionFailureMarksCaller(t *testing.T) {
 		currentClaims,
 	)
 	require.ErrorContains(t, err, "provider not found")
-	require.Equal(t, float64(1), authMetricValue(t, service.metrics.refreshes.WithLabelValues("test", authResultError)))
+	require.Equal(t, float64(1), authMetricValue(t, service.metrics.refreshes.WithLabelValues("test", authResultError, authTenantRoot)))
 	cookie := requireResponseCookie(t, resp, RefreshFailedCookieName)
 	require.Equal(t, session.ID.String(), cookie.Value)
 }
