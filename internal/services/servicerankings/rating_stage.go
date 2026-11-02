@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/ratingmath"
 	"github.com/google/uuid"
 )
 
@@ -155,7 +156,7 @@ func stageRatingEvidencePage(ctx context.Context, store database.Store, tenant, 
 		return advanceRatingStage(ctx, tx, cp, cp.Phase, next)
 	}, nil)
 	if err == nil && stale {
-		return false, fmt.Errorf("rating rebuild %s configuration changed; aborted", generation)
+		return false, fmt.Errorf("rating rebuild %s aborted: %w", generation, ratingmath.ErrRatingConfigStale)
 	}
 	return staged, err
 }

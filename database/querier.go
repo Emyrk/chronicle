@@ -833,7 +833,11 @@ type sqlcQuerier interface {
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error)
 	ListRatingBossPolicies(ctx context.Context, arg ListRatingBossPoliciesParams) ([]RatingGroupBossPolicy, error)
 	ListRatingGuildRenownSourcePage(ctx context.Context, arg ListRatingGuildRenownSourcePageParams) ([]GuildRenownKillFact, error)
+	ListRatingMasteryGuildKeys(ctx context.Context, arg ListRatingMasteryGuildKeysParams) ([]ListRatingMasteryGuildKeysRow, error)
 	ListRatingMasteryGuildPage(ctx context.Context, arg ListRatingMasteryGuildPageParams) ([]ListRatingMasteryGuildPageRow, error)
+	// Frozen staged subject keys with eligible locked parses. Membership and boss eligibility
+	// are checked against the frozen manifest by the orchestrator.
+	ListRatingMasteryPlayerKeys(ctx context.Context, arg ListRatingMasteryPlayerKeysParams) ([]ListRatingMasteryPlayerKeysRow, error)
 	// Stable ascending tie order is required to exclude exactly floor(N*0.2)
 	// observations. NULL (unlocked) parses are never eligible. The page limit is
 	// hard capped even if a caller supplies an excessive size. The first page

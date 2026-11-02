@@ -2,6 +2,7 @@ package servicerankings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -15,10 +16,6 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 )
-
-// These are safety bounds, not page sizes. Exceeding either aborts the entire
-// generation, leaving the previously published scores unchanged.
-var ratingRebuildLimits = ratingmath.RebuildLimits{MaxRuns: 10_000, MaxFacts: 100_000}
 
 var ratingActiveJobStates = []rivertype.JobState{
 	rivertype.JobStateScheduled,
@@ -84,42 +81,97 @@ type WorkerRebuildTenantRatings struct {
 	Logger *slog.Logger
 }
 
+// Every invocation commits at most one bounded evidence, projection, or Mastery
+// page. River snoozing does not consume an attempt, so large tenants can finish.
 func (w *WorkerRebuildTenantRatings) Work(ctx context.Context, job *river.Job[ArgsRebuildTenantRatings]) error {
 	tenant := job.Args.TenantID
-	if tenant != uuid.Nil {
+	if tenant == uuid.Nil {
+		ctx = servicetenant.AdminBypass(ctx)
+	} else {
 		ctx = servicetenant.WithTenantID(ctx, tenant)
 	}
-	// One transaction holds the config lock across the build and publication.
-	// Config mutations take the same lock via triggers, so no stale policy or
-	// realm move can slip between the build and activation. A failure rolls
-	// back all staged rows; the publisher's nested InTx reuses this transaction.
-	var count int
-	var generationID uuid.UUID
-	err := w.Store.InTx(ctx, func(tx database.Store) error {
-		if err := tx.AcquireRatingRebuildConfigLock(ctx); err != nil {
-			return fmt.Errorf("acquire rating configuration lock: %w", err)
+	generation, _, err := StageRatingEvidenceStep(ctx, w.Store, tenant, time.Now().UTC())
+	if err != nil {
+		// StageRatingEvidenceStep commits an abort when it detects a stale revision.
+		// A later invocation starts a fresh snapshot; never publish the stale build.
+		if errors.Is(err, ratingmath.ErrRatingConfigStale) {
+			return river.JobSnooze(time.Second)
 		}
-		generation, written, err := ratingmath.BuildTenantRatings(ctx, tx, tenant, time.Now().UTC(), ratingRebuildLimits)
-		if err != nil {
-			return fmt.Errorf("build tenant ratings: %w", err)
-		}
-		if generation.ID == uuid.Nil {
-			// Policy removed between dispatch and execution: no generation to publish.
-			return nil
-		}
-		if err := ratingmath.PublishTenantRatings(ctx, tx, tenant, generation.ID); err != nil {
-			return fmt.Errorf("publish tenant ratings: %w", err)
-		}
-		count = written
-		generationID = generation.ID
+		return err
+	}
+	if generation == uuid.Nil {
 		return nil
-	}, nil)
+	}
+	cp, err := w.Store.GetRatingRebuildCheckpoint(ctx, database.GetRatingRebuildCheckpointParams{TenantID: tenant, GenerationID: generation})
 	if err != nil {
 		return err
 	}
-	if generationID != uuid.Nil {
-		w.Logger.Info("published tenant ratings", slog.String("tenant_id", tenant.String()),
-			slog.String("generation_id", generationID.String()), slog.Int("scores", count))
+	revision, err := w.Store.GetRatingConfigRevision(ctx, tenant)
+	if err != nil {
+		return err
 	}
-	return nil
+	if revision != cp.ConfigRevision {
+		if _, err := w.Store.AbortRatingRebuild(ctx, database.AbortRatingRebuildParams{TenantID: tenant, GenerationID: generation}); err != nil {
+			return err
+		}
+		return river.JobSnooze(time.Second)
+	}
+	switch cp.Phase {
+	case "runs", "player_renown", "guild_renown":
+		// The evidence step above already committed one page.
+	case "players", "guilds", "player_renown_scores", "guild_renown_scores", "player_scopes", "guild_scopes":
+		_, err = ratingmath.ProjectRatingStagePage(ctx, w.Store, tenant, generation)
+	case "mastery_pending":
+		err = ratingmath.MasteryStageStep(ctx, w.Store, tenant, generation)
+	case "scopes_complete":
+		err = w.Store.InTx(ctx, func(tx database.Store) error {
+			current, err := tx.GetRatingRebuildCheckpoint(ctx, database.GetRatingRebuildCheckpointParams{TenantID: tenant, GenerationID: generation})
+			if err != nil {
+				return err
+			}
+			rev, err := tx.GetRatingConfigRevision(ctx, tenant)
+			if err != nil {
+				return err
+			}
+			if rev != current.ConfigRevision {
+				return ratingmath.ErrRatingConfigStale
+			}
+			if current.Phase != "scopes_complete" {
+				return fmt.Errorf("rating scopes checkpoint changed")
+			}
+			n, err := tx.AdvanceRatingRebuildCheckpoint(ctx, database.AdvanceRatingRebuildCheckpointParams{
+				TenantID: tenant, GenerationID: generation, ExpectedPhase: "scopes_complete", ExpectedCursor: current.Cursor,
+				NextPhase: "ready", NextCursor: []byte(`{}`),
+			})
+			if err != nil {
+				return err
+			}
+			if n != 1 {
+				return fmt.Errorf("rating scopes checkpoint changed")
+			}
+			return nil
+		}, nil)
+	case "ready":
+		var published bool
+		published, err = w.Store.PublishRatingRebuild(ctx, database.PublishRatingRebuildParams{TenantID: tenant, GenerationID: generation})
+		if err == nil && !published {
+			err = ratingmath.ErrRatingConfigStale
+		}
+		if err == nil {
+			w.Logger.Info("published tenant ratings", slog.String("tenant_id", tenant.String()), slog.String("generation_id", generation.String()))
+			return nil
+		}
+	default:
+		return fmt.Errorf("unexpected rating rebuild phase %q", cp.Phase)
+	}
+	if errors.Is(err, ratingmath.ErrRatingConfigStale) {
+		if _, abortErr := w.Store.AbortRatingRebuild(ctx, database.AbortRatingRebuildParams{TenantID: tenant, GenerationID: generation}); abortErr != nil {
+			return abortErr
+		}
+		return river.JobSnooze(time.Second)
+	}
+	if err != nil {
+		return err
+	}
+	return river.JobSnooze(time.Second)
 }

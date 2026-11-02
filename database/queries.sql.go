@@ -22441,6 +22441,173 @@ func (q *sqlQuerier) ListRatingMasteryPlayerPage(ctx context.Context, arg ListRa
 	return items, nil
 }
 
+const listRatingMasteryGuildKeys = `-- name: ListRatingMasteryGuildKeys :many
+SELECT DISTINCT realm_id, guild_id, instance_name, encounter_name, difficulty_name, max_players
+FROM rating_stage_guild_observations
+WHERE generation_id = $1 AND tenant_id = $2
+  AND locked_parse BETWEEN 0 AND 100 AND killed_at < $3::timestamptz AND guild_id IS NOT NULL
+  AND (realm_id, guild_id, instance_name, encounter_name, difficulty_name, max_players) >
+      ($4::uuid, $5::uuid, $6::text,
+       $7::text, $8::text, $9::smallint)
+ORDER BY realm_id, guild_id, instance_name, encounter_name, difficulty_name, max_players
+LIMIT LEAST(GREATEST($10::int, 0), 200)
+`
+
+type ListRatingMasteryGuildKeysParams struct {
+	GenerationID        uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID            uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	AsOf                pgtype.Timestamptz `db:"as_of" json:"as_of"`
+	AfterRealmID        uuid.UUID          `db:"after_realm_id" json:"after_realm_id"`
+	AfterGuildID        uuid.UUID          `db:"after_guild_id" json:"after_guild_id"`
+	AfterInstanceName   string             `db:"after_instance_name" json:"after_instance_name"`
+	AfterEncounterName  string             `db:"after_encounter_name" json:"after_encounter_name"`
+	AfterDifficultyName string             `db:"after_difficulty_name" json:"after_difficulty_name"`
+	AfterMaxPlayers     int16              `db:"after_max_players" json:"after_max_players"`
+	BatchSize           int32              `db:"batch_size" json:"batch_size"`
+}
+
+type ListRatingMasteryGuildKeysRow struct {
+	RealmID        uuid.UUID     `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.NullUUID `db:"guild_id" json:"guild_id"`
+	InstanceName   string        `db:"instance_name" json:"instance_name"`
+	EncounterName  string        `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string        `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16         `db:"max_players" json:"max_players"`
+}
+
+func (q *sqlQuerier) ListRatingMasteryGuildKeys(ctx context.Context, arg ListRatingMasteryGuildKeysParams) ([]ListRatingMasteryGuildKeysRow, error) {
+	rows, err := q.db.Query(ctx, listRatingMasteryGuildKeys,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.AsOf,
+		arg.AfterRealmID,
+		arg.AfterGuildID,
+		arg.AfterInstanceName,
+		arg.AfterEncounterName,
+		arg.AfterDifficultyName,
+		arg.AfterMaxPlayers,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRatingMasteryGuildKeysRow
+	for rows.Next() {
+		var i ListRatingMasteryGuildKeysRow
+		if err := rows.Scan(
+			&i.RealmID,
+			&i.GuildID,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRatingMasteryPlayerKeys = `-- name: ListRatingMasteryPlayerKeys :many
+SELECT DISTINCT realm_id, player_guid, instance_name, encounter_name,
+       difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric
+FROM rating_stage_player_observations
+WHERE generation_id = $1 AND tenant_id = $2
+  AND locked_parse BETWEEN 0 AND 100 AND killed_at < $3::timestamptz
+  AND (realm_id, player_guid, instance_name, encounter_name, difficulty_name,
+       max_players, player_class, player_spec, player_sub_spec, performance_metric) >
+      ($4::uuid, $5::text, $6::text,
+       $7::text, $8::text, $9::smallint,
+       $10::text, $11::text, $12::text,
+       $13::text)
+ORDER BY realm_id, player_guid, instance_name, encounter_name, difficulty_name,
+         max_players, player_class, player_spec, player_sub_spec, performance_metric
+LIMIT LEAST(GREATEST($14::int, 0), 200)
+`
+
+type ListRatingMasteryPlayerKeysParams struct {
+	GenerationID           uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID               uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	AsOf                   pgtype.Timestamptz `db:"as_of" json:"as_of"`
+	AfterRealmID           uuid.UUID          `db:"after_realm_id" json:"after_realm_id"`
+	AfterPlayerGuid        string             `db:"after_player_guid" json:"after_player_guid"`
+	AfterInstanceName      string             `db:"after_instance_name" json:"after_instance_name"`
+	AfterEncounterName     string             `db:"after_encounter_name" json:"after_encounter_name"`
+	AfterDifficultyName    string             `db:"after_difficulty_name" json:"after_difficulty_name"`
+	AfterMaxPlayers        int16              `db:"after_max_players" json:"after_max_players"`
+	AfterPlayerClass       string             `db:"after_player_class" json:"after_player_class"`
+	AfterPlayerSpec        string             `db:"after_player_spec" json:"after_player_spec"`
+	AfterPlayerSubSpec     string             `db:"after_player_sub_spec" json:"after_player_sub_spec"`
+	AfterPerformanceMetric string             `db:"after_performance_metric" json:"after_performance_metric"`
+	BatchSize              int32              `db:"batch_size" json:"batch_size"`
+}
+
+type ListRatingMasteryPlayerKeysRow struct {
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string    `db:"player_guid" json:"player_guid"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+}
+
+// Frozen staged subject keys with eligible locked parses. Membership and boss eligibility
+// are checked against the frozen manifest by the orchestrator.
+func (q *sqlQuerier) ListRatingMasteryPlayerKeys(ctx context.Context, arg ListRatingMasteryPlayerKeysParams) ([]ListRatingMasteryPlayerKeysRow, error) {
+	rows, err := q.db.Query(ctx, listRatingMasteryPlayerKeys,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.AsOf,
+		arg.AfterRealmID,
+		arg.AfterPlayerGuid,
+		arg.AfterInstanceName,
+		arg.AfterEncounterName,
+		arg.AfterDifficultyName,
+		arg.AfterMaxPlayers,
+		arg.AfterPlayerClass,
+		arg.AfterPlayerSpec,
+		arg.AfterPlayerSubSpec,
+		arg.AfterPerformanceMetric,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRatingMasteryPlayerKeysRow
+	for rows.Next() {
+		var i ListRatingMasteryPlayerKeysRow
+		if err := rows.Scan(
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.PerformanceMetric,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteRatingBossPolicy = `-- name: DeleteRatingBossPolicy :execrows
 DELETE FROM rating_group_boss_policies boss
 USING rating_realm_groups grp, wow_servers server
