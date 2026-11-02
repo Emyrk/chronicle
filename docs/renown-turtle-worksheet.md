@@ -4,7 +4,7 @@
 
 The clear times are the operator's approximate figures from [Capybara speedruns](https://capy.chronicleclassic.com/leaderboards/speedruns), **not** independently measured or verified here. Reset periods for these ten raids were supplied by the operator. Tier labels, difficulty, and points remain calibration proposals. The existing `RaidProgressionOrder` is display ordering, not a numeric difficulty/tier rating. Confirm the precise Turtle eligible manifests before a seed migration.
 
-> **Recalibration pending:** ZG's High Priest encounters are now zero-point progression labels, reducing its provisional normalized total to 23⅓; the operator also considers AQ20's 56 too high relative to MC. Do not seed either total as approved policy. Emerald Sanctum's points should be in the revised ZG range. Optional ZG bosses still earn points.
+> **Recalibration pending:** ZG's High Priest encounters award zero and the four Edge of Madness variants share one achievable award per reset, bringing its provisional normalized total to about 16.33. The operator also considers AQ20's 56 too high relative to MC. Do not seed either total as approved policy. Emerald Sanctum's points should be in the revised ZG range. Optional ZG bosses still earn points.
 
 ## Draft raid budgets
 
@@ -15,20 +15,20 @@ The clear times are the operator's approximate figures from [Capybara speedruns]
 | Naxxramas | 40 | base (verify) | 90m | endgame | 7d | 120 | 120 | Long clear and high tier. |
 | Temple of Ahn'Qiraj (AQ40) | 40 | base (verify) | 50m | late | 7d | 90 | 90 | Bug Family is one canonical encounter. |
 | Ruins of Ahn'Qiraj (AQ20) | 20 | base (verify) | 50m | catch-up / late | 3d | 24 | 56 | Lower size, but substantial time. |
-| Zul'Gurub (ZG) | 20 | base (verify) | 25m | catch-up | 3d | 10 | ≈23.33 | Five High Priest encounters award 0; five optional encounters still award points. |
-| Blackwing Lair (BWL) | 40 | base (verify) | 40m | mid / high | 7d | 70 | 70 | Revised ZG offers about one third of BWL's weekly opportunity. |
+| Zul'Gurub (ZG) | 20 | base (verify) | 25m | catch-up | 3d | 7 | ≈16.33 | Five High Priests award 0; only one Edge of Madness boss is available per reset. |
+| Blackwing Lair (BWL) | 40 | base (verify) | 40m | mid / high | 7d | 70 | 70 | Revised ZG offers about 23% of BWL's weekly opportunity. |
 | Onyxia's Lair | 40 | base (verify) | 6m | entry / short | 5d | 6 | 8.4 | Includes Broodcommander Axelus. |
 | Emerald Sanctum | 40 | normal / hard (verify) | ~20m | custom (verify) | 7d | **E + S (either mode)** | **E + S (either mode)** | E = Erennius points; S = normal Solnius points. Hard-mode Solnius earns E + S as a single encounter instead of Erennius + normal Solnius. |
 | Timbermaw Hold | 20 | hard | **unknown** | custom 20-player | 7d | **TBD** | **TBD** | Hard raid; clear time and points pending. |
 | Molten Core (MC) | 40 | base (verify) | 45m | entry | 7d | 40 | 40 | Turtle omits Gehennas; Kronos vanilla needs a separate Gehennas award. |
 
-The draft uses a **70-point BWL clear**, not 1,000. ZG's five High Priest encounters award zero Renown because their kills are not required to kill Hakkar; they remain visible in logs and progression panels. The remaining eight encounters retain their draft awards, including the five optional bosses: `10 × 7 / 3 = 23⅓` points per week, about one third of BWL's 70. This is a provisional allocation, not an approved balance target. Clear time is one input, not a points-per-minute formula. Character and guild point awards currently share the same configured boss values.
+The draft uses a **70-point BWL clear**, not 1,000. ZG's five High Priest encounters award zero Renown because their kills are not required to kill Hakkar; they remain visible in logs and progression panels. The achievable non-priest kills include Mandokir, Jin'do, Hakkar, Gahz'ranka, and exactly one Edge of Madness variant: `7 × 7 / 3 = 16⅓` points per week, about 23% of BWL's 70. This is a provisional allocation, not an approved balance target. Clear time is one input, not a points-per-minute formula. Character and guild point awards currently share the same configured boss values.
 
 ### Draft boss allocations
 
 | Reset | Raid | Bosses and actual points per eligible kill | Total | Normalized (7d) |
 | ---: | --- | --- | ---: | ---: |
-| 3d | ZG | High Priestess Jeklik 0; High Priest Venoxis 0; High Priestess Mar'li 0; Bloodlord Mandokir 1; High Priest Thekal 0; High Priestess Arlokk 0; Jin'do the Hexxer 1; Hakkar 3; Gahz'ranka 1; Gri'lek 1; Hazza'rah 1; Renataki 1; Wushoolay 1 | 10 | ≈23.33 |
+| 3d | ZG | High Priestess Jeklik 0; High Priest Venoxis 0; High Priestess Mar'li 0; Bloodlord Mandokir 1; High Priest Thekal 0; High Priestess Arlokk 0; Jin'do the Hexxer 1; Hakkar 3; Gahz'ranka 1; Edge of Madness 1 (one of Gri'lek, Hazza'rah, Renataki, Wushoolay) | 7 | ≈16.33 |
 | 3d | AQ20 | Kurinnaxx 3; General Rajaxx 3; Moam 3; Buru the Gorger 3; Ayamiss the Hunter 3; Ossirian the Unscarred 9 | 24 | 56 |
 | 5d | Onyxia | Onyxia 4; Broodcommander Axelus 2 | 6 | 8.4 |
 | 5d | K10 | Lord Blackwald II 5; Brood Queen Araxxna 5; Grizikil 5; Clawlord Howlfang 5; Moroes 10 | 30 | 42 |
@@ -40,7 +40,7 @@ The draft uses a **70-point BWL clear**, not 1,000. ZG's five High Priest encoun
 | 7d | Emerald Sanctum | Normal: Erennius **E**; Solnius **S**. Hard: Solnius (Hard Mode) **E + S** only. | **E + S (either mode)** | **E + S (either mode)** |
 | 7d | Timbermaw Hold | Kodiak & Rotgrowl **TBD**; Trioch the Devourer **TBD**; Karrsh the Sentinel **TBD**; Chieftain Partath **TBD**; Archdruid Kronn **TBD**; Selenaxx Foulheart **TBD**; Loktanag the Vile **TBD**; Ormanos the Cracked **TBD**; Ursol **TBD**; Peroth'arn **TBD** | **TBD** | **TBD** |
 
-**Turtle MC excludes Gehennas.** The registry's hostile inventory lists Gehennas, but the Turtle flavor's progression and speedrun requirements instead list its custom bosses. This Turtle allocation gives no Gehennas points and assigns the provisional 40-point total across Turtle encounters. Vanilla Kronos MC will require a separate Gehennas award in its flavor-specific policy. ZG's five non-progression bosses and both Turtle-specific custom encounters are listed so the proposed totals do not depend on an incomplete speedrun requirement list. K10 and K40 are derived names under the Tower of Karazhan instance; its parent has no `ProgressionBosses` list. Treat these as separate raid budgets.
+**Turtle MC excludes Gehennas.** The registry's hostile inventory lists Gehennas, but the Turtle flavor's progression and speedrun requirements instead list its custom bosses. This Turtle allocation gives no Gehennas points and assigns the provisional 40-point total across Turtle encounters. Vanilla Kronos MC will require a separate Gehennas award in its flavor-specific policy. ZG's four Edge of Madness encounter names share one award in the worksheet because only one is killable per reset. The actual SQL policy must still map each distinct canonical encounter name to one point; `Edge of Madness` is a worksheet label, not an existing canonical kill name. Gahz'ranka remains a separate optional award. Turtle-specific custom MC encounters remain listed rather than relying on a vanilla boss list. K10 and K40 are derived names under the Tower of Karazhan instance; its parent has no `ProgressionBosses` list. Treat these as separate raid budgets.
 
 **Emerald Sanctum** is a seven-day, 40-player raid taking approximately 20 minutes, per the operator. Its registry lists `Erennius`, `Solnius`, and `Solnius (Hard Mode)`; the default rankings set contains Erennius and Solnius, while a separate hard-mode set contains Solnius (Hard Mode). The operator specifies `ES (Hard) = E + S`, the same total as Erennius plus normal Solnius. The draft models a hard-mode Solnius encounter as a single `E + S` award, not an extra `E` on top. Individual point values remain TBD. Before seeding, confirm which encounters actually produce credited kills on a hard-mode run so both modes total the same without double counting. **Timbermaw Hold** is a hard, 20-player raid on a seven-day reset, per the operator. Its clear time and points remain TBD. The worksheet contains draft allocations for nine raids and placeholders for these two; it is not yet a finalized Turtle policy.
 
@@ -54,7 +54,7 @@ The draft uses a **70-point BWL clear**, not 1,000. ZG's five High Priest encoun
 ## Required review before default seeding
 
 1. Reset periods were supplied by the operator: K10/Onyxia 5d; AQ20/ZG 3d; K40/Naxx/AQ40/BWL/MC/Emerald Sanctum/Timbermaw Hold 7d.
-2. Review ZG's revised one-third-of-BWL weekly opportunity, reduce AQ20's still-high 56-point normalized total, and check the other tier/size relationships.
+2. Review ZG's revised ~23%-of-BWL weekly opportunity, reduce AQ20's still-high 56-point normalized total, and check the other tier/size relationships.
 3. Keep MC Gehennas in a non-Turtle (for example Kronos) policy, and confirm boss identity and eligibility for BWL Ezzel, Onyxia Axelus, and optional ZG encounters. Check whether every named encounter can produce a canonical ranking fact.
 4. Confirm K10/K40 as separately derived instances; decide whether the two Solnius modes are mutually exclusive award variants, and gather Timbermaw Hold's approximate clear time.
 5. Confirm which difficulty partitions these base awards should cover, especially Emerald Sanctum hard mode.
