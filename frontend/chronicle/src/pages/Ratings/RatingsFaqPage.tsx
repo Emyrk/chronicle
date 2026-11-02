@@ -29,7 +29,7 @@ export function RatingsFaqPage() {
         <h1 className="mb-3 font-wow text-4xl">How ratings work</h1>
         <p className="text-muted-foreground">
           A parse tells you how one kill went. Ratings look at all of your kills and answer three different questions: how high you have reached, what
-          you reliably deliver, and how much you have been seen doing. Each gets its own number, because one number cannot answer all three honestly.
+          you reliably deliver, and what your career adds up to. Each gets its own number, because one number cannot answer all three honestly.
         </p>
       </header>
 
@@ -46,7 +46,7 @@ export function RatingsFaqPage() {
         />
         <MetricIntro
           metric="renown"
-          question="What have you been seen doing?"
+          question="What has your career added up to?"
           body="Bosses killed, how often you return, and full clears. It never looks at your parses."
         />
       </div>
@@ -209,8 +209,8 @@ export function RatingsFaqPage() {
           <Section id="renown" title="Renown" accent={RENOWN.accent} icon={<RENOWN.icon className="size-5" style={{ color: RENOWN.accent }} />}>
             <Faq q="What is Renown?" open>
               <p>
-                Your <strong>witnessed raiding career</strong>: how many bosses you have killed, how often you come back to them, and how many full
-                clears you have done. It is history, not skill. It never looks at your parses, and a high Renown does not mean a better player.
+                Your <strong>career total</strong>: how many bosses you have killed, how often you come back to them, and how many full clears you
+                have done. It is history, not skill. It never looks at your parses, and a high Renown does not mean a better player.
               </p>
             </Faq>
             <Faq q="How is it calculated?">

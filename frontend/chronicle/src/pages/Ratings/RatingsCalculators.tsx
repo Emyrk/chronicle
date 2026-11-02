@@ -248,7 +248,7 @@ export function RenownCalculator() {
       id="renown-calculator"
       title="Renown"
       accent={RENOWN.accent}
-      description="Renown counts what you have been seen doing. Each boss is worth more the more often you return, with diminishing returns; full clears add a bonus."
+      description="Renown is your career total. Each boss is worth more the more often you return, with diminishing returns; full clears add a bonus."
       inputs={
         <>
           <Slider label="Bosses killed" hint="distinct bosses" value={bosses} onChange={setBosses} min={1} max={40} accent={RENOWN.accent} />

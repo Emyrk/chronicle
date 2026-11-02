@@ -20,7 +20,7 @@ const RATINGS = [
   },
   {
     metric: "renown" as const,
-    question: "What have you been seen doing?",
+    question: "What has your career added up to?",
     body: "Bosses killed, how often you return, and full clears. It never looks at your parses.",
   },
 ];
@@ -77,8 +77,7 @@ export function RatingsLaunchPost({ post }: PostProps) {
           <strong>Evidence</strong>.
         </li>
         <li>
-          <strong>Renown</strong> is your raiding career: bosses, repeat kills, and full clears. It is history, not
-          skill.
+          <strong>Renown</strong> is your career total: bosses, repeat kills, and full clears. It is history, not skill.
         </li>
       </ul>
       <p>
