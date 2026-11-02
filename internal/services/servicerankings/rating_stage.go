@@ -167,6 +167,41 @@ func finishRatingStage(ctx context.Context, tx database.Store, cp database.Ratin
 	return advanceRatingStage(ctx, tx, cp, "players", ratingStageCursor{})
 }
 
+// StageRatingEvidenceStep snapshots or resumes a generation and commits at most
+// one evidence page. A River worker can snooze between pages rather than hold a
+// single job open while scanning an unbounded tenant history.
+func StageRatingEvidenceStep(ctx context.Context, store database.Store, tenant uuid.UUID, asOf time.Time) (uuid.UUID, bool, error) {
+	policies, err := store.ListTenantRatingPolicies(ctx, tenant)
+	if err != nil {
+		return uuid.Nil, false, err
+	}
+	if len(policies) == 0 {
+		cp, err := store.GetBuildingRatingRebuildCheckpoint(ctx, tenant)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, true, nil
+		}
+		if err != nil {
+			return uuid.Nil, false, err
+		}
+		staged, err := stageRatingEvidencePage(ctx, store, tenant, cp.GenerationID)
+		return cp.GenerationID, staged, err
+	}
+	var version int32
+	for _, p := range policies {
+		if p.Version > version {
+			version = p.Version
+		}
+	}
+	generation, err := store.StartRatingRebuild(ctx, database.StartRatingRebuildParams{
+		TenantID: tenant, PolicyVersion: version, AsOf: database.Timestamptz(asOf), SourceCutoff: database.Timestamptz(asOf),
+	})
+	if err != nil {
+		return uuid.Nil, false, err
+	}
+	staged, err := stageRatingEvidencePage(ctx, store, tenant, generation)
+	return generation, staged, err
+}
+
 // StageRatingEvidence resumes the existing generation if possible, or freezes
 // a new snapshot. It does not publish or project: callers must project all four
 // metrics and scope rows before transitioning the checkpoint to ready.
