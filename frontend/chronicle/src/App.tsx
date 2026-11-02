@@ -131,6 +131,7 @@ const SpeedrunningPage = lazy(() => import("./pages/Speedrunning/SpeedrunningPag
 const MapLegendPage = lazy(() => import("./pages/MapLegend/MapLegendPage").then(({ MapLegendPage }) => ({ default: MapLegendPage })))
 const ClassDetailsPage = lazy(() => import("./pages/ClassDetails/ClassDetailsPage").then(({ ClassDetailsPage }) => ({ default: ClassDetailsPage })))
 const SubspecsPage = lazy(() => import("./pages/Subspecs/SubspecsPage").then(({ SubspecsPage }) => ({ default: SubspecsPage })))
+const RatingsFaqPage = lazy(() => import("./pages/Ratings/RatingsFaqPage").then(({ RatingsFaqPage }) => ({ default: RatingsFaqPage })))
 const TenantDatasetLayout = lazy(() => import("./components/Layout/TenantDatasetLayout").then(({ TenantDatasetLayout }) => ({ default: TenantDatasetLayout })))
 
 // Backend-handled paths that should bypass React Router
@@ -297,6 +298,8 @@ function App() {
         <Route path="/speedrunning" element={<SpeedrunningPage />} />
         <Route path="/map-legend" element={<MapLegendPage />} />
         <Route path="/subspecs" element={<SubspecsPage />} />
+        {/* Unlisted until ratings launch: the leaderboards and the launch post will link here. */}
+        <Route path="/ratings/faq" element={<RatingsFaqPage />} />
         <Route path="/class-details" element={<ClassDetailsPage />} />
         <Route path="/g/:guildId" element={<GuildPage />} />
         <Route path="/g/:guildId/:tabSlug" element={<GuildPage />} />
