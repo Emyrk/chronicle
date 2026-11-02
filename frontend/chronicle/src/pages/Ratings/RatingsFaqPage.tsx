@@ -2,7 +2,15 @@ import type { ReactNode } from "react"
 import { ChevronDown } from "lucide-react"
 import { calculateMastery } from "@/pages/ArmoryPage/overview/masteryRenownModel"
 import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes"
-import { EvidenceBadge, EvidenceChart, GuildPeakCalculator, MasteryCalculator, RaidPeakCalculator, RenownCalculator } from "./RatingsCalculators"
+import {
+  EvidenceBadge,
+  EvidenceChart,
+  GuildPeakCalculator,
+  MasteryCalculator,
+  PeakCalculator,
+  RaidPeakCalculator,
+  RenownCalculator,
+} from "./RatingsCalculators"
 
 const PEAK = METRIC_THEMES.peak
 const MASTERY = METRIC_THEMES.mastery
@@ -37,7 +45,7 @@ export function RatingsFaqPage() {
         <MetricIntro
           metric="peak"
           question="How high have you reached?"
-          body="Your best parse on each boss. One great kill is enough, and it holds until you beat it."
+          body="Your best kill on each boss, measured against the current #1. One great kill is enough."
         />
         <MetricIntro
           metric="mastery"
@@ -67,6 +75,7 @@ export function RatingsFaqPage() {
             <p className="mt-4 mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">Calculators</p>
             {[
               ["mastery-calculator", "Ranked Mastery"],
+              ["peak-calculator", "Peak"],
               ["raid-peak-calculator", "Raid Peak"],
               ["renown-calculator", "Renown"],
               ["guild-peak-calculator", "Guild Peak"],
@@ -124,10 +133,25 @@ export function RatingsFaqPage() {
           <Section id="peak" title="Peak" accent={PEAK.accent} icon={<PEAK.icon className="size-5" style={{ color: PEAK.accent }} />}>
             <Faq q="What is Peak?" open>
               <p>
-                Your <strong>best parse</strong>. On a boss, it is your single best kill. A Peak of 100 means you hold the best kill of your spec on
-                that boss. It is the one-shot, min-max rating: one great night is enough.
+                Your <strong>best kill</strong> on a boss, measured against the <strong>current #1</strong> of your spec: your best raw DPS (or HPS)
+                divided by the #1's, times 100. The #1 holds 100. It is the one-shot, min-max rating: one great night is enough.
               </p>
             </Faq>
+            <Faq q="Why did my Peak go down when I did not play?">
+              <p>
+                Because the #1 is a moving target. When someone sets a new record, everyone else is now measured against a higher bar, so every other
+                Peak on that boss drops a little. Your best kill has not changed; beat your own record to climb back.
+              </p>
+              <Example
+                title="Example: a new #1"
+                rows={[
+                  ["Your best kill", "1,200 DPS"],
+                  ["#1 at 1,300 DPS", "1,200 ÷ 1,300 = 92.3"],
+                  ["#1 improves to 1,400 DPS", "1,200 ÷ 1,400 = 85.7"],
+                ]}
+              />
+            </Faq>
+            <PeakCalculator />
             <Faq q="How is a raid's Peak calculated?">
               <p>
                 It averages your Peak on <strong>every boss in the raid</strong>. A boss you have not killed counts as zero, so a raid Peak rewards a
@@ -143,7 +167,7 @@ export function RatingsFaqPage() {
               />
             </Faq>
             <RaidPeakCalculator />
-            <Faq q="Two players have 100. Who is first?">
+            <Faq q="Two players have the same Peak. Who is first?">
               <p>The one who set it first. When Peaks tie, the earlier kill ranks higher.</p>
             </Faq>
             <Faq q="Why does the Peak table show a kill time and date?">
@@ -197,7 +221,7 @@ export function RatingsFaqPage() {
             <Faq q="My Ranked Mastery went down. Why?">
               <p>
                 Most likely your Form moved: Form favors recent kills, so a few weaker nights pull it down, and a few strong ones bring it back. Your
-                Peak never drops. Outside the 180-day view, older kills also leave the window.
+                Peak can also slip when the #1 sets a new record. Outside the 180-day view, older kills also leave the window.
               </p>
             </Faq>
             <Faq q="Does taking a break hurt me?">

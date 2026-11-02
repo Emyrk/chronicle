@@ -28,6 +28,14 @@ export const Calculators: Story = {
     fireEvent.change(mastery.getByRole("slider", { name: "Kills" }), { target: { value: "5" } })
     await expect(mastery.getByLabelText("Evidence complete")).toBeInTheDocument()
 
+    // Peak is measured against the current #1, so a new record lowers it.
+    const peak = within(canvas.getByRole("region", { name: "Peak calculator" }))
+    fireEvent.change(peak.getByRole("slider", { name: "Your best kill" }), { target: { value: "1200" } })
+    fireEvent.change(peak.getByRole("slider", { name: "Current #1" }), { target: { value: "1300" } })
+    fireEvent.change(peak.getByRole("slider", { name: "A new #1 record" }), { target: { value: "1400" } })
+    await expect(peak.getByText("92.3")).toBeInTheDocument()
+    await expect(peak.getByText("85.7")).toBeInTheDocument()
+
     const raid = within(canvas.getByRole("region", { name: "Raid Peak calculator" }))
     fireEvent.change(raid.getByRole("slider", { name: "Bosses killed" }), { target: { value: "11" } })
     fireEvent.change(raid.getByRole("slider", { name: "Average Peak" }), { target: { value: "95" } })

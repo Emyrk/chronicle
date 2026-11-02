@@ -202,6 +202,62 @@ export function EvidenceChart() {
   )
 }
 
+/** Peak on a boss: your best raw DPS against the current #1, which can move. */
+export function PeakCalculator() {
+  const [yours, setYours] = useState(1200)
+  const [top, setTop] = useState(1300)
+  const [record, setRecord] = useState(1400)
+  const peak = (n: number) => (Math.min(yours, n) / n) * 100
+  return (
+    <CalculatorCard
+      id="peak-calculator"
+      title="Peak"
+      accent={PEAK.accent}
+      description="Peak is your best kill measured against the current #1. Raise the #1's record to see every other Peak drop."
+      inputs={
+        <>
+          <Slider label="Your best kill" hint="DPS or HPS" value={yours} onChange={setYours} min={300} max={2000} step={10} accent={PEAK.accent} />
+          <Slider
+            label="Current #1"
+            hint="best kill of your spec"
+            value={top}
+            onChange={(v) => {
+              setTop(v)
+              if (record < v) setRecord(v)
+            }}
+            min={300}
+            max={2000}
+            step={10}
+            accent={PEAK.accent}
+          />
+          <Slider
+            label="A new #1 record"
+            hint="if someone beats it"
+            value={record}
+            onChange={(v) => setRecord(Math.max(v, top))}
+            min={300}
+            max={2500}
+            step={10}
+            accent={PEAK.accent}
+          />
+        </>
+      }
+      result={
+        <>
+          <p className="mb-3 font-mono text-xs text-muted-foreground">
+            {yours.toLocaleString()} ÷ {top.toLocaleString()} × 100
+          </p>
+          <ResultLine label="Your Peak" value={peak(top).toFixed(1)} strong color={PEAK.accent} />
+          <ResultLine label="After the new record" value={peak(record).toFixed(1)} />
+          <p className="mt-2 text-xs text-muted-foreground">
+            {yours >= top ? "You are the #1: your Peak is 100 until someone beats you." : "Your kill did not change; the bar did."}
+          </p>
+        </>
+      }
+    />
+  )
+}
+
 /** Raid Peak: the average of every boss's Peak, a missed boss counting as zero. */
 export function RaidPeakCalculator({ bosses = 12 }: { bosses?: number }) {
   const [killed, setKilled] = useState(bosses - 1)
@@ -212,7 +268,7 @@ export function RaidPeakCalculator({ bosses = 12 }: { bosses?: number }) {
       id="raid-peak-calculator"
       title="Raid Peak"
       accent={PEAK.accent}
-      description={`A single raid's Peak averages your best parse on all ${bosses} bosses. A boss you have not killed counts as zero.`}
+      description={`A single raid's Peak averages your Peak on all ${bosses} bosses. A boss you have not killed counts as zero.`}
       inputs={
         <>
           <Slider label="Bosses killed" hint={`of ${bosses}`} value={killed} onChange={setKilled} min={0} max={bosses} accent={PEAK.accent} />

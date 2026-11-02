@@ -11,7 +11,7 @@ const RATINGS = [
   {
     metric: "peak" as const,
     question: "How high have you reached?",
-    body: "Your best parse on each boss. One great kill is enough, and it holds until you beat it.",
+    body: "Your best kill on each boss, measured against the current #1. One great kill is enough.",
   },
   {
     metric: "mastery" as const,
@@ -68,8 +68,8 @@ export function RatingsLaunchPost({ post }: PostProps) {
       <h2>A closer look</h2>
       <ul>
         <li>
-          <strong>Peak</strong> is your best kill. A single raid's Peak averages every boss, so it rewards a full set of
-          strong kills.
+          <strong>Peak</strong> is your best kill measured against the current #1, so it moves when the #1 sets a new
+          record. A single raid's Peak averages every boss, so it rewards a full set of strong kills.
         </li>
         <li>
           <strong>Ranked Mastery</strong> blends your Peak, your typical recent play (Form), and your weaker nights
