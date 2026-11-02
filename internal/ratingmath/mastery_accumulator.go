@@ -181,7 +181,7 @@ func AdvanceMasterySubject(ctx context.Context, db database.Store, subject Maste
 		if next.NextPass == "complete" {
 			state.EligibleKills, state.ExcludedKills, state.Best = next.NextEligibleKills, next.NextExcludedKills, next.NextBest
 			state.TotalWeight, state.FloorScore, state.FormScore = next.NextTotalWeight, next.NextFloorScore, next.NextFormScore
-			result, err = completedMastery(state, policy)
+			result, err = completedMastery(state, policy, subject.InstanceName, subject.EncounterName)
 			if err != nil {
 				return err
 			}
@@ -270,7 +270,7 @@ func masteryPage(ctx context.Context, tx database.Store, key MasterySubject, sta
 	return rows, nil
 }
 
-func completedMastery(s database.RatingMasteryAccumulator, policy database.RatingGroupPolicy) (MasteryResult, error) {
+func completedMastery(s database.RatingMasteryAccumulator, policy database.RatingGroupPolicy, instance, boss string) (MasteryResult, error) {
 	r := MasteryResult{EligibleKills: int(s.EligibleKills), ExcludedKills: int(s.ExcludedKills), Best: s.Best}
 	if s.EligibleKills == 0 {
 		return r, nil
@@ -281,10 +281,6 @@ func completedMastery(s database.RatingMasteryAccumulator, policy database.Ratin
 	r.Floor, r.Form = s.FloorScore.Float64, s.FormScore.Float64
 	r.Mastery = policy.BestWeight*r.Best + policy.FormWeight*r.Form + policy.FloorWeight*r.Floor
 	r.Confidence = 1 - math.Exp(-float64(s.EligibleKills)/4)
-	weight := 1.0
-	if s.EligibleKills < int64(policy.FullRankKills) && policy.FullRankKills > 1 {
-		weight = policy.RankOneWeight + (1-policy.RankOneWeight)*float64(s.EligibleKills-1)/float64(policy.FullRankKills-1)
-	}
-	r.Ranked = r.Mastery * weight
+	r.Ranked = r.Mastery * masteryRankWeight(policy, instance, boss)(r.EligibleKills)
 	return r, nil
 }

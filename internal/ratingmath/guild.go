@@ -189,12 +189,7 @@ func buildGuildGroup(ctx context.Context, store ratingStore, generation, tenant,
 		mastery, err := ScoreMastery(entry.parses, MasteryPolicy{
 			HalfLife:   time.Duration(policy.HalfLifeDays * float64(24*time.Hour)),
 			BestWeight: policy.BestWeight, FormWeight: policy.FormWeight, FloorWeight: policy.FloorWeight,
-			RankWeight: func(n int) float64 {
-				if n >= int(policy.FullRankKills) || policy.FullRankKills == 1 {
-					return 1
-				}
-				return policy.RankOneWeight + (1-policy.RankOneWeight)*float64(n-1)/float64(policy.FullRankKills-1)
-			},
+			RankWeight: masteryRankWeight(policy, key.instance, key.boss),
 		})
 		if err != nil {
 			return written, err
