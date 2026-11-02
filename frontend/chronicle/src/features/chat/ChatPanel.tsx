@@ -27,6 +27,8 @@ export interface ChatPanelProps {
   debugAvailable?: boolean;
   debugEnabled?: boolean;
   onDebugEnabledChange?: (enabled: boolean) => void;
+  yoloEnabled?: boolean;
+  onYoloEnabledChange?: (enabled: boolean) => void;
   /** Window actions (minimize, pop out, …) rendered at the end of the header. */
   windowControls?: ReactNode;
   className?: string;
@@ -184,6 +186,8 @@ export function ChatPanel({
   debugAvailable = false,
   debugEnabled = false,
   onDebugEnabledChange,
+  yoloEnabled,
+  onYoloEnabledChange,
   windowControls,
   className,
 }: ChatPanelProps) {
@@ -192,6 +196,8 @@ export function ChatPanel({
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Stable across debug toggles so a popped-out debug viewer reconnects when debugging is re-enabled.
   const [debugChannelId] = useState(newDebugChannelId);
+  const effectiveYoloEnabled = yoloEnabled ?? runtime?.yoloEnabled ?? false;
+  const setEffectiveYoloEnabled = onYoloEnabledChange ?? runtime?.setYoloEnabled;
   const pendingConfirmation = runtime?.pendingConfirmation ?? null;
   const messageEndRef = useRef<HTMLDivElement>(null);
 
@@ -220,7 +226,7 @@ export function ChatPanel({
     void controller.startNewChat();
   };
 
-  const hasSettings = Boolean(configuration || runtime || debugAvailable);
+  const hasSettings = Boolean(configuration || setEffectiveYoloEnabled || debugAvailable);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -275,16 +281,16 @@ export function ChatPanel({
       {hasSettings && (
         <div className={cn("bg-muted/30 space-y-3 border-b px-4 py-3", !settingsOpen && "hidden")}>
           {configuration}
-          {(runtime || debugAvailable) && (
+          {(setEffectiveYoloEnabled || debugAvailable) && (
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-              {runtime && (
-                <label className="text-muted-foreground flex items-center gap-2 text-xs" title="Allow view-changing client tools without confirmation for this session">
+              {setEffectiveYoloEnabled && (
+                <label className="text-muted-foreground flex items-center gap-2 text-xs" title="Allow view-changing client tools without confirmation for this chat">
                   <ShieldAlert className="size-3.5" />
                   YOLO
                   <Switch
                     size="sm"
-                    checked={runtime.yoloEnabled}
-                    onCheckedChange={runtime.setYoloEnabled}
+                    checked={effectiveYoloEnabled}
+                    onCheckedChange={setEffectiveYoloEnabled}
                     aria-label="Enable YOLO mode for client tools"
                   />
                 </label>

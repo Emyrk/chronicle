@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Bot, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { shouldCreateInstanceThread } from "./instanceThread";
 import { buildInstanceAnalystRunRequest, buildSiteHelpRunRequest, toChatMessages } from "./inference";
 import { ModelCombobox } from "./ModelCombobox";
 import type { DebugCommandInput } from "./useAssistantChat";
+import { useChatPreferences } from "./useChatPreferences";
 import { useChatWindow } from "./useChatWindow";
 import { useInferenceSelection } from "./useInferenceSelection";
 import { usageFromApi } from "./usage";
@@ -81,7 +82,7 @@ function DesktopGlobalSiteHelpChat() {
   const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed);
   const debugPreview = useInferenceDebugPreview();
   const chatWindow = useChatWindow("site-help", "Chronicle site help");
-  const [debugEnabled, setDebugEnabled] = useState(false);
+  const { debugEnabled, yoloEnabled, setDebugEnabled, setYoloEnabled } = useChatPreferences(session?.user_id, "site-help");
   const previewDebug = useCallback(async (input: DebugCommandInput) => {
     if (!selection.modelId) throw new Error("Select a model first.");
     const snapshot = await debugPreview.mutateAsync({
@@ -91,11 +92,11 @@ function DesktopGlobalSiteHelpChat() {
     });
     setDebugEnabled(true);
     return { snapshot };
-  }, [debugPreview, selection.modelId]);
+  }, [debugPreview, selection.modelId, setDebugEnabled]);
   const createRequest = useCallback((input: Parameters<typeof buildSiteHelpRunRequest>[0]) => {
     if (!selection.connectionId || !selection.modelId) throw new Error("Select an AI connection and model first.");
-    return buildSiteHelpRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, debugEnabled);
-  }, [debugEnabled, selection.connectionId, selection.modelId]);
+    return buildSiteHelpRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, debugPermission.allowed && debugEnabled);
+  }, [debugEnabled, debugPermission.allowed, selection.connectionId, selection.modelId]);
 
   if (
     !isAuthenticated
@@ -119,6 +120,8 @@ function DesktopGlobalSiteHelpChat() {
       debugAvailable={debugPermission.allowed}
       debugEnabled={debugEnabled}
       onDebugEnabledChange={setDebugEnabled}
+      yoloEnabled={yoloEnabled}
+      onYoloEnabledChange={setYoloEnabled}
       disabled={disconnected || Boolean(selection.error)}
       disabledTitle={selection.error ? "AI configuration unavailable" : "Connect OpenRouter to start chatting"}
       disabledDescription={selection.error?.message ?? "Connect your user-funded OpenRouter account in settings. Chronicle never receives your OpenRouter password."}
@@ -142,7 +145,7 @@ function DesktopInstanceAssistantChat({ instanceId, instanceName }: { instanceId
   const createThread = useCreateInstanceInferenceThread();
   const chatWindow = useChatWindow(`instance-${instanceId}`, `${instanceName} assistant`);
   const open = chatWindow.mode !== "minimized";
-  const [debugEnabled, setDebugEnabled] = useState(false);
+  const { debugEnabled, yoloEnabled, setDebugEnabled, setYoloEnabled } = useChatPreferences(session?.user_id, `instance-${instanceId}`);
   const threadId = createThread.data?.thread.id;
   const threadQuery = useInferenceThread(threadId, { enabled: false });
 
@@ -179,11 +182,11 @@ function DesktopInstanceAssistantChat({ instanceId, instanceName }: { instanceId
     });
     setDebugEnabled(true);
     return { snapshot };
-  }, [debugPreview, instanceId, selection.modelId, threadId]);
+  }, [debugPreview, instanceId, selection.modelId, setDebugEnabled, threadId]);
   const createRequest = useCallback((input: Parameters<typeof buildInstanceAnalystRunRequest>[0]) => {
     if (!selection.connectionId || !selection.modelId) throw new Error("Select an AI connection and model first.");
-    return buildInstanceAnalystRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, instanceId, debugEnabled);
-  }, [debugEnabled, instanceId, selection.connectionId, selection.modelId]);
+    return buildInstanceAnalystRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, instanceId, debugPermission.allowed && debugEnabled);
+  }, [debugEnabled, debugPermission.allowed, instanceId, selection.connectionId, selection.modelId]);
 
   if (
     !isAuthenticated
@@ -220,6 +223,8 @@ function DesktopInstanceAssistantChat({ instanceId, instanceName }: { instanceId
       debugAvailable={debugPermission.allowed}
       debugEnabled={debugEnabled}
       onDebugEnabledChange={setDebugEnabled}
+      yoloEnabled={yoloEnabled}
+      onYoloEnabledChange={setYoloEnabled}
       disabled={disconnected || Boolean(selection.error || threadError) || threadLoading}
       disabledTitle={disconnected
         ? "Connect OpenRouter to analyze this raid"

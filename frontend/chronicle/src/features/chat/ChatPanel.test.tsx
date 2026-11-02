@@ -32,6 +32,14 @@ describe("ChatPanel client tool controls", () => {
     expect(markup).toContain('data-state="unchecked"');
   });
 
+  it("renders a chat-scoped YOLO value without using global runtime state", () => {
+    const markup = renderToStaticMarkup(
+      <ChatPanel controller={controller} yoloEnabled onYoloEnabledChange={vi.fn()} />,
+    );
+    expect(markup).toContain("YOLO");
+    expect(markup).toContain('data-state="checked"');
+  });
+
   it("renders markdown typography, links, and a new chat action", () => {
     const markup = renderToStaticMarkup(
       <ChatPanel

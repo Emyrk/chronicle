@@ -83,7 +83,11 @@ interface StoredCapability {
 
 export interface InferenceRuntimeClient {
   getClientDescriptor: () => InferenceClientDescriptor;
-  executeClientTool: (request: ClientToolRequestEvent, signal: AbortSignal) => Promise<ClientToolContinuation>;
+  executeClientTool: (
+    request: ClientToolRequestEvent,
+    signal: AbortSignal,
+    options?: { yoloEnabled?: boolean },
+  ) => Promise<ClientToolContinuation>;
 }
 
 export interface InferenceRuntimeSnapshot extends InferenceRuntimeClient {
@@ -198,6 +202,7 @@ export class InferenceRuntime implements InferenceRuntimeClient {
   executeClientTool = async (
     request: ClientToolRequestEvent,
     signal: AbortSignal,
+    options?: { yoloEnabled?: boolean },
   ): Promise<ClientToolContinuation> => {
     let capability = this.capabilities.get(request.capability.id);
     // Continuations identify the persisted request, not the capability's latest
@@ -253,7 +258,7 @@ export class InferenceRuntime implements InferenceRuntimeClient {
     if (
       request.effect === "view_mutation" &&
       request.confirmation === "unless_yolo" &&
-      !this.isYoloEnabled()
+      !(options?.yoloEnabled ?? this.isYoloEnabled())
     ) {
       const approved = await new Promise<boolean>((resolve, reject) => {
         const handleAbort = () => reject(signal.reason ?? new DOMException("Aborted", "AbortError"));

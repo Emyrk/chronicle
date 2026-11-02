@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
+import { useCallback, useEffect, useRef, type RefObject } from "react"
 import { Link } from "react-router-dom"
 import { Code2, LoaderCircle, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -17,6 +17,7 @@ import {
 } from "@/features/chat/api"
 import { buildLuaWorkshopRunRequest, toChatMessages } from "@/features/chat/inference"
 import { useAssistantChat, type DebugCommandInput, type UseAssistantChatOptions } from "@/features/chat/useAssistantChat"
+import { useChatPreferences } from "@/features/chat/useChatPreferences"
 import { useInferenceSelection } from "@/features/chat/useInferenceSelection"
 import { usageFromApi } from "@/features/chat/usage"
 
@@ -69,7 +70,7 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
   const debugPreview = useInferenceDebugPreview()
   const clearThread = useClearInferenceThread()
   const createThread = useCreateLuaProjectInferenceThread()
-  const [debugEnabled, setDebugEnabled] = useState(false)
+  const { debugEnabled, yoloEnabled, setDebugEnabled, setYoloEnabled } = useChatPreferences(session?.user_id, `lua-project-${projectId}`)
   const sentRequest = useRef<number | undefined>(undefined)
   const threadId = createThread.data?.thread.id
   const threadQuery = useInferenceThread(threadId, { enabled: false })
@@ -95,11 +96,11 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
     })
     setDebugEnabled(true)
     return { snapshot }
-  }, [debugPreview, selection.modelId, threadId])
+  }, [debugPreview, selection.modelId, setDebugEnabled, threadId])
   const createRequest = useCallback((input: Parameters<typeof buildLuaWorkshopRunRequest>[0]) => {
     if (!selection.connectionId || !selection.modelId) throw new Error("Select an AI connection and model first.")
-    return buildLuaWorkshopRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, debugEnabled)
-  }, [debugEnabled, selection.connectionId, selection.modelId])
+    return buildLuaWorkshopRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, debugPermission.allowed && debugEnabled)
+  }, [debugEnabled, debugPermission.allowed, selection.connectionId, selection.modelId])
 
   const showCodeButton = onShowCode && <Button size="sm" variant="outline" onClick={onShowCode}><Code2 className="size-4" /> Open code here</Button>
 
@@ -129,7 +130,7 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
     sentRef={sentRequest}
     chat={{
       endpoint: "/api/v1/inference/runs", threadId: response?.thread.id, initialMessages, createRequest,
-      initialUsage: response?.usage && usageFromApi(response.usage),
+      initialUsage: response?.usage && usageFromApi(response.usage), yoloEnabled,
       onDebugCommand: debugPermission.allowed ? previewDebug : undefined, onStartNewChat: startNewChat, onRunSettled: refreshThread,
     }}
     panel={{
@@ -141,6 +142,7 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
         ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" /> Loading conversation…</div>
         : undefined,
       debugAvailable: debugPermission.allowed, debugEnabled, onDebugEnabledChange: setDebugEnabled,
+      yoloEnabled, onYoloEnabledChange: setYoloEnabled,
       disabled: disconnected || Boolean(selection.error || threadError) || threadLoading,
       disabledTitle: disconnected ? "Connect OpenRouter to use the Module Workshop chat"
         : threadLoading ? "Opening Module Workshop chat"

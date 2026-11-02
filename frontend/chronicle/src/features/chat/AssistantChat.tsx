@@ -100,6 +100,7 @@ export function AssistantChat({
   onRunComplete,
   onRunSettled,
   onStartNewChat,
+  yoloEnabled,
   runClient,
   ...panelProps
 }: AssistantChatProps) {
@@ -115,6 +116,7 @@ export function AssistantChat({
     onRunComplete,
     onRunSettled,
     onStartNewChat,
+    yoloEnabled,
     runClient,
   });
   const runtime = useOptionalInferenceRuntime();
@@ -130,6 +132,7 @@ export function AssistantChat({
     <ChatPanel
       {...panelProps}
       controller={controller}
+      yoloEnabled={yoloEnabled}
       title={title}
       description={description}
       windowControls={<ChatWindowControls chatWindow={chatWindow} />}
