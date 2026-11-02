@@ -214,6 +214,8 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/ratings/groups", s.handleRatingRealmGroups)
 	s.router.Get("/ratings/scope-leaderboard", s.handleRatingScopeLeaderboard)
 	s.router.Get("/ratings/boss-leaderboard", s.handleRatingBossLeaderboard)
+	s.router.Get("/ratings/guild-boss-leaderboard", s.handleGuildRatingBossLeaderboard)
+	s.router.Get("/ratings/guild-scope-leaderboard", s.handleGuildRatingScopeLeaderboard)
 
 	// Speedrun leaderboard
 	s.router.Get("/speedrun", s.handleSpeedrunLeaderboard)
