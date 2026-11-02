@@ -33,9 +33,8 @@ export function RatingsLaunchPost({ post }: PostProps) {
   return (
     <ShortPost post={post}>
       <p>
-        A parse tells you how one kill went. It cannot tell you whether that kill was a great night or a normal one, or
-        how long you have been raiding. Today Chronicle adds <strong>ratings</strong>: three numbers built from all of
-        your kills, each answering a different question.
+        A parse is a snapshot of a single kill on a single night. Today Chronicle adds <strong>ratings</strong>: three
+        numbers that span many raid nights, each answering a different question.
       </p>
 
       <div className="not-prose my-8 grid gap-3 sm:grid-cols-3">
