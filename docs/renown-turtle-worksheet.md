@@ -4,17 +4,17 @@
 
 The clear times are the operator's approximate figures from [Capybara speedruns](https://capy.chronicleclassic.com/leaderboards/speedruns), **not** independently measured or verified here. Reset periods for these ten raids were supplied by the operator. Tier labels, difficulty, and points remain calibration proposals. The existing `RaidProgressionOrder` is display ordering, not a numeric difficulty/tier rating. Confirm the precise Turtle eligible manifests before a seed migration.
 
-> **Recalibration pending:** ZG's High Priest encounters award zero and the four Edge of Madness variants share one achievable award per reset, bringing its provisional normalized total to about 16.33. The operator also considers AQ20's 56 too high relative to MC. Do not seed either total as approved policy. Emerald Sanctum's points should be in the revised ZG range. Optional ZG bosses still earn points.
+> **Draft, not seeded:** ZG's High Priests award zero and its four Edge of Madness variants share one achievable award per reset. AQ20 and K10 now total 8 and 6 per reset respectively, subject to per-boss review. Do not seed these numbers until the full policy is approved; optional ZG bosses still earn points.
 
 ## Draft raid budgets
 
 | Raid | Size | Difficulty | Est. clean clear | Proposed tier/role | Reset | Total | Normalized (7d) | Notes |
 | --- | ---: | --- | ---: | --- | ---: | ---: | ---: | --- |
-| Lower Tower of Karazhan (K10) | 10 | base (verify) | 40m | custom 10-player | 5d | 30 | 42 | Verify source support. |
+| Lower Tower of Karazhan (K10) | 10 | base (verify) | 40m | custom 10-player | 5d | 6 | 8.4 | Four bosses at 1; Moroes at 2. Verify source support. |
 | Upper Tower of Karazhan (K40) | 40 | base (verify) | 40m | custom 40-player | 7d | 95 | 95 | Verify source support. |
 | Naxxramas | 40 | base (verify) | 90m | endgame | 7d | 120 | 120 | Long clear and high tier. |
 | Temple of Ahn'Qiraj (AQ40) | 40 | base (verify) | 50m | late | 7d | 90 | 90 | Bug Family is one canonical encounter. |
-| Ruins of Ahn'Qiraj (AQ20) | 20 | base (verify) | 50m | catch-up / late | 3d | 24 | 56 | Lower size, but substantial time. |
+| Ruins of Ahn'Qiraj (AQ20) | 20 | base (verify) | 50m | catch-up / late | 3d | 8 | ≈18.67 | Five bosses at 1; Ossirian at 3. |
 | Zul'Gurub (ZG) | 20 | base (verify) | 25m | catch-up | 3d | 7 | ≈16.33 | Five High Priests award 0; only one Edge of Madness boss is available per reset. |
 | Blackwing Lair (BWL) | 40 | base (verify) | 40m | mid / high | 7d | 70 | 70 | Revised ZG offers about 23% of BWL's weekly opportunity. |
 | Onyxia's Lair | 40 | base (verify) | 6m | entry / short | 5d | 3 | 4.2 | Onyxia 2; Broodcommander Axelus 1. |
@@ -29,9 +29,9 @@ The draft uses a **70-point BWL clear**, not 1,000. ZG's five High Priest encoun
 | Reset | Raid | Bosses and actual points per eligible kill | Total | Normalized (7d) |
 | ---: | --- | --- | ---: | ---: |
 | 3d | ZG | High Priestess Jeklik 0; High Priest Venoxis 0; High Priestess Mar'li 0; Bloodlord Mandokir 1; High Priest Thekal 0; High Priestess Arlokk 0; Jin'do the Hexxer 1; Hakkar 3; Gahz'ranka 1; Edge of Madness 1 (one of Gri'lek, Hazza'rah, Renataki, Wushoolay) | 7 | ≈16.33 |
-| 3d | AQ20 | Kurinnaxx 3; General Rajaxx 3; Moam 3; Buru the Gorger 3; Ayamiss the Hunter 3; Ossirian the Unscarred 9 | 24 | 56 |
+| 3d | AQ20 | Kurinnaxx 1; General Rajaxx 1; Moam 1; Buru the Gorger 1; Ayamiss the Hunter 1; Ossirian the Unscarred 3 | 8 | ≈18.67 |
 | 5d | Onyxia | Onyxia 2; Broodcommander Axelus 1 | 3 | 4.2 |
-| 5d | K10 | Lord Blackwald II 5; Brood Queen Araxxna 5; Grizikil 5; Clawlord Howlfang 5; Moroes 10 | 30 | 42 |
+| 5d | K10 | Lord Blackwald II 1; Brood Queen Araxxna 1; Grizikil 1; Clawlord Howlfang 1; Moroes 2 | 6 | 8.4 |
 | 7d | Emerald Sanctum | Normal: Erennius 2; Solnius 3. Hard: Solnius (Hard Mode) 5 only. | 5 | 5 |
 | 7d | MC | Lucifron 2; Magmadar 2; Garr 2; Shazzrah 2; Baron Geddon 2; Sulfuron Harbinger 2; Golemagg the Incinerator 2; Incindis 2; Basalthar & Smoldaris 2; Sorcerer-Thane Thaurissan 2; Majordomo Executus 6; Ragnaros 14 | 40 | 40 |
 | 7d | BWL | Razorgore the Untamed 7; Vaelastrasz the Corrupt 7; Broodlord Lashlayer 7; Firemaw 7; Ebonroc 7; Flamegor 7; Chromaggus 7; Nefarian 14; Ezzel Darkbrewer 7 | 70 | 70 |
@@ -54,7 +54,7 @@ The draft uses a **70-point BWL clear**, not 1,000. ZG's five High Priest encoun
 ## Required review before default seeding
 
 1. Reset periods were supplied by the operator: K10/Onyxia 5d; AQ20/ZG 3d; K40/Naxx/AQ40/BWL/MC/Emerald Sanctum/Timbermaw Hold 7d.
-2. Review ZG's revised ~23%-of-BWL weekly opportunity, reduce AQ20's still-high 56-point normalized total, and check the other tier/size relationships.
+2. Review ZG at about 16.33, AQ20 at about 18.67, and K10 at 8.4 points per seven days, plus the other proposed tier/size relationships.
 3. Keep MC Gehennas in a non-Turtle (for example Kronos) policy, and confirm boss identity and eligibility for BWL Ezzel, Onyxia Axelus, and optional ZG encounters. Check whether every named encounter can produce a canonical ranking fact.
 4. Confirm K10/K40 as separately derived instances; decide whether the two Solnius modes are mutually exclusive award variants, and gather Timbermaw Hold's approximate clear time.
 5. Confirm which difficulty partitions these base awards should cover, especially Emerald Sanctum hard mode.
