@@ -25,7 +25,7 @@ import {
   type RaidFramesProcessorEvent,
   type RaidFramesResult,
 } from "./raidFrames.processor";
-import { deadEnemyFrameOpacity } from "../Map/mapDeathVisibility";
+import { enemyFrameOpacity } from "../Map/mapDeathVisibility";
 import { INCOMING_HEAL_WINDOW_MS, POWER_COLORS, percent, useDisplayTimestamp } from "./raidFrameShared";
 
 /** Alt+click entity-menu attributes for a unit's name (empty for non-players). */
@@ -565,7 +565,7 @@ function InspectCastBar({ cast, timestampMs }: { cast: RaidFrameCast; timestampM
 
 /** Panel option token for enemy raid frames. */
 const ENEMIES_OPTION = "enemies";
-/** Map overlay option: fade dead non-boss enemy frames with their 3D models, then remove them. */
+/** Map overlay option: time non-boss frames to their fight presence, including the existing death fade. */
 export const HIDE_DEAD_ENEMIES_OPTION = "hide-dead-enemies";
 
 const BREAKOUT_WIDTH = 400;
@@ -635,11 +635,15 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
   const encounterEnemies = props.context.instance.encounters.find((candidate) => candidate.id === encounter.encounterId)?.enemies ?? [];
   const bossGuids = new Set(encounterEnemies.filter((enemy) => enemy.boss).map((enemy) => enemy.id));
   const encounterEnemyGuids = new Set(encounterEnemies.map((enemy) => enemy.id));
-  const enemyOpacity = (guid: string) => deadEnemyFrameOpacity(
-    resourceDeathStartedAt(encounter.resourcesByUnit.get(guid) ?? [], timestampMs),
-    timestampMs,
-    bossGuids.has(guid),
-  );
+  const enemyOpacity = (guid: string) => {
+    const samples = encounter.resourcesByUnit.get(guid) ?? [];
+    return enemyFrameOpacity(
+      samples[0]?.timestampMs ?? encounter.startMs,
+      resourceDeathStartedAt(samples, timestampMs),
+      timestampMs,
+      bossGuids.has(guid),
+    );
+  };
   const players: (readonly [string, { name: string; class: string }])[] = enemiesMode
     ? enemyFrameUnits(
         encounter,
