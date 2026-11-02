@@ -1,9 +1,21 @@
+export const ADD_FRAME_PREVIEW_MS = 500;
 export const DEAD_ENEMY_MODEL_FADE_MS = 5_000;
 export const DEAD_ENEMY_FRAME_FADE_MS = DEAD_ENEMY_MODEL_FADE_MS;
 
 function deadEnemyOpacity(deadSinceMs: number | null, cursorMs: number, boss: boolean, fadeMs: number): number {
   if (boss || deadSinceMs === null) return 1;
   return Math.max(0, Math.min(1, 1 - (cursorMs - deadSinceMs) / fadeMs));
+}
+
+/** Bosses stay for the whole fight; adds appear shortly before their first telemetry, then keep the existing death fade. */
+export function enemyFrameOpacity(
+  firstSeenMs: number,
+  deadSinceMs: number | null,
+  cursorMs: number,
+  boss: boolean,
+): number {
+  if (!boss && cursorMs < firstSeenMs - ADD_FRAME_PREVIEW_MS) return 0;
+  return deadEnemyFrameOpacity(deadSinceMs, cursorMs, boss);
 }
 
 /** Bosses and living enemies stay opaque; a dead trash enemy's top-right frame fades with its model. */

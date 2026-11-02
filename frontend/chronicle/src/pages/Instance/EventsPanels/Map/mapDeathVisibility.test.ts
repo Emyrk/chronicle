@@ -1,11 +1,26 @@
 import { describe, expect, it } from "vitest";
 import {
+  ADD_FRAME_PREVIEW_MS,
   DEAD_ENEMY_FRAME_FADE_MS,
   DEAD_ENEMY_MODEL_FADE_MS,
   deadEnemyFrameOpacity,
   deadEnemyModelOpacity,
   deadUnitVisualState,
+  enemyFrameOpacity,
 } from "./mapDeathVisibility";
+
+describe("enemy frame visibility", () => {
+  it("shows adds only from 500ms before their first resource sample", () => {
+    const firstSeenMs = 10_000;
+    expect(enemyFrameOpacity(firstSeenMs, null, firstSeenMs - ADD_FRAME_PREVIEW_MS - 1, false)).toBe(0);
+    expect(enemyFrameOpacity(firstSeenMs, null, firstSeenMs - ADD_FRAME_PREVIEW_MS, false)).toBe(1);
+    expect(enemyFrameOpacity(firstSeenMs, null, firstSeenMs, false)).toBe(1);
+  });
+
+  it("keeps bosses visible for the whole fight", () => {
+    expect(enemyFrameOpacity(10_000, null, 0, true)).toBe(1);
+  });
+});
 
 describe("dead enemy visibility", () => {
   it("fades a non-boss frame with its model and keeps boss frames opaque", () => {
