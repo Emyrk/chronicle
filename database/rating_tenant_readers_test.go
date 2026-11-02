@@ -136,20 +136,111 @@ func TestTenantRatingReaders(t *testing.T) {
 	playerBoss.LimitCount, playerScope.LimitCount, guildBoss.LimitCount, guildScope.LimitCount = 1, 1, 1, 1
 	check(realms[:1])
 	playerBoss.LimitCount, playerScope.LimitCount, guildBoss.LimitCount, guildScope.LimitCount = 100, 100, 100, 100
-	playerBoss.PlayerSubSpec = "Arcane"
-	playerScope.PlayerSubSpec = "Arcane"
+	// The same score and realm require the subject tie-break. Page through
+	// all four boards with a single-row limit, including the lower score.
+	for _, table := range []string{"player_tenant_rating_boss_scores", "player_tenant_rating_scope_scores"} {
+		boss := table == "player_tenant_rating_boss_scores"
+		columns := "generation_id,tenant_id,realm_id,instance_name,difficulty_name,max_players,rating_metric,window_kind,score,player_guid,player_class,player_spec,player_sub_spec,performance_metric"
+		values := "($1,$2,$3,'Molten Core','Heroic',40,'peak','all_time',100,'zzz','Mage','Fire','Deep Fire','dps')"
+		if boss {
+			columns += ",encounter_name"
+			values = values[:len(values)-1] + ",'Ragnaros')"
+		}
+		_, err = conn.Exec(ctx, "INSERT INTO "+table+" ("+columns+") VALUES "+values, active, tenant, realms[0])
+		require.NoError(t, err)
+	}
+	lastGuild := uuid.New()
+	_, err = conn.Exec(ctx, "INSERT INTO guilds (id, realm_id, name) VALUES ($1,$2,'Reader tie guild')", lastGuild, realms[0])
+	require.NoError(t, err)
+	for _, table := range []string{"guild_tenant_rating_boss_scores", "guild_tenant_rating_scope_scores"} {
+		columns := "generation_id,tenant_id,realm_id,instance_name,difficulty_name,max_players,rating_metric,window_kind,score,guild_id"
+		values := "($1,$2,$3,'Molten Core','Heroic',40,'peak','all_time',100,$4)"
+		if table == "guild_tenant_rating_boss_scores" {
+			columns += ",encounter_name"
+			values = values[:len(values)-1] + ",'Ragnaros')"
+		}
+		_, err = conn.Exec(ctx, "INSERT INTO "+table+" ("+columns+") VALUES "+values, active, tenant, realms[0], lastGuild)
+		require.NoError(t, err)
+	}
+	generation, err := q.GetActiveTenantRatingGeneration(ctx, tenant)
+	require.NoError(t, err)
+	require.Equal(t, active, generation)
+	playerBoss.LimitCount, playerScope.LimitCount, guildBoss.LimitCount, guildScope.LimitCount = 1, 1, 1, 1
+	seen := [4][]string{}
+	for page := 0; page < 3; page++ {
+		pb, err := q.ListActivePlayerTenantBossScores(ctx, playerBoss)
+		require.NoError(t, err)
+		ps, err := q.ListActivePlayerTenantScopeScores(ctx, playerScope)
+		require.NoError(t, err)
+		gb, err := q.ListActiveGuildTenantBossScores(ctx, guildBoss)
+		require.NoError(t, err)
+		gs, err := q.ListActiveGuildTenantScopeScores(ctx, guildScope)
+		require.NoError(t, err)
+		for i, length := range []int{len(pb), len(ps), len(gb), len(gs)} {
+			require.Equal(t, 1, length, "board %d page %d", i, page)
+		}
+		for i, row := range []struct {
+			generation, realm uuid.UUID
+			score             float64
+			subject           string
+		}{
+			{pb[0].GenerationID, pb[0].RealmID, pb[0].Score, pb[0].PlayerGuid},
+			{ps[0].GenerationID, ps[0].RealmID, ps[0].Score, ps[0].PlayerGuid},
+			{gb[0].GenerationID, gb[0].RealmID, gb[0].Score, gb[0].GuildID.String()},
+			{gs[0].GenerationID, gs[0].RealmID, gs[0].Score, gs[0].GuildID.String()},
+		} {
+			require.Equal(t, active, row.generation)
+			seen[i] = append(seen[i], row.subject)
+		}
+		playerBoss.GenerationID, playerScope.GenerationID, guildBoss.GenerationID, guildScope.GenerationID = active, active, active, active
+		playerBoss.AfterScore, playerScope.AfterScore = pb[0].Score, ps[0].Score
+		guildBoss.AfterScore, guildScope.AfterScore = gb[0].Score, gs[0].Score
+		playerBoss.AfterRealmID, playerScope.AfterRealmID = pb[0].RealmID, ps[0].RealmID
+		guildBoss.AfterRealmID, guildScope.AfterRealmID = gb[0].RealmID, gs[0].RealmID
+		playerBoss.AfterPlayerGuid, playerScope.AfterPlayerGuid = pb[0].PlayerGuid, ps[0].PlayerGuid
+		guildBoss.AfterGuildID, guildScope.AfterGuildID = gb[0].GuildID, gs[0].GuildID
+	}
+	require.Equal(t, []string{"player", "zzz", "player"}, seen[0])
+	require.Equal(t, seen[0], seen[1])
+	wantGuilds := []string{guilds[0].String(), lastGuild.String()}
+	if wantGuilds[0] > wantGuilds[1] {
+		wantGuilds[0], wantGuilds[1] = wantGuilds[1], wantGuilds[0]
+	}
+	for _, board := range seen[2:] {
+		require.Equal(t, append(append([]string{}, wantGuilds...), guilds[1].String()), board)
+	}
 	pb, err := q.ListActivePlayerTenantBossScores(ctx, playerBoss)
 	require.NoError(t, err)
 	require.Empty(t, pb)
 	ps, err := q.ListActivePlayerTenantScopeScores(ctx, playerScope)
 	require.NoError(t, err)
 	require.Empty(t, ps)
-	guildBoss.EncounterName = "Onyxia"
 	gb, err := q.ListActiveGuildTenantBossScores(ctx, guildBoss)
 	require.NoError(t, err)
 	require.Empty(t, gb)
-	guildScope.DifficultyName = "Normal"
 	gs, err := q.ListActiveGuildTenantScopeScores(ctx, guildScope)
+	require.NoError(t, err)
+	require.Empty(t, gs)
+	// A position without a pinned generation cannot walk another snapshot.
+	playerBoss.GenerationID = uuid.Nil
+	pb, err = q.ListActivePlayerTenantBossScores(ctx, playerBoss)
+	require.NoError(t, err)
+	require.Empty(t, pb)
+	playerBoss.GenerationID = active
+	playerBoss.PlayerSubSpec = "Arcane"
+	playerScope.PlayerSubSpec = "Arcane"
+	pb, err = q.ListActivePlayerTenantBossScores(ctx, playerBoss)
+	require.NoError(t, err)
+	require.Empty(t, pb)
+	ps, err = q.ListActivePlayerTenantScopeScores(ctx, playerScope)
+	require.NoError(t, err)
+	require.Empty(t, ps)
+	guildBoss.EncounterName = "Onyxia"
+	gb, err = q.ListActiveGuildTenantBossScores(ctx, guildBoss)
+	require.NoError(t, err)
+	require.Empty(t, gb)
+	guildScope.DifficultyName = "Normal"
+	gs, err = q.ListActiveGuildTenantScopeScores(ctx, guildScope)
 	require.NoError(t, err)
 	require.Empty(t, gs)
 	playerBoss.PlayerSubSpec, playerScope.PlayerSubSpec, guildBoss.EncounterName, guildScope.DifficultyName = "Deep Fire", "Deep Fire", "Ragnaros", "Heroic"
@@ -220,4 +311,40 @@ func TestTenantRatingReaders(t *testing.T) {
 	_, err = conn.Exec(ctx, "SELECT set_config('app.tenant_id',$1,false)", other.String())
 	require.NoError(t, err)
 	check(nil) // explicit tenant argument cannot bypass tenant RLS.
+
+	// A publication invalidates a cursor rather than silently mixing the new
+	// generation into its traversal. Retired snapshots are subject to deletion.
+	_, err = conn.Exec(ctx, "SELECT set_config('app.tenant_id',$1,false)", tenant.String())
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
+	require.NoError(t, err)
+	require.NoError(t, q.RetireActiveRatingScoreGeneration(ctx, tenant))
+	activated, err := q.ActivateRatingScoreGeneration(ctx, database.ActivateRatingScoreGenerationParams{GenerationID: building, TenantID: tenant})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, activated)
+	_, err = conn.Exec(ctx, "RESET app.tenant_bypass")
+	require.NoError(t, err)
+	current, err := q.GetActiveTenantRatingGeneration(ctx, tenant)
+	require.NoError(t, err)
+	require.Equal(t, building, current)
+	require.NotEqual(t, playerBoss.GenerationID, current) // API must report stale cursor.
+	playerBoss.PlayerSubSpec, playerScope.PlayerSubSpec, guildBoss.EncounterName, guildScope.DifficultyName = "Deep Fire", "Deep Fire", "Ragnaros", "Heroic"
+	pb, err = q.ListActivePlayerTenantBossScores(ctx, playerBoss)
+	require.NoError(t, err)
+	require.Empty(t, pb)
+	ps, err = q.ListActivePlayerTenantScopeScores(ctx, playerScope)
+	require.NoError(t, err)
+	require.Empty(t, ps)
+	gb, err = q.ListActiveGuildTenantBossScores(ctx, guildBoss)
+	require.NoError(t, err)
+	require.Empty(t, gb)
+	gs, err = q.ListActiveGuildTenantScopeScores(ctx, guildScope)
+	require.NoError(t, err)
+	require.Empty(t, gs)
+	playerBoss.GenerationID = uuid.Nil
+	playerBoss.AfterRealmID = uuid.Nil
+	pb, err = q.ListActivePlayerTenantBossScores(ctx, playerBoss)
+	require.NoError(t, err)
+	require.Len(t, pb, 1)
+	require.Equal(t, building, pb[0].GenerationID)
 }

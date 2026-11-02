@@ -294,6 +294,18 @@ type sqlcQuerier interface {
 	GetAccountPurge(ctx context.Context, id uuid.UUID) (AccountPurge, error)
 	GetActiveAccountPurgeByUser(ctx context.Context, userID uuid.UUID) (AccountPurge, error)
 	GetActiveInferenceRunByThreadForUpdate(ctx context.Context, arg GetActiveInferenceRunByThreadForUpdateParams) (InferenceRun, error)
+	// Non-serving readers for tenant-wide projections. Do not route public handlers here
+	// until the tenant projection writer is activated. realm_ids is display-only;
+	// an empty array shows every realm owned by the tenant.
+	// Pass zero generation_id and zero after_realm_id on the first page. Continue
+	// with the returned generation_id and the last row's (score, realm_id,
+	// player_guid/guild_id). Retired generations can be deleted with CASCADE, so
+	// continuation is active-only: callers must compare the cursor generation
+	// with the active tenant generation and report stale cursor on mismatch.
+	// Never restart at a new generation using an old position.
+	// Compare this ID with a continuation cursor before reading; a mismatch or
+	// no active generation means the cursor is stale, not an empty leaderboard.
+	GetActiveTenantRatingGeneration(ctx context.Context, tenantID uuid.UUID) (uuid.UUID, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
 	GetBillingEntitlementOwnerByProviderCustomerID(ctx context.Context, arg GetBillingEntitlementOwnerByProviderCustomerIDParams) (uuid.UUID, error)
@@ -746,9 +758,6 @@ type sqlcQuerier interface {
 	ListActiveGuildRatingScopeScores(ctx context.Context, arg ListActiveGuildRatingScopeScoresParams) ([]GuildRatingScopeScore, error)
 	ListActiveGuildTenantBossScores(ctx context.Context, arg ListActiveGuildTenantBossScoresParams) ([]GuildTenantRatingBossScore, error)
 	ListActiveGuildTenantScopeScores(ctx context.Context, arg ListActiveGuildTenantScopeScoresParams) ([]GuildTenantRatingScopeScore, error)
-	// Non-serving readers for tenant-wide projections. Do not route public handlers here
-	// until the tenant projection writer is activated. realm_ids is display-only;
-	// an empty array shows every realm owned by the tenant.
 	ListActivePlayerTenantBossScores(ctx context.Context, arg ListActivePlayerTenantBossScoresParams) ([]PlayerTenantRatingBossScore, error)
 	ListActivePlayerTenantScopeScores(ctx context.Context, arg ListActivePlayerTenantScopeScoresParams) ([]PlayerTenantRatingScopeScore, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)

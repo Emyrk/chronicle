@@ -26114,6 +26114,30 @@ func (q *sqlQuerier) InsertPlayerTenantScopeScore(ctx context.Context, arg Inser
 	return result.RowsAffected(), nil
 }
 
+const getActiveTenantRatingGeneration = `-- name: GetActiveTenantRatingGeneration :one
+
+SELECT id FROM rating_score_generations
+WHERE tenant_id = $1 AND status = 'active'
+`
+
+// Non-serving readers for tenant-wide projections. Do not route public handlers here
+// until the tenant projection writer is activated. realm_ids is display-only;
+// an empty array shows every realm owned by the tenant.
+// Pass zero generation_id and zero after_realm_id on the first page. Continue
+// with the returned generation_id and the last row's (score, realm_id,
+// player_guid/guild_id). Retired generations can be deleted with CASCADE, so
+// continuation is active-only: callers must compare the cursor generation
+// with the active tenant generation and report stale cursor on mismatch.
+// Never restart at a new generation using an old position.
+// Compare this ID with a continuation cursor before reading; a mismatch or
+// no active generation means the cursor is stale, not an empty leaderboard.
+func (q *sqlQuerier) GetActiveTenantRatingGeneration(ctx context.Context, tenantID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getActiveTenantRatingGeneration, tenantID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const listActiveGuildTenantBossScores = `-- name: ListActiveGuildTenantBossScores :many
 SELECT score.generation_id, score.tenant_id, score.realm_id, score.guild_id, score.instance_name, score.encounter_name, score.difficulty_name, score.max_players, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.best_raw, score.rank_one_raw, score.best_locked_parse, score.form, score.floor_score, score.eligible_kills, score.computed_at
 FROM guild_tenant_rating_boss_scores score
@@ -26125,19 +26149,30 @@ JOIN wow_server_realms realm ON realm.id = score.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
 WHERE score.tenant_id = $1
   AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-  AND score.instance_name = $2
-  AND score.encounter_name = $3
-  AND score.difficulty_name = $4
-  AND score.max_players = $5
-  AND score.rating_metric = $6
-  AND score.window_kind = $7
-  AND (COALESCE(cardinality($8::uuid[]), 0) = 0 OR score.realm_id = ANY($8::uuid[]))
+  AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = $2::uuid)
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR $2::uuid <> '00000000-0000-0000-0000-000000000000'::uuid)
+  AND score.instance_name = $4
+  AND score.encounter_name = $5
+  AND score.difficulty_name = $6
+  AND score.max_players = $7
+  AND score.rating_metric = $8
+  AND score.window_kind = $9
+  AND (COALESCE(cardinality($10::uuid[]), 0) = 0 OR score.realm_id = ANY($10::uuid[]))
+  AND score.score <= CASE WHEN $3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+                          THEN 'Infinity'::float8 ELSE $11::float8 END
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR score.score < $11::float8
+       OR (score.score = $11::float8 AND score.realm_id > $3::uuid)
+       OR (score.score = $11::float8 AND score.realm_id = $3::uuid AND score.guild_id > $12::uuid))
 ORDER BY score.score DESC, score.realm_id, score.guild_id
-LIMIT LEAST(GREATEST($9::int, 1), 100)
+LIMIT LEAST(GREATEST($13::int, 1), 100)
 `
 
 type ListActiveGuildTenantBossScoresParams struct {
 	TenantID       uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID   uuid.UUID   `db:"generation_id" json:"generation_id"`
+	AfterRealmID   uuid.UUID   `db:"after_realm_id" json:"after_realm_id"`
 	InstanceName   string      `db:"instance_name" json:"instance_name"`
 	EncounterName  string      `db:"encounter_name" json:"encounter_name"`
 	DifficultyName string      `db:"difficulty_name" json:"difficulty_name"`
@@ -26145,12 +26180,16 @@ type ListActiveGuildTenantBossScoresParams struct {
 	RatingMetric   string      `db:"rating_metric" json:"rating_metric"`
 	WindowKind     string      `db:"window_kind" json:"window_kind"`
 	RealmIds       []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	AfterScore     float64     `db:"after_score" json:"after_score"`
+	AfterGuildID   uuid.UUID   `db:"after_guild_id" json:"after_guild_id"`
 	LimitCount     int32       `db:"limit_count" json:"limit_count"`
 }
 
 func (q *sqlQuerier) ListActiveGuildTenantBossScores(ctx context.Context, arg ListActiveGuildTenantBossScoresParams) ([]GuildTenantRatingBossScore, error) {
 	rows, err := q.db.Query(ctx, listActiveGuildTenantBossScores,
 		arg.TenantID,
+		arg.GenerationID,
+		arg.AfterRealmID,
 		arg.InstanceName,
 		arg.EncounterName,
 		arg.DifficultyName,
@@ -26158,6 +26197,8 @@ func (q *sqlQuerier) ListActiveGuildTenantBossScores(ctx context.Context, arg Li
 		arg.RatingMetric,
 		arg.WindowKind,
 		arg.RealmIds,
+		arg.AfterScore,
+		arg.AfterGuildID,
 		arg.LimitCount,
 	)
 	if err != nil {
@@ -26210,36 +26251,53 @@ JOIN wow_server_realms realm ON realm.id = score.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
 WHERE score.tenant_id = $1
   AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-  AND score.instance_name = $2
-  AND score.difficulty_name = $3
-  AND score.max_players = $4
-  AND score.rating_metric = $5
-  AND score.window_kind = $6
-  AND (COALESCE(cardinality($7::uuid[]), 0) = 0 OR score.realm_id = ANY($7::uuid[]))
+  AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = $2::uuid)
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR $2::uuid <> '00000000-0000-0000-0000-000000000000'::uuid)
+  AND score.instance_name = $4
+  AND score.difficulty_name = $5
+  AND score.max_players = $6
+  AND score.rating_metric = $7
+  AND score.window_kind = $8
+  AND (COALESCE(cardinality($9::uuid[]), 0) = 0 OR score.realm_id = ANY($9::uuid[]))
+  AND score.score <= CASE WHEN $3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+                          THEN 'Infinity'::float8 ELSE $10::float8 END
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR score.score < $10::float8
+       OR (score.score = $10::float8 AND score.realm_id > $3::uuid)
+       OR (score.score = $10::float8 AND score.realm_id = $3::uuid AND score.guild_id > $11::uuid))
 ORDER BY score.score DESC, score.realm_id, score.guild_id
-LIMIT LEAST(GREATEST($8::int, 1), 100)
+LIMIT LEAST(GREATEST($12::int, 1), 100)
 `
 
 type ListActiveGuildTenantScopeScoresParams struct {
 	TenantID       uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID   uuid.UUID   `db:"generation_id" json:"generation_id"`
+	AfterRealmID   uuid.UUID   `db:"after_realm_id" json:"after_realm_id"`
 	InstanceName   string      `db:"instance_name" json:"instance_name"`
 	DifficultyName string      `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers     int16       `db:"max_players" json:"max_players"`
 	RatingMetric   string      `db:"rating_metric" json:"rating_metric"`
 	WindowKind     string      `db:"window_kind" json:"window_kind"`
 	RealmIds       []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	AfterScore     float64     `db:"after_score" json:"after_score"`
+	AfterGuildID   uuid.UUID   `db:"after_guild_id" json:"after_guild_id"`
 	LimitCount     int32       `db:"limit_count" json:"limit_count"`
 }
 
 func (q *sqlQuerier) ListActiveGuildTenantScopeScores(ctx context.Context, arg ListActiveGuildTenantScopeScoresParams) ([]GuildTenantRatingScopeScore, error) {
 	rows, err := q.db.Query(ctx, listActiveGuildTenantScopeScores,
 		arg.TenantID,
+		arg.GenerationID,
+		arg.AfterRealmID,
 		arg.InstanceName,
 		arg.DifficultyName,
 		arg.MaxPlayers,
 		arg.RatingMetric,
 		arg.WindowKind,
 		arg.RealmIds,
+		arg.AfterScore,
+		arg.AfterGuildID,
 		arg.LimitCount,
 	)
 	if err != nil {
@@ -26275,7 +26333,6 @@ func (q *sqlQuerier) ListActiveGuildTenantScopeScores(ctx context.Context, arg L
 }
 
 const listActivePlayerTenantBossScores = `-- name: ListActivePlayerTenantBossScores :many
-
 SELECT score.generation_id, score.tenant_id, score.realm_id, score.player_guid, score.instance_name, score.encounter_name, score.difficulty_name, score.max_players, score.player_class, score.player_spec, score.player_sub_spec, score.performance_metric, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.best_raw, score.rank_one_raw, score.best_locked_parse, score.form, score.floor_score, score.eligible_kills, score.computed_at
 FROM player_tenant_rating_boss_scores score
 JOIN rating_score_generations generation
@@ -26286,23 +26343,34 @@ JOIN wow_server_realms realm ON realm.id = score.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
 WHERE score.tenant_id = $1
   AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-  AND score.instance_name = $2
-  AND score.encounter_name = $3
-  AND score.difficulty_name = $4
-  AND score.max_players = $5
-  AND score.player_class = $6
-  AND score.player_spec = $7
-  AND score.player_sub_spec = $8
-  AND score.performance_metric = $9
-  AND score.rating_metric = $10
-  AND score.window_kind = $11
-  AND (COALESCE(cardinality($12::uuid[]), 0) = 0 OR score.realm_id = ANY($12::uuid[]))
+  AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = $2::uuid)
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR $2::uuid <> '00000000-0000-0000-0000-000000000000'::uuid)
+  AND score.instance_name = $4
+  AND score.encounter_name = $5
+  AND score.difficulty_name = $6
+  AND score.max_players = $7
+  AND score.player_class = $8
+  AND score.player_spec = $9
+  AND score.player_sub_spec = $10
+  AND score.performance_metric = $11
+  AND score.rating_metric = $12
+  AND score.window_kind = $13
+  AND (COALESCE(cardinality($14::uuid[]), 0) = 0 OR score.realm_id = ANY($14::uuid[]))
+  AND score.score <= CASE WHEN $3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+                          THEN 'Infinity'::float8 ELSE $15::float8 END
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR score.score < $15::float8
+       OR (score.score = $15::float8 AND score.realm_id > $3::uuid)
+       OR (score.score = $15::float8 AND score.realm_id = $3::uuid AND score.player_guid > $16::text))
 ORDER BY score.score DESC, score.realm_id, score.player_guid
-LIMIT LEAST(GREATEST($13::int, 1), 100)
+LIMIT LEAST(GREATEST($17::int, 1), 100)
 `
 
 type ListActivePlayerTenantBossScoresParams struct {
 	TenantID          uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID      uuid.UUID   `db:"generation_id" json:"generation_id"`
+	AfterRealmID      uuid.UUID   `db:"after_realm_id" json:"after_realm_id"`
 	InstanceName      string      `db:"instance_name" json:"instance_name"`
 	EncounterName     string      `db:"encounter_name" json:"encounter_name"`
 	DifficultyName    string      `db:"difficulty_name" json:"difficulty_name"`
@@ -26314,15 +26382,16 @@ type ListActivePlayerTenantBossScoresParams struct {
 	RatingMetric      string      `db:"rating_metric" json:"rating_metric"`
 	WindowKind        string      `db:"window_kind" json:"window_kind"`
 	RealmIds          []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	AfterScore        float64     `db:"after_score" json:"after_score"`
+	AfterPlayerGuid   string      `db:"after_player_guid" json:"after_player_guid"`
 	LimitCount        int32       `db:"limit_count" json:"limit_count"`
 }
 
-// Non-serving readers for tenant-wide projections. Do not route public handlers here
-// until the tenant projection writer is activated. realm_ids is display-only;
-// an empty array shows every realm owned by the tenant.
 func (q *sqlQuerier) ListActivePlayerTenantBossScores(ctx context.Context, arg ListActivePlayerTenantBossScoresParams) ([]PlayerTenantRatingBossScore, error) {
 	rows, err := q.db.Query(ctx, listActivePlayerTenantBossScores,
 		arg.TenantID,
+		arg.GenerationID,
+		arg.AfterRealmID,
 		arg.InstanceName,
 		arg.EncounterName,
 		arg.DifficultyName,
@@ -26334,6 +26403,8 @@ func (q *sqlQuerier) ListActivePlayerTenantBossScores(ctx context.Context, arg L
 		arg.RatingMetric,
 		arg.WindowKind,
 		arg.RealmIds,
+		arg.AfterScore,
+		arg.AfterPlayerGuid,
 		arg.LimitCount,
 	)
 	if err != nil {
@@ -26390,22 +26461,33 @@ JOIN wow_server_realms realm ON realm.id = score.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
 WHERE score.tenant_id = $1
   AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-  AND score.instance_name = $2
-  AND score.difficulty_name = $3
-  AND score.max_players = $4
-  AND score.player_class = $5
-  AND score.player_spec = $6
-  AND score.player_sub_spec = $7
-  AND score.performance_metric = $8
-  AND score.rating_metric = $9
-  AND score.window_kind = $10
-  AND (COALESCE(cardinality($11::uuid[]), 0) = 0 OR score.realm_id = ANY($11::uuid[]))
+  AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = $2::uuid)
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR $2::uuid <> '00000000-0000-0000-0000-000000000000'::uuid)
+  AND score.instance_name = $4
+  AND score.difficulty_name = $5
+  AND score.max_players = $6
+  AND score.player_class = $7
+  AND score.player_spec = $8
+  AND score.player_sub_spec = $9
+  AND score.performance_metric = $10
+  AND score.rating_metric = $11
+  AND score.window_kind = $12
+  AND (COALESCE(cardinality($13::uuid[]), 0) = 0 OR score.realm_id = ANY($13::uuid[]))
+  AND score.score <= CASE WHEN $3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+                          THEN 'Infinity'::float8 ELSE $14::float8 END
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR score.score < $14::float8
+       OR (score.score = $14::float8 AND score.realm_id > $3::uuid)
+       OR (score.score = $14::float8 AND score.realm_id = $3::uuid AND score.player_guid > $15::text))
 ORDER BY score.score DESC, score.realm_id, score.player_guid
-LIMIT LEAST(GREATEST($12::int, 1), 100)
+LIMIT LEAST(GREATEST($16::int, 1), 100)
 `
 
 type ListActivePlayerTenantScopeScoresParams struct {
 	TenantID          uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID      uuid.UUID   `db:"generation_id" json:"generation_id"`
+	AfterRealmID      uuid.UUID   `db:"after_realm_id" json:"after_realm_id"`
 	InstanceName      string      `db:"instance_name" json:"instance_name"`
 	DifficultyName    string      `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers        int16       `db:"max_players" json:"max_players"`
@@ -26416,12 +26498,16 @@ type ListActivePlayerTenantScopeScoresParams struct {
 	RatingMetric      string      `db:"rating_metric" json:"rating_metric"`
 	WindowKind        string      `db:"window_kind" json:"window_kind"`
 	RealmIds          []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	AfterScore        float64     `db:"after_score" json:"after_score"`
+	AfterPlayerGuid   string      `db:"after_player_guid" json:"after_player_guid"`
 	LimitCount        int32       `db:"limit_count" json:"limit_count"`
 }
 
 func (q *sqlQuerier) ListActivePlayerTenantScopeScores(ctx context.Context, arg ListActivePlayerTenantScopeScoresParams) ([]PlayerTenantRatingScopeScore, error) {
 	rows, err := q.db.Query(ctx, listActivePlayerTenantScopeScores,
 		arg.TenantID,
+		arg.GenerationID,
+		arg.AfterRealmID,
 		arg.InstanceName,
 		arg.DifficultyName,
 		arg.MaxPlayers,
@@ -26432,6 +26518,8 @@ func (q *sqlQuerier) ListActivePlayerTenantScopeScores(ctx context.Context, arg 
 		arg.RatingMetric,
 		arg.WindowKind,
 		arg.RealmIds,
+		arg.AfterScore,
+		arg.AfterPlayerGuid,
 		arg.LimitCount,
 	)
 	if err != nil {
