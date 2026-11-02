@@ -5066,6 +5066,16 @@ export interface TrackLayoutRequest {
     readonly layout_id: string;
 }
 
+// From chroniclesdk/panel_layout.go
+/**
+ * UIUsageRequest records anonymous, bounded UI usage telemetry.
+ */
+export interface UIUsageRequest {
+    readonly preset?: string;
+    readonly panels?: readonly string[];
+    readonly selected?: readonly string[];
+}
+
 // From chroniclesdk/log.go
 /**
  * UnknownUnit represents a creature entry not found in the hostiles map.

@@ -74,6 +74,46 @@ Useful Grafana variables include:
 
 The exact infrastructure labels available alongside Chronicle's labels depend on the Prometheus deployment.
 
+## UI panel and preset usage
+
+Chronicle records anonymous, process-local counters when an instance page first opens and whenever its active preset or panel composition changes:
+
+- `chronicle_ui_panel_views_total{panel="damage_done"}` counts panels present in a stable layout.
+- `chronicle_ui_panel_choices_total{panel="damage_done"}` counts explicit panel selections.
+- `chronicle_ui_preset_views_total{preset="summary"}` counts active presets.
+
+Explicit choices made within the same 750 ms quiet window are sent together as a `selected` array. Every entry increments `panel_choices_total`, including repeated selections.
+
+Custom panels use the bounded `custom` label and Lua panels use `lua`; repository, project, user, instance, guild, and character identifiers are never labels. Empty panel slots are not counted. Unknown values are collapsed to `unknown` so label cardinality remains bounded.
+
+Most-used panels over seven days:
+
+```promql
+topk(10, sum by (panel) (
+  increase(chronicle_ui_panel_views_total[7d])
+))
+```
+
+Most explicitly selected panels over seven days:
+
+```promql
+topk(10, sum by (panel) (
+  increase(chronicle_ui_panel_choices_total[7d])
+))
+```
+
+Most-used presets over seven days:
+
+```promql
+topk(10, sum by (preset) (
+  increase(chronicle_ui_preset_views_total[7d])
+))
+```
+
+The included operations dashboard uses `increase(...[$__range])` for these counters. Prometheus adjusts `increase()` for counter resets, so Chronicle restarts and deployments do not produce negative usage or discard the activity recorded before the reset.
+
+These counters are local to each Chronicle process. Sum across replicas for service-wide usage.
+
 ## Recommended dashboard layout
 
 A useful top-level dashboard answers these questions:
