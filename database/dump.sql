@@ -132,6 +132,8 @@ BEGIN
         WHEN server.id = '10ac9e23-ff74-43ed-83ad-96c123017097'::uuid
             OR 'nightmare-of-ursol' = ANY(dataset.default_flavor)
             THEN ARRAY['vanilla', 'nightmare-of-ursol']::text[]
+        WHEN 'vanillaplus' = ANY(dataset.default_flavor)
+            THEN ARRAY['vanilla', 'vanillaplus']::text[]
         WHEN 'vanilla' = ANY(dataset.default_flavor) THEN ARRAY['vanilla']::text[]
         ELSE '{}'::text[] END INTO selected_flavors
     FROM rating_realm_groups grp

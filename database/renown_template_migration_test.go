@@ -116,12 +116,14 @@ func TestRenownTemplateAppliesOnlyToNewGroupPolicies(t *testing.T) {
         SELECT instance_name, encounter_name FROM rating_group_boss_policies WHERE group_id = $1
         EXCEPT
         SELECT instance_name, encounter_name FROM rating_renown_template_bosses
-        WHERE version = 1 AND NOT (instance_name = 'Molten Core' AND encounter_name = 'Gehennas')
+        WHERE version = 1 AND flavor IN ('vanilla', 'nightmare-of-ursol')
+          AND NOT (instance_name = 'Molten Core' AND encounter_name = 'Gehennas')
     ) unexpected`, turtleGroup).Scan(&count))
 	require.Zero(t, count)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM (
         SELECT instance_name, encounter_name FROM rating_renown_template_bosses
-        WHERE version = 1 AND NOT (instance_name = 'Molten Core' AND encounter_name = 'Gehennas')
+        WHERE version = 1 AND flavor IN ('vanilla', 'nightmare-of-ursol')
+          AND NOT (instance_name = 'Molten Core' AND encounter_name = 'Gehennas')
         EXCEPT
         SELECT instance_name, encounter_name FROM rating_group_boss_policies WHERE group_id = $1
     ) missing`, turtleGroup).Scan(&count))
@@ -149,4 +151,71 @@ func TestRenownTemplateAppliesOnlyToNewGroupPolicies(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT renown_points FROM rating_group_boss_policies
         WHERE group_id = $1 AND instance_name = 'Lower Tower of Karazhan' AND encounter_name = 'Moroes'`, nightmareGroup).Scan(&points))
 	require.Equal(t, 2.0, points)
+}
+
+func TestVanillaPlusRenownDefaults(t *testing.T) {
+	t.Parallel()
+	pool, _ := dbtestutil.NewPGXPool(t)
+	ctx := t.Context()
+
+	datasetID, serverID, groupID := uuid.New(), uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `INSERT INTO datasets (id, name, slug, wow_version, default_flavor)
+        VALUES ($1, 'Vanilla Plus test', $2, '1.12', ARRAY['vanilla', 'vanillaplus']::text[])`, datasetID, "vanillaplus-"+uuid.NewString())
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO wow_servers (id, name, default_dataset_id)
+        VALUES ($1, 'Vanilla Plus test', $2)`, serverID, datasetID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO rating_realm_groups (id, server_id, name)
+        VALUES ($1, $2, 'Vanilla Plus')`, groupID, serverID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, createRenownGroupPolicy, groupID)
+	require.NoError(t, err)
+
+	for name, want := range map[string]float64{
+		"Master Elemental Shaper Krixix": 2,
+		"Elementium Decapitator Mk III":  2,
+		"Razorgore the Untamed":          2, // Shared vanilla boss.
+	} {
+		var points float64
+		require.NoError(t, pool.QueryRow(ctx, `SELECT renown_points FROM rating_group_boss_policies
+            WHERE group_id = $1 AND instance_name = 'Blackwing Lair' AND encounter_name = $2`, groupID, name).Scan(&points))
+		require.Equal(t, want, points, name)
+	}
+
+	for name, want := range map[string]float64{
+		"Loksey": 1, "Brother Michael": 1, "Brigitte Abbendis": 1,
+		"Fairbanks": 1, "Doan": 1, "Vishas": 1, "Herod": 1,
+		"Mograine & Whitemane": 3,
+	} {
+		var points float64
+		require.NoError(t, pool.QueryRow(ctx, `SELECT renown_points FROM rating_group_boss_policies
+            WHERE group_id = $1 AND instance_name = 'Scarlet Monastery' AND encounter_name = $2`, groupID, name).Scan(&points))
+		require.Equal(t, want, points, name)
+	}
+	var count int
+	var total float64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*), sum(renown_points) FROM rating_group_boss_policies
+        WHERE group_id = $1 AND instance_name = 'Scarlet Monastery'`, groupID).Scan(&count, &total))
+	require.Equal(t, 8, count)
+	require.Equal(t, 10.0, total)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM rating_group_boss_policies
+        WHERE group_id = $1 AND instance_name = 'Blackwing Lair' AND encounter_name = 'Ezzel Darkbrewer'`, groupID).Scan(&count))
+	require.Zero(t, count, "Nightmare-only bosses do not appear on Vanilla Plus")
+
+	vanillaOnlyDataset, vanillaOnlyServer, vanillaOnlyGroup := uuid.New(), uuid.New(), uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO datasets (id, name, slug, wow_version, default_flavor)
+        VALUES ($1, 'Vanilla only test', $2, '1.12', ARRAY['vanilla']::text[])`, vanillaOnlyDataset, "vanilla-only-"+uuid.NewString())
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO wow_servers (id, name, default_dataset_id)
+        VALUES ($1, 'Vanilla only test', $2)`, vanillaOnlyServer, vanillaOnlyDataset)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO rating_realm_groups (id, server_id, name)
+        VALUES ($1, $2, 'Vanilla only')`, vanillaOnlyGroup, vanillaOnlyServer)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, createRenownGroupPolicy, vanillaOnlyGroup)
+	require.NoError(t, err)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM rating_group_boss_policies WHERE group_id = $1
+        AND (instance_name = 'Scarlet Monastery' OR encounter_name = 'Master Elemental Shaper Krixix'
+             OR encounter_name = 'Elementium Decapitator Mk III')`, vanillaOnlyGroup).Scan(&count))
+	require.Zero(t, count, "Vanilla Plus bosses stay flavor-specific")
 }

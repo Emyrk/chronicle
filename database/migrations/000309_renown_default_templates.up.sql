@@ -16,7 +16,7 @@ CREATE TABLE rating_renown_template_bosses (
     FOREIGN KEY (flavor, version) REFERENCES rating_renown_templates(flavor, version)
 );
 
-INSERT INTO rating_renown_templates (flavor, version) VALUES ('vanilla', 1), ('nightmare-of-ursol', 1);
+INSERT INTO rating_renown_templates (flavor, version) VALUES ('vanilla', 1), ('nightmare-of-ursol', 1), ('vanillaplus', 1);
 
 -- Shared vanilla bosses use the vanilla flavor; only Turtle-specific bosses use
 -- nightmare-of-ursol. Four Edge of Madness variants are individually canonical;
@@ -115,11 +115,23 @@ INSERT INTO rating_renown_template_bosses (flavor, version, instance_name, encou
     ('nightmare-of-ursol', 1, 'Upper Tower of Karazhan', 'King', 6),
     ('nightmare-of-ursol', 1, 'Upper Tower of Karazhan', 'Sanv Tas''dal', 6),
     ('nightmare-of-ursol', 1, 'Upper Tower of Karazhan', 'Kruul', 7),
-    ('vanilla', 1, 'Molten Core', 'Gehennas', 1);
+    ('vanilla', 1, 'Molten Core', 'Gehennas', 1),
+    ('vanillaplus', 1, 'Blackwing Lair', 'Master Elemental Shaper Krixix', 2),
+    ('vanillaplus', 1, 'Blackwing Lair', 'Elementium Decapitator Mk III', 2),
+    ('vanillaplus', 1, 'Scarlet Monastery', 'Loksey', 1),
+    ('vanillaplus', 1, 'Scarlet Monastery', 'Brother Michael', 1),
+    ('vanillaplus', 1, 'Scarlet Monastery', 'Brigitte Abbendis', 1),
+    ('vanillaplus', 1, 'Scarlet Monastery', 'Fairbanks', 1),
+    ('vanillaplus', 1, 'Scarlet Monastery', 'Doan', 1),
+    ('vanillaplus', 1, 'Scarlet Monastery', 'Vishas', 1),
+    ('vanillaplus', 1, 'Scarlet Monastery', 'Herod', 1),
+    ('vanillaplus', 1, 'Scarlet Monastery', 'Mograine & Whitemane', 3);
 
 -- Only a newly created explicit group policy receives defaults. Existing policy rows
 -- and their admin overrides are never updated by this trigger. Turtle combines
 -- vanilla with nightmare-of-ursol, replacing vanilla's Gehennas with custom MC bosses.
+-- Vanilla Plus combines vanilla with its own custom bosses. The dataset flavor tag
+-- is "vanillaplus" (not "vanilla-plus"), matching database.FlavorVanillaPlus.
 CREATE FUNCTION apply_rating_renown_template() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE
     selected_flavors TEXT[];
@@ -128,6 +140,8 @@ BEGIN
         WHEN server.id = '10ac9e23-ff74-43ed-83ad-96c123017097'::uuid
             OR 'nightmare-of-ursol' = ANY(dataset.default_flavor)
             THEN ARRAY['vanilla', 'nightmare-of-ursol']::text[]
+        WHEN 'vanillaplus' = ANY(dataset.default_flavor)
+            THEN ARRAY['vanilla', 'vanillaplus']::text[]
         WHEN 'vanilla' = ANY(dataset.default_flavor) THEN ARRAY['vanilla']::text[]
         ELSE '{}'::text[] END INTO selected_flavors
     FROM rating_realm_groups grp
