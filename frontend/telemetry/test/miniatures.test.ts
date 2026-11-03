@@ -112,6 +112,11 @@ test("Miniature Foundry edits tabletop and original game models", async () => {
   assert.match(page, /item\.entry_ids\.join\(', '\)/);
   assert.match(page, /replaceAll\(escapedNewline,' '\)/);
   assert.match(page, /new RegExp\(separators\)/);
+  assert.match(page, /id="selection-count"/);
+  assert.match(page, /id="select-visible"/);
+  assert.match(page, /id="bulk-scale"/);
+  assert.match(page, /id="apply-scale"/);
+  assert.match(page, /for\(const item of bulkSelected\)item\.map_scale=scale/);
 });
 
 test("provides an empty manifest for first-time setup", () => {
