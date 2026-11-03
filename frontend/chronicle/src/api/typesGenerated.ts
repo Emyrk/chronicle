@@ -2490,6 +2490,151 @@ export interface InstanceReport {
     readonly unknown_units?: Record<number, UnknownUnit>;
 }
 
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchCount compares how many children satisfy Where. A nil Where
+ * counts all of them.
+ */
+export interface InstanceSearchCount {
+    readonly where?: InstanceSearchNode;
+    readonly op: InstanceSearchOp;
+    readonly value: number;
+}
+
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchCursor is a keyset pagination position. Results are ordered
+ * by (started_at DESC, id DESC).
+ */
+export interface InstanceSearchCursor {
+    readonly started_at: string;
+    readonly id: string;
+}
+
+// From chroniclesdk/instance_search.go
+export type InstanceSearchMatch = "any" | "each";
+
+export const InstanceSearchMatches: InstanceSearchMatch[] = ["any", "each"];
+
+// From chroniclesdk/instance_search.go
+export type InstanceSearchMetric = "dps" | "hps";
+
+export const InstanceSearchMetrics: InstanceSearchMetric[] = ["dps", "hps"];
+
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchNode is one node of the search tree. Exactly one of And, Or,
+ * Not, AnyPlayer, CountPlayers, AnyEncounter, CountEncounters or Field must be
+ * set.
+ */
+export interface InstanceSearchNode {
+    readonly and?: readonly InstanceSearchNode[];
+    readonly or?: readonly InstanceSearchNode[];
+    readonly not?: InstanceSearchNode;
+    /**
+     * AnyPlayer matches when one player satisfies the subtree. Every
+     * predicate in the subtree refers to that same player.
+     */
+    readonly any_player?: InstanceSearchNode;
+    /**
+     * CountPlayers compares how many distinct players satisfy the subtree.
+     */
+    readonly count_players?: InstanceSearchCount;
+    /**
+     * AnyEncounter matches when one encounter (pull) satisfies the subtree.
+     */
+    readonly any_encounter?: InstanceSearchNode;
+    /**
+     * CountEncounters compares how many pulls satisfy the subtree.
+     */
+    readonly count_encounters?: InstanceSearchCount;
+    /**
+     * Field names a predicate, e.g. "player.class".
+     */
+    readonly field?: string;
+    readonly op?: InstanceSearchOp;
+    /**
+     * Value is a string, number, boolean, or a list for in / not_in.
+     */
+    // empty interface{} type, falling back to unknown
+    readonly value?: unknown;
+    /**
+     * Bosses restricts boss-based predicates to these encounter names.
+     */
+    readonly bosses?: readonly string[];
+    /**
+     * Match is "any" (default) or "each" for predicates that take Bosses.
+     */
+    readonly match?: InstanceSearchMatch;
+    /**
+     * ParseScope selects the time-parse cohort (default server).
+     */
+    readonly parse_scope?: InstanceSearchParseScope;
+    /**
+     * Metric selects the player parse metric (default dps).
+     */
+    readonly metric?: InstanceSearchMetric;
+}
+
+// From chroniclesdk/instance_search.go
+export type InstanceSearchOp = "=" | ">" | ">=" | "in" | "<" | "<=" | "!=" | "not_in";
+
+export const InstanceSearchOps: InstanceSearchOp[] = ["=", ">", ">=", "in", "<", "<=", "!=", "not_in"];
+
+// From chroniclesdk/instance_search.go
+export type InstanceSearchParseScope = "guild" | "realm" | "server";
+
+export const InstanceSearchParseScopes: InstanceSearchParseScope[] = ["guild", "realm", "server"];
+
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchQuery is the body of POST /api/v1/raidlogs/search.
+ * See .agents/skills/instance-search/SKILL.md for the query language.
+ */
+export interface InstanceSearchQuery {
+    /**
+     * Where is the search tree. Omit it to match every visible run.
+     */
+    readonly where?: InstanceSearchNode;
+    /**
+     * Limit is the page size. Zero uses the default (25).
+     */
+    readonly limit?: number;
+    /**
+     * Cursor continues from a previous page's Next.
+     */
+    readonly cursor?: InstanceSearchCursor;
+}
+
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchResponse is one page of results.
+ */
+export interface InstanceSearchResponse {
+    readonly results: readonly InstanceSearchResult[];
+    /**
+     * Next is set when more results exist. Send it back as Cursor.
+     */
+    readonly next?: InstanceSearchCursor;
+}
+
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchResult is one matching run.
+ */
+export interface InstanceSearchResult {
+    readonly id: string;
+    readonly slug?: string;
+    readonly name: string;
+    readonly realm_id: string;
+    readonly realm_name: string;
+    readonly guild_id: string | null;
+    readonly guild_name?: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly started_at: string;
+}
+
 // From chroniclesdk/time_parses.go
 /**
  * InstanceTimeParsesResponse contains locked time-based parse scores for a

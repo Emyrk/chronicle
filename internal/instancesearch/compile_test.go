@@ -19,7 +19,7 @@ var update = flag.Bool("update", false, "regenerate instance search golden files
 
 type example struct {
 	Name        string
-	Description string                `json:"description"`
+	Description string               `json:"description"`
 	Query       instancesearch.Query `json:"query"`
 }
 
@@ -110,7 +110,7 @@ func TestCompileErrors(t *testing.T) {
 
 	pred := func(field string, op instancesearch.Op, value any) *instancesearch.Node {
 		raw, _ := json.Marshal(value)
-		return &instancesearch.Node{Field: field, Op: op, Value: raw}
+		return &instancesearch.Node{Field: field, Op: op, Value: json.RawMessage(raw)}
 	}
 	deep := pred("instance.name", instancesearch.OpEq, "x")
 	for range 10 {
@@ -154,6 +154,61 @@ func TestCompileErrors(t *testing.T) {
 			require.Contains(t, err.Error(), tc.want)
 		})
 	}
+}
+
+func TestCost(t *testing.T) {
+	t.Parallel()
+
+	cost := func(raw string) int {
+		var n instancesearch.Node
+		require.NoError(t, json.Unmarshal([]byte(raw), &n))
+		compiled, err := instancesearch.Compile(instancesearch.Query{Where: &n}, instancesearch.Options{})
+		require.NoError(t, err)
+		return compiled.Cost
+	}
+	empty, err := instancesearch.Compile(instancesearch.Query{}, instancesearch.Options{})
+	require.NoError(t, err)
+	require.Equal(t, 1, empty.Cost)
+	require.Empty(t, empty.Fields)
+
+	cheap := cost(`{"field": "instance.name", "op": "=", "value": "Molten Core"}`)
+	heavy := cost(`{"field": "instance.idle_time_ms", "op": "<", "value": 1}`)
+	player := cost(`{"any_player": {"field": "player.parse", "op": ">=", "value": 90}}`)
+	require.Equal(t, 2, cheap)
+	require.Greater(t, heavy, cheap)
+	require.Greater(t, player, cheap)
+
+	compiled, err := instancesearch.Compile(where(t, `{"and": [
+		{"field": "instance.name", "op": "=", "value": "x"},
+		{"count_players": {"where": {"field": "player.class", "op": "=", "value": "MAGE"}, "op": ">", "value": 1}}]}`), instancesearch.Options{})
+	require.NoError(t, err)
+	require.Equal(t, []string{"instance.name", "player.class"}, compiled.Fields)
+}
+
+func TestCheckAnonymous(t *testing.T) {
+	t.Parallel()
+
+	allowed := []string{
+		`{"field": "instance.name", "op": "=", "value": "Molten Core"}`,
+		`{"and": [{"field": "instance.realm", "op": "=", "value": "Nordanaar"}, {"field": "instance.started_at", "op": ">=", "value": "2026-10-01T00:00:00Z"}]}`,
+	}
+	for _, raw := range allowed {
+		require.NoError(t, instancesearch.CheckAnonymous(where(t, raw)), raw)
+	}
+	require.NoError(t, instancesearch.CheckAnonymous(instancesearch.Query{}))
+
+	denied := []string{
+		`{"any_player": {"field": "player.class", "op": "=", "value": "MAGE"}}`,
+		`{"or": [{"field": "instance.name", "op": "=", "value": "a"}, {"field": "instance.name", "op": "=", "value": "b"}]}`,
+		`{"not": {"field": "instance.name", "op": "=", "value": "a"}}`,
+		`{"field": "instance.clear_parse", "op": ">=", "value": 90}`,
+		`{"and": [{"field": "instance.name", "op": "=", "value": "a"}, {"and": [{"field": "instance.name", "op": "=", "value": "b"}]}]}`,
+		`{"and": [` + strings.Repeat(`{"field": "instance.name", "op": "=", "value": "a"},`, 6) + `{"field": "instance.name", "op": "=", "value": "a"}]}`,
+	}
+	for _, raw := range denied {
+		require.ErrorIs(t, instancesearch.CheckAnonymous(where(t, raw)), instancesearch.ErrLoginRequired, raw)
+	}
+	require.ErrorIs(t, instancesearch.CheckAnonymous(instancesearch.Query{Limit: 100}), instancesearch.ErrLoginRequired)
 }
 
 func mustJSON(t *testing.T, v any) json.RawMessage {

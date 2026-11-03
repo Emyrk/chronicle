@@ -22,6 +22,39 @@ players.filter(p, p.class == "PRIEST").size() >= 3
 && "unit-position" in instance.capabilities
 ```
 
+## Endpoint
+
+`POST /api/v1/raidlogs/search` with the query as the JSON body. It returns `{results, next}`. The handler is `api/instance_search.go`, and the wire types are `chroniclesdk.InstanceSearch*`; TypeScript types are generated.
+
+| Status | Meaning |
+|---|---|
+| 200 | results |
+| 400 | invalid query; `detail` names the bad path, e.g. `where.and[1].field: unknown field "x"` |
+| 403 | anonymous caller used something beyond the anonymous subset; prompt them to log in |
+| 422 | the query hit the 5s statement timeout; narrow it with zone, realm or date |
+| 429 | rate limited; obey `Retry-After`. "too complex" means the query costs more than the whole bucket |
+| 503 | too many searches running at once; retry in a second |
+
+**Anonymous users** (`instancesearch.CheckAnonymous`) can only send:
+- up to 6 predicates ANDed together
+- fields from `instance.name`, `realm`, `guild`, `started_at`, `difficulty`, `category`
+- no quantifiers, `or` or `not`
+- a page size of at most 25
+
+They have a per-IP bucket. Everything else returns 403 "Log in to use advanced search."
+
+**Cost.** `Compiled.Cost` adds up per-field weights (`field.Cost`, default 1), plus 2 per `any_*` and 3 per `count_*`, plus a base of 1. The rate limiter charges that many tokens:
+- logged-in users: 120 tokens a minute, burst 300
+- anonymous: 20 tokens a minute, burst 40 per IP
+
+Give an expensive new field a higher `Cost`.
+
+**Observability.**
+- `chronicle_instance_search_duration_seconds{outcome,caller}`
+- `chronicle_instance_search_cost{caller}`
+- `chronicle_instance_search_field_uses_total{field}`
+- Searches slower than 2s, or that time out, are logged with their `FormatCEL` text.
+
 ## Query shape
 
 ```json

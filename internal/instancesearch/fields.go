@@ -66,6 +66,10 @@ type field struct {
 	ParseScope bool
 	// Metric: the predicate accepts metric.
 	Metric bool
+	// Cost is the field's weight in Compiled.Cost. Zero means 1 (a plain
+	// column). Correlated subqueries cost more; per-player ranking lookups
+	// and clear-window math the most.
+	Cost int
 
 	compile func(c *compiler, s scope, p pred) string
 }
@@ -119,13 +123,19 @@ func (c *compiler) parsePred(f *field, n *Node, path string) (pred, error) {
 	if !slices.Contains(f.Type.ops(), n.Op) {
 		return p, &Error{Path: path + ".op", Message: fmt.Sprintf("%s supports %s", f.Name, joinOps(f.Type.ops()))}
 	}
-	if len(n.Value) == 0 {
+	if n.Value == nil {
 		return p, &Error{Path: path + ".value", Message: "is required"}
+	}
+	// Value arrives as decoded JSON (any) or json.RawMessage; normalize to
+	// bytes and decode strictly per the field type.
+	value, err := json.Marshal(n.Value)
+	if err != nil {
+		return p, &Error{Path: path + ".value", Message: "invalid value"}
 	}
 
 	if n.Op == OpIn || n.Op == OpNotIn {
 		var raw []json.RawMessage
-		if err := json.Unmarshal(n.Value, &raw); err != nil {
+		if err := json.Unmarshal(value, &raw); err != nil {
 			return p, &Error{Path: path + ".value", Message: "must be a list for in / not_in"}
 		}
 		if len(raw) == 0 || len(raw) > c.opts.MaxListValues {
@@ -142,7 +152,7 @@ func (c *compiler) parsePred(f *field, n *Node, path string) (pred, error) {
 		}
 		p.value = list
 	} else {
-		v, err := decodeScalar(f, n.Value)
+		v, err := decodeScalar(f, value)
 		if err != nil {
 			return p, &Error{Path: path + ".value", Message: err.Error()}
 		}
@@ -402,7 +412,7 @@ var fields = []*field{
 		Doc: "raid or dungeon.", compile: column("li.category")},
 	{Name: "instance.recorder", Scope: scopeInstance, Type: typeString,
 		Doc: "Name of the character that recorded the log.", compile: column("li.recorder_name")},
-	{Name: "instance.has_video", Scope: scopeInstance, Type: typeBool,
+	{Name: "instance.has_video", Cost: 2, Scope: scopeInstance, Type: typeBool,
 		Doc:     "A YouTube video is linked to the run.",
 		compile: column("EXISTS (SELECT 1 FROM log_instance_youtube_timestamped yt WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug)")},
 	{Name: "instance.capability", Scope: scopeInstance, Type: typeEnum, Enum: capabilities,
@@ -419,31 +429,31 @@ var fields = []*field{
 				return fmt.Sprintf("%s::text = ANY(li.capabilities)", c.arg(p.value))
 			}
 		}},
-	{Name: "instance.player_count",Scope: scopeInstance, Type: typeInt,
+	{Name: "instance.player_count", Cost: 2, Scope: scopeInstance, Type: typeInt,
 		Doc:     "Number of distinct players in the run.",
 		compile: column("(SELECT count(DISTINCT lp.unit_guid) FROM log_instance_players lp WHERE lp.instance_id = li.id)")},
-	{Name: "instance.bosses_killed", Scope: scopeInstance, Type: typeInt,
+	{Name: "instance.bosses_killed", Cost: 2, Scope: scopeInstance, Type: typeInt,
 		Doc:     "Number of distinct bosses killed (clean or partial).",
 		compile: column("(SELECT count(DISTINCT bk.name) FROM log_instance_encounters bk WHERE bk.instance_id = li.id AND bk.boss AND bk.kill_type " + killedSQL + ")")},
-	{Name: "instance.wipes", Scope: scopeInstance, Type: typeInt,
+	{Name: "instance.wipes", Cost: 2, Scope: scopeInstance, Type: typeInt,
 		Doc:     "Total wipes in the run (overview metrics).",
 		compile: column("(SELECT iom.wipe_count FROM instance_overview_metrics iom WHERE iom.instance_id = li.id)")},
-	{Name: "instance.deaths", Scope: scopeInstance, Type: typeInt,
+	{Name: "instance.deaths", Cost: 2, Scope: scopeInstance, Type: typeInt,
 		Doc:     "Total player deaths in the run (overview metrics).",
 		compile: column("(SELECT iom.player_deaths FROM instance_overview_metrics iom WHERE iom.instance_id = li.id)")},
-	{Name: "instance.clear_time_ms", Scope: scopeInstance, Type: typeInt, Unit: "ms",
+	{Name: "instance.clear_time_ms", Cost: 2, Scope: scopeInstance, Type: typeInt, Unit: "ms",
 		Doc:     "Ranked full-clear time. Only full clears have one.",
 		compile: column("(SELECT sr.ranked_duration_ms FROM instance_speedruns sr WHERE sr.instance_id = li.id AND sr.ranked_duration_ms > 0)")},
-	{Name: "instance.clear_qualified", Scope: scopeInstance, Type: typeBool,
+	{Name: "instance.clear_qualified", Cost: 2, Scope: scopeInstance, Type: typeBool,
 		Doc:     "The clear qualifies for speedrun leaderboards.",
 		compile: column("(SELECT sr.qualified FROM instance_speedruns sr WHERE sr.instance_id = li.id)")},
-	{Name: "instance.boss_time_ms", Scope: scopeInstance, Type: typeInt, Unit: "ms",
+	{Name: "instance.boss_time_ms", Cost: 10, Scope: scopeInstance, Type: typeInt, Unit: "ms",
 		Doc: "Time inside the clear spent fighting bosses. Full clears only.", compile: clearParts("boss")},
-	{Name: "instance.trash_time_ms", Scope: scopeInstance, Type: typeInt, Unit: "ms",
+	{Name: "instance.trash_time_ms", Cost: 10, Scope: scopeInstance, Type: typeInt, Unit: "ms",
 		Doc: "Time inside the clear spent fighting trash (non-boss fights). Full clears only.", compile: clearParts("trash")},
-	{Name: "instance.idle_time_ms", Scope: scopeInstance, Type: typeInt, Unit: "ms",
+	{Name: "instance.idle_time_ms", Cost: 10, Scope: scopeInstance, Type: typeInt, Unit: "ms",
 		Doc: "Time inside the clear spent out of combat. Full clears only.", compile: clearParts("idle")},
-	{Name: "instance.clear_parse", Scope: scopeInstance, Type: typeInt, Unit: "0-100", ParseScope: true,
+	{Name: "instance.clear_parse", Cost: 3, Scope: scopeInstance, Type: typeInt, Unit: "0-100", ParseScope: true,
 		Doc: "Clear-time parse (higher is faster).",
 		compile: func(c *compiler, s scope, p pred) string {
 			tps := c.alias("tps")
@@ -451,7 +461,7 @@ var fields = []*field{
 			return c.cmp(fmt.Sprintf("(SELECT %[1]s_display_score FROM time_parse_scores %[2]s WHERE %[3]s AND %[1]s_status %[4]s)",
 				col, tps, c.timeParseContract(tps), scoredStatusSQL), p)
 		}},
-	{Name: "instance.kill_time_parse", Scope: scopeInstance, Type: typeInt, Unit: "0-100", ParseScope: true, Bosses: true,
+	{Name: "instance.kill_time_parse", Cost: 4, Scope: scopeInstance, Type: typeInt, Unit: "0-100", ParseScope: true, Bosses: true,
 		Doc: "Boss kill-time parse (higher is faster) on any / each of the bosses.",
 		compile: func(c *compiler, s scope, p pred) string {
 			tps, tbs := c.alias("tps"), c.alias("tbs")
@@ -459,7 +469,7 @@ var fields = []*field{
 				tps, tbs, c.timeParseContract(tps), p.parseScope, scoredStatusSQL)
 			return c.bossMatch(p, from, tbs+".encounter_name", c.cmp(fmt.Sprintf("%s.%s_display_score", tbs, p.parseScope), p))
 		}},
-	{Name: "instance.kill_time_ms", Scope: scopeInstance, Type: typeInt, Unit: "ms", Bosses: true,
+	{Name: "instance.kill_time_ms", Cost: 3, Scope: scopeInstance, Type: typeInt, Unit: "ms", Bosses: true,
 		Doc: "Boss kill duration (clean or partial kills) on any / each of the bosses.",
 		compile: func(c *compiler, s scope, p pred) string {
 			e := c.alias("k")
@@ -481,7 +491,7 @@ var fields = []*field{
 		compile: func(c *compiler, s scope, p pred) string {
 			return c.cmp(durationMS(s.alias), p)
 		}},
-	{Name: "encounter.kill_time_parse", Scope: scopeEncounter, Type: typeInt, Unit: "0-100", ParseScope: true,
+	{Name: "encounter.kill_time_parse", Cost: 4, Scope: scopeEncounter, Type: typeInt, Unit: "0-100", ParseScope: true,
 		Doc: "Kill-time parse for this kill.",
 		compile: func(c *compiler, s scope, p pred) string {
 			tps, tbs := c.alias("tps"), c.alias("tbs")
@@ -500,25 +510,25 @@ var fields = []*field{
 		Doc: "Race.", compile: column("{a}.race::text")},
 	{Name: "player.level", Scope: scopePlayer, Type: typeInt,
 		Doc: "Level.", compile: column("{a}.level")},
-	{Name: "player.guild", Scope: scopePlayer, Type: typeString,
+	{Name: "player.guild", Cost: 2, Scope: scopePlayer, Type: typeString,
 		Doc: "Guild name at the time of the run.", compile: column("(SELECT pg.name FROM guilds pg WHERE pg.id = {a}.guild_id)")},
 	{Name: "player.guild_id", Scope: scopePlayer, Type: typeUUID,
 		Doc: "Guild ID at the time of the run.", compile: column("{a}.guild_id")},
-	{Name: "player.spec", Scope: scopePlayer, Type: typeString, Bosses: true,
+	{Name: "player.spec", Cost: 3, Scope: scopePlayer, Type: typeString, Bosses: true,
 		Doc: "Spec on a boss kill, e.g. \"Feral\". Known on boss kills only.", compile: rankingField("player_spec")},
-	{Name: "player.sub_spec", Scope: scopePlayer, Type: typeString, Bosses: true,
+	{Name: "player.sub_spec", Cost: 3, Scope: scopePlayer, Type: typeString, Bosses: true,
 		Doc: "Sub-spec on a boss kill, e.g. \"Bear\" / \"Cat\". Known on boss kills only.", compile: rankingField("player_sub_spec")},
-	{Name: "player.role", Scope: scopePlayer, Type: typeString, Bosses: true,
+	{Name: "player.role", Cost: 3, Scope: scopePlayer, Type: typeString, Bosses: true,
 		Doc: "Role on a boss kill (dps, healer, tank).", compile: rankingField("player_role")},
-	{Name: "player.dps", Scope: scopePlayer, Type: typeFloat, Bosses: true,
+	{Name: "player.dps", Cost: 3, Scope: scopePlayer, Type: typeFloat, Bosses: true,
 		Doc: "DPS on a boss kill.", compile: rankingField("dps")},
-	{Name: "player.hps", Scope: scopePlayer, Type: typeFloat, Bosses: true,
+	{Name: "player.hps", Cost: 3, Scope: scopePlayer, Type: typeFloat, Bosses: true,
 		Doc: "HPS on a boss kill.", compile: rankingField("hps")},
-	{Name: "player.deaths", Scope: scopePlayer, Type: typeInt, Bosses: true,
+	{Name: "player.deaths", Cost: 3, Scope: scopePlayer, Type: typeInt, Bosses: true,
 		Doc: "Deaths on a boss kill. Wipes are not counted.", compile: rankingField("player_deaths")},
-	{Name: "player.avg_ilvl", Scope: scopePlayer, Type: typeInt, Bosses: true,
+	{Name: "player.avg_ilvl", Cost: 3, Scope: scopePlayer, Type: typeInt, Bosses: true,
 		Doc: "Average item level on a boss kill.", compile: rankingField("avg_ilvl")},
-	{Name: "player.parse", Scope: scopePlayer, Type: typeInt, Unit: "0-100", Bosses: true, Metric: true,
+	{Name: "player.parse", Cost: 5, Scope: scopePlayer, Type: typeInt, Unit: "0-100", Bosses: true, Metric: true,
 		Doc: "Player parse on a boss kill (latest stored score per boss).",
 		compile: func(c *compiler, s scope, p pred) string {
 			r := c.alias("ps")

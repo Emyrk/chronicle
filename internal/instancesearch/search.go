@@ -2,11 +2,12 @@ package instancesearch
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/xerrors"
 
@@ -17,26 +18,8 @@ import (
 // DefaultStatementTimeout bounds how long one search may run.
 const DefaultStatementTimeout = 5 * time.Second
 
-// Result is one matching instance.
-type Result struct {
-	ID             uuid.UUID     `json:"id"`
-	Slug           string        `json:"slug,omitempty"`
-	Name           string        `json:"name"`
-	RealmID        uuid.UUID     `json:"realm_id"`
-	RealmName      string        `json:"realm_name"`
-	GuildID        uuid.NullUUID `json:"guild_id"`
-	GuildName      string        `json:"guild_name,omitempty"`
-	DifficultyName string        `json:"difficulty_name"`
-	MaxPlayers     int32         `json:"max_players"`
-	StartedAt      time.Time     `json:"started_at"`
-}
-
-// Page is one page of results.
-type Page struct {
-	Results []Result `json:"results"`
-	// Next is set when more results exist.
-	Next *Cursor `json:"next,omitempty"`
-}
+// ErrTimeout is returned when a search hits its statement timeout.
+var ErrTimeout = errors.New("instance search timed out")
 
 // SearchOptions configures Search.
 type SearchOptions struct {
@@ -45,17 +28,16 @@ type SearchOptions struct {
 	StatementTimeout time.Duration
 }
 
-// Search compiles and runs q in a read-only transaction.
+// Search runs an already-compiled query in a read-only transaction.
 //
 // Tenant scoping comes from the connection's app.tenant_id (row-level
-// security on realms), which database.PrepareConnFunc sets from ctx. The
-// tenant used for parse tables is taken from the same ctx, so the two can
-// never disagree.
-func Search(ctx context.Context, db database.Store, q Query, opts SearchOptions) (Page, error) {
-	opts.TenantID = servicetenant.TenantIDFromContext(ctx)
-	compiled, err := Compile(q, opts.Options)
-	if err != nil {
-		return Page{}, err
+// security on realms), which database.PrepareConnFunc sets from ctx. Compile
+// the query with CompileForContext so the tenant bound into parse tables
+// comes from the same ctx. Searching with an admin-bypass context is refused:
+// it would disable RLS and search every tenant.
+func Search(ctx context.Context, db database.Store, compiled Compiled, opts SearchOptions) (Page, error) {
+	if servicetenant.IsBypass(ctx) {
+		return Page{}, xerrors.New("instance search must not run with tenant RLS bypassed")
 	}
 	timeout := opts.StatementTimeout
 	if timeout <= 0 {
@@ -63,7 +45,7 @@ func Search(ctx context.Context, db database.Store, q Query, opts SearchOptions)
 	}
 
 	var results []Result
-	err = db.InTx(ctx, func(tx database.Store) error {
+	err := db.InTx(ctx, func(tx database.Store) error {
 		if _, err := tx.Exec(ctx, "SELECT set_config('statement_timeout', $1::text, true)", strconv.FormatInt(timeout.Milliseconds(), 10)); err != nil {
 			return xerrors.Errorf("set statement timeout: %w", err)
 		}
@@ -89,6 +71,10 @@ func Search(ctx context.Context, db database.Store, q Query, opts SearchOptions)
 		return rows.Err()
 	}, &pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "57014" { // query_canceled
+			return Page{}, ErrTimeout
+		}
 		return Page{}, xerrors.Errorf("instance search: %w", err)
 	}
 
@@ -102,4 +88,11 @@ func Search(ctx context.Context, db database.Store, q Query, opts SearchOptions)
 		page.Results = []Result{}
 	}
 	return page, nil
+}
+
+// CompileForContext compiles q with the tenant taken from ctx, matching the
+// app.tenant_id the connection will carry.
+func CompileForContext(ctx context.Context, q Query, opts Options) (Compiled, error) {
+	opts.TenantID = servicetenant.TenantIDFromContext(ctx)
+	return Compile(q, opts)
 }

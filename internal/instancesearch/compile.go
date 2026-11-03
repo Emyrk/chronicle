@@ -70,7 +70,20 @@ type Compiled struct {
 	SQL   string
 	Args  []any
 	Limit int
+	// Cost is a rough estimate of how expensive the query is to run: the
+	// sum of per-field and per-quantifier weights. Rate limiters charge it as
+	// tokens, so heavy queries drain a bucket faster.
+	Cost int
+	// Fields lists each predicate field used, once per use.
+	Fields []string
 }
+
+const (
+	baseCost         = 1
+	anyQuantCost     = 2
+	countQuantCost   = 3
+	defaultFieldCost = 1
+)
 
 // Error is a validation error that is safe to show to the user.
 type Error struct {
@@ -124,7 +137,7 @@ func Compile(q Query, opts Options) (Compiled, error) {
 		"{{CURSOR}}", cursor,
 		"{{LIMIT}}", limitArg,
 	).Replace(frameSQL)
-	return Compiled{SQL: sql, Args: c.args, Limit: limit}, nil
+	return Compiled{SQL: sql, Args: c.args, Limit: limit, Cost: baseCost + c.cost, Fields: c.fields}, nil
 }
 
 // frameSQL is the fixed outer query. Only {{WHERE}} carries the compiled
@@ -199,6 +212,8 @@ type compiler struct {
 	args    []any
 	nodes   int
 	aliases int
+	cost    int
+	fields  []string
 
 	tenantArg   string
 	contractArg [3]string
@@ -328,6 +343,7 @@ func (c *compiler) quantifier(where *Node, count *Count, path string, kind scope
 	}
 
 	if count == nil {
+		c.cost += anyQuantCost
 		return fmt.Sprintf("EXISTS (SELECT 1 FROM %s AND (%s))", from, inner), nil
 	}
 	switch count.Op {
@@ -338,6 +354,7 @@ func (c *compiler) quantifier(where *Node, count *Count, path string, kind scope
 	if count.Value < 0 {
 		return "", &Error{Path: path + ".value", Message: "must not be negative"}
 	}
+	c.cost += countQuantCost
 	return fmt.Sprintf("(SELECT count(%s) FROM %s AND (%s)) %s %s::bigint",
 		distinct, from, inner, sqlOp(count.Op), c.arg(count.Value)), nil
 }
@@ -354,6 +371,12 @@ func (c *compiler) predicate(n *Node, path string, s scope) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if f.Cost > 0 {
+		c.cost += f.Cost
+	} else {
+		c.cost += defaultFieldCost
+	}
+	c.fields = append(c.fields, f.Name)
 	return f.compile(c, s, p), nil
 }
 

@@ -200,9 +200,17 @@ func (f *fixture) store(t *testing.T, tenant uuid.UUID) (context.Context, databa
 func (f *fixture) search(t *testing.T, tenant uuid.UUID, q instancesearch.Query) instancesearch.Page {
 	t.Helper()
 	ctx, store := f.store(t, tenant)
-	page, err := instancesearch.Search(ctx, store, q, instancesearch.SearchOptions{})
+	page, err := run(ctx, store, q)
 	require.NoError(t, err)
 	return page
+}
+
+func run(ctx context.Context, store database.Store, q instancesearch.Query) (instancesearch.Page, error) {
+	compiled, err := instancesearch.CompileForContext(ctx, q, instancesearch.Options{})
+	if err != nil {
+		return instancesearch.Page{}, err
+	}
+	return instancesearch.Search(ctx, store, compiled, instancesearch.SearchOptions{})
 }
 
 func ids(page instancesearch.Page) []uuid.UUID {
@@ -229,9 +237,28 @@ func TestSearch(t *testing.T) {
 		t.Parallel()
 		ctx, store := f.store(t, f.tenantA)
 		for _, ex := range loadExamples(t) {
-			_, err := instancesearch.Search(ctx, store, ex.Query, instancesearch.SearchOptions{})
+			_, err := run(ctx, store, ex.Query)
 			require.NoError(t, err, ex.Name)
 		}
+	})
+
+	t.Run("RefusesAdminBypass", func(t *testing.T) {
+		t.Parallel()
+		ctx, store := f.store(t, f.tenantA)
+		_, err := run(servicetenant.AdminBypass(ctx), store, instancesearch.Query{})
+		require.ErrorContains(t, err, "RLS bypassed")
+	})
+
+	t.Run("Timeout", func(t *testing.T) {
+		t.Parallel()
+		ctx, store := f.store(t, f.tenantA)
+		compiled, err := instancesearch.CompileForContext(ctx, instancesearch.Query{}, instancesearch.Options{})
+		require.NoError(t, err)
+		// Force the timeout with a query that sleeps past it.
+		compiled.SQL = "SELECT pg_sleep(1)"
+		compiled.Args = nil
+		_, err = instancesearch.Search(ctx, store, compiled, instancesearch.SearchOptions{StatementTimeout: 50 * time.Millisecond})
+		require.ErrorIs(t, err, instancesearch.ErrTimeout)
 	})
 
 	t.Run("TenantIsolationVisibilityAndDuplicates", func(t *testing.T) {

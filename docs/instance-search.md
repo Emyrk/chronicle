@@ -1,7 +1,9 @@
 # Instance Advanced Search — design draft
 
-Status: core compiler implemented in `internal/instancesearch` (2026-11-02). No API
-endpoint or UI yet. How to write queries: `.agents/skills/instance-search/SKILL.md`.
+Status (2026-11-02): compiler in `internal/instancesearch`, endpoint
+`POST /api/v1/raidlogs/search` in `api/instance_search.go`, rate limited by
+the DB-backed limiter (`internal/ratelimit`). No UI yet. How to write
+queries: `.agents/skills/instance-search/SKILL.md`.
 
 ## Goal
 
@@ -189,11 +191,18 @@ date (default), clear time, clear-time parse.
 - Duplicate uploads collapse to the lowest instance ID among the matching
   copies.
 
+## Abuse protection
+
+- **Rate limiting.** Searches use a leaky bucket in Postgres (`internal/ratelimit`), keyed per user, or per IP for anonymous callers. The bucket is charged the query's estimated cost (`Compiled.Cost`), so heavy queries drain it faster.
+- **Concurrency cap.** At most 6 searches run at once per process, so searches can't use up the shared connection pool. Searches beyond that return 503.
+- **Timeout.** A 5s statement timeout runs in a read-only transaction.
+- **Anonymous subset.** Anonymous callers get a small subset of cheap instance-level filters. Everything else returns 403 with a log-in prompt.
+- **Metrics and slow log.** Metrics cover duration by outcome, cost and field usage. Searches slower than 2s, or that time out, are logged with the query as CEL text.
+- **No bypass.** Searching with an admin-bypass context is refused.
+
 ## Next steps
 
-1. API endpoint (`POST /api/v1/instances/search`) plus a registry endpoint that
-   serves the field list for the UI. Supporter-tier limits go through
-   `SearchOptions`.
-2. `EXPLAIN ANALYZE` the examples on prod-scale data. Likely candidates for
-   indexes: `log_instances(name)` and `start_time`.
-3. UI query builder.
+1. **A field-list endpoint for the UI:** fields, ops, arg types, scopes, and the anonymous subset.
+2. **`EXPLAIN ANALYZE` on production-size data.** Likely index candidates are `log_instances(name)` and `start_time`.
+3. **The UI query builder,** including the simple anonymous form with a log-in prompt.
+4. **Possibly larger buckets for supporters,** via `whoami` `supporter_tier`.

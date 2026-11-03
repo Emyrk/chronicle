@@ -28,6 +28,7 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/chroniclemail"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/database/pubsub"
@@ -167,6 +168,7 @@ type API struct {
 	liveSessions       *servicelivesession.Service
 	luaArtifactBacklog prometheus.Gauge
 	uiUsageMetrics     *uiUsageMetrics
+	instanceSearch     *instanceSearch
 	discoveryStats     discoveryStatsCache
 }
 
@@ -233,6 +235,7 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	api := &API{
 		luaArtifactBacklog: luaArtifactBacklog,
 		uiUsageMetrics:     newUIUsageMetrics(opts.Registry),
+		instanceSearch:     newInstanceSearch(opts.Logger, database.New(opts.Pool), opts.Registry),
 		Opts:               &opts,
 		AppContext:         ctx,
 		Auth:               service,
@@ -680,6 +683,7 @@ func (api *API) Routes() chi.Router {
 					r.Get("/supported", api.SupportedInstances)
 					r.Get("/recent", api.RecentInstances)
 					r.Get("/range", api.InstancesByTimeRange)
+					r.Post("/search", api.InstanceSearch)
 					r.Route("/logs", func(r chi.Router) {
 						r.Get("/by-file-hash/{file-hash}", api.WoWLogGroupByFile)
 						r.Route("/{logID}", func(r chi.Router) {

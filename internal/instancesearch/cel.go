@@ -140,7 +140,12 @@ func celOptions(f *field, n *Node) string {
 	return "{" + strings.Join(opts, ", ") + "}"
 }
 
-func celValue(f *field, raw json.RawMessage) string {
+func celValue(f *field, value any) string {
+	// Round-trip so json.RawMessage and decoded values render the same.
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return "<invalid>"
+	}
 	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return "<invalid>"
