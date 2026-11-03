@@ -294,8 +294,7 @@ type sqlcQuerier interface {
 	GetAccountPurge(ctx context.Context, id uuid.UUID) (AccountPurge, error)
 	GetActiveAccountPurgeByUser(ctx context.Context, userID uuid.UUID) (AccountPurge, error)
 	GetActiveInferenceRunByThreadForUpdate(ctx context.Context, arg GetActiveInferenceRunByThreadForUpdateParams) (InferenceRun, error)
-	// Non-serving readers for tenant-wide projections. Do not route public handlers here
-	// until the tenant projection writer is activated. realm_ids is display-only;
+	// Published tenant-wide projection readers. realm_ids is display-only;
 	// an empty array shows every realm owned by the tenant.
 	// Pass zero generation_id and zero after_realm_id on the first page. Continue
 	// with the returned generation_id and the last row's (score, realm_id,
@@ -758,10 +757,12 @@ type sqlcQuerier interface {
 	ListActiveGroupBossRatingScores(ctx context.Context, arg ListActiveGroupBossRatingScoresParams) ([]RatingBossScore, error)
 	ListActiveGuildRatingBossScores(ctx context.Context, arg ListActiveGuildRatingBossScoresParams) ([]GuildRatingBossScore, error)
 	ListActiveGuildRatingScopeScores(ctx context.Context, arg ListActiveGuildRatingScopeScoresParams) ([]GuildRatingScopeScore, error)
-	ListActiveGuildTenantBossScores(ctx context.Context, arg ListActiveGuildTenantBossScoresParams) ([]GuildTenantRatingBossScore, error)
-	ListActiveGuildTenantScopeScores(ctx context.Context, arg ListActiveGuildTenantScopeScoresParams) ([]GuildTenantRatingScopeScore, error)
-	ListActivePlayerTenantBossScores(ctx context.Context, arg ListActivePlayerTenantBossScoresParams) ([]PlayerTenantRatingBossScore, error)
-	ListActivePlayerTenantScopeScores(ctx context.Context, arg ListActivePlayerTenantScopeScoresParams) ([]PlayerTenantRatingScopeScore, error)
+	ListActiveGuildTenantBossScores(ctx context.Context, arg ListActiveGuildTenantBossScoresParams) ([]ListActiveGuildTenantBossScoresRow, error)
+	ListActiveGuildTenantScopeScores(ctx context.Context, arg ListActiveGuildTenantScopeScoresParams) ([]ListActiveGuildTenantScopeScoresRow, error)
+	// Keep the indexed wow_guid column uncast. Non-GUID historical score text
+	// must safely miss the optional identity join rather than fail the board.
+	ListActivePlayerTenantBossScores(ctx context.Context, arg ListActivePlayerTenantBossScoresParams) ([]ListActivePlayerTenantBossScoresRow, error)
+	ListActivePlayerTenantScopeScores(ctx context.Context, arg ListActivePlayerTenantScopeScoresParams) ([]ListActivePlayerTenantScopeScoresRow, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActiveRatingScopeScores(ctx context.Context, arg ListActiveRatingScopeScoresParams) ([]RatingScopeScore, error)
 	ListAdminActiveCustomPanelInstallations(ctx context.Context) ([]ListAdminActiveCustomPanelInstallationsRow, error)
@@ -784,7 +785,7 @@ type sqlcQuerier interface {
 	ListCacheGenerations(ctx context.Context) ([]CacheGeneration, error)
 	ListClassBuffIgnorePolicies(ctx context.Context) ([]ListClassBuffIgnorePoliciesRow, error)
 	ListClassBuffPoliciesForDataset(ctx context.Context, datasetID uuid.UUID) ([]ListClassBuffPoliciesForDatasetRow, error)
-	// Future tenant-wide writer configuration; old group readers remain unchanged.
+	// Tenant-wide writer configuration. Legacy group tables are retained only for migration compatibility.
 	// The 180-day window is a fixed scoring rule, not an admin policy column.
 	// Only tenants with an approved scoring policy can be scheduled. Root uses
 	// the zero UUID, not a nullable server association or a group membership.
@@ -1270,7 +1271,7 @@ type sqlcQuerier interface {
 	// The start function atomically locks the tenant revision, snapshots all config,
 	// creates a building generation and checkpoint, or returns the unfinished one.
 	StartRatingRebuild(ctx context.Context, arg StartRatingRebuildParams) (uuid.UUID, error)
-	// Non-serving tenant checkpoint entry point. The group writer must not use it.
+	// Tenant checkpoint entry point. Legacy group checkpoints cannot resume here.
 	// Missing tenant policy raises an error rather than inventing scoring defaults.
 	StartTenantRatingRebuild(ctx context.Context, arg StartTenantRatingRebuildParams) (uuid.UUID, error)
 	TelemetryGetActiveFileBytes(ctx context.Context) (int64, error)

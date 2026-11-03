@@ -30,6 +30,9 @@ type TenantPlayerBossLeaderboardEntry struct {
 	GenerationID      uuid.UUID  `json:"generation_id"`
 	RealmID           uuid.UUID  `json:"realm_id"`
 	PlayerGUID        string     `json:"player_guid"`
+	PlayerName        *string    `json:"player_name,omitempty"`
+	GuildName         *string    `json:"guild_name,omitempty"`
+	RealmName         string     `json:"realm_name"`
 	InstanceName      string     `json:"instance_name"`
 	EncounterName     string     `json:"encounter_name"`
 	DifficultyName    string     `json:"difficulty_name"`
@@ -55,6 +58,9 @@ type TenantPlayerScopeLeaderboardEntry struct {
 	GenerationID      uuid.UUID  `json:"generation_id"`
 	RealmID           uuid.UUID  `json:"realm_id"`
 	PlayerGUID        string     `json:"player_guid"`
+	PlayerName        *string    `json:"player_name,omitempty"`
+	GuildName         *string    `json:"guild_name,omitempty"`
+	RealmName         string     `json:"realm_name"`
 	InstanceName      string     `json:"instance_name"`
 	DifficultyName    string     `json:"difficulty_name"`
 	MaxPlayers        int16      `json:"max_players"`
@@ -71,6 +77,8 @@ type TenantGuildBossLeaderboardEntry struct {
 	GenerationID    uuid.UUID  `json:"generation_id"`
 	RealmID         uuid.UUID  `json:"realm_id"`
 	GuildID         uuid.UUID  `json:"guild_id"`
+	GuildName       *string    `json:"guild_name,omitempty"`
+	RealmName       string     `json:"realm_name"`
 	InstanceName    string     `json:"instance_name"`
 	EncounterName   string     `json:"encounter_name"`
 	DifficultyName  string     `json:"difficulty_name"`
@@ -92,6 +100,8 @@ type TenantGuildScopeLeaderboardEntry struct {
 	GenerationID   uuid.UUID  `json:"generation_id"`
 	RealmID        uuid.UUID  `json:"realm_id"`
 	GuildID        uuid.UUID  `json:"guild_id"`
+	GuildName      *string    `json:"guild_name,omitempty"`
+	RealmName      string     `json:"realm_name"`
 	InstanceName   string     `json:"instance_name"`
 	DifficultyName string     `json:"difficulty_name"`
 	MaxPlayers     int16      `json:"max_players"`

@@ -308,6 +308,81 @@ func TestTenantRatingReaders(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, rows)
 	}
+	// Names are additive: the same character GUID in two realms must resolve
+	// independently, and a missing character must not remove a score row.
+	const guid = "0x00000000000000AB"
+	for i, name := range []string{"Realm one player", "Realm two player"} {
+		_, err = conn.Exec(ctx, `INSERT INTO game_players (id,realm_id,guild_id,name,class,gender,race)
+			VALUES ($1,$2,$3,$4,'MAGE','Male','Orc')`, guid, realms[i], guilds[i], name)
+		require.NoError(t, err)
+		for _, table := range []string{"player_tenant_rating_boss_scores", "player_tenant_rating_scope_scores"} {
+			columns := "generation_id,tenant_id,realm_id,instance_name,difficulty_name,max_players,rating_metric,window_kind,score,player_guid,player_class,player_spec,player_sub_spec,performance_metric"
+			values := "($1,$2,$3,'Molten Core','Heroic',40,'peak','all_time',$4,$5,'Mage','Fire','Deep Fire','dps')"
+			if table == "player_tenant_rating_boss_scores" {
+				columns += ",encounter_name"
+				values = values[:len(values)-1] + ",'Ragnaros')"
+			}
+			_, err = conn.Exec(ctx, "INSERT INTO "+table+" ("+columns+") VALUES "+values, active, tenant, realms[i], float64(88-i), guid)
+			require.NoError(t, err)
+		}
+	}
+	playerBoss.LimitCount, playerScope.LimitCount = 100, 100
+	guildBoss.LimitCount, guildScope.LimitCount = 100, 100
+	playerBoss.AfterRealmID, playerScope.AfterRealmID = uuid.Nil, uuid.Nil
+	playerBoss.AfterScore, playerScope.AfterScore = 0, 0
+	playerBoss.AfterPlayerGuid, playerScope.AfterPlayerGuid = "", ""
+	guildBoss.AfterRealmID, guildScope.AfterRealmID = uuid.Nil, uuid.Nil
+	guildBoss.AfterScore, guildScope.AfterScore = 0, 0
+	guildBoss.AfterGuildID, guildScope.AfterGuildID = uuid.Nil, uuid.Nil
+	pb, err = q.ListActivePlayerTenantBossScores(ctx, playerBoss)
+	require.NoError(t, err)
+	ps, err = q.ListActivePlayerTenantScopeScores(ctx, playerScope)
+	require.NoError(t, err)
+	found := make(map[uuid.UUID]string)
+	for _, row := range pb {
+		require.NotEmpty(t, row.RealmName)
+		if row.PlayerGuid == "player" || row.PlayerGuid == "zzz" {
+			require.False(t, row.PlayerName.Valid)
+			continue
+		}
+		require.Equal(t, guid, row.PlayerGuid)
+		require.True(t, row.PlayerName.Valid)
+		require.True(t, row.GuildName.Valid)
+		found[row.RealmID] = row.PlayerName.String
+	}
+	require.Equal(t, map[uuid.UUID]string{realms[0]: "Realm one player", realms[1]: "Realm two player"}, found)
+	for _, row := range ps {
+		require.NotEmpty(t, row.RealmName)
+		if row.PlayerGuid == guid {
+			require.True(t, row.PlayerName.Valid)
+			require.True(t, row.GuildName.Valid)
+		} else {
+			require.False(t, row.PlayerName.Valid)
+		}
+	}
+	// A guild ID from another realm must not supply a display name.
+	for _, table := range []string{"guild_tenant_rating_boss_scores", "guild_tenant_rating_scope_scores"} {
+		columns := "generation_id,tenant_id,realm_id,instance_name,difficulty_name,max_players,rating_metric,window_kind,score,guild_id"
+		values := "($1,$2,$3,'Molten Core','Heroic',40,'peak','all_time',77,$4)"
+		if table == "guild_tenant_rating_boss_scores" {
+			columns += ",encounter_name"
+			values = values[:len(values)-1] + ",'Ragnaros')"
+		}
+		_, err = conn.Exec(ctx, "INSERT INTO "+table+" ("+columns+") VALUES "+values, active, tenant, realms[0], guilds[1])
+		require.NoError(t, err)
+	}
+	gb, err = q.ListActiveGuildTenantBossScores(ctx, guildBoss)
+	require.NoError(t, err)
+	gs, err = q.ListActiveGuildTenantScopeScores(ctx, guildScope)
+	require.NoError(t, err)
+	for _, row := range gb {
+		require.NotEmpty(t, row.RealmName)
+		require.Equal(t, row.RealmID == realms[1] || row.GuildID != guilds[1], row.GuildName.Valid)
+	}
+	for _, row := range gs {
+		require.NotEmpty(t, row.RealmName)
+		require.Equal(t, row.RealmID == realms[1] || row.GuildID != guilds[1], row.GuildName.Valid)
+	}
 	_, err = conn.Exec(ctx, "SELECT set_config('app.tenant_id',$1,false)", other.String())
 	require.NoError(t, err)
 	check(nil) // explicit tenant argument cannot bypass tenant RLS.

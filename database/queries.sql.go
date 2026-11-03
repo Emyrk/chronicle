@@ -25757,7 +25757,7 @@ const listConfiguredTenantRatingTenants = `-- name: ListConfiguredTenantRatingTe
 SELECT tenant_id FROM rating_tenant_policies ORDER BY tenant_id
 `
 
-// Future tenant-wide writer configuration; old group readers remain unchanged.
+// Tenant-wide writer configuration. Legacy group tables are retained only for migration compatibility.
 // The 180-day window is a fixed scoring rule, not an admin policy column.
 // Only tenants with an approved scoring policy can be scheduled. Root uses
 // the zero UUID, not a nullable server association or a group membership.
@@ -25897,7 +25897,7 @@ type StartTenantRatingRebuildParams struct {
 	SourceCutoff pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
 }
 
-// Non-serving tenant checkpoint entry point. The group writer must not use it.
+// Tenant checkpoint entry point. Legacy group checkpoints cannot resume here.
 // Missing tenant policy raises an error rather than inventing scoring defaults.
 func (q *sqlQuerier) StartTenantRatingRebuild(ctx context.Context, arg StartTenantRatingRebuildParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, startTenantRatingRebuild, arg.TenantID, arg.AsOf, arg.SourceCutoff)
@@ -26490,8 +26490,7 @@ SELECT id FROM rating_score_generations
 WHERE tenant_id = $1 AND status = 'active'
 `
 
-// Non-serving readers for tenant-wide projections. Do not route public handlers here
-// until the tenant projection writer is activated. realm_ids is display-only;
+// Published tenant-wide projection readers. realm_ids is display-only;
 // an empty array shows every realm owned by the tenant.
 // Pass zero generation_id and zero after_realm_id on the first page. Continue
 // with the returned generation_id and the last row's (score, realm_id,
@@ -26509,7 +26508,7 @@ func (q *sqlQuerier) GetActiveTenantRatingGeneration(ctx context.Context, tenant
 }
 
 const listActiveGuildTenantBossScores = `-- name: ListActiveGuildTenantBossScores :many
-SELECT score.generation_id, score.tenant_id, score.realm_id, score.guild_id, score.instance_name, score.encounter_name, score.difficulty_name, score.max_players, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.best_raw, score.rank_one_raw, score.best_locked_parse, score.form, score.floor_score, score.eligible_kills, score.computed_at
+SELECT score.generation_id, score.tenant_id, score.realm_id, score.guild_id, score.instance_name, score.encounter_name, score.difficulty_name, score.max_players, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.best_raw, score.rank_one_raw, score.best_locked_parse, score.form, score.floor_score, score.eligible_kills, score.computed_at, guild.name AS guild_name, realm.name AS realm_name
 FROM guild_tenant_rating_boss_scores score
 JOIN rating_score_generations generation
   ON generation.id = score.generation_id
@@ -26517,6 +26516,7 @@ JOIN rating_score_generations generation
  AND generation.status = 'active'
 JOIN wow_server_realms realm ON realm.id = score.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
+LEFT JOIN guilds guild ON guild.id = score.guild_id AND guild.realm_id = score.realm_id
 WHERE score.tenant_id = $1
   AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
   AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = $2::uuid)
@@ -26555,7 +26555,32 @@ type ListActiveGuildTenantBossScoresParams struct {
 	LimitCount     int32       `db:"limit_count" json:"limit_count"`
 }
 
-func (q *sqlQuerier) ListActiveGuildTenantBossScores(ctx context.Context, arg ListActiveGuildTenantBossScoresParams) ([]GuildTenantRatingBossScore, error) {
+type ListActiveGuildTenantBossScoresRow struct {
+	GenerationID    uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID         uuid.UUID          `db:"guild_id" json:"guild_id"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16              `db:"max_players" json:"max_players"`
+	RatingMetric    string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind      string             `db:"window_kind" json:"window_kind"`
+	WindowStart     pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd       pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score           float64            `db:"score" json:"score"`
+	BestRaw         pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	RankOneRaw      pgtype.Float8      `db:"rank_one_raw" json:"rank_one_raw"`
+	BestLockedParse pgtype.Float8      `db:"best_locked_parse" json:"best_locked_parse"`
+	Form            pgtype.Float8      `db:"form" json:"form"`
+	FloorScore      pgtype.Float8      `db:"floor_score" json:"floor_score"`
+	EligibleKills   int32              `db:"eligible_kills" json:"eligible_kills"`
+	ComputedAt      pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	GuildName       pgtype.Text        `db:"guild_name" json:"guild_name"`
+	RealmName       string             `db:"realm_name" json:"realm_name"`
+}
+
+func (q *sqlQuerier) ListActiveGuildTenantBossScores(ctx context.Context, arg ListActiveGuildTenantBossScoresParams) ([]ListActiveGuildTenantBossScoresRow, error) {
 	rows, err := q.db.Query(ctx, listActiveGuildTenantBossScores,
 		arg.TenantID,
 		arg.GenerationID,
@@ -26575,9 +26600,9 @@ func (q *sqlQuerier) ListActiveGuildTenantBossScores(ctx context.Context, arg Li
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GuildTenantRatingBossScore
+	var items []ListActiveGuildTenantBossScoresRow
 	for rows.Next() {
-		var i GuildTenantRatingBossScore
+		var i ListActiveGuildTenantBossScoresRow
 		if err := rows.Scan(
 			&i.GenerationID,
 			&i.TenantID,
@@ -26599,6 +26624,8 @@ func (q *sqlQuerier) ListActiveGuildTenantBossScores(ctx context.Context, arg Li
 			&i.FloorScore,
 			&i.EligibleKills,
 			&i.ComputedAt,
+			&i.GuildName,
+			&i.RealmName,
 		); err != nil {
 			return nil, err
 		}
@@ -26611,7 +26638,7 @@ func (q *sqlQuerier) ListActiveGuildTenantBossScores(ctx context.Context, arg Li
 }
 
 const listActiveGuildTenantScopeScores = `-- name: ListActiveGuildTenantScopeScores :many
-SELECT score.generation_id, score.tenant_id, score.realm_id, score.guild_id, score.instance_name, score.difficulty_name, score.max_players, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.computed_at
+SELECT score.generation_id, score.tenant_id, score.realm_id, score.guild_id, score.instance_name, score.difficulty_name, score.max_players, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.computed_at, guild.name AS guild_name, realm.name AS realm_name
 FROM guild_tenant_rating_scope_scores score
 JOIN rating_score_generations generation
   ON generation.id = score.generation_id
@@ -26619,6 +26646,7 @@ JOIN rating_score_generations generation
  AND generation.status = 'active'
 JOIN wow_server_realms realm ON realm.id = score.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
+LEFT JOIN guilds guild ON guild.id = score.guild_id AND guild.realm_id = score.realm_id
 WHERE score.tenant_id = $1
   AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
   AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = $2::uuid)
@@ -26655,7 +26683,25 @@ type ListActiveGuildTenantScopeScoresParams struct {
 	LimitCount     int32       `db:"limit_count" json:"limit_count"`
 }
 
-func (q *sqlQuerier) ListActiveGuildTenantScopeScores(ctx context.Context, arg ListActiveGuildTenantScopeScoresParams) ([]GuildTenantRatingScopeScore, error) {
+type ListActiveGuildTenantScopeScoresRow struct {
+	GenerationID   uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID          `db:"guild_id" json:"guild_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	RatingMetric   string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind     string             `db:"window_kind" json:"window_kind"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd      pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score          float64            `db:"score" json:"score"`
+	ComputedAt     pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	GuildName      pgtype.Text        `db:"guild_name" json:"guild_name"`
+	RealmName      string             `db:"realm_name" json:"realm_name"`
+}
+
+func (q *sqlQuerier) ListActiveGuildTenantScopeScores(ctx context.Context, arg ListActiveGuildTenantScopeScoresParams) ([]ListActiveGuildTenantScopeScoresRow, error) {
 	rows, err := q.db.Query(ctx, listActiveGuildTenantScopeScores,
 		arg.TenantID,
 		arg.GenerationID,
@@ -26674,9 +26720,9 @@ func (q *sqlQuerier) ListActiveGuildTenantScopeScores(ctx context.Context, arg L
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GuildTenantRatingScopeScore
+	var items []ListActiveGuildTenantScopeScoresRow
 	for rows.Next() {
-		var i GuildTenantRatingScopeScore
+		var i ListActiveGuildTenantScopeScoresRow
 		if err := rows.Scan(
 			&i.GenerationID,
 			&i.TenantID,
@@ -26691,6 +26737,8 @@ func (q *sqlQuerier) ListActiveGuildTenantScopeScores(ctx context.Context, arg L
 			&i.WindowEnd,
 			&i.Score,
 			&i.ComputedAt,
+			&i.GuildName,
+			&i.RealmName,
 		); err != nil {
 			return nil, err
 		}
@@ -26703,7 +26751,7 @@ func (q *sqlQuerier) ListActiveGuildTenantScopeScores(ctx context.Context, arg L
 }
 
 const listActivePlayerTenantBossScores = `-- name: ListActivePlayerTenantBossScores :many
-SELECT score.generation_id, score.tenant_id, score.realm_id, score.player_guid, score.instance_name, score.encounter_name, score.difficulty_name, score.max_players, score.player_class, score.player_spec, score.player_sub_spec, score.performance_metric, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.best_raw, score.rank_one_raw, score.best_locked_parse, score.form, score.floor_score, score.eligible_kills, score.computed_at
+SELECT score.generation_id, score.tenant_id, score.realm_id, score.player_guid, score.instance_name, score.encounter_name, score.difficulty_name, score.max_players, score.player_class, score.player_spec, score.player_sub_spec, score.performance_metric, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.best_raw, score.rank_one_raw, score.best_locked_parse, score.form, score.floor_score, score.eligible_kills, score.computed_at, gp.name AS player_name, guild.name AS guild_name, realm.name AS realm_name
 FROM player_tenant_rating_boss_scores score
 JOIN rating_score_generations generation
   ON generation.id = score.generation_id
@@ -26711,6 +26759,9 @@ JOIN rating_score_generations generation
  AND generation.status = 'active'
 JOIN wow_server_realms realm ON realm.id = score.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
+LEFT JOIN game_players gp ON gp.realm_id = score.realm_id AND gp.id = (CASE WHEN score.player_guid ~ '^0x[0-9A-Fa-f]{16}$'
+     THEN score.player_guid::wow_guid ELSE NULL::wow_guid END)
+LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = score.realm_id
 WHERE score.tenant_id = $1
   AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
   AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = $2::uuid)
@@ -26757,7 +26808,39 @@ type ListActivePlayerTenantBossScoresParams struct {
 	LimitCount        int32       `db:"limit_count" json:"limit_count"`
 }
 
-func (q *sqlQuerier) ListActivePlayerTenantBossScores(ctx context.Context, arg ListActivePlayerTenantBossScoresParams) ([]PlayerTenantRatingBossScore, error) {
+type ListActivePlayerTenantBossScoresRow struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	BestRaw           pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	RankOneRaw        pgtype.Float8      `db:"rank_one_raw" json:"rank_one_raw"`
+	BestLockedParse   pgtype.Float8      `db:"best_locked_parse" json:"best_locked_parse"`
+	Form              pgtype.Float8      `db:"form" json:"form"`
+	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
+	EligibleKills     int32              `db:"eligible_kills" json:"eligible_kills"`
+	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	PlayerName        pgtype.Text        `db:"player_name" json:"player_name"`
+	GuildName         pgtype.Text        `db:"guild_name" json:"guild_name"`
+	RealmName         string             `db:"realm_name" json:"realm_name"`
+}
+
+// Keep the indexed wow_guid column uncast. Non-GUID historical score text
+// must safely miss the optional identity join rather than fail the board.
+func (q *sqlQuerier) ListActivePlayerTenantBossScores(ctx context.Context, arg ListActivePlayerTenantBossScoresParams) ([]ListActivePlayerTenantBossScoresRow, error) {
 	rows, err := q.db.Query(ctx, listActivePlayerTenantBossScores,
 		arg.TenantID,
 		arg.GenerationID,
@@ -26781,9 +26864,9 @@ func (q *sqlQuerier) ListActivePlayerTenantBossScores(ctx context.Context, arg L
 		return nil, err
 	}
 	defer rows.Close()
-	var items []PlayerTenantRatingBossScore
+	var items []ListActivePlayerTenantBossScoresRow
 	for rows.Next() {
-		var i PlayerTenantRatingBossScore
+		var i ListActivePlayerTenantBossScoresRow
 		if err := rows.Scan(
 			&i.GenerationID,
 			&i.TenantID,
@@ -26809,6 +26892,9 @@ func (q *sqlQuerier) ListActivePlayerTenantBossScores(ctx context.Context, arg L
 			&i.FloorScore,
 			&i.EligibleKills,
 			&i.ComputedAt,
+			&i.PlayerName,
+			&i.GuildName,
+			&i.RealmName,
 		); err != nil {
 			return nil, err
 		}
@@ -26821,7 +26907,7 @@ func (q *sqlQuerier) ListActivePlayerTenantBossScores(ctx context.Context, arg L
 }
 
 const listActivePlayerTenantScopeScores = `-- name: ListActivePlayerTenantScopeScores :many
-SELECT score.generation_id, score.tenant_id, score.realm_id, score.player_guid, score.instance_name, score.difficulty_name, score.max_players, score.player_class, score.player_spec, score.player_sub_spec, score.performance_metric, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.computed_at
+SELECT score.generation_id, score.tenant_id, score.realm_id, score.player_guid, score.instance_name, score.difficulty_name, score.max_players, score.player_class, score.player_spec, score.player_sub_spec, score.performance_metric, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.computed_at, gp.name AS player_name, guild.name AS guild_name, realm.name AS realm_name
 FROM player_tenant_rating_scope_scores score
 JOIN rating_score_generations generation
   ON generation.id = score.generation_id
@@ -26829,6 +26915,9 @@ JOIN rating_score_generations generation
  AND generation.status = 'active'
 JOIN wow_server_realms realm ON realm.id = score.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
+LEFT JOIN game_players gp ON gp.realm_id = score.realm_id AND gp.id = (CASE WHEN score.player_guid ~ '^0x[0-9A-Fa-f]{16}$'
+     THEN score.player_guid::wow_guid ELSE NULL::wow_guid END)
+LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = score.realm_id
 WHERE score.tenant_id = $1
   AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
   AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = $2::uuid)
@@ -26873,7 +26962,30 @@ type ListActivePlayerTenantScopeScoresParams struct {
 	LimitCount        int32       `db:"limit_count" json:"limit_count"`
 }
 
-func (q *sqlQuerier) ListActivePlayerTenantScopeScores(ctx context.Context, arg ListActivePlayerTenantScopeScoresParams) ([]PlayerTenantRatingScopeScore, error) {
+type ListActivePlayerTenantScopeScoresRow struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	PlayerName        pgtype.Text        `db:"player_name" json:"player_name"`
+	GuildName         pgtype.Text        `db:"guild_name" json:"guild_name"`
+	RealmName         string             `db:"realm_name" json:"realm_name"`
+}
+
+func (q *sqlQuerier) ListActivePlayerTenantScopeScores(ctx context.Context, arg ListActivePlayerTenantScopeScoresParams) ([]ListActivePlayerTenantScopeScoresRow, error) {
 	rows, err := q.db.Query(ctx, listActivePlayerTenantScopeScores,
 		arg.TenantID,
 		arg.GenerationID,
@@ -26896,9 +27008,9 @@ func (q *sqlQuerier) ListActivePlayerTenantScopeScores(ctx context.Context, arg 
 		return nil, err
 	}
 	defer rows.Close()
-	var items []PlayerTenantRatingScopeScore
+	var items []ListActivePlayerTenantScopeScoresRow
 	for rows.Next() {
-		var i PlayerTenantRatingScopeScore
+		var i ListActivePlayerTenantScopeScoresRow
 		if err := rows.Scan(
 			&i.GenerationID,
 			&i.TenantID,
@@ -26917,6 +27029,9 @@ func (q *sqlQuerier) ListActivePlayerTenantScopeScores(ctx context.Context, arg 
 			&i.WindowEnd,
 			&i.Score,
 			&i.ComputedAt,
+			&i.PlayerName,
+			&i.GuildName,
+			&i.RealmName,
 		); err != nil {
 			return nil, err
 		}

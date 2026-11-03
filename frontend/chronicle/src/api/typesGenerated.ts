@@ -5184,6 +5184,8 @@ export interface TenantGuildBossLeaderboardEntry {
     readonly generation_id: string;
     readonly realm_id: string;
     readonly guild_id: string;
+    readonly guild_name?: string;
+    readonly realm_name: string;
     readonly instance_name: string;
     readonly encounter_name: string;
     readonly difficulty_name: string;
@@ -5213,6 +5215,8 @@ export interface TenantGuildScopeLeaderboardEntry {
     readonly generation_id: string;
     readonly realm_id: string;
     readonly guild_id: string;
+    readonly guild_name?: string;
+    readonly realm_name: string;
     readonly instance_name: string;
     readonly difficulty_name: string;
     readonly max_players: number;
@@ -5234,6 +5238,9 @@ export interface TenantPlayerBossLeaderboardEntry {
     readonly generation_id: string;
     readonly realm_id: string;
     readonly player_guid: string;
+    readonly player_name?: string;
+    readonly guild_name?: string;
+    readonly realm_name: string;
     readonly instance_name: string;
     readonly encounter_name: string;
     readonly difficulty_name: string;
@@ -5258,7 +5265,8 @@ export interface TenantPlayerBossLeaderboardEntry {
 
 // From chroniclesdk/rating_tenant_leaderboard.go
 /**
- * Tenant rating leaderboards expose materialized scores, never a recomputed rank.
+ * Tenant rating leaderboards expose materialized, raid-filtered scores, never a
+ * global board or a recomputed rank. Scope responses always report "raid".
  */
 export interface TenantPlayerBossLeaderboardResponse {
     readonly entries: readonly TenantPlayerBossLeaderboardEntry[];
@@ -5270,6 +5278,9 @@ export interface TenantPlayerScopeLeaderboardEntry {
     readonly generation_id: string;
     readonly realm_id: string;
     readonly player_guid: string;
+    readonly player_name?: string;
+    readonly guild_name?: string;
+    readonly realm_name: string;
     readonly instance_name: string;
     readonly difficulty_name: string;
     readonly max_players: number;

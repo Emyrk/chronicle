@@ -14,7 +14,7 @@ SELECT id FROM rating_score_generations
 WHERE tenant_id = @tenant_id AND status = 'active';
 
 -- name: ListActivePlayerTenantBossScores :many
-SELECT score.*
+SELECT score.*, gp.name AS player_name, guild.name AS guild_name, realm.name AS realm_name
 FROM player_tenant_rating_boss_scores score
 JOIN rating_score_generations generation
   ON generation.id = score.generation_id
@@ -22,6 +22,11 @@ JOIN rating_score_generations generation
  AND generation.status = 'active'
 JOIN wow_server_realms realm ON realm.id = score.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
+-- Keep the indexed wow_guid column uncast. Non-GUID historical score text
+-- must safely miss the optional identity join rather than fail the board.
+LEFT JOIN game_players gp ON gp.realm_id = score.realm_id AND gp.id = (CASE WHEN score.player_guid ~ '^0x[0-9A-Fa-f]{16}$'
+     THEN score.player_guid::wow_guid ELSE NULL::wow_guid END)
+LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = score.realm_id
 WHERE score.tenant_id = @tenant_id
   AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
   AND (@generation_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = @generation_id::uuid)
@@ -48,7 +53,7 @@ ORDER BY score.score DESC, score.realm_id, score.player_guid
 LIMIT LEAST(GREATEST(@limit_count::int, 1), 100);
 
 -- name: ListActivePlayerTenantScopeScores :many
-SELECT score.*
+SELECT score.*, gp.name AS player_name, guild.name AS guild_name, realm.name AS realm_name
 FROM player_tenant_rating_scope_scores score
 JOIN rating_score_generations generation
   ON generation.id = score.generation_id
@@ -56,6 +61,9 @@ JOIN rating_score_generations generation
  AND generation.status = 'active'
 JOIN wow_server_realms realm ON realm.id = score.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
+LEFT JOIN game_players gp ON gp.realm_id = score.realm_id AND gp.id = (CASE WHEN score.player_guid ~ '^0x[0-9A-Fa-f]{16}$'
+     THEN score.player_guid::wow_guid ELSE NULL::wow_guid END)
+LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = score.realm_id
 WHERE score.tenant_id = @tenant_id
   AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
   AND (@generation_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = @generation_id::uuid)
@@ -81,7 +89,7 @@ ORDER BY score.score DESC, score.realm_id, score.player_guid
 LIMIT LEAST(GREATEST(@limit_count::int, 1), 100);
 
 -- name: ListActiveGuildTenantBossScores :many
-SELECT score.*
+SELECT score.*, guild.name AS guild_name, realm.name AS realm_name
 FROM guild_tenant_rating_boss_scores score
 JOIN rating_score_generations generation
   ON generation.id = score.generation_id
@@ -89,6 +97,7 @@ JOIN rating_score_generations generation
  AND generation.status = 'active'
 JOIN wow_server_realms realm ON realm.id = score.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
+LEFT JOIN guilds guild ON guild.id = score.guild_id AND guild.realm_id = score.realm_id
 WHERE score.tenant_id = @tenant_id
   AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
   AND (@generation_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = @generation_id::uuid)
@@ -111,7 +120,7 @@ ORDER BY score.score DESC, score.realm_id, score.guild_id
 LIMIT LEAST(GREATEST(@limit_count::int, 1), 100);
 
 -- name: ListActiveGuildTenantScopeScores :many
-SELECT score.*
+SELECT score.*, guild.name AS guild_name, realm.name AS realm_name
 FROM guild_tenant_rating_scope_scores score
 JOIN rating_score_generations generation
   ON generation.id = score.generation_id
@@ -119,6 +128,7 @@ JOIN rating_score_generations generation
  AND generation.status = 'active'
 JOIN wow_server_realms realm ON realm.id = score.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
+LEFT JOIN guilds guild ON guild.id = score.guild_id AND guild.realm_id = score.realm_id
 WHERE score.tenant_id = @tenant_id
   AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
   AND (@generation_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = @generation_id::uuid)

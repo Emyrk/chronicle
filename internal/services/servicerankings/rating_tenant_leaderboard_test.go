@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,10 +21,10 @@ type tenantLeaderboardStub struct {
 	tenant, generation uuid.UUID
 	calls              int
 	changeAt           int
-	guildBoss          []database.GuildTenantRatingBossScore
-	guildScope         []database.GuildTenantRatingScopeScore
-	playerBoss         []database.PlayerTenantRatingBossScore
-	playerScope        []database.PlayerTenantRatingScopeScore
+	guildBoss          []database.ListActiveGuildTenantBossScoresRow
+	guildScope         []database.ListActiveGuildTenantScopeScoresRow
+	playerBoss         []database.ListActivePlayerTenantBossScoresRow
+	playerScope        []database.ListActivePlayerTenantScopeScoresRow
 	params             []any
 }
 
@@ -51,27 +52,27 @@ func pageRows[T any](rows []T, limit int32, afterScore float64, afterRealm uuid.
 	}
 	return out
 }
-func (s *tenantLeaderboardStub) ListActiveGuildTenantBossScores(_ context.Context, p database.ListActiveGuildTenantBossScoresParams) ([]database.GuildTenantRatingBossScore, error) {
+func (s *tenantLeaderboardStub) ListActiveGuildTenantBossScores(_ context.Context, p database.ListActiveGuildTenantBossScoresParams) ([]database.ListActiveGuildTenantBossScoresRow, error) {
 	s.params = append(s.params, p)
-	return pageRows(s.guildBoss, p.LimitCount, p.AfterScore, p.AfterRealmID, p.AfterGuildID.String(), func(row database.GuildTenantRatingBossScore) (float64, uuid.UUID, string) {
+	return pageRows(s.guildBoss, p.LimitCount, p.AfterScore, p.AfterRealmID, p.AfterGuildID.String(), func(row database.ListActiveGuildTenantBossScoresRow) (float64, uuid.UUID, string) {
 		return row.Score, row.RealmID, row.GuildID.String()
 	}), nil
 }
-func (s *tenantLeaderboardStub) ListActiveGuildTenantScopeScores(_ context.Context, p database.ListActiveGuildTenantScopeScoresParams) ([]database.GuildTenantRatingScopeScore, error) {
+func (s *tenantLeaderboardStub) ListActiveGuildTenantScopeScores(_ context.Context, p database.ListActiveGuildTenantScopeScoresParams) ([]database.ListActiveGuildTenantScopeScoresRow, error) {
 	s.params = append(s.params, p)
-	return pageRows(s.guildScope, p.LimitCount, p.AfterScore, p.AfterRealmID, p.AfterGuildID.String(), func(row database.GuildTenantRatingScopeScore) (float64, uuid.UUID, string) {
+	return pageRows(s.guildScope, p.LimitCount, p.AfterScore, p.AfterRealmID, p.AfterGuildID.String(), func(row database.ListActiveGuildTenantScopeScoresRow) (float64, uuid.UUID, string) {
 		return row.Score, row.RealmID, row.GuildID.String()
 	}), nil
 }
-func (s *tenantLeaderboardStub) ListActivePlayerTenantBossScores(_ context.Context, p database.ListActivePlayerTenantBossScoresParams) ([]database.PlayerTenantRatingBossScore, error) {
+func (s *tenantLeaderboardStub) ListActivePlayerTenantBossScores(_ context.Context, p database.ListActivePlayerTenantBossScoresParams) ([]database.ListActivePlayerTenantBossScoresRow, error) {
 	s.params = append(s.params, p)
-	return pageRows(s.playerBoss, p.LimitCount, p.AfterScore, p.AfterRealmID, p.AfterPlayerGuid, func(row database.PlayerTenantRatingBossScore) (float64, uuid.UUID, string) {
+	return pageRows(s.playerBoss, p.LimitCount, p.AfterScore, p.AfterRealmID, p.AfterPlayerGuid, func(row database.ListActivePlayerTenantBossScoresRow) (float64, uuid.UUID, string) {
 		return row.Score, row.RealmID, row.PlayerGuid
 	}), nil
 }
-func (s *tenantLeaderboardStub) ListActivePlayerTenantScopeScores(_ context.Context, p database.ListActivePlayerTenantScopeScoresParams) ([]database.PlayerTenantRatingScopeScore, error) {
+func (s *tenantLeaderboardStub) ListActivePlayerTenantScopeScores(_ context.Context, p database.ListActivePlayerTenantScopeScoresParams) ([]database.ListActivePlayerTenantScopeScoresRow, error) {
 	s.params = append(s.params, p)
-	return pageRows(s.playerScope, p.LimitCount, p.AfterScore, p.AfterRealmID, p.AfterPlayerGuid, func(row database.PlayerTenantRatingScopeScore) (float64, uuid.UUID, string) {
+	return pageRows(s.playerScope, p.LimitCount, p.AfterScore, p.AfterRealmID, p.AfterPlayerGuid, func(row database.ListActivePlayerTenantScopeScoresRow) (float64, uuid.UUID, string) {
 		return row.Score, row.RealmID, row.PlayerGuid
 	}), nil
 }
@@ -105,7 +106,7 @@ func TestTenantRatingLeaderboardTraversal(t *testing.T) {
 	}{{"guild boss", true, true}, {"guild scope", true, false}, {"player boss", false, true}, {"player scope", false, false}} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			stub := &tenantLeaderboardStub{tenant: tenant, generation: gen, guildBoss: []database.GuildTenantRatingBossScore{{TenantID: tenant, GenerationID: gen, RealmID: realm, GuildID: guild1, Score: 42}, {TenantID: tenant, GenerationID: gen, RealmID: realm, GuildID: guild2, Score: 42}}, guildScope: []database.GuildTenantRatingScopeScore{{TenantID: tenant, GenerationID: gen, RealmID: realm, GuildID: guild1, Score: 42}, {TenantID: tenant, GenerationID: gen, RealmID: realm, GuildID: guild2, Score: 42}}, playerBoss: []database.PlayerTenantRatingBossScore{{TenantID: tenant, GenerationID: gen, RealmID: realm, PlayerGuid: "a", Score: 42}, {TenantID: tenant, GenerationID: gen, RealmID: realm, PlayerGuid: "b", Score: 42}}, playerScope: []database.PlayerTenantRatingScopeScore{{TenantID: tenant, GenerationID: gen, RealmID: realm, PlayerGuid: "a", Score: 42}, {TenantID: tenant, GenerationID: gen, RealmID: realm, PlayerGuid: "b", Score: 42}}}
+			stub := &tenantLeaderboardStub{tenant: tenant, generation: gen, guildBoss: []database.ListActiveGuildTenantBossScoresRow{{TenantID: tenant, GenerationID: gen, RealmID: realm, GuildID: guild1, Score: 42}, {TenantID: tenant, GenerationID: gen, RealmID: realm, GuildID: guild2, Score: 42}}, guildScope: []database.ListActiveGuildTenantScopeScoresRow{{TenantID: tenant, GenerationID: gen, RealmID: realm, GuildID: guild1, Score: 42}, {TenantID: tenant, GenerationID: gen, RealmID: realm, GuildID: guild2, Score: 42}}, playerBoss: []database.ListActivePlayerTenantBossScoresRow{{TenantID: tenant, GenerationID: gen, RealmID: realm, PlayerGuid: "a", Score: 42}, {TenantID: tenant, GenerationID: gen, RealmID: realm, PlayerGuid: "b", Score: 42}}, playerScope: []database.ListActivePlayerTenantScopeScoresRow{{TenantID: tenant, GenerationID: gen, RealmID: realm, PlayerGuid: "a", Score: 42}, {TenantID: tenant, GenerationID: gen, RealmID: realm, PlayerGuid: "b", Score: 42}}}
 			q := tenantBase(tc.guild, tc.boss)
 			q.Set("realm_ids", realm.String())
 			first := tenantRequest(q, tenant, stub, tc.guild, tc.boss)
@@ -180,12 +181,51 @@ func TestTenantScopeRequiresRaid(t *testing.T) {
 	}
 }
 
+func TestTenantRatingLeaderboardDisplayNames(t *testing.T) {
+	t.Parallel()
+	tenant, generation, realm, guildID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	name := func(s string) pgtype.Text { return pgtype.Text{String: s, Valid: true} }
+	for _, tc := range []struct {
+		guild, boss bool
+	}{{false, true}, {false, false}, {true, true}, {true, false}} {
+		stub := &tenantLeaderboardStub{
+			tenant: tenant, generation: generation,
+			playerBoss:  []database.ListActivePlayerTenantBossScoresRow{{TenantID: tenant, GenerationID: generation, RealmID: realm, PlayerGuid: "player", PlayerName: name("Hero"), GuildName: name("Raiders"), RealmName: "Realm", Score: 10}},
+			playerScope: []database.ListActivePlayerTenantScopeScoresRow{{TenantID: tenant, GenerationID: generation, RealmID: realm, PlayerGuid: "player", RealmName: "Realm", Score: 10}},
+			guildBoss:   []database.ListActiveGuildTenantBossScoresRow{{TenantID: tenant, GenerationID: generation, RealmID: realm, GuildID: guildID, GuildName: name("Raiders"), RealmName: "Realm", Score: 10}},
+			guildScope:  []database.ListActiveGuildTenantScopeScoresRow{{TenantID: tenant, GenerationID: generation, RealmID: realm, GuildID: guildID, RealmName: "Realm", Score: 10}},
+		}
+		rec := tenantRequest(tenantBase(tc.guild, tc.boss), tenant, stub, tc.guild, tc.boss)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		var response struct {
+			Entries []map[string]any `json:"entries"`
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		require.Len(t, response.Entries, 1)
+		entry := response.Entries[0]
+		require.Equal(t, "Realm", entry["realm_name"])
+		if tc.guild {
+			if tc.boss {
+				require.Equal(t, "Raiders", entry["guild_name"])
+			} else {
+				require.NotContains(t, entry, "guild_name")
+			}
+		} else if tc.boss {
+			require.Equal(t, "Hero", entry["player_name"])
+			require.Equal(t, "Raiders", entry["guild_name"])
+		} else {
+			require.NotContains(t, entry, "player_name")
+			require.NotContains(t, entry, "guild_name")
+		}
+	}
+}
+
 func TestTenantRatingLeaderboardLimitHundred(t *testing.T) {
 	t.Parallel()
 	tenant, generation, realm := uuid.New(), uuid.New(), uuid.New()
 	stub := &tenantLeaderboardStub{tenant: tenant, generation: generation}
 	for i := 0; i < 101; i++ {
-		stub.playerScope = append(stub.playerScope, database.PlayerTenantRatingScopeScore{
+		stub.playerScope = append(stub.playerScope, database.ListActivePlayerTenantScopeScoresRow{
 			TenantID: tenant, GenerationID: generation, RealmID: realm,
 			PlayerGuid: strconv.Itoa(i + 100), Score: float64(101 - i),
 		})
@@ -244,7 +284,7 @@ func TestTenantRatingLeaderboardValidationAndRace(t *testing.T) {
 	q := tenantBase(false, false)
 	stub := &tenantLeaderboardStub{tenant: tenant, generation: gen, changeAt: 2}
 	require.Equal(t, http.StatusConflict, tenantRequest(q, tenant, stub, false, false).Code)
-	stub = &tenantLeaderboardStub{tenant: tenant, generation: gen, playerScope: []database.PlayerTenantRatingScopeScore{{TenantID: uuid.New(), GenerationID: gen, Score: 30}}}
+	stub = &tenantLeaderboardStub{tenant: tenant, generation: gen, playerScope: []database.ListActivePlayerTenantScopeScoresRow{{TenantID: uuid.New(), GenerationID: gen, Score: 30}}}
 	require.Equal(t, http.StatusInternalServerError, tenantRequest(q, tenant, stub, false, false).Code)
 	empty := &tenantLeaderboardStub{tenant: tenant}
 	rec := tenantRequest(q, tenant, empty, false, false)
