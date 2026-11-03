@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { InstanceSearchFieldsResponse } from "@/api/typesGenerated";
 import { EXAMPLES } from "./examples";
 import fixture from "./fixtures/searchFields.json";
-import { complexity, nodeCost, queryCost } from "./searchCost";
+import { LEVEL_LIMITS, complexity, nodeCost, queryCost } from "./searchCost";
 
 const desc = fixture as unknown as InstanceSearchFieldsResponse;
 
@@ -14,8 +14,12 @@ describe("queryCost", () => {
   });
 
   it("is just the base for an empty search", () => {
-    expect(queryCost(undefined, desc)).toEqual({ total: 1, parts: [{ label: "Base", cost: 1, count: 1 }] });
+    expect(queryCost(undefined, desc)).toEqual({ total: desc.cost_base, parts: [{ label: "Base", cost: desc.cost_base, count: 1 }] });
   });
+
+  // Weights come from the fixture (the server's registry), so tuning costs
+  // in Go doesn't break these.
+  const fieldCost = (name: string) => desc.fields.find((f) => f.name === name)!.cost;
 
   it("groups the breakdown by field and block, most expensive first", () => {
     const cost = queryCost(
@@ -28,21 +32,31 @@ describe("queryCost", () => {
       },
       desc,
     );
-    expect(cost.total).toBe(1 + 2 * 15 + 2 * 2 + 1);
-    expect(cost.parts.map((p) => [p.label, p.cost, p.count])).toEqual([
-      ["Parse", 30, 2],
-      ["A player block", 4, 2],
-      ["Zone", 1, 1],
-      ["Base", 1, 1],
-    ]);
+    const parse = 2 * fieldCost("player.parse");
+    const blocks = 2 * desc.cost_any;
+    expect(cost.total).toBe(desc.cost_base + parse + blocks + fieldCost("instance.name"));
+    expect(cost.parts.find((p) => p.label === "Parse")).toEqual({ label: "Parse", cost: parse, count: 2 });
+    expect(cost.parts.find((p) => p.label === "A player block")).toEqual({ label: "A player block", cost: blocks, count: 2 });
+    // Most expensive first, with the base always last.
+    const own = cost.parts.slice(0, -1).map((p) => p.cost);
+    expect(own).toEqual([...own].sort((a, b) => b - a));
+    expect(cost.parts.at(-1)?.label).toBe("Base");
+  });
+
+  it("charges or groups and not", () => {
+    const zone = { field: "instance.name", op: "=" as const, value: "Molten Core" };
+    const base = queryCost({ and: [zone, zone] }, desc).total;
+    expect(queryCost({ or: [zone, zone] }, desc).total).toBe(base + desc.cost_or);
+    expect(queryCost({ not: zone }, desc).total).toBe(desc.cost_base + desc.cost_not + fieldCost("instance.name"));
   });
 });
 
 describe("nodeCost", () => {
   it("is a block's own share, nested blocks included", () => {
     const parse = { field: "player.parse", op: ">=" as const, value: 95 };
-    expect(nodeCost({ any_player: parse }, desc)).toBe(2 + 15);
-    expect(nodeCost({ not: { any_player: parse } }, desc)).toBe(2 + 15);
+    const block = desc.cost_any + desc.fields.find((f) => f.name === "player.parse")!.cost;
+    expect(nodeCost({ any_player: parse }, desc)).toBe(block);
+    expect(nodeCost({ not: { any_player: parse } }, desc)).toBe(desc.cost_not + block);
     // Top-level blocks add up to the total, minus the base.
     const tree = { and: [{ any_player: parse }, { field: "instance.name", op: "=" as const, value: "Molten Core" }] };
     expect(tree.and.reduce((sum, n) => sum + nodeCost(n, desc), 0)).toBe(queryCost(tree, desc).total - desc.cost_base);
@@ -51,7 +65,8 @@ describe("nodeCost", () => {
 
 describe("complexity", () => {
   it("rates by cost, and anything over the whole budget is too complex", () => {
-    expect([5, 12, 40, 80].map((c) => complexity(c, 300).label)).toEqual(["Light", "Moderate", "Heavy", "Very heavy"]);
+    const { light, moderate, heavy } = LEVEL_LIMITS;
+    expect([light - 1, light, moderate, heavy].map((c) => complexity(c, 10_000).label)).toEqual(["Light", "Moderate", "Heavy", "Very heavy"]);
     expect(complexity(301, 300).label).toBe("Too complex");
     expect(complexity(301, null).label).toBe("Very heavy");
   });

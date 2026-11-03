@@ -19,8 +19,8 @@ export interface QueryCost {
 /**
  * The rate-limit cost the server will charge for a search, worked out the
  * same way the compiler does (instancesearch.Compile): a base, each field's
- * cost, and a weight per player / pull block and per count block; and / or /
- * not are free. The weights come from GET /search/fields, so they always match
+ * cost, and a weight per or group, not, player / pull block and count block;
+ * and groups are free. The weights come from GET /search/fields, so they always match
  * the backend. Pass the tree that will be sent (already pruned).
  */
 export function queryCost(tree: Node | undefined, desc: InstanceSearchFieldsResponse): QueryCost {
@@ -35,8 +35,13 @@ export function queryCost(tree: Node | undefined, desc: InstanceSearchFieldsResp
 
   const walk = (n: Node | undefined) => {
     if (!n) return;
-    if (n.and || n.or) (n.and ?? n.or ?? []).forEach(walk);
-    else if (n.not) walk(n.not);
+    if (n.and || n.or) {
+      if (n.or) add("Or group", desc.cost_or);
+      (n.and ?? n.or ?? []).forEach(walk);
+    } else if (n.not) {
+      add("Not", desc.cost_not);
+      walk(n.not);
+    }
     else if (n.any_player || n.any_encounter) {
       add(n.any_player ? "A player block" : "A pull block", desc.cost_any);
       walk(n.any_player ?? n.any_encounter);
@@ -59,6 +64,9 @@ export function nodeCost(n: Node, desc: InstanceSearchFieldsResponse): number {
   return queryCost(n, desc).total - desc.cost_base;
 }
 
+/** Upper bounds (exclusive) for each level; anything at or above heavy is Very heavy. */
+export const LEVEL_LIMITS = { light: 20, moderate: 50, heavy: 120 };
+
 export type ComplexityLevel = "light" | "moderate" | "heavy" | "very_heavy" | "too_complex";
 
 export interface Complexity {
@@ -75,9 +83,9 @@ export interface Complexity {
  */
 export function complexity(cost: number, budgetLimit: number | null): Complexity {
   if (budgetLimit != null && cost > budgetLimit) return { level: "too_complex", label: "Too complex", steps: 4 };
-  if (cost < 10) return { level: "light", label: "Light", steps: 1 };
-  if (cost < 25) return { level: "moderate", label: "Moderate", steps: 2 };
-  if (cost < 60) return { level: "heavy", label: "Heavy", steps: 3 };
+  if (cost < LEVEL_LIMITS.light) return { level: "light", label: "Light", steps: 1 };
+  if (cost < LEVEL_LIMITS.moderate) return { level: "moderate", label: "Moderate", steps: 2 };
+  if (cost < LEVEL_LIMITS.heavy) return { level: "heavy", label: "Heavy", steps: 3 };
   return { level: "very_heavy", label: "Very heavy", steps: 4 };
 }
 

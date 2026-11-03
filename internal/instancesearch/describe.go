@@ -15,6 +15,8 @@ func Describe() chroniclesdk.InstanceSearchFieldsResponse {
 		AnonymousMaxPredicates: anonymousMaxPredicates,
 		AnonymousMaxLimit:      anonymousMaxLimit,
 		CostBase:               baseCost,
+		CostOr:                 orCost,
+		CostNot:                notCost,
 		CostAny:                anyQuantCost,
 		CostCount:              countQuantCost,
 	}

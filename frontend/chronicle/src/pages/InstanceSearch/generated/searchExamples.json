@@ -21,7 +21,7 @@
         }
       ]
     },
-    "cost": 4
+    "cost": 11
   },
   {
     "id": "26_partial_zone_and_guild_name",
@@ -42,7 +42,7 @@
         }
       ]
     },
-    "cost": 3
+    "cost": 5
   },
   {
     "id": "02_rag_kill_without_wipes",
@@ -87,7 +87,7 @@
         }
       ]
     },
-    "cost": 9
+    "cost": 18
   },
   {
     "id": "03_nefarian_progression",
@@ -114,7 +114,7 @@
         "value": 5
       }
     },
-    "cost": 6
+    "cost": 15
   },
   {
     "id": "16_deathless_ragnaros",
@@ -145,7 +145,7 @@
         }
       ]
     },
-    "cost": 9
+    "cost": 18
   },
   {
     "id": "19_naxx_partial_progress",
@@ -171,7 +171,7 @@
         }
       ]
     },
-    "cost": 6
+    "cost": 11
   },
   {
     "id": "04_top_realm_clear_parse",
@@ -184,7 +184,7 @@
       "value": 95,
       "parse_scope": "realm"
     },
-    "cost": 4
+    "cost": 7
   },
   {
     "id": "05_kill_parse_each_boss",
@@ -201,7 +201,7 @@
       ],
       "match": "each"
     },
-    "cost": 5
+    "cost": 9
   },
   {
     "id": "06_guild_best_kill_any_boss",
@@ -214,7 +214,7 @@
       "value": 99,
       "parse_scope": "guild"
     },
-    "cost": 5
+    "cost": 9
   },
   {
     "id": "07_tight_clear_low_idle",
@@ -235,7 +235,7 @@
         }
       ]
     },
-    "cost": 21
+    "cost": 41
   },
   {
     "id": "08_bwl_short_boss_time",
@@ -256,7 +256,7 @@
         }
       ]
     },
-    "cost": 12
+    "cost": 23
   },
   {
     "id": "17_fast_ragnaros_kill",
@@ -271,7 +271,7 @@
         "Ragnaros"
       ]
     },
-    "cost": 4
+    "cost": 7
   },
   {
     "id": "29_october_mc_clears_60_to_75_min",
@@ -303,7 +303,7 @@
         }
       ]
     },
-    "cost": 5
+    "cost": 9
   },
   {
     "id": "09_three_or_more_priests",
@@ -321,7 +321,7 @@
         "value": 3
       }
     },
-    "cost": 5
+    "cost": 13
   },
   {
     "id": "10_two_holy_paladins",
@@ -348,7 +348,7 @@
         "value": 2
       }
     },
-    "cost": 8
+    "cost": 19
   },
   {
     "id": "11_druid_bear_and_cat",
@@ -376,7 +376,7 @@
         ]
       }
     },
-    "cost": 10
+    "cost": 19
   },
   {
     "id": "15_guild_core_in_pug",
@@ -405,7 +405,7 @@
         }
       ]
     },
-    "cost": 7
+    "cost": 18
   },
   {
     "id": "20_geared_tanks",
@@ -432,7 +432,7 @@
         "value": 2
       }
     },
-    "cost": 10
+    "cost": 23
   },
   {
     "id": "25_bear_trash_cat_bosses",
@@ -465,7 +465,7 @@
         ]
       }
     },
-    "cost": 12
+    "cost": 24
   },
   {
     "id": "12_player_rag_dps_parse",
@@ -492,7 +492,7 @@
         ]
       }
     },
-    "cost": 19
+    "cost": 28
   },
   {
     "id": "13_healer_parse_each_boss",
@@ -512,7 +512,7 @@
         "metric": "hps"
       }
     },
-    "cost": 18
+    "cost": 26
   },
   {
     "id": "24_full_telemetry_rag_kill",
@@ -549,7 +549,7 @@
         }
       ]
     },
-    "cost": 7
+    "cost": 13
   },
   {
     "id": "23_complex_speed_comp",
@@ -608,7 +608,7 @@
         }
       ]
     },
-    "cost": 20
+    "cost": 46
   },
   {
     "id": "27_gnome_warrior_bwl_deathless_vod",
@@ -733,7 +733,7 @@
         }
       ]
     },
-    "cost": 44
+    "cost": 96
   },
   {
     "id": "28_one_pull_rag_cat_shaman_carry",
@@ -873,6 +873,6 @@
         }
       ]
     },
-    "cost": 52
+    "cost": 100
   }
 ]

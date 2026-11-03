@@ -1,6 +1,6 @@
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
-import { COMPLEXITY_STYLE, complexity, type QueryCost } from "./searchCost";
+import { COMPLEXITY_STYLE, LEVEL_LIMITS, complexity, type QueryCost } from "./searchCost";
 import type { SearchBudget } from "./searchApi";
 
 /**
@@ -68,7 +68,7 @@ export function CostLine({
           </li>
         </ul>
         <p className="mt-2 text-[11px] text-muted-foreground">
-          Light under 10, Moderate under 25, Heavy under 60, then Very heavy. Searches spend from a budget that refills over time;
+          Light under {LEVEL_LIMITS.light}, Moderate under {LEVEL_LIMITS.moderate}, Heavy under {LEVEL_LIMITS.heavy}, then Very heavy. Searches spend from a budget that refills over time;
           parses across players and boss / trash / idle time cost the most.
         </p>
       </TooltipContent>

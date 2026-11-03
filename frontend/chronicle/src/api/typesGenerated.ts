@@ -3069,10 +3069,13 @@ export interface InstanceSearchFieldsResponse {
     readonly anonymous_max_limit: number;
     /**
      * Cost weights, so UIs can show a query's cost before running it:
-     * CostBase + each field's Cost + CostAny per any_player / any_encounter +
-     * CostCount per count_players / count_encounters. and / or / not are free.
+     * CostBase + each field's Cost + CostOr per or group + CostNot per not +
+     * CostAny per any_player / any_encounter + CostCount per count_players /
+     * count_encounters. and groups are free.
      */
     readonly cost_base: number;
+    readonly cost_or: number;
+    readonly cost_not: number;
     readonly cost_any: number;
     readonly cost_count: number;
 }
