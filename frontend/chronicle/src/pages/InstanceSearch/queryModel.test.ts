@@ -36,6 +36,8 @@ function fullForm(): SearchForm {
     from: "2026-10-01",
     to: "2026-10-31",
     difficulty: "40 Player",
+    maxPlayers: 40,
+    hasVideo: true,
     killed: ["Ragnaros"],
     noWipes: ["Ragnaros", "Majordomo Executus"],
     parseScope: "realm",
@@ -45,6 +47,12 @@ function fullForm(): SearchForm {
     killParseMatch: "each",
     clearTimeMaxMinutes: 60,
     idleTimeMaxMinutes: 5,
+    bossTimeMaxMinutes: 20,
+    trashTimeMaxMinutes: 35,
+    bossesKilledMin: 8,
+    wipesMax: 0,
+    deathsMax: 10,
+    bossKillTimes: [{ boss: "Ragnaros", maxMinutes: 2 }],
     classCounts: [
       { class: "PRIEST", spec: "", subSpec: "", min: 3 },
       { class: "PALADIN", spec: "Holy", subSpec: "", min: 2 },
@@ -52,6 +60,14 @@ function fullForm(): SearchForm {
     ],
     players: ["Thrall"],
     guildCounts: [{ guild: "Beta", min: 10 }],
+    playerParses: [
+      { name: "", class: "WARRIOR", spec: "Fury", subSpec: "", min: 95, metric: "dps", bosses: ["Ragnaros"] },
+      { name: "Thrall", class: "", spec: "", subSpec: "", min: 90, metric: "hps", bosses: [] },
+    ],
+    playerStats: [
+      { name: "Thrall", stat: "dps", min: 3000, bosses: [] },
+      { name: "", stat: "avg_ilvl", min: 70, bosses: ["Ragnaros"] },
+    ],
     capabilities: ["unit-position", "unit-resources"],
   };
 }
@@ -117,9 +133,15 @@ describe("formToTree / treeToForm", () => {
   it("returns null for trees the form cannot show", () => {
     const or: Node = { or: [{ field: "instance.name", op: "=", value: "a" }, { field: "instance.name", op: "=", value: "b" }] };
     expect(treeToForm(or)).toBeNull();
-    expect(treeToForm({ and: [{ any_player: { field: "player.parse", op: ">=", value: 90 } }] })).toBeNull();
+    expect(treeToForm({ and: [{ any_player: { field: "player.parse", op: "<", value: 90 } }] })).toBeNull();
+    expect(treeToForm({ and: [{ any_player: { and: [{ field: "player.deaths", op: ">=", value: 3 }, { field: "player.parse", op: ">=", value: 90 }] } }] })).toBeNull();
     // Two zone filters can't both fit in the single zone box.
     expect(treeToForm({ and: [{ field: "instance.name", op: "=", value: "a" }, { field: "instance.name", op: "=", value: "b" }] })).toBeNull();
+  });
+
+  it("reads the one-player parse example as a form", () => {
+    const ex = EXAMPLES.find((e) => e.id === "12_player_rag_dps_parse")!;
+    expect(treeToForm(ex.where)?.playerParses).toEqual([{ name: "Thrall", class: "", spec: "", subSpec: "", min: 95, metric: "dps", bosses: ["Ragnaros"] }]);
   });
 
   it("accepts a single top-level predicate", () => {
@@ -130,6 +152,8 @@ describe("formToTree / treeToForm", () => {
     expect(formIsBasic({ ...emptyForm(), zone: "mc", realm: "x", from: "2026-01-01" })).toBe(true);
     expect(formIsBasic({ ...emptyForm(), killed: ["Ragnaros"] })).toBe(false);
     expect(formIsBasic({ ...emptyForm(), capabilities: ["unit-position"] })).toBe(false);
+    expect(formIsBasic({ ...emptyForm(), hasVideo: true })).toBe(false);
+    expect(formIsBasic({ ...emptyForm(), playerStats: [{ name: "", stat: "dps", min: 1, bosses: [] }] })).toBe(false);
   });
 });
 

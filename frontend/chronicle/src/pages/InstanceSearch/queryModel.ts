@@ -134,6 +134,35 @@ export interface GuildCount {
   min: number;
 }
 
+/** A boss killed within a time limit. */
+export interface BossKillTime {
+  boss: string;
+  maxMinutes: number | null;
+}
+
+export type ParseMetric = "dps" | "hps";
+
+/** One player (optionally named, optionally a class / spec) who parsed at least min. */
+export interface PlayerParse {
+  name: string;
+  class: string;
+  spec: string;
+  subSpec: string;
+  min: number | null;
+  metric: ParseMetric;
+  bosses: string[];
+}
+
+export type PlayerStatField = "dps" | "hps" | "avg_ilvl";
+
+/** One player (optionally named) with a fight stat of at least min. */
+export interface PlayerStat {
+  name: string;
+  stat: PlayerStatField;
+  min: number | null;
+  bosses: string[];
+}
+
 /** The simple search form. Empty / null fields are ignored. */
 export interface SearchForm {
   zone: string;
@@ -146,6 +175,8 @@ export interface SearchForm {
   /** yyyy-mm-dd, inclusive. */
   to: string;
   difficulty: string;
+  maxPlayers: number | null;
+  hasVideo: boolean;
 
   killed: string[];
   noWipes: string[];
@@ -156,10 +187,18 @@ export interface SearchForm {
   killParseMatch: InstanceSearchMatch;
   clearTimeMaxMinutes: number | null;
   idleTimeMaxMinutes: number | null;
+  bossTimeMaxMinutes: number | null;
+  trashTimeMaxMinutes: number | null;
+  bossesKilledMin: number | null;
+  wipesMax: number | null;
+  deathsMax: number | null;
+  bossKillTimes: BossKillTime[];
 
   classCounts: ClassCount[];
   players: string[];
   guildCounts: GuildCount[];
+  playerParses: PlayerParse[];
+  playerStats: PlayerStat[];
 
   capabilities: string[];
 }
@@ -174,6 +213,8 @@ export function emptyForm(): SearchForm {
     from: "",
     to: "",
     difficulty: "",
+    maxPlayers: null,
+    hasVideo: false,
     killed: [],
     noWipes: [],
     parseScope: "server",
@@ -183,29 +224,28 @@ export function emptyForm(): SearchForm {
     killParseMatch: "any",
     clearTimeMaxMinutes: null,
     idleTimeMaxMinutes: null,
+    bossTimeMaxMinutes: null,
+    trashTimeMaxMinutes: null,
+    bossesKilledMin: null,
+    wipesMax: null,
+    deathsMax: null,
+    bossKillTimes: [],
     classCounts: [],
     players: [],
     guildCounts: [],
+    playerParses: [],
+    playerStats: [],
     capabilities: [],
   };
 }
 
+/** Form fields anonymous users may search (the anonymous instance fields). */
+const BASIC_KEYS: (keyof SearchForm)[] = ["zone", "zoneMatch", "realm", "guild", "guildMatch", "from", "to", "difficulty"];
+
 /** True when the form only uses fields anonymous users may search. */
 export function formIsBasic(f: SearchForm): boolean {
   const e = emptyForm();
-  return (
-    f.killed.length === 0 &&
-    f.noWipes.length === 0 &&
-    f.clearParseMin == null &&
-    f.killParseMin == null &&
-    f.clearTimeMaxMinutes == null &&
-    f.idleTimeMaxMinutes == null &&
-    f.classCounts.length === 0 &&
-    f.players.length === 0 &&
-    f.guildCounts.length === 0 &&
-    f.capabilities.length === 0 &&
-    f.parseScope === e.parseScope
-  );
+  return (Object.keys(e) as (keyof SearchForm)[]).every((k) => BASIC_KEYS.includes(k) || JSON.stringify(f[k]) === JSON.stringify(e[k]));
 }
 
 const MINUTE_MS = 60_000;
@@ -232,6 +272,42 @@ function killedNode(boss: string): Node {
   return { any_encounter: { and: [pred("encounter.name", "=", boss), pred("encounter.killed", "=", true)] } };
 }
 
+function bossKillTimeNode(k: BossKillTime): Node {
+  const conds = [pred("encounter.name", "=", k.boss.trim()), pred("encounter.killed", "=", true)];
+  if (k.maxMinutes != null) conds.push(pred("encounter.duration_ms", "<=", Math.round(k.maxMinutes * MINUTE_MS)));
+  return { any_encounter: { and: conds } };
+}
+
+/** class, spec, sub-spec equality on one player, in that order. */
+function classSpecConds(c: { class: string; spec: string; subSpec: string }): Node[] {
+  const conds: Node[] = [];
+  if (c.class) conds.push(pred("player.class", "=", c.class));
+  if (c.spec.trim()) conds.push(pred("player.spec", "=", c.spec.trim()));
+  if (c.subSpec.trim()) conds.push(pred("player.sub_spec", "=", c.subSpec.trim()));
+  return conds;
+}
+
+function bossesOpt(bosses: string[]): Partial<Node> {
+  return bosses.length ? { bosses } : {};
+}
+
+/** any_player: [name], parse, [class, spec, sub-spec]. */
+function playerParseNode(p: PlayerParse): Node | null {
+  if (p.min == null) return null;
+  const conds: Node[] = [];
+  if (p.name.trim()) conds.push(pred("player.name", "=", p.name.trim()));
+  conds.push(pred("player.parse", ">=", p.min, { ...bossesOpt(p.bosses), ...(p.metric === "hps" ? { metric: "hps" } : {}) }));
+  conds.push(...classSpecConds(p));
+  return { any_player: conds.length === 1 ? conds[0] : { and: conds } };
+}
+
+/** any_player: [name], stat. */
+function playerStatNode(p: PlayerStat): Node | null {
+  if (p.min == null) return null;
+  const stat = pred(`player.${p.stat}`, ">=", p.min, bossesOpt(p.bosses));
+  return { any_player: p.name.trim() ? { and: [pred("player.name", "=", p.name.trim()), stat] } : stat };
+}
+
 function noWipeNode(boss: string): Node {
   return { not: { any_encounter: { and: [pred("encounter.name", "=", boss), pred("encounter.outcome", "=", "wipe")] } } };
 }
@@ -247,9 +323,15 @@ export function formToTree(f: SearchForm): Node | undefined {
   if (f.from) parts.push(pred("instance.started_at", ">=", dayStart(f.from)));
   if (f.to) parts.push(pred("instance.started_at", "<", nextDayStart(f.to)));
   if (f.difficulty.trim()) parts.push(pred("instance.difficulty", "=", f.difficulty.trim()));
+  if (f.maxPlayers != null) parts.push(pred("instance.max_players", "=", f.maxPlayers));
+  if (f.hasVideo) parts.push(pred("instance.has_video", "=", true));
 
   for (const boss of f.killed) parts.push(killedNode(boss));
   for (const boss of f.noWipes) parts.push(noWipeNode(boss));
+  for (const k of f.bossKillTimes) if (k.boss.trim()) parts.push(bossKillTimeNode(k));
+  if (f.bossesKilledMin != null) parts.push(pred("instance.bosses_killed", ">=", f.bossesKilledMin));
+  if (f.wipesMax != null) parts.push(pred("instance.wipes", "<=", f.wipesMax));
+  if (f.deathsMax != null) parts.push(pred("instance.deaths", "<=", f.deathsMax));
   if (f.clearParseMin != null) parts.push(pred("instance.clear_parse", ">=", f.clearParseMin, scope));
   if (f.killParseMin != null) {
     parts.push(
@@ -262,13 +344,12 @@ export function formToTree(f: SearchForm): Node | undefined {
   }
   if (f.clearTimeMaxMinutes != null) parts.push(pred("instance.clear_time_ms", "<=", Math.round(f.clearTimeMaxMinutes * MINUTE_MS)));
   if (f.idleTimeMaxMinutes != null) parts.push(pred("instance.idle_time_ms", "<=", Math.round(f.idleTimeMaxMinutes * MINUTE_MS)));
+  if (f.bossTimeMaxMinutes != null) parts.push(pred("instance.boss_time_ms", "<=", Math.round(f.bossTimeMaxMinutes * MINUTE_MS)));
+  if (f.trashTimeMaxMinutes != null) parts.push(pred("instance.trash_time_ms", "<=", Math.round(f.trashTimeMaxMinutes * MINUTE_MS)));
 
   for (const c of f.classCounts) {
     // All parts refer to the same player: e.g. a Paladin who was Holy.
-    const conds: Node[] = [];
-    if (c.class) conds.push(pred("player.class", "=", c.class));
-    if (c.spec.trim()) conds.push(pred("player.spec", "=", c.spec.trim()));
-    if (c.subSpec.trim()) conds.push(pred("player.sub_spec", "=", c.subSpec.trim()));
+    const conds = classSpecConds(c);
     if (conds.length === 0) continue;
     const where = conds.length === 1 ? conds[0] : { and: conds };
     parts.push({ count_players: { where, op: ">=", value: c.min } });
@@ -278,6 +359,14 @@ export function formToTree(f: SearchForm): Node | undefined {
   }
   for (const g of f.guildCounts) {
     if (g.guild.trim()) parts.push({ count_players: { where: pred("player.guild", "=", g.guild.trim()), op: ">=", value: g.min } });
+  }
+  for (const p of f.playerParses) {
+    const n = playerParseNode(p);
+    if (n) parts.push(n);
+  }
+  for (const p of f.playerStats) {
+    const n = playerStatNode(p);
+    if (n) parts.push(n);
   }
   for (const cap of f.capabilities) parts.push(pred("instance.capability", "=", cap));
 
@@ -332,6 +421,50 @@ function classSpecOf(w: Node | undefined): { class: string; spec: string; subSpe
   return out;
 }
 
+/** any_encounter: name, killed, [duration ≤]. */
+function bossKillTimeOf(inner: Node | undefined): BossKillTime | null {
+  const kids = inner?.and;
+  if (!kids || inner?.or || kids.length !== 3) return null;
+  const [a, b, c] = kids;
+  if (!isPred(a, "encounter.name", "=") || asString(a.value) == null) return null;
+  if (!isPred(b, "encounter.killed", "=") || b.value !== true) return null;
+  if (!isPred(c, "encounter.duration_ms", "<=") || asNumber(c.value) == null) return null;
+  return { boss: a.value as string, maxMinutes: (c.value as number) / MINUTE_MS };
+}
+
+/** Splits a player block into its conditions, taking a leading name. */
+function playerConds(p: Node): { name: string; rest: Node[] } | null {
+  const conds = p.and ?? (p.field ? [p] : null);
+  if (!conds || p.or || conds.length === 0) return null;
+  const first = conds[0];
+  if (isPred(first, "player.name", "=") && asString(first.value) != null && !first.bosses && !first.on) {
+    return { name: first.value as string, rest: conds.slice(1) };
+  }
+  return { name: "", rest: [...conds] };
+}
+
+function playerParseOf(p: Node): PlayerParse | null {
+  const pc = playerConds(p);
+  const parse = pc?.rest[0];
+  if (!pc || !parse || !isPred(parse, "player.parse", ">=") || asNumber(parse.value) == null || parse.match || parse.parse_scope || parse.on) return null;
+  if (parse.metric && parse.metric !== "dps" && parse.metric !== "hps") return null;
+  const rest = pc.rest.slice(1);
+  const cs = rest.length ? classSpecOf(rest.length === 1 ? rest[0] : { and: rest }) : { class: "", spec: "", subSpec: "" };
+  if (!cs) return null;
+  return { name: pc.name, ...cs, min: parse.value as number, metric: parse.metric === "hps" ? "hps" : "dps", bosses: [...(parse.bosses ?? [])] };
+}
+
+const STAT_FIELDS: Record<string, PlayerStatField> = { "player.dps": "dps", "player.hps": "hps", "player.avg_ilvl": "avg_ilvl" };
+
+function playerStatOf(p: Node): PlayerStat | null {
+  const pc = playerConds(p);
+  if (!pc || pc.rest.length !== 1) return null;
+  const st = pc.rest[0];
+  const stat = st.field ? STAT_FIELDS[st.field] : undefined;
+  if (!stat || !isPred(st, st.field!, ">=") || asNumber(st.value) == null || st.match || st.on || st.metric || st.parse_scope) return null;
+  return { name: pc.name, stat, min: st.value as number, bosses: [...(st.bosses ?? [])] };
+}
+
 /**
  * Converts a tree back into the form, or returns null when the tree uses
  * anything the form can't show (then it can only be edited as blocks).
@@ -370,6 +503,20 @@ export function treeToForm(tree: Node | undefined): SearchForm | null {
         f.to = d.toISOString().slice(0, 10);
       } else if (isPred(n, "instance.difficulty", "=") && s != null && !f.difficulty) {
         f.difficulty = s;
+      } else if (isPred(n, "instance.max_players", "=") && num != null && f.maxPlayers == null) {
+        f.maxPlayers = num;
+      } else if (isPred(n, "instance.has_video", "=") && n.value === true && !f.hasVideo) {
+        f.hasVideo = true;
+      } else if (isPred(n, "instance.bosses_killed", ">=") && num != null && f.bossesKilledMin == null) {
+        f.bossesKilledMin = num;
+      } else if (isPred(n, "instance.wipes", "<=") && num != null && f.wipesMax == null) {
+        f.wipesMax = num;
+      } else if (isPred(n, "instance.deaths", "<=") && num != null && f.deathsMax == null) {
+        f.deathsMax = num;
+      } else if (isPred(n, "instance.boss_time_ms", "<=") && num != null && f.bossTimeMaxMinutes == null) {
+        f.bossTimeMaxMinutes = num / MINUTE_MS;
+      } else if (isPred(n, "instance.trash_time_ms", "<=") && num != null && f.trashTimeMaxMinutes == null) {
+        f.trashTimeMaxMinutes = num / MINUTE_MS;
       } else if (isPred(n, "instance.clear_parse", ">=") && num != null && f.clearParseMin == null && takeScope(n)) {
         f.clearParseMin = num;
       } else if (isPred(n, "instance.kill_time_parse", ">=") && num != null && f.killParseMin == null && takeScope(n)) {
@@ -388,6 +535,11 @@ export function treeToForm(tree: Node | undefined): SearchForm | null {
       continue;
     }
     if (n.any_encounter) {
+      const timed = bossKillTimeOf(n.any_encounter);
+      if (timed) {
+        f.bossKillTimes.push(timed);
+        continue;
+      }
       const boss = bossOf(n.any_encounter, (b) => isPred(b, "encounter.killed", "=") && b.value === true);
       if (boss == null) return null;
       f.killed.push(boss);
@@ -401,6 +553,16 @@ export function treeToForm(tree: Node | undefined): SearchForm | null {
     }
     if (n.any_player) {
       const p = n.any_player;
+      const parse = playerParseOf(p);
+      if (parse) {
+        f.playerParses.push(parse);
+        continue;
+      }
+      const stat = playerStatOf(p);
+      if (stat) {
+        f.playerStats.push(stat);
+        continue;
+      }
       if (!isPred(p, "player.name", "=") || asString(p.value) == null) return null;
       f.players.push(p.value as string);
       continue;

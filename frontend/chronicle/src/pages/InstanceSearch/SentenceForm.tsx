@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Popover as PopoverPrimitive } from "radix-ui";
-import { Check, Clock, Film, Gauge, Hourglass, Lock, Plus, ShieldCheck, Skull, Swords, Trophy, User, Users, X, type LucideIcon } from "lucide-react";
+import { Check, Lock, Plus, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   DropdownMenu,
@@ -14,138 +14,94 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { parseColor } from "@/pages/Instance/parseColors";
+import { TIER_COLOR } from "@/pages/Settings/billingPricing";
 import { ChipInput, NumberInput, Segmented, SuggestInput, ToggleChips } from "./controls";
 import { MATCH_OPTIONS, PARSE_SCOPE_OPTIONS, enumLabel } from "./fieldLabels";
 import { ClassSpecPicker } from "./ClassSpecPicker";
 import { toOptions, type Suggestion } from "./comboOptions";
-import type { SearchForm as Form, TextMatch } from "./queryModel";
-import type { SearchFormProps } from "./SearchForm";
+import type { SearchForm as Form, PlayerStatField, TextMatch } from "./queryModel";
+import { KINDS, KIND_DEF, cleared, hasValue, type Kind, type KindDef } from "./sentenceKinds";
 
 /*
  * The search form as a sentence: "Find [Molten Core] runs by [any guild] on
  * [any realm] [any time], where [Ragnaros] died and …". Every bracketed token
  * opens a small editor. Conditions only appear once added, so an empty search
- * is one short line instead of a wall of inputs. It edits the same Form as
- * before, so formToTree / treeToForm are unchanged.
+ * is one short line instead of a wall of inputs.
+ * The conditions and their tiers are in sentenceKinds.ts.
  */
+
+export interface SearchFormProps {
+  form: Form;
+  onChange: (form: Form) => void;
+  zones: readonly Suggestion[];
+  /** Bosses for the chosen zone (or every boss when no zone is chosen). */
+  bosses: readonly Suggestion[];
+  realms: readonly Suggestion[];
+  classes: readonly string[];
+  capabilities: readonly string[];
+  loggedIn: boolean;
+  /** Honored supporters get the expensive conditions. */
+  honored: boolean;
+}
 
 const TEXT_MATCH_OPTIONS: { value: TextMatch; label: string }[] = [
   { value: "contains", label: "contains" },
   { value: "exact", label: "exact" },
 ];
 
-/** Conditions that are one line each. classCount / guildCount add a line per entry. */
-type Kind = "killed" | "noWipes" | "clearParse" | "killParse" | "clearTime" | "idleTime" | "classCount" | "players" | "guildCount" | "capabilities" | "difficulty";
+const HONORED = TIER_COLOR.honored;
 
-interface KindDef {
-  kind: Kind;
-  icon: LucideIcon;
-  /** What the menu shows, phrased like the sentence. */
-  label: string;
-  group: string;
-  /** Anonymous users can add it. */
-  basic?: boolean;
-}
-
-const KINDS: KindDef[] = [
-  { kind: "killed", icon: Skull, label: "…a boss died", group: "Bosses" },
-  { kind: "noWipes", icon: ShieldCheck, label: "…a boss was never wiped on", group: "Bosses" },
-  { kind: "killParse", icon: Trophy, label: "…kill time parsed well", group: "Parses" },
-  { kind: "clearParse", icon: Gauge, label: "…the clear parsed well", group: "Parses" },
-  { kind: "clearTime", icon: Clock, label: "…the clear was fast", group: "Speed" },
-  { kind: "idleTime", icon: Hourglass, label: "…little time was spent idle", group: "Speed" },
-  { kind: "classCount", icon: Users, label: "…the raid had a class or spec", group: "Roster" },
-  { kind: "players", icon: User, label: "…a player was in the raid", group: "Roster" },
-  { kind: "guildCount", icon: Users, label: "…members of a guild attended", group: "Roster" },
-  { kind: "capabilities", icon: Film, label: "…the log recorded something", group: "Log" },
-  { kind: "difficulty", icon: Swords, label: "…the difficulty was", group: "Run", basic: true },
-];
-
-/** Whether a single-line condition has a value. */
-function hasValue(f: Form, k: Kind): boolean {
-  switch (k) {
-    case "killed":
-      return f.killed.length > 0;
-    case "noWipes":
-      return f.noWipes.length > 0;
-    case "clearParse":
-      return f.clearParseMin != null;
-    case "killParse":
-      return f.killParseMin != null || f.killParseBosses.length > 0;
-    case "clearTime":
-      return f.clearTimeMaxMinutes != null;
-    case "idleTime":
-      return f.idleTimeMaxMinutes != null;
-    case "players":
-      return f.players.length > 0;
-    case "capabilities":
-      return f.capabilities.length > 0;
-    case "difficulty":
-      return f.difficulty.trim() !== "";
-    default:
-      return false;
-  }
-}
-
-/** Resets a single-line condition. */
-function cleared(k: Kind): Partial<Form> {
-  switch (k) {
-    case "killed":
-      return { killed: [] };
-    case "noWipes":
-      return { noWipes: [] };
-    case "clearParse":
-      return { clearParseMin: null };
-    case "killParse":
-      return { killParseMin: null, killParseBosses: [], killParseMatch: "any" };
-    case "clearTime":
-      return { clearTimeMaxMinutes: null };
-    case "idleTime":
-      return { idleTimeMaxMinutes: null };
-    case "players":
-      return { players: [] };
-    case "capabilities":
-      return { capabilities: [] };
-    case "difficulty":
-      return { difficulty: "" };
-    default:
-      return {};
-  }
-}
-
-const SINGLE_KINDS: Kind[] = ["killed", "noWipes", "killParse", "clearParse", "clearTime", "idleTime", "players", "capabilities", "difficulty"];
-
-export function SentenceForm({ form, onChange, zones, bosses, realms, classes, capabilities, loggedIn }: SearchFormProps) {
+export function SentenceForm({ form, onChange, zones, bosses, realms, classes, capabilities, loggedIn, honored }: SearchFormProps) {
   const patch = (p: Partial<Form>) => onChange({ ...form, ...p });
   const set = <K extends keyof Form>(key: K, value: Form[K]) => patch({ [key]: value } as Partial<Form>);
-  const locked = !loggedIn;
   // Conditions added but not filled in yet stay on screen.
   const [added, setAdded] = useState<Kind[]>([]);
   // The condition just added opens its editor right away.
   const [fresh, setFresh] = useState<Kind | null>(null);
 
-  const shown = SINGLE_KINDS.filter((k) => hasValue(form, k) || added.includes(k));
+  const isLocked = (k: Kind) => {
+    const tier = KIND_DEF.get(k)!.tier;
+    return tier === "honored" ? !honored : tier === "free" ? !loggedIn : false;
+  };
+  const single = KINDS.filter((d) => !d.list && (hasValue(form, d.kind) || added.includes(d.kind))).map((d) => d.kind);
   const remove = (k: Kind) => {
     setAdded(added.filter((x) => x !== k));
     patch(cleared(k));
   };
   const add = (k: Kind) => {
     setFresh(k);
-    if (k === "classCount") return set("classCounts", [...form.classCounts, { class: classes[0] ?? "WARRIOR", spec: "", subSpec: "", min: 1 }]);
-    if (k === "guildCount") return set("guildCounts", [...form.guildCounts, { guild: "", min: 5 }]);
-    setAdded([...added, k]);
+    switch (k) {
+      case "classCount":
+        return set("classCounts", [...form.classCounts, { class: classes[0] ?? "WARRIOR", spec: "", subSpec: "", min: 1 }]);
+      case "guildCount":
+        return set("guildCounts", [...form.guildCounts, { guild: "", min: 5 }]);
+      case "bossKillTime":
+        return set("bossKillTimes", [...form.bossKillTimes, { boss: "", maxMinutes: null }]);
+      case "playerParse":
+        return set("playerParses", [...form.playerParses, { name: "", class: "", spec: "", subSpec: "", min: null, metric: "dps", bosses: [] }]);
+      case "playerStat":
+        return set("playerStats", [...form.playerStats, { name: "", stat: "dps", min: null, bosses: [] }]);
+      case "hasVideo":
+        return set("hasVideo", true);
+      default:
+        setAdded([...added, k]);
+    }
   };
-  const isLocked = (k: Kind) => locked && !KINDS.find((d) => d.kind === k)?.basic;
+  /** Replaces item i of a list field. */
+  const updateAt = <K extends "classCounts" | "guildCounts" | "bossKillTimes" | "playerParses" | "playerStats">(key: K, i: number, v: Partial<Form[K][number]>) =>
+    set(key, (form[key] as Form[K][number][]).map((x, j) => (j === i ? { ...x, ...v } : x)) as Form[K]);
+  const removeAt = <K extends "classCounts" | "guildCounts" | "bossKillTimes" | "playerParses" | "playerStats">(key: K, i: number) =>
+    set(key, (form[key] as Form[K][number][]).filter((_, j) => j !== i) as Form[K]);
 
-  const scopeToken = (
-    <Token label={`the ${form.parseScope}`} filled tone="muted" disabled={locked} width="w-auto">
+  const scopeToken = (dis: boolean) => (
+    <Token label={`the ${form.parseScope}`} filled tone="muted" disabled={dis} width="w-auto">
       <p className="text-2xs text-muted-foreground mb-2">Rank parses against every run on the</p>
       <Segmented options={PARSE_SCOPE_OPTIONS} value={form.parseScope} onChange={(v) => set("parseScope", v)} />
     </Token>
   );
 
   const lines: { key: string; kind: Kind; body: ReactNode; onRemove: () => void }[] = [];
-  for (const k of shown) {
+  for (const k of single) {
     const auto = fresh === k;
     const dis = isLocked(k);
     let body: ReactNode = null;
@@ -166,6 +122,33 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
           </>
         );
         break;
+      case "bossesKilled":
+        body = (
+          <>
+            <Word>at least</Word>
+            <NumberToken value={form.bossesKilledMin} onChange={(v) => set("bossesKilledMin", v)} min={1} presets={[4, 6, 8, 10]} autoOpen={auto} disabled={dis} />
+            <Word>bosses died</Word>
+          </>
+        );
+        break;
+      case "wipes":
+        body = (
+          <>
+            <Word>there were at most</Word>
+            <NumberToken value={form.wipesMax} onChange={(v) => set("wipesMax", v)} min={0} presets={[0, 1, 2, 5]} autoOpen={auto} disabled={dis} />
+            <Word>{form.wipesMax === 1 ? "wipe" : "wipes"}</Word>
+          </>
+        );
+        break;
+      case "deaths":
+        body = (
+          <>
+            <Word>there were at most</Word>
+            <NumberToken value={form.deathsMax} onChange={(v) => set("deathsMax", v)} min={0} presets={[0, 5, 10, 20]} autoOpen={auto} disabled={dis} />
+            <Word>{form.deathsMax === 1 ? "death" : "deaths"}</Word>
+          </>
+        );
+        break;
       case "killParse":
         body = (
           <>
@@ -180,7 +163,7 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
             )}
             <BossToken values={form.killParseBosses} onChange={(v) => set("killParseBosses", v)} bosses={bosses} empty="any boss" disabled={dis} />
             <Word>vs</Word>
-            {scopeToken}
+            {scopeToken(dis)}
           </>
         );
         break;
@@ -190,7 +173,7 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
             <Word>the clear parsed</Word>
             <ParseToken value={form.clearParseMin} onChange={(v) => set("clearParseMin", v)} autoOpen={auto} disabled={dis} />
             <Word>vs</Word>
-            {scopeToken}
+            {scopeToken(dis)}
           </>
         );
         break;
@@ -199,6 +182,24 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
           <>
             <Word>the full clear took under</Word>
             <MinutesToken value={form.clearTimeMaxMinutes} onChange={(v) => set("clearTimeMaxMinutes", v)} presets={[45, 60, 90, 120, 180]} autoOpen={auto} disabled={dis} />
+          </>
+        );
+        break;
+      case "bossTime":
+        body = (
+          <>
+            <Word>fighting bosses took under</Word>
+            <MinutesToken value={form.bossTimeMaxMinutes} onChange={(v) => set("bossTimeMaxMinutes", v)} presets={[10, 15, 20, 30, 45]} autoOpen={auto} disabled={dis} />
+            <Word>in total</Word>
+          </>
+        );
+        break;
+      case "trashTime":
+        body = (
+          <>
+            <Word>clearing trash took under</Word>
+            <MinutesToken value={form.trashTimeMaxMinutes} onChange={(v) => set("trashTimeMaxMinutes", v)} presets={[20, 30, 45, 60, 90]} autoOpen={auto} disabled={dis} />
+            <Word>in total</Word>
           </>
         );
         break;
@@ -222,14 +223,12 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
           </>
         );
         break;
-      case "capabilities":
+      case "raidSize":
         body = (
           <>
-            <Word>the log recorded</Word>
-            <Token label={listLabel(form.capabilities.map(enumLabel)).toLowerCase()} filled={form.capabilities.length > 0} empty="something" autoOpen={auto} disabled={dis}>
-              <p className="text-2xs text-muted-foreground mb-2">Only logs that recorded all of these.</p>
-              <ToggleChips options={capabilities.map((c) => ({ value: c, label: enumLabel(c) }))} values={form.capabilities} onChange={(v) => set("capabilities", v)} />
-            </Token>
+            <Word>it was a</Word>
+            <NumberToken value={form.maxPlayers} onChange={(v) => set("maxPlayers", v)} min={1} presets={[10, 20, 40]} autoOpen={auto} disabled={dis} />
+            <Word>player raid</Word>
           </>
         );
         break;
@@ -243,20 +242,82 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
           </>
         );
         break;
+      case "hasVideo":
+        body = <Word>it has a linked video</Word>;
+        break;
+      case "capabilities":
+        body = (
+          <>
+            <Word>the log recorded</Word>
+            <Token label={listLabel(form.capabilities.map(enumLabel)).toLowerCase()} filled={form.capabilities.length > 0} empty="something" autoOpen={auto} disabled={dis}>
+              <p className="text-2xs text-muted-foreground mb-2">Only logs that recorded all of these.</p>
+              <ToggleChips options={capabilities.map((c) => ({ value: c, label: enumLabel(c) }))} values={form.capabilities} onChange={(v) => set("capabilities", v)} />
+            </Token>
+          </>
+        );
+        break;
     }
     lines.push({ key: k, kind: k, body, onRemove: () => remove(k) });
   }
 
+  /** The newest entry of a list condition that was just added. */
+  const freshAt = (k: Kind, i: number, len: number) => fresh === k && i === len - 1;
+
+  form.bossKillTimes.forEach((b, i) => {
+    const dis = isLocked("bossKillTime");
+    lines.push({
+      key: `bossKill-${i}`,
+      kind: "bossKillTime",
+      body: (
+        <>
+          <BossToken single values={b.boss ? [b.boss] : []} onChange={(v) => updateAt("bossKillTimes", i, { boss: v.at(-1) ?? "" })} bosses={bosses} empty="a boss" autoOpen={freshAt("bossKillTime", i, form.bossKillTimes.length)} disabled={dis} />
+          <Word>died in under</Word>
+          <MinutesToken value={b.maxMinutes} onChange={(v) => updateAt("bossKillTimes", i, { maxMinutes: v })} presets={[1, 2, 3, 5, 10]} disabled={dis} />
+        </>
+      ),
+      onRemove: () => removeAt("bossKillTimes", i),
+    });
+  });
+
+  form.playerParses.forEach((p, i) => {
+    const dis = isLocked("playerParse");
+    lines.push({
+      key: `playerParse-${i}`,
+      kind: "playerParse",
+      body: (
+        <>
+          <NameToken value={p.name} onChange={(name) => updateAt("playerParses", i, { name })} disabled={dis} />
+          <Word>parsed</Word>
+          <ParseToken value={p.min} onChange={(min) => updateAt("playerParses", i, { min })} autoOpen={freshAt("playerParse", i, form.playerParses.length)} disabled={dis} />
+          <Token label={p.metric.toUpperCase()} filled tone="muted" disabled={dis} width="w-auto">
+            <Segmented options={[{ value: "dps" as const, label: "DPS" }, { value: "hps" as const, label: "HPS" }]} value={p.metric} onChange={(metric) => updateAt("playerParses", i, { metric })} />
+          </Token>
+          <Word>as</Word>
+          <ClassSpecPicker
+            value={p}
+            allowedClasses={classes}
+            placeholder="any class"
+            disabled={dis}
+            className={cn(TOKEN, p.class || p.spec ? TOKEN_FILLED : TOKEN_EMPTY, "h-auto")}
+            onChange={(v) => updateAt("playerParses", i, v)}
+          />
+          <Word>on</Word>
+          <BossToken values={p.bosses} onChange={(v) => updateAt("playerParses", i, { bosses: v })} bosses={bosses} empty="any boss" disabled={dis} />
+        </>
+      ),
+      onRemove: () => removeAt("playerParses", i),
+    });
+  });
+
   form.classCounts.forEach((c, i) => {
-    const dis = locked;
-    const update = (v: Partial<typeof c>) => set("classCounts", form.classCounts.map((x, j) => (j === i ? { ...x, ...v } : x)));
+    const dis = isLocked("classCount");
     lines.push({
       key: `class-${i}`,
       kind: "classCount",
       body: (
         <>
           <Word>the raid had at least</Word>
-          <CountToken value={c.min} onChange={(v) => update({ min: v })} autoOpen={fresh === "classCount" && i === form.classCounts.length - 1} disabled={dis} />
+          <NumberToken value={c.min} onChange={(v) => updateAt("classCounts", i, { min: v ?? 1 })} min={1} autoOpen={freshAt("classCount", i, form.classCounts.length)} disabled={dis} />
           <ClassSpecPicker
             value={c}
             allowedClasses={classes}
@@ -264,36 +325,64 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
             placeholder="Pick a class / spec"
             disabled={dis}
             className={cn(TOKEN, TOKEN_FILLED, "h-auto")}
-            onChange={(v) => update(v)}
+            onChange={(v) => updateAt("classCounts", i, v)}
           />
         </>
       ),
-      onRemove: () => set("classCounts", form.classCounts.filter((_, j) => j !== i)),
+      onRemove: () => removeAt("classCounts", i),
     });
   });
 
   form.guildCounts.forEach((g, i) => {
-    const dis = locked;
-    const update = (v: Partial<typeof g>) => set("guildCounts", form.guildCounts.map((x, j) => (j === i ? { ...x, ...v } : x)));
+    const dis = isLocked("guildCount");
     lines.push({
       key: `guild-${i}`,
       kind: "guildCount",
       body: (
         <>
           <Word>at least</Word>
-          <CountToken value={g.min} onChange={(v) => update({ min: v })} disabled={dis} />
+          <NumberToken value={g.min} onChange={(v) => updateAt("guildCounts", i, { min: v ?? 1 })} min={1} disabled={dis} />
           <Word>members of</Word>
-          <Token label={g.guild} filled={g.guild.trim() !== ""} empty="a guild" autoOpen={fresh === "guildCount" && i === form.guildCounts.length - 1} disabled={dis}>
-            <Input autoFocus className="h-7 text-xs" value={g.guild} onChange={(e) => update({ guild: e.target.value })} placeholder="Guild name" />
+          <Token label={g.guild} filled={g.guild.trim() !== ""} empty="a guild" autoOpen={freshAt("guildCount", i, form.guildCounts.length)} disabled={dis}>
+            <Input autoFocus className="h-7 text-xs" value={g.guild} onChange={(e) => updateAt("guildCounts", i, { guild: e.target.value })} placeholder="Guild name" />
           </Token>
           <Word>attended</Word>
         </>
       ),
-      onRemove: () => set("guildCounts", form.guildCounts.filter((_, j) => j !== i)),
+      onRemove: () => removeAt("guildCounts", i),
     });
   });
 
-  const available = KINDS.filter((d) => d.kind === "classCount" || d.kind === "guildCount" || !shown.includes(d.kind));
+  form.playerStats.forEach((p, i) => {
+    const dis = isLocked("playerStat");
+    const stat = STATS[p.stat];
+    lines.push({
+      key: `playerStat-${i}`,
+      kind: "playerStat",
+      body: (
+        <>
+          <NameToken value={p.name} onChange={(name) => updateAt("playerStats", i, { name })} disabled={dis} />
+          <Word>had</Word>
+          <NumberToken value={p.min} onChange={(min) => updateAt("playerStats", i, { min })} min={0} presets={stat.presets} suffix="+" autoOpen={freshAt("playerStat", i, form.playerStats.length)} disabled={dis} />
+          <Token label={stat.label} filled tone="muted" disabled={dis} width="w-auto">
+            <Segmented
+              options={(Object.keys(STATS) as PlayerStatField[]).map((value) => ({ value, label: STATS[value].label }))}
+              value={p.stat}
+              onChange={(s) => updateAt("playerStats", i, { stat: s, min: null })}
+            />
+          </Token>
+          <Word>on</Word>
+          <BossToken values={p.bosses} onChange={(v) => updateAt("playerStats", i, { bosses: v })} bosses={bosses} empty="any boss" disabled={dis} />
+        </>
+      ),
+      onRemove: () => removeAt("playerStats", i),
+    });
+  });
+
+  // Lines in menu order, so related conditions sit together.
+  const order = new Map(KINDS.map((d, i) => [d.kind, i]));
+  lines.sort((a, b) => order.get(a.kind)! - order.get(b.kind)!);
+  const available = KINDS.filter((d) => d.list || !single.includes(d.kind));
 
   return (
     <div className="rounded-lg border border-border/60 bg-background/40 p-4 sm:p-5">
@@ -320,14 +409,18 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
       {lines.length > 0 && (
         <ul className="mt-3 space-y-2 border-l-2 border-primary/25 pl-3 sm:ml-1">
           {lines.map((l, i) => {
-            const def = KINDS.find((d) => d.kind === l.kind)!;
-            const Icon = def.icon;
+            const def = KIND_DEF.get(l.kind)!;
+            const locked = isLocked(l.kind);
+            const Icon = locked ? Lock : def.icon;
             return (
               <li key={l.key} className="group flex items-start gap-2">
-                <Icon className="h-4 w-4 mt-1.5 shrink-0 text-primary/70" aria-hidden="true" />
-                <div className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-2 text-sm sm:text-base leading-relaxed flex-1 min-w-0", isLocked(l.kind) && "opacity-60")}>
+                <span title={locked ? (def.tier === "honored" ? "Honored supporters can search by this" : "Log in to search by this") : undefined} className="mt-1.5 shrink-0">
+                  <Icon className={cn("h-4 w-4", !locked && "text-primary/70")} style={locked ? { color: def.tier === "honored" ? HONORED : undefined } : undefined} aria-hidden="true" />
+                </span>
+                <div className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-2 text-sm sm:text-base leading-relaxed flex-1 min-w-0", locked && "opacity-60")}>
                   <Word>{i === 0 ? "where" : "and"}</Word>
                   {l.body}
+                  {def.tier === "honored" && <HonoredBadge />}
                 </div>
                 <button
                   type="button"
@@ -344,8 +437,8 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
       )}
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <AddConditionMenu kinds={available} isLocked={isLocked} onAdd={add} />
-        {locked && (
+        <AddConditionMenu kinds={available} isLocked={isLocked} loggedIn={loggedIn} honored={honored} onAdd={add} />
+        {!loggedIn && (
           <span className="inline-flex items-center gap-1 text-xs text-amber-400/90">
             <Lock className="h-3 w-3" />
             <Link to="/login" className="hover:underline">Log in</Link> to search by bosses, parses, speed and roster
@@ -360,8 +453,22 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
 /* Pieces                                                              */
 /* ------------------------------------------------------------------ */
 
+const STATS: Record<PlayerStatField, { label: string; presets: number[] }> = {
+  dps: { label: "DPS", presets: [800, 1000, 1500, 2000] },
+  hps: { label: "HPS", presets: [500, 800, 1000, 1500] },
+  avg_ilvl: { label: "item level", presets: [60, 66, 70, 75] },
+};
+
 function Word({ children, strong }: { children: ReactNode; strong?: boolean }) {
   return <span className={strong ? "font-semibold text-foreground" : "text-muted-foreground"}>{children}</span>;
+}
+
+function HonoredBadge() {
+  return (
+    <span className="rounded px-1.5 py-px text-2xs font-semibold uppercase tracking-wider ring-1 ring-current/40" style={{ color: HONORED }}>
+      Honored
+    </span>
+  );
 }
 
 const TOKEN =
@@ -423,6 +530,17 @@ function ClearLink({ show, onClick, children }: { show: boolean; onClick: () => 
   );
 }
 
+/** "Thrall" / "someone". */
+function NameToken({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
+  return (
+    <Token label={value} filled={value.trim() !== ""} empty="someone" disabled={disabled}>
+      <p className="text-2xs text-muted-foreground mb-2">A player name, or leave empty for anyone in the raid.</p>
+      <Input autoFocus className="h-7 text-xs" value={value} onChange={(e) => onChange(e.target.value)} placeholder="Player name" />
+      <ClearLink show={value !== ""} onClick={() => onChange("")}>Anyone</ClearLink>
+    </Token>
+  );
+}
+
 /** "Molten Core" / "any raid": raid art tiles, plus free text for anything else. */
 function ZoneToken({ value, match, zones, onChange }: { value: string; match: TextMatch; zones: readonly Suggestion[]; onChange: (zone: string, match: TextMatch) => void }) {
   const options = toOptions(zones);
@@ -462,13 +580,35 @@ function ZoneToken({ value, match, zones, onChange }: { value: string; match: Te
   );
 }
 
-/** A checklist of bosses (for the chosen zone), filterable, with free text. */
-function BossToken({ values, onChange, bosses, empty, autoOpen, disabled }: { values: string[]; onChange: (v: string[]) => void; bosses: readonly Suggestion[]; empty: string; autoOpen?: boolean; disabled?: boolean }) {
+/**
+ * A checklist of bosses (for the chosen zone), filterable, with free text.
+ * single: picking a boss replaces the current one.
+ */
+function BossToken({
+  values,
+  onChange,
+  bosses,
+  empty,
+  single,
+  autoOpen,
+  disabled,
+}: {
+  values: string[];
+  onChange: (v: string[]) => void;
+  bosses: readonly Suggestion[];
+  empty: string;
+  single?: boolean;
+  autoOpen?: boolean;
+  disabled?: boolean;
+}) {
   const [q, setQ] = useState("");
   const options = toOptions(bosses);
   const hits = options.filter((o) => !q || o.value.toLowerCase().includes(q.toLowerCase()));
   const groups = [...new Set(hits.map((o) => o.group ?? ""))];
-  const toggle = (name: string) => onChange(values.includes(name) ? values.filter((v) => v !== name) : [...values, name]);
+  const toggle = (name: string) => {
+    if (values.includes(name)) onChange(values.filter((v) => v !== name));
+    else onChange(single ? [name] : [...values, name]);
+  };
   return (
     <Token label={listLabel(values)} filled={values.length > 0} empty={empty} autoOpen={autoOpen} disabled={disabled}>
       <Input
@@ -476,12 +616,12 @@ function BossToken({ values, onChange, bosses, empty, autoOpen, disabled }: { va
         className="h-7 text-xs mb-2"
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Filter bosses, Enter adds any name"
+        placeholder={single ? "Filter bosses, Enter picks any name" : "Filter bosses, Enter adds any name"}
         onKeyDown={(e) => {
           if (e.key !== "Enter" || !q.trim()) return;
           e.preventDefault();
           const exact = hits.length === 1 ? hits[0].value : q.trim();
-          if (!values.includes(exact)) onChange([...values, exact]);
+          if (!values.includes(exact)) onChange(single ? [exact] : [...values, exact]);
           setQ("");
         }}
       />
@@ -498,7 +638,7 @@ function BossToken({ values, onChange, bosses, empty, autoOpen, disabled }: { va
                   onClick={() => toggle(o.value)}
                   className={cn("flex w-full items-center gap-2 rounded px-1.5 py-1 text-xs text-left", on ? "bg-primary/15 text-foreground" : "hover:bg-muted/60 text-muted-foreground hover:text-foreground")}
                 >
-                  <span className={cn("flex h-3.5 w-3.5 items-center justify-center rounded-sm border", on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/50")}>
+                  <span className={cn("flex h-3.5 w-3.5 items-center justify-center border", single ? "rounded-full" : "rounded-sm", on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/50")}>
                     {on && <Check className="h-3 w-3" />}
                   </span>
                   {o.value}
@@ -540,7 +680,7 @@ function ParseToken({ value, onChange, autoOpen, disabled }: { value: number | n
         ))}
       </div>
       <div className="mt-2 flex items-center gap-1.5 text-2xs text-muted-foreground">
-        or at least <NumberInput className="w-16" value={value} onChange={onChange} min={0} max={100} placeholder="0-100" />
+        or at least <NumberInput className="w-20" value={value} onChange={onChange} min={0} max={100} placeholder="0-100" />
       </div>
     </Token>
   );
@@ -575,14 +715,44 @@ function MinutesToken({ value, onChange, presets, autoOpen, disabled }: { value:
   );
 }
 
-/** A count with − / + steppers. */
-function CountToken({ value, onChange, autoOpen, disabled }: { value: number; onChange: (v: number) => void; autoOpen?: boolean; disabled?: boolean }) {
-  const step = (d: number) => onChange(Math.max(1, value + d));
+/** A number with − / + steppers and optional quick picks. */
+function NumberToken({
+  value,
+  onChange,
+  min,
+  presets,
+  suffix = "",
+  autoOpen,
+  disabled,
+}: {
+  value: number | null;
+  onChange: (v: number | null) => void;
+  min: number;
+  presets?: number[];
+  suffix?: string;
+  autoOpen?: boolean;
+  disabled?: boolean;
+}) {
+  const step = (d: number) => onChange(Math.max(min, (value ?? min) + d));
   return (
-    <Token label={<span className="tabular-nums">{value}</span>} filled autoOpen={autoOpen} disabled={disabled} width="w-auto">
+    <Token label={<span className="tabular-nums">{value?.toLocaleString()}{suffix}</span>} filled={value != null} empty="…" autoOpen={autoOpen} disabled={disabled} width="w-auto">
+      {presets && (
+        <div className="flex gap-1 mb-2">
+          {presets.map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onChange(p)}
+              className={cn("rounded-md px-2 py-1 text-xs tabular-nums ring-1 transition", value === p ? "ring-primary bg-primary/15 text-foreground" : "ring-border text-muted-foreground hover:text-foreground")}
+            >
+              {p.toLocaleString()}{suffix}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex items-center gap-1">
         <button type="button" onClick={() => step(-1)} className="h-7 w-7 rounded-md ring-1 ring-border hover:bg-muted" aria-label="Fewer">−</button>
-        <NumberInput className="w-14 text-center" value={value} onChange={(v) => onChange(Math.max(1, Math.round(v ?? 1)))} min={1} />
+        <NumberInput className="w-20 text-center" value={value} onChange={(v) => onChange(v == null ? null : Math.max(min, Math.round(v)))} min={min} />
         <button type="button" onClick={() => step(1)} className="h-7 w-7 rounded-md ring-1 ring-border hover:bg-muted" aria-label="More">+</button>
       </div>
     </Token>
@@ -647,7 +817,19 @@ function listLabel(values: readonly string[]): string {
   return `${values[0]}, ${values[1]} +${values.length - 2}`;
 }
 
-function AddConditionMenu({ kinds, isLocked, onAdd }: { kinds: KindDef[]; isLocked: (k: Kind) => boolean; onAdd: (k: Kind) => void }) {
+function AddConditionMenu({
+  kinds,
+  isLocked,
+  loggedIn,
+  honored,
+  onAdd,
+}: {
+  kinds: KindDef[];
+  isLocked: (k: Kind) => boolean;
+  loggedIn: boolean;
+  honored: boolean;
+  onAdd: (k: Kind) => void;
+}) {
   const groups = [...new Set(kinds.map((k) => k.group))];
   return (
     <DropdownMenu modal={false}>
@@ -661,7 +843,7 @@ function AddConditionMenu({ kinds, isLocked, onAdd }: { kinds: KindDef[]; isLock
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        className="w-72 max-h-[70vh] overflow-y-auto styled-scrollbar"
+        className="w-80 max-h-[70vh] overflow-y-auto styled-scrollbar"
         // The new condition opens its own editor; don't pull focus back here.
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
@@ -677,12 +859,35 @@ function AddConditionMenu({ kinds, isLocked, onAdd }: { kinds: KindDef[]; isLock
                 <DropdownMenuItem key={k.kind} disabled={lock} onSelect={() => onAdd(k.kind)} className="gap-2">
                   <Icon className="h-4 w-4 text-primary/80" />
                   <span className="flex-1">{k.label}</span>
-                  {lock && <Lock className="h-3 w-3 text-amber-400/90" />}
+                  {k.tier === "honored" && (
+                    <span className="inline-flex items-center gap-1 text-2xs font-semibold" style={{ color: HONORED }}>
+                      {lock && <Lock className="h-3 w-3" />}
+                      Honored
+                    </span>
+                  )}
+                  {k.tier === "free" && lock && <Lock className="h-3 w-3 text-amber-400/90" />}
                 </DropdownMenuItem>
               );
             })}
           </div>
         ))}
+        {(!honored || !loggedIn) && (
+          <>
+            <DropdownMenuSeparator />
+            <div className="px-2 py-2 text-2xs text-muted-foreground">
+              {!loggedIn && (
+                <p className="mb-1">
+                  <Link to="/login" className="text-sky-400 hover:underline">Log in</Link> to search by bosses, parses, speed and roster.
+                </p>
+              )}
+              {!honored && (
+                <p>
+                  <Link to="/supporter" className="font-medium hover:underline" style={{ color: HONORED }}>Honored supporters</Link> can also search by player parses and stats, and boss, trash and idle time.
+                </p>
+              )}
+            </div>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

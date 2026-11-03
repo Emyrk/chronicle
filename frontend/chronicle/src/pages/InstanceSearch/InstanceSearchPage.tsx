@@ -27,6 +27,7 @@ import { addRecentSearch, loadRecentSearches, saveRecentSearches, type RecentSea
 import { HonoredLockTooltip } from "./HonoredLockTooltip";
 import { EXAMPLES, type SearchExample } from "./examples";
 import { SentenceForm } from "./SentenceForm";
+import { formNeedsHonored } from "./sentenceKinds";
 import { bossOptions, realmOptions, zoneOptions } from "./searchOptions";
 import {
   buildQuery,
@@ -160,6 +161,8 @@ export function InstanceSearchPage() {
   const enumOf = (name: string) => fields.data?.fields.find((f) => f.name === name)?.enum ?? [];
 
   const anonBlocked = !isAuthenticated && mode === "form" && !formIsBasic(form);
+  // Honored-only conditions (UI-only lock, like Blocks / Code).
+  const honoredBlocked = !advancedUnlocked && mode === "form" && formNeedsHonored(form);
 
   const leavePreview = () => {
     setPreview(false);
@@ -418,6 +421,7 @@ export function InstanceSearchPage() {
           classes={enumOf("player.class")}
           capabilities={enumOf("instance.capability")}
           loggedIn={isAuthenticated}
+          honored={advancedUnlocked}
         />
       ) : (
         <div className="rounded-lg border border-border/60 bg-background/40 p-3 space-y-3">
@@ -457,8 +461,8 @@ export function InstanceSearchPage() {
         <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
         <Button
           onClick={submit}
-          disabled={preview || anonBlocked || codeInvalid || tooComplex || results.isFetching}
-          title={preview ? "Honored supporters can run block and code searches" : undefined}
+          disabled={preview || anonBlocked || honoredBlocked || codeInvalid || tooComplex || results.isFetching}
+          title={preview ? "Honored supporters can run block and code searches" : honoredBlocked ? "This search uses conditions for Honored supporters" : undefined}
           className="gap-1.5"
         >
           {results.isFetching && !results.isFetchingNextPage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}

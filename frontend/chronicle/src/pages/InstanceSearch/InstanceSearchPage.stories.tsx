@@ -179,6 +179,22 @@ const blockTree: Node = {
   ],
 };
 
+/** Every newer sentence condition, including the Honored ones. */
+const sentenceTree: Node = {
+  and: [
+    { field: "instance.name", op: "=", value: "Molten Core" },
+    { field: "instance.max_players", op: "=", value: 40 },
+    { any_encounter: { and: [{ field: "encounter.name", op: "=", value: "Ragnaros" }, { field: "encounter.killed", op: "=", value: true }, { field: "encounter.duration_ms", op: "<=", value: 120000 }] } },
+    { field: "instance.bosses_killed", op: ">=", value: 10 },
+    { field: "instance.wipes", op: "<=", value: 0 },
+    { any_player: { and: [{ field: "player.parse", op: ">=", value: 95, bosses: ["Ragnaros"] }, { field: "player.class", op: "=", value: "WARRIOR" }, { field: "player.spec", op: "=", value: "Fury" }] } },
+    { field: "instance.boss_time_ms", op: "<=", value: 1200000 },
+    { field: "instance.idle_time_ms", op: "<=", value: 300000 },
+    { any_player: { and: [{ field: "player.name", op: "=", value: "Thrall" }, { field: "player.dps", op: ">=", value: 1500 }] } },
+    { field: "instance.has_video", op: "=", value: true },
+  ],
+};
+
 const meta: Meta<typeof InstanceSearchPage> = {
   title: "pages/InstanceSearch",
   component: InstanceSearchPage,
@@ -208,6 +224,16 @@ export const Empty: Story = {};
 /** A shared form search: results load from the URL, with "Load more". */
 export const FormWithResults: Story = {
   parameters: { initialEntry: url(formTree) },
+};
+
+/** The sentence form with every newer condition, as an Honored supporter. */
+export const SentenceConditions: Story = {
+  parameters: { initialEntry: url(sentenceTree) },
+};
+
+/** Without Honored, Honored conditions are locked and Search is disabled. */
+export const NotHonoredHonoredConditions: Story = {
+  parameters: { initialEntry: url(sentenceTree), msw: { handlers: handlers({ loggedIn: true, tier: "" }) } },
 };
 
 /** A query the form can't show opens in the block editor; "Form" is disabled. */
