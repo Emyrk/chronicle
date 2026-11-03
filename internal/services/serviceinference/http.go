@@ -529,6 +529,11 @@ func (s *Service) previewDebug(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	assistantDefinition = withServerTools(assistantDefinition, request.WebSearch)
+	assistantDefinition, err = withRuntimeSkills(assistantDefinition)
+	if err != nil {
+		s.internalError(w, "compose inference skills", err)
+		return
+	}
 
 	debug := debugRunContext{Enabled: true, RunID: "preview-" + uuid.NewString(), Persistence: "ephemeral"}
 	messages := make([]Message, 0, maxHistoryMessages+1)

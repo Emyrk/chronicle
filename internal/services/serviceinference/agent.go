@@ -35,6 +35,7 @@ const (
 
 type assistant struct {
 	ID, System string
+	Skills     []string
 	// Name and Description are shown in the user's AI settings.
 	Name, Description string
 	Durable           bool
@@ -68,7 +69,7 @@ var pageCatalog = []map[string]string{
 	{"path": "/account/ai", "name": "AI assistant settings", "description": "Turn AI features and individual assistants on or off, and connect OpenRouter"},
 }
 var assistants = map[string]assistant{
-	"site-help": {ID: "site-help", Name: "Ask Chronicle", Description: "Site help on every page: finding pages, answering rankings questions, and researching external information.", System: "You are Chronicle site help. Explain how to navigate Chronicle and answer rankings questions using tools. Never invent pages or ranking results." + webResearchPrompt, Tools: []ToolDefinition{
+	"site-help": {ID: "site-help", Name: "Ask Chronicle", Description: "Site help on every page: finding pages, answering rankings questions, and researching external information.", System: "You are Chronicle site help. Explain how to navigate Chronicle and answer rankings questions using tools. Never invent pages or ranking results." + webResearchPrompt, Skills: []string{chronicleConceptsSkillID}, Tools: []ToolDefinition{
 		{Name: "list_pages", Description: "List known Chronicle pages.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "find_pages", Description: "Find Chronicle pages by name or description.", Parameters: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","maxLength":100}},"required":["query"],"additionalProperties":false}`)},
 		{Name: "query_rankings", Description: "Query a bounded Chronicle player leaderboard.", Parameters: json.RawMessage(`{"type":"object","properties":{"instance_name":{"type":"string","maxLength":100},"encounter":{"type":"string","maxLength":100},"class":{"type":"string","maxLength":30},"spec":{"type":"string","maxLength":50},"role":{"type":"string","maxLength":30},"metric":{"type":"string","enum":["dps","hps"]},"limit":{"type":"integer","minimum":1,"maximum":10}},"required":["instance_name"],"additionalProperties":false}`)},
@@ -128,6 +129,14 @@ func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model strin
 			Parameters:  parameters,
 		})
 	}
+	debugSkills := make([]agui.DebugSkill, 0, len(a.Skills))
+	for _, skill := range debugRuntimeSkills(a) {
+		names := make([]string, 0, len(skill.Tools))
+		for _, tool := range skill.Tools {
+			names = append(names, tool.Name)
+		}
+		debugSkills = append(debugSkills, agui.DebugSkill{ID: skill.ID, Name: skill.Name, Version: skill.Version, Source: "server", PromptContribution: skill.Instructions, Tools: names})
+	}
 	return agui.DebugSnapshotEvent{
 		RunID:       debug.RunID,
 		Iteration:   iteration,
@@ -139,7 +148,7 @@ func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model strin
 		ContextID:   debug.ContextID,
 		Messages:    debugMessages,
 		Tools:       debugTools,
-		Skills:      make([]agui.DebugSkill, 0),
+		Skills:      debugSkills,
 		Limits: agui.DebugLimits{
 			MaxHistoryMessages: maxHistoryMessages,
 			MaxHistoryBytes:    maxHistoryBytes,
@@ -833,6 +842,11 @@ type agentLoopResult struct {
 type pauseClientToolFunc func(Message, []Message, clientToolPause, agentLoopState) error
 
 func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, debug debugRunContext, capability *clientCapability, state agentLoopState, persist func(...Message) error, pause pauseClientToolFunc, record usageRecorder) (agentLoopResult, error) {
+	var err error
+	a, err = withRuntimeSkills(a)
+	if err != nil {
+		return agentLoopResult{State: state}, err
+	}
 	messages = append([]Message{{Role: RoleSystem, Content: a.System}}, messages...)
 	usedCallIDs := usedToolCallIDs(messages)
 	for state.IterationCount <= maxIterations {
@@ -963,6 +977,10 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			}
 			if err := w.Write(agui.ToolCallArgsEvent{ToolCallID: call.ID, Delta: call.Arguments}); err != nil {
 				return agentLoopResult{State: state}, err
+			}
+			if !assistantAllowsTool(a, call.Name) {
+				toolMessages = append(toolMessages, Message{Role: RoleTool, Name: call.Name, ToolCallID: call.ID, Content: `{"error":"invalid tool request"}`})
+				continue
 			}
 			output, err := s.executeTool(ctx, tc, call.Name, call.Arguments)
 			if err != nil {

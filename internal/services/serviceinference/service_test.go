@@ -181,7 +181,8 @@ func TestDebugPreviewDoesNotInvokeProvider(t *testing.T) {
 	for _, tool := range snapshot.Tools {
 		require.NotEqual(t, "web_search", tool.Name)
 	}
-	require.Empty(t, snapshot.Skills)
+	require.Equal(t, chronicleConceptsSkillID, snapshot.Skills[0].ID)
+	require.Contains(t, snapshot.Messages[0].Content, "## Skill: Chronicle log concepts")
 }
 
 func TestWebSearchIsOptInPerRun(t *testing.T) {
@@ -400,13 +401,15 @@ func TestAgentLoopDebugSnapshotsMatchProviderRequestsAndResults(t *testing.T) {
 	require.Equal(t, "run-1", request.RunID)
 	require.Equal(t, "provider/model", request.Model)
 	require.Equal(t, "ephemeral", request.Persistence)
-	require.Equal(t, assistants["site-help"].System, request.Messages[0].Content)
+	require.Contains(t, request.Messages[0].Content, assistants["site-help"].System)
+	require.Contains(t, request.Messages[0].Content, "## Skill: Chronicle log concepts")
 	require.Equal(t, "Where are rankings?", request.Messages[1].Content)
 	require.Equal(t, "list_pages", request.Tools[0].Name)
 	require.Equal(t, "web_search", request.Tools[len(request.Tools)-1].Name)
 	require.JSONEq(t, `{"max_results":5,"max_total_results":12,"max_uses":3}`, string(request.Tools[len(request.Tools)-1].Parameters))
 	require.Equal(t, assistants["site-help"].ServerTools, provider.requests[0].ServerTools)
-	require.Empty(t, request.Skills)
+	require.Equal(t, chronicleConceptsSkillID, request.Skills[0].ID)
+	require.Equal(t, "server", request.Skills[0].Source)
 	require.Equal(t, maxHistoryMessages, request.Limits.MaxHistoryMessages)
 	require.Equal(t, maxToolOutput, request.Limits.MaxToolOutput)
 	require.Equal(t, agui.DebugUsage{}, request.Usage)
