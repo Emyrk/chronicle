@@ -5,7 +5,8 @@ import (
 	"time"
 )
 
-// Tenant rating leaderboards expose materialized scores, never a recomputed rank.
+// Tenant rating leaderboards expose materialized, raid-filtered scores, never a
+// global board or a recomputed rank. Scope responses always report "raid".
 type TenantPlayerBossLeaderboardResponse struct {
 	Entries    []TenantPlayerBossLeaderboardEntry `json:"entries"`
 	NextCursor string                             `json:"next_cursor,omitempty"`

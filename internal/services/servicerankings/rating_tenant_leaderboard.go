@@ -73,9 +73,9 @@ func tenantRatingInput(r *http.Request, guild, boss bool) (url.Values, []uuid.UU
 			return nil, nil, 0, "", tenantRatingCursor{}, errors.New(key + " must appear once")
 		}
 	}
-	required := []string{"difficulty_name", "max_players", "rating_metric", "window_kind"}
+	required := []string{"instance_name", "difficulty_name", "max_players", "rating_metric", "window_kind"}
 	if boss {
-		required = append(required, "instance_name", "encounter_name")
+		required = append(required, "encounter_name")
 	}
 	if !guild {
 		required = append(required, "performance_metric")
@@ -94,8 +94,8 @@ func tenantRatingInput(r *http.Request, guild, boss bool) (url.Values, []uuid.UU
 	if !boss && q.Has("encounter_name") {
 		return nil, nil, 0, "", tenantRatingCursor{}, errors.New("encounter_name is not a scope parameter")
 	}
-	if !boss && q.Has("instance_name") && q.Get("instance_name") != "" && strings.TrimSpace(q.Get("instance_name")) == "" {
-		return nil, nil, 0, "", tenantRatingCursor{}, errors.New("invalid instance_name")
+	if !boss && strings.TrimSpace(q.Get("instance_name")) == "" {
+		return nil, nil, 0, "", tenantRatingCursor{}, errors.New("instance_name must be non-empty for raid scores")
 	}
 	max, err := strconv.ParseInt(q.Get("max_players"), 10, 16)
 	if err != nil || max < 0 {
@@ -266,7 +266,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				next = tenantCursorEncode(tenantRatingCursor{Binding: binding, Generation: generation, Score: last.Score, Realm: last.RealmID, Guild: last.GuildID})
 			}
 		}
-		payload = chroniclesdk.TenantGuildScopeLeaderboardResponse{Scope: tenantScope(q), Entries: entries, NextCursor: next}
+		payload = chroniclesdk.TenantGuildScopeLeaderboardResponse{Scope: "raid", Entries: entries, NextCursor: next}
 	} else if boss {
 		params := database.ListActivePlayerTenantBossScoresParams{TenantID: tenant, GenerationID: generation, InstanceName: q.Get("instance_name"), EncounterName: q.Get("encounter_name"), DifficultyName: q.Get("difficulty_name"), MaxPlayers: tenantMax(q), PlayerClass: tenantClass(q), PlayerSpec: q.Get("spec"), PlayerSubSpec: q.Get("sub_spec"), PerformanceMetric: q.Get("performance_metric"), RatingMetric: q.Get("rating_metric"), WindowKind: q.Get("window_kind"), RealmIds: realms, LimitCount: limit}
 		params.AfterScore, params.AfterRealmID, params.AfterPlayerGuid = cursor.Score, cursor.Realm, cursor.Player
@@ -326,7 +326,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				next = tenantCursorEncode(tenantRatingCursor{Binding: binding, Generation: generation, Score: last.Score, Realm: last.RealmID, Player: last.PlayerGuid})
 			}
 		}
-		payload = chroniclesdk.TenantPlayerScopeLeaderboardResponse{Scope: tenantScope(q), Entries: entries, NextCursor: next}
+		payload = chroniclesdk.TenantPlayerScopeLeaderboardResponse{Scope: "raid", Entries: entries, NextCursor: next}
 	}
 	// An activation between queries invalidates the entire response, including the lookahead.
 	active, e := store.GetActiveTenantRatingGeneration(ctx, tenant)
@@ -350,23 +350,17 @@ func tenantClass(q url.Values) string {
 	}
 	return string(db2sdk.HeroClassToDB(types.HeroClasses(q.Get("class"))))
 }
-func tenantScope(q url.Values) string {
-	if q.Get("instance_name") == "" {
-		return "global"
-	}
-	return "raid"
-}
 func writeEmptyTenantRating(w http.ResponseWriter, r *http.Request, guild, boss bool) {
 	var payload any
 	switch {
 	case guild && boss:
 		payload = chroniclesdk.TenantGuildBossLeaderboardResponse{Entries: []chroniclesdk.TenantGuildBossLeaderboardEntry{}}
 	case guild:
-		payload = chroniclesdk.TenantGuildScopeLeaderboardResponse{Scope: tenantScope(r.URL.Query()), Entries: []chroniclesdk.TenantGuildScopeLeaderboardEntry{}}
+		payload = chroniclesdk.TenantGuildScopeLeaderboardResponse{Scope: "raid", Entries: []chroniclesdk.TenantGuildScopeLeaderboardEntry{}}
 	case boss:
 		payload = chroniclesdk.TenantPlayerBossLeaderboardResponse{Entries: []chroniclesdk.TenantPlayerBossLeaderboardEntry{}}
 	default:
-		payload = chroniclesdk.TenantPlayerScopeLeaderboardResponse{Scope: tenantScope(r.URL.Query()), Entries: []chroniclesdk.TenantPlayerScopeLeaderboardEntry{}}
+		payload = chroniclesdk.TenantPlayerScopeLeaderboardResponse{Scope: "raid", Entries: []chroniclesdk.TenantPlayerScopeLeaderboardEntry{}}
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, payload)
 }

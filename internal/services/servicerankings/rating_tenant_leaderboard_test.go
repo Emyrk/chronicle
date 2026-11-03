@@ -151,6 +151,35 @@ func TestTenantRatingLeaderboardTraversal(t *testing.T) {
 		})
 	}
 }
+func TestTenantScopeRequiresRaid(t *testing.T) {
+	t.Parallel()
+	tenant, generation := uuid.New(), uuid.New()
+	for _, guild := range []bool{false, true} {
+		for _, instance := range []string{"", "   "} {
+			q := tenantBase(guild, false)
+			q.Set("instance_name", instance)
+			stub := &tenantLeaderboardStub{tenant: tenant, generation: generation}
+			rec := tenantRequest(q, tenant, stub, guild, false)
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			require.Zero(t, stub.calls, "invalid raid cannot query generation")
+		}
+		q := tenantBase(guild, false)
+		q.Del("instance_name")
+		stub := &tenantLeaderboardStub{tenant: tenant, generation: generation}
+		require.Equal(t, http.StatusBadRequest, tenantRequest(q, tenant, stub, guild, false).Code)
+		require.Zero(t, stub.calls)
+
+		q.Set("instance_name", "Molten Core")
+		rec := tenantRequest(q, tenant, stub, guild, false)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		var payload struct {
+			Scope string `json:"scope"`
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+		require.Equal(t, "raid", payload.Scope)
+	}
+}
+
 func TestTenantRatingLeaderboardLimitHundred(t *testing.T) {
 	t.Parallel()
 	tenant, generation, realm := uuid.New(), uuid.New(), uuid.New()
@@ -193,6 +222,12 @@ func TestTenantRatingLeaderboardValidationAndRace(t *testing.T) {
 		q.Set("rating_metric", metric)
 		q.Set("window_kind", "all_time")
 		require.Equal(t, http.StatusOK, tenantRequest(q, tenant, &tenantLeaderboardStub{tenant: tenant, generation: gen}, false, false).Code, metric)
+	}
+	for _, metric := range []string{"mastery", "ranked_mastery"} {
+		q := tenantBase(true, false)
+		q.Set("rating_metric", metric)
+		q.Set("window_kind", "all_time")
+		require.Equal(t, http.StatusOK, tenantRequest(q, tenant, &tenantLeaderboardStub{tenant: tenant, generation: gen}, true, false).Code, metric)
 	}
 	renown := tenantBase(false, false)
 	renown.Set("rating_metric", "renown")
