@@ -575,6 +575,8 @@ function InstanceTitle({
 export interface OverviewData {
   /** Fastest runs, fastest first: the podium shows three, the guild card all of them. */
   speedruns?: readonly SpeedrunLeaderboardEntry[]
+  /** The runs are full clears even with a set of bosses chosen (set kill times live on Speedruns). */
+  speedrunsAreClears?: boolean
   ratings?: Record<RatingMetric, RatingLeader[]>
   guildRatings?: Record<RatingMetric, GuildRating[]>
   guildRenown?: GuildRow[]
@@ -640,7 +642,14 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
       {cohort ? (
         data.cohorts?.length ? <CohortHero cohorts={data.cohorts} scope={scope} role={role} onScope={onScope} onRole={onRole} /> : null
       ) : (
-        <SpeedHero instanceName={instanceName} scope={scope} set={set} onOpen={() => onTab("speedruns")} entries={data.speedruns?.slice(0, 3)} pending={pending} />
+        <SpeedHero
+          instanceName={instanceName}
+          scope={data.speedrunsAreClears ? {} : scope}
+          set={data.speedrunsAreClears ? undefined : set}
+          onOpen={() => onTab("speedruns")}
+          entries={data.speedruns?.slice(0, 3)}
+          pending={pending}
+        />
       )}
       {scope.boss && <BossStats boss={data.boss ?? { boss: scope.boss }} />}
 

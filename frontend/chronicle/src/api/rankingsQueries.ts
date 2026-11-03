@@ -328,6 +328,18 @@ export function useRankingsKillTimeLeaderboard(params: {
   });
 }
 
+/** Each chosen boss's fastest clean kills (up to `perBoss`, at most 10) in one request. */
+export function useRankingsKillTimesByBoss(instanceName: string, bosses: readonly string[], perBoss: number, enabled = true) {
+  const searchParams = new URLSearchParams({ instance_name: instanceName, encounter_names: bosses.join(","), limit: String(perBoss) });
+  return useQuery({
+    queryKey: ["rankings", "kill-times-by-boss", instanceName, [...bosses], perBoss],
+    queryFn: () =>
+      fetchJSON<KillTimeLeaderboardResponse>(`/api/v1/rankings/kill-time-leaderboard?${searchParams.toString()}`),
+    staleTime: RANKINGS_STALE_TIME,
+    enabled: enabled && !!instanceName && bosses.length > 0,
+  });
+}
+
 export function useInstanceParses(params: {
   instanceId: string;
   encounterNames?: string[];

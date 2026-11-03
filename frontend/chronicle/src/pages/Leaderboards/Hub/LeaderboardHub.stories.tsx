@@ -294,12 +294,19 @@ export const ParsingTab: Story = {
   },
 }
 
-/** Speedruns, a top-level tab, follow the encounter selection: a boss ranks its fastest kills. */
+/**
+ * Speedruns, a top-level tab, with a Full clear / Kill times switch. A picked boss opens on its fastest
+ * kills; the switch goes to full clears.
+ */
 export const SpeedrunsBoss: Story = {
   args: { initialTab: "speedruns", initialScope: { boss: "Ragnaros" } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await expect(canvas.getByRole("region", { name: "Fastest Ragnaros kills" })).toBeInTheDocument()
+    const board = () => within(canvas.getByRole("navigation", { name: "Speedrun board" }))
+    await expect(board().getByRole("button", { name: /Kill times/ })).toHaveAttribute("aria-pressed", "true")
+    await expect(within(canvas.getByRole("region", { name: "Kill times" })).getByText("Ragnaros")).toBeInTheDocument()
+    await userEvent.click(board().getByRole("button", { name: "Full clear" }))
+    await expect(canvas.getByRole("region", { name: "Fastest full clears" })).toBeInTheDocument()
   },
 }
 

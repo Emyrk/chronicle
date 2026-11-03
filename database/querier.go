@@ -1131,6 +1131,9 @@ type sqlcQuerier interface {
 	// Box plot stats on encounter duration (seconds) per encounter name.
 	// Deduplicates encounters across duplicate log groups.
 	RankingsKillTimeStats(ctx context.Context, arg RankingsKillTimeStatsParams) ([]RankingsKillTimeStatsRow, error)
+	// The fastest clean kills of each chosen boss in one round trip, deduplicated
+	// across duplicate log groups like RankingsKillTimeLeaderboard.
+	RankingsKillTimeTopPerEncounter(ctx context.Context, arg RankingsKillTimeTopPerEncounterParams) ([]RankingsKillTimeTopPerEncounterRow, error)
 	// Returns paginated DPS rankings showing each player's best single run.
 	// A "run" is one instance_id (deduplicated by duplicate_group_id).
 	// Within a run, damage and duration are summed across encounters to get run DPS.

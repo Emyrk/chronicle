@@ -1183,6 +1183,44 @@ WHERE d.duration_secs > 0
 ORDER BY d.duration_secs ASC
 LIMIT @query_limit::bigint OFFSET @query_offset::bigint;
 
+-- name: RankingsKillTimeTopPerEncounter :many
+-- The fastest clean kills of each chosen boss in one round trip, deduplicated
+-- across duplicate log groups like RankingsKillTimeLeaderboard.
+WITH deduped AS (
+    SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))
+        lie.id AS encounter_id,
+        lie.name AS encounter_name,
+        li.id AS instance_id,
+        li.hashed_slug AS log_hashed_slug,
+        li.name AS instance_name,
+        COALESCE(g.name, '')::text AS guild_name,
+        COALESCE(li.guild_id::text, '')::text AS guild_id,
+        wsr.name AS realm_name,
+        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
+        lie.end_time AS killed_at
+    FROM log_instance_encounters lie
+    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    LEFT JOIN guilds g ON g.id = li.guild_id
+    WHERE li.name = @instance_name
+      AND lie.boss = true
+      AND lie.kill_type = 'clean'
+      AND lie.name = ANY(@encounter_names::text[])
+      AND cardinality(@encounter_names::text[]) <= 64
+    ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
+             EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) ASC
+), ranked AS (
+    SELECT d.*, row_number() OVER (PARTITION BY d.encounter_name ORDER BY d.duration_secs ASC, d.killed_at ASC) AS position
+    FROM deduped d
+    WHERE d.duration_secs > 0
+)
+SELECT encounter_id, encounter_name, instance_id, log_hashed_slug, instance_name, guild_name, guild_id,
+       realm_name, duration_secs, killed_at
+FROM ranked
+WHERE position <= LEAST(GREATEST(@per_encounter::int, 1), 10)
+ORDER BY encounter_name, position;
+
 -- name: RankingsSuccessRates :many
 -- Kill/wipe/total counts per encounter name within an instance.
 -- Deduplicates across duplicate log groups.

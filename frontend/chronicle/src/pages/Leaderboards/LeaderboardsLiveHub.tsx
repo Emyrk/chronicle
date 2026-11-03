@@ -1,7 +1,8 @@
+import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Navigate, useSearchParams } from "react-router-dom"
 import type { SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
-import { useRankingsLeaderboard, useRankingsStats, useRankingsClearTimes, useRankingsKillTimes, useRankingsSuccessRates, useParseScoreSpreads, useTimeParseSpreads } from "@/api/rankingsQueries"
+import { useRankingsKillTimesByBoss, useRankingsLeaderboard, useRankingsStats, useRankingsClearTimes, useRankingsKillTimes, useRankingsSuccessRates, useParseScoreSpreads, useTimeParseSpreads } from "@/api/rankingsQueries"
 import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
 import { LeaderboardsHubApp } from "./Hub/HubLanding"
@@ -14,7 +15,7 @@ import { PerformancesTab } from "./Hub/PerformancesTab"
 import { SpeedrunsTab } from "./Hub/SpeedrunsTab"
 import { StatisticsTab, type LiveStatisticsData } from "./Hub/StatisticsTab"
 import { ParsingTab, type LiveParsingData } from "./Hub/ParsingTab"
-import { FULL_CLEAR, type EncounterSelection } from "./Hub/encounterSelection"
+import { FULL_CLEAR, defaultSpeedrunsView, type EncounterSelection, type SpeedrunsView } from "./Hub/encounterSelection"
 import { liveHubBosses } from "./Hub/liveBosses"
 import { v2Selection, hubParams } from "./v2Selection"
 import { legacyLeaderboardsTarget } from "./leaderboardsState"
@@ -127,6 +128,13 @@ function LiveHubContent({ context, summary, requestedEncounters = [], realmName,
     difficulty_names: chosen?.difficulty_name, max_players: chosen?.max_players || undefined, exact_cohort: !!chosen, class: scope.cls, spec: scope.spec, sub_spec: scope.subSpec,
     metric: role === "healing" ? "hps" : "dps", realm_names: realmName, limit: 50,
   }, !overview && context.tab === "performances" && exact && realmIDs.length <= 1 && subject === "characters")
+  // Speedruns shows one board at a time; only that board is fetched. Reset with the selection.
+  const [speedViewState, setSpeedView] = useState<{ key: string; view: SpeedrunsView }>()
+  const selectionKey = picked.join(",")
+  const speedView = speedViewState?.key === selectionKey ? speedViewState.view : defaultSpeedrunsView(selection)
+  const killBosses = picked.length ? picked : bosses
+  const kills = useRankingsKillTimesByBoss(instanceName, killBosses, killBosses.length === 1 ? 10 : 3,
+    !overview && context.tab === "speedruns" && speedView === "kills")
   const speed = useQuery<SpeedrunLeaderboardEntry[]>({
     queryKey: ["hub-live-speedruns", instanceName, realmName, chosen?.difficulty_name, chosen?.max_players],
     queryFn: async () => {
@@ -137,7 +145,7 @@ function LiveHubContent({ context, summary, requestedEncounters = [], realmName,
       if (!response.ok) throw new Error(`Speedruns request failed (${response.status})`)
       return response.json() as Promise<SpeedrunLeaderboardEntry[]>
     },
-    enabled: !overview && context.tab === "speedruns" && exact && !boss && realmIDs.length <= 1,
+    enabled: !overview && context.tab === "speedruns" && speedView === "clear" && exact && realmIDs.length <= 1,
     staleTime: 5 * 60 * 1000,
   })
   const stats = useRankingsStats({ instance_names: instanceName, encounter_names: pickedNames, difficulty_names: chosen?.difficulty_name,
@@ -166,9 +174,13 @@ function LiveHubContent({ context, summary, requestedEncounters = [], realmName,
     <PerformancesTab instanceName={instanceName} scope={scope} role={role} subject={subject} bosses={picked}
       where={boss ?? (picked.length > 1 ? `${picked.length} bosses` : instanceName)} onSpeedruns={() => onTab("speedruns")}
       live={{ response: performance.data, loading: performance.isPending, error: performance.isError ? performance.error : null }} />
-  if (context.tab === "speedruns") return !exact ? <CohortPrompt raids={raids} /> : boss ?
-    <p className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">Boss kill-time podiums are not published by the speedrun board. Select Full clear.</p> :
-    <SpeedrunsTab instanceName={instanceName} bosses={[]} selection={selection} live={{ entries: speed.data, loading: speed.isPending, error: speed.isError ? speed.error : null }} />
+  if (context.tab === "speedruns") return !exact ? <CohortPrompt raids={raids} /> :
+    <SpeedrunsTab instanceName={instanceName} bosses={bosses} selection={selection}
+      view={speedView} onView={(view) => setSpeedView({ key: selectionKey, view })}
+      live={{
+        clears: { entries: speed.data, loading: speed.isPending, error: speed.isError ? speed.error : null },
+        kills: { entries: kills.data?.entries, loading: kills.isPending, error: kills.isError ? kills.error : null },
+      }} />
   if (context.tab === "statistics") {
     const live: LiveStatisticsData = {
       specs: chosen ? queryState(stats) : undefined,

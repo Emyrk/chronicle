@@ -259,6 +259,7 @@ export function liveOverviewData(src: LiveOverviewSources): OverviewData {
   const bossKills = src.bossKills ? killsAsRuns(src.bossKills) : undefined;
   return {
     speedruns: scope.boss ? bossKills : summary.speedruns,
+    speedrunsAreClears: !scope.boss,
     ratings,
     guildRatings:
       board && subject === "guilds" ? guildLeaders(board.guild) : undefined,

@@ -809,6 +809,33 @@ func (s *Service) handleKillTimeLeaderboard(w http.ResponseWriter, r *http.Reque
 		offset, _ = strconv.ParseInt(v, 10, 64)
 	}
 
+	// encounter_names returns each chosen boss's fastest kills (limit per boss, at
+	// most 10) in one request, for boards that show several bosses side by side.
+	if q.Has("encounter_names") {
+		names := splitCSV(q.Get("encounter_names"))
+		if len(names) == 0 || len(names) > 64 {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "encounter_names must list 1 to 64 bosses"})
+			return
+		}
+		top, err := s.store.RankingsKillTimeTopPerEncounter(ctx, database.RankingsKillTimeTopPerEncounterParams{
+			InstanceName: instanceName, EncounterNames: names, PerEncounter: int32(min(limit, 10)),
+		})
+		if err != nil {
+			httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to fetch kill times", Detail: err.Error()}})
+			return
+		}
+		entries := make([]chroniclesdk.KillTimeLeaderboardEntry, 0, len(top))
+		for _, row := range top {
+			entries = append(entries, chroniclesdk.KillTimeLeaderboardEntry{
+				EncounterID: row.EncounterID, InstanceID: row.InstanceID, EncounterName: row.EncounterName,
+				InstanceName: row.InstanceName, GuildName: row.GuildName, GuildID: row.GuildID, RealmName: row.RealmName,
+				DurationSecs: row.DurationSecs, KilledAt: row.KilledAt.Time, LogHashedSlug: row.LogHashedSlug.String,
+			})
+		}
+		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.KillTimeLeaderboardResponse{Entries: entries, TotalCount: int64(len(entries))})
+		return
+	}
+
 	rows, err := s.store.RankingsKillTimeLeaderboard(ctx, database.RankingsKillTimeLeaderboardParams{
 		InstanceName:  instanceName,
 		EncounterName: q.Get("encounter_name"),

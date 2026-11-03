@@ -23,6 +23,7 @@ vi.mock("@/api/rankingsQueries", () => ({
   useRankingsStats: () => ({ data: [], isPending: false, isError: false }),
   useRankingsClearTimes: () => ({ data: [], isPending: false, isError: false }),
   useRankingsKillTimes: () => ({ data: [], isPending: false, isError: false }),
+  useRankingsKillTimesByBoss: () => ({ data: { entries: [], total_count: 0 }, isPending: false, isError: false }),
   useRankingsSuccessRates: () => ({ data: [], isPending: false, isError: false }),
   useParseScoreSpreads: () => ({ data: { available: false, spreads: [] }, isPending: false, isError: false }),
   useTimeParseSpreads: () => ({ data: { spreads: [] }, isPending: false, isError: false }),

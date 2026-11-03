@@ -21,8 +21,9 @@ const speedrun = {
 const performance = { player_name: "Live player", log_hashed_slug: "live-log" } as RankingsEntry
 const response: RankingsLeaderboardResponse = { entries: [performance], total_count: 1 }
 
-function speedruns(live?: React.ComponentProps<typeof SpeedrunsTab>["live"]) {
-  return renderToStaticMarkup(<SpeedrunsTab instanceName="Molten Core" bosses={["Ragnaros"]} selection={{ kind: "clear" }} live={live} />)
+type SpeedrunsLive = NonNullable<React.ComponentProps<typeof SpeedrunsTab>["live"]>
+function speedruns(clears?: SpeedrunsLive["clears"], extra?: Partial<React.ComponentProps<typeof SpeedrunsTab>>) {
+  return renderToStaticMarkup(<SpeedrunsTab instanceName="Molten Core" bosses={["Lucifron", "Ragnaros"]} selection={{ kind: "clear" }} live={clears ? { clears } : undefined} {...extra} />)
 }
 function performances(live?: React.ComponentProps<typeof PerformancesTab>["live"], subject: "characters" | "guilds" = "characters") {
   return renderToStaticMarkup(<PerformancesTab instanceName="Molten Core" scope={{ boss: "Ragnaros" }} role="healing" subject={subject} bosses={["Ragnaros"]} where="Ragnaros" onSpeedruns={() => {}} live={live} />)
@@ -47,12 +48,22 @@ describe("Hub leaderboard live props", () => {
   })
 
   it("distinguishes speedrun loading, empty, and error without showing fixtures", () => {
-    expect(speedruns({})).toContain("Loading speedruns")
+    expect(speedruns({ loading: true })).toContain("Loading speedruns")
     expect(speedruns({ loading: true, entries: [speedrun] })).not.toContain("Live guild")
     expect(speedruns({ entries: [] })).toContain("No speedruns found")
     const error = speedruns({ error: new Error("Offline") })
     expect(error).toContain("Could not load speedruns: Offline")
     expect(error).not.toContain("<table")
+  })
+
+  it("opens a hand-picked set on its bosses' kill times and loads only that board", () => {
+    const kill = { encounter_id: "k1", encounter_name: "Ragnaros", guild_name: "Fast Guild", guild_id: "g1", realm_name: "Realm", duration_secs: 95, killed_at: "2026-10-01T00:00:00Z" }
+    const markup = renderToStaticMarkup(<SpeedrunsTab instanceName="Molten Core" bosses={["Lucifron", "Ragnaros"]} selection={{ kind: "bosses", bosses: ["Ragnaros"] }}
+      live={{ kills: { entries: [kill as never] } }} />)
+    expect(markup).toMatch(/aria-pressed="true"[^>]*>Kill times · Ragnaros/)
+    expect(markup).toContain("&lt;Fast Guild&gt;")
+    expect(markup).toContain("1:35")
+    expect(markup).not.toContain("Fastest full clears")
   })
 
   it("keeps Storybook performances and renders live ranked rows with the selected metric", () => {

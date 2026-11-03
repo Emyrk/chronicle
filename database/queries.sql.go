@@ -20638,6 +20638,95 @@ func (q *sqlQuerier) RankingsKillTimeStats(ctx context.Context, arg RankingsKill
 	return items, nil
 }
 
+const rankingsKillTimeTopPerEncounter = `-- name: RankingsKillTimeTopPerEncounter :many
+WITH deduped AS (
+    SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))
+        lie.id AS encounter_id,
+        lie.name AS encounter_name,
+        li.id AS instance_id,
+        li.hashed_slug AS log_hashed_slug,
+        li.name AS instance_name,
+        COALESCE(g.name, '')::text AS guild_name,
+        COALESCE(li.guild_id::text, '')::text AS guild_id,
+        wsr.name AS realm_name,
+        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
+        lie.end_time AS killed_at
+    FROM log_instance_encounters lie
+    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    LEFT JOIN guilds g ON g.id = li.guild_id
+    WHERE li.name = $2
+      AND lie.boss = true
+      AND lie.kill_type = 'clean'
+      AND lie.name = ANY($3::text[])
+      AND cardinality($3::text[]) <= 64
+    ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
+             EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) ASC
+), ranked AS (
+    SELECT d.encounter_id, d.encounter_name, d.instance_id, d.log_hashed_slug, d.instance_name, d.guild_name, d.guild_id, d.realm_name, d.duration_secs, d.killed_at, row_number() OVER (PARTITION BY d.encounter_name ORDER BY d.duration_secs ASC, d.killed_at ASC) AS position
+    FROM deduped d
+    WHERE d.duration_secs > 0
+)
+SELECT encounter_id, encounter_name, instance_id, log_hashed_slug, instance_name, guild_name, guild_id,
+       realm_name, duration_secs, killed_at
+FROM ranked
+WHERE position <= LEAST(GREATEST($1::int, 1), 10)
+ORDER BY encounter_name, position
+`
+
+type RankingsKillTimeTopPerEncounterParams struct {
+	PerEncounter   int32    `db:"per_encounter" json:"per_encounter"`
+	InstanceName   string   `db:"instance_name" json:"instance_name"`
+	EncounterNames []string `db:"encounter_names" json:"encounter_names"`
+}
+
+type RankingsKillTimeTopPerEncounterRow struct {
+	EncounterID   uuid.UUID          `db:"encounter_id" json:"encounter_id"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
+	LogHashedSlug pgtype.Text        `db:"log_hashed_slug" json:"log_hashed_slug"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	GuildName     string             `db:"guild_name" json:"guild_name"`
+	GuildID       string             `db:"guild_id" json:"guild_id"`
+	RealmName     string             `db:"realm_name" json:"realm_name"`
+	DurationSecs  float64            `db:"duration_secs" json:"duration_secs"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+}
+
+// The fastest clean kills of each chosen boss in one round trip, deduplicated
+// across duplicate log groups like RankingsKillTimeLeaderboard.
+func (q *sqlQuerier) RankingsKillTimeTopPerEncounter(ctx context.Context, arg RankingsKillTimeTopPerEncounterParams) ([]RankingsKillTimeTopPerEncounterRow, error) {
+	rows, err := q.db.Query(ctx, rankingsKillTimeTopPerEncounter, arg.PerEncounter, arg.InstanceName, arg.EncounterNames)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingsKillTimeTopPerEncounterRow
+	for rows.Next() {
+		var i RankingsKillTimeTopPerEncounterRow
+		if err := rows.Scan(
+			&i.EncounterID,
+			&i.EncounterName,
+			&i.InstanceID,
+			&i.LogHashedSlug,
+			&i.InstanceName,
+			&i.GuildName,
+			&i.GuildID,
+			&i.RealmName,
+			&i.DurationSecs,
+			&i.KilledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const rankingsLeaderboard = `-- name: RankingsLeaderboard :many
 WITH candidate_runs AS (
     -- Class/spec/sub-spec/role filters usually narrow the leaderboard to a small

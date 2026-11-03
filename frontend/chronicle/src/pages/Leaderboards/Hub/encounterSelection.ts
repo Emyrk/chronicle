@@ -29,3 +29,11 @@ export function toggleEncounter(selection: EncounterSelection, preset: readonly 
   const isPreset = ordered.length === preset.length && preset.every((b) => next.has(b))
   return !ordered.length || isPreset ? FULL_CLEAR : { kind: "bosses", bosses: ordered }
 }
+
+/** Speedruns boards: whole-raid runs, or each selected boss's fastest kills. */
+export type SpeedrunsView = "clear" | "kills"
+
+/** The preset opens Speedruns on full clears; a hand-picked set on its kill times. */
+export function defaultSpeedrunsView(selection: EncounterSelection): SpeedrunsView {
+  return selection.kind === "clear" ? "clear" : "kills"
+}

@@ -584,7 +584,9 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		}
 		out.Ratings.Raid = board
 	}
-	if in.exact && in.featured == "" && setIsPreset {
+	// The overview's podium shows full clears for the preset and any set of
+	// bosses; set kill times live on the Speedruns tab.
+	if in.exact && in.featured == "" {
 		speed, e := s.store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{InstanceName: in.instance, FilterDifficulty: true, DifficultyName: in.difficulty, FilterInstanceMaxPlayers: true, InstanceMaxPlayers: in.size, RealmNames: realmNames, ResultLimit: hubOverviewSpeedrunLimit})
 		if e != nil {
 			httpapi.InternalServerError(w, e)
