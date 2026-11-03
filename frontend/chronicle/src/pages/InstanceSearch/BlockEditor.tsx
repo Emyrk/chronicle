@@ -7,12 +7,13 @@ import type {
   InstanceSearchOp,
 } from "@/api/typesGenerated";
 import { Button } from "@/components/ui/button";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ChipInput, NATIVE_SELECT, NumberInput, Segmented, SuggestInput, ToggleChips } from "./controls";
 import { MATCH_OPTIONS, METRIC_OPTIONS, ON_OPTIONS, OP_LABELS, PARSE_SCOPE_OPTIONS, enumLabel, fieldGroup, fieldLabel } from "./fieldLabels";
 import { prune, type Node } from "./queryModel";
-import { COMPLEXITY_STYLE, complexity, nodeCost } from "./searchCost";
+import { COMPLEXITY_STYLE, complexity, queryCost } from "./searchCost";
 import type { ComboOption, Suggestion } from "./comboOptions";
 import { SelectCombo } from "./ComboInput";
 import { ClassSpecPicker } from "./ClassSpecPicker";
@@ -322,16 +323,42 @@ function NodeBlock({
  */
 function BlockCost({ node, costs }: { node: Node; costs: InstanceSearchFieldsResponse }) {
   const pruned = prune(node);
-  const cost = pruned ? nodeCost(pruned, costs) : 0;
+  if (!pruned) return null;
+  const { parts } = queryCost(pruned, costs);
+  const own = parts.filter((p) => p.label !== "Base");
+  const cost = own.reduce((sum, p) => sum + p.cost, 0);
   if (cost === 0) return null;
-  const style = COMPLEXITY_STYLE[complexity(cost, null).level];
+  const c = complexity(cost, null);
+  const style = COMPLEXITY_STYLE[c.level];
   return (
-    <span
-      className={cn("shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] tabular-nums ring-1", style.pill, style.text)}
-      title={`This block adds ${cost} to the search's cost`}
-    >
-      +{cost}
-    </span>
+    <HintTooltip delayDuration={150}>
+      <TooltipTrigger asChild>
+        <span
+          tabIndex={0}
+          className={cn("shrink-0 cursor-help rounded px-1.5 py-0.5 font-mono text-[10px] tabular-nums ring-1", style.pill, style.text)}
+          aria-label={`This block adds ${cost} to the search's cost`}
+        >
+          +{cost}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="left" sideOffset={6} className="w-60 p-3 text-left">
+        <p className="mb-1.5 font-semibold">
+          This block adds {cost} <span className={cn("font-normal", style.text)}>· {c.label}</span>
+        </p>
+        <ul className="space-y-0.5 text-xs">
+          {own.map((p) => (
+            <li key={p.label} className="flex justify-between gap-3 tabular-nums">
+              <span>
+                {p.label}
+                {p.count > 1 && <span className="text-muted-foreground"> ×{p.count}</span>}
+              </span>
+              <span>{p.cost}</span>
+            </li>
+          ))}
+        </ul>
+        {own.length > 1 && <p className="mt-2 text-[11px] text-muted-foreground">Includes everything inside this block.</p>}
+      </TooltipContent>
+    </HintTooltip>
   );
 }
 
