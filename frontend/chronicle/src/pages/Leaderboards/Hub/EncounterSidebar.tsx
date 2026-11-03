@@ -15,6 +15,7 @@ export function EncounterSidebar({
   selection,
   onSelect,
   onCollapse,
+  allowCombine = true,
 }: {
   bosses: readonly string[]
   optional: ReadonlySet<string>
@@ -22,13 +23,15 @@ export function EncounterSidebar({
   onSelect: (selection: EncounterSelection) => void
   /** Collapse the column to the left (the instance page's "Hide sidebar"). */
   onCollapse?: () => void
+  /** Disable mock-only multi-boss aggregation on live leaderboards. */
+  allowCombine?: boolean
 }) {
   const chosen = new Set(selection.kind === "bosses" ? selection.bosses : [])
   const required = bosses.filter((b) => !optional.has(b))
   const extra = bosses.filter((b) => optional.has(b))
 
   const pick = (boss: string, combine: boolean) => {
-    if (!combine) return onSelect({ kind: "bosses", bosses: [boss] })
+    if (!combine || !allowCombine) return onSelect({ kind: "bosses", bosses: [boss] })
     const next = new Set(chosen)
     if (next.has(boss)) next.delete(boss)
     else next.add(boss)
@@ -48,8 +51,7 @@ export function EncounterSidebar({
         )}
       </div>
 
-      {/* Quick-select buttons */}
-      <div className="mt-1.5 flex gap-1">
+      {allowCombine && <div className="mt-1.5 flex gap-1">
         <Button
           variant="outline"
           size="sm"
@@ -59,7 +61,7 @@ export function EncounterSidebar({
         >
           All bosses
         </Button>
-      </div>
+      </div>}
 
       <div className="mt-3 space-y-4">
         <Section label="Raid">
@@ -72,20 +74,22 @@ export function EncounterSidebar({
         </Section>
         <Section label="Bosses">
           {required.map((name) => (
-            <Row key={name} name={name} selected={chosen.has(name)} onClick={(combine) => pick(name, combine)} />
+            <Row key={name} name={name} selected={chosen.has(name)} title={!allowCombine ? `Show ${name} ratings` : undefined} onClick={(combine) => pick(name, combine)} />
           ))}
         </Section>
         {extra.length > 0 && (
           <Section label="Optional">
             {extra.map((name) => (
-              <Row key={name} name={name} selected={chosen.has(name)} subdued onClick={(combine) => pick(name, combine)} />
+              <Row key={name} name={name} selected={chosen.has(name)} subdued title={!allowCombine ? `Show ${name} ratings` : undefined} onClick={(combine) => pick(name, combine)} />
             ))}
           </Section>
         )}
       </div>
 
       <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground/50">
-        Full clear uses whole-raid runs. Ctrl+Click to combine bosses: ratings average across them and time is total kill time.
+        {allowCombine
+          ? "Full clear uses whole-raid runs. Ctrl+Click to combine bosses: ratings average across them and time is total kill time."
+          : "Choose the raid board or a single encounter. Realm filters change only the displayed rows."}
       </p>
     </nav>
   )
