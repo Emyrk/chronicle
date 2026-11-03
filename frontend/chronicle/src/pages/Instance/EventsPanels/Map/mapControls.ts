@@ -1,7 +1,8 @@
 /**
  * Fixed replay map controls, WoW-style. Keys are KeyboardEvent.code values,
  * so a control follows the physical key on any keyboard layout. The same keys
- * drive the orbit camera and walk mode ("join the fight"), each its own way.
+ * and drags drive the free camera and walk mode ("join the fight") the same
+ * way: the free cam is walk mode with a hidden character (chronicle-1514).
  */
 
 export const MAP_CONTROL_ACTIONS = [
@@ -98,6 +99,71 @@ export function cameraCollisionDistance(
   return allowed - next < 1e-4 * Math.max(1, allowed) ? allowed : next;
 }
 
+/** Mouse look: radians per pixel dragged, in both camera modes, whatever the window size. */
+export const LOOK_RADIANS_PER_PX = 0.006;
+/** The wheel scales the camera distance by e^(deltaY * this), in both camera modes. */
+export const WHEEL_ZOOM_RATE = 0.0015;
+/** Shift multiplies the free cam's travel speed by this. */
+export const FREE_CAM_FAST_FACTOR = 3;
+
+export interface CameraOffset {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/**
+ * Where the camera sits relative to its pivot (the character's head, or the
+ * free cam's hidden one): `yaw` around the vertical (0 is +z), `pitch` above
+ * the horizon, `distance` out. Both camera modes place the camera with this.
+ */
+export function cameraOffset(yaw: number, pitch: number, distance: number): CameraOffset {
+  const horizontal = Math.cos(pitch) * distance;
+  return { x: Math.sin(yaw) * horizontal, y: Math.sin(pitch) * distance, z: Math.cos(yaw) * horizontal };
+}
+
+/** The inverse of cameraOffset: the yaw, pitch and distance of an offset from the pivot. */
+export function cameraAngles(offset: CameraOffset): { yaw: number; pitch: number; distance: number } {
+  const horizontal = Math.hypot(offset.x, offset.z);
+  return {
+    yaw: Math.abs(offset.x) + Math.abs(offset.z) < 1e-9 ? 0 : Math.atan2(offset.x, offset.z),
+    pitch: Math.atan2(offset.y, horizontal),
+    distance: Math.hypot(horizontal, offset.y),
+  };
+}
+
+/** A mouse-look drag of (dx, dy) pixels: drag right turns the view right, drag down raises the camera. */
+export function lookDrag(yaw: number, pitch: number, dx: number, dy: number, minPitch: number, maxPitch: number): { yaw: number; pitch: number } {
+  return {
+    yaw: yaw - dx * LOOK_RADIANS_PER_PX,
+    pitch: Math.max(minPitch, Math.min(maxPitch, pitch + dy * LOOK_RADIANS_PER_PX)),
+  };
+}
+
+/** One wheel step: the new camera distance, between `min` and `max`. */
+export function wheelZoomDistance(distance: number, deltaY: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, distance * Math.exp(deltaY * WHEEL_ZOOM_RATE)));
+}
+
+/**
+ * Ground movement for forward/strafe input (each -1…1) facing `yaw` (forward
+ * is -z turned by yaw, away from a camera at that yaw), `step` long; a
+ * diagonal is no faster than a straight line.
+ */
+export function planarStep(yaw: number, forward: number, strafe: number, step: number): { x: number; z: number } {
+  const length = Math.hypot(forward, strafe);
+  if (length === 0) return { x: 0, z: 0 };
+  const scaled = step / length;
+  const sin = Math.sin(yaw);
+  const cos = Math.cos(yaw);
+  return { x: (-sin * forward + cos * strafe) * scaled, z: (-cos * forward - sin * strafe) * scaled };
+}
+
+/** The free cam's travel speed (scene units per second): a fraction of the zoom distance, so it feels the same near or far; Shift travels faster. */
+export function freeCamTravelSpeed(distance: number, fractionPerSecond: number, fast: boolean): number {
+  return distance * fractionPerSecond * (fast ? FREE_CAM_FAST_FACTOR : 1);
+}
+
 /** Tracks left/right mouse state without relying on browser `event.buttons` updates. */
 export function setWalkMouseButton(buttons: number, button: number, down: boolean): number {
   const bit = button === 0 ? 1 : button === 2 ? 2 : 0;
@@ -154,14 +220,16 @@ export const MAP_CONTROL_KEYBINDS = [
   { keys: "W / S", action: "Move forward / back (pointer over the map, or while walking)" },
   { keys: "A / D", action: "Turn left / right (strafe with \"A/D strafe\" on in Map settings → Controls)" },
   { keys: "Q / E", action: "Rewind / fast forward replay by 1 second" },
-  { keys: "Space / Z", action: "Zoom out / in; while walking: jump (hold to fly up) / fly down" },
+  { keys: "Space / Z", action: "Fly up / down; while walking: jump (hold to fly up) / fly down" },
+  { keys: "Shift", action: "Free camera: travel faster" },
   { keys: "X", action: "Play / pause the replay" },
   { keys: keyLabel(WALK_TOGGLE_KEY), action: "Walk mode on / off: join the fight on the ground" },
   { keys: "Esc", action: "Leave walk mode" },
   { keys: "Ctrl + Shift + F", action: "Map fills the browser window on / off (pointer over the map); Esc leaves" },
   { keys: "Ctrl + Alt + F", action: "Map fullscreen on / off (pointer over the map)" },
-  { keys: "Left-drag / right-drag", action: "While walking: free-look / steer character and camera. The cursor hides while you drag" },
-  { keys: "Left + right mouse", action: "While walking: run forward and steer with the mouse" },
+  { keys: "Left-drag / right-drag", action: "Look around / steer: movement follows the camera (while walking the character turns too). The cursor hides while you drag" },
+  { keys: "Left + right mouse", action: "Move forward and steer with the mouse" },
+  { keys: "Middle-drag", action: "Free camera: pan (grab the ground)" },
   { keys: "Right-drag + A / D", action: "Strafe left / right relative to the camera, whatever A/D strafe is set to" },
   { keys: "Mouse wheel", action: "Zoom; while walking, all the way in is first person" },
 ];
