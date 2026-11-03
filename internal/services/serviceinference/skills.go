@@ -17,6 +17,31 @@ type runtimeSkill struct {
 	Tools                           []ToolDefinition
 }
 
+// Keep the link and browser-draft tools' query-tree guidance identical. The
+// compiler remains the authority for scope, field values, and depth limits.
+const searchWhereParameterSchema = `{
+  "type":"object",
+  "description":"One query node: exactly one of field, and, or, not, any_player, count_players, any_encounter, count_encounters. Each field predicate has field, op, value; player.* and encounter.* require their respective quantifier. Nested nodes use the same shape.",
+  "properties":{
+    "field":{"type":"string","description":"Field name such as instance.category, player.class, or encounter.name. Use describe_instance_search for valid fields and scopes."},
+    "op":{"type":"string","enum":["=","!=","<","<=",">",">=","in","not_in","contains","starts_with","between"],"description":"Operator must be allowed for the chosen field."},
+    "value":{"description":"Predicate value: string, number, boolean, or list as required by the field and operator."},
+    "and":{"type":"array","items":{"type":"object"},"description":"All child query nodes must match."},
+    "or":{"type":"array","items":{"type":"object"},"description":"At least one child query node must match."},
+    "not":{"type":"object","description":"Negate one child query node."},
+    "any_player":{"type":"object","description":"One player must satisfy this subtree; all child predicates refer to that same player."},
+    "count_players":{"type":"object","properties":{"where":{"type":"object"},"op":{"type":"string","enum":["=","!=","<","<=",">",">="]},"value":{"type":"integer","minimum":0}},"required":["op","value"],"additionalProperties":false},
+    "any_encounter":{"type":"object","description":"One encounter must satisfy this subtree."},
+    "count_encounters":{"type":"object","properties":{"where":{"type":"object"},"op":{"type":"string","enum":["=","!=","<","<=",">",">="]},"value":{"type":"integer","minimum":0}},"required":["op","value"],"additionalProperties":false},
+    "bosses":{"type":"array","items":{"type":"string"},"description":"Optional boss names for supported field predicates."},
+    "match":{"type":"string","enum":["any","each"]},
+    "parse_scope":{"type":"string","enum":["server","realm","guild"]},
+    "metric":{"type":"string","enum":["dps","hps"]},
+    "on":{"type":"string","enum":["bosses","trash","any"]}
+  },
+  "additionalProperties":false
+}`
+
 var runtimeSkills = map[string]runtimeSkill{
 	chronicleConceptsSkillID: {
 		ID: chronicleConceptsSkillID, Name: "Chronicle log concepts", Version: "1",
@@ -25,16 +50,19 @@ A parse is a comparison score, not the raw damage, healing, or kill time. A play
 Use Chronicle tools when a question needs current account-specific data; general definitions alone do not establish that a log or parse exists.`,
 	},
 	instanceSearchSkillID: {
-		ID: instanceSearchSkillID, Name: "Chronicle instance search", Version: "1",
+		ID: instanceSearchSkillID, Name: "Chronicle instance search", Version: "2",
 		Instructions: `Use this skill to build a link to a Chronicle search for raid or dungeon runs, rosters, fights, parses, or progression. This assistant cannot run the search or see results. Never claim matches exist; explain the proposed filters and give the returned URL. Links preserve the current site/tenant and filters only, not pagination or limits. Do not fabricate links: call build_instance_search_link.
 First call describe_instance_search if you need the current field registry, allowed operators, value types, or limits. Then build a JSON where node using and/or/not, any_player/count_players, or any_encounter/count_encounters. Fields with instance.* are top-level; player.* fields go inside player quantifiers; encounter.* inside encounter quantifiers; quantifiers cannot nest. Predicates inside one any_player or count_players subtree apply to the same player; similarly for encounters.
-For example, "3+ priests" is count_players(where player.class = PRIEST, op >=, value 3). "Killed Rag without wipes" combines an encounter with name Ragnaros and killed=true with NOT an encounter matching Ragnaros and outcome=wipe. "90+ kill parse on Rag and Domo" uses instance.kill_time_parse with bosses [Ragnaros, Majordomo Executus] and match=each.
-For a druid who used both Bear and Cat on boss kills in a raid, call build_instance_search_link with {"where":{"and":[{"field":"instance.category","op":"=","value":"raid"},{"any_player":{"and":[{"field":"player.class","op":"=","value":"DRUID"},{"field":"player.sub_spec","op":"=","value":"Bear"},{"field":"player.sub_spec","op":"=","value":"Cat"}]}}]}}. Keep the two sub_spec predicates inside one any_player so they refer to the same druid. A request for *any* two distinct specs without naming them is not expressible by this query language; ask which specs the user means rather than guessing.
+Examples of complete build_instance_search_link arguments (the same where trees work with set_search_draft when accompanied by expected_revision):
+- Raid runs: {"where":{"field":"instance.category","op":"=","value":"raid"}}
+- Runs with at least three priests: {"where":{"count_players":{"where":{"field":"player.class","op":"=","value":"PRIEST"},"op":">=","value":3}}}
+- A raid with the same druid playing Bear and Cat on boss kills: {"where":{"and":[{"field":"instance.category","op":"=","value":"raid"},{"any_player":{"and":[{"field":"player.class","op":"=","value":"DRUID"},{"field":"player.sub_spec","op":"=","value":"Bear"},{"field":"player.sub_spec","op":"=","value":"Cat"}]}}]}}
+Keep both sub_spec predicates inside one any_player so they refer to the same druid; two separate any_player nodes could match two different players. A request for *any* two distinct specs without naming them is not expressible by this query language; ask which specs the user means rather than guessing.
 Every predicate is an object with field, op, and value; do not use {"category":"raid"} or {"player":{"class":"DRUID"}}. Use the detail from a rejected link or draft tool call to correct its JSON, and never present an unreturned URL as valid.
 Text matching is case-insensitive. Missing values do not satisfy = or !=; use not when missing values should also count. Per-fight player fields default to boss kills; set on=trash or on=any only when requested. If validation rejects a query, revise it or explain the limitation rather than inventing a URL.`,
 		Tools: []ToolDefinition{
 			{Name: "describe_instance_search", Description: "Return current Chronicle instance-search fields, operators, and limits. Does not run a search.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
-			{Name: "build_instance_search_link", Description: "Validate a JSON search tree and return a link to open it in Chronicle search. Does not run the search or return results.", Parameters: json.RawMessage(`{"type":"object","properties":{"where":{"type":"object","description":"One instance-search node: and, or, not, any_player, count_players, any_encounter, count_encounters, or field predicate."}},"required":["where"],"additionalProperties":false}`)},
+			{Name: "build_instance_search_link", Description: "Validate a JSON search tree and return a link to open it in Chronicle search. Pass {\"where\": <one query node>}; does not run the search or return results.", Parameters: json.RawMessage(`{"type":"object","properties":{"where":` + searchWhereParameterSchema + `},"required":["where"],"additionalProperties":false}`)},
 		},
 	},
 }

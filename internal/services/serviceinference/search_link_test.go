@@ -22,9 +22,9 @@ func TestSiteHelpSearchLinkTool(t *testing.T) {
 	require.Contains(t, a.System, "## Skill: Chronicle instance search")
 	require.Equal(t, []string{"chronicle-concepts", "instance-search"}, a.Skills)
 	require.Len(t, debugRuntimeSkills(a), 2)
-	_, example, found := strings.Cut(a.System, "call build_instance_search_link with ")
+	_, example, found := strings.Cut(a.System, "- A raid with the same druid playing Bear and Cat on boss kills: ")
 	require.True(t, found)
-	example, _, found = strings.Cut(example, ". Keep the two")
+	example, _, found = strings.Cut(example, "\nKeep both")
 	require.True(t, found)
 	var input struct {
 		Where *instancesearch.Node `json:"where"`

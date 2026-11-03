@@ -57,7 +57,7 @@ var searchPageClientTools = []clientToolDefinition{
 		CapabilityID:   searchPageCapabilityID, CapabilityVersion: searchPageCapabilityVersion, Effect: "read", Confirmation: "never",
 	},
 	{
-		ToolDefinition: ToolDefinition{Name: "set_search_draft", Description: "Replace the current unsaved advanced instance-search draft with a validated query tree. This does not execute a search, change the URL, or save the draft. Pass expected_revision from inspect_search_draft. If unavailable or rejected, do not retry; after stale_state inspect again before retrying once.", Parameters: json.RawMessage(`{"type":"object","properties":{"expected_revision":{"type":"integer","minimum":0},"where":{"type":"object"}},"required":["expected_revision","where"],"additionalProperties":false}`)},
+		ToolDefinition: ToolDefinition{Name: "set_search_draft", Description: "Replace the current unsaved advanced instance-search draft with a validated query tree. This does not execute a search, change the URL, or save the draft. Pass expected_revision from inspect_search_draft. If unavailable or rejected, do not retry; after stale_state inspect again before retrying once.", Parameters: json.RawMessage(`{"type":"object","properties":{"expected_revision":{"type":"integer","minimum":0},"where":` + searchWhereParameterSchema + `},"required":["expected_revision","where"],"additionalProperties":false}`)},
 		CapabilityID:   searchPageCapabilityID, CapabilityVersion: searchPageCapabilityVersion, Effect: "view_mutation", Confirmation: "unless_yolo",
 	},
 }

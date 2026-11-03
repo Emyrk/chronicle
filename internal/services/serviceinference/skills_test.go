@@ -25,6 +25,33 @@ func TestRuntimeSkillsComposeConcepts(t *testing.T) {
 	require.Equal(t, "chronicle-concepts", debugRuntimeSkills(composed)[0].ID)
 }
 
+func TestSearchSkillExamplesAndToolSchemas(t *testing.T) {
+	t.Parallel()
+	skill := runtimeSkills[instanceSearchSkillID]
+	for _, example := range []string{
+		`{"where":{"field":"instance.category","op":"=","value":"raid"}}`,
+		`{"where":{"count_players":{"where":{"field":"player.class","op":"=","value":"PRIEST"},"op":">=","value":3}}}`,
+		`{"where":{"and":[{"field":"instance.category","op":"=","value":"raid"},{"any_player":{"and":[{"field":"player.class","op":"=","value":"DRUID"},{"field":"player.sub_spec","op":"=","value":"Bear"},{"field":"player.sub_spec","op":"=","value":"Cat"}]}}]}}`,
+	} {
+		require.Contains(t, skill.Instructions, example)
+		_, err := buildInstanceSearchLink(example)
+		require.NoError(t, err)
+	}
+	var link, draft struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal(skill.Tools[1].Parameters, &link))
+	require.NoError(t, json.Unmarshal(searchPageClientTools[1].Parameters, &draft))
+	require.JSONEq(t, string(link.Properties["where"]), string(draft.Properties["where"]))
+	var where struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal(link.Properties["where"], &where))
+	for _, key := range []string{"field", "op", "value", "and", "or", "not", "any_player", "count_players", "any_encounter", "count_encounters"} {
+		require.Contains(t, where.Properties, key)
+	}
+}
+
 func TestRuntimeSkillsRejectUnknownOrDuplicate(t *testing.T) {
 	t.Parallel()
 	for _, skills := range [][]string{{"not-a-skill"}, {"chronicle-concepts", "chronicle-concepts"}} {
