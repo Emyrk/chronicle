@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,13 +35,15 @@ func TestTenantScopeProjectionRaidPages(t *testing.T) {
 	require.NoError(t, err)
 	for i, realm := range realms {
 		for _, boss := range []struct {
-			name  string
-			score float64
-		}{{"Gri'lek", 70}, {"Hazza'rah", 90}, {"Hakkar", 50}} {
+			name          string
+			score         float64
+			raw, duration float64
+		}{{"Gri'lek", 70, 700, 100}, {"Hazza'rah", 90, 900, 50}, {"Hakkar", 50, 500, 150}} {
 			_, err = q.InsertPlayerTenantBossScore(ctx, database.InsertPlayerTenantBossScoreParams{
 				GenerationID: gen, TenantID: uuid.Nil, RealmID: realm, PlayerGuid: "player", InstanceName: "Zul'Gurub",
 				EncounterName: boss.name, DifficultyName: "Normal", MaxPlayers: 20, PlayerClass: "MAGE",
 				PlayerSpec: "Fire", PerformanceMetric: "dps", RatingMetric: "peak", WindowKind: "all_time", Score: boss.score + float64(i*10),
+				BestRaw: pgtype.Float8{Float64: boss.raw, Valid: true}, BestDurationSecs: boss.duration,
 			})
 			require.NoError(t, err)
 			_, err = q.InsertGuildTenantBossScore(ctx, database.InsertGuildTenantBossScoreParams{
@@ -73,6 +76,13 @@ func TestTenantScopeProjectionRaidPages(t *testing.T) {
 		err = pool.QueryRow(ctx, `SELECT score FROM player_tenant_rating_scope_scores WHERE generation_id=$1 AND realm_id=$2 AND rating_metric='peak'`, gen, realm).Scan(&score)
 		require.NoError(t, err)
 		require.Equal(t, 70.0+float64(i*10), score)
+		// Raid Peak DPS weighs the counted kills by length: Edge of Madness keeps
+		// Hazza'rah (900 dps, 50s) with Hakkar (500 dps, 150s): 120000 / 200s.
+		var raw, duration float64
+		err = pool.QueryRow(ctx, `SELECT best_raw, best_duration_secs FROM player_tenant_rating_scope_scores WHERE generation_id=$1 AND realm_id=$2 AND rating_metric='peak'`, gen, realm).Scan(&raw, &duration)
+		require.NoError(t, err)
+		require.InDelta(t, 600.0, raw, 1e-9)
+		require.InDelta(t, 200.0, duration, 1e-9)
 		err = pool.QueryRow(ctx, `SELECT score FROM guild_tenant_rating_scope_scores WHERE generation_id=$1 AND realm_id=$2`, gen, realm).Scan(&score)
 		require.NoError(t, err)
 		require.Equal(t, 70.0+float64(i*10), score)

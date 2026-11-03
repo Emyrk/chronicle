@@ -57,7 +57,7 @@ func (f *tenantProjectionFake) ListRatingStageGuildKeys(_ context.Context, p dat
 	return []database.ListRatingStageGuildKeysRow{{RealmID: uuid.MustParse("00000000-0000-0000-0000-000000000001"), GuildID: uuid.NullUUID{UUID: uuid.MustParse("00000000-0000-0000-0000-000000000010"), Valid: true}, InstanceName: "Raid", EncounterName: "Unconfigured boss", DifficultyName: "Heroic", MaxPlayers: 20}}, nil
 }
 func (f *tenantProjectionFake) RatingStagePlayerPeak(_ context.Context, p database.RatingStagePlayerPeakParams) (database.RatingStagePlayerPeakRow, error) {
-	return database.RatingStagePlayerPeakRow{CareerRaw: 80, PeriodRaw: 70}, nil
+	return database.RatingStagePlayerPeakRow{CareerRaw: 80, PeriodRaw: 70, CareerDurationSecs: 95, PeriodDurationSecs: 120}, nil
 }
 func (f *tenantProjectionFake) RatingProjectionPlayerRankOne(_ context.Context, p database.RatingProjectionPlayerRankOneParams) (database.RatingProjectionPlayerRankOneRow, error) {
 	return database.RatingProjectionPlayerRankOneRow{CareerRaw: 100, PeriodRaw: 100}, nil
@@ -118,6 +118,9 @@ func TestTenantProjectionPeakAndCuratedRenown(t *testing.T) {
 	require.Equal(t, "peak", f.player[0].RatingMetric, "Peak does not require a curated Renown boss")
 	require.InDelta(t, 80, f.player[0].Score, 1e-9)
 	require.InDelta(t, 70, f.player[1].Score, 1e-9)
+	// Each Peak keeps its best kill's length so raid Peak can weigh bosses by it.
+	require.InDelta(t, 95, f.player[0].BestDurationSecs, 1e-9)
+	require.InDelta(t, 120, f.player[1].BestDurationSecs, 1e-9)
 	require.Equal(t, "Heroic", f.player[0].DifficultyName)
 	require.Equal(t, "Fury", f.player[0].PlayerSpec)
 	require.True(t, f.player[1].WindowStart.Valid)
