@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { BlockEditor } from "./BlockEditor";
 import { ResultsTable } from "./ResultsTable";
 import { SearchSummary } from "./SearchSummary";
+import { CelCode } from "./CelCode";
 import { CodeEditor } from "./CodeEditor";
 import { CelParseError, parseCEL } from "./celParser";
 import { AdRailStack } from "@/components/Ads/AdRailStack";
@@ -79,14 +80,7 @@ export function InstanceSearchPage() {
     setExample(ex);
   };
 
-  const parsedCode = useMemo(() => {
-    try {
-      return { tree: parseCEL(code), error: null };
-    } catch (e) {
-      const err = e instanceof CelParseError ? e : new CelParseError(String(e), 0);
-      return { tree: undefined, error: { message: err.message, offset: err.offset } };
-    }
-  }, [code]);
+  const parsedCode = useMemo(() => parseCode(code), [code]);
   const codeInvalid = mode === "code" && parsedCode.error !== null;
 
   const draftTree = mode === "form" ? formToTree(form) : mode === "blocks" ? prune(blocks) : prune(parsedCode.tree);
@@ -367,7 +361,7 @@ export function InstanceSearchPage() {
       )}
       {showCel && mode !== "code" && (
         <pre className="text-2xs leading-relaxed bg-zinc-900/60 border border-border/60 rounded-md p-3 overflow-x-auto styled-scrollbar whitespace-pre-wrap">
-          {formatCEL(draftTree)}
+          <CelCode code={formatCEL(draftTree)} />
         </pre>
       )}
       </>
@@ -441,6 +435,20 @@ function HonoredUpsell({ loggedIn, readOnly }: { loggedIn: boolean; readOnly: bo
       </span>
     </div>
   );
+}
+
+/**
+ * Parses the code editor's text. Kept outside the component: the React
+ * Compiler mis-memoizes a try/catch inside a component, which left the syntax
+ * error from an earlier keystroke on screen after the text was fixed.
+ */
+function parseCode(code: string): { tree: Node | undefined; error: { message: string; offset: number } | null } {
+  try {
+    return { tree: parseCEL(code), error: null };
+  } catch (e) {
+    const err = e instanceof CelParseError ? e : new CelParseError(String(e), 0);
+    return { tree: undefined, error: { message: err.message, offset: err.offset } };
+  }
 }
 
 function BudgetLine({ budget, lastCost }: { budget: SearchBudget | null; lastCost: number | null }) {
