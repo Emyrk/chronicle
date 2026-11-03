@@ -52,6 +52,21 @@ const operations = {
       { name: "damage", count: 311 },
     ],
   },
+  search: {
+    available: true,
+    requests24h: 914,
+    requestsChangePercent: 12.4,
+    anonymous24h: 173,
+    successPercent: 96.8,
+    rateLimited24h: 11,
+    timeouts24h: 2,
+    p95Ms: 640,
+    p95Cost: 40,
+    topFields: [
+      { name: "zone_id", count: 412 },
+      { name: "player_class", count: 284 },
+    ],
+  },
   parsing: {
     instances24h: 228,
     lines24h: 9842738,
@@ -83,7 +98,7 @@ test("projects the GA4 dashboard into a compact device payload", () => {
   const source = createMockAnalyticsDashboard(30);
   const projected = projectDeviceAnalytics(source);
 
-  assert.equal(projected.schemaVersion, 6);
+  assert.equal(projected.schemaVersion, 7);
   assert.equal(projected.operations, null);
   assert.deepEqual(projected.overview, source.overview);
   assert.equal(projected.trend.length, source.timeseries.length);
@@ -119,6 +134,8 @@ test("includes compact VictoriaMetrics operations data", () => {
   assert.deepEqual(projected.operations, operations);
   assert.equal(projected.operations?.jobs.queues[0]?.name, "Log parsing");
   assert.equal(projected.operations?.parsing.topInstances.length, 5);
+  assert.equal(projected.operations?.search.requests24h, 914);
+  assert.equal(projected.operations?.search.topFields[0]?.name, "zone_id");
 });
 
 test("content hash ignores fetch time but changes with dashboard data", async () => {

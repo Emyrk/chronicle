@@ -28,6 +28,24 @@ export interface DeviceUIUsage {
   topPresets: UIUsageItem[];
 }
 
+export interface SearchFieldUsage {
+  name: string;
+  count: number;
+}
+
+export interface DeviceSearchUsage {
+  available: boolean;
+  requests24h: number;
+  requestsChangePercent: number | null;
+  anonymous24h: number;
+  successPercent: number;
+  rateLimited24h: number;
+  timeouts24h: number;
+  p95Ms: number;
+  p95Cost: number;
+  topFields: SearchFieldUsage[];
+}
+
 export interface DeviceOperations {
   status: "healthy" | "degraded" | "down";
   healthyReplicas: number;
@@ -56,6 +74,7 @@ export interface DeviceOperations {
     deletions24h: number;
   };
   uiUsage: DeviceUIUsage;
+  search: DeviceSearchUsage;
   parsing: {
     instances24h: number;
     lines24h: number;
@@ -269,12 +288,20 @@ function queueName(name: string): string {
   return labels[name] ?? name;
 }
 
-function uiUsageValue(
+function kindValue(
   samples: PrometheusVectorSample[],
   kind: string
 ): number {
   const sample = samples.find((candidate) => candidate.metric.kind === kind);
-  return Math.round(Number(sample?.value[1]) || 0);
+  const value = Number(sample?.value[1] ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function uiUsageValue(
+  samples: PrometheusVectorSample[],
+  kind: string
+): number {
+  return Math.round(kindValue(samples, kind));
 }
 
 function uiUsageItems(
@@ -357,6 +384,8 @@ export async function fetchDeviceOperations(env: Env): Promise<DeviceOperations>
     requestTrend,
     encounterTrend,
     uiUsage,
+    searchUsage,
+    searchFields,
   ] = await Promise.all([
     instant(env, "topk(5, sum by (instance_name) (increase(chronicle_logparse_instance_duration_seconds_count[24h])))"),
     instant(env, "max by (queue, state) (chronicle_river_queue_jobs)"),
@@ -371,6 +400,18 @@ export async function fetchDeviceOperations(env: Env): Promise<DeviceOperations>
       'label_replace(topk(6, sum by (panel) (increase(chronicle_ui_panel_choices_total[24h]))), "kind", "top_choices", "", ".*")',
       'label_replace(topk(6, sum by (preset) (increase(chronicle_ui_preset_views_total[24h]))), "kind", "top_presets", "", ".*")',
     ].join(" or ")),
+    instant(env, [
+      'label_replace(count({__name__="chronicle_instance_search_duration_seconds_count"}), "kind", "available", "", ".*")',
+      'label_replace(sum(increase(chronicle_instance_search_duration_seconds_count{outcome!~"explain_.*"}[24h])), "kind", "requests", "", ".*")',
+      'label_replace(sum(increase(chronicle_instance_search_duration_seconds_count{outcome!~"explain_.*"}[24h] offset 24h)), "kind", "requests_previous", "", ".*")',
+      'label_replace(sum(increase(chronicle_instance_search_duration_seconds_count{caller="anon",outcome!~"explain_.*"}[24h])), "kind", "anonymous", "", ".*")',
+      'label_replace(sum(increase(chronicle_instance_search_duration_seconds_count{outcome="ok"}[24h])), "kind", "successful", "", ".*")',
+      'label_replace(sum(increase(chronicle_instance_search_duration_seconds_count{outcome="rate_limited"}[24h])), "kind", "rate_limited", "", ".*")',
+      'label_replace(sum(increase(chronicle_instance_search_duration_seconds_count{outcome="timeout"}[24h])), "kind", "timeouts", "", ".*")',
+      'label_replace(histogram_quantile(0.95, sum by (le) (rate(chronicle_instance_search_duration_seconds_bucket{outcome!~"explain_.*"}[1h]))), "kind", "p95_duration", "", ".*")',
+      'label_replace(histogram_quantile(0.95, sum by (le) (rate(chronicle_instance_search_cost_bucket[1h]))), "kind", "p95_cost", "", ".*")',
+    ].join(" or ")),
+    instant(env, "topk(6, sum by (field) (increase(chronicle_instance_search_field_uses_total[24h])))"),
   ]);
 
   const queues = new Map<string, OperationsQueue>();
@@ -399,6 +440,11 @@ export async function fetchDeviceOperations(env: Env): Promise<DeviceOperations>
   const parseSuccess = values.parseJobs <= 0
     ? 100
     : Math.max(0, 100 * (values.parseJobs - values.parseFailures) / values.parseJobs);
+  const searches = kindValue(searchUsage, "requests");
+  const successfulSearches = kindValue(searchUsage, "successful");
+  const searchSuccess = searches <= 0
+    ? 100
+    : Math.max(0, 100 * successfulSearches / searches);
   const status = values.up < values.replicas || values.up === 0
     ? "down"
     : values.backlog > 20 || values.parseFailures > 10 || values.billingErrors > 0
@@ -440,6 +486,24 @@ export async function fetchDeviceOperations(env: Env): Promise<DeviceOperations>
       topPanels: uiUsageItems(uiUsage, "top_panels", "panel"),
       topChoices: uiUsageItems(uiUsage, "top_choices", "panel"),
       topPresets: uiUsageItems(uiUsage, "top_presets", "preset"),
+    },
+    search: {
+      available: kindValue(searchUsage, "available") > 0,
+      requests24h: Math.round(searches),
+      requestsChangePercent: percentChange(
+        searches,
+        kindValue(searchUsage, "requests_previous")
+      ),
+      anonymous24h: Math.round(kindValue(searchUsage, "anonymous")),
+      successPercent: searchSuccess,
+      rateLimited24h: Math.round(kindValue(searchUsage, "rate_limited")),
+      timeouts24h: Math.round(kindValue(searchUsage, "timeouts")),
+      p95Ms: Math.round(kindValue(searchUsage, "p95_duration") * 1000),
+      p95Cost: Math.round(kindValue(searchUsage, "p95_cost")),
+      topFields: searchFields.map((sample) => ({
+        name: sample.metric.field ?? "unknown",
+        count: Math.round(Number(sample.value[1]) || 0),
+      })),
     },
     parsing: {
       instances24h: Math.round(values.instances),

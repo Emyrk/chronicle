@@ -2,7 +2,7 @@ import type { AnalyticsDashboard } from "../analytics/types";
 import type { DeviceOperations } from "../operations/victoria";
 
 export interface DeviceAnalyticsDashboard {
-  schemaVersion: 6;
+  schemaVersion: 7;
   contentHash: string;
   generatedAt: string;
   timezone: string;
@@ -61,7 +61,7 @@ export function projectDeviceAnalytics(
   operations: DeviceOperations | null = null
 ): DeviceAnalyticsWithoutHash {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     generatedAt: dashboard.generatedAt,
     timezone: dashboard.timezone,
     mock: dashboard.mock,
