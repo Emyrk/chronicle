@@ -22097,7 +22097,7 @@ func (q *sqlQuerier) UnassignRatingRealmFromGroup(ctx context.Context, arg Unass
 const hubLandingRatingRows = `-- name: HubLandingRatingRows :many
 WITH cohorts AS (
   SELECT instance_name, difficulty_name, max_players
-  FROM rankings_instance_summaries ris WHERE ris.tenant_id = $2
+  FROM rankings_instance_summaries ris WHERE ris.tenant_id = $1
   ORDER BY instance_name, difficulty_name, max_players LIMIT 64
 ), scores AS (
   SELECT c.instance_name, c.difficulty_name, c.max_players,
@@ -22105,7 +22105,7 @@ WITH cohorts AS (
     s.score, s.player_class, s.player_spec, s.player_sub_spec,
     COALESCE(gp.name, '')::text AS subject_name, realm.name::text AS realm_name
   FROM cohorts c
-  JOIN player_tenant_rating_scope_scores s ON s.tenant_id = $2 AND s.generation_id = $1
+  JOIN player_tenant_rating_scope_scores s ON s.tenant_id = $1 AND s.generation_id = $2
     AND s.instance_name = c.instance_name AND s.window_kind = 'period'
     AND ((s.rating_metric IN ('peak', 'ranked_mastery') AND s.performance_metric = 'dps'
       AND s.difficulty_name = c.difficulty_name AND s.max_players = c.max_players)
@@ -22114,7 +22114,7 @@ WITH cohorts AS (
   JOIN wow_server_realms realm ON realm.id = s.realm_id
     AND (COALESCE(cardinality($3::uuid[]), 0) = 0 OR realm.id = ANY($3::uuid[]))
   JOIN wow_servers server ON server.id = realm.server_id
-    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
   LEFT JOIN game_players gp ON gp.realm_id = s.realm_id
     AND gp.id = (CASE WHEN s.player_guid ~ '^0x[0-9A-Fa-f]{16}$' THEN s.player_guid::wow_guid ELSE NULL::wow_guid END)
   UNION ALL
@@ -22123,13 +22123,13 @@ WITH cohorts AS (
     s.score, ''::text, ''::text, ''::text,
     COALESCE(g.name, '')::text, realm.name::text
   FROM cohorts c
-  JOIN guild_tenant_rating_scope_scores s ON s.tenant_id = $2 AND s.generation_id = $1
+  JOIN guild_tenant_rating_scope_scores s ON s.tenant_id = $1 AND s.generation_id = $2
     AND s.instance_name = c.instance_name AND s.rating_metric = 'renown'
     AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0
   JOIN wow_server_realms realm ON realm.id = s.realm_id
     AND (COALESCE(cardinality($3::uuid[]), 0) = 0 OR realm.id = ANY($3::uuid[]))
   JOIN wow_servers server ON server.id = realm.server_id
-    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
   JOIN guilds g ON g.id = s.guild_id AND g.realm_id = s.realm_id
 ), unique_subjects AS (
   SELECT instance_name, difficulty_name, max_players, subject, rating_metric, realm_id, subject_id, score, player_class, player_spec, player_sub_spec, subject_name, realm_name, row_number() OVER (PARTITION BY instance_name, difficulty_name, max_players, subject, rating_metric, realm_id, subject_id
@@ -22140,16 +22140,28 @@ WITH cohorts AS (
   FROM unique_subjects WHERE identity_position = 1
 )
 SELECT instance_name, difficulty_name, max_players, subject, rating_metric, realm_id,
-  subject_id, score, player_class, player_spec, player_sub_spec, subject_name, realm_name
+  subject_id, score,
+  -- Raid Peak's throughput (0 when unknown): the mean of the player's best DPS per boss in the cohort.
+  COALESCE(CASE WHEN subject = 'player' AND rating_metric = 'peak' THEN
+    (SELECT avg(bs.best_raw) FROM player_tenant_rating_boss_scores bs
+     WHERE bs.tenant_id = $1 AND bs.generation_id = $2
+       AND bs.realm_id = ranked.realm_id AND bs.player_guid = ranked.subject_id
+       AND bs.instance_name = ranked.instance_name AND bs.difficulty_name = ranked.difficulty_name
+       AND bs.max_players = ranked.max_players AND bs.performance_metric = 'dps'
+       AND bs.rating_metric = 'peak' AND bs.window_kind = 'period'
+       AND bs.player_class = ranked.player_class AND bs.player_spec = ranked.player_spec
+       AND bs.player_sub_spec = ranked.player_sub_spec)
+  END, 0)::float8 AS peak_raw,
+  player_class, player_spec, player_sub_spec, subject_name, realm_name
 FROM ranked WHERE position <= 3
   AND EXISTS (SELECT 1 FROM rating_score_generations generation
-    WHERE generation.id = $1 AND generation.tenant_id = $2 AND generation.status = 'active')
+    WHERE generation.id = $2 AND generation.tenant_id = $1 AND generation.status = 'active')
 ORDER BY instance_name, difficulty_name, max_players, subject, rating_metric, position
 `
 
 type HubLandingRatingRowsParams struct {
-	GenerationID uuid.UUID   `db:"generation_id" json:"generation_id"`
 	TenantID     uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID uuid.UUID   `db:"generation_id" json:"generation_id"`
 	RealmIds     []uuid.UUID `db:"realm_ids" json:"realm_ids"`
 }
 
@@ -22162,6 +22174,7 @@ type HubLandingRatingRowsRow struct {
 	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
 	SubjectID      string    `db:"subject_id" json:"subject_id"`
 	Score          float64   `db:"score" json:"score"`
+	PeakRaw        float64   `db:"peak_raw" json:"peak_raw"`
 	PlayerClass    string    `db:"player_class" json:"player_class"`
 	PlayerSpec     string    `db:"player_spec" json:"player_spec"`
 	PlayerSubSpec  string    `db:"player_sub_spec" json:"player_sub_spec"`
@@ -22172,7 +22185,7 @@ type HubLandingRatingRowsRow struct {
 // Only the same 64 published cohorts returned by HubSummaryInstances are eligible.
 // Renown is instance-wide; its published period score is repeated for each cohort.
 func (q *sqlQuerier) HubLandingRatingRows(ctx context.Context, arg HubLandingRatingRowsParams) ([]HubLandingRatingRowsRow, error) {
-	rows, err := q.db.Query(ctx, hubLandingRatingRows, arg.GenerationID, arg.TenantID, arg.RealmIds)
+	rows, err := q.db.Query(ctx, hubLandingRatingRows, arg.TenantID, arg.GenerationID, arg.RealmIds)
 	if err != nil {
 		return nil, err
 	}
@@ -22189,6 +22202,7 @@ func (q *sqlQuerier) HubLandingRatingRows(ctx context.Context, arg HubLandingRat
 			&i.RealmID,
 			&i.SubjectID,
 			&i.Score,
+			&i.PeakRaw,
 			&i.PlayerClass,
 			&i.PlayerSpec,
 			&i.PlayerSubSpec,
@@ -22515,14 +22529,14 @@ const hubSummaryRatingRows = `-- name: HubSummaryRatingRows :many
 WITH selected_bosses AS (
   SELECT names.encounter_name FROM (
     SELECT p.encounter_name FROM player_tenant_rating_boss_scores p
-    WHERE p.tenant_id = $2 AND p.generation_id = $3 AND p.instance_name = $4
+    WHERE p.tenant_id = $1 AND p.generation_id = $2 AND p.instance_name = $3
     UNION
     SELECT g.encounter_name FROM guild_tenant_rating_boss_scores g
-    WHERE g.tenant_id = $2 AND g.generation_id = $3 AND g.instance_name = $4
-  ) names ORDER BY (names.encounter_name <> $1::text), names.encounter_name LIMIT 30
+    WHERE g.tenant_id = $1 AND g.generation_id = $2 AND g.instance_name = $3
+  ) names ORDER BY (names.encounter_name <> $7::text), names.encounter_name LIMIT 30
 ), boards AS (
   SELECT 'player'::text AS subject, 'scope'::text AS board, b.rating_metric, ''::text AS encounter_name,
-         b.realm_id, b.player_guid::text AS subject_id, b.score, b.player_class, b.player_spec, b.player_sub_spec,
+         b.realm_id, b.player_guid::text AS subject_id, b.score, NULL::float8 AS best_raw, b.player_class, b.player_spec, b.player_sub_spec,
          COALESCE(gp.name, '')::text AS subject_name, realm.name::text AS realm_name,
          row_number() OVER (PARTITION BY b.rating_metric ORDER BY b.score DESC, b.realm_id, b.player_guid) AS position
   FROM (
@@ -22531,10 +22545,10 @@ WITH selected_bosses AS (
     JOIN rating_score_generations generation ON generation.id = s.generation_id AND generation.tenant_id = s.tenant_id AND generation.status = 'active'
     JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
     JOIN wow_servers server ON server.id = source_realm.server_id
-    WHERE s.tenant_id = $2 AND s.generation_id = $3 AND s.instance_name = $4
-      AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-      AND (COALESCE(cardinality($5::uuid[]), 0) = 0 OR s.realm_id = ANY($5::uuid[]))
-      AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none') OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND $6::boolean AND s.difficulty_name = $7 AND s.max_players = $8 AND s.performance_metric = $9::text))
+    WHERE s.tenant_id = $1 AND s.generation_id = $2 AND s.instance_name = $3
+      AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND (COALESCE(cardinality($8::uuid[]), 0) = 0 OR s.realm_id = ANY($8::uuid[]))
+      AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none') OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND $9::boolean AND s.difficulty_name = $4 AND s.max_players = $5 AND s.performance_metric = $6::text))
     AND (s.rating_metric = 'renown' OR (($10::text = '' OR s.player_class = $10) AND ($11::text = '' OR s.player_spec = $11) AND ($12::text = '' OR s.player_sub_spec = $12)))
 
     ORDER BY s.rating_metric, s.realm_id, s.player_guid, s.score DESC, s.player_class, s.player_spec, s.player_sub_spec
@@ -22544,7 +22558,7 @@ WITH selected_bosses AS (
   LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = b.realm_id
   UNION ALL
   SELECT 'player'::text AS subject, 'boss'::text AS board, b.rating_metric, b.encounter_name AS encounter_name,
-         b.realm_id, b.player_guid::text AS subject_id, b.score, b.player_class, b.player_spec, b.player_sub_spec,
+         b.realm_id, b.player_guid::text AS subject_id, b.score, b.best_raw, b.player_class, b.player_spec, b.player_sub_spec,
          COALESCE(gp.name, '')::text AS subject_name, realm.name::text AS realm_name,
          row_number() OVER (PARTITION BY b.encounter_name, b.rating_metric ORDER BY b.score DESC, b.realm_id, b.player_guid) AS position
   FROM (
@@ -22553,10 +22567,10 @@ WITH selected_bosses AS (
     JOIN rating_score_generations generation ON generation.id = s.generation_id AND generation.tenant_id = s.tenant_id AND generation.status = 'active'
     JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
     JOIN wow_servers server ON server.id = source_realm.server_id
-    WHERE s.tenant_id = $2 AND s.generation_id = $3 AND s.instance_name = $4
-      AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-      AND (COALESCE(cardinality($5::uuid[]), 0) = 0 OR s.realm_id = ANY($5::uuid[]))
-      AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none') OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND $6::boolean AND s.difficulty_name = $7 AND s.max_players = $8 AND s.performance_metric = $9::text))
+    WHERE s.tenant_id = $1 AND s.generation_id = $2 AND s.instance_name = $3
+      AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND (COALESCE(cardinality($8::uuid[]), 0) = 0 OR s.realm_id = ANY($8::uuid[]))
+      AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none') OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND $9::boolean AND s.difficulty_name = $4 AND s.max_players = $5 AND s.performance_metric = $6::text))
     AND (s.rating_metric = 'renown' OR (($10::text = '' OR s.player_class = $10) AND ($11::text = '' OR s.player_spec = $11) AND ($12::text = '' OR s.player_sub_spec = $12)))
       AND s.encounter_name IN (SELECT encounter_name FROM selected_bosses)
     ORDER BY s.encounter_name, s.rating_metric, s.realm_id, s.player_guid, s.score DESC, s.player_class, s.player_spec, s.player_sub_spec
@@ -22566,7 +22580,7 @@ WITH selected_bosses AS (
   LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = b.realm_id
   UNION ALL
   SELECT 'guild'::text AS subject, 'scope'::text AS board, b.rating_metric, ''::text AS encounter_name,
-         b.realm_id, b.guild_id::text AS subject_id, b.score, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec,
+         b.realm_id, b.guild_id::text AS subject_id, b.score, NULL::float8 AS best_raw, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec,
          COALESCE(guild.name, '')::text AS subject_name, realm.name::text AS realm_name,
          row_number() OVER (PARTITION BY b.rating_metric ORDER BY b.score DESC, b.realm_id, b.guild_id) AS position
   FROM (
@@ -22575,10 +22589,10 @@ WITH selected_bosses AS (
     JOIN rating_score_generations generation ON generation.id = s.generation_id AND generation.tenant_id = s.tenant_id AND generation.status = 'active'
     JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
     JOIN wow_servers server ON server.id = source_realm.server_id
-    WHERE s.tenant_id = $2 AND s.generation_id = $3 AND s.instance_name = $4
-      AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-      AND (COALESCE(cardinality($5::uuid[]), 0) = 0 OR s.realm_id = ANY($5::uuid[]))
-      AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0) OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND $6::boolean AND s.difficulty_name = $7 AND s.max_players = $8))
+    WHERE s.tenant_id = $1 AND s.generation_id = $2 AND s.instance_name = $3
+      AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND (COALESCE(cardinality($8::uuid[]), 0) = 0 OR s.realm_id = ANY($8::uuid[]))
+      AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0) OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND $9::boolean AND s.difficulty_name = $4 AND s.max_players = $5))
     ORDER BY s.rating_metric, s.realm_id, s.guild_id, s.score DESC
   ) b
   JOIN wow_server_realms realm ON realm.id = b.realm_id
@@ -22586,7 +22600,7 @@ WITH selected_bosses AS (
   LEFT JOIN guilds guild ON guild.id = b.guild_id AND guild.realm_id = b.realm_id
   UNION ALL
   SELECT 'guild'::text AS subject, 'boss'::text AS board, b.rating_metric, b.encounter_name AS encounter_name,
-         b.realm_id, b.guild_id::text AS subject_id, b.score, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec,
+         b.realm_id, b.guild_id::text AS subject_id, b.score, NULL::float8 AS best_raw, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec,
          COALESCE(guild.name, '')::text AS subject_name, realm.name::text AS realm_name,
          row_number() OVER (PARTITION BY b.encounter_name, b.rating_metric ORDER BY b.score DESC, b.realm_id, b.guild_id) AS position
   FROM (
@@ -22595,10 +22609,10 @@ WITH selected_bosses AS (
     JOIN rating_score_generations generation ON generation.id = s.generation_id AND generation.tenant_id = s.tenant_id AND generation.status = 'active'
     JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
     JOIN wow_servers server ON server.id = source_realm.server_id
-    WHERE s.tenant_id = $2 AND s.generation_id = $3 AND s.instance_name = $4
-      AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-      AND (COALESCE(cardinality($5::uuid[]), 0) = 0 OR s.realm_id = ANY($5::uuid[]))
-      AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0) OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND $6::boolean AND s.difficulty_name = $7 AND s.max_players = $8))
+    WHERE s.tenant_id = $1 AND s.generation_id = $2 AND s.instance_name = $3
+      AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND (COALESCE(cardinality($8::uuid[]), 0) = 0 OR s.realm_id = ANY($8::uuid[]))
+      AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0) OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND $9::boolean AND s.difficulty_name = $4 AND s.max_players = $5))
       AND s.encounter_name IN (SELECT encounter_name FROM selected_bosses)
     ORDER BY s.encounter_name, s.rating_metric, s.realm_id, s.guild_id, s.score DESC
   ) b
@@ -22607,22 +22621,35 @@ WITH selected_bosses AS (
   LEFT JOIN guilds guild ON guild.id = b.guild_id AND guild.realm_id = b.realm_id
 )
 SELECT subject, board, rating_metric, encounter_name, realm_id, subject_id, score,
+       -- Peak's throughput (0 when unknown): the kill's DPS/HPS on a boss, and on the raid the mean of
+       -- the player's best per boss in the same cohort (raid Peak averages those parses).
+       COALESCE(CASE WHEN subject <> 'player' OR rating_metric <> 'peak' THEN NULL
+             WHEN board = 'boss' THEN best_raw
+             ELSE (SELECT avg(bs.best_raw) FROM player_tenant_rating_boss_scores bs
+                   WHERE bs.tenant_id = $1 AND bs.generation_id = $2
+                     AND bs.realm_id = boards.realm_id AND bs.player_guid = boards.subject_id
+                     AND bs.instance_name = $3 AND bs.difficulty_name = $4
+                     AND bs.max_players = $5 AND bs.performance_metric = $6::text
+                     AND bs.rating_metric = 'peak' AND bs.window_kind = 'period'
+                     AND bs.player_class = boards.player_class AND bs.player_spec = boards.player_spec
+                     AND bs.player_sub_spec = boards.player_sub_spec)
+        END, 0)::float8 AS peak_raw,
        player_class, player_spec, player_sub_spec, subject_name, realm_name
 FROM boards
-WHERE position <= CASE WHEN board = 'scope' OR encounter_name = $1::text THEN 5 ELSE 1 END
+WHERE position <= CASE WHEN board = 'scope' OR encounter_name = $7::text THEN 5 ELSE 1 END
 ORDER BY board, encounter_name, subject, rating_metric, score DESC, realm_id, subject_id
 `
 
 type HubSummaryRatingRowsParams struct {
-	FeaturedEncounter string      `db:"featured_encounter" json:"featured_encounter"`
 	TenantID          uuid.UUID   `db:"tenant_id" json:"tenant_id"`
 	GenerationID      uuid.UUID   `db:"generation_id" json:"generation_id"`
 	InstanceName      string      `db:"instance_name" json:"instance_name"`
-	RealmIds          []uuid.UUID `db:"realm_ids" json:"realm_ids"`
-	ExactCohort       bool        `db:"exact_cohort" json:"exact_cohort"`
 	DifficultyName    string      `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers        int16       `db:"max_players" json:"max_players"`
 	PerformanceMetric string      `db:"performance_metric" json:"performance_metric"`
+	FeaturedEncounter string      `db:"featured_encounter" json:"featured_encounter"`
+	RealmIds          []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	ExactCohort       bool        `db:"exact_cohort" json:"exact_cohort"`
 	PlayerClass       string      `db:"player_class" json:"player_class"`
 	PlayerSpec        string      `db:"player_spec" json:"player_spec"`
 	PlayerSubSpec     string      `db:"player_sub_spec" json:"player_sub_spec"`
@@ -22636,6 +22663,7 @@ type HubSummaryRatingRowsRow struct {
 	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
 	SubjectID     string    `db:"subject_id" json:"subject_id"`
 	Score         float64   `db:"score" json:"score"`
+	PeakRaw       float64   `db:"peak_raw" json:"peak_raw"`
 	PlayerClass   string    `db:"player_class" json:"player_class"`
 	PlayerSpec    string    `db:"player_spec" json:"player_spec"`
 	PlayerSubSpec string    `db:"player_sub_spec" json:"player_sub_spec"`
@@ -22647,15 +22675,15 @@ type HubSummaryRatingRowsRow struct {
 // truncate each board in SQL, not in the HTTP handler.
 func (q *sqlQuerier) HubSummaryRatingRows(ctx context.Context, arg HubSummaryRatingRowsParams) ([]HubSummaryRatingRowsRow, error) {
 	rows, err := q.db.Query(ctx, hubSummaryRatingRows,
-		arg.FeaturedEncounter,
 		arg.TenantID,
 		arg.GenerationID,
 		arg.InstanceName,
-		arg.RealmIds,
-		arg.ExactCohort,
 		arg.DifficultyName,
 		arg.MaxPlayers,
 		arg.PerformanceMetric,
+		arg.FeaturedEncounter,
+		arg.RealmIds,
+		arg.ExactCohort,
 		arg.PlayerClass,
 		arg.PlayerSpec,
 		arg.PlayerSubSpec,
@@ -22675,6 +22703,7 @@ func (q *sqlQuerier) HubSummaryRatingRows(ctx context.Context, arg HubSummaryRat
 			&i.RealmID,
 			&i.SubjectID,
 			&i.Score,
+			&i.PeakRaw,
 			&i.PlayerClass,
 			&i.PlayerSpec,
 			&i.PlayerSubSpec,

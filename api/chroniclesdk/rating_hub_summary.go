@@ -74,6 +74,9 @@ type HubPlayerRatingEntry struct {
 	PlayerSpec    string    `json:"player_spec"`
 	PlayerSubSpec string    `json:"player_sub_spec"`
 	Score         float64   `json:"score"`
+	// PeakRaw is the DPS or HPS behind a Peak score: the kill's on a boss board,
+	// the mean of the player's best per boss on a raid board. Unset otherwise.
+	PeakRaw *float64 `json:"peak_raw,omitempty"`
 }
 type HubGuildRatingEntry struct {
 	RealmID   uuid.UUID `json:"realm_id"`

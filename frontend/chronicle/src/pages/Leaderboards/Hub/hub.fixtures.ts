@@ -94,6 +94,8 @@ export interface Cohort extends SpecStanding {
 export interface RatingLeader {
   player: HubPlayer
   score: number
+  /** Peak only: the DPS or HPS behind the score (a boss kill's, or the mean of the best per boss). */
+  raw?: number
 }
 
 const DPS_SPECS: [string, string][] = [
@@ -293,7 +295,10 @@ export function ratingLeaders(scope: RatingScope, role: HubRole): Record<RatingM
       for (const s of scored) best.set(key(s.player), Math.max(best.get(key(s.player)) ?? 0, s.score))
       for (const s of scored) s.score = (s.score / best.get(key(s.player))!) * 100
     }
-    return scored.sort((a, b) => b.score - a.score).slice(0, 5)
+    const top = scored.sort((a, b) => b.score - a.score).slice(0, 5)
+    if (metric !== "peak") return top
+    const base = role === "dps" ? 1250 : 1050
+    return top.map((l) => ({ ...l, raw: Math.round(base * (l.score / 100) * (scope.boss ? 1 : 0.92)) }))
   }
   const renownRand = scopedRand("renown", scope.boss, role)
   const renown = realmPlayers()
@@ -488,7 +493,10 @@ export function instanceHeadlines(): InstanceHeadline[] {
       })),
       renown: { guild: pick(HUB_GUILDS.slice(0, 5)), value: Math.round(inst.bosses * 3500 * (0.8 + rand() * 0.4)) },
       ratings: {
-        peak: { player: player(), score: 97 + rand() * 3 },
+        peak: (() => {
+          const score = 97 + rand() * 3
+          return { player: player(), score, raw: Math.round(inst.dps * 0.92 * (score / 100)) }
+        })(),
         mastery: { player: player(), score: 90 + rand() * 5 },
         renown: { player: player(), score: Math.round(inst.bosses * 1000 * (0.9 + rand() * 0.3)) },
       },

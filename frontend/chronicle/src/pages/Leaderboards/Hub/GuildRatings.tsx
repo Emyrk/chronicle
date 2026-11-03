@@ -11,6 +11,8 @@ export interface MetricRow {
   id: string
   name: ReactNode
   score: number
+  /** What stands behind the score, shown muted beside it (Peak's DPS). */
+  raw?: string
 }
 
 /**
@@ -41,6 +43,7 @@ export function MetricColumns({ columns, onOpen, ranksKnown = true }: { columns:
                 <li key={r.id} className="flex items-center gap-2 border-b border-white/5 px-3 py-2.5 last:border-b-0">
                   <span className="w-3 font-mono text-xs text-muted-foreground">{ranksKnown ? i + 1 : ""}</span>
                   <span className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">{r.name}</span>
+                  {r.raw && <span className="shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">{r.raw}</span>}
                   <span className="font-mono text-sm tabular-nums" style={i === 0 ? { color: t.accent } : undefined}>
                     {t.format(r.score)}
                   </span>

@@ -69,6 +69,14 @@ func hubResolveCohort(instances []chroniclesdk.RankingsInstanceSummary, instance
 	return chroniclesdk.HubSelectedCohort{DifficultyName: best.DifficultyName, MaxPlayers: best.MaxPlayers}, true
 }
 
+// hubPeakRaw is the published throughput behind a Peak score; zero means unknown.
+func hubPeakRaw(v float64) *float64 {
+	if v <= 0 {
+		return nil
+	}
+	return &v
+}
+
 // hubClassFilter is the DB class for a class filter, or "" for every class.
 // HeroClassToDB maps an empty class to UNKNOWN, which would match no player.
 func hubClassFilter(class string) string {
@@ -256,6 +264,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 				entry := chroniclesdk.HubPlayerRatingEntry{
 					RealmID: v.RealmID, RealmName: v.RealmName, PlayerGUID: v.SubjectID, PlayerName: v.SubjectName,
 					PlayerClass: normalizeClassName(v.PlayerClass), PlayerSpec: v.PlayerSpec, PlayerSubSpec: v.PlayerSubSpec, Score: v.Score,
+					PeakRaw: hubPeakRaw(v.PeakRaw),
 				}
 				switch v.RatingMetric {
 				case "peak":
@@ -473,7 +482,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 				}
 				continue
 			}
-			entry := chroniclesdk.HubPlayerRatingEntry{RealmID: v.RealmID, RealmName: v.RealmName, PlayerGUID: v.SubjectID, PlayerName: v.SubjectName, PlayerClass: normalizeClassName(v.PlayerClass), PlayerSpec: v.PlayerSpec, PlayerSubSpec: v.PlayerSubSpec, Score: v.Score}
+			entry := chroniclesdk.HubPlayerRatingEntry{RealmID: v.RealmID, RealmName: v.RealmName, PlayerGUID: v.SubjectID, PlayerName: v.SubjectName, PlayerClass: normalizeClassName(v.PlayerClass), PlayerSpec: v.PlayerSpec, PlayerSubSpec: v.PlayerSubSpec, Score: v.Score, PeakRaw: hubPeakRaw(v.PeakRaw)}
 			switch v.RatingMetric {
 			case "peak":
 				board.Player.Peak = append(board.Player.Peak, entry)

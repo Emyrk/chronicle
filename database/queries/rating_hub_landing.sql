@@ -46,7 +46,19 @@ WITH cohorts AS (
   FROM unique_subjects WHERE identity_position = 1
 )
 SELECT instance_name, difficulty_name, max_players, subject, rating_metric, realm_id,
-  subject_id, score, player_class, player_spec, player_sub_spec, subject_name, realm_name
+  subject_id, score,
+  -- Raid Peak's throughput (0 when unknown): the mean of the player's best DPS per boss in the cohort.
+  COALESCE(CASE WHEN subject = 'player' AND rating_metric = 'peak' THEN
+    (SELECT avg(bs.best_raw) FROM player_tenant_rating_boss_scores bs
+     WHERE bs.tenant_id = @tenant_id AND bs.generation_id = @generation_id
+       AND bs.realm_id = ranked.realm_id AND bs.player_guid = ranked.subject_id
+       AND bs.instance_name = ranked.instance_name AND bs.difficulty_name = ranked.difficulty_name
+       AND bs.max_players = ranked.max_players AND bs.performance_metric = 'dps'
+       AND bs.rating_metric = 'peak' AND bs.window_kind = 'period'
+       AND bs.player_class = ranked.player_class AND bs.player_spec = ranked.player_spec
+       AND bs.player_sub_spec = ranked.player_sub_spec)
+  END, 0)::float8 AS peak_raw,
+  player_class, player_spec, player_sub_spec, subject_name, realm_name
 FROM ranked WHERE position <= 3
   AND EXISTS (SELECT 1 FROM rating_score_generations generation
     WHERE generation.id = @generation_id AND generation.tenant_id = @tenant_id AND generation.status = 'active')

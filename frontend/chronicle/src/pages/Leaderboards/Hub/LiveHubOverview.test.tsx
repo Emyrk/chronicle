@@ -13,7 +13,7 @@ vi.mock("@/api/rankingsQueries", () => {
   return { useRankingsStats: vi.fn(idle), useRankingsSuccessRates: vi.fn(idle), useRankingsKillTimes: vi.fn(idle), useRankingsKillTimeLeaderboard: vi.fn(idle) }
 })
 
-const entry = { player_guid: "mage-1", player_name: "Actual Mage", player_class: "MAGE", player_spec: "Frost", player_sub_spec: "", score: 42, realm_id: "realm-1", realm_name: "Turtle" }
+const entry = { player_guid: "mage-1", player_name: "Actual Mage", player_class: "MAGE", player_spec: "Frost", player_sub_spec: "", score: 42, peak_raw: 1311.6, realm_id: "realm-1", realm_name: "Turtle" }
 const guild = { guild_id: "guild-1", guild_name: "Actual Guild", score: 15, realm_id: "realm-1", realm_name: "Turtle" }
 const ratings = { player: { peak: [entry], ranked_mastery: [entry], renown: [entry] }, guild: { peak: [guild], ranked_mastery: [guild], renown: [guild] } }
 const summary = {
@@ -51,6 +51,9 @@ describe("live Hub overview", () => {
     expect(html).toContain("Guild Renown · Molten Core")
     expect(html).toContain("Actual Warrior")
     expect(html).toContain("1,533/s")
+    // Peak carries the DPS behind it, on the ratings card and the boss cards.
+    expect(html).toContain("1,312 dps")
+    expect(html).toContain("42.0 · 1,312 dps")
     expect(vi.mocked(useHubSummary).mock.calls[0][1]).toBe(false)
   })
 

@@ -11,6 +11,7 @@ import { LeaderboardHub, RealmPicker, type LeaderboardHubProps } from "./Leaderb
 import { HUB_REALMS, useHubRealm } from "./hubRealm"
 import { setMockRealm } from "@/pages/Leaderboards/Ratings/mockRealm"
 import { TABS, type HubTab } from "./hubTabs"
+import { peakWithRaw } from "./peakDisplay"
 import { RulesetsLanding } from "@/pages/Leaderboards/RulesetsLanding"
 
 /**
@@ -236,7 +237,7 @@ function LiveCardBody({ tab, preview }: { tab: HubTab; preview?: HubLandingPrevi
     const entry = preview?.player[metric][0]
     const theme = METRIC_THEMES[metric === "ranked_mastery" ? "mastery" : metric]
     return entry && <Line key={metric} icon={<theme.icon className="size-3" style={{ color: theme.accent }} />}
-      value={theme.format(entry.score)} title={`${label} #1`}><LivePlayer entry={entry} /></Line>
+      value={metric === "peak" ? withRaw({ score: entry.score, raw: entry.peak_raw }) : theme.format(entry.score)} title={`${label} #1`}><LivePlayer entry={entry} /></Line>
   }
   const speedLine = (index: number) => {
     const entry = preview?.speedruns[index]
@@ -287,6 +288,9 @@ function UnavailableHighlight({ label = "No published highlights yet" }: { label
   return <span className="text-xs text-muted-foreground">{label}</span>
 }
 
+/** Peak with the DPS behind it. Landing cards rank DPS only. */
+const withRaw = (l: { score: number; raw?: number }) => peakWithRaw(l.score, l.raw)
+
 /** Each tab's headline, in the card's existing row style. */
 function CardBody({ tab, inst }: { tab: HubTab; inst: InstanceHeadline }) {
   const peak = METRIC_THEMES.peak
@@ -306,7 +310,7 @@ function CardBody({ tab, inst }: { tab: HubTab; inst: InstanceHeadline }) {
         >
           <span className="truncate text-foreground/90">{inst.renown.guild}</span>
         </Line>
-        <Line icon={<peak.icon className="size-3" style={{ color: peak.accent }} />} value={peak.format(inst.ratings.peak.score)} title="Peak #1">
+        <Line icon={<peak.icon className="size-3" style={{ color: peak.accent }} />} value={withRaw(inst.ratings.peak)} title="Peak #1">
           <Player player={inst.ratings.peak.player} />
         </Line>
         <Line
@@ -323,7 +327,7 @@ function CardBody({ tab, inst }: { tab: HubTab; inst: InstanceHeadline }) {
       const t = METRIC_THEMES[m]
       const l = inst.ratings[m]
       return (
-        <Line key={m} icon={<t.icon className="size-3" style={{ color: t.accent }} />} value={t.format(l.score)} title={`${t.label} #1`}>
+        <Line key={m} icon={<t.icon className="size-3" style={{ color: t.accent }} />} value={m === "peak" ? withRaw(l) : t.format(l.score)} title={`${t.label} #1`}>
           <Player player={l.player} />
         </Line>
       )

@@ -86,7 +86,7 @@ function leaders(
   const pick = (m: RatingMetric) =>
     board[RATING_KEYS[m]]
       .slice(0, LEADERS)
-      .map((e) => ({ player: player(e, role), score: e.score }));
+      .map((e) => ({ player: player(e, role), score: e.score, raw: m === "peak" ? e.peak_raw : undefined }));
   return {
     peak: pick("peak"),
     mastery: pick("mastery"),
@@ -204,7 +204,7 @@ function bossSummaries(src: LiveOverviewSources): LiveBossSummary[] {
     )?.player;
     const top = (m: RatingMetric) => {
       const e = board?.[RATING_KEYS[m]][0];
-      return e ? { player: player(e, role), score: e.score } : undefined;
+      return e ? { player: player(e, role), score: e.score, raw: m === "peak" ? e.peak_raw : undefined } : undefined;
     };
     const rate = src.successRates?.find((r) => r.encounter_name === boss);
     const time = src.killTimes?.find((r) => r.encounter_name === boss);

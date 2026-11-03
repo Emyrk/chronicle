@@ -11,7 +11,7 @@ WITH selected_bosses AS (
   ) names ORDER BY (names.encounter_name <> @featured_encounter::text), names.encounter_name LIMIT 30
 ), boards AS (
   SELECT 'player'::text AS subject, 'scope'::text AS board, b.rating_metric, ''::text AS encounter_name,
-         b.realm_id, b.player_guid::text AS subject_id, b.score, b.player_class, b.player_spec, b.player_sub_spec,
+         b.realm_id, b.player_guid::text AS subject_id, b.score, NULL::float8 AS best_raw, b.player_class, b.player_spec, b.player_sub_spec,
          COALESCE(gp.name, '')::text AS subject_name, realm.name::text AS realm_name,
          row_number() OVER (PARTITION BY b.rating_metric ORDER BY b.score DESC, b.realm_id, b.player_guid) AS position
   FROM (
@@ -33,7 +33,7 @@ WITH selected_bosses AS (
   LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = b.realm_id
   UNION ALL
   SELECT 'player'::text AS subject, 'boss'::text AS board, b.rating_metric, b.encounter_name AS encounter_name,
-         b.realm_id, b.player_guid::text AS subject_id, b.score, b.player_class, b.player_spec, b.player_sub_spec,
+         b.realm_id, b.player_guid::text AS subject_id, b.score, b.best_raw, b.player_class, b.player_spec, b.player_sub_spec,
          COALESCE(gp.name, '')::text AS subject_name, realm.name::text AS realm_name,
          row_number() OVER (PARTITION BY b.encounter_name, b.rating_metric ORDER BY b.score DESC, b.realm_id, b.player_guid) AS position
   FROM (
@@ -55,7 +55,7 @@ WITH selected_bosses AS (
   LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = b.realm_id
   UNION ALL
   SELECT 'guild'::text AS subject, 'scope'::text AS board, b.rating_metric, ''::text AS encounter_name,
-         b.realm_id, b.guild_id::text AS subject_id, b.score, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec,
+         b.realm_id, b.guild_id::text AS subject_id, b.score, NULL::float8 AS best_raw, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec,
          COALESCE(guild.name, '')::text AS subject_name, realm.name::text AS realm_name,
          row_number() OVER (PARTITION BY b.rating_metric ORDER BY b.score DESC, b.realm_id, b.guild_id) AS position
   FROM (
@@ -75,7 +75,7 @@ WITH selected_bosses AS (
   LEFT JOIN guilds guild ON guild.id = b.guild_id AND guild.realm_id = b.realm_id
   UNION ALL
   SELECT 'guild'::text AS subject, 'boss'::text AS board, b.rating_metric, b.encounter_name AS encounter_name,
-         b.realm_id, b.guild_id::text AS subject_id, b.score, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec,
+         b.realm_id, b.guild_id::text AS subject_id, b.score, NULL::float8 AS best_raw, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec,
          COALESCE(guild.name, '')::text AS subject_name, realm.name::text AS realm_name,
          row_number() OVER (PARTITION BY b.encounter_name, b.rating_metric ORDER BY b.score DESC, b.realm_id, b.guild_id) AS position
   FROM (
@@ -96,6 +96,19 @@ WITH selected_bosses AS (
   LEFT JOIN guilds guild ON guild.id = b.guild_id AND guild.realm_id = b.realm_id
 )
 SELECT subject, board, rating_metric, encounter_name, realm_id, subject_id, score,
+       -- Peak's throughput (0 when unknown): the kill's DPS/HPS on a boss, and on the raid the mean of
+       -- the player's best per boss in the same cohort (raid Peak averages those parses).
+       COALESCE(CASE WHEN subject <> 'player' OR rating_metric <> 'peak' THEN NULL
+             WHEN board = 'boss' THEN best_raw
+             ELSE (SELECT avg(bs.best_raw) FROM player_tenant_rating_boss_scores bs
+                   WHERE bs.tenant_id = @tenant_id AND bs.generation_id = @generation_id
+                     AND bs.realm_id = boards.realm_id AND bs.player_guid = boards.subject_id
+                     AND bs.instance_name = @instance_name AND bs.difficulty_name = @difficulty_name
+                     AND bs.max_players = @max_players AND bs.performance_metric = sqlc.arg(performance_metric)::text
+                     AND bs.rating_metric = 'peak' AND bs.window_kind = 'period'
+                     AND bs.player_class = boards.player_class AND bs.player_spec = boards.player_spec
+                     AND bs.player_sub_spec = boards.player_sub_spec)
+        END, 0)::float8 AS peak_raw,
        player_class, player_spec, player_sub_spec, subject_name, realm_name
 FROM boards
 WHERE position <= CASE WHEN board = 'scope' OR encounter_name = @featured_encounter::text THEN 5 ELSE 1 END

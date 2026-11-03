@@ -13,6 +13,7 @@ import { BossPortrait, SpecIcon } from "@/pages/Leaderboards/Ratings/RatingParts
 import { METRIC_THEMES, scopeTitle, type RatingView } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { ScopeBar } from "@/pages/Leaderboards/Ratings/ScopeBar"
 import { useBossModelImage } from "./bossModels"
+import { formatPeakRaw, peakWithRaw } from "./peakDisplay"
 import { TABS, type HubTab } from "./hubTabs"
 import { EncounterSidebar } from "./EncounterSidebar"
 import { GuildName, GuildRatingBoards, GuildRatingLeaders, MetricColumns } from "./GuildRatings"
@@ -657,7 +658,7 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
               // A guild run is rated like a player's parse: its time against the fastest.
               data.guildRatings ? <GuildRatingLeaders ratings={data.guildRatings} onOpen={onRatings} /> : <Empty pending={pending} />
             ) : data.ratings ? (
-              <RatingLeaders leaders={data.ratings} onOpen={onRatings} />
+              <RatingLeaders leaders={data.ratings} role={role} onOpen={onRatings} />
             ) : (
               <Empty pending={pending} />
             )}
@@ -819,7 +820,7 @@ function CohortCard({ cohort: c, offRole, current, onOpen }: { cohort: Cohort; o
         <BossStat
           icon={<METRIC_THEMES.peak.icon className="size-3.5" style={{ color: METRIC_THEMES.peak.accent }} />}
           label="#1 Peak"
-          value={c.peak ? METRIC_THEMES.peak.format(c.peak.score) : "—"}
+          value={c.peak ? peakWithRaw(c.peak.score, c.peak.raw, c.role === "dps" ? "dps" : "hps") : "—"}
         >
           {c.peak && (
             <span className="truncate" style={{ color }}>
@@ -1139,6 +1140,8 @@ function BossCard({ summary: b, role, optional, onOpen }: { summary: LiveBossSum
               icon={<t.icon className="size-3.5" style={{ color: t.accent }} />}
               label={t.label}
               value={leader ? t.format(leader.score) : "—"}
+              // Peak's DPS stacks under the score so the name keeps its room.
+              sub={leader?.raw ? `${Math.round(leader.raw).toLocaleString()}/s` : undefined}
             >
               {leader && <PlayerName player={leader.player} />}
             </BossStat>
@@ -1156,7 +1159,7 @@ function BossCard({ summary: b, role, optional, onOpen }: { summary: LiveBossSum
   )
 }
 
-function BossStat({ icon, label, value, children }: { icon: ReactNode; label: string; value: string; children?: ReactNode }) {
+function BossStat({ icon, label, value, sub, children }: { icon: ReactNode; label: string; value: string; sub?: string; children?: ReactNode }) {
   return (
     <div className="flex items-center gap-2 rounded px-1.5 py-1 [text-shadow:0_1px_2px_rgba(0,0,0,.8)]">
       <dt className="shrink-0" title={label}>
@@ -1164,7 +1167,10 @@ function BossStat({ icon, label, value, children }: { icon: ReactNode; label: st
         <span className="sr-only">{label}</span>
       </dt>
       <dd className="flex min-w-0 flex-1 items-center gap-1.5 truncate">{children}</dd>
-      <dd className="shrink-0 font-mono tabular-nums">{value}</dd>
+      <dd className="shrink-0 text-right font-mono tabular-nums">
+        {value}
+        {sub && <span className="block text-[9px] leading-tight text-muted-foreground">{sub}</span>}
+      </dd>
     </div>
   )
 }
@@ -1180,7 +1186,7 @@ function PlayerName({ player }: { player: HubPlayer }) {
   )
 }
 
-function RatingLeaders({ leaders, onOpen }: { leaders: Record<RatingMetric, RatingLeader[]>; onOpen: (metric: RatingMetric) => void }) {
+function RatingLeaders({ leaders, role, onOpen }: { leaders: Record<RatingMetric, RatingLeader[]>; role: HubRole; onOpen: (metric: RatingMetric) => void }) {
   const rows = (m: RatingMetric) =>
     leaders[m].map((l) => ({
       id: l.player.id,
@@ -1193,6 +1199,7 @@ function RatingLeaders({ leaders, onOpen }: { leaders: Record<RatingMetric, Rati
         </>
       ),
       score: l.score,
+      raw: l.raw ? formatPeakRaw(l.raw, role === "dps" ? "dps" : "hps") : undefined,
     }))
   return <MetricColumns columns={{ peak: rows("peak"), mastery: rows("mastery"), renown: rows("renown") }} onOpen={onOpen} />
 }

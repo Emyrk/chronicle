@@ -2258,6 +2258,11 @@ export interface HubPlayerRatingEntry {
     readonly player_spec: string;
     readonly player_sub_spec: string;
     readonly score: number;
+    /**
+     * PeakRaw is the DPS or HPS behind a Peak score: the kill's on a boss board,
+     * the mean of the player's best per boss on a raid board. Unset otherwise.
+     */
+    readonly peak_raw?: number;
 }
 
 // From chroniclesdk/rating_hub_summary.go
