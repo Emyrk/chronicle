@@ -1684,7 +1684,7 @@ CREATE TABLE guilds (
 
 CREATE TABLE inference_client_tool_requests (
     run_id uuid NOT NULL,
-    thread_id uuid NOT NULL,
+    thread_id uuid,
     tool_call_id text NOT NULL,
     tool_name text NOT NULL,
     arguments jsonb NOT NULL,
@@ -1762,7 +1762,8 @@ CREATE TABLE inference_runs (
     debug boolean DEFAULT false NOT NULL,
     iteration_count integer DEFAULT 0 NOT NULL,
     tool_call_count integer DEFAULT 0 NOT NULL,
-    web_search boolean DEFAULT false NOT NULL
+    web_search boolean DEFAULT false NOT NULL,
+    ephemeral_history jsonb
 );
 
 CREATE TABLE inference_threads (
@@ -3767,6 +3768,9 @@ ALTER TABLE ONLY inference_oauth_transactions
 
 ALTER TABLE ONLY inference_oauth_transactions
     ADD CONSTRAINT inference_oauth_transactions_state_hash_key UNIQUE (state_hash);
+
+ALTER TABLE inference_runs
+    ADD CONSTRAINT inference_runs_ephemeral_history_check CHECK (((ephemeral_history IS NULL) OR ((thread_id IS NULL) AND (assistant_id = 'site-help'::text) AND (status = 'awaiting_client_tool'::text) AND (jsonb_typeof(ephemeral_history) = 'array'::text) AND (jsonb_array_length(ephemeral_history) <= 70) AND (pg_column_size(ephemeral_history) <= 262144)))) NOT VALID;
 
 ALTER TABLE ONLY inference_runs
     ADD CONSTRAINT inference_runs_pkey PRIMARY KEY (id);

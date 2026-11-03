@@ -402,7 +402,7 @@ const runLease = 15 * time.Minute
 
 func supersedeAwaitingClientTool(ctx context.Context, tx database.Store, threadID, userID uuid.UUID) error {
 	pending, err := tx.GetPendingInferenceClientToolRequestByThreadForUpdate(ctx, database.GetPendingInferenceClientToolRequestByThreadForUpdateParams{
-		ThreadID: threadID,
+		ThreadID: uuid.NullUUID{UUID: threadID, Valid: true},
 		UserID:   userID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -575,8 +575,16 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		history = append(history, input)
 	} else {
 		if req.Client != nil {
-			badRequest(w, r, "Client tools are not supported for this assistant.")
-			return
+			if a.ID != "site-help" {
+				badRequest(w, r, "Client tools are not supported for this assistant.")
+				return
+			}
+			client, err = advertisedClient(req.Client, searchPageCapability, "search")
+			if err != nil {
+				badRequest(w, r, err.Error())
+				return
+			}
+			a = withClientTools(a, client)
 		}
 		if req.ThreadID != nil || req.Message != nil || len(req.Messages) == 0 || len(req.Messages) > maxHistoryMessages {
 			badRequest(w, r, "Ephemeral runs require 1-50 browser messages and no thread.")
@@ -651,11 +659,15 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	}
 	persist := func(messages ...Message) error {
 		if !a.Durable {
+			history = append(history, messages...)
 			return nil
 		}
 		return s.persistInferenceMessages(r.Context(), thread.ID, messages...)
 	}
 	pause := func(assistantMessage Message, toolMessages []Message, pending clientToolPause, state agentLoopState) error {
+		if !a.Durable {
+			return s.pauseForEphemeralClientTool(r.Context(), runRow, append(slices.Clone(history), append([]Message{assistantMessage}, toolMessages...)...), pending, state)
+		}
 		return s.pauseForClientTool(r.Context(), runRow, thread.ID, assistantMessage, toolMessages, pending, state)
 	}
 	var usageThread *database.InferenceThread
@@ -702,7 +714,7 @@ func (s *Service) pauseForClientTool(ctx context.Context, run database.Inference
 			return err
 		}
 		if _, err := tx.InsertInferenceClientToolRequest(ctx, database.InsertInferenceClientToolRequestParams{
-			RunID: run.ID, ThreadID: threadID, ToolCallID: pending.Call.ID, ToolName: pending.Call.Name,
+			RunID: run.ID, ThreadID: uuid.NullUUID{UUID: threadID, Valid: true}, ToolCallID: pending.Call.ID, ToolName: pending.Call.Name,
 			Arguments: pending.Arguments, CapabilityID: pending.Capability.ID, CapabilityVersion: int32(pending.Capability.Version),
 			ScopeType:       pgtype.Text{String: pending.Capability.ScopeType, Valid: pending.Capability.ScopeType != ""},
 			ScopeID:         pgtype.Text{String: pending.Capability.ScopeID, Valid: pending.Capability.ScopeID != ""},
@@ -715,6 +727,61 @@ func (s *Service) pauseForClientTool(ctx context.Context, run database.Inference
 			ID: run.ID, UserID: run.UserID, InputTokens: int64(state.Usage.PromptTokens), OutputTokens: int64(state.Usage.CompletionTokens),
 			IterationCount: int32(state.IterationCount), ToolCallCount: int32(state.ToolCallCount),
 			LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(runLease), Valid: true},
+		})
+		return err
+	}, nil)
+}
+
+// ephemeralHistoryJSON keeps only the active exchange and as much earlier browser history
+// as fits. Tool-call/result pairs from this run are never split across the boundary.
+func ephemeralHistoryJSON(messages []Message) (json.RawMessage, error) {
+	lastUser := -1
+	for i, message := range messages {
+		if message.Role == RoleUser {
+			lastUser = i
+		}
+	}
+	if lastUser < 0 {
+		return nil, errors.New("ephemeral history has no user message")
+	}
+	for start := 0; start <= lastUser; {
+		if messages[start].Role == RoleUser {
+			data, err := json.Marshal(messages[start:])
+			if err != nil {
+				return nil, err
+			}
+			if len(messages)-start <= 70 && len(data) <= maxHistoryBytes {
+				return data, nil
+			}
+		}
+		if start == lastUser {
+			break
+		}
+		start++
+	}
+	return nil, errors.New("ephemeral client tool history too large")
+}
+
+func (s *Service) pauseForEphemeralClientTool(ctx context.Context, run database.InferenceRun, messages []Message, pending clientToolPause, state agentLoopState) error {
+	history, err := ephemeralHistoryJSON(messages)
+	if err != nil {
+		return err
+	}
+	return s.db.InTx(ctx, func(tx database.Store) error {
+		if _, err := tx.InsertInferenceClientToolRequest(ctx, database.InsertInferenceClientToolRequestParams{
+			RunID: run.ID, ToolCallID: pending.Call.ID, ToolName: pending.Call.Name,
+			Arguments: pending.Arguments, CapabilityID: pending.Capability.ID, CapabilityVersion: int32(pending.Capability.Version),
+			ScopeType:       pgtype.Text{String: pending.Capability.ScopeType, Valid: true},
+			ScopeID:         pgtype.Text{String: pending.Capability.ScopeID, Valid: true},
+			ClientSessionID: pending.Capability.SessionID, StateRevision: int64PointerPG(pending.Capability.StateRevision),
+			Effect: pending.Effect, Confirmation: pending.Confirmation,
+		}); err != nil {
+			return err
+		}
+		_, err := tx.PauseEphemeralInferenceRun(ctx, database.PauseEphemeralInferenceRunParams{
+			ID: run.ID, UserID: run.UserID, InputTokens: int64(state.Usage.PromptTokens), OutputTokens: int64(state.Usage.CompletionTokens),
+			IterationCount: int32(state.IterationCount), ToolCallCount: int32(state.ToolCallCount),
+			LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(runLease), Valid: true}, EphemeralHistory: history,
 		})
 		return err
 	}, nil)
@@ -973,6 +1040,14 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 				arguments, err := validateClientToolArguments(call.Name, call.Arguments)
 				if err != nil {
 					return agentLoopResult{State: state}, err
+				}
+				if capability.ID == searchPageCapabilityID && call.Name == "set_search_draft" {
+					var input struct {
+						ExpectedRevision int64 `json:"expected_revision"`
+					}
+					if err := json.Unmarshal(arguments, &input); err != nil || capability.StateRevision == nil || input.ExpectedRevision != *capability.StateRevision {
+						return agentLoopResult{State: state}, errors.New("search draft revision mismatch")
+					}
 				}
 				pending = &clientToolPause{Call: call, Arguments: arguments, Capability: *capability, Effect: clientTool.Effect, Confirmation: clientTool.Confirmation}
 				continue

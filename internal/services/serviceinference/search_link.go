@@ -11,6 +11,16 @@ import (
 
 const maxSearchLinkLength = 4096
 
+// validateSearchDraft checks the query tree without executing a search or building a URL.
+func validateSearchDraft(raw json.RawMessage) error {
+	var node instancesearch.Node
+	if err := decodeStrict(string(raw), &node); err != nil {
+		return err
+	}
+	_, err := instancesearch.Compile(instancesearch.Query{Where: &node}, instancesearch.Options{})
+	return err
+}
+
 func describeInstanceSearch(args string) (string, error) {
 	var in struct{}
 	if err := decodeStrict(args, &in); err != nil {

@@ -1741,7 +1741,7 @@ type GuildTenantRatingScopeScore struct {
 
 type InferenceClientToolRequest struct {
 	RunID             uuid.UUID          `db:"run_id" json:"run_id"`
-	ThreadID          uuid.UUID          `db:"thread_id" json:"thread_id"`
+	ThreadID          uuid.NullUUID      `db:"thread_id" json:"thread_id"`
 	ToolCallID        string             `db:"tool_call_id" json:"tool_call_id"`
 	ToolName          string             `db:"tool_name" json:"tool_name"`
 	Arguments         []byte             `db:"arguments" json:"arguments"`
@@ -1796,25 +1796,26 @@ type InferenceOauthTransaction struct {
 }
 
 type InferenceRun struct {
-	ID             uuid.UUID          `db:"id" json:"id"`
-	ThreadID       uuid.NullUUID      `db:"thread_id" json:"thread_id"`
-	UserID         uuid.UUID          `db:"user_id" json:"user_id"`
-	ConnectionID   uuid.UUID          `db:"connection_id" json:"connection_id"`
-	AssistantID    string             `db:"assistant_id" json:"assistant_id"`
-	Model          string             `db:"model" json:"model"`
-	Status         string             `db:"status" json:"status"`
-	IdempotencyKey string             `db:"idempotency_key" json:"idempotency_key"`
-	InputTokens    int64              `db:"input_tokens" json:"input_tokens"`
-	OutputTokens   int64              `db:"output_tokens" json:"output_tokens"`
-	ErrorCode      pgtype.Text        `db:"error_code" json:"error_code"`
-	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	CompletedAt    pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
-	LeaseExpiresAt pgtype.Timestamptz `db:"lease_expires_at" json:"lease_expires_at"`
-	Debug          bool               `db:"debug" json:"debug"`
-	IterationCount int32              `db:"iteration_count" json:"iteration_count"`
-	ToolCallCount  int32              `db:"tool_call_count" json:"tool_call_count"`
-	WebSearch      bool               `db:"web_search" json:"web_search"`
+	ID               uuid.UUID          `db:"id" json:"id"`
+	ThreadID         uuid.NullUUID      `db:"thread_id" json:"thread_id"`
+	UserID           uuid.UUID          `db:"user_id" json:"user_id"`
+	ConnectionID     uuid.UUID          `db:"connection_id" json:"connection_id"`
+	AssistantID      string             `db:"assistant_id" json:"assistant_id"`
+	Model            string             `db:"model" json:"model"`
+	Status           string             `db:"status" json:"status"`
+	IdempotencyKey   string             `db:"idempotency_key" json:"idempotency_key"`
+	InputTokens      int64              `db:"input_tokens" json:"input_tokens"`
+	OutputTokens     int64              `db:"output_tokens" json:"output_tokens"`
+	ErrorCode        pgtype.Text        `db:"error_code" json:"error_code"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	CompletedAt      pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	LeaseExpiresAt   pgtype.Timestamptz `db:"lease_expires_at" json:"lease_expires_at"`
+	Debug            bool               `db:"debug" json:"debug"`
+	IterationCount   int32              `db:"iteration_count" json:"iteration_count"`
+	ToolCallCount    int32              `db:"tool_call_count" json:"tool_call_count"`
+	WebSearch        bool               `db:"web_search" json:"web_search"`
+	EphemeralHistory []byte             `db:"ephemeral_history" json:"ephemeral_history"`
 }
 
 type InferenceThread struct {

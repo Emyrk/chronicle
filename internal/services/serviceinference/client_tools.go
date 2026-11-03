@@ -14,6 +14,8 @@ import (
 )
 
 const (
+	searchPageCapabilityID        = "search-page"
+	searchPageCapabilityVersion   = 1
 	instancePageCapabilityID      = "instance-page"
 	instancePageCapabilityVersion = 2
 	luaEditorCapabilityID         = "lua-editor"
@@ -47,6 +49,17 @@ type clientToolDefinition struct {
 	CapabilityVersion int
 	Effect            string
 	Confirmation      string
+}
+
+var searchPageClientTools = []clientToolDefinition{
+	{
+		ToolDefinition: ToolDefinition{Name: "inspect_search_draft", Description: "Inspect the current unsaved advanced instance-search draft, its revision, and editor availability. Does not run a search.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
+		CapabilityID:   searchPageCapabilityID, CapabilityVersion: searchPageCapabilityVersion, Effect: "read", Confirmation: "never",
+	},
+	{
+		ToolDefinition: ToolDefinition{Name: "set_search_draft", Description: "Replace the current unsaved advanced instance-search draft with a validated query tree. This does not execute a search, change the URL, or save the draft. Pass expected_revision from inspect_search_draft. If unavailable or rejected, do not retry; after stale_state inspect again before retrying once.", Parameters: json.RawMessage(`{"type":"object","properties":{"expected_revision":{"type":"integer","minimum":0},"where":{"type":"object"}},"required":["expected_revision","where"],"additionalProperties":false}`)},
+		CapabilityID:   searchPageCapabilityID, CapabilityVersion: searchPageCapabilityVersion, Effect: "view_mutation", Confirmation: "unless_yolo",
+	},
 }
 
 var instancePageClientTools = []clientToolDefinition{
@@ -97,9 +110,10 @@ type clientCapabilityDefinition struct {
 }
 
 var (
+	searchPageCapability   = clientCapabilityDefinition{ID: searchPageCapabilityID, Version: searchPageCapabilityVersion, ScopeType: "search_page", Tools: searchPageClientTools}
 	instancePageCapability = clientCapabilityDefinition{ID: instancePageCapabilityID, Version: instancePageCapabilityVersion, ScopeType: "instance", Tools: instancePageClientTools}
 	luaEditorCapability    = clientCapabilityDefinition{ID: luaEditorCapabilityID, Version: luaEditorCapabilityVersion, ScopeType: "lua_project", Tools: luaEditorClientTools}
-	clientCapabilities     = map[string]clientCapabilityDefinition{instancePageCapabilityID: instancePageCapability, luaEditorCapabilityID: luaEditorCapability}
+	clientCapabilities     = map[string]clientCapabilityDefinition{searchPageCapabilityID: searchPageCapability, instancePageCapabilityID: instancePageCapability, luaEditorCapabilityID: luaEditorCapability}
 )
 
 func clientToolByName(capabilityID, name string) (clientToolDefinition, bool) {
@@ -148,6 +162,9 @@ func withClientTools(a assistant, capability *clientCapability) assistant {
 		return a
 	}
 	a.Tools = slices.Clone(a.Tools)
+	if a.ID == "site-help" && capability.ID == searchPageCapabilityID {
+		a.System += "\n\nWhen the search-page capability is available, inspect_search_draft before editing. Use set_search_draft with the inspected expected_revision to edit only the current unsaved advanced-search draft. Never claim the edit ran a search or changed the URL. The user must press Search. The separate build_instance_search_link tool only builds a link and does not edit the current page. Do not retry rejected or unavailable edits; after stale_state inspect once before retrying at most once."
+	}
 	for _, tool := range clientCapabilities[capability.ID].Tools {
 		a.Tools = append(a.Tools, tool.ToolDefinition)
 	}
@@ -159,6 +176,25 @@ func validateClientToolArguments(name, raw string) (json.RawMessage, error) {
 		return nil, errors.New("tool arguments too large")
 	}
 	switch name {
+	case "inspect_search_draft":
+		var input struct{}
+		if strings.TrimSpace(raw) == "null" {
+			return nil, errors.New("invalid inspect_search_draft arguments")
+		}
+		if err := decodeStrict(raw, &input); err != nil {
+			return nil, errors.New("invalid inspect_search_draft arguments")
+		}
+	case "set_search_draft":
+		var input struct {
+			ExpectedRevision *int64          `json:"expected_revision"`
+			Where            json.RawMessage `json:"where"`
+		}
+		if err := decodeStrict(raw, &input); err != nil || input.ExpectedRevision == nil || *input.ExpectedRevision < 0 || len(input.Where) == 0 {
+			return nil, errors.New("invalid set_search_draft arguments")
+		}
+		if err := validateSearchDraft(input.Where); err != nil {
+			return nil, errors.New("invalid search draft")
+		}
 	case "inspect_instance_ui":
 		var input struct {
 			Include []string `json:"include"`
