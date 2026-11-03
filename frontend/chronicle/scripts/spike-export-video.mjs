@@ -1,15 +1,15 @@
-// Spike: drives the Mandokir capture story's in-browser MP4 export (WebCodecs)
-// and saves the result. The browser does the rendering and encoding; this
-// script only clicks the button and writes the file.
+// Drives the Mandokir capture story's "Render video" (drone camera, WebCodecs
+// MP4 in the browser) and saves the result. The browser does the rendering and
+// encoding; this script only starts it and writes the file. FROM_MS / TO_MS
+// pick a slice of the video (ms into it); the whole fight otherwise.
 import { chromium } from "playwright";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const storyUrl = process.env.STORY_URL ?? "http://localhost:6107/iframe.html?id=instance-map-mapview3d--mandokir-capture&viewMode=story&capture=render";
-const output = path.resolve(process.env.OUTPUT ?? ".capture/spike-export.mp4");
-const startMs = Number(process.env.START_MS ?? 14_028);
-const endMs = Number(process.env.END_MS ?? 23_000);
-const fps = Number(process.env.FPS ?? 30);
+const storyUrl = process.env.STORY_URL ?? "http://localhost:6108/iframe.html?id=instance-map-mapview3d--mandokir-capture&viewMode=story&capture=render";
+const output = path.resolve(process.env.OUTPUT ?? ".capture/replay-video.mp4");
+const fromMs = process.env.FROM_MS === undefined ? undefined : Number(process.env.FROM_MS);
+const toMs = process.env.TO_MS === undefined ? undefined : Number(process.env.TO_MS);
 const channel = process.env.CHANNEL; // e.g. "chrome" for a branded build with H.264
 
 const browser = await chromium.launch({
@@ -41,7 +41,7 @@ try {
     let binary = "";
     for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     return { status, base64: btoa(binary) };
-  }, { startMs, endMs, fps });
+  }, { fromMs, toMs });
   await writeFile(output, Buffer.from(result.base64, "base64"));
   console.log(result.status);
   console.log(`Wrote ${output}`);

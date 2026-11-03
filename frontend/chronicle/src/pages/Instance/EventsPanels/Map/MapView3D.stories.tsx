@@ -20,7 +20,7 @@ import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
 import type { MapCameraMark, MapCameraPose } from "./cameraPath";
 import MapView3D from "./MapView3D";
-import { exportCanvasVideo } from "./videoExport";
+import VideoRenderDialog, { type VideoRenderResult } from "./VideoRenderDialog";
 import type { MapViewRequest } from "./MapView2D";
 import { addEffectEvent, createEncounterEffects, isDeadAt, type EncounterEffects, type ReplayEffectEvent } from "./replayEffects";
 import { useMapScene, type MapMarkerKind, type MapSceneGround, type MapSceneMarker } from "./useMapScene";
@@ -881,7 +881,8 @@ const KRESH_LOOP_PAUSE_MS = 1_000;
 // built in its shape) through the production useMapScene, looping.
 interface MapCaptureBridge {
   setTime: (timestampMs: number, walkElapsedMs?: number) => void;
-  exportVideo: (options: { startMs: number; endMs: number; fps?: number }) => Promise<{ blob: Blob; codec: string; width: number; height: number; elapsedMs: number; frameCount: number; status: string }>;
+  /** Renders the fight (or `fromMs`..`toMs` of the video) with the drone camera, as "Render video" does. */
+  exportVideo: (options?: { fromMs?: number; toMs?: number }) => Promise<VideoRenderResult & { status: string }>;
 }
 function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSettings, walkAvatar, capture = false, initialCameraMarks = [], captureRender = false, captureWalking = false, captureWalkStartGuid, captureWalkLookAtGuid }: {
   fixture: LoadedMapFixture;
@@ -901,14 +902,10 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
   const sync = useSyncModeContext();
   const { enabled, isPlaying, currentTimestamp, enable, setEncounterBounds, setTimestamp, play, pause } = sync;
   const [captureHud, setCaptureHud] = useState(!captureRender);
-  // Spike: the in-browser export reads the WebGL canvas, which needs its
-  // drawing buffer kept. Set before MapView3D creates its renderer.
-  useState(() => {
-    if (captureRender) (window as Window & { __chronicleMapPreserveBuffer?: boolean }).__chronicleMapPreserveBuffer = true;
-    return null;
-  });
-  const rootRef = useRef<HTMLDivElement>(null);
-  const replayMsRef = useRef(0);
+  // "Render video" (the drone camera, in browser): the open render, and the
+  // bridge call waiting on it.
+  const [videoRender, setVideoRender] = useState<{ range: { fromMs: number; toMs: number } | null } | null>(null);
+  const videoResolveRef = useRef<((result: VideoRenderResult) => void) | null>(null);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [cameraMarks, setCameraMarks] = useState<MapCameraMark[]>(() => [...initialCameraMarks]);
   const [cameraPathPreview, setCameraPathPreview] = useState(captureRender && !captureWalking);
@@ -919,9 +916,6 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
   const replayMs = Math.max(0, Math.min(fixture.endMs - fixture.startMs, (currentTimestamp?.getTime() ?? fixture.startMs) - fixture.startMs));
   const elapsed = replayMs / 1000;
   const durationSeconds = Math.max(0.001, (fixture.endMs - fixture.startMs) / 1000);
-  useEffect(() => {
-    replayMsRef.current = replayMs;
-  }, [replayMs]);
   const sortedCameraMarks = useMemo(() => [...cameraMarks].sort((a, b) => a.timestampMs - b.timestampMs), [cameraMarks]);
   const cameraMarksJson = useMemo(() => JSON.stringify(sortedCameraMarks, null, 2), [sortedCameraMarks]);
   const walkCaptureFrame = useMemo(() => captureWalking ? {
@@ -982,40 +976,24 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
     if (!captureRender) return;
     const captureWindow = window as Window & { __chronicleMapCapture?: MapCaptureBridge };
     const clampMs = (timestampMs: number) => Math.max(0, Math.min(fixture.endMs - fixture.startMs, timestampMs));
-    const nextFrame = () => new Promise<number>((resolve) => requestAnimationFrame(resolve));
     captureWindow.__chronicleMapCapture = {
       setTime: (timestampMs, walkElapsedMs) => {
         pause();
         setTimestamp(new Date(fixture.startMs + clampMs(timestampMs)));
         if (walkElapsedMs !== undefined) setCaptureWalkMs(walkElapsedMs);
       },
-      // Spike: steps the replay frame by frame and encodes the WebGL canvas
-      // to MP4 in this tab (WebCodecs). No server, no screenshots.
-      exportVideo: async ({ startMs, endMs, fps = 30 }) => {
-        const canvas = rootRef.current?.querySelector("canvas");
-        if (!canvas) throw new Error("No map canvas");
+      exportVideo: (options = {}) => new Promise((resolve) => {
         pause();
-        const frameCount = Math.round(((endMs - startMs) / 1000) * fps) + 1;
-        const result = await exportCanvasVideo({
-          canvas,
-          fps,
-          frameCount,
-          renderFrame: async (index) => {
-            const at = clampMs(Math.min(endMs, startMs + (index * 1000) / fps));
-            setTimestamp(new Date(fixture.startMs + at));
-            // Wait for React to commit the replay time, then for the scene's
-            // render frame (same settle as scripts/capture-map-path.mjs).
-            for (let tries = 0; tries < 60 && Math.abs(replayMsRef.current - at) > 1; tries += 1) await nextFrame();
-            await nextFrame();
-            await nextFrame();
-            await nextFrame();
-          },
-          onProgress: (done, total) => setExportStatus(`Encoding ${done}/${total}`),
-        });
-        const status = `${result.codec} ${result.width}x${result.height} · ${frameCount} frames · ${(result.blob.size / 1e6).toFixed(2)} MB · ${(result.elapsedMs / 1000).toFixed(1)}s (${(frameCount / (result.elapsedMs / 1000)).toFixed(1)} fps)`;
-        setExportStatus(status);
-        return { ...result, frameCount, status };
-      },
+        const range = options.fromMs !== undefined || options.toMs !== undefined
+          ? { fromMs: options.fromMs ?? 0, toMs: options.toMs ?? Number.POSITIVE_INFINITY }
+          : null;
+        videoResolveRef.current = (result) => {
+          const status = `${result.codec} ${result.width}x${result.height} · ${result.frameCount} frames · ${(result.blob.size / 1e6).toFixed(2)} MB · ${(result.elapsedMs / 1000).toFixed(1)}s (${(result.frameCount / (result.elapsedMs / 1000)).toFixed(2)} fps)`;
+          setExportStatus(status);
+          resolve({ ...result, status });
+        };
+        setVideoRender({ range });
+      }),
     };
     return () => {
       delete captureWindow.__chronicleMapCapture;
@@ -1070,7 +1048,6 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
   const followable = meshState === "ready" && scene.status === "ready" && scene.markers.some((marker) => marker.guid === followGuid);
   return (
     <div
-      ref={rootRef}
       data-map-capture-ready={captureRender && meshState === "ready" && scene.status === "ready"}
       data-map-capture-ms={captureRender ? Math.round(replayMs) : undefined}
       style={{ width: capture ? "100vw" : 800, height: capture ? "100vh" : 520 }}
@@ -1109,6 +1086,25 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
       ) : (
         <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{scene.title}: {scene.detail}</div>
       )}
+      {videoRender && dungeonMesh ? (
+        <VideoRenderDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setVideoRender(null);
+          }}
+          panelProps={fixture.props}
+          dungeonMesh={dungeonMesh}
+          unitModelUrls={unitModelUrls}
+          effectSettings={effectSettings}
+          title={instance.encounters[0]?.name ?? "Boss"}
+          fileName="chronicle-replay.mp4"
+          range={videoRender.range}
+          onRendered={(result) => {
+            videoResolveRef.current?.(result);
+            videoResolveRef.current = null;
+          }}
+        />
+      ) : null}
       {capture && captureHud ? (
         <>
           <div className="absolute bottom-4 left-1/2 z-50 w-[min(760px,calc(100vw-32px))] -translate-x-1/2 rounded-xl border border-white/15 bg-black/80 px-4 py-3 text-white shadow-2xl backdrop-blur">
@@ -1120,22 +1116,11 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
               <div className="mb-2 flex items-center gap-2 text-xs">
                 <button
                   type="button"
-                  disabled={exportStatus?.startsWith("Encoding")}
-                  onClick={() => {
-                    const bridge = (window as Window & { __chronicleMapCapture?: MapCaptureBridge }).__chronicleMapCapture;
-                    const marks = sortedCameraMarks;
-                    const startMs = marks[0]?.timestampMs ?? 0;
-                    const endMs = marks.length > 1 ? marks[marks.length - 1].timestampMs : fixture.endMs - fixture.startMs;
-                    bridge?.exportVideo({ startMs, endMs }).then(({ blob }) => {
-                      const link = document.createElement("a");
-                      link.href = URL.createObjectURL(blob);
-                      link.download = "chronicle-replay.mp4";
-                      link.click();
-                    }, (error: unknown) => setExportStatus(`Export failed: ${String(error)}`));
-                  }}
+                  disabled={videoRender !== null || !dungeonMesh}
+                  onClick={() => setVideoRender({ range: null })}
                   className="rounded-md bg-cyan-400 px-2.5 py-1 font-semibold text-black hover:bg-cyan-300 disabled:opacity-50"
                 >
-                  Export MP4 (in browser)
+                  Render video (drone camera)
                 </button>
                 {exportStatus ? <span className="text-white/70">{exportStatus}</span> : null}
               </div>
