@@ -155,6 +155,60 @@ func TestTake(t *testing.T) {
 		require.EqualValues(t, 5, allowed.Load())
 	})
 
+	t.Run("PeekDoesNotSpend", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
+		l := ratelimit.New(db, "peek", ratelimit.PerMinute(60, 10))
+
+		// Unknown buckets are full.
+		s, err := l.Peek(ctx, "user:a")
+		require.NoError(t, err)
+		require.Equal(t, ratelimit.Status{Limit: 10, Remaining: 10, Reset: 0}, s)
+
+		_, err = l.Take(ctx, "user:a", 4)
+		require.NoError(t, err)
+		for range 2 {
+			s, err = l.Peek(ctx, "user:a")
+			require.NoError(t, err)
+			require.InDelta(t, 6, s.Remaining, 0.1)
+			// 4 tokens at 1/s.
+			require.InDelta(t, 4*time.Second, s.Reset, float64(200*time.Millisecond))
+		}
+	})
+
+	t.Run("Refund", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
+		l := ratelimit.New(db, "refund", ratelimit.PerMinute(1, 10))
+
+		_, err := l.Take(ctx, "user:a", 7)
+		require.NoError(t, err)
+		s, err := l.Refund(ctx, "user:a", 5)
+		require.NoError(t, err)
+		require.InDelta(t, 8, s.Remaining, 0.1)
+		// Refunds never overfill.
+		s, err = l.Refund(ctx, "user:a", 50)
+		require.NoError(t, err)
+		require.InDelta(t, 10, s.Remaining, 0.01)
+		_, err = l.Refund(ctx, "user:a", -1)
+		require.Error(t, err)
+	})
+
+	t.Run("Headers", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
+		l := ratelimit.New(db, "headers", ratelimit.PerMinute(60, 10))
+
+		res, err := l.Take(ctx, "user:a", 2.5)
+		require.NoError(t, err)
+		require.Equal(t, 10.0, res.Limit)
+		rec := httptest.NewRecorder()
+		ratelimit.SetHeaders(rec, res.Status)
+		require.Equal(t, "10", rec.Header().Get("RateLimit-Limit"))
+		require.Equal(t, "7", rec.Header().Get("RateLimit-Remaining"))
+		require.Equal(t, "3", rec.Header().Get("RateLimit-Reset"))
+	})
+
 	t.Run("NegativeCost", func(t *testing.T) {
 		t.Parallel()
 		ctx := testutil.Context(t, testutil.WaitShort)

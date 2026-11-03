@@ -20829,18 +20829,43 @@ func (q *sqlQuerier) DeleteIdleRateLimitBuckets(ctx context.Context, idleBefore 
 	return result.RowsAffected(), nil
 }
 
+const peekRateLimitTokens = `-- name: PeekRateLimitTokens :one
+SELECT COALESCE(
+  (SELECT rate_limit_refill(b.tokens, b.updated_at, $1::float8, $2::float8)
+   FROM rate_limit_buckets b WHERE b.key = $3::text),
+  $2::float8
+)::float8 AS tokens
+`
+
+type PeekRateLimitTokensParams struct {
+	RatePerSecond float64 `db:"rate_per_second" json:"rate_per_second"`
+	Burst         float64 `db:"burst" json:"burst"`
+	Key           string  `db:"key" json:"key"`
+}
+
+// Returns a bucket's current (refilled) token level without changing it. A
+// bucket that does not exist yet is full.
+func (q *sqlQuerier) PeekRateLimitTokens(ctx context.Context, arg PeekRateLimitTokensParams) (float64, error) {
+	row := q.db.QueryRow(ctx, peekRateLimitTokens, arg.RatePerSecond, arg.Burst, arg.Key)
+	var tokens float64
+	err := row.Scan(&tokens)
+	return tokens, err
+}
+
 const takeRateLimitTokens = `-- name: TakeRateLimitTokens :one
 INSERT INTO rate_limit_buckets (key, tokens, last_allowed, updated_at)
 VALUES (
   $1::text,
-  CASE WHEN $2::float8 >= $3::float8 THEN $2::float8 - $3::float8 ELSE $2::float8 END,
+  CASE WHEN $2::float8 >= $3::float8
+    THEN LEAST($2::float8, $2::float8 - $3::float8)
+    ELSE $2::float8 END,
   $2::float8 >= $3::float8,
   now()
 )
 ON CONFLICT (key) DO UPDATE SET
   tokens = CASE
     WHEN rate_limit_refill(rate_limit_buckets.tokens, rate_limit_buckets.updated_at, $4::float8, $2::float8) >= $3::float8
-    THEN rate_limit_refill(rate_limit_buckets.tokens, rate_limit_buckets.updated_at, $4::float8, $2::float8) - $3::float8
+    THEN LEAST($2::float8, rate_limit_refill(rate_limit_buckets.tokens, rate_limit_buckets.updated_at, $4::float8, $2::float8) - $3::float8)
     ELSE rate_limit_refill(rate_limit_buckets.tokens, rate_limit_buckets.updated_at, $4::float8, $2::float8)
   END,
   last_allowed = rate_limit_refill(rate_limit_buckets.tokens, rate_limit_buckets.updated_at, $4::float8, $2::float8) >= $3::float8,
@@ -20863,8 +20888,9 @@ type TakeRateLimitTokensRow struct {
 // Atomically refills a leaky bucket by the time since its last update
 // (capped at burst) and takes cost tokens if enough are available. A new
 // bucket starts full. A refused take still stores the refilled level, so
-// tokens never go negative. The row lock taken by the upsert serializes
-// concurrent takes on the same key.
+// tokens never go negative. A negative cost refunds tokens, still capped at
+// burst. The row lock taken by the upsert serializes concurrent takes on the
+// same key.
 func (q *sqlQuerier) TakeRateLimitTokens(ctx context.Context, arg TakeRateLimitTokensParams) (TakeRateLimitTokensRow, error) {
 	row := q.db.QueryRow(ctx, takeRateLimitTokens,
 		arg.Key,
