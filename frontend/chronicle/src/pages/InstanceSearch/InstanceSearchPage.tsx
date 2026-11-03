@@ -1,10 +1,11 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Blocks, ChevronDown, ChevronRight, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
 import type { InstanceSearchCursor } from "@/api/typesGenerated";
 import { useSupportedInstances } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
+import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation";
 import { useSupporterTier } from "@/hooks/useSupporterTier";
 import { TIER_COLOR } from "@/pages/Settings/billingPricing";
 import { Button } from "@/components/ui/button";
@@ -161,6 +162,21 @@ export function InstanceSearchPage() {
     (limit.data ? { limit: limit.data.limit, remaining: limit.data.remaining, resetSeconds: limit.data.reset_seconds } : null);
   const lastCost = lastPage?.cost ?? error?.cost ?? null;
   const rows = results.data?.pages.flatMap((p) => p.page.results) ?? [];
+  // Ask before leaving while results are on screen: in-app links via the
+  // shared click guard (BrowserRouter has no useBlocker), and reloads / tab
+  // closes via beforeunload. Result rows open in new tabs, so they never ask.
+  const hasResults = rows.length > 0;
+  useConfirmLinkNavigation(hasResults, "Leave instance search? Your results will be closed.");
+  useEffect(() => {
+    if (!hasResults) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [hasResults]);
+
   const resultLabel = results.isLoading
     ? "Searching…"
     : results.error

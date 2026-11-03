@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { CheckCircle2, Loader2, SearchX } from "lucide-react";
 import type { InstanceSearchResult } from "@/api/typesGenerated";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
@@ -32,7 +32,6 @@ export function ResultsTable({
   /** Total bosses per zone name, for "8/10". */
   bossCounts: Map<string, number>;
 }) {
-  const navigate = useNavigate();
   if (loading) {
     return (
       <div className="py-16 flex justify-center">
@@ -71,9 +70,10 @@ export function ResultsTable({
               <tr
                 key={r.id}
                 onClick={(e) => {
-                  // Let real links (and modifier-clicks) behave normally.
-                  if ((e.target as HTMLElement).closest("a") || e.metaKey || e.ctrlKey) return;
-                  navigate(instanceHref(r));
+                  // Rows open the run in a new tab so the results stay put.
+                  // Real links already open in a new tab themselves.
+                  if ((e.target as HTMLElement).closest("a")) return;
+                  window.open(instanceHref(r), "_blank", "noopener,noreferrer");
                 }}
                 className="group cursor-pointer hover:bg-primary-darker/40 transition-colors"
               >
@@ -85,7 +85,7 @@ export function ResultsTable({
                       aria-hidden="true"
                     />
                     <div className="min-w-0">
-                      <Link to={instanceHref(r)} className="block font-medium text-foreground truncate group-hover:underline">
+                      <Link to={instanceHref(r)} target="_blank" rel="noopener noreferrer" className="block font-medium text-foreground truncate group-hover:underline">
                         {r.name}
                       </Link>
                       <div className="text-2xs text-muted-foreground truncate">
@@ -101,7 +101,7 @@ export function ResultsTable({
                 </td>
                 <td className="px-3 py-2 hidden sm:table-cell whitespace-nowrap">
                   {r.guild_id && r.guild_name ? (
-                    <Link to={`/g/${r.guild_id}`} className="text-foreground/90 hover:underline">
+                    <Link to={`/g/${r.guild_id}`} target="_blank" rel="noopener noreferrer" className="text-foreground/90 hover:underline">
                       {r.guild_name}
                     </Link>
                   ) : (
