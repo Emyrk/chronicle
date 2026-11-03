@@ -1,5 +1,6 @@
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Loader2, Castle, Search, Check, ChevronsUpDown } from "lucide-react";
+import { Loader2, Castle, Search, Check, ChevronsUpDown, ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { AdRailStack } from "@/components/Ads/AdRailStack";
 import { AdSlot, type AdFallbackRenderer } from "@/components/Ads/AdSlot";
@@ -15,6 +16,7 @@ import { useUrlState, serializers } from "@/hooks/useUrlState";
 import { INSTANCE_CONFIG } from "@/pages/Logs/utils/instanceImages";
 import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
 import { RaidCard } from "./RaidCard";
+import { advancedSearchHref } from "./advancedSearchHref";
 import { expandInstanceOptions, expandInstanceQuery, getRecentRaidAdInsertions } from "./recentRaids.utils";
 import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import type { RecentInstance, RecentInstancesResponse } from "@/api/typesGenerated";
@@ -409,14 +411,25 @@ export function RecentRaids() {
       <main className="min-w-0 w-full max-w-7xl">
         {/* Header */}
         <div className="mb-6 space-y-3">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-              <Castle className="h-7 w-7" />
-              Recent
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Browse community dungeon & raid uploads from the last {RECENT_WINDOW_DAYS} days. Older uploads are not shown here.
-            </p>
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+                <Castle className="h-7 w-7" />
+                Recent
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                Browse community dungeon & raid uploads from the last {RECENT_WINDOW_DAYS} days. Older uploads are not shown here.
+              </p>
+            </div>
+            <Link
+              to={advancedSearchHref(selectedInstancesValid, realms?.find((r) => r.id === realmID)?.name)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+              title="Search every run on Chronicle by bosses, speed, parses, roster and more"
+            >
+              <Search className="h-4 w-4" />
+              Advanced search
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

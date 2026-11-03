@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Blocks, ChevronDown, ChevronRight, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
+import { Blocks, BookOpen, ChevronDown, ChevronRight, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
 import type { InstanceSearchCursor } from "@/api/typesGenerated";
 import { useRealms, useSupportedInstances } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,6 +9,7 @@ import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation";
 import { useSupporterTier } from "@/hooks/useSupporterTier";
 import { TIER_COLOR } from "@/pages/Settings/billingPricing";
 import { Button } from "@/components/ui/button";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { BlockEditor } from "./BlockEditor";
 import { ResultsTable } from "./ResultsTable";
@@ -21,7 +22,7 @@ import { ExamplesMenu } from "./ExamplesMenu";
 import { RecentSearchesMenu } from "./RecentSearchesMenu";
 import { addRecentSearch, loadRecentSearches, saveRecentSearches, type RecentSearch } from "./recentSearches";
 import { HonoredLockTooltip } from "./HonoredLockTooltip";
-import type { SearchExample } from "./examples";
+import { EXAMPLES, type SearchExample } from "./examples";
 import { SearchForm } from "./SearchForm";
 import { bossOptions, realmOptions, zoneOptions } from "./searchOptions";
 import {
@@ -40,6 +41,9 @@ import {
 import { SearchError, runSearch, useSearchFields, useSearchLimit, type SearchBudget } from "./searchApi";
 
 type Mode = "form" | "blocks" | "code";
+
+/** What Blocks / Code show non-Honored users first: or, count and not in one search. */
+const PREVIEW_EXAMPLE = EXAMPLES.find((e) => e.id === "23_complex_speed_comp") ?? EXAMPLES[0];
 
 export function InstanceSearchPage() {
   const [params, setParams] = useSearchParams();
@@ -69,7 +73,23 @@ export function InstanceSearchPage() {
   // The example last loaded into the block editor, shown as a caption.
   const [example, setExample] = useState<SearchExample | null>(null);
 
+  // Without Honored, Blocks / Code / Examples open a read-only preview of an
+  // example: it can be looked at in blocks or as code, but not edited or run.
+  // Going back to Form restores the user's own form untouched.
+  const [preview, setPreview] = useState(false);
+  const enterPreview = (target: "blocks" | "code", ex: SearchExample = example ?? PREVIEW_EXAMPLE) => {
+    setBlocks(ex.where);
+    setCode(formatCEL(ex.where));
+    setExample(ex);
+    setMode(target);
+    setPreview(true);
+  };
+
   const loadExample = (ex: SearchExample) => {
+    if (!advancedUnlocked) {
+      enterPreview(mode === "code" ? "code" : "blocks", ex);
+      return;
+    }
     // Code mode shows the example as text; otherwise as blocks.
     if (mode === "code") {
       setCode(formatCEL(ex.where));
@@ -101,6 +121,20 @@ export function InstanceSearchPage() {
   const enumOf = (name: string) => fields.data?.fields.find((f) => f.name === name)?.enum ?? [];
 
   const anonBlocked = !isAuthenticated && mode === "form" && !formIsBasic(form);
+
+  const leavePreview = () => {
+    setPreview(false);
+    setExample(null);
+    setMode("form");
+  };
+
+  /** Blocks / Code without Honored: preview an example from the form, else just change the read-only view. */
+  const lockedView = (next: "blocks" | "code") => {
+    setShowUpsell(true);
+    if (mode === "form") enterPreview(next);
+    else if (preview) setMode(next);
+    else switchMode(next);
+  };
 
   const switchMode = (next: Mode) => {
     if (next === mode || codeInvalid) return;
@@ -239,9 +273,25 @@ export function InstanceSearchPage() {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Search className="h-6 w-6 text-primary" />
             Instance search
+            <HintTooltip delayDuration={150}>
+              <TooltipTrigger asChild>
+                <span
+                  tabIndex={0}
+                  className="cursor-help rounded-sm border border-amber-400/35 bg-amber-400/10 px-1.5 py-px text-[10px] font-bold uppercase tracking-wider text-amber-400"
+                >
+                  Beta
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={6} className="max-w-64 text-center">
+                Instance search is under active development. Fields, results and limits can change at any time.
+              </TooltipContent>
+            </HintTooltip>
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Find raids by zone, bosses, speed, parses, roster and more.
+            Find raids by zone, bosses, speed, parses, roster and more.{" "}
+            <Link to="/search/guide" className="inline-flex items-center gap-1 text-primary hover:underline">
+              <BookOpen className="h-3.5 w-3.5" /> How it works
+            </Link>
           </p>
         </div>
         <BudgetLine budget={budget} lastCost={lastCost} />
@@ -265,16 +315,16 @@ export function InstanceSearchPage() {
         <div className="inline-flex items-center gap-0.5 bg-muted/50 rounded-md p-0.5">
           <ModeButton
             active={mode === "form"}
-            onClick={() => switchMode("form")}
-            disabled={mode !== "form" && (codeInvalid || formFromDraft === null)}
-            title={codeInvalid ? "Fix the query text first" : mode !== "form" && formFromDraft === null ? "This search uses things the form can't show" : undefined}
+            onClick={() => (preview ? leavePreview() : switchMode("form"))}
+            disabled={!preview && mode !== "form" && (codeInvalid || formFromDraft === null)}
+            title={preview ? "Back to your search" : codeInvalid ? "Fix the query text first" : mode !== "form" && formFromDraft === null ? "This search uses things the form can't show" : undefined}
           >
             <ListFilter className="h-3.5 w-3.5" /> Form
           </ModeButton>
           <ModeButton
             active={mode === "blocks"}
             locked={!advancedUnlocked}
-            onClick={() => (advancedUnlocked ? switchMode("blocks") : setShowUpsell(true))}
+            onClick={() => (advancedUnlocked ? switchMode("blocks") : lockedView("blocks"))}
             disabled={advancedUnlocked && codeInvalid}
             title={codeInvalid ? "Fix the query text first" : "Edit this search as blocks"}
             lockedPerk="blocks"
@@ -284,7 +334,7 @@ export function InstanceSearchPage() {
           <ModeButton
             active={mode === "code"}
             locked={!advancedUnlocked}
-            onClick={() => (advancedUnlocked ? switchMode("code") : setShowUpsell(true))}
+            onClick={() => (advancedUnlocked ? switchMode("code") : lockedView("code"))}
             title="Edit this search as text"
             lockedPerk="code"
           >
@@ -292,11 +342,13 @@ export function InstanceSearchPage() {
           </ModeButton>
         </div>
         <div className="flex items-center gap-2">
-          <ExamplesMenu onPick={loadExample} locked={!advancedUnlocked} onLocked={() => setShowUpsell(true)} />
+          <ExamplesMenu onPick={loadExample} />
           <RecentSearchesMenu recent={recent} onPick={pickRecent} onClear={clearRecent} />
         </div>
       </div>
-      {!advancedUnlocked && (showUpsell || mode !== "form") && <HonoredUpsell loggedIn={isAuthenticated} readOnly={mode !== "form"} />}
+      {!advancedUnlocked && (showUpsell || mode !== "form") && (
+        <HonoredUpsell loggedIn={isAuthenticated} note={preview ? "You're previewing an example. " : mode !== "form" ? "You're viewing a shared search. " : ""} />
+      )}
 
       {fields.isLoading ? (
         <div className="py-10 flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
@@ -318,11 +370,13 @@ export function InstanceSearchPage() {
               <Lightbulb className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium">Example: {example.title}</p>
-                <p className="text-2xs text-muted-foreground">{example.description} {mode === "code" ? "Edit the query" : "Edit any block"}, then Search.</p>
+                <p className="text-2xs text-muted-foreground">{example.description} {preview ? "Honored supporters can edit and run it." : `${mode === "code" ? "Edit the query" : "Edit any block"}, then Search.`}</p>
               </div>
-              <button type="button" onClick={() => setExample(null)} className="text-muted-foreground hover:text-foreground" aria-label="Dismiss example">
-                <X className="h-3.5 w-3.5" />
-              </button>
+              {!preview && (
+                <button type="button" onClick={() => setExample(null)} className="text-muted-foreground hover:text-foreground" aria-label="Dismiss example">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           )}
           {mode === "code" ? (
@@ -334,17 +388,22 @@ export function InstanceSearchPage() {
       )}
 
       <div className="flex items-center gap-3 flex-wrap">
-        <Button onClick={submit} disabled={anonBlocked || codeInvalid || results.isFetching} className="gap-1.5">
+        <Button
+          onClick={submit}
+          disabled={preview || anonBlocked || codeInvalid || results.isFetching}
+          title={preview ? "Honored supporters can run block and code searches" : undefined}
+          className="gap-1.5"
+        >
           {results.isFetching && !results.isFetchingNextPage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
           Search
         </Button>
         {mode === "form" && (
           <Button variant="ghost" size="sm" onClick={() => setForm(emptyForm())}>Clear</Button>
         )}
-        {mode === "blocks" && (
+        {mode === "blocks" && !preview && (
           <Button variant="ghost" size="sm" onClick={() => { setBlocks(undefined); setExample(null); }}>Clear</Button>
         )}
-        {mode === "code" && (
+        {mode === "code" && !preview && (
           <Button variant="ghost" size="sm" onClick={() => { setCode(""); setExample(null); }}>Clear</Button>
         )}
         {mode !== "code" && (
@@ -412,7 +471,7 @@ function ModeButton({ active, onClick, disabled, locked, lockedPerk, title, chil
 }
 
 /** Blocks / Code / Examples are an Honored perk; links to the supporter page. */
-function HonoredUpsell({ loggedIn, readOnly }: { loggedIn: boolean; readOnly: boolean }) {
+function HonoredUpsell({ loggedIn, note }: { loggedIn: boolean; note: string }) {
   return (
     <div
       className="rounded-lg border px-3 py-2 text-xs flex items-center gap-2"
@@ -420,8 +479,8 @@ function HonoredUpsell({ loggedIn, readOnly }: { loggedIn: boolean; readOnly: bo
     >
       <Lock className="h-3.5 w-3.5 shrink-0" style={{ color: TIER_COLOR.honored }} />
       <span>
-        {readOnly ? "You're viewing a shared search. " : ""}
-        The block editor, code editor and example searches are for{" "}
+        {note}
+        Building and running block and code searches is for{" "}
         <span className="font-medium" style={{ color: TIER_COLOR.honored }}>Honored</span> supporters.{" "}
         {loggedIn ? (
           <Link to="/supporter" className="underline font-medium">Become a supporter</Link>

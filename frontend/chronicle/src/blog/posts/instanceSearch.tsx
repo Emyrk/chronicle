@@ -1,14 +1,6 @@
 import type { BlogPostDefinition } from "../blogRegistry";
 import { ShortPost } from "./ShortPost";
 
-/*
- * DRAFT, not registered. To publish: add metadata to each
- * assets/<tenant>/generated/blog-posts.json (draft values are in
- * instanceSearch.stories.tsx), map "instance-search" to InstanceSearchPost in
- * BLOG_COMPONENTS and to the video in BLOG_VIDEOS (blogRegistry.ts, 970
- * frames), and add a What's New entry.
- */
-
 type PostProps = { post: BlogPostDefinition };
 
 export function InstanceSearchPost({ post }: PostProps) {

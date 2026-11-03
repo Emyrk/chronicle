@@ -1,27 +1,14 @@
 import { useRef, useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronRight, XCircle } from "lucide-react";
+import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { CelCode } from "./CelCode";
 import { lineCol } from "./celParser";
+import { CEL_CHEATSHEET } from "./celCheatsheet";
 
 export interface CodeParseState {
   error: { message: string; offset: number } | null;
 }
-
-const CHEATSHEET: [string, string][] = [
-  [`instance.name.contains("molten")`, "partial, case-insensitive"],
-  [`instance.name == "Molten Core"`, "exact (case-insensitive)"],
-  [`instance.clear_parse({"parse_scope": "realm"}) >= 95`, "options go in ({...})"],
-  [`instance.kill_time_parse({"bosses": ["Ragnaros", "Nefarian"], "match": "each"}) >= 90`, "any / each of a boss list"],
-  [`encounters.exists(e, e.name == "Ragnaros" && e.killed == true)`, "a pull where…"],
-  [`encounters.filter(e, e.outcome == "wipe").size() >= 5`, "count pulls"],
-  [`players.exists(p, p.sub_spec == "Bear" && p.sub_spec == "Cat")`, "same player"],
-  [`players.filter(p, p.class == "PRIEST").size() >= 3`, "count players"],
-  [`p.spec({"on": "trash"}) == "Feral"`, "on: bosses (default), trash, any"],
-  [`"unit-position" in instance.capabilities`, "log capability"],
-  [`instance.started_at >= timestamp("2026-10-01T00:00:00Z")`, "dates"],
-  [`!(…)  a && b  a || b  x in ["a", "b"]`, "not, and, or, lists"],
-];
 
 /**
  * Text editor for the query in CEL-style syntax (what "Query text" shows).
@@ -113,7 +100,7 @@ export function CodeEditor({
         <div className="rounded-md border border-border/60 bg-zinc-900/40 p-2 overflow-x-auto styled-scrollbar">
           <table className="text-2xs">
             <tbody>
-              {CHEATSHEET.map(([code, note]) => (
+              {CEL_CHEATSHEET.map(([code, note]) => (
                 <tr key={code}>
                   <td className="pr-4 py-0.5 font-mono whitespace-nowrap">
                     <CelCode code={code} />
@@ -124,7 +111,8 @@ export function CodeEditor({
             </tbody>
           </table>
           <p className="text-2xs text-muted-foreground mt-1.5">
-            Switch to Blocks to see the field list, or load an Example to see more.
+            Switch to Blocks to see the field list, or load an Example to see more. The{" "}
+            <Link to="/search/guide" className="text-primary hover:underline">guide</Link> lists every field.
           </p>
         </div>
       )}

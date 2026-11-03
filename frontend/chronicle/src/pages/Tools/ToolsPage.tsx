@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { Swords, FileText, Youtube, Code, Shirt, Users, Timer, BookOpen, GitBranch, ChartNoAxesCombined, Blocks, Puzzle, Map } from "lucide-react"
+import { Swords, FileText, Youtube, Code, Shirt, Users, Timer, BookOpen, GitBranch, ChartNoAxesCombined, Blocks, Puzzle, Map, Search } from "lucide-react"
 
 const faq = [
   {
@@ -19,6 +19,12 @@ const faq = [
     description: "See how talent builds are divided into specialized ranking and parse cohorts.",
     to: "/subspecs",
     icon: <GitBranch className="h-6 w-6" />,
+  },
+  {
+    name: "Instance search",
+    description: "Build searches with the form, blocks or code, every field, and examples.",
+    to: "/search/guide",
+    icon: <Search className="h-6 w-6" />,
   },
   {
     name: "Replay map legend",
