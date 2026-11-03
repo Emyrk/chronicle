@@ -253,6 +253,45 @@ func (api *API) WoWLogArtifactDownload(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(contents)
 }
 
+func (api *API) WoWLogGroupDownload(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	logID := httpmw.LogID(ctx)
+	actor, _ := authz.ActorFromContext(ctx)
+
+	canAdminLogs, err := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(actor))
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if !canAdminLogs {
+		httpapi.Forbidden(w, nil)
+		return
+	}
+
+	files, err := api.Opts.Zed.GetWoWLogFilesByGroupID(ctx, logID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{Message: "Failed to load log files", Detail: err.Error()},
+			Status:   http.StatusInternalServerError,
+			Wrapped:  err,
+		})
+		return
+	}
+	if len(files) == 0 {
+		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "Log has no files to download"})
+		return
+	}
+	if len(files) > 1 {
+		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{
+			Message: "Log has more than one file",
+			Detail:  fmt.Sprintf("Found %d files; download them individually from the log detail page.", len(files)),
+		})
+		return
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/api/v1/raidlogs/logs/%s/files/%s/download", logID, files[0].ID), http.StatusTemporaryRedirect)
+}
+
 func (api *API) WoWLogFileDownload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	fileID, err := uuid.Parse(chi.URLParam(r, "fileID"))
