@@ -651,6 +651,12 @@ type sqlcQuerier interface {
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	HeartbeatRatingRebuildCheckpoint(ctx context.Context, arg HeartbeatRatingRebuildCheckpointParams) (int64, error)
+	// Only the same 64 published cohorts returned by HubSummaryInstances are eligible.
+	// Renown is instance-wide; its published period score is repeated for each cohort.
+	HubLandingRatingRows(ctx context.Context, arg HubLandingRatingRowsParams) ([]HubLandingRatingRowsRow, error)
+	// Mirrors the full-clear leaderboard: version gates, duplicate groups, best
+	// per guild, ranked duration with legacy raw fallback. Do not load video proof.
+	HubLandingSpeedruns(ctx context.Context, arg HubLandingSpeedrunsParams) ([]HubLandingSpeedrunsRow, error)
 	// Returns encounters available in rankings for a given instance.
 	HubSummaryEncounters(ctx context.Context, arg HubSummaryEncountersParams) ([]HubSummaryEncountersRow, error)
 	// Scope selector metadata to this tenant as well as the selected raid.

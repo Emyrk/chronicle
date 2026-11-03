@@ -17,6 +17,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+type hubLandingCohort struct {
+	instance, difficulty string
+	size                 int16
+}
+
 type hubSummaryInput struct {
 	instance, featured, difficulty, metric, class, spec, subSpec string
 	size                                                         int16
@@ -95,7 +100,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	tenant := servicetenant.TenantIDFromContext(ctx)
-	out := chroniclesdk.HubSummary{Instances: []chroniclesdk.RankingsInstanceSummary{}, Realms: []chroniclesdk.HubRealm{}, Encounters: []chroniclesdk.RankingsEncounterSummary{}, Ratings: chroniclesdk.HubRatings{Raid: emptyHubBoard(), Bosses: []chroniclesdk.HubBossRating{}}, Performances: []chroniclesdk.RankingsEntry{}, Speedruns: []chroniclesdk.SpeedrunLeaderboardEntry{}}
+	out := chroniclesdk.HubSummary{Instances: []chroniclesdk.RankingsInstanceSummary{}, LandingPreviews: []chroniclesdk.HubLandingPreview{}, Realms: []chroniclesdk.HubRealm{}, Encounters: []chroniclesdk.RankingsEncounterSummary{}, Ratings: chroniclesdk.HubRatings{Raid: emptyHubBoard(), Bosses: []chroniclesdk.HubBossRating{}}, Performances: []chroniclesdk.RankingsEntry{}, Speedruns: []chroniclesdk.SpeedrunLeaderboardEntry{}}
 	instances, err := s.store.HubSummaryInstances(ctx, tenant)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
@@ -138,6 +143,84 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.instance == "" {
+		// All landing highlights come from two bounded bulk queries. The
+		// instance summary supplies only aggregate DPS, never log performances.
+		byCohort := make(map[hubLandingCohort]int, len(out.Instances))
+		for _, summary := range out.Instances {
+			key := hubLandingCohort{summary.InstanceName, summary.DifficultyName, summary.MaxPlayers}
+			byCohort[key] = len(out.LandingPreviews)
+			board := emptyHubBoard()
+			out.LandingPreviews = append(out.LandingPreviews, chroniclesdk.HubLandingPreview{
+				InstanceName: summary.InstanceName, DifficultyName: summary.DifficultyName, MaxPlayers: summary.MaxPlayers,
+				Player: board.Player, Guild: board.Guild, Speedruns: []chroniclesdk.SpeedrunLeaderboardEntry{},
+			})
+		}
+		generation, genErr := s.store.GetActiveTenantRatingGeneration(ctx, tenant)
+		if genErr != nil && !errors.Is(genErr, pgx.ErrNoRows) && !errors.Is(genErr, sql.ErrNoRows) {
+			httpapi.InternalServerError(w, genErr)
+			return
+		}
+		if genErr == nil && generation != uuid.Nil {
+			rows, e := s.store.HubLandingRatingRows(ctx, database.HubLandingRatingRowsParams{TenantID: tenant, GenerationID: generation, RealmIds: in.realmIDs})
+			if e != nil {
+				httpapi.InternalServerError(w, e)
+				return
+			}
+			out.GenerationID = &generation
+			for _, v := range rows {
+				index, found := byCohort[hubLandingCohort{v.InstanceName, v.DifficultyName, v.MaxPlayers}]
+				if !found {
+					continue
+				}
+				preview := &out.LandingPreviews[index]
+				if v.Subject == "guild" {
+					id, e := uuid.Parse(v.SubjectID)
+					if e != nil {
+						httpapi.InternalServerError(w, e)
+						return
+					}
+					preview.Guild.Renown = append(preview.Guild.Renown, chroniclesdk.HubGuildRatingEntry{
+						RealmID: v.RealmID, RealmName: v.RealmName, GuildID: id, GuildName: v.SubjectName, Score: v.Score,
+					})
+					continue
+				}
+				entry := chroniclesdk.HubPlayerRatingEntry{
+					RealmID: v.RealmID, RealmName: v.RealmName, PlayerGUID: v.SubjectID, PlayerName: v.SubjectName,
+					PlayerClass: normalizeClassName(v.PlayerClass), PlayerSpec: v.PlayerSpec, PlayerSubSpec: v.PlayerSubSpec, Score: v.Score,
+				}
+				switch v.RatingMetric {
+				case "peak":
+					preview.Player.Peak = append(preview.Player.Peak, entry)
+				case "ranked_mastery":
+					preview.Player.RankedMastery = append(preview.Player.RankedMastery, entry)
+				case "renown":
+					preview.Player.Renown = append(preview.Player.Renown, entry)
+				}
+			}
+		}
+		runs, e := s.store.HubLandingSpeedruns(ctx, database.HubLandingSpeedrunsParams{TenantID: tenant, RealmIds: in.realmIDs})
+		if e != nil {
+			httpapi.InternalServerError(w, e)
+			return
+		}
+		for _, v := range runs {
+			index, found := byCohort[hubLandingCohort{v.InstanceName, v.DifficultyName, v.MaxPlayers}]
+			if !found {
+				continue
+			}
+			preview := &out.LandingPreviews[index]
+			entry := chroniclesdk.SpeedrunLeaderboardEntry{
+				InstanceID: v.InstanceID, Slug: v.HashedSlug.String, DifficultyName: v.DifficultyName,
+				DurationMs: v.DurationMs, GuildID: v.GuildID.UUID, GuildName: v.GuildName,
+				RealmName: v.RealmName, StartTime: v.StartTime.Time, CompletionTime: v.CompletionTime.Time,
+				PlayerCount: v.PlayerCount, GuildLogoURL: v.GuildLogoUrl,
+				ParserVersion: v.ParserVersion, AddonVersion: v.AddonVersion,
+			}
+			if v.DuplicateGroupID.Valid {
+				entry.DuplicateGroupID = &v.DuplicateGroupID.UUID
+			}
+			preview.Speedruns = append(preview.Speedruns, entry)
+		}
 		httpapi.Write(ctx, w, http.StatusOK, out)
 		return
 	}

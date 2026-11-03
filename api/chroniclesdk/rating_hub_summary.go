@@ -5,6 +5,7 @@ import "github.com/google/uuid"
 // HubSummary is a public, tenant-wide snapshot for the live leaderboards overview.
 type HubSummary struct {
 	Instances            []RankingsInstanceSummary  `json:"instances"`
+	LandingPreviews      []HubLandingPreview        `json:"landing_previews"`
 	Realms               []HubRealm                 `json:"realms"`
 	Encounters           []RankingsEncounterSummary `json:"encounters"`
 	ProgressionBosses    []string                   `json:"progression_bosses"`
@@ -16,6 +17,19 @@ type HubSummary struct {
 	Performances         []RankingsEntry            `json:"performances"`
 	Speedruns            []SpeedrunLeaderboardEntry `json:"speedruns"`
 }
+
+// HubLandingPreview contains published, bounded highlights for one instance cohort.
+// Aggregate top-player DPS remains in HubSummary.Instances[].top_players.
+// Statistics are unavailable here.
+type HubLandingPreview struct {
+	InstanceName   string                     `json:"instance_name"`
+	DifficultyName string                     `json:"difficulty_name"`
+	MaxPlayers     int16                      `json:"max_players"`
+	Player         HubPlayerRatings           `json:"player"`
+	Guild          HubGuildRatings            `json:"guild"`
+	Speedruns      []SpeedrunLeaderboardEntry `json:"speedruns"`
+}
+
 type HubSelectedCohort struct {
 	DifficultyName string `json:"difficulty_name"`
 	MaxPlayers     int16  `json:"max_players"`

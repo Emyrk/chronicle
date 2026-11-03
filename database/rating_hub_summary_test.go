@@ -119,6 +119,62 @@ func TestHubSummaryRatingPreviewLimitsAndRealm(t *testing.T) {
 	// the reader's server ownership join must reject it even with RLS bypassed.
 	_, err = conn.Exec(ctx, `INSERT INTO player_tenant_rating_boss_scores(generation_id,tenant_id,realm_id,player_guid,instance_name,encounter_name,difficulty_name,max_players,player_class,player_spec,player_sub_spec,performance_metric,rating_metric,window_kind,window_start,window_end,score) VALUES($1,$2,$3,'intruder','Molten Core','Ragnaros','',0,'Mage','Fire','','dps','peak','period',$4,$5,999)`, gen, tenant, realms[2], time.Now().Add(-time.Hour), time.Now())
 	require.NoError(t, err)
+	// Landing rows are keyed to the published cohort and remain fenced even
+	// when the connection deliberately bypasses tenant RLS.
+	_, err = conn.Exec(ctx, `INSERT INTO rankings_instance_summaries(instance_name,difficulty_name,max_players,tenant_id)
+		VALUES ('Molten Core','',0,$1), ('Other raid','',0,$2)`, tenant, other)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, `INSERT INTO player_tenant_rating_scope_scores(generation_id,tenant_id,realm_id,player_guid,instance_name,difficulty_name,max_players,player_class,player_spec,player_sub_spec,performance_metric,rating_metric,window_kind,window_start,window_end,score)
+		VALUES ($1,$2,$3,'local','Molten Core','',0,'Mage','Fire','','dps','peak','period',$4,$5,101),
+		($1,$2,$6,'foreign-realm','Molten Core','',0,'Mage','Fire','','dps','peak','period',$4,$5,999)`, gen, tenant, realms[0], time.Now().Add(-time.Hour), time.Now(), realms[2])
+	require.NoError(t, err)
+	landing, err := q.HubLandingRatingRows(ctx, database.HubLandingRatingRowsParams{TenantID: tenant, GenerationID: gen})
+	require.NoError(t, err)
+	require.Len(t, landing, 1)
+	require.Equal(t, "local", landing[0].SubjectID)
+	for i := 0; i < 4; i++ {
+		_, err = conn.Exec(ctx, `INSERT INTO player_tenant_rating_scope_scores(generation_id,tenant_id,realm_id,player_guid,instance_name,difficulty_name,max_players,player_class,player_spec,player_sub_spec,performance_metric,rating_metric,window_kind,window_start,window_end,score)
+			VALUES ($1,$2,$3,$4,'Molten Core','',0,'Mage','Fire','','dps','peak','period',$5,$6,$7)`, gen, tenant, realms[0], fmt.Sprintf("extra-%d", i), time.Now().Add(-time.Hour), time.Now(), float64(100-i))
+		require.NoError(t, err)
+	}
+	landing, err = q.HubLandingRatingRows(ctx, database.HubLandingRatingRowsParams{TenantID: tenant, GenerationID: gen})
+	require.NoError(t, err)
+	require.Len(t, landing, 3)
+	require.Equal(t, "local", landing[0].SubjectID)
+	landing, err = q.HubLandingRatingRows(ctx, database.HubLandingRatingRowsParams{TenantID: tenant, GenerationID: gen, RealmIds: []uuid.UUID{realms[1]}})
+	require.NoError(t, err)
+	require.Empty(t, landing)
+	landing, err = q.HubLandingRatingRows(ctx, database.HubLandingRatingRowsParams{TenantID: tenant, GenerationID: uuid.Nil})
+	require.NoError(t, err)
+	require.Empty(t, landing)
+	owner := uuid.New()
+	_, err = q.InsertUser(ctx, database.InsertUserParams{ID: owner, Username: "hub-" + owner.String()[:8]})
+	require.NoError(t, err)
+	logGroup := uuid.New()
+	_, err = q.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{ID: logGroup, Owner: owner, LogType: database.LogTypeV1,
+		CreatedAt: database.Timestamptz(time.Now()), UpdatedAt: database.Timestamptz(time.Now())})
+	require.NoError(t, err)
+	require.NoError(t, q.InsertParsedLogGroup(ctx, logGroup))
+	for i := 0; i < 6; i++ {
+		realm := realms[0]
+		if i == 5 {
+			realm = realms[2]
+		}
+		guildID, instanceID := uuid.New(), uuid.New()
+		_, err = conn.Exec(ctx, `INSERT INTO guilds(id,realm_id,name) VALUES($1,$2,$3)`, guildID, realm, fmt.Sprintf("Speedrun guild %d", i))
+		require.NoError(t, err)
+		_, err = conn.Exec(ctx, `INSERT INTO log_instances(id,realm_id,log_group_id,name,difficulty_name,max_players) VALUES($1,$2,$3,'Molten Core','',0)`, instanceID, realm, logGroup)
+		require.NoError(t, err)
+		_, err = conn.Exec(ctx, `INSERT INTO instance_speedruns(instance_id,instance_name,realm_id,guild_id,qualified,start_time,completion_time,duration_ms,proof) VALUES($1,'Molten Core',$2,$3,true,$4,$5,$6,'{}')`, instanceID, realm, guildID, time.Now().Add(-time.Hour), time.Now(), int64(i+1))
+		require.NoError(t, err)
+	}
+	runs, err := q.HubLandingSpeedruns(ctx, database.HubLandingSpeedrunsParams{TenantID: tenant})
+	require.NoError(t, err)
+	require.Len(t, runs, 3)
+	require.Equal(t, "Speedrun guild 0", runs[0].GuildName)
+	runs, err = q.HubLandingSpeedruns(ctx, database.HubLandingSpeedrunsParams{TenantID: tenant, RealmIds: []uuid.UUID{realms[1]}})
+	require.NoError(t, err)
+	require.Empty(t, runs)
 	args := database.HubSummaryRatingRowsParams{TenantID: tenant, GenerationID: gen, InstanceName: "Molten Core", FeaturedEncounter: "Ragnaros", ExactCohort: true, DifficultyName: "", MaxPlayers: 0, PerformanceMetric: "dps"}
 	rows, err := q.HubSummaryRatingRows(ctx, args)
 	require.NoError(t, err)
