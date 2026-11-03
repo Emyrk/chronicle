@@ -79,6 +79,7 @@ export function ClassSpecPicker({
   depth = "subspec",
   allowedClasses,
   allowAny = true,
+  requireSpec = false,
   placeholder = "Any class",
   disabled,
   className,
@@ -88,6 +89,8 @@ export function ClassSpecPicker({
   depth?: "class" | "spec" | "subspec";
   allowedClasses?: readonly string[];
   allowAny?: boolean;
+  /** Hide "Any <class>": a choice must include a spec. */
+  requireSpec?: boolean;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
@@ -135,11 +138,15 @@ export function ClassSpecPicker({
                 <ClassLabel cls={cls} />
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-52">
-                <DropdownMenuItem onSelect={() => pick({ class: cls, spec: "", subSpec: "" })}>
-                  <ClassIcon cls={displayKey(cls)} className="h-4 w-4 rounded-sm" />
-                  Any {classLabel(cls)}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                {!requireSpec && (
+                  <>
+                    <DropdownMenuItem onSelect={() => pick({ class: cls, spec: "", subSpec: "" })}>
+                      <ClassIcon cls={displayKey(cls)} className="h-4 w-4 rounded-sm" />
+                      Any {classLabel(cls)}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 {(SPEC_BY_CLASS[displayKey(cls)] ?? []).map((spec) => {
                   const subs = depth === "subspec" ? subSpecs.get(`${displayKey(cls)}/${spec}`) : undefined;
                   if (!subs?.length) {

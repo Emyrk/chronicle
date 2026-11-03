@@ -12,7 +12,7 @@ import { ChipInput, NATIVE_SELECT, NumberInput, Segmented, SuggestInput, ToggleC
 import { MATCH_OPTIONS, METRIC_OPTIONS, ON_OPTIONS, OP_LABELS, PARSE_SCOPE_OPTIONS, enumLabel, fieldLabel } from "./fieldLabels";
 import type { Node } from "./queryModel";
 import { ClassSpecPicker } from "./ClassSpecPicker";
-import { ANY_CLASS_SPEC, classLabel, useSubSpecs } from "./classSpec";
+import { ANY_CLASS_SPEC, type ClassSpec, classLabel, useSubSpecs } from "./classSpec";
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
 
 /**
@@ -357,12 +357,17 @@ function PredicateEditor({
   ctx: BlockContext;
   onChange: (n: Node) => void;
 }) {
-  const options = ctx.fields.filter((f) => f.scope === scope);
+  // "Spec" covers both player.spec and player.sub_spec: the picker decides
+  // which one a block is from what the user clicks.
+  const options = ctx.fields.filter((f) => f.scope === scope && f.name !== SUB_SPEC_FIELD);
   const field = ctx.fields.find((f) => f.name === node.field) ?? options[0];
   if (!field) return null;
   const op = (node.op && field.ops.includes(node.op) ? node.op : field.ops[0]) as InstanceSearchOp;
+  const specLike = field.name === SPEC_FIELD || field.name === SUB_SPEC_FIELD;
+  const list = op === "in" || op === "not_in";
 
   const setField = (name: string) => {
+    if (name === SPEC_FIELD && specLike) return;
     const next = ctx.fields.find((f) => f.name === name);
     if (next) onChange(newPredicate(next));
   };
@@ -373,7 +378,7 @@ function PredicateEditor({
 
   return (
     <>
-      <select className={NATIVE_SELECT} disabled={ctx.disabled} value={field.name} onChange={(e) => setField(e.target.value)} title={field.doc}>
+      <select className={NATIVE_SELECT} disabled={ctx.disabled} value={specLike ? SPEC_FIELD : field.name} onChange={(e) => setField(e.target.value)} title={field.doc}>
         {options.map((f) => (
           <option key={f.name} value={f.name} title={f.doc}>
             {fieldLabel(f.name)}
@@ -385,7 +390,11 @@ function PredicateEditor({
           <option key={o} value={o}>{OP_LABELS[o]}</option>
         ))}
       </select>
-      <ValueEditor field={field} op={op} value={node.value} ctx={ctx} onChange={(value) => onChange({ ...node, field: field.name, op, value })} />
+      {specLike && !list ? (
+        <SpecOrSubSpecPicker node={{ ...node, op }} onChange={onChange} disabled={ctx.disabled} />
+      ) : (
+        <ValueEditor field={field} op={op} value={node.value} ctx={ctx} onChange={(value) => onChange({ ...node, field: field.name, op, value })} />
+      )}
     </>
   );
 }
@@ -428,9 +437,6 @@ function ValueEditor({
         disabled={disabled}
       />
     );
-  }
-  if ((field.name === "player.spec" || field.name === "player.sub_spec") && !list) {
-    return <SpecValuePicker subSpec={field.name === "player.sub_spec"} value={typeof value === "string" ? value : ""} onChange={onChange} disabled={disabled} />;
   }
 
   if (field.type === "enum") {
@@ -504,25 +510,47 @@ function ValueEditor({
   );
 }
 
+const SPEC_FIELD = "player.spec";
+const SUB_SPEC_FIELD = "player.sub_spec";
+
 /**
- * Spec / sub-spec value via the Class > Spec (> Sub-spec) menu. The stored
- * value is just the spec or sub-spec name; pair it with a class condition
- * to pin the class. When the site records no sub-specs, sub-spec falls back
- * to a text box.
+ * One picker for spec and sub-spec. It shows Class > Spec, with sub-specs
+ * where the site records them. Clicking a spec (or "Any <spec>") makes the
+ * block a player.spec condition; clicking a sub-spec makes it player.sub_spec.
+ * The stored value is just the name, so it matches that spec on any class;
+ * add a class condition to pin the class.
  */
-function SpecValuePicker({ subSpec, value, onChange, disabled }: { subSpec: boolean; value: string; onChange: (v: string) => void; disabled?: boolean }) {
+function SpecOrSubSpecPicker({ node, onChange, disabled }: { node: Node; onChange: (n: Node) => void; disabled?: boolean }) {
   const subSpecs = useSubSpecs();
-  if (subSpec && subSpecs.size === 0) {
-    return <SuggestInput className="flex-1 min-w-[120px]" value={value} onChange={onChange} disabled={disabled} />;
+  const value = typeof node.value === "string" ? node.value : "";
+  const isSub = node.field === SUB_SPEC_FIELD;
+  if (isSub && subSpecs.size === 0) {
+    // This site records no sub-specs; keep a shared query editable as text.
+    return <SuggestInput className="flex-1 min-w-[120px]" value={value} onChange={(v) => onChange({ ...node, value: v })} disabled={disabled} />;
   }
-  const current = subSpec ? { ...ANY_CLASS_SPEC, subSpec: value } : { ...ANY_CLASS_SPEC, spec: value };
+  let current: ClassSpec = isSub ? { ...ANY_CLASS_SPEC, subSpec: value } : { ...ANY_CLASS_SPEC, spec: value };
+  if (isSub) {
+    // Sub-spec names belong to one class and spec (Bear -> Feral Druid), so
+    // show them in full.
+    for (const [key, subs] of subSpecs) {
+      if (subs.includes(value)) {
+        const [cls, spec] = key.split("/");
+        current = { class: cls, spec, subSpec: value };
+        break;
+      }
+    }
+  }
   return (
     <ClassSpecPicker
-      depth={subSpec ? "subspec" : "spec"}
+      depth={subSpecs.size ? "subspec" : "spec"}
       allowAny={false}
-      placeholder={subSpec ? "Pick a sub-spec" : "Pick a spec"}
+      requireSpec
+      placeholder="Pick a spec"
       value={current}
-      onChange={(v) => onChange(subSpec ? v.subSpec : v.spec)}
+      onChange={(v) => {
+        if (v.subSpec) onChange({ ...node, field: SUB_SPEC_FIELD, value: v.subSpec });
+        else if (v.spec) onChange({ ...node, field: SPEC_FIELD, value: v.spec });
+      }}
       disabled={disabled}
     />
   );
