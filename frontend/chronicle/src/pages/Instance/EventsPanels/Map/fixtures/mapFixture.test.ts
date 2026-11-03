@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { gahzrankaOcto } from "./gahzrankaOcto";
 import { mandokirOcto } from "./mandokirOcto";
 import { kreshReal } from "./kreshReal";
+import { LEEROY_VIDEO_TIMESTAMPS, leeroyRookery } from "./leeroyRookery";
 import { loadMapFixture } from "./mapFixture";
 
 describe("loadMapFixture", () => {
@@ -44,6 +45,26 @@ describe("loadMapFixture", () => {
     expect(encounter?.effects.events.some((event) => event.spellName === "Massive Geyser")).toBe(true);
     expect(endMs - startMs).toBeGreaterThan(32_000);
     expect(Object.keys(props.context.instance.players ?? {})).toHaveLength(16);
+  });
+
+  it("loads the Leeroy Jenkins reconstruction with its eggs, whelps and deaths", () => {
+    const { props, startMs, endMs } = loadMapFixture(leeroyRookery);
+    const encounter = props.result.encounters.get(leeroyRookery.encounter.id);
+    const guidOf = (name: string) => Object.entries(leeroyRookery.players).find(([, player]) => player.name === name)?.[0];
+    const unitsNamed = (name: string) => Object.entries(leeroyRookery.units).filter(([, unit]) => unit.name === name).map(([guid]) => guid);
+
+    expect(endMs - startMs).toBe(52_000);
+    expect(Object.keys(props.context.instance.players ?? {})).toHaveLength(13);
+    // Every unhatched egg and every whelp stands on the map from the pull.
+    const eggs = unitsNamed("Rookery Egg");
+    const whelps = unitsNamed("Rookery Whelp");
+    expect(eggs.length + whelps.length).toBe(198);
+    for (const guid of [...eggs, ...whelps]) expect(encounter?.positionsByUnit.get(guid)?.[0]?.timestampMs).toBe(startMs);
+    // Jamaal dies at video 2:12 (44 s into the clip), as the party frames show.
+    const jamaal = encounter?.healthByUnit.get(guidOf("Jamaal")!);
+    expect(jamaal?.at(-1)).toMatchObject({ timestampMs: startMs + 44_000, current: 0 });
+    // The video sync maps 1:28 to the clip's first log second.
+    expect(LEEROY_VIDEO_TIMESTAMPS[0]).toMatchObject({ video_time_seconds: 88, utc_time: leeroyRookery.encounter.startTime.slice(11, 19) });
   });
 
   it("selects the five players when asked", () => {

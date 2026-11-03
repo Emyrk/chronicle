@@ -8,13 +8,17 @@ import { GAHZRANKA_ANNOUNCEMENT_SLAM, HAKKAR_ANNOUNCEMENT_WALK_START, MANDOKIR_A
 import { hakkarOcto } from "./fixtures/hakkarOcto";
 import { DEFAULT_EFFECT_SETTINGS, type EffectSettings } from "./mapViewSettings";
 import { kreshReal } from "./fixtures/kreshReal";
+import { LEEROY_FLOOR_Z, LEEROY_VIDEO_TIMESTAMPS, LEEROY_VIDEO_URL, leeroyChargeCamera, leeroyRookery } from "./fixtures/leeroyRookery";
+import { fetchMapManifest } from "@/pages/Technical/mapManifest";
+import { YouTubeOverlay } from "../../YouTubeOverlay";
+import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
 import { loadMapFixture, type LoadedMapFixture } from "./fixtures/mapFixture";
 import type { InstanceUnit, KillType, WoWHeroClasses } from "@/api/typesGenerated";
 import type { WoWSpell } from "@/api/wowdb";
 import type { WowMapInstance, WowMapManifest, WowMapMeshInstance } from "@/pages/Technical/mapGallery";
 import type { PanelContext } from "../types";
 import { fetchUnitModelUrls, type PublishedUnitModelUrls } from "./bossMinis";
-import { dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
+import { dungeonMeshLiquid, dungeonMeshUrl, placeableDungeonMesh } from "./dungeonMeshes";
 import type { MapHealthSample, MapPositionSample, MapResult } from "./map.processor";
 import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt, renderedDungeonMapPoint, selectHealthBars, unitFocusBounds, type MapPoint } from "./mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
@@ -884,8 +888,12 @@ interface MapCaptureBridge {
   /** Renders the fight (or `fromMs`..`toMs` of the video) with the drone camera, as "Render video" does. */
   exportVideo: (options?: { fromMs?: number; toMs?: number }) => Promise<VideoRenderResult & { status: string }>;
 }
-function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSettings, walkAvatar, capture = false, initialCameraMarks = [], captureRender = false, captureWalking = false, captureWalkStartGuid, captureWalkLookAtGuid }: {
+function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSettings, walkAvatar, capture = false, initialCameraMarks = [], captureRender = false, captureWalking = false, captureWalkStartGuid, captureWalkLookAtGuid, loop = true, cameraPath = null }: {
   fixture: LoadedMapFixture;
+  /** Plays and rewinds on its own; off when another driver (the YouTube overlay) owns the clock. */
+  loop?: boolean;
+  /** An authored camera path, played outside capture mode. */
+  cameraPath?: readonly MapCameraMark[] | null;
   mesh?: boolean;
   followGuid?: string | null;
   effectSettings?: EffectSettings;
@@ -966,11 +974,12 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
     focusCentre && fitZoom !== null ? { centre: focusCentre, zoom: fitZoom } : null,
   [fitZoom, focusCentre]);
 
+  // `loop`: closing the YouTube overlay turns sync off; take the clock back.
   useEffect(() => {
     enable();
     setEncounterBounds({ start: new Date(fixture.startMs), end: new Date(fixture.endMs) });
     setTimestamp(new Date(fixture.startMs));
-  }, [enable, fixture, setEncounterBounds, setTimestamp]);
+  }, [enable, fixture, loop, setEncounterBounds, setTimestamp]);
 
   useEffect(() => {
     if (!captureRender) return;
@@ -1002,14 +1011,14 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
 
   // Playback stops at the encounter end; rewind to the pull and play again.
   useEffect(() => {
-    if (capture || !enabled || isPlaying) return;
+    if (capture || !loop || !enabled || isPlaying) return;
     const atEnd = (currentTimestamp?.getTime() ?? 0) >= fixture.endMs;
     const id = setTimeout(() => {
       if (atEnd) setTimestamp(new Date(fixture.startMs));
       play();
     }, atEnd ? KRESH_LOOP_PAUSE_MS : 0);
     return () => clearTimeout(id);
-  }, [capture, currentTimestamp, enabled, fixture, isPlaying, play, setTimestamp]);
+  }, [capture, currentTimestamp, enabled, fixture, isPlaying, loop, play, setTimestamp]);
 
   useEffect(() => {
     if (!capture) return;
@@ -1076,7 +1085,7 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
           followGuid={followable ? followGuid : null}
           effectSettings={effectSettings}
           cameraPose={capture ? manualCameraPose : null}
-          cameraPath={capture && cameraPathPreview ? sortedCameraMarks : null}
+          cameraPath={capture ? (cameraPathPreview ? sortedCameraMarks : null) : cameraPath}
           cameraPathStartMs={fixture.startMs}
           walkCaptureFrame={capture ? walkCaptureFrame : null}
           cameraCaptureKey={capture ? cameraCaptureKey : 0}
@@ -1419,6 +1428,98 @@ function GahzrankaCaptureReplay() {
           />
         </SyncModeProvider>
       </WithGahzrankaSpellIcons>
+    </QueryClientProvider>
+  );
+}
+
+// --- Leeroy Jenkins (Upper Blackrock Spire, map 229), rebuilt from the 2005 video. ---
+
+// Every player selected but the recorder: with all selected no marker is
+// muted and MapView3D would treat it as no selection.
+const LEEROY_UNSELECTED = "Anfrony";
+
+/**
+ * Map 229's mesh from the live turtle manifest once it is published, else
+ * null: the story then keeps the fixture's flat placeholder floor.
+ */
+function usePublishedLeeroyMesh(): { ready: boolean; mesh: WowMapMeshInstance | null } {
+  const [state, setState] = useState<{ ready: boolean; mesh: WowMapMeshInstance | null }>({ ready: false, mesh: null });
+  useEffect(() => {
+    let cancelled = false;
+    fetchMapManifest(leeroyRookery.instance.iconBaseUrl)
+      .then((manifest) => manifest.instances?.find((instance) => instance.mapID === leeroyRookery.encounter.mapId)?.mesh ?? null)
+      .catch(() => null)
+      .then((mesh) => {
+        if (!cancelled) setState({ ready: true, mesh: placeableDungeonMesh(mesh ?? undefined) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return state;
+}
+
+function LeeroyReplay({ video, scriptedCamera }: { video: boolean; scriptedCamera: boolean }) {
+  const published = usePublishedLeeroyMesh();
+  if (!published.ready) {
+    return <div style={{ width: 800, height: 520 }} className="flex items-center justify-center rounded-md border border-white/10 bg-black/70 text-xs text-muted-foreground">Loading map…</div>;
+  }
+  return <LeeroyScene video={video} scriptedCamera={scriptedCamera} mesh={published.mesh} />;
+}
+
+function LeeroyScene({ video, scriptedCamera, mesh }: { video: boolean; scriptedCamera: boolean; mesh: WowMapMeshInstance | null }) {
+  const [fixture] = useState(() => {
+    const loaded = loadMapFixture(leeroyRookery, { selectPlayers: true });
+    const playerIds = loaded.props.context.entitySelection.playerIds as Set<string>;
+    for (const [guid, player] of Object.entries(leeroyRookery.players)) if (player.name === LEEROY_UNSELECTED) playerIds.delete(guid);
+    // The published mesh replaces the placeholder floor (eggs are not in the
+    // mesh; they come from the fixture's spawn data either way).
+    if (!mesh) return loaded;
+    const manifest = { ...loaded.manifest, instances: loaded.manifest.instances.map((instance) => ({ ...instance, mesh })) };
+    return { ...loaded, manifest };
+  });
+  const [queryClient] = useState(() => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(["wow-map-manifest", leeroyRookery.instance.iconBaseUrl], fixture.manifest);
+    return client;
+  });
+  const cameraPath = useMemo(() => {
+    if (!scriptedCamera) return null;
+    if (mesh) return leeroyChargeCamera(mesh.bounds, 0);
+    // The placeholder entry's extent is the flat ground (its GLB is never loaded).
+    const bounds = leeroyRookery.manifest.instances[0]?.mesh?.bounds;
+    return bounds ? leeroyChargeCamera(bounds, LEEROY_FLOOR_Z) : null;
+  }, [mesh, scriptedCamera]);
+  const [videoOpen, setVideoOpen] = useState(video);
+  return (
+    <QueryClientProvider client={queryClient}>
+      <SyncModeProvider>
+        <div className="flex flex-col gap-2">
+          <FixturePlayer fixture={fixture} mesh={mesh !== null} loop={!videoOpen} cameraPath={cameraPath} />
+          <div className="flex max-w-[800px] items-center gap-2 text-xs text-white/60">
+            {!videoOpen && (
+              <button type="button" onClick={() => setVideoOpen(true)} className="shrink-0 rounded bg-white/10 px-2 py-1 text-white hover:bg-white/20">
+                Watch with the video
+              </button>
+            )}
+            <span>
+              {mesh ? "On the map 229 mesh." : "Flat placeholder floor until the map 229 mesh is published."}
+              {" "}Positions are hand keyframes from the video; see scripts/leeroy/README.md.
+            </span>
+          </div>
+        </div>
+        {videoOpen && (
+          <TooltipProvider>
+            <YouTubeOverlay
+              videoUrl={LEEROY_VIDEO_URL}
+              timestamps={LEEROY_VIDEO_TIMESTAMPS}
+              targetTime={leeroyRookery.encounter.startTime}
+              pauseTime={leeroyRookery.encounter.endTime}
+              onClose={() => setVideoOpen(false)}
+            />
+          </TooltipProvider>
+        )}
+      </SyncModeProvider>
     </QueryClientProvider>
   );
 }
@@ -1943,6 +2044,24 @@ export const HakkarRealPlayer: Story = {
  * coordinates. The mesh loads from the icon CDN (`forever/maps/3d/`); offline
  * the units stand on an empty ground.
  */
+/**
+ * Leeroy Jenkins charges into the Rookery (Upper Blackrock Spire): the raid in
+ * the Hall of Binding, the run through the door, whelps hatching from the real
+ * egg spawns, and the recorder's party dying at the times its frames show. The
+ * guild's YouTube upload plays in the draggable picture-in-picture and drives
+ * the replay; its seek bar scrubs both. Positions are hand keyframes from
+ * frame annotations, not a camera solve (map 229 has no mesh yet); see
+ * scripts/leeroy/README.md for what is observed, inferred and illustrative.
+ */
+export const Leeroy: Story = {
+  render: () => <LeeroyReplay video scriptedCamera />,
+};
+
+/** As Leeroy without the video or the scripted camera: loops, orbit freely. */
+export const LeeroyFreeCamera: Story = {
+  render: () => <LeeroyReplay video={false} scriptedCamera={false} />,
+};
+
 export const RuinsMesh: Story = {
   args: { players: 10, playbackSpeed: 1 },
   render: ({ players }) => <MeshFightReplay players={players} fight={RUINS_FIGHT} />,

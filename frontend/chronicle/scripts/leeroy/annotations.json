@@ -1,0 +1,665 @@
+{
+ "about": [
+  "Frame annotations for the Leeroy Jenkins replay spike (issue #1543).",
+  "Annotated by a vision model (Claude) reading frames of the official 480p upload: 5 fps for 86-116 s, 4 fps for 130-138 s, 1 fps elsewhere. Roster and classes are cross-checked with fan sources and labelled as such.",
+  "World positions are HAND KEYFRAMES, not a camera solve: map 229 has no published mesh yet, so screen positions could not be projected onto a floor.",
+  "They are placed with the real geometry we do have: the Rookery's 198 floor eggs and Father Flame (CMaNGOS spawns, rookery-spawns.json) and Pyroguard Emberseer's Hall of Binding to the north.",
+  "Every field says where it came from: observed (seen in the frames), inferred (from the story or layout), or illustrative (filler so the replay reads; not seen)."
+ ],
+ "video": {
+  "youtubeId": "jbq5dsQ-l9M",
+  "title": "A Rough Go - Leeroy Jenkins",
+  "channel": "Anf Pal (the guild's own upload, 2005 original)",
+  "firstTakeYoutubeId": "8hmgrHohDGM",
+  "resolution": "640x480"
+ },
+ "clip": {
+  "fromVideoSeconds": 88,
+  "toVideoSeconds": 140,
+  "logStart": "2005-05-11T20:00:00.000Z",
+  "note": "The 20 s spike (charge 93 s -> pile-in -> 113 s) plus the POV party's wipe at 131-136 s, so deaths are inside the clip."
+ },
+ "places": {
+  "source": "map 229 mesh (orchestrator render, calibrated against real Rookery pulls) and real pull positions: groups come down stairs from the upper Hall of Binding (z ~111) at y ~-314 onto a terrace (z 106.4) along the Rookery's north side; the eggs lie on the floor below (z 91.5). Leeroy and the POV reach the eggs 2 s after the door, so they drop off the terrace edge (the 95.2 s frame looks down from it).",
+  "behind": {
+   "x": 140,
+   "y": -312,
+   "z": 111
+  },
+  "planning": {
+   "x": 131,
+   "y": -313,
+   "z": 111
+  },
+  "door": {
+   "x": 119,
+   "y": -314,
+   "z": 110.5
+  },
+  "terraceEdge": {
+   "x": 106,
+   "y": -314,
+   "z": 106.4
+  },
+  "leeroyStop": {
+   "x": 97,
+   "y": -312,
+   "z": 91.5
+  },
+  "pileIn": {
+   "x": 95,
+   "y": -309,
+   "z": 91.5
+  },
+  "retreat": {
+   "x": 86,
+   "y": -326,
+   "z": 91.5
+  },
+  "fatherFlame": {
+   "x": 76,
+   "y": -334.74,
+   "z": 91.51
+  }
+ },
+ "roster": [
+  {
+   "name": "Leeroy",
+   "class": "PALADIN",
+   "classSource": "fan source (Human Paladin); observed: gold plate at 96 s"
+  },
+  {
+   "name": "Anfrony",
+   "class": "WARRIOR",
+   "classSource": "fan source: Human Warrior, the recorder (POV). Observed: his fear at 104 s puts purple skulls over the whelps, which fits Intimidating Shout. The player frame name itself is not legible at 480p."
+  },
+  {
+   "name": "Abduhl",
+   "class": "ROGUE",
+   "classSource": "fan source (Human Rogue)"
+  },
+  {
+   "name": "Basphemy",
+   "class": "WARRIOR",
+   "classSource": "inferred from the dialogue (fan analysis), not stated anywhere: asked to use Intimidating Shout"
+  },
+  {
+   "name": "Chrisym",
+   "class": "MAGE",
+   "classSource": "guess: the dialogue mentions mages; nameplate at the right edge at 90 s"
+  },
+  {
+   "name": "Ctidalwave",
+   "class": "MAGE",
+   "classSource": "guess: the dialogue mentions mages"
+  },
+  {
+   "name": "Forekin",
+   "class": "WARRIOR",
+   "classSource": "guess: in melee in the whelp pile at 100-102 s and 113 s"
+  },
+  {
+   "name": "Jamaal",
+   "class": "WARRIOR",
+   "classSource": "inferred from the dialogue (fan analysis), not stated anywhere: asked to use Intimidating Shout"
+  },
+  {
+   "name": "Juron",
+   "class": "HUNTER",
+   "classSource": "guess"
+  },
+  {
+   "name": "Madtoker",
+   "class": "MAGE",
+   "classSource": "guess: the dialogue mentions mages and no warlock"
+  },
+  {
+   "name": "Ritter",
+   "class": "PRIEST",
+   "classSource": "guess: white robes at 90-96 s"
+  },
+  {
+   "name": "Spiffy",
+   "class": "PRIEST",
+   "classSource": "inferred from the dialogue (fan analysis), not stated anywhere: asked to rez"
+  },
+  {
+   "name": "Therien",
+   "class": "PALADIN",
+   "classSource": "inferred from the dialogue (fan analysis), not stated anywhere: asked for Divine Intervention"
+  }
+ ],
+ "observations": [
+  {
+   "t": 90.0,
+   "what": "Raid stacked in the Hall of Binding beside a doorway; nameplates Forekin, Abduhl, Jamaal, Ritter, Madtoker, Basphemy, Therien, Ctidalwave, Juron, Spiffy.",
+   "source": "observed"
+  },
+  {
+   "t": 93.0,
+   "what": "A runner leaves the stack for the door; the raid turns after him.",
+   "source": "observed"
+  },
+  {
+   "t": 94.0,
+   "what": "Anfrony (POV) follows the runner through the stone doorway, Juron beside the camera.",
+   "source": "observed"
+  },
+  {
+   "t": 96.0,
+   "what": "Minimap now 'The Rookery'. Leeroy (paladin) on the checkered floor among eggs and bones; Ritter right of the camera.",
+   "source": "observed"
+  },
+  {
+   "t": 97.0,
+   "what": "First Rookery Whelp nameplates over Leeroy's position.",
+   "source": "observed"
+  },
+  {
+   "t": 99.0,
+   "what": "Leeroy buried under ~8 whelps.",
+   "source": "observed"
+  },
+  {
+   "t": 100.0,
+   "what": "Forekin and Abduhl arrive at the pile; ~10 whelp nameplates.",
+   "source": "observed"
+  },
+  {
+   "t": 101.0,
+   "what": "Ritter, Spiffy, Basphemy and Abduhl in the pile.",
+   "source": "observed"
+  },
+  {
+   "t": 104.0,
+   "what": "Anfrony (POV)'s fear: purple skulls over ~6 whelps; more eggs ahead of the camera.",
+   "source": "observed"
+  },
+  {
+   "t": 108.0,
+   "what": "Anfrony (POV) health about half (player frame turns yellow).",
+   "source": "observed"
+  },
+  {
+   "t": 112.0,
+   "what": "Whelps spread over the room; Forekin fighting at 113 s.",
+   "source": "observed"
+  },
+  {
+   "t": 126.0,
+   "what": "Anfrony (POV) is backing out over grey stone towards the east side of the room.",
+   "source": "observed (direction inferred)"
+  },
+  {
+   "t": 131.0,
+   "what": "Anfrony (POV) party: slot 2 health goes red.",
+   "source": "observed"
+  },
+  {
+   "t": 132.0,
+   "what": "Slot 2 health empty, portrait grey (dead).",
+   "source": "observed"
+  },
+  {
+   "t": 134.4,
+   "what": "Slot 3 portrait grey (dead).",
+   "source": "observed"
+  },
+  {
+   "t": 135.0,
+   "what": "Slot 1 health reads 0 (dead).",
+   "source": "observed"
+  },
+  {
+   "t": 135.4,
+   "what": "Slot 4 portrait grey (dead): every other member of the Anfrony (POV) party is down.",
+   "source": "observed"
+  }
+ ],
+ "deaths": [
+  {
+   "t": 132.0,
+   "partySlot": 2,
+   "name": "Jamaal",
+   "nameSource": "assumed: party frame names are not legible at 480p; the first three follow the script's death order (Jamaal, Forekin, Basphemy, then everyone; fan transcript)"
+  },
+  {
+   "t": 134.4,
+   "partySlot": 3,
+   "name": "Forekin",
+   "nameSource": "assumed (script order)"
+  },
+  {
+   "t": 135.0,
+   "partySlot": 1,
+   "name": "Basphemy",
+   "nameSource": "assumed (script order)"
+  },
+  {
+   "t": 135.4,
+   "partySlot": 4,
+   "name": "Juron",
+   "nameSource": "unattributed: party slot 4's name is not legible; Juron is a placeholder"
+  }
+ ],
+ "keyframes": {
+  "source": "hand-placed from the observations above; times are video seconds",
+  "Leeroy": [
+   [
+    88,
+    "behind",
+    0
+   ],
+   [
+    92.6,
+    "behind",
+    0
+   ],
+   [
+    93.4,
+    "planning",
+    0
+   ],
+   [
+    94.6,
+    "door",
+    0
+   ],
+   [
+    95.7,
+    "terraceEdge",
+    0
+   ],
+   [
+    96.6,
+    "leeroyStop",
+    0
+   ],
+   [
+    140,
+    "leeroyStop",
+    0
+   ]
+  ],
+  "Juron": [
+   [
+    88,
+    "planning",
+    2
+   ],
+   [
+    93.8,
+    "planning",
+    2
+   ],
+   [
+    95.0,
+    "door",
+    2
+   ],
+   [
+    96.3,
+    "terraceEdge",
+    2
+   ],
+   [
+    97.4,
+    "pileIn",
+    2
+   ]
+  ],
+  "Ritter": [
+   [
+    88,
+    "planning",
+    3
+   ],
+   [
+    94.2,
+    "planning",
+    3
+   ],
+   [
+    95.6,
+    "door",
+    3
+   ],
+   [
+    96.7,
+    "terraceEdge",
+    3
+   ],
+   [
+    97.6,
+    "pileIn",
+    3
+   ]
+  ],
+  "Forekin": [
+   [
+    88,
+    "planning",
+    4
+   ],
+   [
+    94.6,
+    "planning",
+    4
+   ],
+   [
+    96.2,
+    "door",
+    4
+   ],
+   [
+    98.1,
+    "terraceEdge",
+    4
+   ],
+   [
+    99.6,
+    "pileIn",
+    4
+   ]
+  ],
+  "Abduhl": [
+   [
+    88,
+    "planning",
+    5
+   ],
+   [
+    94.8,
+    "planning",
+    5
+   ],
+   [
+    96.6,
+    "door",
+    5
+   ],
+   [
+    98.4,
+    "terraceEdge",
+    5
+   ],
+   [
+    99.8,
+    "pileIn",
+    5
+   ]
+  ],
+  "Spiffy": [
+   [
+    88,
+    "planning",
+    6
+   ],
+   [
+    95.0,
+    "planning",
+    6
+   ],
+   [
+    96.8,
+    "door",
+    6
+   ],
+   [
+    98.9,
+    "terraceEdge",
+    6
+   ],
+   [
+    100.6,
+    "pileIn",
+    6
+   ]
+  ],
+  "Basphemy": [
+   [
+    88,
+    "planning",
+    7
+   ],
+   [
+    95.2,
+    "planning",
+    7
+   ],
+   [
+    97.0,
+    "door",
+    7
+   ],
+   [
+    99.1,
+    "terraceEdge",
+    7
+   ],
+   [
+    100.8,
+    "pileIn",
+    7
+   ]
+  ],
+  "Jamaal": [
+   [
+    88,
+    "planning",
+    8
+   ],
+   [
+    95.4,
+    "planning",
+    8
+   ],
+   [
+    97.4,
+    "door",
+    8
+   ],
+   [
+    99.4,
+    "terraceEdge",
+    8
+   ],
+   [
+    101.0,
+    "pileIn",
+    8
+   ]
+  ],
+  "Madtoker": [
+   [
+    88,
+    "planning",
+    9
+   ],
+   [
+    95.6,
+    "planning",
+    9
+   ],
+   [
+    97.6,
+    "door",
+    9
+   ],
+   [
+    99.7,
+    "terraceEdge",
+    9
+   ],
+   [
+    101.4,
+    "pileIn",
+    9
+   ]
+  ],
+  "Therien": [
+   [
+    88,
+    "planning",
+    10
+   ],
+   [
+    95.8,
+    "planning",
+    10
+   ],
+   [
+    97.8,
+    "door",
+    10
+   ],
+   [
+    99.9,
+    "terraceEdge",
+    10
+   ],
+   [
+    101.6,
+    "pileIn",
+    10
+   ]
+  ],
+  "Anfrony": [
+   [
+    88,
+    "planning",
+    1
+   ],
+   [
+    93.6,
+    "planning",
+    1
+   ],
+   [
+    94.8,
+    "door",
+    1
+   ],
+   [
+    95.7,
+    "terraceEdge",
+    1
+   ],
+   [
+    96.4,
+    "pileIn",
+    6
+   ],
+   [
+    112,
+    "pileIn",
+    4
+   ],
+   [
+    126,
+    "retreat",
+    0
+   ],
+   [
+    140,
+    "retreat",
+    0
+   ]
+  ],
+  "Ctidalwave": [
+   [
+    88,
+    "planning",
+    11
+   ],
+   [
+    96.0,
+    "planning",
+    11
+   ],
+   [
+    98.0,
+    "door",
+    11
+   ],
+   [
+    100.2,
+    "terraceEdge",
+    11
+   ],
+   [
+    102.0,
+    "pileIn",
+    11
+   ]
+  ],
+  "Chrisym": [
+   [
+    88,
+    "planning",
+    12
+   ],
+   [
+    96.2,
+    "planning",
+    12
+   ],
+   [
+    98.2,
+    "door",
+    12
+   ],
+   [
+    100.4,
+    "terraceEdge",
+    12
+   ],
+   [
+    102.2,
+    "pileIn",
+    12
+   ]
+  ]
+ },
+ "whelps": {
+  "source": "counts observed (nameplates per frame); which eggs hatch is inferred: the eggs nearest each player as they arrive. Whelp targets and swings are illustrative.",
+  "hatchRadius": 11,
+  "waves": [
+   {
+    "t": 96.8,
+    "near": "Leeroy",
+    "count": 8
+   },
+   {
+    "t": 99.8,
+    "near": "pileIn",
+    "count": 8
+   },
+   {
+    "t": 103.0,
+    "near": "pileIn",
+    "count": 10
+   },
+   {
+    "t": 107.0,
+    "near": "Anfrony",
+    "count": 8
+   },
+   {
+    "t": 111.0,
+    "near": "retreat",
+    "count": 8
+   }
+  ],
+  "near_note": "A fan analysis says eggs hatch when stepped on and the recorder keeps stepping on them; waves anchor on Leeroy, the pile and the recorder."
+ },
+ "fear": {
+  "t": 104.0,
+  "caster": "Anfrony",
+  "spellId": 5246,
+  "spellName": "Intimidating Shout",
+  "source": "observed (the effect); the spell is inferred from the recorder being a warrior"
+ },
+ "rosterSource": "fan source: old wowwiki LEEROY page roster (13 names); nameplates checked against the 90-93 s frames (Forekin, Abduhl, Jamaal, Ritter, Madtoker, Basphemy, Therien, Ctidalwave, Chrisym, Juron, Spiffy legible). The UBRS cap was 10-15, so not every listed name need be in the room.",
+ "recorder": "Anfrony"
+}

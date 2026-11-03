@@ -37,3 +37,10 @@ and classes, and the names, entries and owners of the other units in the
 encounter. It has no account ids, guild data or chat. The committed Kresh
 fixture comes from a public log on forever.chronicleclassic.com, the Hakkar one
 from a log on octo.chronicleclassic.com.
+
+## Leeroy Jenkins replay (`leeroy/`)
+
+The `Instance/Map/MapView3D/Leeroy` story replays a reconstruction of the 2005
+video from `fixtures/leeroyRookery.json`, built by `leeroy/build-fixture.mjs`
+from frame annotations and real Rookery egg spawns. See `leeroy/README.md` for
+what is observed, what is hand-placed, and how to rebuild it.
