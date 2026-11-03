@@ -26,6 +26,7 @@ import {
   VehicleSupportPost,
   YoutubeSyncPost,
 } from "./posts/announcements";
+import { InstanceSearchPost } from "./posts/instanceSearch";
 
 export type BlogFlavorSet = readonly string[];
 
@@ -63,6 +64,7 @@ export interface BlogPostDefinition extends BlogPostMetadata {
 }
 
 const BLOG_COMPONENTS = {
+  "instance-search": InstanceSearchPost,
   "alt-click-compare": EntityInspectorPost,
   "ranked-damage": RankedDamagePost,
   "character-cosmetics": CharacterCosmeticsPost,
@@ -99,6 +101,7 @@ function remotionVideo(load: LessonVideo["load"], durationInFrames: number): Les
 }
 
 const BLOG_VIDEOS = {
+  "instance-search": remotionVideo(() => import("@/pages/InstanceSearch/videos/InstanceSearch.video"), 970),
   "alt-click-compare": remotionVideo(() => import("@/pages/Instance/videos/EntityInspector.video"), 1256),
   "ranked-damage": remotionVideo(() => import("@/pages/Instance/videos/RankedDamage.video"), 900),
   "character-cosmetics": remotionVideo(() => import("@/pages/Instance/videos/CharacterCosmetics.video"), 720),

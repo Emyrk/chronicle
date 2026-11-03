@@ -1,5 +1,18 @@
 [
   {
+    "id": "instance-search",
+    "title": "Instance search",
+    "description": "Find any raid on Chronicle by zone, bosses, speed, parses and roster, then see exactly why each run matched. Build searches with a form, blocks or code.",
+    "publishedAt": "2026-11-03",
+    "rarity": "epic",
+    "tag": "Feature",
+    "icon": "inv_misc_spyglass_03",
+    "flavor": "Seek, and ye shall find.",
+    "hintTitle": "Search every raid",
+    "hintDescription": "Find runs by zone, bosses, speed, parses and roster, and see why each one matched.",
+    "hintHref": "/search"
+  },
+  {
     "id": "alt-click-compare",
     "title": "Alt+click to inspect and compare",
     "description": "Hold Alt (Option on Mac) to outline every player, guild, boss and raid you can inspect. Alt+click one for a quick menu, or add it to the new compare tray: player parses on the same fights, and boss kills and raid clears against your server, realm and guild.",
