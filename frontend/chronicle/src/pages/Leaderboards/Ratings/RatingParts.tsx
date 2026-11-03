@@ -19,11 +19,11 @@ export function SpecIcon({ cls, spec, className }: { cls: string; spec: string; 
   )
 }
 
-export function EntryRow({ entry, rank, theme, size }: { entry: RatingEntry; rank: number; theme: MetricTheme; size: "lg" | "sm" }) {
+export function EntryRow({ entry, rank, theme, size }: { entry: RatingEntry; rank?: number; theme: MetricTheme; size: "lg" | "sm" }) {
   const lg = size === "lg"
   return (
     <li className={cn("flex items-center gap-3 border-b border-white/5 last:border-b-0", lg ? "px-4 py-3 sm:px-5" : "px-3 py-2")}>
-      <RankMark rank={rank} size={size} />
+      {rank === undefined ? <span aria-label="Global rank unavailable for realm filter" className={cn("shrink-0", lg ? "size-8" : "size-6")} /> : <RankMark rank={rank} size={size} />}
       <SpecIcon cls={entry.cls} spec={entry.spec} className={cn("shrink-0 rounded-sm", lg ? "size-7" : "size-5")} />
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-baseline gap-1.5">

@@ -89,7 +89,8 @@ export function RatingBoards({
     [scope, period, bosses, live],
   )
   const single = view === "overview" ? undefined : boards.find((b) => b.metric === view)!
-  const pending = (single ? [single] : boards).find((b) => b.center.status !== "ready")?.center
+  const pending = (single ? [single] : boards).find((b) => b.center.status === "loading")?.center
+    ?? (single ? single.center.status === "error" ? single.center : undefined : undefined)
   const readyBoards = boards.filter((b): b is { metric: RatingMetric; center: { status: "ready"; data: RatingLiveBoard }; around: RatingLiveBoard[] } => b.center.status === "ready")
 
   return (
@@ -113,8 +114,10 @@ export function RatingBoards({
         <section role={pending.status === "error" ? "alert" : "status"} className="rounded-xl border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
           {pending.status === "error" ? pending.error : "Loading published ratings…"}
         </section>
+      ) : !single && readyBoards.length === 0 ? (
+        <section role="status" className="rounded-xl border bg-card px-5 py-10 text-center text-sm text-muted-foreground">No published ratings for this selection.</section>
       ) : single && single.center.status === "ready" ? (
-        <CenterBoard board={single.center.data} theme={theme} title={title} onShowAll={showTable} search={searchBox} toolbar={toolbar} />
+        <CenterBoard board={single.center.data} theme={theme} title={title} onShowAll={showTable} search={searchBox} toolbar={toolbar} ranksKnown={live?.ranksKnown !== false} />
       ) : (
         <OverviewCenter
           boards={readyBoards.map((b) => ({ metric: b.metric, board: b.center.data }))}
@@ -124,6 +127,7 @@ export function RatingBoards({
           onShowAll={showTable}
           search={searchBox}
           toolbar={toolbar}
+          ranksKnown={live?.ranksKnown !== false}
         />
       )}
 
@@ -133,7 +137,7 @@ export function RatingBoards({
           <section aria-label={`By ${childBy}`} className="space-y-3">
             <h2 className="px-1 text-sm font-semibold">By {childBy}</h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-              {(single ?? boards[0]).around.map((board) => (
+              {(single ?? readyBoards[0] ?? boards[0]).around.map((board) => (
                 <SideFrame key={board.id} board={board} by={childBy} label={theme.label} onOpen={() => onScope(board.scope)}>
                   {single
                     ? board.entries.map((entry, i) => (
@@ -141,7 +145,7 @@ export function RatingBoards({
                           key={entry.id}
                           entry={entry}
                           theme={theme}
-                          lead={<span className="w-3.5 font-mono text-[10px] text-muted-foreground">{i + 1}</span>}
+                          lead={<span className="w-3.5 font-mono text-[10px] text-muted-foreground">{live?.ranksKnown === false ? "" : i + 1}</span>}
                         />
                       ))
                     : boards.map((b) => {
@@ -156,7 +160,7 @@ export function RatingBoards({
                           />
                         ) : (
                           <li key={b.metric} className="px-3 py-1.5 text-xs text-muted-foreground">
-                            No ranked kills
+                            {live && b.center.status === "error" ? "Exact cohort required" : "No ranked kills"}
                           </li>
                         )
                       })}
@@ -291,6 +295,7 @@ function CenterBoard({
   onShowAll,
   search,
   toolbar,
+  ranksKnown = true,
 }: {
   board: RatingLiveBoard
   theme: MetricTheme
@@ -298,6 +303,7 @@ function CenterBoard({
   onShowAll: () => void
   search: ReactNode
   toolbar?: ReactNode
+  ranksKnown?: boolean
 }) {
   return (
     <CenterFrame board={board} theme={theme} title={title} onShowAll={onShowAll} search={search} toolbar={toolbar}>
@@ -305,12 +311,12 @@ function CenterBoard({
       <div className="relative grid border-t max-lg:divide-y lg:grid-cols-2 lg:divide-x">
         <ol>
           {board.entries.slice(0, 5).map((entry, i) => (
-            <EntryRow key={entry.id} entry={entry} rank={i + 1} theme={theme} size="sm" />
+            <EntryRow key={entry.id} entry={entry} rank={ranksKnown ? i + 1 : undefined} theme={theme} size="sm" />
           ))}
         </ol>
         <ol>
           {board.entries.slice(5, 10).map((entry, i) => (
-            <EntryRow key={entry.id} entry={entry} rank={i + 6} theme={theme} size="sm" />
+            <EntryRow key={entry.id} entry={entry} rank={ranksKnown ? i + 6 : undefined} theme={theme} size="sm" />
           ))}
         </ol>
       </div>
@@ -327,6 +333,7 @@ function OverviewCenter({
   onShowAll,
   search,
   toolbar,
+  ranksKnown = true,
 }: {
   boards: { metric: RatingMetric; board: RatingLiveBoard }[]
   theme: MetricTheme
@@ -335,6 +342,7 @@ function OverviewCenter({
   onShowAll: () => void
   search: ReactNode
   toolbar?: ReactNode
+  ranksKnown?: boolean
 }) {
   return (
     <CenterFrame board={boards[0].board} theme={theme} title={title} onShowAll={onShowAll} search={search} toolbar={toolbar}>
@@ -355,7 +363,7 @@ function OverviewCenter({
               </button>
               <ol>
                 {board.entries.slice(0, 5).map((entry, i) => (
-                  <EntryRow key={entry.id} entry={entry} rank={i + 1} theme={t} size="sm" />
+                  <EntryRow key={entry.id} entry={entry} rank={ranksKnown ? i + 1 : undefined} theme={t} size="sm" />
                 ))}
               </ol>
             </div>

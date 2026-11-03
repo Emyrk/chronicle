@@ -115,6 +115,12 @@ export interface HubLiveTabContext {
   scope: RatingScope
   role: HubRole
   subject: HubSubject
+  ratingView: RatingView
+  statisticsView: StatisticsView
+  onStatisticsView: (view: StatisticsView) => void
+  period: RatingPeriod
+  onView: (view: RatingView) => void
+  onPeriod: (period: RatingPeriod) => void
   selection: EncounterSelection
   setSelection: (selection: EncounterSelection) => void
   onTab: (tab: HubTab) => void
@@ -126,6 +132,10 @@ export interface HubLiveTabContext {
 export interface HubLiveData {
   bosses: readonly string[]
   optionalBosses?: ReadonlySet<string>
+  /** Persist a selected encounter in the host URL without changing the Storybook path. */
+  onSelection?: (selection: EncounterSelection) => void
+  selection?: EncounterSelection
+  cohortPicker?: ReactNode
   realms: readonly string[]
   specsFor: (cls: string, role: HubRole) => string[]
   subSpecsFor: (cls: string, spec: string) => string[]
@@ -194,11 +204,15 @@ export function LeaderboardHub({
   const realm = controlledRealm ?? (live && !realms.includes(ownRealm) ? realms[0] ?? "" : ownRealm)
   const setRealm = onRealm ?? setOwnRealm
   if (!live) setMockRealm(realm)
-  const [selection, setSelection] = useState<EncounterSelection>(
+  const [ownSelection, setSelection] = useState<EncounterSelection>(
     initialBosses?.length ? { kind: "bosses", bosses: live ? [initialBosses[0]] : initialBosses } : initialScope.boss ? { kind: "bosses", bosses: [initialScope.boss] } : FULL_CLEAR,
   )
-  const selectEncounter = (next: EncounterSelection) =>
-    setSelection(live && next.kind === "bosses" && next.bosses.length > 1 ? { kind: "bosses", bosses: [next.bosses[0]] } : next)
+  const selection = live?.selection ?? ownSelection
+  const selectEncounter = (next: EncounterSelection) => {
+    const selected = live && next.kind === "bosses" && next.bosses.length > 1 ? { kind: "bosses" as const, bosses: [next.bosses[0]] } : next
+    setSelection(selected)
+    live?.onSelection?.(selected)
+  }
   const [classScope, setClassScope] = useState<RatingScope>({ cls: initialScope.cls, spec: initialScope.spec, subSpec: initialScope.subSpec })
   // Switching instance keeps tab and filters; only the encounter choice resets, since bosses differ.
   const [shownInstance, setShownInstance] = useState(instanceName)
@@ -223,7 +237,7 @@ export function LeaderboardHub({
   const scope: RatingScope = { boss: chosen.length === 1 ? chosen[0] : undefined, ...(subject === "guilds" ? {} : classScope) }
   /** Boards and cards narrow by scope: a boss opens that boss, a class/spec narrows the class filter. */
   const setScope = (next: RatingScope) => {
-    if (next.boss !== scope.boss) setSelection(next.boss ? { kind: "bosses", bosses: [next.boss] } : FULL_CLEAR)
+    if (next.boss !== scope.boss) selectEncounter(next.boss ? { kind: "bosses", bosses: [next.boss] } : FULL_CLEAR)
     setClassScope({ cls: next.cls, spec: next.spec, subSpec: next.subSpec })
   }
   const bosses = live ? live.bosses : instanceBosses(instanceName)
@@ -264,7 +278,8 @@ export function LeaderboardHub({
     if (scope.cls && scope.spec && !(live ? live.specsFor : specsFor)(scope.cls, next).includes(scope.spec)) setClassScope({ cls: scope.cls })
   }
   const liveContext: HubLiveTabContext = {
-    tab, instanceName, realm, onSwitchInstance, scope, role, subject, selection,
+    tab, instanceName, realm, onSwitchInstance, scope, role, subject, ratingView, statisticsView, period,
+    onView: setRatingView, onStatisticsView: setStatisticsView, onPeriod: setPeriod, selection,
     setSelection: selectEncounter, onTab: setTab, onRatings: openRatings,
     onStatistics: openStatistics, onScope: setScope,
   }
@@ -366,11 +381,12 @@ export function LeaderboardHub({
               subSpecs={scope.cls && scope.spec ? (live ? live.subSpecsFor : subSpecsFor)(scope.cls, scope.spec) : []}
               onChange={(next) => {
                 // "Whole raid" clears everything, the encounter choice included.
-                if (!next.boss && !next.cls && !next.spec) setSelection(FULL_CLEAR)
+                if (!next.boss && !next.cls && !next.spec) selectEncounter(FULL_CLEAR)
                 setClassScope({ cls: next.cls, spec: next.spec, subSpec: next.subSpec })
               }}
               extra={
                 <>
+                  {live?.cohortPicker}
                   <Segmented
                     label="Role"
                     value={role}

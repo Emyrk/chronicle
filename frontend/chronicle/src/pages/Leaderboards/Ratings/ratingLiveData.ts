@@ -8,7 +8,7 @@ export type RatingLiveSelection = {
   scope: RatingScope
   metric: RatingMetric
   period: RatingPeriod
-  cohort: RatingLiveCohort
+  cohort?: RatingLiveCohort
 }
 
 export type RatingLiveState<T> =
@@ -36,7 +36,9 @@ export type RatingLivePage = {
 
 /** Supply already-fetched data; the host owns API queries, cursor state, and exact cohort mapping. */
 export interface RatingLiveData {
-  cohort: RatingLiveCohort
+  /** Realm-filtered pages have no published global rank number. */
+  ranksKnown?: boolean
+  cohort?: RatingLiveCohort
   board: (selection: RatingLiveSelection) => RatingLiveState<RatingLiveBoard>
   page: (selection: RatingLiveSelection & { query: string; page: number }) => RatingLiveState<RatingLivePage>
 }

@@ -136,15 +136,17 @@ function HubLanding({ tab, onOpen, instances }: { tab: HubTab; onOpen: (instance
   if (instances !== undefined) {
     const grid = (items: readonly RankingsInstanceSummary[]) => (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {items.map((inst) => (
-          <div key={`${inst.instance_name}-${inst.difficulty_name}-${inst.max_players}`} onClickCapture={(e) => {
+        {[...new Set(items.map((row) => row.instance_name))].map((name) => (
+          <div key={name} onClickCapture={(e) => {
             e.preventDefault()
-            onOpen(inst.instance_name)
+            onOpen(name)
           }}>
-            <InstanceCard name={inst.instance_name} to="#" badge={`${inst.difficulty_name || "Default"} · ${inst.max_players} players`}>
-              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                <Skull className="h-3 w-3" />
-                {inst.total_kills.toLocaleString()} recorded kills
+            <InstanceCard name={name} to="#">
+              <div className="space-y-1">
+                {items.filter((row) => row.instance_name === name).map((row) => <div key={`${row.difficulty_name}-${row.max_players}`} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <Skull className="h-3 w-3" />
+                  {row.difficulty_name || "Default"} · {row.max_players} players · {row.total_kills.toLocaleString()} recorded kills
+                </div>)}
               </div>
             </InstanceCard>
           </div>

@@ -58,7 +58,8 @@ export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, r
     role: role === "healing" ? "heal" : "dps", metric, realm_names: realmName, limit: 5,
   }, ready && !!boss && exactPerformance && subject === "player")
   const fullClear = !boss && !combined
-  const speedCohort = exactPerformance ? performanceCohort : exactRating ? ratingCohort : undefined
+  const speedCohort = performanceCohort && raids.some((raid) => raid.difficulty_name === performanceCohort.difficulty && raid.max_players === performanceCohort.maxPlayers)
+    ? performanceCohort : exactRating ? ratingCohort : undefined
   const speed = useQuery({
     queryKey: ["hub-overview-speedrun", instanceName, realmName, speedCohort?.difficulty, speedCohort?.maxPlayers],
     queryFn: async () => {
@@ -84,7 +85,7 @@ export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, r
     const id = player ? entry.player_guid : "guild_id" in entry ? entry.guild_id : String(i)
     const name = player ? entry.player_name || entry.player_guid : "guild_id" in entry ? entry.guild_name || entry.guild_id : "Unknown guild"
     return <li key={`${entry.realm_id}-${id}`} className="flex items-center gap-2 border-b border-white/5 px-3 py-2.5 last:border-b-0">
-      <span className="w-3 font-mono text-xs text-muted-foreground">{i + 1}</span>
+      <span className="w-3 font-mono text-xs text-muted-foreground" aria-label={realmIDs?.length ? "Global rank unavailable for realm filter" : undefined}>{realmIDs?.length ? "" : i + 1}</span>
       <span className="min-w-0 flex-1 truncate text-sm font-medium" style={player ? { color: CLASS_CSS_VAR[entry.player_class] } : undefined}>{name}</span>
       <span className="font-mono text-sm tabular-nums">{entry.score.toLocaleString()}</span>
     </li>
