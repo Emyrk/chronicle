@@ -599,7 +599,7 @@ var fields = []*field{
 		Doc: "Deaths in a fight. Wipes are not counted.", compile: rankingField("player_deaths")},
 	{Name: "player.avg_ilvl", Cost: 3, Scope: scopePlayer, Type: typeInt, Bosses: true, On: true,
 		Doc: "Average item level in a fight.", compile: rankingField("avg_ilvl")},
-	{Name: "player.parse", Cost: 5, Scope: scopePlayer, Type: typeInt, Unit: "0-100", Bosses: true, Metric: true,
+	{Name: "player.parse", Cost: 15, Scope: scopePlayer, Type: typeInt, Unit: "0-100", Bosses: true, Metric: true,
 		Doc: "Player parse on a boss kill (latest stored score per boss).",
 		compile: func(c *compiler, s scope, p pred) string {
 			r := c.alias("ps")
