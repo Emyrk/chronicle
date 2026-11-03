@@ -552,7 +552,7 @@ function ModeButton({ active, onClick, disabled, locked, lockedPerk, title, chil
   return locked && lockedPerk ? <HonoredLockTooltip highlight={lockedPerk}>{button}</HonoredLockTooltip> : button;
 }
 
-/** Blocks / Code / Examples are an Honored perk; links to the supporter page. */
+/** Code and the costly conditions are an Honored perk; links to the supporter page. */
 function HonoredUpsell({ loggedIn, note }: { loggedIn: boolean; note: string }) {
   return (
     <div
