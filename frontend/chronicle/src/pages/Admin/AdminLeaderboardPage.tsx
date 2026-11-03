@@ -189,8 +189,9 @@ export function AdminLeaderboardPage() {
         <div>
           <h3 className="font-semibold">Rating maintenance</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Both jobs also run daily. Repair missing Renown kill facts first, wait for its child jobs to finish,
-            then rebuild ratings to include the repaired history. Enqueueing is not the same as publishing scores.
+            Both dispatchers also run daily. Repair missing Renown kill facts across all tenants first, wait for its child jobs to finish,
+            then rebuild ratings (including Renown scores) across all configured tenants. Tenants without a rating policy cannot publish scores.
+            Enqueueing is not the same as publishing scores.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -198,9 +199,9 @@ export function AdminLeaderboardPage() {
             {pendingRatingJob === "renown-repair" && <Loader2 className="mr-2 size-4 animate-spin" />}
             Repair Renown facts (all tenants)
           </Button>
-          <Button disabled={pendingRatingJob !== null} onClick={() => void enqueueRatingMaintenance("rebuild")}>
-            {pendingRatingJob === "rebuild" && <Loader2 className="mr-2 size-4 animate-spin" />}
-            Rebuild ratings (this tenant)
+          <Button disabled={pendingRatingJob !== null} onClick={() => void enqueueRatingMaintenance("rebuild-all")}>
+            {pendingRatingJob === "rebuild-all" && <Loader2 className="mr-2 size-4 animate-spin" />}
+            Rebuild ratings + Renown (all configured tenants)
           </Button>
         </div>
         {ratingJobResult && (

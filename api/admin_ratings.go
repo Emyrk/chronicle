@@ -79,12 +79,13 @@ func (api *API) adminRatingRoutes(r chi.Router) {
 	r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
 	r.Post("/renown/repair", api.AdminDispatchRenownRepair)
 	r.Post("/rebuild", api.AdminRebuildRatings)
+	r.Post("/rebuild/all", api.AdminDispatchAllRatingScores)
 }
 
 // AdminDispatchRenownRepair starts a bounded historical repair pass across all
 // tenants, including root. It does not wait for the repair pages to complete.
 // For complete rating history, wait for the repair jobs to finish before
-// calling /rebuild for the current tenant.
+// calling /rebuild/all for every configured tenant or /rebuild for one tenant.
 //
 // POST /api/v1/admin/ratings/renown/repair (no request body)
 func (api *API) AdminDispatchRenownRepair(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +98,16 @@ func (api *API) AdminDispatchRenownRepair(w http.ResponseWriter, r *http.Request
 // POST /api/v1/admin/ratings/rebuild (no request body)
 func (api *API) AdminRebuildRatings(w http.ResponseWriter, r *http.Request) {
 	api.adminEnqueueRatingJob(w, r, servicerankings.ArgsRebuildTenantRatings{TenantID: servicetenant.TenantIDFromContext(r.Context())})
+}
+
+// AdminDispatchAllRatingScores queues the existing daily dispatcher immediately.
+// It enqueues a deduplicated rebuild for every configured tenant, including root;
+// each tenant job publishes Peak, Mastery, Ranked Mastery, and Renown scores.
+// Repair Renown facts separately first and wait for its child jobs to finish.
+//
+// POST /api/v1/admin/ratings/rebuild/all (no request body)
+func (api *API) AdminDispatchAllRatingScores(w http.ResponseWriter, r *http.Request) {
+	api.adminEnqueueRatingJob(w, r, servicerankings.ArgsDispatchRatingScores{})
 }
 
 func (api *API) adminEnqueueRatingJob(w http.ResponseWriter, r *http.Request, args rivertype.JobArgs) {

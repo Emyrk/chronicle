@@ -51,7 +51,7 @@ func TestAdminRatingConfigurationRoutesRemoved(t *testing.T) {
 			require.False(t, routes.Match(chi.NewRouteContext(), tc.method, path))
 		})
 	}
-	for _, path := range []string{"/api/v1/admin/ratings/rebuild", "/api/v1/admin/ratings/renown/repair"} {
+	for _, path := range []string{"/api/v1/admin/ratings/rebuild", "/api/v1/admin/ratings/rebuild/all", "/api/v1/admin/ratings/renown/repair"} {
 		require.True(t, routes.Match(chi.NewRouteContext(), http.MethodPost, path), path)
 		rec := httptest.NewRecorder()
 		routes.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, nil))
@@ -84,6 +84,14 @@ func TestAdminRatingMaintenanceJobs(t *testing.T) {
 		return response
 	}
 
+	all := call(api.AdminDispatchAllRatingScores, uuid.Nil)
+	allDuplicate := call(api.AdminDispatchAllRatingScores, uuid.New())
+	require.True(t, allDuplicate.UniqueSkippedAsDuplicate)
+	require.Equal(t, all.JobID, allDuplicate.JobID)
+	allJob, err := client.JobGet(t.Context(), all.JobID)
+	require.NoError(t, err)
+	require.Equal(t, servicerankings.KindDispatchRatingScores, allJob.Kind)
+
 	repair := call(api.AdminDispatchRenownRepair, uuid.Nil)
 	repairDuplicate := call(api.AdminDispatchRenownRepair, uuid.Nil)
 	require.True(t, repairDuplicate.UniqueSkippedAsDuplicate)
@@ -110,7 +118,7 @@ func TestAdminRatingMaintenanceJobs(t *testing.T) {
 func TestAdminRatingMaintenanceQueueUnavailable(t *testing.T) {
 	t.Parallel()
 	for _, api := range []*API{{}, {Queues: &riverqueue.Queues{}}} {
-		for _, handler := range []http.HandlerFunc{api.AdminDispatchRenownRepair, api.AdminRebuildRatings} {
+		for _, handler := range []http.HandlerFunc{api.AdminDispatchRenownRepair, api.AdminRebuildRatings, api.AdminDispatchAllRatingScores} {
 			rec := httptest.NewRecorder()
 			handler(rec, httptest.NewRequest(http.MethodPost, "/", nil))
 			require.Equal(t, http.StatusServiceUnavailable, rec.Code)

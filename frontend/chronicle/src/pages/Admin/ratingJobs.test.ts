@@ -7,6 +7,7 @@ describe("rating maintenance enqueue", () => {
   it.each([
     ["renown-repair", "/api/v1/admin/ratings/renown/repair"],
     ["rebuild", "/api/v1/admin/ratings/rebuild"],
+    ["rebuild-all", "/api/v1/admin/ratings/rebuild/all"],
   ] as const)("posts %s to its admin route", async (action, path) => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
