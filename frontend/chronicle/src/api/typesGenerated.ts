@@ -2604,7 +2604,17 @@ export interface InstanceSearchNode {
      * Metric selects the player parse metric (default dps).
      */
     readonly metric?: InstanceSearchMetric;
+    /**
+     * On selects which fights per-fight player data comes from: boss kills
+     * (default), trash, or either.
+     */
+    readonly on?: InstanceSearchOn;
 }
+
+// From chroniclesdk/instance_search.go
+export type InstanceSearchOn = "any" | "bosses" | "trash";
+
+export const InstanceSearchOns: InstanceSearchOn[] = ["any", "bosses", "trash"];
 
 // From chroniclesdk/instance_search.go
 export type InstanceSearchOp = "=" | ">" | ">=" | "in" | "<" | "<=" | "!=" | "not_in";

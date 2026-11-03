@@ -42,6 +42,9 @@ func FieldReference() string {
 			if f.Metric {
 				opts = append(opts, "metric")
 			}
+			if f.On {
+				opts = append(opts, "on")
+			}
 			fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s |\n",
 				f.Name, typ, joinOps(f.Type.ops()), strings.Join(opts, ", "), f.Doc)
 		}

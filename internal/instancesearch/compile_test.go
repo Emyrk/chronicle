@@ -142,6 +142,10 @@ func TestCompileErrors(t *testing.T) {
 		{"TooDeep", instancesearch.Query{Where: deep}, "nested deeper than"},
 		{"TooWide", instancesearch.Query{Where: &instancesearch.Node{Or: wide}}, "more than 64 nodes"},
 		{"BadLimit", instancesearch.Query{Limit: 1000}, "limit: must be between"},
+		{"BadOn", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: &instancesearch.Node{Field: "player.spec", Op: instancesearch.OpEq, Value: json.RawMessage(`"Holy"`), On: "pulls"}}}, "must be bosses, trash or any"},
+		{"OnNotAllowed", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: &instancesearch.Node{Field: "player.parse", Op: instancesearch.OpGt, Value: json.RawMessage("1"), On: instancesearch.OnTrash}}}, "does not take on"},
+		{"BossesWithTrash", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: &instancesearch.Node{Field: "player.spec", Op: instancesearch.OpEq, Value: json.RawMessage(`"Holy"`), On: instancesearch.OnTrash, Bosses: []string{"Onyxia"}}}}, "only apply with on: bosses"},
+		{"BadRole", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: &instancesearch.Node{Field: "player.role", Op: instancesearch.OpEq, Value: json.RawMessage(`"healer"`)}}}, "must be one of dps, heal, tank"},
 		{"BadCountOp", instancesearch.Query{Where: &instancesearch.Node{CountPlayers: &instancesearch.Count{Op: instancesearch.OpIn, Value: 1}}}, "must be one of =, !=, <, <=, >, >="},
 	}
 	for _, tc := range cases {

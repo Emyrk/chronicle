@@ -94,6 +94,9 @@ Predicate options (only on fields that list them):
 - `match: "any"` (default) means any listed boss satisfies it. `"each"` means every listed boss must satisfy it, and requires `bosses`.
 - `parse_scope: "server" | "realm" | "guild"` picks the time-parse cohort (default `server`).
 - `metric: "dps" | "hps"` picks the metric for `player.parse` (default `dps`).
+- `on: "bosses" | "trash" | "any"` picks which fights per-fight player fields read (spec, sub_spec, role, dps, hps, deaths, avg_ilvl). The default is `bosses`.
+  - Each player has one row per boss kill, plus one aggregated trash row per spec, so `bosses` and `trash` are exact complements.
+  - `bosses` and `match` only apply with `on: "bosses"`.
 
 Ops: numbers/times use `= != < <= > >=`. Strings, enums and UUIDs use `= != in not_in`, with a JSON list for `in`/`not_in`. Booleans use `= !=`. Times are RFC 3339 strings. Durations are milliseconds.
 
@@ -128,6 +131,7 @@ This means one druid played both Bear and Cat. Two separate `any_player` nodes A
 | "kill parse 90+ on Rag **and** Domo" | `instance.kill_time_parse >= 90, bosses [...], match each` |
 | "fast clear" | `instance.clear_parse >= 95` (or `instance.clear_time_ms <= N`) |
 | "little downtime" | `instance.idle_time_ms < 300000` |
+| "tanked trash as Bear, Cat on bosses" | `any_player(sub_spec = Bear on trash AND sub_spec = Cat on bosses)` |
 | "nobody died on Rag" | `NOT any_player(player.deaths >= 1, bosses [Ragnaros])` plus a Rag kill |
 | "logs with positions and resources" | `instance.capability = unit-position AND instance.capability = unit-resources` |
 | "logs without positions" | `instance.capability != unit-position` |
@@ -136,7 +140,9 @@ This means one druid played both Bear and Cat. Two separate `any_player` nodes A
 ## Semantics to keep in mind
 
 - **Missing data never matches.** Runs without a guild, without a clear (`clear_*`, `*_time_ms` parts), or without a computed parse don't match `=` or `!=`. Wrap the predicate in `not` to find "not X", which includes missing.
-- **Spec, role, dps/hps, deaths and ilvl come from boss kills only.** Wipes and trash are not counted. Wipe deaths aren't searchable yet.
+- **Spec, role, dps/hps, deaths and ilvl come from boss kills by default.** Use `on: "trash"` or `on: "any"` to include trash. Wipes are never counted, so wipe deaths aren't searchable yet.
+- **Sub-spec values:** `Bear` / `Cat` (Feral druid), `Tank` / `DPS` (Enhancement shaman) and `Fury Prot`. It's empty for every other spec, and on servers whose parser doesn't infer sub-specs.
+- **Roles:** `dps`, `heal`, `tank`.
 - **Clear time, boss/trash/idle time and clear parse exist for full clears only.** Boss/trash/idle use the same calculation as the Guild History page.
 - `encounter.killed` is `clean` or `partial`. `instance.kill_time_ms` uses kills only.
 - **Duplicate uploads appear once.** One logical run per `duplicate_group_id`.

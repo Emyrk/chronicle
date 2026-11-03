@@ -58,11 +58,11 @@ Use inside `any_player` / `count_players`. All fields in one quantifier refer to
 | `player.level` | int | =, !=, <, <=, >, >= |  | Level. |
 | `player.guild` | string | =, !=, in, not_in |  | Guild name at the time of the run. |
 | `player.guild_id` | uuid | =, !=, in, not_in |  | Guild ID at the time of the run. |
-| `player.spec` | string | =, !=, in, not_in | bosses, match | Spec on a boss kill, e.g. "Feral". Known on boss kills only. |
-| `player.sub_spec` | string | =, !=, in, not_in | bosses, match | Sub-spec on a boss kill, e.g. "Bear" / "Cat". Known on boss kills only. |
-| `player.role` | string | =, !=, in, not_in | bosses, match | Role on a boss kill (dps, healer, tank). |
-| `player.dps` | float | =, !=, <, <=, >, >= | bosses, match | DPS on a boss kill. |
-| `player.hps` | float | =, !=, <, <=, >, >= | bosses, match | HPS on a boss kill. |
-| `player.deaths` | int | =, !=, <, <=, >, >= | bosses, match | Deaths on a boss kill. Wipes are not counted. |
-| `player.avg_ilvl` | int | =, !=, <, <=, >, >= | bosses, match | Average item level on a boss kill. |
+| `player.spec` | string | =, !=, in, not_in | bosses, match, on | Spec in a fight, e.g. "Feral". Read from boss kills by default; see on. |
+| `player.sub_spec` | string | =, !=, in, not_in | bosses, match, on | Sub-spec in a fight: Bear / Cat (Feral druid), Tank / DPS (Enhancement shaman), Fury Prot. Empty for other specs and servers. |
+| `player.role` | enum: dps, heal, tank | =, !=, in, not_in | bosses, match, on | Role in a fight. |
+| `player.dps` | float | =, !=, <, <=, >, >= | bosses, match, on | DPS in a fight. |
+| `player.hps` | float | =, !=, <, <=, >, >= | bosses, match, on | HPS in a fight. |
+| `player.deaths` | int | =, !=, <, <=, >, >= | bosses, match, on | Deaths in a fight. Wipes are not counted. |
+| `player.avg_ilvl` | int | =, !=, <, <=, >, >= | bosses, match, on | Average item level in a fight. |
 | `player.parse` | int (0-100) | =, !=, <, <=, >, >= | bosses, match, metric | Player parse on a boss kill (latest stored score per boss). |

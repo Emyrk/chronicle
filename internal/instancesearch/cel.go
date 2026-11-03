@@ -131,6 +131,9 @@ func celOptions(f *field, n *Node) string {
 	if f.ParseScope && n.ParseScope != "" {
 		opts = append(opts, `"parse_scope": `+strconv.Quote(string(n.ParseScope)))
 	}
+	if f.On && n.On != "" {
+		opts = append(opts, `"on": `+strconv.Quote(string(n.On)))
+	}
 	if f.Metric && n.Metric != "" {
 		opts = append(opts, `"metric": `+strconv.Quote(string(n.Metric)))
 	}

@@ -66,6 +66,9 @@ type field struct {
 	ParseScope bool
 	// Metric: the predicate accepts metric.
 	Metric bool
+	// On: the predicate reads per-fight player rows and accepts on
+	// (bosses, trash, any).
+	On bool
 	// Cost is the field's weight in Compiled.Cost. Zero means 1 (a plain
 	// column). Correlated subqueries cost more; per-player ranking lookups
 	// and clear-window math the most.
@@ -83,6 +86,7 @@ type pred struct {
 	match      Match
 	parseScope ParseScope
 	metric     Metric
+	on         On
 }
 
 const maxStringLen = 200
@@ -219,6 +223,25 @@ func (c *compiler) parsePred(f *field, n *Node, path string) (pred, error) {
 			return p, &Error{Path: path + ".metric", Message: "must be dps or hps"}
 		}
 	}
+
+	if n.On != "" && !f.On {
+		return p, &Error{Path: path + ".on", Message: fmt.Sprintf("%s does not take on", f.Name)}
+	}
+	if f.On {
+		switch n.On {
+		case "", OnBosses:
+			p.on = OnBosses
+		case OnTrash, OnAny:
+			p.on = n.On
+			// Trash is one aggregated row, so a boss list only makes sense
+			// for boss kills.
+			if len(p.bosses) > 0 {
+				return p, &Error{Path: path + ".bosses", Message: "bosses and match only apply with on: bosses"}
+			}
+		default:
+			return p, &Error{Path: path + ".on", Message: "must be bosses, trash or any"}
+		}
+	}
 	return p, nil
 }
 
@@ -310,17 +333,27 @@ func durationMS(alias string) string {
 	return fmt.Sprintf("(EXTRACT(EPOCH FROM (%[1]s.end_time - %[1]s.start_time)) * 1000)::bigint", alias)
 }
 
-// rankingRows are a player's boss-kill rows in encounter_dps_rankings. Spec,
-// dps, deaths and ilvl are only known for boss kills.
-func (c *compiler) rankingRows(s scope) (from, alias string) {
+// rankingRows are a player's per-fight rows in encounter_dps_rankings: one
+// per boss kill (encounter_id set) and one aggregated trash row per spec
+// (encounter_id NULL). on picks boss kills, trash, or both; bosses and trash
+// are exact complements.
+func (c *compiler) rankingRows(s scope, on On) (from, alias string) {
 	alias = c.alias("r")
-	return fmt.Sprintf("encounter_dps_rankings %[1]s WHERE %[1]s.instance_id = li.id AND %[1]s.player_guid = %[2]s.unit_guid::text AND %[1]s.encounter_id IS NOT NULL",
-		alias, s.alias), alias
+	fights := ""
+	switch on {
+	case OnTrash:
+		fights = fmt.Sprintf(" AND %s.encounter_id IS NULL", alias)
+	case OnAny:
+	default:
+		fights = fmt.Sprintf(" AND %s.encounter_id IS NOT NULL", alias)
+	}
+	return fmt.Sprintf("encounter_dps_rankings %[1]s WHERE %[1]s.instance_id = li.id AND %[1]s.player_guid = %[2]s.unit_guid::text%[3]s",
+		alias, s.alias, fights), alias
 }
 
 func rankingField(col string) func(c *compiler, s scope, p pred) string {
 	return func(c *compiler, s scope, p pred) string {
-		from, r := c.rankingRows(s)
+		from, r := c.rankingRows(s, p.on)
 		return c.bossMatch(p, from, r+".encounter_name", c.cmp(r+"."+col, p))
 	}
 }
@@ -384,6 +417,8 @@ var (
 		"Human", "Dwarf", "NightElf", "Gnome", "Draenei", "Orc", "Scourge", "Tauren", "Troll", "Goblin", "BloodElf",
 	}
 	outcomes = []string{"clean", "partial", "wipe", "reset"}
+	// roles are the values stored in encounter_dps_rankings.player_role.
+	roles = []string{"dps", "heal", "tank"}
 	// capabilities are the values the log parser writes to
 	// log_instances.capabilities (chronicle/logparse_parse.go).
 	capabilities = []string{"overheal", "absorb", "unit-resources", "unit-position", "raidgroup", "interrupt", "server-side"}
@@ -514,20 +549,20 @@ var fields = []*field{
 		Doc: "Guild name at the time of the run.", compile: column("(SELECT pg.name FROM guilds pg WHERE pg.id = {a}.guild_id)")},
 	{Name: "player.guild_id", Scope: scopePlayer, Type: typeUUID,
 		Doc: "Guild ID at the time of the run.", compile: column("{a}.guild_id")},
-	{Name: "player.spec", Cost: 3, Scope: scopePlayer, Type: typeString, Bosses: true,
-		Doc: "Spec on a boss kill, e.g. \"Feral\". Known on boss kills only.", compile: rankingField("player_spec")},
-	{Name: "player.sub_spec", Cost: 3, Scope: scopePlayer, Type: typeString, Bosses: true,
-		Doc: "Sub-spec on a boss kill, e.g. \"Bear\" / \"Cat\". Known on boss kills only.", compile: rankingField("player_sub_spec")},
-	{Name: "player.role", Cost: 3, Scope: scopePlayer, Type: typeString, Bosses: true,
-		Doc: "Role on a boss kill (dps, healer, tank).", compile: rankingField("player_role")},
-	{Name: "player.dps", Cost: 3, Scope: scopePlayer, Type: typeFloat, Bosses: true,
-		Doc: "DPS on a boss kill.", compile: rankingField("dps")},
-	{Name: "player.hps", Cost: 3, Scope: scopePlayer, Type: typeFloat, Bosses: true,
-		Doc: "HPS on a boss kill.", compile: rankingField("hps")},
-	{Name: "player.deaths", Cost: 3, Scope: scopePlayer, Type: typeInt, Bosses: true,
-		Doc: "Deaths on a boss kill. Wipes are not counted.", compile: rankingField("player_deaths")},
-	{Name: "player.avg_ilvl", Cost: 3, Scope: scopePlayer, Type: typeInt, Bosses: true,
-		Doc: "Average item level on a boss kill.", compile: rankingField("avg_ilvl")},
+	{Name: "player.spec", Cost: 3, Scope: scopePlayer, Type: typeString, Bosses: true, On: true,
+		Doc: "Spec in a fight, e.g. \"Feral\". Read from boss kills by default; see on.", compile: rankingField("player_spec")},
+	{Name: "player.sub_spec", Cost: 3, Scope: scopePlayer, Type: typeString, Bosses: true, On: true,
+		Doc: "Sub-spec in a fight: Bear / Cat (Feral druid), Tank / DPS (Enhancement shaman), Fury Prot. Empty for other specs and servers.", compile: rankingField("player_sub_spec")},
+	{Name: "player.role", Cost: 3, Scope: scopePlayer, Type: typeEnum, Enum: roles, Bosses: true, On: true,
+		Doc: "Role in a fight.", compile: rankingField("player_role")},
+	{Name: "player.dps", Cost: 3, Scope: scopePlayer, Type: typeFloat, Bosses: true, On: true,
+		Doc: "DPS in a fight.", compile: rankingField("dps")},
+	{Name: "player.hps", Cost: 3, Scope: scopePlayer, Type: typeFloat, Bosses: true, On: true,
+		Doc: "HPS in a fight.", compile: rankingField("hps")},
+	{Name: "player.deaths", Cost: 3, Scope: scopePlayer, Type: typeInt, Bosses: true, On: true,
+		Doc: "Deaths in a fight. Wipes are not counted.", compile: rankingField("player_deaths")},
+	{Name: "player.avg_ilvl", Cost: 3, Scope: scopePlayer, Type: typeInt, Bosses: true, On: true,
+		Doc: "Average item level in a fight.", compile: rankingField("avg_ilvl")},
 	{Name: "player.parse", Cost: 5, Scope: scopePlayer, Type: typeInt, Unit: "0-100", Bosses: true, Metric: true,
 		Doc: "Player parse on a boss kill (latest stored score per boss).",
 		compile: func(c *compiler, s scope, p pred) string {

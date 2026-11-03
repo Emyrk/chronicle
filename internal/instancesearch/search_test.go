@@ -167,6 +167,11 @@ func newFixture(t *testing.T) *fixture {
 	encounter(f.mc2, "Ragnaros", true, "wipe", 0, 100*time.Second)
 	rag2 := encounter(f.mc2, "Ragnaros", true, "clean", 200*time.Second, 400*time.Second)
 	ranking(f.mc2, rag2, realmA, bear, "Bearonly", "DRUID", "Feral", "Bear", "tank", 300, 1)
+	// Bearonly went Cat on trash. The aggregated trash row has no encounter_id.
+	exec(`INSERT INTO encounter_dps_rankings (encounter_id, instance_id, encounter_name, instance_name, player_guid, player_name,
+			player_class, player_spec, player_sub_spec, player_role, realm_id, realm_name, damage_done, duration_secs, dps, killed_at, player_deaths)
+		VALUES (NULL, $1, 'Trash', 'Molten Core', $2, 'Bearonly', 'DRUID', 'Feral', 'Cat', 'dps', $3, 'r', 1000, 60, 500, $4, 0)`,
+		f.mc2, bear, realmA, t0)
 
 	// hidden and other: 3 priests each.
 	for _, inst := range []uuid.UUID{f.hidden, f.other} {
@@ -286,9 +291,19 @@ func TestSearch(t *testing.T) {
 			query string
 			want  []uuid.UUID
 		}{
+			// mc2's druid was Bear on a boss and Cat only on trash, so the
+			// default (bosses) excludes it.
 			{"SamePlayerBearAndCat", `{"any_player": {"and": [
 				{"field": "player.sub_spec", "op": "=", "value": "Bear"},
 				{"field": "player.sub_spec", "op": "=", "value": "Cat"}]}}`, mc1},
+			{"BearAndCatOnAnyFight", `{"any_player": {"and": [
+				{"field": "player.sub_spec", "op": "=", "value": "Bear", "on": "any"},
+				{"field": "player.sub_spec", "op": "=", "value": "Cat", "on": "any"}]}}`, []uuid.UUID{f.mc1, f.mc2}},
+			{"CatOnTrash", `{"any_player": {"field": "player.sub_spec", "op": "=", "value": "Cat", "on": "trash"}}`, []uuid.UUID{f.mc2}},
+			{"BearOnBossCatOnTrash", `{"any_player": {"and": [
+				{"field": "player.sub_spec", "op": "=", "value": "Bear", "on": "bosses"},
+				{"field": "player.sub_spec", "op": "=", "value": "Cat", "on": "trash"}]}}`, []uuid.UUID{f.mc2}},
+			{"TankRole", `{"any_player": {"field": "player.role", "op": "=", "value": "tank"}}`, []uuid.UUID{f.mc1, f.mc2}},
 			{"RagKillWithoutWipes", `{"and": [
 				{"any_encounter": {"and": [{"field": "encounter.name", "op": "=", "value": "Ragnaros"}, {"field": "encounter.killed", "op": "=", "value": true}]}},
 				{"not": {"any_encounter": {"and": [{"field": "encounter.name", "op": "=", "value": "Ragnaros"}, {"field": "encounter.outcome", "op": "=", "value": "wipe"}]}}}]}`, mc1},

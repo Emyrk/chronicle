@@ -55,7 +55,20 @@ type InstanceSearchNode struct {
 	ParseScope InstanceSearchParseScope `json:"parse_scope,omitempty"`
 	// Metric selects the player parse metric (default dps).
 	Metric InstanceSearchMetric `json:"metric,omitempty"`
+	// On selects which fights per-fight player data comes from: boss kills
+	// (default), trash, or either.
+	On InstanceSearchOn `json:"on,omitempty"`
 }
+
+// InstanceSearchOn selects which fights per-fight player data (spec, role,
+// dps, deaths, ...) is read from.
+type InstanceSearchOn string
+
+const (
+	InstanceSearchOnBosses InstanceSearchOn = "bosses"
+	InstanceSearchOnTrash  InstanceSearchOn = "trash"
+	InstanceSearchOnAny    InstanceSearchOn = "any"
+)
 
 // InstanceSearchCount compares how many children satisfy Where. A nil Where
 // counts all of them.

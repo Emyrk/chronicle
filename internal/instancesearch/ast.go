@@ -30,6 +30,7 @@ type (
 	Match      = chroniclesdk.InstanceSearchMatch
 	ParseScope = chroniclesdk.InstanceSearchParseScope
 	Metric     = chroniclesdk.InstanceSearchMetric
+	On         = chroniclesdk.InstanceSearchOn
 	Result     = chroniclesdk.InstanceSearchResult
 	Page       = chroniclesdk.InstanceSearchResponse
 )
@@ -53,4 +54,8 @@ const (
 
 	MetricDPS = chroniclesdk.InstanceSearchMetricDPS
 	MetricHPS = chroniclesdk.InstanceSearchMetricHPS
+
+	OnBosses = chroniclesdk.InstanceSearchOnBosses
+	OnTrash  = chroniclesdk.InstanceSearchOnTrash
+	OnAny    = chroniclesdk.InstanceSearchOnAny
 )
