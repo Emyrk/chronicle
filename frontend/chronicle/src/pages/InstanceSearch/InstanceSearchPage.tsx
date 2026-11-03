@@ -26,7 +26,7 @@ import { RecentSearchesMenu } from "./RecentSearchesMenu";
 import { addRecentSearch, loadRecentSearches, saveRecentSearches, type RecentSearch } from "./recentSearches";
 import { HonoredLockTooltip } from "./HonoredLockTooltip";
 import { EXAMPLES, type SearchExample } from "./examples";
-import { SearchForm } from "./SearchForm";
+import { SentenceForm } from "./SentenceForm";
 import { bossOptions, realmOptions, zoneOptions } from "./searchOptions";
 import {
   buildQuery,
@@ -409,7 +409,7 @@ export function InstanceSearchPage() {
       {fields.isLoading ? (
         <div className="py-10 flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
       ) : mode === "form" ? (
-        <SearchForm
+        <SentenceForm
           form={form}
           onChange={setForm}
           zones={zones}
