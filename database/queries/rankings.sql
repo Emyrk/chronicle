@@ -413,7 +413,7 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         ELSE true
     END
     AND CASE
-        WHEN @filter_max_players :: smallint > 0 THEN edr.max_players = @filter_max_players
+        WHEN @exact_cohort::boolean OR @filter_max_players :: smallint > 0 THEN edr.max_players = @filter_max_players
         ELSE true
     END
     AND (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) > 0
@@ -706,7 +706,7 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         ELSE true
     END
     AND CASE
-        WHEN @filter_max_players :: smallint > 0 THEN edr.max_players = @filter_max_players
+        WHEN @exact_cohort::boolean OR @filter_max_players :: smallint > 0 THEN edr.max_players = @filter_max_players
         ELSE true
     END
 ),
@@ -1202,7 +1202,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           ELSE true
       END
       AND CASE
-          WHEN @filter_max_players :: smallint > 0 THEN li.max_players = @filter_max_players
+          WHEN @exact_cohort::boolean OR @filter_max_players :: smallint > 0 THEN li.max_players = @filter_max_players
           ELSE true
       END
       AND CASE

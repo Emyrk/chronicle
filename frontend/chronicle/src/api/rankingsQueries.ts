@@ -175,6 +175,7 @@ export function useRankingsLeaderboard(params: {
   hide_unknowns?: boolean;
   metric?: "dps" | "hps";
   max_players?: number;
+  exact_cohort?: boolean;
   limit?: number;
   offset?: number;
 }, enabled = true) {
@@ -192,6 +193,7 @@ export function useRankingsLeaderboard(params: {
   if (params.hide_unknowns) searchParams.set("hide_unknowns", "true");
   if (params.metric && params.metric !== "dps") searchParams.set("metric", params.metric);
   if (params.max_players !== undefined) searchParams.set("max_players", String(params.max_players));
+  if (params.exact_cohort) searchParams.set("exact_cohort", "true");
   if (params.limit != null) searchParams.set("limit", String(params.limit));
   if (params.offset != null) searchParams.set("offset", String(params.offset));
   const qs = searchParams.toString();
@@ -216,6 +218,7 @@ export function useRankingsStats(params: {
   metric?: "dps" | "hps";
   group_by_class?: boolean;
   max_players?: number;
+  exact_cohort?: boolean;
 }, enabled = true) {
   const searchParams = new URLSearchParams();
   if (params.instance_names) searchParams.set("instance_names", params.instance_names);
@@ -228,6 +231,7 @@ export function useRankingsStats(params: {
   if (params.metric && params.metric !== "dps") searchParams.set("metric", params.metric);
   if (params.group_by_class) searchParams.set("group_by_class", "true");
   if (params.max_players !== undefined) searchParams.set("max_players", String(params.max_players));
+  if (params.exact_cohort) searchParams.set("exact_cohort", "true");
   const qs = searchParams.toString();
 
   return useQuery({
@@ -279,14 +283,15 @@ export function useRankingsClearTimes(instanceName: string, period?: string, ena
 export function useRankingsSuccessRates(
   instanceName: string,
   period?: string,
-  opts?: { difficulty_names?: string; max_players?: number },
+  opts?: { difficulty_names?: string; max_players?: number; exact_cohort?: boolean },
   enabled = true,
 ) {
   const searchParams = new URLSearchParams();
   searchParams.set("instance_name", instanceName);
   if (period) searchParams.set("period", period);
-  if (opts?.difficulty_names) searchParams.set("difficulty_names", opts.difficulty_names);
-  if (opts?.max_players) searchParams.set("max_players", String(opts.max_players));
+  if (opts?.difficulty_names !== undefined) searchParams.set("difficulty_names", opts.difficulty_names);
+  if (opts?.max_players !== undefined) searchParams.set("max_players", String(opts.max_players));
+  if (opts?.exact_cohort) searchParams.set("exact_cohort", "true");
 
   return useQuery({
     queryKey: ["rankings", "success-rates", instanceName, period, opts],

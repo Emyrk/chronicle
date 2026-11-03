@@ -45,8 +45,6 @@ export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, r
     && raids.some((raid) => raid.difficulty_name === ratingCohort.difficulty && raid.max_players === ratingCohort.maxPlayers)
     && (subject === "guild" || (ratingCohort.playerClass === cls && ratingCohort.spec === (spec ?? "")
       && ratingCohort.subSpec === (subSpec ?? "") && ratingCohort.performance === metric))
-  // Legacy performance filters cannot enforce an empty or zero-size cohort yet.
-  const performanceSupported = exactPerformance && performanceCohort.difficulty !== "" && performanceCohort.maxPlayers > 0
   const ready = !instances.isPending && !instances.isError && raids.length > 0
   const renownURL = ready && !combined ? liveRatingURL({ instanceName, encounterName: boss, subject, metric: "renown", window: "period", realmIDs }) : null
   const peakURL = ready && !combined && exactRating ? liveRatingURL({ instanceName, encounterName: boss, subject, metric: "peak", window: "period", cohort: ratingCohort, realmIDs }) : null
@@ -56,9 +54,9 @@ export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, r
   const mastery = useQuery({ queryKey: ["hub-overview-rating", masteryURL], queryFn: () => fetchLiveRatingPage(masteryURL!), enabled: !!masteryURL, staleTime: 5 * 60 * 1000, retry: false })
   const performances = useRankingsLeaderboard({
     instance_names: instanceName, encounter_names: boss, class: cls, spec, sub_spec: subSpec,
-    difficulty_names: performanceCohort?.difficulty, max_players: performanceCohort?.maxPlayers,
+    difficulty_names: performanceCohort?.difficulty, max_players: performanceCohort?.maxPlayers, exact_cohort: exactPerformance,
     role: role === "healing" ? "heal" : "dps", metric, realm_names: realmName, limit: 5,
-  }, ready && !!boss && performanceSupported && subject === "player")
+  }, ready && !!boss && exactPerformance && subject === "player")
   const fullClear = !boss && !combined
   const speedCohort = performanceCohort && raids.some((raid) => raid.difficulty_name === performanceCohort.difficulty && raid.max_players === performanceCohort.maxPlayers)
     ? performanceCohort : exactRating ? ratingCohort : undefined
@@ -66,14 +64,13 @@ export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, r
     queryKey: ["hub-overview-speedrun", instanceName, realmName, speedCohort?.difficulty, speedCohort?.maxPlayers],
     queryFn: async () => {
       const params = new URLSearchParams({ instance_name: instanceName, difficulty_name: speedCohort!.difficulty,
-        min_players: String(speedCohort!.maxPlayers), max_players: String(speedCohort!.maxPlayers), timing: "full" })
+        instance_max_players: String(speedCohort!.maxPlayers), timing: "full" })
       if (realmName) params.append("realm_name", realmName)
       const response = await fetch(`/api/v1/rankings/speedrun?${params}`)
       if (!response.ok) throw new Error(`Speedruns request failed (${response.status})`)
       return response.json() as Promise<SpeedrunLeaderboardEntry[]>
     },
-    // Speedrun size filters use player count, where 0 means unfiltered.
-    enabled: ready && fullClear && !!speedCohort && speedCohort.maxPlayers > 0,
+    enabled: ready && fullClear && !!speedCohort,
     staleTime: 5 * 60 * 1000,
     retry: false,
   })
@@ -115,7 +112,7 @@ export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, r
         <div className="absolute inset-0 bg-background/80" />
         <span className="absolute top-3 left-4 z-10 text-xs font-medium text-muted-foreground">{boss ? `Fastest ${boss} kills` : combined ? `Fastest total kill time · ${selectedBosses.length} bosses` : "Fastest full clears"}</span>
         <CardLink label="Speedruns" onClick={() => onTab("speedruns")} className="absolute top-3 right-4 z-10" />
-        <div className="relative px-4 pt-10 pb-8 text-center text-sm text-muted-foreground">{!fullClear ? "Selected boss or combined-boss speed podium unavailable" : !speedCohort ? "Choose an exact raid difficulty and size to see fastest full clears" : speedCohort.maxPlayers === 0 ? "Exact speedrun results unavailable for raids without a recorded size" : speed.isPending ? "Loading speedruns…" : speed.isError ? "Speedruns unavailable" : "No qualifying full clears yet"}</div>
+        <div className="relative px-4 pt-10 pb-8 text-center text-sm text-muted-foreground">{!fullClear ? "Selected boss or combined-boss speed podium unavailable" : !speedCohort ? "Choose an exact raid difficulty and size to see fastest full clears" : speed.isPending ? "Loading speedruns…" : speed.isError ? "Speedruns unavailable" : "No qualifying full clears yet"}</div>
       </section>}
     {boss && <BossStats boss={{ boss, kills: !realmName && !cls && !spec && !subSpec ? encounters.data?.find((row) => row.encounter_name === boss)?.total_kills : undefined }} />}
     <div className="grid gap-5 lg:grid-cols-[1.55fr_1fr]">
@@ -130,7 +127,7 @@ export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, r
         {unavailable(subject === "guild" ? "Guild clear counts unavailable for this selection" : "Guild Renown belongs to a separate guild board; open Renown to compare guilds")}
       </Card>
       <Card title={`Best Performances (${subject === "guild" ? "Clear time" : metric.toUpperCase()}) · ${where}`} action={{ label: subject === "guild" ? "Speedruns" : "Performances", onClick: () => onTab(subject === "guild" ? "speedruns" : "performances") }}>
-        {subject === "guild" ? unavailable("Open Speedruns for qualified guild clears") : !boss ? unavailable("Select exactly one boss for performances") : !exactPerformance ? unavailable("Choose an exact raid difficulty and size") : !performanceSupported ? unavailable("This published cohort cannot be filtered by the legacy performances API yet") : performances.isPending ? unavailable("Loading performances…") : performances.isError ? unavailable("Performances unavailable") : !performances.data?.entries.length ? unavailable("No recorded performances") :
+        {subject === "guild" ? unavailable("Open Speedruns for qualified guild clears") : !boss ? unavailable("Select exactly one boss for performances") : !exactPerformance ? unavailable("Choose an exact raid difficulty and size") : performances.isPending ? unavailable("Loading performances…") : performances.isError ? unavailable("Performances unavailable") : !performances.data?.entries.length ? unavailable("No recorded performances") :
           <ol>{performances.data.entries.map((entry, i) => <li key={entry.id} className="flex items-center gap-2 border-b border-white/5 px-3 py-2.5"><span className="w-3 font-mono text-xs text-muted-foreground">{i + 1}</span><span className="min-w-0 flex-1 truncate text-sm" style={{ color: CLASS_CSS_VAR[entry.player_class] }}>{entry.player_name}</span><span className="font-mono text-sm tabular-nums">{entry[metric].toLocaleString()} {metric}</span></li>)}</ol>}
       </Card>
       <Card title={`Typical ${subject === "guild" ? "clear time by guild" : `${metric.toUpperCase()} parse by spec`} · ${where}`} action={{ label: "Box plot", onClick: () => onTab("statistics") }}>

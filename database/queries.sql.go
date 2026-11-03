@@ -19978,7 +19978,7 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         ELSE true
     END
     AND CASE
-        WHEN $8 :: smallint > 0 THEN edr.max_players = $8
+        WHEN $8::boolean OR $9 :: smallint > 0 THEN edr.max_players = $9
         ELSE true
     END
 ),
@@ -19994,7 +19994,7 @@ ranking_rows AS (
         FROM filtered_rankings candidate
         WHERE candidate.encounter_id IS NULL
         ORDER BY candidate.player_guid, candidate.encounter_name, candidate.run_id,
-            (CASE WHEN $9 :: text = 'hps' THEN candidate.hps ELSE candidate.dps END) DESC,
+            (CASE WHEN $10 :: text = 'hps' THEN candidate.hps ELSE candidate.dps END) DESC,
             candidate.killed_at DESC,
             candidate.id ASC
     ) trash
@@ -20012,7 +20012,7 @@ per_run AS (
         d.player_class,
         d.player_spec,
         d.player_sub_spec,
-        (CASE WHEN $9 :: text = 'hps'
+        (CASE WHEN $10 :: text = 'hps'
             THEN SUM(d.healing_done + d.absorbed_done)::double precision / NULLIF(SUM(d.duration_secs), 0)
             ELSE SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0)
         END)::double precision AS metric_value
@@ -20068,6 +20068,7 @@ type RankingsBoxPlotStatsParams struct {
 	Role             string   `db:"role" json:"role"`
 	SinceDays        int64    `db:"since_days" json:"since_days"`
 	DifficultyNames  []string `db:"difficulty_names" json:"difficulty_names"`
+	ExactCohort      bool     `db:"exact_cohort" json:"exact_cohort"`
 	FilterMaxPlayers int16    `db:"filter_max_players" json:"filter_max_players"`
 	Metric           string   `db:"metric" json:"metric"`
 }
@@ -20102,6 +20103,7 @@ func (q *sqlQuerier) RankingsBoxPlotStats(ctx context.Context, arg RankingsBoxPl
 		arg.Role,
 		arg.SinceDays,
 		arg.DifficultyNames,
+		arg.ExactCohort,
 		arg.FilterMaxPlayers,
 		arg.Metric,
 	)
@@ -20769,7 +20771,7 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         ELSE true
     END
     AND CASE
-        WHEN $12 :: smallint > 0 THEN edr.max_players = $12
+        WHEN $12::boolean OR $13 :: smallint > 0 THEN edr.max_players = $13
         ELSE true
     END
     AND (CASE WHEN $1 :: text = 'hps' THEN edr.hps ELSE edr.dps END) > 0
@@ -20841,8 +20843,8 @@ paged AS (
     WHERE (CASE WHEN $1 :: text = 'hps' THEN bpp.hps ELSE bpp.dps END) > 0
     ORDER BY (CASE WHEN $1 :: text = 'hps' THEN bpp.hps ELSE bpp.dps END) DESC,
         bpp.player_guid ASC
-    LIMIT $14::bigint
-    OFFSET $13::bigint
+    LIMIT $15::bigint
+    OFFSET $14::bigint
 ),
 hydration_rows AS (
     SELECT
@@ -20950,6 +20952,7 @@ type RankingsLeaderboardParams struct {
 	SinceDays        int64    `db:"since_days" json:"since_days"`
 	HideUnknowns     bool     `db:"hide_unknowns" json:"hide_unknowns"`
 	DifficultyNames  []string `db:"difficulty_names" json:"difficulty_names"`
+	ExactCohort      bool     `db:"exact_cohort" json:"exact_cohort"`
 	FilterMaxPlayers int16    `db:"filter_max_players" json:"filter_max_players"`
 	QueryOffset      int64    `db:"query_offset" json:"query_offset"`
 	QueryLimit       int64    `db:"query_limit" json:"query_limit"`
@@ -21016,6 +21019,7 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 		arg.SinceDays,
 		arg.HideUnknowns,
 		arg.DifficultyNames,
+		arg.ExactCohort,
 		arg.FilterMaxPlayers,
 		arg.QueryOffset,
 		arg.QueryLimit,
@@ -21134,11 +21138,11 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           ELSE true
       END
       AND CASE
-          WHEN $3 :: smallint > 0 THEN li.max_players = $3
+          WHEN $3::boolean OR $4 :: smallint > 0 THEN li.max_players = $4
           ELSE true
       END
       AND CASE
-          WHEN $4 :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => $4::int)
+          WHEN $5 :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => $5::int)
           ELSE true
       END
     ORDER BY lie.name, lie.kill_type, COALESCE(li.duplicate_group_id, li.id), lie.end_time DESC
@@ -21156,6 +21160,7 @@ ORDER BY (d.encounter_name = 'Trash'), d.encounter_name
 type RankingsSuccessRatesParams struct {
 	InstanceName     string   `db:"instance_name" json:"instance_name"`
 	DifficultyNames  []string `db:"difficulty_names" json:"difficulty_names"`
+	ExactCohort      bool     `db:"exact_cohort" json:"exact_cohort"`
 	FilterMaxPlayers int16    `db:"filter_max_players" json:"filter_max_players"`
 	SinceDays        int64    `db:"since_days" json:"since_days"`
 }
@@ -21173,6 +21178,7 @@ func (q *sqlQuerier) RankingsSuccessRates(ctx context.Context, arg RankingsSucce
 	rows, err := q.db.Query(ctx, rankingsSuccessRates,
 		arg.InstanceName,
 		arg.DifficultyNames,
+		arg.ExactCohort,
 		arg.FilterMaxPlayers,
 		arg.SinceDays,
 	)
@@ -30135,6 +30141,7 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
           WHEN $10 :: boolean THEN li.difficulty_name = $11 :: text
           ELSE true
       END
+      AND (NOT $12::boolean OR li.max_players = $13::smallint)
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         CASE WHEN $5::boolean
             THEN sr.boss_to_boss_duration_ms
@@ -30159,17 +30166,19 @@ OFFSET $3::bigint
 `
 
 type SpeedrunLeaderboardParams struct {
-	MinPlayers       int64    `db:"min_players" json:"min_players"`
-	MaxPlayers       int64    `db:"max_players" json:"max_players"`
-	ResultOffset     int64    `db:"result_offset" json:"result_offset"`
-	ResultLimit      int64    `db:"result_limit" json:"result_limit"`
-	UseRankedTiming  bool     `db:"use_ranked_timing" json:"use_ranked_timing"`
-	InstanceName     string   `db:"instance_name" json:"instance_name"`
-	RealmNames       []string `db:"realm_names" json:"realm_names"`
-	GuildID          string   `db:"guild_id" json:"guild_id"`
-	SinceDays        int64    `db:"since_days" json:"since_days"`
-	FilterDifficulty bool     `db:"filter_difficulty" json:"filter_difficulty"`
-	DifficultyName   string   `db:"difficulty_name" json:"difficulty_name"`
+	MinPlayers               int64    `db:"min_players" json:"min_players"`
+	MaxPlayers               int64    `db:"max_players" json:"max_players"`
+	ResultOffset             int64    `db:"result_offset" json:"result_offset"`
+	ResultLimit              int64    `db:"result_limit" json:"result_limit"`
+	UseRankedTiming          bool     `db:"use_ranked_timing" json:"use_ranked_timing"`
+	InstanceName             string   `db:"instance_name" json:"instance_name"`
+	RealmNames               []string `db:"realm_names" json:"realm_names"`
+	GuildID                  string   `db:"guild_id" json:"guild_id"`
+	SinceDays                int64    `db:"since_days" json:"since_days"`
+	FilterDifficulty         bool     `db:"filter_difficulty" json:"filter_difficulty"`
+	DifficultyName           string   `db:"difficulty_name" json:"difficulty_name"`
+	FilterInstanceMaxPlayers bool     `db:"filter_instance_max_players" json:"filter_instance_max_players"`
+	InstanceMaxPlayers       int16    `db:"instance_max_players" json:"instance_max_players"`
 }
 
 type SpeedrunLeaderboardRow struct {
@@ -30215,6 +30224,8 @@ func (q *sqlQuerier) SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeader
 		arg.SinceDays,
 		arg.FilterDifficulty,
 		arg.DifficultyName,
+		arg.FilterInstanceMaxPlayers,
+		arg.InstanceMaxPlayers,
 	)
 	if err != nil {
 		return nil, err

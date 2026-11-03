@@ -22,20 +22,22 @@ beforeEach(() => {
 })
 
 describe("LiveHubOverview exact default cohort", () => {
-  it("requests exact zero-size and empty-difficulty ratings without broadening legacy performances", () => {
+  it("requests exact zero-size and empty-difficulty ratings and performances", () => {
     const html = renderToStaticMarkup(<LiveHubOverview {...base} performanceCohort={cohort} ratingCohort={ratingCohort} />)
     const ratingCalls = vi.mocked(useQuery).mock.calls
     expect(ratingCalls[1][0].enabled).toBe(true)
     expect(String(ratingCalls[1][0].queryKey?.[1])).toContain("difficulty_name=&max_players=0")
     expect(ratingCalls[2][0].enabled).toBe(true)
-    expect(vi.mocked(useRankingsLeaderboard).mock.calls[0][1]).toBe(false)
-    expect(html).toContain("cannot be filtered by the legacy performances API")
+    expect(vi.mocked(useRankingsLeaderboard).mock.calls[0][0]).toMatchObject({ difficulty_names: "", max_players: 0, exact_cohort: true })
+    expect(vi.mocked(useRankingsLeaderboard).mock.calls[0][1]).toBe(true)
+    expect(html).not.toContain("cannot be filtered")
   })
 
-  it("does not show a broad speedrun board for an unrecorded raid size", () => {
-    const html = renderToStaticMarkup(<LiveHubOverview {...base} selection={{ kind: "clear" }} performanceCohort={cohort} ratingCohort={ratingCohort} />)
-    expect(vi.mocked(useQuery).mock.calls[3][0].enabled).toBe(false)
-    expect(html).toContain("Exact speedrun results unavailable for raids without a recorded size")
+  it("requests speedruns filtered by the recorded zero-size cohort, not the player count", () => {
+    renderToStaticMarkup(<LiveHubOverview {...base} selection={{ kind: "clear" }} performanceCohort={cohort} ratingCohort={ratingCohort} />)
+    const options = vi.mocked(useQuery).mock.calls[3][0]
+    expect(options.enabled).toBe(true)
+    expect(String(options.queryKey)).toContain("0")
   })
 
   it("does not request Peak without a selected matching cohort", () => {

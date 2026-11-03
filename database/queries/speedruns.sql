@@ -205,6 +205,7 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
           WHEN @filter_difficulty :: boolean THEN li.difficulty_name = @difficulty_name :: text
           ELSE true
       END
+      AND (NOT @filter_instance_max_players::boolean OR li.max_players = @instance_max_players::smallint)
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         CASE WHEN @use_ranked_timing::boolean
             THEN sr.boss_to_boss_duration_ms

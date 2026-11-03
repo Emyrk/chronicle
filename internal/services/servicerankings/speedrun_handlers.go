@@ -60,6 +60,16 @@ func (s *Service) handleSpeedrunLeaderboard(w http.ResponseWriter, r *http.Reque
 	// empty, which matches runs with no recorded difficulty) enables the filter.
 	filterDifficulty := r.URL.Query().Has("difficulty_name")
 	difficultyName := r.URL.Query().Get("difficulty_name")
+	filterInstanceSize := r.URL.Query().Has("instance_max_players")
+	var instanceSize int16
+	if filterInstanceSize {
+		parsed, err := strconv.ParseInt(r.URL.Query().Get("instance_max_players"), 10, 16)
+		if err != nil || parsed < 0 {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "instance_max_players must be a non-negative number"})
+			return
+		}
+		instanceSize = int16(parsed)
+	}
 
 	useRankedTiming, validTiming := speedrunUsesRankedTiming(r.URL.Query().Get("timing"))
 	if !validTiming {
@@ -70,15 +80,17 @@ func (s *Service) handleSpeedrunLeaderboard(w http.ResponseWriter, r *http.Reque
 	}
 
 	rows, err := s.store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
-		InstanceName:     instanceName,
-		RealmNames:       realmNames,
-		MinPlayers:       minPlayers,
-		MaxPlayers:       maxPlayers,
-		GuildID:          guildID,
-		SinceDays:        sinceDays,
-		FilterDifficulty: filterDifficulty,
-		DifficultyName:   difficultyName,
-		UseRankedTiming:  useRankedTiming,
+		InstanceName:             instanceName,
+		RealmNames:               realmNames,
+		MinPlayers:               minPlayers,
+		MaxPlayers:               maxPlayers,
+		GuildID:                  guildID,
+		SinceDays:                sinceDays,
+		FilterDifficulty:         filterDifficulty,
+		FilterInstanceMaxPlayers: filterInstanceSize,
+		InstanceMaxPlayers:       instanceSize,
+		DifficultyName:           difficultyName,
+		UseRankedTiming:          useRankedTiming,
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{

@@ -265,6 +265,19 @@ func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 	require.True(t, legacyStart.Equal(fullRows[1].StartTime.Time))
 	require.True(t, legacyEnd.Equal(fullRows[1].CompletionTime.Time))
 
+	zeroCohort, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
+		InstanceName: "Molten Core", FilterDifficulty: true, DifficultyName: "Normal",
+		FilterInstanceMaxPlayers: true, InstanceMaxPlayers: 0,
+	})
+	require.NoError(t, err)
+	require.Empty(t, zeroCohort, "zero must filter recorded instance size, not player count")
+	matchingCohort, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
+		InstanceName: "Molten Core", FilterDifficulty: true, DifficultyName: "Normal",
+		FilterInstanceMaxPlayers: true, InstanceMaxPlayers: 40,
+	})
+	require.NoError(t, err)
+	require.Equal(t, fullRows, matchingCohort)
+
 	firstPage, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
 		InstanceName: "Molten Core", RealmNames: []string{}, ResultLimit: 1,
 		FilterDifficulty: true, DifficultyName: "Normal", UseRankedTiming: false,

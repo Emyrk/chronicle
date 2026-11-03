@@ -415,6 +415,20 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, persistedRows, noJITRows)
 
+	// The Hub must distinguish a published size-zero/empty-difficulty cohort
+	// from an omitted legacy filter; these fixture rows have size 40.
+	exact := equivalenceParams
+	exact.ExactCohort = true
+	exact.DifficultyNames = []string{""}
+	exact.FilterMaxPlayers = 0
+	zeroRows, err := store.RankingsLeaderboardNoJIT(ctx, exact)
+	require.NoError(t, err)
+	require.Empty(t, zeroRows)
+	exact.FilterMaxPlayers = 40
+	exactRows, err := store.RankingsLeaderboardNoJIT(ctx, exact)
+	require.NoError(t, err)
+	require.Equal(t, noJITRows, exactRows)
+
 	for _, params := range []database.RankingsLeaderboardParams{
 		{
 			Metric: "hps", QueryLimit: 10,
@@ -504,6 +518,13 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	assert.Equal(t, "P-HEALER", secondPageRows[0].PlayerGuid)
 	assert.Equal(t, "Newest Run", secondPageRows[0].PlayerName)
 	assert.Equal(t, int64(2), secondPageRows[0].TotalCount)
+	// Turtle/vanilla stores zero as the cohort's actual raid size.
+	_, err = pool.Exec(ctx, "UPDATE encounter_dps_rankings SET max_players = 0 WHERE instance_name = 'Molten Core'")
+	require.NoError(t, err)
+	exact.FilterMaxPlayers = 0
+	zeroRows, err = store.RankingsLeaderboardNoJIT(ctx, exact)
+	require.NoError(t, err)
+	require.NotEmpty(t, zeroRows)
 }
 
 func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
@@ -607,6 +628,16 @@ func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, rows, noJITRows)
+
+	exactStats := database.RankingsBoxPlotStatsParams{Metric: "hps", InstanceNames: []string{"Molten Core"},
+		EncounterNames: []string{"Lucifron", "Magmadar"}, DifficultyNames: []string{""}, ExactCohort: true}
+	zeroStats, err := store.RankingsBoxPlotStatsNoJIT(ctx, exactStats)
+	require.NoError(t, err)
+	require.Empty(t, zeroStats)
+	exactStats.FilterMaxPlayers = 40
+	matchingStats, err := store.RankingsBoxPlotStatsNoJIT(ctx, exactStats)
+	require.NoError(t, err)
+	require.Equal(t, noJITRows, matchingStats)
 
 	emptySelectionRows, err := store.RankingsBoxPlotStats(ctx, database.RankingsBoxPlotStatsParams{
 		Metric:        "hps",

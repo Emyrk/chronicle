@@ -68,7 +68,7 @@ export function ParsingTab({
   const chosen = selection.kind === "bosses" ? selection.bosses : []
   const boss = chosen[0] ?? allBosses[0]
   const difficulty = live?.difficulty
-  const validDifficulty = !!difficulty && Number.isInteger(difficulty.maxPlayers) && difficulty.maxPlayers > 0
+  const validDifficulty = !!difficulty && Number.isInteger(difficulty.maxPlayers) && difficulty.maxPlayers >= 0
   const scoreSpreads = live?.spreads?.status === "ready" && validDifficulty
     ? live.spreads.data.filter((s) => s.encounter_name === boss && s.difficulty_name === difficulty.difficultyName && s.max_players === difficulty.maxPlayers)
     : []

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -399,7 +400,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.store.RankingsLeaderboardNoJIT(ctx, database.RankingsLeaderboardParams{
 		InstanceNames:    splitCSV(q.Get("instance_names")),
 		EncounterNames:   encounterNames,
-		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
+		DifficultyNames:  rankingDifficultyNames(q),
 		RealmNames:       splitCSV(q.Get("realm_names")),
 		Class:            classParam,
 		Spec:             q.Get("spec"),
@@ -409,6 +410,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		HideUnknowns:     q.Get("hide_unknowns") == "true",
 		Metric:           normalizeMetric(q.Get("metric")),
 		FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
+		ExactCohort:      q.Get("exact_cohort") == "true",
 		QueryLimit:       limit,
 		QueryOffset:      offset,
 	})
@@ -536,13 +538,14 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.store.RankingsBoxPlotStatsNoJIT(ctx, database.RankingsBoxPlotStatsParams{
 		InstanceNames:    splitCSV(q.Get("instance_names")),
 		EncounterNames:   encounterNames,
-		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
+		DifficultyNames:  rankingDifficultyNames(q),
 		RealmNames:       splitCSV(q.Get("realm_names")),
 		Role:             q.Get("role"),
 		SinceDays:        sinceDays,
 		Metric:           normalizeMetric(q.Get("metric")),
 		GroupByClass:     q.Get("group_by_class") == "true",
 		FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
+		ExactCohort:      q.Get("exact_cohort") == "true",
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -629,6 +632,14 @@ func parseMaxPlayers(s string) int16 {
 		return 0
 	}
 	return int16(v)
+}
+
+// Exact Hub cohorts may legitimately have an empty difficulty; legacy CSV filters cannot express it.
+func rankingDifficultyNames(q url.Values) []string {
+	if q.Get("exact_cohort") == "true" && q.Has("difficulty_names") {
+		return []string{q.Get("difficulty_names")}
+	}
+	return splitCSV(q.Get("difficulty_names"))
 }
 
 // splitCSV splits a comma-separated string into a slice, trimming whitespace.
@@ -858,8 +869,9 @@ func (s *Service) handleSuccessRates(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := s.store.RankingsSuccessRates(ctx, database.RankingsSuccessRatesParams{
 		InstanceName:     instanceName,
-		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
+		DifficultyNames:  rankingDifficultyNames(q),
 		FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
+		ExactCohort:      q.Get("exact_cohort") == "true",
 		SinceDays:        sinceDays,
 	})
 	if err != nil {
