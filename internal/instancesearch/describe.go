@@ -14,6 +14,11 @@ func Describe() chroniclesdk.InstanceSearchFieldsResponse {
 		MaxDepth:               DefaultMaxDepth,
 		AnonymousMaxPredicates: anonymousMaxPredicates,
 		AnonymousMaxLimit:      anonymousMaxLimit,
+		CostBase:               baseCost,
+		CostOr:                 orCost,
+		CostNot:                notCost,
+		CostAny:                anyQuantCost,
+		CostCount:              countQuantCost,
 	}
 	for _, f := range fields {
 		cost := f.Cost

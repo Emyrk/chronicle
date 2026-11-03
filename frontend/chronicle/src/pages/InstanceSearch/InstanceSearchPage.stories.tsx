@@ -6,6 +6,7 @@ import { InstanceSearchPage } from "./InstanceSearchPage";
 import { encodeQuery, type Node } from "./queryModel";
 import { saveRecentSearches, type RecentSearch } from "./recentSearches";
 import { mockEvidence } from "./evidence.mocks";
+import { EXAMPLES } from "./examples";
 // Generated from the Go registry; kept in sync by TestDescribeFixture.
 import fieldsFixture from "./fixtures/searchFields.json";
 
@@ -64,10 +65,21 @@ const session = {
 
 type SearchMode = "ok" | "empty" | "rate_limited" | "login_required" | "timeout";
 
-function handlers({ loggedIn, search = "ok", tier = "honored" }: { loggedIn: boolean; search?: SearchMode; tier?: string }) {
+function handlers({
+  loggedIn,
+  search = "ok",
+  tier = "honored",
+  budgetLeft,
+}: {
+  loggedIn: boolean;
+  search?: SearchMode;
+  tier?: string;
+  /** Pin the remaining budget (searches don't spend from it). */
+  budgetLeft?: number;
+}) {
   const supporterLimit = tier === "exalted" ? 2000 : tier === "revered" ? 800 : tier === "honored" ? 300 : 100;
   const limit = loggedIn ? supporterLimit : 40;
-  let remaining = limit;
+  let remaining = budgetLeft ?? limit;
   const rlHeaders = (cost?: number) => ({
     "RateLimit-Limit": String(limit),
     "RateLimit-Remaining": String(Math.floor(remaining)),
@@ -110,7 +122,7 @@ function handlers({ loggedIn, search = "ok", tier = "honored" }: { loggedIn: boo
         remaining -= cost;
         return HttpResponse.json({ message: "This search took too long.", call_to_action: "Narrow it with a zone, realm or date range." }, { status: 422, headers: rlHeaders(cost) });
       }
-      remaining = Math.max(0, remaining - cost);
+      if (budgetLeft === undefined) remaining = Math.max(0, remaining - cost);
       if (search === "empty") return HttpResponse.json({ results: [] }, { headers: rlHeaders(cost) });
       const start = body.cursor ? allRows.findIndex((r) => r.id === body.cursor!.id) + 1 : 0;
       const pageSize = body.limit ?? 25;
@@ -269,4 +281,31 @@ export const RecentSearches: Story = {
 
 export const NoResults: Story = {
   parameters: { initialEntry: url(formTree), msw: { handlers: handlers({ loggedIn: true, search: "empty" }) } },
+};
+
+// A search costing 52: two per-boss kill fields, a parse, a count and three player / pull blocks.
+const costlyTree = EXAMPLES.find((e) => e.id === "28_one_pull_rag_cat_shaman_carry")!.where;
+
+/** The live cost beside Search (click Edit). Hover it for the breakdown. */
+export const LiveCost: Story = {
+  parameters: { initialEntry: url(costlyTree, "blocks") },
+};
+
+/** Costs more than what's left right now: amber, with how long until enough refills. */
+export const ShortOnBudget: Story = {
+  parameters: { initialEntry: url(costlyTree, "blocks"), msw: { handlers: handlers({ loggedIn: true, budgetLeft: 20 }) } },
+};
+
+/** Costs more than the whole budget: red, and Search is disabled. */
+export const TooComplex: Story = {
+  parameters: {
+    initialEntry: url(
+      {
+        and: Array.from({ length: 20 }, (_, i) => ({
+          any_player: { field: "player.parse", op: ">=", value: 80 + i, bosses: ["Ragnaros"] },
+        })),
+      },
+      "blocks",
+    ),
+  },
 };

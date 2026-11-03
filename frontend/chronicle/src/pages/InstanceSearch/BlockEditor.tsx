@@ -3,14 +3,17 @@ import type {
   InstanceSearchCount,
   InstanceSearchField,
   InstanceSearchFieldScope,
+  InstanceSearchFieldsResponse,
   InstanceSearchOp,
 } from "@/api/typesGenerated";
 import { Button } from "@/components/ui/button";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ChipInput, NATIVE_SELECT, NumberInput, Segmented, SuggestInput, ToggleChips } from "./controls";
 import { MATCH_OPTIONS, METRIC_OPTIONS, ON_OPTIONS, OP_LABELS, PARSE_SCOPE_OPTIONS, enumLabel, fieldGroup, fieldLabel } from "./fieldLabels";
-import type { Node } from "./queryModel";
+import { prune, type Node } from "./queryModel";
+import { COMPLEXITY_STYLE, complexity, queryCost } from "./searchCost";
 import type { ComboOption, Suggestion } from "./comboOptions";
 import { SelectCombo } from "./ComboInput";
 import { ClassSpecPicker } from "./ClassSpecPicker";
@@ -26,6 +29,8 @@ import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
 
 export interface BlockContext {
   fields: readonly InstanceSearchField[];
+  /** The field list with cost weights; when set, each block shows what it adds to the cost. */
+  costs?: InstanceSearchFieldsResponse;
   zones: readonly Suggestion[];
   bosses: readonly Suggestion[];
   realms?: readonly Suggestion[];
@@ -229,6 +234,7 @@ function NodeBlock({
         {negated ? "NOT" : "IS"}
       </button>
       <div className="flex-1 min-w-0 flex flex-wrap items-center gap-1.5">{content}</div>
+      {ctx.costs && <BlockCost node={node} costs={ctx.costs} />}
       <Button className="shrink-0 h-7 w-7 p-0" variant="ghost" size="sm" disabled={ctx.disabled} onClick={onRemove} aria-label="Remove">✕</Button>
     </div>
   );
@@ -307,6 +313,52 @@ function NodeBlock({
       {toolbar(<PredicateEditor node={inner} scope={scope} ctx={ctx} onChange={setInner} />)}
       <PredicateOptions node={inner} ctx={ctx} onChange={setInner} />
     </div>
+  );
+}
+
+/**
+ * What a block adds to the search's cost, everything nested in it included,
+ * coloured on the same scale as the total. Unfinished conditions (no value
+ * yet) aren't sent, so they cost nothing.
+ */
+function BlockCost({ node, costs }: { node: Node; costs: InstanceSearchFieldsResponse }) {
+  const pruned = prune(node);
+  if (!pruned) return null;
+  const { parts } = queryCost(pruned, costs);
+  const own = parts.filter((p) => p.label !== "Base");
+  const cost = own.reduce((sum, p) => sum + p.cost, 0);
+  if (cost === 0) return null;
+  const c = complexity(cost, null);
+  const style = COMPLEXITY_STYLE[c.level];
+  return (
+    <HintTooltip delayDuration={150}>
+      <TooltipTrigger asChild>
+        <span
+          tabIndex={0}
+          className={cn("shrink-0 cursor-help rounded px-1.5 py-0.5 font-mono text-[10px] tabular-nums ring-1", style.pill, style.text)}
+          aria-label={`This block adds ${cost} to the search's cost`}
+        >
+          +{cost}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="left" sideOffset={6} className="w-60 p-3 text-left">
+        <p className="mb-1.5 font-semibold">
+          This block adds {cost} <span className={cn("font-normal", style.text)}>· {c.label}</span>
+        </p>
+        <ul className="space-y-0.5 text-xs">
+          {own.map((p) => (
+            <li key={p.label} className="flex justify-between gap-3 tabular-nums">
+              <span>
+                {p.label}
+                {p.count > 1 && <span className="text-muted-foreground"> ×{p.count}</span>}
+              </span>
+              <span>{p.cost}</span>
+            </li>
+          ))}
+        </ul>
+        {own.length > 1 && <p className="mt-2 text-[11px] text-muted-foreground">Includes everything inside this block.</p>}
+      </TooltipContent>
+    </HintTooltip>
   );
 }
 

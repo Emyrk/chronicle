@@ -952,5 +952,10 @@
   "max_nodes": 64,
   "max_depth": 8,
   "anonymous_max_predicates": 6,
-  "anonymous_max_limit": 25
+  "anonymous_max_limit": 25,
+  "cost_base": 1,
+  "cost_or": 2,
+  "cost_not": 1,
+  "cost_any": 4,
+  "cost_count": 10
 }

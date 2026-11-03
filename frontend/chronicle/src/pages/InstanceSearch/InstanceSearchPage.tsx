@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { Blocks, BookOpen, ChevronDown, ChevronRight, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
+import { Blocks, BookOpen, ChevronDown, ChevronUp, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
 import type { InstanceSearchCursor, InstanceSearchLimitResponse } from "@/api/typesGenerated";
 import { useRealms, useSupportedInstances } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,6 +15,8 @@ import { BlockEditor } from "./BlockEditor";
 import { ResultsTable } from "./ResultsTable";
 import { SearchSummary } from "./SearchSummary";
 import { CelCode } from "./CelCode";
+import { CostLine } from "./CostLine";
+import { queryCost } from "./searchCost";
 import { CodeEditor } from "./CodeEditor";
 import { CelParseError, parseCEL } from "./celParser";
 import { AdRailStack } from "@/components/Ads/AdRailStack";
@@ -245,6 +247,9 @@ export function InstanceSearchPage() {
     ? { limit: limit.data.limit, remaining: limit.data.remaining, resetSeconds: limit.data.reset_seconds }
     : searchBudget;
   const lastCost = lastPage?.cost ?? error?.cost ?? null;
+  // The cost the server will charge for the current draft, live as it's edited.
+  const liveCost = useMemo(() => (fields.data && !codeInvalid ? queryCost(draftTree, fields.data) : null), [fields.data, codeInvalid, draftTree]);
+  const tooComplex = liveCost != null && budget != null && liveCost.total > budget.limit;
   const rows = results.data?.pages.flatMap((p) => p.page.results) ?? [];
   // Ask before leaving while results are on screen: in-app links via the
   // shared click guard (BrowserRouter has no useBlocker), and reloads / tab
@@ -308,7 +313,7 @@ export function InstanceSearchPage() {
             </Link>
           </p>
         </div>
-        <BudgetLine budget={budget} lastCost={lastCost} />
+        <BudgetLine budget={budget} lastCost={lastCost} pending={collapsed ? null : (liveCost?.total ?? null)} />
       </div>
 
       {collapsed ? (
@@ -396,15 +401,26 @@ export function InstanceSearchPage() {
           {mode === "code" ? (
             <CodeEditor value={code} onChange={setCode} onSubmit={submit} parse={{ error: parsedCode.error }} disabled={!advancedUnlocked} />
           ) : (
-            <BlockEditor tree={blocks} onChange={setBlocks} ctx={{ fields: fields.data?.fields ?? [], zones, bosses: allBosses, realms: realmNames, disabled: !advancedUnlocked }} />
+            <BlockEditor tree={blocks} onChange={setBlocks} ctx={{ fields: fields.data?.fields ?? [], costs: fields.data, zones, bosses: allBosses, realms: realmNames, disabled: !advancedUnlocked }} />
           )}
         </div>
       )}
 
-      <div className="flex items-center gap-3 flex-wrap">
+      {/* Sticks to the bottom of the screen while a long search is being
+          edited, so Search and the cost stay in reach; it settles back into
+          place above the results. The query text opens inside it, above the
+          buttons, so it stays visible while pinned. */}
+      <div className="sticky bottom-2 z-20 -mx-2 overflow-hidden rounded-xl border border-sky-500/30 bg-zinc-950/95 shadow-[0_-12px_36px_rgba(0,0,0,0.6)] ring-1 ring-white/5 backdrop-blur">
+        <div className="h-0.5 bg-gradient-to-r from-sky-500/0 via-sky-400/70 to-sky-500/0" />
+        {showCel && mode !== "code" && (
+          <pre className="mx-3 mt-2.5 max-h-48 overflow-auto rounded-md border border-border/60 bg-zinc-900/70 p-3 text-2xs leading-relaxed whitespace-pre-wrap styled-scrollbar">
+            <CelCode code={formatCEL(draftTree)} />
+          </pre>
+        )}
+        <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
         <Button
           onClick={submit}
-          disabled={preview || anonBlocked || codeInvalid || results.isFetching}
+          disabled={preview || anonBlocked || codeInvalid || tooComplex || results.isFetching}
           title={preview ? "Honored supporters can run block and code searches" : undefined}
           className="gap-1.5"
         >
@@ -420,22 +436,23 @@ export function InstanceSearchPage() {
         {mode === "code" && !preview && (
           <Button variant="ghost" size="sm" onClick={() => { setCode(""); setExample(null); }}>Clear</Button>
         )}
+        {liveCost && (
+          <span className="ml-auto">
+            <CostLine cost={liveCost} budget={budget} refillPerMinute={limit.data?.refill_per_minute ?? null} />
+          </span>
+        )}
         {mode !== "code" && (
           <button type="button" onClick={() => setShowCel((v) => !v)} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
-            {showCel ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            {showCel ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
             Query text
           </button>
         )}
+        </div>
       </div>
       {anonBlocked && (
         <p className="text-xs text-amber-300/90">
           <Link to="/login" className="underline">Log in</Link> to search by bosses, parses, roster or capabilities.
         </p>
-      )}
-      {showCel && mode !== "code" && (
-        <pre className="text-2xs leading-relaxed bg-zinc-900/60 border border-border/60 rounded-md p-3 overflow-x-auto styled-scrollbar whitespace-pre-wrap">
-          <CelCode code={formatCEL(draftTree)} />
-        </pre>
       )}
       </>
       )}
@@ -524,17 +541,38 @@ function parseCode(code: string): { tree: Node | undefined; error: { message: st
   }
 }
 
-function BudgetLine({ budget, lastCost }: { budget: SearchBudget | null; lastCost: number | null }) {
+/**
+ * The caller's budget. While a search is being edited (pending), the part of
+ * the bar it would spend is highlighted and its cost shown, amber when it's
+ * more than what's left and red when it's more than the whole budget.
+ */
+function BudgetLine({ budget, lastCost, pending }: { budget: SearchBudget | null; lastCost: number | null; pending: number | null }) {
   if (!budget) return null;
-  const pct = budget.limit > 0 ? Math.max(0, Math.min(1, budget.remaining / budget.limit)) : 0;
+  const frac = (n: number) => (budget.limit > 0 ? Math.max(0, Math.min(1, n / budget.limit)) : 0);
+  const left = frac(budget.remaining);
+  const spend = pending != null ? Math.min(left, frac(pending)) : 0;
+  const tooComplex = pending != null && pending > budget.limit;
+  const short = !tooComplex && pending != null && pending > budget.remaining;
   return (
     <div className="flex items-center gap-2 text-2xs text-muted-foreground" title="Searches spend from a budget that refills over time. Complex searches cost more.">
       <span>Search budget</span>
-      <div className="h-1.5 w-24 rounded-full bg-zinc-800 overflow-hidden">
-        <div className={cn("h-full rounded-full", pct > 0.25 ? "bg-primary/70" : "bg-amber-500/80")} style={{ width: `${pct * 100}%` }} />
+      <div className="relative h-1.5 w-32 rounded-full bg-zinc-800 overflow-hidden">
+        <div className={cn("absolute inset-y-0 left-0 rounded-full", left > 0.25 ? "bg-primary/70" : "bg-amber-500/80")} style={{ width: `${left * 100}%` }} />
+        {spend > 0 && (
+          <div
+            className={cn("absolute inset-y-0 rounded-r-full", tooComplex ? "bg-red-400" : short ? "bg-amber-300" : "bg-sky-200")}
+            style={{ left: `${(left - spend) * 100}%`, width: `${spend * 100}%` }}
+          />
+        )}
       </div>
       <span className="tabular-nums">{Math.floor(budget.remaining)}/{budget.limit}</span>
-      {lastCost != null && <span className="tabular-nums">· last search cost {lastCost}</span>}
+      {pending != null ? (
+        <span className={cn("tabular-nums font-medium", tooComplex ? "text-red-300" : short ? "text-amber-200" : "text-foreground/80")}>
+          · this search costs {pending}
+        </span>
+      ) : (
+        lastCost != null && <span className="tabular-nums">· last search cost {lastCost}</span>
+      )}
     </div>
   );
 }
