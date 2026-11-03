@@ -24,14 +24,14 @@ type Story = StoryObj<typeof meta>;
 /** The complete editorial explainer, beginning with an established elite player. */
 export const FieldGuide: Story = {};
 
-/** A perfect parse with one kill: Mastery remains 100, while Ranked Mastery is visibly capped near 65. */
+/** A perfect parse with one kill: Mastery remains 100, while Ranked Mastery is visibly capped at 50. */
 export const OneKillCannotMaster: Story = {
   args: { initialPlayerId: "rave" },
   play: async ({ canvas }) => {
     expect(canvas.getByRole("button", { name: "Show Rave's Mastery story" })).toHaveAttribute("aria-pressed", "true");
     expect(canvas.getAllByText("The perfect flash").length).toBeGreaterThan(0);
     expect(canvas.getAllByText("100.0").length).toBeGreaterThan(0);
-    expect(canvas.getAllByText("65.0").length).toBeGreaterThan(0);
+    expect(canvas.getAllByText("50.0").length).toBeGreaterThan(0);
     expect(canvas.getAllByText("1.0", { exact: true }).length).toBeGreaterThan(0);
   },
 };
@@ -46,7 +46,7 @@ export const MoltenCoreWorkshop: Story = {
     const kills = canvas.getByRole("slider", { name: "Kills calculator input" });
     await fireEvent.change(kills, { target: { value: "1" } });
     expect(kills).toHaveValue("1");
-    expect(canvas.getAllByText("65.0").length).toBeGreaterThan(0);
+    expect(canvas.getAllByText("50.0").length).toBeGreaterThan(0);
   },
 };
 

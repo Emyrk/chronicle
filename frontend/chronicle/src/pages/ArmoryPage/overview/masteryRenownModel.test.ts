@@ -8,12 +8,12 @@ describe("Mastery", () => {
 
     expect(result.estimate).toBe(100);
     expect(result.confidence).toBeCloseTo(0.2212, 4);
-    expect(result.rankedCeiling).toBe(65);
-    expect(result.rankedMastery).toBe(65);
+    expect(result.rankedCeiling).toBe(50);
+    expect(result.rankedMastery).toBe(50);
   });
 
   it("ends the provisional ranking discount at five kills per boss", () => {
-    [55, 65, 73.75, 82.5, 91.25, 100, 100].forEach((ceiling, index) => {
+    [50, 50, 62.5, 75, 87.5, 100, 100].forEach((ceiling, index) => {
       expect(masteryCeiling([0, 1, 2, 3, 4, 5, 20][index])).toBeCloseTo(ceiling, 5);
     });
     const fiveKills = calculateMastery({ peak: 90, form: 80, floor: 70, kills: 5 });
@@ -25,7 +25,7 @@ describe("Mastery", () => {
     const volatile = calculateMastery({ peak: 99.1, form: 45.1, floor: 28.5, kills: 6.8 });
     const proven = calculateMastery({ peak: 99.1, form: 94, floor: 86, kills: 6.8 });
 
-    expect(volatile.estimate).toBeLessThan(60);
+    expect(volatile.estimate).toBeLessThan(65);
     expect(proven.rankedMastery).toBeGreaterThan(volatile.rankedMastery + 30);
   });
 
@@ -49,7 +49,7 @@ describe("Mastery", () => {
     expect(result.form).toBe(0);
     expect(result.floor).toBe(80);
     expect(result.confidence).toBe(0);
-    expect(result.rankedMastery).toBeCloseTo(8.8, 5);
+    expect(result.rankedMastery).toBeCloseTo(6, 5);
   });
 
   it("never decreases confidence as kills accumulate", () => {

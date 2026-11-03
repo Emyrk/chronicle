@@ -199,9 +199,9 @@ function PlayerCaseStudy({
                 <Sparkles className="size-5 text-amber-300" />
               </div>
               <div className="space-y-5">
-                <MetricBar label="Peak" value={mastery.peak} weight="30%" description="Best locked parse" />
-                <MetricBar label="Form" value={mastery.form} weight="50%" description="Typical recent performance" />
-                <MetricBar label="Floor" value={mastery.floor} weight="20%" description="Reliable lower quartile" />
+                <MetricBar label="Best parse" value={mastery.peak} weight="35%" description="Highest locked parse" />
+                <MetricBar label="Form" value={mastery.form} weight="50%" description="Typical performance" />
+                <MetricBar label="Floor" value={mastery.floor} weight="15%" description="Reliable lower quartile" />
               </div>
               <div className="mt-7 flex items-center justify-between border-t border-dashed border-white/10 pt-5">
                 <span className="text-sm text-zinc-400">Mastery estimate</span>
@@ -241,7 +241,7 @@ function PlayerCaseStudy({
                 <Stat label="Ranked Mastery" value={mastery.rankedMastery.toFixed(1)} accent />
               </div>
               <p className="mt-5 text-sm leading-6 text-zinc-400">
-                Mastery reports what the parses suggest. In this candidate, Ranked Mastery gets full weight at five kills per boss; Confidence remains a separate description of the evidence.
+                Mastery reports what the parses suggest. Under the current policy, Ranked Mastery gets full weight at five kills per boss; Confidence remains a separate description of the evidence.
               </p>
             </div>
           </div>
@@ -349,7 +349,7 @@ function EncounterProof({ player, encounter }: { player: MasteryPlayer; encounte
         <Swords className="size-5 text-zinc-500" />
       </div>
       <div className="mt-6 grid grid-cols-3 gap-2 text-center">
-        <MiniStat label="Peak" value={encounter.peak} />
+        <MiniStat label="Best parse" value={encounter.peak} />
         <MiniStat label="Form" value={encounter.form} />
         <MiniStat label="Floor" value={encounter.floor} />
       </div>
@@ -443,7 +443,7 @@ function MasteryLab({
           </div>
 
           <div className="mt-8 space-y-7">
-            <MasterySlider label="Peak" description="Best locked parse" value={inputs.peak} onChange={(value) => setInput("peak", value)} />
+            <MasterySlider label="Best parse" description="Highest locked parse" value={inputs.peak} onChange={(value) => setInput("peak", value)} />
             <MasterySlider label="Form" description="Typical performance" value={inputs.form} onChange={(value) => setInput("form", value)} />
             <MasterySlider label="Floor" description="Lower-quartile reliability" value={inputs.floor} onChange={(value) => setInput("floor", value)} />
             <MasterySlider label="Kills" description="Eligible kills per boss (five removes the ranking discount)" value={inputs.kills} max={20} step={1} onChange={(value) => setInput("kills", value)} />
@@ -466,13 +466,13 @@ function MasteryLab({
           </div>
 
           <div className="mt-7 rounded-2xl border border-white/8 bg-black/20 p-5">
-            <div className="text-[10px] tracking-[.18em] text-zinc-600 uppercase">Live equation · illustrative five-kill rule</div>
+            <div className="text-[10px] tracking-[.18em] text-zinc-600 uppercase">Live equation · current five-kill rule</div>
             <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2 font-mono text-sm text-zinc-400">
-              <FormulaToken value={inputs.peak * 0.3} label="30% Peak" />
+              <FormulaToken value={inputs.peak * 0.35} label="35% best parse" />
               <span>+</span>
               <FormulaToken value={inputs.form * 0.5} label="50% Form" />
               <span>+</span>
-              <FormulaToken value={inputs.floor * 0.2} label="20% Floor" />
+              <FormulaToken value={inputs.floor * 0.15} label="15% Floor" />
               <span>=</span>
               <strong className="text-zinc-100">{result.estimate.toFixed(1)} Mastery</strong>
             </div>
@@ -586,7 +586,7 @@ function ConfidenceStory() {
           <Eyebrow>The sellable promise</Eyebrow>
           <h2 className="font-wow text-3xl leading-tight sm:text-4xl">One brilliant kill opens the door. Repetition raises the roof.</h2>
           <p className="mt-5 font-serif text-lg leading-8 text-zinc-400">
-            A perfect locked parse remains visible forever, and its Mastery estimate can still be 100. This candidate gives full ranking weight after five eligible kills per boss.
+            A perfect eligible locked parse can still produce a 100 Mastery estimate. The current policy gives full ranking weight after five eligible kills per boss.
           </p>
           <div className="mt-7 rounded-2xl border border-amber-200/10 bg-amber-200/[.035] p-5 text-sm leading-6 text-zinc-300">
             <strong className="text-amber-200">The visual rule:</strong> never hide the estimate. Show Mastery, Confidence, and Ranked Mastery together so the discount is explainable.
