@@ -40,17 +40,17 @@ func hubLandingStatisticsParams(cohort chroniclesdk.RankingsInstanceSummary, rea
 }
 
 type hubSummaryInput struct {
-	instance, featured, difficulty, metric, class, spec, subSpec string
-	size                                                         int16
-	exact                                                        bool
-	realmIDs                                                     []uuid.UUID
+	instance, featured, difficulty, metric, class, spec, subSpec, tab string
+	size                                                              int16
+	exact                                                             bool
+	realmIDs                                                          []uuid.UUID
 }
 
 func parseHubSummaryInput(r *http.Request) (hubSummaryInput, error) {
 	q := r.URL.Query()
 	for key, values := range q {
 		switch key {
-		case "instance_name", "encounter_name", "difficulty_name", "max_players", "performance_metric", "class", "spec", "sub_spec", "realm_ids":
+		case "instance_name", "encounter_name", "difficulty_name", "max_players", "performance_metric", "class", "spec", "sub_spec", "realm_ids", "tab":
 		default:
 			return hubSummaryInput{}, errors.New("unknown parameter: " + key)
 		}
@@ -58,9 +58,20 @@ func parseHubSummaryInput(r *http.Request) (hubSummaryInput, error) {
 			return hubSummaryInput{}, errors.New(key + " must appear once")
 		}
 	}
-	in := hubSummaryInput{instance: q.Get("instance_name"), featured: q.Get("encounter_name"), difficulty: q.Get("difficulty_name"), metric: q.Get("performance_metric"), class: q.Get("class"), spec: q.Get("spec"), subSpec: q.Get("sub_spec")}
+	in := hubSummaryInput{instance: q.Get("instance_name"), featured: q.Get("encounter_name"), difficulty: q.Get("difficulty_name"), metric: q.Get("performance_metric"), class: q.Get("class"), spec: q.Get("spec"), subSpec: q.Get("sub_spec"), tab: q.Get("tab")}
 	if in.instance == "" && (q.Has("encounter_name") || q.Has("difficulty_name") || q.Has("max_players") || q.Has("class") || q.Has("spec") || q.Has("sub_spec") || q.Has("performance_metric")) {
 		return in, errors.New("instance_name is required for selected overview filters")
+	}
+	if in.tab == "" {
+		in.tab = "overview"
+	}
+	switch in.tab {
+	case "overview", "ratings", "performances", "speedruns", "statistics", "parsing", "rulesets":
+	default:
+		return in, errors.New("invalid tab")
+	}
+	if in.instance != "" && q.Has("tab") {
+		return in, errors.New("tab is only supported for the all-instances landing")
 	}
 	if q.Has("difficulty_name") != q.Has("max_players") {
 		return in, errors.New("difficulty_name and max_players must be supplied together")
@@ -160,10 +171,9 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.instance == "" {
-		// Ratings and speedruns use bounded bulk queries. V1 performance and
-		// statistics queries below run once per published cohort (at most 64
-		// each); this trades database work for one cacheable HTTP response.
-		// Instance top_players is aggregate DPS, not this performance board.
+		// Return only the board needed for this tab. All-realm performance
+		// leaders are already maintained in the instance summary; a filtered
+		// realm or the statistics tab uses the corresponding v1 query.
 		byCohort := make(map[hubLandingCohort]int, len(out.Instances))
 		for _, summary := range out.Instances {
 			key := hubLandingCohort{summary.InstanceName, summary.DifficultyName, summary.MaxPlayers}
@@ -180,7 +190,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 			httpapi.InternalServerError(w, genErr)
 			return
 		}
-		if genErr == nil && generation != uuid.Nil {
+		if (in.tab == "overview" || in.tab == "ratings") && genErr == nil && generation != uuid.Nil {
 			rows, e := s.store.HubLandingRatingRows(ctx, database.HubLandingRatingRowsParams{TenantID: tenant, GenerationID: generation, RealmIds: in.realmIDs})
 			if e != nil {
 				httpapi.InternalServerError(w, e)
@@ -218,54 +228,73 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		runs, e := s.store.HubLandingSpeedruns(ctx, database.HubLandingSpeedrunsParams{TenantID: tenant, RealmIds: in.realmIDs})
-		if e != nil {
-			httpapi.InternalServerError(w, e)
-			return
-		}
-		for _, v := range runs {
-			index, found := byCohort[hubLandingCohort{v.InstanceName, v.DifficultyName, v.MaxPlayers}]
-			if !found {
-				continue
-			}
-			preview := &out.LandingPreviews[index]
-			entry := chroniclesdk.SpeedrunLeaderboardEntry{
-				InstanceID: v.InstanceID, Slug: v.HashedSlug.String, DifficultyName: v.DifficultyName,
-				DurationMs: v.DurationMs, GuildID: v.GuildID.UUID, GuildName: v.GuildName,
-				RealmName: v.RealmName, StartTime: v.StartTime.Time, CompletionTime: v.CompletionTime.Time,
-				PlayerCount: v.PlayerCount, GuildLogoURL: v.GuildLogoUrl,
-				ParserVersion: v.ParserVersion, AddonVersion: v.AddonVersion,
-			}
-			if v.DuplicateGroupID.Valid {
-				entry.DuplicateGroupID = &v.DuplicateGroupID.UUID
-			}
-			preview.Speedruns = append(preview.Speedruns, entry)
-		}
-		for i, cohort := range out.Instances {
-			// These are the existing v1 complete-run DPS boards. Reusing them
-			// preserves duplicate handling, tenant RLS and spec aggregation.
-			performances, e := s.store.RankingsLeaderboardNoJIT(ctx, hubLandingPerformanceParams(cohort, realmNames))
+		if in.tab == "overview" || in.tab == "speedruns" {
+			runs, e := s.store.HubLandingSpeedruns(ctx, database.HubLandingSpeedrunsParams{TenantID: tenant, RealmIds: in.realmIDs})
 			if e != nil {
 				httpapi.InternalServerError(w, e)
 				return
 			}
-			for _, v := range performances {
-				entry := chroniclesdk.RankingsEntry{
-					InstanceName: v.InstanceName, EncounterName: v.EncounterName, PlayerGUID: v.PlayerGuid,
-					PlayerName: v.PlayerName, PlayerClass: normalizeClassName(v.PlayerClass), PlayerSpec: v.PlayerSpec,
-					PlayerRole: v.PlayerRole, PlayerLevel: v.PlayerLevel, DifficultyName: v.DifficultyName,
-					MaxPlayers: v.MaxPlayers, RealmID: v.RealmID, RealmName: v.RealmName,
-					GuildName: v.GuildName, GuildID: v.GuildID, DamageDone: v.DamageDone,
-					HealingDone: v.HealingDone, AbsorbedDone: v.AbsorbedDone, DurationSecs: v.DurationSecs,
-					DPS: v.Dps, HPS: v.Hps, LogHashedSlug: v.LogHashedSlug, KilledAt: v.KilledAt.Time,
+			for _, v := range runs {
+				index, found := byCohort[hubLandingCohort{v.InstanceName, v.DifficultyName, v.MaxPlayers}]
+				if !found {
+					continue
 				}
-				if v.PlayerSubSpec != "" {
-					entry.SubSpec = &v.PlayerSubSpec
+				preview := &out.LandingPreviews[index]
+				entry := chroniclesdk.SpeedrunLeaderboardEntry{
+					InstanceID: v.InstanceID, Slug: v.HashedSlug.String, DifficultyName: v.DifficultyName,
+					DurationMs: v.DurationMs, GuildID: v.GuildID.UUID, GuildName: v.GuildName,
+					RealmName: v.RealmName, StartTime: v.StartTime.Time, CompletionTime: v.CompletionTime.Time,
+					PlayerCount: v.PlayerCount, GuildLogoURL: v.GuildLogoUrl,
+					ParserVersion: v.ParserVersion, AddonVersion: v.AddonVersion,
 				}
-				if v.TalentLayout != "" {
-					entry.TalentLayout = &v.TalentLayout
+				if v.DuplicateGroupID.Valid {
+					entry.DuplicateGroupID = &v.DuplicateGroupID.UUID
 				}
-				out.LandingPreviews[i].Performances = append(out.LandingPreviews[i].Performances, entry)
+				preview.Speedruns = append(preview.Speedruns, entry)
+			}
+		}
+		statisticsShown := map[string]bool{}
+		for i, cohort := range out.Instances {
+			if in.tab == "overview" || in.tab == "performances" {
+				// The maintained instance summary already stores the top three
+				// complete-run DPS players. Only a realm-filtered board needs the
+				// v1 query to find its own top three rather than filter global top three.
+				if len(in.realmIDs) == 0 {
+					for _, player := range cohort.TopPlayers {
+						out.LandingPreviews[i].Performances = append(out.LandingPreviews[i].Performances, chroniclesdk.RankingsEntry{
+							InstanceName: cohort.InstanceName, PlayerGUID: player.PlayerGUID,
+							PlayerName: player.PlayerName, PlayerClass: player.PlayerClass,
+							RealmName: player.RealmName, DPS: player.DPS,
+						})
+					}
+				} else {
+					performances, e := s.store.RankingsLeaderboardNoJIT(ctx, hubLandingPerformanceParams(cohort, realmNames))
+					if e != nil {
+						httpapi.InternalServerError(w, e)
+						return
+					}
+					for _, v := range performances {
+						entry := chroniclesdk.RankingsEntry{
+							InstanceName: v.InstanceName, EncounterName: v.EncounterName, PlayerGUID: v.PlayerGuid,
+							PlayerName: v.PlayerName, PlayerClass: normalizeClassName(v.PlayerClass), PlayerSpec: v.PlayerSpec,
+							PlayerRole: v.PlayerRole, PlayerLevel: v.PlayerLevel, DifficultyName: v.DifficultyName,
+							MaxPlayers: v.MaxPlayers, RealmID: v.RealmID, RealmName: v.RealmName,
+							GuildName: v.GuildName, GuildID: v.GuildID, DamageDone: v.DamageDone,
+							HealingDone: v.HealingDone, AbsorbedDone: v.AbsorbedDone, DurationSecs: v.DurationSecs,
+							DPS: v.Dps, HPS: v.Hps, LogHashedSlug: v.LogHashedSlug, KilledAt: v.KilledAt.Time,
+						}
+						if v.PlayerSubSpec != "" {
+							entry.SubSpec = &v.PlayerSubSpec
+						}
+						if v.TalentLayout != "" {
+							entry.TalentLayout = &v.TalentLayout
+						}
+						out.LandingPreviews[i].Performances = append(out.LandingPreviews[i].Performances, entry)
+					}
+				}
+			}
+			if in.tab != "statistics" || statisticsShown[cohort.InstanceName] {
+				continue
 			}
 			stats, e := s.store.RankingsBoxPlotStatsNoJIT(ctx, hubLandingStatisticsParams(cohort, realmNames))
 			if e != nil {
@@ -282,6 +311,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 					MedianDPS: v.MedianDps, Q3DPS: v.Q3Dps, MaxDPS: v.MaxDps, Count: v.Count,
 				})
 			}
+			statisticsShown[cohort.InstanceName] = len(out.LandingPreviews[i].Statistics) > 0
 		}
 		httpapi.Write(ctx, w, http.StatusOK, out)
 		return

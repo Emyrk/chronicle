@@ -29,7 +29,7 @@ export function LeaderboardsLiveHub() {
   const parsedSize = requestedSize === null ? NaN : Number(requestedSize)
   const requestedCohort = params.has("difficulty") && Number.isInteger(parsedSize) && parsedSize >= 0 && parsedSize <= 32767
     ? { difficulty: params.get("difficulty")!, maxPlayers: parsedSize } : undefined
-  const summary = useHubSummary({ instanceName: instance ?? undefined, realmIDs, performance: "dps",
+  const summary = useHubSummary({ instanceName: instance ?? undefined, tab: instance ? undefined : tab, realmIDs, performance: "dps",
     cohort: requestedCohort, encounterName: encounter ?? undefined })
   const available = summary.data?.realms ?? []
   const activeRealm = realmIDs.length === 1 ? available.find((row) => row.id === realmIDs[0]) : undefined

@@ -8,6 +8,11 @@ describe("CDN-keyed hub summary", () => {
       .toBe("/api/v1/rankings/ratings/hub-summary?realm_ids=a%2Cb")
   })
 
+  it("fetches only the active landing tab's board", () => {
+    expect(hubSummaryURL({ performance: "dps", tab: "overview" })).toBe("/api/v1/rankings/ratings/hub-summary")
+    expect(hubSummaryURL({ performance: "dps", tab: "statistics" })).toBe("/api/v1/rankings/ratings/hub-summary?tab=statistics")
+  })
+
   it("preserves exact Turtle cohort zero and canonical realm order", () => {
     const url = hubSummaryURL({ instanceName: "Molten Core", encounterName: "Ragnaros",
       performance: "hps", cohort: { difficulty: "", maxPlayers: 0 }, realmIDs: ["b", "a", "a"] })

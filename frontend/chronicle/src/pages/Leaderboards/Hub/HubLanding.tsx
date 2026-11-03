@@ -261,8 +261,8 @@ function LiveCardBody({ tab, preview }: { tab: HubTab; preview?: HubLandingPrevi
   } else if (tab === "speedruns") {
     rows = <>{[0, 1, 2].map(speedLine)}{!preview?.speedruns.length && <UnavailableHighlight label="No qualifying full clears" />}</>
   } else if (tab === "performances") {
-    rows = preview?.performances.length ? preview.performances.map((entry) =>
-      <Line key={`${entry.realm_id}-${entry.player_guid}`} value={`${Math.round(entry.dps).toLocaleString()} dps`} title="Best performance">
+    rows = preview?.performances.length ? preview.performances.map((entry, index) =>
+      <Line key={`${entry.realm_id}-${entry.player_guid || index}`} value={`${Math.round(entry.dps).toLocaleString()} dps`} title="Best performance">
         <LivePlayer entry={entry} />
       </Line>) : <UnavailableHighlight label="No recorded performances" />
   } else if (tab === "statistics") {

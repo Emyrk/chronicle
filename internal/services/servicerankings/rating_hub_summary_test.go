@@ -19,6 +19,9 @@ func TestParseHubSummaryInput(t *testing.T) {
 		realms       int
 	}{
 		{"landing", "", true, false, 0, 0},
+		{"statistics landing", "tab=statistics", true, false, 0, 0},
+		{"invalid tab", "tab=other", false, false, 0, 0},
+		{"tab on selected instance", "instance_name=Molten+Core&tab=statistics", false, false, 0, 0},
 		{"turtle empty difficulty size zero", "instance_name=Molten+Core&difficulty_name=&max_players=0", true, true, 0, 0},
 		{"selected boss and realms", "instance_name=Molten+Core&encounter_name=Ragnaros&difficulty_name=Heroic&max_players=40&realm_ids=" + realm.String() + "," + realm.String(), true, true, 40, 1},
 		{"unpaired difficulty", "instance_name=Molten+Core&difficulty_name=", false, false, 0, 0},

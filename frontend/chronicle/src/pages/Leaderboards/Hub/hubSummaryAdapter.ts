@@ -6,6 +6,7 @@ export type { HubSummary, HubPlayerRatingEntry, HubGuildRatingEntry }
 
 export type HubSummaryRequest = {
   instanceName?: string
+  tab?: "overview" | "ratings" | "performances" | "speedruns" | "statistics" | "parsing" | "rulesets"
   encounterName?: string
   cohort?: LiveRatingCohort
   performance: "dps" | "hps"
@@ -16,9 +17,10 @@ export type HubSummaryRequest = {
 }
 
 /** Canonical URL is the CDN cache key; no per-user parameters or cursor. */
-export function hubSummaryURL({ instanceName, encounterName, cohort, performance, cls, spec, subSpec, realmIDs }: HubSummaryRequest) {
+export function hubSummaryURL({ instanceName, tab, encounterName, cohort, performance, cls, spec, subSpec, realmIDs }: HubSummaryRequest) {
   const query = new URLSearchParams()
   if (instanceName) query.set("instance_name", instanceName)
+  if (!instanceName && tab && tab !== "overview") query.set("tab", tab)
   if (instanceName && cohort) {
     query.set("difficulty_name", cohort.difficulty)
     query.set("max_players", String(cohort.maxPlayers))
