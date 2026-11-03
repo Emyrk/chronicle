@@ -134,6 +134,9 @@ type sqlcQuerier interface {
 	DeleteGuildPagePanelsByTab(ctx context.Context, tabID uuid.UUID) error
 	DeleteGuildPageTab(ctx context.Context, id uuid.UUID) error
 	DeleteGuildPageTabsByPage(ctx context.Context, pageID uuid.UUID) error
+	// Removes buckets untouched since the cutoff. Callers pick a cutoff longer
+	// than any bucket takes to refill, so deleting a bucket never changes a limit.
+	DeleteIdleRateLimitBuckets(ctx context.Context, idleBefore pgtype.Timestamptz) (int64, error)
 	DeleteInferenceConnectionByOwner(ctx context.Context, arg DeleteInferenceConnectionByOwnerParams) error
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
@@ -1049,6 +1052,12 @@ type sqlcQuerier interface {
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
 	StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error
+	// Atomically refills a leaky bucket by the time since its last update
+	// (capped at burst) and takes cost tokens if enough are available. A new
+	// bucket starts full. A refused take still stores the refilled level, so
+	// tokens never go negative. The row lock taken by the upsert serializes
+	// concurrent takes on the same key.
+	TakeRateLimitTokens(ctx context.Context, arg TakeRateLimitTokensParams) (TakeRateLimitTokensRow, error)
 	TelemetryGetActiveFileBytes(ctx context.Context) (int64, error)
 	TelemetryGetDeletedFileBytes(ctx context.Context) (int64, error)
 	TelemetryGetLogCountByZone(ctx context.Context) ([]TelemetryGetLogCountByZoneRow, error)
