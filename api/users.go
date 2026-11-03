@@ -13,7 +13,6 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/billing"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func highestSupporterTier(exalted, revered, honored bool) string {
@@ -202,24 +201,6 @@ func (a *API) UpdateMyPreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.RawLogRetentionHours != nil {
-		val := *req.RawLogRetentionHours
-		var retentionHours pgtype.Int4
-		if val > 0 {
-			retentionHours = pgtype.Int4{Int32: val, Valid: true}
-		}
-		// val == 0 means "keep forever" → NULL in DB (retentionHours.Valid stays false)
-
-		_, err := a.Opts.Zed.UpdateUserRawLogRetentionHours(ctx, database.UpdateUserRawLogRetentionHoursParams{
-			ID:                   state.Claims.Subject,
-			RawLogRetentionHours: retentionHours,
-		})
-		if err != nil {
-			httpapi.InternalServerError(w, err)
-			return
-		}
-	}
-
 	if req.CharacterCosmetics != nil {
 		_, err := a.Opts.Zed.UpdateUserCharacterCosmeticsDisplayMode(ctx, database.UpdateUserCharacterCosmeticsDisplayModeParams{
 			ID:                 state.Claims.Subject,
@@ -243,14 +224,9 @@ func (a *API) UpdateMyPreferences(w http.ResponseWriter, r *http.Request) {
 
 // userPreferences converts a database user to SDK preferences.
 func userPreferences(user database.ChronicleUser) chroniclesdk.Preferences {
-	prefs := chroniclesdk.Preferences{
+	return chroniclesdk.Preferences{
 		// Should allow people to disable hints if they want, but for now we'll just enable them by default
 		HelpfulHints:       true,
 		CharacterCosmetics: chroniclesdk.CharacterCosmeticsDisplayMode(user.CharacterCosmetics),
 	}
-	if user.RawLogRetentionHours.Valid {
-		v := user.RawLogRetentionHours.Int32
-		prefs.RawLogRetentionHours = &v
-	}
-	return prefs
 }

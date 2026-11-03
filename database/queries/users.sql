@@ -133,12 +133,6 @@ WHERE
 -- name: GetUserByEmail :one
 SELECT * FROM users WHERE LOWER(email) = LOWER(@email);
 
--- name: UpdateUserRawLogRetentionHours :one
-UPDATE users
-SET raw_log_retention_hours = @raw_log_retention_hours
-WHERE id = @id
-RETURNING *;
-
 -- name: UpdateUserCharacterCosmeticsDisplayMode :one
 UPDATE users
 SET character_cosmetics = @character_cosmetics

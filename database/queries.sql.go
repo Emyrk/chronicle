@@ -6233,41 +6233,6 @@ func (q *sqlQuerier) DeleteWoWLogGroupFiles(ctx context.Context, arg DeleteWoWLo
 	return items, nil
 }
 
-const getExpiredRawLogGroups = `-- name: GetExpiredRawLogGroups :many
-SELECT DISTINCT
-  wlg.id AS log_group_id
-FROM wow_log_groups wlg
-JOIN log_file lf ON lf.wow_log_id = wlg.id
-JOIN users u ON u.id = lf.owner
-WHERE
-  u.raw_log_retention_hours IS NOT NULL
-  AND lf.storage_deleted_at IS NULL
-  AND lf.created_at < NOW() - make_interval(hours => u.raw_log_retention_hours)
-LIMIT $1
-`
-
-// Returns log groups whose raw files are past their owner's retention window.
-// Only considers users who have set a retention policy (non-NULL).
-func (q *sqlQuerier) GetExpiredRawLogGroups(ctx context.Context, limit int32) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, getExpiredRawLogGroups, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var log_group_id uuid.UUID
-		if err := rows.Scan(&log_group_id); err != nil {
-			return nil, err
-		}
-		items = append(items, log_group_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getFileByHash = `-- name: GetFileByHash :one
 SELECT id, owner, wow_log_id, hash, size_bytes, mime_type, created_at, updated_at, storage_deleted_at, compressed_size_bytes, content_encoding FROM log_file WHERE hash = $1
 `
@@ -14496,6 +14461,19 @@ func (q *sqlQuerier) DeleteLogInstanceByIDAndGroup(ctx context.Context, arg Dele
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const deleteLogInstancesByIDs = `-- name: DeleteLogInstancesByIDs :execrows
+DELETE FROM log_instances
+WHERE id = ANY($1::uuid[])
+`
+
+func (q *sqlQuerier) DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteLogInstancesByIDs, ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const encountersByInstanceID = `-- name: EncountersByInstanceID :many
@@ -29854,477 +29832,6 @@ func (q *sqlQuerier) ResyncCandidateLogGroups(ctx context.Context) ([]ResyncCand
 	return items, nil
 }
 
-const deleteLogInstancesByIDs = `-- name: DeleteLogInstancesByIDs :execrows
-DELETE FROM log_instances
-WHERE id = ANY($1::uuid[])
-`
-
-func (q *sqlQuerier) DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteLogInstancesByIDs, ids)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteRetentionPolicy = `-- name: DeleteRetentionPolicy :exec
-DELETE FROM retention_policies
-WHERE id = $1
-`
-
-func (q *sqlQuerier) DeleteRetentionPolicy(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteRetentionPolicy, id)
-	return err
-}
-
-const deleteRetentionRule = `-- name: DeleteRetentionRule :exec
-DELETE FROM retention_rules
-WHERE id = $1
-`
-
-func (q *sqlQuerier) DeleteRetentionRule(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteRetentionRule, id)
-	return err
-}
-
-const getInstancesForRetentionCheck = `-- name: GetInstancesForRetentionCheck :many
-SELECT
-  li.id,
-  li.name AS instance_name,
-  li.end_time,
-  li.log_group_id,
-  gsr.guild_rank
-FROM log_instances li
-LEFT JOIN guild_speedrun_ranks gsr ON gsr.instance_id = li.id
-WHERE li.realm_id = $1
-  AND li.end_time IS NOT NULL
-`
-
-type GetInstancesForRetentionCheckRow struct {
-	ID           uuid.UUID          `db:"id" json:"id"`
-	InstanceName string             `db:"instance_name" json:"instance_name"`
-	EndTime      pgtype.Timestamptz `db:"end_time" json:"end_time"`
-	LogGroupID   uuid.UUID          `db:"log_group_id" json:"log_group_id"`
-	GuildRank    pgtype.Int8        `db:"guild_rank" json:"guild_rank"`
-}
-
-// Fetches all log instances for a given realm with pre-joined speedrun rank data.
-// Used by the preview endpoint (admin-only, synchronous).
-func (q *sqlQuerier) GetInstancesForRetentionCheck(ctx context.Context, realmID uuid.UUID) ([]GetInstancesForRetentionCheckRow, error) {
-	rows, err := q.db.Query(ctx, getInstancesForRetentionCheck, realmID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetInstancesForRetentionCheckRow
-	for rows.Next() {
-		var i GetInstancesForRetentionCheckRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.InstanceName,
-			&i.EndTime,
-			&i.LogGroupID,
-			&i.GuildRank,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getInstancesForRetentionCheckPaged = `-- name: GetInstancesForRetentionCheckPaged :many
-SELECT
-  li.id,
-  li.name AS instance_name,
-  li.end_time,
-  li.log_group_id,
-  gsr.guild_rank
-FROM log_instances li
-LEFT JOIN guild_speedrun_ranks gsr ON gsr.instance_id = li.id
-WHERE li.realm_id = $1
-  AND li.end_time IS NOT NULL
-  AND (li.end_time > $2 OR (li.end_time = $2 AND li.id > $3::uuid))
-ORDER BY li.end_time ASC, li.id ASC
-LIMIT $4
-`
-
-type GetInstancesForRetentionCheckPagedParams struct {
-	RealmID    uuid.UUID          `db:"realm_id" json:"realm_id"`
-	CursorTime pgtype.Timestamptz `db:"cursor_time" json:"cursor_time"`
-	CursorID   uuid.UUID          `db:"cursor_id" json:"cursor_id"`
-	PageSize   int32              `db:"page_size" json:"page_size"`
-}
-
-type GetInstancesForRetentionCheckPagedRow struct {
-	ID           uuid.UUID          `db:"id" json:"id"`
-	InstanceName string             `db:"instance_name" json:"instance_name"`
-	EndTime      pgtype.Timestamptz `db:"end_time" json:"end_time"`
-	LogGroupID   uuid.UUID          `db:"log_group_id" json:"log_group_id"`
-	GuildRank    pgtype.Int8        `db:"guild_rank" json:"guild_rank"`
-}
-
-// Fetches a page of log instances for cursor-based retention processing.
-// Ordered by end_time ASC so older logs are processed first.
-func (q *sqlQuerier) GetInstancesForRetentionCheckPaged(ctx context.Context, arg GetInstancesForRetentionCheckPagedParams) ([]GetInstancesForRetentionCheckPagedRow, error) {
-	rows, err := q.db.Query(ctx, getInstancesForRetentionCheckPaged,
-		arg.RealmID,
-		arg.CursorTime,
-		arg.CursorID,
-		arg.PageSize,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetInstancesForRetentionCheckPagedRow
-	for rows.Next() {
-		var i GetInstancesForRetentionCheckPagedRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.InstanceName,
-			&i.EndTime,
-			&i.LogGroupID,
-			&i.GuildRank,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getRealmsWithRetentionPolicies = `-- name: GetRealmsWithRetentionPolicies :many
-SELECT DISTINCT wsr.id AS realm_id
-FROM wow_server_realms wsr
-WHERE EXISTS (
-  SELECT 1 FROM retention_policies rp
-  WHERE rp.enabled = true
-    AND (rp.realm_id = wsr.id OR rp.server_id = wsr.server_id)
-)
-`
-
-// Returns all realm IDs that have an applicable retention policy
-// (either directly or through their server).
-func (q *sqlQuerier) GetRealmsWithRetentionPolicies(ctx context.Context) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, getRealmsWithRetentionPolicies)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var realm_id uuid.UUID
-		if err := rows.Scan(&realm_id); err != nil {
-			return nil, err
-		}
-		items = append(items, realm_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getRetentionPolicies = `-- name: GetRetentionPolicies :many
-SELECT
-  rp.id, rp.server_id, rp.realm_id, rp.enabled, rp.created_at, rp.updated_at, rp.last_run_at, rp.total_deleted, rp.total_kept
-FROM retention_policies rp
-WHERE rp.enabled = true
-`
-
-func (q *sqlQuerier) GetRetentionPolicies(ctx context.Context) ([]RetentionPolicy, error) {
-	rows, err := q.db.Query(ctx, getRetentionPolicies)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RetentionPolicy
-	for rows.Next() {
-		var i RetentionPolicy
-		if err := rows.Scan(
-			&i.ID,
-			&i.ServerID,
-			&i.RealmID,
-			&i.Enabled,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.LastRunAt,
-			&i.TotalDeleted,
-			&i.TotalKept,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getRetentionPolicy = `-- name: GetRetentionPolicy :one
-SELECT
-  rp.id, rp.server_id, rp.realm_id, rp.enabled, rp.created_at, rp.updated_at, rp.last_run_at, rp.total_deleted, rp.total_kept
-FROM retention_policies rp
-WHERE rp.id = $1
-`
-
-func (q *sqlQuerier) GetRetentionPolicy(ctx context.Context, id uuid.UUID) (RetentionPolicy, error) {
-	row := q.db.QueryRow(ctx, getRetentionPolicy, id)
-	var i RetentionPolicy
-	err := row.Scan(
-		&i.ID,
-		&i.ServerID,
-		&i.RealmID,
-		&i.Enabled,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.LastRunAt,
-		&i.TotalDeleted,
-		&i.TotalKept,
-	)
-	return i, err
-}
-
-const getRetentionPolicyForRealm = `-- name: GetRetentionPolicyForRealm :one
-SELECT
-  rp.id, rp.server_id, rp.realm_id, rp.enabled, rp.created_at, rp.updated_at, rp.last_run_at, rp.total_deleted, rp.total_kept
-FROM retention_policies rp
-WHERE rp.enabled = true
-  AND (
-    rp.realm_id = $1
-    OR (
-      rp.server_id = (SELECT server_id FROM wow_server_realms WHERE id = $1)
-      AND NOT EXISTS (
-        SELECT 1 FROM retention_policies rp2
-        WHERE rp2.realm_id = $1 AND rp2.enabled = true
-      )
-    )
-  )
-LIMIT 1
-`
-
-// Returns the realm-specific policy if it exists, otherwise the server-level policy.
-func (q *sqlQuerier) GetRetentionPolicyForRealm(ctx context.Context, realmID uuid.NullUUID) (RetentionPolicy, error) {
-	row := q.db.QueryRow(ctx, getRetentionPolicyForRealm, realmID)
-	var i RetentionPolicy
-	err := row.Scan(
-		&i.ID,
-		&i.ServerID,
-		&i.RealmID,
-		&i.Enabled,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.LastRunAt,
-		&i.TotalDeleted,
-		&i.TotalKept,
-	)
-	return i, err
-}
-
-const getRetentionRulesByPolicy = `-- name: GetRetentionRulesByPolicy :many
-SELECT
-  rr.id, rr.policy_id, rr.priority, rr.action, rr.conditions, rr.description, rr.created_at
-FROM retention_rules rr
-WHERE rr.policy_id = $1
-ORDER BY rr.priority ASC
-`
-
-func (q *sqlQuerier) GetRetentionRulesByPolicy(ctx context.Context, policyID uuid.UUID) ([]RetentionRule, error) {
-	rows, err := q.db.Query(ctx, getRetentionRulesByPolicy, policyID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RetentionRule
-	for rows.Next() {
-		var i RetentionRule
-		if err := rows.Scan(
-			&i.ID,
-			&i.PolicyID,
-			&i.Priority,
-			&i.Action,
-			&i.Conditions,
-			&i.Description,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAllRetentionPolicies = `-- name: ListAllRetentionPolicies :many
-SELECT
-  rp.id, rp.server_id, rp.realm_id, rp.enabled, rp.created_at, rp.updated_at, rp.last_run_at, rp.total_deleted, rp.total_kept
-FROM retention_policies rp
-ORDER BY rp.created_at ASC
-`
-
-func (q *sqlQuerier) ListAllRetentionPolicies(ctx context.Context) ([]RetentionPolicy, error) {
-	rows, err := q.db.Query(ctx, listAllRetentionPolicies)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RetentionPolicy
-	for rows.Next() {
-		var i RetentionPolicy
-		if err := rows.Scan(
-			&i.ID,
-			&i.ServerID,
-			&i.RealmID,
-			&i.Enabled,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.LastRunAt,
-			&i.TotalDeleted,
-			&i.TotalKept,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const updateRetentionPolicyStats = `-- name: UpdateRetentionPolicyStats :exec
-UPDATE retention_policies
-SET
-  last_run_at = now(),
-  total_deleted = total_deleted + $1::bigint,
-  total_kept = total_kept + $2::bigint,
-  updated_at = now()
-WHERE id = $3
-`
-
-type UpdateRetentionPolicyStatsParams struct {
-	Deleted int64     `db:"deleted" json:"deleted"`
-	Kept    int64     `db:"kept" json:"kept"`
-	ID      uuid.UUID `db:"id" json:"id"`
-}
-
-func (q *sqlQuerier) UpdateRetentionPolicyStats(ctx context.Context, arg UpdateRetentionPolicyStatsParams) error {
-	_, err := q.db.Exec(ctx, updateRetentionPolicyStats, arg.Deleted, arg.Kept, arg.ID)
-	return err
-}
-
-const upsertRetentionPolicy = `-- name: UpsertRetentionPolicy :one
-INSERT INTO retention_policies (server_id, realm_id, enabled)
-VALUES ($1, $2, $3)
-ON CONFLICT ON CONSTRAINT retention_policies_unique_server
-  DO UPDATE SET enabled = $3, updated_at = now()
-  WHERE retention_policies.server_id IS NOT NULL
-RETURNING id, server_id, realm_id, enabled, created_at, updated_at, last_run_at, total_deleted, total_kept
-`
-
-type UpsertRetentionPolicyParams struct {
-	ServerID uuid.NullUUID `db:"server_id" json:"server_id"`
-	RealmID  uuid.NullUUID `db:"realm_id" json:"realm_id"`
-	Enabled  bool          `db:"enabled" json:"enabled"`
-}
-
-func (q *sqlQuerier) UpsertRetentionPolicy(ctx context.Context, arg UpsertRetentionPolicyParams) (RetentionPolicy, error) {
-	row := q.db.QueryRow(ctx, upsertRetentionPolicy, arg.ServerID, arg.RealmID, arg.Enabled)
-	var i RetentionPolicy
-	err := row.Scan(
-		&i.ID,
-		&i.ServerID,
-		&i.RealmID,
-		&i.Enabled,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.LastRunAt,
-		&i.TotalDeleted,
-		&i.TotalKept,
-	)
-	return i, err
-}
-
-const upsertRetentionPolicyByRealm = `-- name: UpsertRetentionPolicyByRealm :one
-INSERT INTO retention_policies (realm_id, enabled)
-VALUES ($1, $2)
-ON CONFLICT ON CONSTRAINT retention_policies_unique_realm
-  DO UPDATE SET enabled = $2, updated_at = now()
-RETURNING id, server_id, realm_id, enabled, created_at, updated_at, last_run_at, total_deleted, total_kept
-`
-
-type UpsertRetentionPolicyByRealmParams struct {
-	RealmID uuid.NullUUID `db:"realm_id" json:"realm_id"`
-	Enabled bool          `db:"enabled" json:"enabled"`
-}
-
-func (q *sqlQuerier) UpsertRetentionPolicyByRealm(ctx context.Context, arg UpsertRetentionPolicyByRealmParams) (RetentionPolicy, error) {
-	row := q.db.QueryRow(ctx, upsertRetentionPolicyByRealm, arg.RealmID, arg.Enabled)
-	var i RetentionPolicy
-	err := row.Scan(
-		&i.ID,
-		&i.ServerID,
-		&i.RealmID,
-		&i.Enabled,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.LastRunAt,
-		&i.TotalDeleted,
-		&i.TotalKept,
-	)
-	return i, err
-}
-
-const upsertRetentionRule = `-- name: UpsertRetentionRule :one
-INSERT INTO retention_rules (policy_id, priority, action, conditions, description)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT ON CONSTRAINT retention_rules_unique_priority
-  DO UPDATE SET
-    action = $3,
-    conditions = $4,
-    description = $5
-RETURNING id, policy_id, priority, action, conditions, description, created_at
-`
-
-type UpsertRetentionRuleParams struct {
-	PolicyID    uuid.UUID `db:"policy_id" json:"policy_id"`
-	Priority    int32     `db:"priority" json:"priority"`
-	Action      string    `db:"action" json:"action"`
-	Conditions  []byte    `db:"conditions" json:"conditions"`
-	Description string    `db:"description" json:"description"`
-}
-
-func (q *sqlQuerier) UpsertRetentionRule(ctx context.Context, arg UpsertRetentionRuleParams) (RetentionRule, error) {
-	row := q.db.QueryRow(ctx, upsertRetentionRule,
-		arg.PolicyID,
-		arg.Priority,
-		arg.Action,
-		arg.Conditions,
-		arg.Description,
-	)
-	var i RetentionRule
-	err := row.Scan(
-		&i.ID,
-		&i.PolicyID,
-		&i.Priority,
-		&i.Action,
-		&i.Conditions,
-		&i.Description,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
 const adminListRatingRebuildJobs = `-- name: AdminListRatingRebuildJobs :many
 SELECT j.id, j.state::text AS state, j.attempt, j.created_at, j.attempted_at, j.finalized_at,
        COALESCE(j.args->>'tenant_id', '')::text AS tenant_id, COALESCE(t.name, '')::text AS tenant_name,
@@ -37605,7 +37112,7 @@ func (q *sqlQuerier) GetUserAuthSessionByID(ctx context.Context, id uuid.UUID) (
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics FROM users WHERE LOWER(email) = LOWER($1)
+SELECT id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, character_cosmetics FROM users WHERE LOWER(email) = LOWER($1)
 `
 
 func (q *sqlQuerier) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -37619,7 +37126,6 @@ func (q *sqlQuerier) GetUserByEmail(ctx context.Context, email string) (User, er
 		&i.UpdatedAt,
 		&i.DefaultDesktopLayoutID,
 		&i.DefaultMobileLayoutID,
-		&i.RawLogRetentionHours,
 		&i.CharacterCosmetics,
 	)
 	return i, err
@@ -37627,7 +37133,7 @@ func (q *sqlQuerier) GetUserByEmail(ctx context.Context, email string) (User, er
 
 const getUserByID = `-- name: GetUserByID :one
 SELECT
-  id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
+  id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, character_cosmetics, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
 FROM
   chronicle_users
 WHERE
@@ -37645,7 +37151,6 @@ func (q *sqlQuerier) GetUserByID(ctx context.Context, id uuid.UUID) (ChronicleUs
 		&i.UpdatedAt,
 		&i.DefaultDesktopLayoutID,
 		&i.DefaultMobileLayoutID,
-		&i.RawLogRetentionHours,
 		&i.CharacterCosmetics,
 		&i.MaxStorageBytes,
 		&i.DataLimitUpdatedAt,
@@ -37656,7 +37161,7 @@ func (q *sqlQuerier) GetUserByID(ctx context.Context, id uuid.UUID) (ChronicleUs
 
 const getUsersByIDs = `-- name: GetUsersByIDs :many
 SELECT
-  id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
+  id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, character_cosmetics, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
 FROM
   chronicle_users
 WHERE
@@ -37680,7 +37185,6 @@ func (q *sqlQuerier) GetUsersByIDs(ctx context.Context, ids []uuid.UUID) ([]Chro
 			&i.UpdatedAt,
 			&i.DefaultDesktopLayoutID,
 			&i.DefaultMobileLayoutID,
-			&i.RawLogRetentionHours,
 			&i.CharacterCosmetics,
 			&i.MaxStorageBytes,
 			&i.DataLimitUpdatedAt,
@@ -37701,7 +37205,7 @@ INSERT INTO
   users(id, username, email, created_at, updated_at)
 VALUES
   ($1, $2, $3, $4, $5)
-RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics
+RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, character_cosmetics
 `
 
 type InsertUserParams struct {
@@ -37729,7 +37233,6 @@ func (q *sqlQuerier) InsertUser(ctx context.Context, arg InsertUserParams) (User
 		&i.UpdatedAt,
 		&i.DefaultDesktopLayoutID,
 		&i.DefaultMobileLayoutID,
-		&i.RawLogRetentionHours,
 		&i.CharacterCosmetics,
 	)
 	return i, err
@@ -37825,7 +37328,7 @@ func (q *sqlQuerier) InsertUserAuthSession(ctx context.Context, arg InsertUserAu
 
 const listAllUsers = `-- name: ListAllUsers :many
 SELECT
-  chronicle_users.id, chronicle_users.username, chronicle_users.email, chronicle_users.created_at, chronicle_users.updated_at, chronicle_users.default_desktop_layout_id, chronicle_users.default_mobile_layout_id, chronicle_users.raw_log_retention_hours, chronicle_users.character_cosmetics, chronicle_users.max_storage_bytes, chronicle_users.data_limit_updated_at, chronicle_users.consumed_storage_bytes,
+  chronicle_users.id, chronicle_users.username, chronicle_users.email, chronicle_users.created_at, chronicle_users.updated_at, chronicle_users.default_desktop_layout_id, chronicle_users.default_mobile_layout_id, chronicle_users.character_cosmetics, chronicle_users.max_storage_bytes, chronicle_users.data_limit_updated_at, chronicle_users.consumed_storage_bytes,
   COALESCE(discord_auth.linked_id, '')::text AS discord_id
 FROM
   chronicle_users
@@ -37862,7 +37365,6 @@ func (q *sqlQuerier) ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error
 			&i.ChronicleUser.UpdatedAt,
 			&i.ChronicleUser.DefaultDesktopLayoutID,
 			&i.ChronicleUser.DefaultMobileLayoutID,
-			&i.ChronicleUser.RawLogRetentionHours,
 			&i.ChronicleUser.CharacterCosmetics,
 			&i.ChronicleUser.MaxStorageBytes,
 			&i.ChronicleUser.DataLimitUpdatedAt,
@@ -37948,7 +37450,7 @@ const updateUserCharacterCosmeticsDisplayMode = `-- name: UpdateUserCharacterCos
 UPDATE users
 SET character_cosmetics = $1
 WHERE id = $2
-RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics
+RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, character_cosmetics
 `
 
 type UpdateUserCharacterCosmeticsDisplayModeParams struct {
@@ -37967,36 +37469,6 @@ func (q *sqlQuerier) UpdateUserCharacterCosmeticsDisplayMode(ctx context.Context
 		&i.UpdatedAt,
 		&i.DefaultDesktopLayoutID,
 		&i.DefaultMobileLayoutID,
-		&i.RawLogRetentionHours,
-		&i.CharacterCosmetics,
-	)
-	return i, err
-}
-
-const updateUserRawLogRetentionHours = `-- name: UpdateUserRawLogRetentionHours :one
-UPDATE users
-SET raw_log_retention_hours = $1
-WHERE id = $2
-RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics
-`
-
-type UpdateUserRawLogRetentionHoursParams struct {
-	RawLogRetentionHours pgtype.Int4 `db:"raw_log_retention_hours" json:"raw_log_retention_hours"`
-	ID                   uuid.UUID   `db:"id" json:"id"`
-}
-
-func (q *sqlQuerier) UpdateUserRawLogRetentionHours(ctx context.Context, arg UpdateUserRawLogRetentionHoursParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUserRawLogRetentionHours, arg.RawLogRetentionHours, arg.ID)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Username,
-		&i.Email,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DefaultDesktopLayoutID,
-		&i.DefaultMobileLayoutID,
-		&i.RawLogRetentionHours,
 		&i.CharacterCosmetics,
 	)
 	return i, err

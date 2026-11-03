@@ -150,7 +150,6 @@ definition wow_server {
 
   permission upload_log = admin + chronicle->admin_servers
   permission administer = admin + chronicle->admin_servers
-  permission manage_log_retention = admin + chronicle->admin_servers
 }
 
 definition wow_server_realm {
@@ -160,7 +159,6 @@ definition wow_server_realm {
 
   permission administer = wow_server->administer
   permission upload_log = world_daemon + wow_server->upload_log
-  permission manage_log_retention = wow_server->manage_log_retention
 }
 
 definition layout {

@@ -15,6 +15,10 @@ RETURNING
   id
 ;
 
+-- name: DeleteLogInstancesByIDs :execrows
+DELETE FROM log_instances
+WHERE id = ANY(@ids::uuid[]);
+
 -- name: PruneParsedInstanceFromLogOutput :exec
 UPDATE
   river_job

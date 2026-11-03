@@ -710,7 +710,6 @@ CREATE TABLE users (
     updated_at timestamp with time zone,
     default_desktop_layout_id uuid,
     default_mobile_layout_id uuid,
-    raw_log_retention_hours integer,
     character_cosmetics text DEFAULT 'enabled'::text NOT NULL,
     CONSTRAINT users_character_cosmetics_check CHECK ((character_cosmetics = ANY (ARRAY['enabled'::text, 'limited'::text, 'disabled'::text])))
 );
@@ -737,7 +736,6 @@ CREATE VIEW chronicle_users AS
     u.updated_at,
     u.default_desktop_layout_id,
     u.default_mobile_layout_id,
-    u.raw_log_retention_hours,
     u.character_cosmetics,
     COALESCE(sl.max_storage_bytes, (0)::numeric) AS max_storage_bytes,
     sl.updated_at AS data_limit_updated_at,
@@ -1587,42 +1585,6 @@ CREATE TABLE guild_settings (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
-CREATE TABLE instance_speedruns (
-    instance_id uuid NOT NULL,
-    instance_name text NOT NULL,
-    realm_id uuid NOT NULL,
-    guild_id uuid,
-    qualified boolean NOT NULL,
-    start_time timestamp with time zone NOT NULL,
-    completion_time timestamp with time zone NOT NULL,
-    duration_ms bigint NOT NULL,
-    proof jsonb NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    addon_version text DEFAULT ''::text NOT NULL,
-    parser_version_num bigint DEFAULT 0 NOT NULL,
-    addon_version_num bigint DEFAULT 0 NOT NULL,
-    ranked_start_time timestamp with time zone,
-    ranked_completion_time timestamp with time zone,
-    ranked_duration_ms bigint,
-    boss_to_boss_start_time timestamp with time zone,
-    boss_to_boss_completion_time timestamp with time zone,
-    boss_to_boss_duration_ms bigint,
-    CONSTRAINT instance_speedruns_boss_to_boss_duration_nonnegative CHECK (((boss_to_boss_duration_ms IS NULL) OR (boss_to_boss_duration_ms >= 0))),
-    CONSTRAINT instance_speedruns_boss_to_boss_timing_complete CHECK ((((boss_to_boss_start_time IS NULL) AND (boss_to_boss_completion_time IS NULL) AND (boss_to_boss_duration_ms IS NULL)) OR ((boss_to_boss_start_time IS NOT NULL) AND (boss_to_boss_completion_time IS NOT NULL) AND (boss_to_boss_duration_ms IS NOT NULL)))),
-    CONSTRAINT instance_speedruns_ranked_duration_nonnegative CHECK (((ranked_duration_ms IS NULL) OR (ranked_duration_ms >= 0))),
-    CONSTRAINT instance_speedruns_ranked_timing_complete CHECK ((((ranked_start_time IS NULL) AND (ranked_completion_time IS NULL) AND (ranked_duration_ms IS NULL)) OR ((ranked_start_time IS NOT NULL) AND (ranked_completion_time IS NOT NULL) AND (ranked_duration_ms IS NOT NULL))))
-);
-
-CREATE VIEW guild_speedrun_ranks AS
- SELECT instance_speedruns.instance_id,
-    instance_speedruns.instance_name,
-    instance_speedruns.realm_id,
-    instance_speedruns.guild_id,
-    instance_speedruns.duration_ms,
-    rank() OVER (PARTITION BY instance_speedruns.guild_id, instance_speedruns.instance_name, instance_speedruns.realm_id ORDER BY instance_speedruns.duration_ms) AS guild_rank
-   FROM instance_speedruns
-  WHERE ((instance_speedruns.qualified = true) AND (instance_speedruns.guild_id IS NOT NULL));
-
 CREATE TABLE guild_tenant_rating_boss_scores (
     generation_id uuid NOT NULL,
     tenant_id uuid NOT NULL,
@@ -1841,6 +1803,32 @@ CREATE TABLE instance_overview_metrics (
     CONSTRAINT instance_overview_metrics_encounter_span_nonnegative CHECK ((encounter_span_duration_ms >= 0)),
     CONSTRAINT instance_overview_metrics_player_deaths_nonnegative CHECK ((player_deaths >= 0)),
     CONSTRAINT instance_overview_metrics_wipe_count_nonnegative CHECK ((wipe_count >= 0))
+);
+
+CREATE TABLE instance_speedruns (
+    instance_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid,
+    qualified boolean NOT NULL,
+    start_time timestamp with time zone NOT NULL,
+    completion_time timestamp with time zone NOT NULL,
+    duration_ms bigint NOT NULL,
+    proof jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    addon_version text DEFAULT ''::text NOT NULL,
+    parser_version_num bigint DEFAULT 0 NOT NULL,
+    addon_version_num bigint DEFAULT 0 NOT NULL,
+    ranked_start_time timestamp with time zone,
+    ranked_completion_time timestamp with time zone,
+    ranked_duration_ms bigint,
+    boss_to_boss_start_time timestamp with time zone,
+    boss_to_boss_completion_time timestamp with time zone,
+    boss_to_boss_duration_ms bigint,
+    CONSTRAINT instance_speedruns_boss_to_boss_duration_nonnegative CHECK (((boss_to_boss_duration_ms IS NULL) OR (boss_to_boss_duration_ms >= 0))),
+    CONSTRAINT instance_speedruns_boss_to_boss_timing_complete CHECK ((((boss_to_boss_start_time IS NULL) AND (boss_to_boss_completion_time IS NULL) AND (boss_to_boss_duration_ms IS NULL)) OR ((boss_to_boss_start_time IS NOT NULL) AND (boss_to_boss_completion_time IS NOT NULL) AND (boss_to_boss_duration_ms IS NOT NULL)))),
+    CONSTRAINT instance_speedruns_ranked_duration_nonnegative CHECK (((ranked_duration_ms IS NULL) OR (ranked_duration_ms >= 0))),
+    CONSTRAINT instance_speedruns_ranked_timing_complete CHECK ((((ranked_start_time IS NULL) AND (ranked_completion_time IS NULL) AND (ranked_duration_ms IS NULL)) OR ((ranked_start_time IS NOT NULL) AND (ranked_completion_time IS NOT NULL) AND (ranked_duration_ms IS NOT NULL))))
 );
 
 CREATE TABLE item_daily_prices (
@@ -2732,30 +2720,6 @@ CREATE TABLE renown_kill_facts (
 );
 
 ALTER TABLE ONLY renown_kill_facts FORCE ROW LEVEL SECURITY;
-
-CREATE TABLE retention_policies (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    server_id uuid,
-    realm_id uuid,
-    enabled boolean DEFAULT true NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    last_run_at timestamp with time zone,
-    total_deleted bigint DEFAULT 0 NOT NULL,
-    total_kept bigint DEFAULT 0 NOT NULL,
-    CONSTRAINT retention_policies_scope CHECK ((((server_id IS NOT NULL) AND (realm_id IS NULL)) OR ((server_id IS NULL) AND (realm_id IS NOT NULL))))
-);
-
-CREATE TABLE retention_rules (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    policy_id uuid NOT NULL,
-    priority integer NOT NULL,
-    action text NOT NULL,
-    conditions jsonb DEFAULT '[]'::jsonb NOT NULL,
-    description text DEFAULT ''::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT retention_rules_action_check CHECK ((action = ANY (ARRAY['keep'::text, 'delete'::text])))
-);
 
 CREATE TABLE river_job (
     id bigint NOT NULL,
@@ -4006,21 +3970,6 @@ ALTER TABLE ONLY renown_kill_facts
 ALTER TABLE ONLY renown_kill_facts
     ADD CONSTRAINT renown_kill_facts_realm_id_player_guid_run_id_encounter_nam_key UNIQUE (realm_id, player_guid, run_id, encounter_name);
 
-ALTER TABLE ONLY retention_policies
-    ADD CONSTRAINT retention_policies_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY retention_policies
-    ADD CONSTRAINT retention_policies_unique_realm UNIQUE (realm_id);
-
-ALTER TABLE ONLY retention_policies
-    ADD CONSTRAINT retention_policies_unique_server UNIQUE (server_id);
-
-ALTER TABLE ONLY retention_rules
-    ADD CONSTRAINT retention_rules_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY retention_rules
-    ADD CONSTRAINT retention_rules_unique_priority UNIQUE (policy_id, priority);
-
 ALTER TABLE ONLY river_job
     ADD CONSTRAINT river_job_pkey PRIMARY KEY (id);
 
@@ -5187,15 +5136,6 @@ ALTER TABLE ONLY regression_snapshots
 
 ALTER TABLE ONLY renown_kill_facts
     ADD CONSTRAINT renown_kill_facts_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
-
-ALTER TABLE ONLY retention_policies
-    ADD CONSTRAINT retention_policies_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY retention_policies
-    ADD CONSTRAINT retention_policies_server_id_fkey FOREIGN KEY (server_id) REFERENCES wow_servers(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY retention_rules
-    ADD CONSTRAINT retention_rules_policy_id_fkey FOREIGN KEY (policy_id) REFERENCES retention_policies(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY server_applications
     ADD CONSTRAINT server_applications_initiated_by_fkey FOREIGN KEY (initiated_by) REFERENCES users(id);

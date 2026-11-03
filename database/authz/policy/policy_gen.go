@@ -82,7 +82,7 @@ func (obj *ObjArmory_player) Create() *Armory_playerRelates {
 	return &Armory_playerRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:255
+// Chronicle schema.zed:253
 // Relationship: armory_player:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjArmory_player) Chronicle(subs ...*ObjChronicle) *ObjArmory_player {
@@ -100,7 +100,7 @@ func (r *Armory_playerRelates) Chronicle(subs ...*ObjChronicle) *Armory_playerRe
 	return r
 }
 
-// Owner schema.zed:258
+// Owner schema.zed:256
 // Relationship: armory_player:<id>#owner@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Owner() etc.
 func (obj *ObjArmory_player) Owner(subs ...*ObjUser) *ObjArmory_player {
@@ -1900,7 +1900,7 @@ func (obj *ObjGuild) Create() *GuildRelates {
 	return &GuildRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:234
+// Chronicle schema.zed:232
 // Relationship: guild:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjGuild) Chronicle(subs ...*ObjChronicle) *ObjGuild {
@@ -1918,7 +1918,7 @@ func (r *GuildRelates) Chronicle(subs ...*ObjChronicle) *GuildRelates {
 	return r
 }
 
-// Leader schema.zed:236
+// Leader schema.zed:234
 // Relationship: guild:<id>#leader@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Leader() etc.
 func (obj *ObjGuild) Leader(subs ...*ObjUser) *ObjGuild {
@@ -1936,7 +1936,7 @@ func (r *GuildRelates) Leader(subs ...*ObjUser) *GuildRelates {
 	return r
 }
 
-// Member schema.zed:237
+// Member schema.zed:235
 // Relationship: guild:<id>#member@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Member() etc.
 func (obj *ObjGuild) Member(subs ...*ObjUser) *ObjGuild {
@@ -1954,7 +1954,7 @@ func (r *GuildRelates) Member(subs ...*ObjUser) *GuildRelates {
 	return r
 }
 
-// Discord_bot_enabledWildcard schema.zed:241
+// Discord_bot_enabledWildcard schema.zed:239
 // Relationship: guild:<id>#discord_bot_enabled@user:*
 func (obj *ObjGuild) Discord_bot_enabledWildcard() *ObjGuild {
 	obj.src.Touch().Add("discord_bot_enabled", &v1.ObjectReference{
@@ -2240,7 +2240,7 @@ func (obj *ObjInstance) Create() *InstanceRelates {
 	return &InstanceRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Raid_log schema.zed:280
+// Raid_log schema.zed:278
 // Relationship: instance:<id>#raid_log@raid_log:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Raid_log() etc.
 func (obj *ObjInstance) Raid_log(subs ...*ObjRaid_log) *ObjInstance {
@@ -2258,7 +2258,7 @@ func (r *InstanceRelates) Raid_log(subs ...*ObjRaid_log) *InstanceRelates {
 	return r
 }
 
-// PublicWildcard schema.zed:281
+// PublicWildcard schema.zed:279
 // Relationship: instance:<id>#public@user:*
 func (obj *ObjInstance) PublicWildcard() *ObjInstance {
 	obj.src.Touch().Add("public", &v1.ObjectReference{
@@ -2365,7 +2365,7 @@ func (obj *ObjLayout) Create() *LayoutRelates {
 	return &LayoutRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:167
+// Chronicle schema.zed:165
 // Relationship: layout:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjLayout) Chronicle(subs ...*ObjChronicle) *ObjLayout {
@@ -2383,7 +2383,7 @@ func (r *LayoutRelates) Chronicle(subs ...*ObjChronicle) *LayoutRelates {
 	return r
 }
 
-// Owner schema.zed:168
+// Owner schema.zed:166
 // Relationship: layout:<id>#owner@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Owner() etc.
 func (obj *ObjLayout) Owner(subs ...*ObjUser) *ObjLayout {
@@ -2560,7 +2560,7 @@ func (obj *ObjLua_project) Create() *Lua_projectRelates {
 	return &Lua_projectRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:177
+// Chronicle schema.zed:175
 // Relationship: lua_project:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjLua_project) Chronicle(subs ...*ObjChronicle) *ObjLua_project {
@@ -2578,7 +2578,7 @@ func (r *Lua_projectRelates) Chronicle(subs ...*ObjChronicle) *Lua_projectRelate
 	return r
 }
 
-// Owner schema.zed:178
+// Owner schema.zed:176
 // Relationship: lua_project:<id>#owner@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Owner() etc.
 func (obj *ObjLua_project) Owner(subs ...*ObjUser) *ObjLua_project {
@@ -2596,7 +2596,7 @@ func (r *Lua_projectRelates) Owner(subs ...*ObjUser) *Lua_projectRelates {
 	return r
 }
 
-// Public_viewerWildcard schema.zed:180
+// Public_viewerWildcard schema.zed:178
 // Relationship: lua_project:<id>#public_viewer@user:*
 func (obj *ObjLua_project) Public_viewerWildcard() *ObjLua_project {
 	obj.src.Touch().Add("public_viewer", &v1.ObjectReference{
@@ -2615,7 +2615,7 @@ func (r *Lua_projectRelates) Public_viewerWildcard() *Lua_projectRelates {
 	return r
 }
 
-// Viewer_User schema.zed:183
+// Viewer_User schema.zed:181
 // Relationship: lua_project:<id>#viewer@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Viewer_User() etc.
 func (obj *ObjLua_project) Viewer_User(subs ...*ObjUser) *ObjLua_project {
@@ -2633,7 +2633,7 @@ func (r *Lua_projectRelates) Viewer_User(subs ...*ObjUser) *Lua_projectRelates {
 	return r
 }
 
-// ViewerWildcard schema.zed:183
+// ViewerWildcard schema.zed:181
 // Relationship: lua_project:<id>#viewer@user:*
 func (obj *ObjLua_project) ViewerWildcard() *ObjLua_project {
 	obj.src.Touch().Add("viewer", &v1.ObjectReference{
@@ -2652,7 +2652,7 @@ func (r *Lua_projectRelates) ViewerWildcard() *Lua_projectRelates {
 	return r
 }
 
-// Runner_User schema.zed:184
+// Runner_User schema.zed:182
 // Relationship: lua_project:<id>#runner@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Runner_User() etc.
 func (obj *ObjLua_project) Runner_User(subs ...*ObjUser) *ObjLua_project {
@@ -2670,7 +2670,7 @@ func (r *Lua_projectRelates) Runner_User(subs ...*ObjUser) *Lua_projectRelates {
 	return r
 }
 
-// RunnerWildcard schema.zed:184
+// RunnerWildcard schema.zed:182
 // Relationship: lua_project:<id>#runner@user:*
 func (obj *ObjLua_project) RunnerWildcard() *ObjLua_project {
 	obj.src.Touch().Add("runner", &v1.ObjectReference{
@@ -2689,7 +2689,7 @@ func (r *Lua_projectRelates) RunnerWildcard() *Lua_projectRelates {
 	return r
 }
 
-// Editor schema.zed:186
+// Editor schema.zed:184
 // Relationship: lua_project:<id>#editor@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Editor() etc.
 func (obj *ObjLua_project) Editor(subs ...*ObjUser) *ObjLua_project {
@@ -2707,7 +2707,7 @@ func (r *Lua_projectRelates) Editor(subs ...*ObjUser) *Lua_projectRelates {
 	return r
 }
 
-// Publisher schema.zed:187
+// Publisher schema.zed:185
 // Relationship: lua_project:<id>#publisher@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Publisher() etc.
 func (obj *ObjLua_project) Publisher(subs ...*ObjUser) *ObjLua_project {
@@ -2725,7 +2725,7 @@ func (r *Lua_projectRelates) Publisher(subs ...*ObjUser) *Lua_projectRelates {
 	return r
 }
 
-// Unstable_publisher schema.zed:189
+// Unstable_publisher schema.zed:187
 // Relationship: lua_project:<id>#unstable_publisher@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Unstable_publisher() etc.
 func (obj *ObjLua_project) Unstable_publisher(subs ...*ObjUser) *ObjLua_project {
@@ -3000,7 +3000,7 @@ func (obj *ObjRaid_composition) Create() *Raid_compositionRelates {
 	return &Raid_compositionRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:215
+// Chronicle schema.zed:213
 // Relationship: raid_composition:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjRaid_composition) Chronicle(subs ...*ObjChronicle) *ObjRaid_composition {
@@ -3018,7 +3018,7 @@ func (r *Raid_compositionRelates) Chronicle(subs ...*ObjChronicle) *Raid_composi
 	return r
 }
 
-// Owner schema.zed:216
+// Owner schema.zed:214
 // Relationship: raid_composition:<id>#owner@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Owner() etc.
 func (obj *ObjRaid_composition) Owner(subs ...*ObjUser) *ObjRaid_composition {
@@ -3036,7 +3036,7 @@ func (r *Raid_compositionRelates) Owner(subs ...*ObjUser) *Raid_compositionRelat
 	return r
 }
 
-// Editor schema.zed:217
+// Editor schema.zed:215
 // Relationship: raid_composition:<id>#editor@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Editor() etc.
 func (obj *ObjRaid_composition) Editor(subs ...*ObjUser) *ObjRaid_composition {
@@ -3054,7 +3054,7 @@ func (r *Raid_compositionRelates) Editor(subs ...*ObjUser) *Raid_compositionRela
 	return r
 }
 
-// Viewer schema.zed:218
+// Viewer schema.zed:216
 // Relationship: raid_composition:<id>#viewer@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Viewer() etc.
 func (obj *ObjRaid_composition) Viewer(subs ...*ObjUser) *ObjRaid_composition {
@@ -3072,7 +3072,7 @@ func (r *Raid_compositionRelates) Viewer(subs ...*ObjUser) *Raid_compositionRela
 	return r
 }
 
-// Public_viewerWildcard schema.zed:219
+// Public_viewerWildcard schema.zed:217
 // Relationship: raid_composition:<id>#public_viewer@user:*
 func (obj *ObjRaid_composition) Public_viewerWildcard() *ObjRaid_composition {
 	obj.src.Touch().Add("public_viewer", &v1.ObjectReference{
@@ -3290,7 +3290,7 @@ func (obj *ObjRaid_log) Create() *Raid_logRelates {
 	return &Raid_logRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:265
+// Chronicle schema.zed:263
 // Relationship: raid_log:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjRaid_log) Chronicle(subs ...*ObjChronicle) *ObjRaid_log {
@@ -3308,7 +3308,7 @@ func (r *Raid_logRelates) Chronicle(subs ...*ObjChronicle) *Raid_logRelates {
 	return r
 }
 
-// Uploader schema.zed:266
+// Uploader schema.zed:264
 // Relationship: raid_log:<id>#uploader@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Uploader() etc.
 func (obj *ObjRaid_log) Uploader(subs ...*ObjUser) *ObjRaid_log {
@@ -3585,7 +3585,7 @@ func (obj *ObjRiver_queue) Create() *River_queueRelates {
 	return &River_queueRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:228
+// Chronicle schema.zed:226
 // Relationship: river_queue:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjRiver_queue) Chronicle(subs ...*ObjChronicle) *ObjRiver_queue {
@@ -3677,7 +3677,7 @@ func (obj *ObjTalent_build) Create() *Talent_buildRelates {
 	return &Talent_buildRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:203
+// Chronicle schema.zed:201
 // Relationship: talent_build:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjTalent_build) Chronicle(subs ...*ObjChronicle) *ObjTalent_build {
@@ -3695,7 +3695,7 @@ func (r *Talent_buildRelates) Chronicle(subs ...*ObjChronicle) *Talent_buildRela
 	return r
 }
 
-// Owner schema.zed:204
+// Owner schema.zed:202
 // Relationship: talent_build:<id>#owner@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Owner() etc.
 func (obj *ObjTalent_build) Owner(subs ...*ObjUser) *ObjTalent_build {
@@ -3843,10 +3843,6 @@ func (obj *ObjWow_server) PermissionUpload_log() string {
 
 func (obj *ObjWow_server) PermissionAdminister() string {
 	return "administer"
-}
-
-func (obj *ObjWow_server) PermissionManage_log_retention() string {
-	return "manage_log_retention"
 }
 
 type Wow_serverRelates struct {
@@ -4010,51 +4006,6 @@ func (obj *ObjWow_server) CanAdminister_Wow_tenant(sub *ObjWow_tenant) rel.Relat
 	}
 }
 
-// CanManage_log_retention_Chronicle checks if the subject has manage_log_retention permission
-// // Object: wow_server:<id>
-// Schema: permission manage_log_retention = admin + chronicle->admin_servers
-func (obj *ObjWow_server) CanManage_log_retention_Chronicle(sub *ObjChronicle) rel.Relationship {
-	r, s := obj.src.Obj, sub.src
-	return rel.Relationship{
-		ResourceType:     r.ObjectType,
-		ResourceID:       r.ObjectId,
-		ResourceRelation: "manage_log_retention",
-		SubjectType:      s.Obj.ObjectType,
-		SubjectID:        s.Obj.ObjectId,
-		SubjectRelation:  s.OptionalRelation,
-	}
-}
-
-// CanManage_log_retention_User checks if the subject has manage_log_retention permission
-// // Object: wow_server:<id>
-// Schema: permission manage_log_retention = admin + chronicle->admin_servers
-func (obj *ObjWow_server) CanManage_log_retention_User(sub *ObjUser) rel.Relationship {
-	r, s := obj.src.Obj, sub.src
-	return rel.Relationship{
-		ResourceType:     r.ObjectType,
-		ResourceID:       r.ObjectId,
-		ResourceRelation: "manage_log_retention",
-		SubjectType:      s.Obj.ObjectType,
-		SubjectID:        s.Obj.ObjectId,
-		SubjectRelation:  s.OptionalRelation,
-	}
-}
-
-// CanManage_log_retention_Wow_tenant checks if the subject has manage_log_retention permission
-// // Object: wow_server:<id>
-// Schema: permission manage_log_retention = admin + chronicle->admin_servers
-func (obj *ObjWow_server) CanManage_log_retention_Wow_tenant(sub *ObjWow_tenant) rel.Relationship {
-	r, s := obj.src.Obj, sub.src
-	return rel.Relationship{
-		ResourceType:     r.ObjectType,
-		ResourceID:       r.ObjectId,
-		ResourceRelation: "manage_log_retention",
-		SubjectType:      s.Obj.ObjectType,
-		SubjectID:        s.Obj.ObjectId,
-		SubjectRelation:  s.OptionalRelation,
-	}
-}
-
 type ObjWow_server_realm struct {
 	src Object
 }
@@ -4097,10 +4048,6 @@ func (obj *ObjWow_server_realm) PermissionUpload_log() string {
 	return "upload_log"
 }
 
-func (obj *ObjWow_server_realm) PermissionManage_log_retention() string {
-	return "manage_log_retention"
-}
-
 type Wow_server_realmRelates struct {
 	obj *ObjWow_server_realm
 	rel Relationship
@@ -4118,7 +4065,7 @@ func (obj *ObjWow_server_realm) Create() *Wow_server_realmRelates {
 	return &Wow_server_realmRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Wow_server schema.zed:158
+// Wow_server schema.zed:157
 // Relationship: wow_server_realm:<id>#wow_server@wow_server:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Wow_server() etc.
 func (obj *ObjWow_server_realm) Wow_server(subs ...*ObjWow_server) *ObjWow_server_realm {
@@ -4136,7 +4083,7 @@ func (r *Wow_server_realmRelates) Wow_server(subs ...*ObjWow_server) *Wow_server
 	return r
 }
 
-// World_daemon schema.zed:159
+// World_daemon schema.zed:158
 // Relationship: wow_server_realm:<id>#world_daemon@wow_server_upload_key:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().World_daemon() etc.
 func (obj *ObjWow_server_realm) World_daemon(subs ...*ObjWow_server_upload_key) *ObjWow_server_realm {
@@ -4208,36 +4155,6 @@ func (obj *ObjWow_server_realm) CanUpload_log_Wow_server_upload_key(sub *ObjWow_
 		ResourceType:     r.ObjectType,
 		ResourceID:       r.ObjectId,
 		ResourceRelation: "upload_log",
-		SubjectType:      s.Obj.ObjectType,
-		SubjectID:        s.Obj.ObjectId,
-		SubjectRelation:  s.OptionalRelation,
-	}
-}
-
-// CanManage_log_retention_Wow_server checks if the subject has manage_log_retention permission
-// // Object: wow_server_realm:<id>
-// Schema: permission manage_log_retention = wow_server->manage_log_retention
-func (obj *ObjWow_server_realm) CanManage_log_retention_Wow_server(sub *ObjWow_server) rel.Relationship {
-	r, s := obj.src.Obj, sub.src
-	return rel.Relationship{
-		ResourceType:     r.ObjectType,
-		ResourceID:       r.ObjectId,
-		ResourceRelation: "manage_log_retention",
-		SubjectType:      s.Obj.ObjectType,
-		SubjectID:        s.Obj.ObjectId,
-		SubjectRelation:  s.OptionalRelation,
-	}
-}
-
-// CanManage_log_retention_Wow_server_upload_key checks if the subject has manage_log_retention permission
-// // Object: wow_server_realm:<id>
-// Schema: permission manage_log_retention = wow_server->manage_log_retention
-func (obj *ObjWow_server_realm) CanManage_log_retention_Wow_server_upload_key(sub *ObjWow_server_upload_key) rel.Relationship {
-	r, s := obj.src.Obj, sub.src
-	return rel.Relationship{
-		ResourceType:     r.ObjectType,
-		ResourceID:       r.ObjectId,
-		ResourceRelation: "manage_log_retention",
 		SubjectType:      s.Obj.ObjectType,
 		SubjectID:        s.Obj.ObjectId,
 		SubjectRelation:  s.OptionalRelation,

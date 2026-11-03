@@ -334,7 +334,6 @@ docker compose logs -f chronicle
 | `CHRONICLE_SPICEDB_PRESHARED_KEY` | development key | SpiceDB authentication key |
 | `CHRONICLE_STORAGE_TYPE` | `local` | `local` or `s3` |
 | `CHRONICLE_LOG_PARSING_WORKERS` | `1` | Parallel combat-log parsing workers |
-| `CHRONICLE_RETENTION_SCHEDULE` | `24h` | Retention cleanup interval, or `0` to disable |
 | `CHRONICLE_PROMETHEUS_ENABLED` | `false` | Enable Prometheus on its separate listener |
 | `CHRONICLE_PROMETHEUS_ADDRESS` | `0.0.0.0:9091` | Prometheus listen address |
 | `CHRONICLE_PROMETHEUS_SHARED_KEY` | unset | Optional bearer token required to access Prometheus metrics |

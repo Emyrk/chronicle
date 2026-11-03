@@ -213,8 +213,6 @@ type sqlcQuerier interface {
 	DeleteRatingRealmGroup(ctx context.Context, arg DeleteRatingRealmGroupParams) (int64, error)
 	DeleteRegressionFixture(ctx context.Context, id uuid.UUID) error
 	DeleteRegressionSnapshot(ctx context.Context, id uuid.UUID) error
-	DeleteRetentionPolicy(ctx context.Context, id uuid.UUID) error
-	DeleteRetentionRule(ctx context.Context, id uuid.UUID) error
 	DeleteRetiredRatingGeneration(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	// A single invocation deletes at most 200 rows. The PK begins with
 	// generation_id, so both selection and deletion are generation-local.
@@ -389,9 +387,6 @@ type sqlcQuerier interface {
 	GetEncounterPhasesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounterPhase, error)
 	GetEncounterSummariesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]GetEncounterSummariesByInstanceIDRow, error)
 	GetEncounterSummariesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]GetEncounterSummariesByInstanceIDsRow, error)
-	// Returns log groups whose raw files are past their owner's retention window.
-	// Only considers users who have set a retention policy (non-NULL).
-	GetExpiredRawLogGroups(ctx context.Context, limit int32) ([]uuid.UUID, error)
 	GetExternalAPICharacter(ctx context.Context, arg GetExternalAPICharacterParams) (GetExternalAPICharacterRow, error)
 	GetExternalCharacterLinkSync(ctx context.Context, arg GetExternalCharacterLinkSyncParams) (ExternalCharacterLinkSync, error)
 	GetFileByHash(ctx context.Context, hash string) (LogFile, error)
@@ -434,12 +429,6 @@ type sqlcQuerier interface {
 	GetInstanceSpeedrun(ctx context.Context, instanceID uuid.UUID) (GetInstanceSpeedrunRow, error)
 	GetInstanceYoutubeData(ctx context.Context, arg GetInstanceYoutubeDataParams) (LogInstanceYoutubeTimestamped, error)
 	GetInstancesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]LogInstancesGuild, error)
-	// Fetches all log instances for a given realm with pre-joined speedrun rank data.
-	// Used by the preview endpoint (admin-only, synchronous).
-	GetInstancesForRetentionCheck(ctx context.Context, realmID uuid.UUID) ([]GetInstancesForRetentionCheckRow, error)
-	// Fetches a page of log instances for cursor-based retention processing.
-	// Ordered by end_time ASC so older logs are processed first.
-	GetInstancesForRetentionCheckPaged(ctx context.Context, arg GetInstancesForRetentionCheckPagedParams) ([]GetInstancesForRetentionCheckPagedRow, error)
 	GetItemPricingConfigByRealm(ctx context.Context, realmID uuid.UUID) (GetItemPricingConfigByRealmRow, error)
 	GetItemRandomPropertiesByID(ctx context.Context, arg GetItemRandomPropertiesByIDParams) (DbcItemRandomProperty, error)
 	GetItemSetBonuses(ctx context.Context, arg GetItemSetBonusesParams) ([]DbcItemSetBonu, error)
@@ -518,16 +507,8 @@ type sqlcQuerier interface {
 	GetRatingConfigRevision(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	GetRatingMasteryAccumulator(ctx context.Context, arg GetRatingMasteryAccumulatorParams) (RatingMasteryAccumulator, error)
 	GetRatingRebuildCheckpoint(ctx context.Context, arg GetRatingRebuildCheckpointParams) (RatingRebuildCheckpoint, error)
-	// Returns all realm IDs that have an applicable retention policy
-	// (either directly or through their server).
-	GetRealmsWithRetentionPolicies(ctx context.Context) ([]uuid.UUID, error)
 	GetRegressionFixture(ctx context.Context, id uuid.UUID) (RegressionFixture, error)
 	GetRegressionSnapshot(ctx context.Context, id uuid.UUID) (RegressionSnapshot, error)
-	GetRetentionPolicies(ctx context.Context) ([]RetentionPolicy, error)
-	GetRetentionPolicy(ctx context.Context, id uuid.UUID) (RetentionPolicy, error)
-	// Returns the realm-specific policy if it exists, otherwise the server-level policy.
-	GetRetentionPolicyForRealm(ctx context.Context, realmID uuid.NullUUID) (RetentionPolicy, error)
-	GetRetentionRulesByPolicy(ctx context.Context, policyID uuid.UUID) ([]RetentionRule, error)
 	GetScopedTimeParseBossKillCohort(ctx context.Context, arg GetScopedTimeParseBossKillCohortParams) ([]int64, error)
 	GetScopedTimeParseClearTimeCohort(ctx context.Context, arg GetScopedTimeParseClearTimeCohortParams) ([]int64, error)
 	GetServerApplicationByID(ctx context.Context, id uuid.UUID) (GetServerApplicationByIDRow, error)
@@ -830,7 +811,6 @@ type sqlcQuerier interface {
 	// Root-domain site admins only: caller must use AdminBypass to include tenants
 	// excluded by root-domain RLS.
 	ListAllProofRequests(ctx context.Context) ([]ProofRequest, error)
-	ListAllRetentionPolicies(ctx context.Context) ([]RetentionPolicy, error)
 	ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error)
 	ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAllWoWLogGroupsWithOwnerRow, error)
 	ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, arg ListAllWoWLogGroupsWithOwnerPaginatedParams) ([]ListAllWoWLogGroupsWithOwnerPaginatedRow, error)
@@ -1383,7 +1363,6 @@ type sqlcQuerier interface {
 	UpdateRaidCompositionByID(ctx context.Context, arg UpdateRaidCompositionByIDParams) (RaidComposition, error)
 	UpdateRaidCompositionSharing(ctx context.Context, arg UpdateRaidCompositionSharingParams) (RaidComposition, error)
 	UpdateRegressionFixtureNote(ctx context.Context, arg UpdateRegressionFixtureNoteParams) error
-	UpdateRetentionPolicyStats(ctx context.Context, arg UpdateRetentionPolicyStatsParams) error
 	UpdateSidekickHeartbeat(ctx context.Context, arg UpdateSidekickHeartbeatParams) (SidekickInstallation, error)
 	UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigParams) (SiteConfig, error)
 	UpdateTelemetryHeartbeat(ctx context.Context) error
@@ -1395,7 +1374,6 @@ type sqlcQuerier interface {
 	UpdateUserPanelLayoutByID(ctx context.Context, arg UpdateUserPanelLayoutByIDParams) (UserPanelLayout, error)
 	UpdateUserPanelLayoutDefaults(ctx context.Context, arg UpdateUserPanelLayoutDefaultsParams) (UpdateUserPanelLayoutDefaultsRow, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
-	UpdateUserRawLogRetentionHours(ctx context.Context, arg UpdateUserRawLogRetentionHoursParams) (User, error)
 	UpdateUserTalentBuildByID(ctx context.Context, arg UpdateUserTalentBuildByIDParams) (UserTalentBuild, error)
 	// Persists the resolved flavor back onto a log group after dataset-based
 	// resolution, so subsequent reparses use the correct value.
@@ -1450,9 +1428,6 @@ type sqlcQuerier interface {
 	// Step 1: aggregate per player per run (sum encounters within one instance run).
 	// Step 2: pick each player's best run.
 	UpsertRankingsInstanceSummary(ctx context.Context, arg UpsertRankingsInstanceSummaryParams) error
-	UpsertRetentionPolicy(ctx context.Context, arg UpsertRetentionPolicyParams) (RetentionPolicy, error)
-	UpsertRetentionPolicyByRealm(ctx context.Context, arg UpsertRetentionPolicyByRealmParams) (RetentionPolicy, error)
-	UpsertRetentionRule(ctx context.Context, arg UpsertRetentionRuleParams) (RetentionRule, error)
 	UpsertSidekickConfigOverride(ctx context.Context, arg UpsertSidekickConfigOverrideParams) ([]byte, error)
 	UpsertSidekickInstallation(ctx context.Context, arg UpsertSidekickInstallationParams) (SidekickInstallation, error)
 	UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertSidekickWoWDirectoryParams) error
