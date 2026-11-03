@@ -1,10 +1,11 @@
 import { useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Bot, LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { AssistantChat } from "./AssistantChat";
+import { AssistantMark } from "./ChatPanel";
 import {
   isInferenceAuthorizationError,
   isInferenceServiceUnavailable,
@@ -63,7 +64,7 @@ export function ConnectRequiredAction() {
 function SiteHelpEmptyState() {
   return (
     <div className="text-muted-foreground mx-auto max-w-72 text-center text-sm">
-      <Bot className="text-primary mx-auto mb-3 size-9" />
+      <AssistantMark size="lg" className="mx-auto mb-3" />
       <p className="text-foreground font-medium">What can Chronicle help you find?</p>
       <p className="mt-2">Try “Where can I upload a combat log?” or “How do rankings and parse scores work?”</p>
     </div>

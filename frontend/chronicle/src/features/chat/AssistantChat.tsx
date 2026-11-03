@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
-import { ExternalLink, LoaderCircle, Maximize2, MessageCircleMore, Minimize2, Minus, PictureInPicture2 } from "lucide-react";
+import { ExternalLink, LoaderCircle, Maximize2, Minimize2, Minus, PictureInPicture2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PortalContainerProvider } from "@/components/ui/PortalContainerContext";
 import { cn } from "@/lib/utils";
@@ -27,10 +27,35 @@ export function AssistantChatLauncher({
     ? `${style?.transform ? `${style.transform} ` : ""}translateY(-${offset}px)`
     : style?.transform;
 
+  const featured = variant === "default";
+
   return (
-    <Button ref={ref} variant={variant} style={{ ...style, transform }} {...props}>
-      {running ? <LoaderCircle className="animate-spin" /> : <MessageCircleMore />}
-      {label}
+    <Button
+      ref={ref}
+      variant={variant}
+      style={{ ...style, transform }}
+      {...props}
+      className={cn(
+        featured && [
+          "group relative h-11 gap-2 overflow-hidden px-5 font-semibold tracking-wide text-white",
+          "border border-amber-300/40 bg-gradient-to-br from-primary via-primary-darker to-[#2a3f52]",
+          "shadow-[0_8px_24px_-6px_rgb(95_143_166/0.6),inset_0_1px_0_rgb(255_255_255/0.15)]",
+          "transition-all duration-200 hover:-translate-y-0.5 hover:border-amber-300/70",
+          "hover:shadow-[0_12px_32px_-6px_rgb(95_143_166/0.8),0_0_0_3px_rgb(252_211_77/0.15),inset_0_1px_0_rgb(255_255_255/0.2)]",
+        ],
+        props.className,
+      )}
+    >
+      {featured && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent motion-safe:animate-[shimmer_4s_ease-in-out_infinite]"
+        />
+      )}
+      {running
+        ? <LoaderCircle className="animate-spin" />
+        : <Sparkles className={cn(featured && "text-amber-200 transition-transform group-hover:rotate-12 group-hover:scale-110")} />}
+      <span className="relative">{label}</span>
     </Button>
   );
 }
@@ -173,7 +198,8 @@ export function AssistantChat({
         aria-label={title}
         className={cn(
           "bg-background fixed inset-0 z-[90] flex flex-col overflow-hidden",
-          "sm:inset-auto sm:right-4 sm:bottom-4 sm:rounded-xl sm:border sm:shadow-2xl",
+          "sm:inset-auto sm:right-4 sm:bottom-4 sm:rounded-xl sm:border sm:border-amber-300/30",
+          "sm:shadow-[0_24px_64px_-12px_rgb(0_0_0/0.6),0_0_40px_-8px_rgb(95_143_166/0.55),0_0_0_1px_rgb(95_143_166/0.25)]",
           chatWindow.expanded
             ? "sm:h-[calc(100dvh-2rem)] sm:w-[min(760px,calc(100vw-2rem))]"
             : "sm:h-[min(760px,calc(100dvh-2rem))] sm:w-[min(440px,calc(100vw-2rem))]",
