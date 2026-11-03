@@ -5,6 +5,7 @@ import type { InstanceSearchFieldsResponse, InstanceSearchQuery, InstanceSearchR
 import { InstanceSearchPage } from "./InstanceSearchPage";
 import { encodeQuery, type Node } from "./queryModel";
 import { saveRecentSearches, type RecentSearch } from "./recentSearches";
+import { mockEvidence } from "./evidence.mocks";
 // Generated from the Go registry; kept in sync by TestDescribeFixture.
 import fieldsFixture from "./fixtures/searchFields.json";
 
@@ -81,6 +82,13 @@ function handlers({ loggedIn, search = "ok", tier = "honored" }: { loggedIn: boo
     http.get("/api/v1/raidlogs/search/limit", () =>
       HttpResponse.json({ logged_in: loggedIn, limit, remaining, refill_per_minute: loggedIn ? 120 : 20, reset_seconds: 0 }),
     ),
+    http.post("/api/v1/raidlogs/search/explain", async ({ request }) => {
+      await delay(300);
+      const body = (await request.json()) as { query: InstanceSearchQuery };
+      remaining = Math.max(0, remaining - 2);
+      const where = body.query.where;
+      return HttpResponse.json({ matched: true, ...(where ? { evidence: mockEvidence(where) } : {}) }, { headers: rlHeaders(2) });
+    }),
     http.post("/api/v1/raidlogs/search", async ({ request }) => {
       await delay(350);
       const body = (await request.json()) as InstanceSearchQuery;
@@ -225,6 +233,22 @@ export const RateLimited: Story = {
 
 export const TimedOut: Story = {
   parameters: { initialEntry: url(blockTree, "blocks"), msw: { handlers: handlers({ loggedIn: true, search: "timeout" }) } },
+};
+
+/** Date and number ranges (between) in the block editor. */
+export const Ranges: Story = {
+  parameters: {
+    initialEntry: url(
+      {
+        and: [
+          { field: "instance.name", op: "=", value: "Molten Core" },
+          { field: "instance.started_at", op: "between", value: ["2026-10-01T00:00:00Z", "2026-10-31T23:59:59Z"] },
+          { field: "instance.clear_time_ms", op: "between", value: [3_600_000, 4_500_000] },
+        ],
+      },
+      "blocks",
+    ),
+  },
 };
 
 /** History from earlier searches in this browser, under the Recent menu. */

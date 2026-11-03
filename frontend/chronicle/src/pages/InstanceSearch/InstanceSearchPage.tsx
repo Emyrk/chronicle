@@ -191,9 +191,12 @@ export function InstanceSearchPage() {
   const limit = useSearchLimit();
   const lastPage = results.data?.pages[results.data.pages.length - 1];
   const error = results.error instanceof SearchError ? results.error : null;
+  // Explaining a row also spends from the budget; show whichever response
+  // is newer, the search's or the last explain's.
+  const [explainBudget, setExplainBudget] = useState<{ budget: SearchBudget; at: number } | null>(null);
+  const searchBudget = lastPage?.budget ?? error?.budget ?? null;
   const budget: SearchBudget | null =
-    lastPage?.budget ??
-    error?.budget ??
+    (explainBudget && (!searchBudget || explainBudget.at > Math.max(results.dataUpdatedAt, results.errorUpdatedAt)) ? explainBudget.budget : searchBudget) ??
     (limit.data ? { limit: limit.data.limit, remaining: limit.data.remaining, resetSeconds: limit.data.reset_seconds } : null);
   const lastCost = lastPage?.cost ?? error?.cost ?? null;
   const rows = results.data?.pages.flatMap((p) => p.page.results) ?? [];
@@ -369,7 +372,13 @@ export function InstanceSearchPage() {
       {results.error && !error && <ErrorBox error={new SearchError("Search failed.", 0)} />}
 
       {submittedParam !== null && !results.error && (
-        <ResultsTable rows={rows} loading={results.isLoading} bossCounts={bossCounts} />
+        <ResultsTable
+          rows={rows}
+          loading={results.isLoading}
+          bossCounts={bossCounts}
+          tree={submittedTree}
+          onBudget={(b) => setExplainBudget({ budget: b, at: Date.now() })}
+        />
       )}
       {results.hasNextPage && (
         <div className="flex justify-center">
