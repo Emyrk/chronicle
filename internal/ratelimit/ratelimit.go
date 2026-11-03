@@ -78,56 +78,73 @@ type Result struct {
 // Take tries to take cost tokens from subject's bucket. Errors are database
 // errors; the caller decides whether to fail open or closed.
 func (l *Limiter) Take(ctx context.Context, subject string, cost float64) (Result, error) {
+	return l.TakeWithLimit(ctx, subject, cost, l.limit)
+}
+
+// TakeWithLimit is Take with a per-request limit. The limiter name and subject
+// still select the same bucket, so changing a user's limit does not create or
+// reset a separate bucket.
+func (l *Limiter) TakeWithLimit(ctx context.Context, subject string, cost float64, limit Limit) (Result, error) {
 	if cost < 0 {
 		return Result{}, xerrors.Errorf("rate limit cost must not be negative, got %v", cost)
 	}
-	return l.take(ctx, subject, cost)
+	return l.take(ctx, subject, cost, limit)
 }
 
 // Refund returns tokens to subject's bucket, capped at the burst. Use it
 // when a request was charged but did no work.
 func (l *Limiter) Refund(ctx context.Context, subject string, tokens float64) (Status, error) {
+	return l.RefundWithLimit(ctx, subject, tokens, l.limit)
+}
+
+// RefundWithLimit is Refund with a per-request limit.
+func (l *Limiter) RefundWithLimit(ctx context.Context, subject string, tokens float64, limit Limit) (Status, error) {
 	if tokens < 0 {
 		return Status{}, xerrors.Errorf("rate limit refund must not be negative, got %v", tokens)
 	}
-	res, err := l.take(ctx, subject, -tokens)
+	res, err := l.take(ctx, subject, -tokens, limit)
 	return res.Status, err
 }
 
-func (l *Limiter) take(ctx context.Context, subject string, cost float64) (Result, error) {
+func (l *Limiter) take(ctx context.Context, subject string, cost float64, limit Limit) (Result, error) {
 	row, err := l.store.TakeRateLimitTokens(ctx, database.TakeRateLimitTokensParams{
 		Key:           l.key(subject),
-		Burst:         l.limit.Burst,
+		Burst:         limit.Burst,
 		Cost:          cost,
-		RatePerSecond: l.limit.PerSecond,
+		RatePerSecond: limit.PerSecond,
 	})
 	if err != nil {
 		return Result{}, xerrors.Errorf("take rate limit tokens: %w", err)
 	}
-	res := Result{Status: l.status(row.Tokens), Allowed: row.Allowed}
+	res := Result{Status: status(row.Tokens, limit), Allowed: row.Allowed}
 	if !row.Allowed {
-		res.RetryAfter = retryAfter(cost, row.Tokens, l.limit)
+		res.RetryAfter = retryAfter(cost, row.Tokens, limit)
 	}
 	return res, nil
 }
 
 // Peek returns subject's bucket state without taking anything.
 func (l *Limiter) Peek(ctx context.Context, subject string) (Status, error) {
+	return l.PeekWithLimit(ctx, subject, l.limit)
+}
+
+// PeekWithLimit is Peek with a per-request limit.
+func (l *Limiter) PeekWithLimit(ctx context.Context, subject string, limit Limit) (Status, error) {
 	tokens, err := l.store.PeekRateLimitTokens(ctx, database.PeekRateLimitTokensParams{
 		Key:           l.key(subject),
-		Burst:         l.limit.Burst,
-		RatePerSecond: l.limit.PerSecond,
+		Burst:         limit.Burst,
+		RatePerSecond: limit.PerSecond,
 	})
 	if err != nil {
 		return Status{}, xerrors.Errorf("peek rate limit tokens: %w", err)
 	}
-	return l.status(tokens), nil
+	return status(tokens, limit), nil
 }
 
 func (l *Limiter) key(subject string) string { return l.name + ":" + subject }
 
-func (l *Limiter) status(tokens float64) Status {
-	return Status{Limit: l.limit.Burst, Remaining: tokens, Reset: retryAfter(l.limit.Burst, tokens, l.limit)}
+func status(tokens float64, limit Limit) Status {
+	return Status{Limit: limit.Burst, Remaining: tokens, Reset: retryAfter(limit.Burst, tokens, limit)}
 }
 
 // retryAfter is how long until the bucket holds cost tokens.

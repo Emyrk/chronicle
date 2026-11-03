@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
 
@@ -22,7 +25,7 @@ func newInstanceSearchAPI(t *testing.T) (*API, *prometheus.Registry) {
 	t.Helper()
 	db, _ := dbtestutil.NewDB(t)
 	registry := prometheus.NewRegistry()
-	return &API{instanceSearch: newInstanceSearch(testutil.Logger(t), db, registry)}, registry
+	return &API{instanceSearch: newInstanceSearch(testutil.Logger(t), db, registry, nil)}, registry
 }
 
 // doSearch posts body as the given user (uuid.Nil = anonymous) from ip.
@@ -84,8 +87,8 @@ func TestInstanceSearch(t *testing.T) {
 	t.Run("AnonymousRateLimitedPerIP", func(t *testing.T) {
 		t.Parallel()
 		api, _ := newInstanceSearchAPI(t)
-		// A simple search costs 2, so the 40-token anonymous burst allows 20.
-		for i := range 20 {
+		// A simple search costs 3, so the 40-token anonymous burst allows 13.
+		for i := range 13 {
 			rec := doSearch(t, api, uuid.Nil, "10.0.0.2", simpleSearch)
 			require.Equal(t, http.StatusOK, rec.Code, "search %d", i)
 		}
@@ -117,7 +120,7 @@ func TestInstanceSearch(t *testing.T) {
 		rec := doSearch(t, api, uuid.New(), "10.0.0.1", simpleSearch)
 		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 		// The search never ran, so the bucket is full again.
-		require.Equal(t, "300", rec.Header().Get("RateLimit-Remaining"))
+		require.Equal(t, "100", rec.Header().Get("RateLimit-Remaining"))
 	})
 
 	// Every response reports the bucket; every response for a query that
@@ -140,9 +143,9 @@ func TestInstanceSearch(t *testing.T) {
 		}{
 			{"BadJSON", user, `{not json`, http.StatusBadRequest, ""},
 			{"Invalid", user, `{"where": {"field": "instance.nope", "op": "=", "value": 1}}`, http.StatusBadRequest, ""},
-			{"OK", user, simpleSearch, http.StatusOK, "2"},
-			{"LoginRequired", uuid.Nil, advancedSearch, http.StatusForbidden, "5"},
-			{"TooComplex", user, `{"where": {"and": [` + strings.Join(heavy, ",") + `]}}`, http.StatusTooManyRequests, "401"},
+			{"OK", user, simpleSearch, http.StatusOK, "3"},
+			{"LoginRequired", uuid.Nil, advancedSearch, http.StatusForbidden, "13"},
+			{"TooComplex", user, `{"where": {"and": [` + strings.Join(heavy, ",") + `]}}`, http.StatusTooManyRequests, "801"},
 		}
 		for _, tc := range cases {
 			rec := doSearch(t, api, tc.user, "10.0.0.9", tc.body)
@@ -153,9 +156,9 @@ func TestInstanceSearch(t *testing.T) {
 			require.Equal(t, tc.wantCost, rec.Header().Get(InstanceSearchCostHeader), tc.name)
 		}
 
-		// Only the successful search spent tokens: 300 - 2.
+		// Only the successful search spent tokens: 100 - 3.
 		rec := doSearch(t, api, user, "10.0.0.9", `{not json`)
-		require.Equal(t, "298", rec.Header().Get("RateLimit-Remaining"))
+		require.Equal(t, "97", rec.Header().Get("RateLimit-Remaining"))
 	})
 
 	t.Run("LimitEndpoint", func(t *testing.T) {
@@ -180,14 +183,14 @@ func TestInstanceSearch(t *testing.T) {
 
 		fresh := get(user)
 		require.True(t, fresh.LoggedIn)
-		require.Equal(t, 300.0, fresh.Limit)
-		require.Equal(t, 300.0, fresh.Remaining)
-		require.InDelta(t, 120, fresh.RefillPerMinute, 0.001)
+		require.Equal(t, 100.0, fresh.Limit)
+		require.Equal(t, 100.0, fresh.Remaining)
+		require.InDelta(t, 60, fresh.RefillPerMinute, 0.001)
 		require.EqualValues(t, 0, fresh.ResetSeconds)
 
 		require.Equal(t, http.StatusOK, doSearch(t, api, user, "10.0.0.8", advancedSearch).Code)
 		after := get(user)
-		require.InDelta(t, 295, after.Remaining, 0.5) // advancedSearch costs 5
+		require.InDelta(t, 87, after.Remaining, 0.5) // advancedSearch costs 13
 		require.Positive(t, after.ResetSeconds)
 		// Peeking does not spend.
 		require.InDelta(t, after.Remaining, get(user).Remaining, 0.5)
@@ -224,6 +227,51 @@ func TestInstanceSearch(t *testing.T) {
 	})
 }
 
+func TestInstanceSearchSupporterLimits(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		tier  string
+		burst float64
+	}{
+		{tier: "free", burst: 100},
+		{tier: "honored", burst: 300},
+		{tier: "revered", burst: 800},
+		{tier: "exalted", burst: 2000},
+		{tier: "unknown", burst: 100},
+	} {
+		t.Run(tc.tier, func(t *testing.T) {
+			t.Parallel()
+			limit := instanceSearchLimitForTier(tc.tier)
+			require.Equal(t, tc.burst, limit.Burst)
+			require.InDelta(t, 60, limit.PerSecond*60, 0.001)
+
+			api, _ := newInstanceSearchAPI(t)
+			api.instanceSearch.resolveUserLimit = func(context.Context, uuid.UUID) (ratelimit.Limit, error) {
+				return limit, nil
+			}
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/raidlogs/search/limit", nil)
+			ctx := chronauth.WithClaims(testutil.Context(t, testutil.WaitShort), &claims.Claims{Subject: uuid.New()})
+			rec := httptest.NewRecorder()
+			api.InstanceSearchLimit(rec, req.WithContext(ctx))
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			var out chroniclesdk.InstanceSearchLimitResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+			require.Equal(t, tc.burst, out.Limit)
+			require.Equal(t, tc.burst, out.Remaining)
+			require.Equal(t, tc.burst, float64(mustAtoi(t, rec.Header().Get("RateLimit-Limit"))))
+		})
+	}
+}
+
+func mustAtoi(t *testing.T, value string) int {
+	t.Helper()
+	n, err := strconv.Atoi(value)
+	require.NoError(t, err)
+	return n
+}
+
 func doExplain(t *testing.T, api *API, user uuid.UUID, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/raidlogs/search/explain", strings.NewReader(body))
@@ -252,12 +300,12 @@ func TestInstanceSearchExplain(t *testing.T) {
 		body   string
 		status int
 		want   string
-		// Explain costs 1 + search cost / 4: advancedSearch 5 -> 2, simpleSearch 2 -> 1.
+		// Explain costs 1 + search cost / 4: advancedSearch 13 -> 4, simpleSearch 3 -> 1.
 		cost string
 	}{
-		{"UnknownRun", uuid.New(), body(advancedSearch), http.StatusNotFound, "Run not found", "2"},
+		{"UnknownRun", uuid.New(), body(advancedSearch), http.StatusNotFound, "Run not found", "4"},
 		{"AnonymousSimple", uuid.Nil, body(simpleSearch), http.StatusNotFound, "Run not found", "1"},
-		{"AnonymousAdvancedNeedsLogin", uuid.Nil, body(advancedSearch), http.StatusForbidden, "Log in", "2"},
+		{"AnonymousAdvancedNeedsLogin", uuid.Nil, body(advancedSearch), http.StatusForbidden, "Log in", "4"},
 		{"Invalid", uuid.New(), body(`{"where": {"field": "instance.nope", "op": "=", "value": 1}}`), http.StatusBadRequest, "unknown field", ""},
 		{"BadJSON", uuid.New(), `{`, http.StatusBadRequest, "valid JSON", ""},
 	}

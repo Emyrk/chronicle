@@ -235,7 +235,7 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	api := &API{
 		luaArtifactBacklog: luaArtifactBacklog,
 		uiUsageMetrics:     newUIUsageMetrics(opts.Registry),
-		instanceSearch:     newInstanceSearch(opts.Logger, database.New(opts.Pool), opts.Registry),
+		instanceSearch:     newInstanceSearch(opts.Logger, database.New(opts.Pool), opts.Registry, newInstanceSearchUserLimitResolver(opts.Zed)),
 		Opts:               &opts,
 		AppContext:         ctx,
 		Auth:               service,

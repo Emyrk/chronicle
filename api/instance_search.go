@@ -20,8 +20,12 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/instancesearch"
 	"github.com/Emyrk/chronicle/internal/ratelimit"
+	"github.com/google/uuid"
 )
 
 const (
@@ -32,22 +36,32 @@ const (
 	instanceSearchSlowLog = 2 * time.Second
 )
 
+const (
+	instanceSearchUserRefillPerMinute = 60
+	instanceSearchFreeBurst           = 100
+	instanceSearchHonoredBurst        = 300
+	instanceSearchReveredBurst        = 800
+	instanceSearchExaltedBurst        = 2000
+)
+
 var (
-	// Logged-in users: about 4 heavy or 60 simple searches a minute, with
-	// room for a burst. Buckets refill fully in under 3 minutes, well inside
-	// ratelimit.IdleBucketTTL.
-	instanceSearchUserLimit = ratelimit.PerMinute(120, 300)
+	// Logged-in buckets share a refill rate but get more room at higher
+	// supporter tiers. The free bucket takes five minutes to refill from empty.
+	instanceSearchUserLimit = ratelimit.PerMinute(instanceSearchUserRefillPerMinute, instanceSearchFreeBurst)
 	// Anonymous users only get cheap queries; bucketed per IP.
 	instanceSearchAnonLimit = ratelimit.PerMinute(20, 40)
 )
 
+type instanceSearchUserLimitResolver func(context.Context, uuid.UUID) (ratelimit.Limit, error)
+
 type instanceSearch struct {
-	logger  *slog.Logger
-	store   database.Store
-	users   *ratelimit.Limiter
-	anon    *ratelimit.Limiter
-	slots   chan struct{}
-	metrics *instanceSearchMetrics
+	logger           *slog.Logger
+	store            database.Store
+	users            *ratelimit.Limiter
+	anon             *ratelimit.Limiter
+	resolveUserLimit instanceSearchUserLimitResolver
+	slots            chan struct{}
+	metrics          *instanceSearchMetrics
 }
 
 type instanceSearchMetrics struct {
@@ -56,14 +70,20 @@ type instanceSearchMetrics struct {
 	fieldUses *prometheus.CounterVec
 }
 
-func newInstanceSearch(logger *slog.Logger, store database.Store, registry prometheus.Registerer) *instanceSearch {
+func newInstanceSearch(logger *slog.Logger, store database.Store, registry prometheus.Registerer, resolveUserLimit instanceSearchUserLimitResolver) *instanceSearch {
 	factory := promauto.With(registry)
+	if resolveUserLimit == nil {
+		resolveUserLimit = func(context.Context, uuid.UUID) (ratelimit.Limit, error) {
+			return instanceSearchUserLimit, nil
+		}
+	}
 	return &instanceSearch{
-		logger: logger.With(slog.String("component", "instance_search")),
-		store:  store,
-		users:  ratelimit.New(store, "instance_search", instanceSearchUserLimit),
-		anon:   ratelimit.New(store, "instance_search_anon", instanceSearchAnonLimit),
-		slots:  make(chan struct{}, instanceSearchMaxConcurrent),
+		logger:           logger.With(slog.String("component", "instance_search")),
+		store:            store,
+		users:            ratelimit.New(store, "instance_search", instanceSearchUserLimit),
+		anon:             ratelimit.New(store, "instance_search_anon", instanceSearchAnonLimit),
+		resolveUserLimit: resolveUserLimit,
+		slots:            make(chan struct{}, instanceSearchMaxConcurrent),
 		metrics: &instanceSearchMetrics{
 			duration: factory.NewHistogramVec(prometheus.HistogramOpts{
 				Namespace: "chronicle",
@@ -78,8 +98,8 @@ func newInstanceSearch(logger *slog.Logger, store database.Store, registry prome
 				Name:      "cost",
 				Help:      "Estimated cost of compiled instance searches.",
 				// Covers the most a valid query can cost (MaxNodes x the
-				// heaviest field, ~640) so heavy queries don't all land in +Inf.
-				Buckets: []float64{1, 2, 5, 10, 20, 40, 80, 160, 320, 640},
+				// heaviest field, ~1280) so heavy queries don't all land in +Inf.
+				Buckets: []float64{1, 2, 5, 10, 20, 40, 80, 160, 320, 640, 1280},
 			}, []string{"caller"}),
 			fieldUses: factory.NewCounterVec(prometheus.CounterOpts{
 				Namespace: "chronicle",
@@ -105,19 +125,70 @@ type searchCaller struct {
 	loggedIn bool
 	subject  string
 	limiter  *ratelimit.Limiter
+	limit    ratelimit.Limit
 }
 
-func (s *instanceSearch) caller(r *http.Request) searchCaller {
-	if claims, ok := chronauth.AuthenticatedClaims(r.Context()); ok {
-		return searchCaller{kind: "user", loggedIn: true, subject: ratelimit.UserSubject(claims.Subject.String()), limiter: s.users}
+func instanceSearchLimitForTier(tier string) ratelimit.Limit {
+	burst := float64(instanceSearchFreeBurst)
+	switch tier {
+	case billing.TierHonored:
+		burst = instanceSearchHonoredBurst
+	case billing.TierRevered:
+		burst = instanceSearchReveredBurst
+	case billing.TierExalted:
+		burst = instanceSearchExaltedBurst
 	}
-	return searchCaller{kind: "anon", subject: ratelimit.IPSubject(instanceSearchClientIP(r)), limiter: s.anon}
+	return ratelimit.PerMinute(instanceSearchUserRefillPerMinute, burst)
+}
+
+func newInstanceSearchUserLimitResolver(zed *authz.Authz) instanceSearchUserLimitResolver {
+	return func(ctx context.Context, userID uuid.UUID) (ratelimit.Limit, error) {
+		return resolveInstanceSearchUserLimit(ctx, zed, userID)
+	}
+}
+
+func resolveInstanceSearchUserLimit(ctx context.Context, zed *authz.Authz, userID uuid.UUID) (ratelimit.Limit, error) {
+	actor := policy.New().User(userID)
+	chronicle := policy.New().GlobalChronicle()
+	permissions, err := zed.Check(ctx, nil,
+		chronicle.CanHas_exalted_User(actor),
+		chronicle.CanHas_revered_User(actor),
+		chronicle.CanHas_honored_User(actor),
+	)
+	if err != nil {
+		return ratelimit.Limit{}, err
+	}
+	if len(permissions) != 3 {
+		return ratelimit.Limit{}, errors.New("check instance search supporter tier: expected 3 permission results")
+	}
+	return instanceSearchLimitForTier(highestSupporterTier(permissions[0], permissions[1], permissions[2])), nil
+}
+
+func (s *instanceSearch) caller(r *http.Request) (searchCaller, error) {
+	if claims, ok := chronauth.AuthenticatedClaims(r.Context()); ok {
+		limit, err := s.resolveUserLimit(r.Context(), claims.Subject)
+		if err != nil {
+			return searchCaller{}, err
+		}
+		return searchCaller{kind: "user", loggedIn: true, subject: ratelimit.UserSubject(claims.Subject.String()), limiter: s.users, limit: limit}, nil
+	}
+	return searchCaller{kind: "anon", subject: ratelimit.IPSubject(instanceSearchClientIP(r)), limiter: s.anon, limit: instanceSearchAnonLimit}, nil
+}
+
+func (s *instanceSearch) callerOrError(w http.ResponseWriter, r *http.Request) (searchCaller, bool) {
+	c, err := s.caller(r)
+	if err != nil {
+		s.logger.Error("instance search supporter tier", slog.String("error", err.Error()))
+		httpapi.Write(r.Context(), w, http.StatusInternalServerError, chroniclesdk.Response{Message: "Search is unavailable right now."})
+		return searchCaller{}, false
+	}
+	return c, true
 }
 
 // peekHeaders sets the RateLimit-* headers on responses that did not take
 // from the bucket. It is best effort: a failed peek only drops the headers.
 func (s *instanceSearch) peekHeaders(ctx context.Context, w http.ResponseWriter, c searchCaller) {
-	st, err := c.limiter.Peek(ctx, c.subject)
+	st, err := c.limiter.PeekWithLimit(ctx, c.subject, c.limit)
 	if err != nil {
 		s.logger.Error("instance search rate limit peek", slog.String("error", err.Error()))
 		return
@@ -129,7 +200,7 @@ func (s *instanceSearch) peekHeaders(ctx context.Context, w http.ResponseWriter,
 // slot. When it returns false it has already written the response. Call
 // release when the query is done.
 func (s *instanceSearch) admit(ctx context.Context, w http.ResponseWriter, c searchCaller, cost int, observe func(string)) (release func(), ok bool) {
-	res, err := c.limiter.Take(ctx, c.subject, float64(cost))
+	res, err := c.limiter.TakeWithLimit(ctx, c.subject, float64(cost), c.limit)
 	if err != nil {
 		observe("error")
 		s.logger.Error("instance search rate limit", slog.String("error", err.Error()))
@@ -141,7 +212,7 @@ func (s *instanceSearch) admit(ctx context.Context, w http.ResponseWriter, c sea
 		observe("rate_limited")
 		ratelimit.SetRetryAfter(w, res)
 		msg := "You are searching too quickly. Try again shortly."
-		if float64(cost) > c.limiter.Limit().Burst {
+		if float64(cost) > c.limit.Burst {
 			msg = "This search is too complex. Remove some filters and try again."
 		}
 		httpapi.Write(ctx, w, http.StatusTooManyRequests, chroniclesdk.Response{Message: msg})
@@ -154,7 +225,7 @@ func (s *instanceSearch) admit(ctx context.Context, w http.ResponseWriter, c sea
 	default:
 		observe("busy")
 		// The query never ran, so give the tokens back.
-		if st, err := c.limiter.Refund(ctx, c.subject, float64(cost)); err == nil {
+		if st, err := c.limiter.RefundWithLimit(ctx, c.subject, float64(cost), c.limit); err == nil {
 			ratelimit.SetHeaders(w, st)
 		} else {
 			s.logger.Error("instance search rate limit refund", slog.String("error", err.Error()))
@@ -181,7 +252,10 @@ func (api *API) InstanceSearch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	s := api.instanceSearch
 	start := time.Now()
-	c := s.caller(r)
+	c, ok := s.callerOrError(w, r)
+	if !ok {
+		return
+	}
 	observe := func(outcome string) {
 		s.metrics.duration.WithLabelValues(outcome, c.kind).Observe(time.Since(start).Seconds())
 	}
@@ -276,7 +350,10 @@ func (api *API) InstanceSearchExplain(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	s := api.instanceSearch
 	start := time.Now()
-	c := s.caller(r)
+	c, ok := s.callerOrError(w, r)
+	if !ok {
+		return
+	}
 	observe := func(outcome string) {
 		s.metrics.duration.WithLabelValues("explain_"+outcome, c.kind).Observe(time.Since(start).Seconds())
 	}
@@ -355,8 +432,11 @@ func (api *API) InstanceSearchExplain(w http.ResponseWriter, r *http.Request) {
 func (api *API) InstanceSearchLimit(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	s := api.instanceSearch
-	c := s.caller(r)
-	st, err := c.limiter.Peek(ctx, c.subject)
+	c, ok := s.callerOrError(w, r)
+	if !ok {
+		return
+	}
+	st, err := c.limiter.PeekWithLimit(ctx, c.subject, c.limit)
 	if err != nil {
 		s.logger.Error("instance search rate limit peek", slog.String("error", err.Error()))
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{Message: "Search is unavailable right now."})
@@ -367,7 +447,7 @@ func (api *API) InstanceSearchLimit(w http.ResponseWriter, r *http.Request) {
 		LoggedIn:        c.loggedIn,
 		Limit:           st.Limit,
 		Remaining:       st.Remaining,
-		RefillPerMinute: c.limiter.Limit().PerSecond * 60,
+		RefillPerMinute: c.limit.PerSecond * 60,
 		ResetSeconds:    int64(math.Ceil(st.Reset.Seconds())),
 	})
 }

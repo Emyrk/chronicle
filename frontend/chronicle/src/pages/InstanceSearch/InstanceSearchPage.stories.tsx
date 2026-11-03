@@ -65,12 +65,13 @@ const session = {
 type SearchMode = "ok" | "empty" | "rate_limited" | "login_required" | "timeout";
 
 function handlers({ loggedIn, search = "ok", tier = "honored" }: { loggedIn: boolean; search?: SearchMode; tier?: string }) {
-  let remaining = loggedIn ? 300 : 40;
-  const limit = loggedIn ? 300 : 40;
+  const supporterLimit = tier === "exalted" ? 2000 : tier === "revered" ? 800 : tier === "honored" ? 300 : 100;
+  const limit = loggedIn ? supporterLimit : 40;
+  let remaining = limit;
   const rlHeaders = (cost?: number) => ({
     "RateLimit-Limit": String(limit),
     "RateLimit-Remaining": String(Math.floor(remaining)),
-    "RateLimit-Reset": String(Math.ceil(((limit - remaining) / (loggedIn ? 120 : 20)) * 60)),
+    "RateLimit-Reset": String(Math.ceil(((limit - remaining) / (loggedIn ? 60 : 20)) * 60)),
     ...(cost != null ? { "Chronicle-Search-Cost": String(cost) } : {}),
   });
   return [
@@ -81,7 +82,7 @@ function handlers({ loggedIn, search = "ok", tier = "honored" }: { loggedIn: boo
     http.get("/api/v1/site-config", () => HttpResponse.json({ dataset_flavor: ["nightmare-of-ursol"] })),
     http.get("/api/v1/raidlogs/search/fields", () => HttpResponse.json(fields)),
     http.get("/api/v1/raidlogs/search/limit", () =>
-      HttpResponse.json({ logged_in: loggedIn, limit, remaining, refill_per_minute: loggedIn ? 120 : 20, reset_seconds: 0 }),
+      HttpResponse.json({ logged_in: loggedIn, limit, remaining, refill_per_minute: loggedIn ? 60 : 20, reset_seconds: 0 }),
     ),
     http.post("/api/v1/raidlogs/search/explain", async ({ request }) => {
       await delay(300);

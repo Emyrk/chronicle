@@ -194,6 +194,28 @@ func TestTake(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("PerRequestLimitUsesSameBucket", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
+		l := ratelimit.New(db, "dynamic", ratelimit.PerMinute(60, 10))
+		larger := ratelimit.PerMinute(60, 40)
+
+		res, err := l.TakeWithLimit(ctx, "user:a", 7, larger)
+		require.NoError(t, err)
+		require.True(t, res.Allowed)
+		require.Equal(t, 40.0, res.Limit)
+		require.InDelta(t, 33, res.Remaining, 0.1)
+
+		status, err := l.PeekWithLimit(ctx, "user:a", larger)
+		require.NoError(t, err)
+		require.Equal(t, 40.0, status.Limit)
+		require.InDelta(t, 33, status.Remaining, 0.1)
+
+		status, err = l.RefundWithLimit(ctx, "user:a", 3, larger)
+		require.NoError(t, err)
+		require.InDelta(t, 36, status.Remaining, 0.1)
+	})
+
 	t.Run("Headers", func(t *testing.T) {
 		t.Parallel()
 		ctx := testutil.Context(t, testutil.WaitShort)

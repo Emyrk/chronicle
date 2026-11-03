@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Blocks, BookOpen, ChevronDown, ChevronRight, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
-import type { InstanceSearchCursor } from "@/api/typesGenerated";
+import type { InstanceSearchCursor, InstanceSearchLimitResponse } from "@/api/typesGenerated";
 import { useRealms, useSupportedInstances } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation";
@@ -220,16 +220,30 @@ export function InstanceSearchPage() {
     staleTime: Infinity,
   });
 
+  const queryClient = useQueryClient();
   const limit = useSearchLimit();
   const lastPage = results.data?.pages[results.data.pages.length - 1];
   const error = results.error instanceof SearchError ? results.error : null;
-  // Explaining a row also spends from the budget; show whichever response
-  // is newer, the search's or the last explain's.
-  const [explainBudget, setExplainBudget] = useState<{ budget: SearchBudget; at: number } | null>(null);
   const searchBudget = lastPage?.budget ?? error?.budget ?? null;
-  const budget: SearchBudget | null =
-    (explainBudget && (!searchBudget || explainBudget.at > Math.max(results.dataUpdatedAt, results.errorUpdatedAt)) ? explainBudget.budget : searchBudget) ??
-    (limit.data ? { limit: limit.data.limit, remaining: limit.data.remaining, resetSeconds: limit.data.reset_seconds } : null);
+  const recordBudget = useCallback(
+    (next: SearchBudget) => {
+      queryClient.setQueryData<InstanceSearchLimitResponse>(["instance-search", "limit"], (current) =>
+        current
+          ? { ...current, limit: next.limit, remaining: next.remaining, reset_seconds: next.resetSeconds }
+          : current,
+      );
+    },
+    [queryClient],
+  );
+  // Search and explain responses already carry the exact bucket state. Put it
+  // into the limit query so its five-second polling starts immediately, then
+  // stops once a later peek reports a full bucket.
+  useEffect(() => {
+    if (searchBudget) recordBudget(searchBudget);
+  }, [recordBudget, searchBudget]);
+  const budget: SearchBudget | null = limit.data
+    ? { limit: limit.data.limit, remaining: limit.data.remaining, resetSeconds: limit.data.reset_seconds }
+    : searchBudget;
   const lastCost = lastPage?.cost ?? error?.cost ?? null;
   const rows = results.data?.pages.flatMap((p) => p.page.results) ?? [];
   // Ask before leaving while results are on screen: in-app links via the
@@ -435,7 +449,7 @@ export function InstanceSearchPage() {
           loading={results.isLoading}
           bossCounts={bossCounts}
           tree={submittedTree}
-          onBudget={(b) => setExplainBudget({ budget: b, at: Date.now() })}
+          onBudget={recordBudget}
         />
       )}
       {results.hasNextPage && (

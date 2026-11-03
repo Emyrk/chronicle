@@ -134,11 +134,20 @@ export function useSearchFields() {
   });
 }
 
+export const SEARCH_LIMIT_REFETCH_MS = 5_000;
+
+export function searchLimitRefetchInterval(data: InstanceSearchLimitResponse | undefined): number | false {
+  return data && data.remaining < data.limit ? SEARCH_LIMIT_REFETCH_MS : false;
+}
+
 /** The caller's search budget, without spending from it. */
 export function useSearchLimit() {
   return useQuery({
     queryKey: ["instance-search", "limit"],
     queryFn: () => fetchJSON<InstanceSearchLimitResponse>(`${BASE}/limit`),
-    staleTime: 10_000,
+    refetchInterval: (query) => searchLimitRefetchInterval(query.state.data),
+    refetchOnWindowFocus: false,
+    retry: false,
+    staleTime: SEARCH_LIMIT_REFETCH_MS,
   });
 }

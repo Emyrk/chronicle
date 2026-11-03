@@ -16,6 +16,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+func highestSupporterTier(exalted, revered, honored bool) string {
+	switch {
+	case exalted:
+		return billing.TierExalted
+	case revered:
+		return billing.TierRevered
+	case honored:
+		return billing.TierHonored
+	default:
+		return billing.TierFree
+	}
+}
+
 func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	claims, authenticated := chronauth.AuthenticatedClaims(ctx)
@@ -66,15 +79,7 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 	adsFree := permissions[0]
 	canDownloadRawLogs := permissions[1]
 	// Highest supporter tier wins; the tier permissions include both manual and Stripe grants.
-	supporterTier := billing.TierFree
-	switch {
-	case permissions[2]:
-		supporterTier = billing.TierExalted
-	case permissions[3]:
-		supporterTier = billing.TierRevered
-	case permissions[4]:
-		supporterTier = billing.TierHonored
-	}
+	supporterTier := highestSupporterTier(permissions[2], permissions[3], permissions[4])
 
 	sess := chroniclesdk.Session{
 		UserID:               claims.Subject,

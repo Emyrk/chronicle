@@ -58,8 +58,8 @@ players.filter(p, p.class == "PRIEST").size() >= 3
 
 They have a per-IP bucket. Everything else returns 403 "Log in to use advanced search."
 
-**Cost.** `Compiled.Cost` adds up per-field weights (`field.Cost`, default 1), plus 2 per `any_*` and 3 per `count_*`, plus a base of 1. The rate limiter charges that many tokens:
-- logged-in users: 120 tokens a minute, burst 300
+**Cost.** `Compiled.Cost` adds up per-field weights (`field.Cost`, default 2), plus 2 per `or`, 1 per `not`, 4 per `any_*` and 10 per `count_*`, plus a base of 1. The rate limiter charges that many tokens:
+- logged-in users: 60 tokens a minute, with burst 100 for free users, 300 for Honored, 800 for Revered and 2000 for Exalted
 - anonymous: 20 tokens a minute, burst 40 per IP
 
 Give an expensive new field a higher `Cost`.

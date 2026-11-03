@@ -80,9 +80,11 @@ type Compiled struct {
 
 const (
 	baseCost         = 1
-	anyQuantCost     = 2
-	countQuantCost   = 3
-	defaultFieldCost = 1
+	orCost           = 2
+	notCost          = 1
+	anyQuantCost     = 4
+	countQuantCost   = 10
+	defaultFieldCost = 2
 )
 
 // Error is a validation error that is safe to show to the user.
@@ -293,8 +295,10 @@ func (c *compiler) node(n *Node, path string, s scope, depth int) (string, error
 	case n.And != nil:
 		return c.group(n.And, path+".and", " AND ", s, depth)
 	case n.Or != nil:
+		c.cost += orCost
 		return c.group(n.Or, path+".or", " OR ", s, depth)
 	case n.Not != nil:
+		c.cost += notCost
 		inner, err := c.node(n.Not, path+".not", s, depth+1)
 		if err != nil {
 			return "", err

@@ -71,7 +71,7 @@ type field struct {
 	// On: the predicate reads per-fight player rows and accepts on
 	// (bosses, trash, any).
 	On bool
-	// Cost is the field's weight in Compiled.Cost. Zero means 1 (a plain
+	// Cost is the field's weight in Compiled.Cost. Zero means 2 (a plain
 	// column). Correlated subqueries cost more; per-player ranking lookups
 	// and clear-window math the most.
 	Cost int
@@ -548,7 +548,7 @@ var fields = []*field{
 		Doc: "raid or dungeon.", value: column("li.category")},
 	{Name: "instance.recorder", Scope: scopeInstance, Type: typeString,
 		Doc: "Name of the character that recorded the log.", value: column("li.recorder_name")},
-	{Name: "instance.has_video", Cost: 2, Scope: scopeInstance, Type: typeBool,
+	{Name: "instance.has_video", Cost: 4, Scope: scopeInstance, Type: typeBool,
 		Doc:   "A YouTube video is linked to the run.",
 		value: column("EXISTS (SELECT 1 FROM log_instance_youtube_timestamped yt WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug)")},
 	{Name: "instance.capability", Scope: scopeInstance, Type: typeEnum, Enum: capabilities,
@@ -566,31 +566,31 @@ var fields = []*field{
 				return fmt.Sprintf("%s::text = ANY(li.capabilities)", c.arg(p.value))
 			}
 		}},
-	{Name: "instance.player_count", Cost: 2, Scope: scopeInstance, Type: typeInt,
+	{Name: "instance.player_count", Cost: 8, Scope: scopeInstance, Type: typeInt,
 		Doc:   "Number of distinct players in the run.",
 		value: column("(SELECT count(DISTINCT lp.unit_guid) FROM log_instance_players lp WHERE lp.instance_id = li.id)")},
-	{Name: "instance.bosses_killed", Cost: 2, Scope: scopeInstance, Type: typeInt,
+	{Name: "instance.bosses_killed", Cost: 4, Scope: scopeInstance, Type: typeInt,
 		Doc:   "Number of distinct bosses killed (clean or partial).",
 		value: column("(SELECT count(DISTINCT bk.name) FROM log_instance_encounters bk WHERE bk.instance_id = li.id AND bk.boss AND bk.kill_type " + killedSQL + ")")},
-	{Name: "instance.wipes", Cost: 2, Scope: scopeInstance, Type: typeInt,
+	{Name: "instance.wipes", Cost: 4, Scope: scopeInstance, Type: typeInt,
 		Doc:   "Total wipes in the run (overview metrics).",
 		value: column("(SELECT iom.wipe_count FROM instance_overview_metrics iom WHERE iom.instance_id = li.id)")},
-	{Name: "instance.deaths", Cost: 2, Scope: scopeInstance, Type: typeInt,
+	{Name: "instance.deaths", Cost: 4, Scope: scopeInstance, Type: typeInt,
 		Doc:   "Total player deaths in the run (overview metrics).",
 		value: column("(SELECT iom.player_deaths FROM instance_overview_metrics iom WHERE iom.instance_id = li.id)")},
-	{Name: "instance.clear_time_ms", Cost: 2, Scope: scopeInstance, Type: typeInt, Unit: "ms",
+	{Name: "instance.clear_time_ms", Cost: 4, Scope: scopeInstance, Type: typeInt, Unit: "ms",
 		Doc:   "Ranked full-clear time. Only full clears have one.",
 		value: column("(SELECT sr.ranked_duration_ms FROM instance_speedruns sr WHERE sr.instance_id = li.id AND sr.ranked_duration_ms > 0)")},
-	{Name: "instance.clear_qualified", Cost: 2, Scope: scopeInstance, Type: typeBool,
+	{Name: "instance.clear_qualified", Cost: 4, Scope: scopeInstance, Type: typeBool,
 		Doc:   "The clear qualifies for speedrun leaderboards.",
 		value: column("(SELECT sr.qualified FROM instance_speedruns sr WHERE sr.instance_id = li.id)")},
-	{Name: "instance.boss_time_ms", Cost: 10, Scope: scopeInstance, Type: typeInt, Unit: "ms",
+	{Name: "instance.boss_time_ms", Cost: 20, Scope: scopeInstance, Type: typeInt, Unit: "ms",
 		Doc: "Time inside the clear spent fighting bosses. Full clears only.", value: clearParts("boss")},
-	{Name: "instance.trash_time_ms", Cost: 10, Scope: scopeInstance, Type: typeInt, Unit: "ms",
+	{Name: "instance.trash_time_ms", Cost: 20, Scope: scopeInstance, Type: typeInt, Unit: "ms",
 		Doc: "Time inside the clear spent fighting trash (non-boss fights). Full clears only.", value: clearParts("trash")},
-	{Name: "instance.idle_time_ms", Cost: 10, Scope: scopeInstance, Type: typeInt, Unit: "ms",
+	{Name: "instance.idle_time_ms", Cost: 20, Scope: scopeInstance, Type: typeInt, Unit: "ms",
 		Doc: "Time inside the clear spent out of combat. Full clears only.", value: clearParts("idle")},
-	{Name: "instance.clear_parse", Cost: 3, Scope: scopeInstance, Type: typeInt, Unit: "0-100", ParseScope: true,
+	{Name: "instance.clear_parse", Cost: 6, Scope: scopeInstance, Type: typeInt, Unit: "0-100", ParseScope: true,
 		Doc: "Clear-time parse (higher is faster).",
 		value: func(c *compiler, s scope, p pred) valueSQL {
 			tps := c.alias("tps")
@@ -598,7 +598,7 @@ var fields = []*field{
 			return valueSQL{Expr: fmt.Sprintf("(SELECT %[1]s_display_score FROM time_parse_scores %[2]s WHERE %[3]s AND %[1]s_status %[4]s)",
 				col, tps, c.timeParseContract(tps), scoredStatusSQL)}
 		}},
-	{Name: "instance.kill_time_parse", Cost: 4, Scope: scopeInstance, Type: typeInt, Unit: "0-100", ParseScope: true, Bosses: true,
+	{Name: "instance.kill_time_parse", Cost: 8, Scope: scopeInstance, Type: typeInt, Unit: "0-100", ParseScope: true, Bosses: true,
 		Doc: "Boss kill-time parse (higher is faster) on any / each of the bosses.",
 		value: func(c *compiler, s scope, p pred) valueSQL {
 			tps, tbs := c.alias("tps"), c.alias("tbs")
@@ -606,7 +606,7 @@ var fields = []*field{
 				tps, tbs, c.timeParseContract(tps), p.parseScope, scoredStatusSQL)
 			return valueSQL{Expr: fmt.Sprintf("%s.%s_display_score", tbs, p.parseScope), From: from, Name: tbs + ".encounter_name"}
 		}},
-	{Name: "instance.kill_time_ms", Cost: 3, Scope: scopeInstance, Type: typeInt, Unit: "ms", Bosses: true,
+	{Name: "instance.kill_time_ms", Cost: 6, Scope: scopeInstance, Type: typeInt, Unit: "ms", Bosses: true,
 		Doc: "Boss kill duration (clean or partial kills) on any / each of the bosses.",
 		value: func(c *compiler, s scope, p pred) valueSQL {
 			e := c.alias("k")
@@ -628,7 +628,7 @@ var fields = []*field{
 		value: func(c *compiler, s scope, p pred) valueSQL {
 			return valueSQL{Expr: durationMS(s.alias)}
 		}},
-	{Name: "encounter.kill_time_parse", Cost: 4, Scope: scopeEncounter, Type: typeInt, Unit: "0-100", ParseScope: true,
+	{Name: "encounter.kill_time_parse", Cost: 8, Scope: scopeEncounter, Type: typeInt, Unit: "0-100", ParseScope: true,
 		Doc: "Kill-time parse for this kill.",
 		value: func(c *compiler, s scope, p pred) valueSQL {
 			tps, tbs := c.alias("tps"), c.alias("tbs")
@@ -647,25 +647,25 @@ var fields = []*field{
 		Doc: "Race.", value: column("{a}.race::text")},
 	{Name: "player.level", Scope: scopePlayer, Type: typeInt,
 		Doc: "Level.", value: column("{a}.level")},
-	{Name: "player.guild", Cost: 2, Scope: scopePlayer, Type: typeString,
+	{Name: "player.guild", Cost: 4, Scope: scopePlayer, Type: typeString,
 		Doc: "Guild name at the time of the run.", value: column("(SELECT pg.name FROM guilds pg WHERE pg.id = {a}.guild_id)")},
 	{Name: "player.guild_id", Scope: scopePlayer, Type: typeUUID,
 		Doc: "Guild ID at the time of the run.", value: column("{a}.guild_id")},
-	{Name: "player.spec", Cost: 3, Scope: scopePlayer, Type: typeString, Bosses: true, On: true,
+	{Name: "player.spec", Cost: 6, Scope: scopePlayer, Type: typeString, Bosses: true, On: true,
 		Doc: "Spec in a fight, e.g. \"Feral\". Read from boss kills by default; see on.", value: rankingField("player_spec")},
-	{Name: "player.sub_spec", Cost: 3, Scope: scopePlayer, Type: typeString, Bosses: true, On: true,
+	{Name: "player.sub_spec", Cost: 6, Scope: scopePlayer, Type: typeString, Bosses: true, On: true,
 		Doc: "Sub-spec in a fight: Bear / Cat (Feral druid), Tank / DPS (Enhancement shaman), Fury Prot. Empty for other specs and servers.", value: rankingField("player_sub_spec")},
-	{Name: "player.role", Cost: 3, Scope: scopePlayer, Type: typeEnum, Enum: roles, Bosses: true, On: true,
+	{Name: "player.role", Cost: 6, Scope: scopePlayer, Type: typeEnum, Enum: roles, Bosses: true, On: true,
 		Doc: "Role in a fight.", value: rankingField("player_role")},
-	{Name: "player.dps", Cost: 3, Scope: scopePlayer, Type: typeFloat, Bosses: true, On: true,
+	{Name: "player.dps", Cost: 6, Scope: scopePlayer, Type: typeFloat, Bosses: true, On: true,
 		Doc: "DPS in a fight.", value: rankingField("dps")},
-	{Name: "player.hps", Cost: 3, Scope: scopePlayer, Type: typeFloat, Bosses: true, On: true,
+	{Name: "player.hps", Cost: 6, Scope: scopePlayer, Type: typeFloat, Bosses: true, On: true,
 		Doc: "HPS in a fight.", value: rankingField("hps")},
-	{Name: "player.deaths", Cost: 3, Scope: scopePlayer, Type: typeInt, Bosses: true, On: true,
+	{Name: "player.deaths", Cost: 6, Scope: scopePlayer, Type: typeInt, Bosses: true, On: true,
 		Doc: "Deaths in a fight. Wipes are not counted.", value: rankingField("player_deaths")},
-	{Name: "player.avg_ilvl", Cost: 3, Scope: scopePlayer, Type: typeInt, Bosses: true, On: true,
+	{Name: "player.avg_ilvl", Cost: 6, Scope: scopePlayer, Type: typeInt, Bosses: true, On: true,
 		Doc: "Average item level in a fight.", value: rankingField("avg_ilvl")},
-	{Name: "player.parse", Cost: 15, Scope: scopePlayer, Type: typeInt, Unit: "0-100", Bosses: true, Metric: true,
+	{Name: "player.parse", Cost: 21, Scope: scopePlayer, Type: typeInt, Unit: "0-100", Bosses: true, Metric: true,
 		Doc: "Player parse on a boss kill (latest stored score per boss).",
 		value: func(c *compiler, s scope, p pred) valueSQL {
 			r := c.alias("ps")

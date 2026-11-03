@@ -18,7 +18,7 @@
       "metric": false,
       "on": false,
       "anonymous": true,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "instance.realm",
@@ -38,7 +38,7 @@
       "metric": false,
       "on": false,
       "anonymous": true,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "instance.realm_id",
@@ -56,7 +56,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "instance.guild",
@@ -76,7 +76,7 @@
       "metric": false,
       "on": false,
       "anonymous": true,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "instance.guild_id",
@@ -94,7 +94,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "instance.started_at",
@@ -115,7 +115,7 @@
       "metric": false,
       "on": false,
       "anonymous": true,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "instance.difficulty",
@@ -135,7 +135,7 @@
       "metric": false,
       "on": false,
       "anonymous": true,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "instance.max_players",
@@ -156,7 +156,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "instance.category",
@@ -178,7 +178,7 @@
       "metric": false,
       "on": false,
       "anonymous": true,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "instance.recorder",
@@ -198,7 +198,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "instance.has_video",
@@ -214,7 +214,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 4
     },
     {
       "name": "instance.capability",
@@ -241,7 +241,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "instance.player_count",
@@ -262,7 +262,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 8
     },
     {
       "name": "instance.bosses_killed",
@@ -283,7 +283,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 4
     },
     {
       "name": "instance.wipes",
@@ -304,7 +304,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 4
     },
     {
       "name": "instance.deaths",
@@ -325,7 +325,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 4
     },
     {
       "name": "instance.clear_time_ms",
@@ -347,7 +347,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 4
     },
     {
       "name": "instance.clear_qualified",
@@ -363,7 +363,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 4
     },
     {
       "name": "instance.boss_time_ms",
@@ -385,7 +385,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 10
+      "cost": 20
     },
     {
       "name": "instance.trash_time_ms",
@@ -407,7 +407,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 10
+      "cost": 20
     },
     {
       "name": "instance.idle_time_ms",
@@ -429,7 +429,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 10
+      "cost": 20
     },
     {
       "name": "instance.clear_parse",
@@ -451,7 +451,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 3
+      "cost": 6
     },
     {
       "name": "instance.kill_time_parse",
@@ -473,7 +473,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 4
+      "cost": 8
     },
     {
       "name": "instance.kill_time_ms",
@@ -495,7 +495,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 3
+      "cost": 6
     },
     {
       "name": "encounter.name",
@@ -515,7 +515,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "encounter.boss",
@@ -531,7 +531,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "encounter.outcome",
@@ -555,7 +555,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "encounter.killed",
@@ -571,7 +571,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "encounter.duration_ms",
@@ -593,7 +593,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "encounter.kill_time_parse",
@@ -615,7 +615,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 4
+      "cost": 8
     },
     {
       "name": "player.name",
@@ -635,7 +635,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "player.guid",
@@ -655,7 +655,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "player.class",
@@ -687,7 +687,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "player.race",
@@ -718,7 +718,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "player.level",
@@ -739,7 +739,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "player.guild",
@@ -759,7 +759,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 4
     },
     {
       "name": "player.guild_id",
@@ -777,7 +777,7 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 1
+      "cost": 2
     },
     {
       "name": "player.spec",
@@ -797,7 +797,7 @@
       "metric": false,
       "on": true,
       "anonymous": false,
-      "cost": 3
+      "cost": 6
     },
     {
       "name": "player.sub_spec",
@@ -817,7 +817,7 @@
       "metric": false,
       "on": true,
       "anonymous": false,
-      "cost": 3
+      "cost": 6
     },
     {
       "name": "player.role",
@@ -840,7 +840,7 @@
       "metric": false,
       "on": true,
       "anonymous": false,
-      "cost": 3
+      "cost": 6
     },
     {
       "name": "player.dps",
@@ -861,7 +861,7 @@
       "metric": false,
       "on": true,
       "anonymous": false,
-      "cost": 3
+      "cost": 6
     },
     {
       "name": "player.hps",
@@ -882,7 +882,7 @@
       "metric": false,
       "on": true,
       "anonymous": false,
-      "cost": 3
+      "cost": 6
     },
     {
       "name": "player.deaths",
@@ -903,7 +903,7 @@
       "metric": false,
       "on": true,
       "anonymous": false,
-      "cost": 3
+      "cost": 6
     },
     {
       "name": "player.avg_ilvl",
@@ -924,7 +924,7 @@
       "metric": false,
       "on": true,
       "anonymous": false,
-      "cost": 3
+      "cost": 6
     },
     {
       "name": "player.parse",
@@ -946,7 +946,7 @@
       "metric": true,
       "on": false,
       "anonymous": false,
-      "cost": 15
+      "cost": 21
     }
   ],
   "max_nodes": 64,

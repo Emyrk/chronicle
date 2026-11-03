@@ -162,7 +162,7 @@ func TestDescribe(t *testing.T) {
 	require.True(t, role.On)
 	require.True(t, role.Bosses)
 
-	require.Equal(t, 15, byName["player.parse"].Cost)
+	require.Equal(t, 21, byName["player.parse"].Cost)
 	require.Equal(t, chroniclesdk.InstanceSearchFieldScopeEncounter, byName["encounter.outcome"].Scope)
 }
 
@@ -290,9 +290,12 @@ func TestCost(t *testing.T) {
 	cheap := cost(`{"field": "instance.name", "op": "=", "value": "Molten Core"}`)
 	heavy := cost(`{"field": "instance.idle_time_ms", "op": "<", "value": 1}`)
 	player := cost(`{"any_player": {"field": "player.parse", "op": ">=", "value": 90}}`)
-	require.Equal(t, 2, cheap)
-	require.Greater(t, heavy, cheap)
-	require.Greater(t, player, cheap)
+	require.Equal(t, 3, cheap)
+	require.Equal(t, 21, heavy)
+	require.Equal(t, 26, player)
+	require.Equal(t, 7, cost(`{"or": [{"field": "instance.name", "op": "=", "value": "a"}, {"field": "instance.name", "op": "=", "value": "b"}]}`))
+	require.Equal(t, 4, cost(`{"not": {"field": "instance.name", "op": "=", "value": "a"}}`))
+	require.Equal(t, 13, cost(`{"count_players": {"where": {"field": "player.class", "op": "=", "value": "MAGE"}, "op": ">", "value": 1}}`))
 
 	compiled, err := instancesearch.Compile(where(t, `{"and": [
 		{"field": "instance.name", "op": "=", "value": "x"},
