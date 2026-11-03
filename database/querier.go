@@ -651,6 +651,13 @@ type sqlcQuerier interface {
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	HeartbeatRatingRebuildCheckpoint(ctx context.Context, arg HeartbeatRatingRebuildCheckpointParams) (int64, error)
+	// Returns encounters available in rankings for a given instance.
+	HubSummaryEncounters(ctx context.Context, instanceName string) ([]HubSummaryEncountersRow, error)
+	HubSummaryInstances(ctx context.Context, tenantID uuid.UUID) ([]HubSummaryInstancesRow, error)
+	// All boards share the caller-pinned active generation. Bound boss names and
+	// truncate each board in SQL, not in the HTTP handler.
+	HubSummaryRatingRows(ctx context.Context, arg HubSummaryRatingRowsParams) ([]HubSummaryRatingRowsRow, error)
+	HubSummaryRealms(ctx context.Context, tenantID uuid.UUID) ([]HubSummaryRealmsRow, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
 	// Persist one constant-size state per subject/window. The caller must use the
 	// frozen manifest to select the window and rank weight. Replays do
