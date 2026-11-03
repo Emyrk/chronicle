@@ -63,9 +63,10 @@ function LiveInstanceHub({ instanceName, names, realm, realmIDs, encounter, tab,
   const realms = useRealms()
   const instances = useRankingsInstances()
   const raids = (instances.data ?? []).filter((row) => row.instance_name === instanceName && row.category === "raid")
-  const cohort = size !== null && difficulty !== null
-    ? raids.find((row) => row.difficulty_name === difficulty && String(row.max_players) === size)
-    : raids.length === 1 ? raids[0] : undefined
+  const cohort = raids.length === 1 ? raids[0]
+    : size !== null && difficulty !== null
+      ? raids.find((row) => row.difficulty_name === difficulty && String(row.max_players) === size)
+      : undefined
   const realmName = realm === ALL_REALMS ? undefined : realm
   const selected = encounter && encounters.data?.some((row) => row.encounter_name === encounter) ? encounter : undefined
   const selection: EncounterSelection = selected ? { kind: "bosses", bosses: [selected] } : FULL_CLEAR
@@ -76,12 +77,12 @@ function LiveInstanceHub({ instanceName, names, realm, realmIDs, encounter, tab,
     realms: [ALL_REALMS, ...(realms.data ?? []).map((row) => row.name)],
     specsFor: (cls: string) => filters.data?.find((row) => row.player_class === cls)?.specs.map((row) => row.spec) ?? [],
     subSpecsFor: (cls: string, spec: string) => filters.data?.find((row) => row.player_class === cls)?.specs.find((row) => row.spec === spec)?.sub_specs.filter(Boolean) as string[] ?? [],
-    cohortPicker: <label className="flex items-center gap-2 text-xs text-muted-foreground">Raid cohort
+    cohortPicker: raids.length > 1 ? <label className="flex items-center gap-2 text-xs text-muted-foreground">Raid cohort
       <select aria-label="Raid cohort" className="h-8 max-w-48 rounded-md border bg-background px-2 text-foreground" value={cohort ? `${cohort.difficulty_name}|${cohort.max_players}` : ""} onChange={(event) => {
         const row = raids.find((item) => `${item.difficulty_name}|${item.max_players}` === event.target.value)
         onCohort(row?.difficulty_name ?? "", row ? String(row.max_players) : "")
       }}><option value="">Choose difficulty and size</option>{raids.map((row) => <option key={`${row.difficulty_name}|${row.max_players}`} value={`${row.difficulty_name}|${row.max_players}`}>{row.difficulty_name || "Default"} · {row.max_players} players</option>)}</select>
-    </label>,
+    </label> : undefined,
     renderOverview: (context: HubLiveTabContext) => <LiveHubContent context={context} realmName={realmName} realmIDs={realmIDs} cohort={cohort} overview />,
     renderTab: (context: HubLiveTabContext) => <LiveHubContent context={context} realmName={realmName} realmIDs={realmIDs} cohort={cohort} />,
   }
