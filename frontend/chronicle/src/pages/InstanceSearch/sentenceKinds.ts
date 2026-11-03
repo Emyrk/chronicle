@@ -175,7 +175,3 @@ export function cleared(k: Kind): Partial<Form> {
   }
 }
 
-/** True when the form uses a condition only Honored supporters can search by. */
-export function formNeedsHonored(f: Form): boolean {
-  return KINDS.some((d) => d.tier === "honored" && hasValue(f, d.kind));
-}

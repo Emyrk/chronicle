@@ -59,6 +59,7 @@ export function ComboInput({
   const active = highlight >= 0 && highlight < shown.length ? highlight : -1;
 
   const pick = (o: ComboOption) => {
+    if (o.disabled) return;
     onPick(o);
     setOpen(false);
     setHighlight(-1);
@@ -134,11 +135,15 @@ export function ComboInput({
                 id={`${listId}-${i}`}
                 role="option"
                 aria-selected={i === active}
+                aria-disabled={o.disabled || undefined}
                 // Keep focus in the input so blur doesn't fire before the click.
                 onMouseDown={(e) => e.preventDefault()}
                 onMouseEnter={() => setHighlight(i)}
                 onClick={() => pick(o)}
-                className={cn("flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs", i === active ? "bg-accent text-accent-foreground" : "hover:bg-accent/60")}
+                className={cn(
+                  "flex items-center gap-2 rounded px-2 py-1 text-xs",
+                  o.disabled ? "cursor-not-allowed opacity-50" : cn("cursor-pointer", i === active ? "bg-accent text-accent-foreground" : "hover:bg-accent/60"),
+                )}
               >
                 {selected !== undefined && (
                   <span className="flex size-3.5 shrink-0 items-center justify-center">{o.value === selected && <Check className="h-3.5 w-3.5 text-sky-400" />}</span>

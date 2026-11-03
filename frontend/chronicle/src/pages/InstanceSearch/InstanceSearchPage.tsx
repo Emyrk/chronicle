@@ -27,7 +27,7 @@ import { addRecentSearch, loadRecentSearches, saveRecentSearches, type RecentSea
 import { HonoredLockTooltip } from "./HonoredLockTooltip";
 import { EXAMPLES, type SearchExample } from "./examples";
 import { SentenceForm } from "./SentenceForm";
-import { formNeedsHonored } from "./sentenceKinds";
+import { treeNeedsHonored } from "./fieldTiers";
 import { bossOptions, realmOptions, zoneOptions } from "./searchOptions";
 import {
   buildQuery,
@@ -56,9 +56,10 @@ export function InstanceSearchPage() {
   const setParams: typeof writeParams = (...args) => { bumpDraftRevision(); writeParams(...args); };
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const supporter = useSupporterTier();
-  // Blocks, Code and Examples are an Honored perk (UI only; the server
-  // accepts the same queries from anyone logged in). Assume unlocked while
-  // the session loads so supporters never see a flash of locks.
+  // Code and the costly fields (fieldTiers.ts) are an Honored perk (UI only;
+  // the server accepts the same queries from anyone logged in). Form and
+  // Blocks are open to everyone. Assume unlocked while the session loads so
+  // supporters never see a flash of locks.
   const advancedUnlocked = supporter.isLoading || supporter.atLeast("honored");
   const [showUpsell, setShowUpsell] = useState(false);
   const fields = useSearchFields();
@@ -84,8 +85,8 @@ export function InstanceSearchPage() {
   // The example last loaded into the block editor, shown as a caption.
   const [example, setExample] = useState<SearchExample | null>(null);
 
-  // Without Honored, Blocks / Code / Examples open a read-only preview of an
-  // example: it can be looked at in blocks or as code, but not edited or run.
+  // Without Honored, Code opens a read-only preview of an example: it can be
+  // looked at as code, but not edited or run.
   // Going back to Form restores the user's own form untouched.
   const [preview, writePreview] = useState(false);
   const setPreview: typeof writePreview = (value) => { bumpDraftRevision(); writePreview(value); };
@@ -98,10 +99,11 @@ export function InstanceSearchPage() {
   };
 
   const loadExample = (ex: SearchExample) => {
-    if (!advancedUnlocked) {
-      enterPreview(mode === "code" ? "code" : "blocks", ex);
+    if (!advancedUnlocked && mode === "code") {
+      enterPreview("code", ex);
       return;
     }
+    setPreview(false);
     // Code mode shows the example as text; otherwise as blocks.
     if (mode === "code") {
       setCode(formatCEL(ex.where));
@@ -161,8 +163,8 @@ export function InstanceSearchPage() {
   const enumOf = (name: string) => fields.data?.fields.find((f) => f.name === name)?.enum ?? [];
 
   const anonBlocked = !isAuthenticated && mode === "form" && !formIsBasic(form);
-  // Honored-only conditions (UI-only lock, like Blocks / Code).
-  const honoredBlocked = !advancedUnlocked && mode === "form" && formNeedsHonored(form);
+  // Honored-only fields (UI-only lock, like Code).
+  const honoredBlocked = !advancedUnlocked && !preview && treeNeedsHonored(draftTree);
 
   const leavePreview = () => {
     setPreview(false);
@@ -240,7 +242,7 @@ export function InstanceSearchPage() {
     const asForm = treeToForm(tree);
     let m: Mode = r.mode;
     if (m === "form" && !asForm) m = "blocks";
-    if (m !== "form" && asForm && !advancedUnlocked) m = "form";
+    if (m === "code" && !advancedUnlocked) m = asForm ? "form" : "blocks";
     if (asForm) setForm(asForm);
     setBlocks(tree);
     setCode(tree ? formatCEL(tree) : "");
@@ -382,11 +384,15 @@ export function InstanceSearchPage() {
           </ModeButton>
           <ModeButton
             active={mode === "blocks"}
-            locked={!advancedUnlocked}
-            onClick={() => (advancedUnlocked ? switchMode("blocks") : lockedView("blocks"))}
-            disabled={advancedUnlocked && codeInvalid}
+            onClick={() => {
+              // From a Code preview, Blocks opens the example for editing.
+              if (preview) {
+                setPreview(false);
+                setMode("blocks");
+              } else switchMode("blocks");
+            }}
+            disabled={!preview && codeInvalid}
             title={codeInvalid ? "Fix the query text first" : "Edit this search as blocks"}
-            lockedPerk="blocks"
           >
             <Blocks className="h-3.5 w-3.5" /> Blocks
           </ModeButton>
@@ -405,8 +411,8 @@ export function InstanceSearchPage() {
           <RecentSearchesMenu recent={recent} onPick={pickRecent} onClear={clearRecent} />
         </div>
       </div>
-      {!advancedUnlocked && (showUpsell || mode !== "form") && (
-        <HonoredUpsell loggedIn={isAuthenticated} note={preview ? "You're previewing an example. " : mode !== "form" ? "You're viewing a shared search. " : ""} />
+      {!advancedUnlocked && (showUpsell || mode === "code" || honoredBlocked) && (
+        <HonoredUpsell loggedIn={isAuthenticated} note={preview ? "You're previewing an example. " : mode === "code" ? "You're viewing a shared search. " : honoredBlocked ? "This search uses Honored conditions. " : ""} />
       )}
 
       {fields.isLoading ? (
@@ -442,7 +448,11 @@ export function InstanceSearchPage() {
           {mode === "code" ? (
             <CodeEditor value={code} onChange={setCode} onSubmit={submit} parse={{ error: parsedCode.error }} disabled={!advancedUnlocked} />
           ) : (
-            <BlockEditor tree={blocks} onChange={setBlocks} ctx={{ fields: fields.data?.fields ?? [], costs: fields.data, zones, bosses: allBosses, realms: realmNames, disabled: !advancedUnlocked }} />
+            <BlockEditor
+              tree={blocks}
+              onChange={setBlocks}
+              ctx={{ fields: fields.data?.fields ?? [], costs: fields.data, zones, bosses: allBosses, realms: realmNames, disabled: preview, honored: advancedUnlocked, loggedIn: isAuthenticated }}
+            />
           )}
         </div>
       )}
@@ -462,7 +472,7 @@ export function InstanceSearchPage() {
         <Button
           onClick={submit}
           disabled={preview || anonBlocked || honoredBlocked || codeInvalid || tooComplex || results.isFetching}
-          title={preview ? "Honored supporters can run block and code searches" : honoredBlocked ? "This search uses conditions for Honored supporters" : undefined}
+          title={preview ? "Honored supporters can run code searches" : honoredBlocked ? "This search uses conditions for Honored supporters" : undefined}
           className="gap-1.5"
         >
           {results.isFetching && !results.isFetchingNextPage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
@@ -523,7 +533,7 @@ export function InstanceSearchPage() {
   );
 }
 
-function ModeButton({ active, onClick, disabled, locked, lockedPerk, title, children }: { active: boolean; onClick: () => void; disabled?: boolean; locked?: boolean; lockedPerk?: "blocks" | "code"; title?: string; children: ReactNode }) {
+function ModeButton({ active, onClick, disabled, locked, lockedPerk, title, children }: { active: boolean; onClick: () => void; disabled?: boolean; locked?: boolean; lockedPerk?: "code"; title?: string; children: ReactNode }) {
   const button = (
     <button
       type="button"
@@ -552,7 +562,7 @@ function HonoredUpsell({ loggedIn, note }: { loggedIn: boolean; note: string }) 
       <Lock className="h-3.5 w-3.5 shrink-0" style={{ color: TIER_COLOR.honored }} />
       <span>
         {note}
-        Building and running block and code searches is for{" "}
+        Code searches and the costly conditions (player parses and stats, boss, trash and idle time) are for{" "}
         <span className="font-medium" style={{ color: TIER_COLOR.honored }}>Honored</span> supporters.{" "}
         {loggedIn ? (
           <Link to="/supporter" className="underline font-medium">Become a supporter</Link>
@@ -562,7 +572,7 @@ function HonoredUpsell({ loggedIn, note }: { loggedIn: boolean; note: string }) 
             <Link to="/supporter" className="underline font-medium">become a supporter</Link>
           </>
         )}{" "}
-        to build your own. The form is free.
+        to use them. The form and blocks are free.
       </span>
     </div>
   );

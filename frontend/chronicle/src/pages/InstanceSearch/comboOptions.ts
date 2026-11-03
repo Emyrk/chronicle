@@ -11,6 +11,8 @@ export interface ComboOption {
   group?: string;
   /** Extra text that typing can match but that isn't shown (e.g. a description). */
   keywords?: string;
+  /** Shown but can't be picked (e.g. locked for this user). */
+  disabled?: boolean;
 }
 
 /** Plain strings are shorthand for { value }. */

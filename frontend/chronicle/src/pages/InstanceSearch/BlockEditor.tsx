@@ -19,6 +19,9 @@ import { SelectCombo } from "./ComboInput";
 import { ClassSpecPicker } from "./ClassSpecPicker";
 import { ANY_CLASS_SPEC, type ClassSpec, classLabel, useSubSpecs } from "./classSpec";
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
+import { Lock } from "lucide-react";
+import { TIER_COLOR } from "@/pages/Settings/billingPricing";
+import { fieldLock, type FieldLock } from "./fieldTiers";
 
 /**
  * Block editor for the search tree, in the style of the panel filter editor
@@ -35,6 +38,18 @@ export interface BlockContext {
   bosses: readonly Suggestion[];
   realms?: readonly Suggestion[];
   disabled?: boolean;
+  /** Whether the viewer is Honored / logged in; false locks those fields (see fieldTiers). */
+  honored?: boolean;
+  loggedIn?: boolean;
+}
+
+function lockOf(field: InstanceSearchField | undefined, ctx: BlockContext): FieldLock | null {
+  return field ? fieldLock(field, ctx) : null;
+}
+
+/** The block's controls read-only when its field is locked for the viewer. */
+function lockedCtx(field: InstanceSearchField | undefined, ctx: BlockContext): BlockContext {
+  return lockOf(field, ctx) ? { ...ctx, disabled: true } : ctx;
 }
 
 export function BlockEditor({
@@ -128,8 +143,9 @@ function Connector({ isOr, onClick, disabled }: { isOr: boolean; onClick: () => 
   );
 }
 
-function firstField(fields: readonly InstanceSearchField[], scope: InstanceSearchFieldScope): InstanceSearchField | undefined {
-  return fields.find((f) => f.scope === scope);
+/** The first field of a scope the viewer can use. */
+function firstField(ctx: BlockContext, scope: InstanceSearchFieldScope): InstanceSearchField | undefined {
+  return ctx.fields.find((f) => f.scope === scope && !lockOf(f, ctx));
 }
 
 function newPredicate(field: InstanceSearchField | undefined): Node {
@@ -157,15 +173,17 @@ function AddRow({
   ctx: BlockContext;
   onAdd: (n: Node) => void;
 }) {
-  const btn = (label: string, node: () => Node, title: string) => (
+  // Anonymous searches are a flat list of run conditions.
+  const anon = ctx.loggedIn === false;
+  const btn = (label: string, node: () => Node, title: string, needsLogin = false) => (
     <Button
       key={label}
       type="button"
       size="sm"
       variant="outline"
       className="h-6 px-2 text-2xs"
-      disabled={ctx.disabled || depth >= 6}
-      title={title}
+      disabled={ctx.disabled || depth >= 6 || (needsLogin && anon)}
+      title={needsLogin && anon ? "Log in to add groups, player and pull blocks" : title}
       onClick={() => onAdd(node())}
     >
       {label}
@@ -173,14 +191,14 @@ function AddRow({
   );
   return (
     <div className="flex flex-wrap gap-1 pt-2">
-      {btn("+ Condition", () => newPredicate(firstField(ctx.fields, scope)), "Add a condition")}
-      {btn("+ Group", () => ({ or: [newPredicate(firstField(ctx.fields, scope))] }), "Add a nested group (any / all of)")}
+      {btn("+ Condition", () => newPredicate(firstField(ctx, scope)), "Add a condition")}
+      {btn("+ Group", () => ({ or: [newPredicate(firstField(ctx, scope))] }), "Add a nested group (any / all of)", true)}
       {scope === "instance" && (
         <>
-          {btn("+ A player…", () => ({ any_player: { and: [newPredicate(firstField(ctx.fields, "player"))] } }), "Some player in the run matches all of these")}
-          {btn("+ Count players…", () => ({ count_players: { where: { and: [newPredicate(firstField(ctx.fields, "player"))] }, op: ">=", value: 1 } }), "How many players match")}
-          {btn("+ A pull…", () => ({ any_encounter: { and: [newPredicate(firstField(ctx.fields, "encounter"))] } }), "Some pull (encounter) matches all of these")}
-          {btn("+ Count pulls…", () => ({ count_encounters: { where: { and: [newPredicate(firstField(ctx.fields, "encounter"))] }, op: ">=", value: 1 } }), "How many pulls match")}
+          {btn("+ A player…", () => ({ any_player: { and: [newPredicate(firstField(ctx, "player"))] } }), "Some player in the run matches all of these", true)}
+          {btn("+ Count players…", () => ({ count_players: { where: { and: [newPredicate(firstField(ctx, "player"))] }, op: ">=", value: 1 } }), "How many players match", true)}
+          {btn("+ A pull…", () => ({ any_encounter: { and: [newPredicate(firstField(ctx, "encounter"))] } }), "Some pull (encounter) matches all of these", true)}
+          {btn("+ Count pulls…", () => ({ count_encounters: { where: { and: [newPredicate(firstField(ctx, "encounter"))] }, op: ">=", value: 1 } }), "How many pulls match", true)}
         </>
       )}
     </div>
@@ -311,7 +329,7 @@ function NodeBlock({
   return (
     <div className="@container flex flex-col gap-1.5 p-2 rounded border border-border/60 bg-background/40">
       {toolbar(<PredicateEditor node={inner} scope={scope} ctx={ctx} onChange={setInner} />)}
-      <PredicateOptions node={inner} ctx={ctx} onChange={setInner} />
+      <PredicateOptions node={inner} ctx={lockedCtx(ctx.fields.find((f) => f.name === inner.field), ctx)} onChange={setInner} />
     </div>
   );
 }
@@ -425,8 +443,11 @@ function PredicateEditor({
   const setField = (name: string) => {
     if (name === SPEC_FIELD && specLike) return;
     const next = ctx.fields.find((f) => f.name === name);
-    if (next) onChange(newPredicate(next));
+    if (next && !lockOf(next, ctx)) onChange(newPredicate(next));
   };
+  // A locked field (e.g. from a shared link) can be swapped for another, not edited.
+  const lock = lockOf(field, ctx);
+  const vctx = lockedCtx(field, ctx);
   const setOp = (nextOp: InstanceSearchOp) => {
     const shape = (o: InstanceSearchOp) => (o === "in" || o === "not_in" ? "list" : o === "between" ? "range" : "one");
     let value = node.value;
@@ -444,28 +465,43 @@ function PredicateEditor({
       <SelectCombo
         className="w-40"
         value={specLike ? SPEC_FIELD : field.name}
-        options={fieldOptions(options)}
+        options={fieldOptions(options, ctx)}
         onChange={setField}
         disabled={ctx.disabled}
         placeholder="Search fields…"
         title={field.doc}
       />
-      <select className={NATIVE_SELECT} disabled={ctx.disabled} value={op} onChange={(e) => setOp(e.target.value as InstanceSearchOp)}>
+      {lock && <LockBadge lock={lock} />}
+      <select className={NATIVE_SELECT} disabled={vctx.disabled} value={op} onChange={(e) => setOp(e.target.value as InstanceSearchOp)}>
         {field.ops.map((o) => (
           <option key={o} value={o}>{OP_LABELS[o]}</option>
         ))}
       </select>
       {specLike && !list ? (
-        <SpecOrSubSpecPicker node={{ ...node, op }} onChange={onChange} disabled={ctx.disabled} />
+        <SpecOrSubSpecPicker node={{ ...node, op }} onChange={onChange} disabled={vctx.disabled} />
       ) : (
-        <ValueEditor field={field} op={op} value={node.value} ctx={ctx} onChange={(value) => onChange({ ...node, field: field.name, op, value })} />
+        <ValueEditor field={field} op={op} value={node.value} ctx={vctx} onChange={(value) => onChange({ ...node, field: field.name, op, value })} />
       )}
     </>
   );
 }
 
-/** The field picker's options: grouped, searchable by name and description. */
-function fieldOptions(fields: readonly InstanceSearchField[]): ComboOption[] {
+function LockBadge({ lock }: { lock: FieldLock }) {
+  const honored = lock === "honored";
+  return (
+    <span
+      className={cn("inline-flex items-center gap-1 rounded px-1.5 py-px text-2xs font-semibold ring-1 ring-current/40", !honored && "text-amber-400")}
+      style={honored ? { color: TIER_COLOR.honored } : undefined}
+      title={honored ? "Honored supporters can search by this" : "Log in to search by this"}
+    >
+      <Lock className="h-3 w-3" />
+      {honored ? "Honored" : "Log in"}
+    </span>
+  );
+}
+
+/** The field picker's options: grouped, searchable by name and description. Locked fields show but can't be picked. */
+function fieldOptions(fields: readonly InstanceSearchField[], ctx: BlockContext): ComboOption[] {
   return fields
     .map((f, i) => ({ f, i, ...fieldGroup(f.name) }))
     .sort((a, b) => a.rank - b.rank || a.i - b.i)
@@ -475,6 +511,7 @@ function fieldOptions(fields: readonly InstanceSearchField[]): ComboOption[] {
       group,
       // Spec also covers sub-specs (Bear / Cat, Tank / DPS, Fury Prot).
       keywords: `${f.name} ${f.doc}${f.name === SPEC_FIELD ? " sub-spec bear cat tank dps fury prot" : ""}`,
+      ...(lockOf(f, ctx) ? { disabled: true, hint: lockOf(f, ctx) === "honored" ? "Honored" : "Log in" } : {}),
     }));
 }
 

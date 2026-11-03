@@ -241,17 +241,17 @@ export const Blocks: Story = {
   parameters: { initialEntry: url(blockTree, "blocks") },
 };
 
-/** Logged out: only the Run section, a log-in banner, and no block editor. */
-/** Logged in without Honored: Blocks, Code and Examples are locked. */
+/** Logged in without Honored: Code and the costly conditions are locked. */
 export const NotHonored: Story = {
   parameters: { initialEntry: url(formTree), msw: { handlers: handlers({ loggedIn: true, tier: "" }) } },
 };
 
-/** A non-Honored user opening a shared block search sees it read-only. */
+/** A non-Honored user can edit a shared block search; Honored fields are locked and Search is off until they are removed. */
 export const NotHonoredSharedBlocks: Story = {
   parameters: { initialEntry: url(blockTree, "blocks"), msw: { handlers: handlers({ loggedIn: true, tier: "" }) } },
 };
 
+/** Logged out: run conditions only, with a log-in banner. */
 export const LoggedOut: Story = {
   parameters: {
     initialEntry: url({ and: [{ field: "instance.name", op: "contains", value: "naxx" }] }),
