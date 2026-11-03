@@ -100,6 +100,9 @@ describe("live Storybook Hub", () => {
     expect(params).toMatchObject({ instance_names: "Molten Core", difficulty_names: "", exact_cohort: true, metric: "dps" })
     expect(params.role).toBeUndefined()
     expect(params.max_players).toBeUndefined()
+    // The preset sends its bosses, never an empty list (which ranks every encounter, Trash included).
+    expect(params.encounter_names).toBeTruthy()
+    expect(params.encounter_names!.split(",")).not.toContain("Trash")
   })
 
   it("uses the Storybook landing grid with published cohorts", () => {

@@ -467,9 +467,8 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		break
 	}
 	// No chosen bosses means the instance's preset, as the encounter sidebar shows it.
-	setIsPreset := false
 	if in.featured == "" && len(in.set) == 0 {
-		in.set, setIsPreset = hubPresetBosses(out.RankingEncounterSets, out.ProgressionBosses), true
+		in.set = hubPresetBosses(out.RankingEncounterSets, out.ProgressionBosses)
 	}
 	filters, err := s.store.HubSummaryFilters(ctx, database.HubSummaryFiltersParams{TenantID: tenant, InstanceName: in.instance})
 	if err != nil {
@@ -625,13 +624,11 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if in.exact {
-		// No encounter is the complete-run board, the preset's best performances;
-		// a chosen set ranks across its bosses.
-		var encounters []string
+		// Rank across the chosen bosses, the preset's included. No list would rank
+		// every encounter, Trash segments among them.
+		encounters := in.set
 		if in.featured != "" {
 			encounters = []string{in.featured}
-		} else if !setIsPreset {
-			encounters = in.set
 		}
 		rows, e := s.store.RankingsLeaderboardNoJIT(ctx, database.RankingsLeaderboardParams{InstanceNames: []string{in.instance}, EncounterNames: encounters, DifficultyNames: []string{in.difficulty}, FilterMaxPlayers: in.size, ExactCohort: true, Class: hubClassFilter(in.class), Spec: in.spec, SubSpec: in.subSpec, Metric: in.metric, RealmNames: realmNames, QueryLimit: hubOverviewPerformanceLimit})
 		if e != nil {

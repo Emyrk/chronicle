@@ -120,7 +120,9 @@ function LiveHubContent({ context, summary, requestedEncounters = [], realmName,
   // Hand-picked bosses (empty: the preset, i.e. whole-raid boards). One boss still has its own views.
   const picked = selection.kind === "bosses" ? selection.bosses : []
   const boss = picked.length === 1 ? picked[0] : undefined
-  const pickedNames = picked.length ? picked.join(",") : undefined
+  // The preset sends its bosses explicitly, as /leaderboards does: no list would rank every
+  // encounter, Trash included.
+  const pickedNames = (picked.length ? picked : bosses.filter((name) => name !== "Trash")).join(",") || undefined
   const exact = !!chosen
   // Omit the legacy zero-size URL parameter; exact_cohort still selects size 0
   // server-side, so a mixed-size raid cannot silently broaden this board.
