@@ -2469,6 +2469,8 @@ export interface InstancePageViewProps {
   suppressActionBar?: boolean;
   /** Enable the real Instance page's Encounters/Overview mode switch. */
   supportsOverview?: boolean;
+  /** Static cinematic reconstruction: no rankings or persisted-instance actions. */
+  reconstruction?: boolean;
 }
 
 const INSTANCE_PAGE_KEYBINDS = [
@@ -2510,23 +2512,24 @@ function InstancePageViewContent({
   duplicateGroupId,
   suppressActionBar,
   supportsOverview = false,
+  reconstruction = false,
 }: InstancePageViewProps) {
   useRegisterInstanceKeybinds("instance-page", "Instance page", INSTANCE_PAGE_KEYBINDS);
   const timeRange = useTimeRangeContextOptional();
 
-  const instanceTimeParsesQuery = useInstanceTimeParses(instance.unlisted ? undefined : instance.id);
+  const instanceTimeParsesQuery = useInstanceTimeParses(instance.unlisted || reconstruction ? undefined : instance.id);
   const { data: instanceSpeedrun } = useQuery({
     queryKey: ["instance-speedrun", instance.id],
     queryFn: () => fetchInstanceSpeedrun(instance.id),
     staleTime: Infinity,
     retry: false,
-    enabled: !instance.unlisted,
+    enabled: !instance.unlisted && !reconstruction,
   });
 
   // URL state for explainer mode (simple ?explain=panel_type)
   const [searchParams, setSearchParams] = useSearchParams();
   const importCode = searchParams.get("import");
-  const overviewEnabled = isInstanceOverviewEnabled(supportsOverview) && !instance.unlisted;
+  const overviewEnabled = isInstanceOverviewEnabled(supportsOverview) && !instance.unlisted && !reconstruction;
   const requestedViewMode = parseInstanceViewMode(searchParams.get("view"));
   const viewMode: InstanceViewMode = overviewEnabled ? requestedViewMode : "encounters";
   const isEncounterView = viewMode === "encounters";
@@ -2659,11 +2662,12 @@ function InstancePageViewContent({
   const { data: session } = useSession();
   const isLoggedIn = !!session?.user_id;
   const { publishView: publishLiveView, registerViewApplier } = liveSession;
-  useAutoJoinLiveSession(instance.id, showLiveSessionControls);
+  useAutoJoinLiveSession(instance.id, showLiveSessionControls && !reconstruction);
   const createShare = useCreateShare();
   const instanceDefaults = useInstanceDefaultsCache(isLoggedIn);
 
   const cachedDefaultLayout = useMemo(() => {
+    if (reconstruction) return null;
     const layout = isMobile
       ? instanceDefaults?.default_mobile_layout
       : instanceDefaults?.default_desktop_layout;
@@ -2672,14 +2676,25 @@ function InstancePageViewContent({
     }
 
     return parsePanelLayout(layout);
-  }, [instanceDefaults?.default_desktop_layout, instanceDefaults?.default_mobile_layout, isMobile]);
+  }, [instanceDefaults?.default_desktop_layout, instanceDefaults?.default_mobile_layout, isMobile, reconstruction]);
 
-  const defaultLayoutId = isMobile
+  const defaultLayoutId = reconstruction ? null : isMobile
     ? instanceDefaults?.default_mobile_layout?.id ?? null
     : instanceDefaults?.default_desktop_layout?.id ?? null;
 
   // A user's saved default layout wins; otherwise the built-in one for this log.
-  const builtInDefaultLayout = useMemo(() => defaultInstanceLayout(instance.capabilities ?? [], isMobile), [instance.capabilities, isMobile]);
+  const builtInDefaultLayout = useMemo(() => {
+    const layout = defaultInstanceLayout(instance.capabilities ?? [], isMobile);
+    if (!reconstruction) return layout;
+    return {
+      ...layout,
+      items: [
+        { id: "panel-1", title: "Map", x: 0, y: 0, w: 12, h: 8, minW: 4 },
+        ...layout.items.filter((item) => item.id !== "panel-1" && item.id !== "panel-6"),
+      ],
+      panelTypes: { ...layout.panelTypes, "panel-1": "map" as const },
+    };
+  }, [instance.capabilities, isMobile, reconstruction]);
 
   const standardOrderedLayoutItems = useMemo(
     () => orderLayoutItems(normalizeLayoutItems(cachedDefaultLayout?.items ?? builtInDefaultLayout.items)),
@@ -2724,7 +2739,7 @@ function InstancePageViewContent({
   const [activeLayoutId, setActiveLayoutId] = useState<string | null>(defaultLayoutId);
 
   const createDefaultViewState = useCallback((): LocalInstanceViewState => ({
-    encounters: instance.encounters.filter(e => e.kill_type !== "wipe" && e.kill_type !== "reset").map(e => e.id),
+    encounters: instance.encounters.filter(e => reconstruction || (e.kill_type !== "wipe" && e.kill_type !== "reset")).map(e => e.id),
     enemies: new Set<string>(),
     players: new Set<string>(),
     panels: defaultOrderedPanels,
@@ -2733,8 +2748,8 @@ function InstancePageViewContent({
       return itemId ? (builtInDefaultLayout.panelOptions[itemId] ?? null) : null;
     }),
     layout: "standard",
-    includeWipes: false,
-  }), [instance.encounters, defaultOrderedPanels, standardOrderedLayoutItems, builtInDefaultLayout.panelOptions]);
+    includeWipes: reconstruction,
+  }), [instance.encounters, defaultOrderedPanels, standardOrderedLayoutItems, builtInDefaultLayout.panelOptions, reconstruction]);
 
   const [viewState, setViewState] = useState<LocalInstanceViewState>(() =>
     createDefaultViewState(),
@@ -3863,7 +3878,7 @@ function InstancePageViewContent({
   }, [shareContextMenu]);
 
   const handleShareView = useCallback(async () => {
-    if (instance.unlisted || !isLoggedIn) {
+    if (instance.unlisted || reconstruction || !isLoggedIn) {
       const url = window.location.href;
       try {
         await navigator.clipboard.writeText(url);
@@ -3889,7 +3904,7 @@ function InstancePageViewContent({
         description: error instanceof Error ? toastError(error) : "An unexpected error occurred.",
       });
     }
-  }, [buildSharedViewPayload, createShare, instance.id, instance.unlisted, isLoggedIn, viewMode]);
+  }, [buildSharedViewPayload, createShare, instance.id, instance.unlisted, reconstruction, isLoggedIn, viewMode]);
 
   const handleShareWithoutLayout = useCallback(async () => {
     const url = withInstanceViewMode(
@@ -4270,13 +4285,16 @@ function InstancePageViewContent({
         <div className="flex items-start justify-between gap-4 mb-1">
           <h1 className={cn("font-bold flex items-center gap-2", isMobile ? "text-xl" : "text-2xl", heroic && "drop-shadow-[0_0_8px_rgba(147,51,234,0.3)]")}>
             <span {...raidEntityAttributes}>{instance.name}</span>
-            {!instance.unlisted && (
+            {!instance.unlisted && !reconstruction && (
               <ClearParseBadge
                 parses={scopedClearParses(instanceTimeParsesQuery.data)}
                 lookbackDays={instanceTimeParsesQuery.data?.lookback_days}
               />
             )}
-            {instance.unlisted && (
+            {reconstruction && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-300" title="Cinematic simulation, not a recovered combat log">Reconstruction</span>
+            )}
+            {instance.unlisted && !reconstruction && (
               <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-300">
                 <LockKeyhole className="h-3 w-3" /> Unlisted
               </span>
@@ -4307,7 +4325,7 @@ function InstancePageViewContent({
             {duplicateGroupId && (
               <DuplicatesBadge instanceId={instance.id} duplicateGroupId={duplicateGroupId} />
             )}
-            <OwnerAdFreeBadge subject="log" />
+            {!reconstruction && <OwnerAdFreeBadge subject="log" />}
           </h1>
           {!isMobile && (
             <div className="flex shrink-0 items-center gap-3">
@@ -4441,7 +4459,7 @@ function InstancePageViewContent({
           )}
           {!isMobile && (
             <div className="flex items-center gap-2 shrink-0">
-              {showLiveSessionControls && (
+              {showLiveSessionControls && !reconstruction && (
                 <LiveSessionButton instanceId={instance.id} canCreate={isLoggedIn} />
               )}
               <DropdownMenu modal={false}>
@@ -4638,7 +4656,7 @@ function InstancePageViewContent({
             showHints={showHints}
             includeWipes={viewState.includeWipes}
             onIncludeWipesChange={handleIncludeWipesChange}
-            showRankings={!instance.unlisted}
+            showRankings={!instance.unlisted && !reconstruction}
             instanceStartTime={instance.startTime}
           />
         )}

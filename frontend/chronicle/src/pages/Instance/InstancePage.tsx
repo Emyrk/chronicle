@@ -33,6 +33,7 @@ import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySe
 import { shouldShowInstanceAdRail } from "./instanceAdRail";
 import { useEntityRaidContext, type EntityRaidContext } from "@/components/EntityMenu/entityMenuContext";
 import { defaultPositionCoordinateSpace, type PositionCoordinateSpace } from "./positionCoordinateSpace";
+import type { MapCameraMark } from "./EventsPanels/Map/cameraPath";
 
 // Types for the Instance page
 export interface EnemyUnit {
@@ -102,6 +103,8 @@ export interface Instance {
   capabilities: readonly string[];
   // Coordinate system used by unit-position telemetry.
   positionCoordinateSpace?: PositionCoordinateSpace;
+  /** Optional authored replay camera, used by cinematic reconstructions. */
+  replayCameraPath?: readonly MapCameraMark[];
   // Unlisted logs preserve combat analysis for authorized users but omit public ranking features.
   unlisted?: boolean;
   // Parse format and server-mechanics flavor of the source log group
@@ -286,12 +289,14 @@ function transformToInstance(
  * Inner component that has access to SyncModeContext.
  * Must be rendered inside SyncModeProvider.
  */
-function InstancePageInner({ 
+export function InstancePageInner({
   instance, 
   selectedEncounterIds,
   onSelectEncounters,
   youtubeData,
   selectedEncounterTimes,
+  autoOpenYoutube = false,
+  reconstruction = false,
   logDetailUrl,
   rawEncounters,
   canAdminLogs,
@@ -303,16 +308,18 @@ function InstancePageInner({
   onSelectEncounters: (ids: string[] | null) => void;
   youtubeData: { url: string; results: readonly import("@/api/typesGenerated").VideoTimestamp[] } | null | undefined;
   selectedEncounterTimes: SelectedEncounterTimes;
+  autoOpenYoutube?: boolean;
+  reconstruction?: boolean;
   logDetailUrl?: string;
   rawEncounters?: readonly import("@/api/typesGenerated").WoWEncounterWithHostiles[];
   canAdminLogs?: boolean;
   canInvalidateLogs?: boolean;
   duplicateGroupId?: string;
 }) {
-  const [showYoutube, setShowYoutube] = useState(false);
+  const [showYoutube, setShowYoutube] = useState(autoOpenYoutube);
   const [showReplayPanel, setShowReplayPanel] = useState(false);
   const [showTimeRange, setShowTimeRange] = useState(false);
-  const { setEncounterBounds, setTimestamp, enabled: syncEnabled } = useSyncModeContext();
+  const { setEncounterBounds, setTimestamp, play, enabled: syncEnabled } = useSyncModeContext();
   const previousEncounterTimesRef = useRef(selectedEncounterTimes);
   const isMobile = useIsMobile();
   const showReplayControls = !isMobile;
@@ -368,6 +375,7 @@ function InstancePageInner({
         instance={instance}
         selectedEncounterIds={selectedEncounterIds}
         onSelectEncounters={onSelectEncounters}
+        reconstruction={reconstruction}
         logDetailUrl={logDetailUrl}
         canAdminLogs={canAdminLogs}
         canInvalidateLogs={canInvalidateLogs}
@@ -409,7 +417,14 @@ function InstancePageInner({
           timestamps={youtubeData.results}
           targetTime={selectedEncounterTimes.start}
           pauseTime={selectedEncounterTimes.end}
-          onClose={() => setShowYoutube(false)}
+          onClose={() => {
+            setShowYoutube(false);
+            if (reconstruction && selectedEncounterTimes.start) {
+              setTimestamp(new Date(selectedEncounterTimes.start));
+              play();
+              setShowReplayPanel(true);
+            }
+          }}
           encounters={rawEncounters}
           onEncounterChange={(id) => onSelectEncounters([id])}
         />

@@ -22,6 +22,7 @@ const LogsList = lazy(() => import("./pages/Logs/LogsList").then(({ LogsList }) 
 const LogDetail = lazy(() => import("./pages/Logs/LogDetail").then(({ LogDetail }) => ({ default: LogDetail })))
 const LogDetailByHash = lazy(() => import("./pages/Logs/LogDetail").then(({ LogDetailByHash }) => ({ default: LogDetailByHash })))
 const InstancePage = lazy(() => import("./pages/Instance/InstancePage").then(({ InstancePage }) => ({ default: InstancePage })))
+const LeeroyPage = lazy(() => import("./pages/Instance/Leeroy/LeeroyPage").then(({ LeeroyPage }) => ({ default: LeeroyPage })))
 const PopulationComparisonPage = lazy(() => import("./pages/Instance/Overview/PopulationComparisonPage").then(({ PopulationComparisonPage }) => ({ default: PopulationComparisonPage })))
 const SharedViewRedirect = lazy(() => import("./pages/SharedViewRedirect").then(({ SharedViewRedirect }) => ({ default: SharedViewRedirect })))
 const RecentRaids = lazy(() => import("./pages/Recent/RecentRaids").then(({ RecentRaids }) => ({ default: RecentRaids })))
@@ -187,6 +188,7 @@ function App() {
         <Route path="/logs/:logId" element={<LogDetail />} />
         <Route path="/logs/file/:fileHash" element={<LogDetailByHash />} />
         <Route path="/instances/compare" element={<PopulationComparisonPage />} />
+        <Route path="/instances/leeroy" element={<LeeroyPage />} />
         <Route path="/instances/:instanceId" element={<InstancePage />} />
         <Route path="/s/:code" element={<SharedViewRedirect />} />
         <Route path="/guilds" element={<GuildSearchPage />} />
