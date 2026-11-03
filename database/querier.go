@@ -1429,6 +1429,11 @@ type sqlcQuerier interface {
 	// (instance, difficulty, max_players, tenant) combo.
 	// The caller sets tenant context so RLS on encounter_dps_rankings
 	// scopes to the correct realms automatically.
+	// A complete run kills as many distinct bosses as the instance's full clears
+	// do: the largest boss count at least three runs reach (else the largest seen).
+	// Requiring every boss name ever recorded fails when a server changes a raid's
+	// roster (Turtle's Molten Core dropped Gehennas) or ranks a hard mode as its
+	// own encounter, leaving no run complete and no top players.
 	// Step 1: aggregate per player per run (sum encounters within one instance run).
 	// Step 2: pick each player's best run.
 	UpsertRankingsInstanceSummary(ctx context.Context, arg UpsertRankingsInstanceSummaryParams) error

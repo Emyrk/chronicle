@@ -2298,6 +2298,17 @@ export interface HubSelectedCohort {
 
 // From chroniclesdk/rating_hub_summary.go
 /**
+ * HubSetBoardMastery is the Peak, Form, and Floor a Ranked Mastery score is built from.
+ */
+export interface HubSetBoardMastery {
+    readonly peak: number;
+    readonly form: number;
+    readonly floor: number;
+    readonly eligible_kills: number;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
  * HubSetBoardResponse is a page of a chosen-boss board. Ranks cover the whole
  * cohort; realm and search filters only narrow the displayed rows.
  */
@@ -2334,6 +2345,11 @@ export interface HubSetBoardRow {
      * PeakRaw is the Peak's duration-weighted DPS/HPS; unset when unknown.
      */
     readonly peak_raw?: number;
+    /**
+     * Mastery is Ranked Mastery's parts over the chosen bosses (a missed boss
+     * counts as 0) and the eligible kills behind it; unset without a Mastery score.
+     */
+    readonly mastery_parts?: HubSetBoardMastery;
 }
 
 // From chroniclesdk/rating_hub_summary.go

@@ -87,8 +87,19 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
       -- Boss encounters only: trash is excluded from the top-3 preview by default.
       AND edr.encounter_id IS NOT NULL
 ),
+run_encounter_counts AS (
+    SELECT d.run_id, COUNT(DISTINCT d.encounter_name) AS cnt FROM ranking_rows d GROUP BY d.run_id
+),
+-- A complete run kills as many distinct bosses as the instance's full clears
+-- do: the largest boss count at least three runs reach (else the largest seen).
+-- Requiring every boss name ever recorded fails when a server changes a raid's
+-- roster (Turtle's Molten Core dropped Gehennas) or ranks a hard mode as its
+-- own encounter, leaving no run complete and no top players.
 instance_encounter_count AS (
-    SELECT COUNT(DISTINCT d.encounter_name) AS cnt FROM ranking_rows d
+    SELECT COALESCE(
+        (SELECT max(c.cnt) FROM (SELECT cnt FROM run_encounter_counts GROUP BY cnt HAVING COUNT(*) >= 3) c),
+        (SELECT max(cnt) FROM run_encounter_counts)
+    ) AS cnt
 ),
 -- Step 1: aggregate per player per run (sum encounters within one instance run).
 per_run AS (
@@ -101,7 +112,7 @@ per_run AS (
         (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0)) AS dps
     FROM ranking_rows d
     GROUP BY d.player_guid, d.run_id
-    HAVING COUNT(DISTINCT d.encounter_name) = (SELECT cnt FROM instance_encounter_count)
+    HAVING COUNT(DISTINCT d.encounter_name) >= (SELECT cnt FROM instance_encounter_count)
 ),
 -- Step 2: pick each player's best run.
 per_player AS (

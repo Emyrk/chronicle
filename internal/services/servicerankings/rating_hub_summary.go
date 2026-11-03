@@ -24,9 +24,10 @@ type hubLandingCohort struct {
 
 // V1 rankings use exact cohorts even when max_players is zero, and their
 // empty encounter selection means a complete-run DPS board, not a boss board.
-func hubLandingPerformanceParams(cohort chroniclesdk.RankingsInstanceSummary, realmNames []string) database.RankingsLeaderboardParams {
+// bosses is the instance's preset; without it the board would rank every encounter, Trash included.
+func hubLandingPerformanceParams(cohort chroniclesdk.RankingsInstanceSummary, realmNames, bosses []string) database.RankingsLeaderboardParams {
 	return database.RankingsLeaderboardParams{
-		InstanceNames: []string{cohort.InstanceName}, DifficultyNames: []string{cohort.DifficultyName},
+		InstanceNames: []string{cohort.InstanceName}, EncounterNames: bosses, DifficultyNames: []string{cohort.DifficultyName},
 		FilterMaxPlayers: cohort.MaxPlayers, ExactCohort: true, Metric: "dps", RealmNames: realmNames,
 		QueryLimit: 3,
 	}
@@ -374,6 +375,17 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		statisticsShown := map[string]bool{}
+		// Each instance's preset bosses, for realm-filtered performance boards.
+		presets := map[string][]string{}
+		if len(in.realmIDs) > 0 && (in.tab == "overview" || in.tab == "performances") {
+			for _, detail := range s.registryForRequest(ctx).AllInstanceDetails() {
+				sets := make([]chroniclesdk.RankingEncounterSet, 0, len(detail.RankingEncounterSets))
+				for _, set := range detail.RankingEncounterSets {
+					sets = append(sets, chroniclesdk.RankingEncounterSet{ID: set.ID, Label: set.Label, Encounters: set.Encounters})
+				}
+				presets[detail.Name] = hubPresetBosses(sets, detail.ProgressionBosses)
+			}
+		}
 		for i, cohort := range out.Instances {
 			if in.tab == "overview" || in.tab == "performances" {
 				// The maintained instance summary already stores the top three
@@ -388,7 +400,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 						})
 					}
 				} else {
-					performances, e := s.store.RankingsLeaderboardNoJIT(ctx, hubLandingPerformanceParams(cohort, realmNames))
+					performances, e := s.store.RankingsLeaderboardNoJIT(ctx, hubLandingPerformanceParams(cohort, realmNames, presets[cohort.InstanceName]))
 					if e != nil {
 						httpapi.InternalServerError(w, e)
 						return

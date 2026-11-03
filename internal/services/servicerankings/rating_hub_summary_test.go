@@ -66,14 +66,15 @@ func TestHubLandingV1RankingParams(t *testing.T) {
 		{InstanceName: "Molten Core", DifficultyName: "", MaxPlayers: 0},
 		{InstanceName: "Naxxramas", DifficultyName: "Heroic", MaxPlayers: 40},
 	} {
-		performance := hubLandingPerformanceParams(cohort, []string{"Realm A"})
+		performance := hubLandingPerformanceParams(cohort, []string{"Realm A"}, []string{"Lucifron", "Ragnaros"})
 		require.Equal(t, []string{cohort.InstanceName}, performance.InstanceNames)
 		require.Equal(t, []string{cohort.DifficultyName}, performance.DifficultyNames)
 		require.Equal(t, cohort.MaxPlayers, performance.FilterMaxPlayers)
 		require.True(t, performance.ExactCohort)
 		require.Equal(t, "dps", performance.Metric)
 		require.Equal(t, []string{"Realm A"}, performance.RealmNames)
-		require.Empty(t, performance.EncounterNames)
+		// The preset's bosses, never an empty list (which ranks every encounter, Trash included).
+		require.Equal(t, []string{"Lucifron", "Ragnaros"}, performance.EncounterNames)
 		require.EqualValues(t, 3, performance.QueryLimit)
 
 		stats := hubLandingStatisticsParams(cohort, []string{"Realm A"})

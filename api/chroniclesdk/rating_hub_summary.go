@@ -105,6 +105,17 @@ type HubSetBoardRow struct {
 	Renown  float64 `json:"renown"`
 	// PeakRaw is the Peak's duration-weighted DPS/HPS; unset when unknown.
 	PeakRaw *float64 `json:"peak_raw,omitempty"`
+	// Mastery is Ranked Mastery's parts over the chosen bosses (a missed boss
+	// counts as 0) and the eligible kills behind it; unset without a Mastery score.
+	MasteryParts *HubSetBoardMastery `json:"mastery_parts,omitempty"`
+}
+
+// HubSetBoardMastery is the Peak, Form, and Floor a Ranked Mastery score is built from.
+type HubSetBoardMastery struct {
+	Peak          float64 `json:"peak"`
+	Form          float64 `json:"form"`
+	Floor         float64 `json:"floor"`
+	EligibleKills int64   `json:"eligible_kills"`
 }
 
 // HubSetBoardResponse is a page of a chosen-boss board. Ranks cover the whole

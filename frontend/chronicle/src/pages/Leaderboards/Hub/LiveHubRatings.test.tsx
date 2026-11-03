@@ -57,5 +57,9 @@ describe("set board client", () => {
     expect(page.rows[0].scores?.peak?.raw).toBe(1500)
     expect(page.rows[0].entry.raw).toBeUndefined()
     expect(page.hasPreviousPage && page.hasNextPage).toBe(true)
+    const withParts = setBoardPage({ rows: [{ rank: 1, realm_id: "r", realm_name: "R", subject_id: "g", name: "Zed", guild_name: "", player_class: "MAGE",
+      player_spec: "Fire", player_sub_spec: "", score: 80, peak: 90, mastery: 80, renown: 0, mastery_parts: { peak: 91, form: 82, floor: 60, eligible_kills: 7 } }],
+      total: 1, page: 0, has_next_page: false }, "mastery")
+    expect(withParts.rows[0].entry.publishedMastery).toEqual({ peak: 91, form: 82, floor: 60, eligibleKills: 7 })
   })
 })

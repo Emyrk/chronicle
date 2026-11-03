@@ -62,6 +62,9 @@ export function setBoardEntry(row: HubSetBoardRow, metric: RatingMetric): Rating
     score: row.score,
     detail: row.realm_name,
     raw: metric === "peak" ? row.peak_raw : undefined,
+    publishedMastery: row.mastery_parts
+      ? { peak: row.mastery_parts.peak, form: row.mastery_parts.form, floor: row.mastery_parts.floor, eligibleKills: row.mastery_parts.eligible_kills }
+      : undefined,
   }
 }
 

@@ -160,10 +160,14 @@ func (s *Service) handleHubSetBoard(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, v := range rows {
 		out.Total = v.Total
-		out.Rows = append(out.Rows, chroniclesdk.HubSetBoardRow{Rank: v.Rank, RealmID: v.RealmID, RealmName: v.RealmName,
+		row := chroniclesdk.HubSetBoardRow{Rank: v.Rank, RealmID: v.RealmID, RealmName: v.RealmName,
 			SubjectID: v.SubjectID, Name: v.SubjectName, GuildName: v.GuildName, PlayerClass: normalizeClassName(v.PlayerClass),
 			PlayerSpec: v.PlayerSpec, PlayerSubSpec: v.PlayerSubSpec, Score: v.Score, Peak: v.Peak, Mastery: v.Mastery,
-			Renown: v.Renown, PeakRaw: hubPeakRaw(v.PeakRaw)})
+			Renown: v.Renown, PeakRaw: hubPeakRaw(v.PeakRaw)}
+		if v.EligibleKills > 0 {
+			row.MasteryParts = &chroniclesdk.HubSetBoardMastery{Peak: v.MasteryPeak, Form: v.MasteryForm, Floor: v.MasteryFloor, EligibleKills: v.EligibleKills}
+		}
+		out.Rows = append(out.Rows, row)
 	}
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }

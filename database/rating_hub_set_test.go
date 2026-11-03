@@ -104,6 +104,22 @@ func TestHubSetRatingRows(t *testing.T) {
 	require.InDelta(t, 90, renownBoard[0].Peak, 1e-9)
 	require.Empty(t, page("peak", "nobody", 0, 10))
 
+	// Ranked Mastery carries its parts over the chosen bosses: averaged with a missed
+	// boss as 0, eligible kills summed.
+	_, err = conn.Exec(ctx, `INSERT INTO player_tenant_rating_boss_scores
+		(generation_id,tenant_id,realm_id,player_guid,instance_name,encounter_name,difficulty_name,max_players,player_class,player_spec,player_sub_spec,
+		 performance_metric,rating_metric,window_kind,window_start,window_end,score,best_locked_parse,form,floor_score,eligible_kills)
+		VALUES ($1,$2,$3,'steady','Molten Core','Lucifron','',0,'MAGE','Fire','','dps','ranked_mastery','period',now()-interval '1 day',now(),80,90,80,60,6)`,
+		gen, tenant, realm)
+	require.NoError(t, err)
+	mastery := page("ranked_mastery", "", 0, 10)
+	require.Len(t, mastery, 1)
+	require.InDelta(t, 40, mastery[0].Score, 1e-9)
+	require.InDelta(t, 45, mastery[0].MasteryPeak, 1e-9)
+	require.InDelta(t, 40, mastery[0].MasteryForm, 1e-9)
+	require.InDelta(t, 30, mastery[0].MasteryFloor, 1e-9)
+	require.Equal(t, int64(6), mastery[0].EligibleKills)
+
 	// Guild boards: same averaging, ranked by guild.
 	guild := uuid.New()
 	_, err = conn.Exec(ctx, "INSERT INTO guilds (id, realm_id, name) VALUES ($1,$2,'Set Guild')", guild, realm)

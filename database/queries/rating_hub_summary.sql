@@ -356,23 +356,34 @@ player_cohorts AS (
 SELECT p.rank::bigint AS rank, p.total::bigint AS total, p.realm_id, p.realm_name, p.subject_id, p.subject_name, p.guild_name,
        p.player_class, p.player_spec, p.player_sub_spec, p.score::float8 AS score,
        COALESCE(other.peak, 0)::float8 AS peak, COALESCE(other.mastery, 0)::float8 AS mastery, COALESCE(other.renown, 0)::float8 AS renown,
-       COALESCE(other.peak_raw, 0)::float8 AS peak_raw
+       COALESCE(other.peak_raw, 0)::float8 AS peak_raw,
+       -- Ranked Mastery's parts over the chosen bosses (a missed boss as 0), kills summed.
+       COALESCE(other.mastery_peak, 0)::float8 AS mastery_peak, COALESCE(other.mastery_form, 0)::float8 AS mastery_form,
+       COALESCE(other.mastery_floor, 0)::float8 AS mastery_floor, COALESCE(other.eligible_kills, 0)::bigint AS eligible_kills
 FROM paged p
 LEFT JOIN LATERAL (
   -- The row's three scores over the same bosses. A class/spec-ranked row keeps its
   -- cohort; a Renown-ranked player (Renown has no spec) takes its best cohort.
   SELECT max(c.peak) AS peak, max(c.mastery) AS mastery, max(c.renown) AS renown,
-         (array_agg(c.peak_raw ORDER BY c.peak DESC NULLS LAST))[1] AS peak_raw
+         (array_agg(c.peak_raw ORDER BY c.peak DESC NULLS LAST))[1] AS peak_raw,
+         (array_agg(c.mastery_peak ORDER BY c.mastery DESC NULLS LAST))[1] AS mastery_peak,
+         (array_agg(c.mastery_form ORDER BY c.mastery DESC NULLS LAST))[1] AS mastery_form,
+         (array_agg(c.mastery_floor ORDER BY c.mastery DESC NULLS LAST))[1] AS mastery_floor,
+         (array_agg(c.eligible_kills ORDER BY c.mastery DESC NULLS LAST))[1] AS eligible_kills
   FROM (
     SELECT x.cohort,
            sum(x.score) FILTER (WHERE x.rating_metric = 'peak') / (SELECT bosses FROM n) AS peak,
            sum(x.score) FILTER (WHERE x.rating_metric = 'ranked_mastery') / (SELECT bosses FROM n) AS mastery,
            sum(x.score) FILTER (WHERE x.rating_metric = 'renown') AS renown,
            sum(x.best_raw * x.best_duration_secs) FILTER (WHERE x.rating_metric = 'peak' AND x.best_raw > 0 AND x.best_duration_secs > 0)
-             / NULLIF(sum(x.best_duration_secs) FILTER (WHERE x.rating_metric = 'peak' AND x.best_raw > 0 AND x.best_duration_secs > 0), 0) AS peak_raw
+             / NULLIF(sum(x.best_duration_secs) FILTER (WHERE x.rating_metric = 'peak' AND x.best_raw > 0 AND x.best_duration_secs > 0), 0) AS peak_raw,
+           sum(x.best_locked_parse) FILTER (WHERE x.rating_metric = 'ranked_mastery') / (SELECT bosses FROM n) AS mastery_peak,
+           sum(x.form) FILTER (WHERE x.rating_metric = 'ranked_mastery') / (SELECT bosses FROM n) AS mastery_form,
+           sum(x.floor_score) FILTER (WHERE x.rating_metric = 'ranked_mastery') / (SELECT bosses FROM n) AS mastery_floor,
+           sum(x.eligible_kills) FILTER (WHERE x.rating_metric = 'ranked_mastery') AS eligible_kills
     FROM (
       SELECT CASE WHEN s.rating_metric = 'renown' THEN '' ELSE s.player_class || '|' || s.player_spec || '|' || s.player_sub_spec END AS cohort,
-             s.rating_metric, s.score, s.best_raw, s.best_duration_secs
+             s.rating_metric, s.score, s.best_raw, s.best_duration_secs, s.best_locked_parse, s.form, s.floor_score, s.eligible_kills
       FROM player_tenant_rating_boss_scores s
       WHERE @subject::text = 'player' AND s.tenant_id = @tenant_id AND s.generation_id = @generation_id
         AND s.realm_id = p.realm_id AND s.player_guid = p.subject_id AND s.instance_name = @instance_name
@@ -385,7 +396,7 @@ LEFT JOIN LATERAL (
               AND (@player_sub_spec::text = '' OR s.player_sub_spec = @player_sub_spec)
               AND (p.player_class = '' OR (s.player_class = p.player_class AND s.player_spec = p.player_spec AND s.player_sub_spec = p.player_sub_spec))))
       UNION ALL
-      SELECT '', s.rating_metric, s.score, NULL::float8, NULL::float8 FROM guild_tenant_rating_boss_scores s
+      SELECT '', s.rating_metric, s.score, NULL::float8, NULL::float8, s.best_locked_parse, s.form, s.floor_score, s.eligible_kills FROM guild_tenant_rating_boss_scores s
       WHERE @subject::text = 'guild' AND s.tenant_id = @tenant_id AND s.generation_id = @generation_id
         AND s.realm_id = p.realm_id AND s.guild_id::text = p.subject_id AND s.instance_name = @instance_name
         AND s.encounter_name IN (SELECT encounter_name FROM chosen)
