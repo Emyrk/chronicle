@@ -2,16 +2,74 @@ package database_test
 
 import (
 	"context"
-	"log/slog"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/ratingmath"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/google/uuid"
-	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/require"
 )
+
+// Preserve the legacy group pipeline's stale-publication invariant without
+// routing scheduled jobs through a group-based writer after tenant cutover.
+func workLegacyRatingPipeline(ctx context.Context, store database.Store, tenant uuid.UUID) error {
+	generation, _, err := servicerankings.StageRatingEvidenceStep(ctx, store, tenant, time.Now().UTC())
+	if err != nil || generation == uuid.Nil {
+		return err
+	}
+	cp, err := store.GetRatingRebuildCheckpoint(ctx, database.GetRatingRebuildCheckpointParams{TenantID: tenant, GenerationID: generation})
+	if err != nil {
+		return err
+	}
+	revision, err := store.GetRatingConfigRevision(ctx, tenant)
+	if err != nil {
+		return err
+	}
+	if revision != cp.ConfigRevision {
+		_, err = store.AbortRatingRebuild(ctx, database.AbortRatingRebuildParams{TenantID: tenant, GenerationID: generation})
+		if err != nil {
+			return err
+		}
+		return ratingmath.ErrRatingConfigStale
+	}
+	switch cp.Phase {
+	case "runs", "player_renown", "guild_renown":
+	case "players", "guilds", "player_renown_scores", "guild_renown_scores", "player_scopes", "guild_scopes":
+		_, err = ratingmath.ProjectRatingStagePage(ctx, store, tenant, generation)
+	case "mastery_pending":
+		err = ratingmath.MasteryStageStep(ctx, store, tenant, generation)
+	case "scopes_complete":
+		next, advanceErr := store.AdvanceRatingRebuildCheckpoint(ctx, database.AdvanceRatingRebuildCheckpointParams{
+			TenantID: tenant, GenerationID: generation, ExpectedPhase: cp.Phase, ExpectedCursor: cp.Cursor,
+			NextPhase: "ready", NextCursor: []byte(`{}`),
+		})
+		if advanceErr != nil {
+			return advanceErr
+		}
+		if next != 1 {
+			return fmt.Errorf("legacy checkpoint changed")
+		}
+	case "ready":
+		published, publishErr := store.PublishRatingRebuild(ctx, database.PublishRatingRebuildParams{TenantID: tenant, GenerationID: generation})
+		if publishErr != nil {
+			return publishErr
+		}
+		if !published {
+			return ratingmath.ErrRatingConfigStale
+		}
+		return nil
+	default:
+		return fmt.Errorf("unexpected legacy phase %q", cp.Phase)
+	}
+	if err != nil {
+		return err
+	}
+	return errors.New("legacy page pending")
+}
 
 // Exercises the same bounded worker invocations used by River, against real
 // checkpoints, frozen observations, projections, and active leaderboard reads.
@@ -98,8 +156,9 @@ func TestRatingWorkerStagedPipelineAndStalePublication(t *testing.T) {
 		VALUES ($1,$2,$3,$4,'Molten Core','Ragnaros',$5)`, uuid.Nil, realm, guild, uuid.New(), recentKill)
 	require.NoError(t, err)
 
-	worker := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default()}
-	job := &river.Job[servicerankings.ArgsRebuildTenantRatings]{Args: servicerankings.ArgsRebuildTenantRatings{TenantID: uuid.Nil}}
+	// Exercise the retired group pipeline through its explicit legacy helper.
+	// The scheduled worker now uses the separate tenant-only pipeline.
+	workLegacy := func() error { return workLegacyRatingPipeline(ctx, store, uuid.Nil) }
 	checkpoint := func(id uuid.UUID) database.RatingRebuildCheckpoint {
 		t.Helper()
 		cp, err := q.GetRatingRebuildCheckpoint(ctx, database.GetRatingRebuildCheckpointParams{TenantID: uuid.Nil, GenerationID: id})
@@ -140,7 +199,7 @@ func TestRatingWorkerStagedPipelineAndStalePublication(t *testing.T) {
 	injected, pagedMastery := false, false
 	seen := map[string]bool{}
 	for i := 0; i < 100; i++ {
-		err := worker.Work(ctx, job)
+		err := workLegacy()
 		require.Error(t, err, "each intermediate page must snooze, not publish")
 		cp, lookupErr := q.GetBuildingRatingRebuildCheckpoint(ctx, uuid.Nil)
 		require.NoError(t, lookupErr)
@@ -191,7 +250,7 @@ func TestRatingWorkerStagedPipelineAndStalePublication(t *testing.T) {
 	require.Equal(t, int64(40), longDropped)
 	require.Equal(t, int64(1), dropped, "drop the lowest parse of six")
 	require.Equal(t, "ready", checkpoint(generation).Phase)
-	require.NoError(t, worker.Work(ctx, job))
+	require.NoError(t, workLegacy())
 	require.Equal(t, "complete", checkpoint(generation).Phase)
 
 	peak := boss("peak", "period")
@@ -242,7 +301,7 @@ func TestRatingWorkerStagedPipelineAndStalePublication(t *testing.T) {
 	// already active generation. The worker aborts it before publication.
 	var next uuid.UUID
 	for i := 0; i < 100; i++ {
-		err := worker.Work(ctx, job)
+		err := workLegacy()
 		require.Error(t, err)
 		cp, lookupErr := q.GetBuildingRatingRebuildCheckpoint(ctx, uuid.Nil)
 		require.NoError(t, lookupErr)
@@ -260,7 +319,7 @@ func TestRatingWorkerStagedPipelineAndStalePublication(t *testing.T) {
 		PeakWeight: 2, MasteryWeight: 1, RenownPoints: 15,
 	})
 	require.NoError(t, err)
-	require.Error(t, worker.Work(ctx, job))
+	require.Error(t, workLegacy())
 	require.Equal(t, "aborted", checkpoint(next).Phase)
 	require.Equal(t, peak, boss("peak", "period"), "stale build must leave the active leaderboard untouched")
 }

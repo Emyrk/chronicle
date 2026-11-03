@@ -216,10 +216,34 @@ func StageRatingEvidenceStep(ctx context.Context, store database.Store, tenant u
 	return generation, staged, err
 }
 
-// StageTenantRatingEvidenceStep only stages bounded tenant-wide evidence. It is
-// intentionally not called by River: a tenant generation cannot be projected
-// or published until the tenant-only score and scope phases are available.
+// StageTenantRatingEvidenceStep stages one bounded tenant-wide evidence page.
+// The worker projects all score and scope phases before publishing its generation.
 func StageTenantRatingEvidenceStep(ctx context.Context, store database.Store, tenant uuid.UUID, asOf time.Time) (uuid.UUID, bool, error) {
+	// A legacy group checkpoint left unfinished during deployment cannot be
+	// resumed by the tenant writer. Retire it without touching the active board.
+	old, err := store.GetBuildingRatingRebuildCheckpoint(ctx, tenant)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, false, err
+	}
+	if err == nil {
+		var marker struct {
+			Writer string `json:"writer"`
+		}
+		if err := json.Unmarshal(old.Manifest, &marker); err != nil {
+			return uuid.Nil, false, fmt.Errorf("invalid rating checkpoint manifest: %w", err)
+		}
+		if marker.Writer == "" {
+			n, err := store.AbortRatingRebuild(ctx, database.AbortRatingRebuildParams{TenantID: tenant, GenerationID: old.GenerationID})
+			if err != nil {
+				return uuid.Nil, false, err
+			}
+			if n != 1 {
+				return uuid.Nil, false, fmt.Errorf("legacy rating checkpoint could not be retired")
+			}
+		} else if marker.Writer != "tenant" {
+			return uuid.Nil, false, fmt.Errorf("unknown rating checkpoint writer %q", marker.Writer)
+		}
+	}
 	generation, err := store.StartTenantRatingRebuild(ctx, database.StartTenantRatingRebuildParams{
 		TenantID: tenant, AsOf: database.Timestamptz(asOf), SourceCutoff: database.Timestamptz(asOf),
 	})

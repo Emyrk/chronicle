@@ -61,19 +61,19 @@ func TestTenantRatingStageIncludesUnassignedRealmsAndBosses(t *testing.T) {
 	require.NoError(t, conn.QueryRow(ctx, `SELECT count(DISTINCT realm_id) FROM rating_stage_player_observations
 		WHERE generation_id=$1 AND instance_name='Uncurated Raid' AND encounter_name='Uncurated Boss'`, generation).Scan(&realms))
 	require.Equal(t, 2, realms)
-	// The scheduled group worker must refuse this checkpoint, never silently
-	// project zero group scores and activate a partial tenant generation.
+	// The scheduled worker now resumes this tenant checkpoint, but must not
+	// publish before every tenant projection phase completes.
 	worker := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default()}
-	require.ErrorContains(t, worker.Work(ctx, &river.Job[servicerankings.ArgsRebuildTenantRatings]{
+	require.Error(t, worker.Work(ctx, &river.Job[servicerankings.ArgsRebuildTenantRatings]{
 		Args: servicerankings.ArgsRebuildTenantRatings{TenantID: uuid.Nil},
-	}), "different writer")
+	}))
 	var active int
 	require.NoError(t, conn.QueryRow(ctx, "SELECT count(*) FROM rating_score_generations WHERE id=$1 AND status='active'", generation).Scan(&active))
 	require.Zero(t, active)
 }
 
-// This entry point is deliberately not invoked by the scheduled writer until
-// tenant score and scope projections have been implemented.
+// This entry point is now used by the scheduled tenant worker; missing
+// calibration must still fail closed and manifests must remain frozen.
 func TestTenantRatingCheckpointRequiresPolicyAndFreezesManifest(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)

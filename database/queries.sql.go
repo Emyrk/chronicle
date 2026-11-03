@@ -25736,8 +25736,6 @@ const getTenantRatingPolicy = `-- name: GetTenantRatingPolicy :one
 SELECT tenant_id, version, half_life_days, best_weight, form_weight, floor_weight, rank_one_weight, full_rank_kills, updated_at FROM rating_tenant_policies WHERE tenant_id = $1
 `
 
-// Future tenant-wide writer configuration; old group readers remain unchanged.
-// The 180-day window is a fixed scoring rule, not an admin policy column.
 func (q *sqlQuerier) GetTenantRatingPolicy(ctx context.Context, tenantID uuid.UUID) (RatingTenantPolicy, error) {
 	row := q.db.QueryRow(ctx, getTenantRatingPolicy, tenantID)
 	var i RatingTenantPolicy
@@ -25753,6 +25751,34 @@ func (q *sqlQuerier) GetTenantRatingPolicy(ctx context.Context, tenantID uuid.UU
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listConfiguredTenantRatingTenants = `-- name: ListConfiguredTenantRatingTenants :many
+SELECT tenant_id FROM rating_tenant_policies ORDER BY tenant_id
+`
+
+// Future tenant-wide writer configuration; old group readers remain unchanged.
+// The 180-day window is a fixed scoring rule, not an admin policy column.
+// Only tenants with an approved scoring policy can be scheduled. Root uses
+// the zero UUID, not a nullable server association or a group membership.
+func (q *sqlQuerier) ListConfiguredTenantRatingTenants(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listConfiguredTenantRatingTenants)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var tenant_id uuid.UUID
+		if err := rows.Scan(&tenant_id); err != nil {
+			return nil, err
+		}
+		items = append(items, tenant_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listTenantRenownBosses = `-- name: ListTenantRenownBosses :many

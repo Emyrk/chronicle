@@ -1,5 +1,10 @@
 -- Future tenant-wide writer configuration; old group readers remain unchanged.
 -- The 180-day window is a fixed scoring rule, not an admin policy column.
+-- Only tenants with an approved scoring policy can be scheduled. Root uses
+-- the zero UUID, not a nullable server association or a group membership.
+-- name: ListConfiguredTenantRatingTenants :many
+SELECT tenant_id FROM rating_tenant_policies ORDER BY tenant_id;
+
 -- name: GetTenantRatingPolicy :one
 SELECT * FROM rating_tenant_policies WHERE tenant_id = @tenant_id;
 

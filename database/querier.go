@@ -519,8 +519,6 @@ type sqlcQuerier interface {
 	// itself is not behind RLS (only wow_servers/wow_server_realms are).
 	GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Tenant, error)
 	GetTenantProofRequest(ctx context.Context, arg GetTenantProofRequestParams) (ProofRequest, error)
-	// Future tenant-wide writer configuration; old group readers remain unchanged.
-	// The 180-day window is a fixed scoring rule, not an admin policy column.
 	GetTenantRatingPolicy(ctx context.Context, tenantID uuid.UUID) (RatingTenantPolicy, error)
 	GetTimeParseBossKillCohortEntries(ctx context.Context, arg GetTimeParseBossKillCohortEntriesParams) ([]GetTimeParseBossKillCohortEntriesRow, error)
 	GetTimeParseBossKillMembershipCohort(ctx context.Context, arg GetTimeParseBossKillMembershipCohortParams) ([]int64, error)
@@ -786,6 +784,11 @@ type sqlcQuerier interface {
 	ListCacheGenerations(ctx context.Context) ([]CacheGeneration, error)
 	ListClassBuffIgnorePolicies(ctx context.Context) ([]ListClassBuffIgnorePoliciesRow, error)
 	ListClassBuffPoliciesForDataset(ctx context.Context, datasetID uuid.UUID) ([]ListClassBuffPoliciesForDatasetRow, error)
+	// Future tenant-wide writer configuration; old group readers remain unchanged.
+	// The 180-day window is a fixed scoring rule, not an admin policy column.
+	// Only tenants with an approved scoring policy can be scheduled. Root uses
+	// the zero UUID, not a nullable server association or a group membership.
+	ListConfiguredTenantRatingTenants(ctx context.Context) ([]uuid.UUID, error)
 	ListConsumableDisambiguationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumableDisambiguationsByDatasetRow, error)
 	ListConsumableEffectPoliciesByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumableEffectPoliciesByDatasetRow, error)
 	ListConsumablesByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumablesByDatasetRow, error)

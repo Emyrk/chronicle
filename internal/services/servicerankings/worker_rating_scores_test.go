@@ -2,6 +2,7 @@ package servicerankings_test
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"testing"
 
@@ -31,11 +32,11 @@ func (s *unconfiguredRatingStore) AcquireRatingRebuildConfigLock(context.Context
 	return nil
 }
 
-func (s *unconfiguredRatingStore) ListTenantRatingPolicies(_ context.Context, tenant uuid.UUID) ([]database.RatingGroupPolicy, error) {
+func (s *unconfiguredRatingStore) StartTenantRatingRebuild(_ context.Context, p database.StartTenantRatingRebuildParams) (uuid.UUID, error) {
 	s.t.Helper()
-	require.Equal(s.t, s.tenant, tenant)
+	require.Equal(s.t, s.tenant, p.TenantID)
 	s.called = true
-	return nil, nil
+	return uuid.Nil, errors.New("tenant rating policy missing")
 }
 
 func (s *unconfiguredRatingStore) GetBuildingRatingRebuildCheckpoint(context.Context, uuid.UUID) (database.RatingRebuildCheckpoint, error) {
@@ -50,7 +51,7 @@ func TestWorkerRebuildTenantRatings_UnconfiguredTenant(t *testing.T) {
 	err := worker.Work(t.Context(), &river.Job[servicerankings.ArgsRebuildTenantRatings]{
 		Args: servicerankings.ArgsRebuildTenantRatings{TenantID: tenant},
 	})
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "tenant rating policy missing")
 	require.True(t, store.called)
 }
 
@@ -59,7 +60,7 @@ func TestWorkerRebuildTenantRatings_RootUnconfigured(t *testing.T) {
 	store := &unconfiguredRatingStore{t: t, tenant: uuid.Nil}
 	worker := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default()}
 	err := worker.Work(t.Context(), &river.Job[servicerankings.ArgsRebuildTenantRatings]{})
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "tenant rating policy missing")
 	require.True(t, store.called)
 }
 
@@ -88,10 +89,16 @@ type checkpointRatingStore struct {
 func (s *checkpointRatingStore) InTx(_ context.Context, fn func(database.Store) error, _ *pgx.TxOptions) error {
 	return fn(s)
 }
-func (s *checkpointRatingStore) ListTenantRatingPolicies(context.Context, uuid.UUID) ([]database.RatingGroupPolicy, error) {
-	return nil, nil
+func (s *checkpointRatingStore) StartTenantRatingRebuild(context.Context, database.StartTenantRatingRebuildParams) (uuid.UUID, error) {
+	return s.cp.GenerationID, nil
 }
 func (s *checkpointRatingStore) GetBuildingRatingRebuildCheckpoint(context.Context, uuid.UUID) (database.RatingRebuildCheckpoint, error) {
+	return s.cp, nil
+}
+func (s *checkpointRatingStore) GetBuildingTenantProjectionCheckpoint(context.Context, database.GetBuildingTenantProjectionCheckpointParams) (database.RatingRebuildCheckpoint, error) {
+	if string(s.cp.Manifest) != `{"writer":"tenant"}` {
+		return database.RatingRebuildCheckpoint{}, pgx.ErrNoRows
+	}
 	return s.cp, nil
 }
 func (s *checkpointRatingStore) GetRatingRebuildCheckpoint(context.Context, database.GetRatingRebuildCheckpointParams) (database.RatingRebuildCheckpoint, error) {
@@ -122,7 +129,7 @@ func TestWorkerRebuildTenantRatingsPublishesOnlyReady(t *testing.T) {
 		t.Run(phase, func(t *testing.T) {
 			t.Parallel()
 			tenant := uuid.New()
-			store := &checkpointRatingStore{cp: database.RatingRebuildCheckpoint{TenantID: tenant, GenerationID: uuid.New(), Phase: phase, Cursor: []byte(`{}`), ConfigRevision: 1}, revision: 1}
+			store := &checkpointRatingStore{cp: database.RatingRebuildCheckpoint{TenantID: tenant, GenerationID: uuid.New(), Phase: phase, Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"tenant"}`), ConfigRevision: 1}, revision: 1}
 			worker := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default()}
 			err := worker.Work(t.Context(), &river.Job[servicerankings.ArgsRebuildTenantRatings]{Args: servicerankings.ArgsRebuildTenantRatings{TenantID: tenant}})
 			if phase == "ready" {
@@ -137,10 +144,42 @@ func TestWorkerRebuildTenantRatingsPublishesOnlyReady(t *testing.T) {
 	}
 }
 
+func (s *checkpointRatingStore) ListTenantPlayerRaidScopeKeys(context.Context, database.ListTenantPlayerRaidScopeKeysParams) ([]database.ListTenantPlayerRaidScopeKeysRow, error) {
+	return nil, errors.New("scope page failed")
+}
+
+func TestWorkerRebuildTenantRatingsDoesNotPublishSkippedOrFailedPhases(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"player_scopes", "guild_renown_scores", "unknown"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			tenant := uuid.New()
+			store := &checkpointRatingStore{cp: database.RatingRebuildCheckpoint{
+				TenantID: tenant, GenerationID: uuid.New(), Phase: phase,
+				Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"tenant"}`), ConfigRevision: 1,
+			}, revision: 1}
+			worker := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default()}
+			err := worker.Work(t.Context(), &river.Job[servicerankings.ArgsRebuildTenantRatings]{Args: servicerankings.ArgsRebuildTenantRatings{TenantID: tenant}})
+			require.Error(t, err)
+			require.False(t, store.published)
+			require.Equal(t, phase, store.cp.Phase)
+		})
+	}
+}
+
+func TestWorkerRebuildTenantRatingsRefusesGroupCheckpoint(t *testing.T) {
+	t.Parallel()
+	tenant := uuid.New()
+	store := &checkpointRatingStore{cp: database.RatingRebuildCheckpoint{TenantID: tenant, GenerationID: uuid.New(), Phase: "ready", Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"group"}`), ConfigRevision: 1}, revision: 1}
+	worker := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default()}
+	require.Error(t, worker.Work(t.Context(), &river.Job[servicerankings.ArgsRebuildTenantRatings]{Args: servicerankings.ArgsRebuildTenantRatings{TenantID: tenant}}))
+	require.False(t, store.published)
+}
+
 func TestWorkerRebuildTenantRatingsStaleConfiguration(t *testing.T) {
 	t.Parallel()
 	tenant := uuid.New()
-	store := &checkpointRatingStore{cp: database.RatingRebuildCheckpoint{TenantID: tenant, GenerationID: uuid.New(), Phase: "ready", Cursor: []byte(`{}`), ConfigRevision: 1}, revision: 2}
+	store := &checkpointRatingStore{cp: database.RatingRebuildCheckpoint{TenantID: tenant, GenerationID: uuid.New(), Phase: "ready", Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"tenant"}`), ConfigRevision: 1}, revision: 2}
 	worker := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default()}
 	require.Error(t, worker.Work(t.Context(), &river.Job[servicerankings.ArgsRebuildTenantRatings]{Args: servicerankings.ArgsRebuildTenantRatings{TenantID: tenant}}))
 	require.True(t, store.aborted)

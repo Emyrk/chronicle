@@ -48,14 +48,13 @@ func (w *WorkerDispatchRatingScores) Work(ctx context.Context, _ *river.Job[Args
 	if w.Queue == nil {
 		return fmt.Errorf("rating score dispatch queue is unavailable")
 	}
-	tenants, err := w.Store.ListRatingScoreTenants(ctx)
+	tenants, err := w.Store.ListConfiguredTenantRatingTenants(ctx)
 	if err != nil {
 		return fmt.Errorf("list rating score tenants: %w", err)
 	}
 	for _, tenant := range tenants {
-		// A NULL server tenant is the root tenant, represented by uuid.Nil.
-		if _, err := w.Queue.Insert(ctx, ArgsRebuildTenantRatings{TenantID: tenant.UUID}, nil); err != nil {
-			return fmt.Errorf("enqueue rating rebuild for tenant %s: %w", tenant.UUID, err)
+		if _, err := w.Queue.Insert(ctx, ArgsRebuildTenantRatings{TenantID: tenant}, nil); err != nil {
+			return fmt.Errorf("enqueue rating rebuild for tenant %s: %w", tenant, err)
 		}
 	}
 	return nil
@@ -81,8 +80,8 @@ type WorkerRebuildTenantRatings struct {
 	Logger *slog.Logger
 }
 
-// Every invocation commits at most one bounded evidence, projection, or Mastery
-// page. River snoozing does not consume an attempt, so large tenants can finish.
+// Every invocation commits at most one bounded tenant evidence, Peak/Renown,
+// Mastery, or raid-scope page. River snoozing does not consume an attempt.
 func (w *WorkerRebuildTenantRatings) Work(ctx context.Context, job *river.Job[ArgsRebuildTenantRatings]) error {
 	tenant := job.Args.TenantID
 	if tenant == uuid.Nil {
@@ -90,9 +89,9 @@ func (w *WorkerRebuildTenantRatings) Work(ctx context.Context, job *river.Job[Ar
 	} else {
 		ctx = servicetenant.WithTenantID(ctx, tenant)
 	}
-	generation, _, err := StageRatingEvidenceStep(ctx, w.Store, tenant, time.Now().UTC())
+	generation, _, err := StageTenantRatingEvidenceStep(ctx, w.Store, tenant, time.Now().UTC())
 	if err != nil {
-		// StageRatingEvidenceStep commits an abort when it detects a stale revision.
+		// The evidence step commits an abort when it detects a stale revision.
 		// A later invocation starts a fresh snapshot; never publish the stale build.
 		if errors.Is(err, ratingmath.ErrRatingConfigStale) {
 			return river.JobSnooze(time.Second)
@@ -102,7 +101,7 @@ func (w *WorkerRebuildTenantRatings) Work(ctx context.Context, job *river.Job[Ar
 	if generation == uuid.Nil {
 		return nil
 	}
-	cp, err := w.Store.GetRatingRebuildCheckpoint(ctx, database.GetRatingRebuildCheckpointParams{TenantID: tenant, GenerationID: generation})
+	cp, err := w.Store.GetBuildingTenantProjectionCheckpoint(ctx, database.GetBuildingTenantProjectionCheckpointParams{TenantID: tenant, GenerationID: generation})
 	if err != nil {
 		return err
 	}
@@ -119,17 +118,20 @@ func (w *WorkerRebuildTenantRatings) Work(ctx context.Context, job *river.Job[Ar
 	switch cp.Phase {
 	case "runs", "player_renown", "guild_renown":
 		// The evidence step above already committed one page.
-	case "players", "guilds", "player_renown_scores", "guild_renown_scores", "player_scopes", "guild_scopes":
-		_, err = ratingmath.ProjectRatingStagePage(ctx, w.Store, tenant, generation)
+	case "players", "guilds", "player_renown_scores", "guild_renown_scores":
+		_, err = ratingmath.TenantProjectionPage(ctx, w.Store, tenant, generation)
 	case "mastery_pending":
-		err = ratingmath.MasteryStageStep(ctx, w.Store, tenant, generation)
+		err = ratingmath.TenantMasteryStageStep(ctx, w.Store, tenant, generation)
+	case "player_scopes", "guild_scopes":
+		err = ratingmath.TenantScopeProjectionPage(ctx, w.Store, tenant, generation)
 	case "scopes_complete":
 		err = w.Store.InTx(ctx, func(tx database.Store) error {
-			current, err := tx.GetRatingRebuildCheckpoint(ctx, database.GetRatingRebuildCheckpointParams{TenantID: tenant, GenerationID: generation})
+			// Recheck the configuration inside the ready-transition transaction.
+			rev, err := tx.GetRatingConfigRevision(ctx, tenant)
 			if err != nil {
 				return err
 			}
-			rev, err := tx.GetRatingConfigRevision(ctx, tenant)
+			current, err := tx.GetBuildingTenantProjectionCheckpoint(ctx, database.GetBuildingTenantProjectionCheckpointParams{TenantID: tenant, GenerationID: generation})
 			if err != nil {
 				return err
 			}
