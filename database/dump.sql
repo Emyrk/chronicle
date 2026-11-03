@@ -157,6 +157,12 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION rate_limit_refill(tokens double precision, updated_at timestamp with time zone, rate_per_second double precision, burst double precision) RETURNS double precision
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT LEAST(burst, tokens + GREATEST(EXTRACT(EPOCH FROM (now() - updated_at)), 0) * rate_per_second)
+$$;
+
 CREATE FUNCTION reattach_by_slug() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -1883,6 +1889,13 @@ CREATE TABLE rankings_instance_summaries (
     query_version smallint DEFAULT 0 NOT NULL
 );
 
+CREATE TABLE rate_limit_buckets (
+    key text NOT NULL,
+    tokens double precision NOT NULL,
+    last_allowed boolean NOT NULL,
+    updated_at timestamp with time zone NOT NULL
+);
+
 CREATE TABLE regression_fixtures (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     log_group_id uuid NOT NULL,
@@ -3069,6 +3082,9 @@ ALTER TABLE ONLY ranking_runs
 ALTER TABLE ONLY rankings_instance_summaries
     ADD CONSTRAINT rankings_instance_summaries_pkey PRIMARY KEY (instance_name, difficulty_name, max_players, tenant_id);
 
+ALTER TABLE ONLY rate_limit_buckets
+    ADD CONSTRAINT rate_limit_buckets_pkey PRIMARY KEY (key);
+
 ALTER TABLE ONLY regression_fixtures
     ADD CONSTRAINT regression_fixtures_log_group_id_key UNIQUE (log_group_id);
 
@@ -3433,6 +3449,8 @@ CREATE INDEX idx_psreceipt_instance ON parse_score_receipts USING btree (instanc
 CREATE INDEX idx_psreceipt_snapshot ON parse_score_receipts USING btree (snapshot_id);
 
 CREATE INDEX idx_psreceipt_tenant ON parse_score_receipts USING btree (tenant_id);
+
+CREATE INDEX idx_rate_limit_buckets_updated_at ON rate_limit_buckets USING btree (updated_at);
 
 CREATE INDEX idx_regression_snapshots_fixture ON regression_snapshots USING btree (fixture_id, created_at DESC);
 
