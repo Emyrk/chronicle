@@ -464,6 +464,9 @@ func providerErrorCode(status int) string {
 }
 
 func providerErrorMessage(status int, contentType, body string) string {
+	if status == http.StatusUnauthorized {
+		return "OpenRouter couldn't authenticate your connection. Reconnect OpenRouter in Account → AI settings and try again."
+	}
 	detail := ""
 	if strings.Contains(strings.ToLower(contentType), "application/json") {
 		var payload struct {
