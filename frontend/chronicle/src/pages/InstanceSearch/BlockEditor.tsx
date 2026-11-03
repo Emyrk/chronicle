@@ -9,8 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ChipInput, NATIVE_SELECT, NumberInput, Segmented, SuggestInput, ToggleChips } from "./controls";
-import { MATCH_OPTIONS, METRIC_OPTIONS, ON_OPTIONS, OP_LABELS, PARSE_SCOPE_OPTIONS, enumLabel, fieldLabel } from "./fieldLabels";
+import { MATCH_OPTIONS, METRIC_OPTIONS, ON_OPTIONS, OP_LABELS, PARSE_SCOPE_OPTIONS, enumLabel, fieldGroup, fieldLabel } from "./fieldLabels";
 import type { Node } from "./queryModel";
+import type { ComboOption, Suggestion } from "./comboOptions";
+import { SelectCombo } from "./ComboInput";
 import { ClassSpecPicker } from "./ClassSpecPicker";
 import { ANY_CLASS_SPEC, type ClassSpec, classLabel, useSubSpecs } from "./classSpec";
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
@@ -24,8 +26,9 @@ import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
 
 export interface BlockContext {
   fields: readonly InstanceSearchField[];
-  zones: readonly string[];
-  bosses: readonly string[];
+  zones: readonly Suggestion[];
+  bosses: readonly Suggestion[];
+  realms?: readonly Suggestion[];
   disabled?: boolean;
 }
 
@@ -386,13 +389,15 @@ function PredicateEditor({
 
   return (
     <>
-      <select className={NATIVE_SELECT} disabled={ctx.disabled} value={specLike ? SPEC_FIELD : field.name} onChange={(e) => setField(e.target.value)} title={field.doc}>
-        {options.map((f) => (
-          <option key={f.name} value={f.name} title={f.doc}>
-            {fieldLabel(f.name)}
-          </option>
-        ))}
-      </select>
+      <SelectCombo
+        className="w-40"
+        value={specLike ? SPEC_FIELD : field.name}
+        options={fieldOptions(options)}
+        onChange={setField}
+        disabled={ctx.disabled}
+        placeholder="Search fields…"
+        title={field.doc}
+      />
       <select className={NATIVE_SELECT} disabled={ctx.disabled} value={op} onChange={(e) => setOp(e.target.value as InstanceSearchOp)}>
         {field.ops.map((o) => (
           <option key={o} value={o}>{OP_LABELS[o]}</option>
@@ -407,10 +412,32 @@ function PredicateEditor({
   );
 }
 
-function suggestionsFor(field: InstanceSearchField, ctx: BlockContext): readonly string[] {
-  if (field.name === "instance.name") return ctx.zones;
-  if (field.name === "encounter.name") return ctx.bosses;
-  return [];
+/** The field picker's options: grouped, searchable by name and description. */
+function fieldOptions(fields: readonly InstanceSearchField[]): ComboOption[] {
+  return fields
+    .map((f, i) => ({ f, i, ...fieldGroup(f.name) }))
+    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .map(({ f, group }) => ({
+      value: f.name,
+      label: fieldLabel(f.name),
+      group,
+      // Spec also covers sub-specs (Bear / Cat, Tank / DPS, Fury Prot).
+      keywords: `${f.name} ${f.doc}${f.name === SPEC_FIELD ? " sub-spec bear cat tank dps fury prot" : ""}`,
+    }));
+}
+
+/** Combobox options per field. Add a field here to give its block a picker. */
+function suggestionsFor(field: InstanceSearchField, ctx: BlockContext): readonly Suggestion[] {
+  switch (field.name) {
+    case "instance.name":
+      return ctx.zones;
+    case "encounter.name":
+      return ctx.bosses;
+    case "instance.realm":
+      return ctx.realms ?? [];
+    default:
+      return [];
+  }
 }
 
 function ValueEditor({

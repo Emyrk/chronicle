@@ -34,6 +34,25 @@ export function fieldLabel(name: string): string {
   return base.charAt(0).toUpperCase() + base.slice(1);
 }
 
+/** Field picker groups, in display order. Unlisted fields go under "Other". */
+const FIELD_GROUPS: [string, string[]][] = [
+  ["Run", ["instance.name", "instance.realm", "instance.realm_id", "instance.guild", "instance.guild_id", "instance.started_at", "instance.difficulty", "instance.max_players", "instance.category", "instance.recorder", "instance.has_video", "instance.player_count"]],
+  ["Bosses & speed", ["instance.bosses_killed", "instance.wipes", "instance.deaths", "instance.clear_time_ms", "instance.clear_qualified", "instance.boss_time_ms", "instance.trash_time_ms", "instance.idle_time_ms", "instance.kill_time_ms"]],
+  ["Parses", ["instance.clear_parse", "instance.kill_time_parse"]],
+  ["Log", ["instance.capability"]],
+  ["Character", ["player.name", "player.guid", "player.class", "player.race", "player.level", "player.guild", "player.guild_id"]],
+  ["In fights", ["player.spec", "player.role", "player.dps", "player.hps", "player.deaths", "player.avg_ilvl"]],
+  ["Parses", ["player.parse"]],
+  ["Pull", ["encounter.name", "encounter.boss", "encounter.outcome", "encounter.killed", "encounter.duration_ms", "encounter.kill_time_parse"]],
+];
+const GROUP_OF = new Map(FIELD_GROUPS.flatMap(([g, names], i) => names.map((n) => [n, [g, i] as const])));
+
+/** The picker group for a field and its sort rank. */
+export function fieldGroup(name: string): { group: string; rank: number } {
+  const hit = GROUP_OF.get(name);
+  return hit ? { group: hit[0], rank: hit[1] } : { group: "Other", rank: FIELD_GROUPS.length };
+}
+
 export const OP_LABELS: Record<InstanceSearchOp, string> = {
   "=": "is",
   "!=": "is not",
