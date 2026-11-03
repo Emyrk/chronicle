@@ -19,10 +19,10 @@ export const Calculators: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     const mastery = within(canvas.getByRole("region", { name: "Ranked Mastery calculator" }))
-    // One perfect kill: the estimate is 100, but only 65% of it counts yet.
+    // One perfect kill: the estimate is 100, but only half of it counts yet.
     for (const name of ["Peak", "Form", "Floor"]) fireEvent.change(mastery.getByRole("slider", { name }), { target: { value: "100" } })
     fireEvent.change(mastery.getByRole("slider", { name: "Kills" }), { target: { value: "1" } })
-    await expect(mastery.getByText("65.0")).toBeInTheDocument()
+    await expect(mastery.getByText("50.0")).toBeInTheDocument()
     await expect(mastery.getByText("20%")).toBeInTheDocument()
     // Five kills complete the evidence.
     fireEvent.change(mastery.getByRole("slider", { name: "Kills" }), { target: { value: "5" } })

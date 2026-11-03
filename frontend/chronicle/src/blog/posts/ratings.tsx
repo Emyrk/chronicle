@@ -21,7 +21,7 @@ const RATINGS = [
   {
     metric: "renown" as const,
     question: "What has your career added up to?",
-    body: "Bosses killed, how often you return, and full clears. It never looks at your parses.",
+    body: "The bosses you have killed and how often you return. It never looks at your parses.",
   },
 ];
 
@@ -72,12 +72,12 @@ export function RatingsLaunchPost({ post }: PostProps) {
           record. A single raid's Peak averages every boss, so it rewards a full set of strong kills.
         </li>
         <li>
-          <strong>Ranked Mastery</strong> blends your Peak, your typical recent play (Form), and your weaker nights
-          (Floor). Until you have five kills on a boss, it is held back a little; the leaderboards show this as{" "}
-          <strong>Evidence</strong>.
+          <strong>Ranked Mastery</strong> blends your best parse, your typical play (Form), and your weaker nights
+          (Floor). Until you have five kills on a boss, it is held back: half counts after one kill, all of it at five.
         </li>
         <li>
-          <strong>Renown</strong> is your career total: bosses, repeat kills, and full clears. It is history, not skill.
+          <strong>Renown</strong> is your career total: every boss kill, repeat kills included, with bigger bosses worth
+          more. It is history, not skill.
         </li>
       </ul>
       <p>
@@ -92,22 +92,23 @@ export function RatingsLaunchPost({ post }: PostProps) {
       </p>
       <ul>
         <li>
-          <strong>Pick an encounter</strong>: the full clear, one boss, or several bosses combined.
+          <strong>Pick encounters</strong>: every boss to start, click one boss to see only it, or Ctrl+Click to
+          combine several. Raids with more than one difficulty or size get a picker for those too.
         </li>
         <li>
           <strong>Pick a class</strong> by its icon, then a spec and subspec. DPS or healing, characters or guilds.
         </li>
         <li>
-          <strong>Filter by realm</strong> to see your own realm's players; ratings stay server-wide, and the choice is
-          remembered for next time.
+          <strong>Filter by realm</strong> to see your own realm's players; ratings stay server-wide.
         </li>
         <li>
           <strong>Overview</strong> shows the fastest clears, the rating leaders, best performances, and a card for
           every boss. Pick a class to see how each of its specs stands.
         </li>
         <li>
-          <strong>Ratings</strong> has a board per rating and a full table you can search and sort. Performances,
-          Speedruns, Statistics, Parsing, and Rulesets live next door.
+          <strong>Ratings</strong> has a board per rating and a full table you can search and sort. Peak shows the DPS
+          behind it. Performances, Speedruns (full clears or each boss's kill times), Statistics, Parsing, and Rulesets
+          live next door.
         </li>
       </ul>
 

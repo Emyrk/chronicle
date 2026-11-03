@@ -225,16 +225,17 @@ function PeakScene({ frame }: { frame: number }) {
 /** Peak, Form, and Floor blend into the estimate; five kills complete the Evidence. */
 function MasteryScene({ frame }: { frame: number }) {
   const parts = [
-    { label: "Peak", hint: "your best", value: 96, weight: 0.3, color: ACCENT.peak },
-    { label: "Form", hint: "your typical recent play", value: 88, weight: 0.5, color: ACCENT.mastery },
-    { label: "Floor", hint: "your weaker nights", value: 79, weight: 0.2, color: ACCENT.mastery },
+    { label: "Peak", hint: "your best", value: 96, weight: 0.35, color: ACCENT.peak },
+    { label: "Form", hint: "your typical play", value: 88, weight: 0.5, color: ACCENT.mastery },
+    { label: "Floor", hint: "your weaker nights", value: 79, weight: 0.15, color: ACCENT.mastery },
   ];
   const estimate = parts.reduce((sum, p) => sum + p.value * p.weight, 0);
   const kills = Math.min(
     5,
     1 + Math.floor(interpolate(frame, [KILLS - MASTERY, KILLS - MASTERY + 120], [0, 4.999], clamp)),
   );
-  const weight = 0.65 + 0.35 * ((kills - 1) / 4);
+  // As the backend ranks it: half counts after one kill, all of it at five.
+  const weight = 0.5 + 0.5 * ((kills - 1) / 4);
   const ranked = estimate * weight;
   const evidenceIn = interpolate(frame, [KILLS - MASTERY - 20, KILLS - MASTERY], [0, 1], ease);
   const complete = kills >= 5;
@@ -326,24 +327,23 @@ function MasteryScene({ frame }: { frame: number }) {
   );
 }
 
-/** Boss kills stack into a career total; bosses carry different weights; clears add a bonus. */
+/** Boss kills stack into a career total; bosses carry different points (Molten Core's real ones). */
 function RenownScene({ frame }: { frame: number }) {
   const tiles = [
-    { name: "Lucifron", weight: 1 },
-    { name: "Magmadar", weight: 1 },
-    { name: "Gehennas", weight: 1 },
-    { name: "Garr", weight: 1.2 },
-    { name: "Geddon", weight: 1.3 },
-    { name: "Golemagg", weight: 1.3 },
-    { name: "Majordomo", weight: 1.5 },
-    { name: "Ragnaros", weight: 2.2 },
+    { name: "Lucifron", points: 1 },
+    { name: "Magmadar", points: 1 },
+    { name: "Gehennas", points: 1 },
+    { name: "Garr", points: 1 },
+    { name: "Geddon", points: 1 },
+    { name: "Golemagg", points: 1 },
+    { name: "Majordomo", points: 2 },
+    { name: "Ragnaros", points: 5 },
   ];
   const step = 12;
   const shown = tiles.filter((_, i) => frame >= 24 + i * step);
-  const clear = interpolate(frame, [24 + tiles.length * step + 10, 24 + tiles.length * step + 26], [0, 1], ease);
-  // Illustrative: a career total that only climbs.
-  const base = 3120;
-  const earned = shown.reduce((sum, t) => sum + Math.round(40 * t.weight), 0) + Math.round(clear * 180);
+  // Illustrative: a career total that only climbs. A full clear is just the sum of its kills.
+  const base = 412;
+  const earned = shown.reduce((sum, t) => sum + t.points, 0);
   const total = base + earned;
   return (
     <>
@@ -358,8 +358,8 @@ function RenownScene({ frame }: { frame: number }) {
               style={{
                 opacity: appear,
                 scale: interpolate(appear, [0, 1], [0.8, 1]),
-                borderColor: `rgba(179,148,230,${0.25 + (t.weight - 1) * 0.35})`,
-                background: `rgba(179,148,230,${0.06 + (t.weight - 1) * 0.08})`,
+                borderColor: `rgba(179,148,230,${0.25 + ((t.points - 1) / 4) * 0.6})`,
+                background: `rgba(179,148,230,${0.06 + ((t.points - 1) / 4) * 0.16})`,
               }}
             >
               <span className="flex items-center gap-1.5 text-base font-semibold">
@@ -367,18 +367,11 @@ function RenownScene({ frame }: { frame: number }) {
                 {t.name}
               </span>
               <span className="font-mono text-sm" style={{ color: ACCENT.renown }}>
-                +{Math.round(40 * t.weight)}
+                +{t.points}
               </span>
             </div>
           );
         })}
-        <div
-          className="col-span-4 flex items-center justify-between rounded-lg border px-4 py-3 text-lg font-semibold"
-          style={{ opacity: clear, borderColor: ACCENT.gold, color: ACCENT.gold, background: "rgba(230,195,106,0.08)" }}
-        >
-          <span>Full clear bonus</span>
-          <span className="font-mono">+180</span>
-        </div>
       </div>
       <div
         className="absolute right-8 rounded-xl border border-white/10 bg-black/30 p-6 text-right"

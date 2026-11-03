@@ -116,7 +116,7 @@ export function EvidenceBadge({ kills }: { kills: number }) {
 
 /**
  * Ranked Mastery from its parts, with the same model the leaderboards use: the estimate is
- * 30% Peak + 50% Form + 20% Floor, discounted until five kills.
+ * 35% Peak + 50% Form + 15% Floor, discounted until five kills.
  */
 export function MasteryCalculator({
   initial = { peak: 96, form: 88, floor: 79, kills: 3 },
@@ -137,7 +137,7 @@ export function MasteryCalculator({
       inputs={
         <>
           <Slider label="Peak" hint="your best parse" value={peak} onChange={setPeak} accent={PEAK.accent} />
-          <Slider label="Form" hint="typical recent parse" value={form} onChange={setForm} accent={MASTERY.accent} />
+          <Slider label="Form" hint="your typical parse" value={form} onChange={setForm} accent={MASTERY.accent} />
           <Slider label="Floor" hint="your weaker nights" value={floor} onChange={setFloor} accent={MASTERY.accent} />
           <Slider label="Kills" hint="on this boss" value={kills} onChange={setKills} min={1} max={10} accent={MASTERY.accent} />
         </>
@@ -145,7 +145,7 @@ export function MasteryCalculator({
       result={
         <>
           <p className="mb-3 font-mono text-xs text-muted-foreground">
-            0.3 × {peak} + 0.5 × {form} + 0.2 × {floor}
+            0.35 × {peak} + 0.5 × {form} + 0.15 × {floor}
           </p>
           <ResultLine label="Mastery estimate" value={m.estimate.toFixed(1)} />
           <ResultLine label="Evidence" value={<EvidenceBadge kills={kills} />} />
@@ -257,7 +257,7 @@ export function PeakCalculator() {
   )
 }
 
-/** Raid Peak: the average of every boss's Peak, a missed boss counting as zero. */
+/** Raid Peak: the average of every boss's Peak, optional bosses included, a missed boss counting as zero. */
 export function RaidPeakCalculator({ bosses = 12 }: { bosses?: number }) {
   const [killed, setKilled] = useState(bosses - 1)
   const [average, setAverage] = useState(95)

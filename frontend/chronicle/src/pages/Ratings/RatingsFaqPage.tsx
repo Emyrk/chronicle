@@ -47,7 +47,7 @@ export function RatingsFaqPage() {
         <MetricIntro
           metric="renown"
           question="What has your career added up to?"
-          body="Bosses killed, how often you return, and full clears. It never looks at your parses."
+          body="The bosses you have killed and how often you return. It never looks at your parses."
         />
       </div>
 
@@ -103,7 +103,7 @@ export function RatingsFaqPage() {
                 Parses compare you with your own <strong>spec on the same boss</strong>, and with your <a href="/subspecs">subspec</a> where one
                 exists, so a Feral (Bear) is not ranked against Feral (Cat) damage. Ratings are calculated across the <strong>whole server</strong>,
                 every realm together. The realm picker at the top of the leaderboards only filters who is listed, so a player keeps the same rating
-                whichever realm you view; your choice is remembered for your next visit.
+                whichever realm you view.
               </p>
             </Faq>
             <Faq q="Which kills count, and for how long?">
@@ -145,8 +145,9 @@ export function RatingsFaqPage() {
             <PeakCalculator />
             <Faq q="How is a raid's Peak calculated?">
               <p>
-                It averages your Peak on <strong>every boss in the raid</strong>. A boss you have not killed counts as zero, so a raid Peak rewards a
-                full set of strong kills, not three great ones.
+                It averages your Peak on <strong>every boss in the raid</strong>, optional bosses included. A boss you have not killed counts as zero,
+                so a raid Peak rewards a full set of strong kills, not three great ones. In Zul'Gurub the four Edge of Madness bosses count as one, your
+                best of them. Pick bosses in the encounter list and the leaderboards average just those, the same way.
               </p>
               <Example
                 title="Example: one boss short"
@@ -159,12 +160,12 @@ export function RatingsFaqPage() {
             </Faq>
             <RaidPeakCalculator />
             <Faq q="Two players have the same Peak. Who is first?">
-              <p>The one who set it first. When Peaks tie, the earlier kill ranks higher.</p>
+              <p>The one with the higher DPS (or HPS). Every spec's #1 scores 100, so ties are common, and the bigger number behind the score breaks them.</p>
             </Faq>
-            <Faq q="Why does the Peak table show a kill time and date?">
+            <Faq q="What is the DPS number next to a Peak?">
               <p>
-                They are the kill behind the score, so you can see when and how the record was set. Across a raid, the time is the sum of your best
-                kills.
+                The DPS (or HPS) behind the score. On a boss it is that kill's. Across a raid it is your total damage over your total fight time on
+                your best kills, so long fights count for more than short ones.
               </p>
             </Faq>
           </Section>
@@ -185,23 +186,23 @@ export function RatingsFaqPage() {
                   <strong>Peak</strong>: your best parse.
                 </li>
                 <li>
-                  <strong>Form</strong>: your typical recent parse, with newer kills counting more.
+                  <strong>Form</strong>: your typical parse, the middle of your kills.
                 </li>
                 <li>
                   <strong>Floor</strong>: the lower end of your play, your weaker but not worst nights.
                 </li>
               </ul>
               <p>
-                They combine as <Formula>30% Peak + 50% Form + 20% Floor</Formula>. Form carries the most weight because it is the best guide to your
-                next kill.
+                They combine as <Formula>35% Peak + 50% Form + 15% Floor</Formula>. Form carries the most weight because it is the best guide to your
+                next kill. From five kills on, your weakest fifth is left out of Form and Floor, so one disaster night does not define you.
               </p>
             </Faq>
             <Faq q="What is Evidence?">
               <p>
                 How much of your record is proven. One kill shows something happened, not that it repeats, so until you have{" "}
-                <strong>five kills on a boss</strong> your Ranked Mastery is held back a little. The leaderboards show Evidence as a percentage, and a{" "}
-                <EvidenceBadge kills={5} /> mark once all five are in. Across a raid, Evidence counts every boss, so one thin boss lowers it without
-                zeroing it.
+                <strong>five kills on a boss</strong> your Ranked Mastery is held back: half of it counts after one kill, and another eighth with each
+                kill until all of it counts at five (here, <EvidenceBadge kills={5} />). The leaderboards list the eligible kills behind each score.
+                Across a raid, every boss is held back on its own, so one thin boss lowers the raid without zeroing it.
               </p>
               <EvidenceChart />
             </Faq>
@@ -211,8 +212,8 @@ export function RatingsFaqPage() {
             <MasteryCalculator />
             <Faq q="My Ranked Mastery went down. Why?">
               <p>
-                Most likely your Form moved: Form favors recent kills, so a few weaker nights pull it down, and a few strong ones bring it back. Your
-                Peak can also slip when the #1 sets a new record. Outside the 180-day view, older kills also leave the window.
+                Most likely your Form moved: a few weaker nights pull your typical parse down, and a few strong ones bring it back. In the 180-day
+                view, older kills also leave the window, taking their parses with them.
               </p>
             </Faq>
             <Faq q="Does taking a break hurt me?">
@@ -226,17 +227,18 @@ export function RatingsFaqPage() {
           <Section id="renown" title="Renown" accent={RENOWN.accent} icon={<RENOWN.icon className="size-5" style={{ color: RENOWN.accent }} />}>
             <Faq q="What is Renown?" open>
               <p>
-                Your <strong>career total</strong>: how many bosses you have killed, how often you come back to them, and how many full clears you
-                have done. It is history, not skill. It never looks at your parses, and a high Renown does not mean a better player.
+                Your <strong>career total</strong>: how many bosses you have killed and how often you come back to them. It is history, not skill.
+                It never looks at your parses, and a high Renown does not mean a better player.
               </p>
             </Faq>
             <Faq q="How is it calculated?">
               <ul>
-                <li>Every boss kill earns Renown, and bosses are weighted differently, so some are worth more than others.</li>
-                <li>Returning to a boss keeps adding Renown, with each repeat kill adding a little less.</li>
-                <li>Full clears of a raid add a bonus on top.</li>
+                <li>Every boss kill earns Renown, and bosses are weighted differently: a final boss such as Ragnaros is worth more than the bosses
+                before it.</li>
+                <li>Every repeat kill earns the same amount again.</li>
+                <li>There is no bonus for a full clear; it is the sum of its kills.</li>
               </ul>
-              <p>Renown only ever grows: it is your career total.</p>
+              <p>All time Renown only ever grows. The 180-day view counts your recent kills.</p>
             </Faq>
           </Section>
 
@@ -409,7 +411,7 @@ function MasteryExample() {
         </table>
       </div>
       <p>
-        Player A's estimate is 100, but with one kill only 65% of it counts: {a.rankedMastery.toFixed(1)}. Four more kills at that level would make it
+        Player A's estimate is 100, but with one kill only {Math.round(a.rankingMultiplier * 100)}% of it counts: {a.rankedMastery.toFixed(1)}. Four more kills at that level would make it
         100. Player B's {b.rankedMastery.toFixed(1)} is fully proven.
       </p>
     </>

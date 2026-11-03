@@ -199,9 +199,9 @@ function PlayerCaseStudy({
                 <Sparkles className="size-5 text-amber-300" />
               </div>
               <div className="space-y-5">
-                <MetricBar label="Peak" value={mastery.peak} weight="30%" description="Best locked parse" />
-                <MetricBar label="Form" value={mastery.form} weight="50%" description="Typical recent performance" />
-                <MetricBar label="Floor" value={mastery.floor} weight="20%" description="Reliable lower quartile" />
+                <MetricBar label="Peak" value={mastery.peak} weight="35%" description="Best locked parse" />
+                <MetricBar label="Form" value={mastery.form} weight="50%" description="Typical performance" />
+                <MetricBar label="Floor" value={mastery.floor} weight="15%" description="Reliable lower quartile" />
               </div>
               <div className="mt-7 flex items-center justify-between border-t border-dashed border-white/10 pt-5">
                 <span className="text-sm text-zinc-400">Mastery estimate</span>
@@ -468,11 +468,11 @@ function MasteryLab({
           <div className="mt-7 rounded-2xl border border-white/8 bg-black/20 p-5">
             <div className="text-[10px] tracking-[.18em] text-zinc-600 uppercase">Live equation · illustrative five-kill rule</div>
             <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2 font-mono text-sm text-zinc-400">
-              <FormulaToken value={inputs.peak * 0.3} label="30% Peak" />
+              <FormulaToken value={inputs.peak * 0.35} label="35% Peak" />
               <span>+</span>
               <FormulaToken value={inputs.form * 0.5} label="50% Form" />
               <span>+</span>
-              <FormulaToken value={inputs.floor * 0.2} label="20% Floor" />
+              <FormulaToken value={inputs.floor * 0.15} label="15% Floor" />
               <span>=</span>
               <strong className="text-zinc-100">{result.estimate.toFixed(1)} Mastery</strong>
             </div>
