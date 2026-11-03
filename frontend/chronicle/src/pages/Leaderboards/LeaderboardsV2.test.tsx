@@ -11,6 +11,7 @@ vi.mock("@/api/rankingsQueries", () => ({
 vi.mock("@/api/queries", () => ({
   useRealms: () => ({ data: [{ id: "realm-id", name: "Nordanaar" }], isPending: false, isError: false, isSuccess: true }),
 }))
+vi.mock("./Hub/LiveOverview", () => ({ LiveOverview: ({ instanceName, selection, subject, role, realmIDs, realmName, performanceCohort }: { instanceName: string; selection: { kind: string; bosses?: string[] }; subject: string; role: string; realmIDs: string[]; realmName?: string; performanceCohort?: { difficulty: string; maxPlayers: number } }) => <p>{[instanceName, selection.bosses?.[0] ?? "raid", subject, role, performanceCohort?.difficulty ?? "no cohort", performanceCohort?.maxPlayers, realmIDs.join(","), realmName].filter(Boolean).join(" / ")}</p> }))
 vi.mock("./Hub/LivePerformances", () => ({ LivePerformances: ({ instanceName, selection, realmName }: { instanceName: string; selection: { bosses: string[] }; realmName?: string }) => <p>{instanceName} / {selection.bosses[0]} / {realmName ?? "All realms"}</p> }))
 vi.mock("./Ratings/LiveRatingBoards", () => ({ LiveRatingBoards: ({ instanceName, encounterName, subject, metric, window, cohort, realmIDs, realmNames }: { instanceName: string; encounterName?: string; subject: string; metric: string; window: string; cohort?: { difficulty: string; maxPlayers: number; playerClass?: string; spec?: string; performance?: string }; realmIDs?: string[]; realmNames?: Record<string, string> }) => <p>{[instanceName, encounterName ?? "raid", subject, metric, window, cohort?.difficulty, cohort?.maxPlayers, cohort?.playerClass, cohort?.spec, cohort?.performance, realmIDs?.join(","), realmNames?.["realm-id"]].filter(Boolean).join(" / ")}</p> }))
 vi.mock("@/components/Ads/AdRailStack", () => ({ AdRailStack: () => null }))
@@ -27,6 +28,22 @@ describe("production leaderboards hub", () => {
     expect(html).toContain('href="/leaderboards/parsing"')
     expect(html).toContain('href="/leaderboards/rulesets"')
     expect(html).not.toContain("Mock data for design review")
+  })
+
+  it("uses live overview with raid Renown by default, never an arbitrary cohort", () => {
+    const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboards?instance=Molten+Core"]}><LeaderboardsV2 /></MemoryRouter>)
+    expect(html).toContain("Molten Core / raid / player / dps / no cohort")
+    expect(html).toContain('aria-label="Overview raid cohort"')
+    expect(html).toContain('value="" selected=""')
+    expect(html).toContain('aria-label="Encounters"')
+  })
+
+  it("passes URL-selected raid cohort, boss, subject, role and realm to overview", () => {
+    const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboards?tab=overview&instance=Molten+Core&encounter=Ragnaros&subject=guild&role=healing&difficulty=Normal&size=40&realm_ids=realm-id"]}><LeaderboardsV2 /></MemoryRouter>)
+    expect(html).toContain("Molten Core / Ragnaros / guild / healing / Normal / 40 / realm-id / Nordanaar")
+    expect(html).toContain("Overview realm: Nordanaar")
+    expect(html).toContain('aria-label="Overview subject"')
+    expect(html).toMatch(/<button[^>]*aria-pressed="true"[^>]*title="Show Ragnaros ratings"/)
   })
 
   it("renders only a published exact boss and resolves its selected realm name", () => {

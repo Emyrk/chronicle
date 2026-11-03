@@ -34,6 +34,16 @@ describe("hidden leaderboard v2 selection", () => {
     expect(v2Selection(hubParams(params, "instance", "Blackwing Lair")).realmIDs).toEqual(["realm-1"])
   })
 
+  it("drops the exact raid cohort with encounter when changing instances", () => {
+    const params = new URLSearchParams("instance=Molten+Core&encounter=Ragnaros&difficulty=Normal&size=40&subject=guild&realm_ids=realm-1")
+    const next = hubParams(params, "instance", "Blackwing Lair")
+    expect(next.has("encounter")).toBe(false)
+    expect(next.has("difficulty")).toBe(false)
+    expect(next.has("size")).toBe(false)
+    expect(next.get("subject")).toBe("guild")
+    expect(next.get("realm_ids")).toBe("realm-1")
+  })
+
   it("falls back to the overview for unknown tabs", () => {
     expect(v2Selection(new URLSearchParams("tab=unknown&instance=Molten+Core"))).toEqual({
       tab: "overview", instance: "Molten Core", encounter: null, realmIDs: [],

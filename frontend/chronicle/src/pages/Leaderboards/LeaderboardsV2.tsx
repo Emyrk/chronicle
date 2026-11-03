@@ -15,8 +15,9 @@ import { RulesetsLanding } from "./RulesetsLanding"
 import { SpeedrunLeaderboard } from "../Leaderboard/SpeedrunLeaderboard"
 import { EncounterSidebar } from "./Hub/EncounterSidebar"
 import { FULL_CLEAR } from "./Hub/encounterSelection"
+import { LiveOverview } from "./Hub/LiveOverview"
 import { LivePerformances } from "./Hub/LivePerformances"
-import { TABS } from "./Hub/hubTabs"
+import { TABS, type HubTab } from "./Hub/hubTabs"
 import { hubParams, v2Selection } from "./v2Selection"
 import { legacyLeaderboardsTarget } from "./leaderboardsState"
 import { LiveRatingBoards } from "./Ratings/LiveRatingBoards"
@@ -38,7 +39,7 @@ export function LeaderboardsV2() {
             <p className="text-xs uppercase tracking-widest text-muted-foreground">Leaderboards / {instance ? "Instance" : "All instances"}</p>
             <h1 className="font-wow mt-1 text-3xl leading-tight sm:text-4xl">{instance ?? "All instances"}</h1>
             <p className="mt-2 text-sm text-muted-foreground">Published instance rankings. Choose an instance to explore ratings, performances, clear times and more.</p>
-            {(tab === "ratings" || tab === "performances") && <RatingsRealmPicker selected={realmIDs} multiple={tab === "ratings"} onChange={(ids) => select("realm_ids", ids.join(","))} />}
+            {(tab === "overview" || tab === "ratings" || tab === "performances") && <RatingsRealmPicker selected={realmIDs} multiple={tab === "ratings"} label={tab === "overview" ? "Overview realm" : tab === "ratings" ? "Ratings realms" : "Performance realm"} onChange={(ids) => select("realm_ids", ids.join(","))} />}
           </div>
           <nav aria-label="Leaderboard section" className="styled-scrollbar relative flex overflow-x-auto border-t border-white/5 px-2 sm:px-4">
             {TABS.map(({ id, icon: Icon, label }) => (
@@ -60,13 +61,18 @@ export function LeaderboardsV2() {
         <div className="flex gap-6">
           <div className="min-w-0 flex-1">
         {instance ? (
-          tab === "ratings" || tab === "performances" ? <LiveEncounterContent instanceName={instance} encounter={encounter} realmIDs={realmIDs} params={params} tab={tab} onEncounter={(boss) => select("encounter", boss)} onControl={(key, value) => {
+          tab === "overview" || tab === "ratings" || tab === "performances" ? <LiveEncounterContent instanceName={instance} encounter={encounter} realmIDs={realmIDs} params={params} tab={tab} onEncounter={(boss) => select("encounter", boss)} onTab={(next) => select("tab", next)} onCohort={(difficulty, size) => {
+            const next = new URLSearchParams(params)
+            if (size) { next.set("difficulty", difficulty); next.set("size", size) }
+            else { next.delete("difficulty"); next.delete("size") }
+            setParams(next)
+          }} onControl={(key, value) => {
             const next = new URLSearchParams(params)
             next.set(key, value)
             if (key === "rating_metric") next.delete("rating_window")
             setParams(next)
           }} /> :
-          tab === "statistics" || tab === "overview" ? <InstanceView instanceName={instance} /> :
+          tab === "statistics" ? <InstanceView instanceName={instance} /> :
           tab === "parsing" ? <ParsingInstanceView key={instance} instanceName={instance} /> :
           tab === "speedruns" ? <SpeedrunLeaderboard overrideInstance={instance} /> :
           <RulesetInstanceView instanceName={instance} />
@@ -85,27 +91,54 @@ export function LeaderboardsV2() {
 
 const NO_OPTIONAL_BOSSES: ReadonlySet<string> = new Set()
 
-function LiveEncounterContent({ instanceName, encounter, realmIDs, params, tab, onEncounter, onControl }: {
+function LiveEncounterContent({ instanceName, encounter, realmIDs, params, tab, onEncounter, onTab, onCohort, onControl }: {
   instanceName: string
   encounter: string | null
   realmIDs: string[]
   params: URLSearchParams
-  tab: "ratings" | "performances"
+  tab: "overview" | "ratings" | "performances"
   onEncounter: (boss?: string) => void
-  onControl: (key: "subject" | "rating_metric" | "rating_window", value: string) => void
+  onTab: (tab: HubTab) => void
+  onCohort: (difficulty: string, size: string) => void
+  onControl: (key: "subject" | "rating_metric" | "rating_window" | "role", value: string) => void
 }) {
   const encounters = useRankingsEncounters(instanceName)
+  const summaries = useRankingsInstances()
+  const realms = useRealms()
   if (encounters.isPending) return <p role="status">Loading encounters…</p>
   if (encounters.isError) return <p role="alert">Could not load encounters.</p>
   const bosses = encounters.data?.map((row) => row.encounter_name) ?? []
   const selectedBoss = encounter && bosses.includes(encounter) ? encounter : undefined
   const selection = selectedBoss ? { kind: "bosses" as const, bosses: [selectedBoss] } : FULL_CLEAR
+  const subject = params.get("subject") === "guild" ? "guild" : "player"
+  const role = params.get("role") === "healing" ? "healing" : "dps"
+  const raids = (summaries.data ?? []).filter((row) => row.instance_name === instanceName && row.category === "raid")
+  const selectedCohort = params.has("difficulty") && params.has("size")
+    ? raids.find((row) => row.difficulty_name === params.get("difficulty") && String(row.max_players) === params.get("size")) : undefined
+  const realmName = realmIDs.length === 1 ? realms.data?.find((realm) => realm.id === realmIDs[0])?.name : undefined
+  const overviewRealmIDs = realmName ? realmIDs : []
   return <div className="flex flex-col gap-5 lg:flex-row">
     <aside className="styled-scrollbar max-h-64 overflow-y-auto rounded-xl border bg-card p-3 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:w-[267px] lg:shrink-0 lg:self-start lg:border-0 lg:border-r lg:bg-transparent lg:pl-0">
       <EncounterSidebar bosses={bosses} optional={NO_OPTIONAL_BOSSES} selection={selection} allowCombine={false} onSelect={(next) => onEncounter(next.kind === "bosses" ? next.bosses[0] : undefined)} />
     </aside>
-    <div className="min-w-0 flex-1">
-      {tab === "ratings" ? <LiveRatingsPanel instanceName={instanceName} selectedBoss={selectedBoss} invalidEncounter={!!encounter && !selectedBoss} realmIDs={realmIDs} params={params} onControl={onControl} /> :
+    <div className="min-w-0 flex-1 space-y-5">
+      {tab === "overview" && <div className="flex flex-wrap gap-3 rounded-xl border bg-card p-4 text-sm">
+        <label>Rank <select aria-label="Overview subject" className="ml-2 rounded border bg-background p-2" value={subject} onChange={(event) => onControl("subject", event.target.value)}>
+          <option value="player">Characters</option><option value="guild">Guilds</option>
+        </select></label>
+        <label>Role <select aria-label="Overview role" className="ml-2 rounded border bg-background p-2" value={role} onChange={(event) => onControl("role", event.target.value)}>
+          <option value="dps">DPS</option><option value="healing">Healing</option>
+        </select></label>
+        <label>Raid cohort <select aria-label="Overview raid cohort" className="ml-2 rounded border bg-background p-2" value={selectedCohort ? String(raids.indexOf(selectedCohort) + 1) : ""} onChange={(event) => {
+          const row = raids[Number(event.target.value) - 1]
+          onCohort(row?.difficulty_name ?? "", row ? String(row.max_players) : "")
+        }}>
+          <option value="">Choose difficulty and size</option>
+          {raids.map((row, index) => <option key={`${row.difficulty_name}-${row.max_players}`} value={index + 1}>{row.difficulty_name || "Default"} · {row.max_players} players</option>)}
+        </select></label>
+      </div>}
+      {tab === "overview" ? <LiveOverview instanceName={instanceName} selection={selection} subject={subject} role={role} realmIDs={overviewRealmIDs} realmName={realmName} performanceCohort={selectedCohort ? { difficulty: selectedCohort.difficulty_name, maxPlayers: selectedCohort.max_players } : undefined} onOpenTab={onTab} /> :
+        tab === "ratings" ? <LiveRatingsPanel instanceName={instanceName} selectedBoss={selectedBoss} invalidEncounter={!!encounter && !selectedBoss} realmIDs={realmIDs} params={params} onControl={onControl} /> :
         <LivePerformancesPanel instanceName={instanceName} selectedBoss={selectedBoss} hasBosses={bosses.length > 0} realmIDs={realmIDs} />}
     </div>
   </div>
@@ -131,12 +164,12 @@ function LivePerformancesPanel({ instanceName, selectedBoss, hasBosses, realmIDs
   </section>
 }
 
-function RatingsRealmPicker({ selected, multiple, onChange }: { selected: string[]; multiple: boolean; onChange: (ids: string[]) => void }) {
+function RatingsRealmPicker({ selected, multiple, label, onChange }: { selected: string[]; multiple: boolean; label: string; onChange: (ids: string[]) => void }) {
   const realms = useRealms()
   const valid = selected.filter((id) => realms.data?.some((realm) => realm.id === id))
   const active = multiple || valid.length <= 1 ? valid : []
   return <details className="relative mt-4 inline-block rounded-md border bg-background/80 px-3 py-2 text-sm backdrop-blur-sm">
-    <summary className="cursor-pointer">{multiple ? "Ratings realms" : "Performance realm"}: {active.length ? active.map((id) => realms.data?.find((realm) => realm.id === id)?.name).join(", ") : "All realms"}</summary>
+    <summary className="cursor-pointer">{label}: {active.length ? active.map((id) => realms.data?.find((realm) => realm.id === id)?.name).join(", ") : "All realms"}</summary>
     <div className="styled-scrollbar absolute left-0 top-full z-20 mt-1 max-h-52 min-w-48 overflow-y-auto rounded border bg-background p-2 shadow-lg">
       {realms.isPending ? <span role="status">Loading realms…</span> : realms.isError ? <span role="alert">Could not load realms.</span> : <>
         <button type="button" className="block w-full p-1 text-left underline" onClick={() => onChange([])}>All realms</button>
@@ -174,7 +207,7 @@ function LiveRatingsPanel({ instanceName, selectedBoss, invalidEncounter, realmI
   invalidEncounter: boolean
   realmIDs: string[]
   params: URLSearchParams
-  onControl: (key: "subject" | "rating_metric" | "rating_window", value: string) => void
+  onControl: (key: "subject" | "rating_metric" | "rating_window" | "role", value: string) => void
 }) {
   const realms = useRealms()
   const summaries = useRankingsInstances()

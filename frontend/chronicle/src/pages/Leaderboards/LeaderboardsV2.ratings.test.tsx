@@ -8,6 +8,7 @@ import { liveRatingURL } from "./Ratings/liveRatingAdapter"
 vi.mock("@/api/rankingsQueries", () => ({
   useRankingsInstances: () => ({ data: [{ instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40, category: "raid", total_kills: 123, top_players: [] }], isPending: false, isError: false }),
   useRankingsFilters: () => ({ data: [], isPending: false, isError: false }),
+  useRankingsLeaderboard: () => ({ data: { entries: [], total_count: 0 }, isPending: false, isError: false }),
   useRankingsEncounters: () => ({ data: [{ encounter_name: "Ragnaros", total_kills: 12, top_dps: 1400 }], isPending: false, isError: false }),
 }))
 vi.mock("@/api/queries", () => ({
@@ -16,6 +17,19 @@ vi.mock("@/api/queries", () => ({
 vi.mock("@/components/Ads/AdRailStack", () => ({ AdRailStack: () => null }))
 
 describe("published ratings on the live hub", () => {
+  it("renders published raid counts and Renown without selecting a cohort by default", () => {
+    const client = new QueryClient()
+    const request = { instanceName: "Molten Core", subject: "player" as const, metric: "renown" as const, window: "period" as const }
+    client.setQueryData(["tenant-rating-overview", liveRatingURL(request)], { entries: [] })
+    const html = renderToStaticMarkup(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/leaderboards?instance=Molten+Core"]}><LeaderboardsV2 /></MemoryRouter></QueryClientProvider>)
+    expect(html).toContain('aria-label="Recorded raid cohorts"')
+    expect(html).toContain("123")
+    expect(html).toContain("Published Renown")
+    expect(html).toContain("Select exactly one boss for recorded DPS performances")
+    expect(html).toContain("Choose difficulty and size")
+    expect(html).not.toContain("Mock data")
+  })
+
   it("shows a live empty state for an unseeded guild boss board, never mock scores", () => {
     const client = new QueryClient()
     const request = { instanceName: "Molten Core", encounterName: "Ragnaros", subject: "guild" as const, metric: "renown" as const, window: "period" as const, realmIDs: ["a0000000-0000-4000-8000-000000000001"] }

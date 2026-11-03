@@ -5,7 +5,11 @@ const tabIDs = new Set<string>(TABS.map((tab) => tab.id))
 /** Keep the active tab and ratings realm filter when navigating between instances. */
 export function hubParams(params: URLSearchParams, key: "tab" | "instance" | "realm_ids" | "encounter", value?: string): URLSearchParams {
   const next = new URLSearchParams(params)
-  if (key === "instance" && next.get("instance") !== (value ?? null)) next.delete("encounter")
+  if (key === "instance" && next.get("instance") !== (value ?? null)) {
+    next.delete("encounter")
+    next.delete("difficulty")
+    next.delete("size")
+  }
   if (value) next.set(key, value)
   else next.delete(key)
   return next
