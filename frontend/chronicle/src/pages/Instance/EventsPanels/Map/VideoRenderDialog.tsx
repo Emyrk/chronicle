@@ -6,7 +6,7 @@ import { SyncModeProvider, useSyncModeContext } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
 import type { PublishedUnitModelUrls } from "./bossMinis";
 import type { DirectorUnit } from "./cameraDirector";
-import { buildDroneTrack, dronePoseAt, droneVideoDurationMs } from "./droneCamera";
+import { buildDroneTrack, dronePoseAt, fightMsAtVideoMs, RENDER_SPEEDS, speedFileName, videoFrameRange, type RenderSpeed } from "./droneCamera";
 import type { MapResult } from "./map.processor";
 import { FULL_MAP_VIEWPORT, replayPositionAt, type ReplayMapSource } from "./mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapScene3D } from "./MapScene3D";
@@ -38,7 +38,7 @@ export interface VideoRenderDialogProps {
   title: string;
   /** The download's file name (…mp4). */
   fileName: string;
-  /** Render only this slice of the video (ms into it); the whole fight otherwise. For tests and capture scripts. */
+  /** Render only this slice of the video (ms into the output video, after speed-up); the whole fight otherwise. For tests and capture scripts. */
   range?: { fromMs: number; toMs: number } | null;
   /** Called with the finished video. */
   onRendered?: (result: VideoRenderResult) => void;
@@ -63,11 +63,23 @@ function sleep(ms: number): Promise<void> {
  * "Render video": replays one boss fight off screen at a fixed output size
  * with the drone camera, and encodes it to MP4 in the browser. The canvas
  * shows each frame as it is drawn but takes no input.
+ *
+ * The render starts as soon as the dialog opens; changing the speed restarts
+ * it (the loaded scene and dungeon mesh are kept).
  */
-export default function VideoRenderDialog({ open, onOpenChange, title, fileName, ...stageProps }: VideoRenderDialogProps) {
+export default function VideoRenderDialog({ open, onOpenChange, title, fileName: baseFileName, ...stageProps }: VideoRenderDialogProps) {
   const [output, setOutput] = useState<VideoOutputConfig | null>(null);
   const [progress, setProgress] = useState<RenderProgress>({ phase: "preparing", detail: "Checking video encoding…" });
+  const [speed, setSpeed] = useState<RenderSpeed>(1);
   const rendering = progress.phase === "rendering" || progress.phase === "preparing";
+  const fileName = speedFileName(baseFileName, speed);
+
+  const changeSpeed = (next: RenderSpeed) => {
+    if (next === speed) return;
+    setSpeed(next);
+    // A finished video belongs to the old speed: render again (the stage remounts).
+    if (progress.phase === "done") setProgress({ phase: "preparing", detail: "Loading the fight…" });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -99,7 +111,7 @@ export default function VideoRenderDialog({ open, onOpenChange, title, fileName,
     const eta = progress.done > 0 ? (elapsed / progress.done) * (progress.total - progress.done) : null;
     status = (
       <span>
-        Frame {progress.done} / {progress.total}
+        {speed}× · Frame {progress.done} / {progress.total}
         {eta !== null && <> · about {formatDuration(eta)} left</>}
         {progress.pausedAt !== null && <span className="text-amber-300"> · paused while this tab is hidden</span>}
       </span>
@@ -108,7 +120,7 @@ export default function VideoRenderDialog({ open, onOpenChange, title, fileName,
     const { result } = progress;
     status = (
       <span>
-        {result.width}×{result.height} · {result.codec.toUpperCase()} · {result.frameCount} frames · {(result.blob.size / 1e6).toFixed(1)} MB · rendered in {formatDuration(result.elapsedMs)}
+        {result.width}×{result.height} · {speed}× · {result.codec.toUpperCase()} · {result.frameCount} frames · {(result.blob.size / 1e6).toFixed(1)} MB · rendered in {formatDuration(result.elapsedMs)}
       </span>
     );
   } else {
@@ -136,12 +148,32 @@ export default function VideoRenderDialog({ open, onOpenChange, title, fileName,
         <div className="pointer-events-none relative aspect-video w-full select-none overflow-hidden rounded-sm border border-white/10 bg-black" aria-hidden>
           {output && progress.phase !== "error" && progress.phase !== "done" && (
             <SyncModeProvider>
-              <RenderStage {...stageProps} output={output} onProgress={setProgress} />
+              <RenderStage {...stageProps} output={output} speed={speed} onProgress={setProgress} />
             </SyncModeProvider>
           )}
           {doneUrl && (
             <div className="absolute inset-0 grid place-items-center text-sm text-white/70">Done: download the MP4 below.</div>
           )}
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>Speed</span>
+          <div className="flex gap-1" role="radiogroup" aria-label="Video speed">
+            {RENDER_SPEEDS.map((option) => (
+              <Button
+                key={option}
+                role="radio"
+                aria-checked={option === speed}
+                variant={option === speed ? "default" : "outline"}
+                size="sm"
+                className="h-7 px-2.5"
+                disabled={progress.phase === "error"}
+                onClick={() => changeSpeed(option)}
+              >
+                {option}×
+              </Button>
+            ))}
+          </div>
+          <span>{speed === 1 ? "Real time" : "Shorter video, quicker render"}</span>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
           <div className="h-full bg-primary transition-[width]" style={{ width: `${fraction * 100}%` }} />
@@ -183,12 +215,13 @@ export default function VideoRenderDialog({ open, onOpenChange, title, fileName,
 
 interface RenderStageProps extends Omit<VideoRenderDialogProps, "open" | "onOpenChange" | "title" | "fileName"> {
   output: VideoOutputConfig;
+  speed: RenderSpeed;
   onProgress: (progress: RenderProgress) => void;
 }
 
 // The capture scene and its frame loop, under a replay clock of its own (the
 // dialog's SyncModeProvider) so the page behind it never re-renders per frame.
-function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unitModelUrls, effectSettings, range = null, onRendered, output, onProgress }: RenderStageProps) {
+function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unitModelUrls, effectSettings, range = null, onRendered, output, speed, onProgress }: RenderStageProps) {
   const { enable, setTimestamp } = useSyncModeContext();
   const scene = useMapScene(panelProps, { rawDungeonProjection: true, mapSource, showHiddenUnits });
   const ready = scene.status === "ready" ? scene : null;
@@ -246,6 +279,7 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
     if (!fight || !canvas || !input) return;
     const controller = new AbortController();
     const { signal } = controller;
+    onProgressRef.current({ phase: "preparing", detail: "Planning the camera…" });
 
     const run = async () => {
       const fightMs = Math.max(0, fight.encounterEndMs - fight.encounterStartMs);
@@ -255,6 +289,7 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
         scale: input.scale,
         aspect: output.width / output.height,
         probe: input.probe,
+        speed,
         unitsAt: (ms) => {
           const at = fight.encounterStartMs + ms;
           return tracked.flatMap((marker): DirectorUnit[] => {
@@ -268,10 +303,7 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
       });
       if (!track) throw new Error("Nobody in this fight has position data to film.");
 
-      const videoMs = droneVideoDurationMs(fightMs);
-      const firstFrame = range ? Math.max(0, Math.round((range.fromMs * VIDEO_FPS) / 1000)) : 0;
-      const lastFrame = Math.round((Math.min(videoMs, range?.toMs ?? videoMs) * VIDEO_FPS) / 1000);
-      const frameCount = Math.max(1, lastFrame - firstFrame + 1);
+      const { firstFrame, frameCount } = videoFrameRange(fightMs, speed, VIDEO_FPS, range);
       let progress: Extract<RenderProgress, { phase: "rendering" }> = { phase: "rendering", done: 0, total: frameCount, startedAt: performance.now(), lastFrameAt: 0, pausedMs: 0, pausedAt: null };
       onProgressRef.current(progress);
 
@@ -283,9 +315,10 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
         bitrate: output.bitrate,
         signal,
         renderFrame: async (index) => {
+          // `ms` is video time: the camera and animations run in it; the replay steps `speed` times as fast.
           const ms = ((firstFrame + index) * 1000) / VIDEO_FPS;
           // Whole milliseconds: the replay clock is a Date.
-          await showReplayAt(Math.round(fight.encounterStartMs + Math.min(ms, fightMs)));
+          await showReplayAt(Math.round(fight.encounterStartMs + fightMsAtVideoMs(ms, speed, fightMs)));
           if (signal.aborted) return;
           const pose = dronePoseAt(track, ms);
           scene3d.captureFrame(pose, ms);
@@ -324,9 +357,9 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
       waiterRef.current?.resolve();
       waiterRef.current = null;
     };
-    // The render runs once per prepared stage; range and output are fixed for its life.
+    // The render runs once per prepared stage and speed; range and output are fixed for its life.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prepared]);
+  }, [prepared, speed]);
 
   if (!ready) return null;
   return (

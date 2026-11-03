@@ -9,6 +9,10 @@ import {
   DRONE_ORBIT_PERIOD_MS,
   dronePoseAt,
   droneVideoDurationMs,
+  fightMsAtVideoMs,
+  RENDER_SPEEDS,
+  speedFileName,
+  videoFrameRange,
   type DroneTrackOptions,
 } from "./droneCamera";
 import type { MapCameraPose } from "./cameraPath";
@@ -180,5 +184,80 @@ describe("dronePoseAt", () => {
 
   it("is null when there is never anyone to frame", () => {
     expect(buildDroneTrack(options({ unitsAt: () => [] }))).toBeNull();
+  });
+});
+
+describe("render speed", () => {
+  const FPS = 30;
+
+  it("steps speed * 1000 / fps fight ms per frame, clamped to the fight", () => {
+    for (const speed of RENDER_SPEEDS) {
+      for (const frame of [0, 1, 2, 30, 299]) {
+        expect(fightMsAtVideoMs((frame * 1000) / FPS, speed, 600_000)).toBeCloseTo((frame * speed * 1000) / FPS, 9);
+      }
+      // Past the fight's end (the hold) the replay stays on the end.
+      expect(fightMsAtVideoMs(60_000 / speed + 1_000, speed, 60_000)).toBe(60_000);
+    }
+  });
+
+  it("renders about fight / speed frames, plus a real-time end hold", () => {
+    const fightMs = 120_000;
+    const counts = RENDER_SPEEDS.map((speed) => videoFrameRange(fightMs, speed, FPS).frameCount);
+    expect(counts).toEqual([
+      ((120_000 + DRONE_END_HOLD_MS) * FPS) / 1000 + 1,
+      ((60_000 + DRONE_END_HOLD_MS) * FPS) / 1000 + 1,
+      ((30_000 + DRONE_END_HOLD_MS) * FPS) / 1000 + 1,
+      ((20_000 + DRONE_END_HOLD_MS) * FPS) / 1000 + 1,
+    ]);
+    for (const speed of RENDER_SPEEDS) {
+      expect(droneVideoDurationMs(fightMs, speed)).toBe(fightMs / speed + DRONE_END_HOLD_MS);
+      expect(videoFrameRange(fightMs, speed, FPS).firstFrame).toBe(0);
+    }
+  });
+
+  it("suffixes the file name when sped up", () => {
+    expect(speedFileName("chronicle-replay.mp4", 1)).toBe("chronicle-replay.mp4");
+    expect(speedFileName("chronicle-replay.mp4", 4)).toBe("chronicle-replay-4x.mp4");
+  });
+
+  it("applies a range in video time at any speed", () => {
+    expect(videoFrameRange(120_000, 4, FPS, { fromMs: 10_000, toMs: 20_000 })).toEqual({ firstFrame: 300, frameCount: 301 });
+    // A range past the end of the shorter video stops at its end.
+    expect(videoFrameRange(120_000, 4, FPS, { fromMs: 30_000, toMs: 999_000 })).toEqual({ firstFrame: 900, frameCount: 61 });
+  });
+
+  it("films a sped-up fight in video time: the same orbit and intro, the framing at the fight's pace", () => {
+    const real = buildDroneTrack(options())!;
+    const fast = buildDroneTrack(options({ speed: 4 }))!;
+    // The orbit turns at its natural rate in video time.
+    const step = 1_000;
+    for (let ms = DRONE_INTRO_MS; ms < 10_000; ms += step) {
+      let turned = yaw(dronePoseAt(fast, ms + step)) - yaw(dronePoseAt(fast, ms));
+      if (turned < -Math.PI) turned += 2 * Math.PI;
+      expect(turned).toBeCloseTo((2 * Math.PI * step) / DRONE_ORBIT_PERIOD_MS, 6);
+    }
+    // The intro still lasts DRONE_INTRO_MS of video.
+    expect(elevationDeg(dronePoseAt(fast, 0))).toBeCloseTo(DRONE_INTRO_ELEVATION_DEG, 3);
+    expect(elevationDeg(dronePoseAt(fast, DRONE_INTRO_MS))).toBeCloseTo(CINEMATIC_ELEVATION_DEG, 3);
+    // 5 s of video at 4x frames the fight at 20 s, near where real time frames it.
+    expect(dronePoseAt(fast, 5_000).target[0]).toBeCloseTo(dronePoseAt(real, 20_000).target[0], -1);
+    // No jerkier than filming, in real time, a fight that moves 4x as fast.
+    const quickFight = (ms: number) => walkingFight(ms * 4);
+    const quick = buildDroneTrack(options({ durationMs: 10_000, unitsAt: quickFight }))!;
+    const largestStep = (track: typeof fast) => {
+      let previous = dronePoseAt(track, 0);
+      let largest = 0;
+      for (let frame = 1; frame <= (droneVideoDurationMs(10_000) * FPS) / 1000; frame++) {
+        const pose = dronePoseAt(track, (frame * 1000) / FPS);
+        largest = Math.max(largest, Math.hypot(...pose.position.map((v, i) => v - previous.position[i]!)));
+        previous = pose;
+      }
+      return largest;
+    };
+    expect(largestStep(fast)).toBeLessThan(largestStep(quick) * 1.05);
+    // The end hold is real time.
+    const end = dronePoseAt(fast, 10_000);
+    const held = dronePoseAt(fast, 10_000 + DRONE_END_HOLD_MS);
+    expect(held.target[0]).toBeCloseTo(end.target[0], 0);
   });
 });
