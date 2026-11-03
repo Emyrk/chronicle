@@ -1,9 +1,10 @@
-import { useQuery } from "@tanstack/react-query"
-import type { SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
+import { useQueries, useQuery } from "@tanstack/react-query"
+import type { RankingsEncounterSummary, SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
 import { useRankingsEncounters, useRankingsInstances, useRankingsLeaderboard } from "@/api/rankingsQueries"
 import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay"
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages"
 import { fetchLiveRatingPage, liveRatingURL, type LiveRatingCohort, type LiveRatingPage } from "@/pages/Leaderboards/Ratings/liveRatingAdapter"
+import type { RatingMetric } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 import type { RatingView } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { BossGrid, BossStats, Card, CardLink, SpeedHero, type LiveBossSummary } from "./LeaderboardHub"
@@ -108,6 +109,8 @@ export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, r
     </div>
   }
 
+  const bossRows = (encounters.data ?? []).filter((row) => bosses?.includes(row.encounter_name) ?? row.encounter_name !== "Trash")
+
   return <div className="space-y-5">
     {fullClear && speedCohort && speed.data?.length ?
       <SpeedHero instanceName={instanceName} scope={{}} entries={speed.data.slice(0, 3)} onOpen={() => onTab("speedruns")} /> :
@@ -138,12 +141,58 @@ export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, r
       </Card>
     </div>
     {encounters.isPending ? <section aria-label="Bosses">{unavailable("Loading bosses…")}</section> : encounters.isError ? <section aria-label="Bosses">{unavailable("Bosses unavailable")}</section> :
-      <BossGrid instanceName={instanceName} scope={{ cls, spec, subSpec }} role={role} only={combined ? selectedBosses : undefined} onBoss={onBoss}
-        summaries={(encounters.data ?? []).filter((row) => bosses?.includes(row.encounter_name) ?? row.encounter_name !== "Trash").map((row): LiveBossSummary => ({ boss: row.encounter_name,
-          // Encounter summaries are global; never present them as scoped realm/class/role results.
-          kills: !realmName && !cls && !spec && !subSpec ? row.total_kills : undefined,
-          topDps: !realmName && !cls && !spec && !subSpec && role === "dps" ? row.top_dps || undefined : undefined,
-        }))} />}
+      <LiveBossGrid instanceName={instanceName} rows={bossRows} scope={{ cls, spec, subSpec }} role={role} subject={subject}
+        realmName={realmName} realmIDs={realmIDs} cohort={exactRating ? ratingCohort : undefined} allClasses={allClasses}
+        only={combined ? selectedBosses : undefined} onBoss={onBoss} />}
 
   </div>
+}
+
+/** Populate the boss cards from the same published boards as the selected-boss view. */
+function LiveBossGrid({ instanceName, rows, scope, role, subject, realmName, realmIDs, cohort, allClasses, only, onBoss }: {
+  instanceName: string
+  rows: readonly RankingsEncounterSummary[]
+  scope: { cls?: string; spec?: string; subSpec?: string }
+  role: "dps" | "healing"
+  subject: "player" | "guild"
+  realmName?: string
+  realmIDs?: readonly string[]
+  cohort?: LiveRatingCohort
+  allClasses: boolean
+  only?: readonly string[]
+  onBoss: (boss: string) => void
+}) {
+  const metrics = ["peak", "ranked_mastery", "renown"] as const
+  const urls = rows.flatMap((row) => metrics.map((metric) => liveRatingURL({
+    instanceName, encounterName: row.encounter_name, subject, metric, window: "period",
+    cohort: metric === "renown" ? undefined : cohort, allClasses: metric !== "renown" && allClasses,
+    realmIDs,
+  })))
+  const results = useQueries({ queries: urls.map((url) => ({
+    queryKey: ["hub-overview-rating", url],
+    queryFn: () => fetchLiveRatingPage(url!),
+    enabled: !!url,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  })) })
+  const summaries: LiveBossSummary[] = rows.map((row, index) => {
+    const ratings: NonNullable<LiveBossSummary["ratings"]> = { peak: undefined, mastery: undefined, renown: undefined }
+    metrics.forEach((metric, offset) => {
+      const entry = results[index * metrics.length + offset]?.data?.entries[0]
+      if (entry && "player_guid" in entry) {
+        const key: RatingMetric = metric === "ranked_mastery" ? "mastery" : metric
+        ratings[key] = { score: entry.score, player: {
+          id: entry.player_guid, name: entry.player_name || entry.player_guid, guild: "",
+          cls: entry.player_class, spec: entry.player_spec, subSpec: entry.player_sub_spec,
+          role, skill: 0,
+        } }
+      }
+    })
+    return { boss: row.encounter_name, ratings,
+      // Encounter summaries are global; never present them as scoped realm/class/role results.
+      kills: !realmName && !scope.cls && !scope.spec && !scope.subSpec ? row.total_kills : undefined,
+      topDps: !realmName && !scope.cls && !scope.spec && !scope.subSpec && role === "dps" ? row.top_dps || undefined : undefined,
+    }
+  })
+  return <BossGrid instanceName={instanceName} scope={scope} role={role} only={only} onBoss={onBoss} summaries={summaries} />
 }
