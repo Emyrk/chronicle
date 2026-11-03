@@ -1,8 +1,12 @@
+import { Fragment, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Loader2, SearchX } from "lucide-react";
+import { CheckCircle2, ChevronRight, Loader2, SearchX } from "lucide-react";
 import type { InstanceSearchResult } from "@/api/typesGenerated";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { cn } from "@/lib/utils";
+import { EvidencePanel } from "./EvidencePanel";
+import type { Node } from "./queryModel";
+import type { SearchBudget } from "./searchApi";
 import { formatMinutes } from "./summary";
 
 function relativeDate(iso: string): string {
@@ -20,18 +24,32 @@ function instanceHref(r: InstanceSearchResult): string {
 
 /**
  * Search results: zone art, guild, boss progress, players, clear time and
- * date. Whole rows are clickable.
+ * date. Whole rows open the run in a new tab; the chevron expands "why it
+ * matched" evidence under the row.
  */
 export function ResultsTable({
   rows,
   loading,
   bossCounts,
+  tree,
+  onBudget,
 }: {
   rows: InstanceSearchResult[];
   loading: boolean;
   /** Total bosses per zone name, for "8/10". */
   bossCounts: Map<string, number>;
+  /** The submitted search, explained per row on expand. */
+  tree: Node | undefined;
+  onBudget?: (budget: SearchBudget) => void;
 }) {
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   if (loading) {
     return (
       <div className="py-16 flex justify-center">
@@ -53,6 +71,7 @@ export function ResultsTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-primary-darker text-muted-foreground text-2xs uppercase tracking-wider">
+            <th className="w-8 pl-2 py-2"><span className="sr-only">Why it matched</span></th>
             <th className="text-left px-3 py-2 font-medium">Run</th>
             <th className="text-left px-3 py-2 font-medium hidden sm:table-cell">Guild</th>
             <th className="text-left px-3 py-2 font-medium">Bosses</th>
@@ -66,17 +85,30 @@ export function ResultsTable({
             const total = bossCounts.get(r.name);
             const full = total != null && total > 0 && r.bosses_killed >= total;
             const pct = total ? Math.min(1, r.bosses_killed / total) : 0;
+            const open = expanded.has(r.id);
             return (
+              <Fragment key={r.id}>
               <tr
-                key={r.id}
                 onClick={(e) => {
                   // Rows open the run in a new tab so the results stay put.
-                  // Real links already open in a new tab themselves.
-                  if ((e.target as HTMLElement).closest("a")) return;
+                  // Real links already open in a new tab themselves, and the
+                  // chevron toggles the evidence.
+                  if ((e.target as HTMLElement).closest("a, button")) return;
                   window.open(instanceHref(r), "_blank", "noopener,noreferrer");
                 }}
-                className="group cursor-pointer hover:bg-primary-darker/40 transition-colors"
+                className={cn("group cursor-pointer hover:bg-primary-darker/40 transition-colors", open && "bg-primary-darker/30")}
               >
+                <td className="pl-2 py-2 align-middle">
+                  <button
+                    type="button"
+                    onClick={() => toggle(r.id)}
+                    aria-expanded={open}
+                    title={open ? "Hide why this run matched" : "Why did this run match?"}
+                    className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                  >
+                    <ChevronRight className={cn("h-4 w-4 transition-transform", open && "rotate-90")} />
+                  </button>
+                </td>
                 <td className="px-3 py-2 max-w-0 w-full">
                   <div className="flex items-center gap-3 min-w-0">
                     <div
@@ -133,6 +165,16 @@ export function ResultsTable({
                   </div>
                 </td>
               </tr>
+              {open && (
+                <tr className="bg-primary-darker/20">
+                  <td />
+                  <td colSpan={6} className="px-3 pt-1 pb-3">
+                    <p className="text-2xs uppercase tracking-wider text-muted-foreground mb-1.5">Why it matched</p>
+                    <EvidencePanel tree={tree} instanceId={r.id} realmName={r.realm_name} onBudget={onBudget} />
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             );
           })}
         </tbody>

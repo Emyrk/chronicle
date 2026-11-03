@@ -77,9 +77,21 @@ export function prune(n: Node | undefined): Node | undefined {
   if (n.count_players) return { count_players: pruneCount(n.count_players) };
   if (n.count_encounters) return { count_encounters: pruneCount(n.count_encounters) };
   if (n.field) {
+    if (n.op === "between") return pruneBetween(n);
     if (!n.op || isEmptyValue(n.value)) return undefined;
     return n;
   }
+  return undefined;
+}
+
+/** A range with one end filled in becomes ≥ / ≤; with neither, it's dropped. */
+function pruneBetween(n: Node): Node | undefined {
+  const [lo, hi] = Array.isArray(n.value) ? n.value : [];
+  const hasLo = !isEmptyValue(lo);
+  const hasHi = !isEmptyValue(hi);
+  if (hasLo && hasHi) return n;
+  if (hasLo) return { ...n, op: ">=", value: lo };
+  if (hasHi) return { ...n, op: "<=", value: hi };
   return undefined;
 }
 

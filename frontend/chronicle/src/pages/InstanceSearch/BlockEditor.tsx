@@ -131,6 +131,7 @@ function newPredicate(field: InstanceSearchField | undefined): Node {
 
 function defaultValue(field: InstanceSearchField, op: InstanceSearchOp): unknown {
   if (op === "in" || op === "not_in") return [];
+  if (op === "between") return [null, null];
   if (field.type === "bool") return true;
   if (field.type === "enum") return field.enum?.[0] ?? "";
   if (field.type === "int" || field.type === "float") return null;
@@ -372,8 +373,15 @@ function PredicateEditor({
     if (next) onChange(newPredicate(next));
   };
   const setOp = (nextOp: InstanceSearchOp) => {
-    const listChange = (nextOp === "in" || nextOp === "not_in") !== (op === "in" || op === "not_in");
-    onChange({ ...node, op: nextOp, value: listChange ? defaultValue(field, nextOp) : node.value });
+    const shape = (o: InstanceSearchOp) => (o === "in" || o === "not_in" ? "list" : o === "between" ? "range" : "one");
+    let value = node.value;
+    if (shape(nextOp) !== shape(op)) {
+      // Keep the typed value where it fits: x -> [x, ...] and [x, ...] -> x.
+      if (shape(nextOp) === "range" && shape(op) === "one") value = [node.value ?? null, null];
+      else if (shape(op) === "range" && shape(nextOp) === "one") value = Array.isArray(node.value) ? (node.value[0] ?? null) : null;
+      else value = defaultValue(field, nextOp);
+    }
+    onChange({ ...node, op: nextOp, value });
   };
 
   return (
@@ -458,32 +466,25 @@ function ValueEditor({
       </select>
     );
   }
-  if (field.type === "int" || field.type === "float") {
-    const isMs = field.unit === "ms";
-    const n = typeof value === "number" ? value : null;
+  if (op === "between" && (field.type === "int" || field.type === "float" || field.type === "time")) {
+    // A range: from / to. Dates cover whole days (to = end of that day).
+    const [lo, hi] = Array.isArray(value) ? value : [null, null];
+    const unit = field.unit === "ms" ? "min" : null;
     return (
-      <span className="inline-flex items-center gap-1">
-        <NumberInput
-          value={n == null ? null : isMs ? n / MS_PER_MINUTE : n}
-          step={isMs ? 0.5 : field.type === "int" ? 1 : 0.1}
-          disabled={disabled}
-          placeholder={field.unit === "0-100" ? "0-100" : undefined}
-          onChange={(v) => onChange(v == null ? null : isMs ? Math.round(v * MS_PER_MINUTE) : field.type === "int" ? Math.round(v) : v)}
-        />
-        {isMs && <span className="text-2xs text-muted-foreground">min</span>}
+      <span className="inline-flex items-center gap-1 flex-wrap">
+        <ScalarInput field={field} value={lo} disabled={disabled} onChange={(v) => onChange([v, hi ?? null])} />
+        <span className="text-2xs text-muted-foreground">to</span>
+        <ScalarInput field={field} value={hi} disabled={disabled} endOfDay onChange={(v) => onChange([lo ?? null, v])} />
+        {unit && <span className="text-2xs text-muted-foreground">{unit}</span>}
       </span>
     );
   }
-  if (field.type === "time") {
-    const day = typeof value === "string" ? value.slice(0, 10) : "";
+  if (field.type === "int" || field.type === "float" || field.type === "time") {
     return (
-      <Input
-        type="date"
-        className="h-7 text-xs w-36"
-        disabled={disabled}
-        value={day}
-        onChange={(e) => onChange(e.target.value ? `${e.target.value}T00:00:00Z` : "")}
-      />
+      <span className="inline-flex items-center gap-1">
+        <ScalarInput field={field} value={value} disabled={disabled} onChange={onChange} />
+        {field.unit === "ms" && <span className="text-2xs text-muted-foreground">min</span>}
+      </span>
     );
   }
   // string / uuid
@@ -506,6 +507,49 @@ function ValueEditor({
       onChange={onChange}
       suggestions={suggestionsFor(field, ctx)}
       disabled={disabled}
+    />
+  );
+}
+
+/**
+ * One number or date. Durations (ms) are edited in minutes. Dates are whole
+ * days: the start of the day, or with endOfDay the last second of it (the
+ * "to" end of an inclusive range).
+ */
+function ScalarInput({
+  field,
+  value,
+  disabled,
+  endOfDay,
+  onChange,
+}: {
+  field: InstanceSearchField;
+  value: unknown;
+  disabled?: boolean;
+  endOfDay?: boolean;
+  onChange: (v: unknown) => void;
+}) {
+  if (field.type === "time") {
+    const day = typeof value === "string" ? value.slice(0, 10) : "";
+    return (
+      <Input
+        type="date"
+        className="h-7 text-xs w-36"
+        disabled={disabled}
+        value={day}
+        onChange={(e) => onChange(e.target.value ? `${e.target.value}${endOfDay ? "T23:59:59Z" : "T00:00:00Z"}` : null)}
+      />
+    );
+  }
+  const isMs = field.unit === "ms";
+  const n = typeof value === "number" ? value : null;
+  return (
+    <NumberInput
+      value={n == null ? null : isMs ? n / MS_PER_MINUTE : n}
+      step={isMs ? 0.5 : field.type === "int" ? 1 : 0.1}
+      disabled={disabled}
+      placeholder={field.unit === "0-100" ? "0-100" : undefined}
+      onChange={(v) => onChange(v == null ? null : isMs ? Math.round(v * MS_PER_MINUTE) : field.type === "int" ? Math.round(v) : v)}
     />
   );
 }

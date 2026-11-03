@@ -188,3 +188,21 @@ describe("formatCEL", () => {
     );
   });
 });
+
+describe("between ranges", () => {
+  const field = "instance.clear_time_ms";
+  it("keeps a full range and drops an empty one", () => {
+    const full: Node = { field, op: "between", value: [3_600_000, 4_500_000] };
+    expect(prune(full)).toEqual(full);
+    expect(prune({ field, op: "between", value: [null, null] })).toBeUndefined();
+  });
+  it("turns a half-filled range into >= or <=", () => {
+    expect(prune({ field, op: "between", value: [3_600_000, null] })).toEqual({ field, op: ">=", value: 3_600_000 });
+    expect(prune({ field, op: "between", value: [null, 4_500_000] })).toEqual({ field, op: "<=", value: 4_500_000 });
+  });
+  it("formats as .between(low, high)", () => {
+    expect(formatCEL({ field: "instance.started_at", op: "between", value: ["2026-10-01T00:00:00Z", "2026-10-31T23:59:59Z"] })).toBe(
+      'instance.started_at.between(timestamp("2026-10-01T00:00:00Z"), timestamp("2026-10-31T23:59:59Z"))',
+    );
+  });
+});

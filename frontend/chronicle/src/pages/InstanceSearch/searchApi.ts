@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type {
   InstanceSearchCursor,
+  InstanceSearchExplainResponse,
   InstanceSearchFieldsResponse,
   InstanceSearchLimitResponse,
   InstanceSearchQuery,
@@ -77,24 +78,45 @@ export async function runSearch(query: InstanceSearchQuery, cursor?: InstanceSea
   });
   const cost = num(response.headers.get("Chronicle-Search-Cost"));
   const budget = readBudget(response.headers);
-  if (!response.ok) {
-    let body: { message?: string; detail?: string; call_to_action?: string } = {};
-    try {
-      body = await response.json();
-    } catch {
-      // Non-JSON error body; fall back to the status text.
-    }
-    throw new SearchError(
-      body.message ?? response.statusText ?? "Search failed.",
-      response.status,
-      body.detail,
-      body.call_to_action,
-      cost,
-      budget,
-      num(response.headers.get("Retry-After")),
-    );
-  }
+  if (!response.ok) throw await searchError(response, cost, budget, "Search failed.");
   return { page: (await response.json()) as InstanceSearchResponse, cost, budget };
+}
+
+async function searchError(response: Response, cost: number | null, budget: SearchBudget | null, fallback: string): Promise<SearchError> {
+  let body: { message?: string; detail?: string; call_to_action?: string } = {};
+  try {
+    body = await response.json();
+  } catch {
+    // Non-JSON error body; fall back to the status text.
+  }
+  return new SearchError(
+    body.message ?? (response.statusText || fallback),
+    response.status,
+    body.detail,
+    body.call_to_action,
+    cost,
+    budget,
+    num(response.headers.get("Retry-After")),
+  );
+}
+
+export interface ExplainResult {
+  explanation: InstanceSearchExplainResponse;
+  cost: number | null;
+  budget: SearchBudget | null;
+}
+
+/** Why one run matches a search: per-condition evidence (POST /search/explain). */
+export async function explainRun(query: InstanceSearchQuery, instanceId: string): Promise<ExplainResult> {
+  const response = await fetch(`${BASE}/explain`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query: { where: query.where }, instance_id: instanceId }),
+  });
+  const cost = num(response.headers.get("Chronicle-Search-Cost"));
+  const budget = readBudget(response.headers);
+  if (!response.ok) throw await searchError(response, cost, budget, "Explain failed.");
+  return { explanation: (await response.json()) as InstanceSearchExplainResponse, cost, budget };
 }
 
 async function fetchJSON<T>(path: string): Promise<T> {
