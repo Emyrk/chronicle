@@ -24025,6 +24025,44 @@ func (q *sqlQuerier) DeleteRatingBossPolicy(ctx context.Context, arg DeleteRatin
 	return result.RowsAffected(), nil
 }
 
+const listLatestRenownTemplateBosses = `-- name: ListLatestRenownTemplateBosses :many
+SELECT boss.instance_name, boss.encounter_name, boss.renown_points
+FROM rating_renown_template_bosses boss
+WHERE boss.flavor = ANY($1::text[])
+  AND boss.version = (
+    SELECT max(template.version)
+    FROM rating_renown_templates template
+    WHERE template.flavor = boss.flavor
+  )
+ORDER BY boss.instance_name, boss.encounter_name
+`
+
+type ListLatestRenownTemplateBossesRow struct {
+	InstanceName  string  `db:"instance_name" json:"instance_name"`
+	EncounterName string  `db:"encounter_name" json:"encounter_name"`
+	RenownPoints  float64 `db:"renown_points" json:"renown_points"`
+}
+
+func (q *sqlQuerier) ListLatestRenownTemplateBosses(ctx context.Context, flavors []string) ([]ListLatestRenownTemplateBossesRow, error) {
+	rows, err := q.db.Query(ctx, listLatestRenownTemplateBosses, flavors)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLatestRenownTemplateBossesRow
+	for rows.Next() {
+		var i ListLatestRenownTemplateBossesRow
+		if err := rows.Scan(&i.InstanceName, &i.EncounterName, &i.RenownPoints); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRatingBossPolicies = `-- name: ListRatingBossPolicies :many
 SELECT boss.group_id, boss.instance_name, boss.encounter_name, boss.peak_weight, boss.mastery_weight, boss.renown_points
 FROM rating_group_boss_policies boss

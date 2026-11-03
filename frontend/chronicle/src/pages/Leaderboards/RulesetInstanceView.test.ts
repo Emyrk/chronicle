@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { damageRuleRows, rulesetEntries } from "./damageRuleRows"
+import { damageRuleRows, renownRuleRows, rulesetEntries } from "./damageRuleRows"
 import type { SupportedInstance } from "@/api/typesGenerated"
 
-describe("DPS ruleset", () => {
+describe("Leaderboard ruleset", () => {
   it("orders encounter rules by progression and resolves creature names", () => {
     const instance: SupportedInstance = {
       name: "Molten Core",
@@ -46,21 +46,46 @@ describe("DPS ruleset", () => {
     expect(damageRuleRows({ name: "Other", category: "raid" })).toEqual([])
   })
 
+  it("orders Renown bosses by progression, then alphabetically", () => {
+    const instance: SupportedInstance = {
+      name: "Raid",
+      category: "raid",
+      progression_bosses: ["Second", "First"],
+      renown_rules: [
+        { encounter_name: "Optional B", points: 1 },
+        { encounter_name: "First", points: 3 },
+        { encounter_name: "Optional A", points: 0 },
+        { encounter_name: "Second", points: 2 },
+      ],
+    }
+    const entry = rulesetEntries([instance])[0]
+    expect(renownRuleRows(entry).map((rule) => rule.encounter_name)).toEqual([
+      "Second", "First", "Optional A", "Optional B",
+    ])
+  })
+
   it("lists DPS, speedrun-only, and derived rulesets in progression order", () => {
     const instances: SupportedInstance[] = [
       { name: "Unrestricted", category: "raid", raid_progression_order: 3000 },
       { name: "Early", category: "raid", raid_progression_order: 1000, damage_by_encounter: { Boss: { mode: "boss-only" } } },
       { name: "Empty", category: "raid", damage_by_encounter: {} },
+      { name: "Renown", category: "raid", raid_progression_order: 1500,
+        renown_rules: [{ encounter_name: "Boss", points: 2 }],
+      },
       { name: "Late", category: "raid", raid_progression_order: 2000,
         derived_names: ["Late Wing"],
         speedrun_rules: { requirements: [{ name: "Boss", entry_ids: [1], count: 1, category: "Bosses" }] },
         derived_speedrun_rules: { "Late Wing": { requirements: [{ name: "Trash", entry_ids: [2], count: 3, category: "Trash" }] } },
+        derived_renown_rules: { "Late Wing": [{ encounter_name: "Wing Boss", points: 4 }] },
         derived_raid_progression_orders: { "Late Wing": 2001 },
       },
     ]
-    expect(rulesetEntries(instances).map((entry) => entry.name)).toEqual(["Late Wing", "Late", "Early"])
+    expect(rulesetEntries(instances).map((entry) => entry.name)).toEqual(["Late Wing", "Late", "Renown", "Early"])
     expect(rulesetEntries(instances).find((entry) => entry.name === "Late Wing")).toMatchObject({
-      derived: true, damageRuleCount: 0, speedrunRules: { requirements: [{ name: "Trash", count: 3 }] },
+      derived: true,
+      damageRuleCount: 0,
+      speedrunRules: { requirements: [{ name: "Trash", count: 3 }] },
+      renownRules: [{ encounter_name: "Wing Boss", points: 4 }],
     })
   })
 })

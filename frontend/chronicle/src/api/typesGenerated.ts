@@ -5716,6 +5716,8 @@ export interface SupportedInstance {
     readonly damage_by_encounter?: Record<string, SupportedInstanceDamageRule>;
     readonly speedrun_rules?: SupportedInstanceSpeedrunRules;
     readonly derived_speedrun_rules?: Record<string, SupportedInstanceSpeedrunRules>;
+    readonly renown_rules?: readonly SupportedInstanceRenownRule[];
+    readonly derived_renown_rules?: Record<string, SupportedInstanceRenownRule[]>;
     readonly raid_progression_order?: number;
     readonly derived_raid_progression_orders?: Record<string, number>;
     readonly ranked_start_after_requirement?: string;
@@ -5730,6 +5732,15 @@ export interface SupportedInstance {
 export interface SupportedInstanceDamageRule {
     readonly mode: string;
     readonly entry_ids?: readonly number[];
+}
+
+// From chroniclesdk/supported_instance.go
+/**
+ * SupportedInstanceRenownRule is the Renown awarded for an eligible boss kill.
+ */
+export interface SupportedInstanceRenownRule {
+    readonly encounter_name: string;
+    readonly points: number;
 }
 
 // From chroniclesdk/supported_instance.go

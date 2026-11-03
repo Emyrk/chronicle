@@ -1,5 +1,6 @@
 import { Loader2, Swords, Timer } from "lucide-react"
 import { useSupportedInstances } from "@/api/queries"
+import { METRIC_THEMES } from "./Ratings/ratingThemes"
 import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory"
 import { groupByRaidLevel } from "@/pages/Logs/utils/instanceProgressionOrder"
 import { InstanceCard } from "../Rankings/InstanceCard"
@@ -23,7 +24,7 @@ export function RulesetsLanding() {
   if (instances.length === 0) {
     return (
       <div className="rounded-xl border p-8 text-center text-muted-foreground">
-        No DPS or speedrun rulesets are available.
+        No DPS, speedrun, or Renown rulesets are available.
       </div>
     )
   }
@@ -40,6 +41,8 @@ export function RulesetsLanding() {
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       {items.map((entry) => {
         const requirementCount = entry.speedrunRules?.requirements.length ?? 0
+        const renownTotal = entry.renownRules?.reduce((sum, rule) => sum + rule.points, 0) ?? 0
+        const RenownIcon = METRIC_THEMES.renown.icon
         return (
           <InstanceCard
             key={entry.name}
@@ -51,6 +54,12 @@ export function RulesetsLanding() {
                 <span className="flex items-center gap-1">
                   <Timer className="h-3 w-3" />
                   {requirementCount} speedrun {requirementCount === 1 ? "requirement" : "requirements"}
+                </span>
+              )}
+              {(entry.renownRules?.length ?? 0) > 0 && (
+                <span className="flex items-center gap-1">
+                  <RenownIcon className="h-3 w-3" style={{ color: METRIC_THEMES.renown.accent }} />
+                  {renownTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })} Renown
                 </span>
               )}
               {entry.damageRuleCount > 0 && (

@@ -1,11 +1,16 @@
-import type { ReactNode } from "react"
+import type { CSSProperties, ReactNode } from "react"
 import { ArrowLeft, Clock, Info, Loader2, Skull, Swords, Timer, Users } from "lucide-react"
 import { Link } from "react-router-dom"
 import { useSupportedInstances } from "@/api/queries"
+import type { SupportedInstanceRenownRule } from "@/api/typesGenerated"
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages"
 import { cn } from "@/lib/utils"
-import { damageRuleRows, formatLevelRange, rulesetEntries, type RankedTime } from "./damageRuleRows"
+import { damageRuleRows, formatLevelRange, renownRuleRows, rulesetEntries, type RankedTime } from "./damageRuleRows"
 import { SpeedrunRequirements } from "./SpeedrunRequirements"
+import { METRIC_THEMES } from "./Ratings/ratingThemes"
+
+const RENOWN = METRIC_THEMES.renown
+const formatRenown = (points: number) => points.toLocaleString(undefined, { maximumFractionDigits: 2 })
 
 function RulesSection({ id, icon, iconClassName, title, description, aside, children }: {
   id: string
@@ -63,12 +68,57 @@ function RankedTimeCell({ rankedTime, mode }: { rankedTime: RankedTime; mode: st
   )
 }
 
+/** One bar in progression order; each boss's segment is sized by its share of the instance total. */
+function RenownShareBar({ rules, total }: { rules: readonly SupportedInstanceRenownRule[]; total: number }) {
+  const top = Math.max(...rules.map((rule) => rule.points))
+  const describe = (rule: SupportedInstanceRenownRule) =>
+    `${rule.encounter_name}: ${formatRenown(rule.points)} Renown${total > 0 ? ` (${Math.round((rule.points / total) * 100)}%)` : ""}`
+  return (
+    <>
+      <ol className="mt-3 flex gap-0.5" aria-label="Renown points per boss">
+        {rules.map((rule, i) => (
+          <li
+            key={rule.encounter_name}
+            className="group min-w-0"
+            style={{ flex: `${Math.max(rule.points, total / 100)} 1 0` }}
+            title={describe(rule)}
+          >
+            <div
+              className={cn(
+                "h-2.5 transition-opacity group-hover:opacity-100",
+                i === 0 && "rounded-l-full",
+                i === rules.length - 1 && "rounded-r-full",
+                rule.points === top ? "opacity-90" : i % 2 ? "opacity-45" : "opacity-60",
+              )}
+              style={{ backgroundColor: RENOWN.accent }}
+            />
+            <div className="mt-1.5 hidden px-0.5 sm:block">
+              <div className="font-mono text-xs font-semibold leading-tight" style={{ color: RENOWN.accent }}>{formatRenown(rule.points)}</div>
+              <div className="truncate text-[11px] leading-tight text-muted-foreground group-hover:text-foreground">{rule.encounter_name}</div>
+            </div>
+          </li>
+        ))}
+      </ol>
+      <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs sm:hidden" aria-hidden>
+        {rules.map((rule) => (
+          <li key={rule.encounter_name}>
+            <span className="text-muted-foreground">{rule.encounter_name}</span>{" "}
+            <span className="font-mono font-semibold" style={{ color: RENOWN.accent }}>{formatRenown(rule.points)}</span>
+          </li>
+        ))}
+      </ul>
+    </>
+  )
+}
+
 /** `embedded`: inside a page that already shows the instance banner, so only the summary chips are drawn. */
 export function RulesetInstanceView({ instanceName, embedded = false }: { instanceName: string; embedded?: boolean }) {
   const { data, isLoading, isError } = useSupportedInstances()
   const entry = rulesetEntries(data ?? []).find((item) => item.name === instanceName)
   const instance = entry?.instance ?? data?.find((item) => item.name === instanceName)
   const rows = instance && !entry?.derived ? damageRuleRows(instance) : []
+  const renownRows = entry ? renownRuleRows(entry) : []
+  const renownTotal = renownRows.reduce((sum, rule) => sum + rule.points, 0)
   const bossCount = entry?.speedrunRules?.requirements.filter((requirement) => requirement.category === "Bosses").length ?? 0
 
   if (isLoading) return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
@@ -87,6 +137,15 @@ export function RulesetInstanceView({ instanceName, embedded = false }: { instan
         <span className="inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 ring-1 ring-sky-500/30 backdrop-blur-sm">
           <Users className="h-3 w-3 text-sky-300" />
           {entry.speedrunRules.level_range ? `Level ${formatLevelRange(entry.speedrunRules.level_range)}` : "Any level"}
+        </span>
+      )}
+      {renownRows.length > 0 && (
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 ring-1 backdrop-blur-sm"
+          style={{ "--tw-ring-color": `${RENOWN.accent}4d` } as CSSProperties}
+        >
+          <RENOWN.icon className="h-3 w-3" style={{ color: RENOWN.accent }} />
+          {formatRenown(renownTotal)} Renown per clear
         </span>
       )}
       {rows.length > 0 && (
@@ -144,6 +203,22 @@ export function RulesetInstanceView({ instanceName, embedded = false }: { instan
         <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground sm:p-5">
           No speedrun rules for {instanceName}.
         </div>
+      )}
+
+      {renownRows.length > 0 && (
+        <section aria-labelledby="renown-policy" className="rounded-xl border bg-card px-4 py-3 sm:px-5">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h2 id="renown-policy" className="flex items-center gap-2 text-sm font-semibold">
+              <RENOWN.icon className="h-4 w-4" style={{ color: RENOWN.accent }} />
+              Renown per kill
+            </h2>
+            <span className="text-xs text-muted-foreground">
+              Instance total{" "}
+              <span className="font-mono text-sm font-semibold" style={{ color: RENOWN.accent }}>{formatRenown(renownTotal)}</span>
+            </span>
+          </div>
+          <RenownShareBar rules={renownRows} total={renownTotal} />
+        </section>
       )}
 
       {!entry?.derived && (

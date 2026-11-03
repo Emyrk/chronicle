@@ -2,6 +2,7 @@ import type {
   SpeedrunLevelRangeRequirement,
   SupportedInstance,
   SupportedInstanceDamageRule,
+  SupportedInstanceRenownRule,
   SupportedInstanceSpeedrunRules,
 } from "@/api/typesGenerated"
 import { compareByRaidProgression } from "@/pages/Logs/utils/instanceProgressionOrder"
@@ -10,6 +11,7 @@ export interface RulesetEntry {
   name: string
   instance: SupportedInstance
   speedrunRules?: SupportedInstanceSpeedrunRules
+  renownRules?: readonly SupportedInstanceRenownRule[]
   damageRuleCount: number
   derived: boolean
 }
@@ -46,16 +48,34 @@ function encounterRules(instance: SupportedInstance): Record<string, SupportedIn
   return { ...(instance.damage_by_encounter ?? {}), ...(FRONTEND_DAMAGE_RULES[instance.name] ?? {}) }
 }
 
-/** Include both DPS rules and speedrun-only instances, including derived zones. */
+/** Include DPS, speedrun, and Renown rules, including derived zones. */
 export function rulesetEntries(instances: readonly SupportedInstance[]): RulesetEntry[] {
   const entries: RulesetEntry[] = []
   for (const instance of instances) {
     const damageRuleCount = Object.keys(encounterRules(instance)).length
-    if (damageRuleCount > 0 || instance.speedrun_rules) {
-      entries.push({ name: instance.name, instance, speedrunRules: instance.speedrun_rules, damageRuleCount, derived: false })
+    if (damageRuleCount > 0 || instance.speedrun_rules || instance.renown_rules?.length) {
+      entries.push({
+        name: instance.name,
+        instance,
+        speedrunRules: instance.speedrun_rules,
+        renownRules: instance.renown_rules,
+        damageRuleCount,
+        derived: false,
+      })
     }
-    for (const [name, speedrunRules] of Object.entries(instance.derived_speedrun_rules ?? {})) {
-      entries.push({ name, instance, speedrunRules, damageRuleCount: 0, derived: true })
+    const derivedNames = new Set([
+      ...Object.keys(instance.derived_speedrun_rules ?? {}),
+      ...Object.keys(instance.derived_renown_rules ?? {}),
+    ])
+    for (const name of derivedNames) {
+      entries.push({
+        name,
+        instance,
+        speedrunRules: instance.derived_speedrun_rules?.[name],
+        renownRules: instance.derived_renown_rules?.[name],
+        damageRuleCount: 0,
+        derived: true,
+      })
     }
   }
   return entries.sort((a, b) => compareByRaidProgression(a.name, b.name, instances))
@@ -96,6 +116,16 @@ export function damageRuleRows(instance: SupportedInstance) {
       boss: bossIDs.has(id) || id in FALLBACK_UNIT_NAMES,
     })),
   }))
+}
+
+export function renownRuleRows(entry: RulesetEntry): readonly SupportedInstanceRenownRule[] {
+  const order = entry.derived ? [] : (entry.instance.progression_bosses ?? [])
+  return [...(entry.renownRules ?? [])].sort((a, b) => {
+    const aIndex = order.indexOf(a.encounter_name)
+    const bIndex = order.indexOf(b.encounter_name)
+    return (aIndex < 0 ? Infinity : aIndex) - (bIndex < 0 ? Infinity : bIndex)
+      || a.encounter_name.localeCompare(b.encounter_name)
+  })
 }
 
 export function formatLevelRange(range?: SpeedrunLevelRangeRequirement): string {

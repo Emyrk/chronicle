@@ -27,6 +27,12 @@ type SupportedInstanceSpeedrunRules struct {
 	RankedStartAfterRequirement string                         `json:"ranked_start_after_requirement,omitempty"`
 }
 
+// SupportedInstanceRenownRule is the Renown awarded for an eligible boss kill.
+type SupportedInstanceRenownRule struct {
+	EncounterName string  `json:"encounter_name"`
+	Points        float64 `json:"points"`
+}
+
 // SupportedInstance describes a registered instance with its metadata.
 type SupportedInstance struct {
 	Name                         string                                    `json:"name"`
@@ -41,6 +47,8 @@ type SupportedInstance struct {
 	DamageByEncounter            map[string]SupportedInstanceDamageRule    `json:"damage_by_encounter,omitempty"`
 	SpeedrunRules                *SupportedInstanceSpeedrunRules           `json:"speedrun_rules,omitempty"`
 	DerivedSpeedrunRules         map[string]SupportedInstanceSpeedrunRules `json:"derived_speedrun_rules,omitempty"`
+	RenownRules                  []SupportedInstanceRenownRule             `json:"renown_rules,omitempty"`
+	DerivedRenownRules           map[string][]SupportedInstanceRenownRule  `json:"derived_renown_rules,omitempty"`
 	RaidProgressionOrder         int                                       `json:"raid_progression_order,omitempty"`
 	DerivedRaidProgressionOrders map[string]int                            `json:"derived_raid_progression_orders,omitempty"`
 	RankedStartAfterRequirement  string                                    `json:"ranked_start_after_requirement,omitempty"`

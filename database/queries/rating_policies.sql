@@ -1,3 +1,14 @@
+-- name: ListLatestRenownTemplateBosses :many
+SELECT boss.instance_name, boss.encounter_name, boss.renown_points
+FROM rating_renown_template_bosses boss
+WHERE boss.flavor = ANY(@flavors::text[])
+  AND boss.version = (
+    SELECT max(template.version)
+    FROM rating_renown_templates template
+    WHERE template.flavor = boss.flavor
+  )
+ORDER BY boss.instance_name, boss.encounter_name;
+
 -- Group configuration is explicit: no group has score eligibility until both
 -- a policy and eligible boss rows have been configured by an operator.
 -- name: ListTenantRatingPolicies :many
