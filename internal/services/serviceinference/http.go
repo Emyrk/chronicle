@@ -34,6 +34,9 @@ func (s *Service) AccountRoutes() http.Handler {
 	r.Put("/", s.updateInferenceSettings)
 	// Stored credentials stay visible and removable even while AI features are off for the account.
 	r.Get("/connections", s.listConnections)
+	r.With(s.requireEnabled).Post("/openrouter/authorize", s.authorizeOpenRouter)
+	r.With(s.requireEnabled).Get("/openrouter/callback", s.callbackOpenRouter)
+	r.With(s.requireEnabled).Get("/connections/{connectionID}/models", s.listModels)
 	r.Delete("/connections/{connectionID}", s.deleteConnection)
 	return r
 }
@@ -48,12 +51,17 @@ func (s *Service) updateInferenceSettings(w http.ResponseWriter, r *http.Request
 		return
 	}
 	user := policy.New().User(userID(r))
-	available, err := s.zed.CheckOne(r.Context(), nil, policy.New().GlobalChronicle().CanInference_available_User(user))
+	chronicle := policy.New().GlobalChronicle()
+	checks, err := s.zed.Check(r.Context(), nil,
+		chronicle.CanInference_available_User(user),
+		chronicle.CanDiscord_inference_available_User(user),
+	)
 	if err != nil {
 		s.internalError(w, "authorize inference preference", err)
 		return
 	}
-	if !available {
+	available, discordAvailable := checks[0], checks[1]
+	if !available && !discordAvailable {
 		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "AI features are not enabled for this account."})
 		return
 	}
@@ -64,12 +72,26 @@ func (s *Service) updateInferenceSettings(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if len(req.Assistants) > 0 {
+		if !available {
+			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "Browser AI assistants are not enabled for this account."})
+			return
+		}
 		if err := s.setAssistantsEnabled(r.Context(), userID(r), req.Assistants); err != nil {
 			if errors.Is(err, errUnknownAssistant) {
 				badRequest(w, r, err.Error())
 				return
 			}
 			s.internalError(w, "update assistant preferences", err)
+			return
+		}
+	}
+	if req.DiscordUsePersonalOpenRouter != nil || req.DiscordConnectionID != nil || req.DiscordModel != nil {
+		if !discordAvailable {
+			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "Discord AI requires Honored status or above."})
+			return
+		}
+		if err := s.setDiscordConfig(r.Context(), userID(r), req); err != nil {
+			badRequest(w, r, err.Error())
 			return
 		}
 	}
@@ -89,12 +111,20 @@ func (s *Service) writeInferenceSettings(w http.ResponseWriter, r *http.Request)
 			SubjectID:        user.Object().ID,
 		},
 		chronicle.CanUse_inference_chat_User(user),
+		chronicle.CanDiscord_inference_available_User(user),
+		chronicle.CanUse_discord_inference_User(user),
 	)
 	if err != nil {
 		s.internalError(w, "read inference preference", err)
 		return
 	}
 	available, disabled, permitted := checks[0], checks[1], checks[2]
+	discordAvailable, discordPermitted := checks[3], checks[4]
+	discord, err := s.discordConfig(r.Context(), userID(r))
+	if err != nil {
+		s.internalError(w, "read Discord inference preference", err)
+		return
+	}
 	off, err := s.disabledAssistants(r.Context(), userID(r))
 	if err != nil {
 		s.internalError(w, "read assistant preferences", err)
@@ -105,21 +135,28 @@ func (s *Service) writeInferenceSettings(w http.ResponseWriter, r *http.Request)
 		a := assistants[id]
 		settings = append(settings, chroniclesdk.InferenceAssistantSetting{ID: a.ID, Name: a.Name, Description: a.Description, Enabled: !off[a.ID]})
 	}
-	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceSettings{
-		Available:        available,
-		Disabled:         disabled,
-		Enabled:          s.enabled && permitted,
-		ServiceAvailable: s.enabled,
-		Assistants:       settings,
-	})
+	response := chroniclesdk.InferenceSettings{
+		Available:                    available,
+		Disabled:                     disabled,
+		Enabled:                      s.enabled && permitted,
+		ServiceAvailable:             s.enabled,
+		DiscordAvailable:             discordAvailable,
+		DiscordEnabled:               s.enabled && discordPermitted,
+		DiscordUsePersonalOpenRouter: discord.UsePersonalOpenRouter,
+		DiscordModel:                 discord.Model,
+		Assistants:                   settings,
+	}
+	if discord.ConnectionID != uuid.Nil {
+		id := discord.ConnectionID
+		response.DiscordConnectionID = &id
+	}
+	httpapi.Write(r.Context(), w, http.StatusOK, response)
 }
 
 func (s *Service) routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(s.requireEnabled)
 	r.Get("/connections", s.listConnections)
-	r.Post("/openrouter/authorize", s.authorizeOpenRouter)
-	r.Get("/openrouter/callback", s.callbackOpenRouter)
 	r.Delete("/connections/{connectionID}", s.deleteConnection)
 	r.Get("/connections/{connectionID}/models", s.listModels)
 	r.Post("/threads/instance/{instance}", s.createInstanceThread)
@@ -188,7 +225,7 @@ func connectionSDK(row database.InferenceConnection) chroniclesdk.InferenceConne
 
 func openRouterCallbackURL(accessURL *url.URL, state string) string {
 	callback := *accessURL
-	callback.Path = "/api/v1/inference/openrouter/callback"
+	callback.Path = "/api/v1/me/inference/openrouter/callback"
 	query := callback.Query()
 	query.Set("state", state)
 	callback.RawQuery = query.Encode()
@@ -196,9 +233,28 @@ func openRouterCallbackURL(accessURL *url.URL, state string) string {
 	return callback.String()
 }
 
+func (s *Service) canConnectInferenceProvider(ctx context.Context, uid uuid.UUID) (bool, error) {
+	chronicle := policy.New().GlobalChronicle()
+	user := policy.New().User(uid)
+	checks, err := s.zed.Check(ctx, nil,
+		chronicle.CanInference_available_User(user),
+		chronicle.CanDiscord_inference_available_User(user),
+	)
+	return err == nil && (checks[0] || checks[1]), err
+}
+
 func (s *Service) authorizeOpenRouter(w http.ResponseWriter, r *http.Request) {
 	var req chroniclesdk.InferenceAuthorizeRequest
 	if !httpapi.Read(r.Context(), w, r, &req) {
+		return
+	}
+	allowed, err := s.canConnectInferenceProvider(r.Context(), userID(r))
+	if err != nil {
+		s.internalError(w, "authorize inference provider connection", err)
+		return
+	}
+	if !allowed {
+		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "AI provider connections are not enabled for this account."})
 		return
 	}
 	if ValidateLocalReturnPath(req.ReturnPath) != nil {
@@ -237,6 +293,15 @@ func (s *Service) authorizeOpenRouter(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) callbackOpenRouter(w http.ResponseWriter, r *http.Request) {
 	uid := userID(r)
+	allowed, err := s.canConnectInferenceProvider(r.Context(), uid)
+	if err != nil {
+		s.internalError(w, "authorize inference provider callback", err)
+		return
+	}
+	if !allowed {
+		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "AI provider connections are not enabled for this account."})
+		return
+	}
 	state := r.URL.Query().Get("state")
 	if state == "" {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Missing OAuth state."})
@@ -520,7 +585,7 @@ func (s *Service) previewDebug(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	assistantDefinition, ok := assistants[request.AssistantID]
-	if !ok {
+	if !ok || assistantDefinition.SettingsHidden {
 		badRequest(w, r, "Unknown assistant.")
 		return
 	}

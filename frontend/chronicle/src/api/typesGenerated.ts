@@ -2543,6 +2543,15 @@ export interface InferenceDebugPreviewRequest {
 }
 
 // From chroniclesdk/inference.go
+export interface InferenceDiscordAdminSettings {
+    readonly enabled: boolean;
+    readonly default_model: string;
+    readonly shared_connection_configured: boolean;
+    readonly shared_connection_id?: string;
+    readonly shared_connection_label?: string;
+}
+
+// From chroniclesdk/inference.go
 export interface InferenceMessage {
     readonly id?: string;
     readonly role: string;
@@ -2597,7 +2606,21 @@ export interface InferenceSettings {
     readonly enabled: boolean;
     readonly service_available: boolean;
     /**
-     * Assistants lists every assistant with the user's choice. Each still needs AI features to be enabled.
+     * DiscordAvailable is true for Honored-and-above accounts.
+     */
+    readonly discord_available: boolean;
+    /**
+     * DiscordEnabled includes the account-wide AI opt-out.
+     */
+    readonly discord_enabled: boolean;
+    /**
+     * DiscordUsePersonalOpenRouter opts DMs into the user's selected provider connection.
+     */
+    readonly discord_use_personal_openrouter: boolean;
+    readonly discord_connection_id?: string;
+    readonly discord_model?: string;
+    /**
+     * Assistants lists every browser assistant with the user's choice. Each still needs AI features to be enabled.
      */
     readonly assistants: readonly InferenceAssistantSetting[];
 }
@@ -6239,6 +6262,13 @@ export interface UpdateGuildSettingsRequest {
 }
 
 // From chroniclesdk/inference.go
+export interface UpdateInferenceDiscordAdminSettingsRequest {
+    readonly enabled?: boolean;
+    readonly default_model?: string;
+    readonly api_key?: string;
+}
+
+// From chroniclesdk/inference.go
 /**
  * UpdateInferenceSettingsRequest changes only the fields that are present.
  */
@@ -6248,6 +6278,9 @@ export interface UpdateInferenceSettingsRequest {
      * Assistants maps assistant IDs to whether the user wants them on.
      */
     readonly assistants?: Record<string, boolean>;
+    readonly discord_use_personal_openrouter?: boolean;
+    readonly discord_connection_id?: string;
+    readonly discord_model?: string;
 }
 
 // From chroniclesdk/panel_layout.go

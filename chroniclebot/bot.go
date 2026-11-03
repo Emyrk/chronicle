@@ -11,10 +11,15 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/bwmarrin/discordgo"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 )
+
+type DiscordInference interface {
+	AskDiscord(ctx context.Context, userID uuid.UUID, interactionID, question string, directMessage bool) (string, error)
+}
 
 // Config holds the configuration for the Discord bot.
 type Config struct {
@@ -31,6 +36,7 @@ type Config struct {
 	DB                           database.Store
 	Zed                          *authz.Authz
 	AccessURL                    string
+	Inference                    DiscordInference
 	PrimaryDomain                string
 }
 

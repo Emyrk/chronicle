@@ -9,6 +9,7 @@ import {
   useAuthorizeOpenRouter,
   useDeleteInferenceConnection,
   useInferenceConnections,
+  useInferenceModels,
   useInferenceSettings,
   useUpdateInferenceSettings,
 } from "./api";
@@ -28,6 +29,9 @@ export function InferenceSettings() {
   const updateSettings = useUpdateInferenceSettings();
   // Listed even while AI is off: a stored credential still exists and should stay removable.
   const connections = useInferenceConnections({ enabled: isAuthenticated && Boolean(settings.data) });
+  const discordModels = useInferenceModels(settings.data?.discord_connection_id, {
+    enabled: isAuthenticated && Boolean(settings.data?.discord_available && settings.data?.discord_connection_id),
+  });
   const authorize = useAuthorizeOpenRouter();
   const disconnect = useDeleteInferenceConnection();
   const location = useLocation();
@@ -57,7 +61,10 @@ export function InferenceSettings() {
   };
 
   const preference = settings.data;
-  const status = statusPresentation[preference ? inferenceStatus(preference) : "unavailable"];
+  const preferenceStatus = preference?.discord_available && !preference.available
+    ? (preference.disabled ? "disabled" : "enabled")
+    : (preference ? inferenceStatus(preference) : "unavailable");
+  const status = statusPresentation[preferenceStatus];
   const StatusIcon = status.icon;
   const statusBadge = settings.isLoading ? (
     <span className="text-muted-foreground flex items-center gap-1.5 text-xs"><LoaderCircle className="size-3.5 animate-spin" /> Checking…</span>
@@ -67,7 +74,7 @@ export function InferenceSettings() {
     <span className={`flex items-center gap-1.5 text-xs font-medium ${status.className}`}><StatusIcon className="size-3.5" /> {status.label}</span>
   );
 
-  if (preference && !preference.available) {
+  if (preference && !preference.available && !preference.discord_available) {
     return (
       <SettingsSection title="General">
         <Row title="AI features" description="Your account has not been granted AI assistant access, so there are no AI settings or actions for it." aside={statusBadge} />
@@ -100,7 +107,7 @@ export function InferenceSettings() {
         />
       </SettingsSection>
 
-      {preference && preference.assistants?.length > 0 && (
+      {preference?.available && preference.assistants?.length > 0 && (
         <SettingsSection
           title="Assistants"
           description={preference.disabled ? "Turn on AI features to choose assistants." : "Choose which assistants appear. A turned-off assistant is hidden and cannot run for your account."}
@@ -128,13 +135,72 @@ export function InferenceSettings() {
         </SettingsSection>
       )}
 
+      {preference?.discord_available && (
+        <SettingsSection
+          title="Discord /ask"
+          description="Honored-and-above accounts can use the shared Chronicle model in the configured guild. Direct messages require your personal OpenRouter connection and explicit opt-in."
+        >
+          <Row
+            title={<label htmlFor="discord-personal-openrouter">Use my OpenRouter for Discord DMs</label>}
+            description="When enabled, /ask in a DM uses the connection and model selected below, billed to your OpenRouter account."
+            aside={
+              <Switch
+                id="discord-personal-openrouter"
+                checked={preference.discord_use_personal_openrouter}
+                disabled={preference.disabled || updateSettings.isPending}
+                onCheckedChange={(checked) => updateSettings.mutate(
+                  { discord_use_personal_openrouter: checked },
+                  { onError: (error) => toast.error("Could not update Discord AI", { description: error.message }) },
+                )}
+              />
+            }
+          />
+          <Row
+            title="OpenRouter connection"
+            description="Choose which existing personal connection Discord DMs should use."
+            aside={
+              <select
+                className="max-w-64 rounded-md border bg-background px-2 py-1 text-sm"
+                value={preference.discord_connection_id ?? ""}
+                disabled={preference.disabled || updateSettings.isPending || connectionList.length === 0}
+                onChange={(event) => updateSettings.mutate(
+                  { discord_connection_id: event.target.value },
+                  { onError: (error) => toast.error("Could not select connection", { description: error.message }) },
+                )}
+              >
+                <option value="">Select a connection</option>
+                {connectionList.map((connection) => <option key={connection.id} value={connection.id}>{connection.label}</option>)}
+              </select>
+            }
+          />
+          <Row
+            title="Discord DM model"
+            description="Any OpenRouter model compatible with Chronicle's tool runtime may be selected."
+            aside={
+              <select
+                className="max-w-80 rounded-md border bg-background px-2 py-1 text-sm"
+                value={preference.discord_model ?? ""}
+                disabled={preference.disabled || updateSettings.isPending || discordModels.isLoading || !preference.discord_connection_id}
+                onChange={(event) => updateSettings.mutate(
+                  { discord_model: event.target.value },
+                  { onError: (error) => toast.error("Could not select Discord model", { description: error.message }) },
+                )}
+              >
+                <option value="">Select a model</option>
+                {(discordModels.data?.models ?? []).map((model) => <option key={model.id} value={model.id}>{model.name || model.id}</option>)}
+              </select>
+            }
+          />
+        </SettingsSection>
+      )}
+
       {preference && (
         <SettingsSection
           title="Provider"
-          description={preference.enabled
-            ? "Assistant requests are paid for by your own OpenRouter account. Authorization happens on OpenRouter; Chronicle never sees your password and stores no API key in this browser."
+          description={(preference.enabled || preference.discord_enabled)
+            ? "Personal assistant and Discord DM requests can use your OpenRouter account. Authorization happens on OpenRouter; Chronicle never sees your password and stores no API key in this browser."
             : "Turn on AI features to connect a provider. Existing connections stay stored, and you can still disconnect them."}
-          action={preference.enabled && (
+          action={(preference.enabled || preference.discord_enabled) && (
             <Button size="sm" onClick={() => void connect()} disabled={authorize.isPending}>
               {authorize.isPending ? <LoaderCircle className="animate-spin" /> : <ExternalLink />}
               Connect OpenRouter

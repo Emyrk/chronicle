@@ -5,6 +5,13 @@ import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 
 import { ThemeEditor } from "@/components/ThemeEditor/ThemeEditor";
+import { Switch } from "@/components/ui/Switch/Switch";
+import {
+  useDeleteDiscordInferenceConnection,
+  useDiscordInferenceAdminSettings,
+  useUpdateDiscordInferenceAdminSettings,
+} from "@/features/chat/api";
+import { toast } from "sonner";
 import { LOG_FORMAT_OPTIONS } from "@/config/serverCapabilities";
 
 export function AdminSiteSettingsPage() {
@@ -29,6 +36,8 @@ export function AdminSiteSettingsPage() {
   // Sync all server-derived state when config loads.
   useEffect(() => {
     if (!config) return;
+    // This form intentionally snapshots the loaded server config into editable local draft state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDefaultFormat(config.default_format ?? "");
     setAvailableFormats([...(config.available_formats ?? [])]);
     if (config.branding) {
@@ -237,6 +246,8 @@ export function AdminSiteSettingsPage() {
         </div>
       </Card>
 
+      <DiscordInferenceSettingsCard />
+
       <Card className="p-6 space-y-4">
         <h2 className="text-lg font-semibold">Parse Defaults</h2>
         <p className="text-sm text-muted-foreground">
@@ -323,6 +334,89 @@ export function AdminSiteSettingsPage() {
         </Button>
       </Card>
     </div>
+  );
+}
+
+function DiscordInferenceSettingsCard() {
+  const settings = useDiscordInferenceAdminSettings();
+  const update = useUpdateDiscordInferenceAdminSettings();
+  const remove = useDeleteDiscordInferenceConnection();
+  const [apiKey, setAPIKey] = useState("");
+  const [editedDefaultModel, setEditedDefaultModel] = useState<string | null>(null);
+  const defaultModel = editedDefaultModel ?? settings.data?.default_model ?? "";
+
+  const save = async () => {
+    try {
+      await update.mutateAsync({
+        default_model: defaultModel,
+        ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
+      });
+      setEditedDefaultModel(null);
+      setAPIKey("");
+      toast.success("Discord AI settings saved.");
+    } catch (error) {
+      toast.error("Could not save Discord AI settings", { description: error instanceof Error ? error.message : undefined });
+    }
+  };
+
+  return (
+    <Card className="space-y-4 p-6">
+      <div>
+        <h2 className="text-lg font-semibold">Discord AI</h2>
+        <p className="text-sm text-muted-foreground">
+          Configure the shared OpenRouter key and default model used by Honored-and-above members invoking /ask in Chronicle&apos;s Discord guild.
+        </p>
+      </div>
+      {settings.isLoading ? <p className="text-sm text-muted-foreground">Loading Discord AI settings…</p> : <>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="font-medium">Enable shared guild /ask</p>
+            <p className="text-sm text-muted-foreground">DMs never use this key. Users must explicitly enable their personal OpenRouter connection for DMs.</p>
+          </div>
+          <Switch
+            checked={settings.data?.enabled ?? false}
+            disabled={update.isPending || !settings.data?.shared_connection_configured || !settings.data?.default_model}
+            onCheckedChange={(enabled) => update.mutate({ enabled }, {
+              onError: (error) => toast.error("Could not update Discord AI", { description: error.message }),
+            })}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium">Shared OpenRouter API key</label>
+          <input
+            type="password"
+            autoComplete="new-password"
+            className="w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+            placeholder={settings.data?.shared_connection_configured ? "Configured, enter a new key to replace it" : "sk-or-v1-…"}
+            value={apiKey}
+            onChange={(event) => setAPIKey(event.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">The key is encrypted on the server and is never returned to this page.</p>
+        </div>
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium">Discord assistant default model</label>
+          <input
+            className="w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+            placeholder="openrouter/free"
+            value={defaultModel}
+            onChange={(event) => setEditedDefaultModel(event.target.value)}
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" disabled={update.isPending || !defaultModel.trim()} onClick={() => void save()}>
+            {update.isPending ? <Loader2 className="size-4 animate-spin" /> : "Save Discord AI"}
+          </Button>
+          {settings.data?.shared_connection_configured && (
+            <Button variant="outline" size="sm" disabled={remove.isPending} onClick={() => remove.mutate(undefined, {
+              onSuccess: () => toast.success("Shared Discord OpenRouter connection removed."),
+              onError: (error) => toast.error("Could not remove shared connection", { description: error.message }),
+            })}>
+              Remove shared key
+            </Button>
+          )}
+        </div>
+      </>}
+    </Card>
   );
 }
 

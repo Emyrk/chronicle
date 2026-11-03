@@ -1722,6 +1722,16 @@ CREATE TABLE inference_connections (
     last_used_at timestamp with time zone
 );
 
+CREATE TABLE inference_discord_config (
+    id boolean DEFAULT true NOT NULL,
+    connection_id uuid,
+    default_model text DEFAULT ''::text NOT NULL,
+    enabled boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT inference_discord_config_id_check CHECK (id)
+);
+
 CREATE TABLE inference_messages (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     thread_id uuid NOT NULL,
@@ -3759,6 +3769,9 @@ ALTER TABLE ONLY inference_client_tool_requests
 ALTER TABLE ONLY inference_connections
     ADD CONSTRAINT inference_connections_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY inference_discord_config
+    ADD CONSTRAINT inference_discord_config_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY inference_messages
     ADD CONSTRAINT inference_messages_pkey PRIMARY KEY (id);
 
@@ -4919,6 +4932,9 @@ ALTER TABLE ONLY inference_client_tool_requests
 
 ALTER TABLE ONLY inference_connections
     ADD CONSTRAINT inference_connections_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY inference_discord_config
+    ADD CONSTRAINT inference_discord_config_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES inference_connections(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY inference_messages
     ADD CONSTRAINT inference_messages_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES inference_threads(id) ON DELETE CASCADE;

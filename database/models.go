@@ -1774,6 +1774,15 @@ type InferenceConnection struct {
 	LastUsedAt             pgtype.Timestamptz `db:"last_used_at" json:"last_used_at"`
 }
 
+type InferenceDiscordConfig struct {
+	ID           bool               `db:"id" json:"id"`
+	ConnectionID uuid.NullUUID      `db:"connection_id" json:"connection_id"`
+	DefaultModel string             `db:"default_model" json:"default_model"`
+	Enabled      bool               `db:"enabled" json:"enabled"`
+	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type InferenceMessage struct {
 	ID         uuid.UUID          `db:"id" json:"id"`
 	ThreadID   uuid.UUID          `db:"thread_id" json:"thread_id"`

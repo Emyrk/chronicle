@@ -4,16 +4,19 @@ import type {
   InferenceAuthorizeRequest,
   InferenceAuthorizeResponse,
   InferenceConnectionsResponse,
+  InferenceDiscordAdminSettings,
   InferenceDebugPreviewRequest,
   InferenceModelsResponse,
   InferenceSettings,
   InferenceThreadResponse,
   InferenceUsage,
+  UpdateInferenceDiscordAdminSettingsRequest,
   UpdateInferenceSettingsRequest,
 } from "@/api/typesGenerated";
 import type { DebugSnapshotEvent } from "./protocol";
 
 const inferenceKeys = {
+  adminDiscord: ["inference", "admin", "discord"] as const,
   settings: ["inference", "settings"] as const,
   connections: ["inference", "connections"] as const,
   models: (connectionId: string) => ["inference", "connections", connectionId, "models"] as const,
@@ -85,6 +88,49 @@ export function useInferenceDebugPermission(enabled = true) {
   return { ...query, allowed: query.data?.inferenceDebug ?? false };
 }
 
+export function useDiscordInferenceAdminSettings(enabled = true) {
+  return useQuery({
+    queryKey: inferenceKeys.adminDiscord,
+    queryFn: async () => {
+      const response = await fetch("/api/v1/admin/inference/discord", { credentials: "include" });
+      if (!response.ok) throw await readError(response, "Failed to load Discord AI settings");
+      return response.json() as Promise<InferenceDiscordAdminSettings>;
+    },
+    enabled,
+  });
+}
+
+export function useUpdateDiscordInferenceAdminSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (request: UpdateInferenceDiscordAdminSettingsRequest) => {
+      const response = await fetch("/api/v1/admin/inference/discord", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      if (!response.ok) throw await readError(response, "Failed to update Discord AI settings");
+      return response.json() as Promise<InferenceDiscordAdminSettings>;
+    },
+    onSuccess: (settings) => queryClient.setQueryData(inferenceKeys.adminDiscord, settings),
+  });
+}
+
+export function useDeleteDiscordInferenceConnection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/v1/admin/inference/discord/connection", {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!response.ok) throw await readError(response, "Failed to remove the shared Discord OpenRouter connection");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: inferenceKeys.adminDiscord }),
+  });
+}
+
 export function useInferenceSettings(enabled = true) {
   return useQuery({
     queryKey: inferenceKeys.settings,
@@ -144,7 +190,7 @@ export function useInferenceModels(
     queryKey: inferenceKeys.models(connectionId ?? ""),
     queryFn: async () => {
       const response = await fetch(
-        `/api/v1/inference/connections/${encodeURIComponent(connectionId ?? "")}/models`,
+        `/api/v1/me/inference/connections/${encodeURIComponent(connectionId ?? "")}/models`,
         { credentials: "include" },
       );
       if (!response.ok) throw await readError(response, "Failed to load available AI models");
@@ -159,7 +205,7 @@ export function useInferenceModels(
 export function useAuthorizeOpenRouter() {
   return useMutation({
     mutationFn: async (request: InferenceAuthorizeRequest) => {
-      const response = await fetch("/api/v1/inference/openrouter/authorize", {
+      const response = await fetch("/api/v1/me/inference/openrouter/authorize", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

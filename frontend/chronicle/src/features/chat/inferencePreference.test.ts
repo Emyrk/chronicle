@@ -8,6 +8,9 @@ function settings(overrides: Partial<InferenceSettings> = {}): InferenceSettings
     disabled: false,
     enabled: true,
     service_available: true,
+    discord_available: false,
+    discord_enabled: false,
+    discord_use_personal_openrouter: false,
     assistants: [],
     ...overrides,
   };

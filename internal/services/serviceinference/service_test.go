@@ -19,8 +19,12 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/instancesearch"
+	"github.com/Emyrk/chronicle/internal/ratelimit"
+	"github.com/Emyrk/chronicle/internal/secrets"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/serviceinference/agui"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/testservices"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
@@ -114,6 +118,92 @@ func TestInferenceAccountSettingsOptOutAndBackIn(t *testing.T) {
 	require.False(t, siteHelpOff.Disabled)
 	require.Equal(t, map[string]bool{"site-help": false, "instance-analyst": true, addonWorkshopPanelAssistantID: true}, enabledIDs(siteHelpOff))
 	require.Equal(t, "Ask Chronicle", siteHelpOff.Assistants[0].Name)
+}
+
+func TestHonoredUserCanConfigureDiscordPersonalOpenRouter(t *testing.T) {
+	t.Parallel()
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	userID := uuid.New()
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"honored"}))
+	store, _ := dbtestutil.NewDB(t)
+	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "discord-ai-" + userID.String()[:8]})
+	require.NoError(t, err)
+	connection, err := store.InsertInferenceConnection(ctx, database.InsertInferenceConnectionParams{
+		UserID: userID, Provider: "openrouter", AuthMode: "oauth", Label: "Personal OpenRouter",
+		EncryptedCredential: []byte("encrypted-secret"), CredentialKeyVersion: "v1", Status: "active",
+	})
+	require.NoError(t, err)
+
+	service := &Service{zed: zed, db: store, enabled: true, logger: slog.Default()}
+	body := fmt.Sprintf(`{"discord_connection_id":%q,"discord_model":"provider/model","discord_use_personal_openrouter":true}`, connection.ID)
+	req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(chronauth.WithClaims(ctx, &claims.Claims{Subject: userID}))
+	recorder := httptest.NewRecorder()
+	service.AccountRoutes().ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+
+	var settings chroniclesdk.InferenceSettings
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &settings))
+	require.False(t, settings.Available)
+	require.True(t, settings.DiscordAvailable)
+	require.True(t, settings.DiscordEnabled)
+	require.True(t, settings.DiscordUsePersonalOpenRouter)
+	require.NotNil(t, settings.DiscordConnectionID)
+	require.Equal(t, connection.ID, *settings.DiscordConnectionID)
+	require.Equal(t, "provider/model", settings.DiscordModel)
+}
+
+func TestDiscordAskRequiresPersonalOptInForDMAndSharedConfigForGuild(t *testing.T) {
+	t.Parallel()
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	userID := uuid.New()
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"honored"}))
+	store, _ := dbtestutil.NewDB(t)
+	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "discord-ask-" + userID.String()[:8]})
+	require.NoError(t, err)
+	service := &Service{zed: zed, db: store, enabled: true, logger: slog.Default()}
+
+	_, err = service.AskDiscord(ctx, userID, "dm-interaction", "hello", true)
+	require.ErrorContains(t, err, "Enable personal OpenRouter")
+	_, err = service.AskDiscord(ctx, userID, "guild-interaction", "hello", false)
+	require.ErrorContains(t, err, "Shared Discord AI is not configured")
+}
+
+func TestDiscordAdminSettingsStoreDedicatedSharedCredential(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	store, _ := dbtestutil.NewDB(t)
+	adminID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: adminID, Username: "discord-admin-" + adminID.String()[:8]})
+	require.NoError(t, err)
+	cipher, err := secrets.NewCredentialCipher(credentialKeyID, bytes.Repeat([]byte{7}, 32))
+	require.NoError(t, err)
+	service := &Service{db: store, cipher: cipher, enabled: true, logger: slog.Default()}
+
+	req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader(`{"api_key":"shared-secret","default_model":"openrouter/free"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(chronauth.WithClaims(ctx, &claims.Claims{Subject: adminID}))
+	recorder := httptest.NewRecorder()
+	service.AdminRoutes().ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	require.NotContains(t, recorder.Body.String(), "shared-secret")
+
+	config, err := store.GetInferenceDiscordConfig(ctx)
+	require.NoError(t, err)
+	require.True(t, config.ConnectionID.Valid)
+	require.Equal(t, "openrouter/free", config.DefaultModel)
+	connection, err := store.GetSharedInferenceConnection(ctx, config.ConnectionID.UUID)
+	require.NoError(t, err)
+	require.Equal(t, "shared", connection.AuthMode)
+	require.Equal(t, adminID, connection.UserID)
+	plaintext, err := cipher.Decrypt(connection.EncryptedCredential, credentialAAD(adminID.String(), "discord-shared-provider-credential"))
+	require.NoError(t, err)
+	require.Equal(t, "shared-secret", string(plaintext))
 }
 
 func TestInferenceAccountSettingsRejectsOptOutWithoutCapability(t *testing.T) {
@@ -223,7 +313,7 @@ func TestOpenRouterCallbackURLCarriesState(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "https", callback.Scheme)
 	require.Equal(t, "chronicle.example", callback.Host)
-	require.Equal(t, "/api/v1/inference/openrouter/callback", callback.Path)
+	require.Equal(t, "/api/v1/me/inference/openrouter/callback", callback.Path)
 	require.Equal(t, "turtle", callback.Query().Get("tenant"))
 	require.Equal(t, "state-token", callback.Query().Get("state"))
 	require.Empty(t, callback.Fragment)
@@ -848,9 +938,78 @@ func TestAssistantPreferences(t *testing.T) {
 	require.True(t, service.requireAssistantEnabled(httptest.NewRecorder(), request, addonWorkshopPanelAssistantID))
 }
 
+func TestDiscordAssistantInstanceSearchTools(t *testing.T) {
+	t.Parallel()
+
+	accessURL, err := url.Parse("https://chronicle.example")
+	require.NoError(t, err)
+	tenant := database.Tenant{ID: uuid.New(), Slug: pgtype.Text{String: "turtle", Valid: true}, Name: "Turtle WoW"}
+	service := &Service{
+		accessURL: accessURL,
+		tenant:    servicetenant.NewTestWithTenants(*accessURL, "chronicle.example", tenant),
+	}
+
+	toolNames := make([]string, 0, len(discordAssistant.Tools))
+	for _, tool := range discordAssistant.Tools {
+		toolNames = append(toolNames, tool.Name)
+	}
+	require.ElementsMatch(t, []string{"describe_instance_search", "search_instances"}, toolNames)
+	require.True(t, assistantAllowsTool(discordAssistant, "search_instances"))
+	require.False(t, assistantAllowsTool(assistants["site-help"], "search_instances"))
+
+	description, err := service.executeTool(context.Background(), toolContext{service: service, userID: uuid.New()}, "describe_instance_search", `{}`)
+	require.NoError(t, err)
+	require.Contains(t, description, `"slug":"turtle"`)
+	require.Contains(t, description, `"name":"instance.name"`)
+
+	_, err = service.executeTool(context.Background(), toolContext{service: service, userID: uuid.New()}, "search_instances", `{"tenant_slug":"turtle","where":{"field":"not.a.field","op":"=","value":"x"}}`)
+	require.ErrorContains(t, err, "invalid instance search")
+	require.Equal(t, "https://turtle.chronicle.example/instances/example", service.tenantInstanceURL(tenant, chroniclesdk.InstanceSearchResult{Slug: "example"}))
+}
+
+func TestDiscordSearchInstancesExecutesAndChargesSharedBucket(t *testing.T) {
+	t.Parallel()
+
+	ctx := testutil.Context(t, testutil.WaitLong)
+	store, _ := dbtestutil.NewDB(t)
+	accessURL, err := url.Parse("https://chronicle.example")
+	require.NoError(t, err)
+	tenant := database.Tenant{ID: uuid.New(), Slug: pgtype.Text{String: "turtle", Valid: true}, Name: "Turtle WoW"}
+	userID := uuid.New()
+	limit := instancesearch.UserRateLimit()
+	limit.PerSecond = 0.001 // Keep refill negligible so the charged-token assertion is deterministic.
+	limiter := ratelimit.New(store, instancesearch.RateLimitBucketName, limit)
+	service := &Service{
+		db:          store,
+		accessURL:   accessURL,
+		tenant:      servicetenant.NewTestWithTenants(*accessURL, "chronicle.example", tenant),
+		searchLimit: limiter,
+	}
+
+	output, err := service.executeTool(ctx, toolContext{service: service, userID: userID}, "search_instances", `{"tenant_slug":"turtle","where":{"field":"instance.name","op":"=","value":"No Such Instance"},"limit":3}`)
+	require.NoError(t, err)
+	var response struct {
+		Cost    int                                 `json:"cost"`
+		Results []chroniclesdk.InstanceSearchResult `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(output), &response))
+	require.Equal(t, 2, response.Cost)
+	require.Empty(t, response.Results)
+
+	status, err := limiter.Peek(ctx, ratelimit.UserSubject(userID.String()))
+	require.NoError(t, err)
+	require.InDelta(t, 298, status.Remaining, 0.5)
+}
+
 func TestAssistantSettingsCatalog(t *testing.T) {
 	t.Parallel()
-	require.Len(t, assistantSettingsOrder, len(assistants), "every assistant must appear in the settings")
+	visible := 0
+	for _, assistant := range assistants {
+		if !assistant.SettingsHidden {
+			visible++
+		}
+	}
+	require.Len(t, assistantSettingsOrder, visible, "every user-configurable assistant must appear in the settings")
 	for _, id := range assistantSettingsOrder {
 		a, ok := assistants[id]
 		require.True(t, ok, id)

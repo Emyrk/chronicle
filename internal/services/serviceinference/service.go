@@ -11,6 +11,8 @@ import (
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/internal/instancesearch"
+	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/Emyrk/chronicle/internal/secrets"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
@@ -19,6 +21,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceinference/openrouter"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicesecrets"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/coder/serpent"
 )
 
@@ -34,15 +37,17 @@ type Service struct {
 	attributionTitle           string
 	attributionReferer         string
 
-	logger     *slog.Logger
-	db         database.Store
-	zed        *authz.Authz
-	accessURL  *url.URL
-	cipher     *secrets.CredentialCipher
-	registry   *Registry
-	openRouter *openrouter.Client
-	router     http.Handler
-	enabled    bool
+	logger      *slog.Logger
+	db          database.Store
+	zed         *authz.Authz
+	accessURL   *url.URL
+	cipher      *secrets.CredentialCipher
+	registry    *Registry
+	openRouter  *openrouter.Client
+	searchLimit *ratelimit.Limiter
+	tenant      *servicetenant.Service
+	router      http.Handler
+	enabled     bool
 }
 
 func New(broker *services.Services) *Service       { return &Service{broker: broker} }
@@ -51,7 +56,7 @@ func OnInference() string                          { return (&Service{}).Name() 
 func (s *Service) Name() string                    { return services.ServiceInference }
 func (s *Service) Configures() []string            { return nil }
 func (s *Service) DependsOn() []string {
-	return []string{servicelogger.OnLogger(), servicedbstore.OnDatabaseStore(), serviceauthz.OnAuthz(), serviceaccessurl.OnAccessURL(), servicesecrets.OnSecrets()}
+	return []string{servicelogger.OnLogger(), servicedbstore.OnDatabaseStore(), serviceauthz.OnAuthz(), serviceaccessurl.OnAccessURL(), servicesecrets.OnSecrets(), servicetenant.OnTenant()}
 }
 func (s *Service) Enabled() bool                                    { return s.enabled }
 func (s *Service) Routes() http.Handler                             { return s }
@@ -62,6 +67,8 @@ func (s *Service) Start(ctx context.Context) error {
 	s.logger = servicelogger.Logger(s.broker)
 	s.db = servicedbstore.DatabaseStore(s.broker)
 	s.zed = serviceauthz.Authz(s.broker)
+	s.tenant = servicetenant.Tenant(s.broker)
+	s.searchLimit = ratelimit.New(s.db, instancesearch.RateLimitBucketName, instancesearch.UserRateLimit())
 	accessURL, err := url.Parse(serviceaccessurl.AccessURL(s.broker))
 	if err != nil {
 		return fmt.Errorf("parse inference access URL: %w", err)

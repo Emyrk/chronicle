@@ -12,7 +12,15 @@ type InferenceSettings struct {
 	Disabled         bool `json:"disabled"`
 	Enabled          bool `json:"enabled"`
 	ServiceAvailable bool `json:"service_available"`
-	// Assistants lists every assistant with the user's choice. Each still needs AI features to be enabled.
+	// DiscordAvailable is true for Honored-and-above accounts.
+	DiscordAvailable bool `json:"discord_available"`
+	// DiscordEnabled includes the account-wide AI opt-out.
+	DiscordEnabled bool `json:"discord_enabled"`
+	// DiscordUsePersonalOpenRouter opts DMs into the user's selected provider connection.
+	DiscordUsePersonalOpenRouter bool       `json:"discord_use_personal_openrouter"`
+	DiscordConnectionID          *uuid.UUID `json:"discord_connection_id,omitempty"`
+	DiscordModel                 string     `json:"discord_model,omitempty"`
+	// Assistants lists every browser assistant with the user's choice. Each still needs AI features to be enabled.
 	Assistants []InferenceAssistantSetting `json:"assistants"`
 }
 
@@ -27,7 +35,24 @@ type InferenceAssistantSetting struct {
 type UpdateInferenceSettingsRequest struct {
 	Disabled *bool `json:"disabled,omitempty"`
 	// Assistants maps assistant IDs to whether the user wants them on.
-	Assistants map[string]bool `json:"assistants,omitempty"`
+	Assistants                   map[string]bool `json:"assistants,omitempty"`
+	DiscordUsePersonalOpenRouter *bool           `json:"discord_use_personal_openrouter,omitempty"`
+	DiscordConnectionID          *uuid.UUID      `json:"discord_connection_id,omitempty"`
+	DiscordModel                 *string         `json:"discord_model,omitempty"`
+}
+
+type InferenceDiscordAdminSettings struct {
+	Enabled                    bool       `json:"enabled"`
+	DefaultModel               string     `json:"default_model"`
+	SharedConnectionConfigured bool       `json:"shared_connection_configured"`
+	SharedConnectionID         *uuid.UUID `json:"shared_connection_id,omitempty"`
+	SharedConnectionLabel      string     `json:"shared_connection_label,omitempty"`
+}
+
+type UpdateInferenceDiscordAdminSettingsRequest struct {
+	Enabled      *bool   `json:"enabled,omitempty"`
+	DefaultModel *string `json:"default_model,omitempty"`
+	APIKey       *string `json:"api_key,omitempty"`
 }
 
 type InferenceConnection struct {

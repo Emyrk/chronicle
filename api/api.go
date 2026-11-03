@@ -75,9 +75,10 @@ type SidekickService interface {
 type InferenceService interface {
 	Routes() http.Handler
 	AccountRoutes() http.Handler
+	AdminRoutes() http.Handler
 }
 
-const openRouterCallbackPath = "/api/v1/inference/openrouter/callback"
+const openRouterCallbackPath = "/api/v1/me/inference/openrouter/callback"
 
 func browserOnlyMiddleware(accessURL *url.URL) func(http.Handler) http.Handler {
 	return httpmw.BrowserOnly(accessURL, discordInstallCallbackPath, openRouterCallbackPath)
@@ -546,6 +547,9 @@ func (api *API) Routes() chi.Router {
 					r.Get("/instance-names", api.AdminListInstanceNames)
 					r.Get("/outdated-instances", api.AdminListOutdatedInstances)
 					r.Post("/outdated-instances/reparse", api.AdminBulkReparseOutdatedInstances)
+					if api.Opts.Inference != nil {
+						r.Mount("/inference/discord", api.Opts.Inference.AdminRoutes())
+					}
 					r.Get("/site-config", api.AdminGetSiteConfig)
 					r.Put("/site-config", api.AdminUpdateSiteConfig)
 					r.Get("/cache-stats", api.AdminGetCacheStats)

@@ -7,7 +7,7 @@ RETURNING *;
 
 -- name: ListInferenceConnectionsByOwner :many
 SELECT * FROM inference_connections
-WHERE user_id = $1 AND status <> 'deleted'
+WHERE user_id = $1 AND status <> 'deleted' AND auth_mode <> 'shared'
 ORDER BY created_at DESC;
 
 -- name: GetInferenceConnectionByOwner :one
@@ -26,6 +26,50 @@ WHERE id = $1 AND user_id = $2;
 UPDATE inference_connections
 SET last_used_at = now(), updated_at = now()
 WHERE id = $1 AND user_id = $2
+RETURNING *;
+
+-- name: GetSharedInferenceConnection :one
+SELECT * FROM inference_connections
+WHERE id = $1 AND auth_mode = 'shared' AND status <> 'deleted';
+
+-- name: DeleteSharedInferenceConnection :exec
+UPDATE inference_connections
+SET status = 'deleted',
+    encrypted_credential = NULL,
+    provider_account_key_hash = NULL,
+    updated_at = now()
+WHERE id = $1 AND auth_mode = 'shared';
+
+-- name: UpdateSharedInferenceConnectionLastUsed :one
+UPDATE inference_connections
+SET last_used_at = now(), updated_at = now()
+WHERE id = $1 AND auth_mode = 'shared'
+RETURNING *;
+
+-- name: GetInferenceDiscordConfig :one
+SELECT * FROM inference_discord_config WHERE id = TRUE;
+
+-- name: UpdateInferenceDiscordConfig :one
+UPDATE inference_discord_config
+SET default_model = COALESCE(sqlc.narg('default_model'), default_model),
+    enabled = COALESCE(sqlc.narg('enabled'), enabled),
+    updated_at = now()
+WHERE id = TRUE
+RETURNING *;
+
+-- name: SetInferenceDiscordConnection :one
+UPDATE inference_discord_config
+SET connection_id = @connection_id,
+    updated_at = now()
+WHERE id = TRUE
+RETURNING *;
+
+-- name: ClearInferenceDiscordConnection :one
+UPDATE inference_discord_config
+SET connection_id = NULL,
+    enabled = FALSE,
+    updated_at = now()
+WHERE id = TRUE
 RETURNING *;
 
 -- name: InsertInferenceOAuthTransaction :one

@@ -34,6 +34,16 @@ Disconnecting a provider connection immediately erases Chronicle's encrypted cre
 
 The separate `chronicle:chronicle#debug_inference_chat` permission is granted by the administrator-managed `inference_debug_capable` role or by `administer`. It is reserved for the prompt, tool, and future skill inspector; ordinary `inference_capable` users do not receive debug access.
 
+## Discord assistant
+
+Chronicle registers a global `/ask` Discord application command so the same command can be invoked in the configured Chronicle guild and in a direct message to the bot. Guild invocations are rejected unless they originate from the configured guild. Every invocation resolves the Discord identity through `user_auth_links` and authorizes the linked Chronicle user with `chronicle:chronicle#use_discord_inference`; Discord roles are not an authorization boundary.
+
+`use_discord_inference` is limited to Honored-and-above Chronicle accounts and respects the account-wide `inference_disabled` opt-out. Guild requests use the administrator-managed shared OpenRouter credential and the Discord assistant's configured default model. The shared credential is stored as an encrypted `inference_connections` row with `auth_mode = 'shared'`; it is hidden from personal connection listings and can only be replaced or erased through the admin Discord AI settings.
+
+Direct-message requests never use the shared credential. A user must explicitly enable personal OpenRouter use for Discord, select one of their owner-scoped connections, and select a compatible model in account AI settings. The Discord assistant is ephemeral and transport-specific: it uses the bounded provider-neutral agent loop but is hidden from the browser assistant catalog. Discord output disables mentions and is split into bounded messages.
+
+The Discord assistant can call the same tenant-safe advanced instance-search compiler used by `POST /api/v1/raidlogs/search`. It first discovers the configured tenant and field registry, then submits a bounded query with at most 10 results. Discord and HTTP searches share the database-backed `instance_search` user bucket, so `/ask` adds no separate cooldown. Search execution retains tenant RLS, the compiler's complexity limits, and the five-second statement timeout; returned rows include tenant-specific Chronicle links.
+
 ## Streaming contract
 
 The browser/backend contract is the Chronicle-owned subset of AG-UI 1.0 over server-sent events. Supported events are:

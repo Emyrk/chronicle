@@ -69,6 +69,7 @@ type sqlcQuerier interface {
 	ClaimLuaProjectArtifactGarbage(ctx context.Context, asOf pgtype.Timestamptz) ([]string, error)
 	ClearApplicationReviewsByReviewer(ctx context.Context, userID uuid.NullUUID) error
 	ClearDiscordMembershipGrantCheckClaim(ctx context.Context, arg ClearDiscordMembershipGrantCheckClaimParams) (int64, error)
+	ClearInferenceDiscordConnection(ctx context.Context) (InferenceDiscordConfig, error)
 	ClearInferenceThreadByOwner(ctx context.Context, arg ClearInferenceThreadByOwnerParams) (InferenceThread, error)
 	ClearRealmsCreatedByUser(ctx context.Context, userID uuid.UUID) error
 	ClearResetToken(ctx context.Context, userAuthID uuid.UUID) error
@@ -227,6 +228,7 @@ type sqlcQuerier interface {
 	// generation_id, so both selection and deletion are generation-local.
 	DeleteRetiredRatingStagePlayerRenownPage(ctx context.Context, arg DeleteRetiredRatingStagePlayerRenownPageParams) (int32, error)
 	DeleteServerApplicationsByInitiator(ctx context.Context, userID uuid.UUID) error
+	DeleteSharedInferenceConnection(ctx context.Context, id uuid.UUID) error
 	DeleteSidekickConfigOverride(ctx context.Context, arg DeleteSidekickConfigOverrideParams) ([]byte, error)
 	DeleteSidekickInstallation(ctx context.Context, arg DeleteSidekickInstallationParams) (SidekickInstallation, error)
 	DeleteSidekickWoWDirectoriesExcept(ctx context.Context, arg DeleteSidekickWoWDirectoriesExceptParams) (int64, error)
@@ -410,6 +412,7 @@ type sqlcQuerier interface {
 	GetInferenceClientToolRequestForUpdate(ctx context.Context, arg GetInferenceClientToolRequestForUpdateParams) (InferenceClientToolRequest, error)
 	GetInferenceConnectionByOwner(ctx context.Context, arg GetInferenceConnectionByOwnerParams) (InferenceConnection, error)
 	GetInferenceContextUsage(ctx context.Context, arg GetInferenceContextUsageParams) (GetInferenceContextUsageRow, error)
+	GetInferenceDiscordConfig(ctx context.Context) (InferenceDiscordConfig, error)
 	GetInferenceRunByIdempotencyKey(ctx context.Context, arg GetInferenceRunByIdempotencyKeyParams) (InferenceRun, error)
 	GetInferenceRunByOwner(ctx context.Context, arg GetInferenceRunByOwnerParams) (InferenceRun, error)
 	GetInferenceRunUsage(ctx context.Context, runID uuid.UUID) (GetInferenceRunUsageRow, error)
@@ -528,6 +531,7 @@ type sqlcQuerier interface {
 	GetServerApplicationByID(ctx context.Context, id uuid.UUID) (GetServerApplicationByIDRow, error)
 	GetServerUploadMetaRealmID(ctx context.Context, logGroupID uuid.UUID) (uuid.NullUUID, error)
 	GetServersForWorld(ctx context.Context, worldID uuid.UUID) ([]WowServer, error)
+	GetSharedInferenceConnection(ctx context.Context, id uuid.UUID) (InferenceConnection, error)
 	GetSharedViewByCode(ctx context.Context, code string) (SharedView, error)
 	GetSharedViewByInstanceAndHash(ctx context.Context, arg GetSharedViewByInstanceAndHashParams) (SharedView, error)
 	GetSidekickConfigOverride(ctx context.Context, arg GetSidekickConfigOverrideParams) ([]byte, error)
@@ -1264,6 +1268,7 @@ type sqlcQuerier interface {
 	SetDiscordAnnouncementDeliveryError(ctx context.Context, arg SetDiscordAnnouncementDeliveryErrorParams) error
 	SetDiscordAnnouncementMessage(ctx context.Context, arg SetDiscordAnnouncementMessageParams) (GuildDiscordLogAnnouncement, error)
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
+	SetInferenceDiscordConnection(ctx context.Context, connectionID uuid.NullUUID) (InferenceDiscordConfig, error)
 	// Replaces one top-level key, leaving the user's other settings untouched.
 	SetInferenceUserConfigKey(ctx context.Context, arg SetInferenceUserConfigKeyParams) error
 	SetLuaProjectDraft(ctx context.Context, arg SetLuaProjectDraftParams) (LuaProject, error)
@@ -1364,6 +1369,7 @@ type sqlcQuerier interface {
 	UpdateGuildPagePanel(ctx context.Context, arg UpdateGuildPagePanelParams) (GuildPagePanel, error)
 	UpdateGuildPageTab(ctx context.Context, arg UpdateGuildPageTabParams) (GuildPageTab, error)
 	UpdateInferenceConnectionLastUsedByOwner(ctx context.Context, arg UpdateInferenceConnectionLastUsedByOwnerParams) (InferenceConnection, error)
+	UpdateInferenceDiscordConfig(ctx context.Context, arg UpdateInferenceDiscordConfigParams) (InferenceDiscordConfig, error)
 	UpdateInferenceRun(ctx context.Context, arg UpdateInferenceRunParams) (InferenceRun, error)
 	UpdateInferenceThreadTitleByOwner(ctx context.Context, arg UpdateInferenceThreadTitleByOwnerParams) (InferenceThread, error)
 	UpdateModificationRequestPayload(ctx context.Context, arg UpdateModificationRequestPayloadParams) error
@@ -1375,6 +1381,7 @@ type sqlcQuerier interface {
 	UpdateRaidCompositionSharing(ctx context.Context, arg UpdateRaidCompositionSharingParams) (RaidComposition, error)
 	UpdateRegressionFixtureNote(ctx context.Context, arg UpdateRegressionFixtureNoteParams) error
 	UpdateRetentionPolicyStats(ctx context.Context, arg UpdateRetentionPolicyStatsParams) error
+	UpdateSharedInferenceConnectionLastUsed(ctx context.Context, id uuid.UUID) (InferenceConnection, error)
 	UpdateSidekickHeartbeat(ctx context.Context, arg UpdateSidekickHeartbeatParams) (SidekickInstallation, error)
 	UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigParams) (SiteConfig, error)
 	UpdateTelemetryHeartbeat(ctx context.Context) error

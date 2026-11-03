@@ -10421,6 +10421,29 @@ func (q *sqlQuerier) AbandonAwaitingInferenceRun(ctx context.Context, arg Abando
 	return i, err
 }
 
+const clearInferenceDiscordConnection = `-- name: ClearInferenceDiscordConnection :one
+UPDATE inference_discord_config
+SET connection_id = NULL,
+    enabled = FALSE,
+    updated_at = now()
+WHERE id = TRUE
+RETURNING id, connection_id, default_model, enabled, created_at, updated_at
+`
+
+func (q *sqlQuerier) ClearInferenceDiscordConnection(ctx context.Context) (InferenceDiscordConfig, error) {
+	row := q.db.QueryRow(ctx, clearInferenceDiscordConnection)
+	var i InferenceDiscordConfig
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.DefaultModel,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const clearInferenceThreadByOwner = `-- name: ClearInferenceThreadByOwner :one
 WITH deleted AS (
   DELETE FROM inference_messages
@@ -10540,6 +10563,20 @@ type DeleteInferenceConnectionByOwnerParams struct {
 
 func (q *sqlQuerier) DeleteInferenceConnectionByOwner(ctx context.Context, arg DeleteInferenceConnectionByOwnerParams) error {
 	_, err := q.db.Exec(ctx, deleteInferenceConnectionByOwner, arg.ID, arg.UserID)
+	return err
+}
+
+const deleteSharedInferenceConnection = `-- name: DeleteSharedInferenceConnection :exec
+UPDATE inference_connections
+SET status = 'deleted',
+    encrypted_credential = NULL,
+    provider_account_key_hash = NULL,
+    updated_at = now()
+WHERE id = $1 AND auth_mode = 'shared'
+`
+
+func (q *sqlQuerier) DeleteSharedInferenceConnection(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteSharedInferenceConnection, id)
 	return err
 }
 
@@ -10754,6 +10791,24 @@ func (q *sqlQuerier) GetInferenceContextUsage(ctx context.Context, arg GetInfere
 		&i.CostNanos,
 		&i.CostedCalls,
 		&i.Calls,
+	)
+	return i, err
+}
+
+const getInferenceDiscordConfig = `-- name: GetInferenceDiscordConfig :one
+SELECT id, connection_id, default_model, enabled, created_at, updated_at FROM inference_discord_config WHERE id = TRUE
+`
+
+func (q *sqlQuerier) GetInferenceDiscordConfig(ctx context.Context) (InferenceDiscordConfig, error) {
+	row := q.db.QueryRow(ctx, getInferenceDiscordConfig)
+	var i InferenceDiscordConfig
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.DefaultModel,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -11017,6 +11072,31 @@ func (q *sqlQuerier) GetPendingInferenceClientToolRequestByThreadForUpdate(ctx c
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const getSharedInferenceConnection = `-- name: GetSharedInferenceConnection :one
+SELECT id, user_id, provider, auth_mode, label, encrypted_credential, credential_key_version, provider_account_key_hash, status, created_at, updated_at, last_used_at FROM inference_connections
+WHERE id = $1 AND auth_mode = 'shared' AND status <> 'deleted'
+`
+
+func (q *sqlQuerier) GetSharedInferenceConnection(ctx context.Context, id uuid.UUID) (InferenceConnection, error) {
+	row := q.db.QueryRow(ctx, getSharedInferenceConnection, id)
+	var i InferenceConnection
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.AuthMode,
+		&i.Label,
+		&i.EncryptedCredential,
+		&i.CredentialKeyVersion,
+		&i.ProviderAccountKeyHash,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastUsedAt,
 	)
 	return i, err
 }
@@ -11385,7 +11465,7 @@ func (q *sqlQuerier) InsertInferenceUsage(ctx context.Context, arg InsertInferen
 
 const listInferenceConnectionsByOwner = `-- name: ListInferenceConnectionsByOwner :many
 SELECT id, user_id, provider, auth_mode, label, encrypted_credential, credential_key_version, provider_account_key_hash, status, created_at, updated_at, last_used_at FROM inference_connections
-WHERE user_id = $1 AND status <> 'deleted'
+WHERE user_id = $1 AND status <> 'deleted' AND auth_mode <> 'shared'
 ORDER BY created_at DESC
 `
 
@@ -11794,6 +11874,28 @@ func (q *sqlQuerier) ResumeInferenceRun(ctx context.Context, arg ResumeInference
 	return i, err
 }
 
+const setInferenceDiscordConnection = `-- name: SetInferenceDiscordConnection :one
+UPDATE inference_discord_config
+SET connection_id = $1,
+    updated_at = now()
+WHERE id = TRUE
+RETURNING id, connection_id, default_model, enabled, created_at, updated_at
+`
+
+func (q *sqlQuerier) SetInferenceDiscordConnection(ctx context.Context, connectionID uuid.NullUUID) (InferenceDiscordConfig, error) {
+	row := q.db.QueryRow(ctx, setInferenceDiscordConnection, connectionID)
+	var i InferenceDiscordConfig
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.DefaultModel,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const setInferenceUserConfigKey = `-- name: SetInferenceUserConfigKey :exec
 INSERT INTO inference_user_config (user_id, config)
 VALUES ($1, jsonb_build_object($2::text, $3::jsonb))
@@ -11841,6 +11943,34 @@ func (q *sqlQuerier) UpdateInferenceConnectionLastUsedByOwner(ctx context.Contex
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const updateInferenceDiscordConfig = `-- name: UpdateInferenceDiscordConfig :one
+UPDATE inference_discord_config
+SET default_model = COALESCE($1, default_model),
+    enabled = COALESCE($2, enabled),
+    updated_at = now()
+WHERE id = TRUE
+RETURNING id, connection_id, default_model, enabled, created_at, updated_at
+`
+
+type UpdateInferenceDiscordConfigParams struct {
+	DefaultModel pgtype.Text `db:"default_model" json:"default_model"`
+	Enabled      pgtype.Bool `db:"enabled" json:"enabled"`
+}
+
+func (q *sqlQuerier) UpdateInferenceDiscordConfig(ctx context.Context, arg UpdateInferenceDiscordConfigParams) (InferenceDiscordConfig, error) {
+	row := q.db.QueryRow(ctx, updateInferenceDiscordConfig, arg.DefaultModel, arg.Enabled)
+	var i InferenceDiscordConfig
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.DefaultModel,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -11936,6 +12066,33 @@ func (q *sqlQuerier) UpdateInferenceThreadTitleByOwner(ctx context.Context, arg 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ClearedAt,
+	)
+	return i, err
+}
+
+const updateSharedInferenceConnectionLastUsed = `-- name: UpdateSharedInferenceConnectionLastUsed :one
+UPDATE inference_connections
+SET last_used_at = now(), updated_at = now()
+WHERE id = $1 AND auth_mode = 'shared'
+RETURNING id, user_id, provider, auth_mode, label, encrypted_credential, credential_key_version, provider_account_key_hash, status, created_at, updated_at, last_used_at
+`
+
+func (q *sqlQuerier) UpdateSharedInferenceConnectionLastUsed(ctx context.Context, id uuid.UUID) (InferenceConnection, error) {
+	row := q.db.QueryRow(ctx, updateSharedInferenceConnectionLastUsed, id)
+	var i InferenceConnection
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.AuthMode,
+		&i.Label,
+		&i.EncryptedCredential,
+		&i.CredentialKeyVersion,
+		&i.ProviderAccountKeyHash,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastUsedAt,
 	)
 	return i, err
 }

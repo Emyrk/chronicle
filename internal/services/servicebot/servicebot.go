@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
+	"github.com/Emyrk/chronicle/internal/services/serviceinference"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
@@ -59,6 +60,7 @@ func (s *Service) DependsOn() []string {
 		servicepgxpool.OnPGXPool(),
 		serviceprometheus.OnPrometheus(),
 		serviceauthz.OnAuthz(),
+		serviceinference.OnInference(),
 		servicetenant.OnTenant(),
 	}
 }
@@ -81,6 +83,7 @@ func (s *Service) Start(ctx context.Context) error {
 		DB:                           db,
 		Zed:                          zed,
 		AccessURL:                    serviceaccessurl.AccessURL(s.broker),
+		Inference:                    serviceinference.Inference(s.broker),
 		PrimaryDomain:                tenant.PrimaryDomain(),
 	})
 	if err != nil {

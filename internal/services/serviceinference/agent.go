@@ -42,8 +42,10 @@ type assistant struct {
 	ContextType string
 	// ClientCapability is the browser capability whose tools this assistant may call.
 	ClientCapability string
-	Tools            []ToolDefinition
-	ServerTools      []ServerToolDefinition
+	// SettingsHidden is true for transport-specific assistants that are not launched by the browser.
+	SettingsHidden bool
+	Tools          []ToolDefinition
+	ServerTools    []ServerToolDefinition
 }
 
 const webResearchPrompt = "\n\nWhen web search is available, use it for current or external information. Prefer authoritative sources, distinguish sourced facts from inference, and cite the sources used."
@@ -155,6 +157,7 @@ func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model strin
 
 type toolContext struct {
 	service    *Service
+	userID     uuid.UUID
 	instanceID uuid.UUID
 }
 
@@ -221,6 +224,12 @@ func boundedJSON(v any) (string, error) {
 		return "", errors.New("tool output too large")
 	}
 	return string(b), nil
+}
+
+func assistantAllowsTool(a assistant, name string) bool {
+	return slices.ContainsFunc(a.Tools, func(tool ToolDefinition) bool {
+		return tool.Name == name
+	})
 }
 
 func (s *Service) executeTool(ctx context.Context, tc toolContext, name, args string) (string, error) {
@@ -302,6 +311,10 @@ func (s *Service) executeTool(ctx context.Context, tc toolContext, name, args st
 			out = append(out, result{Name: row.PlayerName, Class: row.PlayerClass, Spec: row.PlayerSpec, Role: row.PlayerRole, Instance: row.InstanceName, Encounter: row.EncounterName, Realm: row.RealmName, Guild: row.GuildName, Metric: in.Metric, Value: value, LogSlug: row.LogHashedSlug})
 		}
 		return boundedJSON(out)
+	case "describe_instance_search":
+		return s.describeInstanceSearch(args)
+	case "search_instances":
+		return s.searchInstances(ctx, tc, args)
 	case "instance_summary":
 		var in struct{}
 		if err := decodeStrict(args, &in); err != nil {
@@ -469,7 +482,7 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a, ok := assistants[req.AssistantID]
-	if !ok {
+	if !ok || a.SettingsHidden {
 		badRequest(w, r, "Unknown assistant.")
 		return
 	}
@@ -521,6 +534,7 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	var client *clientCapability
 	var tc toolContext
 	tc.service = s
+	tc.userID = uid
 	if a.Durable {
 		if req.ThreadID == nil || req.Message == nil || len(req.Messages) > 0 {
 			badRequest(w, r, "Durable runs require thread_id and one message.")
@@ -546,6 +560,7 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		}
 		a = withClientTools(a, client)
 		tc = threadToolContext(s, thread)
+		tc.userID = uid
 		threadID = uuid.NullUUID{UUID: thread.ID, Valid: true}
 		rows, err := s.db.ListRecentInferenceMessagesByThread(r.Context(), database.ListRecentInferenceMessagesByThreadParams{ThreadID: thread.ID, Limit: maxHistoryMessages})
 		if err != nil {
@@ -767,14 +782,14 @@ func (s *Service) usageRecorder(ctx context.Context, run database.InferenceRun, 
 	}
 }
 
-func writeUsage(w *agui.Writer, debug debugRunContext, messageID string, usage *Usage) error {
+func writeUsage(w eventWriter, debug debugRunContext, messageID string, usage *Usage) error {
 	if usage == nil || !debug.UsageEvents {
 		return nil
 	}
 	return w.Write(agui.UsageEvent{RunID: debug.RunID, MessageID: messageID, Usage: debugUsage(*usage)})
 }
 
-func writeDebugSnapshot(w *agui.Writer, debug debugRunContext, iteration int, phase, model string, a assistant, messages []Message, usage Usage) error {
+func writeDebugSnapshot(w eventWriter, debug debugRunContext, iteration int, phase, model string, a assistant, messages []Message, usage Usage) error {
 	if !debug.Enabled {
 		return nil
 	}
@@ -832,7 +847,7 @@ type agentLoopResult struct {
 
 type pauseClientToolFunc func(Message, []Message, clientToolPause, agentLoopState) error
 
-func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, debug debugRunContext, capability *clientCapability, state agentLoopState, persist func(...Message) error, pause pauseClientToolFunc, record usageRecorder) (agentLoopResult, error) {
+func (s *Service) agentLoop(ctx context.Context, w eventWriter, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, debug debugRunContext, capability *clientCapability, state agentLoopState, persist func(...Message) error, pause pauseClientToolFunc, record usageRecorder) (agentLoopResult, error) {
 	messages = append([]Message{{Role: RoleSystem, Content: a.System}}, messages...)
 	usedCallIDs := usedToolCallIDs(messages)
 	for state.IterationCount <= maxIterations {
@@ -964,9 +979,13 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			if err := w.Write(agui.ToolCallArgsEvent{ToolCallID: call.ID, Delta: call.Arguments}); err != nil {
 				return agentLoopResult{State: state}, err
 			}
-			output, err := s.executeTool(ctx, tc, call.Name, call.Arguments)
-			if err != nil {
-				output = `{"error":"invalid tool request"}`
+			output := `{"error":"tool is not available to this assistant"}`
+			if assistantAllowsTool(a, call.Name) {
+				var err error
+				output, err = s.executeTool(ctx, tc, call.Name, call.Arguments)
+				if err != nil {
+					output = `{"error":"invalid tool request"}`
+				}
 			}
 			toolMessages = append(toolMessages, Message{Role: RoleTool, Name: call.Name, ToolCallID: call.ID, Content: output})
 		}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/serviceinference/openrouter"
 )
 
 // addonWorkshopPanelAssistantID is the legacy persisted ID for the panel Module Workshop. Future module kinds get their own IDs.
@@ -51,7 +53,8 @@ func (s *Service) disabledAssistants(ctx context.Context, userID uuid.UUID) (map
 
 func (s *Service) setAssistantsEnabled(ctx context.Context, userID uuid.UUID, changes map[string]bool) error {
 	for id := range changes {
-		if _, ok := assistants[id]; !ok {
+		a, ok := assistants[id]
+		if !ok || a.SettingsHidden {
 			return fmt.Errorf("%w %q", errUnknownAssistant, id)
 		}
 	}
@@ -74,6 +77,61 @@ func (s *Service) setAssistantsEnabled(ctx context.Context, userID uuid.UUID, ch
 		return err
 	}
 	return s.db.SetInferenceUserConfigKey(ctx, database.SetInferenceUserConfigKeyParams{UserID: userID, Key: configDisabledAssistants, Value: value})
+}
+
+type discordUserConfig struct {
+	UsePersonalOpenRouter bool      `json:"use_personal_openrouter"`
+	ConnectionID          uuid.UUID `json:"connection_id,omitempty"`
+	Model                 string    `json:"model,omitempty"`
+}
+
+func (s *Service) discordConfig(ctx context.Context, userID uuid.UUID) (discordUserConfig, error) {
+	raw, err := s.db.GetInferenceUserConfig(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return discordUserConfig{}, nil
+	}
+	if err != nil {
+		return discordUserConfig{}, err
+	}
+	var config struct {
+		Discord discordUserConfig `json:"discord"`
+	}
+	if err := json.Unmarshal(raw, &config); err != nil {
+		return discordUserConfig{}, fmt.Errorf("decode Discord inference config: %w", err)
+	}
+	return config.Discord, nil
+}
+
+func (s *Service) setDiscordConfig(ctx context.Context, userID uuid.UUID, changes chroniclesdk.UpdateInferenceSettingsRequest) error {
+	config, err := s.discordConfig(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if changes.DiscordConnectionID != nil {
+		connection, err := s.db.GetInferenceConnectionByOwner(ctx, database.GetInferenceConnectionByOwnerParams{ID: *changes.DiscordConnectionID, UserID: userID})
+		if err != nil || connection.Status != "active" || connection.AuthMode == "shared" || connection.Provider != string(openrouter.ProviderID) {
+			return errors.New("discord OpenRouter connection not found")
+		}
+		config.ConnectionID = connection.ID
+	}
+	if changes.DiscordModel != nil {
+		model := strings.TrimSpace(*changes.DiscordModel)
+		if len(model) > 200 {
+			return errors.New("discord model is too long")
+		}
+		config.Model = model
+	}
+	if changes.DiscordUsePersonalOpenRouter != nil {
+		if *changes.DiscordUsePersonalOpenRouter && (config.ConnectionID == uuid.Nil || config.Model == "") {
+			return errors.New("select an OpenRouter connection and model before enabling Discord DMs")
+		}
+		config.UsePersonalOpenRouter = *changes.DiscordUsePersonalOpenRouter
+	}
+	value, err := json.Marshal(config)
+	if err != nil {
+		return err
+	}
+	return s.db.SetInferenceUserConfigKey(ctx, database.SetInferenceUserConfigKeyParams{UserID: userID, Key: "discord", Value: value})
 }
 
 // requireAssistantEnabled writes a 403 and returns false when the user turned the assistant off.
