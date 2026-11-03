@@ -313,7 +313,7 @@ export function InstanceSearchPage() {
             </Link>
           </p>
         </div>
-        <BudgetLine budget={budget} lastCost={lastCost} />
+        <BudgetLine budget={budget} lastCost={lastCost} pending={collapsed ? null : (liveCost?.total ?? null)} />
       </div>
 
       {collapsed ? (
@@ -406,7 +406,10 @@ export function InstanceSearchPage() {
         </div>
       )}
 
-      <div className="flex items-center gap-3 flex-wrap">
+      {/* Sticks to the bottom of the screen while a long search is being
+          edited, so Search and the cost stay in reach; it settles back into
+          place above the results. */}
+      <div className="sticky bottom-0 z-20 -mx-2 flex flex-wrap items-center gap-3 rounded-lg border border-border/60 bg-background/90 px-2 py-2 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] backdrop-blur">
         <Button
           onClick={submit}
           disabled={preview || anonBlocked || codeInvalid || tooComplex || results.isFetching}
@@ -534,17 +537,38 @@ function parseCode(code: string): { tree: Node | undefined; error: { message: st
   }
 }
 
-function BudgetLine({ budget, lastCost }: { budget: SearchBudget | null; lastCost: number | null }) {
+/**
+ * The caller's budget. While a search is being edited (pending), the part of
+ * the bar it would spend is highlighted and its cost shown, amber when it's
+ * more than what's left and red when it's more than the whole budget.
+ */
+function BudgetLine({ budget, lastCost, pending }: { budget: SearchBudget | null; lastCost: number | null; pending: number | null }) {
   if (!budget) return null;
-  const pct = budget.limit > 0 ? Math.max(0, Math.min(1, budget.remaining / budget.limit)) : 0;
+  const frac = (n: number) => (budget.limit > 0 ? Math.max(0, Math.min(1, n / budget.limit)) : 0);
+  const left = frac(budget.remaining);
+  const spend = pending != null ? Math.min(left, frac(pending)) : 0;
+  const tooComplex = pending != null && pending > budget.limit;
+  const short = !tooComplex && pending != null && pending > budget.remaining;
   return (
     <div className="flex items-center gap-2 text-2xs text-muted-foreground" title="Searches spend from a budget that refills over time. Complex searches cost more.">
       <span>Search budget</span>
-      <div className="h-1.5 w-24 rounded-full bg-zinc-800 overflow-hidden">
-        <div className={cn("h-full rounded-full", pct > 0.25 ? "bg-primary/70" : "bg-amber-500/80")} style={{ width: `${pct * 100}%` }} />
+      <div className="relative h-1.5 w-32 rounded-full bg-zinc-800 overflow-hidden">
+        <div className={cn("absolute inset-y-0 left-0 rounded-full", left > 0.25 ? "bg-primary/70" : "bg-amber-500/80")} style={{ width: `${left * 100}%` }} />
+        {spend > 0 && (
+          <div
+            className={cn("absolute inset-y-0 rounded-r-full", tooComplex ? "bg-red-400" : short ? "bg-amber-300" : "bg-sky-200")}
+            style={{ left: `${(left - spend) * 100}%`, width: `${spend * 100}%` }}
+          />
+        )}
       </div>
       <span className="tabular-nums">{Math.floor(budget.remaining)}/{budget.limit}</span>
-      {lastCost != null && <span className="tabular-nums">· last search cost {lastCost}</span>}
+      {pending != null ? (
+        <span className={cn("tabular-nums font-medium", tooComplex ? "text-red-300" : short ? "text-amber-200" : "text-foreground/80")}>
+          · this search costs {pending}
+        </span>
+      ) : (
+        lastCost != null && <span className="tabular-nums">· last search cost {lastCost}</span>
+      )}
     </div>
   );
 }
