@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState, type ReactNode } from "react";
+import { useInferenceCapability } from "@/features/chat";
 import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Blocks, BookOpen, ChevronDown, ChevronUp, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
@@ -40,6 +41,7 @@ import {
   type Node,
   type SearchForm as Form,
 } from "./queryModel";
+import { planSearchDraftUpdate } from "./searchInferenceDraft";
 import { SearchError, runSearch, useSearchFields, useSearchLimit, type SearchBudget } from "./searchApi";
 
 type Mode = "form" | "blocks" | "code";
@@ -48,7 +50,9 @@ type Mode = "form" | "blocks" | "code";
 const PREVIEW_EXAMPLE = EXAMPLES.find((e) => e.id === "23_complex_speed_comp") ?? EXAMPLES[0];
 
 export function InstanceSearchPage() {
-  const [params, setParams] = useSearchParams();
+  const [params, writeParams] = useSearchParams();
+  const [draftRevision, bumpDraftRevision] = useReducer((revision: number) => revision + 1, 0);
+  const setParams: typeof writeParams = (...args) => { bumpDraftRevision(); writeParams(...args); };
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const supporter = useSupporterTier();
   // Blocks, Code and Examples are an Honored perk (UI only; the server
@@ -67,10 +71,14 @@ export function InstanceSearchPage() {
   const urlMode: Mode = modeParam === "blocks" || modeParam === "code" ? modeParam : "form";
 
   // Drafts start from the submitted search.
-  const [mode, setMode] = useState<Mode>(() => (urlMode === "form" && treeToForm(submittedTree) === null ? "blocks" : urlMode));
-  const [form, setForm] = useState<Form>(() => treeToForm(submittedTree) ?? emptyForm());
-  const [blocks, setBlocks] = useState<Node | undefined>(() => submittedTree);
-  const [code, setCode] = useState<string>(() => (submittedTree ? formatCEL(submittedTree) : ""));
+  const [mode, writeMode] = useState<Mode>(() => (urlMode === "form" && treeToForm(submittedTree) === null ? "blocks" : urlMode));
+  const setMode: typeof writeMode = (value) => { bumpDraftRevision(); writeMode(value); };
+  const [form, writeForm] = useState<Form>(() => treeToForm(submittedTree) ?? emptyForm());
+  const setForm: typeof writeForm = (value) => { bumpDraftRevision(); writeForm(value); };
+  const [blocks, writeBlocks] = useState<Node | undefined>(() => submittedTree);
+  const setBlocks: typeof writeBlocks = (value) => { bumpDraftRevision(); writeBlocks(value); };
+  const [code, writeCode] = useState<string>(() => (submittedTree ? formatCEL(submittedTree) : ""));
+  const setCode: typeof writeCode = (value) => { bumpDraftRevision(); writeCode(value); };
   const [showCel, setShowCel] = useState(false);
   // The example last loaded into the block editor, shown as a caption.
   const [example, setExample] = useState<SearchExample | null>(null);
@@ -78,7 +86,8 @@ export function InstanceSearchPage() {
   // Without Honored, Blocks / Code / Examples open a read-only preview of an
   // example: it can be looked at in blocks or as code, but not edited or run.
   // Going back to Form restores the user's own form untouched.
-  const [preview, setPreview] = useState(false);
+  const [preview, writePreview] = useState(false);
+  const setPreview: typeof writePreview = (value) => { bumpDraftRevision(); writePreview(value); };
   const enterPreview = (target: "blocks" | "code", ex: SearchExample = example ?? PREVIEW_EXAMPLE) => {
     setBlocks(ex.where);
     setCode(formatCEL(ex.where));
@@ -105,7 +114,35 @@ export function InstanceSearchPage() {
   const parsedCode = useMemo(() => parseCode(code), [code]);
   const codeInvalid = mode === "code" && parsedCode.error !== null;
 
-  const draftTree = mode === "form" ? formToTree(form) : mode === "blocks" ? prune(blocks) : prune(parsedCode.tree);
+  const draftTree = useMemo(() => mode === "form" ? formToTree(form) : mode === "blocks" ? prune(blocks) : prune(parsedCode.tree), [mode, form, blocks, parsedCode.tree]);
+  useInferenceCapability({
+    id: "search-page",
+    version: 1,
+    scope: { type: "search_page", id: "search" },
+    stateRevision: draftRevision,
+    available: isAuthenticated && !authLoading && !supporter.isLoading,
+    tools: {
+      inspect_search_draft: () => ({
+        draft: parsedCode.error ? null : (draftTree ?? null),
+        submitted: submittedTree ?? null,
+        mode,
+        revision: draftRevision,
+        ...(parsedCode.error ? { codeError: parsedCode.error } : {}),
+        searchWasSubmitted: submittedParam !== null,
+      }),
+      set_search_draft: (argumentsValue) => {
+        const plan = planSearchDraftUpdate(argumentsValue, advancedUnlocked, draftRevision);
+        if (plan.form) setForm(plan.form);
+        setBlocks(plan.where);
+        setCode(formatCEL(plan.where));
+        setMode(plan.mode);
+        setPreview(false);
+        setExample(null);
+        setCollapsed(false);
+        return { applied: true, mode: plan.mode, submitted: false, draft: plan.where };
+      },
+    },
+  });
   // Whether the current draft fits the form (it always fits blocks and code).
   const formFromDraft = useMemo(() => (mode === "form" || codeInvalid ? null : treeToForm(draftTree)), [mode, codeInvalid, draftTree]);
 
