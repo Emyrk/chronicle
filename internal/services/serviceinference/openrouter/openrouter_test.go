@@ -215,13 +215,35 @@ func TestStreamChatHTTPErrorRedactsCredential(t *testing.T) {
 	var providerErr *serviceinference.ProviderError
 	require.ErrorAs(t, err, &providerErr)
 	require.Equal(t, "provider_authentication_failed", providerErr.Code)
-	require.Contains(t, providerErr.UserMessage, "OpenRouter rejected the request (HTTP 401)")
+	require.Equal(t, "OpenRouter couldn't authenticate your connection. Reconnect OpenRouter in Account → AI settings and try again.", providerErr.UserMessage)
 	require.NotContains(t, providerErr.UserMessage, "secret-credential")
 	require.NotContains(t, providerErr.UserMessage, "provider-secret-value")
 	require.ErrorContains(t, err, "HTTP 401")
 	require.NotContains(t, err.Error(), "secret-credential")
 	require.NotContains(t, err.Error(), "provider-secret-value")
 	require.Contains(t, err.Error(), "[REDACTED]")
+}
+
+func TestStreamChatUserNotFoundExplainsReconnect(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = fmt.Fprint(w, `{"error":{"message":"User not found.","code":401}}`)
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server)
+	err := client.StreamChat(testutil.Context(t, testutil.WaitShort), []byte("provider-secret"), serviceinference.ChatRequest{Model: "model"}, func(serviceinference.StreamEvent) error { return nil })
+	require.Error(t, err)
+	var providerErr *serviceinference.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, "provider_authentication_failed", providerErr.Code)
+	require.Contains(t, providerErr.UserMessage, "Reconnect OpenRouter")
+	require.Contains(t, providerErr.UserMessage, "AI settings")
+	require.NotContains(t, providerErr.UserMessage, "User not found")
+	require.ErrorContains(t, err, "User not found") // The server log retains the sanitized diagnostic.
 }
 
 func TestStreamChatRejectsUnexpectedContentTypeAndMissingFinish(t *testing.T) {
