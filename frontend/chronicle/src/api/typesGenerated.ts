@@ -227,8 +227,8 @@ export interface AdminCosmeticsResponse {
 
 // From chroniclesdk/admin_ratings.go
 /**
- * Admin rating configuration is tenant-scoped to the request host. The root
- * domain uses the nil UUID. Clients cannot select another tenant in a payload.
+ * Legacy rating group configuration types are retained for Go compatibility.
+ * Their admin HTTP routes are no longer registered; configuration is migration-owned.
  */
 export interface AdminCreateRatingGroupRequest {
     readonly server_id: string;
@@ -5177,6 +5177,117 @@ export interface Tenant {
     readonly external_linking?: ExternalLinking;
     readonly created_at: string;
     readonly updated_at: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface TenantGuildBossLeaderboardEntry {
+    readonly generation_id: string;
+    readonly realm_id: string;
+    readonly guild_id: string;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly window_start?: string;
+    readonly window_end?: string;
+    readonly score: number;
+    readonly best_raw?: number;
+    readonly rank_one_raw?: number;
+    readonly best_locked_parse?: number;
+    readonly form?: number;
+    readonly floor_score?: number;
+    readonly eligible_kills: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface TenantGuildBossLeaderboardResponse {
+    readonly entries: readonly TenantGuildBossLeaderboardEntry[];
+    readonly next_cursor?: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface TenantGuildScopeLeaderboardEntry {
+    readonly generation_id: string;
+    readonly realm_id: string;
+    readonly guild_id: string;
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly score: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface TenantGuildScopeLeaderboardResponse {
+    readonly scope: string;
+    readonly entries: readonly TenantGuildScopeLeaderboardEntry[];
+    readonly next_cursor?: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface TenantPlayerBossLeaderboardEntry {
+    readonly generation_id: string;
+    readonly realm_id: string;
+    readonly player_guid: string;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly performance_metric: string;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly window_start?: string;
+    readonly window_end?: string;
+    readonly score: number;
+    readonly best_raw?: number;
+    readonly rank_one_raw?: number;
+    readonly best_locked_parse?: number;
+    readonly form?: number;
+    readonly floor_score?: number;
+    readonly eligible_kills: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+/**
+ * Tenant rating leaderboards expose materialized scores, never a recomputed rank.
+ */
+export interface TenantPlayerBossLeaderboardResponse {
+    readonly entries: readonly TenantPlayerBossLeaderboardEntry[];
+    readonly next_cursor?: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface TenantPlayerScopeLeaderboardEntry {
+    readonly generation_id: string;
+    readonly realm_id: string;
+    readonly player_guid: string;
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly performance_metric: string;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly score: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface TenantPlayerScopeLeaderboardResponse {
+    readonly scope: string;
+    readonly entries: readonly TenantPlayerScopeLeaderboardEntry[];
+    readonly next_cursor?: string;
 }
 
 // From chroniclesdk/proofs.go

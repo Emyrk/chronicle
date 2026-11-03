@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useInfiniteQuery } from "@tanstack/react-query"
 import { Link, useSearchParams } from "react-router-dom"
 import { ChevronLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -104,7 +104,15 @@ function LiveRatings({ instance, realmIDs, onRealmChange }: { instance: string |
     } : undefined,
   }
   const url = ratingScopeURL(request)
-  const ratings = useQuery({ queryKey: ["rankings", "ratings", url], queryFn: () => fetchLiveRating(url!), enabled: !!url && realms.isSuccess, retry: false })
+  const ratings = useInfiniteQuery({
+    queryKey: ["rankings", "ratings", url],
+    queryFn: ({ pageParam }) => fetchLiveRating(url!, pageParam || undefined),
+    initialPageParam: "",
+    getNextPageParam: (page) => page.next_cursor || undefined,
+    enabled: !!url && realms.isSuccess,
+    retry: false,
+  })
+  const entries = ratings.data?.pages.flatMap((page) => page.entries) ?? []
   if (realms.isPending || (metric !== "renown" && (summaries.isPending || filters.isPending))) return <p role="status">Loading rating cohorts…</p>
   if (realms.isError || (metric !== "renown" && (summaries.isError || filters.isError))) return <p role="alert">Could not load rating cohorts. Please try again later.</p>
   return <section className="space-y-5 rounded-xl border bg-card p-5">
@@ -123,7 +131,7 @@ function LiveRatings({ instance, realmIDs, onRealmChange }: { instance: string |
         <option value="renown">Renown</option><option value="peak">Peak</option><option value="mastery">Mastery</option><option value="ranked_mastery">Ranked Mastery</option>
       </select></label>
       <label>Window <select aria-label="Rating window" className="ml-2 rounded border bg-background p-2" value={window} onChange={(e) => setWindow(e.target.value as LiveRatingRequest["window"])}>
-        <option value="period">Period</option>{metric === "renown" ? <option value="career">Career</option> : metric === "peak" ? <option value="all_time">All time</option> : null}
+        <option value="period">Period</option>{metric === "renown" ? <option value="career">Career</option> : <option value="all_time">All time</option>}
       </select></label>
     </div>
     {metric !== "renown" && <div className="flex flex-wrap gap-3">
@@ -144,12 +152,15 @@ function LiveRatings({ instance, realmIDs, onRealmChange }: { instance: string |
       </select></label>
     </div>}
     <p className="text-sm text-muted-foreground">{metric === "renown" ? "Renown has no class or spec cohort." : "Scores compare only the selected class, spec, performance metric and raid size."} Realm selection filters displayed entries without recomputing scores. Character names are not included in the published response; IDs are shown instead.</p>
-    {!url ? <p>{!instance && metric !== "renown" ? "Select an instance from the Overview tab to choose an exact raid cohort." : "No supported rating cohort is available for this selection."}</p> : ratings.isPending ? <p role="status">Loading ratings…</p> : ratings.isError ? <p role="alert">Could not load published ratings.</p> : !ratings.data?.entries.length ? <p>No published scores in this cohort yet.</p> :
-      <ul className="divide-y">{ratings.data.entries.map((entry, index) => <li key={`${entry.player_guid}-${index}`} className="flex flex-wrap items-center gap-3 py-3 text-sm">
+    {!url ? <p>{!instance ? "Select an instance from the Overview tab to view a raid rating board." : "No supported rating cohort is available for this selection."}</p> : ratings.isPending ? <p role="status">Loading ratings…</p> : ratings.isError && !entries.length ? <p role="alert">Could not load published ratings. <button type="button" className="underline" onClick={() => void ratings.refetch()}>Retry</button></p> : !entries.length ? <p>No published scores in this cohort yet.</p> : <>
+      <ul className="divide-y">{entries.map((entry, index) => <li key={`${entry.realm_id}-${entry.player_guid}-${index}`} className="flex flex-wrap items-center gap-3 py-3 text-sm">
         <span className="font-mono text-xs">{entry.player_guid}</span>
-        <span className="text-muted-foreground">{entry.player_class ? `${entry.player_class} · ${entry.player_spec} · ` : ""}{entry.instance_name || "Global"} · {realms.data?.find((realm) => realm.id === entry.realm_id)?.name ?? entry.realm_id}</span>
+        <span className="text-muted-foreground">{entry.player_class ? `${entry.player_class} · ${entry.player_spec} · ` : ""}{entry.instance_name} · {realms.data?.find((realm) => realm.id === entry.realm_id)?.name ?? entry.realm_id}</span>
         <strong className="ml-auto tabular-nums">{entry.score.toLocaleString()}</strong>
-      </li>)}</ul>}
+      </li>)}</ul>
+      {ratings.isError && <p role="alert">Could not load more ratings. <button type="button" className="underline" onClick={() => void ratings.fetchNextPage()}>Retry</button></p>}
+      {ratings.hasNextPage && !ratings.isError && <button type="button" disabled={ratings.isFetchingNextPage} className="rounded border px-3 py-2 text-sm disabled:opacity-50" onClick={() => void ratings.fetchNextPage()}>{ratings.isFetchingNextPage ? "Loading…" : "Load more"}</button>}
+    </>}
     <Link to="/leaderboards/statistics" className="text-xs text-muted-foreground underline">Current leaderboards</Link>
   </section>
 }

@@ -1,4 +1,4 @@
-import type { RatingScopeLeaderboardResponse } from "@/api/typesGenerated"
+import type { TenantPlayerScopeLeaderboardResponse } from "@/api/typesGenerated"
 
 export type LiveRatingRequest = {
   realmIDs?: string[]
@@ -11,8 +11,8 @@ export type LiveRatingRequest = {
 /** The API publishes exact cohorts. Realm IDs only filter the displayed rows, not scores. */
 export function ratingScopeURL(request: LiveRatingRequest): string | null {
   const { realmIDs, instanceName, metric, window, cohort } = request
-  if (metric === "renown" ? (window === "all_time" || cohort !== undefined) :
-    (!cohort?.playerClass || !cohort.maxPlayers || !["dps", "hps"].includes(cohort.performance) || window === "career" || (metric !== "peak" && window !== "period"))) return null
+  if (!instanceName?.trim() || (metric === "renown" ? (window === "all_time" || cohort !== undefined) :
+    (!cohort?.playerClass || !cohort.maxPlayers || !["dps", "hps"].includes(cohort.performance) || window === "career"))) return null
   const q = new URLSearchParams({
     instance_name: instanceName ?? "",
     difficulty_name: cohort?.difficulty ?? "",
@@ -31,8 +31,10 @@ export function ratingScopeURL(request: LiveRatingRequest): string | null {
   return `/api/v1/rankings/ratings/scope-leaderboard?${q}`
 }
 
-export async function fetchLiveRating(url: string): Promise<RatingScopeLeaderboardResponse> {
-  const response = await fetch(url)
+export async function fetchLiveRating(url: string, cursor?: string): Promise<TenantPlayerScopeLeaderboardResponse> {
+  const response = await fetch(cursor ? `${url}&cursor=${encodeURIComponent(cursor)}` : url)
   if (!response.ok) throw new Error(`Ratings request failed (${response.status})`)
-  return response.json() as Promise<RatingScopeLeaderboardResponse>
+  const board = await response.json() as TenantPlayerScopeLeaderboardResponse
+  if (board.scope !== "raid") throw new Error("Ratings response is not a raid board")
+  return board
 }
