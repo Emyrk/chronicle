@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react"
+import type { RankingsInstanceSummary } from "@/api/typesGenerated"
 import { Skull, Swords, Timer } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
@@ -18,16 +19,50 @@ import { RulesetsLanding } from "@/pages/Leaderboards/RulesetsLanding"
  * instance grid, its cards carrying that tab's headline; choosing an instance
  * keeps the tab.
  */
+export interface LeaderboardsHubAppProps extends Omit<LeaderboardHubProps, "instanceName" | "onAllInstances" | "tab" | "onTab" | "realm" | "onRealm" | "instances" | "onSwitchInstance"> {
+  initialInstance?: string
+  /** Controlled selection. Pair with onInstance so the caller can clear it. */
+  instance?: string
+  onInstance?: (instance?: string) => void
+  tab?: HubTab
+  onTab?: (tab: HubTab) => void
+  realm?: string
+  onRealm?: (realm: string) => void
+  /** Published realm names for the picker; omit with instances only if no realm selection is available. */
+  realms?: readonly string[]
+  /** Published instance cohorts. Supplying this switches the grid to live, non-fixture cards. */
+  instances?: readonly RankingsInstanceSummary[]
+  /** Production instance view. Never render the fixture-only LeaderboardHub for live data. */
+  renderInstance?: (instance: string) => ReactNode
+}
+
 export function LeaderboardsHubApp({
   initialInstance,
   initialTab = "overview",
+  instance: controlledInstance,
+  onInstance,
+  tab: controlledTab,
+  onTab,
+  realm: controlledRealm,
+  onRealm,
+  realms,
+  instances,
+  renderInstance,
   ...hub
-}: Omit<LeaderboardHubProps, "instanceName" | "onAllInstances" | "tab" | "onTab"> & { initialInstance?: string }) {
-  const [instance, setInstance] = useState(initialInstance)
-  const [tab, setTab] = useState<HubTab>(initialTab)
-  // One realm for the grid and every instance, remembered per browser.
-  const [realm, setRealm] = useHubRealm(HUB_REALMS, hub.initialRealm)
-  setMockRealm(realm)
+}: LeaderboardsHubAppProps) {
+  const live = instances !== undefined
+  const availableRealms = realms ?? (live ? [] : HUB_REALMS)
+  const [localInstance, setLocalInstance] = useState(initialInstance)
+  const [localTab, setLocalTab] = useState<HubTab>(initialTab)
+  // One realm for the grid and every instance, remembered per browser in the mock.
+  const [localRealm, setLocalRealm] = useHubRealm(availableRealms, hub.initialRealm)
+  const instance = onInstance ? controlledInstance : localInstance
+  const tab = controlledTab ?? localTab
+  const realm = controlledRealm ?? localRealm
+  const setInstance = (next?: string) => onInstance ? onInstance(next) : setLocalInstance(next)
+  const setTab = (next: HubTab) => onTab ? onTab(next) : setLocalTab(next)
+  const setRealm = (next: string) => onRealm ? onRealm(next) : setLocalRealm(next)
+  if (!live) setMockRealm(realm)
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       {/* The grid has no banner, so it carries the tabs; an open instance shows them in its banner. */}
@@ -35,7 +70,7 @@ export function LeaderboardsHubApp({
         <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
           <div className="mx-auto flex w-full max-w-[1920px] items-center px-2 sm:px-4">
             {/* Realm first: it scopes every card in the grid. */}
-            <RealmPicker realm={realm} realms={HUB_REALMS} onChange={setRealm} className="my-1.5 mr-3 shrink-0" />
+            {availableRealms.length > 0 && <RealmPicker realm={realm} realms={availableRealms} onChange={setRealm} className="my-1.5 mr-3 shrink-0" />}
             <span className="mr-2 h-6 w-px shrink-0 bg-border" aria-hidden />
             <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" aria-label="Leaderboard section">
               {TABS.map((t) => (
@@ -60,27 +95,29 @@ export function LeaderboardsHubApp({
         </div>
       )}
       {instance ? (
-        <LeaderboardHub
-          {...hub}
-          instanceName={instance}
-          tab={tab}
-          onTab={setTab}
-          onAllInstances={() => setInstance(undefined)}
-          realm={realm}
-          onRealm={setRealm}
-          instances={instanceHeadlines().map((i) => i.name)}
-          onSwitchInstance={setInstance}
-        />
+        live ? (renderInstance?.(instance) ?? <p className="mx-auto max-w-[1920px] px-4 py-8 text-sm text-muted-foreground">No live instance view available.</p>) : (
+          <LeaderboardHub
+            {...hub}
+            instanceName={instance}
+            tab={tab}
+            onTab={setTab}
+            onAllInstances={() => setInstance(undefined)}
+            realm={realm}
+            onRealm={setRealm}
+            instances={instanceHeadlines().map((i) => i.name)}
+            onSwitchInstance={setInstance}
+          />
+        )
       ) : (
-        <HubLanding key={realm} tab={tab} onOpen={setInstance} />
+        <HubLanding key={realm} tab={tab} onOpen={setInstance} instances={instances} />
       )}
     </div>
   )
 }
 
-function HubLanding({ tab, onOpen }: { tab: HubTab; onOpen: (instance: string) => void }) {
+function HubLanding({ tab, onOpen, instances }: { tab: HubTab; onOpen: (instance: string) => void; instances?: readonly RankingsInstanceSummary[] }) {
   if (tab === "rulesets") {
-    // Today's rulesets grid as-is; its cards link to ?instance=<name>, which the mock opens in place.
+    // Today's rulesets grid as-is; its cards link to ?instance=<name>, opened in place.
     return (
       <div
         className="mx-auto w-full max-w-[1920px] px-3 py-4 sm:px-4 sm:py-8"
@@ -93,6 +130,45 @@ function HubLanding({ tab, onOpen }: { tab: HubTab; onOpen: (instance: string) =
         }}
       >
         <RulesetsLanding />
+      </div>
+    )
+  }
+  if (instances !== undefined) {
+    const grid = (items: readonly RankingsInstanceSummary[]) => (
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {items.map((inst) => (
+          <div key={`${inst.instance_name}-${inst.difficulty_name}-${inst.max_players}`} onClickCapture={(e) => {
+            e.preventDefault()
+            onOpen(inst.instance_name)
+          }}>
+            <InstanceCard name={inst.instance_name} to="#" badge={`${inst.difficulty_name || "Default"} · ${inst.max_players} players`}>
+              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                <Skull className="h-3 w-3" />
+                {inst.total_kills.toLocaleString()} recorded kills
+              </div>
+            </InstanceCard>
+          </div>
+        ))}
+      </div>
+    )
+    const raids = instances.filter((inst) => inst.category === "raid")
+    const dungeons = instances.filter((inst) => inst.category === "dungeon")
+    const other = instances.filter((inst) => inst.category !== "raid" && inst.category !== "dungeon")
+    return (
+      <div className="mx-auto w-full max-w-[1920px] space-y-6 px-3 py-4 sm:px-4 sm:py-8">
+        {instances.length === 0 && <p>No published instances yet.</p>}
+        {raids.length > 0 && <section className="space-y-5">
+          <h2 className="text-lg font-semibold text-muted-foreground">Raids</h2>
+          <div className="space-y-3">{grid(raids)}</div>
+        </section>}
+        {dungeons.length > 0 && <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-muted-foreground">Dungeons</h2>
+          {grid(dungeons)}
+        </section>}
+        {other.length > 0 && <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-muted-foreground">Other instances</h2>
+          {grid(other)}
+        </section>}
       </div>
     )
   }
