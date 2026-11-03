@@ -1,16 +1,21 @@
 /**
  * Builds the Leeroy Jenkins replay fixture (a `MapFixture`, see
- * src/pages/Instance/EventsPanels/Map/fixtures/mapFixture.ts) from the frame
- * annotations and the Rookery's spawns. Deterministic: the same inputs give
- * the same bytes.
+ * src/pages/Instance/EventsPanels/Map/fixtures/mapFixture.ts). Deterministic:
+ * the same inputs give the same bytes.
  *
- *   node scripts/leeroy/build-fixture.mjs \
- *     [scripts/leeroy/annotations.json] [scripts/leeroy/rookery-spawns.json] [outFile]
+ *   node scripts/leeroy/build-fixture.mjs [scripts/leeroy] [outFile]
  *
- * Positions are the annotations' hand keyframes, eased between keys, with a
- * formation offset per player; whelps hatch from the real egg nearest each
- * wave and chase a player. Health, whelp swings and the fear's flee are
- * illustrative (see annotations.json `source` fields). See scripts/leeroy/README.md.
+ * Reads, from the first directory: annotations.json (roster, clip, fear,
+ * whelp waves), rookery-spawns.json (real eggs), ih-tracks.json (the player
+ * dots tracked on Internet Historian's map, track-ih-map.py),
+ * ih-map-fit.json (his map to world X/Y, fit-ih-map.py) and rookery-floor.json
+ * (walkable floor heights from the mesh, floor-heights.py).
+ *
+ * Player positions are per Internet Historian's map (2017), fan
+ * approximation: tracked, mapped to world, smoothed. Deaths are the dots he
+ * draws dithered. Whelps hatch from the real egg nearest each wave and chase
+ * a player. Health, whelp swings and the fear's flee are illustrative (see
+ * annotations.json). See scripts/leeroy/README.md.
  */
 import { readFileSync, writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
@@ -18,28 +23,62 @@ import { fileURLToPath } from "node:url"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = resolve(here, "../..")
-const [annotationsArg, spawnsArg, outArg] = process.argv.slice(2)
-const annotations = JSON.parse(readFileSync(annotationsArg ?? resolve(here, "annotations.json"), "utf8"))
-const spawns = JSON.parse(readFileSync(spawnsArg ?? resolve(here, "rookery-spawns.json"), "utf8"))
+const [inputArg, outArg] = process.argv.slice(2)
+const input = (name) => JSON.parse(readFileSync(resolve(inputArg ?? here, name), "utf8"))
+const annotations = input("annotations.json")
+const spawns = input("rookery-spawns.json")
+const ihTracks = input("ih-tracks.json")
+const ihFit = input("ih-map-fit.json")
+const floor = input("rookery-floor.json")
 const outFile = resolve(outArg ?? resolve(root, "src/pages/Instance/EventsPanels/Map/fixtures/leeroyRookery.json"))
 
 const MAP_ID = 229
 const FLOOR_Z = 91.5
+// His map has no height: units take the walkable floor under them
+// (rookery-floor.json, from the mesh: the floor, or the rubble in the west),
+// logged 1.9 yd above it. The 3D view stands a unit on the highest surface up
+// to 2.5 yd above its logged z and draws it airborne only 2 yd or more above
+// that, so everyone stays on the floor or rubble.
+const LIFT = 1.9
+function floorAt(x, y) {
+  const i0 = Math.round((x - floor.x0) / floor.step)
+  const j0 = Math.round((y - floor.y0) / floor.step)
+  // The median of the walkable cells around it (3x3, widening to 5x5 near
+  // walls): broad rubble slopes count, a lone prop under one cell does not.
+  for (const r of [1, 2]) {
+    const zs = []
+    for (let i = i0 - r; i <= i0 + r; i++) {
+      for (let j = j0 - r; j <= j0 + r; j++) {
+        const z = floor.heights[i]?.[j]
+        if (z != null) zs.push(z)
+      }
+    }
+    if (zs.length > 0) return zs.sort((p, q) => p - q)[Math.floor(zs.length / 2)]
+  }
+  return FLOOR_Z
+}
+const unitZ = (x, y) => floorAt(x, y) + LIFT
 const SAMPLE_MS = 200
 const ICON_BASE_URL = "https://icons.chronicleclassic.com/turtle"
 const WHELP = { entry: 10161, name: "Rookery Whelp" }
 const EGG = { entry: 175124, name: "Rookery Egg" }
-// The Rookery (x 46..110, y -341..-233 on the map 229 mesh) and the upper
-// Hall of Binding's stairs, in world yards: the placeholder floor until the
-// mesh is published.
-const FLOOR_BOUNDS = { minX: 40, maxX: 150, minY: -345, maxY: -230 }
+// The Rookery (x 46..110, y -341..-233 on the map 229 mesh) and the Hall of
+// Binding behind its west door, in world yards: the placeholder floor until
+// the mesh is published.
+const FLOOR_BOUNDS = { minX: 40, maxX: 135, minY: -345, maxY: -230 }
+// The west door between the Hall of Binding and the Rookery (mesh: a gap in
+// the north wall at x 109..112, y -262..-254), and where players wait in the
+// hall before his map shows them.
+const DOOR = { x: 111, minY: -260, maxY: -256 } // walk-through band, inside the gap
+const HALL = { x: 121, y: -258 }
 
-const { clip, places, keyframes, whelps, deaths, fear } = annotations
+const { clip, whelps, fear } = annotations
 const clipStartS = clip.fromVideoSeconds
 const durationMs = (clip.toVideoSeconds - clipStartS) * 1000
 const logStartMs = Date.parse(clip.logStart)
 const ms = (videoSeconds) => Math.round((videoSeconds - clipStartS) * 1000)
 const round = (value, digits = 2) => Math.round(value * 10 ** digits) / 10 ** digits
+const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value))
 
 // Seeded PRNG (mulberry32) so jitter is stable across runs.
 let seed = 1543
@@ -48,41 +87,6 @@ function random() {
   let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
   t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-}
-
-const smooth = (t) => t * t * (3 - 2 * t)
-
-/** A player's formation offset around a place: slot 0 is the spot itself. */
-function slotOffset(slot, place) {
-  if (slot === 0) return { x: 0, y: 0 }
-  const spread = place === "pileIn" ? 2.2 : 1.3
-  const angle = slot * 2.39996 // golden angle
-  const radius = spread * Math.sqrt(slot)
-  return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius }
-}
-
-function keyPoint([, place, slot]) {
-  const base = places[place]
-  if (!base) throw new Error(`unknown place ${place}`)
-  const offset = slotOffset(slot, place)
-  return { x: base.x + offset.x, y: base.y + offset.y, z: base.z }
-}
-
-/** Position on a keyframe track at clip time `t` (ms): eased between keys. */
-function trackAt(track, t) {
-  const keys = track.map((key) => ({ t: ms(key[0]), ...keyPoint(key) }))
-  if (t <= keys[0].t) return keys[0]
-  for (let i = 0; i < keys.length - 1; i++) {
-    const a = keys[i]
-    const b = keys[i + 1]
-    if (t <= b.t) {
-      const f = b.t === a.t ? 1 : smooth((t - a.t) / (b.t - a.t))
-      // Height follows the path linearly: stairs, and the drop off the terrace.
-      const linear = b.t === a.t ? 1 : (t - a.t) / (b.t - a.t)
-      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, z: a.z + (b.z - a.z) * linear }
-    }
-  }
-  return keys[keys.length - 1]
 }
 
 const facingTo = (from, to) => Math.atan2(to.y - from.y, to.x - from.x)
@@ -112,17 +116,69 @@ annotations.roster.forEach((member, index) => {
 })
 const units = {}
 
-// Player tracks; anyone without keyframes stands at the planning spot.
-const tracks = new Map()
-for (const [name, guid] of playerByName) {
-  const track = keyframes[name]
-  if (!track) throw new Error(`no keyframes for ${name}`)
-  tracks.set(guid, track)
+// --- Player tracks from Internet Historian's map. ---
+// His clock: original video second = map second + offset (sync-ih-inset.py).
+const { offsetSeconds } = annotations.ihSync
+const [[a00, a01], [a10, a11], [b0, b1]] = ihFit.affine
+const toWorld = (px, py) => ({ x: px * a00 + py * a10 + b0, y: px * a01 + py * a11 + b1 })
+// His door notch sits ~10 yd west of the real gap: walk players through the gap.
+function throughDoor(point) {
+  const w = clamp((point.x - (DOOR.x - 5)) / 4, 0, 1)
+  return { x: point.x, y: point.y + w * (clamp(point.y, DOOR.minY, DOOR.maxY) - point.y) }
 }
-const deathMs = new Map(deaths.map((death) => [playerByName.get(death.name), ms(death.t)]))
+
+// A dot he draws dithered from some moment on, and never solid again, is a
+// death (85% of later samples dithered tolerates the odd missed frame).
+const ihDeaths = new Map()
+for (const name of playerByName.keys()) {
+  const flags = ihTracks.samples.map((sample) => sample.dithered.includes(name))
+  const index = flags.findIndex((flag, i) => flag && flags.slice(i).filter(Boolean).length / (flags.length - i) >= 0.85)
+  if (index >= 0) ihDeaths.set(name, ihTracks.samples[index].t + offsetSeconds)
+}
+
+/** Tracked, smoothed positions on SAMPLE_MS steps of clip time, or null before his map shows the player. */
+function ihTrack(name, slot) {
+  const raw = ihTracks.samples
+    .filter((sample) => sample.dots[name])
+    .map((sample) => ({ t: ms(sample.t + offsetSeconds), ...toWorld(sample.dots[name][0], sample.dots[name][1]) }))
+  // Centred moving average over +-2 samples (0.8 s) against tracking jitter.
+  const smoothed = raw.map((point, i) => {
+    const near = raw.slice(Math.max(0, i - 2), i + 3).filter((other) => Math.abs(other.t - point.t) <= 2 * 1000 / ihTracks.fps + 1)
+    return { t: point.t, x: near.reduce((sum, p) => sum + p.x, 0) / near.length, y: near.reduce((sum, p) => sum + p.y, 0) / near.length }
+  }).map((point) => ({ ...point, ...throughDoor(point) }))
+  // Before his map shows them, players wait in the hall and walk in through the door.
+  const first = smoothed[0]
+  const offset = { x: (slot % 3) * 1.6, y: (Math.floor(slot / 3) - 2) * 1.6 }
+  const keys = [
+    { t: 0, x: HALL.x + offset.x, y: HALL.y + offset.y },
+    { t: Math.max(1, first.t - 1600), x: HALL.x + offset.x, y: HALL.y + offset.y },
+    { t: Math.max(2, first.t - 600), x: DOOR.x + 1, y: (DOOR.minY + DOOR.maxY) / 2 + offset.y / 3 },
+    ...smoothed,
+  ]
+  return (t) => {
+    if (t <= keys[0].t) return { ...keys[0], z: unitZ(keys[0].x, keys[0].y) }
+    for (let i = 0; i < keys.length - 1; i++) {
+      const from = keys[i]
+      const to = keys[i + 1]
+      if (t <= to.t) {
+        const f = to.t === from.t ? 1 : (t - from.t) / (to.t - from.t)
+        const x = from.x + (to.x - from.x) * f
+        const y = from.y + (to.y - from.y) * f
+        return { x, y, z: unitZ(x, y) }
+      }
+    }
+    const last = keys[keys.length - 1]
+    return { ...last, z: unitZ(last.x, last.y) }
+  }
+}
+
+const tracks = new Map()
+let slot = 0
+for (const [name, guid] of playerByName) tracks.set(guid, ihTrack(name, slot++))
+const deathMs = new Map([...ihDeaths].map(([name, seconds]) => [playerByName.get(name), ms(seconds)]))
 const playerAt = (guid, t) => {
   const dead = deathMs.get(guid)
-  return trackAt(tracks.get(guid), dead !== undefined ? Math.min(t, dead) : t)
+  return tracks.get(guid)(dead !== undefined ? Math.min(t, dead) : t)
 }
 
 const events = []
@@ -135,7 +191,7 @@ const eggs = spawns.eggs
 
 // --- Whelps: each wave hatches the unhatched eggs nearest its anchor. ---
 const whelpList = []
-const anchorAt = (near, t) => playerByName.has(near) ? playerAt(playerByName.get(near), t) : places[near]
+const anchorAt = (near, t) => playerAt(playerByName.get(near), t)
 const pileGuids = [...playerByName.values()]
 for (const wave of whelps.waves) {
   const t = ms(wave.t)
@@ -184,11 +240,12 @@ function whelpAt(whelp, t) {
     const f = Math.sin(((t - fearMs) / FEAR_MS) * Math.PI)
     point = { x: point.x + Math.cos(away) * 9 * f, y: point.y + Math.sin(away) * 9 * f }
   }
-  return { ...point, z: FLOOR_Z }
+  return { ...point, z: unitZ(point.x, point.y) }
 }
 
 // --- Position rows. ---
-const positionRow = (guid, t, point, facing) => push(["p", t, g(guid), round(point.x), round(point.y), round(point.z ?? FLOOR_Z), MAP_ID, round(normalizeFacing(facing), 3)])
+const positionRow = (guid, t, point, facing) => push(["p", t, g(guid), round(point.x), round(point.y), round(point.z ?? unitZ(point.x, point.y)), MAP_ID, round(normalizeFacing(facing), 3)])
+const lastFacing = new Map()
 for (let t = 0; t <= durationMs; t += SAMPLE_MS) {
   for (const guid of playerByName.values()) {
     const dead = deathMs.get(guid)
@@ -196,8 +253,10 @@ for (let t = 0; t <= durationMs; t += SAMPLE_MS) {
     const now = playerAt(guid, t)
     const next = playerAt(guid, t + SAMPLE_MS)
     const moving = Math.hypot(next.x - now.x, next.y - now.y) > 0.05
-    // Standing players face the Rookery (south) until it is full of whelps.
-    positionRow(guid, t, now, moving ? facingTo(now, next) : Math.PI)
+    // Players face where they walk; standing, they keep their last heading.
+    const heading = moving ? facingTo(now, next) : lastFacing.get(guid) ?? Math.PI
+    lastFacing.set(guid, heading)
+    positionRow(guid, t, now, heading)
   }
   for (const egg of eggs) {
     // An unhatched egg's single sample at the pull keeps it on the floor.
@@ -212,7 +271,7 @@ for (let t = 0; t <= durationMs; t += SAMPLE_MS) {
   }
 }
 
-// --- Health: observed death times; the curves between are illustrative. ---
+// --- Health: his death times; the curves between are illustrative. ---
 const PLAYER_HEALTH = { WARRIOR: 5200, PALADIN: 4800, ROGUE: 3600, HUNTER: 3800, DRUID: 3700, PRIEST: 3300, MAGE: 3200, WARLOCK: 3600 }
 const healthFraction = (guid, name, t) => {
   const dead = deathMs.get(guid)

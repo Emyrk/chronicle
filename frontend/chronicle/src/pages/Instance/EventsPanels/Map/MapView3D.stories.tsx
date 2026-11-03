@@ -18,7 +18,7 @@ import type { WoWSpell } from "@/api/wowdb";
 import type { WowMapInstance, WowMapManifest, WowMapMeshInstance } from "@/pages/Technical/mapGallery";
 import type { PanelContext } from "../types";
 import { fetchUnitModelUrls, type PublishedUnitModelUrls } from "./bossMinis";
-import { dungeonMeshLiquid, dungeonMeshUrl, placeableDungeonMesh } from "./dungeonMeshes";
+import { dungeonMeshLiquid, dungeonMeshUrl, replayDungeonMesh } from "./dungeonMeshes";
 import type { MapHealthSample, MapPositionSample, MapResult } from "./map.processor";
 import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt, renderedDungeonMapPoint, selectHealthBars, unitFocusBounds, type MapPoint } from "./mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
@@ -1447,10 +1447,14 @@ function usePublishedLeeroyMesh(): { ready: boolean; mesh: WowMapMeshInstance | 
   useEffect(() => {
     let cancelled = false;
     fetchMapManifest(leeroyRookery.instance.iconBaseUrl)
-      .then((manifest) => manifest.instances?.find((instance) => instance.mapID === leeroyRookery.encounter.mapId)?.mesh ?? null)
+      .then((manifest) => {
+        const instance = manifest.instances?.find((candidate) => candidate.mapID === leeroyRookery.encounter.mapId);
+        // Published per floor (map 229 is one floor), or at instance level.
+        return instance ? replayDungeonMesh(instance, instance.floors[0]) : null;
+      })
       .catch(() => null)
       .then((mesh) => {
-        if (!cancelled) setState({ ready: true, mesh: placeableDungeonMesh(mesh ?? undefined) });
+        if (!cancelled) setState({ ready: true, mesh });
       });
     return () => {
       cancelled = true;
@@ -1503,8 +1507,11 @@ function LeeroyScene({ video, scriptedCamera, mesh }: { video: boolean; scripted
               </button>
             )}
             <span>
+              Positions per{" "}
+              <a href="https://youtu.be/IAOLAw0k2DU" target="_blank" rel="noreferrer" className="underline hover:text-white">Internet Historian&apos;s map (2017)</a>
+              , fan approximation.{" "}
               {mesh ? "On the map 229 mesh." : "Flat placeholder floor until the map 229 mesh is published."}
-              {" "}Positions are hand keyframes from the video; see scripts/leeroy/README.md.
+              {" "}See scripts/leeroy/README.md.
             </span>
           </div>
         </div>
@@ -2045,13 +2052,14 @@ export const HakkarRealPlayer: Story = {
  * the units stand on an empty ground.
  */
 /**
- * Leeroy Jenkins charges into the Rookery (Upper Blackrock Spire): the raid in
- * the Hall of Binding, the run through the door, whelps hatching from the real
- * egg spawns, and the recorder's party dying at the times its frames show. The
- * guild's YouTube upload plays in the draggable picture-in-picture and drives
- * the replay; its seek bar scrubs both. Positions are hand keyframes from
- * frame annotations, not a camera solve (map 229 has no mesh yet); see
- * scripts/leeroy/README.md for what is observed, inferred and illustrative.
+ * Leeroy Jenkins runs into the Rookery (Upper Blackrock Spire) alone, the raid
+ * pours in after him, whelps hatch from the real egg spawns, and the run ends
+ * in the wipe. Player positions and deaths are per Internet Historian's map
+ * (2017), fan approximation: the dots of his "Leeroy Jenkins | Map of the
+ * Players" (https://youtu.be/IAOLAw0k2DU) tracked frame by frame and mapped onto
+ * the real Rookery. The guild's YouTube upload plays in the draggable
+ * picture-in-picture and drives the replay; its seek bar scrubs both. See
+ * scripts/leeroy/README.md for what is observed, his, and illustrative.
  */
 export const Leeroy: Story = {
   render: () => <LeeroyReplay video scriptedCamera />,

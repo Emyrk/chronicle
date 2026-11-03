@@ -41,6 +41,8 @@ from a log on octo.chronicleclassic.com.
 ## Leeroy Jenkins replay (`leeroy/`)
 
 The `Instance/Map/MapView3D/Leeroy` story replays a reconstruction of the 2005
-video from `fixtures/leeroyRookery.json`, built by `leeroy/build-fixture.mjs`
-from frame annotations and real Rookery egg spawns. See `leeroy/README.md` for
-what is observed, what is hand-placed, and how to rebuild it.
+video from `fixtures/leeroyRookery.json`, built by `leeroy/build-fixture.mjs`.
+Player positions are per Internet Historian's map (2017), fan approximation:
+his "Leeroy Jenkins | Map of the Players" (https://youtu.be/IAOLAw0k2DU),
+tracked and mapped onto the real Rookery. Eggs are real spawns. See
+`leeroy/README.md` for what is observed, what is his, and how to rebuild it.

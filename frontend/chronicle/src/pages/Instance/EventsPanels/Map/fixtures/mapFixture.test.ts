@@ -53,18 +53,22 @@ describe("loadMapFixture", () => {
     const guidOf = (name: string) => Object.entries(leeroyRookery.players).find(([, player]) => player.name === name)?.[0];
     const unitsNamed = (name: string) => Object.entries(leeroyRookery.units).filter(([, unit]) => unit.name === name).map(([guid]) => guid);
 
-    expect(endMs - startMs).toBe(52_000);
+    expect(endMs - startMs).toBe(86_000);
     expect(Object.keys(props.context.instance.players ?? {})).toHaveLength(13);
     // Every unhatched egg and every whelp stands on the map from the pull.
     const eggs = unitsNamed("Rookery Egg");
     const whelps = unitsNamed("Rookery Whelp");
     expect(eggs.length + whelps.length).toBe(198);
     for (const guid of [...eggs, ...whelps]) expect(encounter?.positionsByUnit.get(guid)?.[0]?.timestampMs).toBe(startMs);
-    // Jamaal dies at video 2:12 (44 s into the clip), as the party frames show.
-    const jamaal = encounter?.healthByUnit.get(guidOf("Jamaal")!);
-    expect(jamaal?.at(-1)).toMatchObject({ timestampMs: startMs + 44_000, current: 0 });
-    // The video sync maps 1:28 to the clip's first log second.
-    expect(LEEROY_VIDEO_TIMESTAMPS[0]).toMatchObject({ video_time_seconds: 88, utc_time: leeroyRookery.encounter.startTime.slice(11, 19) });
+    // Internet Historian's map draws Basphemy dead at video 2:10.5 (46.5 s into the clip).
+    const basphemy = encounter?.healthByUnit.get(guidOf("Basphemy")!);
+    expect(basphemy?.at(-1)).toMatchObject({ timestampMs: startMs + 46_500, current: 0 });
+    // Leeroy is alone in the Rookery before the raid follows.
+    const leeroy = encounter?.positionsByUnit.get(guidOf("Leeroy")!);
+    const atNinety = leeroy?.find((sample) => sample.timestampMs === startMs + 6_000);
+    expect(atNinety?.x).toBeLessThan(105);
+    // The video sync maps 1:24 to the clip's first log second.
+    expect(LEEROY_VIDEO_TIMESTAMPS[0]).toMatchObject({ video_time_seconds: 84, utc_time: leeroyRookery.encounter.startTime.slice(11, 19) });
   });
 
   it("selects the five players when asked", () => {
