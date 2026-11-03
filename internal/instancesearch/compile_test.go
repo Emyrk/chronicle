@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/internal/instancesearch"
 )
 
@@ -88,6 +89,31 @@ func TestFieldReference(t *testing.T) {
 	want, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, string(want), got, "run go test ./internal/instancesearch -run TestFieldReference -update")
+}
+
+func TestDescribe(t *testing.T) {
+	t.Parallel()
+
+	d := instancesearch.Describe()
+	require.NotEmpty(t, d.Fields)
+	byName := map[string]chroniclesdk.InstanceSearchField{}
+	for _, f := range d.Fields {
+		byName[f.Name] = f
+	}
+	name := byName["instance.name"]
+	require.True(t, name.Anonymous)
+	require.Equal(t, chroniclesdk.InstanceSearchFieldScopeInstance, name.Scope)
+	require.Contains(t, name.Ops, instancesearch.OpContains)
+
+	role := byName["player.role"]
+	require.False(t, role.Anonymous)
+	require.Equal(t, chroniclesdk.InstanceSearchFieldScopePlayer, role.Scope)
+	require.Equal(t, []string{"dps", "heal", "tank"}, role.Enum)
+	require.True(t, role.On)
+	require.True(t, role.Bosses)
+
+	require.Equal(t, 15, byName["player.parse"].Cost)
+	require.Equal(t, chroniclesdk.InstanceSearchFieldScopeEncounter, byName["encounter.outcome"].Scope)
 }
 
 func TestCompileEnumsAreCanonicalized(t *testing.T) {

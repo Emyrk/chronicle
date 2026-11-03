@@ -275,6 +275,14 @@ func (api *API) InstanceSearchLimit(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// InstanceSearchFields describes the searchable fields and limits so UIs can
+// build queries without duplicating the registry.
+//
+//	GET /api/v1/raidlogs/search/fields
+func (api *API) InstanceSearchFields(w http.ResponseWriter, r *http.Request) {
+	httpapi.Write(r.Context(), w, http.StatusOK, instancesearch.Describe())
+}
+
 // instanceSearchClientIP returns the client IP, preferring the first
 // X-Forwarded-For hop set by the Railway proxy.
 func instanceSearchClientIP(r *http.Request) string {
