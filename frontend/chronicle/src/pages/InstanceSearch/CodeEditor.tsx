@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronRight, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CelCode } from "./CelCode";
 import { lineCol } from "./celParser";
 
 export interface CodeParseState {
@@ -42,32 +43,55 @@ export function CodeEditor({
   const [showHelp, setShowHelp] = useState(false);
   const rows = Math.min(20, Math.max(6, value.split("\n").length + 1));
   const pos = parse.error ? lineCol(value, parse.error.offset) : null;
+  const highlight = useRef<HTMLPreElement>(null);
 
+  // The textarea's text is transparent; the coloured copy sits underneath in
+  // the same box, font and wrapping, and follows its scroll. Typing,
+  // selection, undo and paste stay the textarea's own.
+  const shared = "px-3 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words styled-scrollbar [scrollbar-gutter:stable]";
   return (
     <div className="space-y-2">
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !parse.error) {
-            e.preventDefault();
-            onSubmit();
-          }
-        }}
-        disabled={disabled}
-        rows={rows}
-        spellCheck={false}
-        autoCapitalize="off"
-        autoCorrect="off"
-        placeholder={`players.filter(p, p.class == "PRIEST").size() >= 3\n&& instance.name.contains("molten")`}
-        aria-label="Search query"
-        aria-invalid={parse.error ? true : undefined}
+      <div
         className={cn(
-          "w-full rounded-md border bg-zinc-950/60 px-3 py-2 font-mono text-xs leading-relaxed text-zinc-100 outline-none styled-scrollbar resize-y",
-          parse.error ? "border-red-500/50 focus:border-red-400" : "border-border focus:border-zinc-500",
+          "relative rounded-md border bg-zinc-950/60",
+          parse.error ? "border-red-500/50 focus-within:border-red-400" : "border-border focus-within:border-zinc-500",
           disabled && "opacity-60",
         )}
-      />
+      >
+        <pre ref={highlight} aria-hidden="true" className={cn("pointer-events-none absolute inset-0 m-0 overflow-hidden", shared)}>
+          <CelCode code={value} errorOffset={parse.error?.offset} />
+          {/* A trailing newline needs a character after it to take up a line. */}
+          {"\n "}
+        </pre>
+        <textarea
+          value={value}
+          onScroll={(e) => {
+            if (highlight.current) {
+              highlight.current.scrollTop = e.currentTarget.scrollTop;
+              highlight.current.scrollLeft = e.currentTarget.scrollLeft;
+            }
+          }}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !parse.error) {
+              e.preventDefault();
+              onSubmit();
+            }
+          }}
+          disabled={disabled}
+          rows={rows}
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          placeholder={`players.filter(p, p.class == "PRIEST").size() >= 3\n&& instance.name.contains("molten")`}
+          aria-label="Search query"
+          aria-invalid={parse.error ? true : undefined}
+          className={cn(
+            "relative block w-full resize-y bg-transparent text-transparent caret-zinc-100 outline-none placeholder:text-zinc-600 selection:bg-sky-500/30 selection:text-transparent",
+            shared,
+          )}
+        />
+      </div>
       <div className="flex items-center justify-between gap-2 flex-wrap text-2xs">
         {parse.error && pos ? (
           <span className="inline-flex items-center gap-1 text-red-300">
@@ -91,7 +115,9 @@ export function CodeEditor({
             <tbody>
               {CHEATSHEET.map(([code, note]) => (
                 <tr key={code}>
-                  <td className="pr-4 py-0.5 font-mono text-zinc-200 whitespace-nowrap">{code}</td>
+                  <td className="pr-4 py-0.5 font-mono whitespace-nowrap">
+                    <CelCode code={code} />
+                  </td>
                   <td className="py-0.5 text-muted-foreground whitespace-nowrap">{note}</td>
                 </tr>
               ))}
