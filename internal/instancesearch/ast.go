@@ -45,6 +45,9 @@ const (
 	OpIn    = chroniclesdk.InstanceSearchOpIn
 	OpNotIn = chroniclesdk.InstanceSearchOpNotIn
 
+	OpContains   = chroniclesdk.InstanceSearchOpContains
+	OpStartsWith = chroniclesdk.InstanceSearchOpStartsWith
+
 	MatchAny  = chroniclesdk.InstanceSearchMatchAny
 	MatchEach = chroniclesdk.InstanceSearchMatchEach
 

@@ -1,0 +1,19 @@
+{
+  "description": "Partial, case-insensitive names: any zone containing \"molten\" by a guild whose name starts with \"alp\".",
+  "query": {
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "contains",
+          "value": "molten"
+        },
+        {
+          "field": "instance.guild",
+          "op": "starts_with",
+          "value": "alp"
+        }
+      ]
+    }
+  }
+}

@@ -313,7 +313,15 @@ func TestSearch(t *testing.T) {
 				{"field": "instance.capability", "op": "=", "value": "Unit-Position"}]}`, mc1},
 			// The same boss in two cases counts once for match each.
 			{"EachDedupesBossCase", `{"field": "instance.kill_time_ms", "op": "<=", "value": 120000, "bosses": ["Ragnaros", "RAGNAROS"], "match": "each"}`, mc1},
-			{"TankRole",`{"any_player": {"field": "player.role", "op": "=", "value": "tank"}}`, []uuid.UUID{f.mc1, f.mc2}},
+			{"NameContains", `{"field": "instance.name", "op": "contains", "value": "molten"}`, []uuid.UUID{f.mc1, f.mc2}},
+			{"NameContainsMiddle", `{"field": "instance.name", "op": "contains", "value": "TEN co"}`, []uuid.UUID{f.mc1, f.mc2}},
+			{"NameStartsWith", `{"field": "instance.name", "op": "starts_with", "value": "Molt"}`, []uuid.UUID{f.mc1, f.mc2}},
+			{"NameStartsWithMiss", `{"field": "instance.name", "op": "starts_with", "value": "core"}`, nil},
+			{"NameExactStillExact", `{"field": "instance.name", "op": "=", "value": "molten"}`, nil},
+			// % and _ are literal, not LIKE wildcards.
+			{"ContainsWildcardIsLiteral", `{"field": "instance.name", "op": "contains", "value": "%"}`, nil},
+			{"PlayerNameContains", `{"any_player": {"field": "player.name", "op": "contains", "value": "cat"}}`, mc1},
+			{"TankRole", `{"any_player": {"field": "player.role", "op": "=", "value": "tank"}}`, []uuid.UUID{f.mc1, f.mc2}},
 			{"RagKillWithoutWipes", `{"and": [
 				{"any_encounter": {"and": [{"field": "encounter.name", "op": "=", "value": "Ragnaros"}, {"field": "encounter.killed", "op": "=", "value": true}]}},
 				{"not": {"any_encounter": {"and": [{"field": "encounter.name", "op": "=", "value": "Ragnaros"}, {"field": "encounter.outcome", "op": "=", "value": "wipe"}]}}}]}`, mc1},

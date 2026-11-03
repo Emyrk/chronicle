@@ -2617,9 +2617,9 @@ export type InstanceSearchOn = "any" | "bosses" | "trash";
 export const InstanceSearchOns: InstanceSearchOn[] = ["any", "bosses", "trash"];
 
 // From chroniclesdk/instance_search.go
-export type InstanceSearchOp = "=" | ">" | ">=" | "in" | "<" | "<=" | "!=" | "not_in";
+export type InstanceSearchOp = "contains" | "=" | ">" | ">=" | "in" | "<" | "<=" | "!=" | "not_in" | "starts_with";
 
-export const InstanceSearchOps: InstanceSearchOp[] = ["=", ">", ">=", "in", "<", "<=", "!=", "not_in"];
+export const InstanceSearchOps: InstanceSearchOp[] = ["contains", "=", ">", ">=", "in", "<", "<=", "!=", "not_in", "starts_with"];
 
 // From chroniclesdk/instance_search.go
 export type InstanceSearchParseScope = "guild" | "realm" | "server";

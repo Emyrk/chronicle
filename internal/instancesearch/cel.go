@@ -111,6 +111,10 @@ func celPredicate(n *Node, v string) string {
 		return fmt.Sprintf("%s in %s", name, value)
 	case OpNotIn:
 		return fmt.Sprintf("!(%s in %s)", name, value)
+	case OpContains:
+		return fmt.Sprintf("%s.contains(%s)", name, value)
+	case OpStartsWith:
+		return fmt.Sprintf("%s.startsWith(%s)", name, value)
 	default:
 		return fmt.Sprintf("%s %s %s", name, celOp(n.Op), value)
 	}

@@ -47,6 +47,8 @@ func (t valueType) ops() []Op {
 		return []Op{OpEq, OpNe, OpLt, OpLte, OpGt, OpGte}
 	case typeBool:
 		return []Op{OpEq, OpNe}
+	case typeString:
+		return []Op{OpEq, OpNe, OpIn, OpNotIn, OpContains, OpStartsWith}
 	default:
 		return []Op{OpEq, OpNe, OpIn, OpNotIn}
 	}
@@ -102,6 +104,11 @@ func (c *compiler) cmp(expr string, p pred) string {
 			return fmt.Sprintf("lower(%s) = ANY(%s)", expr, lowerArray(c.arg(p.value)))
 		case OpNotIn:
 			return fmt.Sprintf("NOT (lower(%s) = ANY(%s))", expr, lowerArray(c.arg(p.value)))
+		case OpContains:
+			// strpos, not LIKE, so % and _ in user input are literal.
+			return fmt.Sprintf("strpos(lower(%s), lower(%s::text)) > 0", expr, c.arg(p.value))
+		case OpStartsWith:
+			return fmt.Sprintf("starts_with(lower(%s), lower(%s::text))", expr, c.arg(p.value))
 		default:
 			return fmt.Sprintf("lower(%s) %s lower(%s::text)", expr, sqlOp(p.op), c.arg(p.value))
 		}
@@ -177,6 +184,10 @@ func (c *compiler) parsePred(f *field, n *Node, path string) (pred, error) {
 		v, err := decodeScalar(f, value)
 		if err != nil {
 			return p, &Error{Path: path + ".value", Message: err.Error()}
+		}
+		if (n.Op == OpContains || n.Op == OpStartsWith) && strings.TrimSpace(v.(string)) == "" {
+			// An empty substring would match everything.
+			return p, &Error{Path: path + ".value", Message: "must not be empty"}
 		}
 		p.value = v
 	}

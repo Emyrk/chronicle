@@ -89,6 +89,12 @@ const (
 	InstanceSearchOpGte   InstanceSearchOp = ">="
 	InstanceSearchOpIn    InstanceSearchOp = "in"
 	InstanceSearchOpNotIn InstanceSearchOp = "not_in"
+	// InstanceSearchOpContains matches text fields containing the value,
+	// ignoring case ("molten" matches "Molten Core").
+	InstanceSearchOpContains InstanceSearchOp = "contains"
+	// InstanceSearchOpStartsWith matches text fields starting with the value,
+	// ignoring case.
+	InstanceSearchOpStartsWith InstanceSearchOp = "starts_with"
 )
 
 type InstanceSearchMatch string
