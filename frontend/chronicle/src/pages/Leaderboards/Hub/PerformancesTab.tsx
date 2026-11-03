@@ -1,4 +1,5 @@
 import { Timer } from "lucide-react"
+import type { RankingsLeaderboardResponse } from "@/api/typesGenerated"
 import { CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { RankingsTable } from "@/pages/Rankings/RankingsTable"
 import type { RatingScope } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
@@ -17,6 +18,7 @@ export function PerformancesTab({
   bosses,
   where,
   onSpeedruns,
+  live,
 }: {
   instanceName: string
   scope: RatingScope
@@ -26,6 +28,8 @@ export function PerformancesTab({
   bosses: readonly string[]
   where: string
   onSpeedruns: () => void
+  /** When provided, use only parent-loaded API results, never story fixtures. */
+  live?: { response?: RankingsLeaderboardResponse; loading?: boolean; error?: Error | null }
 }) {
   if (subject === "guilds") {
     // A guild's single best performance is its run time, which the Speedruns tab ranks.
@@ -59,7 +63,15 @@ export function PerformancesTab({
           {who} · {scope.boss ? "one kill each" : "best single kill on any boss"}
         </span>
       </div>
-      <RankingsTable entries={performanceEntries(scope, role, instanceName, bosses)} metric={metric} />
+      {live?.error ? (
+        <div role="alert" className="rounded-xl border p-8 text-center text-muted-foreground">Could not load performances: {live.error.message}</div>
+      ) : (
+        <RankingsTable
+          entries={live ? (live.response?.entries.map((entry, i) => ({ ...entry, rank: i + 1 })) ?? []) : performanceEntries(scope, role, instanceName, bosses)}
+          metric={metric}
+          loading={live ? (live.loading || !live.response) : undefined}
+        />
+      )}
     </div>
   )
 }

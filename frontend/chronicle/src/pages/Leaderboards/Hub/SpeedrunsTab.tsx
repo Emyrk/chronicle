@@ -1,4 +1,5 @@
 import { Users } from "lucide-react"
+import type { SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
 import { Podium } from "@/pages/Leaderboard/Podium"
 import { formatClock, speedruns } from "./hub.fixtures"
 import type { EncounterSelection } from "./encounterSelection"
@@ -11,14 +12,21 @@ export function SpeedrunsTab({
   instanceName,
   bosses,
   selection,
+  live,
 }: {
   instanceName: string
   bosses: readonly string[]
   selection: EncounterSelection
+  /** When provided, use only parent-loaded API results, never story fixtures. */
+  live?: { entries?: readonly SpeedrunLeaderboardEntry[]; loading?: boolean; error?: Error | null }
 }) {
   const set = selection.kind === "bosses" ? selection.bosses : undefined
-  const runs = speedruns(set, bosses, instanceName)
+  const runs = live ? (live.entries ?? []) : speedruns(set, bosses, instanceName)
   const what = !set ? "Fastest full clears" : set.length === 1 ? `Fastest ${set[0]} kills` : `Fastest total kill time · ${set.length} bosses`
+  if (live?.error) return <div role="alert" className="rounded-xl border bg-card p-8 text-center text-muted-foreground">Could not load speedruns: {live.error.message}</div>
+  if (live && (live.loading || !live.entries)) return <div role="status" className="rounded-xl border bg-card p-8 text-center text-muted-foreground">Loading speedruns…</div>
+  if (live && runs.length === 0) return <div className="rounded-xl border bg-card p-8 text-center text-muted-foreground">No speedruns found for the current filters.</div>
+
   return (
     <div className="space-y-5">
       <section className="relative overflow-hidden rounded-xl border bg-card px-4 pt-10">
