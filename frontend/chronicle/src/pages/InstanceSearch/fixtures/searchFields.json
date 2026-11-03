@@ -106,7 +106,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "doc": "When the run started (upload time if unknown). RFC 3339.",
       "bosses": false,
@@ -146,7 +147,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "doc": "Declared raid size (0 when unknown).",
       "bosses": false,
@@ -251,7 +253,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "doc": "Number of distinct players in the run.",
       "bosses": false,
@@ -271,7 +274,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "doc": "Number of distinct bosses killed (clean or partial).",
       "bosses": false,
@@ -291,7 +295,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "doc": "Total wipes in the run (overview metrics).",
       "bosses": false,
@@ -311,7 +316,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "doc": "Total player deaths in the run (overview metrics).",
       "bosses": false,
@@ -331,7 +337,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "unit": "ms",
       "doc": "Ranked full-clear time. Only full clears have one.",
@@ -368,7 +375,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "unit": "ms",
       "doc": "Time inside the clear spent fighting bosses. Full clears only.",
@@ -389,7 +397,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "unit": "ms",
       "doc": "Time inside the clear spent fighting trash (non-boss fights). Full clears only.",
@@ -410,7 +419,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "unit": "ms",
       "doc": "Time inside the clear spent out of combat. Full clears only.",
@@ -431,7 +441,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "unit": "0-100",
       "doc": "Clear-time parse (higher is faster).",
@@ -452,7 +463,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "unit": "0-100",
       "doc": "Boss kill-time parse (higher is faster) on any / each of the bosses.",
@@ -473,7 +485,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "unit": "ms",
       "doc": "Boss kill duration (clean or partial kills) on any / each of the bosses.",
@@ -570,7 +583,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "unit": "ms",
       "doc": "Pull duration.",
@@ -591,7 +605,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "unit": "0-100",
       "doc": "Kill-time parse for this kill.",
@@ -715,7 +730,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "doc": "Level.",
       "bosses": false,
@@ -836,7 +852,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "doc": "DPS in a fight.",
       "bosses": true,
@@ -856,7 +873,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "doc": "HPS in a fight.",
       "bosses": true,
@@ -876,7 +894,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "doc": "Deaths in a fight. Wipes are not counted.",
       "bosses": true,
@@ -896,7 +915,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "doc": "Average item level in a fight.",
       "bosses": true,
@@ -916,7 +936,8 @@
         "\u003c",
         "\u003c=",
         "\u003e",
-        "\u003e="
+        "\u003e=",
+        "between"
       ],
       "unit": "0-100",
       "doc": "Player parse on a boss kill (latest stored score per boss).",

@@ -125,6 +125,46 @@ func (s *instanceSearch) peekHeaders(ctx context.Context, w http.ResponseWriter,
 	ratelimit.SetHeaders(w, st)
 }
 
+// admit spends cost tokens from the caller's bucket and takes a concurrency
+// slot. When it returns false it has already written the response. Call
+// release when the query is done.
+func (s *instanceSearch) admit(ctx context.Context, w http.ResponseWriter, c searchCaller, cost int, observe func(string)) (release func(), ok bool) {
+	res, err := c.limiter.Take(ctx, c.subject, float64(cost))
+	if err != nil {
+		observe("error")
+		s.logger.Error("instance search rate limit", slog.String("error", err.Error()))
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{Message: "Search is unavailable right now."})
+		return nil, false
+	}
+	ratelimit.SetHeaders(w, res.Status)
+	if !res.Allowed {
+		observe("rate_limited")
+		ratelimit.SetRetryAfter(w, res)
+		msg := "You are searching too quickly. Try again shortly."
+		if float64(cost) > c.limiter.Limit().Burst {
+			msg = "This search is too complex. Remove some filters and try again."
+		}
+		httpapi.Write(ctx, w, http.StatusTooManyRequests, chroniclesdk.Response{Message: msg})
+		return nil, false
+	}
+
+	select {
+	case s.slots <- struct{}{}:
+		return func() { <-s.slots }, true
+	default:
+		observe("busy")
+		// The query never ran, so give the tokens back.
+		if st, err := c.limiter.Refund(ctx, c.subject, float64(cost)); err == nil {
+			ratelimit.SetHeaders(w, st)
+		} else {
+			s.logger.Error("instance search rate limit refund", slog.String("error", err.Error()))
+		}
+		w.Header().Set("Retry-After", "1")
+		httpapi.Write(ctx, w, http.StatusServiceUnavailable, chroniclesdk.Response{Message: "Search is busy. Try again in a moment."})
+		return nil, false
+	}
+}
+
 // InstanceSearch runs an advanced instance search.
 //
 //	POST /api/v1/raidlogs/search
@@ -183,40 +223,11 @@ func (api *API) InstanceSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	res, err := c.limiter.Take(ctx, c.subject, float64(compiled.Cost))
-	if err != nil {
-		observe("error")
-		s.logger.Error("instance search rate limit", slog.String("error", err.Error()))
-		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{Message: "Search is unavailable right now."})
+	release, ok := s.admit(ctx, w, c, compiled.Cost, observe)
+	if !ok {
 		return
 	}
-	ratelimit.SetHeaders(w, res.Status)
-	if !res.Allowed {
-		observe("rate_limited")
-		ratelimit.SetRetryAfter(w, res)
-		msg := "You are searching too quickly. Try again shortly."
-		if float64(compiled.Cost) > c.limiter.Limit().Burst {
-			msg = "This search is too complex. Remove some filters and try again."
-		}
-		httpapi.Write(ctx, w, http.StatusTooManyRequests, chroniclesdk.Response{Message: msg})
-		return
-	}
-
-	select {
-	case s.slots <- struct{}{}:
-		defer func() { <-s.slots }()
-	default:
-		observe("busy")
-		// The search never ran, so give the tokens back.
-		if st, err := c.limiter.Refund(ctx, c.subject, float64(compiled.Cost)); err == nil {
-			ratelimit.SetHeaders(w, st)
-		} else {
-			s.logger.Error("instance search rate limit refund", slog.String("error", err.Error()))
-		}
-		w.Header().Set("Retry-After", "1")
-		httpapi.Write(ctx, w, http.StatusServiceUnavailable, chroniclesdk.Response{Message: "Search is busy. Try again in a moment."})
-		return
-	}
+	defer release()
 
 	for _, f := range compiled.Fields {
 		s.metrics.fieldUses.WithLabelValues(f).Inc()
@@ -249,6 +260,92 @@ func (api *API) InstanceSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	observe("ok")
 	httpapi.Write(ctx, w, http.StatusOK, page)
+}
+
+// InstanceSearchExplain explains why one run does or does not match a
+// search: each condition's outcome with the run's actual values, and the
+// players or pulls that satisfied each player / pull condition.
+//
+//	POST /api/v1/raidlogs/search/explain
+//
+// It follows the same rules as InstanceSearch (anonymous subset, rate limit,
+// concurrency cap, timeout, tenant frame) and costs
+// instancesearch.ExplainCost of the search's cost. Runs the caller cannot
+// see are 404.
+func (api *API) InstanceSearchExplain(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	s := api.instanceSearch
+	start := time.Now()
+	c := s.caller(r)
+	observe := func(outcome string) {
+		s.metrics.duration.WithLabelValues("explain_"+outcome, c.kind).Observe(time.Since(start).Seconds())
+	}
+
+	var req chroniclesdk.InstanceSearchExplainRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, instanceSearchMaxBody)).Decode(&req); err != nil {
+		observe("invalid")
+		s.peekHeaders(ctx, w, c)
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Request body must be valid JSON.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	q := chroniclesdk.InstanceSearchQuery{Where: req.Query.Where}
+
+	compiled, err := instancesearch.CompileExplainForContext(ctx, q, req.InstanceID, instancesearch.Options{})
+	if err != nil {
+		observe("invalid")
+		s.peekHeaders(ctx, w, c)
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Invalid search.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	w.Header().Set(InstanceSearchCostHeader, strconv.Itoa(compiled.Cost))
+
+	if !c.loggedIn {
+		if err := instancesearch.CheckAnonymous(q); err != nil {
+			observe("login_required")
+			s.peekHeaders(ctx, w, c)
+			httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
+				Message: "Log in to use advanced search.",
+				Detail:  err.Error(),
+			})
+			return
+		}
+	}
+
+	release, ok := s.admit(ctx, w, c, compiled.Cost, observe)
+	if !ok {
+		return
+	}
+	defer release()
+
+	ex, err := instancesearch.Explain(ctx, s.store, compiled, instancesearch.SearchOptions{})
+	switch {
+	case errors.Is(err, instancesearch.ErrNotFound):
+		observe("not_found")
+		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "Run not found."})
+		return
+	case errors.Is(err, instancesearch.ErrTimeout):
+		observe("timeout")
+		s.logger.Warn("slow instance search explain",
+			slog.String("caller", c.subject),
+			slog.String("instance_id", req.InstanceID.String()),
+			slog.String("query", instancesearch.FormatCEL(q.Where)),
+		)
+		httpapi.Write(ctx, w, http.StatusUnprocessableEntity, chroniclesdk.Response{Message: "Explaining this run took too long."})
+		return
+	case err != nil:
+		observe("error")
+		s.logger.Error("instance search explain", slog.String("error", err.Error()))
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{Message: "Explain failed."})
+		return
+	}
+	observe("ok")
+	httpapi.Write(ctx, w, http.StatusOK, ex)
 }
 
 // InstanceSearchLimit returns the caller's search rate-limit bucket without

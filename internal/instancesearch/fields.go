@@ -44,7 +44,7 @@ func (t valueType) sqlType() string {
 func (t valueType) ops() []Op {
 	switch t {
 	case typeInt, typeFloat, typeTime:
-		return []Op{OpEq, OpNe, OpLt, OpLte, OpGt, OpGte}
+		return []Op{OpEq, OpNe, OpLt, OpLte, OpGt, OpGte, OpBetween}
 	case typeBool:
 		return []Op{OpEq, OpNe}
 	case typeString:
@@ -76,7 +76,37 @@ type field struct {
 	// and clear-window math the most.
 	Cost int
 
+	// value says where the field's value comes from. The match condition is
+	// derived from it (see sql), and explain reads it to show the evidence.
+	value func(c *compiler, s scope, p pred) valueSQL
+	// compile overrides the derived condition for fields whose comparison is
+	// not "value op argument" (capabilities are a set).
 	compile func(c *compiler, s scope, p pred) string
+}
+
+// valueSQL is where a field's value comes from.
+type valueSQL struct {
+	// Expr is the value: a scalar expression in scope, or, when From is set,
+	// the value of one From row.
+	Expr string
+	// From is "<table> <alias> WHERE <correlation>" for fields read per boss
+	// or per fight; Name is the row's boss or fight name column. Conditions
+	// on these fields go through bossMatch.
+	From string
+	Name string
+}
+
+// sql compiles the field's match condition.
+func (f *field) sql(c *compiler, s scope, p pred) string {
+	if f.compile != nil {
+		return f.compile(c, s, p)
+	}
+	v := f.value(c, s, p)
+	cond := c.cmp(v.Expr, p)
+	if v.From == "" {
+		return cond
+	}
+	return c.bossMatch(p, v.From, v.Name, cond)
 }
 
 // pred is a validated predicate.
@@ -115,6 +145,9 @@ func (c *compiler) cmp(expr string, p pred) string {
 	}
 	cast := p.typ.sqlType()
 	switch p.op {
+	case OpBetween:
+		bounds := p.value.([]any)
+		return fmt.Sprintf("%s BETWEEN %s::%s AND %s::%s", expr, c.arg(bounds[0]), cast, c.arg(bounds[1]), cast)
 	case OpIn:
 		return fmt.Sprintf("%s = ANY(%s::%s[])", expr, c.arg(p.value), cast)
 	case OpNotIn:
@@ -180,6 +213,23 @@ func (c *compiler) parsePred(f *field, n *Node, path string) (pred, error) {
 			list = append(list, v.(string))
 		}
 		p.value = list
+	} else if n.Op == OpBetween {
+		var raw []json.RawMessage
+		if err := json.Unmarshal(value, &raw); err != nil || len(raw) != 2 {
+			return p, &Error{Path: path + ".value", Message: "must be [low, high] for between"}
+		}
+		bounds := make([]any, 2)
+		for i, r := range raw {
+			v, err := decodeScalar(f, r)
+			if err != nil {
+				return p, &Error{Path: fmt.Sprintf("%s.value[%d]", path, i), Message: err.Error()}
+			}
+			bounds[i] = v
+		}
+		if !ordered(bounds[0], bounds[1]) {
+			return p, &Error{Path: path + ".value", Message: "low must not be above high"}
+		}
+		p.value = bounds
 	} else {
 		v, err := decodeScalar(f, value)
 		if err != nil {
@@ -345,6 +395,20 @@ func decodeScalar(f *field, raw json.RawMessage) (any, error) {
 	return s, nil
 }
 
+// ordered reports lo <= hi for decoded between bounds (int64, float64 or
+// time.Time; the types match because both come from the same field).
+func ordered(lo, hi any) bool {
+	switch l := lo.(type) {
+	case int64:
+		return l <= hi.(int64)
+	case float64:
+		return l <= hi.(float64)
+	case time.Time:
+		return !l.After(hi.(time.Time))
+	}
+	return true
+}
+
 func joinOps(ops []Op) string {
 	s := make([]string, len(ops))
 	for i, op := range ops {
@@ -353,10 +417,10 @@ func joinOps(ops []Op) string {
 	return strings.Join(s, ", ")
 }
 
-// column compiles a plain comparison on a SQL expression in scope.
-func column(expr string) func(c *compiler, s scope, p pred) string {
-	return func(c *compiler, s scope, p pred) string {
-		return c.cmp(strings.ReplaceAll(expr, "{a}", s.alias), p)
+// column is a plain SQL expression in scope; {a} is the quantifier alias.
+func column(expr string) func(c *compiler, s scope, p pred) valueSQL {
+	return func(c *compiler, s scope, p pred) valueSQL {
+		return valueSQL{Expr: strings.ReplaceAll(expr, "{a}", s.alias)}
 	}
 }
 
@@ -387,10 +451,10 @@ func (c *compiler) rankingRows(s scope, on On) (from, alias string) {
 		alias, s.alias, fights), alias
 }
 
-func rankingField(col string) func(c *compiler, s scope, p pred) string {
-	return func(c *compiler, s scope, p pred) string {
+func rankingField(col string) func(c *compiler, s scope, p pred) valueSQL {
+	return func(c *compiler, s scope, p pred) valueSQL {
 		from, r := c.rankingRows(s, p.on)
-		return c.bossMatch(p, from, r+".encounter_name", c.cmp(r+"."+col, p))
+		return valueSQL{Expr: r + "." + col, From: from, Name: r + ".encounter_name"}
 	}
 }
 
@@ -398,8 +462,8 @@ func rankingField(col string) func(c *compiler, s scope, p pred) string {
 // window, the same way GuildSpeedrunHistory does: fights are clipped to the
 // window, overlapping pulls are merged (gaps and islands), boss = merged boss
 // fights, trash = merged all fights minus boss, idle = clear minus all fights.
-func clearParts(part string) func(c *compiler, s scope, p pred) string {
-	return func(c *compiler, s scope, p pred) string {
+func clearParts(part string) func(c *compiler, s scope, p pred) valueSQL {
+	return func(c *compiler, s scope, p pred) valueSQL {
 		sr := c.alias("sr")
 		var expr string
 		switch part {
@@ -440,7 +504,7 @@ func clearParts(part string) func(c *compiler, s scope, p pred) string {
       ) merged
     ) parts
     WHERE %[1]s.instance_id = li.id AND %[1]s.ranked_duration_ms > 0)`, sr, expr)
-		return c.cmp(sub, p)
+		return valueSQL{Expr: sub}
 	}
 }
 
@@ -463,31 +527,32 @@ var (
 var fields = []*field{
 	// ---- Instance scope -------------------------------------------------
 	{Name: "instance.name", Scope: scopeInstance, Type: typeString,
-		Doc:     "Zone name, e.g. \"Molten Core\".",
-		compile: column("COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name)")},
+		Doc:   "Zone name, e.g. \"Molten Core\".",
+		value: column("COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name)")},
 	{Name: "instance.realm", Scope: scopeInstance, Type: typeString,
-		Doc: "Realm name.", compile: column("wsr.name")},
+		Doc: "Realm name.", value: column("wsr.name")},
 	{Name: "instance.realm_id", Scope: scopeInstance, Type: typeUUID,
-		Doc: "Realm ID.", compile: column("li.realm_id")},
+		Doc: "Realm ID.", value: column("li.realm_id")},
 	{Name: "instance.guild", Scope: scopeInstance, Type: typeString,
-		Doc: "Name of the guild the run is attributed to. Runs without a guild never match.", compile: column("g.name")},
+		Doc: "Name of the guild the run is attributed to. Runs without a guild never match.", value: column("g.name")},
 	{Name: "instance.guild_id", Scope: scopeInstance, Type: typeUUID,
-		Doc: "ID of the guild the run is attributed to.", compile: column("li.guild_id")},
+		Doc: "ID of the guild the run is attributed to.", value: column("li.guild_id")},
 	{Name: "instance.started_at", Scope: scopeInstance, Type: typeTime,
-		Doc: "When the run started (upload time if unknown). RFC 3339.", compile: column("COALESCE(li.start_time, wlg.created_at)")},
+		Doc: "When the run started (upload time if unknown). RFC 3339.", value: column("COALESCE(li.start_time, wlg.created_at)")},
 	{Name: "instance.difficulty", Scope: scopeInstance, Type: typeString,
-		Doc: "Difficulty name, e.g. \"10 Player\". Empty on servers without difficulties.", compile: column("li.difficulty_name")},
+		Doc: "Difficulty name, e.g. \"10 Player\". Empty on servers without difficulties.", value: column("li.difficulty_name")},
 	{Name: "instance.max_players", Scope: scopeInstance, Type: typeInt,
-		Doc: "Declared raid size (0 when unknown).", compile: column("li.max_players")},
+		Doc: "Declared raid size (0 when unknown).", value: column("li.max_players")},
 	{Name: "instance.category", Scope: scopeInstance, Type: typeEnum, Enum: []string{"raid", "dungeon"},
-		Doc: "raid or dungeon.", compile: column("li.category")},
+		Doc: "raid or dungeon.", value: column("li.category")},
 	{Name: "instance.recorder", Scope: scopeInstance, Type: typeString,
-		Doc: "Name of the character that recorded the log.", compile: column("li.recorder_name")},
+		Doc: "Name of the character that recorded the log.", value: column("li.recorder_name")},
 	{Name: "instance.has_video", Cost: 2, Scope: scopeInstance, Type: typeBool,
-		Doc:     "A YouTube video is linked to the run.",
-		compile: column("EXISTS (SELECT 1 FROM log_instance_youtube_timestamped yt WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug)")},
+		Doc:   "A YouTube video is linked to the run.",
+		value: column("EXISTS (SELECT 1 FROM log_instance_youtube_timestamped yt WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug)")},
 	{Name: "instance.capability", Scope: scopeInstance, Type: typeEnum, Enum: capabilities,
-		Doc: "What the log recorded. `=` has it, `!=` lacks it, `in` has any of them, `not_in` has none of them. AND several `=` to require all.",
+		Doc:   "What the log recorded. `=` has it, `!=` lacks it, `in` has any of them, `not_in` has none of them. AND several `=` to require all.",
+		value: column("li.capabilities"),
 		compile: func(c *compiler, s scope, p pred) string {
 			switch p.op {
 			case OpIn:
@@ -501,114 +566,114 @@ var fields = []*field{
 			}
 		}},
 	{Name: "instance.player_count", Cost: 2, Scope: scopeInstance, Type: typeInt,
-		Doc:     "Number of distinct players in the run.",
-		compile: column("(SELECT count(DISTINCT lp.unit_guid) FROM log_instance_players lp WHERE lp.instance_id = li.id)")},
+		Doc:   "Number of distinct players in the run.",
+		value: column("(SELECT count(DISTINCT lp.unit_guid) FROM log_instance_players lp WHERE lp.instance_id = li.id)")},
 	{Name: "instance.bosses_killed", Cost: 2, Scope: scopeInstance, Type: typeInt,
-		Doc:     "Number of distinct bosses killed (clean or partial).",
-		compile: column("(SELECT count(DISTINCT bk.name) FROM log_instance_encounters bk WHERE bk.instance_id = li.id AND bk.boss AND bk.kill_type " + killedSQL + ")")},
+		Doc:   "Number of distinct bosses killed (clean or partial).",
+		value: column("(SELECT count(DISTINCT bk.name) FROM log_instance_encounters bk WHERE bk.instance_id = li.id AND bk.boss AND bk.kill_type " + killedSQL + ")")},
 	{Name: "instance.wipes", Cost: 2, Scope: scopeInstance, Type: typeInt,
-		Doc:     "Total wipes in the run (overview metrics).",
-		compile: column("(SELECT iom.wipe_count FROM instance_overview_metrics iom WHERE iom.instance_id = li.id)")},
+		Doc:   "Total wipes in the run (overview metrics).",
+		value: column("(SELECT iom.wipe_count FROM instance_overview_metrics iom WHERE iom.instance_id = li.id)")},
 	{Name: "instance.deaths", Cost: 2, Scope: scopeInstance, Type: typeInt,
-		Doc:     "Total player deaths in the run (overview metrics).",
-		compile: column("(SELECT iom.player_deaths FROM instance_overview_metrics iom WHERE iom.instance_id = li.id)")},
+		Doc:   "Total player deaths in the run (overview metrics).",
+		value: column("(SELECT iom.player_deaths FROM instance_overview_metrics iom WHERE iom.instance_id = li.id)")},
 	{Name: "instance.clear_time_ms", Cost: 2, Scope: scopeInstance, Type: typeInt, Unit: "ms",
-		Doc:     "Ranked full-clear time. Only full clears have one.",
-		compile: column("(SELECT sr.ranked_duration_ms FROM instance_speedruns sr WHERE sr.instance_id = li.id AND sr.ranked_duration_ms > 0)")},
+		Doc:   "Ranked full-clear time. Only full clears have one.",
+		value: column("(SELECT sr.ranked_duration_ms FROM instance_speedruns sr WHERE sr.instance_id = li.id AND sr.ranked_duration_ms > 0)")},
 	{Name: "instance.clear_qualified", Cost: 2, Scope: scopeInstance, Type: typeBool,
-		Doc:     "The clear qualifies for speedrun leaderboards.",
-		compile: column("(SELECT sr.qualified FROM instance_speedruns sr WHERE sr.instance_id = li.id)")},
+		Doc:   "The clear qualifies for speedrun leaderboards.",
+		value: column("(SELECT sr.qualified FROM instance_speedruns sr WHERE sr.instance_id = li.id)")},
 	{Name: "instance.boss_time_ms", Cost: 10, Scope: scopeInstance, Type: typeInt, Unit: "ms",
-		Doc: "Time inside the clear spent fighting bosses. Full clears only.", compile: clearParts("boss")},
+		Doc: "Time inside the clear spent fighting bosses. Full clears only.", value: clearParts("boss")},
 	{Name: "instance.trash_time_ms", Cost: 10, Scope: scopeInstance, Type: typeInt, Unit: "ms",
-		Doc: "Time inside the clear spent fighting trash (non-boss fights). Full clears only.", compile: clearParts("trash")},
+		Doc: "Time inside the clear spent fighting trash (non-boss fights). Full clears only.", value: clearParts("trash")},
 	{Name: "instance.idle_time_ms", Cost: 10, Scope: scopeInstance, Type: typeInt, Unit: "ms",
-		Doc: "Time inside the clear spent out of combat. Full clears only.", compile: clearParts("idle")},
+		Doc: "Time inside the clear spent out of combat. Full clears only.", value: clearParts("idle")},
 	{Name: "instance.clear_parse", Cost: 3, Scope: scopeInstance, Type: typeInt, Unit: "0-100", ParseScope: true,
 		Doc: "Clear-time parse (higher is faster).",
-		compile: func(c *compiler, s scope, p pred) string {
+		value: func(c *compiler, s scope, p pred) valueSQL {
 			tps := c.alias("tps")
 			col := fmt.Sprintf("%s.clear_%s", tps, p.parseScope)
-			return c.cmp(fmt.Sprintf("(SELECT %[1]s_display_score FROM time_parse_scores %[2]s WHERE %[3]s AND %[1]s_status %[4]s)",
-				col, tps, c.timeParseContract(tps), scoredStatusSQL), p)
+			return valueSQL{Expr: fmt.Sprintf("(SELECT %[1]s_display_score FROM time_parse_scores %[2]s WHERE %[3]s AND %[1]s_status %[4]s)",
+				col, tps, c.timeParseContract(tps), scoredStatusSQL)}
 		}},
 	{Name: "instance.kill_time_parse", Cost: 4, Scope: scopeInstance, Type: typeInt, Unit: "0-100", ParseScope: true, Bosses: true,
 		Doc: "Boss kill-time parse (higher is faster) on any / each of the bosses.",
-		compile: func(c *compiler, s scope, p pred) string {
+		value: func(c *compiler, s scope, p pred) valueSQL {
 			tps, tbs := c.alias("tps"), c.alias("tbs")
 			from := fmt.Sprintf("time_parse_scores %[1]s JOIN time_parse_boss_scores %[2]s ON %[2]s.time_parse_score_id = %[1]s.id WHERE %[3]s AND %[2]s.%[4]s_status %[5]s",
 				tps, tbs, c.timeParseContract(tps), p.parseScope, scoredStatusSQL)
-			return c.bossMatch(p, from, tbs+".encounter_name", c.cmp(fmt.Sprintf("%s.%s_display_score", tbs, p.parseScope), p))
+			return valueSQL{Expr: fmt.Sprintf("%s.%s_display_score", tbs, p.parseScope), From: from, Name: tbs + ".encounter_name"}
 		}},
 	{Name: "instance.kill_time_ms", Cost: 3, Scope: scopeInstance, Type: typeInt, Unit: "ms", Bosses: true,
 		Doc: "Boss kill duration (clean or partial kills) on any / each of the bosses.",
-		compile: func(c *compiler, s scope, p pred) string {
+		value: func(c *compiler, s scope, p pred) valueSQL {
 			e := c.alias("k")
 			from := fmt.Sprintf("log_instance_encounters %[1]s WHERE %[1]s.instance_id = li.id AND %[1]s.boss AND %[1]s.kill_type %[2]s", e, killedSQL)
-			return c.bossMatch(p, from, e+".name", c.cmp(durationMS(e), p))
+			return valueSQL{Expr: durationMS(e), From: from, Name: e + ".name"}
 		}},
 
 	// ---- Encounter scope (inside any_encounter / count_encounters) ------
 	{Name: "encounter.name", Scope: scopeEncounter, Type: typeString,
-		Doc: "Encounter name (boss name for boss fights).", compile: column("{a}.name")},
+		Doc: "Encounter name (boss name for boss fights).", value: column("{a}.name")},
 	{Name: "encounter.boss", Scope: scopeEncounter, Type: typeBool,
-		Doc: "The encounter is a boss fight.", compile: column("{a}.boss")},
+		Doc: "The encounter is a boss fight.", value: column("{a}.boss")},
 	{Name: "encounter.outcome", Scope: scopeEncounter, Type: typeEnum, Enum: outcomes,
-		Doc: "clean (kill), partial (kill with gaps), wipe or reset.", compile: column("{a}.kill_type::text")},
+		Doc: "clean (kill), partial (kill with gaps), wipe or reset.", value: column("{a}.kill_type::text")},
 	{Name: "encounter.killed", Scope: scopeEncounter, Type: typeBool,
-		Doc: "The encounter ended in a kill (clean or partial).", compile: column("({a}.kill_type " + killedSQL + ")")},
+		Doc: "The encounter ended in a kill (clean or partial).", value: column("({a}.kill_type " + killedSQL + ")")},
 	{Name: "encounter.duration_ms", Scope: scopeEncounter, Type: typeInt, Unit: "ms",
 		Doc: "Pull duration.",
-		compile: func(c *compiler, s scope, p pred) string {
-			return c.cmp(durationMS(s.alias), p)
+		value: func(c *compiler, s scope, p pred) valueSQL {
+			return valueSQL{Expr: durationMS(s.alias)}
 		}},
 	{Name: "encounter.kill_time_parse", Cost: 4, Scope: scopeEncounter, Type: typeInt, Unit: "0-100", ParseScope: true,
 		Doc: "Kill-time parse for this kill.",
-		compile: func(c *compiler, s scope, p pred) string {
+		value: func(c *compiler, s scope, p pred) valueSQL {
 			tps, tbs := c.alias("tps"), c.alias("tbs")
-			return c.cmp(fmt.Sprintf("(SELECT %[2]s.%[5]s_display_score FROM time_parse_scores %[1]s JOIN time_parse_boss_scores %[2]s ON %[2]s.time_parse_score_id = %[1]s.id WHERE %[3]s AND %[2]s.encounter_id = %[4]s.id AND %[2]s.%[5]s_status %[6]s)",
-				tps, tbs, c.timeParseContract(tps), s.alias, p.parseScope, scoredStatusSQL), p)
+			return valueSQL{Expr: fmt.Sprintf("(SELECT %[2]s.%[5]s_display_score FROM time_parse_scores %[1]s JOIN time_parse_boss_scores %[2]s ON %[2]s.time_parse_score_id = %[1]s.id WHERE %[3]s AND %[2]s.encounter_id = %[4]s.id AND %[2]s.%[5]s_status %[6]s)",
+				tps, tbs, c.timeParseContract(tps), s.alias, p.parseScope, scoredStatusSQL)}
 		}},
 
 	// ---- Player scope (inside any_player / count_players) ---------------
 	{Name: "player.name", Scope: scopePlayer, Type: typeString,
-		Doc: "Character name.", compile: column("{a}.name")},
+		Doc: "Character name.", value: column("{a}.name")},
 	{Name: "player.guid", Scope: scopePlayer, Type: typeString,
-		Doc: "Character GUID, e.g. \"0x0000000000012345\".", compile: column("{a}.unit_guid::text")},
+		Doc: "Character GUID, e.g. \"0x0000000000012345\".", value: column("{a}.unit_guid::text")},
 	{Name: "player.class", Scope: scopePlayer, Type: typeEnum, Enum: classes,
-		Doc: "Class.", compile: column("{a}.class::text")},
+		Doc: "Class.", value: column("{a}.class::text")},
 	{Name: "player.race", Scope: scopePlayer, Type: typeEnum, Enum: races,
-		Doc: "Race.", compile: column("{a}.race::text")},
+		Doc: "Race.", value: column("{a}.race::text")},
 	{Name: "player.level", Scope: scopePlayer, Type: typeInt,
-		Doc: "Level.", compile: column("{a}.level")},
+		Doc: "Level.", value: column("{a}.level")},
 	{Name: "player.guild", Cost: 2, Scope: scopePlayer, Type: typeString,
-		Doc: "Guild name at the time of the run.", compile: column("(SELECT pg.name FROM guilds pg WHERE pg.id = {a}.guild_id)")},
+		Doc: "Guild name at the time of the run.", value: column("(SELECT pg.name FROM guilds pg WHERE pg.id = {a}.guild_id)")},
 	{Name: "player.guild_id", Scope: scopePlayer, Type: typeUUID,
-		Doc: "Guild ID at the time of the run.", compile: column("{a}.guild_id")},
+		Doc: "Guild ID at the time of the run.", value: column("{a}.guild_id")},
 	{Name: "player.spec", Cost: 3, Scope: scopePlayer, Type: typeString, Bosses: true, On: true,
-		Doc: "Spec in a fight, e.g. \"Feral\". Read from boss kills by default; see on.", compile: rankingField("player_spec")},
+		Doc: "Spec in a fight, e.g. \"Feral\". Read from boss kills by default; see on.", value: rankingField("player_spec")},
 	{Name: "player.sub_spec", Cost: 3, Scope: scopePlayer, Type: typeString, Bosses: true, On: true,
-		Doc: "Sub-spec in a fight: Bear / Cat (Feral druid), Tank / DPS (Enhancement shaman), Fury Prot. Empty for other specs and servers.", compile: rankingField("player_sub_spec")},
+		Doc: "Sub-spec in a fight: Bear / Cat (Feral druid), Tank / DPS (Enhancement shaman), Fury Prot. Empty for other specs and servers.", value: rankingField("player_sub_spec")},
 	{Name: "player.role", Cost: 3, Scope: scopePlayer, Type: typeEnum, Enum: roles, Bosses: true, On: true,
-		Doc: "Role in a fight.", compile: rankingField("player_role")},
+		Doc: "Role in a fight.", value: rankingField("player_role")},
 	{Name: "player.dps", Cost: 3, Scope: scopePlayer, Type: typeFloat, Bosses: true, On: true,
-		Doc: "DPS in a fight.", compile: rankingField("dps")},
+		Doc: "DPS in a fight.", value: rankingField("dps")},
 	{Name: "player.hps", Cost: 3, Scope: scopePlayer, Type: typeFloat, Bosses: true, On: true,
-		Doc: "HPS in a fight.", compile: rankingField("hps")},
+		Doc: "HPS in a fight.", value: rankingField("hps")},
 	{Name: "player.deaths", Cost: 3, Scope: scopePlayer, Type: typeInt, Bosses: true, On: true,
-		Doc: "Deaths in a fight. Wipes are not counted.", compile: rankingField("player_deaths")},
+		Doc: "Deaths in a fight. Wipes are not counted.", value: rankingField("player_deaths")},
 	{Name: "player.avg_ilvl", Cost: 3, Scope: scopePlayer, Type: typeInt, Bosses: true, On: true,
-		Doc: "Average item level in a fight.", compile: rankingField("avg_ilvl")},
+		Doc: "Average item level in a fight.", value: rankingField("avg_ilvl")},
 	{Name: "player.parse", Cost: 15, Scope: scopePlayer, Type: typeInt, Unit: "0-100", Bosses: true, Metric: true,
 		Doc: "Player parse on a boss kill (latest stored score per boss).",
-		compile: func(c *compiler, s scope, p pred) string {
+		value: func(c *compiler, s scope, p pred) valueSQL {
 			r := c.alias("ps")
 			from := fmt.Sprintf(`(SELECT DISTINCT ON (x.encounter_name) x.encounter_name, x.display_score, x.status
       FROM parse_score_results x
       WHERE x.tenant_id = %[2]s AND x.instance_id = li.id AND x.player_guid = %[3]s.unit_guid::text AND x.metric = %[4]s::text
       ORDER BY x.encounter_name, x.created_at DESC, x.precise_score DESC) %[1]s WHERE %[1]s.status %[5]s`,
 				r, c.tenant(), s.alias, c.arg(string(p.metric)), scoredStatusSQL)
-			return c.bossMatch(p, from, r+".encounter_name", c.cmp(r+".display_score", p))
+			return valueSQL{Expr: r + ".display_score", From: from, Name: r + ".encounter_name"}
 		}},
 }
 

@@ -45,6 +45,7 @@ export const OP_LABELS: Record<InstanceSearchOp, string> = {
   not_in: "is none of",
   contains: "contains",
   starts_with: "starts with",
+  between: "between",
 };
 
 const CLASS_LABELS: Record<string, string> = {

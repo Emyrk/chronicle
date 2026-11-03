@@ -2513,6 +2513,96 @@ export interface InstanceSearchCursor {
 
 // From chroniclesdk/instance_search.go
 /**
+ * InstanceSearchEvidence explains one node of a search for one run. It has
+ * the same shape as the query: Children line up with And / Or / Not, and a
+ * witness's Evidence lines up with the quantifier's subtree.
+ */
+export interface InstanceSearchEvidence {
+    readonly kind: InstanceSearchEvidenceKind;
+    /**
+     * OK is whether the node holds. Null means unknown, the way SQL treats a
+     * comparison with a missing value (e.g. clear time on a run that is not a
+     * full clear); unknown never matches, even under not.
+     */
+    readonly ok: boolean | null;
+    /**
+     * Field is the predicate field (Kind field).
+     */
+    readonly field?: string;
+    /**
+     * Value is the run's value for a single-valued field. Absent when the run
+     * has none.
+     */
+    // empty interface{} type, falling back to unknown
+    readonly value?: unknown;
+    /**
+     * Rows are per-boss or per-fight values for fields read per fight (kill
+     * times, parses, spec, dps, ...), limited to the requested bosses.
+     */
+    readonly rows?: readonly InstanceSearchEvidenceRow[];
+    /**
+     * Count is how many players or pulls satisfy a quantifier's subtree.
+     */
+    readonly count?: number;
+    /**
+     * Witnesses are up to five of the players or pulls that satisfy a
+     * quantifier's subtree.
+     */
+    readonly witnesses?: readonly InstanceSearchWitness[];
+    readonly children?: readonly InstanceSearchEvidence[];
+}
+
+// From chroniclesdk/instance_search.go
+export type InstanceSearchEvidenceKind = "and" | "any_encounter" | "any_player" | "count_encounters" | "count_players" | "field" | "not" | "or";
+
+export const InstanceSearchEvidenceKinds: InstanceSearchEvidenceKind[] = ["and", "any_encounter", "any_player", "count_encounters", "count_players", "field", "not", "or"];
+
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchEvidenceRow is one fight's value for a per-fight field.
+ */
+export interface InstanceSearchEvidenceRow {
+    /**
+     * Name is the boss or fight name ("Trash" for the aggregated trash row).
+     */
+    readonly name: string;
+    // empty interface{} type, falling back to unknown
+    readonly value: unknown;
+    readonly ok: boolean;
+}
+
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchExplainRequest is the body of POST
+ * /api/v1/raidlogs/search/explain: why one run does (or does not) match a
+ * search.
+ */
+export interface InstanceSearchExplainRequest {
+    /**
+     * Query is the search. Only Where is used.
+     */
+    readonly query: InstanceSearchQuery;
+    readonly instance_id: string;
+}
+
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchExplainResponse is the evidence for one run.
+ */
+export interface InstanceSearchExplainResponse {
+    /**
+     * Matched is whether the run satisfies the whole search.
+     */
+    readonly matched: boolean;
+    /**
+     * Evidence mirrors the query tree node for node. Absent for an empty
+     * search.
+     */
+    readonly evidence?: InstanceSearchEvidence;
+}
+
+// From chroniclesdk/instance_search.go
+/**
  * InstanceSearchField describes one searchable field, for building UIs.
  */
 export interface InstanceSearchField {
@@ -2655,7 +2745,8 @@ export interface InstanceSearchNode {
     readonly field?: string;
     readonly op?: InstanceSearchOp;
     /**
-     * Value is a string, number, boolean, or a list for in / not_in.
+     * Value is a string, number, boolean, a list for in / not_in, or
+     * [low, high] for between.
      */
     // empty interface{} type, falling back to unknown
     readonly value?: unknown;
@@ -2688,9 +2779,9 @@ export type InstanceSearchOn = "any" | "bosses" | "trash";
 export const InstanceSearchOns: InstanceSearchOn[] = ["any", "bosses", "trash"];
 
 // From chroniclesdk/instance_search.go
-export type InstanceSearchOp = "contains" | "=" | ">" | ">=" | "in" | "<" | "<=" | "!=" | "not_in" | "starts_with";
+export type InstanceSearchOp = "between" | "contains" | "=" | ">" | ">=" | "in" | "<" | "<=" | "!=" | "not_in" | "starts_with";
 
-export const InstanceSearchOps: InstanceSearchOp[] = ["contains", "=", ">", ">=", "in", "<", "<=", "!=", "not_in", "starts_with"];
+export const InstanceSearchOps: InstanceSearchOp[] = ["between", "contains", "=", ">", ">=", "in", "<", "<=", "!=", "not_in", "starts_with"];
 
 // From chroniclesdk/instance_search.go
 export type InstanceSearchParseScope = "guild" | "realm" | "server";
@@ -2757,6 +2848,32 @@ export interface InstanceSearchResult {
      * a full clear.
      */
     readonly clear_time_ms?: number;
+}
+
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchWitness is a player or pull that satisfies a quantifier.
+ */
+export interface InstanceSearchWitness {
+    /**
+     * Name is the character or encounter name.
+     */
+    readonly name: string;
+    /**
+     * Players only.
+     */
+    readonly guid?: string;
+    readonly class?: string;
+    /**
+     * Encounters only.
+     */
+    readonly encounter_id: string | null;
+    readonly outcome?: string;
+    readonly duration_ms?: number;
+    /**
+     * Evidence explains the quantifier's subtree for this witness.
+     */
+    readonly evidence?: InstanceSearchEvidence;
 }
 
 // From chroniclesdk/time_parses.go

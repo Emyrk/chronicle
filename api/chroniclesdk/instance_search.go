@@ -45,7 +45,8 @@ type InstanceSearchNode struct {
 	// Field names a predicate, e.g. "player.class".
 	Field string           `json:"field,omitempty"`
 	Op    InstanceSearchOp `json:"op,omitempty"`
-	// Value is a string, number, boolean, or a list for in / not_in.
+	// Value is a string, number, boolean, a list for in / not_in, or
+	// [low, high] for between.
 	Value any `json:"value,omitempty"`
 	// Bosses restricts boss-based predicates to these encounter names.
 	Bosses []string `json:"bosses,omitempty"`
@@ -95,6 +96,9 @@ const (
 	// InstanceSearchOpStartsWith matches text fields starting with the value,
 	// ignoring case.
 	InstanceSearchOpStartsWith InstanceSearchOp = "starts_with"
+	// InstanceSearchOpBetween matches numbers and times in [low, high],
+	// inclusive on both ends. The value is a two-element list.
+	InstanceSearchOpBetween InstanceSearchOp = "between"
 )
 
 type InstanceSearchMatch string
@@ -212,4 +216,83 @@ type InstanceSearchResponse struct {
 	Results []InstanceSearchResult `json:"results"`
 	// Next is set when more results exist. Send it back as Cursor.
 	Next *InstanceSearchCursor `json:"next,omitempty"`
+}
+
+// InstanceSearchExplainRequest is the body of POST
+// /api/v1/raidlogs/search/explain: why one run does (or does not) match a
+// search.
+type InstanceSearchExplainRequest struct {
+	// Query is the search. Only Where is used.
+	Query      InstanceSearchQuery `json:"query"`
+	InstanceID uuid.UUID           `json:"instance_id" format:"uuid"`
+}
+
+// InstanceSearchExplainResponse is the evidence for one run.
+type InstanceSearchExplainResponse struct {
+	// Matched is whether the run satisfies the whole search.
+	Matched bool `json:"matched"`
+	// Evidence mirrors the query tree node for node. Absent for an empty
+	// search.
+	Evidence *InstanceSearchEvidence `json:"evidence,omitempty"`
+}
+
+type InstanceSearchEvidenceKind string
+
+const (
+	InstanceSearchEvidenceAnd             InstanceSearchEvidenceKind = "and"
+	InstanceSearchEvidenceOr              InstanceSearchEvidenceKind = "or"
+	InstanceSearchEvidenceNot             InstanceSearchEvidenceKind = "not"
+	InstanceSearchEvidenceField           InstanceSearchEvidenceKind = "field"
+	InstanceSearchEvidenceAnyPlayer       InstanceSearchEvidenceKind = "any_player"
+	InstanceSearchEvidenceCountPlayers    InstanceSearchEvidenceKind = "count_players"
+	InstanceSearchEvidenceAnyEncounter    InstanceSearchEvidenceKind = "any_encounter"
+	InstanceSearchEvidenceCountEncounters InstanceSearchEvidenceKind = "count_encounters"
+)
+
+// InstanceSearchEvidence explains one node of a search for one run. It has
+// the same shape as the query: Children line up with And / Or / Not, and a
+// witness's Evidence lines up with the quantifier's subtree.
+type InstanceSearchEvidence struct {
+	Kind InstanceSearchEvidenceKind `json:"kind"`
+	// OK is whether the node holds. Null means unknown, the way SQL treats a
+	// comparison with a missing value (e.g. clear time on a run that is not a
+	// full clear); unknown never matches, even under not.
+	OK *bool `json:"ok"`
+	// Field is the predicate field (Kind field).
+	Field string `json:"field,omitempty"`
+	// Value is the run's value for a single-valued field. Absent when the run
+	// has none.
+	Value any `json:"value,omitempty"`
+	// Rows are per-boss or per-fight values for fields read per fight (kill
+	// times, parses, spec, dps, ...), limited to the requested bosses.
+	Rows []InstanceSearchEvidenceRow `json:"rows,omitempty"`
+	// Count is how many players or pulls satisfy a quantifier's subtree.
+	Count *int64 `json:"count,omitempty"`
+	// Witnesses are up to five of the players or pulls that satisfy a
+	// quantifier's subtree.
+	Witnesses []InstanceSearchWitness `json:"witnesses,omitempty"`
+	Children  []InstanceSearchEvidence `json:"children,omitempty"`
+}
+
+// InstanceSearchEvidenceRow is one fight's value for a per-fight field.
+type InstanceSearchEvidenceRow struct {
+	// Name is the boss or fight name ("Trash" for the aggregated trash row).
+	Name  string `json:"name"`
+	Value any    `json:"value"`
+	OK    bool   `json:"ok"`
+}
+
+// InstanceSearchWitness is a player or pull that satisfies a quantifier.
+type InstanceSearchWitness struct {
+	// Name is the character or encounter name.
+	Name string `json:"name"`
+	// Players only.
+	GUID  string `json:"guid,omitempty"`
+	Class string `json:"class,omitempty"`
+	// Encounters only.
+	EncounterID uuid.NullUUID `json:"encounter_id" format:"uuid"`
+	Outcome     string        `json:"outcome,omitempty"`
+	DurationMS  int64         `json:"duration_ms,omitempty"`
+	// Evidence explains the quantifier's subtree for this witness.
+	Evidence *InstanceSearchEvidence `json:"evidence,omitempty"`
 }

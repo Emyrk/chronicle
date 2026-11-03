@@ -190,6 +190,14 @@ date (default), clear time, clear-time parse.
   a newer snapshot receipt exists.
 - Duplicate uploads collapse to the lowest instance ID among the matching
   copies.
+- **Explain** (`explain.go`, `POST /search/explain`) re-walks the tree for one
+  run in the same visibility frame. Each field defines where its value comes
+  from (`valueSQL`), so the match condition and the evidence never drift apart.
+  Leaves report `ok` plus the value or per-fight rows. Quantifiers report a
+  count and up to 5 witnesses with nested evidence. and / or / not are combined
+  in Go with SQL's three-valued logic, so the result always agrees with the
+  search; a test checks that for every semantics case.
+- `between` is inclusive on both ends, for numbers and times.
 
 ## Abuse protection
 
