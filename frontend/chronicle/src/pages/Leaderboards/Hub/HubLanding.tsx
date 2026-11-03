@@ -12,6 +12,8 @@ import { HUB_REALMS, useHubRealm } from "./hubRealm"
 import { setMockRealm } from "@/pages/Leaderboards/Ratings/mockRealm"
 import { TABS, type HubTab } from "./hubTabs"
 import { peakWithRaw } from "./peakDisplay"
+import { entityAttributes } from "@/components/EntityMenu/entity"
+import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities"
 import { RulesetsLanding } from "@/pages/Leaderboards/RulesetsLanding"
 
 /**
@@ -242,7 +244,7 @@ function LiveCardBody({ tab, preview }: { tab: HubTab; preview?: HubLandingPrevi
   const speedLine = (index: number) => {
     const entry = preview?.speedruns[index]
     return entry && <Line key={entry.instance_id} icon={<span className="font-mono text-[10px] text-muted-foreground">{index + 1}</span>}
-      value={formatClock(entry.duration_ms)} title="Full clear"><span className="truncate text-foreground/90">{entry.guild_name}</span></Line>
+      value={formatClock(entry.duration_ms)} title="Full clear"><GuildTag name={entry.guild_name} id={entry.guild_id} /></Line>
   }
   let rows: ReactNode = null
   if (tab === "overview") {
@@ -250,7 +252,7 @@ function LiveCardBody({ tab, preview }: { tab: HubTab; preview?: HubLandingPrevi
     const performance = preview?.performances[0]
     rows = <>{speedLine(0)}
       {guild && <Line icon={<renown.icon className="size-3" style={{ color: renown.accent }} />}
-        value={renown.format(guild.score)} title="Guild Renown #1"><span className="truncate text-foreground/90">{guild.guild_name}</span></Line>}
+        value={renown.format(guild.score)} title="Guild Renown #1"><GuildTag name={guild.guild_name} id={guild.guild_id} /></Line>}
       {playerLine("peak", "Peak")}
       {performance && <Line icon={<Swords className="size-3 text-muted-foreground" />}
         value={`${Math.round(performance.dps).toLocaleString()} dps`} title="Best performance"><LivePlayer entry={performance} /></Line>}
@@ -279,9 +281,18 @@ function LiveCardBody({ tab, preview }: { tab: HubTab; preview?: HubLandingPrevi
   return rows && <div className="mb-2 space-y-0.5">{rows}</div>
 }
 
-function LivePlayer({ entry }: { entry: { player_class: string; player_name: string; player_guid: string } }) {
+function LivePlayer({ entry }: { entry: { player_class: string; player_name: string; player_guid: string; realm_name: string } }) {
+  const name = entry.player_name || entry.player_guid
+  // Alt+click opens the entity inspector; it needs the realm to identify the character.
+  const attributes = entry.player_guid && entry.realm_name
+    ? entityAttributes({ kind: "character", realm: entry.realm_name, guid: entry.player_guid, name, className: entry.player_class }) : {}
   return <><span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: CLASS_CSS_VAR[entry.player_class] }} />
-    <span className="truncate text-foreground/90">{entry.player_name || entry.player_guid}</span></>
+    <span className="truncate text-foreground/90" {...attributes}>{name}</span></>
+}
+
+/** A guild as other pages show it: amber and in angle brackets, so it never reads as a character. */
+function GuildTag({ name, id }: { name: string; id?: string }) {
+  return <span className="truncate text-amber-500" {...guildAttributes(id, name)}>&lt;{name || "Unknown guild"}&gt;</span>
 }
 
 function UnavailableHighlight({ label = "No published highlights yet" }: { label?: string }) {
@@ -301,14 +312,14 @@ function CardBody({ tab, inst }: { tab: HubTab; inst: InstanceHeadline }) {
     rows = (
       <>
         <Line icon={<Timer className="size-3 text-muted-foreground" />} value={formatClock(inst.fastest[0].ms)} title="Fastest full clear">
-          <span className="truncate text-foreground/90">{inst.fastest[0].guild}</span>
+          <GuildTag name={inst.fastest[0].guild} />
         </Line>
         <Line
           icon={<renown.icon className="size-3" style={{ color: renown.accent }} />}
           value={inst.renown.value.toLocaleString()}
           title="Guild Renown #1"
         >
-          <span className="truncate text-foreground/90">{inst.renown.guild}</span>
+          <GuildTag name={inst.renown.guild} />
         </Line>
         <Line icon={<peak.icon className="size-3" style={{ color: peak.accent }} />} value={withRaw(inst.ratings.peak)} title="Peak #1">
           <Player player={inst.ratings.peak.player} />
@@ -347,7 +358,7 @@ function CardBody({ tab, inst }: { tab: HubTab; inst: InstanceHeadline }) {
         value={formatClock(f.ms)}
         title="Full clear"
       >
-        <span className="truncate text-foreground/90">{f.guild}</span>
+        <GuildTag name={f.guild} />
       </Line>
     ))
   } else if (tab === "statistics") {
