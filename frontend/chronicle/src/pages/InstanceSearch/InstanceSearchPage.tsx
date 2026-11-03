@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { Blocks, BookOpen, ChevronDown, ChevronRight, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
+import { Blocks, BookOpen, ChevronDown, ChevronUp, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
 import type { InstanceSearchCursor, InstanceSearchLimitResponse } from "@/api/typesGenerated";
 import { useRealms, useSupportedInstances } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
@@ -401,15 +401,23 @@ export function InstanceSearchPage() {
           {mode === "code" ? (
             <CodeEditor value={code} onChange={setCode} onSubmit={submit} parse={{ error: parsedCode.error }} disabled={!advancedUnlocked} />
           ) : (
-            <BlockEditor tree={blocks} onChange={setBlocks} ctx={{ fields: fields.data?.fields ?? [], zones, bosses: allBosses, realms: realmNames, disabled: !advancedUnlocked }} />
+            <BlockEditor tree={blocks} onChange={setBlocks} ctx={{ fields: fields.data?.fields ?? [], costs: fields.data, zones, bosses: allBosses, realms: realmNames, disabled: !advancedUnlocked }} />
           )}
         </div>
       )}
 
       {/* Sticks to the bottom of the screen while a long search is being
           edited, so Search and the cost stay in reach; it settles back into
-          place above the results. */}
-      <div className="sticky bottom-0 z-20 -mx-2 flex flex-wrap items-center gap-3 rounded-lg border border-border/60 bg-background/90 px-2 py-2 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] backdrop-blur">
+          place above the results. The query text opens inside it, above the
+          buttons, so it stays visible while pinned. */}
+      <div className="sticky bottom-2 z-20 -mx-2 overflow-hidden rounded-xl border border-sky-500/30 bg-zinc-950/95 shadow-[0_-12px_36px_rgba(0,0,0,0.6)] ring-1 ring-white/5 backdrop-blur">
+        <div className="h-0.5 bg-gradient-to-r from-sky-500/0 via-sky-400/70 to-sky-500/0" />
+        {showCel && mode !== "code" && (
+          <pre className="mx-3 mt-2.5 max-h-48 overflow-auto rounded-md border border-border/60 bg-zinc-900/70 p-3 text-2xs leading-relaxed whitespace-pre-wrap styled-scrollbar">
+            <CelCode code={formatCEL(draftTree)} />
+          </pre>
+        )}
+        <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
         <Button
           onClick={submit}
           disabled={preview || anonBlocked || codeInvalid || tooComplex || results.isFetching}
@@ -435,20 +443,16 @@ export function InstanceSearchPage() {
         )}
         {mode !== "code" && (
           <button type="button" onClick={() => setShowCel((v) => !v)} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
-            {showCel ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            {showCel ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
             Query text
           </button>
         )}
+        </div>
       </div>
       {anonBlocked && (
         <p className="text-xs text-amber-300/90">
           <Link to="/login" className="underline">Log in</Link> to search by bosses, parses, roster or capabilities.
         </p>
-      )}
-      {showCel && mode !== "code" && (
-        <pre className="text-2xs leading-relaxed bg-zinc-900/60 border border-border/60 rounded-md p-3 overflow-x-auto styled-scrollbar whitespace-pre-wrap">
-          <CelCode code={formatCEL(draftTree)} />
-        </pre>
       )}
       </>
       )}

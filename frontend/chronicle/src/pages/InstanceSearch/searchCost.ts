@@ -53,3 +53,40 @@ export function queryCost(tree: Node | undefined, desc: InstanceSearchFieldsResp
   const total = desc.cost_base + sorted.reduce((sum, p) => sum + p.cost, 0);
   return { total, parts: [...sorted, { label: "Base", cost: desc.cost_base, count: 1 }] };
 }
+
+/** What one block adds to a search's cost, including everything nested in it (no base). */
+export function nodeCost(n: Node, desc: InstanceSearchFieldsResponse): number {
+  return queryCost(n, desc).total - desc.cost_base;
+}
+
+export type ComplexityLevel = "light" | "moderate" | "heavy" | "very_heavy" | "too_complex";
+
+export interface Complexity {
+  level: ComplexityLevel;
+  label: string;
+  /** Filled segments of the four-step meter. */
+  steps: number;
+}
+
+/**
+ * How heavy a search is, for a meter people can read at a glance. Absolute
+ * thresholds keep a search's rating the same for everyone; anything over the
+ * caller's whole budget can never run.
+ */
+export function complexity(cost: number, budgetLimit: number | null): Complexity {
+  if (budgetLimit != null && cost > budgetLimit) return { level: "too_complex", label: "Too complex", steps: 4 };
+  if (cost < 10) return { level: "light", label: "Light", steps: 1 };
+  if (cost < 25) return { level: "moderate", label: "Moderate", steps: 2 };
+  if (cost < 60) return { level: "heavy", label: "Heavy", steps: 3 };
+  return { level: "very_heavy", label: "Very heavy", steps: 4 };
+}
+
+/** Colours per complexity level (static class names for Tailwind). */
+export const COMPLEXITY_STYLE: Record<ComplexityLevel, { pill: string; text: string; bar: string }> = {
+  light: { pill: "bg-emerald-500/10 ring-emerald-500/30", text: "text-emerald-300", bar: "bg-emerald-400" },
+  moderate: { pill: "bg-sky-500/10 ring-sky-500/30", text: "text-sky-300", bar: "bg-sky-400" },
+  heavy: { pill: "bg-amber-500/10 ring-amber-500/35", text: "text-amber-300", bar: "bg-amber-400" },
+  very_heavy: { pill: "bg-orange-500/15 ring-orange-500/40", text: "text-orange-300", bar: "bg-orange-400" },
+  too_complex: { pill: "bg-red-500/15 ring-red-500/45", text: "text-red-300", bar: "bg-red-400" },
+};
+
