@@ -1,0 +1,25 @@
+{
+  "description": "Raids with at least 2 paladins who played Holy on a boss kill.",
+  "query": {
+    "where": {
+      "count_players": {
+        "where": {
+          "and": [
+            {
+              "field": "player.class",
+              "op": "=",
+              "value": "PALADIN"
+            },
+            {
+              "field": "player.spec",
+              "op": "=",
+              "value": "Holy"
+            }
+          ]
+        },
+        "op": ">=",
+        "value": 2
+      }
+    }
+  }
+}

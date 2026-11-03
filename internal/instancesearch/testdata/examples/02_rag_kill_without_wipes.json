@@ -1,0 +1,43 @@
+{
+  "description": "Ragnaros was killed and never wiped on in the same run.",
+  "query": {
+    "where": {
+      "and": [
+        {
+          "any_encounter": {
+            "and": [
+              {
+                "field": "encounter.name",
+                "op": "=",
+                "value": "Ragnaros"
+              },
+              {
+                "field": "encounter.killed",
+                "op": "=",
+                "value": true
+              }
+            ]
+          }
+        },
+        {
+          "not": {
+            "any_encounter": {
+              "and": [
+                {
+                  "field": "encounter.name",
+                  "op": "=",
+                  "value": "Ragnaros"
+                },
+                {
+                  "field": "encounter.outcome",
+                  "op": "=",
+                  "value": "wipe"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "description": "Ragnaros killed in 2 minutes or less.",
+  "query": {
+    "where": {
+      "field": "instance.kill_time_ms",
+      "op": "<=",
+      "value": 120000,
+      "bosses": [
+        "Ragnaros"
+      ]
+    }
+  }
+}

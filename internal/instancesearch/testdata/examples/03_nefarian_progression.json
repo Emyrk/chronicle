@@ -1,0 +1,25 @@
+{
+  "description": "Progression nights: 5 or more wipes on Nefarian.",
+  "query": {
+    "where": {
+      "count_encounters": {
+        "where": {
+          "and": [
+            {
+              "field": "encounter.name",
+              "op": "=",
+              "value": "Nefarian"
+            },
+            {
+              "field": "encounter.outcome",
+              "op": "=",
+              "value": "wipe"
+            }
+          ]
+        },
+        "op": ">=",
+        "value": 5
+      }
+    }
+  }
+}

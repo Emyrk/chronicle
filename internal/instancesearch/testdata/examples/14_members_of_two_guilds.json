@@ -1,0 +1,19 @@
+{
+  "description": "At least 10 players from Alpha or Beta guild.",
+  "query": {
+    "where": {
+      "count_players": {
+        "where": {
+          "field": "player.guild",
+          "op": "in",
+          "value": [
+            "Alpha",
+            "Beta"
+          ]
+        },
+        "op": ">=",
+        "value": 10
+      }
+    }
+  }
+}

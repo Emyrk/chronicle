@@ -1,0 +1,16 @@
+{
+  "description": "Raids with at least 3 priests.",
+  "query": {
+    "where": {
+      "count_players": {
+        "where": {
+          "field": "player.class",
+          "op": "=",
+          "value": "PRIEST"
+        },
+        "op": ">=",
+        "value": 3
+      }
+    }
+  }
+}

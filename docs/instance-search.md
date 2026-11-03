@@ -1,6 +1,7 @@
 # Instance Advanced Search — design draft
 
-Status: draft (2026-11-02). Nothing implemented yet.
+Status: core compiler implemented in `internal/instancesearch` (2026-11-02). No API
+endpoint or UI yet. How to write queries: `.agents/skills/instance-search/SKILL.md`.
 
 ## Goal
 
@@ -175,12 +176,24 @@ priests", "≥2 Holy Paladins", "≥10 members of guild X".
 Keyset pagination on `(sort_key, li.id)` like `ListRecentInstances`. v1 sorts:
 date (default), clear time, clear-time parse.
 
+## Decisions made while implementing
+
+- Boss / trash / idle time use the Guild History definition (clip fights to
+  the ranked clear window, merge overlapping pulls), not
+  `instance_overview_metrics`.
+- Quantifiers can only be used at the instance level (no player-inside-encounter
+  nesting). Boss-based player fields take `bosses` + `match` instead.
+- `player.parse` reads the latest stored `parse_score_results` row per boss
+  with status ok / low_confidence. It can differ from the instance page when
+  a newer snapshot receipt exists.
+- Duplicate uploads collapse to the lowest instance ID among the matching
+  copies.
+
 ## Next steps
 
-1. Freeze v1 predicate set (✅ rows) and the boss/trash/idle source.
-2. Go package: AST types, registry, validator, compiler + golden SQL tests,
-   including tenancy tests (a tree can never escape the frame or see another
-   tenant's instances).
-3. Endpoint + `EXPLAIN ANALYZE` on prod-scale data for the worst predicates.
-4. UI with react-querybuilder driven by a registry endpoint (fields, ops, arg
-   types, scopes).
+1. API endpoint (`POST /api/v1/instances/search`) plus a registry endpoint that
+   serves the field list for the UI. Supporter-tier limits go through
+   `SearchOptions`.
+2. `EXPLAIN ANALYZE` the examples on prod-scale data. Likely candidates for
+   indexes: `log_instances(name)` and `start_time`.
+3. UI query builder.

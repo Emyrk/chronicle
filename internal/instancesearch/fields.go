@@ -1,0 +1,526 @@
+package instancesearch
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// valueType is the type of a predicate's value.
+type valueType string
+
+const (
+	typeInt    valueType = "int"
+	typeFloat  valueType = "float"
+	typeString valueType = "string"
+	typeBool   valueType = "bool"
+	typeTime   valueType = "time"
+	typeUUID   valueType = "uuid"
+	typeEnum   valueType = "enum"
+)
+
+func (t valueType) sqlType() string {
+	switch t {
+	case typeInt:
+		return "bigint"
+	case typeFloat:
+		return "float8"
+	case typeBool:
+		return "boolean"
+	case typeTime:
+		return "timestamptz"
+	case typeUUID:
+		return "uuid"
+	default:
+		return "text"
+	}
+}
+
+func (t valueType) ops() []Op {
+	switch t {
+	case typeInt, typeFloat, typeTime:
+		return []Op{OpEq, OpNe, OpLt, OpLte, OpGt, OpGte}
+	case typeBool:
+		return []Op{OpEq, OpNe}
+	default:
+		return []Op{OpEq, OpNe, OpIn, OpNotIn}
+	}
+}
+
+// field is one searchable predicate.
+type field struct {
+	Name  string
+	Scope scopeKind
+	Type  valueType
+	Enum  []string
+	Unit  string
+	Doc   string
+	// Bosses: the predicate accepts bosses + match.
+	Bosses bool
+	// ParseScope: the predicate accepts parse_scope.
+	ParseScope bool
+	// Metric: the predicate accepts metric.
+	Metric bool
+
+	compile func(c *compiler, s scope, p pred) string
+}
+
+// pred is a validated predicate.
+type pred struct {
+	typ        valueType
+	op         Op
+	value      any
+	bosses     []string
+	match      Match
+	parseScope ParseScope
+	metric     Metric
+}
+
+const maxStringLen = 200
+
+// cmp compares expr with the predicate value. User values are always bound.
+func (c *compiler) cmp(expr string, p pred) string {
+	cast := p.typ.sqlType()
+	switch p.op {
+	case OpIn:
+		return fmt.Sprintf("%s = ANY(%s::%s[])", expr, c.arg(p.value), cast)
+	case OpNotIn:
+		return fmt.Sprintf("NOT (%s = ANY(%s::%s[]))", expr, c.arg(p.value), cast)
+	default:
+		return fmt.Sprintf("%s %s %s::%s", expr, sqlOp(p.op), c.arg(p.value), cast)
+	}
+}
+
+// bossMatch applies a condition to rows that each belong to one boss.
+// from is "<table> <alias> WHERE <correlation>".
+//
+//   - match any, no bosses: some row satisfies cond.
+//   - match any, bosses:    some row of one of the bosses satisfies cond.
+//   - match each:           every listed boss has a row that satisfies cond.
+func (c *compiler) bossMatch(p pred, from, nameCol, cond string) string {
+	if len(p.bosses) == 0 {
+		return fmt.Sprintf("EXISTS (SELECT 1 FROM %s AND %s)", from, cond)
+	}
+	bosses := c.arg(p.bosses)
+	if p.match == MatchEach {
+		return fmt.Sprintf("(SELECT count(DISTINCT %s) FROM %s AND %s = ANY(%s::text[]) AND %s) = cardinality(%s::text[])",
+			nameCol, from, nameCol, bosses, cond, bosses)
+	}
+	return fmt.Sprintf("EXISTS (SELECT 1 FROM %s AND %s = ANY(%s::text[]) AND %s)", from, nameCol, bosses, cond)
+}
+
+func (c *compiler) parsePred(f *field, n *Node, path string) (pred, error) {
+	p := pred{typ: f.Type, op: n.Op}
+	if !slices.Contains(f.Type.ops(), n.Op) {
+		return p, &Error{Path: path + ".op", Message: fmt.Sprintf("%s supports %s", f.Name, joinOps(f.Type.ops()))}
+	}
+	if len(n.Value) == 0 {
+		return p, &Error{Path: path + ".value", Message: "is required"}
+	}
+
+	if n.Op == OpIn || n.Op == OpNotIn {
+		var raw []json.RawMessage
+		if err := json.Unmarshal(n.Value, &raw); err != nil {
+			return p, &Error{Path: path + ".value", Message: "must be a list for in / not_in"}
+		}
+		if len(raw) == 0 || len(raw) > c.opts.MaxListValues {
+			return p, &Error{Path: path + ".value", Message: fmt.Sprintf("must have 1 to %d values", c.opts.MaxListValues)}
+		}
+		list := make([]string, 0, len(raw))
+		for i, r := range raw {
+			v, err := decodeScalar(f, r)
+			if err != nil {
+				return p, &Error{Path: fmt.Sprintf("%s.value[%d]", path, i), Message: err.Error()}
+			}
+			// in / not_in is only offered for string-like types.
+			list = append(list, v.(string))
+		}
+		p.value = list
+	} else {
+		v, err := decodeScalar(f, n.Value)
+		if err != nil {
+			return p, &Error{Path: path + ".value", Message: err.Error()}
+		}
+		p.value = v
+	}
+
+	if len(n.Bosses) > 0 || n.Match != "" {
+		if !f.Bosses {
+			return p, &Error{Path: path + ".bosses", Message: fmt.Sprintf("%s does not take bosses or match", f.Name)}
+		}
+	}
+	if f.Bosses {
+		if len(n.Bosses) > c.opts.MaxListValues {
+			return p, &Error{Path: path + ".bosses", Message: fmt.Sprintf("must have at most %d bosses", c.opts.MaxListValues)}
+		}
+		seen := map[string]bool{}
+		for i, b := range n.Bosses {
+			b = strings.TrimSpace(b)
+			if b == "" || len(b) > maxStringLen {
+				return p, &Error{Path: fmt.Sprintf("%s.bosses[%d]", path, i), Message: "must be a boss name"}
+			}
+			if !seen[b] {
+				seen[b] = true
+				p.bosses = append(p.bosses, b)
+			}
+		}
+		switch n.Match {
+		case "", MatchAny:
+			p.match = MatchAny
+		case MatchEach:
+			if len(p.bosses) == 0 {
+				return p, &Error{Path: path + ".match", Message: "each requires a list of bosses"}
+			}
+			p.match = MatchEach
+		default:
+			return p, &Error{Path: path + ".match", Message: "must be any or each"}
+		}
+	}
+
+	if n.ParseScope != "" && !f.ParseScope {
+		return p, &Error{Path: path + ".parse_scope", Message: fmt.Sprintf("%s does not take parse_scope", f.Name)}
+	}
+	if f.ParseScope {
+		switch n.ParseScope {
+		case "":
+			p.parseScope = ParseScopeServer
+		case ParseScopeServer, ParseScopeRealm, ParseScopeGuild:
+			p.parseScope = n.ParseScope
+		default:
+			return p, &Error{Path: path + ".parse_scope", Message: "must be server, realm or guild"}
+		}
+	}
+
+	if n.Metric != "" && !f.Metric {
+		return p, &Error{Path: path + ".metric", Message: fmt.Sprintf("%s does not take metric", f.Name)}
+	}
+	if f.Metric {
+		switch n.Metric {
+		case "":
+			p.metric = MetricDPS
+		case MetricDPS, MetricHPS:
+			p.metric = n.Metric
+		default:
+			return p, &Error{Path: path + ".metric", Message: "must be dps or hps"}
+		}
+	}
+	return p, nil
+}
+
+func decodeScalar(f *field, raw json.RawMessage) (any, error) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return nil, fmt.Errorf("invalid value")
+	}
+	switch f.Type {
+	case typeInt:
+		num, ok := v.(json.Number)
+		if !ok {
+			return nil, fmt.Errorf("must be an integer")
+		}
+		i, err := num.Int64()
+		if err != nil {
+			return nil, fmt.Errorf("must be an integer")
+		}
+		return i, nil
+	case typeFloat:
+		num, ok := v.(json.Number)
+		if !ok {
+			return nil, fmt.Errorf("must be a number")
+		}
+		fl, err := num.Float64()
+		if err != nil {
+			return nil, fmt.Errorf("must be a number")
+		}
+		return fl, nil
+	case typeBool:
+		b, ok := v.(bool)
+		if !ok {
+			return nil, fmt.Errorf("must be true or false")
+		}
+		return b, nil
+	}
+
+	s, ok := v.(string)
+	if !ok {
+		return nil, fmt.Errorf("must be a string")
+	}
+	if len(s) > maxStringLen {
+		return nil, fmt.Errorf("must be at most %d characters", maxStringLen)
+	}
+	switch f.Type {
+	case typeTime:
+		t, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			return nil, fmt.Errorf("must be an RFC 3339 timestamp")
+		}
+		return t, nil
+	case typeUUID:
+		id, err := uuid.Parse(s)
+		if err != nil {
+			return nil, fmt.Errorf("must be a UUID")
+		}
+		return id.String(), nil
+	case typeEnum:
+		if !slices.Contains(f.Enum, s) {
+			return nil, fmt.Errorf("must be one of %s", strings.Join(f.Enum, ", "))
+		}
+	}
+	return s, nil
+}
+
+func joinOps(ops []Op) string {
+	s := make([]string, len(ops))
+	for i, op := range ops {
+		s[i] = string(op)
+	}
+	return strings.Join(s, ", ")
+}
+
+// column compiles a plain comparison on a SQL expression in scope.
+func column(expr string) func(c *compiler, s scope, p pred) string {
+	return func(c *compiler, s scope, p pred) string {
+		return c.cmp(strings.ReplaceAll(expr, "{a}", s.alias), p)
+	}
+}
+
+const (
+	killedSQL       = "IN ('clean', 'partial')"
+	scoredStatusSQL = "IN ('ok', 'low_confidence')"
+)
+
+func durationMS(alias string) string {
+	return fmt.Sprintf("(EXTRACT(EPOCH FROM (%[1]s.end_time - %[1]s.start_time)) * 1000)::bigint", alias)
+}
+
+// rankingRows are a player's boss-kill rows in encounter_dps_rankings. Spec,
+// dps, deaths and ilvl are only known for boss kills.
+func (c *compiler) rankingRows(s scope) (from, alias string) {
+	alias = c.alias("r")
+	return fmt.Sprintf("encounter_dps_rankings %[1]s WHERE %[1]s.instance_id = li.id AND %[1]s.player_guid = %[2]s.unit_guid::text AND %[1]s.encounter_id IS NOT NULL",
+		alias, s.alias), alias
+}
+
+func rankingField(col string) func(c *compiler, s scope, p pred) string {
+	return func(c *compiler, s scope, p pred) string {
+		from, r := c.rankingRows(s)
+		return c.bossMatch(p, from, r+".encounter_name", c.cmp(r+"."+col, p))
+	}
+}
+
+// clearParts computes boss, trash and idle time inside the ranked clear
+// window, the same way GuildSpeedrunHistory does: fights are clipped to the
+// window, overlapping pulls are merged (gaps and islands), boss = merged boss
+// fights, trash = merged all fights minus boss, idle = clear minus all fights.
+func clearParts(part string) func(c *compiler, s scope, p pred) string {
+	return func(c *compiler, s scope, p pred) string {
+		sr := c.alias("sr")
+		var expr string
+		switch part {
+		case "boss":
+			expr = "parts.boss_ms"
+		case "trash":
+			expr = "GREATEST(parts.all_ms - parts.boss_ms, 0)"
+		default:
+			expr = fmt.Sprintf("GREATEST(%s.ranked_duration_ms - parts.all_ms, 0)", sr)
+		}
+		sub := fmt.Sprintf(`(SELECT (%[2]s)::bigint
+    FROM instance_speedruns %[1]s
+    CROSS JOIN LATERAL (
+      SELECT COALESCE(SUM(island_ms) FILTER (WHERE scope = 'all'), 0) AS all_ms,
+        COALESCE(SUM(island_ms) FILTER (WHERE scope = 'boss'), 0) AS boss_ms
+      FROM (
+        SELECT scope, EXTRACT(EPOCH FROM (MAX(fight_end) - MIN(fight_start))) * 1000 AS island_ms
+        FROM (
+          SELECT scope, fight_start, fight_end,
+            SUM(starts_island) OVER (PARTITION BY scope ORDER BY fight_start, fight_end) AS island
+          FROM (
+            SELECT scope, fight_start, fight_end,
+              CASE WHEN fight_start <= MAX(fight_end) OVER (
+                PARTITION BY scope ORDER BY fight_start, fight_end
+                ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+              ) THEN 0 ELSE 1 END AS starts_island
+            FROM (
+              SELECT fs.scope, GREATEST(fe.start_time, %[1]s.ranked_start_time) AS fight_start,
+                LEAST(fe.end_time, %[1]s.ranked_completion_time) AS fight_end
+              FROM log_instance_encounters fe
+              CROSS JOIN LATERAL (SELECT 'all'::text AS scope UNION ALL SELECT 'boss'::text WHERE fe.boss) fs
+              WHERE fe.instance_id = li.id
+            ) fights
+            WHERE fight_end > fight_start
+          ) marked
+        ) islands
+        GROUP BY scope, island
+      ) merged
+    ) parts
+    WHERE %[1]s.instance_id = li.id AND %[1]s.ranked_duration_ms > 0)`, sr, expr)
+		return c.cmp(sub, p)
+	}
+}
+
+var (
+	classes = []string{
+		"WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID",
+		"DEATH_KNIGHT", "MONK", "DEMON_HUNTER",
+	}
+	races = []string{
+		"Human", "Dwarf", "NightElf", "Gnome", "Draenei", "Orc", "Scourge", "Tauren", "Troll", "Goblin", "BloodElf",
+	}
+	outcomes = []string{"clean", "partial", "wipe", "reset"}
+)
+
+var fields = []*field{
+	// ---- Instance scope -------------------------------------------------
+	{Name: "instance.name", Scope: scopeInstance, Type: typeString,
+		Doc:     "Zone name, e.g. \"Molten Core\".",
+		compile: column("COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name)")},
+	{Name: "instance.realm", Scope: scopeInstance, Type: typeString,
+		Doc: "Realm name.", compile: column("wsr.name")},
+	{Name: "instance.realm_id", Scope: scopeInstance, Type: typeUUID,
+		Doc: "Realm ID.", compile: column("li.realm_id")},
+	{Name: "instance.guild", Scope: scopeInstance, Type: typeString,
+		Doc: "Name of the guild the run is attributed to. Runs without a guild never match.", compile: column("g.name")},
+	{Name: "instance.guild_id", Scope: scopeInstance, Type: typeUUID,
+		Doc: "ID of the guild the run is attributed to.", compile: column("li.guild_id")},
+	{Name: "instance.started_at", Scope: scopeInstance, Type: typeTime,
+		Doc: "When the run started (upload time if unknown). RFC 3339.", compile: column("COALESCE(li.start_time, wlg.created_at)")},
+	{Name: "instance.difficulty", Scope: scopeInstance, Type: typeString,
+		Doc: "Difficulty name, e.g. \"10 Player\". Empty on servers without difficulties.", compile: column("li.difficulty_name")},
+	{Name: "instance.max_players", Scope: scopeInstance, Type: typeInt,
+		Doc: "Declared raid size (0 when unknown).", compile: column("li.max_players")},
+	{Name: "instance.category", Scope: scopeInstance, Type: typeEnum, Enum: []string{"raid", "dungeon"},
+		Doc: "raid or dungeon.", compile: column("li.category")},
+	{Name: "instance.recorder", Scope: scopeInstance, Type: typeString,
+		Doc: "Name of the character that recorded the log.", compile: column("li.recorder_name")},
+	{Name: "instance.has_video", Scope: scopeInstance, Type: typeBool,
+		Doc:     "A YouTube video is linked to the run.",
+		compile: column("EXISTS (SELECT 1 FROM log_instance_youtube_timestamped yt WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug)")},
+	{Name: "instance.player_count", Scope: scopeInstance, Type: typeInt,
+		Doc:     "Number of distinct players in the run.",
+		compile: column("(SELECT count(DISTINCT lp.unit_guid) FROM log_instance_players lp WHERE lp.instance_id = li.id)")},
+	{Name: "instance.bosses_killed", Scope: scopeInstance, Type: typeInt,
+		Doc:     "Number of distinct bosses killed (clean or partial).",
+		compile: column("(SELECT count(DISTINCT bk.name) FROM log_instance_encounters bk WHERE bk.instance_id = li.id AND bk.boss AND bk.kill_type " + killedSQL + ")")},
+	{Name: "instance.wipes", Scope: scopeInstance, Type: typeInt,
+		Doc:     "Total wipes in the run (overview metrics).",
+		compile: column("(SELECT iom.wipe_count FROM instance_overview_metrics iom WHERE iom.instance_id = li.id)")},
+	{Name: "instance.deaths", Scope: scopeInstance, Type: typeInt,
+		Doc:     "Total player deaths in the run (overview metrics).",
+		compile: column("(SELECT iom.player_deaths FROM instance_overview_metrics iom WHERE iom.instance_id = li.id)")},
+	{Name: "instance.clear_time_ms", Scope: scopeInstance, Type: typeInt, Unit: "ms",
+		Doc:     "Ranked full-clear time. Only full clears have one.",
+		compile: column("(SELECT sr.ranked_duration_ms FROM instance_speedruns sr WHERE sr.instance_id = li.id AND sr.ranked_duration_ms > 0)")},
+	{Name: "instance.clear_qualified", Scope: scopeInstance, Type: typeBool,
+		Doc:     "The clear qualifies for speedrun leaderboards.",
+		compile: column("(SELECT sr.qualified FROM instance_speedruns sr WHERE sr.instance_id = li.id)")},
+	{Name: "instance.boss_time_ms", Scope: scopeInstance, Type: typeInt, Unit: "ms",
+		Doc: "Time inside the clear spent fighting bosses. Full clears only.", compile: clearParts("boss")},
+	{Name: "instance.trash_time_ms", Scope: scopeInstance, Type: typeInt, Unit: "ms",
+		Doc: "Time inside the clear spent fighting trash (non-boss fights). Full clears only.", compile: clearParts("trash")},
+	{Name: "instance.idle_time_ms", Scope: scopeInstance, Type: typeInt, Unit: "ms",
+		Doc: "Time inside the clear spent out of combat. Full clears only.", compile: clearParts("idle")},
+	{Name: "instance.clear_parse", Scope: scopeInstance, Type: typeInt, Unit: "0-100", ParseScope: true,
+		Doc: "Clear-time parse (higher is faster).",
+		compile: func(c *compiler, s scope, p pred) string {
+			tps := c.alias("tps")
+			col := fmt.Sprintf("%s.clear_%s", tps, p.parseScope)
+			return c.cmp(fmt.Sprintf("(SELECT %[1]s_display_score FROM time_parse_scores %[2]s WHERE %[3]s AND %[1]s_status %[4]s)",
+				col, tps, c.timeParseContract(tps), scoredStatusSQL), p)
+		}},
+	{Name: "instance.kill_time_parse", Scope: scopeInstance, Type: typeInt, Unit: "0-100", ParseScope: true, Bosses: true,
+		Doc: "Boss kill-time parse (higher is faster) on any / each of the bosses.",
+		compile: func(c *compiler, s scope, p pred) string {
+			tps, tbs := c.alias("tps"), c.alias("tbs")
+			from := fmt.Sprintf("time_parse_scores %[1]s JOIN time_parse_boss_scores %[2]s ON %[2]s.time_parse_score_id = %[1]s.id WHERE %[3]s AND %[2]s.%[4]s_status %[5]s",
+				tps, tbs, c.timeParseContract(tps), p.parseScope, scoredStatusSQL)
+			return c.bossMatch(p, from, tbs+".encounter_name", c.cmp(fmt.Sprintf("%s.%s_display_score", tbs, p.parseScope), p))
+		}},
+	{Name: "instance.kill_time_ms", Scope: scopeInstance, Type: typeInt, Unit: "ms", Bosses: true,
+		Doc: "Boss kill duration (clean or partial kills) on any / each of the bosses.",
+		compile: func(c *compiler, s scope, p pred) string {
+			e := c.alias("k")
+			from := fmt.Sprintf("log_instance_encounters %[1]s WHERE %[1]s.instance_id = li.id AND %[1]s.boss AND %[1]s.kill_type %[2]s", e, killedSQL)
+			return c.bossMatch(p, from, e+".name", c.cmp(durationMS(e), p))
+		}},
+
+	// ---- Encounter scope (inside any_encounter / count_encounters) ------
+	{Name: "encounter.name", Scope: scopeEncounter, Type: typeString,
+		Doc: "Encounter name (boss name for boss fights).", compile: column("{a}.name")},
+	{Name: "encounter.boss", Scope: scopeEncounter, Type: typeBool,
+		Doc: "The encounter is a boss fight.", compile: column("{a}.boss")},
+	{Name: "encounter.outcome", Scope: scopeEncounter, Type: typeEnum, Enum: outcomes,
+		Doc: "clean (kill), partial (kill with gaps), wipe or reset.", compile: column("{a}.kill_type::text")},
+	{Name: "encounter.killed", Scope: scopeEncounter, Type: typeBool,
+		Doc: "The encounter ended in a kill (clean or partial).", compile: column("({a}.kill_type " + killedSQL + ")")},
+	{Name: "encounter.duration_ms", Scope: scopeEncounter, Type: typeInt, Unit: "ms",
+		Doc: "Pull duration.",
+		compile: func(c *compiler, s scope, p pred) string {
+			return c.cmp(durationMS(s.alias), p)
+		}},
+	{Name: "encounter.kill_time_parse", Scope: scopeEncounter, Type: typeInt, Unit: "0-100", ParseScope: true,
+		Doc: "Kill-time parse for this kill.",
+		compile: func(c *compiler, s scope, p pred) string {
+			tps, tbs := c.alias("tps"), c.alias("tbs")
+			return c.cmp(fmt.Sprintf("(SELECT %[2]s.%[5]s_display_score FROM time_parse_scores %[1]s JOIN time_parse_boss_scores %[2]s ON %[2]s.time_parse_score_id = %[1]s.id WHERE %[3]s AND %[2]s.encounter_id = %[4]s.id AND %[2]s.%[5]s_status %[6]s)",
+				tps, tbs, c.timeParseContract(tps), s.alias, p.parseScope, scoredStatusSQL), p)
+		}},
+
+	// ---- Player scope (inside any_player / count_players) ---------------
+	{Name: "player.name", Scope: scopePlayer, Type: typeString,
+		Doc: "Character name.", compile: column("{a}.name")},
+	{Name: "player.guid", Scope: scopePlayer, Type: typeString,
+		Doc: "Character GUID, e.g. \"0x0000000000012345\".", compile: column("{a}.unit_guid::text")},
+	{Name: "player.class", Scope: scopePlayer, Type: typeEnum, Enum: classes,
+		Doc: "Class.", compile: column("{a}.class::text")},
+	{Name: "player.race", Scope: scopePlayer, Type: typeEnum, Enum: races,
+		Doc: "Race.", compile: column("{a}.race::text")},
+	{Name: "player.level", Scope: scopePlayer, Type: typeInt,
+		Doc: "Level.", compile: column("{a}.level")},
+	{Name: "player.guild", Scope: scopePlayer, Type: typeString,
+		Doc: "Guild name at the time of the run.", compile: column("(SELECT pg.name FROM guilds pg WHERE pg.id = {a}.guild_id)")},
+	{Name: "player.guild_id", Scope: scopePlayer, Type: typeUUID,
+		Doc: "Guild ID at the time of the run.", compile: column("{a}.guild_id")},
+	{Name: "player.spec", Scope: scopePlayer, Type: typeString, Bosses: true,
+		Doc: "Spec on a boss kill, e.g. \"Feral\". Known on boss kills only.", compile: rankingField("player_spec")},
+	{Name: "player.sub_spec", Scope: scopePlayer, Type: typeString, Bosses: true,
+		Doc: "Sub-spec on a boss kill, e.g. \"Bear\" / \"Cat\". Known on boss kills only.", compile: rankingField("player_sub_spec")},
+	{Name: "player.role", Scope: scopePlayer, Type: typeString, Bosses: true,
+		Doc: "Role on a boss kill (dps, healer, tank).", compile: rankingField("player_role")},
+	{Name: "player.dps", Scope: scopePlayer, Type: typeFloat, Bosses: true,
+		Doc: "DPS on a boss kill.", compile: rankingField("dps")},
+	{Name: "player.hps", Scope: scopePlayer, Type: typeFloat, Bosses: true,
+		Doc: "HPS on a boss kill.", compile: rankingField("hps")},
+	{Name: "player.deaths", Scope: scopePlayer, Type: typeInt, Bosses: true,
+		Doc: "Deaths on a boss kill. Wipes are not counted.", compile: rankingField("player_deaths")},
+	{Name: "player.avg_ilvl", Scope: scopePlayer, Type: typeInt, Bosses: true,
+		Doc: "Average item level on a boss kill.", compile: rankingField("avg_ilvl")},
+	{Name: "player.parse", Scope: scopePlayer, Type: typeInt, Unit: "0-100", Bosses: true, Metric: true,
+		Doc: "Player parse on a boss kill (latest stored score per boss).",
+		compile: func(c *compiler, s scope, p pred) string {
+			r := c.alias("ps")
+			from := fmt.Sprintf(`(SELECT DISTINCT ON (x.encounter_name) x.encounter_name, x.display_score, x.status
+      FROM parse_score_results x
+      WHERE x.tenant_id = %[2]s AND x.instance_id = li.id AND x.player_guid = %[3]s.unit_guid::text AND x.metric = %[4]s::text
+      ORDER BY x.encounter_name, x.created_at DESC, x.precise_score DESC) %[1]s WHERE %[1]s.status %[5]s`,
+				r, c.tenant(), s.alias, c.arg(string(p.metric)), scoredStatusSQL)
+			return c.bossMatch(p, from, r+".encounter_name", c.cmp(r+".display_score", p))
+		}},
+}
+
+var fieldsByName = func() map[string]*field {
+	m := make(map[string]*field, len(fields))
+	for _, f := range fields {
+		if _, dup := m[f.Name]; dup {
+			panic("duplicate instance search field " + f.Name)
+		}
+		m[f.Name] = f
+	}
+	return m
+}()
