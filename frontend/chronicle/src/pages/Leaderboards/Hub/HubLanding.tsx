@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react"
-import type { HubLandingPreview, HubPlayerRatingEntry, RankingsInstanceSummary } from "@/api/typesGenerated"
+import type { HubLandingPreview, RankingsInstanceSummary } from "@/api/typesGenerated"
 import { Skull, Swords, Timer } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
@@ -147,7 +147,9 @@ function HubLanding({ tab, onOpen, instances, landingPreviews }: { tab: HubTab; 
             const item = forCohort(row)
             if (tab === "speedruns") return !!item?.speedruns.length
             if (tab === "ratings") return !!(item?.player.peak.length || item?.player.ranked_mastery.length || item?.player.renown.length)
-            return !!(item?.speedruns.length || item?.guild.renown.length || item?.player.peak.length)
+            if (tab === "performances") return !!item?.performances.length
+            if (tab === "statistics") return !!item?.statistics.length
+            return !!(item?.speedruns.length || item?.guild.renown.length || item?.player.peak.length || item?.performances.length)
           }
           const displayed = cohorts.find(hasHighlight) ?? cohorts.find((row) => row.max_players > 0) ?? cohorts[0]
           const preview = forCohort(displayed)
@@ -244,11 +246,14 @@ function LiveCardBody({ tab, preview }: { tab: HubTab; preview?: HubLandingPrevi
   let rows: ReactNode = null
   if (tab === "overview") {
     const guild = preview?.guild.renown[0]
+    const performance = preview?.performances[0]
     rows = <>{speedLine(0)}
       {guild && <Line icon={<renown.icon className="size-3" style={{ color: renown.accent }} />}
         value={renown.format(guild.score)} title="Guild Renown #1"><span className="truncate text-foreground/90">{guild.guild_name}</span></Line>}
       {playerLine("peak", "Peak")}
-      {!preview?.speedruns.length && !guild && !preview?.player.peak.length && <UnavailableHighlight />}
+      {performance && <Line icon={<Swords className="size-3 text-muted-foreground" />}
+        value={`${Math.round(performance.dps).toLocaleString()} dps`} title="Best performance"><LivePlayer entry={performance} /></Line>}
+      {!preview?.speedruns.length && !guild && !preview?.player.peak.length && !performance && <UnavailableHighlight />}
     </>
   } else if (tab === "ratings") {
     rows = <>{playerLine("peak", "Peak")}{playerLine("ranked_mastery", "Ranked Mastery")}{playerLine("renown", "Renown")}
@@ -256,15 +261,24 @@ function LiveCardBody({ tab, preview }: { tab: HubTab; preview?: HubLandingPrevi
   } else if (tab === "speedruns") {
     rows = <>{[0, 1, 2].map(speedLine)}{!preview?.speedruns.length && <UnavailableHighlight label="No qualifying full clears" />}</>
   } else if (tab === "performances") {
-    rows = <UnavailableHighlight label="Performance highlights unavailable" />
+    rows = preview?.performances.length ? preview.performances.map((entry) =>
+      <Line key={`${entry.realm_id}-${entry.player_guid}`} value={`${Math.round(entry.dps).toLocaleString()} dps`} title="Best performance">
+        <LivePlayer entry={entry} />
+      </Line>) : <UnavailableHighlight label="No recorded performances" />
   } else if (tab === "statistics") {
-    rows = <UnavailableHighlight label="Median DPS by spec unavailable" />
+    rows = preview?.statistics.length ? preview.statistics.map((entry, index) =>
+      <Line key={`${entry.player_class}-${entry.player_spec}-${entry.player_sub_spec ?? ""}`}
+        icon={<span className="font-mono text-[10px] text-muted-foreground">{index + 1}</span>}
+        value={`${Math.round(entry.median_dps).toLocaleString()} dps`} title="Median DPS">
+        <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: CLASS_CSS_VAR[entry.player_class] }} />
+        <span className="truncate text-foreground/90">{entry.player_sub_spec ? `${entry.player_spec} (${entry.player_sub_spec})` : entry.player_spec} {CLASS_DISPLAY[entry.player_class]}</span>
+      </Line>) : <UnavailableHighlight label="No median DPS by spec yet" />
   }
   // Parsing keeps the compact card, as in Storybook.
   return rows && <div className="mb-2 space-y-0.5">{rows}</div>
 }
 
-function LivePlayer({ entry }: { entry: HubPlayerRatingEntry }) {
+function LivePlayer({ entry }: { entry: { player_class: string; player_name: string; player_guid: string } }) {
   return <><span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: CLASS_CSS_VAR[entry.player_class] }} />
     <span className="truncate text-foreground/90">{entry.player_name || entry.player_guid}</span></>
 }

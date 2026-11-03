@@ -36,6 +36,8 @@ describe("live Hub landing", () => {
       player: { peak: [player], ranked_mastery: [player], renown: [player] },
       guild: { peak: [], ranked_mastery: [], renown: [guild] },
       speedruns: [{ instance_id: "run-1", guild_name: "Live Clear", duration_ms: 120000 }],
+      performances: [{ player_guid: "mage-1", player_name: "Live Mage", player_class: "MAGE", realm_id: "realm", dps: 1725 }],
+      statistics: [{ player_class: "MAGE", player_spec: "Frost", player_sub_spec: "", median_dps: 840 }],
     }] as unknown as NonNullable<Parameters<typeof LeaderboardsHubApp>[0]["landingPreviews"]>
     const overview = render({ tab: "overview", landingPreviews })
     expect(overview).toContain("Live Clear")
@@ -48,8 +50,12 @@ describe("live Hub landing", () => {
     const speedruns = render({ tab: "speedruns", landingPreviews })
     expect(speedruns).toContain("Live Clear")
     expect(speedruns).not.toContain("Live Mage")
-    expect(render({ tab: "performances", landingPreviews })).toContain("Performance highlights unavailable")
-    expect(render({ tab: "statistics", landingPreviews })).toContain("Median DPS by spec unavailable")
+    const performances = render({ tab: "performances", landingPreviews })
+    expect(performances).toContain("Live Mage")
+    expect(performances).toContain("1,725 dps")
+    const statistics = render({ tab: "statistics", landingPreviews })
+    expect(statistics).toContain("Frost")
+    expect(statistics).toContain("840 dps")
     expect(render({ tab: "parsing", landingPreviews })).not.toContain("Live Mage")
   })
 

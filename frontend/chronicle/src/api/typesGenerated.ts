@@ -2230,8 +2230,9 @@ export interface HubGuildRatings {
 // From chroniclesdk/rating_hub_summary.go
 /**
  * HubLandingPreview contains published, bounded highlights for one instance cohort.
- * Aggregate top-player DPS remains in HubSummary.Instances[].top_players.
- * Statistics are unavailable here.
+ * Performances are each player's best complete run, aggregated across its encounters.
+ * Aggregate top-player DPS remains separately in HubSummary.Instances[].top_players.
+ * Statistics are per-run DPS distributions by class/spec, from the v1 box plot.
  */
 export interface HubLandingPreview {
     readonly instance_name: string;
@@ -2239,6 +2240,8 @@ export interface HubLandingPreview {
     readonly max_players: number;
     readonly player: HubPlayerRatings;
     readonly guild: HubGuildRatings;
+    readonly performances: readonly RankingsEntry[];
+    readonly statistics: readonly RankingsBoxPlotStats[];
     readonly speedruns: readonly SpeedrunLeaderboardEntry[];
 }
 
