@@ -22,7 +22,6 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
-	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/instancesearch"
 	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/google/uuid"
@@ -36,18 +35,10 @@ const (
 	instanceSearchSlowLog = 2 * time.Second
 )
 
-const (
-	instanceSearchUserRefillPerMinute = 60
-	instanceSearchFreeBurst           = 100
-	instanceSearchHonoredBurst        = 300
-	instanceSearchReveredBurst        = 800
-	instanceSearchExaltedBurst        = 2000
-)
-
 var (
 	// Logged-in buckets share a refill rate but get more room at higher
 	// supporter tiers. The free bucket takes five minutes to refill from empty.
-	instanceSearchUserLimit = ratelimit.PerMinute(instanceSearchUserRefillPerMinute, instanceSearchFreeBurst)
+	instanceSearchUserLimit = instancesearch.UserRateLimit(false, false, false)
 	// Anonymous users only get cheap queries; bucketed per IP.
 	instanceSearchAnonLimit = ratelimit.PerMinute(20, 40)
 )
@@ -128,19 +119,6 @@ type searchCaller struct {
 	limit    ratelimit.Limit
 }
 
-func instanceSearchLimitForTier(tier string) ratelimit.Limit {
-	burst := float64(instanceSearchFreeBurst)
-	switch tier {
-	case billing.TierHonored:
-		burst = instanceSearchHonoredBurst
-	case billing.TierRevered:
-		burst = instanceSearchReveredBurst
-	case billing.TierExalted:
-		burst = instanceSearchExaltedBurst
-	}
-	return ratelimit.PerMinute(instanceSearchUserRefillPerMinute, burst)
-}
-
 func newInstanceSearchUserLimitResolver(zed *authz.Authz) instanceSearchUserLimitResolver {
 	return func(ctx context.Context, userID uuid.UUID) (ratelimit.Limit, error) {
 		return resolveInstanceSearchUserLimit(ctx, zed, userID)
@@ -161,7 +139,7 @@ func resolveInstanceSearchUserLimit(ctx context.Context, zed *authz.Authz, userI
 	if len(permissions) != 3 {
 		return ratelimit.Limit{}, errors.New("check instance search supporter tier: expected 3 permission results")
 	}
-	return instanceSearchLimitForTier(highestSupporterTier(permissions[0], permissions[1], permissions[2])), nil
+	return instancesearch.UserRateLimit(permissions[0], permissions[1], permissions[2]), nil
 }
 
 func (s *instanceSearch) caller(r *http.Request) (searchCaller, error) {

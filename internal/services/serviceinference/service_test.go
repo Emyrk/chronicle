@@ -985,11 +985,14 @@ func TestDiscordSearchInstancesExecutesAndChargesSharedBucket(t *testing.T) {
 	require.NoError(t, err)
 	tenant := database.Tenant{ID: uuid.New(), Slug: pgtype.Text{String: "turtle", Valid: true}, Name: "Turtle WoW"}
 	userID := uuid.New()
-	limit := instancesearch.UserRateLimit()
-	limit.PerSecond = 0.001 // Keep refill negligible so the charged-token assertion is deterministic.
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"honored"}))
+	limit := instancesearch.UserRateLimit(false, false, false)
 	limiter := ratelimit.New(store, instancesearch.RateLimitBucketName, limit)
 	service := &Service{
 		db:          store,
+		zed:         zed,
 		accessURL:   accessURL,
 		tenant:      servicetenant.NewTestWithTenants(*accessURL, "chronicle.example", tenant),
 		searchLimit: limiter,
@@ -1002,12 +1005,12 @@ func TestDiscordSearchInstancesExecutesAndChargesSharedBucket(t *testing.T) {
 		Results []chroniclesdk.InstanceSearchResult `json:"results"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(output), &response))
-	require.Equal(t, 2, response.Cost)
+	require.Equal(t, 3, response.Cost)
 	require.Empty(t, response.Results)
 
-	status, err := limiter.Peek(ctx, ratelimit.UserSubject(userID.String()))
+	status, err := limiter.PeekWithLimit(ctx, ratelimit.UserSubject(userID.String()), instancesearch.UserRateLimit(false, false, true))
 	require.NoError(t, err)
-	require.InDelta(t, 298, status.Remaining, 0.5)
+	require.InDelta(t, 297, status.Remaining, 0.5)
 }
 
 func TestDiscordDefaultTenantProfile(t *testing.T) {

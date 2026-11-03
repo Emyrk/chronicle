@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/instancesearch"
 	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
@@ -231,18 +232,18 @@ func TestInstanceSearchSupporterLimits(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		tier  string
-		burst float64
+		tier                      string
+		exalted, revered, honored bool
+		burst                     float64
 	}{
 		{tier: "free", burst: 100},
-		{tier: "honored", burst: 300},
-		{tier: "revered", burst: 800},
-		{tier: "exalted", burst: 2000},
-		{tier: "unknown", burst: 100},
+		{tier: "honored", honored: true, burst: 300},
+		{tier: "revered", revered: true, honored: true, burst: 800},
+		{tier: "exalted", exalted: true, revered: true, honored: true, burst: 2000},
 	} {
 		t.Run(tc.tier, func(t *testing.T) {
 			t.Parallel()
-			limit := instanceSearchLimitForTier(tc.tier)
+			limit := instancesearch.UserRateLimit(tc.exalted, tc.revered, tc.honored)
 			require.Equal(t, tc.burst, limit.Burst)
 			require.InDelta(t, 60, limit.PerSecond*60, 0.001)
 

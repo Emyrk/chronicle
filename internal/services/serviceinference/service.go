@@ -68,7 +68,7 @@ func (s *Service) Start(ctx context.Context) error {
 	s.db = servicedbstore.DatabaseStore(s.broker)
 	s.zed = serviceauthz.Authz(s.broker)
 	s.tenant = servicetenant.Tenant(s.broker)
-	s.searchLimit = ratelimit.New(s.db, instancesearch.RateLimitBucketName, instancesearch.UserRateLimit())
+	s.searchLimit = ratelimit.New(s.db, instancesearch.RateLimitBucketName, instancesearch.UserRateLimit(false, false, false))
 	accessURL, err := url.Parse(serviceaccessurl.AccessURL(s.broker))
 	if err != nil {
 		return fmt.Errorf("parse inference access URL: %w", err)

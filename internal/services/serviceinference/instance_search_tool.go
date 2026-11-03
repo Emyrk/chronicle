@@ -11,6 +11,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/instancesearch"
 	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
@@ -91,6 +92,23 @@ func (s *Service) tenantInstanceURL(tenant database.Tenant, result chroniclesdk.
 	return base.String()
 }
 
+func (s *Service) instanceSearchUserLimit(ctx context.Context, userID uuid.UUID) (ratelimit.Limit, error) {
+	actor := policy.New().User(userID)
+	chronicle := policy.New().GlobalChronicle()
+	permissions, err := s.zed.Check(ctx, nil,
+		chronicle.CanHas_exalted_User(actor),
+		chronicle.CanHas_revered_User(actor),
+		chronicle.CanHas_honored_User(actor),
+	)
+	if err != nil {
+		return ratelimit.Limit{}, err
+	}
+	if len(permissions) != 3 {
+		return ratelimit.Limit{}, errors.New("check instance search supporter tier: expected 3 permission results")
+	}
+	return instancesearch.UserRateLimit(permissions[0], permissions[1], permissions[2]), nil
+}
+
 func (s *Service) searchInstances(ctx context.Context, tc toolContext, args string) (string, error) {
 	var in struct {
 		Where *chroniclesdk.InstanceSearchNode `json:"where"`
@@ -120,14 +138,18 @@ func (s *Service) searchInstances(ctx context.Context, tc toolContext, args stri
 	}
 	limiter := s.searchLimit
 	if limiter == nil {
-		limiter = ratelimit.New(s.db, instancesearch.RateLimitBucketName, instancesearch.UserRateLimit())
+		limiter = ratelimit.New(s.db, instancesearch.RateLimitBucketName, instancesearch.UserRateLimit(false, false, false))
 	}
-	limitResult, err := limiter.Take(searchCtx, ratelimit.UserSubject(tc.userID.String()), float64(compiled.Cost))
+	userLimit, err := s.instanceSearchUserLimit(searchCtx, tc.userID)
+	if err != nil {
+		return "", fmt.Errorf("resolve instance search rate limit: %w", err)
+	}
+	limitResult, err := limiter.TakeWithLimit(searchCtx, ratelimit.UserSubject(tc.userID.String()), float64(compiled.Cost), userLimit)
 	if err != nil {
 		return "", fmt.Errorf("instance search rate limit: %w", err)
 	}
 	if !limitResult.Allowed {
-		if float64(compiled.Cost) > limiter.Limit().Burst {
+		if float64(compiled.Cost) > userLimit.Burst {
 			return "", errors.New("instance search is too complex; remove some filters")
 		}
 		seconds := int64(math.Ceil(limitResult.RetryAfter.Seconds()))
