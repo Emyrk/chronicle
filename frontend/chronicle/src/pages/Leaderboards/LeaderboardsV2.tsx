@@ -1,8 +1,9 @@
 import { useState } from "react"
 import { useInfiniteQuery } from "@tanstack/react-query"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, Navigate, useSearchParams } from "react-router-dom"
 import { ChevronLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { AdRailStack } from "@/components/Ads/AdRailStack"
 import { useRankingsFilters, useRankingsInstances } from "@/api/rankingsQueries"
 import { useRealms } from "@/api/queries"
 import type { RankingsInstanceSummary } from "@/api/typesGenerated"
@@ -13,20 +14,17 @@ import { ParsingInstanceView } from "./Parsing/ParsingInstanceView"
 import { RulesetInstanceView } from "./RulesetInstanceView"
 import { RulesetsLanding } from "./RulesetsLanding"
 import { SpeedrunLeaderboard } from "../Leaderboard/SpeedrunLeaderboard"
-import { RankingsLanding } from "../Rankings/RankingsLanding"
 import { TABS } from "./Hub/hubTabs"
-import { v2Selection } from "./v2Selection"
+import { hubParams, v2Selection } from "./v2Selection"
+import { legacyLeaderboardsTarget } from "./leaderboardsState"
 import { ratingScopeURL, fetchLiveRating, type LiveRatingRequest } from "./ratingsLive"
 
 export function LeaderboardsV2() {
   const [params, setParams] = useSearchParams()
   const { tab, instance, realmIDs } = v2Selection(params)
-  const select = (key: "tab" | "instance" | "realm_ids", value?: string) => {
-    const next = new URLSearchParams(params)
-    if (value) next.set(key, value)
-    else next.delete(key)
-    setParams(next)
-  }
+  const select = (key: "tab" | "instance" | "realm_ids", value?: string) => setParams(hubParams(params, key, value))
+  // Preserve historical deep links while the classic pages live under their own paths.
+  if (params.get("tab") === "speedrun" || params.get("tab") === "leaderboard") return <Navigate to={legacyLeaderboardsTarget(params)} replace />
   return (
     <div className="min-h-screen bg-background text-foreground">
       <main className="mx-auto max-w-[1920px] space-y-5 px-3 py-6 sm:px-6">
@@ -34,9 +32,10 @@ export function LeaderboardsV2() {
           {instance && <><img src={getInstanceBackground(instance)} alt="" className="absolute inset-0 h-full w-full object-cover opacity-60" /><div className="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-card/30" /></>}
           <div className="relative px-5 pt-8 pb-5 sm:px-6 sm:pt-10">
             {instance && <button type="button" className="mb-2 flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground" onClick={() => select("instance")}> <ChevronLeft className="size-4" /> All instances</button>}
-            <p className="text-xs uppercase tracking-widest text-muted-foreground">Leaderboards · live preview</p>
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">Leaderboards / {instance ? "Instance" : "All instances"}</p>
             <h1 className="font-wow mt-1 text-3xl leading-tight sm:text-4xl">{instance ?? "All instances"}</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Published rankings only. Ratings cover all realms by default; the realm filter only changes which rows are shown.</p>
+            <p className="mt-2 text-sm text-muted-foreground">Published instance rankings. Choose an instance to explore ratings, performances, clear times and more.</p>
+            {tab === "ratings" && <RatingsRealmPicker selected={realmIDs} onChange={(ids) => select("realm_ids", ids.join(","))} />}
           </div>
           <nav aria-label="Leaderboard section" className="styled-scrollbar relative flex overflow-x-auto border-t border-white/5 px-2 sm:px-4">
             {TABS.map(({ id, icon: Icon, label }) => (
@@ -47,38 +46,73 @@ export function LeaderboardsV2() {
             ))}
           </nav>
         </header>
-        {tab === "ratings" ? <LiveRatings instance={instance} realmIDs={realmIDs} onRealmChange={(ids) => select("realm_ids", ids.join(","))} /> : instance ? (
-          tab === "statistics" ? <InstanceView instanceName={instance} /> :
-          tab === "performances" ? <p className="rounded-xl border p-8 text-muted-foreground">A dedicated live performances view is not available yet. The Statistics tab includes the current performance leaderboard.</p> :
+        <nav aria-label="Classic leaderboard pages" className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 text-xs text-muted-foreground">
+          <span>Classic boards:</span>
+          <Link className="hover:text-foreground hover:underline" to={`/leaderboards/statistics${instance ? `?instance=${encodeURIComponent(instance)}` : ""}`}>Statistics</Link>
+          <Link className="hover:text-foreground hover:underline" to={`/leaderboards/speedruns${instance ? `?instance=${encodeURIComponent(instance)}` : ""}`}>Speedruns</Link>
+          <Link className="hover:text-foreground hover:underline" to={`/leaderboards/parsing${instance ? `?instance=${encodeURIComponent(instance)}` : ""}`}>Parsing</Link>
+          <Link className="hover:text-foreground hover:underline" to="/leaderboards/rulesets">Rulesets</Link>
+          {instance && <Link className="hover:text-foreground hover:underline" to={`/leaderboards/ruleset?instance=${encodeURIComponent(instance)}`}>Instance ruleset</Link>}
+        </nav>
+        <div className="flex gap-6">
+          <div className="min-w-0 flex-1">
+        {instance ? (
+          tab === "ratings" ? <LiveRatings instance={instance} realmIDs={realmIDs} /> :
+          tab === "statistics" || tab === "overview" ? <InstanceView instanceName={instance} /> :
+          tab === "performances" ? <div className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">Performance rankings are available in <Link className="text-primary underline" to={`/leaderboards/statistics?instance=${encodeURIComponent(instance)}`}>classic Statistics</Link>.</div> :
           tab === "parsing" ? <ParsingInstanceView key={instance} instanceName={instance} /> :
           tab === "speedruns" ? <SpeedrunLeaderboard overrideInstance={instance} /> :
-          tab === "rulesets" ? <RulesetInstanceView instanceName={instance} /> :
-          <InstanceView instanceName={instance} />
+          <RulesetInstanceView instanceName={instance} />
         ) : tab === "rulesets" ? <div onClickCapture={(event) => {
             const link = (event.target as HTMLElement).closest("a")
             const name = link && new URL(link.href).searchParams.get("instance")
             if (name) { event.preventDefault(); select("instance", name) }
-          }}><RulesetsLanding /></div> : tab === "speedruns" ? <SpeedrunLeaderboard /> :
-          tab === "statistics" || tab === "performances" || tab === "parsing" ? <RankingsLanding showTopPlayers={tab === "performances"} /> :
-          <LiveInstanceGrid />}
+          }}><RulesetsLanding /></div> : <LiveInstanceGrid params={params} />}
+          </div>
+          <AdRailStack primaryPlacement="leaderboards-right-rail" secondaryPlacement="leaderboards-right-rail-lower" />
+        </div>
       </main>
     </div>
   )
 }
 
-function LiveInstanceGrid() {
+function RatingsRealmPicker({ selected, onChange }: { selected: string[]; onChange: (ids: string[]) => void }) {
+  const realms = useRealms()
+  const valid = selected.filter((id) => realms.data?.some((realm) => realm.id === id))
+  return <details className="relative mt-4 inline-block rounded-md border bg-background/80 px-3 py-2 text-sm backdrop-blur-sm">
+    <summary className="cursor-pointer">Ratings realms: {valid.length ? valid.map((id) => realms.data?.find((realm) => realm.id === id)?.name).join(", ") : "All realms"}</summary>
+    <div className="styled-scrollbar absolute left-0 top-full z-20 mt-1 max-h-52 min-w-48 overflow-y-auto rounded border bg-background p-2 shadow-lg">
+      {realms.isPending ? <span role="status">Loading realms…</span> : realms.isError ? <span role="alert">Could not load realms.</span> : <>
+        <button type="button" className="block w-full p-1 text-left underline" onClick={() => onChange([])}>All realms</button>
+        {realms.data?.map((realm) => <label key={realm.id} className="flex items-center gap-2 p-1">
+          <input type="checkbox" checked={valid.includes(realm.id)} onChange={() => onChange(valid.includes(realm.id) ? valid.filter((id) => id !== realm.id) : [...valid, realm.id])} />
+          {realm.name}
+        </label>)}
+      </>}
+    </div>
+  </details>
+}
+
+function LiveInstanceGrid({ params }: { params: URLSearchParams }) {
   const { data, isPending, isError } = useRankingsInstances()
   if (isPending) return <p role="status">Loading instances…</p>
   if (isError) return <p role="alert">Could not load instances.</p>
   if (!data?.length) return <p>No published instances yet.</p>
-  return <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{data.map((row: RankingsInstanceSummary) => (
-    <InstanceCard key={`${row.instance_name}-${row.difficulty_name}-${row.max_players}`} name={row.instance_name} to={`?tab=overview&instance=${encodeURIComponent(row.instance_name)}`} badge={row.difficulty_name}>
-      <p className="text-xs text-muted-foreground">{row.total_kills.toLocaleString()} recorded kills · {row.max_players} players</p>
-    </InstanceCard>
-  ))}</div>
+  return <div className="space-y-7">{(["raid", "dungeon", "other"] as const).map((category) => {
+    const rows = data.filter((row) => category === "other" ? row.category !== "raid" && row.category !== "dungeon" : row.category === category)
+    if (!rows.length) return null
+    return <section key={category} className="space-y-4">
+      <h2 className="font-wow text-xl">{category === "raid" ? "Raids" : category === "dungeon" ? "Dungeons" : "Other instances"}</h2>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{rows.map((row: RankingsInstanceSummary) => (
+        <InstanceCard key={`${row.instance_name}-${row.difficulty_name}-${row.max_players}`} name={row.instance_name} to={`?${hubParams(params, "instance", row.instance_name)}`} badge={row.difficulty_name}>
+          <p className="text-xs text-muted-foreground">{row.total_kills.toLocaleString()} recorded kills · {row.max_players} players</p>
+        </InstanceCard>
+      ))}</div>
+    </section>
+  })}</div>
 }
 
-function LiveRatings({ instance, realmIDs, onRealmChange }: { instance: string | null; realmIDs: string[]; onRealmChange: (ids: string[]) => void }) {
+function LiveRatings({ instance, realmIDs }: { instance: string | null; realmIDs: string[] }) {
   const realms = useRealms()
   const selectedRealmIDs = realmIDs.filter((id) => realms.data?.some((realm) => realm.id === id))
   const summaries = useRankingsInstances()
@@ -117,16 +151,6 @@ function LiveRatings({ instance, realmIDs, onRealmChange }: { instance: string |
   if (realms.isError || (metric !== "renown" && (summaries.isError || filters.isError))) return <p role="alert">Could not load rating cohorts. Please try again later.</p>
   return <section className="space-y-5 rounded-xl border bg-card p-5">
     <div className="flex flex-wrap gap-3">
-      <details className="relative rounded border bg-background p-2 text-sm">
-        <summary className="cursor-pointer">Realms: {selectedRealmIDs.length ? `${selectedRealmIDs.length} selected` : "All"}</summary>
-        <div className="styled-scrollbar absolute left-0 top-full z-10 mt-1 max-h-52 min-w-48 overflow-y-auto rounded border bg-background p-2 shadow-lg">
-          <button type="button" className="block w-full p-1 text-left underline" onClick={() => onRealmChange([])}>All realms</button>
-          {realms.data?.map((realm) => <label key={realm.id} className="flex items-center gap-2 p-1">
-            <input type="checkbox" checked={selectedRealmIDs.includes(realm.id)} onChange={() => onRealmChange(selectedRealmIDs.includes(realm.id) ? selectedRealmIDs.filter((id) => id !== realm.id) : [...selectedRealmIDs, realm.id])} />
-            {realm.name}
-          </label>)}
-        </div>
-      </details>
       <label>Rating <select aria-label="Rating metric" className="ml-2 rounded border bg-background p-2" value={metric} onChange={(e) => { setMetric(e.target.value as LiveRatingRequest["metric"]); setWindow("period") }}>
         <option value="renown">Renown</option><option value="peak">Peak</option><option value="mastery">Mastery</option><option value="ranked_mastery">Ranked Mastery</option>
       </select></label>

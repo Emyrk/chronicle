@@ -193,9 +193,9 @@ function App() {
         <Route path="/armory/:realmName/:playerIdentifier" element={<ArmoryPage />} />
         <Route path="/sim" element={<SimPage />} />
         <Route path="/raidplanner" element={<RaidPlannerPage />} />
-        {/* Unlinked live preview. Keep the existing /leaderboards routes intact. */}
+        {/* The live hub owns the index; classic leaderboards remain available as subpages. */}
         <Route path="/leaderboard-v2" element={<LeaderboardsV2 />} />
-        <Route path="/leaderboards" element={<LegacyLeaderboardsRedirect />} />
+        <Route path="/leaderboards" element={<LeaderboardsV2 />} />
         <Route path="/leaderboards/statistics" element={<LeaderboardsPage mode="statistics" />} />
         <Route path="/leaderboards/speedruns" element={<LeaderboardsPage mode="speedruns" />} />
         <Route path="/leaderboards/ruleset" element={<LeaderboardsPage mode="ruleset" />} />
