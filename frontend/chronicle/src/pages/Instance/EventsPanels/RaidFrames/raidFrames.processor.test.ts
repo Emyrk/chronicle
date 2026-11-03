@@ -9,6 +9,7 @@ import type {
 } from "../processorTypes";
 import {
   enemyFrameUnits,
+  repeatedEnemyNames,
   orderRaidFramePlayers,
   activeCastAt,
   lastTargetAt,
@@ -314,3 +315,15 @@ describe("enemyFrameUnits", () => {
   });
 });
 
+
+describe("repeatedEnemyNames", () => {
+  it("returns names listed at least the threshold number of times", () => {
+    const units = [
+      { name: "Onyxia" },
+      ...Array.from({ length: 4 }, () => ({ name: "Rookery Whelp" })),
+      ...Array.from({ length: 3 }, () => ({ name: "Onyxian Warder" })),
+    ];
+    expect([...repeatedEnemyNames(units)]).toEqual(["Rookery Whelp"]);
+    expect([...repeatedEnemyNames(units, 3)].sort()).toEqual(["Onyxian Warder", "Rookery Whelp"]);
+  });
+});

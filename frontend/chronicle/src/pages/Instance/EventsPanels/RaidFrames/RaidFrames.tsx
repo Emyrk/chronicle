@@ -14,6 +14,7 @@ import {
   activeCastAt,
   incomingHealsAt,
   enemyFrameUnits,
+  repeatedEnemyNames,
   latestResourceAt,
   orderRaidFramePlayers,
   resourceDeathStartedAt,
@@ -424,6 +425,7 @@ function OverlayRaidFrame({
   timestampMs,
   opacity,
   entityAttributes,
+  compact = false,
 }: {
   guid?: string;
   name: string;
@@ -435,6 +437,8 @@ function OverlayRaidFrame({
   timestampMs: number;
   opacity?: number;
   entityAttributes?: EntityAttributes;
+  /** A small unlabeled bar (one of a swarm of same-named adds); the name is in the tooltip. */
+  compact?: boolean;
 }) {
   const [hoveredHeal, setHoveredHeal] = useState<RaidFrameHeal | null>(null);
   const inspect = useUnitInspect();
@@ -448,12 +452,12 @@ function OverlayRaidFrame({
     <Tooltip>
       <TooltipTrigger asChild>
         <div
-          className={`pointer-events-auto flex w-20 flex-col overflow-hidden rounded-sm border bg-black/80 transition-opacity duration-100 ease-linear ${inspected ? "border-white ring-1 ring-white/70" : "border-black/80"} ${dead && opacity === undefined ? "opacity-60" : ""} ${inspect && guid ? "cursor-pointer" : ""}`}
+          className={`pointer-events-auto flex ${compact ? "w-5" : "w-20"} flex-col overflow-hidden rounded-sm border bg-black/80 transition-opacity duration-100 ease-linear ${inspected ? "border-white ring-1 ring-white/70" : "border-black/80"} ${dead && opacity === undefined ? "opacity-60" : ""} ${inspect && guid ? "cursor-pointer" : ""}`}
           style={opacity === undefined ? undefined : { opacity }}
           onClick={inspect && guid ? () => inspect.select(guid) : undefined}
           {...entityAttributes}
         >
-          <div className="relative h-4">
+          <div className={`relative ${compact ? "h-2" : "h-4"}`}>
             <div className="absolute inset-y-0 left-0" style={{ width: `${healthWidth}%`, background: classColor }} />
             {absorbWidth > 0 && (
               <div className="absolute inset-y-0 bg-white/50" style={{ left: `${healthWidth}%`, width: `${absorbWidth}%` }} />
@@ -467,12 +471,12 @@ function OverlayRaidFrame({
                 onHoverHeal={setHoveredHeal}
               />
             )}
-            <span className="pointer-events-none absolute inset-0 truncate px-1 text-[9px] font-semibold leading-4 text-white [text-shadow:0_0_2px_#000,0_0_2px_#000]">
+            {!compact && <span className="pointer-events-none absolute inset-0 truncate px-1 text-[9px] font-semibold leading-4 text-white [text-shadow:0_0_2px_#000,0_0_2px_#000]">
               {dead ? `☠ ${name}` : name}
-            </span>
+            </span>}
           </div>
           {cast && !dead && <OverlayCastLine cast={cast} timestampMs={timestampMs} />}
-          <div className="h-1 bg-black/60">
+          <div className={`${compact ? "h-0.5" : "h-1"} bg-black/60`}>
             {sample && sample.maximumPower > 0 && !dead && (
               <div className="h-full" style={{ width: `${percent(sample.currentPower, sample.maximumPower)}%`, background: POWER_COLORS[powerType] ?? "#767676" }} />
             )}
@@ -644,7 +648,7 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
       bossGuids.has(guid),
     );
   };
-  const players: (readonly [string, { name: string; class: string }])[] = enemiesMode
+  const enemies = enemiesMode
     ? enemyFrameUnits(
         encounter,
         (guid) => Boolean(instancePlayers[guid]),
@@ -653,6 +657,12 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
         bossGuids,
         encounterEnemyGuids,
       )
+    : [];
+  // Swarms of same-named adds get compact frames (counted before dead ones
+  // drop out, so a swarm does not flip back to full frames as it dies).
+  const compactNames = repeatedEnemyNames(enemies);
+  const players: (readonly [string, { name: string; class: string }])[] = enemiesMode
+    ? enemies
         .filter(({ guid }) => !hideDeadEnemies || enemyOpacity(guid) > 0)
         .map(({ guid, name }) => [guid, { name, class: "enemy" }] as const)
     : Object.entries(instancePlayers)
@@ -676,24 +686,49 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
   }));
 
   if (overlay) {
+    type Frame = NonNullable<(typeof frameData)[number]>;
+    const renderFrame = (frame: Frame, compact = false) => (
+      <OverlayRaidFrame
+        key={frame.guid}
+        guid={frame.guid}
+        name={frame.player.name}
+        className={frame.player.class}
+        sample={frame.sample}
+        cast={frame.cast}
+        incomingHeals={frame.incomingHeals}
+        spellNames={props.result.spellNames}
+        timestampMs={timestampMs}
+        opacity={frame.opacity}
+        entityAttributes={instanceEntityAttributes(props.context.instance, frame.guid)}
+        compact={compact}
+      />
+    );
+    // Swarms (same-named adds): one label over columns of small bars.
+    const swarms = new Map<string, Frame[]>();
+    for (const frame of frameData) {
+      if (frame && compactNames.has(frame.player.name)) {
+        swarms.set(frame.player.name, [...(swarms.get(frame.player.name) ?? []), frame]);
+      }
+    }
+    const fullFrames = frameData.filter((frame) => !frame || !compactNames.has(frame.player.name));
     // Columns of five like the in-game raid frames; the host positions it.
     return (
       <TooltipProvider>
-        <div aria-label={enemiesMode ? "Enemy frames" : "Raid frames"} className="pointer-events-none grid grid-flow-col grid-rows-[repeat(5,auto)] gap-0.5">
-          {frameData.map((frame, index) => frame === null ? <div key={`empty-${index}`} aria-hidden /> : (
-            <OverlayRaidFrame
-              key={frame.guid}
-              guid={frame.guid}
-              name={frame.player.name}
-              className={frame.player.class}
-              sample={frame.sample}
-              cast={frame.cast}
-              incomingHeals={frame.incomingHeals}
-              spellNames={props.result.spellNames}
-              timestampMs={timestampMs}
-              opacity={frame.opacity}
-              entityAttributes={instanceEntityAttributes(props.context.instance, frame.guid)}
-            />
+        <div aria-label={enemiesMode ? "Enemy frames" : "Raid frames"} className="pointer-events-none flex items-start gap-1">
+          {fullFrames.length > 0 && (
+            <div className="grid grid-flow-col grid-rows-[repeat(5,auto)] gap-0.5">
+              {fullFrames.map((frame, index) => frame === null ? <div key={`empty-${index}`} aria-hidden /> : renderFrame(frame))}
+            </div>
+          )}
+          {[...swarms].map(([name, frames]) => (
+            <div key={name} role="group" aria-label={name} className="flex flex-col gap-0.5">
+              <span className="max-w-full truncate rounded-sm bg-black/60 px-1 text-[9px] font-semibold leading-3 text-white [text-shadow:0_0_2px_#000]">
+                {name} <span className="text-white/60">×{frames.length}</span>
+              </span>
+              <div className="grid grid-flow-col grid-rows-[repeat(5,auto)] justify-start gap-0.5">
+                {frames.map((frame) => renderFrame(frame, true))}
+              </div>
+            </div>
           ))}
         </div>
       </TooltipProvider>

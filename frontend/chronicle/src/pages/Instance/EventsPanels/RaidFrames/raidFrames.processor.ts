@@ -451,3 +451,17 @@ export function enemyFrameUnits(
       || left.name.localeCompare(right.name))
     .map(({ guid, name }) => ({ guid, name }));
 }
+
+/** An enemy name repeated this many times gets compact frames under one label. */
+export const COMPACT_ENEMY_REPEAT = 4;
+
+/**
+ * The names of enemies listed at least `minRepeat` times (a swarm of adds):
+ * the overlay draws those as small unlabeled bars under one shared label
+ * instead of a full nameplate each.
+ */
+export function repeatedEnemyNames(units: readonly { name: string }[], minRepeat = COMPACT_ENEMY_REPEAT): Set<string> {
+  const counts = new Map<string, number>();
+  for (const { name } of units) counts.set(name, (counts.get(name) ?? 0) + 1);
+  return new Set([...counts].filter(([, count]) => count >= minRepeat).map(([name]) => name));
+}
