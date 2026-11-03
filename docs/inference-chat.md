@@ -58,6 +58,8 @@ Accounts with inference debug permission can run `/debug` to request a provider-
 
 Debug authorization is enforced again by the backend before connection lookup, credential decryption, run creation, or provider invocation; hiding the frontend toggle is not the security boundary. Each `DEBUG_SNAPSHOT` is generated from the provider-neutral request actually composed by the server and identifies its iteration and phase (`request`, `tool_results`, `client_tool_request`, or `response`). Snapshots include ordered messages, tool definitions and schemas, applied skills, runtime limits, context, model, and accumulated usage. The prompt inspector can download the current run's snapshots, client-tool requests, and visible transport error as JSON for diagnostics. Snapshots are streamed only and are never written to inference message or run records. Provider credentials, OAuth material, encryption data, HTTP headers, raw provider events, and hidden provider reasoning are excluded. Runtime skills compose server-owned instructions and tools per assistant; snapshots list the applied skill IDs, versions, prompt contributions, and tool names.
 
+The authorized prompt inspector labels advertised tools by execution location: Chronicle server, browser client, or provider-hosted. A browser tool appearing in a snapshot means the model could call it, not that it ran; actual browser invocations appear separately as client-tool requests. Older exported snapshots without execution metadata remain unclassified.
+
 ## Persistence and limits
 
 The persistence model consists of connections, OAuth transactions, threads, messages, and runs. Run events are not stored in the MVP.

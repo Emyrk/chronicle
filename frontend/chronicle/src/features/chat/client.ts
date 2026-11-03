@@ -137,6 +137,9 @@ function validateDebugSnapshot(value: Record<string, unknown>, event: SseEvent):
     const tool = requireRecord(item, "tools[]", event);
     requireString(tool, "name", event);
     requireString(tool, "description", event);
+    if (tool.execution !== undefined && !["server", "browser", "provider"].includes(String(tool.execution))) {
+      throw new AgUiClientError("parse", 'AG-UI debug tool has an unsupported execution location.', { event });
+    }
     if (!("parameters" in tool)) {
       throw new AgUiClientError("parse", 'AG-UI debug tool is missing field "parameters".', { event });
     }

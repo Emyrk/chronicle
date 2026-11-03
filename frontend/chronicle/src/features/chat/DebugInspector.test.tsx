@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { DebugInspector } from "./DebugInspector";
+import { ToolsTab } from "../../pages/AssistantDebug/DebugViewerTabs";
+import { DebugInspector, DebugSnapshot } from "./DebugInspector";
 import { serializeInferenceDebug } from "./debugExport";
 import type { DebugSnapshotEvent } from "./protocol";
 
@@ -15,7 +16,11 @@ const snapshot: DebugSnapshotEvent = {
   contextType: "instance",
   contextId: "instance-1",
   messages: [{ role: "system", content: "instructions" }],
-  tools: [{ name: "inspect_instance_ui", description: "Inspect the UI", parameters: { type: "object" } }],
+  tools: [
+    { name: "inspect_instance_ui", description: "Inspect the UI", parameters: { type: "object" }, execution: "browser" },
+    { name: "instance_summary", description: "Summarize instance", parameters: { type: "object" }, execution: "server" },
+    { name: "web_search", description: "Web research", parameters: { type: "object" }, execution: "provider" },
+  ],
   skills: [],
   limits: {
     maxHistoryMessages: 50,
@@ -49,6 +54,25 @@ describe("DebugInspector", () => {
       clientToolRequests: [request],
       error: "continuation failed",
     });
+  });
+
+  it("separates server, browser, and provider tools from executed client requests", () => {
+    const markup = renderToStaticMarkup(<DebugSnapshot snapshot={snapshot} latest />);
+    expect(markup).toContain("Server tools (1)");
+    expect(markup).toContain("Browser tools (1)");
+    expect(markup).toContain("Provider tools (1)");
+    expect(markup).toContain("Browser tools are advertised to the model");
+    expect(markup).toContain("inspect_instance_ui");
+  });
+
+  it("groups advertised tools by execution location in the pop-out viewer", () => {
+    const olderSnapshot = { ...snapshot, tools: [...snapshot.tools, { name: "legacy", description: "Older tool", parameters: {} }] };
+    const markup = renderToStaticMarkup(<ToolsTab snapshot={olderSnapshot} />);
+    expect(markup).toContain("Server tools (1)");
+    expect(markup).toContain("Browser tools (1)");
+    expect(markup).toContain("Provider tools (1)");
+    expect(markup).toContain("Unclassified tools (1)");
+    expect(markup).toContain("only invoked tools appear in Client tool requests");
   });
 
   it("renders a JSON download control", () => {

@@ -119,6 +119,8 @@ export interface DebugTool {
   name: string;
   description: string;
   parameters: unknown;
+  /** Missing only in older downloaded snapshots. */
+  execution?: "server" | "browser" | "provider";
 }
 
 export interface DebugSkill {

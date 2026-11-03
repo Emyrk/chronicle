@@ -150,6 +150,8 @@ type DebugTool struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	Parameters  json.RawMessage `json:"parameters"`
+	// Execution distinguishes Chronicle-hosted, browser-executed, and provider-hosted tools.
+	Execution string `json:"execution"`
 }
 
 type DebugSkill struct {

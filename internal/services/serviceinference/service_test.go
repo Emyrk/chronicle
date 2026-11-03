@@ -393,6 +393,24 @@ func debugSnapshots(t *testing.T, stream string) []agui.DebugSnapshotEvent {
 	return snapshots
 }
 
+func TestDebugSnapshotLabelsToolExecution(t *testing.T) {
+	t.Parallel()
+	capability := &clientCapability{ID: searchPageCapabilityID, Version: searchPageCapabilityVersion, ScopeType: "search_page", ScopeID: "search", SessionID: "browser"}
+	assistant := withClientTools(assistants["site-help"], capability)
+	assistant, err := withRuntimeSkills(assistant)
+	require.NoError(t, err)
+	snapshot := debugSnapshotEvent(debugRunContext{}, 1, "request", "model", assistant, nil, Usage{})
+	byName := make(map[string]string, len(snapshot.Tools))
+	for _, tool := range snapshot.Tools {
+		byName[tool.Name] = tool.Execution
+	}
+	require.Equal(t, "browser", byName["set_search_draft"])
+	require.Equal(t, "browser", byName["inspect_search_draft"])
+	require.Equal(t, "server", byName["build_instance_search_link"])
+	require.Equal(t, "server", byName["list_pages"])
+	require.Equal(t, "provider", byName["web_search"])
+}
+
 func TestAgentLoopDebugSnapshotsMatchProviderRequestsAndResults(t *testing.T) {
 	t.Parallel()
 	provider := &scriptedProvider{streams: [][]StreamEvent{

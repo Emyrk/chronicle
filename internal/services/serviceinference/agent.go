@@ -93,6 +93,17 @@ type debugRunContext struct {
 	UsageEvents bool
 }
 
+func debugToolExecution(a assistant, name string) string {
+	capabilityID := a.ClientCapability
+	if a.ID == "site-help" {
+		capabilityID = searchPageCapabilityID
+	}
+	if _, ok := clientToolByName(capabilityID, name); ok {
+		return "browser"
+	}
+	return "server"
+}
+
 func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model string, a assistant, messages []Message, usage Usage) agui.DebugSnapshotEvent {
 	debugMessages := make([]agui.DebugMessage, 0, len(messages))
 	for _, message := range messages {
@@ -117,6 +128,7 @@ func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model strin
 			Name:        tool.Name,
 			Description: tool.Description,
 			Parameters:  slices.Clone(tool.Parameters),
+			Execution:   debugToolExecution(a, tool.Name),
 		})
 	}
 	for _, tool := range a.ServerTools {
@@ -129,6 +141,7 @@ func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model strin
 			Name:        string(tool.Kind),
 			Description: "Provider-hosted web search for current and external information.",
 			Parameters:  parameters,
+			Execution:   "provider",
 		})
 	}
 	debugSkills := make([]agui.DebugSkill, 0, len(a.Skills))
