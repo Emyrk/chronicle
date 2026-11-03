@@ -4,6 +4,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -53,4 +54,32 @@ func TestEmptyHubRatingBoard(t *testing.T) {
 	require.NotNil(t, board.Guild.Peak)
 	require.NotNil(t, board.Guild.RankedMastery)
 	require.NotNil(t, board.Guild.Renown)
+}
+
+func TestHubLandingV1RankingParams(t *testing.T) {
+	t.Parallel()
+	for _, cohort := range []chroniclesdk.RankingsInstanceSummary{
+		{InstanceName: "Molten Core", DifficultyName: "", MaxPlayers: 0},
+		{InstanceName: "Naxxramas", DifficultyName: "Heroic", MaxPlayers: 40},
+	} {
+		performance := hubLandingPerformanceParams(cohort, []string{"Realm A"})
+		require.Equal(t, []string{cohort.InstanceName}, performance.InstanceNames)
+		require.Equal(t, []string{cohort.DifficultyName}, performance.DifficultyNames)
+		require.Equal(t, cohort.MaxPlayers, performance.FilterMaxPlayers)
+		require.True(t, performance.ExactCohort)
+		require.Equal(t, "dps", performance.Metric)
+		require.Equal(t, []string{"Realm A"}, performance.RealmNames)
+		require.Empty(t, performance.EncounterNames)
+		require.EqualValues(t, 3, performance.QueryLimit)
+
+		stats := hubLandingStatisticsParams(cohort, []string{"Realm A"})
+		require.Equal(t, []string{cohort.InstanceName}, stats.InstanceNames)
+		require.Equal(t, []string{cohort.DifficultyName}, stats.DifficultyNames)
+		require.Equal(t, cohort.MaxPlayers, stats.FilterMaxPlayers)
+		require.True(t, stats.ExactCohort)
+		require.Equal(t, "dps", stats.Metric)
+		require.Equal(t, []string{"Realm A"}, stats.RealmNames)
+		require.Empty(t, stats.EncounterNames)
+		require.False(t, stats.GroupByClass)
+	}
 }

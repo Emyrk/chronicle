@@ -19,14 +19,17 @@ type HubSummary struct {
 }
 
 // HubLandingPreview contains published, bounded highlights for one instance cohort.
-// Aggregate top-player DPS remains in HubSummary.Instances[].top_players.
-// Statistics are unavailable here.
+// Performances are each player's best complete run, aggregated across its encounters.
+// Aggregate top-player DPS remains separately in HubSummary.Instances[].top_players.
+// Statistics are per-run DPS distributions by class/spec, from the v1 box plot.
 type HubLandingPreview struct {
 	InstanceName   string                     `json:"instance_name"`
 	DifficultyName string                     `json:"difficulty_name"`
 	MaxPlayers     int16                      `json:"max_players"`
 	Player         HubPlayerRatings           `json:"player"`
 	Guild          HubGuildRatings            `json:"guild"`
+	Performances   []RankingsEntry            `json:"performances"`
+	Statistics     []RankingsBoxPlotStats     `json:"statistics"`
 	Speedruns      []SpeedrunLeaderboardEntry `json:"speedruns"`
 }
 

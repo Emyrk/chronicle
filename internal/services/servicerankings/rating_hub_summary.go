@@ -22,6 +22,23 @@ type hubLandingCohort struct {
 	size                 int16
 }
 
+// V1 rankings use exact cohorts even when max_players is zero, and their
+// empty encounter selection means a complete-run DPS board, not a boss board.
+func hubLandingPerformanceParams(cohort chroniclesdk.RankingsInstanceSummary, realmNames []string) database.RankingsLeaderboardParams {
+	return database.RankingsLeaderboardParams{
+		InstanceNames: []string{cohort.InstanceName}, DifficultyNames: []string{cohort.DifficultyName},
+		FilterMaxPlayers: cohort.MaxPlayers, ExactCohort: true, Metric: "dps", RealmNames: realmNames,
+		QueryLimit: 3,
+	}
+}
+
+func hubLandingStatisticsParams(cohort chroniclesdk.RankingsInstanceSummary, realmNames []string) database.RankingsBoxPlotStatsParams {
+	return database.RankingsBoxPlotStatsParams{
+		InstanceNames: []string{cohort.InstanceName}, DifficultyNames: []string{cohort.DifficultyName},
+		FilterMaxPlayers: cohort.MaxPlayers, ExactCohort: true, Metric: "dps", RealmNames: realmNames,
+	}
+}
+
 type hubSummaryInput struct {
 	instance, featured, difficulty, metric, class, spec, subSpec string
 	size                                                         int16
@@ -143,8 +160,10 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.instance == "" {
-		// All landing highlights come from two bounded bulk queries. The
-		// instance summary supplies only aggregate DPS, never log performances.
+		// Ratings and speedruns use bounded bulk queries. V1 performance and
+		// statistics queries below run once per published cohort (at most 64
+		// each); this trades database work for one cacheable HTTP response.
+		// Instance top_players is aggregate DPS, not this performance board.
 		byCohort := make(map[hubLandingCohort]int, len(out.Instances))
 		for _, summary := range out.Instances {
 			key := hubLandingCohort{summary.InstanceName, summary.DifficultyName, summary.MaxPlayers}
@@ -152,7 +171,8 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 			board := emptyHubBoard()
 			out.LandingPreviews = append(out.LandingPreviews, chroniclesdk.HubLandingPreview{
 				InstanceName: summary.InstanceName, DifficultyName: summary.DifficultyName, MaxPlayers: summary.MaxPlayers,
-				Player: board.Player, Guild: board.Guild, Speedruns: []chroniclesdk.SpeedrunLeaderboardEntry{},
+				Player: board.Player, Guild: board.Guild, Performances: []chroniclesdk.RankingsEntry{},
+				Statistics: []chroniclesdk.RankingsBoxPlotStats{}, Speedruns: []chroniclesdk.SpeedrunLeaderboardEntry{},
 			})
 		}
 		generation, genErr := s.store.GetActiveTenantRatingGeneration(ctx, tenant)
@@ -220,6 +240,48 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 				entry.DuplicateGroupID = &v.DuplicateGroupID.UUID
 			}
 			preview.Speedruns = append(preview.Speedruns, entry)
+		}
+		for i, cohort := range out.Instances {
+			// These are the existing v1 complete-run DPS boards. Reusing them
+			// preserves duplicate handling, tenant RLS and spec aggregation.
+			performances, e := s.store.RankingsLeaderboardNoJIT(ctx, hubLandingPerformanceParams(cohort, realmNames))
+			if e != nil {
+				httpapi.InternalServerError(w, e)
+				return
+			}
+			for _, v := range performances {
+				entry := chroniclesdk.RankingsEntry{
+					InstanceName: v.InstanceName, EncounterName: v.EncounterName, PlayerGUID: v.PlayerGuid,
+					PlayerName: v.PlayerName, PlayerClass: normalizeClassName(v.PlayerClass), PlayerSpec: v.PlayerSpec,
+					PlayerRole: v.PlayerRole, PlayerLevel: v.PlayerLevel, DifficultyName: v.DifficultyName,
+					MaxPlayers: v.MaxPlayers, RealmID: v.RealmID, RealmName: v.RealmName,
+					GuildName: v.GuildName, GuildID: v.GuildID, DamageDone: v.DamageDone,
+					HealingDone: v.HealingDone, AbsorbedDone: v.AbsorbedDone, DurationSecs: v.DurationSecs,
+					DPS: v.Dps, HPS: v.Hps, LogHashedSlug: v.LogHashedSlug, KilledAt: v.KilledAt.Time,
+				}
+				if v.PlayerSubSpec != "" {
+					entry.SubSpec = &v.PlayerSubSpec
+				}
+				if v.TalentLayout != "" {
+					entry.TalentLayout = &v.TalentLayout
+				}
+				out.LandingPreviews[i].Performances = append(out.LandingPreviews[i].Performances, entry)
+			}
+			stats, e := s.store.RankingsBoxPlotStatsNoJIT(ctx, hubLandingStatisticsParams(cohort, realmNames))
+			if e != nil {
+				httpapi.InternalServerError(w, e)
+				return
+			}
+			for _, v := range stats {
+				if len(out.LandingPreviews[i].Statistics) == 3 {
+					break
+				}
+				out.LandingPreviews[i].Statistics = append(out.LandingPreviews[i].Statistics, chroniclesdk.RankingsBoxPlotStats{
+					PlayerClass: normalizeClassName(v.PlayerClass), PlayerSpec: v.PlayerSpec,
+					PlayerSubSpec: v.PlayerSubSpec, MinDPS: v.MinDps, Q1DPS: v.Q1Dps,
+					MedianDPS: v.MedianDps, Q3DPS: v.Q3Dps, MaxDPS: v.MaxDps, Count: v.Count,
+				})
+			}
 		}
 		httpapi.Write(ctx, w, http.StatusOK, out)
 		return
