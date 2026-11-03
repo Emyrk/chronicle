@@ -39,6 +39,36 @@ func hubLandingStatisticsParams(cohort chroniclesdk.RankingsInstanceSummary, rea
 	}
 }
 
+const (
+	// The overview's guild Best Performances card lists eight runs; the podium shows three of them.
+	hubOverviewSpeedrunLimit = 8
+	// The overview's Best Performances card lists eight players.
+	hubOverviewPerformanceLimit = 8
+)
+
+// hubResolveCohort picks the exact raid cohort for an instance overview: the
+// requested one when published, otherwise the cohort with the most kills, so a
+// first visit shows the main population instead of asking for a choice.
+func hubResolveCohort(instances []chroniclesdk.RankingsInstanceSummary, instance, difficulty string, size int16, requested bool) (chroniclesdk.HubSelectedCohort, bool) {
+	var best *chroniclesdk.RankingsInstanceSummary
+	for i := range instances {
+		v := &instances[i]
+		if v.InstanceName != instance || v.Category != "raid" {
+			continue
+		}
+		if requested && v.DifficultyName == difficulty && v.MaxPlayers == size {
+			return chroniclesdk.HubSelectedCohort{DifficultyName: v.DifficultyName, MaxPlayers: v.MaxPlayers}, true
+		}
+		if best == nil || v.TotalKills > best.TotalKills {
+			best = v
+		}
+	}
+	if best == nil {
+		return chroniclesdk.HubSelectedCohort{}, false
+	}
+	return chroniclesdk.HubSelectedCohort{DifficultyName: best.DifficultyName, MaxPlayers: best.MaxPlayers}, true
+}
+
 type hubSummaryInput struct {
 	instance, featured, difficulty, metric, class, spec, subSpec, tab string
 	size                                                              int16
@@ -317,29 +347,19 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	known := false
-	cohorts := 0
-	matchedCohort := false
-	var soleCohort chroniclesdk.HubSelectedCohort
 	for _, v := range out.Instances {
-		if v.InstanceName != in.instance {
-			continue
-		}
-		known = true
-		if v.Category == "raid" {
-			cohorts++
-			soleCohort = chroniclesdk.HubSelectedCohort{DifficultyName: v.DifficultyName, MaxPlayers: v.MaxPlayers}
-			matchedCohort = matchedCohort || (in.difficulty == v.DifficultyName && in.size == v.MaxPlayers)
-		}
+		known = known || v.InstanceName == in.instance
 	}
 	if !known {
 		httpapi.Write(ctx, w, http.StatusOK, out)
 		return
 	}
-	// A stale URL cohort must not silently broaden to another population.
-	// A sole published cohort is unambiguous, even when its stored size is zero.
-	in.exact = in.exact && matchedCohort
-	if !in.exact && cohorts == 1 {
-		in.difficulty, in.size, in.exact = soleCohort.DifficultyName, soleCohort.MaxPlayers, true
+	// A stale or missing URL cohort must not silently broaden to another population:
+	// resolve it to one exact published cohort instead.
+	if cohort, ok := hubResolveCohort(out.Instances, in.instance, in.difficulty, in.size, in.exact); ok {
+		in.difficulty, in.size, in.exact = cohort.DifficultyName, cohort.MaxPlayers, true
+	} else {
+		in.exact = false
 	}
 	if in.exact {
 		out.SelectedCohort = &chroniclesdk.HubSelectedCohort{DifficultyName: in.difficulty, MaxPlayers: in.size}
@@ -457,7 +477,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 
 	}
 	if in.exact && in.featured == "" {
-		speed, e := s.store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{InstanceName: in.instance, FilterDifficulty: true, DifficultyName: in.difficulty, FilterInstanceMaxPlayers: true, InstanceMaxPlayers: in.size, RealmNames: realmNames, ResultLimit: 3})
+		speed, e := s.store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{InstanceName: in.instance, FilterDifficulty: true, DifficultyName: in.difficulty, FilterInstanceMaxPlayers: true, InstanceMaxPlayers: in.size, RealmNames: realmNames, ResultLimit: hubOverviewSpeedrunLimit})
 		if e != nil {
 			httpapi.InternalServerError(w, e)
 			return
@@ -466,8 +486,13 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 			out.Speedruns = append(out.Speedruns, db2sdk.SpeedrunLeaderboardEntry(v))
 		}
 	}
-	if in.exact && in.featured != "" {
-		rows, e := s.store.RankingsLeaderboardNoJIT(ctx, database.RankingsLeaderboardParams{InstanceNames: []string{in.instance}, EncounterNames: []string{in.featured}, DifficultyNames: []string{in.difficulty}, FilterMaxPlayers: in.size, ExactCohort: true, Class: string(db2sdk.HeroClassToDB(types.HeroClasses(in.class))), Spec: in.spec, SubSpec: in.subSpec, Metric: in.metric, RealmNames: realmNames, QueryLimit: 5})
+	if in.exact {
+		// No encounter is the complete-run board, the full clear's best performances.
+		var encounters []string
+		if in.featured != "" {
+			encounters = []string{in.featured}
+		}
+		rows, e := s.store.RankingsLeaderboardNoJIT(ctx, database.RankingsLeaderboardParams{InstanceNames: []string{in.instance}, EncounterNames: encounters, DifficultyNames: []string{in.difficulty}, FilterMaxPlayers: in.size, ExactCohort: true, Class: string(db2sdk.HeroClassToDB(types.HeroClasses(in.class))), Spec: in.spec, SubSpec: in.subSpec, Metric: in.metric, RealmNames: realmNames, QueryLimit: hubOverviewPerformanceLimit})
 		if e != nil {
 			httpapi.InternalServerError(w, e)
 			return

@@ -86,3 +86,28 @@ func TestHubLandingV1RankingParams(t *testing.T) {
 		require.False(t, stats.GroupByClass)
 	}
 }
+
+func TestHubResolveCohort(t *testing.T) {
+	t.Parallel()
+	instances := []chroniclesdk.RankingsInstanceSummary{
+		{InstanceName: "Molten Core", DifficultyName: "Normal", MaxPlayers: 20, Category: "raid", TotalKills: 10},
+		{InstanceName: "Molten Core", DifficultyName: "Normal", MaxPlayers: 40, Category: "raid", TotalKills: 90},
+		{InstanceName: "Molten Core", DifficultyName: "Heroic", MaxPlayers: 40, Category: "dungeon", TotalKills: 500},
+		{InstanceName: "Onyxia's Lair", DifficultyName: "Normal", MaxPlayers: 40, Category: "raid", TotalKills: 900},
+	}
+
+	// A published request wins even when another cohort is busier.
+	got, ok := hubResolveCohort(instances, "Molten Core", "Normal", 20, true)
+	require.True(t, ok)
+	require.Equal(t, chroniclesdk.HubSelectedCohort{DifficultyName: "Normal", MaxPlayers: 20}, got)
+
+	// No request, or a stale one, falls back to the instance's busiest raid cohort.
+	for _, requested := range []bool{false, true} {
+		got, ok = hubResolveCohort(instances, "Molten Core", "Mythic", 10, requested)
+		require.True(t, ok)
+		require.Equal(t, chroniclesdk.HubSelectedCohort{DifficultyName: "Normal", MaxPlayers: 40}, got)
+	}
+
+	_, ok = hubResolveCohort(instances, "Naxxramas", "", 0, false)
+	require.False(t, ok)
+}
