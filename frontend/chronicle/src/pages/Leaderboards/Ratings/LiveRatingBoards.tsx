@@ -104,10 +104,11 @@ function Emblem({ children }: { children: ReactNode }) {
 }
 
 function SpecIcon({ cls, spec, className }: { cls: string; spec: string; className: string }) {
-  return <img className={className} src={`/c/icons/spec_${cls.toLowerCase()}_${spec.toLowerCase().replace(/\s+/g, "")}.png`} alt={spec} onError={(event) => {
+  return <img className={className} src={spec ? `/c/icons/spec_${cls.toLowerCase()}_${spec.toLowerCase().replace(/\s+/g, "")}.png` : `/c/icons/class_${cls.toLowerCase()}.png`} alt={spec || cls} onError={(event) => {
     const image = event.currentTarget
-    image.onerror = null
-    image.src = `/c/icons/class_${cls.toLowerCase()}.png`
+    const fallback = `/c/icons/class_${cls.toLowerCase()}.png`
+    if (image.getAttribute("src") === fallback) image.removeAttribute("src")
+    else image.src = fallback
   }} />
 }
 

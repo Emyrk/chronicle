@@ -7,13 +7,20 @@ import { scopeKind, type RatingEntry, type RatingScope } from "./ratingBoards.fi
 import { RANK_COLORS, specIconUrl, type MetricTheme } from "./ratingThemes"
 
 export function SpecIcon({ cls, spec, className }: { cls: string; spec: string; className?: string }) {
+  // Renown entries aggregate all classes, so they have no class/spec icon.
+  if (!cls) return null
   return (
     <img
-      src={specIconUrl(cls, spec)}
-      alt={spec}
+      src={spec ? specIconUrl(cls, spec) : `/c/icons/class_${cls.toLowerCase()}.png`}
+      alt={spec || cls}
       className={className}
       onError={(e) => {
-        ;(e.target as HTMLImageElement).src = `/c/icons/class_${cls.toLowerCase()}.png`
+        const image = e.currentTarget
+        const fallback = `/c/icons/class_${cls.toLowerCase()}.png`
+        // React's delegated onError still fires after assigning image.onerror = null.
+        // Never reassign a failed fallback to itself (including when offline).
+        if (image.getAttribute("src") === fallback) image.removeAttribute("src")
+        else image.src = fallback
       }}
     />
   )
