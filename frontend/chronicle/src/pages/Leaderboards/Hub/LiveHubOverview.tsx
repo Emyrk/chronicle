@@ -23,6 +23,8 @@ export interface LiveHubOverviewProps {
   realmIDs?: readonly string[]
   ratingCohort?: LiveRatingCohort
   performanceCohort?: { difficulty: string; maxPlayers: number }
+  /** Configured raid roster; excludes historical non-boss encounters. */
+  bosses?: readonly string[]
   onTab: (tab: HubTab) => void
   onBoss: (boss: string) => void
   onRatings: (view: RatingView) => void
@@ -31,7 +33,7 @@ export interface LiveHubOverviewProps {
 const unavailable = (message: string) => <p className="px-3 py-3 text-xs text-muted-foreground">{message}</p>
 
 /** Live data in the Storybook Hub Overview's hero, card grid, and boss grid. */
-export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, role, subject, realmName, realmIDs, ratingCohort, performanceCohort, onTab, onBoss, onRatings }: LiveHubOverviewProps) {
+export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, role, subject, realmName, realmIDs, ratingCohort, performanceCohort, onTab, onBoss, onRatings, bosses }: LiveHubOverviewProps) {
   const instances = useRankingsInstances(!!instanceName)
   const encounters = useRankingsEncounters(instanceName)
   const raids = instances.data?.filter((row) => row.category === "raid" && row.instance_name === instanceName) ?? []
@@ -136,7 +138,7 @@ export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, r
     </div>
     {encounters.isPending ? <section aria-label="Bosses">{unavailable("Loading bosses…")}</section> : encounters.isError ? <section aria-label="Bosses">{unavailable("Bosses unavailable")}</section> :
       <BossGrid instanceName={instanceName} scope={{ cls, spec, subSpec }} role={role} only={combined ? selectedBosses : undefined} onBoss={onBoss}
-        summaries={(encounters.data ?? []).map((row): LiveBossSummary => ({ boss: row.encounter_name,
+        summaries={(encounters.data ?? []).filter((row) => bosses?.includes(row.encounter_name) ?? row.encounter_name !== "Trash").map((row): LiveBossSummary => ({ boss: row.encounter_name,
           // Encounter summaries are global; never present them as scoped realm/class/role results.
           kills: !realmName && !cls && !spec && !subSpec ? row.total_kills : undefined,
           topDps: !realmName && !cls && !spec && !subSpec && role === "dps" ? row.top_dps || undefined : undefined,

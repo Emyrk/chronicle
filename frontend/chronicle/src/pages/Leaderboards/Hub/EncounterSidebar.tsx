@@ -12,6 +12,7 @@ import { FULL_CLEAR, type EncounterSelection } from "./encounterSelection"
 export function EncounterSidebar({
   bosses,
   optional,
+  trash = new Set<string>(),
   selection,
   onSelect,
   onCollapse,
@@ -19,6 +20,7 @@ export function EncounterSidebar({
 }: {
   bosses: readonly string[]
   optional: ReadonlySet<string>
+  trash?: ReadonlySet<string>
   selection: EncounterSelection
   onSelect: (selection: EncounterSelection) => void
   /** Collapse the column to the left (the instance page's "Hide sidebar"). */
@@ -27,8 +29,9 @@ export function EncounterSidebar({
   allowCombine?: boolean
 }) {
   const chosen = new Set(selection.kind === "bosses" ? selection.bosses : [])
-  const required = bosses.filter((b) => !optional.has(b))
-  const extra = bosses.filter((b) => optional.has(b))
+  const required = bosses.filter((b) => !optional.has(b) && !trash.has(b))
+  const extra = bosses.filter((b) => optional.has(b) && !trash.has(b))
+  const trashNames = bosses.filter((b) => trash.has(b))
 
   const pick = (boss: string, combine: boolean) => {
     if (!combine || !allowCombine) return onSelect({ kind: "bosses", bosses: [boss] })
@@ -81,6 +84,13 @@ export function EncounterSidebar({
           <Section label="Optional">
             {extra.map((name) => (
               <Row key={name} name={name} selected={chosen.has(name)} subdued title={!allowCombine ? `Show ${name} ratings` : undefined} onClick={(combine) => pick(name, combine)} />
+            ))}
+          </Section>
+        )}
+        {trashNames.length > 0 && (
+          <Section label="Trash">
+            {trashNames.map((name) => (
+              <Row key={name} name={name} selected={chosen.has(name)} onClick={(combine) => pick(name, combine)} />
             ))}
           </Section>
         )}

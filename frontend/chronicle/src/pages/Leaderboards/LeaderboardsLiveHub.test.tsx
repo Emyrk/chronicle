@@ -7,7 +7,11 @@ import { LeaderboardsLiveHub } from "./LeaderboardsLiveHub"
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: [], isPending: false, isError: false }) }))
 vi.mock("@/api/rankingsQueries", () => ({
   useRankingsInstances: vi.fn(() => ({ data: [{ instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40, category: "raid", total_kills: 12, top_players: [] }], isPending: false, isError: false })),
-  useRankingsEncounters: () => ({ data: [{ encounter_name: "Ragnaros", total_kills: 12, top_dps: 1450 }], isPending: false, isError: false }),
+  useRankingsEncounters: () => ({ data: [
+    { encounter_name: "Ragnaros", total_kills: 12, top_dps: 1450 },
+    { encounter_name: "Gehennas", total_kills: 10, top_dps: 1300 },
+    { encounter_name: "Trash", total_kills: 25, top_dps: 1200 },
+  ], isPending: false, isError: false }),
   useRankingsFilters: () => ({ data: [{ player_class: "MAGE", specs: [{ spec: "Frost", sub_specs: [""] }] }], isPending: false, isError: false }),
   useRankingsLeaderboard: () => ({ data: { entries: [] }, isPending: false, isError: false }),
   useRankingsStats: () => ({ data: [], isPending: false, isError: false }),
@@ -17,8 +21,13 @@ vi.mock("@/api/rankingsQueries", () => ({
   useParseScoreSpreads: () => ({ data: { available: false, spreads: [] }, isPending: false, isError: false }),
   useTimeParseSpreads: () => ({ data: { spreads: [] }, isPending: false, isError: false }),
 }))
-vi.mock("@/api/queries", () => ({ useRealms: () => ({ data: [{ id: "realm-id", name: "Nordanaar" }], isPending: false, isError: false }) }))
+vi.mock("@/api/queries", () => ({
+  useRealms: () => ({ data: [{ id: "realm-id", name: "Nordanaar" }], isPending: false, isError: false }),
+  useSupportedInstanceProgressionBosses: () => ({ data: new Map([["Molten Core", new Set(["Ragnaros"])]]), isPending: false, isError: false }),
+  useSupportedInstanceRankingEncounterSets: () => ({ data: new Map([["Molten Core", [{ id: "", label: "Default", encounters: ["Ragnaros"] }]]]), isPending: false, isError: false }),
+}))
 vi.mock("@/components/Ads/AdRailStack", () => ({ AdRailStack: () => null }))
+vi.mock("./Hub/LiveHubRatings", () => ({ LiveHubRatings: () => <p>Live ratings</p> }))
 vi.mock("./Hub/LiveHubOverview", () => ({ LiveHubOverview: () => <p>Live overview</p> }))
 
 describe("live Storybook Hub", () => {
@@ -33,6 +42,19 @@ describe("live Storybook Hub", () => {
     expect(html).not.toContain("Mock data for design review")
     expect(html).not.toContain("Ratings realms:")
   })
+  it("uses the configured Turtle roster and exposes Trash only under Performances", () => {
+    const ratings = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&tab=ratings&encounter=Trash"]}><LeaderboardsLiveHub /></MemoryRouter>)
+    expect(ratings).toContain("Ragnaros")
+    expect(ratings).not.toContain("Gehennas")
+    expect(ratings).not.toContain("Trash")
+    expect(ratings).toContain("Full clear") // invalid encounter falls back to raid selection
+
+    const performances = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&tab=performances"]}><LeaderboardsLiveHub /></MemoryRouter>)
+    expect(performances).not.toContain("Gehennas")
+    expect(performances).toContain("Trash")
+    expect(performances).toContain("Full clear")
+  })
+
   it("hides the cohort selector for one raid cohort and uses it even with a stale URL choice", () => {
     const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&difficulty=Old&size=25"]}><LeaderboardsLiveHub /></MemoryRouter>)
     expect(html).not.toContain('aria-label="Raid cohort"')

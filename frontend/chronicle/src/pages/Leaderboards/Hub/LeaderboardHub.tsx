@@ -420,6 +420,7 @@ export function LeaderboardHub({
                   <EncounterSidebar
                     bosses={bosses}
                     optional={live ? live.optionalBosses ?? new Set<string>() : OPTIONAL_BOSSES}
+                    trash={live && tab === "performances" ? new Set(["Trash"]) : undefined}
                     selection={selection}
                     onSelect={selectEncounter}
                     allowCombine={!live}
