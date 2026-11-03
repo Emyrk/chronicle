@@ -40,5 +40,9 @@ export interface RatingLiveData {
   ranksKnown?: boolean
   cohort?: RatingLiveCohort
   board: (selection: RatingLiveSelection) => RatingLiveState<RatingLiveBoard>
-  page: (selection: RatingLiveSelection & { query: string; page: number }) => RatingLiveState<RatingLivePage>
+  page?: (selection: RatingLiveSelection & { query: string; page: number }) => RatingLiveState<RatingLivePage>
+  /** Fetch an authoritative ranked page for the Storybook full-list table. */
+  loadPage?: (selection: RatingLiveSelection & { query: string; page: number }) => Promise<RatingLivePage>
+  /** Stable API/cohort/realm identity for the full-list query cache. */
+  pageKey?: string
 }

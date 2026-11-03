@@ -4,7 +4,8 @@ import {
   fetchLiveRatingPage, liveRatingURL, type LiveRatingCohort, type LiveRatingEntry,
   type LiveRatingMetric,
 } from "@/pages/Leaderboards/Ratings/liveRatingAdapter"
-import { LiveRatingBoards } from "@/pages/Leaderboards/Ratings/LiveRatingBoards"
+import { fetchLiveRatingFullList, liveRatingFullListURL } from "@/pages/Leaderboards/Ratings/liveRatingFullList"
+import { LiveGuildRatings } from "./LiveGuildRatings"
 import { RatingBoards } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
 import type { RatingLiveCohort, RatingLiveData, RatingLiveState, RatingLiveBoard } from "@/pages/Leaderboards/Ratings/ratingLiveData"
 import type { RatingEntry, RatingMetric, RatingPeriod, RatingScope } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
@@ -99,25 +100,24 @@ export function LiveHubRatings({
   })
 
   if (subject === "guild") {
-    return <LiveRatingBoards instanceName={instanceName} encounterName={scope.boss} subject="guild"
-      metric={apiMetric(view === "overview" ? "peak" : view)} window={apiWindow(view === "overview" ? "peak" : view, period)}
-      cohort={view === "renown" ? undefined : ratingCohort} realmIDs={realmIDs} />
+    return <LiveGuildRatings instanceName={instanceName} bosses={bosses} encounterName={scope.boss}
+      onBoss={(boss) => onScope({ boss })} view={view} onView={onView} period={period}
+      cohort={ratingCohort} realmIDs={realmIDs} toolbar={toolbar} />
   }
   const live: RatingLiveData = {
     cohort,
     ranksKnown: !realmIDs?.length,
     board: ({ scope: target, metric }) => states.get(JSON.stringify([target, metric])) ?? { status: "error", error: "Published ratings unavailable for this selection." },
-    page: ({ query }) => ({ status: "error", error: query
-      ? "Search across published pages is unavailable."
-      : "The published API does not provide ranks for a full list. Browse published pages below." }),
+    pageKey: JSON.stringify([instanceName, selectedCohort, realmIDs, subject]),
+    loadPage: async ({ scope: target, metric, period: selectedPeriod, query, page }) => {
+      const url = liveRatingFullListURL({ instanceName, encounterName: target.boss, subject: "player",
+        metric: apiMetric(metric), window: apiWindow(metric, selectedPeriod),
+        cohort: metric === "renown" ? undefined : selectedCohort, allClasses: metric !== "renown" && !exact,
+        realmIDs, query, page })
+      if (!url) throw new Error("Exact published rating cohort unavailable")
+      return fetchLiveRatingFullList(url)
+    },
   }
-  return <div className="space-y-5">
-    <RatingBoards instanceName={instanceName} bosses={bosses} scope={scope} onScope={onScope}
-      view={view} onView={onView} period={period} toolbar={toolbar} live={live} />
-    <LiveRatingBoards instanceName={instanceName} encounterName={scope.boss} subject="player"
-      metric={apiMetric(view === "overview" ? "peak" : view)}
-      window={apiWindow(view === "overview" ? "peak" : view, period)}
-      cohort={view === "renown" ? undefined : selectedCohort} allClasses={view !== "renown" && !exact}
-      realmIDs={realmIDs} title="Browse published ratings" />
-  </div>
+  return <RatingBoards instanceName={instanceName} bosses={bosses} scope={scope} onScope={onScope}
+    view={view} onView={onView} period={period} toolbar={toolbar} live={live} />
 }

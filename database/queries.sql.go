@@ -26454,7 +26454,8 @@ displayed AS (
     (CASE WHEN ranked.player_guid ~ '^0x[0-9A-Fa-f]{16}$' THEN ranked.player_guid::wow_guid ELSE NULL::wow_guid END)
   LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = ranked.realm_id
   WHERE (COALESCE(cardinality($13::uuid[]), 0) = 0 OR ranked.realm_id = ANY($13::uuid[]))
-    AND ($14::text = '' OR position(lower($14::text) in lower(COALESCE(gp.name, ranked.player_guid))) > 0)
+    AND ($14::text = '' OR position(lower($14::text) in lower(COALESCE(gp.name, ranked.player_guid))) > 0
+         OR position(lower($14::text) in lower(COALESCE(guild.name, ''))) > 0)
 ),
 paged AS (
   SELECT displayed.generation_id, displayed.tenant_id, displayed.realm_id, displayed.player_guid, displayed.instance_name, displayed.encounter_name, displayed.difficulty_name, displayed.max_players, displayed.player_class, displayed.player_spec, displayed.player_sub_spec, displayed.performance_metric, displayed.rating_metric, displayed.window_kind, displayed.window_start, displayed.window_end, displayed.score, displayed.best_raw, displayed.rank_one_raw, displayed.best_locked_parse, displayed.form, displayed.floor_score, displayed.eligible_kills, displayed.computed_at, displayed.payload, displayed.global_rank, displayed.player_name, displayed.guild_name, displayed.realm_name, scores.peak, scores.mastery, scores.renown
@@ -26577,7 +26578,8 @@ displayed AS (
     (CASE WHEN ranked.player_guid ~ '^0x[0-9A-Fa-f]{16}$' THEN ranked.player_guid::wow_guid ELSE NULL::wow_guid END)
   LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = ranked.realm_id
   WHERE (COALESCE(cardinality($12::uuid[]), 0) = 0 OR ranked.realm_id = ANY($12::uuid[]))
-    AND ($13::text = '' OR position(lower($13::text) in lower(COALESCE(gp.name, ranked.player_guid))) > 0)
+    AND ($13::text = '' OR position(lower($13::text) in lower(COALESCE(gp.name, ranked.player_guid))) > 0
+         OR position(lower($13::text) in lower(COALESCE(guild.name, ''))) > 0)
 ),
 paged AS (
   SELECT displayed.generation_id, displayed.tenant_id, displayed.realm_id, displayed.player_guid, displayed.instance_name, displayed.difficulty_name, displayed.max_players, displayed.player_class, displayed.player_spec, displayed.player_sub_spec, displayed.performance_metric, displayed.rating_metric, displayed.window_kind, displayed.window_start, displayed.window_end, displayed.score, displayed.computed_at, displayed.payload, displayed.global_rank, displayed.player_name, displayed.guild_name, displayed.realm_name, scores.peak, scores.mastery, scores.renown

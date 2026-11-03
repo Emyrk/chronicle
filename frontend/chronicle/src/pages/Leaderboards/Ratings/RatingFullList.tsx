@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { ArrowDown, Check, ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay"
@@ -71,7 +72,18 @@ export function RatingFullList({
     }))
   }, [metric, period, scope, live])
 
-  const state = live?.page({ scope, metric, period, cohort: live.cohort, query, page })
+  const selection = { scope, metric, period, cohort: live?.cohort, query, page }
+  const published = useQuery({
+    queryKey: ["hub-rating-full-list", live?.pageKey, scope, metric, period, query, page],
+    queryFn: () => live!.loadPage!(selection),
+    enabled: !!live?.loadPage,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  })
+  const state = live?.loadPage
+    ? published.isError ? { status: "error" as const, error: "Published ratings unavailable." }
+      : published.data ? { status: "ready" as const, data: published.data } : { status: "loading" as const }
+    : live?.page?.(selection)
   const livePage = state?.status === "ready" ? state.data : undefined
   const rows: FullRow[] = livePage ? livePage.rows.map((row) => ({ ...row, scores: row.scores ?? {} })) : fixtureRows
   const top = rows[0]?.entry.score ?? 1
@@ -158,7 +170,7 @@ export function RatingFullList({
               ) : (
                 <>
                   <th className="w-32 px-3 py-2.5 text-left font-medium">{theme.label}</th>
-                  {view === "mastery" && <MasteryPartHeaders />}
+                  {view === "mastery" && (live ? ["Peak", "Form", "Floor", "Eligible kills"].map((label) => <th key={label} className="px-3 py-2.5 text-right font-medium">{label}</th>) : <MasteryPartHeaders />)}
                   {view === "peak" && (
                     <>
                       <th className="px-3 py-2.5 text-right font-medium">{scope.boss ? "Kill time" : "Total kill time"}</th>
@@ -227,7 +239,7 @@ export function RatingFullList({
                         </span>
                       </div>
                     </td>
-                    {view === "mastery" && <MasteryPartCells parts={entry.mastery} />}
+                    {view === "mastery" && (live ? <PublishedMasteryCells entry={entry} /> : <MasteryPartCells parts={entry.mastery} />)}
                     {view === "peak" &&
                       (() => {
                         const run = live ? liveRun : peakRun(entry.id, scope.boss)
@@ -258,7 +270,9 @@ export function RatingFullList({
 
       <div className="flex items-center justify-between gap-3 border-t px-4 py-2.5 text-xs text-muted-foreground sm:px-5">
         <span>
-          {visible.length === 0 ? "0" : live ? `${visible[0].rank}–${visible[visible.length - 1].rank}` : `${current * PAGE_SIZE + 1}–${Math.min((current + 1) * PAGE_SIZE, filtered.length)}`} of {live && livePage?.total === undefined ? "published ratings" : total}
+          {live && (query.trim() || live.ranksKnown === false)
+            ? `${visible.length ? `${current * PAGE_SIZE + 1}–${current * PAGE_SIZE + visible.length}` : "0"} of ${total} matches${visible.length ? ` · global ranks ${visible[0].rank}–${visible[visible.length - 1].rank}` : ""}`
+            : `${visible.length === 0 ? "0" : live ? `${visible[0].rank}–${visible[visible.length - 1].rank}` : `${current * PAGE_SIZE + 1}–${Math.min((current + 1) * PAGE_SIZE, filtered.length)}`} of ${live && livePage?.total === undefined ? "published ratings" : total}`}
         </span>
         <div className="flex items-center gap-1">
           <PageButton disabled={live ? !livePage?.hasPreviousPage : current === 0} onClick={() => setPage(current - 1)} label="Previous page">
@@ -274,6 +288,12 @@ export function RatingFullList({
       </div>
     </section>
   )
+}
+
+function PublishedMasteryCells({ entry }: { entry: RatingEntry }) {
+  const parts = entry.publishedMastery
+  const cells = [parts?.peak, parts?.form, parts?.floor, parts?.eligibleKills]
+  return <>{cells.map((value, i) => <td key={i} className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{value === undefined ? "—" : i === 3 ? value : value.toFixed(1)}</td>)}</>
 }
 
 function PageButton({ disabled, onClick, label, children }: { disabled: boolean; onClick: () => void; label: string; children: React.ReactNode }) {

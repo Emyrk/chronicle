@@ -22,6 +22,8 @@ export interface RatingEntry {
   detail: string
   /** Ranked Mastery entries: the parts it is built from. Across a raid, Peak/Form/Floor average every boss. */
   mastery?: MasteryParts
+  /** Published boss-score components; absent for raid aggregate projections. */
+  publishedMastery?: { peak?: number; form?: number; floor?: number; eligibleKills?: number }
 }
 
 export interface MasteryParts {

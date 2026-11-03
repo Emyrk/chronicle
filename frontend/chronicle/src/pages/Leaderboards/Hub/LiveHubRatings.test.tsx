@@ -2,12 +2,12 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi, type Mock } from "vitest"
 import { useQueries } from "@tanstack/react-query"
 import { RatingBoards } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
-import { LiveRatingBoards } from "@/pages/Leaderboards/Ratings/LiveRatingBoards"
+import { LiveGuildRatings } from "./LiveGuildRatings"
 import { LiveHubRatings, type LiveHubRatingsProps } from "./LiveHubRatings"
 
 vi.mock("@tanstack/react-query", () => ({ useQueries: vi.fn() }))
 vi.mock("@/pages/Leaderboards/Ratings/RatingLeaderboard", () => ({ RatingBoards: vi.fn(() => null) }))
-vi.mock("@/pages/Leaderboards/Ratings/LiveRatingBoards", () => ({ LiveRatingBoards: vi.fn(() => null) }))
+vi.mock("./LiveGuildRatings", () => ({ LiveGuildRatings: vi.fn(() => null) }))
 
 const querySpy = useQueries as unknown as Mock
 type QueryOptions = { queries: Array<{ queryKey?: readonly unknown[]; enabled?: boolean }> }
@@ -37,12 +37,12 @@ describe("LiveHubRatings", () => {
       expect(state.data.entries[0].name).toBe("Actual Mage")
       expect(state.data.total).toBeUndefined()
     }
-    expect(boardProps.live!.page({ scope: {}, metric: "peak", period: "180d", cohort: boardProps.live!.cohort, query: "", page: 0 }).status).toBe("error")
+    expect(boardProps.live!.loadPage).toBeTypeOf("function")
     const options = querySpy.mock.calls[0][0] as QueryOptions
     expect(options.queries[0].queryKey?.[1]).toContain("realm_ids=realm-1")
     expect(options.queries[0].queryKey?.[1]).toContain("class=MAGE")
     expect(options.queries[0].queryKey?.[1]).toContain("max_players=40")
-    expect(vi.mocked(LiveRatingBoards).mock.calls[0][0].metric).toBe("peak")
+    expect(LiveGuildRatings).not.toHaveBeenCalled()
   })
 
   it("marks preview ranks unknown when realm display filters are active", () => {
@@ -80,7 +80,8 @@ describe("LiveHubRatings", () => {
     expect(queries[1].queryKey?.[1]).toContain("rating_metric=ranked_mastery")
     const board = vi.mocked(RatingBoards).mock.calls[0][0]
     expect(board.live!.board({ scope: {}, metric: "peak", period: "180d" }).status).toBe("ready")
-    expect(vi.mocked(LiveRatingBoards).mock.calls[0][0]).toMatchObject({ metric: "peak", allClasses: true })
+    expect(board.live!.loadPage).toBeTypeOf("function")
+    expect(LiveGuildRatings).not.toHaveBeenCalled()
   })
 
   it("does not broaden a mismatched class cohort", () => {
@@ -114,6 +115,6 @@ describe("LiveHubRatings", () => {
     querySpy.mockImplementation(({ queries }: QueryOptions) => queries.map(() => ({ isError: false })))
     render({ subject: "guild", view: "mastery" })
     expect(RatingBoards).not.toHaveBeenCalled()
-    expect(vi.mocked(LiveRatingBoards).mock.calls[0][0]).toMatchObject({ subject: "guild", metric: "ranked_mastery", cohort })
+    expect(vi.mocked(LiveGuildRatings).mock.calls[0][0]).toMatchObject({ view: "mastery", cohort, bosses: ["Ragnaros"] })
   })
 })

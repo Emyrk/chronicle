@@ -47,7 +47,8 @@ displayed AS (
     (CASE WHEN ranked.player_guid ~ '^0x[0-9A-Fa-f]{16}$' THEN ranked.player_guid::wow_guid ELSE NULL::wow_guid END)
   LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = ranked.realm_id
   WHERE (COALESCE(cardinality(@realm_ids::uuid[]), 0) = 0 OR ranked.realm_id = ANY(@realm_ids::uuid[]))
-    AND (@search_query::text = '' OR position(lower(@search_query::text) in lower(COALESCE(gp.name, ranked.player_guid))) > 0)
+    AND (@search_query::text = '' OR position(lower(@search_query::text) in lower(COALESCE(gp.name, ranked.player_guid))) > 0
+         OR position(lower(@search_query::text) in lower(COALESCE(guild.name, ''))) > 0)
 ),
 paged AS (
   SELECT displayed.*, scores.peak, scores.mastery, scores.renown
@@ -112,7 +113,8 @@ displayed AS (
     (CASE WHEN ranked.player_guid ~ '^0x[0-9A-Fa-f]{16}$' THEN ranked.player_guid::wow_guid ELSE NULL::wow_guid END)
   LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = ranked.realm_id
   WHERE (COALESCE(cardinality(@realm_ids::uuid[]), 0) = 0 OR ranked.realm_id = ANY(@realm_ids::uuid[]))
-    AND (@search_query::text = '' OR position(lower(@search_query::text) in lower(COALESCE(gp.name, ranked.player_guid))) > 0)
+    AND (@search_query::text = '' OR position(lower(@search_query::text) in lower(COALESCE(gp.name, ranked.player_guid))) > 0
+         OR position(lower(@search_query::text) in lower(COALESCE(guild.name, ''))) > 0)
 ),
 paged AS (
   SELECT displayed.*, scores.peak, scores.mastery, scores.renown

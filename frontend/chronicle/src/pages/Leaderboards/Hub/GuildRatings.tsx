@@ -18,7 +18,7 @@ export interface MetricRow {
  * whose header (and footer link) opens the full one. Shared by the player and
  * guild rating cards so both read the same.
  */
-export function MetricColumns({ columns, onOpen }: { columns: Record<RatingMetric, MetricRow[]>; onOpen: (metric: RatingMetric) => void }) {
+export function MetricColumns({ columns, onOpen, ranksKnown = true }: { columns: Record<RatingMetric, MetricRow[]>; onOpen: (metric: RatingMetric) => void; ranksKnown?: boolean }) {
   return (
     <div className="grid flex-1 max-sm:divide-y sm:grid-cols-3 sm:divide-x">
       {RATING_METRICS.map((m) => {
@@ -39,7 +39,7 @@ export function MetricColumns({ columns, onOpen }: { columns: Record<RatingMetri
             <ol>
               {columns[m].map((r, i) => (
                 <li key={r.id} className="flex items-center gap-2 border-b border-white/5 px-3 py-2.5 last:border-b-0">
-                  <span className="w-3 font-mono text-xs text-muted-foreground">{i + 1}</span>
+                  <span className="w-3 font-mono text-xs text-muted-foreground">{ranksKnown ? i + 1 : ""}</span>
                   <span className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">{r.name}</span>
                   <span className="font-mono text-sm tabular-nums" style={i === 0 ? { color: t.accent } : undefined}>
                     {t.format(r.score)}
