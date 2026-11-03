@@ -15,6 +15,8 @@ import { BlockEditor } from "./BlockEditor";
 import { ResultsTable } from "./ResultsTable";
 import { SearchSummary } from "./SearchSummary";
 import { CelCode } from "./CelCode";
+import { CostLine } from "./CostLine";
+import { queryCost } from "./searchCost";
 import { CodeEditor } from "./CodeEditor";
 import { CelParseError, parseCEL } from "./celParser";
 import { AdRailStack } from "@/components/Ads/AdRailStack";
@@ -245,6 +247,9 @@ export function InstanceSearchPage() {
     ? { limit: limit.data.limit, remaining: limit.data.remaining, resetSeconds: limit.data.reset_seconds }
     : searchBudget;
   const lastCost = lastPage?.cost ?? error?.cost ?? null;
+  // The cost the server will charge for the current draft, live as it's edited.
+  const liveCost = useMemo(() => (fields.data && !codeInvalid ? queryCost(draftTree, fields.data) : null), [fields.data, codeInvalid, draftTree]);
+  const tooComplex = liveCost != null && budget != null && liveCost.total > budget.limit;
   const rows = results.data?.pages.flatMap((p) => p.page.results) ?? [];
   // Ask before leaving while results are on screen: in-app links via the
   // shared click guard (BrowserRouter has no useBlocker), and reloads / tab
@@ -404,7 +409,7 @@ export function InstanceSearchPage() {
       <div className="flex items-center gap-3 flex-wrap">
         <Button
           onClick={submit}
-          disabled={preview || anonBlocked || codeInvalid || results.isFetching}
+          disabled={preview || anonBlocked || codeInvalid || tooComplex || results.isFetching}
           title={preview ? "Honored supporters can run block and code searches" : undefined}
           className="gap-1.5"
         >
@@ -419,6 +424,11 @@ export function InstanceSearchPage() {
         )}
         {mode === "code" && !preview && (
           <Button variant="ghost" size="sm" onClick={() => { setCode(""); setExample(null); }}>Clear</Button>
+        )}
+        {liveCost && (
+          <span className="ml-auto">
+            <CostLine cost={liveCost} budget={budget} refillPerMinute={limit.data?.refill_per_minute ?? null} />
+          </span>
         )}
         {mode !== "code" && (
           <button type="button" onClick={() => setShowCel((v) => !v)} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">

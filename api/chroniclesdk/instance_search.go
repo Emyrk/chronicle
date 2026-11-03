@@ -209,6 +209,12 @@ type InstanceSearchFieldsResponse struct {
 	// predicates on Anonymous fields, with no quantifiers, or or not.
 	AnonymousMaxPredicates int `json:"anonymous_max_predicates"`
 	AnonymousMaxLimit      int `json:"anonymous_max_limit"`
+	// Cost weights, so UIs can show a query's cost before running it:
+	// CostBase + each field's Cost + CostAny per any_player / any_encounter +
+	// CostCount per count_players / count_encounters. and / or / not are free.
+	CostBase  int `json:"cost_base"`
+	CostAny   int `json:"cost_any"`
+	CostCount int `json:"cost_count"`
 }
 
 // InstanceSearchResponse is one page of results.

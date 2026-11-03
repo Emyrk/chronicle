@@ -9,6 +9,8 @@ export interface SearchExample {
   category: string;
   description: string;
   where: Node;
+  /** Compiled cost, from the Go tests; the live cost estimate is tested against it. */
+  cost: number;
 }
 
 export const EXAMPLES = generated as unknown as SearchExample[];

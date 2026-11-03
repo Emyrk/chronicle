@@ -43,6 +43,9 @@ func TestUIExamples(t *testing.T) {
 		Category    string               `json:"category"`
 		Description string               `json:"description"`
 		Where       *instancesearch.Node `json:"where"`
+		// Cost is the compiled cost; the UI's live cost estimate is tested
+		// against it.
+		Cost int `json:"cost"`
 	}
 	var out []uiExample
 	for _, cat := range uiExampleCategories {
@@ -50,7 +53,9 @@ func TestUIExamples(t *testing.T) {
 			if ex.Title == "" || ex.Category != cat {
 				continue
 			}
-			out = append(out, uiExample{ID: ex.Name, Title: ex.Title, Category: ex.Category, Description: ex.Description, Where: ex.Query.Where})
+			compiled, err := instancesearch.Compile(instancesearch.Query{Where: ex.Query.Where}, instancesearch.Options{})
+			require.NoError(t, err, ex.Name)
+			out = append(out, uiExample{ID: ex.Name, Title: ex.Title, Category: ex.Category, Description: ex.Description, Where: ex.Query.Where, Cost: compiled.Cost})
 		}
 	}
 	for _, ex := range loadExamples(t) {

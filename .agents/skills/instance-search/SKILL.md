@@ -64,6 +64,8 @@ They have a per-IP bucket. Everything else returns 403 "Log in to use advanced s
 
 Give an expensive new field a higher `Cost`.
 
+UIs can show the cost before running: `GET /api/v1/raidlogs/search/fields` returns each field's `cost` plus `cost_base`, `cost_any` and `cost_count`. The search page computes it live (`searchCost.ts`), and a frontend test checks it against the compiled cost of every example.
+
 **Observability.**
 - `chronicle_instance_search_duration_seconds{outcome,caller}`
 - `chronicle_instance_search_cost{caller}`
