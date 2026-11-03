@@ -103,16 +103,45 @@ func discordDirectMessage(message DiscordDirectMessage) *discordgo.MessageSend {
 	}
 }
 
-func (w *WorkerSendDiscordDM) Work(_ context.Context, job *river.Job[ArgsSendDiscordDM]) error {
+type discordDMDeliveryOutput struct {
+	Outcome string `json:"outcome"`
+	Error   string `json:"error"`
+}
+
+func discordDMRecipientUnavailable(err error) bool {
+	var restErr *discordgo.RESTError
+	return errors.As(err, &restErr) && restErr.Message != nil && restErr.Message.Code == 50278
+}
+
+func unavailableDiscordDMOutput(err error) discordDMDeliveryOutput {
+	return discordDMDeliveryOutput{
+		Outcome: "not_delivered",
+		Error:   err.Error(),
+	}
+}
+
+func completeUnavailableDiscordDM(ctx context.Context, err error) error {
+	return river.RecordOutput(ctx, unavailableDiscordDMOutput(err))
+}
+
+func (w *WorkerSendDiscordDM) Work(ctx context.Context, job *river.Job[ArgsSendDiscordDM]) error {
 	if w.bot.session == nil {
 		return errors.New("discord bot session unavailable")
 	}
 	channel, err := w.bot.session.UserChannelCreate(job.Args.DiscordID)
 	if err != nil {
-		return fmt.Errorf("create Discord DM channel for user %s: %w", job.Args.DiscordID, err)
+		err = fmt.Errorf("create Discord DM channel for user %s: %w", job.Args.DiscordID, err)
+		if discordDMRecipientUnavailable(err) {
+			return completeUnavailableDiscordDM(ctx, err)
+		}
+		return err
 	}
 	if _, err := w.bot.session.ChannelMessageSendComplex(channel.ID, discordDirectMessage(job.Args.Message)); err != nil {
-		return fmt.Errorf("send Discord DM to user %s: %w", job.Args.DiscordID, err)
+		err = fmt.Errorf("send Discord DM to user %s: %w", job.Args.DiscordID, err)
+		if discordDMRecipientUnavailable(err) {
+			return completeUnavailableDiscordDM(ctx, err)
+		}
+		return err
 	}
 	return nil
 }
