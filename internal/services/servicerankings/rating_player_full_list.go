@@ -78,9 +78,10 @@ func handlePublishedPlayerFullListWithStore(store publishedPlayerFullListReader,
 	}
 	window := q.Get("window_kind")
 	otherWindow, renownWindow := window, window
-	if window == "all_time" {
+	switch window {
+	case "all_time":
 		renownWindow = "career"
-	} else if window == "career" {
+	case "career":
 		otherWindow = "all_time"
 	}
 	otherDifficulty, otherMaxPlayers, otherPerformance := q.Get("difficulty_name"), tenantMax(q), q.Get("performance_metric")
