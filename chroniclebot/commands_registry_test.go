@@ -28,8 +28,14 @@ func TestDefaultCommandsAreGuildScoped(t *testing.T) {
 
 type fakeDiscordInference struct{}
 
-func (fakeDiscordInference) AskDiscord(context.Context, uuid.UUID, string, string, bool) (string, error) {
+func (fakeDiscordInference) AskDiscord(context.Context, uuid.UUID, string, string, string, bool) (string, error) {
 	return "answer", nil
+}
+func (fakeDiscordInference) SetDiscordDefaultTenant(context.Context, uuid.UUID, string) error {
+	return nil
+}
+func (fakeDiscordInference) GetDiscordDefaultTenant(context.Context, uuid.UUID) (string, error) {
+	return "turtle", nil
 }
 
 func TestDefaultCommandsIncludesGlobalAsk(t *testing.T) {
@@ -37,11 +43,18 @@ func TestDefaultCommandsIncludesGlobalAsk(t *testing.T) {
 
 	bot := &Bot{config: Config{GuildID: "chronicle-guild", Inference: fakeDiscordInference{}}}
 	commands := DefaultCommands(bot)
-	require.Len(t, commands, 2)
-	require.Equal(t, "ask", commands[1].Definition.Name)
-	require.True(t, commands[1].Global)
-	require.NotNil(t, commands[1].Definition.Contexts)
-	require.ElementsMatch(t, []discordgo.InteractionContextType{discordgo.InteractionContextGuild, discordgo.InteractionContextBotDM}, *commands[1].Definition.Contexts)
+	require.Len(t, commands, 4)
+	for index, name := range []string{"ask", "set", "get"} {
+		command := commands[index+1]
+		require.Equal(t, name, command.Definition.Name)
+		require.True(t, command.Global)
+		require.NotNil(t, command.Definition.Contexts)
+		require.ElementsMatch(t, []discordgo.InteractionContextType{discordgo.InteractionContextGuild, discordgo.InteractionContextBotDM}, *command.Definition.Contexts)
+	}
+	require.Equal(t, "tenant", commands[1].Definition.Options[1].Name)
+	require.False(t, commands[1].Definition.Options[1].Required)
+	require.Equal(t, "default-tenant", commands[2].Definition.Options[0].Name)
+	require.Equal(t, "default-tenant", commands[3].Definition.Options[0].Name)
 }
 
 func TestSplitDiscordMessage(t *testing.T) {

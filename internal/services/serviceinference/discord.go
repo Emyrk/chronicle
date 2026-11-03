@@ -2,7 +2,6 @@ package serviceinference
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -34,11 +33,8 @@ var discordAssistant = assistant{
 	Name:           "Discord assistant",
 	Description:    "Answers Chronicle questions from the /ask Discord command.",
 	SettingsHidden: true,
-	System:         "You are the Chronicle Discord assistant. Answer questions about Chronicle and Classic World of Warcraft concisely. Use describe_instance_search to learn the current tenant and field choices, then search_instances for questions about raid logs, players, guilds, encounters, parses, clear times, or compositions. Never invent search results. Include Chronicle instance links returned by the tool when they support the answer. Do not claim access to raw event streams. Responses are sent to Discord, so avoid tables and keep formatting compact.",
-	Tools: []ToolDefinition{
-		{Name: "describe_instance_search", Description: "List Chronicle tenants and the current bounded instance-search fields, operators, and limits.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
-		{Name: "search_instances", Description: "Search visible Chronicle raid and dungeon instances with the bounded JSON query tree returned by describe_instance_search. Choose a tenant when more than one is available.", Parameters: json.RawMessage(`{"type":"object","properties":{"tenant_slug":{"type":"string","maxLength":100},"where":{"type":"object","description":"Instance-search node: exactly one of and, or, not, any_player, count_players, any_encounter, count_encounters, or field."},"limit":{"type":"integer","minimum":1,"maximum":10}},"additionalProperties":false}`)},
-	},
+	System:         "You are the Chronicle Discord assistant. Answer questions about Chronicle and Classic World of Warcraft concisely. Select the relevant available skill based on the user's question. Do not claim access to data or tools that are not provided. Responses are sent to Discord, so avoid tables and keep formatting compact.",
+	Skills:         []string{instanceSearchSkillID},
 }
 
 func init() {
@@ -189,7 +185,7 @@ func (s *Service) deleteDiscordAdminConnection(w http.ResponseWriter, r *http.Re
 }
 
 // AskDiscord runs the Discord-specific ephemeral assistant after enforcing Chronicle permissions.
-func (s *Service) AskDiscord(ctx context.Context, userID uuid.UUID, interactionID, rawQuestion string, directMessage bool) (string, error) {
+func (s *Service) AskDiscord(ctx context.Context, userID uuid.UUID, interactionID, rawQuestion, tenantOverride string, directMessage bool) (string, error) {
 	if !s.enabled {
 		return "", newDiscordUserError("AI is not configured on this Chronicle server.")
 	}
@@ -204,22 +200,34 @@ func (s *Service) AskDiscord(ctx context.Context, userID uuid.UUID, interactionI
 	if !allowed {
 		return "", newDiscordUserError("Discord AI requires a linked Honored-or-above Chronicle account with AI enabled.")
 	}
+	userConfig, err := s.discordConfig(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("read Discord AI preference: %w", err)
+	}
+	tenantSlug := strings.TrimSpace(tenantOverride)
+	if tenantSlug == "" {
+		tenantSlug = userConfig.DefaultTenant
+	}
+	if tenantSlug == "" {
+		return "", newDiscordUserError("Please set your default tenant with `/set default-tenant` before asking a question, or provide the optional tenant on `/ask`.")
+	}
+	tenant, err := s.resolveSearchTenant(tenantSlug)
+	if err != nil {
+		return "", newDiscordUserError(err.Error())
+	}
+	tenantSlug = tenant.Slug.String
 
 	var connection database.InferenceConnection
 	var model string
 	if directMessage {
-		config, err := s.discordConfig(ctx, userID)
-		if err != nil {
-			return "", fmt.Errorf("read Discord AI preference: %w", err)
-		}
-		if !config.UsePersonalOpenRouter || config.ConnectionID == uuid.Nil || strings.TrimSpace(config.Model) == "" {
+		if !userConfig.UsePersonalOpenRouter || userConfig.ConnectionID == uuid.Nil || strings.TrimSpace(userConfig.Model) == "" {
 			return "", newDiscordUserError("Enable personal OpenRouter for Discord in Chronicle AI settings before using /ask in DMs.")
 		}
-		connection, err = s.db.GetInferenceConnectionByOwner(ctx, database.GetInferenceConnectionByOwnerParams{ID: config.ConnectionID, UserID: userID})
+		connection, err = s.db.GetInferenceConnectionByOwner(ctx, database.GetInferenceConnectionByOwnerParams{ID: userConfig.ConnectionID, UserID: userID})
 		if err != nil || connection.Status != "active" {
 			return "", newDiscordUserError("The selected personal OpenRouter connection is unavailable.")
 		}
-		model = config.Model
+		model = userConfig.Model
 	} else {
 		config, err := s.db.GetInferenceDiscordConfig(ctx)
 		if err != nil {
@@ -267,7 +275,7 @@ func (s *Service) AskDiscord(ctx context.Context, userID uuid.UUID, interactionI
 
 	collector := &discordEventCollector{}
 	result, runErr := s.agentLoop(ctx, collector, provider, credential, model, discordAssistant,
-		[]Message{{Role: RoleUser, Content: question}}, toolContext{service: s, userID: userID}, debugRunContext{}, nil,
+		[]Message{{Role: RoleUser, Content: question}}, toolContext{service: s, userID: userID, tenantSlug: tenantSlug}, debugRunContext{}, nil,
 		agentLoopState{}, func(...Message) error { return nil }, nil, s.usageRecorder(ctx, run, nil))
 	if runErr != nil {
 		_ = s.finishRun(ctx, run, "error", result.State, inferenceRunErrorCode(runErr))

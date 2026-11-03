@@ -42,7 +42,11 @@ Chronicle registers a global `/ask` Discord application command so the same comm
 
 Direct-message requests never use the shared credential. A user must explicitly enable personal OpenRouter use for Discord, select one of their owner-scoped connections, and select a compatible model in account AI settings. The Discord assistant is ephemeral and transport-specific: it uses the bounded provider-neutral agent loop but is hidden from the browser assistant catalog. Discord output disables mentions and is split into bounded messages.
 
-The Discord assistant can call the same tenant-safe advanced instance-search compiler used by `POST /api/v1/raidlogs/search`. It first discovers the configured tenant and field registry, then submits a bounded query with at most 10 results. Discord and HTTP searches share the database-backed `instance_search` user bucket, so `/ask` adds no separate cooldown. Search execution retains tenant RLS, the compiler's complexity limits, and the five-second statement timeout; returned rows include tenant-specific Chronicle links.
+The Discord assistant composes reusable server-owned runtime skills based on the question. Its first skill is advanced instance search, which contributes both the query-building instructions and the `describe_instance_search` / `search_instances` tools. Future capabilities such as armory lookup can be added as independent skills without expanding the base Discord prompt.
+
+Every `/ask` runs inside one validated tenant. Users manage their saved tenant with `/set default-tenant <slug>` and `/get default-tenant`; `/ask` also has an optional `tenant` override for one question. The default is stored in the user's existing inference profile. If neither a saved default nor an override exists, Chronicle asks the user to set one before running inference.
+
+Instance search uses the same tenant-safe compiler as `POST /api/v1/raidlogs/search` and submits a bounded query with at most 10 results. Discord and HTTP searches share the database-backed `instance_search` user bucket, so `/ask` adds no separate cooldown. Search execution retains tenant RLS, the compiler's complexity limits, and the five-second statement timeout; returned rows include tenant-specific Chronicle links.
 
 ## Streaming contract
 

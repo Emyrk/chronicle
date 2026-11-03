@@ -18,7 +18,9 @@ import (
 )
 
 type DiscordInference interface {
-	AskDiscord(ctx context.Context, userID uuid.UUID, interactionID, question string, directMessage bool) (string, error)
+	AskDiscord(ctx context.Context, userID uuid.UUID, interactionID, question, tenantOverride string, directMessage bool) (string, error)
+	SetDiscordDefaultTenant(ctx context.Context, userID uuid.UUID, slug string) error
+	GetDiscordDefaultTenant(ctx context.Context, userID uuid.UUID) (string, error)
 }
 
 // Config holds the configuration for the Discord bot.

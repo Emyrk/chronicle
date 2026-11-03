@@ -33,22 +33,19 @@ func (s *Service) availableSearchTenants() []database.Tenant {
 	return tenants
 }
 
-func (s *Service) describeInstanceSearch(args string) (string, error) {
+func (s *Service) describeInstanceSearch(tc toolContext, args string) (string, error) {
 	var in struct{}
 	if err := decodeStrict(args, &in); err != nil {
 		return "", err
 	}
-	tenants := s.availableSearchTenants()
-	outTenants := make([]discordSearchTenant, 0, len(tenants))
-	for _, tenant := range tenants {
-		if tenant.Slug.Valid && tenant.Slug.String != "" {
-			outTenants = append(outTenants, discordSearchTenant{Slug: tenant.Slug.String, Name: tenant.Name})
-		}
+	tenant, err := s.resolveSearchTenant(tc.tenantSlug)
+	if err != nil {
+		return "", err
 	}
 	return boundedJSON(struct {
-		Tenants []discordSearchTenant                     `json:"tenants"`
-		Search  chroniclesdk.InstanceSearchFieldsResponse `json:"search"`
-	}{Tenants: outTenants, Search: instancesearch.Describe()})
+		Tenant discordSearchTenant                       `json:"tenant"`
+		Search chroniclesdk.InstanceSearchFieldsResponse `json:"search"`
+	}{Tenant: discordSearchTenant{Slug: tenant.Slug.String, Name: tenant.Name}, Search: instancesearch.Describe()})
 }
 
 func (s *Service) resolveSearchTenant(slug string) (database.Tenant, error) {
@@ -96,9 +93,8 @@ func (s *Service) tenantInstanceURL(tenant database.Tenant, result chroniclesdk.
 
 func (s *Service) searchInstances(ctx context.Context, tc toolContext, args string) (string, error) {
 	var in struct {
-		TenantSlug string                           `json:"tenant_slug"`
-		Where      *chroniclesdk.InstanceSearchNode `json:"where"`
-		Limit      int                              `json:"limit"`
+		Where *chroniclesdk.InstanceSearchNode `json:"where"`
+		Limit int                              `json:"limit"`
 	}
 	if err := decodeStrict(args, &in); err != nil {
 		return "", err
@@ -112,7 +108,7 @@ func (s *Service) searchInstances(ctx context.Context, tc toolContext, args stri
 	if in.Limit < 1 || in.Limit > 10 {
 		return "", errors.New("limit must be 1-10")
 	}
-	tenant, err := s.resolveSearchTenant(in.TenantSlug)
+	tenant, err := s.resolveSearchTenant(tc.tenantSlug)
 	if err != nil {
 		return "", err
 	}

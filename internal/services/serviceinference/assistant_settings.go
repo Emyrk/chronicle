@@ -83,6 +83,7 @@ type discordUserConfig struct {
 	UsePersonalOpenRouter bool      `json:"use_personal_openrouter"`
 	ConnectionID          uuid.UUID `json:"connection_id,omitempty"`
 	Model                 string    `json:"model,omitempty"`
+	DefaultTenant         string    `json:"default_tenant,omitempty"`
 }
 
 func (s *Service) discordConfig(ctx context.Context, userID uuid.UUID) (discordUserConfig, error) {
@@ -127,11 +128,36 @@ func (s *Service) setDiscordConfig(ctx context.Context, userID uuid.UUID, change
 		}
 		config.UsePersonalOpenRouter = *changes.DiscordUsePersonalOpenRouter
 	}
+	return s.writeDiscordConfig(ctx, userID, config)
+}
+
+func (s *Service) writeDiscordConfig(ctx context.Context, userID uuid.UUID, config discordUserConfig) error {
 	value, err := json.Marshal(config)
 	if err != nil {
 		return err
 	}
 	return s.db.SetInferenceUserConfigKey(ctx, database.SetInferenceUserConfigKeyParams{UserID: userID, Key: "discord", Value: value})
+}
+
+func (s *Service) SetDiscordDefaultTenant(ctx context.Context, userID uuid.UUID, slug string) error {
+	tenant, err := s.resolveSearchTenant(slug)
+	if err != nil {
+		return newDiscordUserError(err.Error())
+	}
+	config, err := s.discordConfig(ctx, userID)
+	if err != nil {
+		return err
+	}
+	config.DefaultTenant = tenant.Slug.String
+	return s.writeDiscordConfig(ctx, userID, config)
+}
+
+func (s *Service) GetDiscordDefaultTenant(ctx context.Context, userID uuid.UUID) (string, error) {
+	config, err := s.discordConfig(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	return config.DefaultTenant, nil
 }
 
 // requireAssistantEnabled writes a 403 and returns false when the user turned the assistant off.

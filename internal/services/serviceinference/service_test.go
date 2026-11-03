@@ -166,11 +166,16 @@ func TestDiscordAskRequiresPersonalOptInForDMAndSharedConfigForGuild(t *testing.
 	store, _ := dbtestutil.NewDB(t)
 	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "discord-ask-" + userID.String()[:8]})
 	require.NoError(t, err)
-	service := &Service{zed: zed, db: store, enabled: true, logger: slog.Default()}
+	accessURL, err := url.Parse("https://chronicle.example")
+	require.NoError(t, err)
+	tenant := database.Tenant{ID: uuid.New(), Slug: pgtype.Text{String: "turtle", Valid: true}, Name: "Turtle WoW"}
+	service := &Service{zed: zed, db: store, enabled: true, logger: slog.Default(), tenant: servicetenant.NewTestWithTenants(*accessURL, "chronicle.example", tenant)}
 
-	_, err = service.AskDiscord(ctx, userID, "dm-interaction", "hello", true)
+	_, err = service.AskDiscord(ctx, userID, "missing-tenant", "hello", "", false)
+	require.ErrorContains(t, err, "Please set your default tenant")
+	_, err = service.AskDiscord(ctx, userID, "dm-interaction", "hello", "turtle", true)
 	require.ErrorContains(t, err, "Enable personal OpenRouter")
-	_, err = service.AskDiscord(ctx, userID, "guild-interaction", "hello", false)
+	_, err = service.AskDiscord(ctx, userID, "guild-interaction", "hello", "turtle", false)
 	require.ErrorContains(t, err, "Shared Discord AI is not configured")
 }
 
@@ -949,20 +954,24 @@ func TestDiscordAssistantInstanceSearchTools(t *testing.T) {
 		tenant:    servicetenant.NewTestWithTenants(*accessURL, "chronicle.example", tenant),
 	}
 
-	toolNames := make([]string, 0, len(discordAssistant.Tools))
-	for _, tool := range discordAssistant.Tools {
+	resolved, err := withRuntimeSkills(discordAssistant)
+	require.NoError(t, err)
+	toolNames := make([]string, 0, len(resolved.Tools))
+	for _, tool := range resolved.Tools {
 		toolNames = append(toolNames, tool.Name)
 	}
 	require.ElementsMatch(t, []string{"describe_instance_search", "search_instances"}, toolNames)
-	require.True(t, assistantAllowsTool(discordAssistant, "search_instances"))
+	require.True(t, assistantAllowsTool(resolved, "search_instances"))
 	require.False(t, assistantAllowsTool(assistants["site-help"], "search_instances"))
+	require.Contains(t, resolved.System, "same player")
 
-	description, err := service.executeTool(context.Background(), toolContext{service: service, userID: uuid.New()}, "describe_instance_search", `{}`)
+	toolCtx := toolContext{service: service, userID: uuid.New(), tenantSlug: "turtle"}
+	description, err := service.executeTool(context.Background(), toolCtx, "describe_instance_search", `{}`)
 	require.NoError(t, err)
 	require.Contains(t, description, `"slug":"turtle"`)
 	require.Contains(t, description, `"name":"instance.name"`)
 
-	_, err = service.executeTool(context.Background(), toolContext{service: service, userID: uuid.New()}, "search_instances", `{"tenant_slug":"turtle","where":{"field":"not.a.field","op":"=","value":"x"}}`)
+	_, err = service.executeTool(context.Background(), toolCtx, "search_instances", `{"where":{"field":"not.a.field","op":"=","value":"x"}}`)
 	require.ErrorContains(t, err, "invalid instance search")
 	require.Equal(t, "https://turtle.chronicle.example/instances/example", service.tenantInstanceURL(tenant, chroniclesdk.InstanceSearchResult{Slug: "example"}))
 }
@@ -986,7 +995,7 @@ func TestDiscordSearchInstancesExecutesAndChargesSharedBucket(t *testing.T) {
 		searchLimit: limiter,
 	}
 
-	output, err := service.executeTool(ctx, toolContext{service: service, userID: userID}, "search_instances", `{"tenant_slug":"turtle","where":{"field":"instance.name","op":"=","value":"No Such Instance"},"limit":3}`)
+	output, err := service.executeTool(ctx, toolContext{service: service, userID: userID, tenantSlug: "turtle"}, "search_instances", `{"where":{"field":"instance.name","op":"=","value":"No Such Instance"},"limit":3}`)
 	require.NoError(t, err)
 	var response struct {
 		Cost    int                                 `json:"cost"`
@@ -999,6 +1008,29 @@ func TestDiscordSearchInstancesExecutesAndChargesSharedBucket(t *testing.T) {
 	status, err := limiter.Peek(ctx, ratelimit.UserSubject(userID.String()))
 	require.NoError(t, err)
 	require.InDelta(t, 298, status.Remaining, 0.5)
+}
+
+func TestDiscordDefaultTenantProfile(t *testing.T) {
+	t.Parallel()
+
+	ctx := testutil.Context(t, testutil.WaitLong)
+	store, _ := dbtestutil.NewDB(t)
+	userID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "discord-tenant-" + userID.String()[:8]})
+	require.NoError(t, err)
+	accessURL, err := url.Parse("https://chronicle.example")
+	require.NoError(t, err)
+	tenant := database.Tenant{ID: uuid.New(), Slug: pgtype.Text{String: "turtle", Valid: true}, Name: "Turtle WoW"}
+	service := &Service{db: store, tenant: servicetenant.NewTestWithTenants(*accessURL, "chronicle.example", tenant)}
+
+	slug, err := service.GetDiscordDefaultTenant(ctx, userID)
+	require.NoError(t, err)
+	require.Empty(t, slug)
+	require.NoError(t, service.SetDiscordDefaultTenant(ctx, userID, "TURTLE"))
+	slug, err = service.GetDiscordDefaultTenant(ctx, userID)
+	require.NoError(t, err)
+	require.Equal(t, "turtle", slug)
+	require.ErrorContains(t, service.SetDiscordDefaultTenant(ctx, userID, "missing"), "unknown tenant_slug")
 }
 
 func TestAssistantSettingsCatalog(t *testing.T) {

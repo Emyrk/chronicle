@@ -44,8 +44,10 @@ type assistant struct {
 	ClientCapability string
 	// SettingsHidden is true for transport-specific assistants that are not launched by the browser.
 	SettingsHidden bool
-	Tools          []ToolDefinition
-	ServerTools    []ServerToolDefinition
+	// Skills compose reusable instructions and tools into this assistant at runtime.
+	Skills      []string
+	Tools       []ToolDefinition
+	ServerTools []ServerToolDefinition
 }
 
 const webResearchPrompt = "\n\nWhen web search is available, use it for current or external information. Prefer authoritative sources, distinguish sourced facts from inference, and cite the sources used."
@@ -130,6 +132,21 @@ func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model strin
 			Parameters:  parameters,
 		})
 	}
+	debugSkills := make([]agui.DebugSkill, 0, len(a.Skills))
+	for _, skill := range debugRuntimeSkills(a) {
+		toolNames := make([]string, 0, len(skill.Tools))
+		for _, tool := range skill.Tools {
+			toolNames = append(toolNames, tool.Name)
+		}
+		debugSkills = append(debugSkills, agui.DebugSkill{
+			ID:                 skill.ID,
+			Name:               skill.Name,
+			Version:            skill.Version,
+			Source:             "server",
+			PromptContribution: skill.Instructions,
+			Tools:              toolNames,
+		})
+	}
 	return agui.DebugSnapshotEvent{
 		RunID:       debug.RunID,
 		Iteration:   iteration,
@@ -141,7 +158,7 @@ func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model strin
 		ContextID:   debug.ContextID,
 		Messages:    debugMessages,
 		Tools:       debugTools,
-		Skills:      make([]agui.DebugSkill, 0),
+		Skills:      debugSkills,
 		Limits: agui.DebugLimits{
 			MaxHistoryMessages: maxHistoryMessages,
 			MaxHistoryBytes:    maxHistoryBytes,
@@ -158,6 +175,7 @@ func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model strin
 type toolContext struct {
 	service    *Service
 	userID     uuid.UUID
+	tenantSlug string
 	instanceID uuid.UUID
 }
 
@@ -312,7 +330,7 @@ func (s *Service) executeTool(ctx context.Context, tc toolContext, name, args st
 		}
 		return boundedJSON(out)
 	case "describe_instance_search":
-		return s.describeInstanceSearch(args)
+		return s.describeInstanceSearch(tc, args)
 	case "search_instances":
 		return s.searchInstances(ctx, tc, args)
 	case "instance_summary":
@@ -848,6 +866,11 @@ type agentLoopResult struct {
 type pauseClientToolFunc func(Message, []Message, clientToolPause, agentLoopState) error
 
 func (s *Service) agentLoop(ctx context.Context, w eventWriter, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, debug debugRunContext, capability *clientCapability, state agentLoopState, persist func(...Message) error, pause pauseClientToolFunc, record usageRecorder) (agentLoopResult, error) {
+	var err error
+	a, err = withRuntimeSkills(a)
+	if err != nil {
+		return agentLoopResult{State: state}, err
+	}
 	messages = append([]Message{{Role: RoleSystem, Content: a.System}}, messages...)
 	usedCallIDs := usedToolCallIDs(messages)
 	for state.IterationCount <= maxIterations {
