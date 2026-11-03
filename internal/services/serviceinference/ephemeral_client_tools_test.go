@@ -92,11 +92,43 @@ func TestSiteHelpAgentPausesOnlyForAdvertisedSearchDraft(t *testing.T) {
 	// A model cannot submit an old revision even when its tool JSON is otherwise valid.
 	provider.calls = 0
 	provider.streams[0][0].ToolCall.Arguments = `{"expected_revision":3,"where":{"field":"instance.name","op":"=","value":"Naxxramas"}}`
-	_, err = (&Service{}).agentLoop(context.Background(), agui.NewStreamWriter(&strings.Builder{}, nil), provider, nil, "model", withClientTools(assistants["site-help"], capability), []Message{{Role: RoleUser, Content: "prepare my search"}}, toolContext{}, debugRunContext{}, capability, agentLoopState{}, func(...Message) error { return nil }, func(_ Message, _ []Message, _ clientToolPause, _ agentLoopState) error {
+	provider.streams = append(provider.streams, []StreamEvent{{Type: StreamEventTextDelta, Text: "I need to inspect the page again."}, {Type: StreamEventFinish, FinishReason: FinishReasonStop}})
+	var staleStream strings.Builder
+	_, err = (&Service{}).agentLoop(context.Background(), agui.NewStreamWriter(&staleStream, nil), provider, nil, "model", withClientTools(assistants["site-help"], capability), []Message{{Role: RoleUser, Content: "prepare my search"}}, toolContext{}, debugRunContext{Enabled: true}, capability, agentLoopState{}, func(...Message) error { return nil }, func(_ Message, _ []Message, _ clientToolPause, _ agentLoopState) error {
 		t.Fatal("stale draft sent to client")
 		return nil
 	}, nil)
-	require.ErrorContains(t, err, "revision mismatch")
+	require.NoError(t, err)
+	require.Contains(t, staleStream.String(), `\"error\":\"stale_state\"`)
+	require.NotContains(t, staleStream.String(), "CLIENT_TOOL_REQUEST")
+}
+
+func TestSearchDraftValidationReturnsToolResultAndAllowsRetry(t *testing.T) {
+	t.Parallel()
+	capability := &clientCapability{ID: searchPageCapabilityID, Version: 1, ScopeType: "search_page", ScopeID: "search", SessionID: "browser", StateRevision: ptr(int64(2))}
+	bad := `{"expected_revision":2,"where":{"field":"player.class","op":"=","value":"DRUID"}}`
+	good := `{"expected_revision":2,"where":{"any_player":{"field":"player.class","op":"=","value":"DRUID"}}}`
+	provider := &scriptedProvider{streams: [][]StreamEvent{
+		{{Type: StreamEventToolCallDelta, ToolCall: ToolCallDelta{Index: 0, ID: "bad", Name: "set_search_draft", Arguments: bad}}, {Type: StreamEventFinish, FinishReason: FinishReasonToolCalls}},
+		{{Type: StreamEventToolCallDelta, ToolCall: ToolCallDelta{Index: 0, ID: "good", Name: "set_search_draft", Arguments: good}}, {Type: StreamEventFinish, FinishReason: FinishReasonToolCalls}},
+	}}
+	var stream strings.Builder
+	var pending clientToolPause
+	result, err := (&Service{}).agentLoop(context.Background(), agui.NewStreamWriter(&stream, nil), provider, nil, "model", withClientTools(assistants["site-help"], capability), []Message{{Role: RoleUser, Content: "Find druids"}}, toolContext{}, debugRunContext{Enabled: true, RunID: "run", ThreadID: "ephemeral", Persistence: "ephemeral"}, capability, agentLoopState{}, func(...Message) error { return nil }, func(_ Message, _ []Message, next clientToolPause, _ agentLoopState) error { pending = next; return nil }, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result.Paused)
+	require.Equal(t, good, pending.Call.Arguments)
+	require.Equal(t, 2, provider.calls)
+	snapshots := debugSnapshots(t, stream.String())
+	require.GreaterOrEqual(t, len(snapshots), 3)
+	require.Equal(t, "tool_results", snapshots[1].Phase)
+	require.Equal(t, bad, snapshots[1].Messages[2].ToolCalls[0].Arguments)
+	require.Equal(t, "set_search_draft", snapshots[1].Messages[3].Name)
+	require.Contains(t, snapshots[1].Messages[3].Content, "player.class")
+	require.Contains(t, snapshots[1].Messages[3].Content, "any_player")
+	require.Contains(t, stream.String(), `"type":"TOOL_CALL_END"`)
+	require.NotContains(t, stream.String(), `"type":"RUN_ERROR"`)
+	require.Contains(t, stream.String(), "CLIENT_TOOL_REQUEST") // Only the corrected call reaches the browser.
 }
 
 func TestEphemeralClientToolHistoryOnlyWhileAwaiting(t *testing.T) {

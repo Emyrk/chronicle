@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/internal/instancesearch"
 	"github.com/Emyrk/chronicle/internal/services/serviceinference/agui"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -913,6 +914,43 @@ type agentLoopResult struct {
 
 type pauseClientToolFunc func(Message, []Message, clientToolPause, agentLoopState) error
 
+var errSearchDraftRevisionMismatch = errors.New("search draft revision mismatch")
+
+// A rejected search draft is a model-correctable tool result, not a failed run.
+// Compiler errors describe only validated paths/fields; never echo JSON decoder
+// errors or arbitrary tool arguments back to the model.
+func searchDraftValidationResult(err error) (string, error) {
+	result := struct {
+		Error  string `json:"error"`
+		Detail string `json:"detail"`
+	}{Error: "invalid_search_draft", Detail: "Use a valid JSON search tree and include expected_revision from inspect_search_draft."}
+	var searchErr *instancesearch.Error
+	if errors.Is(err, errSearchDraftRevisionMismatch) {
+		result.Error = "stale_state"
+		result.Detail = "The search draft revision changed. Call inspect_search_draft again before editing."
+	} else if errors.As(err, &searchErr) {
+		result.Detail = searchErr.Error()
+		if runes := []rune(result.Detail); len(runes) > 500 {
+			result.Detail = string(runes[:500]) + "…"
+		}
+	}
+	return boundedJSON(result)
+}
+
+func rejectedSearchDraftTool(w *agui.Writer, messageID string, call ToolCall, reason error) (Message, error) {
+	if err := w.Write(agui.ToolCallStartEvent{ToolCallID: call.ID, ToolCallName: call.Name, ParentMessageID: messageID}); err != nil {
+		return Message{}, err
+	}
+	if err := w.Write(agui.ToolCallArgsEvent{ToolCallID: call.ID, Delta: call.Arguments}); err != nil {
+		return Message{}, err
+	}
+	output, err := searchDraftValidationResult(reason)
+	if err != nil {
+		return Message{}, err
+	}
+	return Message{Role: RoleTool, Name: call.Name, ToolCallID: call.ID, Content: output}, nil
+}
+
 func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, debug debugRunContext, capability *clientCapability, state agentLoopState, persist func(...Message) error, pause pauseClientToolFunc, record usageRecorder) (agentLoopResult, error) {
 	var err error
 	a, err = withRuntimeSkills(a)
@@ -1038,16 +1076,24 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 					return agentLoopResult{State: state}, errors.New("multiple client tool calls are not supported")
 				}
 				arguments, err := validateClientToolArguments(call.Name, call.Arguments)
-				if err != nil {
-					return agentLoopResult{State: state}, err
-				}
-				if capability.ID == searchPageCapabilityID && call.Name == "set_search_draft" {
+				if err == nil && capability.ID == searchPageCapabilityID && call.Name == "set_search_draft" {
 					var input struct {
 						ExpectedRevision int64 `json:"expected_revision"`
 					}
-					if err := json.Unmarshal(arguments, &input); err != nil || capability.StateRevision == nil || input.ExpectedRevision != *capability.StateRevision {
-						return agentLoopResult{State: state}, errors.New("search draft revision mismatch")
+					if json.Unmarshal(arguments, &input) != nil || capability.StateRevision == nil || input.ExpectedRevision != *capability.StateRevision {
+						err = errSearchDraftRevisionMismatch
 					}
+				}
+				if err != nil {
+					if capability.ID != searchPageCapabilityID || call.Name != "set_search_draft" {
+						return agentLoopResult{State: state}, err
+					}
+					rejected, writeErr := rejectedSearchDraftTool(w, messageID, call, err)
+					if writeErr != nil {
+						return agentLoopResult{State: state}, writeErr
+					}
+					toolMessages = append(toolMessages, rejected)
+					continue
 				}
 				pending = &clientToolPause{Call: call, Arguments: arguments, Capability: *capability, Effect: clientTool.Effect, Confirmation: clientTool.Confirmation}
 				continue

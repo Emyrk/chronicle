@@ -193,7 +193,7 @@ func validateClientToolArguments(name, raw string) (json.RawMessage, error) {
 			return nil, errors.New("invalid set_search_draft arguments")
 		}
 		if err := validateSearchDraft(input.Where); err != nil {
-			return nil, errors.New("invalid search draft")
+			return nil, err
 		}
 	case "inspect_instance_ui":
 		var input struct {
