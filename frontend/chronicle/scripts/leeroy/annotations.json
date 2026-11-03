@@ -1,0 +1,292 @@
+{
+ "about": [
+  "Frame annotations for the Leeroy Jenkins replay (issue #1543).",
+  "Player positions and deaths come from Internet Historian's 'Leeroy Jenkins | Map of the Players' (2017, https://youtu.be/IAOLAw0k2DU): tracked by track-ih-map.py into ih-tracks.json, mapped to world X/Y by fit-ih-map.py (ih-map-fit.json). Per Internet Historian's map (2017), fan approximation.",
+  "The observations below were annotated by a vision model (Claude) reading frames of the guild's 480p upload: 5 fps for 86-116 s, 4 fps for 130-138 s, 1 fps elsewhere. They are now a cross-check on his map (see crossCheck).",
+  "Roster and classes are cross-checked with fan sources and labelled as such.",
+  "Every field says where it came from: observed (seen in the frames), inferred, or illustrative (filler so the replay reads; not seen)."
+ ],
+ "video": {
+  "youtubeId": "jbq5dsQ-l9M",
+  "title": "A Rough Go - Leeroy Jenkins",
+  "channel": "Anf Pal (the guild's own upload, 2005 original)",
+  "firstTakeYoutubeId": "8hmgrHohDGM",
+  "resolution": "640x480"
+ },
+ "clip": {
+  "fromVideoSeconds": 84,
+  "toVideoSeconds": 170,
+  "logStart": "2005-05-11T20:00:00.000Z",
+  "note": "Internet Historian's map covers original 1:24.5-2:49.7: Leeroy walking in, the raid following, the pile-in and the wipe."
+ },
+ "roster": [
+  {
+   "name": "Leeroy",
+   "class": "PALADIN",
+   "classSource": "fan source (Human Paladin); observed: gold plate at 96 s"
+  },
+  {
+   "name": "Anfrony",
+   "class": "WARRIOR",
+   "classSource": "fan source: Human Warrior, the recorder (POV). Observed: his fear at 104 s puts purple skulls over the whelps, which fits Intimidating Shout. The player frame name itself is not legible at 480p."
+  },
+  {
+   "name": "Abduhl",
+   "class": "ROGUE",
+   "classSource": "fan source (Human Rogue)"
+  },
+  {
+   "name": "Basphemy",
+   "class": "WARRIOR",
+   "classSource": "inferred from the dialogue (fan analysis), not stated anywhere: asked to use Intimidating Shout"
+  },
+  {
+   "name": "Chrisym",
+   "class": "MAGE",
+   "classSource": "guess: the dialogue mentions mages; nameplate at the right edge at 90 s"
+  },
+  {
+   "name": "Ctidalwave",
+   "class": "MAGE",
+   "classSource": "guess: the dialogue mentions mages"
+  },
+  {
+   "name": "Forekin",
+   "class": "WARRIOR",
+   "classSource": "guess: in melee in the whelp pile at 100-102 s and 113 s"
+  },
+  {
+   "name": "Jamaal",
+   "class": "WARRIOR",
+   "classSource": "inferred from the dialogue (fan analysis), not stated anywhere: asked to use Intimidating Shout"
+  },
+  {
+   "name": "Juron",
+   "class": "HUNTER",
+   "classSource": "guess"
+  },
+  {
+   "name": "Madtoker",
+   "class": "MAGE",
+   "classSource": "guess: the dialogue mentions mages and no warlock"
+  },
+  {
+   "name": "Ritter",
+   "class": "PRIEST",
+   "classSource": "guess: white robes at 90-96 s"
+  },
+  {
+   "name": "Spiffy",
+   "class": "PRIEST",
+   "classSource": "inferred from the dialogue (fan analysis), not stated anywhere: asked to rez"
+  },
+  {
+   "name": "Therien",
+   "class": "PALADIN",
+   "classSource": "inferred from the dialogue (fan analysis), not stated anywhere: asked for Divine Intervention"
+  }
+ ],
+ "observations": [
+  {
+   "t": 90.0,
+   "what": "Raid stacked in the Hall of Binding beside a doorway; nameplates Forekin, Abduhl, Jamaal, Ritter, Madtoker, Basphemy, Therien, Ctidalwave, Juron, Spiffy.",
+   "source": "observed"
+  },
+  {
+   "t": 93.0,
+   "what": "A runner leaves the stack for the door; the raid turns after him (not Leeroy: per Internet Historian's map Leeroy is already in the Rookery).",
+   "source": "observed"
+  },
+  {
+   "t": 94.0,
+   "what": "Anfrony (POV) follows the runner through the stone doorway, Juron beside the camera.",
+   "source": "observed"
+  },
+  {
+   "t": 96.0,
+   "what": "Minimap now 'The Rookery'. Leeroy (paladin) on the checkered floor among eggs and bones; Ritter right of the camera.",
+   "source": "observed"
+  },
+  {
+   "t": 97.0,
+   "what": "First Rookery Whelp nameplates over Leeroy's position.",
+   "source": "observed"
+  },
+  {
+   "t": 99.0,
+   "what": "Leeroy buried under ~8 whelps.",
+   "source": "observed"
+  },
+  {
+   "t": 100.0,
+   "what": "Forekin and Abduhl arrive at the pile; ~10 whelp nameplates.",
+   "source": "observed"
+  },
+  {
+   "t": 101.0,
+   "what": "Ritter, Spiffy, Basphemy and Abduhl in the pile.",
+   "source": "observed"
+  },
+  {
+   "t": 104.0,
+   "what": "Anfrony (POV)'s fear: purple skulls over ~6 whelps; more eggs ahead of the camera.",
+   "source": "observed"
+  },
+  {
+   "t": 108.0,
+   "what": "Anfrony (POV) health about half (player frame turns yellow).",
+   "source": "observed"
+  },
+  {
+   "t": 112.0,
+   "what": "Whelps spread over the room; Forekin fighting at 113 s.",
+   "source": "observed"
+  },
+  {
+   "t": 126.0,
+   "what": "Anfrony (POV) is backing out over grey stone (per Internet Historian's map: towards the rubble in the south-west).",
+   "source": "observed (direction inferred)"
+  },
+  {
+   "t": 131.0,
+   "what": "Anfrony (POV) party: slot 2 health goes red.",
+   "source": "observed"
+  },
+  {
+   "t": 132.0,
+   "what": "Slot 2 health empty, portrait grey (dead).",
+   "source": "observed"
+  },
+  {
+   "t": 132.0,
+   "what": "Chat: 'Ctidalwave has died.'",
+   "source": "observed (chat log, 2 fps crops)"
+  },
+  {
+   "t": 134.0,
+   "what": "Chat: 'Therien has died.'",
+   "source": "observed (chat log)"
+  },
+  {
+   "t": 134.4,
+   "what": "Slot 3 portrait grey (dead).",
+   "source": "observed"
+  },
+  {
+   "t": 135.0,
+   "what": "Slot 1 health reads 0 (dead).",
+   "source": "observed"
+  },
+  {
+   "t": 135.0,
+   "what": "Chat: 'Forekin has died.' then 'You call out for healing!'",
+   "source": "observed (chat log)"
+  },
+  {
+   "t": 135.0,
+   "what": "The POV runs up a grey stone ramp; at 138-141 he fights Rage Talon Dragonspawn; back on the checkered egg floor by 144.",
+   "source": "observed"
+  },
+  {
+   "t": 135.4,
+   "what": "Slot 4 portrait grey (dead): every other member of the Anfrony (POV) party is down.",
+   "source": "observed"
+  },
+  {
+   "t": 137.0,
+   "what": "Chat: 'Abduhl has died.' (first seen at 137.0; after 135.0)",
+   "source": "observed (chat log)"
+  },
+  {
+   "t": 156.0,
+   "what": "A 'Release Spirit' box: the recorder is dead.",
+   "source": "observed"
+  }
+ ],
+ "whelps": {
+  "trigger": {
+   "radiusYards": 1.5,
+   "source": "real: Rookery Egg (gameobject 175124) is a trap with data2 (diameter) = 3 in cmangos/classic-db gameobject_template; the cmangos/mangos-classic core triggers traps at radius = diameter / 2 (GameObject.cpp, GAMEOBJECT_TYPE_TRAP)",
+   "placementMarginYards": 1.5,
+   "marginSource": "tuned, not sourced: his map places players to about 1 yd (pillar fit RMS 0.96, worst 1.30), so the bare 1.5 yd radius misses eggs a player walked over. 1.5 yd is his worst residual rounded up, and gives the closest match to the footage's whelp counts (8 on Leeroy by 1:39, about 10 by 1:40); the bare radius gives 3 by 1:39"
+  },
+  "source": "which eggs hatch: any living player on the egg floor within the trigger radius (positions per Internet Historian's map); the whelp attacks the player who set it off, then the nearest living player. Swings and damage are illustrative."
+ },
+ "fear": {
+  "t": 104.0,
+  "caster": "Anfrony",
+  "spellId": 5246,
+  "spellName": "Intimidating Shout",
+  "source": "observed (the effect); the spell is inferred from the recorder being a warrior"
+ },
+ "rosterSource": "fan source: old wowwiki LEEROY page roster (13 names); nameplates checked against the 90-93 s frames (Forekin, Abduhl, Jamaal, Ritter, Madtoker, Basphemy, Therien, Ctidalwave, Chrisym, Juron, Spiffy legible). The UBRS cap was 10-15, so not every listed name need be in the room.",
+ "recorder": "Anfrony",
+ "ihSync": {
+  "offsetSeconds": 78.5,
+  "slope": 1.0012,
+  "residualMaxSeconds": 0.52,
+  "source": "sync-ih-inset.py: the inset of the footage on his map matched against the original upload, 72 one-second matches; original second = map second + 78.5"
+ },
+ "partyFrameDeaths": [
+  {
+   "t": 132.0,
+   "partySlot": 2
+  },
+  {
+   "t": 134.4,
+   "partySlot": 3
+  },
+  {
+   "t": 135.0,
+   "partySlot": 1
+  },
+  {
+   "t": 135.4,
+   "partySlot": 4
+  }
+ ],
+ "partyFrameDeathsSource": "observed on the recorder's party frames: four party members dead by 135.4 s; names not legible at 480p",
+ "crossCheck": [
+  {
+   "topic": "Leeroy's entry",
+   "ihMap": "walks in through the door at 1:26.5 and is alone in the room until 1:34.5",
+   "frames": "the v1 annotation had Leeroy leaving the hall at 1:33; that runner's nameplate is not legible, and the raid's own arrival (POV through the door at 1:34.8) matches his map (Anfrony's dot enters at 1:34.1)",
+   "verdict": "his map; the 1:33 runner was another raid member"
+  },
+  {
+   "topic": "Route in",
+   "ihMap": "the west door, from the Hall of Binding at floor level (minimap 'Hall of Binding' before, 'The Rookery' after)",
+   "frames": "agrees; v1 had used the east stairs and a drop off the terrace, taken from modern Rookery pulls in Chronicle logs",
+   "verdict": "his map"
+  },
+  {
+   "topic": "Recorder after the pile",
+   "ihMap": "Anfrony leaves the pile south-west at ~2:06 and reaches the far south-west corner (rubble) by ~2:14",
+   "frames": "the v1 note said 'backing out over grey stone towards the east'; the grey stone fits the rubble in the south-west",
+   "verdict": "his map"
+  },
+  {
+   "topic": "Deaths",
+   "ihMap": "three dots go dithered: Basphemy 2:10.5, Ctidalwave 2:11.7, Chrisym 2:18.3; everyone else is still drawn alive when his map ends (2:49.7)",
+   "frames": "the recorder's party frames show four party members dead at 2:12.0, 2:14.4, 2:15.0 and 2:15.4",
+   "verdict": "the fixture still uses his named deaths (Basphemy, Ctidalwave, Chrisym); the chat agrees on Ctidalwave and names three more he draws alive. Using the chat deaths is a follow-up.",
+   "chat": "the recorder's chat names his party's deaths: Ctidalwave 2:12.0, Therien 2:14, Forekin 2:15, Abduhl by 2:17 (matching the party frames' 2:12.0, 2:14.4, 2:15.0, 2:15.4), and a Release Spirit box shows the recorder dead by 2:36"
+  },
+  {
+   "topic": "Fear",
+   "ihMap": "Anfrony is in the pile at 1:44",
+   "frames": "his fear (purple skulls over the whelps) at 1:44",
+   "verdict": "agree"
+  }
+ ],
+ "levelChanges": [
+  {
+   "name": "Anfrony",
+   "from": 133.0,
+   "to": 139.6,
+   "surface": "the west rubble ramp up towards the north terrace, then a drop back to the egg floor",
+   "source": "footage: the POV runs up a grey stone ramp at 2:15, fights Rage Talon Dragonspawn (terrace-level spawns) at 2:18-2:21 and is back on the checkered egg floor by 2:24; his map has Anfrony along the west wall (the ramp) from 2:13 to 2:19.5, then on the floor from 2:20"
+  }
+ ],
+ "levelsSource": "footage 1:36-2:24: the whole fight is on the checkered egg floor; the raid enters through the west door at floor level. Only the recorder climbs (levelChanges)."
+}
