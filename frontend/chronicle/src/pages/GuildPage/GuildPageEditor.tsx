@@ -1,11 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { toast } from "sonner";
 import type { GuildPagePanel, GuildPageTab, GuildPageTheme, DeviceVisibility } from "@/api/typesGenerated";
 import { useGuildPage, useSaveGuildPage } from "@/api/queries";
 import { GuildPageCanvas, TabBar, AddPanelDrawer, PanelConfigModal, HeaderEditor } from "./components";
 import { getPanelDefinition } from "./panels/registry";
-import { ArrowLeft, Eye, Save, Monitor, PanelLeft } from "lucide-react";
+import { ArrowLeft, Eye, Save, Monitor, PanelLeft, Lock, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { LayoutItem } from "react-grid-layout";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -32,7 +32,7 @@ export function GuildPageEditor() {
   const { data: pageConfig, isLoading } = useGuildPage(guildId);
   const saveGuildPage = useSaveGuildPage(guildId);
 
-  const sourceTabs = tabs.length > 0 ? tabs : (pageConfig?.tabs || []);
+  const sourceTabs = useMemo(() => (tabs.length > 0 ? tabs : (pageConfig?.tabs || [])), [tabs, pageConfig?.tabs]);
   const displayTabs = orderGuildPageTabs(ensureRequiredRaidsTab(sourceTabs, pageConfig?.id));
   const currentTab = displayTabs.find((tab) => tab.slug === activeTab) || displayTabs[0];
   const currentTabSlug = currentTab?.slug ?? "";
@@ -161,7 +161,7 @@ export function GuildPageEditor() {
     const tabCount = displayTabs.length;
     const newTab: GuildPageTab = {
       id: `tab-${Date.now()}`,
-      label: `Tab ${tabCount + 1}`,
+      label: `Page ${tabCount + 1}`,
       slug: `tab-${tabCount + 1}`,
       sort_order: tabCount,
       visibility: "all",
@@ -203,17 +203,18 @@ export function GuildPageEditor() {
 
   const handleDeleteTab = useCallback((tabId: string) => {
     const deletedIndex = displayTabs.findIndex((tab) => tab.id === tabId);
-    const remainingTabs = displayTabs
-      .filter((tab) => tab.id !== tabId)
-      .map((tab, index) => ({ ...tab, sort_order: index }));
-    if (remainingTabs.length === 0) return;
+    const remainingDisplayTabs = displayTabs.filter((tab) => tab.id !== tabId);
+    if (remainingDisplayTabs.length === 0) return;
 
-    setTabs(remainingTabs);
+    // Only persisted tabs are saved; the built-in Raids tab is added on display.
+    setTabs(orderGuildPageTabs(sourceTabs)
+      .filter((tab) => tab.id !== tabId)
+      .map((tab, index) => ({ ...tab, sort_order: index })));
     if (currentTab?.id === tabId) {
-      setActiveTab(remainingTabs[Math.min(deletedIndex, remainingTabs.length - 1)].slug);
+      setActiveTab(remainingDisplayTabs[Math.min(deletedIndex, remainingDisplayTabs.length - 1)].slug);
     }
     setHasChanges(true);
-  }, [currentTab?.id, displayTabs]);
+  }, [currentTab?.id, displayTabs, sourceTabs]);
 
   const handleThemeChange = useCallback((theme: GuildPageTheme) => {
     setThemeOverride(theme);
@@ -306,9 +307,26 @@ export function GuildPageEditor() {
           <HeaderEditor theme={currentTheme} onChange={handleThemeChange} />
         </div>
 
-        {!currentTabIsRequired && (
-          <div className="mb-4">
+        {currentTabIsRequired ? (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/40 px-4 py-3">
+            <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1 text-sm">
+              <p className="font-medium">{currentTab?.label} is a built-in page</p>
+              <p className="text-muted-foreground">
+                It always shows your raid calendar and can't be edited. Add a page to build your own layout from panels.
+              </p>
+            </div>
+            <Button size="sm" onClick={handleAddTab}>
+              <Plus className="h-4 w-4 mr-1" />
+              Add a page
+            </Button>
+          </div>
+        ) : (
+          <div className="mb-4 space-y-2">
             <AddPanelDrawer onAddPanel={handleAddPanel} />
+            <p className="text-xs text-muted-foreground">
+              Drag a panel to move it, drag its edges to resize, and use its gear icon to change settings.
+            </p>
           </div>
         )}
 

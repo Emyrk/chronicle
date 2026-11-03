@@ -2,7 +2,6 @@ import type { GuildPageTab } from "@/api/typesGenerated";
 
 export type TabMoveDirection = "up" | "down";
 
-const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 const CALENDAR_SLUG = "calendar";
 
 export function isRequiredGuildPageTab(tab: GuildPageTab): boolean {
@@ -51,7 +50,8 @@ export function ensureRequiredRaidsTab(
       : tab);
   }
 
-  if (!pageId || pageId === NIL_UUID) {
+  // The default (unsaved) page has a nil ID; it still gets the Raids tab.
+  if (!pageId) {
     return [...tabs];
   }
 

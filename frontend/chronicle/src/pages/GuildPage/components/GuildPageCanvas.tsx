@@ -170,7 +170,7 @@ export function GuildPageCanvas({
       <div ref={containerRef} className="flex items-center justify-center h-64 border-2 border-dashed border-muted rounded-lg">
         <div className="text-center text-muted-foreground">
           <p className="text-lg font-medium">No panels yet</p>
-          <p className="text-sm">Click "Add Panel" to get started</p>
+          <p className="text-sm">Pick a panel from the Add bar above to get started</p>
         </div>
       </div>
     );
