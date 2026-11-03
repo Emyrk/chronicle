@@ -1,4 +1,4 @@
-import { Lightbulb } from "lucide-react";
+import { Lightbulb, Lock } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,29 +9,36 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { Button } from "@/components/ui/button";
+import { TIER_COLOR } from "@/pages/Settings/billingPricing";
 import type { SearchExample } from "./examples";
 import { EXAMPLES } from "./examples";
 
 /**
  * Menu of example searches, grouped by category. Picking one loads it into
- * the block editor so people can see how a query is built and tweak it.
+ * the block or code editor so people can see how a query is built and tweak
+ * it. When locked (not Honored) the button shows a lock and calls onLocked.
  */
-export function ExamplesMenu({ onPick, disabled }: { onPick: (ex: SearchExample) => void; disabled?: boolean }) {
+export function ExamplesMenu({ onPick, locked, onLocked }: { onPick: (ex: SearchExample) => void; locked?: boolean; onLocked?: () => void }) {
+  const trigger = (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-7 gap-1.5 text-xs"
+      onClick={locked ? onLocked : undefined}
+      title={locked ? "Honored supporters can load example searches" : "Load an example search into the editor"}
+    >
+      <Lightbulb className="h-3.5 w-3.5" />
+      Examples
+      {locked && <Lock className="h-3 w-3" style={{ color: TIER_COLOR.honored }} aria-label="Honored" />}
+    </Button>
+  );
+  if (locked) return trigger;
+
   const categories = [...new Set(EXAMPLES.map((e) => e.category))];
   return (
     <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild disabled={disabled}>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 gap-1.5 text-xs"
-          title={disabled ? "Log in to try example searches" : "Load an example search into the block editor"}
-        >
-          <Lightbulb className="h-3.5 w-3.5" />
-          Examples
-        </Button>
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-80 max-h-[70vh] overflow-y-auto styled-scrollbar">
         {categories.map((cat, i) => (
           <DropdownMenuGroup key={cat}>

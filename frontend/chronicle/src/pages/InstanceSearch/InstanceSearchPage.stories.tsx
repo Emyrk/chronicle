@@ -45,14 +45,15 @@ const session = {
   consumed_storage_bytes: 0,
   preferences: {},
   ads_free: true,
-  supporter_tier: "",
+  // Blocks, Code and Examples are an Honored perk.
+  supporter_tier: "honored",
   can_download_raw_logs: false,
   email: "",
 };
 
 type SearchMode = "ok" | "empty" | "rate_limited" | "login_required" | "timeout";
 
-function handlers({ loggedIn, search = "ok" }: { loggedIn: boolean; search?: SearchMode }) {
+function handlers({ loggedIn, search = "ok", tier = "honored" }: { loggedIn: boolean; search?: SearchMode; tier?: string }) {
   let remaining = loggedIn ? 300 : 40;
   const limit = loggedIn ? 300 : 40;
   const rlHeaders = (cost?: number) => ({
@@ -62,7 +63,7 @@ function handlers({ loggedIn, search = "ok" }: { loggedIn: boolean; search?: Sea
     ...(cost != null ? { "Chronicle-Search-Cost": String(cost) } : {}),
   });
   return [
-    http.get("/api/v1/whoami", () => (loggedIn ? HttpResponse.json(session) : new HttpResponse(null, { status: 204 }))),
+    http.get("/api/v1/whoami", () => (loggedIn ? HttpResponse.json({ ...session, supporter_tier: tier }) : new HttpResponse(null, { status: 204 }))),
     http.get("/api/v1/raidlogs/supported", () => HttpResponse.json(supported)),
     // Nightmare of Ursol records sub-specs (Bear / Cat, Tank / DPS, Fury Prot).
     http.get("/api/v1/site-config", () => HttpResponse.json({ dataset_flavor: ["nightmare-of-ursol"] })),
@@ -183,6 +184,16 @@ export const Blocks: Story = {
 };
 
 /** Logged out: only the Run section, a log-in banner, and no block editor. */
+/** Logged in without Honored: Blocks, Code and Examples are locked. */
+export const NotHonored: Story = {
+  parameters: { initialEntry: url(formTree), msw: { handlers: handlers({ loggedIn: true, tier: "" }) } },
+};
+
+/** A non-Honored user opening a shared block search sees it read-only. */
+export const NotHonoredSharedBlocks: Story = {
+  parameters: { initialEntry: url(blockTree, "blocks"), msw: { handlers: handlers({ loggedIn: true, tier: "" }) } },
+};
+
 export const LoggedOut: Story = {
   parameters: {
     initialEntry: url({ and: [{ field: "instance.name", op: "contains", value: "naxx" }] }),

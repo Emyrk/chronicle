@@ -5,6 +5,8 @@ import { Blocks, ChevronDown, ChevronRight, Code2, Lightbulb, ListFilter, Loader
 import type { InstanceSearchCursor, InstanceSearchResult } from "@/api/typesGenerated";
 import { useSupportedInstances } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
+import { useSupporterTier } from "@/hooks/useSupporterTier";
+import { TIER_COLOR } from "@/pages/Settings/billingPricing";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BlockEditor } from "./BlockEditor";
@@ -33,6 +35,12 @@ type Mode = "form" | "blocks" | "code";
 export function InstanceSearchPage() {
   const [params, setParams] = useSearchParams();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const supporter = useSupporterTier();
+  // Blocks, Code and Examples are an Honored perk (UI only; the server
+  // accepts the same queries from anyone logged in). Assume unlocked while
+  // the session loads so supporters never see a flash of locks.
+  const advancedUnlocked = supporter.isLoading || supporter.atLeast("honored");
+  const [showUpsell, setShowUpsell] = useState(false);
   const fields = useSearchFields();
   const supported = useSupportedInstances();
 
@@ -152,7 +160,7 @@ export function InstanceSearchPage() {
           <Lock className="h-3.5 w-3.5 shrink-0" />
           <span>
             Logged out, you can search by zone, guild, realm, date and difficulty.{" "}
-            <Link to="/login" className="underline font-medium">Log in</Link> to search by bosses, parses, kill times, roster and more, and to use the block editor.
+            <Link to="/login" className="underline font-medium">Log in</Link> to search by bosses, parses, kill times, roster and more.
           </span>
         </div>
       )}
@@ -167,17 +175,29 @@ export function InstanceSearchPage() {
           >
             <ListFilter className="h-3.5 w-3.5" /> Form
           </ModeButton>
-          <ModeButton active={mode === "blocks"} onClick={() => switchMode("blocks")} disabled={!isAuthenticated || codeInvalid} title={!isAuthenticated ? "Log in to use the block editor" : codeInvalid ? "Fix the query text first" : "Edit this search as blocks"}>
+          <ModeButton
+            active={mode === "blocks"}
+            locked={!advancedUnlocked}
+            onClick={() => (advancedUnlocked ? switchMode("blocks") : setShowUpsell(true))}
+            disabled={advancedUnlocked && codeInvalid}
+            title={!advancedUnlocked ? "Honored supporters can build searches with blocks" : codeInvalid ? "Fix the query text first" : "Edit this search as blocks"}
+          >
             <Blocks className="h-3.5 w-3.5" /> Blocks
           </ModeButton>
-          <ModeButton active={mode === "code"} onClick={() => switchMode("code")} disabled={!isAuthenticated} title={isAuthenticated ? "Edit this search as text" : "Log in to edit searches as text"}>
+          <ModeButton
+            active={mode === "code"}
+            locked={!advancedUnlocked}
+            onClick={() => (advancedUnlocked ? switchMode("code") : setShowUpsell(true))}
+            title={advancedUnlocked ? "Edit this search as text" : "Honored supporters can write searches as text"}
+          >
             <Code2 className="h-3.5 w-3.5" /> Code
           </ModeButton>
         </div>
-        <ExamplesMenu onPick={loadExample} disabled={!isAuthenticated} />
+        <ExamplesMenu onPick={loadExample} locked={!advancedUnlocked} onLocked={() => setShowUpsell(true)} />
         <div className="flex-1" />
         <BudgetLine budget={budget} lastCost={lastCost} />
       </div>
+      {!advancedUnlocked && (showUpsell || mode !== "form") && <HonoredUpsell loggedIn={isAuthenticated} readOnly={mode !== "form"} />}
 
       {fields.isLoading ? (
         <div className="py-10 flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
@@ -206,9 +226,9 @@ export function InstanceSearchPage() {
             </div>
           )}
           {mode === "code" ? (
-            <CodeEditor value={code} onChange={setCode} onSubmit={submit} parse={{ error: parsedCode.error }} disabled={!isAuthenticated} />
+            <CodeEditor value={code} onChange={setCode} onSubmit={submit} parse={{ error: parsedCode.error }} disabled={!advancedUnlocked} />
           ) : (
-            <BlockEditor tree={blocks} onChange={setBlocks} ctx={{ fields: fields.data?.fields ?? [], zones, bosses: allBosses, disabled: !isAuthenticated }} />
+            <BlockEditor tree={blocks} onChange={setBlocks} ctx={{ fields: fields.data?.fields ?? [], zones, bosses: allBosses, disabled: !advancedUnlocked }} />
           )}
         </div>
       )}
@@ -262,7 +282,7 @@ export function InstanceSearchPage() {
   );
 }
 
-function ModeButton({ active, onClick, disabled, title, children }: { active: boolean; onClick: () => void; disabled?: boolean; title?: string; children: ReactNode }) {
+function ModeButton({ active, onClick, disabled, locked, title, children }: { active: boolean; onClick: () => void; disabled?: boolean; locked?: boolean; title?: string; children: ReactNode }) {
   return (
     <button
       type="button"
@@ -275,7 +295,34 @@ function ModeButton({ active, onClick, disabled, title, children }: { active: bo
       )}
     >
       {children}
+      {locked && <Lock className="h-3 w-3" style={{ color: TIER_COLOR.honored }} aria-label="Honored" />}
     </button>
+  );
+}
+
+/** Blocks / Code / Examples are an Honored perk; links to the supporter page. */
+function HonoredUpsell({ loggedIn, readOnly }: { loggedIn: boolean; readOnly: boolean }) {
+  return (
+    <div
+      className="rounded-lg border px-3 py-2 text-xs flex items-center gap-2"
+      style={{ borderColor: `${TIER_COLOR.honored}55`, backgroundColor: `${TIER_COLOR.honored}0f` }}
+    >
+      <Lock className="h-3.5 w-3.5 shrink-0" style={{ color: TIER_COLOR.honored }} />
+      <span>
+        {readOnly ? "You're viewing a shared search. " : ""}
+        The block editor, code editor and example searches are for{" "}
+        <span className="font-medium" style={{ color: TIER_COLOR.honored }}>Honored</span> supporters.{" "}
+        {loggedIn ? (
+          <Link to="/supporter" className="underline font-medium">Become a supporter</Link>
+        ) : (
+          <>
+            <Link to="/login" className="underline font-medium">Log in</Link> or{" "}
+            <Link to="/supporter" className="underline font-medium">become a supporter</Link>
+          </>
+        )}{" "}
+        to build your own. The form is free.
+      </span>
+    </div>
   );
 }
 
