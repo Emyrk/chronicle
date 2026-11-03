@@ -35,6 +35,7 @@ import {
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { buildConsumablesTokens, parseConsumablesTokens } from "./consumablesTokens";
+import { LedgerFilterInput, useFilteredUses } from "./ConsumablesSearch";
 import { paginateConsumables } from "./consumablesPagination";
 
 // ============================================================================
@@ -407,6 +408,7 @@ type ConsumablesContentProps = PanelRenderProps<ConsumablesResult>;
 export const ConsumablesContent = (props: ConsumablesContentProps) => {
   const { result, context, loading, checkboxChecked, panelOption, setPanelOption } = props;
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [filter, setFilter] = useState("");
   // Initialize from the persisted panelOption (mount-only).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const initial = useMemo(() => parseConsumablesTokens(panelOption), []);
@@ -463,10 +465,25 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
       .sort((a, b) => a.dateMilli - b.dateMilli);
   }, [cachedResult, timingFilters, disambiguationMap]);
 
+  const additionalSearchValues = useCallback((use: ConsumableUse) => {
+    const player = context.instance.players?.[use.player];
+    return [
+      player?.name ?? use.player,
+      encounterNames.get(use.encounterID) ?? use.encounterID,
+      consumableDisplayName(use),
+      ...use.auraSpells.flatMap((spell) => [spell.name, spell.id.toString()]),
+      badgeForUse(use).label,
+    ];
+  }, [context.instance.players, encounterNames]);
+  const filteredUses = useFilteredUses(sortedUses, filter, additionalSearchValues);
+
   // This log can contain thousands of rows. Keep the mounted table bounded so
   // unrelated React updates do not repeatedly traverse and paint the full log.
   const [requestedPage, setRequestedPage] = useState(0);
-  const page = useMemo(() => paginateConsumables(sortedUses, requestedPage), [sortedUses, requestedPage]);
+  const page = useMemo(() => paginateConsumables(filteredUses, requestedPage), [filteredUses, requestedPage]);
+  useEffect(() => {
+    setRequestedPage(0);
+  }, [filter]);
   useEffect(() => {
     if (requestedPage !== page.page) setRequestedPage(page.page);
   }, [page.page, requestedPage]);
@@ -486,64 +503,72 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
   return (
     <GenericPanel {...effectiveProps}>
       <div className="flex flex-col h-full min-h-0">
-        <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
-          <div className="text-xs text-muted-foreground">
-            Uses: <span className="font-medium text-foreground">{sortedUses.length}</span>
-            {page.pageCount > 1 && (
-              <span className="ml-2 text-muted-foreground/60">
-                {page.start + 1}-{page.end}
-              </span>
-            )}
-            {(cachedResult?.unknownUseIds.size ?? 0) > 0 && (
-              <span className="ml-2 text-muted-foreground/60" title="Uses Chronicle could not map to a known item">
-                {cachedResult!.unknownUseIds.size} unmapped
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5">
-            {page.pageCount > 1 && (
-              <div className="flex items-center gap-0.5" aria-label="Consumables log pages">
-                <button
-                  type="button"
-                  onClick={() => goToPage(page.page - 1)}
-                  disabled={page.page === 0}
-                  className="rounded border border-border p-1 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label="Previous consumables page"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                </button>
-                <span className="min-w-12 text-center font-mono text-2xs text-muted-foreground">
-                  {page.page + 1}/{page.pageCount}
+        <div className="mb-2 flex shrink-0 flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">
+              Uses: <span className="font-medium text-foreground">{filteredUses.length}</span>
+              {filter.trim() && <span className="text-muted-foreground/60"> of {sortedUses.length}</span>}
+              {page.pageCount > 1 && (
+                <span className="ml-2 text-muted-foreground/60">
+                  {page.start + 1}-{page.end}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => goToPage(page.page + 1)}
-                  disabled={page.page === page.pageCount - 1}
-                  className="rounded border border-border p-1 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label="Next consumables page"
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-            <TimingToggle
-              label="Pre-Combat"
-              description={PRE_COMBAT_DESCRIPTION}
-              enabled={timingFilters.showPreCombat}
-              onToggle={() => toggleTimingFilter("showPreCombat")}
-            />
-            <TimingToggle
-              label="Pre-Pot"
-              description={PRE_POT_DESCRIPTION}
-              enabled={timingFilters.showPrePot}
-              onToggle={() => toggleTimingFilter("showPrePot")}
-            />
+              )}
+              {(cachedResult?.unknownUseIds.size ?? 0) > 0 && (
+                <span className="ml-2 text-muted-foreground/60" title="Uses Chronicle could not map to a known item">
+                  {cachedResult!.unknownUseIds.size} unmapped
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              {page.pageCount > 1 && (
+                <div className="flex items-center gap-0.5" aria-label="Consumables log pages">
+                  <button
+                    type="button"
+                    onClick={() => goToPage(page.page - 1)}
+                    disabled={page.page === 0}
+                    className="rounded border border-border p-1 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Previous consumables page"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="min-w-12 text-center font-mono text-2xs text-muted-foreground">
+                    {page.page + 1}/{page.pageCount}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => goToPage(page.page + 1)}
+                    disabled={page.page === page.pageCount - 1}
+                    className="rounded border border-border p-1 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Next consumables page"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              <TimingToggle
+                label="Pre-Combat"
+                description={PRE_COMBAT_DESCRIPTION}
+                enabled={timingFilters.showPreCombat}
+                onToggle={() => toggleTimingFilter("showPreCombat")}
+              />
+              <TimingToggle
+                label="Pre-Pot"
+                description={PRE_POT_DESCRIPTION}
+                enabled={timingFilters.showPrePot}
+                onToggle={() => toggleTimingFilter("showPrePot")}
+              />
+            </div>
           </div>
+          <LedgerFilterInput value={filter} onChange={setFilter} />
         </div>
 
-        {sortedUses.length === 0 ? (
+        {filteredUses.length === 0 ? (
           <div className="text-xs text-muted-foreground py-4 text-center">
-            {loading || props.processing ? "Loading..." : "No consumable uses recorded"}
+            {loading || props.processing
+              ? "Loading..."
+              : filter.trim()
+                ? `No consumables match “${filter.trim()}”`
+                : "No consumable uses recorded"}
           </div>
         ) : (
           <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0">
