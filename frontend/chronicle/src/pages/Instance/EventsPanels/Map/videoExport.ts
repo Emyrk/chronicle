@@ -1,4 +1,5 @@
 import { BufferTarget, CanvasSource, getFirstEncodableVideoCodec, Mp4OutputFormat, Output, type VideoCodec } from "mediabunny";
+import { createWatermarkedCanvas, loadWatermark } from "./videoWatermark";
 
 /** The rendered video's frame rate. */
 export const VIDEO_FPS = 30;
@@ -45,6 +46,8 @@ export interface CanvasVideoExportOptions {
   /** Called when rendering pauses (the tab is hidden) and resumes. */
   onPausedChange?: (paused: boolean) => void;
   signal?: AbortSignal;
+  /** The image burned into the bottom-right of every frame (videoWatermark); null for none. */
+  watermarkUrl?: string | null;
 }
 
 export interface CanvasVideoExportResult {
@@ -81,14 +84,20 @@ function whileHidden(signal: AbortSignal | undefined): Promise<void> {
  * plays smoothly at `fps` however slowly each frame renders. Pauses while the
  * tab is hidden; an abort cancels the encoder and throws an AbortError.
  *
+ * Every frame is copied onto a 2D canvas with the Chronicle watermark drawn
+ * over it, so the watermark is in the file but never on the live canvas. If
+ * the watermark cannot load, frames are encoded straight from the canvas.
+ *
  * The file is built in memory (about 1 MB per second at 1080p), which keeps a
  * long fight's export to a few hundred megabytes.
  */
-export async function exportCanvasVideo({ canvas, fps, frameCount, codec, bitrate, renderFrame, onProgress, onPausedChange, signal }: CanvasVideoExportOptions): Promise<CanvasVideoExportResult> {
+export async function exportCanvasVideo({ canvas, fps, frameCount, codec, bitrate, renderFrame, onProgress, onPausedChange, signal, watermarkUrl }: CanvasVideoExportOptions): Promise<CanvasVideoExportResult> {
   if (!canEncodeVideo()) throw new Error("This browser has no WebCodecs VideoEncoder");
   const { width, height } = canvas;
+  const logo = watermarkUrl === null ? null : await loadWatermark(watermarkUrl);
+  const watermarked = logo ? createWatermarkedCanvas(canvas, logo) : null;
   const output = new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target: new BufferTarget() });
-  const source = new CanvasSource(canvas, { codec, bitrate, keyFrameInterval: 2 });
+  const source = new CanvasSource(watermarked?.canvas ?? canvas, { codec, bitrate, keyFrameInterval: 2 });
   output.addVideoTrack(source, { frameRate: fps });
   await output.start();
 
@@ -106,6 +115,7 @@ export async function exportCanvasVideo({ canvas, fps, frameCount, codec, bitrat
       }
       await renderFrame(index);
       if (signal?.aborted) throw abortError();
+      watermarked?.compose();
       await source.add(index / fps, 1 / fps);
       onProgress?.(index + 1, frameCount);
     }
@@ -113,6 +123,8 @@ export async function exportCanvasVideo({ canvas, fps, frameCount, codec, bitrat
   } catch (error) {
     await output.cancel();
     throw error;
+  } finally {
+    logo?.close();
   }
 
   const buffer = (output.target as BufferTarget).buffer;
