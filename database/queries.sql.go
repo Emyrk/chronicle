@@ -25880,6 +25880,40 @@ func (q *sqlQuerier) StartTenantRatingRebuild(ctx context.Context, arg StartTena
 	return column_1, err
 }
 
+const getBuildingTenantProjectionCheckpoint = `-- name: GetBuildingTenantProjectionCheckpoint :one
+SELECT cp.generation_id, cp.tenant_id, cp.config_revision, cp.as_of, cp.source_cutoff, cp.phase, cp.cursor, cp.manifest, cp.heartbeat_at FROM rating_rebuild_checkpoints cp
+JOIN rating_score_generations gen ON gen.id = cp.generation_id
+  AND gen.tenant_id = cp.tenant_id AND gen.status = 'building'
+WHERE cp.tenant_id = $1 AND cp.generation_id = $2
+  AND cp.manifest->>'writer' = 'tenant'
+FOR UPDATE OF cp
+`
+
+type GetBuildingTenantProjectionCheckpointParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+}
+
+// Serialize page workers for one generation and reject retired/active or
+// legacy group checkpoints before any projection writes. Configuration changes
+// remain fenced by the revision check in the same transaction.
+func (q *sqlQuerier) GetBuildingTenantProjectionCheckpoint(ctx context.Context, arg GetBuildingTenantProjectionCheckpointParams) (RatingRebuildCheckpoint, error) {
+	row := q.db.QueryRow(ctx, getBuildingTenantProjectionCheckpoint, arg.TenantID, arg.GenerationID)
+	var i RatingRebuildCheckpoint
+	err := row.Scan(
+		&i.GenerationID,
+		&i.TenantID,
+		&i.ConfigRevision,
+		&i.AsOf,
+		&i.SourceCutoff,
+		&i.Phase,
+		&i.Cursor,
+		&i.Manifest,
+		&i.HeartbeatAt,
+	)
+	return i, err
+}
+
 const insertGuildTenantBossScore = `-- name: InsertGuildTenantBossScore :execrows
 INSERT INTO guild_tenant_rating_boss_scores (
     generation_id, tenant_id, realm_id, guild_id, instance_name, encounter_name, difficulty_name, max_players, rating_metric, window_kind, window_start, window_end, score, best_raw, rank_one_raw, best_locked_parse, form, floor_score, eligible_kills

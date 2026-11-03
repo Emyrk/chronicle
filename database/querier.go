@@ -314,6 +314,10 @@ type sqlcQuerier interface {
 	GetBillingSubscriptionByUserID(ctx context.Context, userID uuid.UUID) (BillingSubscription, error)
 	GetBillingWebhookEvent(ctx context.Context, stripeEventID string) (BillingWebhookEvent, error)
 	GetBuildingRatingRebuildCheckpoint(ctx context.Context, tenantID uuid.UUID) (RatingRebuildCheckpoint, error)
+	// Serialize page workers for one generation and reject retired/active or
+	// legacy group checkpoints before any projection writes. Configuration changes
+	// remain fenced by the revision check in the same transaction.
+	GetBuildingTenantProjectionCheckpoint(ctx context.Context, arg GetBuildingTenantProjectionCheckpointParams) (RatingRebuildCheckpoint, error)
 	GetCacheGeneration(ctx context.Context, arg GetCacheGenerationParams) (CacheGeneration, error)
 	GetCanonicalSpellByID(ctx context.Context, arg GetCanonicalSpellByIDParams) (GetCanonicalSpellByIDRow, error)
 	GetCanonicalSpellsByName(ctx context.Context, arg GetCanonicalSpellsByNameParams) ([]GetCanonicalSpellsByNameRow, error)
