@@ -108,7 +108,7 @@ func tenantRatingInput(r *http.Request, guild, boss bool) (url.Values, []uuid.UU
 			return nil, nil, 0, "", tenantRatingCursor{}, errors.New("invalid peak window")
 		}
 	case "mastery", "ranked_mastery":
-		if window != "period" {
+		if window != "period" && window != "all_time" {
 			return nil, nil, 0, "", tenantRatingCursor{}, errors.New("invalid mastery window")
 		}
 	case "renown":

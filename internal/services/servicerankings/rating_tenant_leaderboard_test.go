@@ -188,6 +188,12 @@ func TestTenantRatingLeaderboardValidationAndRace(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, tenantRequest(q, tenant, stub, false, true).Code, tc.key)
 		require.Zero(t, stub.calls)
 	}
+	for _, metric := range []string{"mastery", "ranked_mastery"} {
+		q := tenantBase(false, false)
+		q.Set("rating_metric", metric)
+		q.Set("window_kind", "all_time")
+		require.Equal(t, http.StatusOK, tenantRequest(q, tenant, &tenantLeaderboardStub{tenant: tenant, generation: gen}, false, false).Code, metric)
+	}
 	renown := tenantBase(false, false)
 	renown.Set("rating_metric", "renown")
 	renown.Set("performance_metric", "none")
