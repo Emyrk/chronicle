@@ -114,9 +114,11 @@ function LiveHubContent({ context, realmName, realmIDs, cohort, bosses, overview
   const chosen = cohort && raids.some((row) => row.difficulty_name === cohort.difficulty_name && row.max_players === cohort.max_players) ? cohort : undefined
   const boss = selection.kind === "bosses" && selection.bosses.length === 1 ? selection.bosses[0] : undefined
   const exact = !!chosen
+  // Omit the legacy zero-size URL parameter; exact_cohort still selects size 0
+  // server-side, so a mixed-size raid cannot silently broaden this board.
   const performance = useRankingsLeaderboard({ instance_names: instanceName, encounter_names: boss,
-    difficulty_names: chosen?.difficulty_name, max_players: chosen?.max_players, exact_cohort: !!chosen, class: scope.cls, spec: scope.spec, sub_spec: scope.subSpec,
-    role: role === "healing" ? "heal" : "dps", metric: role === "healing" ? "hps" : "dps", realm_names: realmName, limit: 50,
+    difficulty_names: chosen?.difficulty_name, max_players: chosen?.max_players || undefined, exact_cohort: !!chosen, class: scope.cls, spec: scope.spec, sub_spec: scope.subSpec,
+    metric: role === "healing" ? "hps" : "dps", realm_names: realmName, limit: 50,
   }, !overview && context.tab === "performances" && exact && realmIDs.length <= 1 && subject === "characters")
   const speed = useQuery<SpeedrunLeaderboardEntry[]>({
     queryKey: ["hub-live-speedruns", instanceName, realmName, chosen?.difficulty_name, chosen?.max_players],
@@ -132,7 +134,7 @@ function LiveHubContent({ context, realmName, realmIDs, cohort, bosses, overview
     staleTime: 5 * 60 * 1000,
   })
   const stats = useRankingsStats({ instance_names: instanceName, encounter_names: boss, difficulty_names: chosen?.difficulty_name,
-    max_players: chosen?.max_players, exact_cohort: !!chosen, realm_names: realmName, role: role === "healing" ? "heal" : "dps", metric: role === "healing" ? "hps" : "dps" },
+    max_players: chosen?.max_players || undefined, exact_cohort: !!chosen, realm_names: realmName, metric: role === "healing" ? "hps" : "dps" },
     !overview && context.tab === "statistics" && exact)
   const clearTimes = useRankingsClearTimes(instanceName, undefined, !overview && context.tab === "statistics" && !realmName && exact)
   const killTimes = useRankingsKillTimes(instanceName, undefined, !overview && context.tab === "statistics" && !realmName && exact)

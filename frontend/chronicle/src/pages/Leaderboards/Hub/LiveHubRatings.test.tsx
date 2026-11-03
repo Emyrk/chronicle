@@ -82,7 +82,7 @@ describe("LiveHubRatings", () => {
     querySpy.mockImplementation(({ queries }: QueryOptions) => queries.map((q) => ({
       isError: false, data: q.enabled ? { entries: [{ realm_id: "realm-1", player_guid: "mage-1", player_name: "Actual Mage", player_class: "MAGE", player_spec: "Fire", player_sub_spec: "", score: 20 }] } : undefined,
     })))
-    render({ view: "renown", scope: {}, ratingCohort: undefined, cls: undefined, spec: undefined })
+    expect(render({ view: "renown", scope: {}, ratingCohort: undefined, cls: undefined, spec: undefined })).toContain("Select a class and spec above")
     const board = vi.mocked(RatingBoards).mock.calls[0][0]
     expect(board.live!.board({ scope: {}, metric: "renown", period: "180d" }).status).toBe("ready")
     const urls = (querySpy.mock.calls[0][0] as QueryOptions).queries

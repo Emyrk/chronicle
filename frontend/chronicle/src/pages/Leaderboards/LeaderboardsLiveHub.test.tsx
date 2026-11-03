@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter } from "react-router-dom"
 import { describe, expect, it, vi } from "vitest"
-import { useRankingsInstances } from "@/api/rankingsQueries"
+import { useRankingsInstances, useRankingsLeaderboard } from "@/api/rankingsQueries"
 import { LeaderboardsLiveHub } from "./LeaderboardsLiveHub"
 
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: [], isPending: false, isError: false }) }))
@@ -13,7 +13,7 @@ vi.mock("@/api/rankingsQueries", () => ({
     { encounter_name: "Trash", total_kills: 25, top_dps: 1200 },
   ], isPending: false, isError: false }),
   useRankingsFilters: () => ({ data: [{ player_class: "MAGE", specs: [{ spec: "Frost", sub_specs: [""] }] }], isPending: false, isError: false }),
-  useRankingsLeaderboard: () => ({ data: { entries: [] }, isPending: false, isError: false }),
+  useRankingsLeaderboard: vi.fn(() => ({ data: { entries: [] }, isPending: false, isError: false })),
   useRankingsStats: () => ({ data: [], isPending: false, isError: false }),
   useRankingsClearTimes: () => ({ data: [], isPending: false, isError: false }),
   useRankingsKillTimes: () => ({ data: [], isPending: false, isError: false }),
@@ -91,6 +91,23 @@ describe("live Storybook Hub", () => {
       expect(selected).toContain('<option value="|0" selected="">Default · 0 players</option>')
       const missing = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core"]}><LeaderboardsLiveHub /></MemoryRouter>)
       expect(missing).toContain('<option value="" selected="">Choose difficulty and size</option>')
+    } finally {
+      hook.mockImplementation(original)
+    }
+  })
+
+  it("requests all-role performances without a zero-size URL parameter", () => {
+    const hook = vi.mocked(useRankingsInstances)
+    const original = hook.getMockImplementation()!
+    hook.mockImplementation(() => ({ ...original(), data: [{ instance_name: "Molten Core", difficulty_name: "", max_players: 0, category: "raid", total_kills: 3, top_players: [] }] }) as ReturnType<typeof useRankingsInstances>)
+    try {
+      vi.mocked(useRankingsLeaderboard).mockClear()
+      renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&tab=performances"]}><LeaderboardsLiveHub /></MemoryRouter>)
+      const [params, enabled] = vi.mocked(useRankingsLeaderboard).mock.calls[0]
+      expect(enabled).toBe(true)
+      expect(params).toMatchObject({ instance_names: "Molten Core", difficulty_names: "", exact_cohort: true, metric: "dps" })
+      expect(params.role).toBeUndefined()
+      expect(params.max_players).toBeUndefined()
     } finally {
       hook.mockImplementation(original)
     }

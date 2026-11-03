@@ -112,6 +112,7 @@ export function LiveHubRatings({
       : "The published API does not provide ranks for a full list. Browse published pages below." }),
   }
   return <div className="space-y-5">
+    {!exact && <p role="status" className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">Peak and Mastery are ranked within a class, spec, sub-spec, and performance cohort. Select a class and spec above to see their published scores; Renown includes all cohorts.</p>}
     <RatingBoards instanceName={instanceName} bosses={bosses} scope={scope} onScope={onScope}
       view={view} onView={onView} period={period} toolbar={toolbar} live={live} />
     <LiveRatingBoards instanceName={instanceName} encounterName={scope.boss} subject="player"

@@ -56,8 +56,8 @@ export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, r
   const mastery = useQuery({ queryKey: ["hub-overview-rating", masteryURL], queryFn: () => fetchLiveRatingPage(masteryURL!), enabled: !!masteryURL, staleTime: 5 * 60 * 1000, retry: false })
   const performances = useRankingsLeaderboard({
     instance_names: instanceName, encounter_names: boss, class: cls, spec, sub_spec: subSpec,
-    difficulty_names: performanceCohort?.difficulty, max_players: performanceCohort?.maxPlayers, exact_cohort: exactPerformance,
-    role: role === "healing" ? "heal" : "dps", metric, realm_names: realmName, limit: 5,
+    difficulty_names: performanceCohort?.difficulty, max_players: performanceCohort?.maxPlayers || undefined, exact_cohort: exactPerformance,
+    metric, realm_names: realmName, limit: 5,
   }, ready && !!boss && exactPerformance && subject === "player")
   const fullClear = !boss && !combined
   const speedCohort = performanceCohort && raids.some((raid) => raid.difficulty_name === performanceCohort.difficulty && raid.max_players === performanceCohort.maxPlayers)
