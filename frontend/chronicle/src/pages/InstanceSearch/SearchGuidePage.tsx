@@ -8,6 +8,7 @@ import { CelCode } from "./CelCode";
 import { CEL_CHEATSHEET } from "./celCheatsheet";
 import { EXAMPLES } from "./examples";
 import { OP_LABELS, fieldLabel } from "./fieldLabels";
+import { HONORED_FIELDS, treeNeedsHonored } from "./fieldTiers";
 import { encodeQuery, formatCEL } from "./queryModel";
 import { useSearchFields } from "./searchApi";
 
@@ -37,10 +38,10 @@ export function SearchGuidePage() {
       <Section title="Three ways to build a search">
         <div className="grid gap-3 sm:grid-cols-3">
           <ModeCard icon={<ListFilter className="h-4 w-4" />} title="Form">
-            Fill in what you care about: zone, guild, realm, dates, bosses, parses, clear and idle time, roster and log
-            capabilities.
+            Reads as a sentence: &quot;Find Molten Core runs by any guild&hellip; where Ragnaros died&quot;. Click any part
+            to change it, and use <em>Add a condition</em> for bosses, parses, speed, roster and log capabilities.
           </ModeCard>
-          <ModeCard icon={<Blocks className="h-4 w-4" />} title="Blocks" honored>
+          <ModeCard icon={<Blocks className="h-4 w-4" />} title="Blocks">
             Combine any conditions with and, or and not, and put conditions on a single player or pull.
           </ModeCard>
           <ModeCard icon={<Code2 className="h-4 w-4" />} title="Code" honored>
@@ -112,7 +113,10 @@ export function SearchGuidePage() {
             <div key={ex.id} className="rounded-lg border bg-card p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <h3 className="font-semibold text-foreground">{ex.title}</h3>
+                  <h3 className="flex flex-wrap items-center gap-2 font-semibold text-foreground">
+                    {ex.title}
+                    {treeNeedsHonored(ex.where) && <HonoredBadge />}
+                  </h3>
                   <p className="text-sm">{ex.description}</p>
                 </div>
                 <Link
@@ -137,20 +141,25 @@ export function SearchGuidePage() {
       <Section title="Who gets what">
         <ul className="list-disc space-y-1.5 pl-5">
           <li>
-            <strong>Logged out:</strong> zone, guild, realm, date and difficulty. <Link to="/login" className="text-primary hover:underline">Log in</Link> for
-            the rest.
+            <strong>Logged out:</strong> zone, guild, realm, date, difficulty and raid or dungeon, up to 6 conditions
+            combined with and, showing the first 25 results.{" "}
+            <Link to="/login" className="text-primary hover:underline">Log in</Link> for the rest.
           </li>
           <li>
-            <strong>Logged in:</strong> the full form and &quot;why it matched&quot;.
+            <strong>Logged in:</strong> the form, Blocks, Examples and &quot;why it matched&quot;, with every condition
+            except the Honored ones below.
           </li>
           <li>
-            <strong style={{ color: TIER_COLOR.honored }}>Honored supporters</strong> and above: Blocks, Code and Examples.{" "}
-            <Link to="/supporter" className="text-primary hover:underline">Become a supporter</Link>. Anyone logged in can
-            still open and run a block or code search someone shares.
+            <strong style={{ color: TIER_COLOR.honored }}>Honored supporters</strong> and above: Code, and the costly
+            conditions: player parse, DPS, HPS and item level, and boss, trash and idle time. They&apos;re marked{" "}
+            <HonoredBadge /> in the examples and field reference.{" "}
+            <Link to="/supporter" className="text-primary hover:underline">Become a supporter</Link>. Without Honored you
+            can still open a shared search or example that uses them to read it, but you can&apos;t run it.
           </li>
           <li>
-            <strong>Search budget:</strong> searches spend from a budget that refills over time, shown on the search page.
-            Complex searches, like parses across many players, cost more.
+            <strong>Search budget:</strong> searches spend from a budget that refills over time; the search page shows
+            what each search will cost before you run it. Complex searches, like parses across many players, cost more,
+            and higher supporter tiers get a bigger budget.
           </li>
         </ul>
       </Section>
@@ -188,6 +197,14 @@ function ModeCard({ icon, title, honored, children }: { icon: ReactNode; title: 
   );
 }
 
+function HonoredBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: TIER_COLOR.honored }}>
+      <Lock className="h-3 w-3" /> Honored
+    </span>
+  );
+}
+
 const SCOPES: { scope: InstanceSearchFieldScope; title: string; note: string }[] = [
   { scope: "instance", title: "Run", note: "Used directly, outside player and pull blocks." },
   { scope: "player", title: "Player", note: "Used inside A player where / Count players." },
@@ -213,7 +230,10 @@ function FieldReference() {
                   .map((f) => (
                     <tr key={f.name} className="align-top">
                       <td className="w-48 px-3 py-2">
-                        <div className="font-medium text-foreground">{fieldLabel(f.name)}</div>
+                        <div className="flex flex-wrap items-center gap-1.5 font-medium text-foreground">
+                          {fieldLabel(f.name)}
+                          {HONORED_FIELDS.has(f.name) && <HonoredBadge />}
+                        </div>
                         <code className="text-[11px] text-muted-foreground">{f.name}</code>
                       </td>
                       <td className="px-3 py-2">

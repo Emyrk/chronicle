@@ -15,7 +15,8 @@ import { EXAMPLES } from "./examples";
 /**
  * Menu of example searches, grouped by category. Picking one loads it into
  * the block or code editor so people can see how a query is built and tweak
- * it (read-only without Honored).
+ * it. Without Honored, Code shows it read-only and examples that use Honored
+ * conditions can be edited but not run.
  */
 export function ExamplesMenu({ onPick }: { onPick: (ex: SearchExample) => void }) {
   const trigger = (

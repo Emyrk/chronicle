@@ -3,6 +3,7 @@ import { http, HttpResponse, delay } from "msw";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { InstanceSearchFieldsResponse, InstanceSearchQuery, InstanceSearchResult, SupportedInstance } from "@/api/typesGenerated";
 import { InstanceSearchPage } from "./InstanceSearchPage";
+import { SearchGuidePage } from "./SearchGuidePage";
 import { encodeQuery, type Node } from "./queryModel";
 import { saveRecentSearches, type RecentSearch } from "./recentSearches";
 import { mockEvidence } from "./evidence.mocks";
@@ -334,4 +335,9 @@ export const TooComplex: Story = {
       "blocks",
     ),
   },
+};
+
+/** The /search/guide page (Tools & FAQ), with the live field reference. */
+export const Guide: Story = {
+  render: () => <SearchGuidePage />,
 };
