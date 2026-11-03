@@ -505,6 +505,31 @@ Interpretation:
 - Normal queue wait with high run time indicates slow worker logic or downstream dependencies.
 - High complete duration indicates River is slow to persist job results, usually pointing at PostgreSQL.
 
+### How long does a tenant rating rebuild take end to end?
+
+`chronicle_rating_rebuild_duration_seconds` observes **once per successfully
+published generation**, from the generation's frozen `as_of` timestamp through
+publication. Unlike River's per-execution histogram, it includes snoozes and
+retries. It has no tenant or generation labels to avoid unbounded cardinality.
+
+```promql
+histogram_quantile(0.95, sum by (le) (
+  rate(chronicle_rating_rebuild_duration_seconds_bucket[$__rate_interval])
+))
+```
+
+For the average across completed rebuilds over a longer window:
+
+```promql
+sum(increase(chronicle_rating_rebuild_duration_seconds_sum[30d]))
+/
+sum(increase(chronicle_rating_rebuild_duration_seconds_count[30d]))
+```
+
+This measures completed generations only; it does not report a currently
+running rebuild or retain individual generation durations. Retention of the
+trend is determined by the Prometheus-compatible metrics backend.
+
 ### Are jobs completing or retrying?
 
 ```promql
@@ -898,6 +923,12 @@ For low-traffic deployments, count-based alerts are often more reliable than rat
 | `chronicle_river_queue_jobs` | Gauge | `queue`, `state` | Current jobs in active states |
 | `chronicle_river_queue_oldest_job_age_seconds` | Gauge | `queue`, `state` | Age of the oldest job in each active state |
 | `chronicle_river_queue_metrics_collection_failures_total` | Counter | none | Queue-state collector failures |
+
+### Rating rebuilds
+
+| Metric | Type | Labels | Meaning |
+| --- | --- | --- | --- |
+| `chronicle_rating_rebuild_duration_seconds` | Histogram | none | Generation start through successful publication (all worker invocations) |
 
 ### Caches
 

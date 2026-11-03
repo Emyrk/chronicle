@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/ratingmath"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 )
@@ -80,8 +81,9 @@ func (ArgsRebuildTenantRatings) InsertOpts() river.InsertOpts {
 
 type WorkerRebuildTenantRatings struct {
 	river.WorkerDefaults[ArgsRebuildTenantRatings]
-	Store  database.Store
-	Logger *slog.Logger
+	Store           database.Store
+	Logger          *slog.Logger
+	RebuildDuration prometheus.Observer // Nil in workers constructed outside the service (e.g. tests).
 }
 
 // Each step commits at most one bounded evidence, projection, Mastery, or
@@ -317,6 +319,13 @@ func (w *WorkerRebuildTenantRatings) workPage(ctx context.Context, job *river.Jo
 			err = ratingmath.ErrRatingConfigStale
 		}
 		if err == nil {
+			// Observe only after publication succeeds; the checkpoint's as_of is
+			// frozen when the generation starts, so this includes snoozes and retries.
+			if w.RebuildDuration != nil && cp.AsOf.Valid {
+				if duration := time.Since(cp.AsOf.Time); duration >= 0 {
+					w.RebuildDuration.Observe(duration.Seconds())
+				}
+			}
 			w.Logger.Info("published tenant ratings", slog.String("tenant_id", tenant.String()), slog.String("generation_id", generation.String()))
 			return nil
 		}

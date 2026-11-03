@@ -5,11 +5,14 @@ import (
 	"errors"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/require"
@@ -129,8 +132,9 @@ func TestWorkerRebuildTenantRatingsPublishesOnlyReady(t *testing.T) {
 		t.Run(phase, func(t *testing.T) {
 			t.Parallel()
 			tenant := uuid.New()
-			store := &checkpointRatingStore{cp: database.RatingRebuildCheckpoint{TenantID: tenant, GenerationID: uuid.New(), Phase: phase, Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"tenant"}`), ConfigRevision: 1}, revision: 1}
-			worker := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default()}
+			store := &checkpointRatingStore{cp: database.RatingRebuildCheckpoint{TenantID: tenant, GenerationID: uuid.New(), Phase: phase, Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"tenant"}`), ConfigRevision: 1, AsOf: database.Timestamptz(time.Now().Add(-2 * time.Minute))}, revision: 1}
+			histogram := prometheus.NewHistogram(prometheus.HistogramOpts{Name: "rating_rebuild_test_duration_seconds"})
+			worker := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default(), RebuildDuration: histogram}
 			err := worker.Work(t.Context(), &river.Job[servicerankings.ArgsRebuildTenantRatings]{Args: servicerankings.ArgsRebuildTenantRatings{TenantID: tenant}})
 			if phase == "ready" {
 				require.NoError(t, err)
@@ -139,6 +143,10 @@ func TestWorkerRebuildTenantRatingsPublishesOnlyReady(t *testing.T) {
 				require.NoError(t, err) // Ready and publish can finish in one bounded invocation.
 				require.True(t, store.published)
 			}
+			var metric dto.Metric
+			require.NoError(t, histogram.Write(&metric))
+			require.EqualValues(t, 1, metric.GetHistogram().GetSampleCount(), "one whole-rebuild observation after publication")
+			require.GreaterOrEqual(t, metric.GetHistogram().GetSampleSum(), 120.0, "duration includes the prior checkpoint's elapsed time")
 		})
 	}
 }
@@ -178,9 +186,13 @@ func TestWorkerRebuildTenantRatingsRefusesGroupCheckpoint(t *testing.T) {
 func TestWorkerRebuildTenantRatingsStaleConfiguration(t *testing.T) {
 	t.Parallel()
 	tenant := uuid.New()
-	store := &checkpointRatingStore{cp: database.RatingRebuildCheckpoint{TenantID: tenant, GenerationID: uuid.New(), Phase: "ready", Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"tenant"}`), ConfigRevision: 1}, revision: 2}
-	worker := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default()}
+	store := &checkpointRatingStore{cp: database.RatingRebuildCheckpoint{TenantID: tenant, GenerationID: uuid.New(), Phase: "ready", Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"tenant"}`), ConfigRevision: 1, AsOf: database.Timestamptz(time.Now().Add(-time.Minute))}, revision: 2}
+	histogram := prometheus.NewHistogram(prometheus.HistogramOpts{Name: "rating_rebuild_stale_test_duration_seconds"})
+	worker := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default(), RebuildDuration: histogram}
 	require.Error(t, worker.Work(t.Context(), &river.Job[servicerankings.ArgsRebuildTenantRatings]{Args: servicerankings.ArgsRebuildTenantRatings{TenantID: tenant}}))
 	require.True(t, store.aborted)
 	require.False(t, store.published)
+	var metric dto.Metric
+	require.NoError(t, histogram.Write(&metric))
+	require.Zero(t, metric.GetHistogram().GetSampleCount(), "an aborted generation is never reported as completed")
 }
