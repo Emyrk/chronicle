@@ -56,6 +56,7 @@ export function HonoredLockTooltip({ highlight, children }: { highlight: (typeof
           </Link>{" "}
           to unlock them.
         </p>
+        <p className="mt-2 text-xs text-muted-foreground">Click to preview an example, read-only.</p>
       </TooltipContent>
     </HintTooltip>
   );
