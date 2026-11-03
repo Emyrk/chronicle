@@ -39,6 +39,41 @@ func TestApplySpell(t *testing.T) {
 	require.Equal(t, int32(20_000), otherSpell.Duration.MaxDuration)
 }
 
+func TestApplySpellsNightmareConsumableDeathPersistence(t *testing.T) {
+	t.Parallel()
+
+	persistent := []*chrondbc.Spell{
+		{ID: 3593},  // Elixir of Fortitude
+		{ID: 10667}, // Rage of Ages
+		{ID: 24382}, // Spirit of Zanza
+		{ID: 45427}, // Dreamshard Elixir
+	}
+	persistent[0].Attrs.Set(chrondbc.Attr_AllowWhileSitting)
+	excluded := []*chrondbc.Spell{
+		{ID: 11371}, // Gift of Arthas
+		{ID: 11406}, // Elixir of Demonslaying
+		{ID: 25804}, // Rumsey Rum Black Label
+	}
+	spells := append(persistent, excluded...)
+
+	ApplySpells(database.WoWFlavor{
+		database.FlavorVanilla,
+		database.FlavorNightmareOfUrsol,
+	}, spells)
+
+	for _, spell := range persistent {
+		require.True(t, spell.Attrs.Has(chrondbc.AttrEx3_DeathPersistent), "spell %d", spell.ID)
+	}
+	require.True(t, persistent[0].Attrs.Has(chrondbc.Attr_AllowWhileSitting))
+	for _, spell := range excluded {
+		require.False(t, spell.Attrs.Has(chrondbc.AttrEx3_DeathPersistent), "spell %d", spell.ID)
+	}
+
+	vanillaElixir := &chrondbc.Spell{ID: 3593}
+	ApplySpell(database.WoWFlavor{database.FlavorVanilla}, vanillaElixir)
+	require.False(t, vanillaElixir.Attrs.Has(chrondbc.AttrEx3_DeathPersistent))
+}
+
 func TestApplySpellsLifeTapIcon(t *testing.T) {
 	t.Parallel()
 
