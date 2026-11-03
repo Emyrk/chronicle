@@ -60,6 +60,42 @@ func TestHandlerRedirectsLegacyYouTubeSyncRoutes(t *testing.T) {
 	}
 }
 
+func TestHandlerDoesNotServeSPAHTMLForMissingStaticAssets(t *testing.T) {
+	t.Parallel()
+
+	siteFS := fstest.MapFS{
+		"index.html":         &fstest.MapFile{Data: []byte(`<html><body>app</body></html>`)},
+		"assets/existing.js": &fstest.MapFile{Data: []byte(`console.log("loaded")`)},
+	}
+	handler := Handler(siteFS, nil, nil, nil)
+
+	t.Run("missing asset", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/assets/missing.js", nil))
+
+		require.Equal(t, http.StatusNotFound, recorder.Code)
+		require.Equal(t, "text/plain; charset=utf-8", recorder.Header().Get("Content-Type"))
+		require.NotContains(t, recorder.Body.String(), "<html>")
+	})
+
+	t.Run("existing asset", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/assets/existing.js", nil))
+
+		require.Equal(t, http.StatusOK, recorder.Code)
+		require.Equal(t, "text/javascript; charset=utf-8", recorder.Header().Get("Content-Type"))
+	})
+
+	t.Run("client route", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/instances/example", nil))
+
+		require.Equal(t, http.StatusOK, recorder.Code)
+		require.Equal(t, "text/html; charset=utf-8", recorder.Header().Get("Content-Type"))
+		require.Contains(t, recorder.Body.String(), "<html>")
+	})
+}
+
 func TestHandlerRendersSEOMetadata(t *testing.T) {
 	t.Parallel()
 
