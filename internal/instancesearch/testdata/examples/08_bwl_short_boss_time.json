@@ -1,0 +1,19 @@
+{
+  "description": "Blackwing Lair clears with at most 15 minutes total spent on bosses.",
+  "query": {
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "=",
+          "value": "Blackwing Lair"
+        },
+        {
+          "field": "instance.boss_time_ms",
+          "op": "<=",
+          "value": 900000
+        }
+      ]
+    }
+  }
+}

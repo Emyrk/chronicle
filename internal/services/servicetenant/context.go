@@ -59,3 +59,8 @@ func isBypass(ctx context.Context) bool {
 	v, _ := ctx.Value(tenantBypassKey{}).(bool)
 	return v
 }
+
+// IsBypass reports whether ctx disables tenant RLS (see AdminBypass).
+func IsBypass(ctx context.Context) bool {
+	return isBypass(ctx)
+}

@@ -3438,6 +3438,8 @@ CREATE INDEX idx_psr_dedup ON parse_score_results USING btree (run_id, encounter
 
 CREATE INDEX idx_psr_guild ON parse_score_results USING btree (tenant_id, guild_id, metric, killed_at DESC NULLS LAST) WHERE (guild_id IS NOT NULL);
 
+CREATE INDEX idx_psr_instance_player_latest ON parse_score_results USING btree (tenant_id, instance_id, player_guid, metric, encounter_name, created_at DESC, precise_score DESC) INCLUDE (display_score, status);
+
 CREATE INDEX idx_psr_player ON parse_score_results USING btree (tenant_id, player_guid, metric, killed_at DESC NULLS LAST);
 
 CREATE INDEX idx_psr_snapshot ON parse_score_results USING btree (snapshot_id);

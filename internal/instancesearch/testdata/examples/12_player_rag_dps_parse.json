@@ -1,0 +1,25 @@
+{
+  "description": "Runs where Thrall parsed 95+ DPS on Ragnaros.",
+  "query": {
+    "where": {
+      "any_player": {
+        "and": [
+          {
+            "field": "player.name",
+            "op": "=",
+            "value": "Thrall"
+          },
+          {
+            "field": "player.parse",
+            "op": ">=",
+            "value": 95,
+            "bosses": [
+              "Ragnaros"
+            ],
+            "metric": "dps"
+          }
+        ]
+      }
+    }
+  }
+}
