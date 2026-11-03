@@ -116,6 +116,25 @@ func TestDescribe(t *testing.T) {
 	require.Equal(t, chroniclesdk.InstanceSearchFieldScopeEncounter, byName["encounter.outcome"].Scope)
 }
 
+// TestDescribeFixture keeps the frontend's Storybook/test fixture of
+// GET /search/fields in sync with the registry.
+func TestDescribeFixture(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join("..", "..", "frontend", "chronicle", "src", "pages", "InstanceSearch", "fixtures", "searchFields.json")
+	got, err := json.MarshalIndent(instancesearch.Describe(), "", "  ")
+	require.NoError(t, err)
+	got = append(got, '\n')
+	if *update {
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
+		require.NoError(t, os.WriteFile(path, got, 0o600))
+		return
+	}
+	want, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, string(want), string(got), "run go test ./internal/instancesearch -run TestDescribeFixture -update")
+}
+
 func TestCompileEnumsAreCanonicalized(t *testing.T) {
 	t.Parallel()
 

@@ -28,14 +28,15 @@ type Mode = "form" | "blocks";
 
 export function InstanceSearchPage() {
   const [params, setParams] = useSearchParams();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const fields = useSearchFields();
   const supported = useSupportedInstances();
 
   // The submitted search lives in the URL so it can be shared.
   const submittedParam = params.get("q");
   const submittedTree = useMemo(() => decodeQuery(submittedParam), [submittedParam]);
-  const urlMode: Mode = params.get("mode") === "blocks" && isAuthenticated ? "blocks" : "form";
+  // Logged-out users can view a shared block search read-only.
+  const urlMode: Mode = params.get("mode") === "blocks" ? "blocks" : "form";
 
   // Drafts start from the submitted search.
   const [mode, setMode] = useState<Mode>(() => (urlMode === "form" && treeToForm(submittedTree) === null ? "blocks" : urlMode));
@@ -83,7 +84,9 @@ export function InstanceSearchPage() {
     queryFn: ({ pageParam }) => runSearch(buildQuery(submittedTree, isAuthenticated ? undefined : 25), pageParam),
     initialPageParam: undefined as InstanceSearchCursor | undefined,
     getNextPageParam: (last) => last.page.next ?? undefined,
-    enabled: submittedParam !== null,
+    // Wait for the session: searching before it loads would run (and spend)
+    // the search once as anonymous and again as the logged-in user.
+    enabled: submittedParam !== null && !authLoading,
     retry: false,
     refetchOnWindowFocus: false,
     staleTime: Infinity,
@@ -147,7 +150,7 @@ export function InstanceSearchPage() {
         />
       ) : (
         <div className="rounded-lg border border-border/60 bg-background/40 p-3">
-          <BlockEditor tree={blocks} onChange={setBlocks} ctx={{ fields: fields.data?.fields ?? [], zones, bosses: allBosses }} />
+          <BlockEditor tree={blocks} onChange={setBlocks} ctx={{ fields: fields.data?.fields ?? [], zones, bosses: allBosses, disabled: !isAuthenticated }} />
         </div>
       )}
 

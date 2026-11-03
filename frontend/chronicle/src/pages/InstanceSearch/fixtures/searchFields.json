@@ -1,0 +1,935 @@
+{
+  "fields": [
+    {
+      "name": "instance.name",
+      "scope": "instance",
+      "type": "string",
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in",
+        "contains",
+        "starts_with"
+      ],
+      "doc": "Zone name, e.g. \"Molten Core\".",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": true,
+      "cost": 1
+    },
+    {
+      "name": "instance.realm",
+      "scope": "instance",
+      "type": "string",
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in",
+        "contains",
+        "starts_with"
+      ],
+      "doc": "Realm name.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": true,
+      "cost": 1
+    },
+    {
+      "name": "instance.realm_id",
+      "scope": "instance",
+      "type": "uuid",
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in"
+      ],
+      "doc": "Realm ID.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "instance.guild",
+      "scope": "instance",
+      "type": "string",
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in",
+        "contains",
+        "starts_with"
+      ],
+      "doc": "Name of the guild the run is attributed to. Runs without a guild never match.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": true,
+      "cost": 1
+    },
+    {
+      "name": "instance.guild_id",
+      "scope": "instance",
+      "type": "uuid",
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in"
+      ],
+      "doc": "ID of the guild the run is attributed to.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "instance.started_at",
+      "scope": "instance",
+      "type": "time",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "doc": "When the run started (upload time if unknown). RFC 3339.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": true,
+      "cost": 1
+    },
+    {
+      "name": "instance.difficulty",
+      "scope": "instance",
+      "type": "string",
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in",
+        "contains",
+        "starts_with"
+      ],
+      "doc": "Difficulty name, e.g. \"10 Player\". Empty on servers without difficulties.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": true,
+      "cost": 1
+    },
+    {
+      "name": "instance.max_players",
+      "scope": "instance",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "doc": "Declared raid size (0 when unknown).",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "instance.category",
+      "scope": "instance",
+      "type": "enum",
+      "enum": [
+        "raid",
+        "dungeon"
+      ],
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in"
+      ],
+      "doc": "raid or dungeon.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": true,
+      "cost": 1
+    },
+    {
+      "name": "instance.recorder",
+      "scope": "instance",
+      "type": "string",
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in",
+        "contains",
+        "starts_with"
+      ],
+      "doc": "Name of the character that recorded the log.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "instance.has_video",
+      "scope": "instance",
+      "type": "bool",
+      "ops": [
+        "=",
+        "!="
+      ],
+      "doc": "A YouTube video is linked to the run.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 2
+    },
+    {
+      "name": "instance.capability",
+      "scope": "instance",
+      "type": "enum",
+      "enum": [
+        "overheal",
+        "absorb",
+        "unit-resources",
+        "unit-position",
+        "raidgroup",
+        "interrupt",
+        "server-side"
+      ],
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in"
+      ],
+      "doc": "What the log recorded. `=` has it, `!=` lacks it, `in` has any of them, `not_in` has none of them. AND several `=` to require all.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "instance.player_count",
+      "scope": "instance",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "doc": "Number of distinct players in the run.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 2
+    },
+    {
+      "name": "instance.bosses_killed",
+      "scope": "instance",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "doc": "Number of distinct bosses killed (clean or partial).",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 2
+    },
+    {
+      "name": "instance.wipes",
+      "scope": "instance",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "doc": "Total wipes in the run (overview metrics).",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 2
+    },
+    {
+      "name": "instance.deaths",
+      "scope": "instance",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "doc": "Total player deaths in the run (overview metrics).",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 2
+    },
+    {
+      "name": "instance.clear_time_ms",
+      "scope": "instance",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "unit": "ms",
+      "doc": "Ranked full-clear time. Only full clears have one.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 2
+    },
+    {
+      "name": "instance.clear_qualified",
+      "scope": "instance",
+      "type": "bool",
+      "ops": [
+        "=",
+        "!="
+      ],
+      "doc": "The clear qualifies for speedrun leaderboards.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 2
+    },
+    {
+      "name": "instance.boss_time_ms",
+      "scope": "instance",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "unit": "ms",
+      "doc": "Time inside the clear spent fighting bosses. Full clears only.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 10
+    },
+    {
+      "name": "instance.trash_time_ms",
+      "scope": "instance",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "unit": "ms",
+      "doc": "Time inside the clear spent fighting trash (non-boss fights). Full clears only.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 10
+    },
+    {
+      "name": "instance.idle_time_ms",
+      "scope": "instance",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "unit": "ms",
+      "doc": "Time inside the clear spent out of combat. Full clears only.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 10
+    },
+    {
+      "name": "instance.clear_parse",
+      "scope": "instance",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "unit": "0-100",
+      "doc": "Clear-time parse (higher is faster).",
+      "bosses": false,
+      "parse_scope": true,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 3
+    },
+    {
+      "name": "instance.kill_time_parse",
+      "scope": "instance",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "unit": "0-100",
+      "doc": "Boss kill-time parse (higher is faster) on any / each of the bosses.",
+      "bosses": true,
+      "parse_scope": true,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 4
+    },
+    {
+      "name": "instance.kill_time_ms",
+      "scope": "instance",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "unit": "ms",
+      "doc": "Boss kill duration (clean or partial kills) on any / each of the bosses.",
+      "bosses": true,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 3
+    },
+    {
+      "name": "encounter.name",
+      "scope": "encounter",
+      "type": "string",
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in",
+        "contains",
+        "starts_with"
+      ],
+      "doc": "Encounter name (boss name for boss fights).",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "encounter.boss",
+      "scope": "encounter",
+      "type": "bool",
+      "ops": [
+        "=",
+        "!="
+      ],
+      "doc": "The encounter is a boss fight.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "encounter.outcome",
+      "scope": "encounter",
+      "type": "enum",
+      "enum": [
+        "clean",
+        "partial",
+        "wipe",
+        "reset"
+      ],
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in"
+      ],
+      "doc": "clean (kill), partial (kill with gaps), wipe or reset.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "encounter.killed",
+      "scope": "encounter",
+      "type": "bool",
+      "ops": [
+        "=",
+        "!="
+      ],
+      "doc": "The encounter ended in a kill (clean or partial).",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "encounter.duration_ms",
+      "scope": "encounter",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "unit": "ms",
+      "doc": "Pull duration.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "encounter.kill_time_parse",
+      "scope": "encounter",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "unit": "0-100",
+      "doc": "Kill-time parse for this kill.",
+      "bosses": false,
+      "parse_scope": true,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 4
+    },
+    {
+      "name": "player.name",
+      "scope": "player",
+      "type": "string",
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in",
+        "contains",
+        "starts_with"
+      ],
+      "doc": "Character name.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "player.guid",
+      "scope": "player",
+      "type": "string",
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in",
+        "contains",
+        "starts_with"
+      ],
+      "doc": "Character GUID, e.g. \"0x0000000000012345\".",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "player.class",
+      "scope": "player",
+      "type": "enum",
+      "enum": [
+        "WARRIOR",
+        "PALADIN",
+        "HUNTER",
+        "ROGUE",
+        "PRIEST",
+        "SHAMAN",
+        "MAGE",
+        "WARLOCK",
+        "DRUID",
+        "DEATH_KNIGHT",
+        "MONK",
+        "DEMON_HUNTER"
+      ],
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in"
+      ],
+      "doc": "Class.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "player.race",
+      "scope": "player",
+      "type": "enum",
+      "enum": [
+        "Human",
+        "Dwarf",
+        "NightElf",
+        "Gnome",
+        "Draenei",
+        "Orc",
+        "Scourge",
+        "Tauren",
+        "Troll",
+        "Goblin",
+        "BloodElf"
+      ],
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in"
+      ],
+      "doc": "Race.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "player.level",
+      "scope": "player",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "doc": "Level.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "player.guild",
+      "scope": "player",
+      "type": "string",
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in",
+        "contains",
+        "starts_with"
+      ],
+      "doc": "Guild name at the time of the run.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 2
+    },
+    {
+      "name": "player.guild_id",
+      "scope": "player",
+      "type": "uuid",
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in"
+      ],
+      "doc": "Guild ID at the time of the run.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 1
+    },
+    {
+      "name": "player.spec",
+      "scope": "player",
+      "type": "string",
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in",
+        "contains",
+        "starts_with"
+      ],
+      "doc": "Spec in a fight, e.g. \"Feral\". Read from boss kills by default; see on.",
+      "bosses": true,
+      "parse_scope": false,
+      "metric": false,
+      "on": true,
+      "anonymous": false,
+      "cost": 3
+    },
+    {
+      "name": "player.sub_spec",
+      "scope": "player",
+      "type": "string",
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in",
+        "contains",
+        "starts_with"
+      ],
+      "doc": "Sub-spec in a fight: Bear / Cat (Feral druid), Tank / DPS (Enhancement shaman), Fury Prot. Empty for other specs and servers.",
+      "bosses": true,
+      "parse_scope": false,
+      "metric": false,
+      "on": true,
+      "anonymous": false,
+      "cost": 3
+    },
+    {
+      "name": "player.role",
+      "scope": "player",
+      "type": "enum",
+      "enum": [
+        "dps",
+        "heal",
+        "tank"
+      ],
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in"
+      ],
+      "doc": "Role in a fight.",
+      "bosses": true,
+      "parse_scope": false,
+      "metric": false,
+      "on": true,
+      "anonymous": false,
+      "cost": 3
+    },
+    {
+      "name": "player.dps",
+      "scope": "player",
+      "type": "float",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "doc": "DPS in a fight.",
+      "bosses": true,
+      "parse_scope": false,
+      "metric": false,
+      "on": true,
+      "anonymous": false,
+      "cost": 3
+    },
+    {
+      "name": "player.hps",
+      "scope": "player",
+      "type": "float",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "doc": "HPS in a fight.",
+      "bosses": true,
+      "parse_scope": false,
+      "metric": false,
+      "on": true,
+      "anonymous": false,
+      "cost": 3
+    },
+    {
+      "name": "player.deaths",
+      "scope": "player",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "doc": "Deaths in a fight. Wipes are not counted.",
+      "bosses": true,
+      "parse_scope": false,
+      "metric": false,
+      "on": true,
+      "anonymous": false,
+      "cost": 3
+    },
+    {
+      "name": "player.avg_ilvl",
+      "scope": "player",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "doc": "Average item level in a fight.",
+      "bosses": true,
+      "parse_scope": false,
+      "metric": false,
+      "on": true,
+      "anonymous": false,
+      "cost": 3
+    },
+    {
+      "name": "player.parse",
+      "scope": "player",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e="
+      ],
+      "unit": "0-100",
+      "doc": "Player parse on a boss kill (latest stored score per boss).",
+      "bosses": true,
+      "parse_scope": false,
+      "metric": true,
+      "on": false,
+      "anonymous": false,
+      "cost": 15
+    }
+  ],
+  "max_nodes": 64,
+  "max_depth": 8,
+  "anonymous_max_predicates": 6,
+  "anonymous_max_limit": 25
+}
