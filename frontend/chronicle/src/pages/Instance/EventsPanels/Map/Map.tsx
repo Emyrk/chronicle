@@ -3,7 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, AppWindow, Crosshair, Expand, Focus, Footprints, Gamepad2, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Minimize2, Pause, Play, Route, Settings2, Shrink, Skull, Timer, X } from "lucide-react";
+import { AlertTriangle, AppWindow, Clapperboard, Crosshair, Expand, Focus, Footprints, Gamepad2, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Minimize2, Pause, Play, Route, Settings2, Shrink, Skull, Timer, X } from "lucide-react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { parseLivePresenceSurface } from "../../liveSessionProtocol";
@@ -58,6 +58,7 @@ import { MapSettingsOverlay } from "./MapSettingsOverlay";
 import { DEFAULT_EFFECT_SETTINGS, useEffectSettings } from "./mapViewSettings";
 import { DEFAULT_WALK_AVATAR, readStoredWalkAvatar, storeWalkAvatar } from "./walkAvatars";
 import { useMapScene } from "./useMapScene";
+import { canEncodeVideo } from "./videoSupport";
 import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
 import { PlanControls } from "./plan/PlanControls";
 import { ROLE_TOKENS, usePlanEditor, usePlanShortcuts, type PlanRosterEntry } from "./plan/usePlanEditor";
@@ -67,6 +68,7 @@ import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/Play
 export { mapPresentationForSelection };
 
 const MapView3D = lazy(() => import("./MapView3D"));
+const VideoRenderDialog = lazy(() => import("./VideoRenderDialog"));
 
 const NO_PLAN_ITEMS: readonly PlanItem[] = [];
 const RAID_FRAMES_PANEL = createRaidFramesPanel();
@@ -575,6 +577,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     }
   }, [alignmentOverlay, effectSettings.alignmentOverlay, updateEffectSettings]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [videoOpen, setVideoOpen] = useState(false);
   const [topDownKey, setTopDownKey] = useState(0);
   const [followGuid, setFollowGuid] = useState<string | null>(null);
   const [adStrafe, setAdStrafeState] = useState(readStoredAdStrafe);
@@ -740,11 +743,31 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     />
   );
 
+  // "Render video": one boss fight on the 3D map, filmed by the drone camera.
+  const videoEncounter = !ready.wholeRun && props.context.selectedEncounterIds.length === 1 && ready.bossGuids.size > 0
+    ? props.context.instance.encounters.find((candidate) => candidate.id === ready.encounterId) ?? null
+    : null;
+  const videoBlocker = !canEncodeVideo()
+    ? "This browser cannot encode video (no WebCodecs VideoEncoder)"
+    : !onMesh || !dungeonMesh ? "Needs the 3D map: turn on the dungeon mesh (WebGL)" : null;
+  const videoFileName = videoEncounter
+    ? `chronicle-${videoEncounter.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "boss"}-${new Date(ready.encounterStartMs).toISOString().slice(0, 10)}.mp4`
+    : "";
+
   // In the card's title row when the host offers one, so the map gets the height.
   const headerControls = (
     <div className="flex min-w-0 shrink-0 items-center gap-2 text-[10px] text-muted-foreground">
       {!ready.overlayAvailable && <span className="text-amber-300/80">position overlay unavailable</span>}
       <LivePresenceIndicator surface={presenceSurface} />
+      {!mini && videoEncounter && (
+        // A span carries the hint: a disabled button shows no title.
+        <span title={videoBlocker ?? "Render this boss fight as an MP4 video, in your browser"}>
+          <button type="button" onClick={() => setVideoOpen(true)} disabled={videoBlocker !== null} className={framingButtonClass}>
+            <Clapperboard className="h-3 w-3" />
+            Render video
+          </button>
+        </span>
+      )}
       {onExitWholeRun && (
         <button type="button" onClick={onExitWholeRun} title="Back to the 2D route overview" className={framingButtonClass}>
           <Route className="h-3 w-3" />
@@ -890,6 +913,22 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               planItems={planOpen && canPlan ? planEditor.drawnItems : NO_PLAN_ITEMS}
               planSelectedId={planOpen ? planEditor.state.selectedId : null}
               planInput={planOpen && canPlan ? planEditor.input : null}
+            />
+          </Suspense>
+        )}
+        {videoOpen && videoEncounter && dungeonMesh && (
+          <Suspense fallback={null}>
+            <VideoRenderDialog
+              open
+              onOpenChange={setVideoOpen}
+              panelProps={props}
+              mapSource={mapSource}
+              showHiddenUnits={effectSettings.showHiddenUnits}
+              dungeonMesh={dungeonMesh}
+              unitModelUrls={unitModelsQuery.data}
+              effectSettings={effectSettings}
+              title={videoEncounter.name}
+              fileName={videoFileName}
             />
           </Suspense>
         )}

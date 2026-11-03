@@ -68,6 +68,13 @@ export class UnitTokenTextures {
     this.onChange = onChange;
   }
 
+  /** Icon images still loading (a token face drawn now would miss its icon). */
+  pendingCount(): number {
+    let pending = 0;
+    for (const image of this.images.values()) if (image === "loading") pending++;
+    return pending;
+  }
+
   private image(url: string): HTMLImageElement | null {
     const cached = this.images.get(url);
     if (cached instanceof HTMLImageElement) return cached;

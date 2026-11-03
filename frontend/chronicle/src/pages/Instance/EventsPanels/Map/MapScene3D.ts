@@ -6,6 +6,7 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import type { MeshBVH } from "three-mesh-bvh";
 import { mapAssetUrl, type WowMapFloorBounds, type WowMapLayer, type WowMapMeshLiquid } from "@/pages/Technical/mapGallery";
 import type { MapCameraPose } from "./cameraPath";
+import type { DroneProbe } from "./droneCamera";
 import { CAPSULE_AVATAR, WALK_AVATAR_CLIPS, walkAvatarUrl, type WalkAvatarState } from "./walkAvatars";
 import {
   AIM_AHEAD_FRACTION,
@@ -331,6 +332,24 @@ export interface DungeonMeshRequest {
  * framed itself, so viewport requests only re-engage it. Null hands the camera
  * back to the viewport framing.
  */
+export interface MapScene3DOptions {
+  /**
+   * A video capture scene: renders at exactly this size (not the container's),
+   * keeps its drawing buffer for the encoder, takes no input, and only draws
+   * through captureFrame.
+   */
+  capture?: { width: number; height: number } | null;
+}
+
+/** What the drone camera needs from the scene: its yard scale, unit placement and mesh probe. */
+export interface MapSceneDroneInput {
+  /** Scene units per yard. */
+  scale: number;
+  /** An artwork point in scene units (x, z), as units are placed. */
+  toPlane: (point: MapPoint) => { x: number; z: number };
+  probe: DroneProbe;
+}
+
 export interface MapSceneDirector {
   /** The hostile units that count as the fight's boss. */
   bossGuids: ReadonlySet<string>;
@@ -817,6 +836,10 @@ export class MapScene3D {
   private chipScale = 1;
   private frame = 0;
   private disposed = false;
+  private readonly capture: { width: number; height: number } | null;
+  // Boss minis still loading, and whether the caller still has asset data in flight (spell icons).
+  private bossMinisLoading = 0;
+  private externalPending = false;
 
   // --- Cinematic camera, "the Director" (chronicle-1079) ---
   // On while the mesh shows and the framing is the default one: every frame it
@@ -1011,7 +1034,9 @@ export class MapScene3D {
     onUserViewport: (viewport: MapViewport) => void = () => {},
     onDungeonMesh: (state: DungeonMeshState) => void = () => {},
     onCompassYaw: (yaw: number) => void = () => {},
+    options: MapScene3DOptions = {},
   ) {
+    this.capture = options.capture ?? null;
     this.container = container;
     this.keyWindow = container.ownerDocument.defaultView ?? window;
     this.onContextLost = onContextLost;
@@ -1020,24 +1045,31 @@ export class MapScene3D {
     this.onDungeonMesh = onDungeonMesh;
     this.onCompassYaw = onCompassYaw;
     // Throws when WebGL is unavailable; the caller falls back to 2D.
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // A capture scene keeps its drawing buffer so the video encoder can read
+    // each frame, and renders at exactly the output size.
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: this.capture !== null });
+    this.renderer.setPixelRatio(this.capture ? 1 : Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(0x11100d);
     this.renderer.domElement.style.display = "block";
     this.renderer.domElement.style.cursor = MAP_CURSOR;
     this.renderer.domElement.addEventListener("webglcontextlost", this.handleContextLost);
-    this.renderer.domElement.addEventListener("pointermove", this.handlePointerMove);
-    this.renderer.domElement.addEventListener("pointerleave", this.handlePointerLeave);
-    this.renderer.domElement.addEventListener("dblclick", this.handleDoubleClick);
-    this.renderer.domElement.addEventListener("pointerdown", this.handlePointerDown);
-    this.renderer.domElement.addEventListener("pointerup", this.handlePointerUp);
-    this.renderer.domElement.addEventListener("wheel", this.handleWheel, { passive: false });
-    this.renderer.domElement.addEventListener("contextmenu", this.handleWalkContextMenu);
-    // Capture, so walk mode's Esc is handled before the page's own Esc (focus mode) sees it.
-    this.keyWindow.addEventListener("keydown", this.handleKeyDown, { capture: true });
-    this.keyWindow.addEventListener("keyup", this.handleKeyUp);
-    this.keyWindow.addEventListener("blur", this.releaseKeys);
     container.appendChild(this.renderer.domElement);
+    if (this.capture) {
+      // Not interactive: no pointer, keys or orbit controls.
+      this.renderer.domElement.style.pointerEvents = "none";
+    } else {
+      this.renderer.domElement.addEventListener("pointermove", this.handlePointerMove);
+      this.renderer.domElement.addEventListener("pointerleave", this.handlePointerLeave);
+      this.renderer.domElement.addEventListener("dblclick", this.handleDoubleClick);
+      this.renderer.domElement.addEventListener("pointerdown", this.handlePointerDown);
+      this.renderer.domElement.addEventListener("pointerup", this.handlePointerUp);
+      this.renderer.domElement.addEventListener("wheel", this.handleWheel, { passive: false });
+      this.renderer.domElement.addEventListener("contextmenu", this.handleWalkContextMenu);
+      // Capture, so walk mode's Esc is handled before the page's own Esc (focus mode) sees it.
+      this.keyWindow.addEventListener("keydown", this.handleKeyDown, { capture: true });
+      this.keyWindow.addEventListener("keyup", this.handleKeyUp);
+      this.keyWindow.addEventListener("blur", this.releaseKeys);
+    }
 
     this.textureLoader.setCrossOrigin("anonymous");
     this.scene.add(new THREE.AmbientLight(0xffffff, 1.6));
@@ -1194,6 +1226,10 @@ export class MapScene3D {
     this.controls.addEventListener("change", this.handleControlsChange);
     this.controls.addEventListener("start", this.handleControlsStart);
     this.controls.addEventListener("end", this.handleControlsEnd);
+    if (this.capture) {
+      this.controls.enabled = false;
+      this.controls.enableDamping = false;
+    }
 
     this.resizeObserver = new ResizeObserver(this.resize);
     this.resizeObserver.observe(container);
@@ -1551,6 +1587,46 @@ export class MapScene3D {
       fov: this.camera.fov,
       near: this.camera.near,
       far: this.camera.far,
+    };
+  }
+
+  /**
+   * Draws one video frame now, synchronously: the camera at `pose` and every
+   * time-driven animation at `nowMs` (the frame's own clock, not the wall
+   * clock), so the same inputs always give the same image. Capture scenes only.
+   */
+  captureFrame(pose: MapCameraPose, nowMs: number) {
+    if (!this.capture || this.disposed) return;
+    this.applyCameraPose(pose);
+    this.renderFrame(nowMs);
+  }
+
+  /**
+   * How many things a frame could still be missing: textures, icons, boss
+   * minis, the dungeon mesh, or data the caller says is in flight.
+   */
+  pendingAssets(): number {
+    let pending = this.tokenTextures.pendingCount() + this.bossMinisLoading + (this.dungeonMeshRequest ? 1 : 0) + (this.externalPending ? 1 : 0);
+    for (const texture of this.iconTextures.values()) if (texture === "loading") pending++;
+    return pending;
+  }
+
+  /** Marks asset data the caller is still fetching (spell icons' metadata) as pending. */
+  setExternalPending(pending: boolean) {
+    this.externalPending = pending;
+  }
+
+  /** The drone camera's view of the scene, once the dungeon mesh shows; null before. */
+  droneInput(): MapSceneDroneInput | null {
+    const mesh = this.dungeonMesh;
+    if (!mesh) return null;
+    return {
+      scale: mesh.scale,
+      toPlane: (point) => mapPointToScene(point, this.aspect, GROUND_WIDTH),
+      probe: {
+        floorAt: (x, z) => this.floorHeights.heightAt("drone", x, z, this.cameraCeiling()),
+        clearShot: (x, z, distance, yaw) => this.clearShot(x, z, distance, yaw),
+      },
     };
   }
 
@@ -2450,7 +2526,9 @@ export class MapScene3D {
     const cacheKey = `${gameModel ? "game" : "miniature"}:${worldHeight ?? "baseline"}:${mapScale}:${url}`;
     if (this.bossMinis.has(cacheKey)) return this.bossMinis.get(cacheKey) ?? null;
     this.bossMinis.set(cacheKey, null);
+    this.bossMinisLoading++;
     void this.loadBossMiniCandidate(url, gameModel, mapScale, worldHeight).then((mini) => {
+      this.bossMinisLoading--;
       if (!mini) return;
       if (this.disposed) {
         mini.geometry.dispose();
@@ -4555,8 +4633,8 @@ export class MapScene3D {
 
   private readonly resize = () => {
     const viewport = this.alignmentOverlay ? this.cameraViewport() : null;
-    const width = Math.max(1, this.container.clientWidth);
-    const height = Math.max(1, this.container.clientHeight);
+    const width = this.capture?.width ?? Math.max(1, this.container.clientWidth);
+    const height = this.capture?.height ?? Math.max(1, this.container.clientHeight);
     this.renderer.setSize(width, height, false);
     this.renderer.domElement.style.width = "100%";
     this.renderer.domElement.style.height = "100%";
@@ -4566,41 +4644,48 @@ export class MapScene3D {
     else this.requestRender();
   };
 
+  // A capture scene draws only when asked (captureFrame), at the frame's own time.
   private readonly requestRender = () => {
-    if (this.disposed || this.frame) return;
+    if (this.disposed || this.frame || this.capture) return;
     this.frame = requestAnimationFrame((now) => {
       this.frame = 0;
       if (this.disposed) return;
       // Only keeps a frame loop running while something moves (playback
       // effects, a re-framing, the Director, coasting damping); otherwise
       // rendering stays on demand.
-      const reframing = this.updateViewAnimation(now);
-      const moving = this.updateCameraMove(now);
-      const directing = this.updateDirector(now);
-      const keyMoving = this.updateKeyboardCamera(now);
-      const walking = this.walkCaptureActive ? this.walk !== null : this.updateWalk(now);
-      const presencesMoving = this.updateRemotePresences(now);
-      // Damping coasts the camera to a stop after a gesture; update() reports
-      // whether it is still moving, so the loop idles again once it settles.
-      // Walking, the character places the camera; OrbitControls would clamp it back.
-      const damping = !walking && this.controls.update();
-      const collisionDt = this.collisionLastMs ? Math.min(KEY_MAX_STEP_S, (now - this.collisionLastMs) / 1000) : 0;
-      this.collisionLastMs = now;
-      // A camera pulled in by a wall eases back out once the wall is gone.
-      const uncolliding = !walking && this.constrainCamera(collisionDt);
-      if (!uncolliding && !damping) this.collisionLastMs = 0;
-      const animating = this.updateEffects(now) || reframing || moving || directing || keyMoving || (!this.walkCaptureActive && walking) || presencesMoving || damping || uncolliding;
-      this.updateTokens(now);
-      this.updateBars();
-      this.updateEffectHover();
-      this.emitCompassYaw();
-      // The nameplate keeps its screen size as the camera moves.
-      if (this.hoveredGuid) this.updateLabel();
-      this.renderer.render(this.scene, this.camera);
-      this.emitPresence();
-      if (animating) this.requestRender();
+      if (this.renderFrame(now)) this.requestRender();
     });
   };
+
+  // One frame of the render loop at `now` (ms). Returns whether something is
+  // still moving and needs another frame.
+  private renderFrame(now: number): boolean {
+    const reframing = this.updateViewAnimation(now);
+    const moving = this.updateCameraMove(now);
+    const directing = this.updateDirector(now);
+    const keyMoving = this.updateKeyboardCamera(now);
+    const walking = this.walkCaptureActive ? this.walk !== null : this.updateWalk(now);
+    const presencesMoving = this.updateRemotePresences(now);
+    // Damping coasts the camera to a stop after a gesture; update() reports
+    // whether it is still moving, so the loop idles again once it settles.
+    // Walking, the character places the camera; OrbitControls would clamp it back.
+    const damping = !walking && this.controls.update();
+    const collisionDt = this.collisionLastMs ? Math.min(KEY_MAX_STEP_S, (now - this.collisionLastMs) / 1000) : 0;
+    this.collisionLastMs = now;
+    // A camera pulled in by a wall eases back out once the wall is gone.
+    const uncolliding = !walking && this.constrainCamera(collisionDt);
+    if (!uncolliding && !damping) this.collisionLastMs = 0;
+    const animating = this.updateEffects(now) || reframing || moving || directing || keyMoving || (!this.walkCaptureActive && walking) || presencesMoving || damping || uncolliding;
+    this.updateTokens(now);
+    this.updateBars();
+    this.updateEffectHover();
+    this.emitCompassYaw();
+    // The nameplate keeps its screen size as the camera moves.
+    if (this.hoveredGuid) this.updateLabel();
+    this.renderer.render(this.scene, this.camera);
+    this.emitPresence();
+    return animating;
+  }
 }
 
 // Untextured bodies take the unit's colour; textured minis keep their texture
