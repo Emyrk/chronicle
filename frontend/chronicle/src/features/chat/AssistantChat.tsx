@@ -198,7 +198,8 @@ export function AssistantChat({
         aria-label={title}
         className={cn(
           "bg-background fixed inset-0 z-[90] flex flex-col overflow-hidden",
-          "sm:inset-auto sm:right-4 sm:bottom-4 sm:rounded-xl sm:border sm:shadow-2xl",
+          "sm:inset-auto sm:right-4 sm:bottom-4 sm:rounded-xl sm:border sm:border-amber-300/30",
+          "sm:shadow-[0_24px_64px_-12px_rgb(0_0_0/0.6),0_0_40px_-8px_rgb(95_143_166/0.55),0_0_0_1px_rgb(95_143_166/0.25)]",
           chatWindow.expanded
             ? "sm:h-[calc(100dvh-2rem)] sm:w-[min(760px,calc(100vw-2rem))]"
             : "sm:h-[min(760px,calc(100dvh-2rem))] sm:w-[min(440px,calc(100vw-2rem))]",

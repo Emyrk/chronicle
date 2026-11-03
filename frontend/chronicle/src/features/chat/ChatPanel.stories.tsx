@@ -2,13 +2,20 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Button } from "@/components/ui/button";
 import { ChatPanel } from "./ChatPanel";
 import type { AssistantChatController } from "./useAssistantChat";
+import { EMPTY_USAGE } from "./usage";
 
 function controller(overrides: Partial<AssistantChatController> = {}): AssistantChatController {
   return {
     messages: [],
+    debugSnapshots: [],
+    clientToolRequests: [],
     status: "idle",
+    usageTotal: EMPTY_USAGE,
     isRunning: false,
+    webSearchEnabled: false,
+    setWebSearchEnabled: () => undefined,
     submit: async () => true,
+    startNewChat: async () => true,
     cancel: () => undefined,
     clearError: () => undefined,
     ...overrides,

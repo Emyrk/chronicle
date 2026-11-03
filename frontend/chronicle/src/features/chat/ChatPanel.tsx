@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { AlertCircle, Bot, Check, CircleStop, Globe2, LoaderCircle, LockKeyhole, RotateCcw, ScanSearch, Send, ShieldAlert, SlidersHorizontal, Wrench } from "lucide-react";
+import { AlertCircle, Check, CircleStop, Globe2, LoaderCircle, LockKeyhole, RotateCcw, ScanSearch, Send, ShieldAlert, SlidersHorizontal, Sparkles, Wrench } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert";
@@ -82,6 +82,24 @@ function ToolCallCard({ toolCall }: { toolCall: ChatToolCall }) {
   );
 }
 
+/** Gold-on-blue badge shared with the launcher so the assistant reads as one brand. */
+export function AssistantMark({ size = "sm", className }: { size?: "sm" | "md" | "lg"; className?: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-full border border-amber-300/40 bg-gradient-to-br from-primary via-primary-darker to-[#2a3f52] text-amber-200 shadow-[0_2px_8px_-2px_rgb(95_143_166/0.6)]",
+        size === "sm" && "size-7 [&_svg]:size-3.5",
+        size === "md" && "size-8 [&_svg]:size-4",
+        size === "lg" && "size-12 [&_svg]:size-6",
+        className,
+      )}
+    >
+      <Sparkles />
+    </div>
+  );
+}
+
 function Message({ message, turnUsage }: { message: ChatMessage; turnUsage?: ChatUsage }) {
   const assistant = message.role === "assistant";
   return (
@@ -89,11 +107,7 @@ function Message({ message, turnUsage }: { message: ChatMessage; turnUsage?: Cha
       className={cn("flex gap-3", !assistant && "justify-end")}
       aria-label={`${assistant ? "Assistant" : "You"} message`}
     >
-      {assistant && (
-        <div className="bg-primary/10 text-primary mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border">
-          <Bot className="size-4" />
-        </div>
-      )}
+      {assistant && <AssistantMark className="mt-0.5" />}
       <div
         className={cn(
           "min-w-0 max-w-[88%] rounded-xl px-3.5 py-2.5 text-sm shadow-xs",
@@ -148,9 +162,7 @@ function Message({ message, turnUsage }: { message: ChatMessage; turnUsage?: Cha
 function AssistantActivity({ label }: { label: "Thinking" | "Working" }) {
   return (
     <article className="flex gap-3" aria-label="Assistant status">
-      <div className="bg-primary/10 text-primary mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border">
-        <Bot className="size-4" />
-      </div>
+      <AssistantMark className="mt-0.5" />
       <div className="bg-card rounded-xl border px-3.5 py-2.5 shadow-xs">
         <TypingIndicator label={label} />
       </div>
@@ -161,9 +173,7 @@ function AssistantActivity({ label }: { label: "Thinking" | "Working" }) {
 function DefaultEmptyState() {
   return (
     <div className="text-muted-foreground mx-auto flex max-w-64 flex-col items-center gap-3 text-center">
-      <div className="bg-primary/10 text-primary flex size-12 items-center justify-center rounded-full border">
-        <Bot className="size-6" />
-      </div>
+      <AssistantMark size="lg" />
       <div>
         <p className="text-foreground font-medium">How can I help?</p>
         <p className="mt-1 text-sm">Ask a question to start a new conversation.</p>
@@ -242,8 +252,9 @@ export function ChatPanel({
 
   return (
     <section className={cn("bg-background flex h-full min-h-0 flex-col", className)}>
-      <header className="flex items-center gap-2 border-b py-2 pr-2 pl-4">
-        <Bot className="text-primary size-5 shrink-0" />
+      <header className="relative flex items-center gap-2.5 border-b bg-gradient-to-r from-primary/35 via-primary/15 to-transparent py-2 pr-2 pl-3">
+        <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 -bottom-px h-px bg-gradient-to-r from-amber-300/70 via-amber-300/25 to-transparent" />
+        <AssistantMark size="md" />
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-semibold tracking-tight">{title}</h2>
           <p className="text-muted-foreground truncate text-xs" title={description}>{description}</p>
