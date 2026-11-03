@@ -214,12 +214,11 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/time-parse-cohorts/cohort", s.handleTimeParseCohort)
 	s.router.Get("/time-parse-cohorts/spreads", s.handleTimeParseSpreads)
 
-	// Published rating leaderboards
-	s.router.Get("/ratings/groups", s.handleRatingRealmGroups)
-	s.router.Get("/ratings/scope-leaderboard", s.handleRatingScopeLeaderboard)
-	s.router.Get("/ratings/boss-leaderboard", s.handleRatingBossLeaderboard)
-	s.router.Get("/ratings/guild-boss-leaderboard", s.handleGuildRatingBossLeaderboard)
-	s.router.Get("/ratings/guild-scope-leaderboard", s.handleGuildRatingScopeLeaderboard)
+	// Published tenant-wide rating leaderboards. Realm IDs filter rows only.
+	s.router.Get("/ratings/scope-leaderboard", s.handleTenantPlayerScopeLeaderboard)
+	s.router.Get("/ratings/boss-leaderboard", s.handleTenantPlayerBossLeaderboard)
+	s.router.Get("/ratings/guild-boss-leaderboard", s.handleTenantGuildBossLeaderboard)
+	s.router.Get("/ratings/guild-scope-leaderboard", s.handleTenantGuildScopeLeaderboard)
 
 	// Speedrun leaderboard
 	s.router.Get("/speedrun", s.handleSpeedrunLeaderboard)
