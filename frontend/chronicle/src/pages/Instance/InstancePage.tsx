@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Loader2, Youtube, Timer, TriangleAlert } from "lucide-react";
 import { useInstance, useInstanceYoutube, useAuthorizationCheck, useSession } from "@/api/queries";
@@ -320,6 +320,7 @@ export function InstancePageInner({
   const [showReplayPanel, setShowReplayPanel] = useState(false);
   const [showTimeRange, setShowTimeRange] = useState(false);
   const { setEncounterBounds, setTimestamp, play, enabled: syncEnabled } = useSyncModeContext();
+  const selectVideoEncounter = useCallback((id: string) => onSelectEncounters([id]), [onSelectEncounters]);
   const previousEncounterTimesRef = useRef(selectedEncounterTimes);
   const isMobile = useIsMobile();
   const showReplayControls = !isMobile;
@@ -426,7 +427,7 @@ export function InstancePageInner({
             }
           }}
           encounters={rawEncounters}
-          onEncounterChange={(id) => onSelectEncounters([id])}
+          onEncounterChange={selectVideoEncounter}
         />
       )}
     </InstanceKeybindProvider>

@@ -66,7 +66,7 @@ function LeeroyInstance({ mesh }: { mesh: WowMapMeshInstance }) {
               <TooltipProvider>
                 <div className="w-full px-4 pt-4 text-sm text-amber-200/90">
                   <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-                    <strong>Cinematic reconstruction.</strong> This is not a recovered combat log. Player movement follows <a href="https://youtu.be/IAOLAw0k2DU" target="_blank" rel="noreferrer" className="underline">Internet Historian&apos;s fan map</a> of the original video; whelp attacks and health are illustrative. Player damage, healing, and most casts have not been simulated yet.
+                    <strong>Cinematic reconstruction.</strong> This is not a recovered combat log. Player movement follows <a href="https://youtu.be/IAOLAw0k2DU" target="_blank" rel="noreferrer" className="underline">Internet Historian&apos;s fan map</a> of the original video. Damage, healing, casts, health and power are illustrative, not recovered combat-log measurements.
                   </div>
                 </div>
                 <InstancePageInner

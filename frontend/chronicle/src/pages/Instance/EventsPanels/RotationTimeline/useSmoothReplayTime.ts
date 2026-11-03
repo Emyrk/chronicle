@@ -6,7 +6,7 @@ const MAX_EXTRAPOLATE_MS = 250;
 const SNAP_MS = 1000;
 
 /**
- * Replay time advances in coarse ticks (SyncModeContext steps every 100 ms),
+ * Replay time advances in coarse ticks (from SyncModeContext or a video player),
  * which makes a scrolling timeline look jumpy. While playing, this projects
  * the time forward every animation frame from the last tick and the playback
  * speed. Paused, seeking, or not replaying, it returns the real time.

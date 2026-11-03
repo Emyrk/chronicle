@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  DamageSchema, HealSchema, InterruptSchema, ResurrectionSchema, SlainSchema,
-  SpellGoSchema, SpellStartSchema, UnitPositionSchema, UnitResourcesSchema,
+  CastAction, CastSchema, DamageSchema, HealSchema, InterruptSchema,
+  ResourceChangeSchema, ResurrectionSchema, SlainSchema, SpellGoSchema,
+  SpellStartSchema, UnitPositionSchema, UnitResourcesSchema,
 } from "@/api/proto/chronicle_pb";
 import { createStreamCursor, decodeAllPayloads, parseAllHeaders } from "@/api/protodecode/decode";
 import { leeroyRookery } from "../EventsPanels/Map/fixtures/leeroyRookery";
@@ -23,6 +24,8 @@ const fixture = {
     ["k", 7, 0, 1],
     ["z", 8, 1, 0],
     ["p", 9, 1, 20, 30, 229, null], // legacy position without z
+    ["m", 10, 1, -55, "loss", "Arcane Explosion", "Mana"],
+    ["m", 11, 0, 12, "Gain", "Rage gained", "Rage"],
   ],
 } as unknown as MapFixture;
 
@@ -30,13 +33,15 @@ describe("buildLeeroyStreams", () => {
   it("feeds the real Leeroy fixture through production stream cursors", () => {
     const streams = buildLeeroyStreams(leeroyRookery);
     const cases = [
-      ["unit_position", "p", UnitPositionSchema, "unit", 2, 26158],
-      ["unit_resources", "r", UnitResourcesSchema, "unit", 2, 3148],
-      ["damage", "d", DamageSchema, "caster", 2, 2072],
-      ["slain", "k", SlainSchema, "target", 3, 3],
-      ["spell_go", "g", SpellGoSchema, "caster", 2, 1],
+      ["unit_position", "p", UnitPositionSchema, "unit", 2],
+      ["unit_resources", "r", UnitResourcesSchema, "unit", 2],
+      ["damage", "d", DamageSchema, "caster", 2],
+      ["slain", "k", SlainSchema, "target", 3],
+      ["spell_go", "g", SpellGoSchema, "caster", 2],
     ] as const;
-    for (const [type, code, schema, field, guidColumn, count] of cases) {
+    for (const [type, code, schema, field, guidColumn] of cases) {
+      const count = leeroyRookery.events.filter((row) => row[0] === code).length;
+      expect(count).toBeGreaterThan(0);
       const cached = streams.get(type)!;
       const cursor = createStreamCursor(schema, cached.data);
       expect(cursor.currentHeader).toEqual(cached.headers[0]);
@@ -61,10 +66,9 @@ describe("buildLeeroyStreams", () => {
     }
   });
 
-  it("writes production headers and preserves fixture-wide indexes across all nine streams", () => {
+  it("writes production headers and preserves fixture-wide indexes across all eleven streams", () => {
     const streams = buildLeeroyStreams(fixture);
-    expect(streams.size).toBe(9);
-    expect(streams.has("cast")).toBe(false);
+    expect(streams.size).toBe(11);
 
     const cases = [
       ["unit_position", UnitPositionSchema, [0, 9]],
@@ -76,6 +80,8 @@ describe("buildLeeroyStreams", () => {
       ["interrupt", InterruptSchema, [6]],
       ["slain", SlainSchema, [7]],
       ["ressurection", ResurrectionSchema, [8]],
+      ["cast", CastSchema, [4, 5]],
+      ["resource_change", ResourceChangeSchema, [10, 11]],
     ] as const;
     for (const [type, schema, indexes] of cases) {
       const cached = streams.get(type)!;
@@ -88,6 +94,20 @@ describe("buildLeeroyStreams", () => {
       expect(messages.map((message) => message.meta?.index)).toEqual(indexes);
       expect(messages.map((message) => message.meta?.offsetMilli)).toEqual(indexes.map(BigInt));
     }
+
+    const casts = decodeAllPayloads(CastSchema, streams.get("cast")!.data)[0].messages;
+    expect(casts.map(({ action }) => action)).toEqual([CastAction.ActionBeginsToCast, CastAction.ActionCasts]);
+    expect(casts.map(({ caster, target, spell }) => ({ caster, target, id: spell?.id, name: spell?.name })))
+      .toEqual([
+        { caster: "caster", target: "target", id: 44, name: "Bolt" },
+        { caster: "caster", target: "target", id: 44, name: "Bolt" },
+      ]);
+    const changes = decodeAllPayloads(ResourceChangeSchema, streams.get("resource_change")!.data)[0].messages;
+    expect(changes.map(({ target, amount, direction, sourceName, resourceType }) => ({ target, amount, direction, sourceName, resourceType })))
+      .toEqual([
+        { target: "target", amount: 55, direction: "Loss", sourceName: "Arcane Explosion", resourceType: "Mana" },
+        { target: "caster", amount: 12, direction: "Gain", sourceName: "Rage gained", resourceType: "Rage" },
+      ]);
 
     const positions = decodeAllPayloads(UnitPositionSchema, streams.get("unit_position")!.data)[0].messages;
     expect(positions[0]).toMatchObject({ unit: "caster", x: 10.5, y: -2, z: 91.5, mapId: 229, facing: 1.25 });

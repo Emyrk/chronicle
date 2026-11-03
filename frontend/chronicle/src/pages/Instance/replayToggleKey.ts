@@ -2,6 +2,7 @@
  * Key guard for the X play/pause shortcut of the replay controls.
  */
 import { useEffect, useRef } from "react";
+import type { YTPlayer } from "@/types/youtube";
 
 const TEXT_ENTRY = /^(INPUT|TEXTAREA|SELECT)$/;
 const INTERACTIVE_ELEMENTS =
@@ -23,6 +24,15 @@ export function isReplayToggleKey(
 
 /** What an X press did: "play" or "pause". */
 export type ReplayToggle = "play" | "pause";
+
+export function toggleYoutubePlayback(player: Pick<YTPlayer, "getPlayerState" | "playVideo" | "pauseVideo">): ReplayToggle {
+  if (player.getPlayerState() === 1) {
+    player.pauseVideo();
+    return "pause";
+  }
+  player.playVideo();
+  return "play";
+}
 
 /** Window event an X press dispatches, for ReplayToggleFlash; `detail` is the ReplayToggle. */
 export const REPLAY_TOGGLE_EVENT = "chronicle:replay-toggle";

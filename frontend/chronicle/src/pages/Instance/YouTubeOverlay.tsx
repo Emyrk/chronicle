@@ -9,6 +9,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import type { VideoTimestamp, WoWEncounterWithHostiles } from "@/api/typesGenerated";
 import type { YTPlayer } from "@/types/youtube";
 import { useSyncModeContextOptional } from "./SyncModeContext";
+import { toggleYoutubePlayback, useReplayToggleKey } from "./replayToggleKey";
 
 interface YouTubeOverlayProps {
   videoUrl: string;
@@ -268,6 +269,7 @@ export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, on
   // Use setExternalDriver directly as dependency (stable from useCallback) rather than
   // syncMode object which changes on every timestamp update
   const setExternalDriver = syncMode?.setExternalDriver;
+  const setExternalPlaybackPlaying = syncMode?.setExternalPlaybackPlaying;
   useEffect(() => {
     if (setExternalDriver) {
       setExternalDriver('youtube');
@@ -351,6 +353,8 @@ export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, on
           setPlayerReady(true);
         },
         onStateChange: (event: { data: number }) => {
+          // YouTube is the clock; visual replay can interpolate only while it plays.
+          setExternalPlaybackPlaying?.(event.data === 1);
           // When video starts playing (including after seek), immediately check time
           // YT.PlayerState.PLAYING = 1
           if (event.data === 1) {
@@ -360,7 +364,13 @@ export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, on
         },
       },
     });
-  }, [videoId]);
+  }, [videoId, setExternalPlaybackPlaying]);
+
+  // X controls the video instead of the disabled Chronicle replay transport.
+  useReplayToggleKey(() => {
+    const player = playerRef.current;
+    return playerReady && player ? toggleYoutubePlayback(player) : null;
+  });
 
   // Load YouTube IFrame API and initialize player
   useEffect(() => {
@@ -441,11 +451,13 @@ export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, on
   }, [targetTime, pauseTime, timestamps, playerReady, pauseAtEnd, encounters]);
 
   // Monitor video time, update current time state, and auto-pause at encounter end
-  // When sync mode is enabled, poll faster (100ms) and report time to sync context
+  // When sync mode is enabled, poll faster (100ms) and report time to sync context.
+  // Depend on stable controls, not the changing context object: each timestamp
+  // update must not restart the polling interval.
+  const setSyncTimestamp = syncMode?.setTimestamp;
+  const isSyncEnabled = syncMode?.enabled ?? false;
   useEffect(() => {
     if (!playerReady || !playerRef.current) return;
-
-    const isSyncEnabled = syncMode?.enabled ?? false;
     const pollInterval = isSyncEnabled ? 100 : 500;
 
     const checkTime = () => {
@@ -460,8 +472,8 @@ export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, on
         : null;
       
       // Report video time to sync mode if enabled
-      if (isSyncEnabled && combatLogTime && syncMode) {
-        syncMode.setTimestamp(combatLogTime);
+      if (isSyncEnabled && combatLogTime) {
+        setSyncTimestamp?.(combatLogTime);
       }
       
       // Auto-select encounter based on video position (only when sync mode is enabled)
@@ -496,7 +508,7 @@ export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, on
       clearInterval(interval);
       checkTimeRef.current = null;
     };
-  }, [playerReady, syncMode, timestamps, referenceDate, encounters, onEncounterChange]);
+  }, [playerReady, isSyncEnabled, setSyncTimestamp, timestamps, referenceDate, encounters, onEncounterChange]);
 
   // Drag handlers
   const handleDragStart = useCallback((e: React.MouseEvent) => {

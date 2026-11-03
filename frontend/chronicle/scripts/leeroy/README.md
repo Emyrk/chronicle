@@ -22,18 +22,19 @@ the wipe and the end.
 ## Public reconstruction
 
 `/instances/leeroy` is a public, read-only Chronicle instance on every tenant.
-It reuses the normal instance panels and the existing YouTube overlay. The video
+It opens with the normal Map preset and existing YouTube overlay. The video
 opens by default and drives the scripted map camera; closing it returns to a
 free-camera replay. The map 229 mesh is fetched from the published Turtle icon
 CDN. If that mesh is unavailable, the page shows an error rather than trying to
 load the fixture's unpublished placeholder GLB.
 
 `src/pages/Instance/Leeroy/leeroyStreams.ts` encodes the fixture's compact rows
-into the normal protobuf event streams. Currently these include positions,
-health, whelp damage, three deaths and one spell-go event. Streams not authored yet
-are empty. Extend `build-fixture.mjs` and regenerate the fixture to add simulated
-combat; do not treat missing events or illustrative values as historical log
-measurements. The route and panel adapter require no database instance.
+into the normal protobuf event streams. Player damage, healing, spell casts,
+resource changes and the resulting health/power snapshots are deterministic
+cinematic simulation, not recovered combat-log data. Streams not authored yet
+remain empty. Extend `build-fixture.mjs` and regenerate the fixture rather than
+editing the packed JSON by hand. The route and panel adapter require no database
+instance.
 
 ## What is real and what is not
 
@@ -47,7 +48,7 @@ measurements. The route and panel adapter require no database instance.
 | Names and classes | Nameplates read in the frames, cross-checked against fan sources (the old wowwiki roster, dialogue analysis) and his legend. Each class says where it comes from. |
 | Timing cross-checks (fear, health, arrivals) | Observed in the frames by a vision model (`annotations.json`), now a cross-check on his map. |
 | Which eggs hatch | An egg hatches when any living player on the egg floor comes within its trigger radius, and the whelp attacks that player. The radius is real: 1.5 yd, from the egg trap's diameter of 3 in classic-db, halved by the mangos-classic core. A tuned 1.5 yd margin is added for his map's placement error (see below). |
-| Whelp swings, health | Illustrative, so the replay reads. Health follows the swings over an 8 s window. Not seen. |
+| Player attacks, heals, whelp swings, health and power | Deterministic cinematic simulation. Health changes follow the authored damage and healing events, and power follows resource costs and recovery. The video does not provide a full combat log. |
 
 Rookery Guardians, Hatchers and Solakar are summoned by the Father Flame event,
 so the spawn tables have no rows for them (and none appear in this clip).
@@ -94,7 +95,8 @@ nameplates at 1:40. That margin is tuned, not sourced.
 
 With it, Leeroy hatches 7 whelps before anyone else hatches one. They hit him
 from 1:32.5, alone, about 5.5 s before the first raid member is within 8 yd
-of him (1:38). By then he is at 83% health.
+of him (1:38). His simulated health is about 80% by then; the exact
+health values are illustrative, not measured from the footage.
 
 ## Levels
 
