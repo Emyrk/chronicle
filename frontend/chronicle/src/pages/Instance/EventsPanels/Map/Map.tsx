@@ -454,7 +454,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   // load fails) the tiles and their calibration stay.
   const [storedMesh, setStoredMesh] = useState(readStoredMesh);
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
-  const meshOn = preferredMeshState(storedMesh);
+  const scriptedCameraActive = Boolean(props.context.instance.replayCameraPath && sync?.externalDriver === "youtube");
+  const meshOn = scriptedCameraActive || preferredMeshState(storedMesh);
   const [mapSource, setMapSourceState] = useState(readStoredMapSource);
   const setMapSource = (source: ReplayMapSource) => {
     setMapSourceState(source);
@@ -893,6 +894,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               onUnavailable={() => setWebglUnavailable(true)}
               dungeonMesh={dungeonMesh}
               onDungeonMeshState={setMeshState}
+              cameraPath={scriptedCameraActive ? props.context.instance.replayCameraPath : null}
+              cameraPathStartMs={new Date(props.context.instance.startTime).getTime()}
               focus={focus}
               cinematic={cinematic}
               onUnitClick={setTarget}
@@ -1157,7 +1160,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               onEffectSettings={updateEffectSettings}
               show3D={show3D}
               hasEffects={Boolean(ready.effects)}
-              mesh={show3D && meshUrl ? { on: meshWanted, locked: meshOnly, loading: Boolean(dungeonMesh) && meshState === "loading", onToggle: toggleMesh } : null}
+              mesh={show3D && meshUrl ? { on: meshWanted, locked: meshOnly || scriptedCameraActive, loading: Boolean(dungeonMesh) && meshState === "loading", onToggle: toggleMesh } : null}
               map2D={ready.mapSources.length > 1 && ready.mapSource ? {
                 value: ready.mapSource,
                 options: ready.mapSources,

@@ -19,6 +19,22 @@ The clip runs from video 1:24 to 2:50, the span his map covers. Leeroy walks
 in alone at 1:26.5, the raid pours in after him from 1:34, then the pile-in,
 the wipe and the end.
 
+## Public reconstruction
+
+`/instances/leeroy` is a public, read-only Chronicle instance on every tenant.
+It reuses the normal instance panels and the existing YouTube overlay. The video
+opens by default and drives the scripted map camera; closing it returns to a
+free-camera replay. The map 229 mesh is fetched from the published Turtle icon
+CDN. If that mesh is unavailable, the page shows an error rather than trying to
+load the fixture's unpublished placeholder GLB.
+
+`src/pages/Instance/Leeroy/leeroyStreams.ts` encodes the fixture's compact rows
+into the normal protobuf event streams. Currently these include positions,
+health, whelp damage, three deaths and one spell-go event. Streams not authored yet
+are empty. Extend `build-fixture.mjs` and regenerate the fixture to add simulated
+combat; do not treat missing events or illustrative values as historical log
+measurements. The route and panel adapter require no database instance.
+
 ## What is real and what is not
 
 | Part | Where it comes from |
