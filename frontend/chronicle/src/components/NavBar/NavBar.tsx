@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, Trophy, ChartSpline, Database, Server, Users, Compass, Sparkles, Shirt, Crown } from "lucide-react";
+import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, Trophy, ChartSpline, Database, Server, Users, Compass, Sparkles, Shirt, Crown, Search } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { useAuth } from "@/hooks/useAuth";
@@ -177,6 +177,14 @@ export function NavBar() {
                 Rankings
               </Link>
               <Link
+                to="/search"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+              >
+                <Search className="h-4 w-4" />
+                Search raids
+              </Link>
+              <Link
                 to="/performance-history"
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
@@ -310,6 +318,12 @@ export function NavBar() {
               <Link to="/leaderboards/statistics" className="flex items-center gap-2">
                 <Trophy className="h-4 w-4" />
                 Rankings
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/search" className="flex items-center gap-2">
+                <Search className="h-4 w-4" />
+                Search raids
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
