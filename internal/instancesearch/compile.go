@@ -160,16 +160,7 @@ const frameSQL = `WITH matched AS (
     li.difficulty_name,
     li.max_players,
     COALESCE(li.start_time, wlg.created_at) AS started_at
-  FROM log_instances li
-  JOIN wow_server_realms wsr ON wsr.id = li.realm_id
-  JOIN parsed_log_group plg ON plg.id = li.log_group_id
-  JOIN wow_log_groups wlg ON wlg.id = plg.id
-    AND plg.parse_generation = wlg.parse_generation
-    AND plg.finalized_at IS NOT NULL
-    AND NOT wlg.unlisted
-  LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
-  LEFT JOIN guilds g ON g.id = li.guild_id
-  WHERE li.invalidated_at IS NULL
+` + frameFrom + `
     AND ({{WHERE}})
   ORDER BY COALESCE(li.duplicate_group_id, li.id), li.id
 )
@@ -190,6 +181,20 @@ FROM (
   LIMIT {{LIMIT}}
 ) p
 ORDER BY p.started_at DESC, p.id DESC`
+
+// frameFrom is the visibility frame shared by search and explain: tenant
+// RLS through wow_server_realms, finalized + listed + valid logs. Fields may
+// reference li, wsr, wlg, sm and g.
+const frameFrom = `  FROM log_instances li
+  JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+  JOIN parsed_log_group plg ON plg.id = li.log_group_id
+  JOIN wow_log_groups wlg ON wlg.id = plg.id
+    AND plg.parse_generation = wlg.parse_generation
+    AND plg.finalized_at IS NOT NULL
+    AND NOT wlg.unlisted
+  LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
+  LEFT JOIN guilds g ON g.id = li.guild_id
+  WHERE li.invalidated_at IS NULL`
 
 type scopeKind int
 
@@ -388,7 +393,7 @@ func (c *compiler) predicate(n *Node, path string, s scope) (string, error) {
 		c.cost += defaultFieldCost
 	}
 	c.fields = append(c.fields, f.Name)
-	return f.compile(c, s, p), nil
+	return f.sql(c, s, p), nil
 }
 
 func scopeHint(k scopeKind) string {

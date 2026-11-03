@@ -257,8 +257,17 @@ class Parser {
     if (this.isPunct(".")) {
       this.i++;
       const m = this.expectIdent();
+      if (m === "between") {
+        // .between(low, high)
+        this.expectPunct("(");
+        const low = this.literal();
+        this.expectPunct(",");
+        const high = this.literal();
+        this.expectPunct(")");
+        return { ...node, op: "between", value: [low, high] };
+      }
       const op: InstanceSearchOp | undefined = m === "contains" ? "contains" : m === "startsWith" ? "starts_with" : undefined;
-      if (!op) this.fail(`Unknown method "${m}" (use contains or startsWith)`);
+      if (!op) this.fail(`Unknown method "${m}" (use contains, startsWith or between)`);
       this.expectPunct("(");
       const value = this.literal();
       this.expectPunct(")");
@@ -271,7 +280,7 @@ class Parser {
       return { ...node, op: "in", value };
     }
     const t = this.next();
-    if (t.kind !== "punct" || !CMP[t.value]) this.fail("Expected ==, !=, <, <=, >, >=, in, .contains() or .startsWith()", t);
+    if (t.kind !== "punct" || !CMP[t.value]) this.fail("Expected ==, !=, <, <=, >, >=, in, .contains(), .startsWith() or .between()", t);
     return { ...node, op: CMP[(t as { value: string }).value], value: this.literal() };
   }
 

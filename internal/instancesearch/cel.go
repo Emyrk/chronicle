@@ -115,6 +115,9 @@ func celPredicate(n *Node, v string) string {
 		return fmt.Sprintf("%s.contains(%s)", name, value)
 	case OpStartsWith:
 		return fmt.Sprintf("%s.startsWith(%s)", name, value)
+	case OpBetween:
+		// [low, high] -> name.between(low, high)
+		return fmt.Sprintf("%s.between(%s)", name, strings.TrimSuffix(strings.TrimPrefix(value, "["), "]"))
 	default:
 		return fmt.Sprintf("%s %s %s", name, celOp(n.Op), value)
 	}

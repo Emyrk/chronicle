@@ -453,6 +453,9 @@ function celPredicate(n: Node, v: string): string {
       return `${name}.contains(${value})`;
     case "starts_with":
       return `${name}.startsWith(${value})`;
+    case "between":
+      // [low, high] -> name.between(low, high)
+      return `${name}.between(${value.replace(/^\[|\]$/g, "")})`;
     case "=":
       return `${name} == ${value}`;
     default:

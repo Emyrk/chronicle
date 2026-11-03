@@ -41,6 +41,13 @@ players.filter(p, p.class == "PRIEST").size() >= 3
 - Refused, invalid and login-required requests spend nothing.
 - A 503 (busy) refunds the tokens, so only searches that actually ran or timed out are charged.
 
+**Why a run matched:** `POST /api/v1/raidlogs/search/explain` with `{"query": {...}, "instance_id": "..."}` returns `{matched, evidence}`.
+- `evidence` mirrors the query tree node for node: `children` line up with `and`/`or`/`not`, and each witness's `evidence` lines up with its quantifier's subtree.
+- Each node has `ok`: `true`/`false`, or `null` when the value is missing (SQL unknown). Unknown never matches, even under `not`, the same as the search.
+- Field nodes carry `value`, or `rows` (`{name, value, ok}` per boss or fight, limited to the requested `bosses`) for per-fight fields.
+- Quantifier nodes carry `count` and up to 5 `witnesses` (players: `name, guid, class`; pulls: `name, encounter_id, outcome, duration_ms`).
+- Same rules as search: the anonymous subset, rate limit, concurrency cap and timeout. It costs `1 + search cost / 4`, and runs the caller can't see are 404.
+
 **Bucket status without searching:** `GET /api/v1/raidlogs/search/limit` returns `{logged_in, limit, remaining, refill_per_minute, reset_seconds}` and the same headers. It spends nothing.
 
 **Anonymous users** (`instancesearch.CheckAnonymous`) can only send:
@@ -98,7 +105,7 @@ Predicate options (only on fields that list them):
   - Each player has one row per boss kill, plus one aggregated trash row per spec, so `bosses` and `trash` are exact complements.
   - `bosses` and `match` only apply with `on: "bosses"`.
 
-Ops: numbers/times use `= != < <= > >=`. Free-text strings use `= != in not_in contains starts_with`. Enums and UUIDs use `= != in not_in`, with a JSON list for `in`/`not_in`. Booleans use `= !=`. Times are RFC 3339 strings. Durations are milliseconds.
+Ops: numbers/times use `= != < <= > >= between`; `between` takes `[low, high]` and includes both ends (for a whole day, end at `T23:59:59Z`). Free-text strings use `= != in not_in contains starts_with`. Enums and UUIDs use `= != in not_in`, with a JSON list for `in`/`not_in`. Booleans use `= !=`. Times are RFC 3339 strings. Durations are milliseconds.
 
 ## Scopes: the one rule that matters
 
@@ -162,10 +169,11 @@ This means one druid played both Bear and Cat. Two separate `any_player` nodes A
 
 ## Adding a field
 
-1. **Add an entry to `fields` in `fields.go`.** Give it a name with a scope prefix, plus the scope, type, optional `Bosses`/`ParseScope`/`Metric`, a one-line `Doc` and a `compile` func.
+1. **Add an entry to `fields` in `fields.go`.** Give it a name with a scope prefix, plus the scope, type, optional `Bosses`/`ParseScope`/`Metric`, a one-line `Doc` and a `value` func returning `valueSQL`. The match condition and the explain evidence are both derived from `value`.
    - Reuse `column(expr)` for plain columns. `{a}` is the quantifier alias, and instance fields use `li`.
    - Reuse `rankingField(col)` for per-boss-kill player data.
-   - Reuse `c.bossMatch` for anything that needs any/each over bosses.
+   - For anything that needs any/each over bosses, return `valueSQL{Expr, From, Name}`: the condition then goes through `c.bossMatch`, and explain lists each row.
+   - Only set `compile` when the comparison isn't "value op argument" (see `instance.capability`).
    - Correlate subqueries on `li.id`, and use `c.alias()` for every new alias.
    - Bind tenant-scoped tables with `c.tenant()` or `c.timeParseContract()`.
 2. **Regenerate the generated files:** `go test ./internal/instancesearch -run 'TestExamplesGolden|TestFieldReference' -update`. This rewrites the golden SQL and `fields.md`. Review the diff.

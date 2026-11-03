@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -218,6 +219,16 @@ func run(ctx context.Context, store database.Store, q instancesearch.Query) (ins
 	return instancesearch.Search(ctx, store, compiled, instancesearch.SearchOptions{})
 }
 
+func (f *fixture) explain(t *testing.T, tenant uuid.UUID, query string, id uuid.UUID) instancesearch.Explanation {
+	t.Helper()
+	ctx, store := f.store(t, tenant)
+	compiled, err := instancesearch.CompileExplainForContext(ctx, where(t, query), id, instancesearch.Options{})
+	require.NoError(t, err)
+	ex, err := instancesearch.Explain(ctx, store, compiled, instancesearch.SearchOptions{})
+	require.NoError(t, err)
+	return ex
+}
+
 func ids(page instancesearch.Page) []uuid.UUID {
 	out := make([]uuid.UUID, 0, len(page.Results))
 	for _, r := range page.Results {
@@ -245,6 +256,105 @@ func TestSearch(t *testing.T) {
 			_, err := run(ctx, store, ex.Query)
 			require.NoError(t, err, ex.Name)
 		}
+	})
+
+	t.Run("ExamplesExplain", func(t *testing.T) {
+		t.Parallel()
+		ctx, store := f.store(t, f.tenantA)
+		for _, ex := range loadExamples(t) {
+			compiled, err := instancesearch.CompileExplainForContext(ctx, ex.Query, f.mc1, instancesearch.Options{})
+			require.NoError(t, err, ex.Name)
+			_, err = instancesearch.Explain(ctx, store, compiled, instancesearch.SearchOptions{})
+			require.NoError(t, err, ex.Name)
+		}
+	})
+
+	t.Run("ExplainEvidence", func(t *testing.T) {
+		t.Parallel()
+		// The same druid was Bear on Majordomo and Cat on Ragnaros.
+		ex := f.explain(t, f.tenantA, `{"and": [
+			{"field": "instance.clear_time_ms", "op": "between", "value": [1000000, 2000000]},
+			{"field": "instance.kill_time_parse", "op": ">=", "value": 90, "bosses": ["Ragnaros", "Majordomo Executus"], "match": "each"},
+			{"any_player": {"and": [
+				{"field": "player.sub_spec", "op": "=", "value": "Bear"},
+				{"field": "player.sub_spec", "op": "=", "value": "Cat"}]}},
+			{"count_players": {"where": {"field": "player.class", "op": "=", "value": "PRIEST"}, "op": ">=", "value": 3}},
+			{"not": {"any_encounter": {"field": "encounter.outcome", "op": "=", "value": "wipe"}}}]}`, f.mc1)
+		require.True(t, ex.Matched)
+		kids := ex.Evidence.Children
+		require.Len(t, kids, 5)
+		for i, k := range kids {
+			require.NotNil(t, k.OK, i)
+			require.True(t, *k.OK, i)
+		}
+
+		require.EqualValues(t, 1_500_000, kids[0].Value)
+
+		parses := map[string]any{}
+		for _, r := range kids[1].Rows {
+			require.True(t, r.OK)
+			parses[r.Name] = r.Value
+		}
+		require.Equal(t, map[string]any{"Ragnaros": float64(95), "Majordomo Executus": float64(92)}, parses)
+
+		require.EqualValues(t, 1, *kids[2].Count)
+		require.Len(t, kids[2].Witnesses, 1)
+		druid := kids[2].Witnesses[0]
+		require.Equal(t, "Bearcat", druid.Name)
+		require.Equal(t, "DRUID", druid.Class)
+		bear, cat := druid.Evidence.Children[0], druid.Evidence.Children[1]
+		require.Equal(t, []instancesearch.EvidenceRow{{Name: "Majordomo Executus", Value: "Bear", OK: true}, {Name: "Ragnaros", Value: "Cat", OK: false}}, bear.Rows)
+		require.Equal(t, []instancesearch.EvidenceRow{{Name: "Majordomo Executus", Value: "Bear", OK: false}, {Name: "Ragnaros", Value: "Cat", OK: true}}, cat.Rows)
+
+		require.EqualValues(t, 3, *kids[3].Count)
+		require.Len(t, kids[3].Witnesses, 3)
+
+		// not: the inner any_encounter is false with no witnesses.
+		inner := kids[4].Children[0]
+		require.False(t, *inner.OK)
+		require.Empty(t, inner.Witnesses)
+
+		// mc2 has no ranked clear: unknown, and still unknown under not.
+		ex = f.explain(t, f.tenantA, `{"not": {"field": "instance.clear_time_ms", "op": ">", "value": 0}}`, f.mc2)
+		require.False(t, ex.Matched)
+		require.Nil(t, ex.Evidence.OK)
+		require.Nil(t, ex.Evidence.Children[0].OK)
+		require.Nil(t, ex.Evidence.Children[0].Value)
+
+		// A wipe is a witness pull with its outcome and duration.
+		ex = f.explain(t, f.tenantA, `{"any_encounter": {"field": "encounter.outcome", "op": "=", "value": "wipe"}}`, f.mc2)
+		require.True(t, ex.Matched)
+		w := ex.Evidence.Witnesses[0]
+		require.Equal(t, "Ragnaros", w.Name)
+		require.Equal(t, "wipe", w.Outcome)
+		require.EqualValues(t, 100_000, w.DurationMS)
+		require.True(t, w.EncounterID.Valid)
+	})
+
+	t.Run("ExplainVisibility", func(t *testing.T) {
+		t.Parallel()
+		q := where(t, `{"field": "instance.name", "op": "contains", "value": "molten"}`)
+		for _, tc := range []struct {
+			tenant uuid.UUID
+			id     uuid.UUID
+		}{
+			{f.tenantA, f.hidden}, // unlisted
+			{f.tenantA, f.other},  // other tenant
+			{f.tenantB, f.mc1},
+			{f.tenantA, uuid.New()},
+		} {
+			ctx, store := f.store(t, tc.tenant)
+			compiled, err := instancesearch.CompileExplainForContext(ctx, q, tc.id, instancesearch.Options{})
+			require.NoError(t, err)
+			_, err = instancesearch.Explain(ctx, store, compiled, instancesearch.SearchOptions{})
+			require.ErrorIs(t, err, instancesearch.ErrNotFound)
+		}
+
+		ctx, store := f.store(t, f.tenantA)
+		compiled, err := instancesearch.CompileExplainForContext(ctx, q, f.mc1, instancesearch.Options{})
+		require.NoError(t, err)
+		_, err = instancesearch.Explain(servicetenant.AdminBypass(ctx), store, compiled, instancesearch.SearchOptions{})
+		require.ErrorContains(t, err, "RLS bypassed")
 	})
 
 	t.Run("RefusesAdminBypass", func(t *testing.T) {
@@ -346,10 +456,20 @@ func TestSearch(t *testing.T) {
 			{"AnyCapability", `{"field": "instance.capability", "op": "in", "value": ["unit-position", "interrupt"]}`, mc1},
 			{"NoCapability", `{"field": "instance.capability", "op": "not_in", "value": ["unit-position", "interrupt"]}`, []uuid.UUID{f.mc2}},
 			{"InstanceGuild", `{"field": "instance.guild", "op": "=", "value": "Beta"}`, []uuid.UUID{f.mc2}},
+			{"KillTimeBetween", `{"field": "instance.kill_time_ms", "op": "between", "value": [150000, 250000], "bosses": ["Ragnaros"]}`, []uuid.UUID{f.mc2}},
+			{"KillTimeBetweenInclusive", `{"field": "instance.kill_time_ms", "op": "between", "value": [90000, 90000], "bosses": ["Ragnaros"]}`, mc1},
+			{"StartedBetween", `{"field": "instance.started_at", "op": "between", "value": ["2026-10-15T00:00:00Z", "2026-10-15T23:59:59Z"]}`, []uuid.UUID{f.mc1, f.mc2}},
+			{"StartedBetweenMiss", `{"field": "instance.started_at", "op": "between", "value": ["2026-10-16T00:00:00Z", "2026-10-31T23:59:59Z"]}`, nil},
+			{"NotClearTimeUnknown", `{"not": {"field": "instance.clear_time_ms", "op": ">", "value": 0}}`, nil},
 		}
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
+				// Explain agrees with search on every visible run.
+				for _, id := range []uuid.UUID{f.mc1, f.mc2} {
+					want := slices.Contains(tc.want, id)
+					require.Equal(t, want, f.explain(t, f.tenantA, tc.query, id).Matched, "explain %s", id)
+				}
 				got := ids(f.search(t, f.tenantA, where(t, tc.query)))
 				// mc1 and mc1dup are one logical run; normalize to mc1.
 				for i, id := range got {

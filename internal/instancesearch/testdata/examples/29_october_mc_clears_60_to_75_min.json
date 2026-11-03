@@ -1,0 +1,32 @@
+{
+  "title": "October Molten Core clears, 60-75 minutes",
+  "category": "Speed",
+  "description": "Molten Core full clears from October 2026 that took between 60 and 75 minutes.",
+  "query": {
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "=",
+          "value": "Molten Core"
+        },
+        {
+          "field": "instance.started_at",
+          "op": "between",
+          "value": [
+            "2026-10-01T00:00:00Z",
+            "2026-10-31T23:59:59Z"
+          ]
+        },
+        {
+          "field": "instance.clear_time_ms",
+          "op": "between",
+          "value": [
+            3600000,
+            4500000
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -223,3 +223,53 @@ func TestInstanceSearch(t *testing.T) {
 		require.Equal(t, 2, series["chronicle_instance_search_duration_seconds"])
 	})
 }
+
+func doExplain(t *testing.T, api *API, user uuid.UUID, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/raidlogs/search/explain", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Forwarded-For", "10.0.0.9")
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	if user != uuid.Nil {
+		ctx = chronauth.WithClaims(ctx, &claims.Claims{Subject: user})
+	}
+	rec := httptest.NewRecorder()
+	api.InstanceSearchExplain(rec, req.WithContext(ctx))
+	return rec
+}
+
+// Evidence itself is covered against real runs in internal/instancesearch;
+// these cover the HTTP rules. No run exists here, so allowed requests 404.
+func TestInstanceSearchExplain(t *testing.T) {
+	t.Parallel()
+	body := func(query string) string {
+		return `{"instance_id": "` + uuid.NewString() + `", "query": ` + query + `}`
+	}
+
+	cases := []struct {
+		name   string
+		user   uuid.UUID
+		body   string
+		status int
+		want   string
+		// Explain costs 1 + search cost / 4: advancedSearch 5 -> 2, simpleSearch 2 -> 1.
+		cost string
+	}{
+		{"UnknownRun", uuid.New(), body(advancedSearch), http.StatusNotFound, "Run not found", "2"},
+		{"AnonymousSimple", uuid.Nil, body(simpleSearch), http.StatusNotFound, "Run not found", "1"},
+		{"AnonymousAdvancedNeedsLogin", uuid.Nil, body(advancedSearch), http.StatusForbidden, "Log in", "2"},
+		{"Invalid", uuid.New(), body(`{"where": {"field": "instance.nope", "op": "=", "value": 1}}`), http.StatusBadRequest, "unknown field", ""},
+		{"BadJSON", uuid.New(), `{`, http.StatusBadRequest, "valid JSON", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			api, _ := newInstanceSearchAPI(t)
+			rec := doExplain(t, api, tc.user, tc.body)
+			require.Equal(t, tc.status, rec.Code, rec.Body.String())
+			require.Contains(t, rec.Body.String(), tc.want)
+			require.Equal(t, tc.cost, rec.Header().Get("Chronicle-Search-Cost"))
+			require.NotEmpty(t, rec.Header().Get("RateLimit-Remaining"))
+		})
+	}
+}
