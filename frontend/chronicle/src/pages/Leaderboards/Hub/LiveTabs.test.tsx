@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 import type { RankingsEntry, RankingsLeaderboardResponse, SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
 import { SpeedrunsTab } from "./SpeedrunsTab"
+import { StatisticsTab } from "./StatisticsTab"
 import { PerformancesTab } from "./PerformancesTab"
 
 vi.mock("@/pages/Leaderboard/Podium", () => ({
@@ -89,5 +90,18 @@ describe("Hub leaderboard live props", () => {
   it("retains the guild-to-speedruns interaction instead of rendering performance records", () => {
     expect(performances({ response }, "guilds")).toContain("Open Speedruns")
     expect(performances({ response }, "guilds")).not.toContain("Live player")
+  })
+})
+
+describe("Statistics unknowns", () => {
+  const row = (cls: string, spec: string, median: number) => ({ player_class: cls, player_spec: spec, min_dps: median - 50, q1_dps: median - 10, median_dps: median, q3_dps: median + 10, max_dps: median + 50, count: 9 })
+  it("hides unknown classes and specs by default and offers to show them", () => {
+    const html = renderToStaticMarkup(
+      <StatisticsTab instanceName="Molten Core" bosses={["Ragnaros"]} optional={new Set()} selection={{ kind: "clear" }} view="specs" onView={() => {}}
+        scope={{}} role="dps" onScope={() => {}} live={{ specs: { status: "ready", data: [row("MAGE", "Fire", 900), row("Unknown", "Unknown", 999), row("WARRIOR", "Unknown", 800)] } }} />,
+    )
+    expect(html).toContain("Show unknowns")
+    expect(html).toContain("Fire")
+    expect(html).not.toContain("Unknown") // case-sensitive: the toggle reads "Show unknowns"
   })
 })

@@ -136,7 +136,9 @@ function throughput(entry: RankingsEntry, role: HubRole): ThroughputRow {
 export function specSpreadsFromStats(
   stats: readonly RankingsBoxPlotStats[],
 ): SpecSpread[] {
+  // Unknown classes or specs are hidden, as on the Statistics box plot by default.
   return stats
+    .filter((s) => s.player_class !== "Unknown" && s.player_spec !== "Unknown")
     .map((s) => ({
       cls: s.player_class,
       spec: s.player_spec,
