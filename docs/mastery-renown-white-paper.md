@@ -1,37 +1,37 @@
-# Beyond the best parse: a Chronicle rating proposal
+# Beyond the best parse: Chronicle ratings
 
-> **Discussion draft, not an approved scoring policy.** Start here for the case and the questions. See the [research on other log sites](log-sites-question-research.md) for the external comparison, and the [mathematical specification](mastery-renown-rating.md) for candidate formulas and implementation constraints.
+> **Design rationale.** The rating backend is on `main` with a fixed, versioned policy; worked Storybook examples below are illustrative, not production ratings. Start here for the case and the questions. See the [research on other log sites](log-sites-question-research.md) for the external comparison, and the [mathematical specification](mastery-renown-rating.md) for policy formulas and implementation constraints.
 
 ## The 30-second version
 
-A parse tells us about **one kill**. A best parse tells us a player's **ceiling**. Neither tells us what they are likely to do next, how much evidence supports that expectation, or how broad a career Chronicle has actually seen.
+A parse tells us about **one kill**. A best parse tells us a player's **ceiling**. Neither describes repeatable results, how much evidence supports them, or how many eligible kills Chronicle has witnessed.
 
-We propose two complementary ideas:
+Chronicle uses two complementary ideas:
 
 - **Mastery** describes the performance a player's recorded kills suggest they can repeat. Show the estimate **alongside Confidence**, not as a fact about the player's innate skill.
 - **Renown** celebrates the breadth and repetition of a witnessed raiding career. It is not a skill rating.
 
-A conservative **Ranked Mastery** could be used for competitive comparisons when the evidence is thin. A single perfect parse can say “Mastery estimate: 100” while saying “Confidence: low; Ranked Mastery: 65.” The numbers are *illustrative policy choices*, not product commitments.
+A conservative **Ranked Mastery** supports competitive comparisons when the evidence is thin. A single perfect parse can say “Mastery estimate: 100” while saying “Confidence: low; Ranked Mastery: 50.”
 
 **Pitch:** honor the exceptional moment without mistaking it for a proven pattern.
 
 ## The questions we are actually trying to answer
 
-| Player question | What the answer should mean | Candidate evidence |
+| Player question | What the answer should mean | Evidence |
 | --- | --- | --- |
 | **How good was that kill?** | An observation, not a player rating. | The persisted Chronicle parse for that kill. |
-| **How good can this character be?** | Demonstrated ceiling, without a promise of repetition. | Best eligible parse on each boss. |
-| **What should we expect next time?** | A qualified estimate of typical recent performance in comparable content. | Distribution of eligible parses, with recent kills emphasized. |
+| **How good can this character be?** | Demonstrated ceiling, without a promise of repetition. | Best eligible raw DPS/HPS versus rank one, with best locked parse used separately in Mastery. |
+| **What should we expect next time?** | A qualified estimate of typical recent performance in comparable content. | Distribution of eligible parses in the window. |
 | **How predictable is that expectation?** | Whether weaker nights remain strong, rather than whether a great night happened once. | Lower end of the observed parse distribution. |
 | **How much should we trust the estimate?** | Evidence quantity and coverage, not a judgment about the person. | Canonical kills, distinct bosses, eligible scope, and sample size. |
 | **How do we compare two players fairly?** | A conservative comparison that does not let a single great kill dominate a leaderboard. | Mastery together with explicit confidence adjustment; show both. |
-| **What has this character accomplished?** | A witnessed history of breadth, repetition, and completions. | Distinct bosses, repeated kills, complete raids, later explicit milestones. |
+| **What has this character accomplished?** | A witnessed history of eligible boss kills. | Canonical per-boss kills, each worth that boss's points. |
 
-These are different questions. **We should not force them all into one number.** Before tuning coefficients, we should agree which answers belong on a profile, which belong on a leaderboard, and which should never be inferred from logs alone.
+These are different questions. **We should not force them all into one number.** Keep these answers distinct on profiles and leaderboards; none measures a person's overall skill.
 
 ## One foundation, two subjects: players and guilds
 
-The **persisted parse is the fundamental observation**, not a player-only rating. A scoring framework built from eligible parses should be reusable for both **characters** and **guilds**. That gives us a useful test for every proposed measure: “What does the analogous question mean for a raid team?”
+Locked per-boss observations are the foundation for Mastery, but player and guild inputs differ. Player Peak compares raw DPS/HPS, while guild Peak compares clean per-boss kill times. Guild Mastery uses locked boss-time parses. Both can earn Renown for eligible canonical kills. That gives us a useful test for every rating measure: “What does the analogous question mean for a raid team?”
 
 | Player question | Guild analogue |
 | --- | --- |
@@ -39,7 +39,7 @@ The **persisted parse is the fundamental observation**, not a player-only rating
 | How much evidence supports their Mastery? | Across how many eligible clears, encounters, and roster configurations have we seen that performance? |
 | How broad is this character's witnessed career? | What content has this guild completed, and how consistently has it returned? |
 
-**Reusable building block does not imply identical aggregation.** Averaging members' Mastery would reward roster selection rather than measure the raid's joint result. Guild identity, changing rosters, encounter coverage, and team outcomes need an explicit policy. We should research how existing log sites frame guild rankings and add guild-specific questions before choosing guild formulas. For now, this is a design requirement and open research question, not a claim that the current player prototype already scores guilds.
+**Reusable building block does not imply identical aggregation.** Guild ratings use their own locked boss-time observations rather than averaging members' Mastery. The backend policy selects eligible content; guild Peak compares clean per-boss kill times with the tenant-wide fastest kill.
 
 ## Why a best-parse list is not enough
 
@@ -53,11 +53,11 @@ Imagine two players with the same best parse of 100 on a boss:
 
 Both deserve credit for a 100. The second record supports a stronger *expectation*; the first needs an uncertainty label rather than a claim that the player is weak. Conversely, a player with one high outlier and many low parses should not look equivalent to a player who performs well every week.
 
-## Our proposed vocabulary
+## Rating vocabulary
 
 1. **Parse** — the persisted score for one kill, measured relative to the comparison cohort and window available when Chronicle scored it. The score result persists; the historical cohort is not an immutable snapshot.
-2. **Peak** — the best eligible parse; the answer to “how high have they reached?”
-3. **Mastery estimate** — the pattern suggested by Peak, typical recent play (**Form**), and the lower end of play (**Floor**). Normalized to the parse scale.
+2. **Peak** — the best raw DPS/HPS for a player, or fastest eligible boss time for a guild, compared with tenant-wide rank one. The best locked parse is a separate Mastery ingredient.
+3. **Mastery estimate** — the pattern suggested by the best locked parse, typical play (**Form**), and the lower end of play (**Floor**). Normalized to the parse scale.
 4. **Confidence** — how much eligible evidence supports that estimate. A separate property, not a rewrite of the observed parses.
 5. **Ranked Mastery** — a cautious, confidence-adjusted number **if** we need a single leaderboard ordering. Always show the underlying estimate and confidence next to it.
 6. **Renown** — a separately earned record of witnessed breadth and repetition. It can grow over a career; it does not mean “better player.”
@@ -66,73 +66,69 @@ A player's profile might read:
 
 ```text
 Molten Core · Enhancement · DPS
-Mastery estimate       93.4    What the performances suggest
+Mastery estimate       94.3    What the performances suggest
 Confidence             97%     About 14 eligible kills per observed boss
-Ranked Mastery         93.4    Conservative comparison value
-Peak                   100     Best recorded moment
-Renown                3,301    Career breadth and repetition across the portfolio
+Ranked Mastery         94.3    Conservative comparison value
+Peak                   100     Illustrative raw-performance fixture
+Renown                3,301    Illustrative fixture, not production points
 ```
 
-The displayed values above come from an exploratory Octo-derived Storybook example; they are not published player ratings. Portfolio Renown is **not** Molten Core-only Renown.
+The displayed values above come from an exploratory Octo-derived Storybook example; they are not published player ratings. Renown shown here is for Molten Core only.
 
 ## The math, in plain English
 
-The proposed method has four steps. The [specification](mastery-renown-rating.md) defines the precise candidate equations and eligibility rules.
+The backend Mastery method has four steps. The [specification](mastery-renown-rating.md) defines the policy equations and eligibility rules.
 
 1. **Start with eligible locked parse results.** Count a logical kill only once; compare like with like (server, metric, spec, difficulty, raid size, scoring period). Do not mistake duplicate uploads for extra experience.
-2. **Summarize each boss separately.** Peak remembers the best parse. Form asks what has been typical, favoring recent kills. Floor asks what the weaker-but-not-worst nights look like.
-3. **Estimate Mastery.** The current candidate gives Form the most weight, then Peak, then Floor. This remains on a 0–100 scale; a player can have high Mastery after one kill, but the estimate is uncertain.
-4. **Express uncertainty explicitly.** Confidence describes how much eligible evidence we have. In the current prototype, the separate Ranked Mastery discount ends at five kills per boss; Confidence can keep growing. Missing eligible bosses reduce *scope confidence*, not the observed performance estimate.
+2. **Summarize each boss separately.** The best locked parse is retained. Starting at five kills, Form and Floor exclude the lowest 20% (rounded down); every retained kill counts equally. Excluded kills still count toward evidence.
+3. **Estimate Mastery.** The example blend gives Form the most weight, then best locked parse, then Floor. This remains on a 0–100 scale; a player can have high Mastery after one kill, but the estimate is uncertain.
+4. **Express uncertainty explicitly.** Confidence describes how much eligible evidence we have. The separate Ranked Mastery discount ends at five kills per boss; Confidence can keep growing. In a raid's Peak, a missed boss counts as zero, not as a zero-valued parse observation.
 
-For the current candidate only:
+For the current 35/50/15, 50%-to-100% policy:
 
 ```text
-Mastery estimate = 30% Peak + 50% Form + 20% Floor
+Mastery estimate = 35% best locked parse + 50% Form + 15% Floor
 Confidence       = 1 - exp(-eligible kills / 4)
-Ranking weight   = 65% at one kill, then +8.75% per kill through five
+Ranking weight   = 50% at one kill, then +12.5% per kill through five
 Ranked Mastery   = Mastery estimate × Ranking weight
 ```
 
-A perfect parse with one eligible kill therefore means **100 Mastery estimate, 22% Confidence, 65 Ranked Mastery**. Five equally strong kills mean **100 Mastery estimate, 71% Confidence, 100 Ranked Mastery**. Confidence keeps describing evidence after the provisional ranking discount ends. The underlying observed parse does not get smaller; only the conservative comparison changes.
+A perfect parse with one eligible kill therefore means **100 Mastery estimate, 22% Confidence, 50 Ranked Mastery**. Five equally strong kills mean **100 Mastery estimate, 71% Confidence, 100 Ranked Mastery**. Confidence keeps describing evidence after the provisional ranking discount ends. The underlying observed parse does not get smaller; only the conservative comparison changes.
 
-The coefficients are **hypotheses to test**, not numbers to defend for their own sake. Before shipping, calculate distributions on real eligible logs and test whether the outputs align with the questions above.
+The numerical policy is a fixed product rule, versioned and frozen into each rebuild. Validate real player and guild histories before launch; a change is a new version and a full rebuild.
 
 ### Why not lead with LaTeX?
 
 Equations are useful for precision, but they should **confirm** an idea the reader already understands—not serve as the entry point. Keep the pitch and examples in ordinary language; keep exact formulas, notation, quantile definitions, edge cases, and versioning in the linked technical specification. If this becomes a published PDF, typeset that appendix with LaTeX or another math renderer. For the GitHub review loop, Markdown and short text equations are easier to diff, comment on, and skim.
 
-## Scope: boss, instance, or portfolio
+## Scope: boss, raid, or chosen bosses
 
-The same question should be answerable for a boss, **one selected raid such as Molten Core**, or a fixed set of raids. Never make a player read a lifetime total just to understand their Molten Core performance.
+The same question should be answerable for a boss, **one raid such as Molten Core**, or a chosen set of its bosses. Never make a player read a lifetime total just to understand their Molten Core performance.
 
 - **Boss:** the player's recorded performances on one eligible encounter.
-- **Instance:** combine the boss-level results for that raid. Show boss coverage and confidence.
-- **Portfolio:** combine an explicitly versioned set of raids. Adding a raid creates a new version rather than silently changing yesterday's rating.
+- **Raid:** combine the boss-level results for that raid. Raid Peak averages every boss on the raid's roster, a missed boss counting as zero.
+- **Chosen bosses:** the leaderboards average any set of a raid's bosses on request, a missed boss counting as zero, and sum Renown.
 
-A normalized Mastery estimate does not automatically grow just because another raid exists. Renown can grow when the character actually records more eligible history. Their different behavior is intentional.
+Renown can grow when the character actually records more eligible history; skill ratings stay on the 0–100 scale. Their different behavior is intentional.
 
-## What this proposal must **not** claim
+## What these ratings must **not** claim
 
 - A parse or Mastery measures every aspect of raid contribution, teamwork, or skill.
 - A low-confidence estimate means a player is bad.
 - A high Renown means a player is strong.
-- Inactivity alone makes a player worse: older kills weigh less *relative to newer kills*, while freshness should be shown separately.
+- Inactivity alone lowers a rating: kills only leave the 180-day view as it rolls forward, and the all-time view keeps them.
 - Scores from different specs, roles, servers, or rule periods are interchangeable without an explicit policy.
-- The Storybook's aggregate examples are production-equivalent: production must calculate per boss before aggregating.
+- The Storybook's aggregate examples are production-equivalent: production must calculate per boss and exclude low observations before aggregating.
 
-## Product direction and the checks still needed
+## Implemented direction and launch checks
 
-**Four distinct promises:** Renown celebrates a witnessed career. Mastery is a recruiting aid describing the quality of a character's recorded performance, analogous in purpose to an aggregate game rating such as WN8, not a prediction of one exact next kill. Peak is a competitive one-shot min/max attempt, like a speedrun. Ranked Mastery is a separate competitive ladder for consistently strong players. The intended launch includes **boss Peak, a raid Peak scorecard, and Ranked Mastery together**.
+**Distinct promises:** Renown records eligible kills, Mastery describes repeatable locked-parse results, Peak compares a raw best against the current rank one, and Ranked Mastery is a conservative competitive score. Player and guild ratings share these concepts but use different raw inputs. Full-clear Speedruns and existing Performance scores remain separate.
 
-**Scope and time:** Every eligible boss kill can count even when the raid log is incomplete. Compare the same encounter within raid, difficulty, player size, spec, and sub-spec; server boundaries and sparse cohorts still need an explicit policy. The proposed default period is a rolling **180 days**. All-time Peak retains all eligible history, while Period Peak uses the period's raw results and rank one; its *normalized score* can still move when rank one changes. Inactivity does not erase an all-time best. Period Mastery and Ranked Mastery ask for repeated play. An all-raids view still needs a policy for weighting current-tier raids against older raids.
+**Cohort and scope:** Rank-one comparisons are tenant/server-wide; realm filters only narrow who is listed. Each realm's game flavor selects its curated boss roster. Missed bosses count as zero in raid Peak. The 180-day period, weights, ranking curve, and boss Renown points are fixed product rules, versioned and frozen into each rebuild; no admin setting changes them.
 
-**Renown over time:** Career Renown is primary, with period-earned Renown and a cumulative graph also useful. Earned Renown should remain when an underlying log is deleted. That requires a deliberate retention and privacy policy before implementation. Guild Renown should reflect the age and durability of the guild; team identity across roster changes remains to be defined.
+**Renown and deletion:** Each eligible canonical boss kill earns that boss's points (for example, Ragnaros 5, Majordomo 2, most Molten Core bosses 1). There is no final-boss bonus, full-clear bonus, or diminishing-return curve. Renown has career and period views. Deleting the final source log removes its credit; a surviving duplicate source retains credit. Daily bounded repair fills missing historical facts, and a subsequent complete daily rating rebuild publishes them.
 
-**What the fairness check means:** Run each candidate rule against cases that could expose a broken promise: one perfect kill versus five consistently strong kills; two poor nights in roughly 25 weekly raids; excellent results on only a few bosses; a sparse sub-spec; an older-tier specialist versus a current-tier raider; duplicate or incomplete uploads; and a deleted log whose earned Renown must remain. Ask whether the ordering and labels still say what we claim they say. If not, change the rule before publishing a leaderboard.
-
-**Still open:** the exact period and drop ratio for Mastery; entry and evidence rules for Ranked Mastery; missing-boss treatment for raid Peak; current-tier weights in an all-raids view; sparse-spec and server cohort boundaries; and deletion obligations for retained Renown. The Workshop's five-kill cutoff is a candidate to test, not an approved rule. The interactive [Storybook field guide](../frontend/chronicle/src/pages/ArmoryPage/overview/MasteryRenown.stories.tsx) helps explore those choices; it does not decide them.
-
-The [ratings preview Storybook](../frontend/chronicle/src/pages/ArmoryPage/overview/RatingPreviews.stories.tsx) sketches the three launch leaderboards alongside a character dossier. Its raw-DPS Peak, raid scorecard, and career Renown values are explicitly **mocked**; the existing four Octo-derived parse summaries supply only the illustrative Mastery inputs. The read-only production connection was unavailable during this preview pass, so fairness comparisons with fresh player histories remain outstanding.
+**QA before launch:** Exercise low-evidence and sparse cohorts, partial raids, a very strong single kill versus repeatable results, lowest-fifth exclusion, a guild-less fastest kill, duplicate uploads, and deletion/re-upload against published generations. Storybook fixtures do not establish production rankings.
 
 ## How to read further
 
