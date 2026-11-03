@@ -203,13 +203,12 @@ export function LeaderboardHub({
   const setRealm = onRealm ?? setOwnRealm
   if (!live) setMockRealm(realm)
   const [ownSelection, setSelection] = useState<EncounterSelection>(
-    initialBosses?.length ? { kind: "bosses", bosses: live ? [initialBosses[0]] : initialBosses } : initialScope.boss ? { kind: "bosses", bosses: [initialScope.boss] } : FULL_CLEAR,
+    initialBosses?.length ? { kind: "bosses", bosses: initialBosses } : initialScope.boss ? { kind: "bosses", bosses: [initialScope.boss] } : FULL_CLEAR,
   )
   const selection = live?.selection ?? ownSelection
   const selectEncounter = (next: EncounterSelection) => {
-    const selected = live && next.kind === "bosses" && next.bosses.length > 1 ? { kind: "bosses" as const, bosses: [next.bosses[0]] } : next
-    setSelection(selected)
-    live?.onSelection?.(selected)
+    setSelection(next)
+    live?.onSelection?.(next)
   }
   const [classScope, setClassScope] = useState<RatingScope>({ cls: initialScope.cls, spec: initialScope.spec, subSpec: initialScope.subSpec })
   // Switching instance keeps tab and filters; only the encounter choice resets, since bosses differ.
@@ -422,7 +421,6 @@ export function LeaderboardHub({
                     trash={live && tab === "performances" ? new Set(["Trash"]) : undefined}
                     selection={selection}
                     onSelect={selectEncounter}
-                    allowCombine={!live}
                     onCollapse={() => setEncountersOpen(false)}
                   />
                 </div>

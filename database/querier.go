@@ -657,6 +657,11 @@ type sqlcQuerier interface {
 	// Mirrors the full-clear leaderboard: version gates, duplicate groups, best
 	// per guild, ranked duration with legacy raw fallback. Do not load video proof.
 	HubLandingSpeedruns(ctx context.Context, arg HubLandingSpeedrunsParams) ([]HubLandingSpeedrunsRow, error)
+	// Ratings over a chosen set of bosses, computed from the published boss boards:
+	// Peak and Ranked Mastery average over every chosen boss (a missed one is 0),
+	// Renown sums. A subject's best class/spec cohort stands for it. Peak carries
+	// the duration-weighted throughput over its kills and breaks ties by it.
+	HubSetRatingRows(ctx context.Context, arg HubSetRatingRowsParams) ([]HubSetRatingRowsRow, error)
 	// Returns encounters available in rankings for a given instance.
 	HubSummaryEncounters(ctx context.Context, arg HubSummaryEncountersParams) ([]HubSummaryEncountersRow, error)
 	// Scope selector metadata to this tenant as well as the selected raid.

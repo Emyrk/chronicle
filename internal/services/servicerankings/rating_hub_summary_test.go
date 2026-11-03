@@ -126,3 +126,25 @@ func TestTenantPeakTieRaw(t *testing.T) {
 	require.Equal(t, 0.0, tenantPeakTieRaw("peak", 0))
 	require.Equal(t, 0.0, tenantPeakTieRaw("ranked_mastery", 1234.5))
 }
+
+func TestHubSummaryEncounterSet(t *testing.T) {
+	t.Parallel()
+	parse := func(query string) (hubSummaryInput, error) {
+		return parseHubSummaryInput(httptest.NewRequest("GET", "/hub-summary?"+query, nil))
+	}
+	in, err := parse("instance_name=Molten+Core&encounter_names=Lucifron,Ragnaros,Lucifron")
+	require.NoError(t, err)
+	require.Equal(t, []string{"Lucifron", "Ragnaros"}, in.set)
+	_, err = parse("instance_name=Molten+Core&encounter_names=Lucifron")
+	require.Error(t, err, "one boss uses encounter_name")
+	_, err = parse("instance_name=Molten+Core&encounter_names=Lucifron,Ragnaros&encounter_name=Garr")
+	require.Error(t, err)
+	_, err = parse("encounter_names=Lucifron,Ragnaros")
+	require.Error(t, err, "requires an instance")
+
+	// The preset is the default encounter set, else progression bosses, never trash.
+	require.Equal(t, []string{"Erennius", "Solnius"}, hubPresetBosses([]chroniclesdk.RankingEncounterSet{
+		{ID: "hard", Encounters: []string{"Solnius (Hard Mode)"}}, {ID: "", Encounters: []string{"Erennius", "Solnius"}},
+	}, []string{"Erennius"}))
+	require.Equal(t, []string{"Lucifron", "Ragnaros"}, hubPresetBosses(nil, []string{"Lucifron", "Trash", "Ragnaros"}))
+}

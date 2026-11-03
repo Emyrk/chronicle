@@ -24,22 +24,28 @@ const ALL_REALMS = "All realms"
 /** The Storybook Hub is the page. Only its data source differs in production. */
 export function LeaderboardsLiveHub() {
   const [params, setParams] = useSearchParams()
-  const { tab, instance, realmIDs, encounter } = v2Selection(params)
+  const { tab, instance, realmIDs, encounters } = v2Selection(params)
   const requestedSize = params.get("size")
   const parsedSize = requestedSize === null ? NaN : Number(requestedSize)
   const requestedCohort = params.has("difficulty") && Number.isInteger(parsedSize) && parsedSize >= 0 && parsedSize <= 32767
     ? { difficulty: params.get("difficulty")!, maxPlayers: parsedSize } : undefined
   const summary = useHubSummary({ instanceName: instance ?? undefined, tab: instance ? undefined : tab, realmIDs, performance: "dps",
-    cohort: requestedCohort, encounterName: encounter ?? undefined })
+    cohort: requestedCohort, encounters: encounters.filter((name) => name !== "Trash") })
   const available = summary.data?.realms ?? []
   const activeRealm = realmIDs.length === 1 ? available.find((row) => row.id === realmIDs[0]) : undefined
   const selectedRealmIDs = activeRealm ? [activeRealm.id] : realmIDs.length > 1 ? realmIDs : []
   const realm = activeRealm?.name ?? ALL_REALMS
   const names = [...new Set((summary.data?.instances ?? []).map((row) => row.instance_name))]
-  const choose = (key: "tab" | "instance" | "realm_ids" | "encounter", value?: string) => setParams(hubParams(params, key, value))
+  const choose = (key: "tab" | "instance" | "realm_ids" | "encounters", value?: string) => setParams(hubParams(params, key, value))
   const chooseTab = (next: ReturnType<typeof v2Selection>["tab"]) => {
     const updated = hubParams(params, "tab", next)
-    if (next !== "performances" && updated.get("encounter") === "Trash") updated.delete("encounter")
+    // Trash is a Performances encounter only.
+    if (next !== "performances" && encounters.includes("Trash")) {
+      const rest = encounters.filter((name) => name !== "Trash")
+      if (rest.length) updated.set("encounters", rest.join(","))
+      else updated.delete("encounters")
+      updated.delete("encounter")
+    }
     setParams(updated)
   }
   if (params.get("tab") === "speedrun" || params.get("tab") === "leaderboard") return <Navigate to={legacyLeaderboardsTarget(params)} replace />
@@ -51,22 +57,22 @@ export function LeaderboardsLiveHub() {
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
         realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data!.instances} landingPreviews={summary.data!.landing_previews}
         renderInstance={(name) => <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} realm={realm}
-          realmIDs={selectedRealmIDs} encounter={encounter} tab={tab}
+          realmIDs={selectedRealmIDs} encounters={encounters} tab={tab}
           onInstance={(next) => choose("instance", next)} onTab={chooseTab}
           onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
           difficulty={params.get("difficulty")} size={params.get("size")}
           onCohort={(difficulty, size) => { const next = new URLSearchParams(params); if (size) { next.set("difficulty", difficulty); next.set("size", size) } else { next.delete("difficulty"); next.delete("size") } setParams(next) }}
-          onEncounter={(boss) => choose("encounter", boss)} />} />
+          onEncounters={(names) => choose("encounters", names.join(",") || undefined)} />} />
     </div>
     <AdRailStack primaryPlacement="leaderboards-right-rail" secondaryPlacement="leaderboards-right-rail-lower" />
   </div>
 }
 
-function LiveInstanceHub({ instanceName, names, summary, realm, realmIDs, encounter, tab, difficulty, size, onInstance, onTab, onRealm, onCohort, onEncounter }: {
-  instanceName: string; names: string[]; summary: HubSummary; realm: string; realmIDs: string[]; encounter: string | null
+function LiveInstanceHub({ instanceName, names, summary, realm, realmIDs, encounters, tab, difficulty, size, onInstance, onTab, onRealm, onCohort, onEncounters }: {
+  instanceName: string; names: string[]; summary: HubSummary; realm: string; realmIDs: string[]; encounters: readonly string[]
   tab: ReturnType<typeof v2Selection>["tab"]; difficulty: string | null; size: string | null
   onInstance: (name?: string) => void; onTab: (tab: ReturnType<typeof v2Selection>["tab"]) => void
-  onRealm: (name: string) => void; onCohort: (difficulty: string, size: string) => void; onEncounter: (boss?: string) => void
+  onRealm: (name: string) => void; onCohort: (difficulty: string, size: string) => void; onEncounters: (bosses: readonly string[]) => void
 }) {
   const raids = summary.instances.filter((row) => row.instance_name === instanceName && row.category === "raid")
   // The summary resolves the URL's cohort, or the busiest one when none (or a stale one) is given.
@@ -77,11 +83,13 @@ function LiveInstanceHub({ instanceName, names, summary, realm, realmIDs, encoun
   const realmName = realm === ALL_REALMS ? undefined : realm
   const bosses = liveHubBosses(summary.encounters.map((row) => row.encounter_name),
     new Set(summary.progression_bosses ?? []), summary.ranking_encounter_sets ?? [], tab === "performances")
-  const selected = encounter && bosses.includes(encounter) ? encounter : undefined
-  const selection: EncounterSelection = selected ? { kind: "bosses", bosses: [selected] } : FULL_CLEAR
+  // Stale names (another instance, a removed boss) drop out; nothing left is the preset.
+  const chosen = bosses.filter((name) => encounters.includes(name))
+  const selection: EncounterSelection = chosen.length ? { kind: "bosses", bosses: chosen } : FULL_CLEAR
+  const requested = chosen.filter((name) => name !== "Trash")
   const live = {
     selection,
-    onSelection: (next: EncounterSelection) => onEncounter(next.kind === "bosses" ? next.bosses[0] : undefined),
+    onSelection: (next: EncounterSelection) => onEncounters(next.kind === "bosses" ? next.bosses : []),
     bosses,
     optionalBosses: new Set<string>(),
     realms: [ALL_REALMS, ...summary.realms.map((row) => row.name)],
@@ -93,26 +101,29 @@ function LiveInstanceHub({ instanceName, names, summary, realm, realmIDs, encoun
         onCohort(row?.difficulty_name ?? "", row ? String(row.max_players) : "")
       }}><option value="">Choose difficulty and size</option>{raids.map((row) => <option key={`${row.difficulty_name}|${row.max_players}`} value={`${row.difficulty_name}|${row.max_players}`}>{row.difficulty_name || "Default"} · {row.max_players} players</option>)}</select>
     </label> : undefined,
-    renderOverview: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} requestedEncounter={encounter ?? undefined} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} overview />,
+    renderOverview: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} requestedEncounters={requested} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} overview />,
     renderTab: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} />,
   }
   return <LeaderboardHub live={live} instanceName={instanceName} instances={names} onAllInstances={() => onInstance()}
     onSwitchInstance={(next) => onInstance(next)} tab={tab} onTab={onTab} realm={realm} onRealm={onRealm}
-    initialBosses={selected ? [selected] : undefined} />
+    initialBosses={chosen.length ? chosen : undefined} />
 }
 
-function LiveHubContent({ context, summary, requestedEncounter, realmName, realmIDs, cohort, bosses, overview = false }: {
-  context: HubLiveTabContext; summary: HubSummary; requestedEncounter?: string; realmName?: string; realmIDs: readonly string[]
+function LiveHubContent({ context, summary, requestedEncounters = [], realmName, realmIDs, cohort, bosses, overview = false }: {
+  context: HubLiveTabContext; summary: HubSummary; requestedEncounters?: readonly string[]; realmName?: string; realmIDs: readonly string[]
   cohort?: { difficulty_name: string; max_players: number }; bosses: readonly string[]; overview?: boolean
 }) {
   const { instanceName, scope, role, subject, selection, onTab } = context
   const raids = summary.instances.filter((row) => row.instance_name === instanceName && row.category === "raid")
   const chosen = cohort && raids.some((row) => row.difficulty_name === cohort.difficulty_name && row.max_players === cohort.max_players) ? cohort : undefined
-  const boss = selection.kind === "bosses" && selection.bosses.length === 1 ? selection.bosses[0] : undefined
+  // Hand-picked bosses (empty: the preset, i.e. whole-raid boards). One boss still has its own views.
+  const picked = selection.kind === "bosses" ? selection.bosses : []
+  const boss = picked.length === 1 ? picked[0] : undefined
+  const pickedNames = picked.length ? picked.join(",") : undefined
   const exact = !!chosen
   // Omit the legacy zero-size URL parameter; exact_cohort still selects size 0
   // server-side, so a mixed-size raid cannot silently broaden this board.
-  const performance = useRankingsLeaderboard({ instance_names: instanceName, encounter_names: boss,
+  const performance = useRankingsLeaderboard({ instance_names: instanceName, encounter_names: pickedNames,
     difficulty_names: chosen?.difficulty_name, max_players: chosen?.max_players || undefined, exact_cohort: !!chosen, class: scope.cls, spec: scope.spec, sub_spec: scope.subSpec,
     metric: role === "healing" ? "hps" : "dps", realm_names: realmName, limit: 50,
   }, !overview && context.tab === "performances" && exact && realmIDs.length <= 1 && subject === "characters")
@@ -129,7 +140,7 @@ function LiveHubContent({ context, summary, requestedEncounter, realmName, realm
     enabled: !overview && context.tab === "speedruns" && exact && !boss && realmIDs.length <= 1,
     staleTime: 5 * 60 * 1000,
   })
-  const stats = useRankingsStats({ instance_names: instanceName, encounter_names: boss, difficulty_names: chosen?.difficulty_name,
+  const stats = useRankingsStats({ instance_names: instanceName, encounter_names: pickedNames, difficulty_names: chosen?.difficulty_name,
     max_players: chosen?.max_players || undefined, exact_cohort: !!chosen, realm_names: realmName, metric: role === "healing" ? "hps" : "dps" },
     !overview && context.tab === "statistics" && exact)
   const clearTimes = useRankingsClearTimes(instanceName, undefined, !overview && context.tab === "statistics" && !realmName && exact)
@@ -138,12 +149,12 @@ function LiveHubContent({ context, summary, requestedEncounter, realmName, realm
     chosen ? { difficulty_names: chosen.difficulty_name, max_players: chosen.max_players, exact_cohort: true } : undefined,
     !overview && context.tab === "statistics" && !realmName && exact)
   const parseSpreads = useParseScoreSpreads({ metric: role === "healing" ? "hps" : "dps",
-    encounterNames: boss ? [boss] : bosses, playerClass: scope.cls, playerSpec: scope.spec },
+    encounterNames: picked.length ? picked : bosses, playerClass: scope.cls, playerSpec: scope.spec },
     !overview && context.tab === "parsing" && !!chosen && !realmName)
   const timeSpreads = useTimeParseSpreads(instanceName, !overview && context.tab === "parsing" && !!chosen && !realmName)
   const queryState = <T,>(query: { data?: T; isPending: boolean; isError: boolean }) => query.isError ? { status: "error" as const } : query.isPending ? { status: "loading" as const } : { status: "ready" as const, data: query.data! }
   if (!overview && realmIDs.length > 1) return <p role="status" className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">Choose one realm or All realms in the Hub selector. This view cannot apply multiple realms.</p>
-  if (overview) return <LiveHubOverview context={context} summary={summary} requestedEncounter={requestedEncounter} realmName={realmName} realmIDs={realmIDs} bosses={bosses} />
+  if (overview) return <LiveHubOverview context={context} summary={summary} requestedEncounters={requestedEncounters} realmName={realmName} realmIDs={realmIDs} bosses={bosses} />
   if (context.tab === "ratings") return <LiveHubRatings instanceName={instanceName} bosses={bosses}
     scope={scope} onScope={context.onScope} view={context.ratingView} onView={context.onView} period={context.period}
     subject={subject === "guilds" ? "guild" : "player"} realmIDs={realmIDs} role={role} cls={scope.cls} spec={scope.spec} subSpec={scope.subSpec}
@@ -152,8 +163,8 @@ function LiveHubContent({ context, summary, requestedEncounter, realmName, realm
     toolbar={<div className="flex flex-wrap items-center gap-2"><MetricTabs view={context.ratingView} onView={context.onView} /><PeriodToggle value={context.period} onChange={context.onPeriod} /></div>} />
   if (context.tab === "rulesets") return <RulesetInstanceView instanceName={instanceName} embedded />
   if (context.tab === "performances") return !exact ? <CohortPrompt raids={raids} /> :
-    <PerformancesTab instanceName={instanceName} scope={scope} role={role} subject={subject} bosses={boss ? [boss] : context.selection.kind === "bosses" ? context.selection.bosses : []}
-      where={boss ?? instanceName} onSpeedruns={() => onTab("speedruns")}
+    <PerformancesTab instanceName={instanceName} scope={scope} role={role} subject={subject} bosses={picked}
+      where={boss ?? (picked.length > 1 ? `${picked.length} bosses` : instanceName)} onSpeedruns={() => onTab("speedruns")}
       live={{ response: performance.data, loading: performance.isPending, error: performance.isError ? performance.error : null }} />
   if (context.tab === "speedruns") return !exact ? <CohortPrompt raids={raids} /> : boss ?
     <p className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">Boss kill-time podiums are not published by the speedrun board. Select Full clear.</p> :

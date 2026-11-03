@@ -2,12 +2,12 @@ import type { ReactNode } from "react"
 import { CheckCircle, PanelLeftClose } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { FULL_CLEAR, type EncounterSelection } from "./encounterSelection"
+import { FULL_CLEAR, selectedBosses, toggleEncounter, type EncounterSelection } from "./encounterSelection"
 
 /**
- * Left-hand encounter list, matching the statistics leaderboard sidebar
- * (Rankings/InstanceView): click picks one, Ctrl+Click combines. "Full clear"
- * is its own entry because whole-raid runs are not the same as every boss combined.
+ * Left-hand encounter list, as on /leaderboards (Rankings/InstanceView): the
+ * preset (every default boss) is selected on entry, click picks one boss, and
+ * Ctrl+Click adds or removes one. Selected bosses are always highlighted.
  */
 export function EncounterSidebar({
   bosses,
@@ -16,7 +16,6 @@ export function EncounterSidebar({
   selection,
   onSelect,
   onCollapse,
-  allowCombine = true,
 }: {
   bosses: readonly string[]
   optional: ReadonlySet<string>
@@ -25,23 +24,13 @@ export function EncounterSidebar({
   onSelect: (selection: EncounterSelection) => void
   /** Collapse the column to the left (the instance page's "Hide sidebar"). */
   onCollapse?: () => void
-  /** Disable mock-only multi-boss aggregation on live leaderboards. */
-  allowCombine?: boolean
 }) {
-  const chosen = new Set(selection.kind === "bosses" ? selection.bosses : [])
+  const preset = bosses.filter((b) => !trash.has(b))
+  const chosen = new Set(selectedBosses(selection, preset))
   const required = bosses.filter((b) => !optional.has(b) && !trash.has(b))
   const extra = bosses.filter((b) => optional.has(b) && !trash.has(b))
   const trashNames = bosses.filter((b) => trash.has(b))
-
-  const pick = (boss: string, combine: boolean) => {
-    if (!combine || !allowCombine) return onSelect({ kind: "bosses", bosses: [boss] })
-    const next = new Set(chosen)
-    if (next.has(boss)) next.delete(boss)
-    else next.add(boss)
-    // Keep raid order so titles and boards read top to bottom.
-    const ordered = bosses.filter((b) => next.has(b))
-    onSelect(ordered.length ? { kind: "bosses", bosses: ordered } : FULL_CLEAR)
-  }
+  const pick = (boss: string, combine: boolean) => onSelect(toggleEncounter(selection, preset, bosses, boss, combine))
 
   return (
     <nav aria-label="Encounters">
@@ -54,36 +43,32 @@ export function EncounterSidebar({
         )}
       </div>
 
-      {allowCombine && <div className="mt-1.5 flex gap-1">
+      <div className="mt-1.5 flex items-center gap-2">
         <Button
           variant="outline"
           size="sm"
           className="h-5 px-1.5 text-xs"
-          onClick={() => onSelect({ kind: "bosses", bosses: required })}
-          title="Combine every required boss: total kill time, not a full clear"
+          aria-pressed={selection.kind === "clear"}
+          onClick={() => onSelect(FULL_CLEAR)}
+          title="Select every boss again"
         >
           All bosses
         </Button>
-      </div>}
+        <span className="text-[11px] text-muted-foreground">
+          {chosen.size} of {preset.length} selected
+        </span>
+      </div>
 
       <div className="mt-3 space-y-4">
-        <Section label="Raid">
-          <Row
-            name="Full clear"
-            selected={selection.kind === "clear"}
-            onClick={() => onSelect(FULL_CLEAR)}
-            title="Whole-raid runs: clear time and raid ratings"
-          />
-        </Section>
         <Section label="Bosses">
           {required.map((name) => (
-            <Row key={name} name={name} selected={chosen.has(name)} title={!allowCombine ? `Show ${name} ratings` : undefined} onClick={(combine) => pick(name, combine)} />
+            <Row key={name} name={name} selected={chosen.has(name)} onClick={(combine) => pick(name, combine)} />
           ))}
         </Section>
         {extra.length > 0 && (
           <Section label="Optional">
             {extra.map((name) => (
-              <Row key={name} name={name} selected={chosen.has(name)} subdued title={!allowCombine ? `Show ${name} ratings` : undefined} onClick={(combine) => pick(name, combine)} />
+              <Row key={name} name={name} selected={chosen.has(name)} subdued onClick={(combine) => pick(name, combine)} />
             ))}
           </Section>
         )}
@@ -97,9 +82,7 @@ export function EncounterSidebar({
       </div>
 
       <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground/50">
-        {allowCombine
-          ? "Full clear uses whole-raid runs. Ctrl+Click to combine bosses: ratings average across them and time is total kill time."
-          : "Choose the raid board or a single encounter. Realm filters change only the displayed rows."}
+        Click a boss to show only it; Ctrl+Click adds or removes one. Ratings average over the selected bosses (a missed boss counts as 0).
       </p>
     </nav>
   )

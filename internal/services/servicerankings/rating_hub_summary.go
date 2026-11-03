@@ -77,6 +77,31 @@ func hubPeakRaw(v float64) *float64 {
 	return &v
 }
 
+// hubPresetBosses is the instance's default boss selection, as /leaderboards
+// shows it: the default ranking encounter set, else the progression bosses.
+func hubPresetBosses(sets []chroniclesdk.RankingEncounterSet, progression []string) []string {
+	var preset []string
+	for _, set := range sets {
+		if set.ID == "" {
+			preset = set.Encounters
+			break
+		}
+	}
+	if preset == nil && len(sets) > 0 {
+		preset = sets[0].Encounters
+	}
+	if len(preset) == 0 {
+		preset = progression
+	}
+	out := make([]string, 0, len(preset))
+	for _, name := range preset {
+		if name != "Trash" {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 // hubClassFilter is the DB class for a class filter, or "" for every class.
 // HeroClassToDB maps an empty class to UNKNOWN, which would match no player.
 func hubClassFilter(class string) string {
@@ -88,16 +113,18 @@ func hubClassFilter(class string) string {
 
 type hubSummaryInput struct {
 	instance, featured, difficulty, metric, class, spec, subSpec, tab string
-	size                                                              int16
-	exact                                                             bool
-	realmIDs                                                          []uuid.UUID
+	// set is two or more chosen bosses; ratings and performances span them.
+	set      []string
+	size     int16
+	exact    bool
+	realmIDs []uuid.UUID
 }
 
 func parseHubSummaryInput(r *http.Request) (hubSummaryInput, error) {
 	q := r.URL.Query()
 	for key, values := range q {
 		switch key {
-		case "instance_name", "encounter_name", "difficulty_name", "max_players", "performance_metric", "class", "spec", "sub_spec", "realm_ids", "tab":
+		case "instance_name", "encounter_name", "encounter_names", "difficulty_name", "max_players", "performance_metric", "class", "spec", "sub_spec", "realm_ids", "tab":
 		default:
 			return hubSummaryInput{}, errors.New("unknown parameter: " + key)
 		}
@@ -106,7 +133,24 @@ func parseHubSummaryInput(r *http.Request) (hubSummaryInput, error) {
 		}
 	}
 	in := hubSummaryInput{instance: q.Get("instance_name"), featured: q.Get("encounter_name"), difficulty: q.Get("difficulty_name"), metric: q.Get("performance_metric"), class: q.Get("class"), spec: q.Get("spec"), subSpec: q.Get("sub_spec"), tab: q.Get("tab")}
-	if in.instance == "" && (q.Has("encounter_name") || q.Has("difficulty_name") || q.Has("max_players") || q.Has("class") || q.Has("spec") || q.Has("sub_spec") || q.Has("performance_metric")) {
+	if q.Has("encounter_names") {
+		if q.Has("encounter_name") {
+			return in, errors.New("encounter_name and encounter_names are exclusive")
+		}
+		seen := map[string]bool{}
+		for _, name := range strings.Split(q.Get("encounter_names"), ",") {
+			name = strings.TrimSpace(name)
+			if name == "" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			in.set = append(in.set, name)
+		}
+		if len(in.set) < 2 || len(in.set) > 64 {
+			return in, errors.New("encounter_names must list 2 to 64 bosses")
+		}
+	}
+	if in.instance == "" && (q.Has("encounter_name") || q.Has("encounter_names") || q.Has("difficulty_name") || q.Has("max_players") || q.Has("class") || q.Has("spec") || q.Has("sub_spec") || q.Has("performance_metric")) {
 		return in, errors.New("instance_name is required for selected overview filters")
 	}
 	if in.tab == "" {
@@ -394,6 +438,11 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		}
 		break
 	}
+	// No chosen bosses means the instance's preset, as the encounter sidebar shows it.
+	setIsPreset := false
+	if in.featured == "" && len(in.set) == 0 {
+		in.set, setIsPreset = hubPresetBosses(out.RankingEncounterSets, out.ProgressionBosses), true
+	}
 	filters, err := s.store.HubSummaryFilters(ctx, database.HubSummaryFiltersParams{TenantID: tenant, InstanceName: in.instance})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
@@ -494,7 +543,48 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
-	if in.exact && in.featured == "" {
+	if genErr == nil && generation != uuid.Nil && in.featured == "" && len(in.set) > 0 {
+		rows, e := s.store.HubSetRatingRows(ctx, database.HubSetRatingRowsParams{TenantID: tenant, GenerationID: generation, InstanceName: in.instance, EncounterNames: in.set, DifficultyName: in.difficulty, MaxPlayers: in.size, PerformanceMetric: in.metric, PlayerClass: hubClassFilter(in.class), PlayerSpec: in.spec, PlayerSubSpec: in.subSpec, RealmIds: in.realmIDs})
+		if e != nil {
+			httpapi.InternalServerError(w, e)
+			return
+		}
+		board := emptyHubBoard()
+		for _, v := range rows {
+			// Peak and Mastery need an exact cohort; Renown is instance-wide.
+			if v.RatingMetric != "renown" && !in.exact {
+				continue
+			}
+			if v.Subject == "guild" {
+				id, e := uuid.Parse(v.SubjectID)
+				if e != nil {
+					httpapi.InternalServerError(w, e)
+					return
+				}
+				entry := chroniclesdk.HubGuildRatingEntry{RealmID: v.RealmID, RealmName: v.RealmName, GuildID: id, GuildName: v.SubjectName, Score: v.Score}
+				switch v.RatingMetric {
+				case "peak":
+					board.Guild.Peak = append(board.Guild.Peak, entry)
+				case "ranked_mastery":
+					board.Guild.RankedMastery = append(board.Guild.RankedMastery, entry)
+				case "renown":
+					board.Guild.Renown = append(board.Guild.Renown, entry)
+				}
+				continue
+			}
+			entry := chroniclesdk.HubPlayerRatingEntry{RealmID: v.RealmID, RealmName: v.RealmName, PlayerGUID: v.SubjectID, PlayerName: v.SubjectName, PlayerClass: normalizeClassName(v.PlayerClass), PlayerSpec: v.PlayerSpec, PlayerSubSpec: v.PlayerSubSpec, Score: v.Score, PeakRaw: hubPeakRaw(v.PeakRaw)}
+			switch v.RatingMetric {
+			case "peak":
+				board.Player.Peak = append(board.Player.Peak, entry)
+			case "ranked_mastery":
+				board.Player.RankedMastery = append(board.Player.RankedMastery, entry)
+			case "renown":
+				board.Player.Renown = append(board.Player.Renown, entry)
+			}
+		}
+		out.Ratings.Raid = board
+	}
+	if in.exact && in.featured == "" && setIsPreset {
 		speed, e := s.store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{InstanceName: in.instance, FilterDifficulty: true, DifficultyName: in.difficulty, FilterInstanceMaxPlayers: true, InstanceMaxPlayers: in.size, RealmNames: realmNames, ResultLimit: hubOverviewSpeedrunLimit})
 		if e != nil {
 			httpapi.InternalServerError(w, e)
@@ -505,10 +595,13 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if in.exact {
-		// No encounter is the complete-run board, the full clear's best performances.
+		// No encounter is the complete-run board, the preset's best performances;
+		// a chosen set ranks across its bosses.
 		var encounters []string
 		if in.featured != "" {
 			encounters = []string{in.featured}
+		} else if !setIsPreset {
+			encounters = in.set
 		}
 		rows, e := s.store.RankingsLeaderboardNoJIT(ctx, database.RankingsLeaderboardParams{InstanceNames: []string{in.instance}, EncounterNames: encounters, DifficultyNames: []string{in.difficulty}, FilterMaxPlayers: in.size, ExactCohort: true, Class: hubClassFilter(in.class), Spec: in.spec, SubSpec: in.subSpec, Metric: in.metric, RealmNames: realmNames, QueryLimit: hubOverviewPerformanceLimit})
 		if e != nil {

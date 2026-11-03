@@ -7,7 +7,8 @@ export type { HubSummary, HubPlayerRatingEntry, HubGuildRatingEntry }
 export type HubSummaryRequest = {
   instanceName?: string
   tab?: "overview" | "ratings" | "performances" | "speedruns" | "statistics" | "parsing" | "rulesets"
-  encounterName?: string
+  /** Chosen bosses; empty is the instance's preset. */
+  encounters?: readonly string[]
   cohort?: LiveRatingCohort
   performance: "dps" | "hps"
   cls?: string
@@ -17,7 +18,7 @@ export type HubSummaryRequest = {
 }
 
 /** Canonical URL is the CDN cache key; no per-user parameters or cursor. */
-export function hubSummaryURL({ instanceName, tab, encounterName, cohort, performance, cls, spec, subSpec, realmIDs }: HubSummaryRequest) {
+export function hubSummaryURL({ instanceName, tab, encounters = [], cohort, performance, cls, spec, subSpec, realmIDs }: HubSummaryRequest) {
   const query = new URLSearchParams()
   if (instanceName) query.set("instance_name", instanceName)
   if (!instanceName && tab && tab !== "overview") query.set("tab", tab)
@@ -26,7 +27,8 @@ export function hubSummaryURL({ instanceName, tab, encounterName, cohort, perfor
     query.set("max_players", String(cohort.maxPlayers))
   }
   if (instanceName) query.set("performance_metric", performance)
-  if (encounterName) query.set("encounter_name", encounterName)
+  if (instanceName && encounters.length === 1) query.set("encounter_name", encounters[0])
+  if (instanceName && encounters.length > 1) query.set("encounter_names", encounters.join(","))
   if (cls) query.set("class", cls)
   if (spec) query.set("spec", spec)
   if (subSpec) query.set("sub_spec", subSpec)

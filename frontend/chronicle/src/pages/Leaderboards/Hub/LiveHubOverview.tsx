@@ -12,8 +12,8 @@ export interface LiveHubOverviewProps {
   context: HubLiveTabContext;
   /** The page's summary: the overview reuses it while the scope matches its request. */
   summary: HubSummary;
-  /** Encounter included in the page summary's request. */
-  requestedEncounter?: string;
+  /** Bosses in the page summary's request (empty: the preset). */
+  requestedEncounters?: readonly string[];
   /** Performance and statistics endpoints filter by realm name; ratings by realm ID. */
   realmName?: string;
   realmIDs: readonly string[];
@@ -25,7 +25,7 @@ export interface LiveHubOverviewProps {
 export function LiveHubOverview({
   context,
   summary: pageSummary,
-  requestedEncounter,
+  requestedEncounters = [],
   realmName,
   realmIDs,
   bosses,
@@ -36,17 +36,19 @@ export function LiveHubOverview({
     (row) => row.category === "raid" && row.instance_name === instanceName,
   );
   const cohort = pageSummary.selected_cohort ?? undefined;
+  // Trash is a Performances encounter; the overview's boards are boss boards.
+  const chosen = context.selection.kind === "bosses" ? context.selection.bosses.filter((name) => name !== "Trash") : [];
   // The page summary answers the default scope; any other scope is its own CDN-cacheable summary URL.
   const changedScope =
     role !== "dps" ||
     !!scope.cls ||
     !!scope.spec ||
     !!scope.subSpec ||
-    (scope.boss ?? undefined) !== (requestedEncounter ?? undefined);
+    chosen.join(",") !== requestedEncounters.join(",");
   const refreshed = useHubSummary(
     {
       instanceName,
-      encounterName: scope.boss,
+      encounters: chosen,
       cohort: cohort
         ? { difficulty: cohort.difficulty_name, maxPlayers: cohort.max_players }
         : undefined,
