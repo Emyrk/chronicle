@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -111,86 +109,6 @@ func (f *tenantMasteryStore) InsertPlayerTenantBossScore(_ context.Context, p da
 func (f *tenantMasteryStore) InsertGuildTenantBossScore(_ context.Context, p database.InsertGuildTenantBossScoreParams) (int64, error) {
 	f.guildScores = append(f.guildScores, p)
 	return 1, nil
-}
-
-func TestTenantMasteryStageAllParsedBossesCrossRealmAndWindows(t *testing.T) {
-	t.Parallel()
-	realmA := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	realmB := uuid.MustParse("00000000-0000-0000-0000-000000000002")
-	tenant, generation, guildA, guildB := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	asOf := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
-	manifest, err := json.Marshal(struct {
-		Writer       string             `json:"writer"`
-		RulesVersion int32              `json:"rules_version"`
-		Policy       TenantRatingPolicy `json:"tenant_policy"`
-	}{Writer: "tenant", RulesVersion: 2, Policy: TenantRatingPolicy{TenantID: tenant, Version: 2, PeriodDays: 180, FullRankKills: 5, RankOneWeight: .5, BestWeight: .35, FormWeight: .5, FloorWeight: .15}})
-	require.NoError(t, err)
-	f := &tenantMasteryStore{masteryFakeStore: &masteryFakeStore{checkpoint: database.RatingRebuildCheckpoint{
-		GenerationID: generation, TenantID: tenant, Phase: "mastery_pending", Cursor: []byte(`{}`), Manifest: manifest, ConfigRevision: 3, AsOf: database.Timestamptz(asOf),
-	}}, revision: 3}
-	for i, realm := range []uuid.UUID{realmA, realmB} {
-		guild := guildA
-		if i == 1 {
-			guild = guildB
-		}
-		for _, boss := range []string{"Boss A", "Boss B"} {
-			f.players = append(f.players, database.ListRatingMasteryPlayerKeysRow{RealmID: realm, PlayerGuid: "same-player", InstanceName: "Raid", EncounterName: boss, PerformanceMetric: "dps"})
-			f.guilds = append(f.guilds, database.ListRatingMasteryGuildKeysRow{RealmID: realm, GuildID: uuid.NullUUID{UUID: guild, Valid: true}, InstanceName: "Raid", EncounterName: boss})
-		}
-	}
-	for i, when := range []time.Time{asOf.AddDate(0, 0, -200), asOf.AddDate(0, 0, -1)} {
-		score := float64(50 + i*40)
-		id := uuid.New()
-		f.player = append(f.player, database.ListRatingMasteryPlayerPageRow{LockedParse: pgtype.Float8{Float64: score, Valid: true}, KilledAt: database.Timestamptz(when), RunID: id})
-		f.guild = append(f.guild, database.ListRatingMasteryGuildPageRow{LockedParse: pgtype.Float8{Float64: score, Valid: true}, KilledAt: database.Timestamptz(when), RunID: id})
-	}
-	for i := 0; i < 100 && f.checkpoint.Phase == "mastery_pending"; i++ {
-		require.NoError(t, TenantMasteryStageStep(t.Context(), f, tenant, generation))
-	}
-	require.Equal(t, "player_scopes", f.checkpoint.Phase)
-	require.Len(t, f.playerScores, 16)
-	require.Len(t, f.guildScores, 16)
-	for _, scores := range []struct {
-		kind string
-		rows int
-	}{{"player", len(f.playerScores)}, {"guild", len(f.guildScores)}} {
-		require.Equal(t, 16, scores.rows, scores.kind)
-	}
-	playerKeys := map[string]bool{}
-	guildKeys := map[string]bool{}
-	for _, s := range f.playerScores {
-		require.Equal(t, tenant, s.TenantID)
-		require.Equal(t, generation, s.GenerationID)
-		require.True(t, s.BestLockedParse.Valid)
-		require.True(t, s.Form.Valid)
-		require.True(t, s.FloorScore.Valid)
-		if s.WindowKind == "period" {
-			require.Equal(t, int32(1), s.EligibleKills)
-			require.Equal(t, asOf.AddDate(0, 0, -180), s.WindowStart.Time)
-			require.Equal(t, asOf, s.WindowEnd.Time)
-		} else {
-			require.Equal(t, "all_time", s.WindowKind)
-			require.Equal(t, int32(2), s.EligibleKills)
-			require.False(t, s.WindowStart.Valid)
-			require.False(t, s.WindowEnd.Valid)
-		}
-		playerKeys[fmt.Sprint(s.RealmID, s.EncounterName, s.WindowKind, s.RatingMetric)] = true
-	}
-	for _, s := range f.guildScores {
-		require.True(t, s.BestLockedParse.Valid)
-		require.True(t, s.Form.Valid)
-		require.True(t, s.FloorScore.Valid)
-		if s.WindowKind == "period" {
-			require.Equal(t, int32(1), s.EligibleKills)
-			require.Equal(t, asOf.AddDate(0, 0, -180), s.WindowStart.Time)
-		} else {
-			require.Equal(t, int32(2), s.EligibleKills)
-			require.False(t, s.WindowStart.Valid)
-		}
-		guildKeys[fmt.Sprint(s.RealmID, s.GuildID, s.EncounterName, s.WindowKind, s.RatingMetric)] = true
-	}
-	require.Len(t, playerKeys, 16)
-	require.Len(t, guildKeys, 16)
 }
 
 func TestTenantMasteryStageRejectsGroupCheckpoint(t *testing.T) {

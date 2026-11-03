@@ -61,6 +61,11 @@ type sqlcQuerier interface {
 	// Caller supplies the affected realms in the same transaction as deletion.
 	// The realm list is bounded by the canonical refresh page size.
 	BumpRatingConfigRevisionForRealms(ctx context.Context, realmIds []uuid.UUID) (int64, error)
+	CalculateTenantGuildMasteryPage(ctx context.Context, arg CalculateTenantGuildMasteryPageParams) ([]CalculateTenantGuildMasteryPageRow, error)
+	// Set-based tenant Mastery calculation. Each query computes both all-time and
+	// period windows for a bounded subject page. The caller writes the returned
+	// rows and advances the rebuild checkpoint in one transaction.
+	CalculateTenantPlayerMasteryPage(ctx context.Context, arg CalculateTenantPlayerMasteryPageParams) ([]CalculateTenantPlayerMasteryPageRow, error)
 	CarryForwardFinalizedParsedLogGroup(ctx context.Context, arg CarryForwardFinalizedParsedLogGroupParams) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
@@ -713,6 +718,7 @@ type sqlcQuerier interface {
 	InsertGuildRatingBossScore(ctx context.Context, arg InsertGuildRatingBossScoreParams) error
 	InsertGuildRatingScopeScore(ctx context.Context, arg InsertGuildRatingScopeScoreParams) error
 	InsertGuildTenantBossScore(ctx context.Context, arg InsertGuildTenantBossScoreParams) (int64, error)
+	InsertGuildTenantBossScores(ctx context.Context, arg []InsertGuildTenantBossScoresParams) *InsertGuildTenantBossScoresBatchResults
 	InsertGuildTenantScopeScore(ctx context.Context, arg InsertGuildTenantScopeScoreParams) (int64, error)
 	InsertInferenceClientToolRequest(ctx context.Context, arg InsertInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
 	InsertInferenceConnection(ctx context.Context, arg InsertInferenceConnectionParams) (InferenceConnection, error)
@@ -742,6 +748,7 @@ type sqlcQuerier interface {
 	// projected score. Lock the building generation against concurrent activation
 	// or retirement while selecting the tenant-owned realm and subject.
 	InsertPlayerTenantBossScore(ctx context.Context, arg InsertPlayerTenantBossScoreParams) (int64, error)
+	InsertPlayerTenantBossScores(ctx context.Context, arg []InsertPlayerTenantBossScoresParams) *InsertPlayerTenantBossScoresBatchResults
 	InsertPlayerTenantScopeScore(ctx context.Context, arg InsertPlayerTenantScopeScoreParams) (int64, error)
 	InsertProofRequest(ctx context.Context, arg InsertProofRequestParams) (ProofRequest, error)
 	InsertProofSubject(ctx context.Context, arg InsertProofSubjectParams) error
@@ -1402,6 +1409,7 @@ type sqlcQuerier interface {
 	UpsertBillingSubscription(ctx context.Context, arg UpsertBillingSubscriptionParams) (BillingSubscription, error)
 	UpsertBillingSubscriptionIfChanged(ctx context.Context, arg UpsertBillingSubscriptionIfChangedParams) (int64, error)
 	UpsertClassBuffIgnore(ctx context.Context, arg UpsertClassBuffIgnoreParams) error
+	UpsertCompletedRatingMasteryAccumulator(ctx context.Context, arg []UpsertCompletedRatingMasteryAccumulatorParams) *UpsertCompletedRatingMasteryAccumulatorBatchResults
 	UpsertConsumableDisambiguationIfCandidate(ctx context.Context, arg UpsertConsumableDisambiguationIfCandidateParams) (UpsertConsumableDisambiguationIfCandidateRow, error)
 	// NULL ignored/hide_duration leaves that flag unchanged.
 	UpsertCooldownOverrides(ctx context.Context, arg UpsertCooldownOverridesParams) error
