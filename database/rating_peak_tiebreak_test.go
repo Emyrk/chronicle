@@ -38,11 +38,11 @@ func TestTenantPeakTieBreaksByThroughput(t *testing.T) {
 	_, err = conn.Exec(ctx, "INSERT INTO rating_score_generations (id,tenant_id,policy_version,as_of,status) VALUES ($1,$2,1,$3,'active')", gen, tenant, time.Now())
 	require.NoError(t, err)
 
-	// Same score; "a" sorts first by GUID but has the lower DPS, "c" has none.
+	// Same score; "a" sorts first by GUID but has the lower DPS, "c" has none (0).
 	rows := []struct {
 		guid, class, spec string
 		raw               any
-	}{{"a", "Mage", "Fire", 900.0}, {"b", "Warrior", "Fury", 1300.0}, {"c", "Rogue", "Combat", nil}}
+	}{{"a", "Mage", "Fire", 900.0}, {"b", "Warrior", "Fury", 1300.0}, {"c", "Rogue", "Combat", 0.0}}
 	for _, table := range []string{"player_tenant_rating_boss_scores", "player_tenant_rating_scope_scores"} {
 		for _, row := range rows {
 			columns := "generation_id,tenant_id,realm_id,instance_name,difficulty_name,max_players,rating_metric,window_kind,score,player_guid,player_class,player_spec,player_sub_spec,performance_metric,best_raw"
@@ -74,7 +74,7 @@ func TestTenantPeakTieBreaksByThroughput(t *testing.T) {
 		require.Len(t, s, 1, "scope page %d", page)
 		require.Equal(t, want, s[0].PlayerGuid, "scope page %d", page)
 		boss.AfterScore, boss.AfterRaw, boss.AfterRealmID, boss.AfterPlayerGuid = b[0].Score, key(b[0].BestRaw), b[0].RealmID, b[0].PlayerGuid
-		scope.AfterScore, scope.AfterRaw, scope.AfterRealmID, scope.AfterPlayerGuid = s[0].Score, key(s[0].BestRaw), s[0].RealmID, s[0].PlayerGuid
+		scope.AfterScore, scope.AfterRaw, scope.AfterRealmID, scope.AfterPlayerGuid = s[0].Score, s[0].BestRaw, s[0].RealmID, s[0].PlayerGuid
 	}
 	b, err := q.ListActiveAllClassPlayerTenantBossScores(ctx, boss)
 	require.NoError(t, err)

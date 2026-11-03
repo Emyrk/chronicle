@@ -25306,7 +25306,7 @@ WITH source AS (
            ranking.player_class, ranking.player_spec, ranking.player_sub_spec,
            ranking.killed_at, $1::text AS performance_metric,
            CASE WHEN $1::text = 'hps' THEN ranking.hps ELSE ranking.dps END AS raw_value,
-           locked.precise_score AS locked_parse, ranking.duration_secs::double precision AS duration_secs
+           locked.precise_score AS locked_parse, COALESCE(ranking.duration_secs, 0)::double precision AS duration_secs
     FROM ranking_runs rr
     JOIN wow_server_realms realm ON realm.id = rr.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
@@ -26870,7 +26870,7 @@ type ListTenantPlayerRaidBossesRow struct {
 	EncounterName    string        `db:"encounter_name" json:"encounter_name"`
 	Score            float64       `db:"score" json:"score"`
 	BestRaw          pgtype.Float8 `db:"best_raw" json:"best_raw"`
-	BestDurationSecs pgtype.Float8 `db:"best_duration_secs" json:"best_duration_secs"`
+	BestDurationSecs float64       `db:"best_duration_secs" json:"best_duration_secs"`
 }
 
 func (q *sqlQuerier) ListTenantPlayerRaidBosses(ctx context.Context, arg ListTenantPlayerRaidBossesParams) ([]ListTenantPlayerRaidBossesRow, error) {
@@ -27163,7 +27163,7 @@ type InsertPlayerTenantBossScoreParams struct {
 	Form              pgtype.Float8      `db:"form" json:"form"`
 	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
 	EligibleKills     int32              `db:"eligible_kills" json:"eligible_kills"`
-	BestDurationSecs  pgtype.Float8      `db:"best_duration_secs" json:"best_duration_secs"`
+	BestDurationSecs  float64            `db:"best_duration_secs" json:"best_duration_secs"`
 	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
 	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
 	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
@@ -27234,8 +27234,8 @@ type InsertPlayerTenantScopeScoreParams struct {
 	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
 	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
 	Score             float64            `db:"score" json:"score"`
-	BestRaw           pgtype.Float8      `db:"best_raw" json:"best_raw"`
-	BestDurationSecs  pgtype.Float8      `db:"best_duration_secs" json:"best_duration_secs"`
+	BestRaw           float64            `db:"best_raw" json:"best_raw"`
+	BestDurationSecs  float64            `db:"best_duration_secs" json:"best_duration_secs"`
 	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
 	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
 	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
@@ -27624,7 +27624,7 @@ type ListActiveAllClassPlayerTenantBossScoresRow struct {
 	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
 	EligibleKills     int32              `db:"eligible_kills" json:"eligible_kills"`
 	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
-	BestDurationSecs  pgtype.Float8      `db:"best_duration_secs" json:"best_duration_secs"`
+	BestDurationSecs  float64            `db:"best_duration_secs" json:"best_duration_secs"`
 	PlayerName        pgtype.Text        `db:"player_name" json:"player_name"`
 	GuildName         pgtype.Text        `db:"guild_name" json:"guild_name"`
 	RealmName         string             `db:"realm_name" json:"realm_name"`
@@ -27775,8 +27775,8 @@ type ListActiveAllClassPlayerTenantScopeScoresRow struct {
 	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
 	Score             float64            `db:"score" json:"score"`
 	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
-	BestRaw           pgtype.Float8      `db:"best_raw" json:"best_raw"`
-	BestDurationSecs  pgtype.Float8      `db:"best_duration_secs" json:"best_duration_secs"`
+	BestRaw           float64            `db:"best_raw" json:"best_raw"`
+	BestDurationSecs  float64            `db:"best_duration_secs" json:"best_duration_secs"`
 	PlayerName        pgtype.Text        `db:"player_name" json:"player_name"`
 	GuildName         pgtype.Text        `db:"guild_name" json:"guild_name"`
 	RealmName         string             `db:"realm_name" json:"realm_name"`
@@ -28172,7 +28172,7 @@ type ListActivePlayerTenantBossScoresRow struct {
 	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
 	EligibleKills     int32              `db:"eligible_kills" json:"eligible_kills"`
 	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
-	BestDurationSecs  pgtype.Float8      `db:"best_duration_secs" json:"best_duration_secs"`
+	BestDurationSecs  float64            `db:"best_duration_secs" json:"best_duration_secs"`
 	PlayerName        pgtype.Text        `db:"player_name" json:"player_name"`
 	GuildName         pgtype.Text        `db:"guild_name" json:"guild_name"`
 	RealmName         string             `db:"realm_name" json:"realm_name"`
@@ -28325,8 +28325,8 @@ type ListActivePlayerTenantScopeScoresRow struct {
 	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
 	Score             float64            `db:"score" json:"score"`
 	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
-	BestRaw           pgtype.Float8      `db:"best_raw" json:"best_raw"`
-	BestDurationSecs  pgtype.Float8      `db:"best_duration_secs" json:"best_duration_secs"`
+	BestRaw           float64            `db:"best_raw" json:"best_raw"`
+	BestDurationSecs  float64            `db:"best_duration_secs" json:"best_duration_secs"`
 	PlayerName        pgtype.Text        `db:"player_name" json:"player_name"`
 	GuildName         pgtype.Text        `db:"guild_name" json:"guild_name"`
 	RealmName         string             `db:"realm_name" json:"realm_name"`

@@ -7,7 +7,6 @@ import (
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // TenantScopeProjectionPage writes at most 16 raid-only subject scores and
@@ -63,16 +62,17 @@ func TenantScopeProjectionPage(ctx context.Context, store database.Store, tenant
 				bosses := make([]tenantScopeBoss, 0, len(rows))
 				for _, row := range rows {
 					bosses = append(bosses, tenantScopeBoss{instance: k.InstanceName, encounter: row.EncounterName, score: row.Score,
-						raw: row.BestRaw.Float64, duration: row.BestDurationSecs.Float64})
+						raw: row.BestRaw.Float64, duration: row.BestDurationSecs})
 				}
 				raids, err := tenantScopeScores(k.RatingMetric, bosses)
 				if err != nil {
 					return err
 				}
-				var bestRaw, bestDuration pgtype.Float8
+				// 0 when not a Peak or any counted kill lacks its throughput or length.
+				var bestRaw, bestDuration float64
 				if k.RatingMetric == "peak" {
 					if raw, duration, ok := tenantScopeThroughput(bosses); ok {
-						bestRaw, bestDuration = pgtype.Float8{Float64: raw, Valid: true}, pgtype.Float8{Float64: duration, Valid: true}
+						bestRaw, bestDuration = raw, duration
 					}
 				}
 				start, end := tenantWindow(k.WindowKind, database.Timestamptz(cp.AsOf.Time.AddDate(0, 0, -180)), cp.AsOf)

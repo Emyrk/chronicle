@@ -207,7 +207,7 @@ func projectTenantPlayerPeak(ctx context.Context, tx database.Store, cp database
 			return err
 		}
 		ws, we := tenantWindow(w.kind, start, cp.AsOf)
-		n, err := tx.InsertPlayerTenantBossScore(ctx, database.InsertPlayerTenantBossScoreParams{GenerationID: cp.GenerationID, TenantID: cp.TenantID, RealmID: k.RealmID, PlayerGuid: k.PlayerGuid, InstanceName: k.InstanceName, EncounterName: k.EncounterName, DifficultyName: k.DifficultyName, MaxPlayers: k.MaxPlayers, PlayerClass: k.PlayerClass, PlayerSpec: k.PlayerSpec, PlayerSubSpec: k.PlayerSubSpec, PerformanceMetric: k.PerformanceMetric, RatingMetric: "peak", WindowKind: w.kind, WindowStart: ws, WindowEnd: we, Score: score, BestRaw: pgtype.Float8{Float64: w.raw, Valid: true}, RankOneRaw: pgtype.Float8{Float64: w.rank, Valid: true}, BestDurationSecs: pgtype.Float8{Float64: w.duration, Valid: w.duration > 0}})
+		n, err := tx.InsertPlayerTenantBossScore(ctx, database.InsertPlayerTenantBossScoreParams{GenerationID: cp.GenerationID, TenantID: cp.TenantID, RealmID: k.RealmID, PlayerGuid: k.PlayerGuid, InstanceName: k.InstanceName, EncounterName: k.EncounterName, DifficultyName: k.DifficultyName, MaxPlayers: k.MaxPlayers, PlayerClass: k.PlayerClass, PlayerSpec: k.PlayerSpec, PlayerSubSpec: k.PlayerSubSpec, PerformanceMetric: k.PerformanceMetric, RatingMetric: "peak", WindowKind: w.kind, WindowStart: ws, WindowEnd: we, Score: score, BestRaw: pgtype.Float8{Float64: w.raw, Valid: true}, RankOneRaw: pgtype.Float8{Float64: w.rank, Valid: true}, BestDurationSecs: w.duration})
 		if err != nil {
 			return err
 		}

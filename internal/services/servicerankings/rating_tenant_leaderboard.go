@@ -198,11 +198,11 @@ func tenantRatingInput(r *http.Request, guild, boss bool) (url.Values, []uuid.UU
 
 // tenantPeakTieRaw is the player board's tie-break key after the score: the
 // Peak's DPS/HPS, or 0 when unknown or for other metrics (matches the SQL).
-func tenantPeakTieRaw(metric string, raw pgtype.Float8) float64 {
-	if metric != "peak" || !raw.Valid {
+func tenantPeakTieRaw(metric string, raw float64) float64 {
+	if metric != "peak" || raw < 0 {
 		return 0
 	}
-	return raw.Float64
+	return raw
 }
 
 func tenantCursorEncode(cursor tenantRatingCursor) string {
@@ -332,7 +332,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 		}
 		if len(rows) == int(limit) {
 			last := rows[len(rows)-1]
-			raw := tenantPeakTieRaw(last.RatingMetric, last.BestRaw)
+			raw := tenantPeakTieRaw(last.RatingMetric, last.BestRaw.Float64)
 			params.AfterScore, params.AfterRaw, params.AfterRealmID, params.AfterPlayerGuid = last.Score, raw, last.RealmID, last.PlayerGuid
 			params.LimitCount = 1
 			more, e := read(params)
@@ -379,7 +379,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				httpapi.InternalServerError(w, errors.New("tenant rating row generation mismatch"))
 				return
 			}
-			entries = append(entries, chroniclesdk.TenantPlayerScopeLeaderboardEntry{GenerationID: row.GenerationID, RealmID: row.RealmID, PlayerGUID: row.PlayerGuid, PlayerName: tenantRatingName(row.PlayerName), GuildName: tenantRatingName(row.GuildName), RealmName: row.RealmName, InstanceName: row.InstanceName, DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, PerformanceMetric: row.PerformanceMetric, RatingMetric: row.RatingMetric, WindowKind: row.WindowKind, Score: row.Score, BestRaw: guildRatingFloat(row.BestRaw), ComputedAt: guildRatingTime(row.ComputedAt)})
+			entries = append(entries, chroniclesdk.TenantPlayerScopeLeaderboardEntry{GenerationID: row.GenerationID, RealmID: row.RealmID, PlayerGUID: row.PlayerGuid, PlayerName: tenantRatingName(row.PlayerName), GuildName: tenantRatingName(row.GuildName), RealmName: row.RealmName, InstanceName: row.InstanceName, DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, PerformanceMetric: row.PerformanceMetric, RatingMetric: row.RatingMetric, WindowKind: row.WindowKind, Score: row.Score, BestRaw: hubPeakRaw(row.BestRaw), ComputedAt: guildRatingTime(row.ComputedAt)})
 		}
 		if len(rows) == int(limit) {
 			last := rows[len(rows)-1]

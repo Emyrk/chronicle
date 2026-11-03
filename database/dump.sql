@@ -2281,7 +2281,7 @@ CREATE TABLE player_tenant_rating_boss_scores (
     floor_score double precision,
     eligible_kills integer DEFAULT 0 NOT NULL,
     computed_at timestamp with time zone DEFAULT now() NOT NULL,
-    best_duration_secs double precision,
+    best_duration_secs double precision DEFAULT 0 NOT NULL,
     CONSTRAINT player_tenant_rating_boss_scores_check CHECK ((((window_kind = 'period'::text) AND (window_start IS NOT NULL) AND (window_end IS NOT NULL) AND (window_start < window_end)) OR ((window_kind = ANY (ARRAY['all_time'::text, 'career'::text])) AND (window_start IS NULL) AND (window_end IS NULL)))),
     CONSTRAINT player_tenant_rating_boss_scores_eligible_kills_check CHECK ((eligible_kills >= 0)),
     CONSTRAINT player_tenant_rating_boss_scores_performance_metric_check CHECK ((performance_metric = ANY (ARRAY['dps'::text, 'hps'::text, 'none'::text]))),
@@ -2310,8 +2310,8 @@ CREATE TABLE player_tenant_rating_scope_scores (
     window_end timestamp with time zone,
     score double precision NOT NULL,
     computed_at timestamp with time zone DEFAULT now() NOT NULL,
-    best_raw double precision,
-    best_duration_secs double precision,
+    best_raw double precision DEFAULT 0 NOT NULL,
+    best_duration_secs double precision DEFAULT 0 NOT NULL,
     CONSTRAINT player_tenant_rating_scope_scores_check CHECK ((((window_kind = 'period'::text) AND (window_start IS NOT NULL) AND (window_end IS NOT NULL) AND (window_start < window_end)) OR ((window_kind = ANY (ARRAY['all_time'::text, 'career'::text])) AND (window_start IS NULL) AND (window_end IS NULL)))),
     CONSTRAINT player_tenant_rating_scope_scores_performance_metric_check CHECK ((performance_metric = ANY (ARRAY['dps'::text, 'hps'::text, 'none'::text]))),
     CONSTRAINT player_tenant_rating_scope_scores_rating_metric_check CHECK ((rating_metric = ANY (ARRAY['peak'::text, 'mastery'::text, 'ranked_mastery'::text, 'renown'::text]))),
@@ -2668,7 +2668,7 @@ CREATE TABLE rating_stage_player_observations (
     performance_metric text NOT NULL,
     raw_value double precision NOT NULL,
     locked_parse double precision,
-    duration_secs double precision,
+    duration_secs double precision DEFAULT 0 NOT NULL,
     CONSTRAINT rating_stage_player_observations_performance_metric_check CHECK ((performance_metric = ANY (ARRAY['dps'::text, 'hps'::text])))
 );
 
