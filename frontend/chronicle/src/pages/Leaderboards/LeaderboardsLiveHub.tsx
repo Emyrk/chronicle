@@ -104,10 +104,12 @@ function LiveHubContent({ context, realmName, realmIDs, cohort, overview = false
   const chosen = cohort && raids.some((row) => row.difficulty_name === cohort.difficulty_name && row.max_players === cohort.max_players) ? cohort : undefined
   const boss = selection.kind === "bosses" && selection.bosses.length === 1 ? selection.bosses[0] : undefined
   const exact = !!chosen
+  // The legacy rankings endpoints treat empty difficulty and zero size as absent filters.
+  const legacyExact = !!chosen && chosen.difficulty_name !== "" && chosen.max_players > 0
   const performance = useRankingsLeaderboard({ instance_names: instanceName, encounter_names: boss,
     difficulty_names: chosen?.difficulty_name, max_players: chosen?.max_players, class: scope.cls, spec: scope.spec, sub_spec: scope.subSpec,
     role: role === "healing" ? "heal" : "dps", metric: role === "healing" ? "hps" : "dps", realm_names: realmName, limit: 50,
-  }, !overview && context.tab === "performances" && exact && realmIDs.length <= 1 && subject === "characters")
+  }, !overview && context.tab === "performances" && legacyExact && realmIDs.length <= 1 && subject === "characters")
   const speed = useQuery<SpeedrunLeaderboardEntry[]>({
     queryKey: ["hub-live-speedruns", instanceName, realmName, chosen?.difficulty_name, chosen?.max_players],
     queryFn: async () => {
@@ -123,12 +125,12 @@ function LiveHubContent({ context, realmName, realmIDs, cohort, overview = false
   })
   const stats = useRankingsStats({ instance_names: instanceName, encounter_names: boss, difficulty_names: chosen?.difficulty_name,
     max_players: chosen?.max_players, realm_names: realmName, role: role === "healing" ? "heal" : "dps", metric: role === "healing" ? "hps" : "dps" },
-    !overview && context.tab === "statistics" && !!chosen)
-  const clearTimes = useRankingsClearTimes(instanceName, undefined, !overview && context.tab === "statistics" && !realmName && !!chosen)
-  const killTimes = useRankingsKillTimes(instanceName, undefined, !overview && context.tab === "statistics" && !realmName && !!chosen)
+    !overview && context.tab === "statistics" && legacyExact)
+  const clearTimes = useRankingsClearTimes(instanceName, undefined, !overview && context.tab === "statistics" && !realmName && legacyExact)
+  const killTimes = useRankingsKillTimes(instanceName, undefined, !overview && context.tab === "statistics" && !realmName && legacyExact)
   const successRates = useRankingsSuccessRates(instanceName, undefined,
     chosen ? { difficulty_names: chosen.difficulty_name, max_players: chosen.max_players } : undefined,
-    !overview && context.tab === "statistics" && !realmName && !!chosen)
+    !overview && context.tab === "statistics" && !realmName && legacyExact)
   const parseSpreads = useParseScoreSpreads({ metric: role === "healing" ? "hps" : "dps",
     encounterNames: boss ? [boss] : (encounters.data ?? []).map((row) => row.encounter_name), playerClass: scope.cls, playerSpec: scope.spec },
     !overview && context.tab === "parsing" && !!chosen && !realmName)
@@ -150,13 +152,14 @@ function LiveHubContent({ context, realmName, realmIDs, cohort, overview = false
       ...(subject === "characters" ? { playerClass: scope.cls, spec: scope.spec ?? "", subSpec: scope.subSpec ?? "", performance: role === "healing" ? "hps" as const : "dps" as const } : {}) } : undefined}
     toolbar={<div className="flex flex-wrap items-center gap-2"><MetricTabs view={context.ratingView} onView={context.onView} /><PeriodToggle value={context.period} onChange={context.onPeriod} /></div>} />
   if (context.tab === "rulesets") return <RulesetInstanceView instanceName={instanceName} embedded />
-  if (context.tab === "performances") return !exact ? <CohortPrompt raids={raids} /> :
+  if (context.tab === "performances") return !exact ? <CohortPrompt raids={raids} /> : !legacyExact ? <LegacyCohortUnavailable /> :
     <PerformancesTab instanceName={instanceName} scope={scope} role={role} subject={subject} bosses={boss ? [boss] : context.selection.kind === "bosses" ? context.selection.bosses : []}
       where={boss ?? instanceName} onSpeedruns={() => onTab("speedruns")}
       live={{ response: performance.data, loading: performance.isPending, error: performance.isError ? performance.error : null }} />
   if (context.tab === "speedruns") return !exact ? <CohortPrompt raids={raids} /> : boss ?
     <p className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">Boss kill-time podiums are not published by the speedrun board. Select Full clear.</p> :
     <SpeedrunsTab instanceName={instanceName} bosses={[]} selection={selection} live={{ entries: speed.data, loading: speed.isPending, error: speed.isError ? speed.error : null }} />
+  if (context.tab === "statistics" && exact && !legacyExact) return <LegacyCohortUnavailable />
   if (context.tab === "statistics") {
     const live: LiveStatisticsData = {
       specs: chosen ? queryState(stats) : undefined,
@@ -178,6 +181,10 @@ function LiveHubContent({ context, realmName, realmIDs, cohort, overview = false
       onClear={() => context.setSelection(FULL_CLEAR)} onScope={context.onScope} live={live} />
   }
   return <p className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">This Hub board does not have a live adapter yet.</p>
+}
+
+function LegacyCohortUnavailable() {
+  return <p className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">This published cohort cannot be filtered by the legacy performance and statistics API yet.</p>
 }
 
 function CohortPrompt({ raids }: { raids: readonly { difficulty_name: string; max_players: number }[] }) {

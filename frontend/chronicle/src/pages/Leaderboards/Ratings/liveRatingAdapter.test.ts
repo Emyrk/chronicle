@@ -33,6 +33,15 @@ describe("tenant live rating URLs", () => {
     expect(liveRatingURL({ ...player, encounterName: "" })).toBeNull()
   })
 
+  it("keeps an explicitly selected empty-difficulty zero-size cohort exact", () => {
+    const exact = query({ ...player, cohort: { ...cohort, difficulty: "", maxPlayers: 0 } })
+    expect(exact.params.has("difficulty_name")).toBe(true)
+    expect(exact.params.get("difficulty_name")).toBe("")
+    expect(exact.params.get("max_players")).toBe("0")
+    expect(liveRatingURL({ ...player, cohort: undefined })).toBeNull()
+    expect(liveRatingURL({ ...player, cohort: { ...cohort, maxPlayers: -1 } })).toBeNull()
+  })
+
   it("keeps guild cohorts free of player dimensions, and renown career free of cohorts", () => {
     const guild = query({ ...player, subject: "guild", metric: "peak", cohort: { difficulty: "Heroic", maxPlayers: 40 }, encounterName: "Ragnaros" })
     expect(guild.path).toContain("/guild-boss-leaderboard")

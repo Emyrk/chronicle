@@ -55,6 +55,17 @@ describe("LiveHubRatings", () => {
     expect(vi.mocked(RatingBoards).mock.calls[0][0].live?.ranksKnown).toBe(true)
   })
 
+  it("requests the exact default cohort in the full rating view", () => {
+    vi.clearAllMocks()
+    querySpy.mockImplementation(({ queries }: QueryOptions) => queries.map(() => ({ isError: false })))
+    render({ ratingCohort: { ...cohort, difficulty: "", maxPlayers: 0 } })
+    const queries = (querySpy.mock.calls[0][0] as QueryOptions).queries
+    expect(queries[0].enabled).toBe(true)
+    expect(queries[0].queryKey?.[1]).toContain("difficulty_name=&max_players=0")
+    expect(queries[1].enabled).toBe(true)
+    expect(RatingBoards).toHaveBeenCalled()
+  })
+
   it("does not broaden a mismatched class cohort", () => {
     vi.clearAllMocks()
     querySpy.mockImplementation(({ queries }: QueryOptions) => queries.map(() => ({ isError: false })))

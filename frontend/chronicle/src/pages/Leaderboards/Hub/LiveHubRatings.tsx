@@ -64,7 +64,7 @@ export function LiveHubRatings({
   const exact = !!cohort && cohort.playerClass === cls && cohort.spec === (spec ?? "") &&
     cohort.subSpec === (subSpec ?? "") && (!scope.cls || scope.cls === cohort.playerClass) &&
     (!scope.spec || scope.spec === cohort.spec) && (!scope.subSpec || scope.subSpec === cohort.subSpec) && cohort.performance === (role === "healing" ? "hps" : "dps") &&
-    !!cohort.difficulty && Number.isInteger(cohort.maxPlayers) && cohort.maxPlayers > 0
+    Number.isInteger(cohort.maxPlayers) && cohort.maxPlayers >= 0
   const targets = useMemo(() => [scope, ...(scope.boss ? [] : bosses.map((boss) => ({ ...scope, boss })))], [scope, bosses])
   const requests = targets.flatMap((target) => metrics.map((metric) => ({
     target, metric,

@@ -55,6 +55,25 @@ describe("live Storybook Hub", () => {
       hook.mockImplementation(original)
     }
   })
+  it("selects the published empty-difficulty zero-size cohort without treating its URL values as missing", () => {
+    const hook = vi.mocked(useRankingsInstances)
+    const original = hook.getMockImplementation()!
+    hook.mockImplementation(() => {
+      const result = original()
+      return { ...result, data: [...(result.data ?? []), {
+        instance_name: "Molten Core", difficulty_name: "", max_players: 0, category: "raid", total_kills: 3, top_players: [],
+      }] } as ReturnType<typeof useRankingsInstances>
+    })
+    try {
+      const selected = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&difficulty=&size=0"]}><LeaderboardsLiveHub /></MemoryRouter>)
+      expect(selected).toContain('<option value="|0" selected="">Default · 0 players</option>')
+      const missing = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core"]}><LeaderboardsLiveHub /></MemoryRouter>)
+      expect(missing).toContain('<option value="" selected="">Choose difficulty and size</option>')
+    } finally {
+      hook.mockImplementation(original)
+    }
+  })
+
   it("uses the Storybook landing grid with published cohorts", () => {
     const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2"]}><LeaderboardsLiveHub /></MemoryRouter>)
     expect(html).toContain("Molten Core")

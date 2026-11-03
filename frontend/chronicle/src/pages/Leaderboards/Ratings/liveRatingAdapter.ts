@@ -39,7 +39,7 @@ export function liveRatingURL(request: LiveRatingBoardRequest): string | null {
     if (window !== "period" && window !== "career") return null
     if (cohort) return null
   } else {
-    if (window !== "period" && window !== "all_time" || !cohort || !Number.isInteger(cohort.maxPlayers) || cohort.maxPlayers < 1) return null
+    if (window !== "period" && window !== "all_time" || !cohort || !Number.isInteger(cohort.maxPlayers) || cohort.maxPlayers < 0) return null
     if (subject === "player" && (!cohort.playerClass?.trim() || cohort.spec === undefined || cohort.subSpec === undefined || !cohort.performance)) return null
   }
   const endpoint = `${subject === "guild" ? "guild-" : ""}${encounterName === undefined ? "scope" : "boss"}-leaderboard`
