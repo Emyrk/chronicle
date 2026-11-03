@@ -342,6 +342,9 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
           onProgressRef.current(progress);
         },
       });
+      // Cancelled (or the speed changed) while the encoder finalized: drop the
+      // video rather than leak an object URL or hand back a stale render.
+      if (signal.aborted) return;
       const rendered = { ...result, frameCount };
       onRenderedRef.current?.(rendered);
       onProgressRef.current({ phase: "done", result: rendered, url: URL.createObjectURL(result.blob) });

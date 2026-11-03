@@ -58,7 +58,7 @@ import { MapSettingsOverlay } from "./MapSettingsOverlay";
 import { DEFAULT_EFFECT_SETTINGS, useEffectSettings } from "./mapViewSettings";
 import { DEFAULT_WALK_AVATAR, readStoredWalkAvatar, storeWalkAvatar } from "./walkAvatars";
 import { useMapScene } from "./useMapScene";
-import { canEncodeVideo } from "./videoExport";
+import { canEncodeVideo } from "./videoSupport";
 import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
 import { PlanControls } from "./plan/PlanControls";
 import { ROLE_TOKENS, usePlanEditor, usePlanShortcuts, type PlanRosterEntry } from "./plan/usePlanEditor";

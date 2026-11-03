@@ -1,4 +1,5 @@
 import { BufferTarget, CanvasSource, getFirstEncodableVideoCodec, Mp4OutputFormat, Output, type VideoCodec } from "mediabunny";
+import { canEncodeVideo } from "./videoSupport";
 import { createWatermarkedCanvas, loadWatermark } from "./videoWatermark";
 
 /** The rendered video's frame rate. */
@@ -16,11 +17,6 @@ export interface VideoOutputConfig {
   height: number;
   bitrate: number;
   codec: VideoCodec;
-}
-
-/** Whether this browser can encode video at all (WebCodecs). */
-export function canEncodeVideo(): boolean {
-  return typeof VideoEncoder !== "undefined" && typeof VideoFrame !== "undefined";
 }
 
 /** The best output size and codec this browser can encode, or null when it can encode none. */
