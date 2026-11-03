@@ -1,4 +1,6 @@
 {
+  "title": "Ragnaros with no wipes",
+  "category": "Bosses",
   "description": "Ragnaros was killed and never wiped on in the same run.",
   "query": {
     "where": {

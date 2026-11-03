@@ -1,4 +1,6 @@
 {
+  "title": "Nefarian progression nights",
+  "category": "Bosses",
   "description": "Progression nights: 5 or more wipes on Nefarian.",
   "query": {
     "where": {

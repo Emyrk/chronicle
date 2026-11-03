@@ -30,12 +30,23 @@ WITH matched AS (
     AND ((((SELECT count(DISTINCT lower(tbs2.encounter_name)) FROM time_parse_scores tps1 JOIN time_parse_boss_scores tbs2 ON tbs2.time_parse_score_id = tps1.id WHERE tps1.tenant_id = $4::uuid AND tps1.instance_id = li.id AND tps1.lookback_days = $1::smallint AND tps1.policy_version = $2::smallint AND tps1.query_version = $3::smallint AND tbs2.server_status IN ('ok', 'low_confidence') AND lower(tbs2.encounter_name) = ANY(ARRAY(SELECT lower(v) FROM unnest($6::text[]) v)) AND tbs2.server_display_score >= $5::bigint) = cardinality(ARRAY(SELECT lower(v) FROM unnest($6::text[]) v))) OR ((SELECT tps3.clear_server_display_score FROM time_parse_scores tps3 WHERE tps3.tenant_id = $4::uuid AND tps3.instance_id = li.id AND tps3.lookback_days = $1::smallint AND tps3.policy_version = $2::smallint AND tps3.query_version = $3::smallint AND tps3.clear_server_status IN ('ok', 'low_confidence')) >= $7::bigint)) AND ((SELECT count(DISTINCT p4.unit_guid) FROM log_instance_players p4 WHERE p4.instance_id = li.id AND ((p4.class::text = $8::text) AND (EXISTS (SELECT 1 FROM encounter_dps_rankings r5 WHERE r5.instance_id = li.id AND r5.player_guid = p4.unit_guid::text AND r5.encounter_id IS NOT NULL AND r5.player_role = $9::text)))) >= $10::bigint) AND (NOT (EXISTS (SELECT 1 FROM log_instance_players p6 WHERE p6.instance_id = li.id AND (EXISTS (SELECT 1 FROM encounter_dps_rankings r7 WHERE r7.instance_id = li.id AND r7.player_guid = p6.unit_guid::text AND r7.encounter_id IS NOT NULL AND r7.player_deaths >= $11::bigint))))))
   ORDER BY COALESCE(li.duplicate_group_id, li.id), li.id
 )
-SELECT m.id, m.hashed_slug, m.name, m.realm_id, m.realm_name, m.guild_id, m.guild_name,
-  m.difficulty_name, m.max_players, m.started_at
-FROM matched m
-WHERE TRUE
-ORDER BY m.started_at DESC, m.id DESC
-LIMIT $12
+-- Summary columns are computed only for the page of results, after the
+-- limit, so they never slow the search itself.
+SELECT p.id, p.hashed_slug, p.name, p.realm_id, p.realm_name, p.guild_id, p.guild_name,
+  p.difficulty_name, p.max_players, p.started_at,
+  (SELECT count(DISTINCT lp.unit_guid) FROM log_instance_players lp WHERE lp.instance_id = p.id) AS player_count,
+  (SELECT count(DISTINCT be.name) FROM log_instance_encounters be
+    WHERE be.instance_id = p.id AND be.boss AND be.kill_type IN ('clean', 'partial')) AS bosses_killed,
+  (SELECT sr.ranked_duration_ms FROM instance_speedruns sr
+    WHERE sr.instance_id = p.id AND sr.ranked_duration_ms > 0) AS clear_time_ms
+FROM (
+  SELECT m.*
+  FROM matched m
+  WHERE TRUE
+  ORDER BY m.started_at DESC, m.id DESC
+  LIMIT $12
+) p
+ORDER BY p.started_at DESC, p.id DESC
 
 -- args:
 [

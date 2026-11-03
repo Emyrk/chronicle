@@ -1,4 +1,6 @@
 {
+  "title": "Deathless Ragnaros kill",
+  "category": "Bosses",
   "description": "Ragnaros killed with no player deaths on the kill.",
   "query": {
     "where": {

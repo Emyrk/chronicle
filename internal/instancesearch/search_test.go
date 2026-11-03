@@ -366,6 +366,25 @@ func TestSearch(t *testing.T) {
 		}
 	})
 
+	t.Run("SummaryColumns", func(t *testing.T) {
+		t.Parallel()
+		page := f.search(t, f.tenantA, where(t, `{"any_player": {"field": "player.name", "op": "=", "value": "Thrall"}}`))
+		require.Len(t, page.Results, 1)
+		r := page.Results[0]
+		require.Equal(t, f.mc1, r.ID)
+		// 3 priests, Bearcat, Thrall; Majordomo and Ragnaros killed; 25 min clear.
+		require.EqualValues(t, 5, r.PlayerCount)
+		require.EqualValues(t, 2, r.BossesKilled)
+		require.NotNil(t, r.ClearTimeMS)
+		require.EqualValues(t, 1_500_000, *r.ClearTimeMS)
+
+		// mc2 has no ranked clear.
+		page = f.search(t, f.tenantA, where(t, `{"field": "instance.guild", "op": "=", "value": "Beta"}`))
+		require.Len(t, page.Results, 1)
+		require.Nil(t, page.Results[0].ClearTimeMS)
+		require.EqualValues(t, 1, page.Results[0].BossesKilled)
+	})
+
 	t.Run("ParseTenantIsBound", func(t *testing.T) {
 		t.Parallel()
 		// Tenant B cannot see tenant A's instances, and parse rows are also

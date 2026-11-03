@@ -173,12 +173,23 @@ const frameSQL = `WITH matched AS (
     AND ({{WHERE}})
   ORDER BY COALESCE(li.duplicate_group_id, li.id), li.id
 )
-SELECT m.id, m.hashed_slug, m.name, m.realm_id, m.realm_name, m.guild_id, m.guild_name,
-  m.difficulty_name, m.max_players, m.started_at
-FROM matched m
-WHERE {{CURSOR}}
-ORDER BY m.started_at DESC, m.id DESC
-LIMIT {{LIMIT}}`
+-- Summary columns are computed only for the page of results, after the
+-- limit, so they never slow the search itself.
+SELECT p.id, p.hashed_slug, p.name, p.realm_id, p.realm_name, p.guild_id, p.guild_name,
+  p.difficulty_name, p.max_players, p.started_at,
+  (SELECT count(DISTINCT lp.unit_guid) FROM log_instance_players lp WHERE lp.instance_id = p.id) AS player_count,
+  (SELECT count(DISTINCT be.name) FROM log_instance_encounters be
+    WHERE be.instance_id = p.id AND be.boss AND be.kill_type IN ('clean', 'partial')) AS bosses_killed,
+  (SELECT sr.ranked_duration_ms FROM instance_speedruns sr
+    WHERE sr.instance_id = p.id AND sr.ranked_duration_ms > 0) AS clear_time_ms
+FROM (
+  SELECT m.*
+  FROM matched m
+  WHERE {{CURSOR}}
+  ORDER BY m.started_at DESC, m.id DESC
+  LIMIT {{LIMIT}}
+) p
+ORDER BY p.started_at DESC, p.id DESC`
 
 type scopeKind int
 

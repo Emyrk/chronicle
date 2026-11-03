@@ -2513,6 +2513,77 @@ export interface InstanceSearchCursor {
 
 // From chroniclesdk/instance_search.go
 /**
+ * InstanceSearchField describes one searchable field, for building UIs.
+ */
+export interface InstanceSearchField {
+    readonly name: string;
+    readonly scope: InstanceSearchFieldScope;
+    /**
+     * Type is int, float, string, bool, time, uuid or enum.
+     */
+    readonly type: string;
+    /**
+     * Enum lists the allowed values when Type is enum.
+     */
+    readonly enum?: readonly string[];
+    readonly ops: readonly InstanceSearchOp[];
+    /**
+     * Unit describes numbers, e.g. "ms" or "0-100".
+     */
+    readonly unit?: string;
+    readonly doc: string;
+    /**
+     * Bosses: the field takes bosses + match.
+     */
+    readonly bosses: boolean;
+    /**
+     * ParseScope: the field takes parse_scope.
+     */
+    readonly parse_scope: boolean;
+    /**
+     * Metric: the field takes metric.
+     */
+    readonly metric: boolean;
+    /**
+     * On: the field takes on (bosses, trash, any).
+     */
+    readonly on: boolean;
+    /**
+     * Anonymous: logged-out users may use this field.
+     */
+    readonly anonymous: boolean;
+    /**
+     * Cost is the field's weight in a query's cost.
+     */
+    readonly cost: number;
+}
+
+// From chroniclesdk/instance_search.go
+export type InstanceSearchFieldScope = "encounter" | "instance" | "player";
+
+export const InstanceSearchFieldScopes: InstanceSearchFieldScope[] = ["encounter", "instance", "player"];
+
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchFieldsResponse is GET /api/v1/raidlogs/search/fields.
+ */
+export interface InstanceSearchFieldsResponse {
+    readonly fields: readonly InstanceSearchField[];
+    /**
+     * MaxNodes and MaxDepth bound the size of a query tree.
+     */
+    readonly max_nodes: number;
+    readonly max_depth: number;
+    /**
+     * Anonymous limits: logged-out users may AND together at most this many
+     * predicates on Anonymous fields, with no quantifiers, or or not.
+     */
+    readonly anonymous_max_predicates: number;
+    readonly anonymous_max_limit: number;
+}
+
+// From chroniclesdk/instance_search.go
+/**
  * InstanceSearchLimitResponse is the caller's instance search rate-limit
  * bucket, from GET /api/v1/raidlogs/search/limit. Searches spend tokens equal
  * to their cost (the Chronicle-Search-Cost header).
@@ -2673,6 +2744,19 @@ export interface InstanceSearchResult {
     readonly difficulty_name: string;
     readonly max_players: number;
     readonly started_at: string;
+    /**
+     * PlayerCount is the number of distinct players in the run.
+     */
+    readonly player_count: number;
+    /**
+     * BossesKilled is the number of distinct bosses killed (clean or partial).
+     */
+    readonly bosses_killed: number;
+    /**
+     * ClearTimeMS is the ranked full-clear time; absent when the run is not
+     * a full clear.
+     */
+    readonly clear_time_ms?: number;
 }
 
 // From chroniclesdk/time_parses.go

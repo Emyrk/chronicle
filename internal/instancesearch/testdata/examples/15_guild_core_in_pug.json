@@ -1,4 +1,6 @@
 {
+  "title": "PUG with a guild core",
+  "category": "Roster",
   "description": "5+ members of Alpha in a run not attributed to Alpha (a PUG with an Alpha core).",
   "query": {
     "where": {

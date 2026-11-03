@@ -28,12 +28,23 @@ WITH matched AS (
     AND ((SELECT count(DISTINCT lower(tbs2.encounter_name)) FROM time_parse_scores tps1 JOIN time_parse_boss_scores tbs2 ON tbs2.time_parse_score_id = tps1.id WHERE tps1.tenant_id = $4::uuid AND tps1.instance_id = li.id AND tps1.lookback_days = $1::smallint AND tps1.policy_version = $2::smallint AND tps1.query_version = $3::smallint AND tbs2.server_status IN ('ok', 'low_confidence') AND lower(tbs2.encounter_name) = ANY(ARRAY(SELECT lower(v) FROM unnest($6::text[]) v)) AND tbs2.server_display_score >= $5::bigint) = cardinality(ARRAY(SELECT lower(v) FROM unnest($6::text[]) v)))
   ORDER BY COALESCE(li.duplicate_group_id, li.id), li.id
 )
-SELECT m.id, m.hashed_slug, m.name, m.realm_id, m.realm_name, m.guild_id, m.guild_name,
-  m.difficulty_name, m.max_players, m.started_at
-FROM matched m
-WHERE TRUE
-ORDER BY m.started_at DESC, m.id DESC
-LIMIT $7
+-- Summary columns are computed only for the page of results, after the
+-- limit, so they never slow the search itself.
+SELECT p.id, p.hashed_slug, p.name, p.realm_id, p.realm_name, p.guild_id, p.guild_name,
+  p.difficulty_name, p.max_players, p.started_at,
+  (SELECT count(DISTINCT lp.unit_guid) FROM log_instance_players lp WHERE lp.instance_id = p.id) AS player_count,
+  (SELECT count(DISTINCT be.name) FROM log_instance_encounters be
+    WHERE be.instance_id = p.id AND be.boss AND be.kill_type IN ('clean', 'partial')) AS bosses_killed,
+  (SELECT sr.ranked_duration_ms FROM instance_speedruns sr
+    WHERE sr.instance_id = p.id AND sr.ranked_duration_ms > 0) AS clear_time_ms
+FROM (
+  SELECT m.*
+  FROM matched m
+  WHERE TRUE
+  ORDER BY m.started_at DESC, m.id DESC
+  LIMIT $7
+) p
+ORDER BY p.started_at DESC, p.id DESC
 
 -- args:
 [

@@ -1,4 +1,6 @@
 {
+  "title": "A druid who went Bear and Cat",
+  "category": "Roster",
   "description": "A single druid played both Bear and Cat on boss kills in the same run.",
   "query": {
     "where": {

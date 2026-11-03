@@ -1,4 +1,6 @@
 {
+  "title": "Bear on trash, Cat on bosses",
+  "category": "Roster",
   "description": "A druid who tanked trash as Bear but played Cat on every boss kill they were ranked on: Bear on trash, Cat on bosses, never Bear on a boss.",
   "query": {
     "where": {

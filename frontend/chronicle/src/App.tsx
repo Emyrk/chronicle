@@ -102,6 +102,7 @@ const ArmoryPage = lazy(() => import("./pages/ArmoryPage").then(({ ArmoryPage })
 const PerformanceComparisonPage = lazy(() => import("./pages/ArmoryPage").then(({ PerformanceComparisonPage }) => ({ default: PerformanceComparisonPage })))
 const ArmorySearchPage = lazy(() => import("./pages/ArmorySearch").then(({ ArmorySearchPage }) => ({ default: ArmorySearchPage })))
 const GuildSearchPage = lazy(() => import("./pages/GuildSearch").then(({ GuildSearchPage }) => ({ default: GuildSearchPage })))
+const InstanceSearchPage = lazy(() => import("./pages/InstanceSearch").then(({ InstanceSearchPage }) => ({ default: InstanceSearchPage })))
 const GuildHistoryPage = lazy(() => import("./pages/GuildHistory/GuildHistoryPage").then(({ GuildHistoryPage }) => ({ default: GuildHistoryPage })))
 const ApplyPage = lazy(() => import("./pages/Apply/ApplyPage").then(({ ApplyPage }) => ({ default: ApplyPage })))
 const ApplicationPage = lazy(() => import("./pages/Apply/ApplicationPage").then(({ ApplicationPage }) => ({ default: ApplicationPage })))
@@ -175,6 +176,7 @@ function App() {
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         <Route path="/recent" element={<RecentRaids />} />
+        <Route path="/search" element={<InstanceSearchPage />} />
         <Route path="/empty" element={<Empty />} />
         <Route path="/upload" element={<Upload />} />
         <Route path="/download" element={<DownloadPage />} />

@@ -1,4 +1,6 @@
 {
+  "title": "One player's 95+ Ragnaros parse",
+  "category": "Parses",
   "description": "Runs where Thrall parsed 95+ DPS on Ragnaros.",
   "query": {
     "where": {

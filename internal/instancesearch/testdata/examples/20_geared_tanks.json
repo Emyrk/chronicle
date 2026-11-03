@@ -1,4 +1,6 @@
 {
+  "title": "Two geared tanks",
+  "category": "Roster",
   "description": "Two or more tanks with average item level 70 or higher on a boss kill.",
   "query": {
     "where": {

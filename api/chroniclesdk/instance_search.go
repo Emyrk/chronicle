@@ -131,6 +131,13 @@ type InstanceSearchResult struct {
 	DifficultyName string        `json:"difficulty_name"`
 	MaxPlayers     int32         `json:"max_players"`
 	StartedAt      time.Time     `json:"started_at" format:"date-time"`
+	// PlayerCount is the number of distinct players in the run.
+	PlayerCount int64 `json:"player_count"`
+	// BossesKilled is the number of distinct bosses killed (clean or partial).
+	BossesKilled int64 `json:"bosses_killed"`
+	// ClearTimeMS is the ranked full-clear time; absent when the run is not
+	// a full clear.
+	ClearTimeMS *int64 `json:"clear_time_ms,omitempty"`
 }
 
 // InstanceSearchLimitResponse is the caller's instance search rate-limit
@@ -148,6 +155,56 @@ type InstanceSearchLimitResponse struct {
 	RefillPerMinute float64 `json:"refill_per_minute"`
 	// ResetSeconds is how long until the bucket is full.
 	ResetSeconds int64 `json:"reset_seconds"`
+}
+
+// InstanceSearchFieldScope is where a field may be used in the tree.
+type InstanceSearchFieldScope string
+
+const (
+	// InstanceSearchFieldScopeInstance fields are used outside quantifiers.
+	InstanceSearchFieldScopeInstance InstanceSearchFieldScope = "instance"
+	// InstanceSearchFieldScopePlayer fields are used inside any_player / count_players.
+	InstanceSearchFieldScopePlayer InstanceSearchFieldScope = "player"
+	// InstanceSearchFieldScopeEncounter fields are used inside any_encounter / count_encounters.
+	InstanceSearchFieldScopeEncounter InstanceSearchFieldScope = "encounter"
+)
+
+// InstanceSearchField describes one searchable field, for building UIs.
+type InstanceSearchField struct {
+	Name  string                   `json:"name"`
+	Scope InstanceSearchFieldScope `json:"scope"`
+	// Type is int, float, string, bool, time, uuid or enum.
+	Type string `json:"type"`
+	// Enum lists the allowed values when Type is enum.
+	Enum []string           `json:"enum,omitempty"`
+	Ops  []InstanceSearchOp `json:"ops"`
+	// Unit describes numbers, e.g. "ms" or "0-100".
+	Unit string `json:"unit,omitempty"`
+	Doc  string `json:"doc"`
+	// Bosses: the field takes bosses + match.
+	Bosses bool `json:"bosses"`
+	// ParseScope: the field takes parse_scope.
+	ParseScope bool `json:"parse_scope"`
+	// Metric: the field takes metric.
+	Metric bool `json:"metric"`
+	// On: the field takes on (bosses, trash, any).
+	On bool `json:"on"`
+	// Anonymous: logged-out users may use this field.
+	Anonymous bool `json:"anonymous"`
+	// Cost is the field's weight in a query's cost.
+	Cost int `json:"cost"`
+}
+
+// InstanceSearchFieldsResponse is GET /api/v1/raidlogs/search/fields.
+type InstanceSearchFieldsResponse struct {
+	Fields []InstanceSearchField `json:"fields"`
+	// MaxNodes and MaxDepth bound the size of a query tree.
+	MaxNodes int `json:"max_nodes"`
+	MaxDepth int `json:"max_depth"`
+	// Anonymous limits: logged-out users may AND together at most this many
+	// predicates on Anonymous fields, with no quantifiers, or or not.
+	AnonymousMaxPredicates int `json:"anonymous_max_predicates"`
+	AnonymousMaxLimit      int `json:"anonymous_max_limit"`
 }
 
 // InstanceSearchResponse is one page of results.

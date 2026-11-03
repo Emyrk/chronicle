@@ -12,15 +12,66 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/internal/instancesearch"
 )
 
 var update = flag.Bool("update", false, "regenerate instance search golden files")
 
 type example struct {
-	Name        string
+	Name string
+	// Title and Category are set on examples shown in the search UI's
+	// Examples menu (see TestUIExamples).
+	Title       string               `json:"title,omitempty"`
+	Category    string               `json:"category,omitempty"`
 	Description string               `json:"description"`
 	Query       instancesearch.Query `json:"query"`
+}
+
+// uiExampleCategories is the menu order; every titled example must use one.
+var uiExampleCategories = []string{"Run", "Bosses", "Speed", "Roster", "Parses", "Logs", "Combined"}
+
+// TestUIExamples writes the titled examples to the frontend's Examples
+// menu. They are the same queries TestSearch runs against Postgres, so the
+// menu can only offer queries that compile and run.
+func TestUIExamples(t *testing.T) {
+	t.Parallel()
+
+	type uiExample struct {
+		ID          string               `json:"id"`
+		Title       string               `json:"title"`
+		Category    string               `json:"category"`
+		Description string               `json:"description"`
+		Where       *instancesearch.Node `json:"where"`
+	}
+	var out []uiExample
+	for _, cat := range uiExampleCategories {
+		for _, ex := range loadExamples(t) {
+			if ex.Title == "" || ex.Category != cat {
+				continue
+			}
+			out = append(out, uiExample{ID: ex.Name, Title: ex.Title, Category: ex.Category, Description: ex.Description, Where: ex.Query.Where})
+		}
+	}
+	for _, ex := range loadExamples(t) {
+		if ex.Title != "" {
+			require.Contains(t, uiExampleCategories, ex.Category, "%s: unknown category", ex.Name)
+		}
+	}
+	require.NotEmpty(t, out)
+
+	path := filepath.Join("..", "..", "frontend", "chronicle", "src", "pages", "InstanceSearch", "generated", "searchExamples.json")
+	got, err := json.MarshalIndent(out, "", "  ")
+	require.NoError(t, err)
+	got = append(got, '\n')
+	if *update {
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
+		require.NoError(t, os.WriteFile(path, got, 0o600))
+		return
+	}
+	want, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, string(want), string(got), "run go test ./internal/instancesearch -run TestUIExamples -update")
 }
 
 func loadExamples(t *testing.T) []example {
@@ -88,6 +139,50 @@ func TestFieldReference(t *testing.T) {
 	want, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, string(want), got, "run go test ./internal/instancesearch -run TestFieldReference -update")
+}
+
+func TestDescribe(t *testing.T) {
+	t.Parallel()
+
+	d := instancesearch.Describe()
+	require.NotEmpty(t, d.Fields)
+	byName := map[string]chroniclesdk.InstanceSearchField{}
+	for _, f := range d.Fields {
+		byName[f.Name] = f
+	}
+	name := byName["instance.name"]
+	require.True(t, name.Anonymous)
+	require.Equal(t, chroniclesdk.InstanceSearchFieldScopeInstance, name.Scope)
+	require.Contains(t, name.Ops, instancesearch.OpContains)
+
+	role := byName["player.role"]
+	require.False(t, role.Anonymous)
+	require.Equal(t, chroniclesdk.InstanceSearchFieldScopePlayer, role.Scope)
+	require.Equal(t, []string{"dps", "heal", "tank"}, role.Enum)
+	require.True(t, role.On)
+	require.True(t, role.Bosses)
+
+	require.Equal(t, 15, byName["player.parse"].Cost)
+	require.Equal(t, chroniclesdk.InstanceSearchFieldScopeEncounter, byName["encounter.outcome"].Scope)
+}
+
+// TestDescribeFixture keeps the frontend's Storybook/test fixture of
+// GET /search/fields in sync with the registry.
+func TestDescribeFixture(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join("..", "..", "frontend", "chronicle", "src", "pages", "InstanceSearch", "fixtures", "searchFields.json")
+	got, err := json.MarshalIndent(instancesearch.Describe(), "", "  ")
+	require.NoError(t, err)
+	got = append(got, '\n')
+	if *update {
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
+		require.NoError(t, os.WriteFile(path, got, 0o600))
+		return
+	}
+	want, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, string(want), string(got), "run go test ./internal/instancesearch -run TestDescribeFixture -update")
 }
 
 func TestCompileEnumsAreCanonicalized(t *testing.T) {
