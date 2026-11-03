@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SyncModeProvider, useSyncModeContext } from "../../SyncModeContext";
@@ -20,6 +20,7 @@ import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
 import type { MapCameraMark, MapCameraPose } from "./cameraPath";
 import MapView3D from "./MapView3D";
+import { exportCanvasVideo } from "./videoExport";
 import type { MapViewRequest } from "./MapView2D";
 import { addEffectEvent, createEncounterEffects, isDeadAt, type EncounterEffects, type ReplayEffectEvent } from "./replayEffects";
 import { useMapScene, type MapMarkerKind, type MapSceneGround, type MapSceneMarker } from "./useMapScene";
@@ -878,6 +879,10 @@ const KRESH_LOOP_PAUSE_MS = 1_000;
 
 // Replays a loaded fixture (the real Kresh kill, or a synthetic encounter
 // built in its shape) through the production useMapScene, looping.
+interface MapCaptureBridge {
+  setTime: (timestampMs: number, walkElapsedMs?: number) => void;
+  exportVideo: (options: { startMs: number; endMs: number; fps?: number }) => Promise<{ blob: Blob; codec: string; width: number; height: number; elapsedMs: number; frameCount: number; status: string }>;
+}
 function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSettings, walkAvatar, capture = false, initialCameraMarks = [], captureRender = false, captureWalking = false, captureWalkStartGuid, captureWalkLookAtGuid }: {
   fixture: LoadedMapFixture;
   mesh?: boolean;
@@ -896,6 +901,15 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
   const sync = useSyncModeContext();
   const { enabled, isPlaying, currentTimestamp, enable, setEncounterBounds, setTimestamp, play, pause } = sync;
   const [captureHud, setCaptureHud] = useState(!captureRender);
+  // Spike: the in-browser export reads the WebGL canvas, which needs its
+  // drawing buffer kept. Set before MapView3D creates its renderer.
+  useState(() => {
+    if (captureRender) (window as Window & { __chronicleMapPreserveBuffer?: boolean }).__chronicleMapPreserveBuffer = true;
+    return null;
+  });
+  const rootRef = useRef<HTMLDivElement>(null);
+  const replayMsRef = useRef(0);
+  const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [cameraMarks, setCameraMarks] = useState<MapCameraMark[]>(() => [...initialCameraMarks]);
   const [cameraPathPreview, setCameraPathPreview] = useState(captureRender && !captureWalking);
   const [cameraCaptureKey, setCameraCaptureKey] = useState(0);
@@ -905,6 +919,9 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
   const replayMs = Math.max(0, Math.min(fixture.endMs - fixture.startMs, (currentTimestamp?.getTime() ?? fixture.startMs) - fixture.startMs));
   const elapsed = replayMs / 1000;
   const durationSeconds = Math.max(0.001, (fixture.endMs - fixture.startMs) / 1000);
+  useEffect(() => {
+    replayMsRef.current = replayMs;
+  }, [replayMs]);
   const sortedCameraMarks = useMemo(() => [...cameraMarks].sort((a, b) => a.timestampMs - b.timestampMs), [cameraMarks]);
   const cameraMarksJson = useMemo(() => JSON.stringify(sortedCameraMarks, null, 2), [sortedCameraMarks]);
   const walkCaptureFrame = useMemo(() => captureWalking ? {
@@ -963,12 +980,41 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
 
   useEffect(() => {
     if (!captureRender) return;
-    const captureWindow = window as Window & { __chronicleMapCapture?: { setTime: (timestampMs: number, walkElapsedMs?: number) => void } };
+    const captureWindow = window as Window & { __chronicleMapCapture?: MapCaptureBridge };
+    const clampMs = (timestampMs: number) => Math.max(0, Math.min(fixture.endMs - fixture.startMs, timestampMs));
+    const nextFrame = () => new Promise<number>((resolve) => requestAnimationFrame(resolve));
     captureWindow.__chronicleMapCapture = {
       setTime: (timestampMs, walkElapsedMs) => {
         pause();
-        setTimestamp(new Date(fixture.startMs + Math.max(0, Math.min(fixture.endMs - fixture.startMs, timestampMs))));
+        setTimestamp(new Date(fixture.startMs + clampMs(timestampMs)));
         if (walkElapsedMs !== undefined) setCaptureWalkMs(walkElapsedMs);
+      },
+      // Spike: steps the replay frame by frame and encodes the WebGL canvas
+      // to MP4 in this tab (WebCodecs). No server, no screenshots.
+      exportVideo: async ({ startMs, endMs, fps = 30 }) => {
+        const canvas = rootRef.current?.querySelector("canvas");
+        if (!canvas) throw new Error("No map canvas");
+        pause();
+        const frameCount = Math.round(((endMs - startMs) / 1000) * fps) + 1;
+        const result = await exportCanvasVideo({
+          canvas,
+          fps,
+          frameCount,
+          renderFrame: async (index) => {
+            const at = clampMs(Math.min(endMs, startMs + (index * 1000) / fps));
+            setTimestamp(new Date(fixture.startMs + at));
+            // Wait for React to commit the replay time, then for the scene's
+            // render frame (same settle as scripts/capture-map-path.mjs).
+            for (let tries = 0; tries < 60 && Math.abs(replayMsRef.current - at) > 1; tries += 1) await nextFrame();
+            await nextFrame();
+            await nextFrame();
+            await nextFrame();
+          },
+          onProgress: (done, total) => setExportStatus(`Encoding ${done}/${total}`),
+        });
+        const status = `${result.codec} ${result.width}x${result.height} · ${frameCount} frames · ${(result.blob.size / 1e6).toFixed(2)} MB · ${(result.elapsedMs / 1000).toFixed(1)}s (${(frameCount / (result.elapsedMs / 1000)).toFixed(1)} fps)`;
+        setExportStatus(status);
+        return { ...result, frameCount, status };
       },
     };
     return () => {
@@ -1024,6 +1070,7 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
   const followable = meshState === "ready" && scene.status === "ready" && scene.markers.some((marker) => marker.guid === followGuid);
   return (
     <div
+      ref={rootRef}
       data-map-capture-ready={captureRender && meshState === "ready" && scene.status === "ready"}
       data-map-capture-ms={captureRender ? Math.round(replayMs) : undefined}
       style={{ width: capture ? "100vw" : 800, height: capture ? "100vh" : 520 }}
@@ -1069,6 +1116,30 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
               <span className="font-semibold">{instance.encounters[0]?.name} · {elapsed.toFixed(1)}s / {durationSeconds.toFixed(1)}s</span>
               <span className="text-white/55">H hide · X play/pause · ←/→ step · Home rewind · G walk · Space jump</span>
             </div>
+            {captureRender ? (
+              <div className="mb-2 flex items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  disabled={exportStatus?.startsWith("Encoding")}
+                  onClick={() => {
+                    const bridge = (window as Window & { __chronicleMapCapture?: MapCaptureBridge }).__chronicleMapCapture;
+                    const marks = sortedCameraMarks;
+                    const startMs = marks[0]?.timestampMs ?? 0;
+                    const endMs = marks.length > 1 ? marks[marks.length - 1].timestampMs : fixture.endMs - fixture.startMs;
+                    bridge?.exportVideo({ startMs, endMs }).then(({ blob }) => {
+                      const link = document.createElement("a");
+                      link.href = URL.createObjectURL(blob);
+                      link.download = "chronicle-replay.mp4";
+                      link.click();
+                    }, (error: unknown) => setExportStatus(`Export failed: ${String(error)}`));
+                  }}
+                  className="rounded-md bg-cyan-400 px-2.5 py-1 font-semibold text-black hover:bg-cyan-300 disabled:opacity-50"
+                >
+                  Export MP4 (in browser)
+                </button>
+                {exportStatus ? <span className="text-white/70">{exportStatus}</span> : null}
+              </div>
+            ) : null}
             <input
               aria-label="Replay time"
               type="range"
