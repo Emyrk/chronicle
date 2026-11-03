@@ -22304,8 +22304,6 @@ WITH selected_bosses AS (
       AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
       AND (COALESCE(cardinality($5::uuid[]), 0) = 0 OR s.realm_id = ANY($5::uuid[]))
       AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0) OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND $6::boolean AND s.difficulty_name = $7 AND s.max_players = $8))
-    AND s.rating_metric = 'renown'
-
     ORDER BY s.rating_metric, s.realm_id, s.guild_id, s.score DESC
   ) b
   JOIN wow_server_realms realm ON realm.id = b.realm_id
@@ -22326,7 +22324,6 @@ WITH selected_bosses AS (
       AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
       AND (COALESCE(cardinality($5::uuid[]), 0) = 0 OR s.realm_id = ANY($5::uuid[]))
       AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0) OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND $6::boolean AND s.difficulty_name = $7 AND s.max_players = $8))
-    AND s.rating_metric = 'renown'
       AND s.encounter_name IN (SELECT encounter_name FROM selected_bosses)
     ORDER BY s.encounter_name, s.rating_metric, s.realm_id, s.guild_id, s.score DESC
   ) b

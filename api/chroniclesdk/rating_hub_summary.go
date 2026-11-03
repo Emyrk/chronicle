@@ -42,7 +42,9 @@ type HubPlayerRatings struct {
 	Renown        []HubPlayerRatingEntry `json:"renown"`
 }
 type HubGuildRatings struct {
-	Renown []HubGuildRatingEntry `json:"renown"`
+	Peak          []HubGuildRatingEntry `json:"peak"`
+	RankedMastery []HubGuildRatingEntry `json:"ranked_mastery"`
+	Renown        []HubGuildRatingEntry `json:"renown"`
 }
 
 // Compact published score identities are sufficient for preview cards.

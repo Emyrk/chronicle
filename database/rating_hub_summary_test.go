@@ -96,6 +96,21 @@ func TestHubSummaryRatingPreviewLimitsAndRealm(t *testing.T) {
 			require.NoError(t, err)
 		}
 	}
+	for i := 0; i < 8; i++ {
+		guildID := uuid.New()
+		_, err = conn.Exec(ctx, "INSERT INTO guilds(id,realm_id,name) VALUES($1,$2,$3)", guildID, realms[0], fmt.Sprintf("Hub guild %d", i))
+		require.NoError(t, err)
+		for _, boss := range []string{"Ragnaros", "Lucifron"} {
+			for _, metric := range []string{"peak", "ranked_mastery"} {
+				_, err = conn.Exec(ctx, `INSERT INTO guild_tenant_rating_boss_scores(generation_id,tenant_id,realm_id,guild_id,instance_name,encounter_name,difficulty_name,max_players,rating_metric,window_kind,window_start,window_end,score) VALUES($1,$2,$3,$4,'Molten Core',$5,'',0,$6,'period',$7,$8,$9)`, gen, tenant, realms[0], guildID, boss, metric, time.Now().Add(-time.Hour), time.Now(), float64(100-i))
+				require.NoError(t, err)
+			}
+		}
+		for _, metric := range []string{"peak", "ranked_mastery"} {
+			_, err = conn.Exec(ctx, `INSERT INTO guild_tenant_rating_scope_scores(generation_id,tenant_id,realm_id,guild_id,instance_name,difficulty_name,max_players,rating_metric,window_kind,window_start,window_end,score) VALUES($1,$2,$3,$4,'Molten Core','',0,$5,'period',$6,$7,$8)`, gen, tenant, realms[0], guildID, metric, time.Now().Add(-time.Hour), time.Now(), float64(100-i))
+			require.NoError(t, err)
+		}
+	}
 	// The same player can have several class/spec rows. All-class previews keep
 	// only their best score per realm before applying the five-row cap.
 	_, err = conn.Exec(ctx, `INSERT INTO player_tenant_rating_boss_scores(generation_id,tenant_id,realm_id,player_guid,instance_name,encounter_name,difficulty_name,max_players,player_class,player_spec,player_sub_spec,performance_metric,rating_metric,window_kind,window_start,window_end,score) VALUES($1,$2,$3,'player-0','Molten Core','Ragnaros','',0,'Warrior','Fury','','dps','peak','period',$4,$5,150)`, gen, tenant, realms[0], time.Now().Add(-time.Hour), time.Now())
@@ -109,7 +124,7 @@ func TestHubSummaryRatingPreviewLimitsAndRealm(t *testing.T) {
 	require.NoError(t, err)
 	counts := map[string]int{}
 	for _, row := range rows {
-		if row.Board == "boss" && row.RatingMetric == "peak" {
+		if row.Subject == "player" && row.Board == "boss" && row.RatingMetric == "peak" {
 			counts[row.EncounterName]++
 			require.NotEqual(t, realms[2], row.RealmID)
 		}
@@ -121,6 +136,17 @@ func TestHubSummaryRatingPreviewLimitsAndRealm(t *testing.T) {
 	}
 	require.Equal(t, 5, counts["Ragnaros"])
 	require.Equal(t, 1, counts["Lucifron"])
+	guildCounts := map[string]int{}
+	for _, row := range rows {
+		if row.Subject == "guild" {
+			guildCounts[row.Board+":"+row.EncounterName+":"+row.RatingMetric]++
+		}
+	}
+	for _, metric := range []string{"peak", "ranked_mastery"} {
+		require.Equal(t, 5, guildCounts["scope::"+metric])
+		require.Equal(t, 5, guildCounts["boss:Ragnaros:"+metric])
+		require.Equal(t, 1, guildCounts["boss:Lucifron:"+metric])
+	}
 	args.RealmIds = []uuid.UUID{realms[1]}
 	rows, err = q.HubSummaryRatingRows(ctx, args)
 	require.NoError(t, err)

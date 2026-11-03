@@ -68,8 +68,6 @@ WITH selected_bosses AS (
       AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
       AND (COALESCE(cardinality(@realm_ids::uuid[]), 0) = 0 OR s.realm_id = ANY(@realm_ids::uuid[]))
       AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0) OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND @exact_cohort::boolean AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players))
-    AND s.rating_metric = 'renown'
-
     ORDER BY s.rating_metric, s.realm_id, s.guild_id, s.score DESC
   ) b
   JOIN wow_server_realms realm ON realm.id = b.realm_id
@@ -90,7 +88,6 @@ WITH selected_bosses AS (
       AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
       AND (COALESCE(cardinality(@realm_ids::uuid[]), 0) = 0 OR s.realm_id = ANY(@realm_ids::uuid[]))
       AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0) OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND @exact_cohort::boolean AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players))
-    AND s.rating_metric = 'renown'
       AND s.encounter_name IN (SELECT encounter_name FROM selected_bosses)
     ORDER BY s.encounter_name, s.rating_metric, s.realm_id, s.guild_id, s.score DESC
   ) b

@@ -50,5 +50,7 @@ func TestEmptyHubRatingBoard(t *testing.T) {
 	require.NotNil(t, board.Player.Peak)
 	require.NotNil(t, board.Player.RankedMastery)
 	require.NotNil(t, board.Player.Renown)
+	require.NotNil(t, board.Guild.Peak)
+	require.NotNil(t, board.Guild.RankedMastery)
 	require.NotNil(t, board.Guild.Renown)
 }

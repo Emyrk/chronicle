@@ -83,7 +83,7 @@ func parseHubSummaryInput(r *http.Request) (hubSummaryInput, error) {
 }
 
 func emptyHubBoard() chroniclesdk.HubRatingBoard {
-	return chroniclesdk.HubRatingBoard{Player: chroniclesdk.HubPlayerRatings{Peak: []chroniclesdk.HubPlayerRatingEntry{}, RankedMastery: []chroniclesdk.HubPlayerRatingEntry{}, Renown: []chroniclesdk.HubPlayerRatingEntry{}}, Guild: chroniclesdk.HubGuildRatings{Renown: []chroniclesdk.HubGuildRatingEntry{}}}
+	return chroniclesdk.HubRatingBoard{Player: chroniclesdk.HubPlayerRatings{Peak: []chroniclesdk.HubPlayerRatingEntry{}, RankedMastery: []chroniclesdk.HubPlayerRatingEntry{}, Renown: []chroniclesdk.HubPlayerRatingEntry{}}, Guild: chroniclesdk.HubGuildRatings{Peak: []chroniclesdk.HubGuildRatingEntry{}, RankedMastery: []chroniclesdk.HubGuildRatingEntry{}, Renown: []chroniclesdk.HubGuildRatingEntry{}}}
 }
 
 // handleHubSummary serves tenant-wide public metadata and bounded published previews.
@@ -254,7 +254,15 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 					httpapi.InternalServerError(w, e)
 					return
 				}
-				board.Guild.Renown = append(board.Guild.Renown, chroniclesdk.HubGuildRatingEntry{RealmID: v.RealmID, RealmName: v.RealmName, GuildID: id, GuildName: v.SubjectName, Score: v.Score})
+				entry := chroniclesdk.HubGuildRatingEntry{RealmID: v.RealmID, RealmName: v.RealmName, GuildID: id, GuildName: v.SubjectName, Score: v.Score}
+				switch v.RatingMetric {
+				case "peak":
+					board.Guild.Peak = append(board.Guild.Peak, entry)
+				case "ranked_mastery":
+					board.Guild.RankedMastery = append(board.Guild.RankedMastery, entry)
+				case "renown":
+					board.Guild.Renown = append(board.Guild.Renown, entry)
+				}
 				continue
 			}
 			entry := chroniclesdk.HubPlayerRatingEntry{RealmID: v.RealmID, RealmName: v.RealmName, PlayerGUID: v.SubjectID, PlayerName: v.SubjectName, PlayerClass: normalizeClassName(v.PlayerClass), PlayerSpec: v.PlayerSpec, PlayerSubSpec: v.PlayerSubSpec, Score: v.Score}
