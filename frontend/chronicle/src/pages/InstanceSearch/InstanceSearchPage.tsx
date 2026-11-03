@@ -9,6 +9,7 @@ import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation";
 import { useSupporterTier } from "@/hooks/useSupporterTier";
 import { TIER_COLOR } from "@/pages/Settings/billingPricing";
 import { Button } from "@/components/ui/button";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { BlockEditor } from "./BlockEditor";
 import { ResultsTable } from "./ResultsTable";
@@ -272,6 +273,19 @@ export function InstanceSearchPage() {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Search className="h-6 w-6 text-primary" />
             Instance search
+            <HintTooltip delayDuration={150}>
+              <TooltipTrigger asChild>
+                <span
+                  tabIndex={0}
+                  className="cursor-help rounded-sm border border-amber-400/35 bg-amber-400/10 px-1.5 py-px text-[10px] font-bold uppercase tracking-wider text-amber-400"
+                >
+                  Beta
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={6} className="max-w-64 text-center">
+                Instance search is under active development. Fields, results and limits can change at any time.
+              </TooltipContent>
+            </HintTooltip>
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Find raids by zone, bosses, speed, parses, roster and more.{" "}
