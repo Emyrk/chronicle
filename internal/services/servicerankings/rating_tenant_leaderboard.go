@@ -132,7 +132,7 @@ func tenantRatingInput(r *http.Request, guild, boss bool) (url.Values, []uuid.UU
 	} else if strings.TrimSpace(q.Get("class")) == "" || (q.Get("performance_metric") != "dps" && q.Get("performance_metric") != "hps") {
 		return nil, nil, 0, "", tenantRatingCursor{}, errors.New("invalid player cohort")
 	}
-	if metric == "renown" && (max != 0 || q.Get("difficulty_name") != "") || metric != "renown" && max == 0 {
+	if metric == "renown" && (max != 0 || q.Get("difficulty_name") != "") {
 		return nil, nil, 0, "", tenantRatingCursor{}, errors.New("max_players and difficulty_name must match the rating cohort")
 	}
 	limit := int64(50)

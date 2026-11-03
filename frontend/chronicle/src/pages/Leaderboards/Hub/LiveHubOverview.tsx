@@ -72,7 +72,8 @@ export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, r
       if (!response.ok) throw new Error(`Speedruns request failed (${response.status})`)
       return response.json() as Promise<SpeedrunLeaderboardEntry[]>
     },
-    enabled: ready && fullClear && !!speedCohort,
+    // Speedrun size filters use player count, where 0 means unfiltered.
+    enabled: ready && fullClear && !!speedCohort && speedCohort.maxPlayers > 0,
     staleTime: 5 * 60 * 1000,
     retry: false,
   })
@@ -114,7 +115,7 @@ export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, r
         <div className="absolute inset-0 bg-background/80" />
         <span className="absolute top-3 left-4 z-10 text-xs font-medium text-muted-foreground">{boss ? `Fastest ${boss} kills` : combined ? `Fastest total kill time · ${selectedBosses.length} bosses` : "Fastest full clears"}</span>
         <CardLink label="Speedruns" onClick={() => onTab("speedruns")} className="absolute top-3 right-4 z-10" />
-        <div className="relative px-4 pt-10 pb-8 text-center text-sm text-muted-foreground">{!fullClear ? "Selected boss or combined-boss speed podium unavailable" : !speedCohort ? "Choose an exact raid difficulty and size to see fastest full clears" : speed.isPending ? "Loading speedruns…" : speed.isError ? "Speedruns unavailable" : "No qualifying full clears yet"}</div>
+        <div className="relative px-4 pt-10 pb-8 text-center text-sm text-muted-foreground">{!fullClear ? "Selected boss or combined-boss speed podium unavailable" : !speedCohort ? "Choose an exact raid difficulty and size to see fastest full clears" : speedCohort.maxPlayers === 0 ? "Exact speedrun results unavailable for raids without a recorded size" : speed.isPending ? "Loading speedruns…" : speed.isError ? "Speedruns unavailable" : "No qualifying full clears yet"}</div>
       </section>}
     {boss && <BossStats boss={{ boss, kills: !realmName && !cls && !spec && !subSpec ? encounters.data?.find((row) => row.encounter_name === boss)?.total_kills : undefined }} />}
     <div className="grid gap-5 lg:grid-cols-[1.55fr_1fr]">

@@ -2624,25 +2624,6 @@ type RatingStagePlayerRenown struct {
 	SourceID      uuid.UUID          `db:"source_id" json:"source_id"`
 }
 
-type RatingTenantPolicy struct {
-	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	Version       int32              `db:"version" json:"version"`
-	HalfLifeDays  float64            `db:"half_life_days" json:"half_life_days"`
-	BestWeight    float64            `db:"best_weight" json:"best_weight"`
-	FormWeight    float64            `db:"form_weight" json:"form_weight"`
-	FloorWeight   float64            `db:"floor_weight" json:"floor_weight"`
-	RankOneWeight float64            `db:"rank_one_weight" json:"rank_one_weight"`
-	FullRankKills int32              `db:"full_rank_kills" json:"full_rank_kills"`
-	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-}
-
-type RatingTenantRenownBoss struct {
-	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	InstanceName  string    `db:"instance_name" json:"instance_name"`
-	EncounterName string    `db:"encounter_name" json:"encounter_name"`
-	RenownPoints  float64   `db:"renown_points" json:"renown_points"`
-}
-
 type RegressionFixture struct {
 	ID         uuid.UUID          `db:"id" json:"id"`
 	LogGroupID uuid.UUID          `db:"log_group_id" json:"log_group_id"`

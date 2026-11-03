@@ -48,13 +48,16 @@ func (w *WorkerDispatchRatingScores) Work(ctx context.Context, _ *river.Job[Args
 	if w.Queue == nil {
 		return fmt.Errorf("rating score dispatch queue is unavailable")
 	}
-	tenants, err := w.Store.ListConfiguredTenantRatingTenants(ctx)
+	tenants, err := w.Store.ListRatingTenants(ctx)
 	if err != nil {
 		return fmt.Errorf("list rating score tenants: %w", err)
 	}
 	for _, tenant := range tenants {
-		if _, err := w.Queue.Insert(ctx, ArgsRebuildTenantRatings{TenantID: tenant}, nil); err != nil {
-			return fmt.Errorf("enqueue rating rebuild for tenant %s: %w", tenant, err)
+		if !tenant.Valid {
+			return fmt.Errorf("rating tenant enumeration returned a null tenant")
+		}
+		if _, err := w.Queue.Insert(ctx, ArgsRebuildTenantRatings{TenantID: tenant.UUID}, nil); err != nil {
+			return fmt.Errorf("enqueue rating rebuild for tenant %s: %w", tenant.UUID, err)
 		}
 	}
 	return nil

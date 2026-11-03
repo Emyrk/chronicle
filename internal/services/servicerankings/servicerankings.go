@@ -70,7 +70,7 @@ type Service struct {
 	RankingRunRefreshWorker *WorkerRefreshRankingRuns
 	// RankingRunRepairWorker discovers missed or stale representative rows.
 	RankingRunRepairWorker *WorkerRepairRankingRuns
-	// RatingDispatchWorker fans daily rating rebuilds out to configured tenants.
+	// RatingDispatchWorker fans daily rating rebuilds out to tenants with realms.
 	RatingDispatchWorker *WorkerDispatchRatingScores
 	// RatingTenantWorker builds and publishes one tenant's rating generation.
 	RatingTenantWorker   *WorkerRebuildTenantRatings

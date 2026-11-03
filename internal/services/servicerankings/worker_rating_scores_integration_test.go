@@ -28,11 +28,6 @@ func TestWorkerRebuildTenantRatingsCrossRealmToPublication(t *testing.T) {
 		_, err = q.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: realms[i], ServerID: server.ID, Name: "Worker realm " + realms[i].String()})
 		require.NoError(t, err)
 	}
-	_, err = q.PutTenantRatingPolicy(ctx, database.PutTenantRatingPolicyParams{TenantID: uuid.Nil, Version: 1, HalfLifeDays: 7, BestWeight: .5, FormWeight: .3, FloorWeight: .2, RankOneWeight: .5, FullRankKills: 5})
-	require.NoError(t, err)
-	tenants, err := q.ListConfiguredTenantRatingTenants(ctx)
-	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{uuid.Nil}, tenants)
 	// Start a snapshot, then stage two evidence rows from different realms.
 	// Work resumes the same checkpoint and must not republish until all phases
 	// (including empty Mastery and scope pages) have advanced.
@@ -79,7 +74,7 @@ func TestWorkerRebuildTenantRatingsCrossRealmToPublication(t *testing.T) {
 	require.Equal(t, 4, scopes)
 
 	// A failed generation must not replace the previous active board, even
-	// before a configuration revision changes. Keep cleanup explicit.
+	// before cleanup. Keep cleanup explicit.
 	failed, err := q.StartTenantRatingRebuild(ctx, database.StartTenantRatingRebuildParams{
 		TenantID: uuid.Nil, AsOf: database.Timestamptz(asOf.Add(time.Minute)), SourceCutoff: database.Timestamptz(asOf.Add(time.Minute)),
 	})
@@ -93,23 +88,6 @@ func TestWorkerRebuildTenantRatingsCrossRealmToPublication(t *testing.T) {
 	_, err = q.AbortRatingRebuild(ctx, database.AbortRatingRebuildParams{TenantID: uuid.Nil, GenerationID: failed})
 	require.NoError(t, err)
 
-	// A later generation that fails before publication must leave the already
-	// active cross-realm board untouched. Revision fencing aborts its checkpoint.
-	next, err := q.StartTenantRatingRebuild(ctx, database.StartTenantRatingRebuildParams{
-		TenantID: uuid.Nil, AsOf: database.Timestamptz(asOf.Add(time.Minute)), SourceCutoff: database.Timestamptz(asOf.Add(time.Minute)),
-	})
-	require.NoError(t, err)
-	require.NotEqual(t, generation, next)
-	_, err = pool.Exec(ctx, "UPDATE rating_rebuild_checkpoints SET phase='ready' WHERE generation_id=$1", next)
-	require.NoError(t, err)
-	_, err = q.PutTenantRatingPolicy(ctx, database.PutTenantRatingPolicyParams{TenantID: uuid.Nil, Version: 2, HalfLifeDays: 7, BestWeight: .5, FormWeight: .3, FloorWeight: .2, RankOneWeight: .5, FullRankKills: 5})
-	require.NoError(t, err)
-	require.Error(t, worker.Work(ctx, job))
-	var nextPhase, activeStatus string
-	require.NoError(t, pool.QueryRow(ctx, "SELECT phase FROM rating_rebuild_checkpoints WHERE generation_id=$1", next).Scan(&nextPhase))
-	require.Equal(t, "aborted", nextPhase)
-	require.NoError(t, pool.QueryRow(ctx, "SELECT status FROM rating_score_generations WHERE id=$1", generation).Scan(&activeStatus))
-	require.Equal(t, "active", activeStatus)
 	var unchanged float64
 	require.NoError(t, pool.QueryRow(ctx, `SELECT score FROM player_tenant_rating_boss_scores WHERE generation_id=$1 AND realm_id=$2 AND rating_metric='peak' AND window_kind='period'`, generation, realms[0]).Scan(&unchanged))
 	require.Equal(t, score, unchanged)

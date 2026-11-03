@@ -190,7 +190,7 @@ export function AdminLeaderboardPage() {
           <h3 className="font-semibold">Rating maintenance</h3>
           <p className="mt-1 text-sm text-muted-foreground">
             Both dispatchers also run daily. Repair missing Renown kill facts across all tenants first, wait for its child jobs to finish,
-            then rebuild ratings (including Renown scores) across all configured tenants. Tenants without a rating policy cannot publish scores.
+            then rebuild ratings (including Renown scores) across all tenants with realms. Scoring is fixed; Renown awards follow each realm's game flavor.
             Enqueueing is not the same as publishing scores.
           </p>
         </div>
@@ -201,7 +201,7 @@ export function AdminLeaderboardPage() {
           </Button>
           <Button disabled={pendingRatingJob !== null} onClick={() => void enqueueRatingMaintenance("rebuild-all")}>
             {pendingRatingJob === "rebuild-all" && <Loader2 className="mr-2 size-4 animate-spin" />}
-            Rebuild ratings + Renown (all configured tenants)
+            Rebuild ratings + Renown (all tenants with realms)
           </Button>
         </div>
         {ratingJobResult && (

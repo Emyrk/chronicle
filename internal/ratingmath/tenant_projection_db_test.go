@@ -27,8 +27,6 @@ func TestTenantProjectionCrossRealmRankOne(t *testing.T) {
 		_, err = q.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: realms[i], ServerID: server.ID, Name: realms[i].String()})
 		require.NoError(t, err)
 	}
-	_, err = q.PutTenantRatingPolicy(ctx, database.PutTenantRatingPolicyParams{TenantID: uuid.Nil, Version: 1, HalfLifeDays: 7, BestWeight: .5, FormWeight: .3, FloorWeight: .2, RankOneWeight: .5, FullRankKills: 5})
-	require.NoError(t, err)
 	asOf := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
 	generation, err := q.StartTenantRatingRebuild(ctx, database.StartTenantRatingRebuildParams{TenantID: uuid.Nil, AsOf: database.Timestamptz(asOf), SourceCutoff: database.Timestamptz(asOf)})
 	require.NoError(t, err)

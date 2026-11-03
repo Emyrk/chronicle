@@ -32,6 +32,12 @@ describe("LiveHubOverview exact default cohort", () => {
     expect(html).toContain("cannot be filtered by the legacy performances API")
   })
 
+  it("does not show a broad speedrun board for an unrecorded raid size", () => {
+    const html = renderToStaticMarkup(<LiveHubOverview {...base} selection={{ kind: "clear" }} performanceCohort={cohort} ratingCohort={ratingCohort} />)
+    expect(vi.mocked(useQuery).mock.calls[3][0].enabled).toBe(false)
+    expect(html).toContain("Exact speedrun results unavailable for raids without a recorded size")
+  })
+
   it("does not request Peak without a selected matching cohort", () => {
     renderToStaticMarkup(<LiveHubOverview {...base} ratingCohort={undefined} />)
     expect(vi.mocked(useQuery).mock.calls[1][0].enabled).toBe(false)

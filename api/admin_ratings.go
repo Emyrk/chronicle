@@ -85,7 +85,7 @@ func (api *API) adminRatingRoutes(r chi.Router) {
 // AdminDispatchRenownRepair starts a bounded historical repair pass across all
 // tenants, including root. It does not wait for the repair pages to complete.
 // For complete rating history, wait for the repair jobs to finish before
-// calling /rebuild/all for every configured tenant or /rebuild for one tenant.
+// calling /rebuild/all for every tenant with realms or /rebuild for one tenant.
 //
 // POST /api/v1/admin/ratings/renown/repair (no request body)
 func (api *API) AdminDispatchRenownRepair(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +101,7 @@ func (api *API) AdminRebuildRatings(w http.ResponseWriter, r *http.Request) {
 }
 
 // AdminDispatchAllRatingScores queues the existing daily dispatcher immediately.
-// It enqueues a deduplicated rebuild for every configured tenant, including root;
+// It enqueues a deduplicated rebuild for every tenant with realms, including root when applicable;
 // each tenant job publishes Peak, Mastery, Ranked Mastery, and Renown scores.
 // Repair Renown facts separately first and wait for its child jobs to finish.
 //

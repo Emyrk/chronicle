@@ -120,7 +120,7 @@ function LiveHubContent({ context, realmName, realmIDs, cohort, overview = false
       if (!response.ok) throw new Error(`Speedruns request failed (${response.status})`)
       return response.json() as Promise<SpeedrunLeaderboardEntry[]>
     },
-    enabled: !overview && context.tab === "speedruns" && exact && !boss && realmIDs.length <= 1,
+    enabled: !overview && context.tab === "speedruns" && exact && chosen!.max_players > 0 && !boss && realmIDs.length <= 1,
     staleTime: 5 * 60 * 1000,
   })
   const stats = useRankingsStats({ instance_names: instanceName, encounter_names: boss, difficulty_names: chosen?.difficulty_name,
@@ -156,7 +156,8 @@ function LiveHubContent({ context, realmName, realmIDs, cohort, overview = false
     <PerformancesTab instanceName={instanceName} scope={scope} role={role} subject={subject} bosses={boss ? [boss] : context.selection.kind === "bosses" ? context.selection.bosses : []}
       where={boss ?? instanceName} onSpeedruns={() => onTab("speedruns")}
       live={{ response: performance.data, loading: performance.isPending, error: performance.isError ? performance.error : null }} />
-  if (context.tab === "speedruns") return !exact ? <CohortPrompt raids={raids} /> : boss ?
+  if (context.tab === "speedruns") return !exact ? <CohortPrompt raids={raids} /> : chosen!.max_players === 0 ?
+    <p className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">Exact speedrun results unavailable for raids without a recorded size.</p> : boss ?
     <p className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">Boss kill-time podiums are not published by the speedrun board. Select Full clear.</p> :
     <SpeedrunsTab instanceName={instanceName} bosses={[]} selection={selection} live={{ entries: speed.data, loading: speed.isPending, error: speed.isError ? speed.error : null }} />
   if (context.tab === "statistics" && exact && !legacyExact) return <LegacyCohortUnavailable />

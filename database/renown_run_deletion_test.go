@@ -75,19 +75,22 @@ func TestDeleteRenownFactsForRunsWithoutGroupMembership(t *testing.T) {
 		require.Len(t, facts, 1)
 		require.Equal(t, keptRun, facts[0].RunID)
 	}
+	// Realm/server setup now bumps the fixed-flavor revision as well.
+	initialRevision, err := q.GetRatingConfigRevision(ctx, uuid.Nil)
+	require.NoError(t, err)
 	// A single revision bump invalidates any checkpoint staged before deletion.
 	bumped, err := q.BumpRatingConfigRevisionForRealms(ctx, []uuid.UUID{realmID, realmID})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), bumped)
 	revision, err := q.GetRatingConfigRevision(ctx, uuid.Nil)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), revision)
+	require.Equal(t, initialRevision+1, revision)
 	bumped, err = q.BumpRatingConfigRevisionForRealms(ctx, []uuid.UUID{realmID})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), bumped)
 	revision, err = q.GetRatingConfigRevision(ctx, uuid.Nil)
 	require.NoError(t, err)
-	require.Equal(t, int64(2), revision)
+	require.Equal(t, initialRevision+2, revision)
 
 	deleted, err = q.DeletePlayerRenownFactsForRuns(ctx, nil)
 	require.NoError(t, err)

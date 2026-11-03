@@ -120,9 +120,10 @@ func TestTenantMasteryStageAllParsedBossesCrossRealmAndWindows(t *testing.T) {
 	tenant, generation, guildA, guildB := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	asOf := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
 	manifest, err := json.Marshal(struct {
-		Writer string                      `json:"writer"`
-		Policy database.RatingTenantPolicy `json:"tenant_policy"`
-	}{Writer: "tenant", Policy: database.RatingTenantPolicy{TenantID: tenant, HalfLifeDays: 7, FullRankKills: 5, RankOneWeight: .5, BestWeight: .5, FormWeight: .3, FloorWeight: .2}})
+		Writer       string             `json:"writer"`
+		RulesVersion int32              `json:"rules_version"`
+		Policy       TenantRatingPolicy `json:"tenant_policy"`
+	}{Writer: "tenant", RulesVersion: 2, Policy: TenantRatingPolicy{TenantID: tenant, Version: 2, PeriodDays: 180, FullRankKills: 5, RankOneWeight: .5, BestWeight: .35, FormWeight: .5, FloorWeight: .15}})
 	require.NoError(t, err)
 	f := &tenantMasteryStore{masteryFakeStore: &masteryFakeStore{checkpoint: database.RatingRebuildCheckpoint{
 		GenerationID: generation, TenantID: tenant, Phase: "mastery_pending", Cursor: []byte(`{}`), Manifest: manifest, ConfigRevision: 3, AsOf: database.Timestamptz(asOf),
@@ -202,7 +203,7 @@ func TestTenantMasteryStageRejectsGroupCheckpoint(t *testing.T) {
 		Manifest: groupManifest, ConfigRevision: 3,
 	}}, revision: 3}
 	err = TenantMasteryStageStep(t.Context(), f, tenant, generation)
-	require.ErrorContains(t, err, "requires a frozen tenant checkpoint")
+	require.ErrorContains(t, err, "requires a frozen fixed-rules checkpoint")
 	require.Equal(t, "mastery_pending", f.checkpoint.Phase)
 	require.Empty(t, f.playerScores)
 	require.Empty(t, f.guildScores)

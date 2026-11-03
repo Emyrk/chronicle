@@ -30,20 +30,18 @@ func TenantMasteryStageStep(ctx context.Context, store database.Store, tenant, g
 		return ErrRatingConfigStale
 	}
 	var m struct {
-		Writer string                       `json:"writer"`
-		Policy *database.RatingTenantPolicy `json:"tenant_policy"`
+		Writer       string              `json:"writer"`
+		RulesVersion int32               `json:"rules_version"`
+		Policy       *TenantRatingPolicy `json:"tenant_policy"`
 	}
 	if err := json.Unmarshal(cp.Manifest, &m); err != nil {
 		return fmt.Errorf("invalid tenant mastery manifest: %w", err)
 	}
-	if m.Writer != "tenant" || m.Policy == nil || m.Policy.TenantID != tenant {
-		return fmt.Errorf("tenant mastery requires a frozen tenant checkpoint")
+	if m.Writer != "tenant" || m.RulesVersion != 2 || m.Policy == nil || m.Policy.TenantID != tenant ||
+		m.Policy.Version != 2 || m.Policy.PeriodDays != 180 {
+		return fmt.Errorf("tenant mastery requires a frozen fixed-rules checkpoint")
 	}
-	policy := database.RatingGroupPolicy{
-		PeriodDays: 180, HalfLifeDays: m.Policy.HalfLifeDays,
-		FullRankKills: m.Policy.FullRankKills, RankOneWeight: m.Policy.RankOneWeight,
-		BestWeight: m.Policy.BestWeight, FormWeight: m.Policy.FormWeight, FloorWeight: m.Policy.FloorWeight,
-	}
+	policy := m.Policy.masteryPolicy()
 	var c projectionCursor
 	if err := json.Unmarshal(cp.Cursor, &c); err != nil {
 		return fmt.Errorf("invalid mastery cursor: %w", err)

@@ -46,11 +46,6 @@ func TestTenantRatingStageIncludesUnassignedRealmsAndBosses(t *testing.T) {
 		_, err = q.UpsertRankingRun(ctx, database.UpsertRankingRunParams(sources[0]))
 		require.NoError(t, err)
 	}
-	_, err = q.PutTenantRatingPolicy(ctx, database.PutTenantRatingPolicyParams{
-		TenantID: uuid.Nil, Version: 1, HalfLifeDays: 30, BestWeight: 1,
-		RankOneWeight: 1, FullRankKills: 5,
-	})
-	require.NoError(t, err)
 	var generation uuid.UUID
 	for i := 0; i < 3; i++ {
 		id, _, err := servicerankings.StageTenantRatingEvidenceStep(ctx, store, uuid.Nil, time.Now().UTC())
@@ -72,37 +67,40 @@ func TestTenantRatingStageIncludesUnassignedRealmsAndBosses(t *testing.T) {
 	require.Zero(t, active)
 }
 
-// This entry point is now used by the scheduled tenant worker; missing
-// calibration must still fail closed and manifests must remain frozen.
-func TestTenantRatingCheckpointRequiresPolicyAndFreezesManifest(t *testing.T) {
+// The tenant snapshot freezes the fixed policy and realm-specific flavor awards.
+func TestTenantRatingCheckpointFreezesMixedFlavorManifest(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
-	pool, _, _ := setupParsesTest(t)
+	pool, _, vanillaRealm := setupParsesTest(t)
 	conn, err := pool.Acquire(ctx)
 	require.NoError(t, err)
 	defer conn.Release()
 	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
 	require.NoError(t, err)
+	vanillaDataset, nightmareDataset := uuid.New(), uuid.New()
+	for _, dataset := range []struct {
+		id           uuid.UUID
+		name, flavor string
+	}{{vanillaDataset, "Vanilla", "vanilla"}, {nightmareDataset, "Nightmare", "nightmare-of-ursol"}} {
+		_, err = conn.Exec(ctx, `INSERT INTO datasets (id, name, slug, wow_version, default_flavor) VALUES ($1,$2,$3,'1.12',ARRAY[$4]::text[])`, dataset.id, dataset.name, uuid.NewString(), dataset.flavor)
+		require.NoError(t, err)
+	}
+	var vanillaServer uuid.UUID
+	require.NoError(t, conn.QueryRow(ctx, "SELECT server_id FROM wow_server_realms WHERE id=$1", vanillaRealm).Scan(&vanillaServer))
+	_, err = conn.Exec(ctx, "UPDATE wow_servers SET default_dataset_id=$1 WHERE id=$2", vanillaDataset, vanillaServer)
+	require.NoError(t, err)
+	nightmareServer, nightmareRealm := uuid.New(), uuid.New()
+	_, err = conn.Exec(ctx, "INSERT INTO wow_servers (id,name,default_dataset_id) VALUES ($1,$2,$3)", nightmareServer, "nightmare", nightmareDataset)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "INSERT INTO wow_server_realms (id,server_id,name) VALUES ($1,$2,$3)", nightmareRealm, nightmareServer, "nightmare")
+	require.NoError(t, err)
 	q := database.NewQueries(conn)
 	asOf := time.Now().UTC()
 	args := database.StartTenantRatingRebuildParams{TenantID: uuid.Nil, AsOf: database.Timestamptz(asOf), SourceCutoff: database.Timestamptz(asOf)}
-
-	_, err = q.StartTenantRatingRebuild(ctx, args)
-	require.ErrorContains(t, err, "tenant rating policy missing")
-	var generations int
-	require.NoError(t, conn.QueryRow(ctx, "SELECT count(*) FROM rating_score_generations WHERE tenant_id=$1", uuid.Nil).Scan(&generations))
-	require.Zero(t, generations)
-
-	_, err = q.PutTenantRatingPolicy(ctx, database.PutTenantRatingPolicyParams{
-		TenantID: uuid.Nil, Version: 1, HalfLifeDays: 30, BestWeight: 0.6,
-		FormWeight: 0.3, FloorWeight: 0.1, RankOneWeight: 0.4, FullRankKills: 5,
-	})
+	tenants, err := q.ListRatingTenants(ctx)
 	require.NoError(t, err)
-	_, err = q.PutTenantRenownBoss(ctx, database.PutTenantRenownBossParams{
-		TenantID: uuid.Nil, InstanceName: "Molten Core", EncounterName: "Ragnaros", RenownPoints: 15,
-	})
-	require.NoError(t, err)
+	require.Contains(t, tenants, uuid.NullUUID{UUID: uuid.Nil, Valid: true}, "root servers must be scheduled without policy rows")
 	id, err := q.StartTenantRatingRebuild(ctx, args)
 	require.NoError(t, err)
 	cp, err := q.GetRatingRebuildCheckpoint(ctx, database.GetRatingRebuildCheckpointParams{TenantID: uuid.Nil, GenerationID: id})
@@ -110,33 +108,58 @@ func TestTenantRatingCheckpointRequiresPolicyAndFreezesManifest(t *testing.T) {
 	var manifest struct {
 		Writer string `json:"writer"`
 		Policy struct {
-			Version int32 `json:"version"`
+			Version       int     `json:"version"`
+			BestWeight    float64 `json:"best_weight"`
+			FormWeight    float64 `json:"form_weight"`
+			FloorWeight   float64 `json:"floor_weight"`
+			RankOneWeight float64 `json:"rank_one_weight"`
+			FullRankKills int     `json:"full_rank_kills"`
+			PeriodDays    int     `json:"period_days"`
 		} `json:"tenant_policy"`
 		Bosses []struct {
-			InstanceName  string `json:"instance_name"`
-			EncounterName string `json:"encounter_name"`
+			RealmID       uuid.UUID `json:"realm_id"`
+			InstanceName  string    `json:"instance_name"`
+			EncounterName string    `json:"encounter_name"`
+			RenownPoints  float64   `json:"renown_points"`
 		} `json:"renown_bosses"`
 	}
 	require.NoError(t, json.Unmarshal(cp.Manifest, &manifest))
 	require.Equal(t, "tenant", manifest.Writer)
-	require.Equal(t, int32(1), manifest.Policy.Version)
-	require.Len(t, manifest.Bosses, 1)
-	require.Equal(t, "Ragnaros", manifest.Bosses[0].EncounterName)
+	require.Equal(t, 2, manifest.Policy.Version)
+	require.Equal(t, 180, manifest.Policy.PeriodDays)
+	require.InDelta(t, .35, manifest.Policy.BestWeight, 1e-9)
+	require.InDelta(t, .50, manifest.Policy.FormWeight, 1e-9)
+	require.InDelta(t, .15, manifest.Policy.FloorWeight, 1e-9)
+	require.InDelta(t, .50, manifest.Policy.RankOneWeight, 1e-9)
+	require.Equal(t, 5, manifest.Policy.FullRankKills)
+	awards := map[uuid.UUID]map[string]float64{}
+	for _, boss := range manifest.Bosses {
+		if boss.InstanceName != "Lower Tower of Karazhan" {
+			continue
+		}
+		if awards[boss.RealmID] == nil {
+			awards[boss.RealmID] = map[string]float64{}
+		}
+		awards[boss.RealmID][boss.EncounterName] = boss.RenownPoints
+	}
+	require.Empty(t, awards[vanillaRealm], "vanilla realm must not receive Turtle-only awards")
+	require.NotEmpty(t, awards[nightmareRealm], "nightmare realm receives its flavor awards")
 	replayed, err := q.StartTenantRatingRebuild(ctx, args)
 	require.NoError(t, err)
 	require.Equal(t, id, replayed)
-
-	_, err = q.PutTenantRenownBoss(ctx, database.PutTenantRenownBossParams{
-		TenantID: uuid.Nil, InstanceName: "Molten Core", EncounterName: "Lucifron", RenownPoints: 5,
-	})
+	frozen, err := q.GetRatingRebuildCheckpoint(ctx, database.GetRatingRebuildCheckpointParams{TenantID: uuid.Nil, GenerationID: id})
 	require.NoError(t, err)
-	current, err := q.GetRatingConfigRevision(ctx, uuid.Nil)
+	require.JSONEq(t, string(cp.Manifest), string(frozen.Manifest))
+	// A flavor change after the snapshot must fence publication, not silently
+	// publish the old realm's awards under its new flavor.
+	_, err = conn.Exec(ctx, `UPDATE rating_rebuild_checkpoints SET phase='ready' WHERE generation_id=$1`, id)
 	require.NoError(t, err)
-	require.Greater(t, current, cp.ConfigRevision)
+	_, err = conn.Exec(ctx, `UPDATE datasets SET default_flavor=ARRAY['vanilla']::text[] WHERE id=$1`, nightmareDataset)
+	require.NoError(t, err)
+	revision, err := q.GetRatingConfigRevision(ctx, uuid.Nil)
+	require.NoError(t, err)
+	require.Greater(t, revision, cp.ConfigRevision)
 	published, err := q.PublishRatingRebuild(ctx, database.PublishRatingRebuildParams{TenantID: uuid.Nil, GenerationID: id})
 	require.NoError(t, err)
 	require.False(t, published)
-	cpAfter, err := q.GetRatingRebuildCheckpoint(ctx, database.GetRatingRebuildCheckpointParams{TenantID: uuid.Nil, GenerationID: id})
-	require.NoError(t, err)
-	require.Equal(t, cp.Manifest, cpAfter.Manifest)
 }

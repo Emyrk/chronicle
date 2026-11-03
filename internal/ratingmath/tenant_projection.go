@@ -22,17 +22,19 @@ func TenantProjectionPage(ctx context.Context, store database.Store, tenant, gen
 		}
 		var manifest struct {
 			Writer       string `json:"writer"`
+			RulesVersion int32  `json:"rules_version"`
 			RenownBosses []struct {
-				Instance  string  `json:"instance_name"`
-				Encounter string  `json:"encounter_name"`
-				Points    float64 `json:"renown_points"`
+				Realm     uuid.UUID `json:"realm_id"`
+				Instance  string    `json:"instance_name"`
+				Encounter string    `json:"encounter_name"`
+				Points    float64   `json:"renown_points"`
 			} `json:"renown_bosses"`
 		}
 		if err := json.Unmarshal(cp.Manifest, &manifest); err != nil {
 			return err
 		}
-		if manifest.Writer != "tenant" {
-			return fmt.Errorf("not a tenant rating checkpoint")
+		if manifest.Writer != "tenant" || manifest.RulesVersion != 2 {
+			return fmt.Errorf("not a fixed-rules tenant rating checkpoint")
 		}
 		revision, err := tx.GetRatingConfigRevision(ctx, tenant)
 		if err != nil {
@@ -66,18 +68,23 @@ func TenantProjectionPage(ctx context.Context, store database.Store, tenant, gen
 			}
 			return nil
 		}
-		points := make(map[BossKey]float64, len(manifest.RenownBosses))
+		type realmBoss struct {
+			realm uuid.UUID
+			boss  BossKey
+		}
+		points := make(map[realmBoss]float64, len(manifest.RenownBosses))
 		for _, boss := range manifest.RenownBosses {
-			if boss.Instance == "" || boss.Encounter == "" {
+			if boss.Realm == uuid.Nil || boss.Instance == "" || boss.Encounter == "" {
 				return fmt.Errorf("invalid frozen Renown boss")
 			}
-			if _, exists := points[BossKey{Instance: boss.Instance, Encounter: boss.Encounter}]; exists {
+			key := realmBoss{realm: boss.Realm, boss: BossKey{Instance: boss.Instance, Encounter: boss.Encounter}}
+			if _, exists := points[key]; exists {
 				return fmt.Errorf("duplicate frozen Renown boss")
 			}
 			if _, err := RenownAward(boss.Points); err != nil {
 				return err
 			}
-			points[BossKey{Instance: boss.Instance, Encounter: boss.Encounter}] = boss.Points
+			points[key] = boss.Points
 		}
 		switch cp.Phase {
 		case "players":
@@ -134,7 +141,7 @@ func TenantProjectionPage(ctx context.Context, store database.Store, tenant, gen
 				return advance("guild_renown_scores", projectionCursor{})
 			}
 			for _, k := range keys {
-				if award, ok := points[BossKey{Instance: k.InstanceName, Encounter: k.EncounterName}]; ok {
+				if award, ok := points[realmBoss{realm: k.RealmID, boss: BossKey{Instance: k.InstanceName, Encounter: k.EncounterName}}]; ok {
 					if err := projectTenantPlayerRenown(ctx, tx, cp, k, start, award); err != nil {
 						return err
 					}
@@ -154,7 +161,7 @@ func TenantProjectionPage(ctx context.Context, store database.Store, tenant, gen
 				return advance("mastery_pending", projectionCursor{})
 			}
 			for _, k := range keys {
-				if award, ok := points[BossKey{Instance: k.InstanceName, Encounter: k.EncounterName}]; ok {
+				if award, ok := points[realmBoss{realm: k.RealmID, boss: BossKey{Instance: k.InstanceName, Encounter: k.EncounterName}}]; ok {
 					if err := projectTenantGuildRenown(ctx, tx, cp, k, start, award); err != nil {
 						return err
 					}

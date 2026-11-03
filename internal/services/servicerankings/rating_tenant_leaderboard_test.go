@@ -250,7 +250,7 @@ func TestTenantRatingLeaderboardLimitHundred(t *testing.T) {
 func TestTenantRatingLeaderboardValidationAndRace(t *testing.T) {
 	t.Parallel()
 	tenant, gen := uuid.New(), uuid.New()
-	for _, tc := range []struct{ key, value string }{{"group_id", uuid.NewString()}, {"realm_ids", "bad"}, {"limit", "101"}, {"max_players", "0"}, {"rating_metric", "bad"}} {
+	for _, tc := range []struct{ key, value string }{{"group_id", uuid.NewString()}, {"realm_ids", "bad"}, {"limit", "101"}, {"max_players", "-1"}, {"rating_metric", "bad"}} {
 		q := tenantBase(false, true)
 		q.Set(tc.key, tc.value)
 		stub := &tenantLeaderboardStub{tenant: tenant, generation: gen}
@@ -268,6 +268,20 @@ func TestTenantRatingLeaderboardValidationAndRace(t *testing.T) {
 		q.Set("rating_metric", metric)
 		q.Set("window_kind", "all_time")
 		require.Equal(t, http.StatusOK, tenantRequest(q, tenant, &tenantLeaderboardStub{tenant: tenant, generation: gen}, true, false).Code, metric)
+	}
+	// A selected difficulty="" / size=0 is an exact cohort, not Renown's
+	// special uncohorted sentinel or a request for a broader board.
+	for _, guild := range []bool{false, true} {
+		q := tenantBase(guild, false)
+		q.Set("max_players", "0")
+		stub := &tenantLeaderboardStub{tenant: tenant, generation: gen}
+		require.Equal(t, http.StatusOK, tenantRequest(q, tenant, stub, guild, false).Code)
+		require.Len(t, stub.params, 1)
+		if guild {
+			require.Zero(t, stub.params[0].(database.ListActiveGuildTenantScopeScoresParams).MaxPlayers)
+		} else {
+			require.Zero(t, stub.params[0].(database.ListActivePlayerTenantScopeScoresParams).MaxPlayers)
+		}
 	}
 	renown := tenantBase(false, false)
 	renown.Set("rating_metric", "renown")

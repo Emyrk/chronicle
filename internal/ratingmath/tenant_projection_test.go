@@ -11,6 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var tenantRenownRealmA = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+var tenantRenownRealmB = uuid.MustParse("00000000-0000-0000-0000-000000000002")
+
 type tenantProjectionFake struct {
 	database.Store
 	checkpoint database.RatingRebuildCheckpoint
@@ -80,7 +83,7 @@ func (f *tenantProjectionFake) ListRatingStagePlayerRenownKeys(_ context.Context
 	if p.AfterEncounterName != "" {
 		return nil, nil
 	}
-	return []database.ListRatingStagePlayerRenownKeysRow{{RealmID: uuid.New(), PlayerGuid: "player", InstanceName: "Zul'Gurub", EncounterName: "Gri'lek"}, {RealmID: uuid.New(), PlayerGuid: "player", InstanceName: "Zul'Gurub", EncounterName: "Unknown"}}, nil
+	return []database.ListRatingStagePlayerRenownKeysRow{{RealmID: tenantRenownRealmA, PlayerGuid: "player", InstanceName: "Zul'Gurub", EncounterName: "Gri'lek"}, {RealmID: tenantRenownRealmB, PlayerGuid: "player", InstanceName: "Zul'Gurub", EncounterName: "Gri'lek"}, {RealmID: tenantRenownRealmA, PlayerGuid: "player", InstanceName: "Zul'Gurub", EncounterName: "Unknown"}}, nil
 }
 func (f *tenantProjectionFake) ListRatingStageGuildRenownKeys(_ context.Context, p database.ListRatingStageGuildRenownKeysParams) ([]database.ListRatingStageGuildRenownKeysRow, error) {
 	if p.BatchSize != projectionPageSize {
@@ -89,7 +92,7 @@ func (f *tenantProjectionFake) ListRatingStageGuildRenownKeys(_ context.Context,
 	if p.AfterEncounterName != "" {
 		return nil, nil
 	}
-	return []database.ListRatingStageGuildRenownKeysRow{{RealmID: uuid.New(), GuildID: uuid.New(), InstanceName: "Zul'Gurub", EncounterName: "Gri'lek"}}, nil
+	return []database.ListRatingStageGuildRenownKeysRow{{RealmID: tenantRenownRealmA, GuildID: uuid.New(), InstanceName: "Zul'Gurub", EncounterName: "Gri'lek"}}, nil
 }
 func (f *tenantProjectionFake) RatingStagePlayerRenownTotals(_ context.Context, p database.RatingStagePlayerRenownTotalsParams) (database.RatingStagePlayerRenownTotalsRow, error) {
 	return database.RatingStagePlayerRenownTotalsRow{CareerKills: 2, PeriodKills: 1}, nil
@@ -101,7 +104,7 @@ func (f *tenantProjectionFake) RatingStageGuildRenownTotals(_ context.Context, p
 func TestTenantProjectionPeakAndCuratedRenown(t *testing.T) {
 	t.Parallel()
 	asOf := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
-	f := &tenantProjectionFake{revision: 3, checkpoint: database.RatingRebuildCheckpoint{TenantID: uuid.New(), GenerationID: uuid.New(), ConfigRevision: 3, Phase: "players", AsOf: database.Timestamptz(asOf), Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"tenant","renown_bosses":[{"instance_name":"Zul'Gurub","encounter_name":"Gri'lek","renown_points":3}]}`)}}
+	f := &tenantProjectionFake{revision: 3, checkpoint: database.RatingRebuildCheckpoint{TenantID: uuid.New(), GenerationID: uuid.New(), ConfigRevision: 3, Phase: "players", AsOf: database.Timestamptz(asOf), Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"tenant","rules_version":2,"renown_bosses":[{"realm_id":"00000000-0000-0000-0000-000000000001","instance_name":"Zul'Gurub","encounter_name":"Gri'lek","renown_points":3},{"realm_id":"00000000-0000-0000-0000-000000000002","instance_name":"Zul'Gurub","encounter_name":"Gri'lek","renown_points":5}]}`)}}
 	for i := 0; i < 10; i++ {
 		done, err := TenantProjectionPage(t.Context(), f, f.checkpoint.TenantID, f.checkpoint.GenerationID)
 		require.NoError(t, err)
@@ -110,7 +113,7 @@ func TestTenantProjectionPeakAndCuratedRenown(t *testing.T) {
 		}
 	}
 	require.Equal(t, "mastery_pending", f.checkpoint.Phase)
-	require.Len(t, f.player, 4)
+	require.Len(t, f.player, 6)
 	require.Len(t, f.guild, 4)
 	require.Equal(t, "peak", f.player[0].RatingMetric, "Peak does not require a curated Renown boss")
 	require.InDelta(t, 80, f.player[0].Score, 1e-9)
@@ -124,14 +127,19 @@ func TestTenantProjectionPeakAndCuratedRenown(t *testing.T) {
 	require.Equal(t, "renown", f.player[2].RatingMetric)
 	require.Equal(t, "Gri'lek", f.player[2].EncounterName)
 	require.Equal(t, 6.0, f.player[2].Score)
-	require.Equal(t, int32(1), f.player[3].EligibleKills)
+	require.Equal(t, 3.0, f.player[3].Score)
+	require.Equal(t, 10.0, f.player[4].Score, "same boss follows realm-specific flavor award")
+	require.Equal(t, 5.0, f.player[5].Score)
+	for _, row := range f.player {
+		require.NotEqual(t, "Unknown", row.EncounterName, "unlisted boss has no Renown award")
+	}
 	require.Equal(t, 3.0, f.guild[2].Score)
 	require.False(t, f.guild[2].WindowStart.Valid)
 }
 
 func TestTenantProjectionRejectsStaleRevision(t *testing.T) {
 	t.Parallel()
-	f := &tenantProjectionFake{revision: 4, checkpoint: database.RatingRebuildCheckpoint{TenantID: uuid.New(), GenerationID: uuid.New(), ConfigRevision: 3, Phase: "players", Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"tenant"}`)}}
+	f := &tenantProjectionFake{revision: 4, checkpoint: database.RatingRebuildCheckpoint{TenantID: uuid.New(), GenerationID: uuid.New(), ConfigRevision: 3, Phase: "players", Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"tenant","rules_version":2}`)}}
 	_, err := TenantProjectionPage(t.Context(), f, f.checkpoint.TenantID, f.checkpoint.GenerationID)
 	require.ErrorIs(t, err, ErrRatingConfigStale)
 	require.Empty(t, f.player)

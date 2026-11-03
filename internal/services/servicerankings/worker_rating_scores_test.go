@@ -15,52 +15,52 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type unconfiguredRatingStore struct {
+type startFailureRatingStore struct {
 	database.Store
 	t      *testing.T
 	tenant uuid.UUID
 	called bool
 }
 
-func (s *unconfiguredRatingStore) InTx(ctx context.Context, f func(database.Store) error, opts *pgx.TxOptions) error {
+func (s *startFailureRatingStore) InTx(ctx context.Context, f func(database.Store) error, opts *pgx.TxOptions) error {
 	s.t.Helper()
 	require.Nil(s.t, opts)
 	return f(s)
 }
 
-func (s *unconfiguredRatingStore) AcquireRatingRebuildConfigLock(context.Context) error {
+func (s *startFailureRatingStore) AcquireRatingRebuildConfigLock(context.Context) error {
 	return nil
 }
 
-func (s *unconfiguredRatingStore) StartTenantRatingRebuild(_ context.Context, p database.StartTenantRatingRebuildParams) (uuid.UUID, error) {
+func (s *startFailureRatingStore) StartTenantRatingRebuild(_ context.Context, p database.StartTenantRatingRebuildParams) (uuid.UUID, error) {
 	s.t.Helper()
 	require.Equal(s.t, s.tenant, p.TenantID)
 	s.called = true
-	return uuid.Nil, errors.New("tenant rating policy missing")
+	return uuid.Nil, errors.New("snapshot start failed")
 }
 
-func (s *unconfiguredRatingStore) GetBuildingRatingRebuildCheckpoint(context.Context, uuid.UUID) (database.RatingRebuildCheckpoint, error) {
+func (s *startFailureRatingStore) GetBuildingRatingRebuildCheckpoint(context.Context, uuid.UUID) (database.RatingRebuildCheckpoint, error) {
 	return database.RatingRebuildCheckpoint{}, pgx.ErrNoRows
 }
 
-func TestWorkerRebuildTenantRatings_UnconfiguredTenant(t *testing.T) {
+func TestWorkerRebuildTenantRatings_PropagatesStartFailure(t *testing.T) {
 	t.Parallel()
 	tenant := uuid.New()
-	store := &unconfiguredRatingStore{t: t, tenant: tenant}
+	store := &startFailureRatingStore{t: t, tenant: tenant}
 	worker := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default()}
 	err := worker.Work(t.Context(), &river.Job[servicerankings.ArgsRebuildTenantRatings]{
 		Args: servicerankings.ArgsRebuildTenantRatings{TenantID: tenant},
 	})
-	require.ErrorContains(t, err, "tenant rating policy missing")
+	require.ErrorContains(t, err, "snapshot start failed")
 	require.True(t, store.called)
 }
 
-func TestWorkerRebuildTenantRatings_RootUnconfigured(t *testing.T) {
+func TestWorkerRebuildTenantRatings_RootStartFailure(t *testing.T) {
 	t.Parallel()
-	store := &unconfiguredRatingStore{t: t, tenant: uuid.Nil}
+	store := &startFailureRatingStore{t: t, tenant: uuid.Nil}
 	worker := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default()}
 	err := worker.Work(t.Context(), &river.Job[servicerankings.ArgsRebuildTenantRatings]{})
-	require.ErrorContains(t, err, "tenant rating policy missing")
+	require.ErrorContains(t, err, "snapshot start failed")
 	require.True(t, store.called)
 }
 

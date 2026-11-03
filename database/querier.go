@@ -220,7 +220,6 @@ type sqlcQuerier interface {
 	DeleteSidekickInstallation(ctx context.Context, arg DeleteSidekickInstallationParams) (SidekickInstallation, error)
 	DeleteSidekickWoWDirectoriesExcept(ctx context.Context, arg DeleteSidekickWoWDirectoriesExceptParams) (int64, error)
 	DeleteTenant(ctx context.Context, id uuid.UUID) error
-	DeleteTenantRenownBoss(ctx context.Context, arg DeleteTenantRenownBossParams) (int64, error)
 	DeleteTimeParseBossKillMembershipSeries(ctx context.Context, arg DeleteTimeParseBossKillMembershipSeriesParams) error
 	DeleteTimeParseBossKillMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
 	DeleteTimeParseBossKillMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error
@@ -518,7 +517,6 @@ type sqlcQuerier interface {
 	// itself is not behind RLS (only wow_servers/wow_server_realms are).
 	GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Tenant, error)
 	GetTenantProofRequest(ctx context.Context, arg GetTenantProofRequestParams) (ProofRequest, error)
-	GetTenantRatingPolicy(ctx context.Context, tenantID uuid.UUID) (RatingTenantPolicy, error)
 	GetTimeParseBossKillCohortEntries(ctx context.Context, arg GetTimeParseBossKillCohortEntriesParams) ([]GetTimeParseBossKillCohortEntriesRow, error)
 	GetTimeParseBossKillMembershipCohort(ctx context.Context, arg GetTimeParseBossKillMembershipCohortParams) ([]int64, error)
 	GetTimeParseClearTimeCohortEntries(ctx context.Context, arg GetTimeParseClearTimeCohortEntriesParams) ([]GetTimeParseClearTimeCohortEntriesRow, error)
@@ -785,11 +783,6 @@ type sqlcQuerier interface {
 	ListCacheGenerations(ctx context.Context) ([]CacheGeneration, error)
 	ListClassBuffIgnorePolicies(ctx context.Context) ([]ListClassBuffIgnorePoliciesRow, error)
 	ListClassBuffPoliciesForDataset(ctx context.Context, datasetID uuid.UUID) ([]ListClassBuffPoliciesForDatasetRow, error)
-	// Tenant-wide writer configuration. Legacy group tables are retained only for migration compatibility.
-	// The 180-day window is a fixed scoring rule, not an admin policy column.
-	// Only tenants with an approved scoring policy can be scheduled. Root uses
-	// the zero UUID, not a nullable server association or a group membership.
-	ListConfiguredTenantRatingTenants(ctx context.Context) ([]uuid.UUID, error)
 	ListConsumableDisambiguationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumableDisambiguationsByDatasetRow, error)
 	ListConsumableEffectPoliciesByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumableEffectPoliciesByDatasetRow, error)
 	ListConsumablesByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumablesByDatasetRow, error)
@@ -931,6 +924,9 @@ type sqlcQuerier interface {
 	// realm using the existing source unique keys (no startup index/backfill).
 	ListRatingStageRealms(ctx context.Context, arg ListRatingStageRealmsParams) ([]uuid.UUID, error)
 	ListRatingStageRunsForTenant(ctx context.Context, arg ListRatingStageRunsForTenantParams) ([]uuid.UUID, error)
+	// A rating generation is per tenant; root servers use the zero UUID. Every
+	// tenant with a realm can rebuild, regardless of legacy realm-group policy.
+	ListRatingTenants(ctx context.Context) ([]uuid.NullUUID, error)
 	ListReadyLogFileParts(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListRecentBillingReconciliationRuns(ctx context.Context, limit int32) ([]BillingReconciliationRun, error)
 	ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]ListRecentBillingSubscriptionsRow, error)
@@ -982,7 +978,6 @@ type sqlcQuerier interface {
 	// Group configuration is explicit: no group has score eligibility until both
 	// a policy and eligible boss rows have been configured by an operator.
 	ListTenantRatingPolicies(ctx context.Context, tenantID uuid.UUID) ([]RatingGroupPolicy, error)
-	ListTenantRenownBosses(ctx context.Context, tenantID uuid.UUID) ([]RatingTenantRenownBoss, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)
 	// Tenants that use this dataset, either directly (tenant.default_dataset_id)
 	// or via a server they own (wow_servers.default_dataset_id).
@@ -1060,11 +1055,6 @@ type sqlcQuerier interface {
 	PutRatingBossPolicy(ctx context.Context, arg PutRatingBossPolicyParams) (int64, error)
 	PutRatingGroupPolicy(ctx context.Context, arg PutRatingGroupPolicyParams) (int64, error)
 	PutRatingRaidPolicy(ctx context.Context, arg PutRatingRaidPolicyParams) (int64, error)
-	// Tenant policy values are maintained through migrations. Its absence must
-	// fail the tenant writer closed, not restrict Peak/Mastery boss eligibility.
-	PutTenantRatingPolicy(ctx context.Context, arg PutTenantRatingPolicyParams) (int64, error)
-	// Curated Renown points are independent of Peak/Mastery boss eligibility.
-	PutTenantRenownBoss(ctx context.Context, arg PutTenantRenownBossParams) (int64, error)
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
 	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)
@@ -1271,8 +1261,7 @@ type sqlcQuerier interface {
 	// The start function atomically locks the tenant revision, snapshots all config,
 	// creates a building generation and checkpoint, or returns the unfinished one.
 	StartRatingRebuild(ctx context.Context, arg StartRatingRebuildParams) (uuid.UUID, error)
-	// Tenant checkpoint entry point. Legacy group checkpoints cannot resume here.
-	// Missing tenant policy raises an error rather than inventing scoring defaults.
+	// The fixed rules and per-realm flavor awards are frozen by the start function.
 	StartTenantRatingRebuild(ctx context.Context, arg StartTenantRatingRebuildParams) (uuid.UUID, error)
 	TelemetryGetActiveFileBytes(ctx context.Context) (int64, error)
 	TelemetryGetDeletedFileBytes(ctx context.Context) (int64, error)

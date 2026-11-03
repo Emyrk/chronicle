@@ -27,8 +27,6 @@ func TestTenantScopeProjectionRaidPages(t *testing.T) {
 		_, err = pool.Exec(ctx, "INSERT INTO guilds (id, realm_id, name) VALUES ($1,$2,$3)", guilds[i], realms[i], realms[i].String())
 		require.NoError(t, err)
 	}
-	_, err = q.PutTenantRatingPolicy(ctx, database.PutTenantRatingPolicyParams{TenantID: uuid.Nil, Version: 1, HalfLifeDays: 7, BestWeight: 1, RankOneWeight: 1, FullRankKills: 5})
-	require.NoError(t, err)
 	asOf := time.Now().UTC()
 	gen, err := q.StartTenantRatingRebuild(ctx, database.StartTenantRatingRebuildParams{TenantID: uuid.Nil, AsOf: database.Timestamptz(asOf), SourceCutoff: database.Timestamptz(asOf)})
 	require.NoError(t, err)
@@ -86,13 +84,6 @@ func TestTenantScopeProjectionRaidPages(t *testing.T) {
 	err = pool.QueryRow(ctx, "SELECT count(*) FROM player_tenant_rating_scope_scores WHERE generation_id=$1 AND instance_name=''", gen).Scan(&global)
 	require.NoError(t, err)
 	require.Zero(t, global)
-	_, err = q.PutTenantRenownBoss(ctx, database.PutTenantRenownBossParams{TenantID: uuid.Nil, InstanceName: "Zul'Gurub", EncounterName: "Hakkar", RenownPoints: 10})
-	require.NoError(t, err)
-	require.ErrorIs(t, TenantScopeProjectionPage(ctx, store, uuid.Nil, gen), ErrRatingConfigStale)
-	unchanged, err := q.GetRatingRebuildCheckpoint(ctx, database.GetRatingRebuildCheckpointParams{TenantID: uuid.Nil, GenerationID: gen})
-	require.NoError(t, err)
-	require.Equal(t, cp.Cursor, unchanged.Cursor)
-	require.Equal(t, cp.Phase, unchanged.Phase)
 	var status string
 	require.NoError(t, pool.QueryRow(ctx, "SELECT status FROM rating_score_generations WHERE id=$1", gen).Scan(&status))
 	require.Equal(t, "building", status)
