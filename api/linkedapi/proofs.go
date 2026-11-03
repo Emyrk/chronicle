@@ -376,6 +376,10 @@ func (h *Handler) proofResponse(ctx context.Context, scope serviceproof.Scope, i
 			continue
 		}
 		warning := s.Warning
+		name := s.Name
+		if name == "" {
+			name = nameBySubject[s.ID]
+		}
 		link, linkErr := h.zed.GetUserCharacterLink(ctx, database.GetUserCharacterLinkParams{RealmID: s.RealmID.UUID, CharacterGuid: *s.CharacterGuid})
 		if linkErr == nil && link.UserID != row.ApplicantID {
 			warning = "Character is already linked to another account"
@@ -383,7 +387,7 @@ func (h *Handler) proofResponse(ctx context.Context, scope serviceproof.Scope, i
 		if linkErr != nil && !errors.Is(linkErr, sql.ErrNoRows) {
 			return chroniclesdk.ProofRequest{}, linkErr
 		}
-		out.Subjects = append(out.Subjects, chroniclesdk.ProofSubject{ProofCharacter: chroniclesdk.ProofCharacter{RealmID: s.RealmID.UUID, CharacterGUID: *s.CharacterGuid}, Name: s.Name, RealmName: s.RealmName, Class: classBySubject[s.ID], GuildName: guildBySubject[s.ID], Status: s.Status, Warning: warning})
+		out.Subjects = append(out.Subjects, chroniclesdk.ProofSubject{ProofCharacter: chroniclesdk.ProofCharacter{RealmID: s.RealmID.UUID, CharacterGUID: *s.CharacterGuid}, Name: name, RealmName: s.RealmName, Class: classBySubject[s.ID], GuildName: guildBySubject[s.ID], Status: s.Status, Warning: warning})
 	}
 	return out, nil
 }

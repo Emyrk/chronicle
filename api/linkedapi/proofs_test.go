@@ -338,6 +338,45 @@ func TestAdminProofsIncludeRootDomainRequests(t *testing.T) {
 	require.False(t, proofs[0].Applicant.DiscordLinked)
 }
 
+func TestProofResponseFallsBackToCurrentCharacterName(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(testservices.Authz(t))
+	objects, err := storage.NewLocalStorageAt(t.TempDir())
+	require.NoError(t, err)
+	h := &Handler{zed: zed, proofs: serviceproof.New(zed, objects)}
+
+	applicant := uuid.New()
+	_, err = zed.InsertUser(ctx, database.InsertUserParams{ID: applicant, Username: "name-fallback-" + applicant.String()[:8]})
+	require.NoError(t, err)
+	serverID, realmID := uuid.New(), uuid.New()
+	_, err = zed.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: serverID, Name: "name-server-" + serverID.String()})
+	require.NoError(t, err)
+	realmName := "Name Realm"
+	_, err = zed.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: realmID, ServerID: serverID, Name: realmName})
+	require.NoError(t, err)
+	characterGUID := guid.GUID(0x1234)
+	players := zed.UpsertPlayers(ctx, []database.UpsertPlayersParams{{
+		ID: characterGUID, RealmID: realmID, Name: "VisibleName",
+		Class: database.WowPlayableClassMAGE, Gender: database.WowPlayableGenderFemale, Race: database.WowPlayableRaceHuman,
+		Level: 60, UpdatedAt: database.Timestamptz(time.Now()),
+	}})
+	require.NoError(t, players.Close())
+
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	var photo bytes.Buffer
+	require.NoError(t, jpeg.Encode(&photo, img, nil))
+	id, err := h.proofs.Create(ctx, uuid.Nil, applicant, "character-link", "", photo.Bytes(), []serviceproof.Subject{{
+		Type: "character", RealmID: uuid.NullUUID{UUID: realmID, Valid: true}, CharacterGUID: &characterGUID, RealmName: realmName,
+	}})
+	require.NoError(t, err)
+
+	proof, err := h.proofResponse(ctx, serviceproof.Scope{AllTenants: true}, id)
+	require.NoError(t, err)
+	require.Len(t, proof.Subjects, 1)
+	require.Equal(t, "VisibleName", proof.Subjects[0].Name)
+}
+
 func TestGuildProofApprovalClaimsOnlyUnclaimedGuild(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)
