@@ -43,6 +43,9 @@ export const DRONE_INTRO_ELEVATION_DEG = 62;
 export const DRONE_INTRO_YAW_OFFSET = -Math.PI / 5;
 /** The camera's vertical field of view in the video. */
 export const DRONE_FOV_DEG = 45;
+/** How many times faster than real time a video can replay its fight. */
+export const RENDER_SPEEDS = [1, 2, 4, 6] as const;
+export type RenderSpeed = (typeof RENDER_SPEEDS)[number];
 
 /** What the mesh tells the drone: both must be deterministic for a given input. */
 export interface DroneProbe {
@@ -66,6 +69,8 @@ export interface DroneTrackOptions {
   startYaw?: number;
   sampleMs?: number;
   probe?: DroneProbe | null;
+  /** Fight ms per video ms. The orbit, intro and smoothing run in video time, so a sped-up fight is filmed as calmly as a real-time one. */
+  speed?: number;
 }
 
 interface DroneKey {
@@ -81,6 +86,8 @@ interface DroneKey {
 /** The precomputed, smoothed shot for a whole fight; sample it with dronePoseAt. */
 export interface DroneTrack {
   durationMs: number;
+  /** Fight ms per video ms. */
+  speed: number;
   sampleMs: number;
   startYaw: number;
   fovDeg: number;
@@ -89,9 +96,32 @@ export interface DroneTrack {
   overview: { x: number; y: number; z: number };
 }
 
-/** The video's length for a fight: the fight, then the hold on its end. */
-export function droneVideoDurationMs(fightMs: number): number {
-  return Math.max(0, fightMs) + DRONE_END_HOLD_MS;
+/** The video's length for a fight at `speed`: the fight, then the hold on its end (real time at any speed). */
+export function droneVideoDurationMs(fightMs: number, speed = 1): number {
+  return Math.max(0, fightMs) / speed + DRONE_END_HOLD_MS;
+}
+
+/** The download name at `speed`: `…-4x.mp4` when sped up. */
+export function speedFileName(fileName: string, speed: RenderSpeed): string {
+  if (speed === 1) return fileName;
+  return /\.mp4$/i.test(fileName) ? fileName.replace(/\.mp4$/i, `-${speed}x.mp4`) : `${fileName}-${speed}x`;
+}
+
+/** The fight time (ms into the fight, clamped to it) shown `videoMs` into a video at `speed`. */
+export function fightMsAtVideoMs(videoMs: number, speed: number, fightMs: number): number {
+  return Math.min(Math.max(0, videoMs) * speed, Math.max(0, fightMs));
+}
+
+/**
+ * The frames to render for a fight at `speed` and `fps`: the whole video, or
+ * only `range` (ms into the video). Frame `firstFrame + i` is at
+ * `(firstFrame + i) * 1000 / fps` ms into the video.
+ */
+export function videoFrameRange(fightMs: number, speed: number, fps: number, range?: { fromMs: number; toMs: number } | null): { firstFrame: number; frameCount: number } {
+  const videoMs = droneVideoDurationMs(fightMs, speed);
+  const firstFrame = range ? Math.max(0, Math.round((range.fromMs * fps) / 1000)) : 0;
+  const lastFrame = Math.round((Math.min(videoMs, range?.toMs ?? videoMs) * fps) / 1000);
+  return { firstFrame, frameCount: Math.max(1, lastFrame - firstFrame + 1) };
 }
 
 /** The orbit's compass direction `ms` into the video. */
@@ -132,7 +162,7 @@ function smoothFloor(values: readonly number[], half: number): number[] {
  * Null when nobody is ever on screen to frame.
  */
 export function buildDroneTrack(options: DroneTrackOptions): DroneTrack | null {
-  const { durationMs, unitsAt, scale, aspect, probe = null, startYaw = Math.PI / 4 } = options;
+  const { durationMs, unitsAt, scale, aspect, probe = null, startYaw = Math.PI / 4, speed = 1 } = options;
   const sampleMs = options.sampleMs ?? DRONE_SAMPLE_MS;
   const fovDeg = options.verticalFovDeg ?? DRONE_FOV_DEG;
   const count = Math.max(1, Math.ceil(Math.max(0, durationMs) / sampleMs) + 1);
@@ -174,7 +204,8 @@ export function buildDroneTrack(options: DroneTrackOptions): DroneTrack | null {
   }
 
   // 2. The centre: a moving average over replay time.
-  const centreHalf = Math.round(DRONE_CENTRE_WINDOW_MS / sampleMs);
+  // The windows are video time: `speed` times as much fight per window.
+  const centreHalf = Math.round((DRONE_CENTRE_WINDOW_MS * speed) / sampleMs);
   const xs = windowed(rawX, centreHalf, "mean");
   const zs = windowed(rawZ, centreHalf, "mean");
 
@@ -182,7 +213,7 @@ export function buildDroneTrack(options: DroneTrackOptions): DroneTrack | null {
   // smooth ceiling so nobody framed slips out while the centre lags.
   const minRadius = MIN_FRAME_RADIUS_YARDS * scale;
   const cover = framed.map((points, i) => points.reduce((radius, point) => Math.max(radius, Math.hypot(point.x - xs[i]!, point.z - zs[i]!)), minRadius));
-  const radii = smoothCeiling(cover, Math.round(DRONE_RADIUS_WINDOW_MS / sampleMs));
+  const radii = smoothCeiling(cover, Math.round((DRONE_RADIUS_WINDOW_MS * speed) / sampleMs));
 
   // 4. The distance that fits it in the 16:9 frame, and (with the mesh) the
   // lowest clear elevation, smoothed so the climb over a wall is gradual.
@@ -195,12 +226,13 @@ export function buildDroneTrack(options: DroneTrackOptions): DroneTrack | null {
   const elevations: number[] = [];
   const distances: number[] = [];
   for (let i = 0; i < count; i++) {
-    const yaw = droneYawAt({ startYaw }, i * sampleMs);
+    // The orbit turns in video time.
+    const yaw = droneYawAt({ startYaw }, (i * sampleMs) / speed);
     const shot = probe ? probe.clearShot(xs[i]!, zs[i]!, fitted[i]!, yaw, i * sampleMs) : null;
     elevations.push(shot?.elevation ?? CINEMATIC_ELEVATION_DEG);
     distances.push(shot?.distance ?? fitted[i]!);
   }
-  const elevationHalf = Math.round(DRONE_ELEVATION_WINDOW_MS / sampleMs);
+  const elevationHalf = Math.round((DRONE_ELEVATION_WINDOW_MS * speed) / sampleMs);
   const smoothElevations = smoothCeiling(elevations, elevationHalf);
   const smoothDistances = smoothFloor(distances, elevationHalf);
   const ys = windowed(probe ? xs.map((x, i) => probe.floorAt(x, zs[i]!)) : xs.map(() => 0), elevationHalf, "mean");
@@ -211,7 +243,7 @@ export function buildDroneTrack(options: DroneTrackOptions): DroneTrack | null {
     y: keys.reduce((sum, key) => sum + key.y, 0) / keys.length,
     z: keys.reduce((sum, key) => sum + key.z, 0) / keys.length,
   };
-  return { durationMs: Math.max(0, durationMs), sampleMs, startYaw, fovDeg, keys, overview };
+  return { durationMs: Math.max(0, durationMs), speed, sampleMs, startYaw, fovDeg, keys, overview };
 }
 
 // Catmull-Rom through the keys around `ms` (clamped to the track).
@@ -247,10 +279,11 @@ function lerp(from: number, to: number, amount: number): number {
 /**
  * The drone's camera `ms` into the video: the intro for the first
  * DRONE_INTRO_MS, then the orbit. Past the fight's end the framing holds and
- * the orbit keeps turning.
+ * the orbit keeps turning. The framing follows the fight at the track's
+ * speed; the intro and the orbit run in video time.
  */
 export function dronePoseAt(track: DroneTrack, ms: number): MapCameraPose {
-  const key = keyAt(track, ms);
+  const key = keyAt(track, ms * track.speed);
   let { x, y, z, distance, elevationDeg } = key;
   let yaw = droneYawAt(track, ms);
   if (ms < DRONE_INTRO_MS) {
