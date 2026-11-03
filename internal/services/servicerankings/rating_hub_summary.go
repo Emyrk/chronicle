@@ -69,6 +69,15 @@ func hubResolveCohort(instances []chroniclesdk.RankingsInstanceSummary, instance
 	return chroniclesdk.HubSelectedCohort{DifficultyName: best.DifficultyName, MaxPlayers: best.MaxPlayers}, true
 }
 
+// hubClassFilter is the DB class for a class filter, or "" for every class.
+// HeroClassToDB maps an empty class to UNKNOWN, which would match no player.
+func hubClassFilter(class string) string {
+	if class == "" {
+		return ""
+	}
+	return string(db2sdk.HeroClassToDB(types.HeroClasses(class)))
+}
+
 type hubSummaryInput struct {
 	instance, featured, difficulty, metric, class, spec, subSpec, tab string
 	size                                                              int16
@@ -429,7 +438,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if genErr == nil && generation != uuid.Nil {
-		rows, e := s.store.HubSummaryRatingRows(ctx, database.HubSummaryRatingRowsParams{TenantID: tenant, GenerationID: generation, InstanceName: in.instance, FeaturedEncounter: in.featured, DifficultyName: in.difficulty, MaxPlayers: in.size, ExactCohort: in.exact, PerformanceMetric: in.metric, PlayerClass: string(db2sdk.HeroClassToDB(types.HeroClasses(in.class))), PlayerSpec: in.spec, PlayerSubSpec: in.subSpec, RealmIds: in.realmIDs})
+		rows, e := s.store.HubSummaryRatingRows(ctx, database.HubSummaryRatingRowsParams{TenantID: tenant, GenerationID: generation, InstanceName: in.instance, FeaturedEncounter: in.featured, DifficultyName: in.difficulty, MaxPlayers: in.size, ExactCohort: in.exact, PerformanceMetric: in.metric, PlayerClass: hubClassFilter(in.class), PlayerSpec: in.spec, PlayerSubSpec: in.subSpec, RealmIds: in.realmIDs})
 		if e != nil {
 			httpapi.InternalServerError(w, e)
 			return
@@ -492,7 +501,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		if in.featured != "" {
 			encounters = []string{in.featured}
 		}
-		rows, e := s.store.RankingsLeaderboardNoJIT(ctx, database.RankingsLeaderboardParams{InstanceNames: []string{in.instance}, EncounterNames: encounters, DifficultyNames: []string{in.difficulty}, FilterMaxPlayers: in.size, ExactCohort: true, Class: string(db2sdk.HeroClassToDB(types.HeroClasses(in.class))), Spec: in.spec, SubSpec: in.subSpec, Metric: in.metric, RealmNames: realmNames, QueryLimit: hubOverviewPerformanceLimit})
+		rows, e := s.store.RankingsLeaderboardNoJIT(ctx, database.RankingsLeaderboardParams{InstanceNames: []string{in.instance}, EncounterNames: encounters, DifficultyNames: []string{in.difficulty}, FilterMaxPlayers: in.size, ExactCohort: true, Class: hubClassFilter(in.class), Spec: in.spec, SubSpec: in.subSpec, Metric: in.metric, RealmNames: realmNames, QueryLimit: hubOverviewPerformanceLimit})
 		if e != nil {
 			httpapi.InternalServerError(w, e)
 			return

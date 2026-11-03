@@ -111,3 +111,11 @@ func TestHubResolveCohort(t *testing.T) {
 	_, ok = hubResolveCohort(instances, "Naxxramas", "", 0, false)
 	require.False(t, ok)
 }
+
+func TestHubClassFilter(t *testing.T) {
+	t.Parallel()
+	// No class means every class, not the UNKNOWN class.
+	require.Equal(t, "", hubClassFilter(""))
+	require.Equal(t, "MAGE", hubClassFilter("MAGE"))
+	require.Equal(t, "DEATH_KNIGHT", hubClassFilter("DEATHKNIGHT"))
+}
