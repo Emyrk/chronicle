@@ -3,10 +3,36 @@ import {
   billingCheckoutOperationID,
   fetchInstanceSpeedrun,
   getLogGroupRefetchInterval,
+  selectSupportedInstanceProgressionBosses,
   spellQueryOptions,
   type RiverJobState,
   type WoWLogGroupState,
 } from "./queries";
+
+describe("selectSupportedInstanceProgressionBosses", () => {
+  it("includes derived instance bosses from their speedrun rules", () => {
+    const bosses = selectSupportedInstanceProgressionBosses([{
+      name: "Tower of Karazhan",
+      category: "raid",
+      progression_bosses: ["Parent Boss"],
+      derived_speedrun_rules: {
+        "Lower Tower of Karazhan": {
+          requirements: [
+            { name: "Lord Blackwald II", entry_ids: [61222], count: 1, category: "Bosses" },
+            { name: "Lower Trash", entry_ids: [61203], count: 1, category: "Trash" },
+            { name: "Moroes", entry_ids: [61225], count: 1, category: "Bosses" },
+          ],
+        },
+      },
+    }]);
+
+    expect(bosses.get("Tower of Karazhan")).toEqual(new Set(["Parent Boss"]));
+    expect(bosses.get("Lower Tower of Karazhan")).toEqual(new Set([
+      "Lord Blackwald II",
+      "Moroes",
+    ]));
+  });
+});
 
 function logWithJobState(state: RiverJobState): WoWLogGroupState {
   return { status: { state } } as WoWLogGroupState;

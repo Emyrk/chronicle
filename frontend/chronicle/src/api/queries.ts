@@ -1228,11 +1228,20 @@ export function useSupportedInstanceBossCounts() {
 
 export function selectSupportedInstanceProgressionBosses(instances: SupportedInstance[]) {
   return new Map(
-    instances.flatMap((instance) =>
-      instance.progression_bosses == null
+    instances.flatMap((instance) => {
+      const entries: [string, Set<string>][] = instance.progression_bosses == null
         ? []
-        : [[instance.name, new Set(instance.progression_bosses)] as const],
-    ),
+        : [[instance.name, new Set(instance.progression_bosses)]];
+
+      for (const [derivedName, rules] of Object.entries(instance.derived_speedrun_rules ?? {})) {
+        const bosses = rules.requirements
+          .filter((requirement) => requirement.category === "Bosses")
+          .map((requirement) => requirement.name);
+        if (bosses.length > 0) entries.push([derivedName, new Set(bosses)]);
+      }
+
+      return entries;
+    }),
   );
 }
 
