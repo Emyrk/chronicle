@@ -1,8 +1,10 @@
 package serviceinference
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -42,7 +44,7 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Inference run not found."})
 		return
 	}
-	if run.Status != "awaiting_client_tool" || !run.ThreadID.Valid || !run.LeaseExpiresAt.Valid || !run.LeaseExpiresAt.Time.After(time.Now()) {
+	if run.Status != "awaiting_client_tool" || !run.LeaseExpiresAt.Valid || !run.LeaseExpiresAt.Time.After(time.Now()) || (!run.ThreadID.Valid && run.AssistantID != "site-help") {
 		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "This run is not awaiting that client tool."})
 		return
 	}
@@ -57,13 +59,21 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	thread, err := s.db.GetInferenceThreadByOwner(r.Context(), database.GetInferenceThreadByOwnerParams{ID: run.ThreadID.UUID, UserID: uid})
-	if err != nil || thread.AssistantID != run.AssistantID || thread.Persistence != "durable" || thread.ContextType.String != assistants[run.AssistantID].ContextType {
-		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Thread not found."})
-		return
-	}
-	if err := s.authorizeThreadContext(r, thread); err != nil {
-		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: threadContextForbidden(thread)})
+	var thread database.InferenceThread
+	streamThread := run.ID.String()
+	if run.ThreadID.Valid {
+		thread, err = s.db.GetInferenceThreadByOwner(r.Context(), database.GetInferenceThreadByOwnerParams{ID: run.ThreadID.UUID, UserID: uid})
+		if err != nil || thread.AssistantID != run.AssistantID || thread.Persistence != "durable" || thread.ContextType.String != assistants[run.AssistantID].ContextType {
+			httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Thread not found."})
+			return
+		}
+		if err := s.authorizeThreadContext(r, thread); err != nil {
+			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: threadContextForbidden(thread)})
+			return
+		}
+		streamThread = thread.ID.String()
+	} else if len(run.EphemeralHistory) == 0 || len(run.EphemeralHistory) > maxHistoryBytes {
+		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "This run has no pending history."})
 		return
 	}
 	connection, err := s.db.GetInferenceConnectionByOwner(r.Context(), database.GetInferenceConnectionByOwnerParams{ID: run.ConnectionID, UserID: uid})
@@ -73,20 +83,42 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var pending database.InferenceClientToolRequest
+	var history []Message
+	if !run.ThreadID.Valid {
+		if err := json.Unmarshal(run.EphemeralHistory, &history); err != nil || len(history) == 0 || len(history) > 70 || history[0].Role != RoleUser {
+			httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "This run has invalid pending history."})
+			return
+		}
+	}
 	err = s.db.InTx(r.Context(), func(tx database.Store) error {
 		pending, err = tx.GetInferenceClientToolRequestForUpdate(r.Context(), database.GetInferenceClientToolRequestForUpdateParams{RunID: run.ID, ToolCallID: toolCallID, UserID: uid})
 		if err != nil {
 			return err
 		}
-		if err := validateClientToolContinuation(pending, request, thread.ContextID.String); err != nil {
+		scopeID := thread.ContextID.String
+		if !run.ThreadID.Valid {
+			scopeID = "search"
+			if pending.CapabilityID != searchPageCapabilityID {
+				return errClientToolMismatch
+			}
+		}
+		if err := validateClientToolContinuation(pending, request, scopeID); err != nil {
 			return err
 		}
 		if _, err = tx.CompleteInferenceClientToolRequest(r.Context(), database.CompleteInferenceClientToolRequestParams{RunID: run.ID, ToolCallID: toolCallID}); err != nil {
 			return err
 		}
 		toolMessage := Message{Role: RoleTool, Name: pending.ToolName, ToolCallID: pending.ToolCallID, Content: content}
-		if err = insertInferenceMessages(r.Context(), tx, thread.ID, toolMessage); err != nil {
-			return err
+		if run.ThreadID.Valid {
+			if err = insertInferenceMessages(r.Context(), tx, thread.ID, toolMessage); err != nil {
+				return err
+			}
+		} else {
+			history = append(history, toolMessage)
+			// Validate the complete exchange before consuming the pending request.
+			if _, err = ephemeralHistoryJSON(history); err != nil {
+				return err
+			}
 		}
 		_, err = tx.ResumeInferenceRun(r.Context(), database.ResumeInferenceRunParams{ID: run.ID, UserID: uid, LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(runLease), Valid: true}})
 		return err
@@ -100,12 +132,14 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.db.ListRecentInferenceMessagesByThread(r.Context(), database.ListRecentInferenceMessagesByThreadParams{ThreadID: thread.ID, Limit: maxHistoryMessages})
-	if err != nil {
-		s.internalError(w, "load inference thread history", err)
-		return
+	if run.ThreadID.Valid {
+		rows, err := s.db.ListRecentInferenceMessagesByThread(r.Context(), database.ListRecentInferenceMessagesByThreadParams{ThreadID: thread.ID, Limit: maxHistoryMessages})
+		if err != nil {
+			s.internalError(w, "load inference thread history", err)
+			return
+		}
+		history = boundedHistory(rows)
 	}
-	history := boundedHistory(rows)
 	capability := &clientCapability{ID: pending.CapabilityID, Version: int(pending.CapabilityVersion), ScopeType: pending.ScopeType.String, ScopeID: pending.ScopeID.String, SessionID: pending.ClientSessionID, StateRevision: request.StateRevision}
 	assistantDefinition, ok := assistants[run.AssistantID]
 	if !ok {
@@ -118,7 +152,7 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 	assistantDefinition = withServerTools(assistantDefinition, run.WebSearch)
 	assistantDefinition = withClientTools(assistantDefinition, capability)
 	writer := agui.NewWriter(w)
-	if err := writer.Write(agui.RunStartedEvent{ThreadID: thread.ID.String(), RunID: run.IdempotencyKey, ProtocolVersion: "1.0"}); err != nil {
+	if err := writer.Write(agui.RunStartedEvent{ThreadID: streamThread, RunID: run.IdempotencyKey, ProtocolVersion: "1.0"}); err != nil {
 		_ = s.finishRun(r.Context(), run, "error", agentLoopState{Usage: Usage{PromptTokens: int(run.InputTokens), CompletionTokens: int(run.OutputTokens), TotalTokens: int(run.InputTokens + run.OutputTokens)}, IterationCount: int(run.IterationCount), ToolCallCount: int(run.ToolCallCount)}, "stream_error")
 		return
 	}
@@ -126,7 +160,10 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 		_ = s.finishRun(r.Context(), run, "error", agentLoopState{Usage: Usage{PromptTokens: int(run.InputTokens), CompletionTokens: int(run.OutputTokens), TotalTokens: int(run.InputTokens + run.OutputTokens)}, IterationCount: int(run.IterationCount), ToolCallCount: int(run.ToolCallCount)}, "stream_error")
 		return
 	}
-	debug := debugRunContext{Enabled: run.Debug, UsageEvents: request.UsageEvents, RunID: run.IdempotencyKey, ThreadID: thread.ID.String(), Persistence: "durable", ContextType: thread.ContextType.String, ContextID: thread.ContextID.String}
+	debug := debugRunContext{Enabled: run.Debug, UsageEvents: request.UsageEvents, RunID: run.IdempotencyKey, ThreadID: streamThread, Persistence: "ephemeral"}
+	if run.ThreadID.Valid {
+		debug.Persistence, debug.ContextType, debug.ContextID = "durable", thread.ContextType.String, thread.ContextID.String
+	}
 	state := agentLoopState{Usage: Usage{PromptTokens: int(run.InputTokens), CompletionTokens: int(run.OutputTokens), TotalTokens: int(run.InputTokens + run.OutputTokens)}, IterationCount: int(run.IterationCount), ToolCallCount: int(run.ToolCallCount)}
 	// Debug snapshots show the whole run's usage, so carry over what the paused calls cost.
 	if prior, err := s.db.GetInferenceRunUsage(r.Context(), run.ID); err == nil {
@@ -136,6 +173,10 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	persist := func(messages ...Message) error {
+		if !run.ThreadID.Valid {
+			history = append(history, messages...)
+			return nil
+		}
 		return s.persistInferenceMessages(r.Context(), thread.ID, messages...)
 	}
 	if terminalMessage, terminal := terminalClientToolFailureMessage(request); terminal {
@@ -167,7 +208,7 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 			_ = writer.Write(agui.RunErrorEvent{Message: "The inference run could not be finalized.", Code: "persistence_error"})
 			return
 		}
-		_ = writer.Write(agui.RunFinishedEvent{ThreadID: thread.ID.String(), RunID: run.IdempotencyKey})
+		_ = writer.Write(agui.RunFinishedEvent{ThreadID: streamThread, RunID: run.IdempotencyKey})
 		return
 	}
 
@@ -183,9 +224,16 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pause := func(assistantMessage Message, toolMessages []Message, next clientToolPause, nextState agentLoopState) error {
+		if !run.ThreadID.Valid {
+			return s.pauseForEphemeralClientTool(r.Context(), run, append(slices.Clone(history), append([]Message{assistantMessage}, toolMessages...)...), next, nextState)
+		}
 		return s.pauseForClientTool(r.Context(), run, thread.ID, assistantMessage, toolMessages, next, nextState)
 	}
-	result, err := s.agentLoop(r.Context(), writer, provider, credential, run.Model, assistantDefinition, history, threadToolContext(s, thread), debug, capability, state, persist, pause, s.usageRecorder(r.Context(), run, &thread))
+	var usageThread *database.InferenceThread
+	if run.ThreadID.Valid {
+		usageThread = &thread
+	}
+	result, err := s.agentLoop(r.Context(), writer, provider, credential, run.Model, assistantDefinition, history, threadToolContext(s, thread), debug, capability, state, persist, pause, s.usageRecorder(r.Context(), run, usageThread))
 	if err != nil {
 		if s.logger != nil {
 			s.logger.Warn("continued inference run failed", "run_id", run.IdempotencyKey, "error", err)
@@ -201,7 +249,7 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 		_ = writer.Write(agui.RunErrorEvent{Message: "The inference run could not be finalized.", Code: "persistence_error"})
 		return
 	}
-	_ = writer.Write(agui.RunFinishedEvent{ThreadID: thread.ID.String(), RunID: run.IdempotencyKey})
+	_ = writer.Write(agui.RunFinishedEvent{ThreadID: streamThread, RunID: run.IdempotencyKey})
 }
 
 var errClientToolMismatch = errors.New("client tool result mismatch")

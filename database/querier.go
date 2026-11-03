@@ -1091,6 +1091,7 @@ type sqlcQuerier interface {
 	// Only retired generations with remaining ephemeral state are eligible. This
 	// preserves published score rows and generation identities independently.
 	NextRetiredRatingStageGeneration(ctx context.Context) (uuid.UUID, error)
+	PauseEphemeralInferenceRun(ctx context.Context, arg PauseEphemeralInferenceRunParams) (InferenceRun, error)
 	PauseInferenceRun(ctx context.Context, arg PauseInferenceRunParams) (InferenceRun, error)
 	// Returns a bucket's current (refilled) token level without changing it. A
 	// bucket that does not exist yet is full.

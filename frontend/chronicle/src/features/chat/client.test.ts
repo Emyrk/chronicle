@@ -85,7 +85,7 @@ describe("parseAgUiEvent", () => {
       model: "provider/model",
       persistence: "ephemeral",
       messages: [{ role: "system", content: "instructions", toolCalls: [{ id: "call-1", name: "lookup", arguments: "{}" }] }],
-      tools: [{ name: "lookup", description: "Look up data", parameters: { type: "object" } }],
+      tools: [{ name: "lookup", description: "Look up data", parameters: { type: "object" }, execution: "browser" }],
       skills: [],
       limits: {
         maxHistoryMessages: 50,
@@ -130,6 +130,9 @@ describe("parseAgUiEvent", () => {
       expect.objectContaining<Partial<AgUiClientError>>({ kind: "parse" }),
     );
     expect(() => parseAgUiEvent({ data: JSON.stringify({ ...base, messages: [{ role: "system", content: 42 }] }) })).toThrowError(
+      expect.objectContaining<Partial<AgUiClientError>>({ kind: "parse" }),
+    );
+    expect(() => parseAgUiEvent({ data: JSON.stringify({ ...base, tools: [{ name: "lookup", description: "Read", parameters: {}, execution: "desktop" }] }) })).toThrowError(
       expect.objectContaining<Partial<AgUiClientError>>({ kind: "parse" }),
     );
     expect(() => parseAgUiEvent({ data: JSON.stringify({ ...base, usage: { promptTokens: "secret" } }) })).toThrowError(

@@ -567,9 +567,23 @@ func (s *Service) previewDebug(w http.ResponseWriter, r *http.Request) {
 		debug.Persistence = "durable"
 		debug.ContextType = thread.ContextType.String
 		debug.ContextID = thread.ContextID.String
-	} else if request.ThreadID != nil || request.Instance != "" || request.Client != nil {
-		badRequest(w, r, "Ephemeral debug previews do not accept thread or client context.")
-		return
+	} else {
+		if request.ThreadID != nil || request.Instance != "" {
+			badRequest(w, r, "Ephemeral debug previews do not accept thread or instance context.")
+			return
+		}
+		if request.Client != nil {
+			if assistantDefinition.ID != "site-help" {
+				badRequest(w, r, "Client tools are not supported for this assistant.")
+				return
+			}
+			capability, err := advertisedClient(request.Client, searchPageCapability, "search")
+			if err != nil {
+				badRequest(w, r, err.Error())
+				return
+			}
+			assistantDefinition = withClientTools(assistantDefinition, capability)
+		}
 	}
 	messages = append([]Message{{Role: RoleSystem, Content: assistantDefinition.System}}, messages...)
 	httpapi.Write(r.Context(), w, http.StatusOK, debugSnapshotEvent(debug, 0, "request", request.Model, assistantDefinition, messages, Usage{}))

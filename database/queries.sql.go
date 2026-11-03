@@ -10384,9 +10384,10 @@ SET status = 'abandoned',
     error_code = 'client_tool_superseded',
     completed_at = now(),
     lease_expires_at = NULL,
+    ephemeral_history = NULL,
     updated_at = now()
 WHERE id = $1 AND user_id = $2 AND status = 'awaiting_client_tool'
-RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search
+RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search, ephemeral_history
 `
 
 type AbandonAwaitingInferenceRunParams struct {
@@ -10417,6 +10418,7 @@ func (q *sqlQuerier) AbandonAwaitingInferenceRun(ctx context.Context, arg Abando
 		&i.IterationCount,
 		&i.ToolCallCount,
 		&i.WebSearch,
+		&i.EphemeralHistory,
 	)
 	return i, err
 }
@@ -10586,6 +10588,7 @@ WITH stale AS (
   SET status = 'abandoned',
       error_code = 'stale_run',
       completed_at = now(),
+      ephemeral_history = NULL,
       updated_at = now()
   WHERE status IN ('running', 'awaiting_client_tool')
     AND lease_expires_at IS NOT NULL
@@ -10608,7 +10611,7 @@ func (q *sqlQuerier) ExpireStaleInferenceRuns(ctx context.Context) (int64, error
 }
 
 const getActiveInferenceRunByThreadForUpdate = `-- name: GetActiveInferenceRunByThreadForUpdate :one
-SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search FROM inference_runs
+SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search, ephemeral_history FROM inference_runs
 WHERE thread_id = $1
   AND user_id = $2
   AND status IN ('running', 'awaiting_client_tool')
@@ -10643,6 +10646,7 @@ func (q *sqlQuerier) GetActiveInferenceRunByThreadForUpdate(ctx context.Context,
 		&i.IterationCount,
 		&i.ToolCallCount,
 		&i.WebSearch,
+		&i.EphemeralHistory,
 	)
 	return i, err
 }
@@ -10759,7 +10763,7 @@ func (q *sqlQuerier) GetInferenceContextUsage(ctx context.Context, arg GetInfere
 }
 
 const getInferenceRunByIdempotencyKey = `-- name: GetInferenceRunByIdempotencyKey :one
-SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search FROM inference_runs
+SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search, ephemeral_history FROM inference_runs
 WHERE user_id = $1 AND idempotency_key = $2
 `
 
@@ -10791,12 +10795,13 @@ func (q *sqlQuerier) GetInferenceRunByIdempotencyKey(ctx context.Context, arg Ge
 		&i.IterationCount,
 		&i.ToolCallCount,
 		&i.WebSearch,
+		&i.EphemeralHistory,
 	)
 	return i, err
 }
 
 const getInferenceRunByOwner = `-- name: GetInferenceRunByOwner :one
-SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search FROM inference_runs
+SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search, ephemeral_history FROM inference_runs
 WHERE id = $1 AND user_id = $2
 `
 
@@ -10828,6 +10833,7 @@ func (q *sqlQuerier) GetInferenceRunByOwner(ctx context.Context, arg GetInferenc
 		&i.IterationCount,
 		&i.ToolCallCount,
 		&i.WebSearch,
+		&i.EphemeralHistory,
 	)
 	return i, err
 }
@@ -10992,8 +10998,8 @@ FOR UPDATE OF request
 `
 
 type GetPendingInferenceClientToolRequestByThreadForUpdateParams struct {
-	ThreadID uuid.UUID `db:"thread_id" json:"thread_id"`
-	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+	ThreadID uuid.NullUUID `db:"thread_id" json:"thread_id"`
+	UserID   uuid.UUID     `db:"user_id" json:"user_id"`
 }
 
 func (q *sqlQuerier) GetPendingInferenceClientToolRequestByThreadForUpdate(ctx context.Context, arg GetPendingInferenceClientToolRequestByThreadForUpdateParams) (InferenceClientToolRequest, error) {
@@ -11031,19 +11037,19 @@ RETURNING run_id, thread_id, tool_call_id, tool_name, arguments, capability_id, 
 `
 
 type InsertInferenceClientToolRequestParams struct {
-	RunID             uuid.UUID   `db:"run_id" json:"run_id"`
-	ThreadID          uuid.UUID   `db:"thread_id" json:"thread_id"`
-	ToolCallID        string      `db:"tool_call_id" json:"tool_call_id"`
-	ToolName          string      `db:"tool_name" json:"tool_name"`
-	Arguments         []byte      `db:"arguments" json:"arguments"`
-	CapabilityID      string      `db:"capability_id" json:"capability_id"`
-	CapabilityVersion int32       `db:"capability_version" json:"capability_version"`
-	ScopeType         pgtype.Text `db:"scope_type" json:"scope_type"`
-	ScopeID           pgtype.Text `db:"scope_id" json:"scope_id"`
-	ClientSessionID   string      `db:"client_session_id" json:"client_session_id"`
-	StateRevision     pgtype.Int8 `db:"state_revision" json:"state_revision"`
-	Effect            string      `db:"effect" json:"effect"`
-	Confirmation      string      `db:"confirmation" json:"confirmation"`
+	RunID             uuid.UUID     `db:"run_id" json:"run_id"`
+	ThreadID          uuid.NullUUID `db:"thread_id" json:"thread_id"`
+	ToolCallID        string        `db:"tool_call_id" json:"tool_call_id"`
+	ToolName          string        `db:"tool_name" json:"tool_name"`
+	Arguments         []byte        `db:"arguments" json:"arguments"`
+	CapabilityID      string        `db:"capability_id" json:"capability_id"`
+	CapabilityVersion int32         `db:"capability_version" json:"capability_version"`
+	ScopeType         pgtype.Text   `db:"scope_type" json:"scope_type"`
+	ScopeID           pgtype.Text   `db:"scope_id" json:"scope_id"`
+	ClientSessionID   string        `db:"client_session_id" json:"client_session_id"`
+	StateRevision     pgtype.Int8   `db:"state_revision" json:"state_revision"`
+	Effect            string        `db:"effect" json:"effect"`
+	Confirmation      string        `db:"confirmation" json:"confirmation"`
 }
 
 func (q *sqlQuerier) InsertInferenceClientToolRequest(ctx context.Context, arg InsertInferenceClientToolRequestParams) (InferenceClientToolRequest, error) {
@@ -11230,7 +11236,7 @@ INSERT INTO inference_runs (
   idempotency_key, input_tokens, output_tokens, error_code, completed_at,
   lease_expires_at, debug, iteration_count, tool_call_count, web_search
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search
+RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search, ephemeral_history
 `
 
 type InsertInferenceRunParams struct {
@@ -11292,6 +11298,7 @@ func (q *sqlQuerier) InsertInferenceRun(ctx context.Context, arg InsertInference
 		&i.IterationCount,
 		&i.ToolCallCount,
 		&i.WebSearch,
+		&i.EphemeralHistory,
 	)
 	return i, err
 }
@@ -11696,6 +11703,66 @@ func (q *sqlQuerier) ListRecentInferenceMessagesByThread(ctx context.Context, ar
 	return items, nil
 }
 
+const pauseEphemeralInferenceRun = `-- name: PauseEphemeralInferenceRun :one
+UPDATE inference_runs
+SET status = 'awaiting_client_tool',
+    input_tokens = $3, output_tokens = $4,
+    iteration_count = $5, tool_call_count = $6,
+    lease_expires_at = $7, ephemeral_history = $8,
+    updated_at = now()
+WHERE id = $1 AND user_id = $2 AND assistant_id = 'site-help'
+  AND thread_id IS NULL AND status = 'running'
+RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search, ephemeral_history
+`
+
+type PauseEphemeralInferenceRunParams struct {
+	ID               uuid.UUID          `db:"id" json:"id"`
+	UserID           uuid.UUID          `db:"user_id" json:"user_id"`
+	InputTokens      int64              `db:"input_tokens" json:"input_tokens"`
+	OutputTokens     int64              `db:"output_tokens" json:"output_tokens"`
+	IterationCount   int32              `db:"iteration_count" json:"iteration_count"`
+	ToolCallCount    int32              `db:"tool_call_count" json:"tool_call_count"`
+	LeaseExpiresAt   pgtype.Timestamptz `db:"lease_expires_at" json:"lease_expires_at"`
+	EphemeralHistory []byte             `db:"ephemeral_history" json:"ephemeral_history"`
+}
+
+func (q *sqlQuerier) PauseEphemeralInferenceRun(ctx context.Context, arg PauseEphemeralInferenceRunParams) (InferenceRun, error) {
+	row := q.db.QueryRow(ctx, pauseEphemeralInferenceRun,
+		arg.ID,
+		arg.UserID,
+		arg.InputTokens,
+		arg.OutputTokens,
+		arg.IterationCount,
+		arg.ToolCallCount,
+		arg.LeaseExpiresAt,
+		arg.EphemeralHistory,
+	)
+	var i InferenceRun
+	err := row.Scan(
+		&i.ID,
+		&i.ThreadID,
+		&i.UserID,
+		&i.ConnectionID,
+		&i.AssistantID,
+		&i.Model,
+		&i.Status,
+		&i.IdempotencyKey,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.LeaseExpiresAt,
+		&i.Debug,
+		&i.IterationCount,
+		&i.ToolCallCount,
+		&i.WebSearch,
+		&i.EphemeralHistory,
+	)
+	return i, err
+}
+
 const pauseInferenceRun = `-- name: PauseInferenceRun :one
 UPDATE inference_runs
 SET status = 'awaiting_client_tool',
@@ -11706,7 +11773,7 @@ SET status = 'awaiting_client_tool',
     lease_expires_at = $7,
     updated_at = now()
 WHERE id = $1 AND user_id = $2 AND status = 'running'
-RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search
+RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search, ephemeral_history
 `
 
 type PauseInferenceRunParams struct {
@@ -11750,15 +11817,16 @@ func (q *sqlQuerier) PauseInferenceRun(ctx context.Context, arg PauseInferenceRu
 		&i.IterationCount,
 		&i.ToolCallCount,
 		&i.WebSearch,
+		&i.EphemeralHistory,
 	)
 	return i, err
 }
 
 const resumeInferenceRun = `-- name: ResumeInferenceRun :one
 UPDATE inference_runs
-SET status = 'running', lease_expires_at = $3, updated_at = now()
-WHERE id = $1 AND user_id = $2 AND status = 'awaiting_client_tool'
-RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search
+SET status = 'running', lease_expires_at = $3, ephemeral_history = NULL, updated_at = now()
+WHERE id = $1 AND user_id = $2 AND status = 'awaiting_client_tool' AND lease_expires_at > now()
+RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search, ephemeral_history
 `
 
 type ResumeInferenceRunParams struct {
@@ -11790,6 +11858,7 @@ func (q *sqlQuerier) ResumeInferenceRun(ctx context.Context, arg ResumeInference
 		&i.IterationCount,
 		&i.ToolCallCount,
 		&i.WebSearch,
+		&i.EphemeralHistory,
 	)
 	return i, err
 }
@@ -11855,9 +11924,10 @@ SET status = $3,
     iteration_count = $8,
     tool_call_count = $9,
     lease_expires_at = NULL,
+    ephemeral_history = NULL,
     updated_at = now()
 WHERE id = $1 AND user_id = $2
-RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search
+RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count, web_search, ephemeral_history
 `
 
 type UpdateInferenceRunParams struct {
@@ -11905,6 +11975,7 @@ func (q *sqlQuerier) UpdateInferenceRun(ctx context.Context, arg UpdateInference
 		&i.IterationCount,
 		&i.ToolCallCount,
 		&i.WebSearch,
+		&i.EphemeralHistory,
 	)
 	return i, err
 }

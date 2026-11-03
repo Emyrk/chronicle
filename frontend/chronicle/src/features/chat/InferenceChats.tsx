@@ -89,6 +89,7 @@ function DesktopGlobalSiteHelpChat() {
       assistant_id: "site-help",
       model: selection.modelId,
       ...(input.webSearch ? { web_search: true } : {}),
+      ...(input.client ? { client: input.client } : {}),
     });
     setDebugEnabled(true);
     return { snapshot };

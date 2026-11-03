@@ -177,11 +177,25 @@ func TestDebugPreviewDoesNotInvokeProvider(t *testing.T) {
 	require.Equal(t, "provider/model", snapshot.Model)
 	require.NotEmpty(t, snapshot.Messages)
 	require.Equal(t, "system", snapshot.Messages[0].Role)
-	require.Len(t, snapshot.Tools, len(assistants["site-help"].Tools))
+	composed, err := withRuntimeSkills(assistants["site-help"])
+	require.NoError(t, err)
+	require.Len(t, snapshot.Tools, len(composed.Tools))
 	for _, tool := range snapshot.Tools {
 		require.NotEqual(t, "web_search", tool.Name)
 	}
 	require.Equal(t, chronicleConceptsSkillID, snapshot.Skills[0].ID)
+	withClient := httptest.NewRequest(http.MethodPost, "/debug/preview", strings.NewReader(`{"assistant_id":"site-help","model":"provider/model","client":{"session_id":"browser","capabilities":[{"id":"search-page","version":1,"scope_type":"search_page","scope_id":"search","state_revision":0}]}}`))
+	withClient.Header.Set("Content-Type", "application/json")
+	withClient = withClient.WithContext(chronauth.WithClaims(withClient.Context(), &claims.Claims{Subject: userID}))
+	preview := httptest.NewRecorder()
+	service.ServeHTTP(preview, withClient)
+	require.Equal(t, http.StatusOK, preview.Code, preview.Body.String())
+	var clientSnapshot agui.DebugSnapshotEvent
+	require.NoError(t, json.Unmarshal(preview.Body.Bytes(), &clientSnapshot))
+	require.Len(t, clientSnapshot.Tools, len(composed.Tools)+2)
+	require.Equal(t, "inspect_search_draft", clientSnapshot.Tools[len(clientSnapshot.Tools)-2].Name)
+	require.Equal(t, "set_search_draft", clientSnapshot.Tools[len(clientSnapshot.Tools)-1].Name)
+	require.Contains(t, clientSnapshot.Messages[0].Content, "user must press Search")
 	require.Contains(t, snapshot.Messages[0].Content, "## Skill: Chronicle log concepts")
 }
 
@@ -377,6 +391,24 @@ func debugSnapshots(t *testing.T, stream string) []agui.DebugSnapshotEvent {
 		snapshots = append(snapshots, snapshot)
 	}
 	return snapshots
+}
+
+func TestDebugSnapshotLabelsToolExecution(t *testing.T) {
+	t.Parallel()
+	capability := &clientCapability{ID: searchPageCapabilityID, Version: searchPageCapabilityVersion, ScopeType: "search_page", ScopeID: "search", SessionID: "browser"}
+	assistant := withClientTools(assistants["site-help"], capability)
+	assistant, err := withRuntimeSkills(assistant)
+	require.NoError(t, err)
+	snapshot := debugSnapshotEvent(debugRunContext{}, 1, "request", "model", assistant, nil, Usage{})
+	byName := make(map[string]string, len(snapshot.Tools))
+	for _, tool := range snapshot.Tools {
+		byName[tool.Name] = tool.Execution
+	}
+	require.Equal(t, "browser", byName["set_search_draft"])
+	require.Equal(t, "browser", byName["inspect_search_draft"])
+	require.Equal(t, "server", byName["build_instance_search_link"])
+	require.Equal(t, "server", byName["list_pages"])
+	require.Equal(t, "provider", byName["web_search"])
 }
 
 func TestAgentLoopDebugSnapshotsMatchProviderRequestsAndResults(t *testing.T) {
@@ -644,7 +676,7 @@ func TestCreateRunSupersedesWaitingClientTool(t *testing.T) {
 		ToolCalls: []ToolCall{{ID: "call-1", Name: "inspect_instance_ui", Arguments: `{}`}},
 	}))
 	_, err = store.InsertInferenceClientToolRequest(ctx, database.InsertInferenceClientToolRequestParams{
-		RunID: oldRun.ID, ThreadID: thread.ID, ToolCallID: "call-1", ToolName: "inspect_instance_ui",
+		RunID: oldRun.ID, ThreadID: uuid.NullUUID{UUID: thread.ID, Valid: true}, ToolCallID: "call-1", ToolName: "inspect_instance_ui",
 		Arguments: []byte(`{}`), CapabilityID: "instance-page", CapabilityVersion: 1,
 		ScopeType: pgtype.Text{String: "instance", Valid: true}, ScopeID: thread.ContextID,
 		ClientSessionID: "session-1", Effect: "read", Confirmation: "never",

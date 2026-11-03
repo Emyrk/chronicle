@@ -82,7 +82,7 @@ func TestInferenceClientToolPauseContinuationAndExpiry(t *testing.T) {
 	run, err := store.InsertInferenceRun(ctx, database.InsertInferenceRunParams{ThreadID: uuid.NullUUID{UUID: thread.ID, Valid: true}, UserID: userID, ConnectionID: connection.ID, AssistantID: "instance-analyst", Model: "model", Status: "running", IdempotencyKey: "client-run", LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true}})
 	require.NoError(t, err)
 
-	pending, err := store.InsertInferenceClientToolRequest(ctx, database.InsertInferenceClientToolRequestParams{RunID: run.ID, ThreadID: thread.ID, ToolCallID: "call-1", ToolName: "inspect_instance_ui", Arguments: []byte(`{"include":["panels"]}`), CapabilityID: "instance-page", CapabilityVersion: 1, ScopeType: pgtype.Text{String: "instance", Valid: true}, ScopeID: pgtype.Text{String: instanceID, Valid: true}, ClientSessionID: "session-1", StateRevision: pgtype.Int8{Int64: 4, Valid: true}, Effect: "read", Confirmation: "never"})
+	pending, err := store.InsertInferenceClientToolRequest(ctx, database.InsertInferenceClientToolRequestParams{RunID: run.ID, ThreadID: uuid.NullUUID{UUID: thread.ID, Valid: true}, ToolCallID: "call-1", ToolName: "inspect_instance_ui", Arguments: []byte(`{"include":["panels"]}`), CapabilityID: "instance-page", CapabilityVersion: 1, ScopeType: pgtype.Text{String: "instance", Valid: true}, ScopeID: pgtype.Text{String: instanceID, Valid: true}, ClientSessionID: "session-1", StateRevision: pgtype.Int8{Int64: 4, Valid: true}, Effect: "read", Confirmation: "never"})
 	require.NoError(t, err)
 	require.Equal(t, "pending", pending.Status)
 	paused, err := store.PauseInferenceRun(ctx, database.PauseInferenceRunParams{ID: run.ID, UserID: userID, InputTokens: 10, OutputTokens: 2, IterationCount: 1, ToolCallCount: 1, LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true}})
@@ -101,7 +101,7 @@ func TestInferenceClientToolPauseContinuationAndExpiry(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "running", resumed.Status)
 
-	_, err = store.InsertInferenceClientToolRequest(ctx, database.InsertInferenceClientToolRequestParams{RunID: run.ID, ThreadID: thread.ID, ToolCallID: "call-2", ToolName: "query_panel", Arguments: []byte(`{"panel_id":"damage"}`), CapabilityID: "instance-page", CapabilityVersion: 1, ScopeType: pgtype.Text{String: "instance", Valid: true}, ScopeID: pgtype.Text{String: instanceID, Valid: true}, ClientSessionID: "session-1", Effect: "read", Confirmation: "never"})
+	_, err = store.InsertInferenceClientToolRequest(ctx, database.InsertInferenceClientToolRequestParams{RunID: run.ID, ThreadID: uuid.NullUUID{UUID: thread.ID, Valid: true}, ToolCallID: "call-2", ToolName: "query_panel", Arguments: []byte(`{"panel_id":"damage"}`), CapabilityID: "instance-page", CapabilityVersion: 1, ScopeType: pgtype.Text{String: "instance", Valid: true}, ScopeID: pgtype.Text{String: instanceID, Valid: true}, ClientSessionID: "session-1", Effect: "read", Confirmation: "never"})
 	require.NoError(t, err)
 	_, err = store.PauseInferenceRun(ctx, database.PauseInferenceRunParams{ID: run.ID, UserID: userID, InputTokens: 20, OutputTokens: 4, IterationCount: 2, ToolCallCount: 2, LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true}})
 	require.NoError(t, err)

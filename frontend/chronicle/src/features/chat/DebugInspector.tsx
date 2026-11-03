@@ -42,7 +42,28 @@ function bytes(value: number): string {
   return `${value} B`;
 }
 
-function Snapshot({ snapshot, latest }: { snapshot: DebugSnapshotEvent; latest: boolean }) {
+function ToolGroup({ title, tools, note }: { title: string; tools: DebugSnapshotEvent["tools"]; note?: string }) {
+  if (!tools.length) return null;
+  return (
+    <div>
+      <p className="text-muted-foreground mb-1.5 text-[11px] font-medium">{title} ({tools.length})</p>
+      {note && <p className="text-muted-foreground mb-2 text-[10px]">{note}</p>}
+      <div className="space-y-2">
+        {tools.map((tool) => (
+          <details key={tool.name} className="rounded border bg-muted/20">
+            <summary className="cursor-pointer px-2.5 py-2 font-mono text-[11px] font-medium">{tool.name}</summary>
+            <div className="border-t p-2.5">
+              <p className="text-muted-foreground text-[11px]">{tool.description}</p>
+              <pre className="styled-scrollbar mt-2 max-h-52 overflow-auto font-mono text-[10px] whitespace-pre-wrap">{formattedJSON(tool.parameters)}</pre>
+            </div>
+          </details>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function DebugSnapshot({ snapshot, latest }: { snapshot: DebugSnapshotEvent; latest: boolean }) {
   return (
     <details open={latest} className="group rounded-lg border bg-background/70">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-xs hover:bg-muted/40">
@@ -75,16 +96,11 @@ function Snapshot({ snapshot, latest }: { snapshot: DebugSnapshotEvent; latest: 
         <section>
           <div className="mb-2 flex items-center gap-2 text-xs font-medium"><Wrench className="size-3.5" /> Tools ({snapshot.tools.length})</div>
           {snapshot.tools.length ? (
-            <div className="space-y-2">
-              {snapshot.tools.map((tool) => (
-                <details key={tool.name} className="rounded border bg-muted/20">
-                  <summary className="cursor-pointer px-2.5 py-2 font-mono text-[11px] font-medium">{tool.name}</summary>
-                  <div className="border-t p-2.5">
-                    <p className="text-muted-foreground text-[11px]">{tool.description}</p>
-                    <pre className="styled-scrollbar mt-2 max-h-52 overflow-auto font-mono text-[10px] whitespace-pre-wrap">{formattedJSON(tool.parameters)}</pre>
-                  </div>
-                </details>
-              ))}
+            <div className="space-y-3">
+              <ToolGroup title="Server tools" tools={snapshot.tools.filter((tool) => tool.execution === "server")} />
+              <ToolGroup title="Browser tools" tools={snapshot.tools.filter((tool) => tool.execution === "browser")} note="Browser tools are advertised to the model; only invoked tools appear in Client tool requests." />
+              <ToolGroup title="Provider tools" tools={snapshot.tools.filter((tool) => tool.execution === "provider")} />
+              <ToolGroup title="Unclassified tools" tools={snapshot.tools.filter((tool) => !tool.execution)} note="Older snapshots did not record execution location." />
             </div>
           ) : <p className="text-muted-foreground text-xs">No tools available.</p>}
         </section>
@@ -181,7 +197,7 @@ export function DebugInspector({ channelId, title, snapshots, clientToolRequests
       {expanded && !empty && (
         <div className="styled-scrollbar max-h-[42vh] space-y-2 overflow-y-auto px-4 pb-3">
           {snapshots.map((snapshot, index) => (
-            <Snapshot key={`${snapshot.runId}-${snapshot.iteration}-${snapshot.phase}`} snapshot={snapshot} latest={index === snapshots.length - 1} />
+            <DebugSnapshot key={`${snapshot.runId}-${snapshot.iteration}-${snapshot.phase}`} snapshot={snapshot} latest={index === snapshots.length - 1} />
           ))}
         </div>
       )}

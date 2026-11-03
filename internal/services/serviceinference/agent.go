@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/internal/instancesearch"
 	"github.com/Emyrk/chronicle/internal/services/serviceinference/agui"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -61,6 +62,7 @@ func withServerTools(a assistant, enabled bool) assistant {
 }
 
 var pageCatalog = []map[string]string{
+	{"path": "/search", "name": "Advanced instance search", "description": "Find raid and dungeon runs using filters for encounters, players, and parses"},
 	{"path": "/recent", "name": "Recent raids", "description": "Browse recently uploaded raid logs"},
 	{"path": "/leaderboards/statistics", "name": "Rankings", "description": "Player performance leaderboards and filters"},
 	{"path": "/guilds", "name": "Guilds", "description": "Guild discovery and public guild pages"},
@@ -69,7 +71,7 @@ var pageCatalog = []map[string]string{
 	{"path": "/account/ai", "name": "AI assistant settings", "description": "Turn AI features and individual assistants on or off, and connect OpenRouter"},
 }
 var assistants = map[string]assistant{
-	"site-help": {ID: "site-help", Name: "Ask Chronicle", Description: "Site help on every page: finding pages, answering rankings questions, and researching external information.", System: "You are Chronicle site help. Explain how to navigate Chronicle and answer rankings questions using tools. Never invent pages or ranking results." + webResearchPrompt, Skills: []string{chronicleConceptsSkillID}, Tools: []ToolDefinition{
+	"site-help": {ID: "site-help", Name: "Ask Chronicle", Description: "Site help on every page: finding pages, answering rankings questions, and researching external information.", System: "You are Chronicle site help. Explain how to navigate Chronicle and answer rankings questions using tools. Never invent pages or ranking results." + webResearchPrompt, Skills: []string{chronicleConceptsSkillID, instanceSearchSkillID}, Tools: []ToolDefinition{
 		{Name: "list_pages", Description: "List known Chronicle pages.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "find_pages", Description: "Find Chronicle pages by name or description.", Parameters: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","maxLength":100}},"required":["query"],"additionalProperties":false}`)},
 		{Name: "query_rankings", Description: "Query a bounded Chronicle player leaderboard.", Parameters: json.RawMessage(`{"type":"object","properties":{"instance_name":{"type":"string","maxLength":100},"encounter":{"type":"string","maxLength":100},"class":{"type":"string","maxLength":30},"spec":{"type":"string","maxLength":50},"role":{"type":"string","maxLength":30},"metric":{"type":"string","enum":["dps","hps"]},"limit":{"type":"integer","minimum":1,"maximum":10}},"required":["instance_name"],"additionalProperties":false}`)},
@@ -89,6 +91,17 @@ type debugRunContext struct {
 	ContextID   string
 	// UsageEvents is set when the client asked for USAGE events.
 	UsageEvents bool
+}
+
+func debugToolExecution(a assistant, name string) string {
+	capabilityID := a.ClientCapability
+	if a.ID == "site-help" {
+		capabilityID = searchPageCapabilityID
+	}
+	if _, ok := clientToolByName(capabilityID, name); ok {
+		return "browser"
+	}
+	return "server"
 }
 
 func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model string, a assistant, messages []Message, usage Usage) agui.DebugSnapshotEvent {
@@ -115,6 +128,7 @@ func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model strin
 			Name:        tool.Name,
 			Description: tool.Description,
 			Parameters:  slices.Clone(tool.Parameters),
+			Execution:   debugToolExecution(a, tool.Name),
 		})
 	}
 	for _, tool := range a.ServerTools {
@@ -127,6 +141,7 @@ func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model strin
 			Name:        string(tool.Kind),
 			Description: "Provider-hosted web search for current and external information.",
 			Parameters:  parameters,
+			Execution:   "provider",
 		})
 	}
 	debugSkills := make([]agui.DebugSkill, 0, len(a.Skills))
@@ -234,6 +249,10 @@ func boundedJSON(v any) (string, error) {
 
 func (s *Service) executeTool(ctx context.Context, tc toolContext, name, args string) (string, error) {
 	switch name {
+	case "describe_instance_search":
+		return describeInstanceSearch(args)
+	case "build_instance_search_link":
+		return buildInstanceSearchLink(args)
 	case "list_pages":
 		var in struct{}
 		if err := decodeStrict(args, &in); err != nil {
@@ -397,7 +416,7 @@ const runLease = 15 * time.Minute
 
 func supersedeAwaitingClientTool(ctx context.Context, tx database.Store, threadID, userID uuid.UUID) error {
 	pending, err := tx.GetPendingInferenceClientToolRequestByThreadForUpdate(ctx, database.GetPendingInferenceClientToolRequestByThreadForUpdateParams{
-		ThreadID: threadID,
+		ThreadID: uuid.NullUUID{UUID: threadID, Valid: true},
 		UserID:   userID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -570,8 +589,16 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		history = append(history, input)
 	} else {
 		if req.Client != nil {
-			badRequest(w, r, "Client tools are not supported for this assistant.")
-			return
+			if a.ID != "site-help" {
+				badRequest(w, r, "Client tools are not supported for this assistant.")
+				return
+			}
+			client, err = advertisedClient(req.Client, searchPageCapability, "search")
+			if err != nil {
+				badRequest(w, r, err.Error())
+				return
+			}
+			a = withClientTools(a, client)
 		}
 		if req.ThreadID != nil || req.Message != nil || len(req.Messages) == 0 || len(req.Messages) > maxHistoryMessages {
 			badRequest(w, r, "Ephemeral runs require 1-50 browser messages and no thread.")
@@ -646,11 +673,15 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	}
 	persist := func(messages ...Message) error {
 		if !a.Durable {
+			history = append(history, messages...)
 			return nil
 		}
 		return s.persistInferenceMessages(r.Context(), thread.ID, messages...)
 	}
 	pause := func(assistantMessage Message, toolMessages []Message, pending clientToolPause, state agentLoopState) error {
+		if !a.Durable {
+			return s.pauseForEphemeralClientTool(r.Context(), runRow, append(slices.Clone(history), append([]Message{assistantMessage}, toolMessages...)...), pending, state)
+		}
 		return s.pauseForClientTool(r.Context(), runRow, thread.ID, assistantMessage, toolMessages, pending, state)
 	}
 	var usageThread *database.InferenceThread
@@ -697,7 +728,7 @@ func (s *Service) pauseForClientTool(ctx context.Context, run database.Inference
 			return err
 		}
 		if _, err := tx.InsertInferenceClientToolRequest(ctx, database.InsertInferenceClientToolRequestParams{
-			RunID: run.ID, ThreadID: threadID, ToolCallID: pending.Call.ID, ToolName: pending.Call.Name,
+			RunID: run.ID, ThreadID: uuid.NullUUID{UUID: threadID, Valid: true}, ToolCallID: pending.Call.ID, ToolName: pending.Call.Name,
 			Arguments: pending.Arguments, CapabilityID: pending.Capability.ID, CapabilityVersion: int32(pending.Capability.Version),
 			ScopeType:       pgtype.Text{String: pending.Capability.ScopeType, Valid: pending.Capability.ScopeType != ""},
 			ScopeID:         pgtype.Text{String: pending.Capability.ScopeID, Valid: pending.Capability.ScopeID != ""},
@@ -710,6 +741,61 @@ func (s *Service) pauseForClientTool(ctx context.Context, run database.Inference
 			ID: run.ID, UserID: run.UserID, InputTokens: int64(state.Usage.PromptTokens), OutputTokens: int64(state.Usage.CompletionTokens),
 			IterationCount: int32(state.IterationCount), ToolCallCount: int32(state.ToolCallCount),
 			LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(runLease), Valid: true},
+		})
+		return err
+	}, nil)
+}
+
+// ephemeralHistoryJSON keeps only the active exchange and as much earlier browser history
+// as fits. Tool-call/result pairs from this run are never split across the boundary.
+func ephemeralHistoryJSON(messages []Message) (json.RawMessage, error) {
+	lastUser := -1
+	for i, message := range messages {
+		if message.Role == RoleUser {
+			lastUser = i
+		}
+	}
+	if lastUser < 0 {
+		return nil, errors.New("ephemeral history has no user message")
+	}
+	for start := 0; start <= lastUser; {
+		if messages[start].Role == RoleUser {
+			data, err := json.Marshal(messages[start:])
+			if err != nil {
+				return nil, err
+			}
+			if len(messages)-start <= 70 && len(data) <= maxHistoryBytes {
+				return data, nil
+			}
+		}
+		if start == lastUser {
+			break
+		}
+		start++
+	}
+	return nil, errors.New("ephemeral client tool history too large")
+}
+
+func (s *Service) pauseForEphemeralClientTool(ctx context.Context, run database.InferenceRun, messages []Message, pending clientToolPause, state agentLoopState) error {
+	history, err := ephemeralHistoryJSON(messages)
+	if err != nil {
+		return err
+	}
+	return s.db.InTx(ctx, func(tx database.Store) error {
+		if _, err := tx.InsertInferenceClientToolRequest(ctx, database.InsertInferenceClientToolRequestParams{
+			RunID: run.ID, ToolCallID: pending.Call.ID, ToolName: pending.Call.Name,
+			Arguments: pending.Arguments, CapabilityID: pending.Capability.ID, CapabilityVersion: int32(pending.Capability.Version),
+			ScopeType:       pgtype.Text{String: pending.Capability.ScopeType, Valid: true},
+			ScopeID:         pgtype.Text{String: pending.Capability.ScopeID, Valid: true},
+			ClientSessionID: pending.Capability.SessionID, StateRevision: int64PointerPG(pending.Capability.StateRevision),
+			Effect: pending.Effect, Confirmation: pending.Confirmation,
+		}); err != nil {
+			return err
+		}
+		_, err := tx.PauseEphemeralInferenceRun(ctx, database.PauseEphemeralInferenceRunParams{
+			ID: run.ID, UserID: run.UserID, InputTokens: int64(state.Usage.PromptTokens), OutputTokens: int64(state.Usage.CompletionTokens),
+			IterationCount: int32(state.IterationCount), ToolCallCount: int32(state.ToolCallCount),
+			LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(runLease), Valid: true}, EphemeralHistory: history,
 		})
 		return err
 	}, nil)
@@ -841,6 +927,58 @@ type agentLoopResult struct {
 
 type pauseClientToolFunc func(Message, []Message, clientToolPause, agentLoopState) error
 
+var errSearchDraftRevisionMismatch = errors.New("search draft revision mismatch")
+
+// Compiler errors describe query paths and fields. Never echo JSON decoder
+// errors or arbitrary tool arguments back to the model.
+func searchQueryValidationDetail(err error, fallback string) string {
+	var searchErr *instancesearch.Error
+	if !errors.As(err, &searchErr) {
+		return fallback
+	}
+	detail := []rune(searchErr.Error())
+	if len(detail) > 500 {
+		return string(detail[:500]) + "…"
+	}
+	return string(detail)
+}
+
+func searchLinkValidationResult(err error) (string, error) {
+	return boundedJSON(struct {
+		Error  string `json:"error"`
+		Detail string `json:"detail"`
+	}{Error: "invalid_search_query", Detail: searchQueryValidationDetail(err, "Use a where node with field, op and value, or combine nodes with and/or/not and scoped quantifiers.")})
+}
+
+// A rejected search draft is a model-correctable tool result, not a failed run.
+func searchDraftValidationResult(err error) (string, error) {
+	result := struct {
+		Error  string `json:"error"`
+		Detail string `json:"detail"`
+	}{Error: "invalid_search_draft", Detail: "Use a valid JSON search tree and include expected_revision from inspect_search_draft."}
+	if errors.Is(err, errSearchDraftRevisionMismatch) {
+		result.Error = "stale_state"
+		result.Detail = "The search draft revision changed. Call inspect_search_draft again before editing."
+	} else {
+		result.Detail = searchQueryValidationDetail(err, result.Detail)
+	}
+	return boundedJSON(result)
+}
+
+func rejectedSearchDraftTool(w *agui.Writer, messageID string, call ToolCall, reason error) (Message, error) {
+	if err := w.Write(agui.ToolCallStartEvent{ToolCallID: call.ID, ToolCallName: call.Name, ParentMessageID: messageID}); err != nil {
+		return Message{}, err
+	}
+	if err := w.Write(agui.ToolCallArgsEvent{ToolCallID: call.ID, Delta: call.Arguments}); err != nil {
+		return Message{}, err
+	}
+	output, err := searchDraftValidationResult(reason)
+	if err != nil {
+		return Message{}, err
+	}
+	return Message{Role: RoleTool, Name: call.Name, ToolCallID: call.ID, Content: output}, nil
+}
+
 func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, debug debugRunContext, capability *clientCapability, state agentLoopState, persist func(...Message) error, pause pauseClientToolFunc, record usageRecorder) (agentLoopResult, error) {
 	var err error
 	a, err = withRuntimeSkills(a)
@@ -966,8 +1104,24 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 					return agentLoopResult{State: state}, errors.New("multiple client tool calls are not supported")
 				}
 				arguments, err := validateClientToolArguments(call.Name, call.Arguments)
+				if err == nil && capability.ID == searchPageCapabilityID && call.Name == "set_search_draft" {
+					var input struct {
+						ExpectedRevision int64 `json:"expected_revision"`
+					}
+					if json.Unmarshal(arguments, &input) != nil || capability.StateRevision == nil || input.ExpectedRevision != *capability.StateRevision {
+						err = errSearchDraftRevisionMismatch
+					}
+				}
 				if err != nil {
-					return agentLoopResult{State: state}, err
+					if capability.ID != searchPageCapabilityID || call.Name != "set_search_draft" {
+						return agentLoopResult{State: state}, err
+					}
+					rejected, writeErr := rejectedSearchDraftTool(w, messageID, call, err)
+					if writeErr != nil {
+						return agentLoopResult{State: state}, writeErr
+					}
+					toolMessages = append(toolMessages, rejected)
+					continue
 				}
 				pending = &clientToolPause{Call: call, Arguments: arguments, Capability: *capability, Effect: clientTool.Effect, Confirmation: clientTool.Confirmation}
 				continue
@@ -984,7 +1138,14 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			}
 			output, err := s.executeTool(ctx, tc, call.Name, call.Arguments)
 			if err != nil {
-				output = `{"error":"invalid tool request"}`
+				if call.Name == "build_instance_search_link" {
+					output, err = searchLinkValidationResult(err)
+					if err != nil {
+						return agentLoopResult{State: state}, err
+					}
+				} else {
+					output = `{"error":"invalid tool request"}`
+				}
 			}
 			toolMessages = append(toolMessages, Message{Role: RoleTool, Name: call.Name, ToolCallID: call.ID, Content: output})
 		}

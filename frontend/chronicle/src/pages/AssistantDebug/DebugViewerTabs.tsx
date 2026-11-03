@@ -230,29 +230,45 @@ export function ToolsTab({ snapshot }: { snapshot: DebugSnapshotEvent }) {
     for (const message of snapshot.messages) for (const call of message.toolCalls ?? []) counts.set(call.name, (counts.get(call.name) ?? 0) + 1);
     return counts;
   }, [snapshot]);
-  const tools = snapshot.tools.filter((tool) => !query || `${tool.name} ${tool.description}`.toLowerCase().includes(query.toLowerCase()));
+  const tools = snapshot.tools.filter((tool) => !query || `${tool.name} ${tool.description} ${tool.execution ?? "unclassified"}`.toLowerCase().includes(query.toLowerCase()));
+  const groups = [
+    { execution: "server", title: "Server tools", note: "Executed by Chronicle." },
+    { execution: "browser", title: "Browser tools", note: "Advertised to the model; only invoked tools appear in Client tool requests." },
+    { execution: "provider", title: "Provider tools", note: "Executed by the model provider." },
+    { execution: undefined, title: "Unclassified tools", note: "Older snapshots did not record execution location." },
+  ] as const;
   if (!snapshot.tools.length) return <EmptyTab>No tools were offered to the model.</EmptyTab>;
   return (
     <div className="mx-auto max-w-4xl space-y-3">
       <SearchBox value={query} onChange={setQuery} placeholder="Filter tools" />
-      {tools.map((tool) => (
-        <details key={tool.name} className="group rounded-lg border" open={tools.length === 1}>
-          <summary className="hover:bg-muted/40 flex cursor-pointer list-none items-center gap-2 px-3 py-2">
-            <Wrench className="size-3.5 text-amber-500" />
-            <span className="font-mono text-sm font-semibold">{tool.name}</span>
-            {calls.get(tool.name) ? <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-500">called {calls.get(tool.name)}×</span> : null}
-            <span className="text-muted-foreground ml-auto min-w-0 truncate text-xs">{tool.description.split("\n")[0]}</span>
-          </summary>
-          <div className="space-y-3 border-t px-3 py-3">
-            <p className="text-sm whitespace-pre-wrap">{tool.description}</p>
-            <SchemaTable schema={tool.parameters} />
-            <details>
-              <summary className="text-muted-foreground cursor-pointer text-[11px]">JSON schema</summary>
-              <Code className="mt-2 max-h-80">{JSON.stringify(tool.parameters, null, 2)}</Code>
-            </details>
+      {groups.map((group) => {
+        const matching = tools.filter((tool) => tool.execution === group.execution);
+        if (!matching.length) return null;
+        return <section key={group.title} className="space-y-2">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <h3 className="text-xs font-semibold">{group.title} ({matching.length})</h3>
+            <p className="text-muted-foreground text-[11px]">{group.note}</p>
           </div>
-        </details>
-      ))}
+          {matching.map((tool) => (
+            <details key={tool.name} className="group rounded-lg border" open={tools.length === 1}>
+              <summary className="hover:bg-muted/40 flex cursor-pointer list-none items-center gap-2 px-3 py-2">
+                <Wrench className="size-3.5 text-amber-500" />
+                <span className="font-mono text-sm font-semibold">{tool.name}</span>
+                {calls.get(tool.name) ? <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-500">called {calls.get(tool.name)}×</span> : null}
+                <span className="text-muted-foreground ml-auto min-w-0 truncate text-xs">{tool.description.split("\n")[0]}</span>
+              </summary>
+              <div className="space-y-3 border-t px-3 py-3">
+                <p className="text-sm whitespace-pre-wrap">{tool.description}</p>
+                <SchemaTable schema={tool.parameters} />
+                <details>
+                  <summary className="text-muted-foreground cursor-pointer text-[11px]">JSON schema</summary>
+                  <Code className="mt-2 max-h-80">{JSON.stringify(tool.parameters, null, 2)}</Code>
+                </details>
+              </div>
+            </details>
+          ))}
+        </section>;
+      })}
     </div>
   );
 }

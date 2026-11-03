@@ -130,6 +130,7 @@ SET status = $3,
     iteration_count = $8,
     tool_call_count = $9,
     lease_expires_at = NULL,
+    ephemeral_history = NULL,
     updated_at = now()
 WHERE id = $1 AND user_id = $2
 RETURNING *;
@@ -140,6 +141,7 @@ WITH stale AS (
   SET status = 'abandoned',
       error_code = 'stale_run',
       completed_at = now(),
+      ephemeral_history = NULL,
       updated_at = now()
   WHERE status IN ('running', 'awaiting_client_tool')
     AND lease_expires_at IS NOT NULL
@@ -192,6 +194,7 @@ SET status = 'abandoned',
     error_code = 'client_tool_superseded',
     completed_at = now(),
     lease_expires_at = NULL,
+    ephemeral_history = NULL,
     updated_at = now()
 WHERE id = $1 AND user_id = $2 AND status = 'awaiting_client_tool'
 RETURNING *;
@@ -216,8 +219,19 @@ RETURNING *;
 
 -- name: ResumeInferenceRun :one
 UPDATE inference_runs
-SET status = 'running', lease_expires_at = $3, updated_at = now()
-WHERE id = $1 AND user_id = $2 AND status = 'awaiting_client_tool'
+SET status = 'running', lease_expires_at = $3, ephemeral_history = NULL, updated_at = now()
+WHERE id = $1 AND user_id = $2 AND status = 'awaiting_client_tool' AND lease_expires_at > now()
+RETURNING *;
+
+-- name: PauseEphemeralInferenceRun :one
+UPDATE inference_runs
+SET status = 'awaiting_client_tool',
+    input_tokens = $3, output_tokens = $4,
+    iteration_count = $5, tool_call_count = $6,
+    lease_expires_at = $7, ephemeral_history = $8,
+    updated_at = now()
+WHERE id = $1 AND user_id = $2 AND assistant_id = 'site-help'
+  AND thread_id IS NULL AND status = 'running'
 RETURNING *;
 
 -- name: ListInferenceInstanceEncounters :many
