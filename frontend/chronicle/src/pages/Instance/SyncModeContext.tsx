@@ -57,6 +57,8 @@ export interface SyncModeContextValue extends SyncModeState {
   externalDriver: SyncExternalDriver;
   /** Set the external driver */
   setExternalDriver: (driver: SyncExternalDriver) => void;
+  /** Report whether the external player is advancing its clock (for visual interpolation). */
+  setExternalPlaybackPlaying: (playing: boolean) => void;
   /** Whether user-driven replay edits are currently blocked. */
   readOnly: boolean;
   /** Controls whether public replay mutators accept user-driven edits. */
@@ -198,6 +200,14 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
   const setExternalDriver = useCallback((driver: SyncExternalDriver) => {
     if (readOnlyRef.current) return;
     setExternalDriverState(driver);
+    // Handing control to a video stops the internal clock; on close, the
+    // caller may already have started Chronicle playback in the same event.
+    if (driver !== "none") setIsPlayingState(false);
+  }, []);
+
+  const setExternalPlaybackPlaying = useCallback((playing: boolean) => {
+    if (readOnlyRef.current) return;
+    setIsPlayingState(playing);
   }, []);
 
   const applyAuthoritativeState = useCallback((state: SyncModeState) => {
@@ -245,7 +255,7 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
   // Uses setInterval at 100ms to match the processing throttle rate in usePanelAggregation.
   // Using requestAnimationFrame (~16ms) would update faster than processing can keep up.
   useEffect(() => {
-    if (!isPlaying || !enabled) {
+    if (!isPlaying || !enabled || externalDriver !== "none") {
       lastFrameTimeRef.current = null;
       return;
     }
@@ -276,7 +286,7 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
     return () => {
       clearInterval(intervalId);
     };
-  }, [isPlaying, enabled]);
+  }, [isPlaying, enabled, externalDriver]);
 
   const value: SyncModeContextValue = useMemo(() => ({
     enabled,
@@ -296,6 +306,7 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
     setEncounterBounds,
     externalDriver,
     setExternalDriver,
+    setExternalPlaybackPlaying,
     readOnly,
     setReadOnly,
     applyAuthoritativeState,
@@ -317,6 +328,7 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
     setEncounterBounds,
     externalDriver,
     setExternalDriver,
+    setExternalPlaybackPlaying,
     readOnly,
     setReadOnly,
     applyAuthoritativeState,

@@ -84,6 +84,75 @@ describe("loadMapFixture", () => {
     expect(LEEROY_VIDEO_TIMESTAMPS[0]).toMatchObject({ video_time_seconds: 84, utc_time: leeroyRookery.encounter.startTime.slice(11, 19) });
   });
 
+  it("keeps the cinematic combat, health and power timelines internally consistent", () => {
+    const fixture = leeroyRookery;
+    const guidOf = (name: string) => Object.entries(fixture.players).find(([, player]) => player.name === name)?.[0];
+    const anfrony = guidOf("Anfrony")!;
+    const rows = fixture.events;
+    const guid = (index: number) => fixture.guids[index];
+    const playerIDs = new Set(Object.keys(fixture.players));
+    const health = new Map<string, number>();
+    const power = new Map<string, number>();
+    const deaths = new Map<string, number>();
+    let playerDamage = 0;
+    let playerHealing = 0;
+    let manaSpent = 0;
+    let anfronyAt24: number | undefined;
+    for (const row of rows) {
+      const [code, time] = row;
+      if (code === "d" || code === "h") {
+        const source = guid(Number(row[2]));
+        const target = guid(Number(row[3]));
+        const amount = Number(row[4]);
+        expect(amount).toBeGreaterThan(0);
+        if (code === "d" && playerIDs.has(source)) playerDamage += amount;
+        if (code === "h" && playerIDs.has(source)) playerHealing += amount;
+        if (health.has(target)) health.set(target, health.get(target)! + (code === "h" ? amount : -amount));
+      } else if (code === "m") {
+        const target = guid(Number(row[2]));
+        const amount = Number(row[3]);
+        const direction = row[4];
+        expect(["Gain", "Loss"]).toContain(direction);
+        if (row[6] === "Mana" && direction === "Loss") manaSpent += amount;
+        const visibleAmount = row[6] === "Rage" ? amount / 10 : amount;
+        if (power.has(target)) power.set(target, power.get(target)! + (direction === "Gain" ? visibleAmount : -visibleAmount));
+      } else if (code === "r") {
+        const target = guid(Number(row[2]));
+        const current = Number(row[3]);
+        const max = Number(row[4]);
+        expect(current).toBeGreaterThanOrEqual(0);
+        expect(current).toBeLessThanOrEqual(max);
+        if (health.has(target)) expect(current).toBe(health.get(target));
+        health.set(target, current);
+        if (playerIDs.has(target)) {
+          const currentPower = Number(row[6]);
+          const maxPower = Number(row[7]);
+          expect(currentPower).toBeGreaterThanOrEqual(0);
+          expect(currentPower).toBeLessThanOrEqual(maxPower);
+          if (power.has(target)) expect(currentPower).toBe(power.get(target));
+          power.set(target, currentPower);
+          if (target === anfrony && time === 24_000) anfronyAt24 = current / max;
+        }
+      } else if (code === "k") {
+        deaths.set(guid(Number(row[3])), Number(time));
+      }
+    }
+    // A previous rolling-window health formula left most of the raid at 1 HP.
+    for (const row of rows) {
+      if (row[0] !== "r" || row[1] !== 30_000 || !playerIDs.has(guid(Number(row[2])))) continue;
+      expect(Number(row[3]) / Number(row[4])).toBeGreaterThan(0.2);
+    }
+    expect(playerDamage).toBeGreaterThan(0);
+    expect(playerHealing).toBeGreaterThan(0);
+    expect(manaSpent).toBeGreaterThan(0);
+    // The recorder's party frame is visibly around half health at video 1:48.
+    expect(anfronyAt24).toBeGreaterThan(0.35);
+    expect(anfronyAt24).toBeLessThan(0.65);
+    for (const [target, deadAt] of deaths) {
+      expect(rows.some((row) => row[0] === "d" && guid(Number(row[2])) === target && Number(row[1]) > deadAt)).toBe(false);
+    }
+  });
+
   it("selects the five players when asked", () => {
     const { props } = loadMapFixture(kreshReal, { selectPlayers: true });
     expect(props.context.entitySelection.playerIds.size).toBe(5);

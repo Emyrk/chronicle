@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { isReplayToggleKey } from "./replayToggleKey";
+import { describe, expect, it, vi } from "vitest";
+import { isReplayToggleKey, toggleYoutubePlayback } from "./replayToggleKey";
 
 const key = (target: unknown, over: Record<string, unknown> = {}) =>
   ({
@@ -47,5 +47,18 @@ describe("isReplayToggleKey", () => {
   it("ignores focused interactive elements", () => {
     expect(isReplayToggleKey(key(el("BUTTON", {}, true)))).toBe(false);
     expect(isReplayToggleKey(key(el("TR", {}, true)))).toBe(false);
+  });
+});
+
+describe("toggleYoutubePlayback", () => {
+  it("pauses a playing video and resumes a paused video", () => {
+    const player = { getPlayerState: vi.fn(() => 1), playVideo: vi.fn(), pauseVideo: vi.fn() };
+    expect(toggleYoutubePlayback(player)).toBe("pause");
+    expect(player.pauseVideo).toHaveBeenCalledOnce();
+    expect(player.playVideo).not.toHaveBeenCalled();
+
+    player.getPlayerState.mockReturnValue(2);
+    expect(toggleYoutubePlayback(player)).toBe("play");
+    expect(player.playVideo).toHaveBeenCalledOnce();
   });
 });

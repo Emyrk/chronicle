@@ -2682,19 +2682,21 @@ function InstancePageViewContent({
     ? instanceDefaults?.default_mobile_layout?.id ?? null
     : instanceDefaults?.default_desktop_layout?.id ?? null;
 
-  // A user's saved default layout wins; otherwise the built-in one for this log.
+  const reconstructionPreset = useMemo(() =>
+    reconstruction ? presetLayoutById("map", instance.capabilities ?? [], isMobile) : undefined,
+  [instance.capabilities, isMobile, reconstruction]);
+
+  // The reconstruction opens in the same Map preset users can choose elsewhere.
   const builtInDefaultLayout = useMemo(() => {
-    const layout = defaultInstanceLayout(instance.capabilities ?? [], isMobile);
-    if (!reconstruction) return layout;
-    return {
-      ...layout,
-      items: [
-        { id: "panel-1", title: "Map", x: 0, y: 0, w: 12, h: 8, minW: 4 },
-        ...layout.items.filter((item) => item.id !== "panel-1" && item.id !== "panel-6"),
-      ],
-      panelTypes: { ...layout.panelTypes, "panel-1": "map" as const },
-    };
-  }, [instance.capabilities, isMobile, reconstruction]);
+    if (reconstructionPreset && isPanelPresetLayout(reconstructionPreset)) {
+      return {
+        items: reconstructionPreset.layoutItems,
+        panelTypes: reconstructionPreset.panelTypes,
+        panelOptions: reconstructionPreset.panelOptions,
+      };
+    }
+    return defaultInstanceLayout(instance.capabilities ?? [], isMobile);
+  }, [instance.capabilities, isMobile, reconstructionPreset]);
 
   const standardOrderedLayoutItems = useMemo(
     () => orderLayoutItems(normalizeLayoutItems(cachedDefaultLayout?.items ?? builtInDefaultLayout.items)),
@@ -2732,9 +2734,15 @@ function InstancePageViewContent({
     setLayoutPopup(null);
   }, [canEditSharedView]);
 
-  const [importedLayoutItems, setImportedLayoutItems] = useState<GridEditorItem[] | null>(null);
+  const [importedLayoutItems, setImportedLayoutItems] = useState<GridEditorItem[] | null>(() =>
+    reconstructionPreset && isPanelPresetLayout(reconstructionPreset)
+      ? orderLayoutItems(normalizeLayoutItems(reconstructionPreset.layoutItems))
+      : null,
+  );
   // The imported layout's appearance; the default layout carries its own.
-  const [importedLayoutAppearance, setImportedLayoutAppearance] = useState<LayoutAppearance>({});
+  const [importedLayoutAppearance, setImportedLayoutAppearance] = useState<LayoutAppearance>(() =>
+    reconstructionPreset ? readLayoutAppearance(reconstructionPreset) : {},
+  );
 
   const [activeLayoutId, setActiveLayoutId] = useState<string | null>(defaultLayoutId);
 
@@ -2771,9 +2779,12 @@ function InstancePageViewContent({
     }
     setLayoutPopup(null);
     setViewState(createDefaultViewState());
-    setImportedLayoutItems(null);
+    setImportedLayoutItems(reconstructionPreset && isPanelPresetLayout(reconstructionPreset)
+      ? orderLayoutItems(normalizeLayoutItems(reconstructionPreset.layoutItems)) : null);
+    setImportedLayoutAppearance(reconstructionPreset ? readLayoutAppearance(reconstructionPreset) : {});
+    setActivePresetId(reconstructionPreset ? "map" : DEFAULT_PRESET_ID);
     setActiveLayoutId(defaultLayoutId);
-  }, [createDefaultViewState, defaultLayoutId, instance.id]);
+  }, [createDefaultViewState, defaultLayoutId, instance.id, reconstructionPreset]);
 
   const setEncounters = useCallback((ids: string[]) => {
     if (!canEditSharedView) return;
@@ -2850,13 +2861,15 @@ function InstancePageViewContent({
   const resetView = useCallback(() => {
     if (!canEditSharedView) return;
     setViewState(createDefaultViewState());
-    setImportedLayoutItems(null);
+    setImportedLayoutItems(reconstructionPreset && isPanelPresetLayout(reconstructionPreset)
+      ? orderLayoutItems(normalizeLayoutItems(reconstructionPreset.layoutItems)) : null);
+    setImportedLayoutAppearance(reconstructionPreset ? readLayoutAppearance(reconstructionPreset) : {});
     setActiveLayoutId(defaultLayoutId);
-    setActivePresetId(DEFAULT_PRESET_ID);
-  }, [canEditSharedView, createDefaultViewState, defaultLayoutId]);
+    setActivePresetId(reconstructionPreset ? "map" : DEFAULT_PRESET_ID);
+  }, [canEditSharedView, createDefaultViewState, defaultLayoutId, reconstructionPreset]);
 
   // ── Preset layouts ──────────────────────────────────────────────────────
-  const [activePresetId, setActivePresetId] = useState<string | null>(DEFAULT_PRESET_ID);
+  const [activePresetId, setActivePresetId] = useState<string | null>(reconstructionPreset ? "map" : DEFAULT_PRESET_ID);
   const activePreset = activePresetId ? PRESET_LAYOUTS_BY_ID[activePresetId] : null;
   const activePageType = activePreset?.kind === "page" ? activePreset.pageType : null;
 

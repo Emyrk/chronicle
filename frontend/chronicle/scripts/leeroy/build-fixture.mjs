@@ -14,7 +14,7 @@
  * Player positions are per Internet Historian's map (2017), fan
  * approximation: tracked, mapped to world, smoothed. Deaths are the dots he
  * draws dithered. Whelps hatch from the real egg nearest each wave and chase
- * a player. Health, whelp swings and the fear's flee are illustrative (see
+ * a player. Combat, resources and the fear's flee are illustrative (see
  * annotations.json). See scripts/leeroy/README.md.
  */
 import { readFileSync, writeFileSync } from "node:fs"
@@ -308,7 +308,173 @@ function whelpAt(whelp, t) {
   return { ...onFloor, z: eggFloorAt(onFloor.x, onFloor.y) }
 }
 
-// --- Position rows. ---
+// --- Illustrative cinematic combat, not a reconstruction of the original log.
+// Positions, egg hatches and named death timestamps are the tracked inputs;
+// every attack, heal and resource change below is invented for the replay.
+const PLAYER_HEALTH = { WARRIOR: 5200, PALADIN: 4800, ROGUE: 3600, HUNTER: 3800, DRUID: 3700, PRIEST: 3300, MAGE: 3200, WARLOCK: 3600 }
+const PLAYER_RESOURCE = { WARRIOR: [1, 100], PALADIN: [0, 4200], ROGUE: [3, 100], HUNTER: [0, 3400], DRUID: [0, 3800], PRIEST: [0, 4600], MAGE: [0, 4800], WARLOCK: [0, 4000] }
+const RESOURCE_NAME = { 0: "Mana", 1: "Rage", 3: "Energy" }
+const WHELP_HEALTH = 1650
+const health = new Map()
+const resources = new Map()
+const whelpDeaths = new Map()
+const combat = []
+const queue = (t, priority, action) => combat.push({ t, priority, action })
+for (const [guid, player] of Object.entries(players)) {
+  health.set(guid, PLAYER_HEALTH[player.class])
+  resources.set(guid, player.class === "WARRIOR" ? 0 : PLAYER_RESOURCE[player.class][1])
+}
+for (const whelp of whelpList) health.set(whelp.guid, WHELP_HEALTH)
+const alive = (guid, t) => health.get(guid) > 0 && !(deathMs.get(guid) <= t)
+const resource = (guid, amount, source) => {
+  const [type, max] = PLAYER_RESOURCE[players[guid].class]
+  const before = resources.get(guid)
+  const after = clamp(before + amount, 0, max)
+  resources.set(guid, after)
+  if (after !== before) push(["m", currentTime, g(guid), Math.abs(after - before) * (type === 1 ? 10 : 1), after > before ? "Gain" : "Loss", source, RESOURCE_NAME[type]])
+}
+const damage = (source, target, amount, spellId, spellName, school = 2) => {
+  if (health.get(target) <= 0 || (deathMs.get(target) ?? Infinity) < currentTime) return
+  // Named deaths are from the map, not guessed from the illustrative combat.
+  // Prevent an invented blow from moving an observed death earlier.
+  const minimum = players[target] && currentTime !== deathMs.get(target) ? 1 : 0
+  const applied = Math.min(amount, Math.max(0, health.get(target) - minimum))
+  if (!applied) return
+  health.set(target, health.get(target) - applied)
+  push(["d", currentTime, g(source), g(target), applied, 2, school, spellId, spellName])
+  if (players[target]?.class === "WARRIOR") resource(target, 3, "Damage Taken")
+  if (units[target] && health.get(target) === 0) {
+    whelpDeaths.set(target, currentTime)
+    push(["r", currentTime, g(target), 0, WHELP_HEALTH, 0])
+    push(["k", currentTime, g(source), g(target)])
+  }
+}
+const heal = (source, target, amount, spellId, spellName) => {
+  const max = PLAYER_HEALTH[players[target].class]
+  const applied = Math.min(amount, max - health.get(target))
+  if (applied <= 0) return
+  health.set(target, health.get(target) + applied)
+  push(["h", currentTime, g(source), g(target), applied, 2, 4, spellId, spellName])
+}
+// No hidden regeneration or healing: each change is an event and each r row
+// samples the resulting accumulated health/resource state.
+for (let t = 0; t <= durationMs; t += 1000) queue(t, 4, () => {
+  for (const guid of pileGuids) {
+    if (!alive(guid, currentTime)) continue
+    const [type] = PLAYER_RESOURCE[players[guid].class]
+    resource(guid, type === 0 ? 17 : type === 3 ? 10 : -2, type === 0 ? "Mana Regeneration" : type === 3 ? "Energy Regeneration" : "Rage Decay")
+  }
+})
+const firstRaidCombat = Math.min(...whelpList.filter((w) => w.target !== playerByName.get("Leeroy")).map((w) => w.egg.hatchMs))
+const lastIncoming = new Map()
+for (const whelp of whelpList) {
+  for (let t = whelp.egg.hatchMs + 1200 + Math.round(random() * 600); t < durationMs; t += 1600 + Math.round(random() * 600)) {
+    queue(t, 1, () => {
+      if (!alive(whelp.guid, currentTime) || currentTime > fearMs && currentTime < fearMs + FEAR_MS && whelp.egg.hatchMs < fearMs) return
+      const near = whelpAt(whelp, currentTime)
+      const living = pileGuids.filter((guid) => alive(guid, currentTime))
+      if (!living.length) return
+      // Aggro favours the original egg trigger, but nearby defenders draw blows.
+      const target = living.sort((a, b) => {
+        const distance = (guid) => Math.hypot(playerAt(guid, currentTime).x - near.x, playerAt(guid, currentTime).y - near.y)
+        return distance(a) - (a === whelp.target ? 1.5 : 0) - distance(b) + (b === whelp.target ? 1.5 : 0)
+      })[0]
+      if (Math.hypot(playerAt(target, currentTime).x - near.x, playerAt(target, currentTime).y - near.y) > 5) return
+      // Illustrative avoidance/defence: only one connecting blow per player
+      // every 3.5 s, regardless of how many whelps crowd the pile.
+      if (currentTime >= firstRaidCombat && currentTime - (lastIncoming.get(target) ?? -Infinity) < 3500) return
+      lastIncoming.set(target, currentTime)
+      damage(whelp.guid, target, 115 + Math.round(random() * 75), 6603, "Auto Attack")
+    })
+  }
+}
+// Illustrative focused pressure as the recorder wades into the pile. These
+// extra blows make his visible low health around video 1:48 legible without
+// silently resetting damage or inventing an observed attacker.
+const anfrony = playerByName.get("Anfrony")
+for (const t of [18500, 19900, 21300, 22700]) queue(t, 1, () => {
+  if (!alive(anfrony, currentTime)) return
+  const at = playerAt(anfrony, currentTime)
+  const attacker = whelpList.filter((w) => w.egg.hatchMs <= currentTime && alive(w.guid, currentTime))
+    .sort((a, b) => Math.hypot(whelpAt(a, currentTime).x - at.x, whelpAt(a, currentTime).y - at.y) - Math.hypot(whelpAt(b, currentTime).x - at.x, whelpAt(b, currentTime).y - at.y))[0]
+  if (attacker && Math.hypot(whelpAt(attacker, currentTime).x - at.x, whelpAt(attacker, currentTime).y - at.y) <= 14)
+    damage(attacker.guid, anfrony, 550, 6603, "Auto Attack")
+})
+// Each class contributes a modest, deterministic rotation against a nearby
+// living whelp. Casts spend mana; melee generates rage or spends energy.
+const attacks = {
+  WARRIOR: ["Heroic Strike", 78, 260, 4, 15], PALADIN: ["Judgement", 20271, 210, 22, 140],
+  ROGUE: ["Sinister Strike", 1752, 210, 4, 40], HUNTER: ["Arcane Shot", 3044, 195, 30, 115],
+  MAGE: ["Fireball", 133, 310, 30, 185], PRIEST: ["Smite", 585, 180, 30, 130],
+  DRUID: ["Wrath", 5176, 210, 30, 125], WARLOCK: ["Shadow Bolt", 686, 245, 30, 160],
+}
+for (const guid of pileGuids) {
+  const player = players[guid]
+  const [name, spellId, amount, range, cost] = attacks[player.class]
+  const interval = player.class === "MAGE" || player.class === "PRIEST" ? 2900 : 2200
+  for (let t = 12500 + pileGuids.indexOf(guid) * 130; t < durationMs; t += interval) queue(t, 2, () => {
+    if (!alive(guid, currentTime)) return
+    const from = playerAt(guid, currentTime)
+    const nearby = whelpList.filter((w) => w.egg.hatchMs <= currentTime && alive(w.guid, currentTime))
+      .sort((a, b) => Math.hypot(whelpAt(a, currentTime).x - from.x, whelpAt(a, currentTime).y - from.y) - Math.hypot(whelpAt(b, currentTime).x - from.x, whelpAt(b, currentTime).y - from.y))
+    const target = nearby[0]
+    if (!target || Math.hypot(whelpAt(target, currentTime).x - from.x, whelpAt(target, currentTime).y - from.y) > range) return
+    const [type] = PLAYER_RESOURCE[player.class]
+    if (type === 1) resource(guid, 9, "Melee Swing")
+    if (resources.get(guid) < cost) return
+    resource(guid, -cost, name)
+    const castMs = player.class === "MAGE" || player.class === "PRIEST" || player.class === "DRUID" || player.class === "WARLOCK" ? 1800 : 0
+    push(["s", currentTime - castMs, g(guid), g(target.guid), castMs, spellId, name])
+    push(["g", currentTime, g(guid), g(target.guid), 1, spellId, name])
+    damage(guid, target.guid, amount, spellId, name, player.class === "MAGE" ? 4 : player.class === "WARLOCK" ? 7 : player.class === "PRIEST" || player.class === "PALADIN" ? 3 : player.class === "DRUID" ? 5 : player.class === "HUNTER" ? 8 : 2)
+  })
+  if (player.class !== "PRIEST" && player.class !== "PALADIN") continue
+  for (let t = 15500 + pileGuids.indexOf(guid) * 310; t < durationMs; t += player.class === "PRIEST" ? 3400 : 5100) queue(t, 3, () => {
+    if (!alive(guid, currentTime)) return
+    const from = playerAt(guid, currentTime)
+    const targets = pileGuids.filter((target) => alive(target, currentTime) && Math.hypot(playerAt(target, currentTime).x - from.x, playerAt(target, currentTime).y - from.y) <= 35)
+      .sort((a, b) => health.get(a) / PLAYER_HEALTH[players[a].class] - health.get(b) / PLAYER_HEALTH[players[b].class])
+    const target = targets[0]
+    if (!target || health.get(target) / PLAYER_HEALTH[players[target].class] > 0.48) return
+    const cost = player.class === "PRIEST" ? 240 : 195
+    if (resources.get(guid) < cost) return
+    const spell = player.class === "PRIEST" ? [2054, "Heal", 390] : [635, "Holy Light", 330]
+    resource(guid, -cost, spell[1])
+    push(["s", currentTime - 1800, g(guid), g(target), 1800, spell[0], spell[1]])
+    push(["g", currentTime, g(guid), g(target), 1, spell[0], spell[1]])
+    heal(guid, target, spell[2], spell[0], spell[1])
+  })
+}
+// At tracked death times, a nearby surviving whelp delivers the final blow.
+// This closing hit is an illustrative bridge, not an assertion about the killer.
+for (const [guid, t] of deathMs) queue(t, 5, () => {
+  const near = playerAt(guid, currentTime)
+  const killer = whelpList.filter((w) => w.egg.hatchMs <= currentTime && alive(w.guid, currentTime))
+    .sort((a, b) => Math.hypot(whelpAt(a, currentTime).x - near.x, whelpAt(a, currentTime).y - near.y) - Math.hypot(whelpAt(b, currentTime).x - near.x, whelpAt(b, currentTime).y - near.y))[0]
+  if (killer) damage(killer.guid, guid, health.get(guid), 6603, "Auto Attack")
+  if (killer) push(["k", currentTime, g(killer.guid), g(guid)])
+})
+for (let t = 0; t <= durationMs; t += 1000) queue(t, 6, () => {
+  for (const guid of pileGuids) {
+    const dead = deathMs.get(guid)
+    if (dead !== undefined && currentTime > dead + 1000) continue
+    const [type, maxResource] = PLAYER_RESOURCE[players[guid].class]
+    push(["r", currentTime, g(guid), health.get(guid), PLAYER_HEALTH[players[guid].class], 0, resources.get(guid), maxResource, RESOURCE_NAME[type]])
+  }
+  for (const whelp of whelpList) if (whelp.egg.hatchMs <= currentTime && (whelpDeaths.get(whelp.guid) ?? Infinity) >= currentTime)
+    push(["r", currentTime, g(whelp.guid), health.get(whelp.guid), WHELP_HEALTH, 0])
+})
+combat.sort((a, b) => a.t - b.t || a.priority - b.priority)
+let currentTime = 0
+for (const { t, action } of combat) { currentTime = t; action() }
+for (const [guid, t] of deathMs) {
+  const [type, maxResource] = PLAYER_RESOURCE[players[guid].class]
+  push(["r", t, g(guid), health.get(guid), PLAYER_HEALTH[players[guid].class], 0, resources.get(guid), maxResource, RESOURCE_NAME[type]])
+}
+for (const egg of eggs) if (egg.hatchMs === null) units[egg.guid] = { name: EGG.name, entry: EGG.entry }
+
+// --- Position rows: the tracked trajectories are unchanged, except that a
+// defeated whelp stops moving instead of attacking from beyond its death. ---
 const positionRow = (guid, t, point, facing) => push(["p", t, g(guid), round(point.x), round(point.y), round(point.z ?? FLOOR_Z), MAP_ID, round(normalizeFacing(facing), 3)])
 const lastFacing = new Map()
 const lastZ = new Map()
@@ -319,82 +485,25 @@ for (let t = 0; t <= durationMs; t += SAMPLE_MS) {
     const now = playerAt(guid, t)
     const next = playerAt(guid, t + SAMPLE_MS)
     const moving = Math.hypot(next.x - now.x, next.y - now.y) > 0.05
-    // Players face where they walk; standing, they keep their last heading.
     const heading = moving ? facingTo(now, next) : lastFacing.get(guid) ?? Math.PI
     lastFacing.set(guid, heading)
-    // Height is continuous: it follows the floor at no more than CLIMB_RATE.
     const previous = lastZ.get(guid)
     const z = previous === undefined ? now.z : previous + Math.max(-CLIMB_RATE * SAMPLE_MS, Math.min(CLIMB_RATE * SAMPLE_MS, now.z - previous))
     lastZ.set(guid, z)
     positionRow(guid, t, { ...now, z }, heading)
   }
-  for (const egg of eggs) {
-    // An unhatched egg's single sample at the pull keeps it on the floor.
-    if (t === 0 && egg.hatchMs === null) positionRow(egg.guid, t, egg, egg.o)
-  }
+  for (const egg of eggs) if (t === 0 && egg.hatchMs === null) positionRow(egg.guid, t, egg, egg.o)
   for (const whelp of whelpList) {
-    // A hatching egg is its whelp: it sits on the egg's spot until it hatches
-    // (no egg corpse is left behind), then chases its player.
-    if (t < whelp.egg.hatchMs && t > 0) continue
+    if (t < whelp.egg.hatchMs && t > 0 || t > (whelpDeaths.get(whelp.guid) ?? Infinity)) continue
     const now = whelpAt(whelp, t)
     positionRow(whelp.guid, t, now, facingTo(now, playerAt(whelp.target, t)))
   }
 }
 
-// --- Illustrative combat: each whelp swings at whoever hatched it (or, once
-// they are dead, the nearest living player). ---
-const swings = []
-for (const whelp of whelpList) {
-  for (let t = whelp.egg.hatchMs + 1200 + Math.round(random() * 600); t < durationMs; t += 1600 + Math.round(random() * 600)) {
-    if (t > fearMs && t < fearMs + FEAR_MS && whelp.egg.hatchMs < fearMs) continue
-    const near = whelpAt(whelp, t)
-    const living = pileGuids.filter((guid) => !(deathMs.get(guid) <= t))
-    if (living.length === 0) break
-    const target = !(deathMs.get(whelp.target) <= t) ? whelp.target
-      : living.sort((a, b) => Math.hypot(playerAt(a, t).x - near.x, playerAt(a, t).y - near.y) - Math.hypot(playerAt(b, t).x - near.x, playerAt(b, t).y - near.y))[0]
-    const at = playerAt(target, t)
-    // Only once it has reached its target.
-    if (Math.hypot(at.x - near.x, at.y - near.y) > 4) continue
-    const amount = 90 + Math.round(random() * 70)
-    swings.push({ t, whelp: whelp.guid, target, amount })
-    push(["d", t, g(whelp.guid), g(target), amount, 2, 2, 6603, "Auto Attack"])
-  }
-}
-
-// --- Health: follows the swings (damage over the last 8 s, as if healers
-// top players up over that long; illustrative), and his death times. ---
-const PLAYER_HEALTH = { WARRIOR: 5200, PALADIN: 4800, ROGUE: 3600, HUNTER: 3800, DRUID: 3700, PRIEST: 3300, MAGE: 3200, WARLOCK: 3600 }
-const HEAL_WINDOW_MS = 8000
-const swingsOn = new Map()
-for (const swing of swings) swingsOn.set(swing.target, [...(swingsOn.get(swing.target) ?? []), swing])
-for (let t = 0; t <= durationMs; t += 1000) {
-  for (const guid of playerByName.values()) {
-    const max = PLAYER_HEALTH[players[guid].class]
-    const dead = deathMs.get(guid)
-    if (dead !== undefined && t > dead + 1000) continue
-    const recent = (swingsOn.get(guid) ?? []).filter((swing) => swing.t <= t && swing.t > t - HEAL_WINDOW_MS).reduce((sum, swing) => sum + swing.amount, 0)
-    let fraction = Math.max(0.12, 1 - recent / max)
-    if (dead !== undefined) fraction = t >= dead ? 0 : Math.min(fraction, Math.max(0, (dead - t) / 4000))
-    push(["r", t, g(guid), Math.round(max * fraction), max, 0])
-  }
-}
-for (const [guid, t] of deathMs) {
-  push(["r", t, g(guid), 0, PLAYER_HEALTH[players[guid].class], 0])
-  const killer = whelpList.find((whelp) => whelp.target === guid) ?? whelpList[0]
-  push(["k", t, g(killer.guid), g(guid)])
-}
-
-for (const egg of eggs) if (egg.hatchMs === null) units[egg.guid] = { name: EGG.name, entry: EGG.entry }
-// Whelps show a health bar from the moment they hatch; eggs never do.
-const WHELP_HEALTH = 1650
-for (const whelp of whelpList) {
-  for (let t = whelp.egg.hatchMs; t <= durationMs; t += 2000) push(["r", t, g(whelp.guid), WHELP_HEALTH, WHELP_HEALTH, 0])
-}
-
 push(["g", fearMs, g(fearCaster), g(fearCaster), 0, fear.spellId, fear.spellName])
 
 // Stream-index order is time order here.
-const STREAM_ORDER = { p: 0, r: 1, d: 2, h: 3, s: 4, g: 5, i: 6, k: 7, z: 8 }
+const STREAM_ORDER = { p: 0, s: 1, g: 2, d: 3, h: 4, m: 5, i: 6, k: 7, z: 8, r: 9 }
 events.sort((a, b) => a[1] - b[1] || STREAM_ORDER[a[0]] - STREAM_ORDER[b[0]])
 
 const startTime = new Date(logStartMs).toISOString()
@@ -446,5 +555,5 @@ console.error(`${outFile}: ${Object.keys(players).length} players, ${eggs.length
 console.error(`moved onto the egg floor: ${moved.count} player samples, mean ${(moved.total / Math.max(1, moved.count)).toFixed(2)} yd, max ${moved.max.toFixed(2)} yd`)
 const firstRaid = Math.min(...pileGuids.filter((guid) => players[guid].name !== "Leeroy").map((guid) => Math.min(...whelpList.filter((w) => w.target === guid).map((w) => w.egg.hatchMs), Infinity)))
 const leeroy = playerByName.get("Leeroy")
-console.error(`whelps hatched by Leeroy before anyone else hatches one: ${whelpList.filter((w) => w.target === leeroy && w.egg.hatchMs < firstRaid).length}; Leeroy hit ${swings.filter((sw) => sw.target === leeroy && sw.t < firstRaid).length} times by then (first raid hatch at video ${(clipStartS + firstRaid / 1000).toFixed(1)} s)`)
+console.error(`whelps hatched by Leeroy before anyone else hatches one: ${whelpList.filter((w) => w.target === leeroy && w.egg.hatchMs < firstRaid).length}; Leeroy hit ${events.filter((row) => row[0] === "d" && row[3] === g(leeroy) && row[1] < firstRaid).length} times by then (first raid hatch at video ${(clipStartS + firstRaid / 1000).toFixed(1)} s)`)
 for (const v of [90, 93, 95, 97, 99, 101, 103, 105, 108, 112, 120, 130, 150, 170]) console.error(`  by ${v} s: ${whelpList.filter((w) => w.egg.hatchMs <= ms(v)).length} whelps hatched`)

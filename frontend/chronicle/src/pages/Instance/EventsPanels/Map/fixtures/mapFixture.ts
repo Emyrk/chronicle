@@ -10,7 +10,8 @@ import { mapProcessor, type MapProcessorEvent, type MapResult } from "../map.pro
 /**
  * A captured encounter written by scripts/capture-kresh-fixture.mjs. Event
  * rows are `[code, offsetMilli, ...fields]` in stream-index order, with GUIDs
- * as indexes into `guids`; they keep only the fields map.processor.ts reads.
+ * as indexes into `guids`. Map rows keep only fields map.processor.ts reads;
+ * optional `m` resource-change rows serve other instance panels.
  */
 export interface MapFixture {
   source: { host: string; instanceId: string; encounterId: string };
@@ -125,6 +126,8 @@ export function loadMapFixture(fixture: MapFixture, options: { selectPlayers?: b
   const firstTimestamp = new Date(fixture.firstTimestamp);
   const result = mapProcessor.createState();
   fixture.events.forEach((row, index) => {
+    // Mana/rage/energy deltas feed the normal resource panel, not the Map processor.
+    if (row[0] === "m") return;
     const event = toEvent(row, index, fixture.guids);
     mapProcessor.processEvent(result, event, encounterId, firstTimestamp, event.type as StreamType, processorContext);
   });

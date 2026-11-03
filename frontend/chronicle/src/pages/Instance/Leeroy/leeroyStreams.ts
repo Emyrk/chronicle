@@ -1,8 +1,8 @@
 import { create, toBinary, type DescMessage, type MessageInitShape } from "@bufbuild/protobuf";
 import {
-  DamageSchema, EventMetaSchema, HealSchema, InterruptSchema, ResurrectionSchema,
-  SlainSchema, SpellDataSchema, SpellGoSchema, SpellStartSchema,
-  UnitPositionSchema, UnitResourcesSchema,
+  CastAction, CastSchema, DamageSchema, EventMetaSchema, HealSchema, InterruptSchema,
+  ResourceChangeSchema, ResurrectionSchema, SlainSchema, SpellDataSchema, SpellGoSchema,
+  SpellSchema, SpellStartSchema, UnitPositionSchema, UnitResourcesSchema,
 } from "@/api/proto/chronicle_pb";
 import type { CachedStream, StreamType } from "@/hooks/instanceEvents/types";
 import type { MapFixture } from "../EventsPanels/Map/fixtures/mapFixture";
@@ -26,6 +26,11 @@ function encodeMessage<T extends DescMessage>(schema: T, fields: MessageInitShap
 /** Convert a map fixture to the same header + length-delimited protobuf streams as the API. */
 export function buildLeeroyStreams(fixture: MapFixture): Map<StreamType, CachedStream> {
   const buckets = new Map<StreamType, Uint8Array[]>();
+  const append = (type: StreamType, message: Uint8Array) => {
+    const bucket = buckets.get(type) ?? [];
+    bucket.push(message);
+    buckets.set(type, bucket);
+  };
   const guid = (index: number | null) => index == null ? undefined : fixture.guids[index];
   const spell = (id: number, name: string) => create(SpellDataSchema, { id, name });
 
@@ -57,6 +62,14 @@ export function buildLeeroyStreams(fixture: MapFixture): Map<StreamType, CachedS
           absorb: n(3), currentPower: n(4), maximumPower: n(5), powerType: text(6),
         });
         break;
+      case "m":
+        type = "resource_change";
+        message = encodeMessage(ResourceChangeSchema, {
+          meta, target: unit(0), amount: Math.abs(n(1)),
+          direction: text(2).toLowerCase() === "gain" ? "Gain" : "Loss",
+          sourceName: text(3), resourceType: text(4),
+        });
+        break;
       case "d":
       case "h": {
         const shared = {
@@ -71,17 +84,29 @@ export function buildLeeroyStreams(fixture: MapFixture): Map<StreamType, CachedS
         break;
       }
       case "s":
-        type = "spell_start";
-        message = encodeMessage(SpellStartSchema, {
-          meta, caster: unit(0), target: unit(1), castTimeMilli: n(2), spellData: spell(n(3), text(4)),
-        });
+      case "g": {
+        const caster = unit(0) ?? "";
+        const target = unit(1);
+        const spellId = n(3);
+        const spellName = text(4);
+        append("cast", encodeMessage(CastSchema, {
+          meta, caster, target,
+          action: code === "s" ? CastAction.ActionBeginsToCast : CastAction.ActionCasts,
+          spell: create(SpellSchema, { id: spellId, name: spellName }),
+        }));
+        if (code === "s") {
+          type = "spell_start";
+          message = encodeMessage(SpellStartSchema, {
+            meta, caster, target, castTimeMilli: n(2), spellData: spell(spellId, spellName),
+          });
+        } else {
+          type = "spell_go";
+          message = encodeMessage(SpellGoSchema, {
+            meta, caster, target, numHits: n(2), spellData: spell(spellId, spellName),
+          });
+        }
         break;
-      case "g":
-        type = "spell_go";
-        message = encodeMessage(SpellGoSchema, {
-          meta, caster: unit(0), target: unit(1), numHits: n(2), spellData: spell(n(3), text(4)),
-        });
-        break;
+      }
       case "i":
         type = "interrupt";
         message = encodeMessage(InterruptSchema, { meta, caster: unit(0), target: unit(1) });
@@ -97,9 +122,7 @@ export function buildLeeroyStreams(fixture: MapFixture): Map<StreamType, CachedS
       default:
         throw new Error(`Unknown fixture event code: ${code}`);
     }
-    const bucket = buckets.get(type) ?? [];
-    bucket.push(message);
-    buckets.set(type, bucket);
+    append(type, message);
   });
 
   const streams = new Map<StreamType, CachedStream>();
