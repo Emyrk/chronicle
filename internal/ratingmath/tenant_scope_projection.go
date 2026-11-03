@@ -7,6 +7,7 @@ import (
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // TenantScopeProjectionPage writes at most 16 raid-only subject scores and
@@ -61,11 +62,18 @@ func TenantScopeProjectionPage(ctx context.Context, store database.Store, tenant
 				}
 				bosses := make([]tenantScopeBoss, 0, len(rows))
 				for _, row := range rows {
-					bosses = append(bosses, tenantScopeBoss{instance: k.InstanceName, encounter: row.EncounterName, score: row.Score})
+					bosses = append(bosses, tenantScopeBoss{instance: k.InstanceName, encounter: row.EncounterName, score: row.Score,
+						raw: row.BestRaw.Float64, duration: row.BestDurationSecs.Float64})
 				}
 				raids, err := tenantScopeScores(k.RatingMetric, bosses)
 				if err != nil {
 					return err
+				}
+				var bestRaw, bestDuration pgtype.Float8
+				if k.RatingMetric == "peak" {
+					if raw, duration, ok := tenantScopeThroughput(bosses); ok {
+						bestRaw, bestDuration = pgtype.Float8{Float64: raw, Valid: true}, pgtype.Float8{Float64: duration, Valid: true}
+					}
 				}
 				start, end := tenantWindow(k.WindowKind, database.Timestamptz(cp.AsOf.Time.AddDate(0, 0, -180)), cp.AsOf)
 				n, err := tx.InsertPlayerTenantScopeScore(ctx, database.InsertPlayerTenantScopeScoreParams{
@@ -73,7 +81,7 @@ func TenantScopeProjectionPage(ctx context.Context, store database.Store, tenant
 					InstanceName: k.InstanceName, DifficultyName: k.DifficultyName, MaxPlayers: k.MaxPlayers,
 					PlayerClass: k.PlayerClass, PlayerSpec: k.PlayerSpec, PlayerSubSpec: k.PlayerSubSpec,
 					PerformanceMetric: k.PerformanceMetric, RatingMetric: k.RatingMetric, WindowKind: k.WindowKind,
-					WindowStart: start, WindowEnd: end, Score: raids[k.InstanceName],
+					WindowStart: start, WindowEnd: end, Score: raids[k.InstanceName], BestRaw: bestRaw, BestDurationSecs: bestDuration,
 				})
 				if err != nil {
 					return err

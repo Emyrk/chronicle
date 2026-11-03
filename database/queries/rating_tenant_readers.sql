@@ -33,10 +33,10 @@ WITH best AS (
     AND (@player_sub_spec::text = '' OR rated.player_sub_spec = @player_sub_spec)
     AND rated.performance_metric = @performance_metric
     AND rated.rating_metric = @rating_metric AND rated.window_kind = @window_kind
-  ORDER BY rated.realm_id, rated.player_guid, rated.score DESC, rated.player_class, rated.player_spec, rated.player_sub_spec
+  ORDER BY rated.realm_id, rated.player_guid, rated.score DESC, (CASE WHEN rated.rating_metric = 'peak' THEN COALESCE(rated.best_raw, 0) ELSE 0 END) DESC, rated.player_class, rated.player_spec, rated.player_sub_spec
 ),
 ranked AS (
-  SELECT best.*, row_number() OVER (ORDER BY score DESC, realm_id, player_guid) AS global_rank
+  SELECT best.*, row_number() OVER (ORDER BY score DESC, (CASE WHEN rating_metric = 'peak' THEN COALESCE(best_raw, 0) ELSE 0 END) DESC, realm_id, player_guid) AS global_rank
   FROM best
 ),
 displayed AS (
@@ -99,10 +99,10 @@ WITH best AS (
     AND (@player_sub_spec::text = '' OR rated.player_sub_spec = @player_sub_spec)
     AND rated.performance_metric = @performance_metric
     AND rated.rating_metric = @rating_metric AND rated.window_kind = @window_kind
-  ORDER BY rated.realm_id, rated.player_guid, rated.score DESC, rated.player_class, rated.player_spec, rated.player_sub_spec
+  ORDER BY rated.realm_id, rated.player_guid, rated.score DESC, (CASE WHEN rated.rating_metric = 'peak' THEN COALESCE(rated.best_raw, 0) ELSE 0 END) DESC, rated.player_class, rated.player_spec, rated.player_sub_spec
 ),
 ranked AS (
-  SELECT best.*, row_number() OVER (ORDER BY score DESC, realm_id, player_guid) AS global_rank
+  SELECT best.*, row_number() OVER (ORDER BY score DESC, (CASE WHEN rating_metric = 'peak' THEN COALESCE(best_raw, 0) ELSE 0 END) DESC, realm_id, player_guid) AS global_rank
   FROM best
 ),
 displayed AS (
@@ -179,9 +179,11 @@ WHERE score.tenant_id = @tenant_id
                           THEN 'Infinity'::float8 ELSE @after_score::float8 END
   AND (@after_realm_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
        OR score.score < @after_score::float8
-       OR (score.score = @after_score::float8 AND score.realm_id > @after_realm_id::uuid)
-       OR (score.score = @after_score::float8 AND score.realm_id = @after_realm_id::uuid AND score.player_guid > @after_player_guid::text))
-ORDER BY score.score DESC, score.realm_id, score.player_guid
+       -- Tied Peaks rank the higher DPS/HPS first; other metrics and unknowns tie on 0.
+       OR (score.score = @after_score::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) < @after_raw::float8)
+       OR (score.score = @after_score::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = @after_raw::float8 AND score.realm_id > @after_realm_id::uuid)
+       OR (score.score = @after_score::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = @after_raw::float8 AND score.realm_id = @after_realm_id::uuid AND score.player_guid > @after_player_guid::text))
+ORDER BY score.score DESC, (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) DESC, score.realm_id, score.player_guid
 LIMIT LEAST(GREATEST(@limit_count::int, 1), 100);
 
 -- name: ListActivePlayerTenantScopeScores :many
@@ -215,9 +217,11 @@ WHERE score.tenant_id = @tenant_id
                           THEN 'Infinity'::float8 ELSE @after_score::float8 END
   AND (@after_realm_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
        OR score.score < @after_score::float8
-       OR (score.score = @after_score::float8 AND score.realm_id > @after_realm_id::uuid)
-       OR (score.score = @after_score::float8 AND score.realm_id = @after_realm_id::uuid AND score.player_guid > @after_player_guid::text))
-ORDER BY score.score DESC, score.realm_id, score.player_guid
+       -- Tied Peaks rank the higher DPS/HPS first; other metrics and unknowns tie on 0.
+       OR (score.score = @after_score::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) < @after_raw::float8)
+       OR (score.score = @after_score::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = @after_raw::float8 AND score.realm_id > @after_realm_id::uuid)
+       OR (score.score = @after_score::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = @after_raw::float8 AND score.realm_id = @after_realm_id::uuid AND score.player_guid > @after_player_guid::text))
+ORDER BY score.score DESC, (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) DESC, score.realm_id, score.player_guid
 LIMIT LEAST(GREATEST(@limit_count::int, 1), 100);
 
 -- name: ListActiveAllClassPlayerTenantBossScores :many
@@ -242,7 +246,7 @@ WITH best AS (
     AND score.rating_metric = @rating_metric
     AND score.window_kind = @window_kind
     AND (COALESCE(cardinality(@realm_ids::uuid[]), 0) = 0 OR score.realm_id = ANY(@realm_ids::uuid[]))
-  ORDER BY score.realm_id, score.player_guid, score.score DESC, score.player_class, score.player_spec, score.player_sub_spec
+  ORDER BY score.realm_id, score.player_guid, score.score DESC, (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) DESC, score.player_class, score.player_spec, score.player_sub_spec
 )
 SELECT score.*, gp.name AS player_name, guild.name AS guild_name, realm.name AS realm_name
 FROM best score
@@ -252,9 +256,11 @@ LEFT JOIN game_players gp ON gp.realm_id = score.realm_id AND gp.id = (CASE WHEN
 LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = score.realm_id
 WHERE (@after_realm_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
        OR score.score < @after_score::float8
-       OR (score.score = @after_score::float8 AND score.realm_id > @after_realm_id::uuid)
-       OR (score.score = @after_score::float8 AND score.realm_id = @after_realm_id::uuid AND score.player_guid > @after_player_guid::text))
-ORDER BY score.score DESC, score.realm_id, score.player_guid
+       -- Tied Peaks rank the higher DPS/HPS first; other metrics and unknowns tie on 0.
+       OR (score.score = @after_score::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) < @after_raw::float8)
+       OR (score.score = @after_score::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = @after_raw::float8 AND score.realm_id > @after_realm_id::uuid)
+       OR (score.score = @after_score::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = @after_raw::float8 AND score.realm_id = @after_realm_id::uuid AND score.player_guid > @after_player_guid::text))
+ORDER BY score.score DESC, (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) DESC, score.realm_id, score.player_guid
 LIMIT LEAST(GREATEST(@limit_count::int, 1), 100);
 
 -- name: ListActiveAllClassPlayerTenantScopeScores :many
@@ -278,7 +284,7 @@ WITH best AS (
     AND score.rating_metric = @rating_metric
     AND score.window_kind = @window_kind
     AND (COALESCE(cardinality(@realm_ids::uuid[]), 0) = 0 OR score.realm_id = ANY(@realm_ids::uuid[]))
-  ORDER BY score.realm_id, score.player_guid, score.score DESC, score.player_class, score.player_spec, score.player_sub_spec
+  ORDER BY score.realm_id, score.player_guid, score.score DESC, (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) DESC, score.player_class, score.player_spec, score.player_sub_spec
 )
 SELECT score.*, gp.name AS player_name, guild.name AS guild_name, realm.name AS realm_name
 FROM best score
@@ -288,9 +294,11 @@ LEFT JOIN game_players gp ON gp.realm_id = score.realm_id AND gp.id = (CASE WHEN
 LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = score.realm_id
 WHERE (@after_realm_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
        OR score.score < @after_score::float8
-       OR (score.score = @after_score::float8 AND score.realm_id > @after_realm_id::uuid)
-       OR (score.score = @after_score::float8 AND score.realm_id = @after_realm_id::uuid AND score.player_guid > @after_player_guid::text))
-ORDER BY score.score DESC, score.realm_id, score.player_guid
+       -- Tied Peaks rank the higher DPS/HPS first; other metrics and unknowns tie on 0.
+       OR (score.score = @after_score::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) < @after_raw::float8)
+       OR (score.score = @after_score::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = @after_raw::float8 AND score.realm_id > @after_realm_id::uuid)
+       OR (score.score = @after_score::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = @after_raw::float8 AND score.realm_id = @after_realm_id::uuid AND score.player_guid > @after_player_guid::text))
+ORDER BY score.score DESC, (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) DESC, score.realm_id, score.player_guid
 LIMIT LEAST(GREATEST(@limit_count::int, 1), 100);
 
 -- name: ListActiveGuildTenantBossScores :many

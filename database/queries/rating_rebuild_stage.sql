@@ -8,7 +8,7 @@ WITH source AS (
            ranking.player_class, ranking.player_spec, ranking.player_sub_spec,
            ranking.killed_at, @metric::text AS performance_metric,
            CASE WHEN @metric::text = 'hps' THEN ranking.hps ELSE ranking.dps END AS raw_value,
-           locked.precise_score AS locked_parse
+           locked.precise_score AS locked_parse, ranking.duration_secs::double precision AS duration_secs
     FROM ranking_runs rr
     JOIN wow_server_realms realm ON realm.id = rr.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
@@ -37,7 +37,7 @@ WITH source AS (
     INSERT INTO rating_stage_player_observations
       (generation_id, tenant_id, realm_id, run_id, player_guid, instance_name, encounter_name,
        difficulty_name, max_players, player_class, player_spec, player_sub_spec, killed_at,
-       performance_metric, raw_value, locked_parse)
+       performance_metric, raw_value, locked_parse, duration_secs)
     SELECT @generation_id, @tenant_id, source.* FROM source
     ON CONFLICT DO NOTHING RETURNING 1
 )

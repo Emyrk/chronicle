@@ -8,7 +8,7 @@ WITH cohorts AS (
 ), scores AS (
   SELECT c.instance_name, c.difficulty_name, c.max_players,
     'player'::text AS subject, s.rating_metric, s.realm_id, s.player_guid::text AS subject_id,
-    s.score, s.player_class, s.player_spec, s.player_sub_spec,
+    s.score, s.best_raw, s.player_class, s.player_spec, s.player_sub_spec,
     COALESCE(gp.name, '')::text AS subject_name, realm.name::text AS realm_name
   FROM cohorts c
   JOIN player_tenant_rating_scope_scores s ON s.tenant_id = @tenant_id AND s.generation_id = @generation_id
@@ -26,7 +26,7 @@ WITH cohorts AS (
   UNION ALL
   SELECT c.instance_name, c.difficulty_name, c.max_players,
     'guild'::text, s.rating_metric, s.realm_id, s.guild_id::text,
-    s.score, ''::text, ''::text, ''::text,
+    s.score, NULL::float8, ''::text, ''::text, ''::text,
     COALESCE(g.name, '')::text, realm.name::text
   FROM cohorts c
   JOIN guild_tenant_rating_scope_scores s ON s.tenant_id = @tenant_id AND s.generation_id = @generation_id
@@ -39,25 +39,16 @@ WITH cohorts AS (
   JOIN guilds g ON g.id = s.guild_id AND g.realm_id = s.realm_id
 ), unique_subjects AS (
   SELECT *, row_number() OVER (PARTITION BY instance_name, difficulty_name, max_players, subject, rating_metric, realm_id, subject_id
-    ORDER BY score DESC, player_class, player_spec, player_sub_spec) AS identity_position FROM scores
+    ORDER BY score DESC, COALESCE(best_raw, 0) DESC, player_class, player_spec, player_sub_spec) AS identity_position FROM scores
 ), ranked AS (
   SELECT *, row_number() OVER (PARTITION BY instance_name, difficulty_name, max_players, subject, rating_metric
-    ORDER BY score DESC, realm_id, subject_id) AS position
+    ORDER BY score DESC, (CASE WHEN rating_metric = 'peak' THEN COALESCE(best_raw, 0) ELSE 0 END) DESC, realm_id, subject_id) AS position
   FROM unique_subjects WHERE identity_position = 1
 )
 SELECT instance_name, difficulty_name, max_players, subject, rating_metric, realm_id,
   subject_id, score,
-  -- Raid Peak's throughput (0 when unknown): the mean of the player's best DPS per boss in the cohort.
-  COALESCE(CASE WHEN subject = 'player' AND rating_metric = 'peak' THEN
-    (SELECT avg(bs.best_raw) FROM player_tenant_rating_boss_scores bs
-     WHERE bs.tenant_id = @tenant_id AND bs.generation_id = @generation_id
-       AND bs.realm_id = ranked.realm_id AND bs.player_guid = ranked.subject_id
-       AND bs.instance_name = ranked.instance_name AND bs.difficulty_name = ranked.difficulty_name
-       AND bs.max_players = ranked.max_players AND bs.performance_metric = 'dps'
-       AND bs.rating_metric = 'peak' AND bs.window_kind = 'period'
-       AND bs.player_class = ranked.player_class AND bs.player_spec = ranked.player_spec
-       AND bs.player_sub_spec = ranked.player_sub_spec)
-  END, 0)::float8 AS peak_raw,
+  -- Raid Peak's throughput (0 when unknown): total output over total fight time.
+  COALESCE(CASE WHEN subject = 'player' AND rating_metric = 'peak' THEN best_raw END, 0)::float8 AS peak_raw,
   player_class, player_spec, player_sub_spec, subject_name, realm_name
 FROM ranked WHERE position <= 3
   AND EXISTS (SELECT 1 FROM rating_score_generations generation

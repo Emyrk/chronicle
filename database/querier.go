@@ -1177,6 +1177,8 @@ type sqlcQuerier interface {
 	RatingStageGuildRankOne(ctx context.Context, arg RatingStageGuildRankOneParams) (float64, error)
 	RatingStageGuildRenownTotals(ctx context.Context, arg RatingStageGuildRenownTotalsParams) (RatingStageGuildRenownTotalsRow, error)
 	// Aggregate a single immutable subject, never retaining its history in Go.
+	// The best kill's throughput, and its fight length (0 when unknown) so raid
+	// Peak can weigh bosses by duration. Ties prefer the earlier kill.
 	RatingStagePlayerPeak(ctx context.Context, arg RatingStagePlayerPeakParams) (RatingStagePlayerPeakRow, error)
 	// Rank-one derives from *all* tenant runs (including unassigned realms and
 	// guild-less observations); the worker applies frozen membership afterwards.

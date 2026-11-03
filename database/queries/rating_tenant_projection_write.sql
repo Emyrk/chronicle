@@ -4,9 +4,9 @@
 
 -- name: InsertPlayerTenantBossScore :execrows
 INSERT INTO player_tenant_rating_boss_scores (
-    generation_id, tenant_id, realm_id, player_guid, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind, window_start, window_end, score, best_raw, rank_one_raw, best_locked_parse, form, floor_score, eligible_kills
+    generation_id, tenant_id, realm_id, player_guid, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind, window_start, window_end, score, best_raw, rank_one_raw, best_locked_parse, form, floor_score, eligible_kills, best_duration_secs
 )
-SELECT generation.id, generation.tenant_id, realm.id, @player_guid, @instance_name, @encounter_name, @difficulty_name, @max_players, @player_class, @player_spec, @player_sub_spec, @performance_metric, @rating_metric, @window_kind, @window_start, @window_end, @score, @best_raw, @rank_one_raw, @best_locked_parse, @form, @floor_score, @eligible_kills
+SELECT generation.id, generation.tenant_id, realm.id, @player_guid, @instance_name, @encounter_name, @difficulty_name, @max_players, @player_class, @player_spec, @player_sub_spec, @performance_metric, @rating_metric, @window_kind, @window_start, @window_end, @score, @best_raw, @rank_one_raw, @best_locked_parse, @form, @floor_score, @eligible_kills, sqlc.narg(best_duration_secs)::double precision
 FROM rating_score_generations generation
 JOIN wow_server_realms realm ON realm.id = @realm_id
 JOIN wow_servers server ON server.id = realm.server_id
@@ -18,9 +18,9 @@ ON CONFLICT DO NOTHING;
 
 -- name: InsertPlayerTenantScopeScore :execrows
 INSERT INTO player_tenant_rating_scope_scores (
-    generation_id, tenant_id, realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind, window_start, window_end, score
+    generation_id, tenant_id, realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind, window_start, window_end, score, best_raw, best_duration_secs
 )
-SELECT generation.id, generation.tenant_id, realm.id, @player_guid, @instance_name, @difficulty_name, @max_players, @player_class, @player_spec, @player_sub_spec, @performance_metric, @rating_metric, @window_kind, @window_start, @window_end, @score
+SELECT generation.id, generation.tenant_id, realm.id, @player_guid, @instance_name, @difficulty_name, @max_players, @player_class, @player_spec, @player_sub_spec, @performance_metric, @rating_metric, @window_kind, @window_start, @window_end, @score, sqlc.narg(best_raw)::double precision, sqlc.narg(best_duration_secs)::double precision
 FROM rating_score_generations generation
 JOIN wow_server_realms realm ON realm.id = @realm_id
 JOIN wow_servers server ON server.id = realm.server_id

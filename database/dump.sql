@@ -164,7 +164,7 @@ BEGIN
         ON CONFLICT (group_id, instance_name, encounter_name) DO NOTHING;
         -- Child-row version triggers record edits. Initial defaults are part of
         -- this initial policy, not subsequent administrative revisions.
-        UPDATE rating_group_policies
+        UPDATE rating_group_policies 
     END IF;
     RETURN NEW;
 END;
@@ -182,34 +182,34 @@ BEGIN
         WHERE server.id = ANY(ARRAY[
             CASE WHEN TG_OP <> 'INSERT' THEN OLD.server_id END,
             CASE WHEN TG_OP <> 'DELETE' THEN NEW.server_id END]::uuid[])
-        ON CONFLICT (tenant_id) DO UPDATE
+        ON CONFLICT (tenant_id) DO UPDATE 
     ELSIF TG_TABLE_NAME = 'wow_servers' THEN
         IF TG_OP <> 'INSERT' THEN
             INSERT INTO rating_config_revisions (tenant_id, revision)
             VALUES (COALESCE(OLD.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), 1)
-            ON CONFLICT (tenant_id) DO UPDATE
+            ON CONFLICT (tenant_id) DO UPDATE 
         END IF;
         IF TG_OP <> 'DELETE' AND (TG_OP = 'INSERT' OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id) THEN
             INSERT INTO rating_config_revisions (tenant_id, revision)
             VALUES (COALESCE(NEW.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), 1)
-            ON CONFLICT (tenant_id) DO UPDATE
+            ON CONFLICT (tenant_id) DO UPDATE 
         END IF;
     ELSIF TG_TABLE_NAME = 'tenants' THEN
         INSERT INTO rating_config_revisions (tenant_id, revision)
         VALUES (NEW.id, 1)
-        ON CONFLICT (tenant_id) DO UPDATE
+        ON CONFLICT (tenant_id) DO UPDATE 
     ELSIF TG_TABLE_NAME = 'datasets' THEN
         INSERT INTO rating_config_revisions (tenant_id, revision)
         SELECT DISTINCT COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), 1
         FROM wow_servers server
         LEFT JOIN tenants tenant ON tenant.id = server.tenant_id
         WHERE COALESCE(server.default_dataset_id, tenant.default_dataset_id) = NEW.id
-        ON CONFLICT (tenant_id) DO UPDATE
+        ON CONFLICT (tenant_id) DO UPDATE 
     ELSIF TG_TABLE_NAME = 'rating_renown_templates' OR TG_TABLE_NAME = 'rating_renown_template_bosses' THEN
         INSERT INTO rating_config_revisions (tenant_id, revision)
         SELECT DISTINCT COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), 1
         FROM wow_servers server JOIN wow_server_realms realm ON realm.server_id = server.id
-        ON CONFLICT (tenant_id) DO UPDATE
+        ON CONFLICT (tenant_id) DO UPDATE 
     END IF;
     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
     RETURN NEW;
@@ -251,11 +251,11 @@ BEGIN
     END IF;
     IF old_tenant IS NOT NULL THEN
         INSERT INTO rating_config_revisions (tenant_id, revision) VALUES (old_tenant, 1)
-        ON CONFLICT (tenant_id) DO UPDATE
+        ON CONFLICT (tenant_id) DO UPDATE 
     END IF;
     IF new_tenant IS NOT NULL AND new_tenant IS DISTINCT FROM old_tenant THEN
         INSERT INTO rating_config_revisions (tenant_id, revision) VALUES (new_tenant, 1)
-        ON CONFLICT (tenant_id) DO UPDATE
+        ON CONFLICT (tenant_id) DO UPDATE 
     END IF;
     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
     RETURN NEW;
@@ -357,7 +357,7 @@ BEGIN
     IF NOT FOUND OR current_revision IS DISTINCT FROM checkpoint_revision THEN RETURN false; END IF;
     UPDATE rating_score_generations SET status = 'retired'
     WHERE tenant_id = p_tenant_id AND status = 'active';
-    UPDATE rating_score_generations
+    UPDATE rating_score_generations 
     UPDATE rating_rebuild_checkpoints SET phase = 'complete', heartbeat_at = now()
     WHERE generation_id = p_generation_id;
     RETURN true;
@@ -476,7 +476,7 @@ BEGIN
         -- Retire them at the next rebuild, not in a startup-wide backfill.
         UPDATE rating_rebuild_checkpoints SET phase = 'aborted', heartbeat_at = now()
         WHERE generation_id = existing_id;
-        UPDATE rating_score_generations
+        UPDATE rating_score_generations 
     END IF;
 
     -- A tenant may own realms on differently flavored servers. Freeze awards
@@ -506,7 +506,7 @@ BEGIN
     SELECT jsonb_build_object(
         'writer', 'tenant', 'rules_version', 2,
         'tenant_policy', jsonb_build_object(
-            'tenant_id', p_tenant_id, 'version', 2,
+            'tenant_id', p_tenant_id, 'version', 2, 'period_days', 180,
             'best_weight', 0.35, 'form_weight', 0.50, 'floor_weight', 0.15,
             'rank_one_weight', 0.50, 'full_rank_kills', 5),
         'renown_bosses', COALESCE(jsonb_agg(jsonb_build_object(
@@ -2281,6 +2281,7 @@ CREATE TABLE player_tenant_rating_boss_scores (
     floor_score double precision,
     eligible_kills integer DEFAULT 0 NOT NULL,
     computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    best_duration_secs double precision,
     CONSTRAINT player_tenant_rating_boss_scores_check CHECK ((((window_kind = 'period'::text) AND (window_start IS NOT NULL) AND (window_end IS NOT NULL) AND (window_start < window_end)) OR ((window_kind = ANY (ARRAY['all_time'::text, 'career'::text])) AND (window_start IS NULL) AND (window_end IS NULL)))),
     CONSTRAINT player_tenant_rating_boss_scores_eligible_kills_check CHECK ((eligible_kills >= 0)),
     CONSTRAINT player_tenant_rating_boss_scores_performance_metric_check CHECK ((performance_metric = ANY (ARRAY['dps'::text, 'hps'::text, 'none'::text]))),
@@ -2309,6 +2310,8 @@ CREATE TABLE player_tenant_rating_scope_scores (
     window_end timestamp with time zone,
     score double precision NOT NULL,
     computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    best_raw double precision,
+    best_duration_secs double precision,
     CONSTRAINT player_tenant_rating_scope_scores_check CHECK ((((window_kind = 'period'::text) AND (window_start IS NOT NULL) AND (window_end IS NOT NULL) AND (window_start < window_end)) OR ((window_kind = ANY (ARRAY['all_time'::text, 'career'::text])) AND (window_start IS NULL) AND (window_end IS NULL)))),
     CONSTRAINT player_tenant_rating_scope_scores_performance_metric_check CHECK ((performance_metric = ANY (ARRAY['dps'::text, 'hps'::text, 'none'::text]))),
     CONSTRAINT player_tenant_rating_scope_scores_rating_metric_check CHECK ((rating_metric = ANY (ARRAY['peak'::text, 'mastery'::text, 'ranked_mastery'::text, 'renown'::text]))),
@@ -2665,6 +2668,7 @@ CREATE TABLE rating_stage_player_observations (
     performance_metric text NOT NULL,
     raw_value double precision NOT NULL,
     locked_parse double precision,
+    duration_secs double precision,
     CONSTRAINT rating_stage_player_observations_performance_metric_check CHECK ((performance_metric = ANY (ARRAY['dps'::text, 'hps'::text])))
 );
 

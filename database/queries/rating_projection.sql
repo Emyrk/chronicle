@@ -1,7 +1,11 @@
 -- Aggregate a single immutable subject, never retaining its history in Go.
 -- name: RatingStagePlayerPeak :one
+-- The best kill's throughput, and its fight length (0 when unknown) so raid
+-- Peak can weigh bosses by duration. Ties prefer the earlier kill.
 SELECT coalesce(max(raw_value), 0)::double precision AS career_raw,
-       coalesce(max(raw_value) FILTER (WHERE killed_at >= @period_start), 0)::double precision AS period_raw
+       coalesce(max(raw_value) FILTER (WHERE killed_at >= @period_start), 0)::double precision AS period_raw,
+       coalesce((array_agg(duration_secs ORDER BY raw_value DESC, killed_at))[1], 0)::double precision AS career_duration_secs,
+       coalesce((array_agg(duration_secs ORDER BY raw_value DESC, killed_at) FILTER (WHERE killed_at >= @period_start))[1], 0)::double precision AS period_duration_secs
 FROM rating_stage_player_observations
 WHERE generation_id = @generation_id AND realm_id = @realm_id AND player_guid = @player_guid
   AND instance_name = @instance_name AND encounter_name = @encounter_name

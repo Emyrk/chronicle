@@ -2318,6 +2318,7 @@ type PlayerTenantRatingBossScore struct {
 	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
 	EligibleKills     int32              `db:"eligible_kills" json:"eligible_kills"`
 	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	BestDurationSecs  pgtype.Float8      `db:"best_duration_secs" json:"best_duration_secs"`
 }
 
 type PlayerTenantRatingScopeScore struct {
@@ -2338,6 +2339,8 @@ type PlayerTenantRatingScopeScore struct {
 	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
 	Score             float64            `db:"score" json:"score"`
 	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	BestRaw           pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	BestDurationSecs  pgtype.Float8      `db:"best_duration_secs" json:"best_duration_secs"`
 }
 
 type ProofRequest struct {
@@ -2610,6 +2613,7 @@ type RatingStagePlayerObservation struct {
 	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
 	RawValue          float64            `db:"raw_value" json:"raw_value"`
 	LockedParse       pgtype.Float8      `db:"locked_parse" json:"locked_parse"`
+	DurationSecs      pgtype.Float8      `db:"duration_secs" json:"duration_secs"`
 }
 
 type RatingStagePlayerRenown struct {

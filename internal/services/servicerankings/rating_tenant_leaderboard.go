@@ -54,9 +54,12 @@ type tenantRatingCursor struct {
 	Binding    string    `json:"b"`
 	Generation uuid.UUID `json:"g"`
 	Score      float64   `json:"s"`
-	Realm      uuid.UUID `json:"r"`
-	Player     string    `json:"p,omitempty"`
-	Guild      uuid.UUID `json:"u,omitempty"`
+	// Raw breaks tied player Peaks (higher DPS/HPS first); 0 for other metrics,
+	// unknown throughput, and cursors issued before it existed.
+	Raw    float64   `json:"w,omitempty"`
+	Realm  uuid.UUID `json:"r"`
+	Player string    `json:"p,omitempty"`
+	Guild  uuid.UUID `json:"u,omitempty"`
 }
 
 func tenantRatingBad(w http.ResponseWriter, r *http.Request, msg string) {
@@ -192,6 +195,16 @@ func tenantRatingInput(r *http.Request, guild, boss bool) (url.Values, []uuid.UU
 	}
 	return q, realms, int32(limit), binding, cursor, nil
 }
+
+// tenantPeakTieRaw is the player board's tie-break key after the score: the
+// Peak's DPS/HPS, or 0 when unknown or for other metrics (matches the SQL).
+func tenantPeakTieRaw(metric string, raw pgtype.Float8) float64 {
+	if metric != "peak" || !raw.Valid {
+		return 0
+	}
+	return raw.Float64
+}
+
 func tenantCursorEncode(cursor tenantRatingCursor) string {
 	raw, _ := json.Marshal(cursor)
 	return base64.RawURLEncoding.EncodeToString(raw)
@@ -290,7 +303,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				InstanceName: p.InstanceName, EncounterName: p.EncounterName, DifficultyName: p.DifficultyName,
 				MaxPlayers: p.MaxPlayers, PlayerClass: p.PlayerClass, PlayerSpec: p.PlayerSpec, PlayerSubSpec: p.PlayerSubSpec,
 				PerformanceMetric: p.PerformanceMetric, RatingMetric: p.RatingMetric, WindowKind: p.WindowKind,
-				RealmIds: p.RealmIds, LimitCount: p.LimitCount, AfterScore: p.AfterScore,
+				RealmIds: p.RealmIds, LimitCount: p.LimitCount, AfterScore: p.AfterScore, AfterRaw: p.AfterRaw,
 				AfterRealmID: p.AfterRealmID, AfterPlayerGuid: p.AfterPlayerGuid}
 			selected, err := store.ListActiveAllClassPlayerTenantBossScores(ctx, all)
 			if err != nil {
@@ -303,7 +316,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 			return rows, nil
 		}
 		params := database.ListActivePlayerTenantBossScoresParams{TenantID: tenant, GenerationID: generation, InstanceName: q.Get("instance_name"), EncounterName: q.Get("encounter_name"), DifficultyName: q.Get("difficulty_name"), MaxPlayers: tenantMax(q), PlayerClass: tenantClass(q), PlayerSpec: q.Get("spec"), PlayerSubSpec: q.Get("sub_spec"), PerformanceMetric: q.Get("performance_metric"), RatingMetric: q.Get("rating_metric"), WindowKind: q.Get("window_kind"), RealmIds: realms, LimitCount: limit}
-		params.AfterScore, params.AfterRealmID, params.AfterPlayerGuid = cursor.Score, cursor.Realm, cursor.Player
+		params.AfterScore, params.AfterRaw, params.AfterRealmID, params.AfterPlayerGuid = cursor.Score, cursor.Raw, cursor.Realm, cursor.Player
 		rows, e := read(params)
 		if e != nil {
 			httpapi.InternalServerError(w, e)
@@ -319,7 +332,8 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 		}
 		if len(rows) == int(limit) {
 			last := rows[len(rows)-1]
-			params.AfterScore, params.AfterRealmID, params.AfterPlayerGuid = last.Score, last.RealmID, last.PlayerGuid
+			raw := tenantPeakTieRaw(last.RatingMetric, last.BestRaw)
+			params.AfterScore, params.AfterRaw, params.AfterRealmID, params.AfterPlayerGuid = last.Score, raw, last.RealmID, last.PlayerGuid
 			params.LimitCount = 1
 			more, e := read(params)
 			if e != nil {
@@ -327,7 +341,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				return
 			}
 			if len(more) > 0 {
-				next = tenantCursorEncode(tenantRatingCursor{Binding: binding, Generation: generation, Score: last.Score, Realm: last.RealmID, Player: last.PlayerGuid})
+				next = tenantCursorEncode(tenantRatingCursor{Binding: binding, Generation: generation, Score: last.Score, Raw: raw, Realm: last.RealmID, Player: last.PlayerGuid})
 			}
 		}
 		payload = chroniclesdk.TenantPlayerBossLeaderboardResponse{Entries: entries, NextCursor: next}
@@ -340,7 +354,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				InstanceName: p.InstanceName, DifficultyName: p.DifficultyName,
 				MaxPlayers: p.MaxPlayers, PlayerClass: p.PlayerClass, PlayerSpec: p.PlayerSpec, PlayerSubSpec: p.PlayerSubSpec,
 				PerformanceMetric: p.PerformanceMetric, RatingMetric: p.RatingMetric, WindowKind: p.WindowKind,
-				RealmIds: p.RealmIds, LimitCount: p.LimitCount, AfterScore: p.AfterScore,
+				RealmIds: p.RealmIds, LimitCount: p.LimitCount, AfterScore: p.AfterScore, AfterRaw: p.AfterRaw,
 				AfterRealmID: p.AfterRealmID, AfterPlayerGuid: p.AfterPlayerGuid}
 			selected, err := store.ListActiveAllClassPlayerTenantScopeScores(ctx, all)
 			if err != nil {
@@ -353,7 +367,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 			return rows, nil
 		}
 		params := database.ListActivePlayerTenantScopeScoresParams{TenantID: tenant, GenerationID: generation, InstanceName: q.Get("instance_name"), DifficultyName: q.Get("difficulty_name"), MaxPlayers: tenantMax(q), PlayerClass: tenantClass(q), PlayerSpec: q.Get("spec"), PlayerSubSpec: q.Get("sub_spec"), PerformanceMetric: q.Get("performance_metric"), RatingMetric: q.Get("rating_metric"), WindowKind: q.Get("window_kind"), RealmIds: realms, LimitCount: limit}
-		params.AfterScore, params.AfterRealmID, params.AfterPlayerGuid = cursor.Score, cursor.Realm, cursor.Player
+		params.AfterScore, params.AfterRaw, params.AfterRealmID, params.AfterPlayerGuid = cursor.Score, cursor.Raw, cursor.Realm, cursor.Player
 		rows, e := read(params)
 		if e != nil {
 			httpapi.InternalServerError(w, e)
@@ -365,11 +379,12 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				httpapi.InternalServerError(w, errors.New("tenant rating row generation mismatch"))
 				return
 			}
-			entries = append(entries, chroniclesdk.TenantPlayerScopeLeaderboardEntry{GenerationID: row.GenerationID, RealmID: row.RealmID, PlayerGUID: row.PlayerGuid, PlayerName: tenantRatingName(row.PlayerName), GuildName: tenantRatingName(row.GuildName), RealmName: row.RealmName, InstanceName: row.InstanceName, DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, PerformanceMetric: row.PerformanceMetric, RatingMetric: row.RatingMetric, WindowKind: row.WindowKind, Score: row.Score, ComputedAt: guildRatingTime(row.ComputedAt)})
+			entries = append(entries, chroniclesdk.TenantPlayerScopeLeaderboardEntry{GenerationID: row.GenerationID, RealmID: row.RealmID, PlayerGUID: row.PlayerGuid, PlayerName: tenantRatingName(row.PlayerName), GuildName: tenantRatingName(row.GuildName), RealmName: row.RealmName, InstanceName: row.InstanceName, DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, PerformanceMetric: row.PerformanceMetric, RatingMetric: row.RatingMetric, WindowKind: row.WindowKind, Score: row.Score, BestRaw: guildRatingFloat(row.BestRaw), ComputedAt: guildRatingTime(row.ComputedAt)})
 		}
 		if len(rows) == int(limit) {
 			last := rows[len(rows)-1]
-			params.AfterScore, params.AfterRealmID, params.AfterPlayerGuid = last.Score, last.RealmID, last.PlayerGuid
+			raw := tenantPeakTieRaw(last.RatingMetric, last.BestRaw)
+			params.AfterScore, params.AfterRaw, params.AfterRealmID, params.AfterPlayerGuid = last.Score, raw, last.RealmID, last.PlayerGuid
 			params.LimitCount = 1
 			more, e := read(params)
 			if e != nil {
@@ -377,7 +392,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				return
 			}
 			if len(more) > 0 {
-				next = tenantCursorEncode(tenantRatingCursor{Binding: binding, Generation: generation, Score: last.Score, Realm: last.RealmID, Player: last.PlayerGuid})
+				next = tenantCursorEncode(tenantRatingCursor{Binding: binding, Generation: generation, Score: last.Score, Raw: raw, Realm: last.RealmID, Player: last.PlayerGuid})
 			}
 		}
 		payload = chroniclesdk.TenantPlayerScopeLeaderboardResponse{Scope: "raid", Entries: entries, NextCursor: next}

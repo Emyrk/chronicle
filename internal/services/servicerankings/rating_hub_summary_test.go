@@ -6,6 +6,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -118,4 +119,11 @@ func TestHubClassFilter(t *testing.T) {
 	require.Equal(t, "", hubClassFilter(""))
 	require.Equal(t, "MAGE", hubClassFilter("MAGE"))
 	require.Equal(t, "DEATH_KNIGHT", hubClassFilter("DEATHKNIGHT"))
+}
+
+func TestTenantPeakTieRaw(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, 1234.5, tenantPeakTieRaw("peak", pgtype.Float8{Float64: 1234.5, Valid: true}))
+	require.Equal(t, 0.0, tenantPeakTieRaw("peak", pgtype.Float8{}))
+	require.Equal(t, 0.0, tenantPeakTieRaw("ranked_mastery", pgtype.Float8{Float64: 1234.5, Valid: true}))
 }

@@ -12,6 +12,8 @@ import (
 type tenantScopeBoss struct {
 	instance, encounter string
 	score               float64
+	// Peak only: the best kill's DPS/HPS and fight length, 0 when unknown.
+	raw, duration float64
 }
 
 type tenantScopeSlot struct{ instance, slot string }
@@ -68,4 +70,36 @@ func tenantScopeScores(rating string, bosses []tenantScopeBoss) (map[string]floa
 		totals[raid] = score
 	}
 	return totals, nil
+}
+
+// tenantScopeThroughput is a raid Peak's DPS/HPS over the same slots its score
+// counts (ZG Edge variants keep their best-scoring kill): total output over total
+// fight time, so long fights weigh more than short ones. ok is false when any
+// counted kill lacks its throughput or length, rather than reporting a partial raid.
+func tenantScopeThroughput(bosses []tenantScopeBoss) (raw, duration float64, ok bool) {
+	chosen := make(map[tenantScopeSlot]tenantScopeBoss, len(bosses))
+	for _, boss := range bosses {
+		slot := tenantScopeSlot{boss.instance, boss.encounter}
+		if boss.instance == "Zul'Gurub" {
+			switch boss.encounter {
+			case "Gri'lek", "Hazza'rah", "Renataki", "Wushoolay":
+				slot.slot = "Edge of Madness"
+			}
+		}
+		if prev, seen := chosen[slot]; !seen || boss.score > prev.score || (boss.score == prev.score && boss.raw > prev.raw) {
+			chosen[slot] = boss
+		}
+	}
+	var output float64
+	for _, boss := range chosen {
+		if boss.raw <= 0 || boss.duration <= 0 || math.IsNaN(boss.raw) || math.IsInf(boss.raw, 0) || math.IsNaN(boss.duration) || math.IsInf(boss.duration, 0) {
+			return 0, 0, false
+		}
+		output += boss.raw * boss.duration
+		duration += boss.duration
+	}
+	if duration <= 0 {
+		return 0, 0, false
+	}
+	return output / duration, duration, true
 }

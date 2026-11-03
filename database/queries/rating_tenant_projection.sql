@@ -37,7 +37,7 @@ ORDER BY realm_id, guild_id, instance_name, difficulty_name, max_players, rating
 LIMIT LEAST(GREATEST(@batch_size::int, 0), 16);
 
 -- name: ListTenantPlayerRaidBosses :many
-SELECT encounter_name, score FROM player_tenant_rating_boss_scores
+SELECT encounter_name, score, best_raw, best_duration_secs FROM player_tenant_rating_boss_scores
 WHERE generation_id = @generation_id AND tenant_id = @tenant_id AND realm_id = @realm_id
   AND player_guid = @player_guid AND instance_name = @instance_name
   AND difficulty_name = @difficulty_name AND max_players = @max_players

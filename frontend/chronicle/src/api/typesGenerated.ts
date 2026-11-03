@@ -5445,6 +5445,11 @@ export interface TenantPlayerScopeLeaderboardEntry {
     readonly rating_metric: string;
     readonly window_kind: string;
     readonly score: number;
+    /**
+     * BestRaw is a raid Peak's throughput: total output over total fight time
+     * across the bosses it counts.
+     */
+    readonly best_raw?: number;
     readonly computed_at?: string;
 }
 
