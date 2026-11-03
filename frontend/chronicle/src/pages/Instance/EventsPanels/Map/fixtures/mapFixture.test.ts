@@ -142,7 +142,8 @@ describe("loadMapFixture", () => {
       if (row[0] !== "r" || row[1] !== 30_000 || !playerIDs.has(guid(Number(row[2])))) continue;
       expect(Number(row[3]) / Number(row[4])).toBeGreaterThan(0.2);
     }
-    expect(playerDamage).toBeGreaterThan(0);
+    // The cinematic rotation should read like a raid, not a handful of weak hits.
+    expect(playerDamage).toBeGreaterThan(100_000);
     expect(playerHealing).toBeGreaterThan(0);
     expect(manaSpent).toBeGreaterThan(0);
     // The recorder's party frame is visibly around half health at video 1:48.

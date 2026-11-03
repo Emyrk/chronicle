@@ -314,7 +314,9 @@ function whelpAt(whelp, t) {
 const PLAYER_HEALTH = { WARRIOR: 5200, PALADIN: 4800, ROGUE: 3600, HUNTER: 3800, DRUID: 3700, PRIEST: 3300, MAGE: 3200, WARLOCK: 3600 }
 const PLAYER_RESOURCE = { WARRIOR: [1, 100], PALADIN: [0, 4200], ROGUE: [3, 100], HUNTER: [0, 3400], DRUID: [0, 3800], PRIEST: [0, 4600], MAGE: [0, 4800], WARLOCK: [0, 4000] }
 const RESOURCE_NAME = { 0: "Mana", 1: "Rage", 3: "Energy" }
-const WHELP_HEALTH = 1650
+// Double player hit size and whelp durability together: larger, readable
+// damage numbers without shortening the cinematic swarm or changing kill order.
+const WHELP_HEALTH = 3300
 const health = new Map()
 const resources = new Map()
 const whelpDeaths = new Map()
@@ -403,10 +405,10 @@ for (const t of [18500, 19900, 21300, 22700]) queue(t, 1, () => {
 // Each class contributes a modest, deterministic rotation against a nearby
 // living whelp. Casts spend mana; melee generates rage or spends energy.
 const attacks = {
-  WARRIOR: ["Heroic Strike", 78, 260, 4, 15], PALADIN: ["Judgement", 20271, 210, 22, 140],
-  ROGUE: ["Sinister Strike", 1752, 210, 4, 40], HUNTER: ["Arcane Shot", 3044, 195, 30, 115],
-  MAGE: ["Fireball", 133, 310, 30, 185], PRIEST: ["Smite", 585, 180, 30, 130],
-  DRUID: ["Wrath", 5176, 210, 30, 125], WARLOCK: ["Shadow Bolt", 686, 245, 30, 160],
+  WARRIOR: ["Heroic Strike", 78, 520, 4, 15], PALADIN: ["Judgement", 20271, 420, 22, 140],
+  ROGUE: ["Sinister Strike", 1752, 420, 4, 40], HUNTER: ["Arcane Shot", 3044, 390, 30, 115],
+  MAGE: ["Fireball", 133, 620, 30, 185], PRIEST: ["Smite", 585, 360, 30, 130],
+  DRUID: ["Wrath", 5176, 420, 30, 125], WARLOCK: ["Shadow Bolt", 686, 490, 30, 160],
 }
 for (const guid of pileGuids) {
   const player = players[guid]

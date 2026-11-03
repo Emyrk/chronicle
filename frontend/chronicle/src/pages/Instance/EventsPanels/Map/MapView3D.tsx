@@ -523,11 +523,11 @@ export default function MapView3D({
     sceneRef.current?.followUnit(followGuid);
   }, [followGuid]);
 
-  // Authored camera paths take precedence over Director, viewport, follow, and
-  // walking updates from the same React commit.
+  // Walk mode owns the camera while active. Once walking ends, resume the
+  // authored path at the current replay time rather than kicking the walker out.
   useEffect(() => {
-    if (authoredCameraPose) sceneRef.current?.applyCameraPose(authoredCameraPose);
-  }, [authoredCameraPose]);
+    if (authoredCameraPose && !walking) sceneRef.current?.applyCameraPose(authoredCameraPose);
+  }, [authoredCameraPose, walking]);
 
   useEffect(() => {
     if (walkCaptureFrame) sceneRef.current?.setWalkCaptureFrame(
