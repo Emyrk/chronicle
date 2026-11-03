@@ -42,6 +42,16 @@ func (s *masteryProgressStore) CountCompletedTenantMasteryWindows(context.Contex
 	return s.done, nil
 }
 
+func TestRatingInvocationTimingExcludesSnooze(t *testing.T) {
+	t.Parallel()
+	output := ratingInvocationTiming(128, 500*time.Millisecond)
+	require.Equal(t, int64(500), output["last_invocation_duration_ms"])
+	require.Equal(t, 256.0, output["last_invocation_pages_per_second"])
+	output = ratingInvocationTiming(1, 0)
+	require.Equal(t, int64(0), output["last_invocation_duration_ms"])
+	require.NotContains(t, output, "last_invocation_pages_per_second")
+}
+
 func TestRatingMasteryProgressKeepsGenerationBoundETA(t *testing.T) {
 	t.Parallel()
 	generation, tenant := uuid.New(), uuid.New()

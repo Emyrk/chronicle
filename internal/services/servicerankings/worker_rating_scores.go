@@ -108,16 +108,16 @@ func (w *WorkerRebuildTenantRatings) Work(ctx context.Context, job *river.Job[Ar
 		err := w.workPage(ctx, job)
 		pages++
 		if err == nil {
-			w.recordRatingProgress(ctx, job, pages, "complete")
+			w.recordRatingProgress(ctx, job, pages, "complete", started)
 			return nil
 		}
 		var snooze *river.JobSnoozeError
 		if !errors.As(err, &snooze) {
-			w.recordRatingProgress(ctx, job, pages, "failed")
+			w.recordRatingProgress(ctx, job, pages, "failed", started)
 			return err
 		}
 	}
-	w.recordRatingProgress(ctx, job, pages, "building")
+	w.recordRatingProgress(ctx, job, pages, "building", started)
 	return river.JobSnooze(time.Second)
 }
 
@@ -155,10 +155,23 @@ func ratingPagesProcessed(job *river.Job[ArgsRebuildTenantRatings], generation u
 	return pages
 }
 
-func (w *WorkerRebuildTenantRatings) recordRatingProgress(ctx context.Context, job *river.Job[ArgsRebuildTenantRatings], pages int, status string) {
+func ratingInvocationTiming(pages int, duration time.Duration) map[string]any {
+	result := map[string]any{"last_invocation_duration_ms": duration.Milliseconds()}
+	if duration > 0 {
+		result["last_invocation_pages_per_second"] = float64(pages) / duration.Seconds()
+	}
+	return result
+}
+
+func (w *WorkerRebuildTenantRatings) recordRatingProgress(ctx context.Context, job *river.Job[ArgsRebuildTenantRatings], pages int, status string, started time.Time) {
 	tenant := job.Args.TenantID
+	// Measure only this invocation's page loop, excluding River's snooze and queue wait.
+	duration := time.Since(started)
 	now := time.Now().UTC()
 	output := map[string]any{"tenant_id": tenant, "status": status, "pages_this_attempt": pages, "reported_at": now}
+	for key, value := range ratingInvocationTiming(pages, duration) {
+		output[key] = value
+	}
 	var generation uuid.UUID
 	if cp, err := w.Store.GetBuildingRatingRebuildCheckpoint(ctx, tenant); err == nil {
 		generation = cp.GenerationID
