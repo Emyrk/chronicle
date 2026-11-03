@@ -2744,6 +2744,19 @@ export interface InstanceSearchResult {
     readonly difficulty_name: string;
     readonly max_players: number;
     readonly started_at: string;
+    /**
+     * PlayerCount is the number of distinct players in the run.
+     */
+    readonly player_count: number;
+    /**
+     * BossesKilled is the number of distinct bosses killed (clean or partial).
+     */
+    readonly bosses_killed: number;
+    /**
+     * ClearTimeMS is the ranked full-clear time; absent when the run is not
+     * a full clear.
+     */
+    readonly clear_time_ms?: number;
 }
 
 // From chroniclesdk/time_parses.go

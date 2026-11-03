@@ -10,19 +10,28 @@ import fieldsFixture from "./fixtures/searchFields.json";
 const fields = fieldsFixture as unknown as InstanceSearchFieldsResponse;
 
 const supported: SupportedInstance[] = [
-  { name: "Molten Core", category: "raid", bosses: ["Lucifron", "Magmadar", "Gehennas", "Garr", "Shazzrah", "Baron Geddon", "Sulfuron Harbinger", "Golemagg the Incinerator", "Majordomo Executus", "Ragnaros"].map((name, i) => ({ entry_id: 1000 + i, name })) },
-  { name: "Blackwing Lair", category: "raid", bosses: ["Razorgore the Untamed", "Vaelastrasz the Corrupt", "Broodlord Lashlayer", "Firemaw", "Ebonroc", "Flamegor", "Chromaggus", "Nefarian"].map((name, i) => ({ entry_id: 2000 + i, name })) },
-  { name: "Onyxia's Lair", category: "raid", bosses: [{ entry_id: 3000, name: "Onyxia" }] },
-  { name: "Naxxramas", category: "raid", bosses: ["Patchwerk", "Grobbulus", "Gluth", "Thaddius", "Sapphiron", "Kel'Thuzad"].map((name, i) => ({ entry_id: 4000 + i, name })) },
+  { name: "Molten Core", category: "raid", boss_count: 10, bosses: ["Lucifron", "Magmadar", "Gehennas", "Garr", "Shazzrah", "Baron Geddon", "Sulfuron Harbinger", "Golemagg the Incinerator", "Majordomo Executus", "Ragnaros"].map((name, i) => ({ entry_id: 1000 + i, name })) },
+  { name: "Blackwing Lair", category: "raid", boss_count: 8, bosses: ["Razorgore the Untamed", "Vaelastrasz the Corrupt", "Broodlord Lashlayer", "Firemaw", "Ebonroc", "Flamegor", "Chromaggus", "Nefarian"].map((name, i) => ({ entry_id: 2000 + i, name })) },
+  { name: "Onyxia's Lair", category: "raid", boss_count: 1, bosses: [{ entry_id: 3000, name: "Onyxia" }] },
+  { name: "Naxxramas", category: "raid", boss_count: 15, bosses: ["Patchwerk", "Grobbulus", "Gluth", "Thaddius", "Sapphiron", "Kel'Thuzad"].map((name, i) => ({ entry_id: 4000 + i, name })) },
 ];
 
 const zones = ["Molten Core", "Blackwing Lair", "Onyxia's Lair", "Naxxramas", "Zul'Gurub"];
 const guilds = ["Ravenholdt", "Sigma", "Fury and Frost", "Nightfall", "", "Pug Life", "Elysium"];
 const realms = ["Nordanaar", "Tel'Abim", "Ambershire"];
 
+const BOSS_TOTALS: Record<string, number> = { "Molten Core": 10, "Blackwing Lair": 8, "Onyxia's Lair": 1, Naxxramas: 15, "Zul'Gurub": 10 };
+
 const allRows: InstanceSearchResult[] = Array.from({ length: 60 }, (_, i) => {
   const guild = guilds[i % guilds.length];
+  const zone = zones[i % zones.length];
+  const total = BOSS_TOTALS[zone] ?? 8;
+  // Most runs are full clears; every fourth is a partial night.
+  const killed = i % 4 === 3 ? Math.max(1, total - 1 - (i % 3)) : total;
   return {
+    player_count: zone === "Zul'Gurub" ? 20 : 38 + (i % 3),
+    bosses_killed: killed,
+    ...(killed === total && total > 1 ? { clear_time_ms: (55 + ((i * 7) % 70)) * 60_000 } : {}),
     id: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
     slug: `story${i}`,
     name: zones[i % zones.length],

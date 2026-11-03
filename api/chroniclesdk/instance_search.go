@@ -131,6 +131,13 @@ type InstanceSearchResult struct {
 	DifficultyName string        `json:"difficulty_name"`
 	MaxPlayers     int32         `json:"max_players"`
 	StartedAt      time.Time     `json:"started_at" format:"date-time"`
+	// PlayerCount is the number of distinct players in the run.
+	PlayerCount int64 `json:"player_count"`
+	// BossesKilled is the number of distinct bosses killed (clean or partial).
+	BossesKilled int64 `json:"bosses_killed"`
+	// ClearTimeMS is the ranked full-clear time; absent when the run is not
+	// a full clear.
+	ClearTimeMS *int64 `json:"clear_time_ms,omitempty"`
 }
 
 // InstanceSearchLimitResponse is the caller's instance search rate-limit

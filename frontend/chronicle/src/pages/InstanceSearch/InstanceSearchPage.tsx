@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Blocks, ChevronDown, ChevronRight, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
-import type { InstanceSearchCursor, InstanceSearchResult } from "@/api/typesGenerated";
+import type { InstanceSearchCursor } from "@/api/typesGenerated";
 import { useSupportedInstances } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { useSupporterTier } from "@/hooks/useSupporterTier";
@@ -10,6 +10,8 @@ import { TIER_COLOR } from "@/pages/Settings/billingPricing";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BlockEditor } from "./BlockEditor";
+import { ResultsTable } from "./ResultsTable";
+import { SearchSummary } from "./SearchSummary";
 import { CodeEditor } from "./CodeEditor";
 import { CelParseError, parseCEL } from "./celParser";
 import { ExamplesMenu } from "./ExamplesMenu";
@@ -112,7 +114,24 @@ export function InstanceSearchPage() {
     setMode(next);
   };
 
+  // After a search the builder collapses into a summary bar so the results
+  // get the space; Edit re-expands it. Shared links open collapsed.
+  const [collapsed, setCollapsed] = useState(() => params.get("q") !== null);
+
+  const newSearch = () => {
+    setForm(emptyForm());
+    setBlocks(undefined);
+    setCode("");
+    setExample(null);
+    const next = new URLSearchParams(params);
+    next.delete("q");
+    next.delete("mode");
+    setParams(next);
+    setCollapsed(false);
+  };
+
   const submit = () => {
+    setCollapsed(true);
     const next = new URLSearchParams(params);
     next.set("q", encodeQuery(draftTree));
     if (mode === "form") next.delete("mode");
@@ -142,19 +161,40 @@ export function InstanceSearchPage() {
     (limit.data ? { limit: limit.data.limit, remaining: limit.data.remaining, resetSeconds: limit.data.reset_seconds } : null);
   const lastCost = lastPage?.cost ?? error?.cost ?? null;
   const rows = results.data?.pages.flatMap((p) => p.page.results) ?? [];
+  const resultLabel = results.isLoading
+    ? "Searching…"
+    : results.error
+      ? ""
+      : `${rows.length}${results.hasNextPage ? "+" : ""} ${rows.length === 1 ? "run" : "runs"}`;
+  const bossCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const i of supported.data ?? []) {
+      if (i.boss_count == null) continue;
+      m.set(i.name, i.boss_count);
+      for (const alias of i.zone_names ?? []) m.set(alias, i.boss_count);
+    }
+    return m;
+  }, [supported.data]);
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Search className="h-6 w-6 text-primary" />
-          Instance search
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Find raids by zone, bosses, speed, parses, roster and more.
-        </p>
+      <div className="flex items-end justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Search className="h-6 w-6 text-primary" />
+            Instance search
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Find raids by zone, bosses, speed, parses, roster and more.
+          </p>
+        </div>
+        <BudgetLine budget={budget} lastCost={lastCost} />
       </div>
 
+      {collapsed ? (
+        <SearchSummary tree={submittedTree} resultLabel={resultLabel} onEdit={() => setCollapsed(false)} onNew={newSearch} />
+      ) : (
+      <>
       {!isAuthenticated && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-200/90 flex items-center gap-2">
           <Lock className="h-3.5 w-3.5 shrink-0" />
@@ -194,8 +234,6 @@ export function InstanceSearchPage() {
           </ModeButton>
         </div>
         <ExamplesMenu onPick={loadExample} locked={!advancedUnlocked} onLocked={() => setShowUpsell(true)} />
-        <div className="flex-1" />
-        <BudgetLine budget={budget} lastCost={lastCost} />
       </div>
       {!advancedUnlocked && (showUpsell || mode !== "form") && <HonoredUpsell loggedIn={isAuthenticated} readOnly={mode !== "form"} />}
 
@@ -264,12 +302,14 @@ export function InstanceSearchPage() {
           {formatCEL(draftTree)}
         </pre>
       )}
+      </>
+      )}
 
       {error && <ErrorBox error={error} />}
       {results.error && !error && <ErrorBox error={new SearchError("Search failed.", 0)} />}
 
       {submittedParam !== null && !results.error && (
-        <ResultsTable rows={rows} loading={results.isLoading} />
+        <ResultsTable rows={rows} loading={results.isLoading} bossCounts={bossCounts} />
       )}
       {results.hasNextPage && (
         <div className="flex justify-center">
@@ -351,55 +391,6 @@ function ErrorBox({ error }: { error: SearchError }) {
       {error.loginRequired && (
         <p><Link to="/login" className="underline text-amber-300">Log in</Link> to run this search.</p>
       )}
-    </div>
-  );
-}
-
-function ResultsTable({ rows, loading }: { rows: InstanceSearchResult[]; loading: boolean }) {
-  if (loading) {
-    return <div className="py-10 flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
-  }
-  if (rows.length === 0) {
-    return <p className="text-center py-10 text-sm text-muted-foreground">No runs match this search.</p>;
-  }
-  return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-primary-darker text-muted-foreground text-xs uppercase tracking-wider">
-            <th className="text-left px-4 py-2.5 font-medium">Zone</th>
-            <th className="text-left px-4 py-2.5 font-medium">Guild</th>
-            <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell">Realm</th>
-            <th className="text-left px-4 py-2.5 font-medium hidden md:table-cell">Size</th>
-            <th className="text-right px-4 py-2.5 font-medium">Date</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {rows.map((r) => (
-            <tr key={r.id} className="hover:bg-primary-darker/40 transition-colors">
-              <td className="px-4 py-2">
-                <Link to={`/instances/${r.slug || r.id}`} className="font-medium text-foreground hover:underline">
-                  {r.name}
-                </Link>
-              </td>
-              <td className="px-4 py-2 text-muted-foreground">
-                {r.guild_id && r.guild_name ? (
-                  <Link to={`/g/${r.guild_id}`} className="hover:underline">{r.guild_name}</Link>
-                ) : (
-                  <span className="opacity-50">—</span>
-                )}
-              </td>
-              <td className="px-4 py-2 hidden sm:table-cell text-muted-foreground">{r.realm_name}</td>
-              <td className="px-4 py-2 hidden md:table-cell text-muted-foreground">
-                {[r.difficulty_name, r.max_players ? `${r.max_players}` : ""].filter(Boolean).join(" · ") || "—"}
-              </td>
-              <td className="px-4 py-2 text-right text-muted-foreground tabular-nums whitespace-nowrap">
-                {new Date(r.started_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }

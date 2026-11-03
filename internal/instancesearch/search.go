@@ -60,9 +60,13 @@ func Search(ctx context.Context, db database.Store, compiled Compiled, opts Sear
 				slug      pgtype.Text
 				guildName pgtype.Text
 			)
+			var clear pgtype.Int8
 			if err := rows.Scan(&r.ID, &slug, &r.Name, &r.RealmID, &r.RealmName, &r.GuildID, &guildName,
-				&r.DifficultyName, &r.MaxPlayers, &r.StartedAt); err != nil {
+				&r.DifficultyName, &r.MaxPlayers, &r.StartedAt, &r.PlayerCount, &r.BossesKilled, &clear); err != nil {
 				return xerrors.Errorf("scan: %w", err)
+			}
+			if clear.Valid {
+				r.ClearTimeMS = &clear.Int64
 			}
 			r.Slug = slug.String
 			r.GuildName = guildName.String
