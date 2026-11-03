@@ -130,7 +130,7 @@ func TestAdvanceMasterySubjectExactPagedReplay(t *testing.T) {
 				killed := asOf.Add(-time.Duration(215-i) * time.Hour)
 				if i == 0 {
 					killed = asOf
-				} // excluded newest kill must not anchor recency
+				} // timestamps must not alter the score quantiles
 				id := uuid.MustParse(fmt.Sprintf("00000000-0000-0000-0000-%012x", i+1))
 				score := float64(i / 5)
 				observations = append(observations, ParseObservation{Score: score, KilledAt: killed, ID: id.String()})
@@ -141,7 +141,7 @@ func TestAdvanceMasterySubjectExactPagedReplay(t *testing.T) {
 					fake.guild = append(fake.guild, database.ListRatingMasteryGuildPageRow(row))
 				}
 			}
-			expected, err := ScoreMastery(observations, MasteryPolicy{HalfLife: 24 * time.Hour, BestWeight: policy.BestWeight, FormWeight: policy.FormWeight, FloorWeight: policy.FloorWeight, RankWeight: func(n int) float64 {
+			expected, err := ScoreMastery(observations, MasteryPolicy{BestWeight: policy.BestWeight, FormWeight: policy.FormWeight, FloorWeight: policy.FloorWeight, RankWeight: func(n int) float64 {
 				if n >= 10 {
 					return 1
 				}
@@ -161,7 +161,7 @@ func TestAdvanceMasterySubjectExactPagedReplay(t *testing.T) {
 			require.Equal(t, "complete", fake.state.Pass)
 			require.Equal(t, 1, fake.writes)
 			require.Equal(t, []byte(`{"subject":2}`), fake.checkpoint.Cursor)
-			require.Greater(t, fake.pages, 4)
+			require.Greater(t, fake.pages, 2)
 			require.Equal(t, expected.EligibleKills, got.EligibleKills)
 			require.Equal(t, expected.ExcludedKills, got.ExcludedKills)
 			for _, pair := range [][2]float64{{got.Best, expected.Best}, {got.Floor, expected.Floor}, {got.Form, expected.Form}, {got.Mastery, expected.Mastery}, {got.Ranked, expected.Ranked}, {got.Confidence, expected.Confidence}} {
@@ -170,6 +170,21 @@ func TestAdvanceMasterySubjectExactPagedReplay(t *testing.T) {
 			_, _, err = AdvanceMasterySubject(context.Background(), fake, key, asOf, asOf.AddDate(0, 0, -13), policy, []byte(`{"subject":1}`), []byte(`{"subject":2}`), func(context.Context, database.Store, MasteryResult) error { panic("replayed write") })
 			require.ErrorIs(t, err, ErrMasteryCheckpointChanged)
 		})
+	}
+}
+
+func TestAdvanceMasterySubjectRejectsWeightedCheckpoint(t *testing.T) {
+	t.Parallel()
+	asOf := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	key := MasterySubject{GenerationID: uuid.New(), TenantID: uuid.New(), SubjectKind: "player", RealmID: uuid.New(), SubjectID: "player", InstanceName: "Raid", EncounterName: "Boss", MaxPlayers: 40, PerformanceMetric: "dps", WindowKind: "period"}
+	policy := database.RatingGroupPolicy{PeriodDays: 1, BestWeight: .5, FormWeight: .3, FloorWeight: .2, FullRankKills: 5, RankOneWeight: .5}
+	for _, state := range []database.RatingMasteryAccumulator{
+		{Pass: "latest"}, {Pass: "weight"},
+		{Pass: "quantile", TotalWeight: 1},
+	} {
+		f := &masteryFakeStore{checkpoint: database.RatingRebuildCheckpoint{Phase: "mastery_pending", Cursor: []byte(`{}`), AsOf: database.Timestamptz(asOf)}, state: state}
+		_, _, err := AdvanceMasterySubject(context.Background(), f, key, asOf, asOf.AddDate(0, 0, -1), policy, []byte(`{}`), []byte(`{"done":true}`), func(context.Context, database.Store, MasteryResult) error { panic("obsolete checkpoint wrote a score") })
+		require.ErrorContains(t, err, "obsolete recency-weighted mastery checkpoint")
 	}
 }
 
@@ -191,11 +206,11 @@ func TestAdvanceMasterySubjectRejectsChangedStageAndPolicy(t *testing.T) {
 	original := f.player
 	f.player = f.player[:4]
 	require.ErrorContains(t, advance(), "changed length")
-	f.player = original // latest detects deletion
-	require.Equal(t, "latest", f.state.Pass)
-	policy.HalfLifeDays = math.NaN()
+	f.player = original // quantile pass detects deletion
+	require.Equal(t, "quantile", f.state.Pass)
+	policy.BestWeight = math.NaN()
 	require.ErrorContains(t, advance(), "invalid mastery")
 	f.failCAS = true
-	policy.HalfLifeDays = 1
+	policy.BestWeight = .5
 	require.True(t, errors.Is(advance(), ErrMasteryCheckpointChanged))
 }

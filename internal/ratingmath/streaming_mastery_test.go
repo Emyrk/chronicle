@@ -54,7 +54,7 @@ func TestScoreMasteryStreamParity(t *testing.T) {
 			{Score: 20, KilledAt: now.Add(-24 * time.Hour)}, {Score: 30, KilledAt: now},
 			{Score: 40, KilledAt: now.Add(-time.Hour)}, {Score: 50, KilledAt: now.Add(-time.Hour)},
 		},
-		"old weights underflow": {
+		"very old observations": {
 			{Score: 10, KilledAt: now.Add(-100 * 365 * 24 * time.Hour)},
 			{Score: 30, KilledAt: now.Add(-24 * time.Hour)}, {Score: 60, KilledAt: now},
 			{Score: 80, KilledAt: now.Add(-time.Hour)}, {Score: 100, KilledAt: now},
@@ -88,7 +88,7 @@ func TestScoreMasteryStreamParity(t *testing.T) {
 				if len(items) == 0 {
 					require.Equal(t, 1, passes)
 				} else {
-					require.Equal(t, 4, passes)
+					require.Equal(t, 2, passes)
 				}
 			})
 		}
@@ -134,7 +134,7 @@ func TestScoreMasteryStreamErrors(t *testing.T) {
 	require.Zero(t, calls)
 
 	boom := errors.New("page fetch failed")
-	for failedPass := 1; failedPass <= 4; failedPass++ {
+	for failedPass := 1; failedPass <= 2; failedPass++ {
 		passes := 0
 		items := []ParseObservation{{Score: 10}, {Score: 20}, {Score: 30}, {Score: 40}, {Score: 50}}
 		replay := pagedMasteryReplay(items, 2)

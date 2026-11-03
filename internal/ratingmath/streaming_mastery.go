@@ -14,8 +14,8 @@ import (
 type MasteryReplay func(context.Context, func(ParseObservation) error) error
 
 // ScoreMasteryStream computes the same result as ScoreMastery with constant
-// memory. It replays the input four times: count/validate/best, newest retained
-// kill, total retained recency weight, and retained weighted quantiles. The
+// memory. It replays the input twice: count/validate/best, then retained
+// score-ordered quantiles. The
 // supplied context is checked between observations and passed to each replay.
 // On error it returns a zero result. Empty input needs only one replay and,
 // like ScoreMastery, does not validate the policy.
@@ -74,57 +74,24 @@ func ScoreMasteryStream(ctx context.Context, replay MasteryReplay, policy Master
 	if result.EligibleKills == 0 {
 		return result, nil
 	}
-	if policy.HalfLife <= 0 || policy.RankWeight == nil ||
+	if policy.RankWeight == nil ||
 		policy.BestWeight < 0 || policy.FormWeight < 0 || policy.FloorWeight < 0 ||
 		math.Abs(policy.BestWeight+policy.FormWeight+policy.FloorWeight-1) > 1e-9 {
 		return MasteryResult{}, errors.New("invalid Mastery policy")
 	}
 	result.ExcludedKills = DropCount(result.EligibleKills)
 	retained := result.EligibleKills - result.ExcludedKills
-	// The latest must be among retained rows: excluded lows can be newer than
-	// every retained kill, and anchoring to them can underflow all weights.
-	var latest ParseObservation
-	haveLatest := false
+	position := 0
 	if err := visitRetained(visit, result.ExcludedKills, retained, func(item ParseObservation) {
-		if !haveLatest || item.KilledAt.After(latest.KilledAt) {
-			latest = item
-			haveLatest = true
+		if position == (retained-1)/4 {
+			result.Floor = item.Score
 		}
+		if position == (retained-1)/2 {
+			result.Form = item.Score
+		}
+		position++
 	}); err != nil {
 		return MasteryResult{}, err
-	}
-	weight := func(item ParseObservation) float64 {
-		return math.Exp2(-latest.KilledAt.Sub(item.KilledAt).Hours() / policy.HalfLife.Hours())
-	}
-	var total float64
-	if err := visitRetained(visit, result.ExcludedKills, retained, func(item ParseObservation) {
-		total += weight(item)
-	}); err != nil {
-		return MasteryResult{}, err
-	}
-	if total == 0 {
-		return MasteryResult{}, errors.New("recency weights underflowed")
-	}
-	var cumulative, lastScore float64
-	floorFound, formFound := false, false
-	if err := visitRetained(visit, result.ExcludedKills, retained, func(item ParseObservation) {
-		cumulative += weight(item)
-		lastScore = item.Score
-		if !floorFound && cumulative >= .25*total {
-			result.Floor, floorFound = item.Score, true
-		}
-		if !formFound && cumulative >= .5*total {
-			result.Form, formFound = item.Score, true
-		}
-	}); err != nil {
-		return MasteryResult{}, err
-	}
-	// Match ScoreMastery's fallback when rounding leaves a threshold unmet.
-	if !floorFound {
-		result.Floor = lastScore
-	}
-	if !formFound {
-		result.Form = lastScore
 	}
 	result.Mastery = policy.BestWeight*result.Best + policy.FormWeight*result.Form + policy.FloorWeight*result.Floor
 	result.Confidence = 1 - math.Exp(-float64(result.EligibleKills)/4)

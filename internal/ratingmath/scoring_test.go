@@ -10,7 +10,6 @@ import (
 
 func candidateMasteryPolicy() MasteryPolicy {
 	return MasteryPolicy{
-		HalfLife:   42 * 24 * time.Hour,
 		BestWeight: .3, FormWeight: .5, FloorWeight: .2,
 		RankWeight: func(n int) float64 {
 			if n >= 5 {
@@ -70,6 +69,22 @@ func TestScoreMastery(t *testing.T) {
 	require.Error(t, err)
 	_, err = ScoreMastery([]ParseObservation{{Score: 1, KilledAt: now}}, MasteryPolicy{})
 	require.Error(t, err)
+}
+
+func TestMasteryPercentilesDoNotDecayWithAge(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 2, 0, 0, 0, 0, time.UTC)
+	observations := []ParseObservation{
+		{Score: 20, KilledAt: now.Add(-90 * 24 * time.Hour)},
+		{Score: 40, KilledAt: now.Add(-60 * 24 * time.Hour)},
+		{Score: 60, KilledAt: now.Add(-30 * 24 * time.Hour)},
+		{Score: 80, KilledAt: now},
+	}
+	result, err := ScoreMastery(observations, candidateMasteryPolicy())
+	require.NoError(t, err)
+	require.Equal(t, 20.0, result.Floor)
+	require.Equal(t, 40.0, result.Form)
+	require.Equal(t, 80.0, result.Best)
 }
 
 func TestPeakTime(t *testing.T) {

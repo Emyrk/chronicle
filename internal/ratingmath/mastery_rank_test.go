@@ -31,7 +31,7 @@ func TestEdgeOfMadnessMasteryRankCredit(t *testing.T) {
 			t.Parallel()
 			// Both direct rebuilds use ScoreMastery with this rank-credit policy.
 			direct, err := ScoreMastery([]ParseObservation{observation}, MasteryPolicy{
-				HalfLife: 24 * time.Hour, BestWeight: policy.BestWeight, FormWeight: policy.FormWeight,
+				BestWeight: policy.BestWeight, FormWeight: policy.FormWeight,
 				FloorWeight: policy.FloorWeight, RankWeight: masteryRankWeight(policy, tc.instance, tc.boss),
 			})
 			require.NoError(t, err)

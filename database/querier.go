@@ -638,7 +638,7 @@ type sqlcQuerier interface {
 	HeartbeatRatingRebuildCheckpoint(ctx context.Context, arg HeartbeatRatingRebuildCheckpointParams) (int64, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
 	// Persist one constant-size state per subject/window. The caller must use the
-	// frozen manifest to select the window, half-life and rank weight. Replays do
+	// frozen manifest to select the window and rank weight. Replays do
 	// not modify staging. Insert and update may share the checkpoint CAS transaction.
 	InitRatingMasteryAccumulator(ctx context.Context, arg InitRatingMasteryAccumulatorParams) error
 	InitializeUserWhatsNewState(ctx context.Context, arg InitializeUserWhatsNewStateParams) (UserWhatsNewState, error)

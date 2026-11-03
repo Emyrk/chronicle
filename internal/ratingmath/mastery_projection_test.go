@@ -65,11 +65,14 @@ func TestMasteryStageStepWindowsAndTransition(t *testing.T) {
 	// this wrapper. Its InTx method otherwise passes the embedded fake to writes.
 	for i := 0; i < 10; i++ {
 		// The fake needs an independent accumulator for the second window.
-		if i == 4 {
+		if i == 2 {
 			f.state = database.RatingMasteryAccumulator{}
 		}
 		err = MasteryStageStep(t.Context(), f, tenant, generation)
 		require.NoError(t, err)
+		if f.checkpoint.Phase == "player_scopes" {
+			break
+		}
 	}
 	require.Equal(t, "player_scopes", f.checkpoint.Phase)
 	require.Len(t, f.playerScores, 4)

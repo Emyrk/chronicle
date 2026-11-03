@@ -16,7 +16,6 @@ type ParseObservation struct {
 }
 
 type MasteryPolicy struct {
-	HalfLife    time.Duration
 	BestWeight  float64
 	FormWeight  float64
 	FloorWeight float64
@@ -36,7 +35,7 @@ func ScoreMastery(observations []ParseObservation, policy MasteryPolicy) (Master
 	if len(observations) == 0 {
 		return result, nil
 	}
-	if policy.HalfLife <= 0 || policy.RankWeight == nil ||
+	if policy.RankWeight == nil ||
 		policy.BestWeight < 0 || policy.FormWeight < 0 || policy.FloorWeight < 0 ||
 		math.Abs(policy.BestWeight+policy.FormWeight+policy.FloorWeight-1) > 1e-9 {
 		return result, errors.New("invalid Mastery policy")
@@ -71,35 +70,10 @@ func ScoreMastery(observations []ParseObservation, policy MasteryPolicy) (Master
 	result.EligibleKills = len(items)
 	result.ExcludedKills = DropCount(len(items))
 	items = items[result.ExcludedKills:]
-	// Normalizing to the newest retained observation does not change weighted
-	// quantiles: the excluded latest kill would multiply every retained weight
-	// by the same factor, which cancels in each cumulative threshold.
-	latest := items[0].KilledAt
-	for _, item := range items {
-		if item.KilledAt.After(latest) {
-			latest = item.KilledAt
-		}
-	}
-	weights := make([]float64, len(items))
-	var total float64
-	for i, item := range items {
-		weights[i] = math.Exp2(-latest.Sub(item.KilledAt).Hours() / policy.HalfLife.Hours())
-		total += weights[i]
-	}
-	if total == 0 {
-		return MasteryResult{}, errors.New("recency weights underflowed")
-	}
-	quantile := func(q float64) float64 {
-		var cumulative float64
-		for i, item := range items {
-			cumulative += weights[i]
-			if cumulative >= q*total {
-				return item.Score
-			}
-		}
-		return items[len(items)-1].Score
-	}
-	result.Form, result.Floor = quantile(0.5), quantile(0.25)
+	// Use the lower nearest-rank quantiles of the retained, score-ordered
+	// kills. Timestamps only determine eligibility and stable tie order.
+	result.Form = items[(len(items)-1)/2].Score
+	result.Floor = items[(len(items)-1)/4].Score
 	result.Mastery = policy.BestWeight*result.Best + policy.FormWeight*result.Form + policy.FloorWeight*result.Floor
 	result.Confidence = 1 - math.Exp(-float64(result.EligibleKills)/4)
 	weight := policy.RankWeight(result.EligibleKills)

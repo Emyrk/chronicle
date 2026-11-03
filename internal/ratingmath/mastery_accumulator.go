@@ -31,7 +31,7 @@ var ErrMasteryCheckpointChanged = errors.New("mastery rebuild checkpoint changed
 // mastery_pending -> player_scopes transition after ALL subjects complete.
 // Neither policy, asOf, nor windowStart is persisted: callers MUST reload
 // identical values from the frozen generation manifest on every retry.
-// Stage observations MUST remain immutable through all four passes.
+// Stage observations MUST remain immutable through both passes.
 func AdvanceMasterySubject(ctx context.Context, db database.Store, subject MasterySubject,
 	asOf, windowStart time.Time, policy database.RatingGroupPolicy,
 	expectedCursor, nextCursor []byte, write func(context.Context, database.Store, MasteryResult) error) (result MasteryResult, complete bool, err error) {
@@ -39,7 +39,6 @@ func AdvanceMasterySubject(ctx context.Context, db database.Store, subject Maste
 		(subject.SubjectKind != "player" && subject.SubjectKind != "guild") ||
 		(subject.WindowKind != "period" && subject.WindowKind != "all_time") ||
 		asOf.IsZero() || windowStart.IsZero() || windowStart.After(asOf) ||
-		policy.HalfLifeDays <= 0 || math.IsNaN(policy.HalfLifeDays) || math.IsInf(policy.HalfLifeDays, 0) ||
 		policy.FullRankKills < 1 || policy.RankOneWeight < 0 || policy.RankOneWeight > 1 ||
 		math.IsNaN(policy.RankOneWeight) || math.IsInf(policy.RankOneWeight, 0) ||
 		math.IsNaN(policy.BestWeight) || math.IsNaN(policy.FormWeight) || math.IsNaN(policy.FloorWeight) ||
@@ -78,6 +77,12 @@ func AdvanceMasterySubject(ctx context.Context, db database.Store, subject Maste
 		if state.Pass == "complete" {
 			return errors.New("completed mastery subject still owns checkpoint cursor")
 		}
+		// An in-flight weighted-quantile job cannot resume under the new
+		// unweighted rule. Restart it with a fresh generation instead.
+		if state.Pass == "latest" || state.Pass == "weight" ||
+			(state.Pass == "quantile" && (state.LatestRetainedAt.Valid || state.TotalWeight != 0 || state.CumulativeWeight != 0)) {
+			return errors.New("obsolete recency-weighted mastery checkpoint; start a new rebuild")
+		}
 		rows, err := masteryPage(ctx, tx, subject, state, asOf, windowStart)
 		if err != nil {
 			return err
@@ -112,26 +117,14 @@ func AdvanceMasterySubject(ctx context.Context, db database.Store, subject Maste
 				continue
 			}
 			switch state.Pass {
-			case "latest":
-				if !next.NextLatestRetainedAt.Valid || row.killed.Time.After(next.NextLatestRetainedAt.Time) {
-					next.NextLatestRetainedAt = row.killed
+			case "quantile":
+				retainedPosition := next.NextPosition - state.ExcludedKills - 1
+				retainedCount := state.EligibleKills - state.ExcludedKills
+				if retainedPosition == (retainedCount-1)/4 {
+					next.NextFloorScore = pgtype.Float8{Float64: row.score.Float64, Valid: true}
 				}
-			case "weight", "quantile":
-				if !state.LatestRetainedAt.Valid {
-					return errors.New("missing retained recency anchor")
-				}
-				weight := math.Exp2(-state.LatestRetainedAt.Time.Sub(row.killed.Time).Hours() / (policy.HalfLifeDays * 24))
-				if state.Pass == "weight" {
-					next.NextTotalWeight += weight
-				} else {
-					next.NextCumulativeWeight += weight
-					next.NextLastRetainedScore = pgtype.Float8{Float64: row.score.Float64, Valid: true}
-					if !next.NextFloorScore.Valid && next.NextCumulativeWeight >= .25*state.TotalWeight {
-						next.NextFloorScore = next.NextLastRetainedScore
-					}
-					if !next.NextFormScore.Valid && next.NextCumulativeWeight >= .5*state.TotalWeight {
-						next.NextFormScore = next.NextLastRetainedScore
-					}
+				if retainedPosition == (retainedCount-1)/2 {
+					next.NextFormScore = pgtype.Float8{Float64: row.score.Float64, Valid: true}
 				}
 			default:
 				return fmt.Errorf("unknown mastery pass %q", state.Pass)
@@ -150,22 +143,9 @@ func AdvanceMasterySubject(ctx context.Context, db database.Store, subject Maste
 			switch state.Pass {
 			case "count":
 				next.NextExcludedKills = int64(DropCount(int(next.NextEligibleKills)))
-				next.NextPass = "latest"
-			case "latest":
-				next.NextPass = "weight"
-			case "weight":
-				if next.NextEligibleKills > 0 && next.NextTotalWeight == 0 {
-					return errors.New("recency weights underflowed")
-				}
 				next.NextPass = "quantile"
 			case "quantile":
 				next.NextPass = "complete"
-				if !next.NextFloorScore.Valid {
-					next.NextFloorScore = next.NextLastRetainedScore
-				}
-				if !next.NextFormScore.Valid {
-					next.NextFormScore = next.NextLastRetainedScore
-				}
 			default:
 				return fmt.Errorf("unknown mastery pass %q", state.Pass)
 			}

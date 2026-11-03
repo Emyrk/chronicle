@@ -22300,7 +22300,7 @@ type InitRatingMasteryAccumulatorParams struct {
 }
 
 // Persist one constant-size state per subject/window. The caller must use the
-// frozen manifest to select the window, half-life and rank weight. Replays do
+// frozen manifest to select the window and rank weight. Replays do
 // not modify staging. Insert and update may share the checkpoint CAS transaction.
 func (q *sqlQuerier) InitRatingMasteryAccumulator(ctx context.Context, arg InitRatingMasteryAccumulatorParams) error {
 	_, err := q.db.Exec(ctx, initRatingMasteryAccumulator,

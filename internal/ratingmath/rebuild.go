@@ -288,7 +288,6 @@ func BuildTenantRatings(ctx context.Context, store ratingStore, tenant uuid.UUID
 				continue
 			}
 			mastery, err := ScoreMastery(entry.parses, MasteryPolicy{
-				HalfLife:   time.Duration(policy.HalfLifeDays * float64(24*time.Hour)),
 				BestWeight: policy.BestWeight, FormWeight: policy.FormWeight, FloorWeight: policy.FloorWeight,
 				RankWeight: masteryRankWeight(policy, key.instance, key.boss),
 			})
