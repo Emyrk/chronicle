@@ -82,19 +82,8 @@ function toRows(list: GuildRating[]): MetricRow[] {
 }
 
 /** The overview's ratings card in Guilds mode: top five guilds per metric. */
-export function GuildRatingLeaders({
-  bosses,
-  allBosses,
-  instanceName,
-  onOpen,
-}: {
-  bosses?: readonly string[]
-  allBosses: readonly string[]
-  instanceName: string
-  onOpen: (metric: RatingMetric) => void
-}) {
-  const r = guildRatings(bosses, allBosses, instanceName, 5)
-  return <MetricColumns columns={{ peak: toRows(r.peak), mastery: toRows(r.mastery), renown: toRows(r.renown) }} onOpen={onOpen} />
+export function GuildRatingLeaders({ ratings, onOpen }: { ratings: Record<RatingMetric, GuildRating[]>; onOpen: (metric: RatingMetric) => void }) {
+  return <MetricColumns columns={{ peak: toRows(ratings.peak), mastery: toRows(ratings.mastery), renown: toRows(ratings.renown) }} onOpen={onOpen} />
 }
 
 /**

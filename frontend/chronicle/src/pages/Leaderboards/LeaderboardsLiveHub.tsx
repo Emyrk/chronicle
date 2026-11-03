@@ -69,10 +69,11 @@ function LiveInstanceHub({ instanceName, names, summary, realm, realmIDs, encoun
   onRealm: (name: string) => void; onCohort: (difficulty: string, size: string) => void; onEncounter: (boss?: string) => void
 }) {
   const raids = summary.instances.filter((row) => row.instance_name === instanceName && row.category === "raid")
-  const cohort = raids.length === 1 ? raids[0]
-    : size !== null && difficulty !== null
-      ? raids.find((row) => row.difficulty_name === difficulty && String(row.max_players) === size)
-      : undefined
+  // The summary resolves the URL's cohort, or the busiest one when none (or a stale one) is given.
+  const resolved = summary.selected_cohort
+  const cohort = (size !== null && difficulty !== null
+    ? raids.find((row) => row.difficulty_name === difficulty && String(row.max_players) === size)
+    : undefined) ?? raids.find((row) => row.difficulty_name === resolved?.difficulty_name && row.max_players === resolved?.max_players)
   const realmName = realm === ALL_REALMS ? undefined : realm
   const bosses = liveHubBosses(summary.encounters.map((row) => row.encounter_name),
     new Set(summary.progression_bosses ?? []), summary.ranking_encounter_sets ?? [], tab === "performances")
@@ -104,7 +105,7 @@ function LiveHubContent({ context, summary, requestedEncounter, realmName, realm
   context: HubLiveTabContext; summary: HubSummary; requestedEncounter?: string; realmName?: string; realmIDs: readonly string[]
   cohort?: { difficulty_name: string; max_players: number }; bosses: readonly string[]; overview?: boolean
 }) {
-  const { instanceName, scope, role, subject, selection, onTab, onRatings } = context
+  const { instanceName, scope, role, subject, selection, onTab } = context
   const raids = summary.instances.filter((row) => row.instance_name === instanceName && row.category === "raid")
   const chosen = cohort && raids.some((row) => row.difficulty_name === cohort.difficulty_name && row.max_players === cohort.max_players) ? cohort : undefined
   const boss = selection.kind === "bosses" && selection.bosses.length === 1 ? selection.bosses[0] : undefined
@@ -142,16 +143,7 @@ function LiveHubContent({ context, summary, requestedEncounter, realmName, realm
   const timeSpreads = useTimeParseSpreads(instanceName, !overview && context.tab === "parsing" && !!chosen && !realmName)
   const queryState = <T,>(query: { data?: T; isPending: boolean; isError: boolean }) => query.isError ? { status: "error" as const } : query.isPending ? { status: "loading" as const } : { status: "ready" as const, data: query.data! }
   if (!overview && realmIDs.length > 1) return <p role="status" className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">Choose one realm or All realms in the Hub selector. This view cannot apply multiple realms.</p>
-  if (overview) return <LiveHubOverview instanceName={instanceName} summary={summary} requestedEncounter={requestedEncounter} selection={selection} cls={scope.cls} spec={scope.spec} subSpec={scope.subSpec}
-    role={role} subject={subject === "guilds" ? "guild" : "player"} realmName={realmName} realmIDs={realmIDs}
-    performanceCohort={chosen ? { difficulty: chosen.difficulty_name, maxPlayers: chosen.max_players } : undefined}
-    ratingCohort={chosen ? {
-      difficulty: chosen.difficulty_name, maxPlayers: chosen.max_players,
-      ...(subject === "characters" ? { playerClass: scope.cls, spec: scope.spec,
-        subSpec: scope.spec ? (scope.subSpec ?? "") : undefined,
-        performance: role === "healing" ? "hps" as const : "dps" as const } : {}),
-    } : undefined}
-    bosses={bosses} onTab={onTab} onBoss={(name) => context.setSelection({ kind: "bosses", bosses: [name] })} onRatings={onRatings} />
+  if (overview) return <LiveHubOverview context={context} summary={summary} requestedEncounter={requestedEncounter} realmName={realmName} realmIDs={realmIDs} bosses={bosses} />
   if (context.tab === "ratings") return <LiveHubRatings instanceName={instanceName} bosses={bosses}
     scope={scope} onScope={context.onScope} view={context.ratingView} onView={context.onView} period={context.period}
     subject={subject === "guilds" ? "guild" : "player"} realmIDs={realmIDs} role={role} cls={scope.cls} spec={scope.spec} subSpec={scope.subSpec}

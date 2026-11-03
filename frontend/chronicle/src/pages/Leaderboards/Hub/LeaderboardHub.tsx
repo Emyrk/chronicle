@@ -25,29 +25,23 @@ import { FULL_CLEAR, type EncounterSelection } from "./encounterSelection"
 import { HUB_REALMS, useHubRealm } from "./hubRealm"
 import { setMockRealm } from "@/pages/Leaderboards/Ratings/mockRealm"
 import {
-  bossSummaries,
-  bossSummary,
-  cohorts,
-  specStanding,
+  fixtureOverviewData,
   formatClock,
-  guildLogo,
-  guildTimeSpreads,
-  speedruns,
   instanceBosses,
   OPTIONAL_BOSSES,
-  guildRows,
-  ratingLeaders,
-  specSpreads,
   specsFor,
   subSpecsFor,
-  topThroughput,
   type BossSummary,
   type Cohort,
+  type GuildRating,
   type GuildRow,
   type GuildTimeSpread,
   type HubPlayer,
   type HubRole,
   type HubSubject,
+  type RatingLeader,
+  type SpecSpread,
+  type ThroughputRow,
 } from "./hub.fixtures"
 
 /**
@@ -127,6 +121,9 @@ export interface HubLiveTabContext {
   onRatings: (view: RatingView) => void
   onStatistics: (view: StatisticsView) => void
   onScope: (scope: RatingScope) => void
+  onRole: (role: HubRole) => void
+  /** The Overview's framing, computed once by the hub so live and Storybook read the same. */
+  overview: Pick<OverviewProps, "kind" | "set" | "where" | "noRole">
 }
 
 export interface HubLiveData {
@@ -141,7 +138,7 @@ export interface HubLiveData {
   subSpecsFor: (cls: string, spec: string) => string[]
   /** Every live tab is supplied by the adapter; fixture-backed tab components are never mounted. */
   renderTab: (context: HubLiveTabContext) => ReactNode
-  /** Render the Storybook Overview layout using the exported presentational pieces below. */
+  /** Render `Overview` with live data; the hub passes everything but the data. */
   renderOverview?: (context: HubLiveTabContext) => ReactNode
 }
 
@@ -281,7 +278,8 @@ export function LeaderboardHub({
     tab, instanceName, realm, onSwitchInstance, scope, role, subject, ratingView, statisticsView, period,
     onView: setRatingView, onStatisticsView: setStatisticsView, onPeriod: setPeriod, selection,
     setSelection: selectEncounter, onTab: setTab, onRatings: openRatings,
-    onStatistics: openStatistics, onScope: setScope,
+    onStatistics: openStatistics, onScope: setScope, onRole: changeRole,
+    overview: { kind, set, where, noRole: !!scope.cls && (live ? live.specsFor : specsFor)(scope.cls, role).length === 0 },
   }
 
   // Guilds mode tints the page gold, the Guilds toggle's color: a faint wash from the top, a gold-edged
@@ -447,13 +445,12 @@ export function LeaderboardHub({
                 tab === "overview" && live.renderOverview ? live.renderOverview(liveContext) : live.renderTab(liveContext)
               ) : tab === "overview" ? (
                 <Overview
+                  {...liveContext.overview}
+                  data={fixtureOverviewData(instanceName, scope, role, set)}
                   instanceName={instanceName}
                   scope={scope}
                   role={role}
                   subject={subject}
-                  kind={kind}
-                  set={set}
-                  where={where}
                   onScope={setScope}
                   onTab={setTab}
                   onRatings={openRatings}
@@ -572,20 +569,42 @@ function InstanceTitle({
   )
 }
 
-function Overview({
-  instanceName,
-  scope,
-  role,
-  subject,
-  kind,
-  set,
-  where,
-  onScope,
-  onTab,
-  onRatings,
-  onStatistics,
-  onRole,
-}: {
+/**
+ * Everything the Overview draws, already scoped to the page's boss, class, spec, role, and realm.
+ * A missing slot means the data is not published for this scope: its card keeps its place and says so.
+ */
+export interface OverviewData {
+  /** Fastest runs, fastest first: the podium shows three, the guild card all of them. */
+  speedruns?: readonly SpeedrunLeaderboardEntry[]
+  ratings?: Record<RatingMetric, RatingLeader[]>
+  guildRatings?: Record<RatingMetric, GuildRating[]>
+  guildRenown?: GuildRow[]
+  guildClears?: GuildRow[]
+  performances?: ThroughputRow[]
+  /** Every spec in the role, best median first. */
+  specSpreads?: SpecSpread[]
+  /** The chosen class's specs, for the class overview's headline cards. */
+  cohorts?: Cohort[]
+  guildTimeSpreads?: GuildTimeSpread[]
+  /** The chosen boss's stats. */
+  boss?: LiveBossSummary
+  bosses?: readonly LiveBossSummary[]
+  optionalBosses?: ReadonlySet<string>
+  /** Still loading: empty slots read as loading rather than unpublished. */
+  pending?: boolean
+}
+
+/** A card body for a slot without rows. */
+function Empty({ pending, text = "Not published for this selection yet" }: { pending?: boolean; text?: string }) {
+  return <p className="px-4 py-6 text-center text-xs text-muted-foreground">{pending ? "Loading…" : text}</p>
+}
+
+function filled<T>(rows: readonly T[] | undefined, pending: boolean | undefined, render: (rows: readonly T[]) => ReactNode) {
+  return rows?.length ? render(rows) : <Empty pending={pending} text={rows ? "No entries yet" : undefined} />
+}
+
+export interface OverviewProps {
+  data: OverviewData
   instanceName: string
   scope: RatingScope
   role: HubRole
@@ -594,18 +613,22 @@ function Overview({
   /** Combined bosses, when two or more are chosen. */
   set?: readonly string[]
   where: string
+  /** The chosen class has no spec in this role. */
+  noRole: boolean
   onScope: (scope: RatingScope) => void
   onTab: (tab: HubTab) => void
   onRatings: (view: RatingView) => void
   onStatistics: (view: StatisticsView) => void
   onRole: (role: HubRole) => void
-}) {
+}
+
+export function Overview({ data, instanceName, scope, role, subject, kind, set, where, noRole, onScope, onTab, onRatings, onStatistics, onRole }: OverviewProps) {
   const roleLabel = role === "dps" ? "DPS" : "HPS"
   const guilds = subject === "guilds"
-  const noRole = scope.cls && specsFor(scope.cls, role).length === 0
+  const { pending } = data
   const spreadCard = (
     <Card title={`Typical ${roleLabel} parse by spec`} action={{ label: "Box plot", onClick: () => onStatistics("specs") }}>
-      <SpecSpreads scope={scope} role={role} />
+      {filled(data.specSpreads, pending, (rows) => <SpecSpreads rows={rows.slice(0, 8)} />)}
     </Card>
   )
 
@@ -616,11 +639,11 @@ function Overview({
   return (
     <div className="space-y-5">
       {cohort ? (
-        <CohortHero scope={scope} role={role} onScope={onScope} onRole={onRole} />
+        data.cohorts?.length ? <CohortHero cohorts={data.cohorts} scope={scope} role={role} onScope={onScope} onRole={onRole} /> : null
       ) : (
-        <SpeedHero instanceName={instanceName} scope={scope} set={set} onOpen={() => onTab("speedruns")} />
+        <SpeedHero instanceName={instanceName} scope={scope} set={set} onOpen={() => onTab("speedruns")} entries={data.speedruns?.slice(0, 3)} pending={pending} />
       )}
-      {scope.boss && <BossStats boss={bossSummary(scope.boss, instanceBosses(instanceName))} />}
+      {scope.boss && <BossStats boss={data.boss ?? { boss: scope.boss }} />}
 
       {noRole ? (
         <div className="rounded-xl border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
@@ -632,14 +655,11 @@ function Overview({
           <Card title={`${guilds ? "Guild Ratings" : "Ratings"} · ${where}`} action={{ label: "Ratings", onClick: () => onRatings("overview") }}>
             {guilds ? (
               // A guild run is rated like a player's parse: its time against the fastest.
-              <GuildRatingLeaders
-                bosses={set ?? (scope.boss ? [scope.boss] : undefined)}
-                allBosses={instanceBosses(instanceName)}
-                instanceName={instanceName}
-                onOpen={onRatings}
-              />
+              data.guildRatings ? <GuildRatingLeaders ratings={data.guildRatings} onOpen={onRatings} /> : <Empty pending={pending} />
+            ) : data.ratings ? (
+              <RatingLeaders leaders={data.ratings} onOpen={onRatings} />
             ) : (
-              <RatingLeaders scope={scope} role={role} onOpen={onRatings} />
+              <Empty pending={pending} />
             )}
           </Card>
           {cohort ? (
@@ -648,7 +668,9 @@ function Overview({
               action={{ label: "Box plot", onClick: () => onStatistics("specs") }}
               className="lg:row-span-2"
             >
-              <SpecStandingList scope={scope} role={role} onPick={(cls, spec, subSpec) => onScope({ boss: scope.boss, cls, spec, subSpec })} />
+              {filled(data.specSpreads, pending, (rows) => (
+                <SpecStandingList rows={rows} scope={scope} onPick={(cls, spec, subSpec) => onScope({ boss: scope.boss, cls, spec, subSpec })} />
+              ))}
             </Card>
           ) : guilds ? (
             // Renown is already a column of Guild Ratings; this slot counts clears instead.
@@ -656,17 +678,13 @@ function Overview({
               title={`${scope.boss || set ? "Kills" : "# Clears"} by guild · ${where}`}
               action={{ label: "Speedruns", onClick: () => onTab("speedruns") }}
             >
-              <GuildList rows={guildRows("clears", scope, role, 5, !!scope.boss || !!set)} format={(v) => String(v)} bars />
+              {filled(data.guildClears, pending, (rows) => <GuildList rows={rows} format={(v) => String(v)} bars />)}
             </Card>
           ) : (
             <Card title={`Guild Renown · ${where}`} metric="renown" action={{ label: "Renown", onClick: () => onRatings("renown") }}>
-              <GuildList
-                rows={guildRows("renown", scope, role, 5, !!scope.boss || !!set)}
-                format={(v) => v.toLocaleString()}
-                bars
-                showDetail
-                accent={METRIC_THEMES.renown.accent}
-              />
+              {filled(data.guildRenown, pending, (rows) => (
+                <GuildList rows={rows} format={(v) => v.toLocaleString()} bars showDetail accent={METRIC_THEMES.renown.accent} />
+              ))}
             </Card>
           )}
           {guilds ? (
@@ -675,11 +693,11 @@ function Overview({
               title={`Best Performances (${set ? "Total kill time" : scope.boss ? "Kill time" : "Clear time"}) · ${where}`}
               action={{ label: "Speedruns", onClick: () => onTab("speedruns") }}
             >
-              <RunList runs={speedruns(set ?? (scope.boss ? [scope.boss] : undefined), instanceBosses(instanceName), instanceName, 8)} />
+              {filled(data.speedruns, pending, (runs) => <RunList runs={runs} />)}
             </Card>
           ) : (
             <Card title={`Best Performances (${roleLabel}) · ${where}`} action={{ label: "Performances", onClick: () => onTab("performances") }}>
-              <ThroughputList scope={scope} role={role} />
+              {filled(data.performances, pending, (rows) => <ThroughputList rows={rows} />)}
             </Card>
           )}
           {guilds ? (
@@ -687,7 +705,7 @@ function Overview({
               title={`Typical ${set ? "total kill time" : scope.boss ? "kill time" : "clear time"} by guild · ${where}`}
               action={{ label: "Kill times", onClick: () => onStatistics("killtimes") }}
             >
-              <GuildSpreads spreads={guildTimeSpreads(set ?? (scope.boss ? [scope.boss] : undefined), instanceBosses(instanceName), instanceName)} />
+              {filled(data.guildTimeSpreads, pending, (spreads) => <GuildSpreads spreads={spreads} />)}
             </Card>
           ) : (
             !cohort && spreadCard
@@ -695,7 +713,9 @@ function Overview({
         </div>
       )}
 
-      {!scope.boss && <BossGrid instanceName={instanceName} scope={scope} role={role} only={set} onBoss={(boss) => onScope({ ...scope, boss })} />}
+      {!scope.boss && data.bosses && (
+        <BossGrid role={role} only={set} onBoss={(boss) => onScope({ ...scope, boss })} summaries={data.bosses} optionalBosses={data.optionalBosses} />
+      )}
     </div>
   )
 }
@@ -705,17 +725,18 @@ function Overview({
  * per subspec once a spec with subspecs is chosen). Clicking narrows to it.
  */
 function CohortHero({
+  cohorts: list,
   scope,
   role,
   onScope,
   onRole,
 }: {
+  cohorts: readonly Cohort[]
   scope: RatingScope
   role: HubRole
   onScope: (scope: RatingScope) => void
   onRole: (role: HubRole) => void
 }) {
-  const list = cohorts(scope, role)
   const single = list.length === 1
   return (
     <section
@@ -783,7 +804,7 @@ function CohortCard({ cohort: c, offRole, current, onOpen }: { cohort: Cohort; o
             )}
           </div>
           <div className="text-xs text-muted-foreground">
-            <span className="font-mono tabular-nums">{c.characters.toLocaleString()}</span> ranked characters
+            <span className="font-mono tabular-nums">{c.characters.toLocaleString()}</span> {c.charactersLabel ?? "ranked characters"}
           </div>
         </div>
       </div>
@@ -859,15 +880,14 @@ function specLabel(s: { cls: string; spec: string; subSpec?: string }, rows: rea
  * and the rest dimmed: is this class good here? Any row opens that spec.
  */
 function SpecStandingList({
+  rows,
   scope,
-  role,
   onPick,
 }: {
+  rows: readonly SpecSpread[]
   scope: RatingScope
-  role: HubRole
   onPick: (cls: string, spec: string, subSpec?: string) => void
 }) {
-  const rows = specStanding(scope.boss, role)
   const lo = Math.min(...rows.map((r) => r.min))
   const hi = Math.max(...rows.map((r) => r.max))
   const pct = (v: number) => ((v - lo) / (hi - lo || 1)) * 100
@@ -913,7 +933,21 @@ function SpecStandingList({
   )
 }
 
-export function SpeedHero({ instanceName, scope, set, onOpen, entries }: { instanceName: string; scope: RatingScope; set?: readonly string[]; onOpen: () => void; entries?: SpeedrunLeaderboardEntry[] }) {
+export function SpeedHero({
+  instanceName,
+  scope,
+  set,
+  onOpen,
+  entries,
+  pending,
+}: {
+  instanceName: string
+  scope: RatingScope
+  set?: readonly string[]
+  onOpen: () => void
+  entries?: readonly SpeedrunLeaderboardEntry[]
+  pending?: boolean
+}) {
   return (
     <section
       className="relative overflow-hidden rounded-xl border bg-cover bg-center"
@@ -924,12 +958,15 @@ export function SpeedHero({ instanceName, scope, set, onOpen, entries }: { insta
         {set ? `Fastest total kill time · ${set.length} bosses` : scope.boss ? `Fastest ${scope.boss} kills` : "Fastest full clears"}
       </span>
       <CardLink label="Speedruns" onClick={onOpen} className="absolute top-3 right-4 z-10" />
-      <div className="relative px-4 pt-10">
-        <Podium
-          entries={entries ?? speedruns(set ?? (scope.boss ? [scope.boss] : undefined), instanceBosses(instanceName), instanceName, 3)}
-          instanceName={instanceName}
-        />
-      </div>
+      {entries?.length ? (
+        <div className="relative px-4 pt-10">
+          <Podium entries={[...entries]} instanceName={instanceName} />
+        </div>
+      ) : (
+        <p className="relative px-4 pt-10 pb-8 text-center text-sm text-muted-foreground">
+          {pending ? "Loading…" : entries ? "No qualifying runs yet" : "Not published for this selection yet"}
+        </p>
+      )}
     </section>
   )
 }
@@ -964,26 +1001,21 @@ export function BossStats({ boss }: { boss: LiveBossSummary }) {
 
 /** One card per boss, its model standing behind the stats: the raid overview's answer to "MC has twelve bosses". */
 export function BossGrid({
-  instanceName,
-  scope,
   role,
   only,
   onBoss,
   summaries,
   optionalBosses,
 }: {
-  instanceName: string
-  scope: RatingScope
   role: HubRole
   /** Limit to a combined set of bosses. */
   only?: readonly string[]
   onBoss: (boss: string) => void
-  /** Pass real summaries to retain the Storybook boss cards without calling fixtures. */
-  summaries?: readonly LiveBossSummary[]
+  summaries: readonly LiveBossSummary[]
   optionalBosses?: ReadonlySet<string>
 }) {
-  const rows = (summaries ?? bossSummaries(scope, role, instanceBosses(instanceName))).filter((b) => !only || only.includes(b.boss))
-  const optionalSet = optionalBosses ?? (summaries ? new Set<string>() : OPTIONAL_BOSSES)
+  const rows = summaries.filter((b) => !only || only.includes(b.boss))
+  const optionalSet = optionalBosses ?? new Set<string>()
   const required = rows.filter((b) => !optionalSet.has(b.boss))
   const optional = rows.filter((b) => optionalSet.has(b.boss))
   const grid = (list: LiveBossSummary[], isOptional: boolean) => (
@@ -1148,8 +1180,7 @@ function PlayerName({ player }: { player: HubPlayer }) {
   )
 }
 
-function RatingLeaders({ scope, role, onOpen }: { scope: RatingScope; role: HubRole; onOpen: (metric: RatingMetric) => void }) {
-  const leaders = ratingLeaders(scope, role)
+function RatingLeaders({ leaders, onOpen }: { leaders: Record<RatingMetric, RatingLeader[]>; onOpen: (metric: RatingMetric) => void }) {
   const rows = (m: RatingMetric) =>
     leaders[m].map((l) => ({
       id: l.player.id,
@@ -1167,7 +1198,7 @@ function RatingLeaders({ scope, role, onOpen }: { scope: RatingScope; role: HubR
 }
 
 /** A guild's best runs, fastest first: the guild counterpart of a player's best parses. */
-function RunList({ runs }: { runs: SpeedrunLeaderboardEntry[] }) {
+function RunList({ runs }: { runs: readonly SpeedrunLeaderboardEntry[] }) {
   return (
     <ol>
       {runs.map((r, i) => (
@@ -1190,8 +1221,7 @@ function RunList({ runs }: { runs: SpeedrunLeaderboardEntry[] }) {
   )
 }
 
-function ThroughputList({ scope, role }: { scope: RatingScope; role: HubRole }) {
-  const rows = topThroughput(scope, role, 8)
+function ThroughputList({ rows }: { rows: readonly ThroughputRow[] }) {
   return (
     <ol>
       {rows.map((r, i) => (
@@ -1207,7 +1237,7 @@ function ThroughputList({ scope, role }: { scope: RatingScope; role: HubRole }) 
             </span>
           </span>
           <span className="hidden truncate text-xs opacity-80 md:block" style={{ color: CLASS_CSS_VAR[r.player.cls] }}>
-            {r.player.spec}
+            {r.player.subSpec ? specName(r.player) : r.player.spec}
           </span>
           <span className="text-right font-mono font-bold tabular-nums">{r.value}/s</span>
           <span className="hidden truncate text-right text-xs text-muted-foreground md:block">{r.player.guild}</span>
@@ -1224,7 +1254,7 @@ function GuildList({
   showDetail = !bars,
   accent,
 }: {
-  rows: GuildRow[]
+  rows: readonly GuildRow[]
   format: (v: number) => string
   bars?: boolean
   showDetail?: boolean
@@ -1239,9 +1269,9 @@ function GuildList({
           <span className="w-4 font-mono text-xs text-muted-foreground">{i + 1}</span>
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center gap-2 font-medium">
-              <GuildName guild={g.guild} logo={guildLogo(g.guild)} />
+              <GuildName guild={g.guild} logo={g.logo} />
             </span>
-            {showDetail && <span className="block text-[11px] text-muted-foreground">{g.detail}</span>}
+            {showDetail && g.detail && <span className="block text-[11px] text-muted-foreground">{g.detail}</span>}
           </span>
           {bars && (
             <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
@@ -1260,7 +1290,7 @@ function GuildList({
  * better, so the axis runs fast (left) to slow (right); a tight box is a
  * guild that clears the same way every week.
  */
-function GuildSpreads({ spreads }: { spreads: GuildTimeSpread[] }) {
+function GuildSpreads({ spreads }: { spreads: readonly GuildTimeSpread[] }) {
   const lo = Math.min(...spreads.map((s) => s.min))
   const hi = Math.max(...spreads.map((s) => s.max))
   const pct = (v: number) => ((v - lo) / (hi - lo || 1)) * 100
@@ -1294,8 +1324,7 @@ function GuildSpreads({ spreads }: { spreads: GuildTimeSpread[] }) {
   )
 }
 
-function SpecSpreads({ scope, role }: { scope: RatingScope; role: HubRole }) {
-  const rows = specSpreads(scope, role, 8)
+function SpecSpreads({ rows }: { rows: readonly SpecSpread[] }) {
   const lo = Math.min(...rows.map((r) => r.min))
   const hi = Math.max(...rows.map((r) => r.max))
   const pct = (v: number) => ((v - lo) / (hi - lo || 1)) * 100
