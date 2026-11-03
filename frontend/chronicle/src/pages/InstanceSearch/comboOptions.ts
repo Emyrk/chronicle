@@ -9,6 +9,8 @@ export interface ComboOption {
   icon?: ReactNode;
   /** Options with the same group are listed together under a header. */
   group?: string;
+  /** Extra text that typing can match but that isn't shown (e.g. a description). */
+  keywords?: string;
 }
 
 /** Plain strings are shorthand for { value }. */
@@ -28,5 +30,5 @@ export function filterOptions(options: readonly ComboOption[], text: string, exc
   const skip = new Set(exclude.map((v) => v.toLowerCase()));
   const pool = options.filter((o) => !skip.has(o.value.toLowerCase()));
   if (!q || pool.some((o) => o.value.toLowerCase() === q)) return pool;
-  return pool.filter((o) => [o.label ?? o.value, o.value, o.hint ?? ""].some((s) => s.toLowerCase().includes(q)));
+  return pool.filter((o) => [o.label ?? o.value, o.value, o.hint ?? "", o.keywords ?? ""].some((s) => s.toLowerCase().includes(q)));
 }

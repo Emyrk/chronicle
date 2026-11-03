@@ -1,4 +1,5 @@
-import { Fragment, useId, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { filterOptions, type ComboOption } from "./comboOptions";
 
@@ -19,6 +20,9 @@ export function ComboInput({
   onEnterText,
   onKeyDown,
   onBlurText,
+  onFocus,
+  selected,
+  blurOnPick,
   placeholder,
   disabled,
   className,
@@ -36,6 +40,11 @@ export function ComboInput({
   /** Runs first; call preventDefault to take over the key. */
   onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
   onBlurText?: (text: string) => void;
+  onFocus?: () => void;
+  /** Value to mark with a check in the list. */
+  selected?: string;
+  /** Leave the box after picking (for pick-one selects). */
+  blurOnPick?: boolean;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
@@ -45,6 +54,7 @@ export function ComboInput({
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
   const listId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const shown = open ? filterOptions(options, text, exclude) : [];
   const active = highlight >= 0 && highlight < shown.length ? highlight : -1;
 
@@ -52,6 +62,7 @@ export function ComboInput({
     onPick(o);
     setOpen(false);
     setHighlight(-1);
+    if (blurOnPick) inputRef.current?.blur();
   };
 
   const keyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -81,6 +92,7 @@ export function ComboInput({
     <div className={cn("relative", className)}>
       {children}
       <input
+        ref={inputRef}
         role="combobox"
         aria-expanded={open && shown.length > 0}
         aria-controls={listId}
@@ -89,7 +101,10 @@ export function ComboInput({
         disabled={disabled}
         value={text}
         placeholder={placeholder}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          onFocus?.();
+          setOpen(true);
+        }}
         onBlur={() => {
           setOpen(false);
           onBlurText?.(text);
@@ -125,6 +140,9 @@ export function ComboInput({
                 onClick={() => pick(o)}
                 className={cn("flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs", i === active ? "bg-accent text-accent-foreground" : "hover:bg-accent/60")}
               >
+                {selected !== undefined && (
+                  <span className="flex size-3.5 shrink-0 items-center justify-center">{o.value === selected && <Check className="h-3.5 w-3.5 text-sky-400" />}</span>
+                )}
                 {o.icon}
                 <span className="truncate">{o.label ?? o.value}</span>
                 {o.hint && <span className="ml-auto pl-3 shrink-0 text-2xs text-muted-foreground">{o.hint}</span>}
@@ -133,6 +151,53 @@ export function ComboInput({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Pick one of a fixed set of options by typing to search. The box shows the
+ * current choice; focusing it clears the text so typing filters the list,
+ * and leaving it without picking keeps the old choice.
+ */
+export function SelectCombo({
+  value,
+  options,
+  onChange,
+  disabled,
+  placeholder = "Search…",
+  className,
+  title,
+}: {
+  value: string;
+  options: readonly ComboOption[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  className?: string;
+  title?: string;
+}) {
+  const [query, setQuery] = useState<string | null>(null);
+  const current = options.find((o) => o.value === value);
+  return (
+    <div className={cn("relative", className)} title={title}>
+      <ComboInput
+        text={query ?? current?.label ?? value}
+        onTextChange={setQuery}
+        options={options}
+        selected={value}
+        blurOnPick
+        onFocus={() => setQuery("")}
+        onBlurText={() => setQuery(null)}
+        onPick={(o) => {
+          onChange(o.value);
+          setQuery(null);
+        }}
+        placeholder={placeholder}
+        disabled={disabled}
+        inputClassName="h-7 w-full rounded-md border border-input bg-background pl-2 pr-6 text-xs outline-none focus-visible:border-ring disabled:opacity-50"
+      />
+      <ChevronsUpDown className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
     </div>
   );
 }
