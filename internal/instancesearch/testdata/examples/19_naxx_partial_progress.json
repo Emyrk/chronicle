@@ -1,4 +1,6 @@
 {
+  "title": "Naxxramas progress (5-10 bosses)",
+  "category": "Bosses",
   "description": "Naxxramas runs that killed between 5 and 10 bosses.",
   "query": {
     "where": {

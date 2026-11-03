@@ -19,9 +19,59 @@ import (
 var update = flag.Bool("update", false, "regenerate instance search golden files")
 
 type example struct {
-	Name        string
+	Name string
+	// Title and Category are set on examples shown in the search UI's
+	// Examples menu (see TestUIExamples).
+	Title       string               `json:"title,omitempty"`
+	Category    string               `json:"category,omitempty"`
 	Description string               `json:"description"`
 	Query       instancesearch.Query `json:"query"`
+}
+
+// uiExampleCategories is the menu order; every titled example must use one.
+var uiExampleCategories = []string{"Run", "Bosses", "Speed", "Roster", "Parses", "Logs", "Combined"}
+
+// TestUIExamples writes the titled examples to the frontend's Examples
+// menu. They are the same queries TestSearch runs against Postgres, so the
+// menu can only offer queries that compile and run.
+func TestUIExamples(t *testing.T) {
+	t.Parallel()
+
+	type uiExample struct {
+		ID          string               `json:"id"`
+		Title       string               `json:"title"`
+		Category    string               `json:"category"`
+		Description string               `json:"description"`
+		Where       *instancesearch.Node `json:"where"`
+	}
+	var out []uiExample
+	for _, cat := range uiExampleCategories {
+		for _, ex := range loadExamples(t) {
+			if ex.Title == "" || ex.Category != cat {
+				continue
+			}
+			out = append(out, uiExample{ID: ex.Name, Title: ex.Title, Category: ex.Category, Description: ex.Description, Where: ex.Query.Where})
+		}
+	}
+	for _, ex := range loadExamples(t) {
+		if ex.Title != "" {
+			require.Contains(t, uiExampleCategories, ex.Category, "%s: unknown category", ex.Name)
+		}
+	}
+	require.NotEmpty(t, out)
+
+	path := filepath.Join("..", "..", "frontend", "chronicle", "src", "pages", "InstanceSearch", "generated", "searchExamples.json")
+	got, err := json.MarshalIndent(out, "", "  ")
+	require.NoError(t, err)
+	got = append(got, '\n')
+	if *update {
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
+		require.NoError(t, os.WriteFile(path, got, 0o600))
+		return
+	}
+	want, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, string(want), string(got), "run go test ./internal/instancesearch -run TestUIExamples -update")
 }
 
 func loadExamples(t *testing.T) []example {

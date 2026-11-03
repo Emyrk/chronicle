@@ -1,4 +1,6 @@
 {
+  "title": "Replay-ready Ragnaros kills",
+  "category": "Logs",
   "description": "Ragnaros kills recorded with both unit positions and unit resources (good for the 3D replay), from client logs rather than server-side logging.",
   "query": {
     "where": {

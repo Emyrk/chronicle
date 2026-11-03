@@ -1,13 +1,15 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Blocks, ChevronDown, ChevronRight, ListFilter, Loader2, Lock, Search } from "lucide-react";
+import { Blocks, ChevronDown, ChevronRight, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
 import type { InstanceSearchCursor, InstanceSearchResult } from "@/api/typesGenerated";
 import { useSupportedInstances } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BlockEditor } from "./BlockEditor";
+import { ExamplesMenu } from "./ExamplesMenu";
+import type { SearchExample } from "./examples";
 import { SearchForm } from "./SearchForm";
 import {
   buildQuery,
@@ -43,6 +45,14 @@ export function InstanceSearchPage() {
   const [form, setForm] = useState<Form>(() => treeToForm(submittedTree) ?? emptyForm());
   const [blocks, setBlocks] = useState<Node | undefined>(() => submittedTree);
   const [showCel, setShowCel] = useState(false);
+  // The example last loaded into the block editor, shown as a caption.
+  const [example, setExample] = useState<SearchExample | null>(null);
+
+  const loadExample = (ex: SearchExample) => {
+    setBlocks(ex.where);
+    setMode("blocks");
+    setExample(ex);
+  };
 
   const draftTree = mode === "form" ? formToTree(form) : prune(blocks);
   const formFromBlocks = useMemo(() => (mode === "blocks" ? treeToForm(prune(blocks)) : null), [mode, blocks]);
@@ -133,6 +143,8 @@ export function InstanceSearchPage() {
             <Blocks className="h-3.5 w-3.5" /> Blocks
           </ModeButton>
         </div>
+        <ExamplesMenu onPick={loadExample} disabled={!isAuthenticated} />
+        <div className="flex-1" />
         <BudgetLine budget={budget} lastCost={lastCost} />
       </div>
 
@@ -149,7 +161,19 @@ export function InstanceSearchPage() {
           loggedIn={isAuthenticated}
         />
       ) : (
-        <div className="rounded-lg border border-border/60 bg-background/40 p-3">
+        <div className="rounded-lg border border-border/60 bg-background/40 p-3 space-y-3">
+          {example && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2">
+              <Lightbulb className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium">Example: {example.title}</p>
+                <p className="text-2xs text-muted-foreground">{example.description} Edit any block, then Search.</p>
+              </div>
+              <button type="button" onClick={() => setExample(null)} className="text-muted-foreground hover:text-foreground" aria-label="Dismiss example">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           <BlockEditor tree={blocks} onChange={setBlocks} ctx={{ fields: fields.data?.fields ?? [], zones, bosses: allBosses, disabled: !isAuthenticated }} />
         </div>
       )}
@@ -163,7 +187,7 @@ export function InstanceSearchPage() {
           <Button variant="ghost" size="sm" onClick={() => setForm(emptyForm())}>Clear</Button>
         )}
         {mode === "blocks" && (
-          <Button variant="ghost" size="sm" onClick={() => setBlocks(undefined)}>Clear</Button>
+          <Button variant="ghost" size="sm" onClick={() => { setBlocks(undefined); setExample(null); }}>Clear</Button>
         )}
         <button type="button" onClick={() => setShowCel((v) => !v)} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
           {showCel ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}

@@ -1,4 +1,6 @@
 {
+  "title": "Partial zone and guild names",
+  "category": "Run",
   "description": "Partial, case-insensitive names: any zone containing \"molten\" by a guild whose name starts with \"alp\".",
   "query": {
     "where": {

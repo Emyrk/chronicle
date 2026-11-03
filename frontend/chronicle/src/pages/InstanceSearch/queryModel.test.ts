@@ -12,6 +12,18 @@ import {
   type Node,
   type SearchForm,
 } from "./queryModel";
+import { EXAMPLES } from "./examples";
+
+describe("examples", () => {
+  it("load into the editor unchanged", () => {
+    expect(EXAMPLES.length).toBeGreaterThan(10);
+    for (const ex of EXAMPLES) {
+      // The editor sends prune(tree); an example must not lose anything.
+      expect(prune(ex.where), ex.id).toEqual(ex.where);
+      expect(Boolean(ex.title && ex.category && ex.description), ex.id).toBe(true);
+    }
+  });
+});
 
 function fullForm(): SearchForm {
   return {

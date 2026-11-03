@@ -1,4 +1,6 @@
 {
+  "title": "2+ Holy Paladins",
+  "category": "Roster",
   "description": "Raids with at least 2 paladins who played Holy on a boss kill.",
   "query": {
     "where": {

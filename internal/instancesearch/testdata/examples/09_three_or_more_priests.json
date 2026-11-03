@@ -1,4 +1,6 @@
 {
+  "title": "3+ Priests",
+  "category": "Roster",
   "description": "Raids with at least 3 priests.",
   "query": {
     "where": {

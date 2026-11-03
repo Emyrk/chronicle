@@ -1,4 +1,6 @@
 {
+  "title": "Fast kills on both Rag and Domo",
+  "category": "Speed",
   "description": "Kill-time parse of 90+ on both Ragnaros and Majordomo Executus.",
   "query": {
     "where": {

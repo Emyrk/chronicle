@@ -1,4 +1,6 @@
 {
+  "title": "Ragnaros in 2 minutes",
+  "category": "Speed",
   "description": "Ragnaros killed in 2 minutes or less.",
   "query": {
     "where": {
