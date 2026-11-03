@@ -25,7 +25,7 @@ WITH matched AS (
   LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
   LEFT JOIN guilds g ON g.id = li.guild_id
   WHERE li.invalidated_at IS NULL
-    AND ((SELECT count(e1.id) FROM log_instance_encounters e1 WHERE e1.instance_id = li.id AND ((e1.name = $1::text) AND (e1.kill_type::text = $2::text))) >= $3::bigint)
+    AND ((SELECT count(e1.id) FROM log_instance_encounters e1 WHERE e1.instance_id = li.id AND ((lower(e1.name) = lower($1::text)) AND (e1.kill_type::text = $2::text))) >= $3::bigint)
   ORDER BY COALESCE(li.duplicate_group_id, li.id), li.id
 )
 SELECT m.id, m.hashed_slug, m.name, m.realm_id, m.realm_name, m.guild_id, m.guild_name,

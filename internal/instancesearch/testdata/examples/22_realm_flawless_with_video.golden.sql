@@ -27,7 +27,7 @@ WITH matched AS (
   LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
   LEFT JOIN guilds g ON g.id = li.guild_id
   WHERE li.invalidated_at IS NULL
-    AND ((wsr.name = $1::text) AND (EXISTS (SELECT 1 FROM log_instance_youtube_timestamped yt WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug) = $2::boolean) AND ((SELECT iom.wipe_count FROM instance_overview_metrics iom WHERE iom.instance_id = li.id) = $3::bigint))
+    AND ((lower(wsr.name) = lower($1::text)) AND (EXISTS (SELECT 1 FROM log_instance_youtube_timestamped yt WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug) = $2::boolean) AND ((SELECT iom.wipe_count FROM instance_overview_metrics iom WHERE iom.instance_id = li.id) = $3::bigint))
   ORDER BY COALESCE(li.duplicate_group_id, li.id), li.id
 )
 SELECT m.id, m.hashed_slug, m.name, m.realm_id, m.realm_name, m.guild_id, m.guild_name,

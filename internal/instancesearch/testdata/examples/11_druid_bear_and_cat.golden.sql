@@ -25,7 +25,7 @@ WITH matched AS (
   LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
   LEFT JOIN guilds g ON g.id = li.guild_id
   WHERE li.invalidated_at IS NULL
-    AND (EXISTS (SELECT 1 FROM log_instance_players p1 WHERE p1.instance_id = li.id AND ((p1.class::text = $1::text) AND (EXISTS (SELECT 1 FROM encounter_dps_rankings r2 WHERE r2.instance_id = li.id AND r2.player_guid = p1.unit_guid::text AND r2.encounter_id IS NOT NULL AND r2.player_sub_spec = $2::text)) AND (EXISTS (SELECT 1 FROM encounter_dps_rankings r3 WHERE r3.instance_id = li.id AND r3.player_guid = p1.unit_guid::text AND r3.encounter_id IS NOT NULL AND r3.player_sub_spec = $3::text)))))
+    AND (EXISTS (SELECT 1 FROM log_instance_players p1 WHERE p1.instance_id = li.id AND ((p1.class::text = $1::text) AND (EXISTS (SELECT 1 FROM encounter_dps_rankings r2 WHERE r2.instance_id = li.id AND r2.player_guid = p1.unit_guid::text AND r2.encounter_id IS NOT NULL AND lower(r2.player_sub_spec) = lower($2::text))) AND (EXISTS (SELECT 1 FROM encounter_dps_rankings r3 WHERE r3.instance_id = li.id AND r3.player_guid = p1.unit_guid::text AND r3.encounter_id IS NOT NULL AND lower(r3.player_sub_spec) = lower($3::text))))))
   ORDER BY COALESCE(li.duplicate_group_id, li.id), li.id
 )
 SELECT m.id, m.hashed_slug, m.name, m.realm_id, m.realm_name, m.guild_id, m.guild_name,

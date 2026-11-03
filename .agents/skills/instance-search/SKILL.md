@@ -139,6 +139,10 @@ This means one druid played both Bear and Cat. Two separate `any_player` nodes A
 
 ## Semantics to keep in mind
 
+- **Matching ignores case.**
+  - Free-text strings (names, guilds, realms, specs, GUIDs) and boss lists are compared with `lower()` on both sides, so `"molten core"` finds `"Molten Core"` and `"RAGNAROS"` works in `bosses`.
+  - Enum values accept any case (`"priest"` becomes `PRIEST`).
+  - There's no partial matching; values must be the whole name.
 - **Missing data never matches.** Runs without a guild, without a clear (`clear_*`, `*_time_ms` parts), or without a computed parse don't match `=` or `!=`. Wrap the predicate in `not` to find "not X", which includes missing.
 - **Spec, role, dps/hps, deaths and ilvl come from boss kills by default.** Use `on: "trash"` or `on: "any"` to include trash. Wipes are never counted, so wipe deaths aren't searchable yet.
 - **Sub-spec values:** `Bear` / `Cat` (Feral druid), `Tank` / `DPS` (Enhancement shaman) and `Fury Prot`. It's empty for every other spec, and on servers whose parser doesn't infer sub-specs.

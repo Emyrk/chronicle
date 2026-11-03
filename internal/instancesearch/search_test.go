@@ -303,7 +303,17 @@ func TestSearch(t *testing.T) {
 			{"BearOnBossCatOnTrash", `{"any_player": {"and": [
 				{"field": "player.sub_spec", "op": "=", "value": "Bear", "on": "bosses"},
 				{"field": "player.sub_spec", "op": "=", "value": "Cat", "on": "trash"}]}}`, []uuid.UUID{f.mc2}},
-			{"TankRole", `{"any_player": {"field": "player.role", "op": "=", "value": "tank"}}`, []uuid.UUID{f.mc1, f.mc2}},
+			{"CaseInsensitiveStrings", `{"and": [
+				{"field": "instance.name", "op": "=", "value": "molten CORE"},
+				{"field": "instance.guild", "op": "in", "value": ["BETA"]},
+				{"any_player": {"field": "player.name", "op": "=", "value": "bearONLY"}}]}`, []uuid.UUID{f.mc2}},
+			{"CaseInsensitiveEnumsAndBosses", `{"and": [
+				{"any_player": {"field": "player.class", "op": "=", "value": "priest"}},
+				{"field": "instance.kill_time_parse", "op": ">=", "value": 90, "bosses": ["RAGNAROS", "majordomo executus"], "match": "each"},
+				{"field": "instance.capability", "op": "=", "value": "Unit-Position"}]}`, mc1},
+			// The same boss in two cases counts once for match each.
+			{"EachDedupesBossCase", `{"field": "instance.kill_time_ms", "op": "<=", "value": 120000, "bosses": ["Ragnaros", "RAGNAROS"], "match": "each"}`, mc1},
+			{"TankRole",`{"any_player": {"field": "player.role", "op": "=", "value": "tank"}}`, []uuid.UUID{f.mc1, f.mc2}},
 			{"RagKillWithoutWipes", `{"and": [
 				{"any_encounter": {"and": [{"field": "encounter.name", "op": "=", "value": "Ragnaros"}, {"field": "encounter.killed", "op": "=", "value": true}]}},
 				{"not": {"any_encounter": {"and": [{"field": "encounter.name", "op": "=", "value": "Ragnaros"}, {"field": "encounter.outcome", "op": "=", "value": "wipe"}]}}}]}`, mc1},

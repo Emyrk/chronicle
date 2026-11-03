@@ -27,7 +27,7 @@ WITH matched AS (
   LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
   LEFT JOIN guilds g ON g.id = li.guild_id
   WHERE li.invalidated_at IS NULL
-    AND ((COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) = $1::text) AND ((SELECT count(DISTINCT bk.name) FROM log_instance_encounters bk WHERE bk.instance_id = li.id AND bk.boss AND bk.kill_type IN ('clean', 'partial')) >= $2::bigint) AND ((SELECT count(DISTINCT bk.name) FROM log_instance_encounters bk WHERE bk.instance_id = li.id AND bk.boss AND bk.kill_type IN ('clean', 'partial')) <= $3::bigint))
+    AND ((lower(COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name)) = lower($1::text)) AND ((SELECT count(DISTINCT bk.name) FROM log_instance_encounters bk WHERE bk.instance_id = li.id AND bk.boss AND bk.kill_type IN ('clean', 'partial')) >= $2::bigint) AND ((SELECT count(DISTINCT bk.name) FROM log_instance_encounters bk WHERE bk.instance_id = li.id AND bk.boss AND bk.kill_type IN ('clean', 'partial')) <= $3::bigint))
   ORDER BY COALESCE(li.duplicate_group_id, li.id), li.id
 )
 SELECT m.id, m.hashed_slug, m.name, m.realm_id, m.realm_name, m.guild_id, m.guild_name,

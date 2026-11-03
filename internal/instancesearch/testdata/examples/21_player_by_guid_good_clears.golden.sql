@@ -26,7 +26,7 @@ WITH matched AS (
   LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
   LEFT JOIN guilds g ON g.id = li.guild_id
   WHERE li.invalidated_at IS NULL
-    AND ((EXISTS (SELECT 1 FROM log_instance_players p1 WHERE p1.instance_id = li.id AND (p1.unit_guid::text = $1::text))) AND ((SELECT tps2.clear_server_display_score FROM time_parse_scores tps2 WHERE tps2.tenant_id = $5::uuid AND tps2.instance_id = li.id AND tps2.lookback_days = $2::smallint AND tps2.policy_version = $3::smallint AND tps2.query_version = $4::smallint AND tps2.clear_server_status IN ('ok', 'low_confidence')) >= $6::bigint))
+    AND ((EXISTS (SELECT 1 FROM log_instance_players p1 WHERE p1.instance_id = li.id AND (lower(p1.unit_guid::text) = lower($1::text)))) AND ((SELECT tps2.clear_server_display_score FROM time_parse_scores tps2 WHERE tps2.tenant_id = $5::uuid AND tps2.instance_id = li.id AND tps2.lookback_days = $2::smallint AND tps2.policy_version = $3::smallint AND tps2.query_version = $4::smallint AND tps2.clear_server_status IN ('ok', 'low_confidence')) >= $6::bigint))
   ORDER BY COALESCE(li.duplicate_group_id, li.id), li.id
 )
 SELECT m.id, m.hashed_slug, m.name, m.realm_id, m.realm_name, m.guild_id, m.guild_name,

@@ -90,6 +90,14 @@ func TestFieldReference(t *testing.T) {
 	require.Equal(t, string(want), got, "run go test ./internal/instancesearch -run TestFieldReference -update")
 }
 
+func TestCompileEnumsAreCanonicalized(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := instancesearch.Compile(where(t, `{"any_player": {"field": "player.class", "op": "in", "value": ["priest", "Mage"]}}`), instancesearch.Options{})
+	require.NoError(t, err)
+	require.Contains(t, compiled.Args, []string{"PRIEST", "MAGE"})
+}
+
 func TestCompileUserValuesAreBound(t *testing.T) {
 	t.Parallel()
 

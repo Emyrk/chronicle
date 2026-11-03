@@ -92,7 +92,20 @@ type pred struct {
 const maxStringLen = 200
 
 // cmp compares expr with the predicate value. User values are always bound.
+// Free-text strings compare case-insensitively: both sides are lowered in
+// Postgres so Go and the database never disagree about non-ASCII names.
+// Enums are already canonicalized during validation.
 func (c *compiler) cmp(expr string, p pred) string {
+	if p.typ == typeString {
+		switch p.op {
+		case OpIn:
+			return fmt.Sprintf("lower(%s) = ANY(%s)", expr, lowerArray(c.arg(p.value)))
+		case OpNotIn:
+			return fmt.Sprintf("NOT (lower(%s) = ANY(%s))", expr, lowerArray(c.arg(p.value)))
+		default:
+			return fmt.Sprintf("lower(%s) %s lower(%s::text)", expr, sqlOp(p.op), c.arg(p.value))
+		}
+	}
 	cast := p.typ.sqlType()
 	switch p.op {
 	case OpIn:
@@ -104,8 +117,13 @@ func (c *compiler) cmp(expr string, p pred) string {
 	}
 }
 
-// bossMatch applies a condition to rows that each belong to one boss.
-// from is "<table> <alias> WHERE <correlation>".
+// lowerArray lowers every element of a bound text[] parameter.
+func lowerArray(arg string) string {
+	return fmt.Sprintf("ARRAY(SELECT lower(v) FROM unnest(%s::text[]) v)", arg)
+}
+
+// bossMatch applies a condition to rows that each belong to one boss. Boss
+// names match case-insensitively. from is "<table> <alias> WHERE <correlation>".
 //
 //   - match any, no bosses: some row satisfies cond.
 //   - match any, bosses:    some row of one of the bosses satisfies cond.
@@ -114,12 +132,12 @@ func (c *compiler) bossMatch(p pred, from, nameCol, cond string) string {
 	if len(p.bosses) == 0 {
 		return fmt.Sprintf("EXISTS (SELECT 1 FROM %s AND %s)", from, cond)
 	}
-	bosses := c.arg(p.bosses)
+	bosses := lowerArray(c.arg(p.bosses))
 	if p.match == MatchEach {
-		return fmt.Sprintf("(SELECT count(DISTINCT %s) FROM %s AND %s = ANY(%s::text[]) AND %s) = cardinality(%s::text[])",
+		return fmt.Sprintf("(SELECT count(DISTINCT lower(%s)) FROM %s AND lower(%s) = ANY(%s) AND %s) = cardinality(%s)",
 			nameCol, from, nameCol, bosses, cond, bosses)
 	}
-	return fmt.Sprintf("EXISTS (SELECT 1 FROM %s AND %s = ANY(%s::text[]) AND %s)", from, nameCol, bosses, cond)
+	return fmt.Sprintf("EXISTS (SELECT 1 FROM %s AND lower(%s) = ANY(%s) AND %s)", from, nameCol, bosses, cond)
 }
 
 func (c *compiler) parsePred(f *field, n *Node, path string) (pred, error) {
@@ -178,8 +196,10 @@ func (c *compiler) parsePred(f *field, n *Node, path string) (pred, error) {
 			if b == "" || len(b) > maxStringLen {
 				return p, &Error{Path: fmt.Sprintf("%s.bosses[%d]", path, i), Message: "must be a boss name"}
 			}
-			if !seen[b] {
-				seen[b] = true
+			// Boss names match case-insensitively, so dedupe the same way;
+			// match each compares the distinct count to the list length.
+			if key := strings.ToLower(b); !seen[key] {
+				seen[key] = true
 				p.bosses = append(p.bosses, b)
 			}
 		}
@@ -302,9 +322,14 @@ func decodeScalar(f *field, raw json.RawMessage) (any, error) {
 		}
 		return id.String(), nil
 	case typeEnum:
-		if !slices.Contains(f.Enum, s) {
-			return nil, fmt.Errorf("must be one of %s", strings.Join(f.Enum, ", "))
+		// Accept any case and send the canonical stored value, so enum
+		// comparisons stay exact (and index-friendly) in SQL.
+		for _, e := range f.Enum {
+			if strings.EqualFold(e, s) {
+				return e, nil
+			}
 		}
+		return nil, fmt.Errorf("must be one of %s", strings.Join(f.Enum, ", "))
 	}
 	return s, nil
 }

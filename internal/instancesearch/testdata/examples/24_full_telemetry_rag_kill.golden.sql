@@ -28,7 +28,7 @@ WITH matched AS (
   LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
   LEFT JOIN guilds g ON g.id = li.guild_id
   WHERE li.invalidated_at IS NULL
-    AND (($1::text = ANY(li.capabilities)) AND ($2::text = ANY(li.capabilities)) AND (NOT ($3::text = ANY(li.capabilities))) AND (EXISTS (SELECT 1 FROM log_instance_encounters e1 WHERE e1.instance_id = li.id AND ((e1.name = $4::text) AND ((e1.kill_type IN ('clean', 'partial')) = $5::boolean)))))
+    AND (($1::text = ANY(li.capabilities)) AND ($2::text = ANY(li.capabilities)) AND (NOT ($3::text = ANY(li.capabilities))) AND (EXISTS (SELECT 1 FROM log_instance_encounters e1 WHERE e1.instance_id = li.id AND ((lower(e1.name) = lower($4::text)) AND ((e1.kill_type IN ('clean', 'partial')) = $5::boolean)))))
   ORDER BY COALESCE(li.duplicate_group_id, li.id), li.id
 )
 SELECT m.id, m.hashed_slug, m.name, m.realm_id, m.realm_name, m.guild_id, m.guild_name,

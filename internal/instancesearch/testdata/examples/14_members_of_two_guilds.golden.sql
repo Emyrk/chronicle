@@ -25,7 +25,7 @@ WITH matched AS (
   LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
   LEFT JOIN guilds g ON g.id = li.guild_id
   WHERE li.invalidated_at IS NULL
-    AND ((SELECT count(DISTINCT p1.unit_guid) FROM log_instance_players p1 WHERE p1.instance_id = li.id AND ((SELECT pg.name FROM guilds pg WHERE pg.id = p1.guild_id) = ANY($1::text[]))) >= $2::bigint)
+    AND ((SELECT count(DISTINCT p1.unit_guid) FROM log_instance_players p1 WHERE p1.instance_id = li.id AND (lower((SELECT pg.name FROM guilds pg WHERE pg.id = p1.guild_id)) = ANY(ARRAY(SELECT lower(v) FROM unnest($1::text[]) v)))) >= $2::bigint)
   ORDER BY COALESCE(li.duplicate_group_id, li.id), li.id
 )
 SELECT m.id, m.hashed_slug, m.name, m.realm_id, m.realm_name, m.guild_id, m.guild_name,

@@ -26,7 +26,7 @@ WITH matched AS (
   LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
   LEFT JOIN guilds g ON g.id = li.guild_id
   WHERE li.invalidated_at IS NULL
-    AND ((COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) = $1::text) AND ((SELECT (parts.boss_ms)::bigint
+    AND ((lower(COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name)) = lower($1::text)) AND ((SELECT (parts.boss_ms)::bigint
     FROM instance_speedruns sr1
     CROSS JOIN LATERAL (
       SELECT COALESCE(SUM(island_ms) FILTER (WHERE scope = 'all'), 0) AS all_ms,

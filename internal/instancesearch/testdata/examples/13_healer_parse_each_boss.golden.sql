@@ -25,10 +25,10 @@ WITH matched AS (
   LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
   LEFT JOIN guilds g ON g.id = li.guild_id
   WHERE li.invalidated_at IS NULL
-    AND (EXISTS (SELECT 1 FROM log_instance_players p1 WHERE p1.instance_id = li.id AND ((SELECT count(DISTINCT ps2.encounter_name) FROM (SELECT DISTINCT ON (x.encounter_name) x.encounter_name, x.display_score, x.status
+    AND (EXISTS (SELECT 1 FROM log_instance_players p1 WHERE p1.instance_id = li.id AND ((SELECT count(DISTINCT lower(ps2.encounter_name)) FROM (SELECT DISTINCT ON (x.encounter_name) x.encounter_name, x.display_score, x.status
       FROM parse_score_results x
       WHERE x.tenant_id = $1::uuid AND x.instance_id = li.id AND x.player_guid = p1.unit_guid::text AND x.metric = $2::text
-      ORDER BY x.encounter_name, x.created_at DESC, x.precise_score DESC) ps2 WHERE ps2.status IN ('ok', 'low_confidence') AND ps2.encounter_name = ANY($4::text[]) AND ps2.display_score >= $3::bigint) = cardinality($4::text[]))))
+      ORDER BY x.encounter_name, x.created_at DESC, x.precise_score DESC) ps2 WHERE ps2.status IN ('ok', 'low_confidence') AND lower(ps2.encounter_name) = ANY(ARRAY(SELECT lower(v) FROM unnest($4::text[]) v)) AND ps2.display_score >= $3::bigint) = cardinality(ARRAY(SELECT lower(v) FROM unnest($4::text[]) v)))))
   ORDER BY COALESCE(li.duplicate_group_id, li.id), li.id
 )
 SELECT m.id, m.hashed_slug, m.name, m.realm_id, m.realm_name, m.guild_id, m.guild_name,
