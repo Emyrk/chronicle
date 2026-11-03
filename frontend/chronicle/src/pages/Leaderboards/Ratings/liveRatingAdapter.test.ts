@@ -42,6 +42,19 @@ describe("tenant live rating URLs", () => {
     expect(liveRatingURL({ ...player, cohort: { ...cohort, maxPlayers: -1 } })).toBeNull()
   })
 
+  it("supports opt-in all-class and class-only leaderboards without weakening exact URLs", () => {
+    const all = query({ ...player, allClasses: true, cohort: { difficulty: "", maxPlayers: 0, performance: "dps" } })
+    expect(all.params.get("all_classes")).toBe("true")
+    expect(all.params.get("difficulty_name")).toBe("")
+    expect(all.params.get("max_players")).toBe("0")
+    expect(all.params.has("class")).toBe(false)
+    expect(all.params.has("spec")).toBe(false)
+    const onlyClass = query({ ...player, allClasses: true, cohort: { difficulty: "", maxPlayers: 0, performance: "dps", playerClass: "MAGE" } })
+    expect(onlyClass.params.get("class")).toBe("MAGE")
+    expect(onlyClass.params.has("spec")).toBe(false)
+    expect(liveRatingURL({ ...player, metric: "renown", window: "period", cohort: undefined, allClasses: true })).toBeNull()
+  })
+
   it("keeps guild cohorts free of player dimensions, and renown career free of cohorts", () => {
     const guild = query({ ...player, subject: "guild", metric: "peak", cohort: { difficulty: "Heroic", maxPlayers: 40 }, encounterName: "Ragnaros" })
     expect(guild.path).toContain("/guild-boss-leaderboard")

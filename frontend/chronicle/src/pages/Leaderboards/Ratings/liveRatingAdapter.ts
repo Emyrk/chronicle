@@ -20,6 +20,8 @@ export type LiveRatingBoardRequest = {
   metric: LiveRatingMetric
   window: LiveRatingWindow
   cohort?: LiveRatingCohort
+  /** Compare each character's best eligible class/spec score across the selected scope. */
+  allClasses?: boolean
   realmIDs?: readonly string[]
 }
 
@@ -31,16 +33,16 @@ export type LiveRatingEntry = (TenantPlayerScopeLeaderboardEntry | TenantPlayerB
   }
 export type LiveRatingPage = { entries: readonly LiveRatingEntry[]; next_cursor?: string; scope?: string }
 
-/** Missing or mismatched cohorts do not silently fall back to a broader population. */
+/** A raid cohort is required; all-class comparisons are explicitly opted in. */
 export function liveRatingURL(request: LiveRatingBoardRequest): string | null {
-  const { instanceName, encounterName, subject, metric, window, cohort, realmIDs } = request
-  if (!instanceName.trim() || (encounterName !== undefined && !encounterName.trim())) return null
+  const { instanceName, encounterName, subject, metric, window, cohort, allClasses, realmIDs } = request
+  if (!instanceName.trim() || (encounterName !== undefined && !encounterName.trim()) || (allClasses && (subject !== "player" || metric === "renown"))) return null
   if (metric === "renown") {
     if (window !== "period" && window !== "career") return null
     if (cohort) return null
   } else {
     if (window !== "period" && window !== "all_time" || !cohort || !Number.isInteger(cohort.maxPlayers) || cohort.maxPlayers < 0) return null
-    if (subject === "player" && (!cohort.playerClass?.trim() || cohort.spec === undefined || cohort.subSpec === undefined || !cohort.performance)) return null
+    if (subject === "player" && (!cohort.performance || (!allClasses && (!cohort.playerClass?.trim() || cohort.spec === undefined || cohort.subSpec === undefined)))) return null
   }
   const endpoint = `${subject === "guild" ? "guild-" : ""}${encounterName === undefined ? "scope" : "boss"}-leaderboard`
   const query = new URLSearchParams({
@@ -55,9 +57,10 @@ export function liveRatingURL(request: LiveRatingBoardRequest): string | null {
   if (subject === "player") {
     query.set("performance_metric", metric === "renown" ? "none" : cohort!.performance!)
     if (metric !== "renown") {
-      query.set("class", cohort!.playerClass!)
-      query.set("spec", cohort!.spec!)
-      query.set("sub_spec", cohort!.subSpec!)
+      if (allClasses) query.set("all_classes", "true")
+      if (cohort!.playerClass !== undefined) query.set("class", cohort!.playerClass)
+      if (cohort!.spec !== undefined) query.set("spec", cohort!.spec)
+      if (cohort!.subSpec !== undefined) query.set("sub_spec", cohort!.subSpec)
     }
   }
   if (realmIDs?.length) query.set("realm_ids", [...new Set(realmIDs)].sort().join(","))

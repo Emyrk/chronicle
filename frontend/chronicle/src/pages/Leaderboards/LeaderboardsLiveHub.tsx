@@ -150,9 +150,11 @@ function LiveHubContent({ context, realmName, realmIDs, cohort, bosses, overview
   if (overview) return <LiveHubOverview instanceName={instanceName} selection={selection} cls={scope.cls} spec={scope.spec} subSpec={scope.subSpec}
     role={role} subject={subject === "guilds" ? "guild" : "player"} realmName={realmName} realmIDs={realmIDs}
     performanceCohort={chosen ? { difficulty: chosen.difficulty_name, maxPlayers: chosen.max_players } : undefined}
-    ratingCohort={chosen && (subject === "guilds" || (scope.cls && scope.spec !== undefined)) ? {
+    ratingCohort={chosen ? {
       difficulty: chosen.difficulty_name, maxPlayers: chosen.max_players,
-      ...(subject === "characters" ? { playerClass: scope.cls, spec: scope.spec, subSpec: scope.subSpec ?? "", performance: role === "healing" ? "hps" as const : "dps" as const } : {}),
+      ...(subject === "characters" ? { playerClass: scope.cls, spec: scope.spec,
+        subSpec: scope.spec ? (scope.subSpec ?? "") : undefined,
+        performance: role === "healing" ? "hps" as const : "dps" as const } : {}),
     } : undefined}
     bosses={bosses} onTab={onTab} onBoss={(name) => context.setSelection({ kind: "bosses", bosses: [name] })} onRatings={onRatings} />
   if (context.tab === "ratings") return <LiveHubRatings instanceName={instanceName} bosses={bosses}

@@ -1,7 +1,7 @@
 import type { LiveRatingCohort } from "./liveRatingAdapter"
 import type { RatingBoardData, RatingEntry, RatingMetric, RatingPeriod, RatingScope } from "./ratingBoards.fixtures"
 
-/** The caller must resolve an exact published cohort. Never substitute another cohort or fixtures. */
+/** Exact class/spec subset of a published raid cohort; all-class views omit this field. */
 export type RatingLiveCohort = LiveRatingCohort & Required<Pick<LiveRatingCohort, "playerClass" | "spec" | "subSpec" | "performance">>
 
 export type RatingLiveSelection = {

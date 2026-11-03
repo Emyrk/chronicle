@@ -20,7 +20,7 @@ export interface LiveHubRatingsProps {
   period: RatingPeriod
   subject: "player" | "guild"
   realmIDs?: readonly string[]
-  /** Exact published raid cohort; never broaden an absent class/spec to all players. */
+  /** Published raid cohort; unset class/spec spans all classes/specs. */
   ratingCohort?: LiveRatingCohort
   cls?: string
   spec?: string
@@ -58,19 +58,21 @@ export function LiveHubRatings({
   instanceName, bosses, scope, onScope, view, onView, period, subject, realmIDs,
   ratingCohort, cls, spec, subSpec, role, toolbar,
 }: LiveHubRatingsProps) {
-  const cohort: RatingLiveCohort | undefined = ratingCohort?.playerClass &&
-    ratingCohort.spec !== undefined && ratingCohort.subSpec !== undefined && ratingCohort.performance
-    ? ratingCohort as RatingLiveCohort : undefined
-  const exact = !!cohort && cohort.playerClass === cls && cohort.spec === (spec ?? "") &&
-    cohort.subSpec === (subSpec ?? "") && (!scope.cls || scope.cls === cohort.playerClass) &&
-    (!scope.spec || scope.spec === cohort.spec) && (!scope.subSpec || scope.subSpec === cohort.subSpec) && cohort.performance === (role === "healing" ? "hps" : "dps") &&
-    Number.isInteger(cohort.maxPlayers) && cohort.maxPlayers >= 0
+  const valid = !!ratingCohort?.performance && ratingCohort.performance === (role === "healing" ? "hps" : "dps") &&
+    Number.isInteger(ratingCohort.maxPlayers) && ratingCohort.maxPlayers >= 0 &&
+    (!scope.cls || scope.cls === cls) && (!scope.spec || scope.spec === spec) && (!scope.subSpec || scope.subSpec === subSpec)
+  const exact = valid && !!cls && !!spec && ratingCohort?.playerClass === cls && ratingCohort.spec === spec &&
+    ratingCohort.subSpec === (subSpec ?? "") && (!scope.cls || scope.cls === cls) &&
+    (!scope.spec || scope.spec === spec) && (!scope.subSpec || scope.subSpec === (subSpec ?? ""))
+  const cohort: RatingLiveCohort | undefined = exact ? ratingCohort as RatingLiveCohort : undefined
+  const selectedCohort = valid ? exact ? cohort : { ...ratingCohort!, playerClass: cls || undefined,
+    spec: scope.spec || undefined, subSpec: scope.spec ? (scope.subSpec ?? "") : undefined } : undefined
   const targets = useMemo(() => [scope, ...(scope.boss ? [] : bosses.map((boss) => ({ ...scope, boss })))], [scope, bosses])
   const requests = targets.flatMap((target) => metrics.map((metric) => ({
     target, metric,
-    url: metric === "renown" || exact ? liveRatingURL({ instanceName, encounterName: target.boss, subject: "player",
+    url: metric === "renown" || selectedCohort ? liveRatingURL({ instanceName, encounterName: target.boss, subject: "player",
       metric: apiMetric(metric), window: apiWindow(metric, period),
-      cohort: metric === "renown" ? undefined : cohort, realmIDs }) : null,
+      cohort: metric === "renown" ? undefined : selectedCohort, allClasses: metric !== "renown" && !exact, realmIDs }) : null,
   })))
   const results = useQueries({ queries: requests.map(({ url }) => ({
     queryKey: ["hub-rating-preview", url],
@@ -90,7 +92,7 @@ export function LiveHubRatings({
       : !result.data ? { status: "loading" }
       : { status: "ready", data: {
         id, kind: target.boss ? "boss" : "raid", scope: target, title,
-        subtitle: metric === "renown" ? "Published renown" : `${cohort!.difficulty} · ${cohort!.maxPlayers} players · ${cohort!.playerClass} / ${cohort!.spec} · ${cohort!.performance!.toUpperCase()}`,
+        subtitle: metric === "renown" ? "Published renown" : `${selectedCohort!.difficulty || "Default"} · ${selectedCohort!.maxPlayers || "Unrecorded size"} · ${exact ? `${cohort!.playerClass} / ${cohort!.spec}` : scope.cls ? `${scope.cls} / All specs` : "All classes / specs"} · ${selectedCohort!.performance!.toUpperCase()}`,
         entries: result.data.entries.map(asEntry).filter((entry): entry is RatingEntry => entry !== null).slice(0, target.boss ? 3 : 10),
       } }
     states.set(id, state)
@@ -101,8 +103,6 @@ export function LiveHubRatings({
       metric={apiMetric(view === "overview" ? "peak" : view)} window={apiWindow(view === "overview" ? "peak" : view, period)}
       cohort={view === "renown" ? undefined : ratingCohort} realmIDs={realmIDs} />
   }
-  if (!exact && view !== "renown" && view !== "overview") return <p role="status" className="rounded-xl border bg-card px-5 py-10 text-center text-sm text-muted-foreground">Choose an exact published raid cohort and matching class, spec, sub-spec, and role to view ratings.</p>
-
   const live: RatingLiveData = {
     cohort,
     ranksKnown: !realmIDs?.length,
@@ -112,12 +112,12 @@ export function LiveHubRatings({
       : "The published API does not provide ranks for a full list. Browse published pages below." }),
   }
   return <div className="space-y-5">
-    {!exact && <p role="status" className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">Peak and Mastery are ranked within a class, spec, sub-spec, and performance cohort. Select a class and spec above to see their published scores; Renown includes all cohorts.</p>}
     <RatingBoards instanceName={instanceName} bosses={bosses} scope={scope} onScope={onScope}
       view={view} onView={onView} period={period} toolbar={toolbar} live={live} />
     <LiveRatingBoards instanceName={instanceName} encounterName={scope.boss} subject="player"
-      metric={apiMetric(view === "overview" ? exact ? "peak" : "renown" : view)}
-      window={apiWindow(view === "overview" ? exact ? "peak" : "renown" : view, period)}
-      cohort={view === "renown" || (view === "overview" && !exact) ? undefined : cohort} realmIDs={realmIDs} title="Browse published ratings" />
+      metric={apiMetric(view === "overview" ? "peak" : view)}
+      window={apiWindow(view === "overview" ? "peak" : view, period)}
+      cohort={view === "renown" ? undefined : selectedCohort} allClasses={view !== "renown" && !exact}
+      realmIDs={realmIDs} title="Browse published ratings" />
   </div>
 }

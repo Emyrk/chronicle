@@ -26,8 +26,8 @@ const bossEntry = (entry: LiveRatingEntry): entry is Extract<LiveRatingEntry, { 
 
 /** A published tenant board, not an aggregate across bosses or an all-class approximation. */
 export function LiveRatingBoards(props: LiveRatingBoardsProps) {
-  const { instanceName, encounterName, subject, metric, window, cohort, realmIDs, realmNames, title } = props
-  const url = liveRatingURL({ instanceName, encounterName, subject, metric, window, cohort, realmIDs })
+  const { instanceName, encounterName, subject, metric, window, cohort, allClasses, realmIDs, realmNames, title } = props
+  const url = liveRatingURL({ instanceName, encounterName, subject, metric, window, cohort, allClasses, realmIDs })
   const [refresh, setRefresh] = useState({ url: "", count: 0 })
   const revision = refresh.url === url ? refresh.count : 0
   const board = useInfiniteQuery({
@@ -43,7 +43,10 @@ export function LiveRatingBoards(props: LiveRatingBoardsProps) {
   const entries = board.data?.pages.flatMap((page) => page.entries) ?? []
   const stale = board.error instanceof StaleRatingCursorError
   const displayed = encounterName === undefined ? instanceName : `${instanceName} · ${encounterName}`
-  const subtitle = [subject === "player" ? "Characters" : "Guilds", metric === "renown" ? "All cohorts" : `${cohort?.difficulty || "Default"} · ${cohort?.maxPlayers} players${subject === "player" ? ` · ${cohort?.playerClass} / ${cohort?.spec}${cohort?.subSpec ? ` / ${cohort.subSpec}` : ""} · ${cohort?.performance?.toUpperCase()}` : ""}`, window === "period" ? "180 days" : window === "career" ? "Career" : "All time"].join(" · ")
+  const population = cohort?.maxPlayers ? `${cohort.maxPlayers} players` : "Size unrecorded"
+  const playerScope = allClasses ? cohort?.playerClass ? `${cohort.playerClass} / All specs` : "All classes / specs"
+    : `${cohort?.playerClass} / ${cohort?.spec}${cohort?.subSpec ? ` / ${cohort.subSpec}` : ""}`
+  const subtitle = [subject === "player" ? "Characters" : "Guilds", metric === "renown" ? "All cohorts" : `${cohort?.difficulty || "Default"} · ${population}${subject === "player" ? ` · ${playerScope} · ${cohort?.performance?.toUpperCase()}` : ""}`, window === "period" ? "180 days" : window === "career" ? "Career" : "All time"].join(" · ")
 
   return (
     <section aria-label={`${displayed} ${theme.label} ${subject} ratings`} data-metric={metric} style={{ "--metric": theme.color } as CSSProperties} className="relative overflow-hidden rounded-xl border bg-card">

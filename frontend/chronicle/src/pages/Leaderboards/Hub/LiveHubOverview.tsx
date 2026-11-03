@@ -45,12 +45,13 @@ export function LiveHubOverview({ instanceName, selection, cls, spec, subSpec, r
     && raids.some((raid) => raid.difficulty_name === performanceCohort.difficulty && raid.max_players === performanceCohort.maxPlayers)
   const exactRating = !!ratingCohort && Number.isInteger(ratingCohort.maxPlayers) && ratingCohort.maxPlayers >= 0
     && raids.some((raid) => raid.difficulty_name === ratingCohort.difficulty && raid.max_players === ratingCohort.maxPlayers)
-    && (subject === "guild" || (ratingCohort.playerClass === cls && ratingCohort.spec === (spec ?? "")
-      && ratingCohort.subSpec === (subSpec ?? "") && ratingCohort.performance === metric))
+    && (subject === "guild" || (ratingCohort.playerClass === cls && (ratingCohort.spec ?? "") === (spec ?? "")
+      && (ratingCohort.subSpec ?? "") === (subSpec ?? "") && ratingCohort.performance === metric))
+  const allClasses = subject === "player" && (!cls || !spec)
   const ready = !instances.isPending && !instances.isError && raids.length > 0
   const renownURL = ready && !combined ? liveRatingURL({ instanceName, encounterName: boss, subject, metric: "renown", window: "period", realmIDs }) : null
-  const peakURL = ready && !combined && exactRating ? liveRatingURL({ instanceName, encounterName: boss, subject, metric: "peak", window: "period", cohort: ratingCohort, realmIDs }) : null
-  const masteryURL = ready && !combined && exactRating ? liveRatingURL({ instanceName, encounterName: boss, subject, metric: "ranked_mastery", window: "period", cohort: ratingCohort, realmIDs }) : null
+  const peakURL = ready && !combined && exactRating ? liveRatingURL({ instanceName, encounterName: boss, subject, metric: "peak", window: "period", cohort: ratingCohort, allClasses, realmIDs }) : null
+  const masteryURL = ready && !combined && exactRating ? liveRatingURL({ instanceName, encounterName: boss, subject, metric: "ranked_mastery", window: "period", cohort: ratingCohort, allClasses, realmIDs }) : null
   const renown = useQuery({ queryKey: ["hub-overview-rating", renownURL], queryFn: () => fetchLiveRatingPage(renownURL!), enabled: !!renownURL, staleTime: 5 * 60 * 1000, retry: false })
   const peak = useQuery({ queryKey: ["hub-overview-rating", peakURL], queryFn: () => fetchLiveRatingPage(peakURL!), enabled: !!peakURL, staleTime: 5 * 60 * 1000, retry: false })
   const mastery = useQuery({ queryKey: ["hub-overview-rating", masteryURL], queryFn: () => fetchLiveRatingPage(masteryURL!), enabled: !!masteryURL, staleTime: 5 * 60 * 1000, retry: false })

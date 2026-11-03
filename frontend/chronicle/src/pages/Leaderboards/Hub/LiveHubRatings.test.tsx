@@ -66,15 +66,32 @@ describe("LiveHubRatings", () => {
     expect(RatingBoards).toHaveBeenCalled()
   })
 
+  it("shows Peak and Mastery across all classes when no class/spec is chosen", () => {
+    vi.clearAllMocks()
+    querySpy.mockImplementation(({ queries }: QueryOptions) => queries.map((q) => ({
+      isError: false, data: q.enabled ? { entries: [{ realm_id: "realm-1", player_guid: "mage-1", player_name: "Actual Mage", player_class: "MAGE", player_spec: "Arcane", player_sub_spec: "", score: 49 }] } : undefined,
+    })))
+    render({ scope: {}, cls: undefined, spec: undefined, subSpec: undefined,
+      ratingCohort: { difficulty: "", maxPlayers: 0, performance: "dps" }, view: "overview" })
+    const queries = (querySpy.mock.calls[0][0] as QueryOptions).queries
+    expect(queries[0].enabled).toBe(true)
+    expect(queries[0].queryKey?.[1]).toContain("all_classes=true")
+    expect(queries[1].enabled).toBe(true)
+    expect(queries[1].queryKey?.[1]).toContain("rating_metric=ranked_mastery")
+    const board = vi.mocked(RatingBoards).mock.calls[0][0]
+    expect(board.live!.board({ scope: {}, metric: "peak", period: "180d" }).status).toBe("ready")
+    expect(vi.mocked(LiveRatingBoards).mock.calls[0][0]).toMatchObject({ metric: "peak", allClasses: true })
+  })
+
   it("does not broaden a mismatched class cohort", () => {
     vi.clearAllMocks()
     querySpy.mockImplementation(({ queries }: QueryOptions) => queries.map(() => ({ isError: false })))
-    expect(render({ scope: { cls: "PRIEST" } })).toContain("Choose an exact published raid cohort")
+    render({ scope: { cls: "PRIEST" } })
     const queries = (querySpy.mock.calls[0][0] as QueryOptions).queries
     expect(queries[0].enabled).toBe(false)
     expect(queries[1].enabled).toBe(false)
     expect(queries[2].enabled).toBe(true) // Renown does not require a class cohort.
-    expect(RatingBoards).not.toHaveBeenCalled()
+    expect(vi.mocked(RatingBoards).mock.calls[0][0].live!.board({ scope: { cls: "PRIEST" }, metric: "peak", period: "180d" }).status).toBe("error")
   })
 
   it("keeps all-cohort Renown available without a class, spec or raid cohort", () => {
@@ -82,7 +99,7 @@ describe("LiveHubRatings", () => {
     querySpy.mockImplementation(({ queries }: QueryOptions) => queries.map((q) => ({
       isError: false, data: q.enabled ? { entries: [{ realm_id: "realm-1", player_guid: "mage-1", player_name: "Actual Mage", player_class: "MAGE", player_spec: "Fire", player_sub_spec: "", score: 20 }] } : undefined,
     })))
-    expect(render({ view: "renown", scope: {}, ratingCohort: undefined, cls: undefined, spec: undefined })).toContain("Select a class and spec above")
+    render({ view: "renown", scope: {}, ratingCohort: undefined, cls: undefined, spec: undefined })
     const board = vi.mocked(RatingBoards).mock.calls[0][0]
     expect(board.live!.board({ scope: {}, metric: "renown", period: "180d" }).status).toBe("ready")
     const urls = (querySpy.mock.calls[0][0] as QueryOptions).queries

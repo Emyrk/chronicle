@@ -140,9 +140,8 @@ func tenantRatingInput(r *http.Request, guild, boss bool) (url.Values, []uuid.UU
 		(q.Has("all_classes") && q.Get("class") != "" && strings.TrimSpace(q.Get("class")) == "") {
 		return nil, nil, 0, "", tenantRatingCursor{}, errors.New("invalid player cohort")
 	}
-	if q.Has("all_classes") && (strings.TrimSpace(q.Get("difficulty_name")) == "" || max == 0) {
-		return nil, nil, 0, "", tenantRatingCursor{}, errors.New("all_classes requires difficulty_name and max_players")
-	}
+	// The request already requires both keys by presence. Empty difficulty and
+	// size zero are valid exact Turtle/vanilla raid cohorts.
 	if metric == "renown" && (max != 0 || q.Get("difficulty_name") != "") {
 		return nil, nil, 0, "", tenantRatingCursor{}, errors.New("max_players and difficulty_name must match the rating cohort")
 	}

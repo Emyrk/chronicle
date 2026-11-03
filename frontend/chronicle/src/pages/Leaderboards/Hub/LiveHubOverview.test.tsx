@@ -42,6 +42,16 @@ describe("LiveHubOverview exact default cohort", () => {
     expect(String(options.queryKey)).toContain("0")
   })
 
+  it("requests all-class Peak and Mastery when no class or spec is selected", () => {
+    renderToStaticMarkup(<LiveHubOverview {...base} cls={undefined} spec={undefined} subSpec={undefined}
+      performanceCohort={cohort} ratingCohort={{ ...cohort, performance: "dps" }} />)
+    const calls = vi.mocked(useQuery).mock.calls
+    expect(calls[1][0].enabled).toBe(true)
+    expect(String(calls[1][0].queryKey?.[1])).toContain("all_classes=true")
+    expect(calls[2][0].enabled).toBe(true)
+    expect(String(calls[2][0].queryKey?.[1])).toContain("rating_metric=ranked_mastery")
+  })
+
   it("does not request Peak without a selected matching cohort", () => {
     renderToStaticMarkup(<LiveHubOverview {...base} ratingCohort={undefined} />)
     expect(vi.mocked(useQuery).mock.calls[1][0].enabled).toBe(false)
