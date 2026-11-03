@@ -29,6 +29,9 @@ type sqlcQuerier interface {
 	AddUserFavoriteGuild(ctx context.Context, arg AddUserFavoriteGuildParams) (pgtype.Bool, error)
 	AddUserFavoritePlayer(ctx context.Context, arg AddUserFavoritePlayerParams) error
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
+	// The most recent tenant rating rebuild jobs with their timing and the
+	// worker's last progress snapshot (metadata.output), for the admin page.
+	AdminListRatingRebuildJobs(ctx context.Context, limitCount int32) ([]AdminListRatingRebuildJobsRow, error)
 	// All page fields are supplied together in a short transaction. The version
 	// and pass CAS reject stale/replayed pages. On pass transition clear cursor,
 	// set position=0; preserve completed pass aggregates. Caller verifies exactly

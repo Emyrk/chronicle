@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { AdminRatingRebuilds } from "./AdminRatingRebuilds";
 import type { LeaderboardVersionRequirements } from "@/api/typesGenerated";
 import { useAdminInstanceNames } from "@/api/queries";
 import { Loader2 } from "lucide-react";
@@ -212,6 +213,7 @@ export function AdminLeaderboardPage() {
         )}
         {ratingJobError && <p role="alert" className="text-sm text-destructive">{ratingJobError}</p>}
       </Card>
+      <AdminRatingRebuilds />
     </div>
   );
 }

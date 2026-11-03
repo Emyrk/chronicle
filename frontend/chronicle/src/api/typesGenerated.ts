@@ -438,6 +438,48 @@ export interface AdminRatingRaidPolicy {
     readonly mastery_weight: number;
 }
 
+// From chroniclesdk/rating_hub_summary.go
+/**
+ * AdminRatingRebuildJob is one tenant rating rebuild job from River, with the
+ * worker's last progress snapshot.
+ */
+export interface AdminRatingRebuildJob {
+    readonly id: number;
+    readonly state: string;
+    readonly attempt: number;
+    readonly tenant_id: string;
+    readonly tenant_name: string;
+    readonly created_at: string;
+    readonly attempted_at?: string;
+    readonly finalized_at?: string;
+    /**
+     * DurationSeconds is the rebuild's elapsed time: the worker's recorded
+     * elapsed time when it has one, else creation to finish (or to now).
+     */
+    readonly duration_seconds: number;
+    /**
+     * Slow marks a job over twice the median of the listed finished rebuilds.
+     */
+    readonly slow: boolean;
+    readonly phase?: string;
+    readonly status?: string;
+    readonly pages_processed?: number;
+    readonly pages_per_second?: number;
+    readonly last_error?: string;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
+ * AdminRatingRebuildJobsResponse lists recent rebuilds, newest first.
+ */
+export interface AdminRatingRebuildJobsResponse {
+    readonly jobs: readonly AdminRatingRebuildJob[];
+    /**
+     * MedianSeconds is the median duration of the listed finished rebuilds.
+     */
+    readonly median_seconds: number;
+}
+
 // From chroniclesdk/rankings.go
 /**
  * AdminRefreshRankingsJob describes one tenant summary refresh job.

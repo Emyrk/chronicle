@@ -29878,6 +29878,64 @@ func (q *sqlQuerier) UpsertRetentionRule(ctx context.Context, arg UpsertRetentio
 	return i, err
 }
 
+const adminListRatingRebuildJobs = `-- name: AdminListRatingRebuildJobs :many
+SELECT j.id, j.state::text AS state, j.attempt, j.created_at, j.attempted_at, j.finalized_at,
+       COALESCE(j.args->>'tenant_id', '')::text AS tenant_id, COALESCE(t.name, '')::text AS tenant_name,
+       COALESCE(j.metadata->'output', '{}'::jsonb)::jsonb AS output,
+       COALESCE(j.errors[array_length(j.errors, 1)]->>'error', '')::text AS last_error
+FROM river_job j
+LEFT JOIN tenants t ON t.id::text = j.args->>'tenant_id'
+WHERE j.kind = 'rebuild-tenant-ratings'
+ORDER BY j.id DESC
+LIMIT LEAST(GREATEST($1::int, 1), 200)
+`
+
+type AdminListRatingRebuildJobsRow struct {
+	ID          int64              `db:"id" json:"id"`
+	State       string             `db:"state" json:"state"`
+	Attempt     int16              `db:"attempt" json:"attempt"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	AttemptedAt pgtype.Timestamptz `db:"attempted_at" json:"attempted_at"`
+	FinalizedAt pgtype.Timestamptz `db:"finalized_at" json:"finalized_at"`
+	TenantID    string             `db:"tenant_id" json:"tenant_id"`
+	TenantName  string             `db:"tenant_name" json:"tenant_name"`
+	Output      []byte             `db:"output" json:"output"`
+	LastError   string             `db:"last_error" json:"last_error"`
+}
+
+// The most recent tenant rating rebuild jobs with their timing and the
+// worker's last progress snapshot (metadata.output), for the admin page.
+func (q *sqlQuerier) AdminListRatingRebuildJobs(ctx context.Context, limitCount int32) ([]AdminListRatingRebuildJobsRow, error) {
+	rows, err := q.db.Query(ctx, adminListRatingRebuildJobs, limitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListRatingRebuildJobsRow
+	for rows.Next() {
+		var i AdminListRatingRebuildJobsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.State,
+			&i.Attempt,
+			&i.CreatedAt,
+			&i.AttemptedAt,
+			&i.FinalizedAt,
+			&i.TenantID,
+			&i.TenantName,
+			&i.Output,
+			&i.LastError,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiverQueueMetrics = `-- name: ListRiverQueueMetrics :many
 SELECT
   queue,

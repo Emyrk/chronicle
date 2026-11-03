@@ -1,6 +1,10 @@
 package chroniclesdk
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // HubSummary is a public, tenant-wide snapshot for the live leaderboards overview.
 type HubSummary struct {
@@ -125,4 +129,34 @@ type HubSetBoardResponse struct {
 	Total       int64            `json:"total"`
 	Page        int              `json:"page"`
 	HasNextPage bool             `json:"has_next_page"`
+}
+
+// AdminRatingRebuildJob is one tenant rating rebuild job from River, with the
+// worker's last progress snapshot.
+type AdminRatingRebuildJob struct {
+	ID          int64      `json:"id"`
+	State       string     `json:"state"`
+	Attempt     int16      `json:"attempt"`
+	TenantID    string     `json:"tenant_id"`
+	TenantName  string     `json:"tenant_name"`
+	CreatedAt   time.Time  `json:"created_at"`
+	AttemptedAt *time.Time `json:"attempted_at,omitempty"`
+	FinalizedAt *time.Time `json:"finalized_at,omitempty"`
+	// DurationSeconds is the rebuild's elapsed time: the worker's recorded
+	// elapsed time when it has one, else creation to finish (or to now).
+	DurationSeconds float64 `json:"duration_seconds"`
+	// Slow marks a job over twice the median of the listed finished rebuilds.
+	Slow           bool    `json:"slow"`
+	Phase          string  `json:"phase,omitempty"`
+	Status         string  `json:"status,omitempty"`
+	PagesProcessed int64   `json:"pages_processed,omitempty"`
+	PagesPerSecond float64 `json:"pages_per_second,omitempty"`
+	LastError      string  `json:"last_error,omitempty"`
+}
+
+// AdminRatingRebuildJobsResponse lists recent rebuilds, newest first.
+type AdminRatingRebuildJobsResponse struct {
+	Jobs []AdminRatingRebuildJob `json:"jobs"`
+	// MedianSeconds is the median duration of the listed finished rebuilds.
+	MedianSeconds float64 `json:"median_seconds"`
 }
