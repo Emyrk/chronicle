@@ -64,6 +64,8 @@ function handlers({ loggedIn, search = "ok" }: { loggedIn: boolean; search?: Sea
   return [
     http.get("/api/v1/whoami", () => (loggedIn ? HttpResponse.json(session) : new HttpResponse(null, { status: 204 }))),
     http.get("/api/v1/raidlogs/supported", () => HttpResponse.json(supported)),
+    // Nightmare of Ursol records sub-specs (Bear / Cat, Tank / DPS, Fury Prot).
+    http.get("/api/v1/site-config", () => HttpResponse.json({ dataset_flavor: ["nightmare-of-ursol"] })),
     http.get("/api/v1/raidlogs/search/fields", () => HttpResponse.json(fields)),
     http.get("/api/v1/raidlogs/search/limit", () =>
       HttpResponse.json({ logged_in: loggedIn, limit, remaining, refill_per_minute: loggedIn ? 120 : 20, reset_seconds: 0 }),

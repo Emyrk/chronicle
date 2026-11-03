@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from "react";
+import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -44,7 +44,7 @@ export function ToggleChips({
   onChange,
   disabled,
 }: {
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; icon?: ReactNode }[];
   values: readonly string[];
   onChange: (values: string[]) => void;
   disabled?: boolean;
@@ -60,10 +60,11 @@ export function ToggleChips({
             disabled={disabled}
             onClick={() => onChange(active ? values.filter((v) => v !== opt.value) : [...values, opt.value])}
             className={cn(
-              "px-2 py-0.5 rounded text-2xs font-medium transition-colors disabled:cursor-not-allowed",
+              "px-2 py-0.5 rounded text-2xs font-medium transition-colors disabled:cursor-not-allowed inline-flex items-center gap-1",
               active ? "bg-primary/20 text-primary ring-1 ring-primary/40" : "bg-zinc-800/40 text-zinc-400 hover:text-zinc-200",
             )}
           >
+            {opt.icon}
             {opt.label}
           </button>
         );

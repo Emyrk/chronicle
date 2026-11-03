@@ -108,9 +108,12 @@ export function buildQuery(where: Node | undefined, limit?: number): InstanceSea
 export type TextMatch = "exact" | "contains";
 
 export interface ClassCount {
+  /** Class (search API value, e.g. PRIEST). Empty = any class. */
   class: string;
   /** Optional spec, e.g. Holy. Empty = any spec. */
   spec: string;
+  /** Optional sub-spec, e.g. Bear. Empty = any. */
+  subSpec: string;
   min: number;
 }
 
@@ -249,10 +252,13 @@ export function formToTree(f: SearchForm): Node | undefined {
   if (f.idleTimeMaxMinutes != null) parts.push(pred("instance.idle_time_ms", "<=", Math.round(f.idleTimeMaxMinutes * MINUTE_MS)));
 
   for (const c of f.classCounts) {
-    if (!c.class) continue;
-    const where = c.spec.trim()
-      ? { and: [pred("player.class", "=", c.class), pred("player.spec", "=", c.spec.trim())] }
-      : pred("player.class", "=", c.class);
+    // All parts refer to the same player: e.g. a Paladin who was Holy.
+    const conds: Node[] = [];
+    if (c.class) conds.push(pred("player.class", "=", c.class));
+    if (c.spec.trim()) conds.push(pred("player.spec", "=", c.spec.trim()));
+    if (c.subSpec.trim()) conds.push(pred("player.sub_spec", "=", c.subSpec.trim()));
+    if (conds.length === 0) continue;
+    const where = conds.length === 1 ? conds[0] : { and: conds };
     parts.push({ count_players: { where, op: ">=", value: c.min } });
   }
   for (const name of f.players) {
@@ -287,6 +293,31 @@ function bossOf(inner: Node | undefined, second: (n: Node) => boolean): string |
   const [a, b] = kids;
   if (!isPred(a, "encounter.name", "=") || !second(b)) return null;
   return asString(a.value);
+}
+
+/**
+ * Recognises the class / spec / sub-spec condition formToTree builds: any
+ * non-empty subset of class, spec, sub_spec equality, in that order.
+ */
+function classSpecOf(w: Node | undefined): { class: string; spec: string; subSpec: string } | null {
+  if (!w) return null;
+  const conds = w.and ?? (w.field ? [w] : null);
+  if (!conds || conds.length === 0 || w.or) return null;
+  const out = { class: "", spec: "", subSpec: "" };
+  const order: [string, keyof typeof out][] = [
+    ["player.class", "class"],
+    ["player.spec", "spec"],
+    ["player.sub_spec", "subSpec"],
+  ];
+  let next = 0;
+  for (const c of conds) {
+    const idx = order.findIndex(([field], i) => i >= next && isPred(c, field, "="));
+    const s = asString(c.value);
+    if (idx < 0 || s == null || c.on || c.bosses) return null;
+    out[order[idx][1]] = s;
+    next = idx + 1;
+  }
+  return out;
 }
 
 /**
@@ -365,13 +396,9 @@ export function treeToForm(tree: Node | undefined): SearchForm | null {
     if (n.count_players && n.count_players.op === ">=") {
       const w = n.count_players.where;
       const min = n.count_players.value;
-      if (w && isPred(w, "player.class", "=") && asString(w.value)) {
-        f.classCounts.push({ class: w.value as string, spec: "", min });
-        continue;
-      }
-      const kids = w?.and;
-      if (kids?.length === 2 && isPred(kids[0], "player.class", "=") && isPred(kids[1], "player.spec", "=")) {
-        f.classCounts.push({ class: String(kids[0].value), spec: String(kids[1].value), min });
+      const cs = classSpecOf(w);
+      if (cs) {
+        f.classCounts.push({ ...cs, min });
         continue;
       }
       if (w && isPred(w, "player.guild", "=") && asString(w.value)) {

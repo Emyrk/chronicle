@@ -34,8 +34,9 @@ function fullForm(): SearchForm {
     clearTimeMaxMinutes: 60,
     idleTimeMaxMinutes: 5,
     classCounts: [
-      { class: "PRIEST", spec: "", min: 3 },
-      { class: "PALADIN", spec: "Holy", min: 2 },
+      { class: "PRIEST", spec: "", subSpec: "", min: 3 },
+      { class: "PALADIN", spec: "Holy", subSpec: "", min: 2 },
+      { class: "DRUID", spec: "Feral", subSpec: "Bear", min: 1 },
     ],
     players: ["Thrall"],
     guildCounts: [{ guild: "Beta", min: 10 }],
@@ -65,7 +66,7 @@ describe("formToTree / treeToForm", () => {
   });
 
   it("builds the same-player class + spec count", () => {
-    const tree = formToTree({ ...emptyForm(), classCounts: [{ class: "PALADIN", spec: "Holy", min: 2 }] });
+    const tree = formToTree({ ...emptyForm(), classCounts: [{ class: "PALADIN", spec: "Holy", subSpec: "", min: 2 }] });
     expect(tree?.and?.[0]).toEqual({
       count_players: {
         where: { and: [{ field: "player.class", op: "=", value: "PALADIN" }, { field: "player.spec", op: "=", value: "Holy" }] },
@@ -73,6 +74,32 @@ describe("formToTree / treeToForm", () => {
         value: 2,
       },
     });
+  });
+
+  it("builds class > spec > sub-spec on the same player", () => {
+    const tree = formToTree({ ...emptyForm(), classCounts: [{ class: "DRUID", spec: "Feral", subSpec: "Bear", min: 2 }] });
+    expect(tree?.and?.[0]).toEqual({
+      count_players: {
+        where: {
+          and: [
+            { field: "player.class", op: "=", value: "DRUID" },
+            { field: "player.spec", op: "=", value: "Feral" },
+            { field: "player.sub_spec", op: "=", value: "Bear" },
+          ],
+        },
+        op: ">=",
+        value: 2,
+      },
+    });
+    // Spec alone (any class) also round-trips.
+    const specOnly = { ...emptyForm(), classCounts: [{ class: "", spec: "Holy", subSpec: "", min: 3 }] };
+    expect(treeToForm(formToTree(specOnly))).toEqual(specOnly);
+    // Out-of-order conditions are not a form shape.
+    expect(
+      treeToForm({
+        and: [{ count_players: { where: { and: [{ field: "player.spec", op: "=", value: "Holy" }, { field: "player.class", op: "=", value: "PRIEST" }] }, op: ">=", value: 1 } }],
+      }),
+    ).toBeNull();
   });
 
   it("returns null for trees the form cannot show", () => {

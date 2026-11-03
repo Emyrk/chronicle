@@ -11,6 +11,9 @@ import { cn } from "@/lib/utils";
 import { ChipInput, NATIVE_SELECT, NumberInput, Segmented, SuggestInput, ToggleChips } from "./controls";
 import { MATCH_OPTIONS, METRIC_OPTIONS, ON_OPTIONS, OP_LABELS, PARSE_SCOPE_OPTIONS, enumLabel, fieldLabel } from "./fieldLabels";
 import type { Node } from "./queryModel";
+import { ClassSpecPicker } from "./ClassSpecPicker";
+import { ANY_CLASS_SPEC, classLabel, useSubSpecs } from "./classSpec";
+import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
 
 /**
  * Block editor for the search tree, in the style of the panel filter editor
@@ -409,6 +412,27 @@ function ValueEditor({
   const list = op === "in" || op === "not_in";
   const disabled = ctx.disabled;
 
+  // Class, spec and sub-spec get the icon pickers instead of plain inputs.
+  if (field.name === "player.class") {
+    if (list) {
+      const opts = (field.enum ?? []).filter((c) => c !== "UNKNOWN").map((c) => ({ value: c, label: classLabel(c), icon: <ClassIcon cls={c.replace(/_/g, "")} className="h-3.5 w-3.5 rounded-sm" /> }));
+      return <ToggleChips options={opts} values={Array.isArray(value) ? (value as string[]) : []} onChange={onChange} disabled={disabled} />;
+    }
+    return (
+      <ClassSpecPicker
+        depth="class"
+        allowAny={false}
+        allowedClasses={field.enum}
+        value={{ ...ANY_CLASS_SPEC, class: typeof value === "string" ? value : "" }}
+        onChange={(v) => onChange(v.class)}
+        disabled={disabled}
+      />
+    );
+  }
+  if ((field.name === "player.spec" || field.name === "player.sub_spec") && !list) {
+    return <SpecValuePicker subSpec={field.name === "player.sub_spec"} value={typeof value === "string" ? value : ""} onChange={onChange} disabled={disabled} />;
+  }
+
   if (field.type === "enum") {
     const opts = (field.enum ?? []).map((v) => ({ value: v, label: enumLabel(v) }));
     if (list) return <ToggleChips options={opts} values={Array.isArray(value) ? (value as string[]) : []} onChange={onChange} disabled={disabled} />;
@@ -475,6 +499,30 @@ function ValueEditor({
       value={typeof value === "string" ? value : ""}
       onChange={onChange}
       suggestions={suggestionsFor(field, ctx)}
+      disabled={disabled}
+    />
+  );
+}
+
+/**
+ * Spec / sub-spec value via the Class > Spec (> Sub-spec) menu. The stored
+ * value is just the spec or sub-spec name; pair it with a class condition
+ * to pin the class. When the site records no sub-specs, sub-spec falls back
+ * to a text box.
+ */
+function SpecValuePicker({ subSpec, value, onChange, disabled }: { subSpec: boolean; value: string; onChange: (v: string) => void; disabled?: boolean }) {
+  const subSpecs = useSubSpecs();
+  if (subSpec && subSpecs.size === 0) {
+    return <SuggestInput className="flex-1 min-w-[120px]" value={value} onChange={onChange} disabled={disabled} />;
+  }
+  const current = subSpec ? { ...ANY_CLASS_SPEC, subSpec: value } : { ...ANY_CLASS_SPEC, spec: value };
+  return (
+    <ClassSpecPicker
+      depth={subSpec ? "subspec" : "spec"}
+      allowAny={false}
+      placeholder={subSpec ? "Pick a sub-spec" : "Pick a spec"}
+      value={current}
+      onChange={(v) => onChange(subSpec ? v.subSpec : v.spec)}
       disabled={disabled}
     />
   );

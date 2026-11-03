@@ -4,8 +4,9 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { ChipInput, NATIVE_SELECT, NumberInput, Segmented, SuggestInput, ToggleChips } from "./controls";
-import { MATCH_OPTIONS, PARSE_SCOPE_OPTIONS, SPEC_SUGGESTIONS, enumLabel } from "./fieldLabels";
+import { ChipInput, NumberInput, Segmented, SuggestInput, ToggleChips } from "./controls";
+import { MATCH_OPTIONS, PARSE_SCOPE_OPTIONS, enumLabel } from "./fieldLabels";
+import { ClassSpecPicker } from "./ClassSpecPicker";
 import type { SearchForm as Form, TextMatch } from "./queryModel";
 
 const TEXT_MATCH_OPTIONS: { value: TextMatch; label: string }[] = [
@@ -90,16 +91,18 @@ export function SearchForm({ form, onChange, zones, bosses, classes, capabilitie
             {form.classCounts.map((c, i) => (
               <div key={i} className="flex flex-wrap items-center gap-1.5">
                 <NumberInput className="w-16" value={c.min} min={1} disabled={locked} onChange={(v) => set("classCounts", form.classCounts.map((x, j) => (j === i ? { ...x, min: Math.max(1, Math.round(v ?? 1)) } : x)))} />
-                <SuggestInput className="w-32" value={c.spec} suggestions={SPEC_SUGGESTIONS} placeholder="any spec" disabled={locked} onChange={(v) => set("classCounts", form.classCounts.map((x, j) => (j === i ? { ...x, spec: v } : x)))} />
-                <select className={NATIVE_SELECT} value={c.class} disabled={locked} onChange={(e) => set("classCounts", form.classCounts.map((x, j) => (j === i ? { ...x, class: e.target.value } : x)))}>
-                  {classes.map((cl) => (
-                    <option key={cl} value={cl}>{enumLabel(cl)}</option>
-                  ))}
-                </select>
+                <ClassSpecPicker
+                  value={c}
+                  allowedClasses={classes}
+                  allowAny={false}
+                  placeholder="Pick a class / spec"
+                  disabled={locked}
+                  onChange={(v) => set("classCounts", form.classCounts.map((x, j) => (j === i ? { ...x, ...v } : x)))}
+                />
                 <RemoveButton disabled={locked} onClick={() => set("classCounts", form.classCounts.filter((_, j) => j !== i))} />
               </div>
             ))}
-            <AddButton disabled={locked} onClick={() => set("classCounts", [...form.classCounts, { class: classes[0] ?? "WARRIOR", spec: "", min: 1 }])}>
+            <AddButton disabled={locked} onClick={() => set("classCounts", [...form.classCounts, { class: classes[0] ?? "WARRIOR", spec: "", subSpec: "", min: 1 }])}>
               + Class / spec
             </AddButton>
             <p className="text-2xs text-muted-foreground">Spec is read from boss kills.</p>
