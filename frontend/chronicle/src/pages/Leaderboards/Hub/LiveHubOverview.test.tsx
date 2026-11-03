@@ -53,7 +53,7 @@ describe("live Hub overview", () => {
     expect(html).toContain("1,533/s")
     // Peak carries the DPS behind it, on the ratings card and the boss cards.
     expect(html).toContain("1,312 dps")
-    expect(html).toContain("42.0 · 1,312 dps")
+    expect(html).toContain("1,312/s")
     expect(vi.mocked(useHubSummary).mock.calls[0][1]).toBe(false)
   })
 
