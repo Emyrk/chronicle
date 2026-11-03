@@ -2,6 +2,7 @@ package servicerankings
 
 import (
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -147,4 +148,31 @@ func TestHubSummaryEncounterSet(t *testing.T) {
 		{ID: "hard", Encounters: []string{"Solnius (Hard Mode)"}}, {ID: "", Encounters: []string{"Erennius", "Solnius"}},
 	}, []string{"Erennius"}))
 	require.Equal(t, []string{"Lucifron", "Ragnaros"}, hubPresetBosses(nil, []string{"Lucifron", "Trash", "Ragnaros"}))
+}
+
+func TestParseHubSetBoardInput(t *testing.T) {
+	t.Parallel()
+	parse := func(query string) (hubSetBoardInput, error) {
+		return parseHubSetBoardInput(httptest.NewRequest("GET", "/set-board?"+query, nil))
+	}
+	base := "instance_name=Molten+Core&encounter_names=Lucifron,Ragnaros&difficulty_name=&max_players=0&performance_metric=dps&subject=player&rating_metric=mastery"
+	in, err := parse(base + "&window=all&page=2&limit=10&class=WARRIOR&spec=Fury")
+	require.NoError(t, err)
+	require.Equal(t, "ranked_mastery", in.params.RatingMetric)
+	require.Equal(t, "all_time", in.params.WindowKind)
+	require.Equal(t, "career", in.params.RenownWindow)
+	require.Equal(t, "WARRIOR", in.params.PlayerClass)
+	require.Equal(t, int32(11), in.params.LimitCount, "one extra row tells whether a next page exists")
+	require.Equal(t, int32(20), in.params.OffsetCount)
+
+	_, err = parse(base + "&encounter_names=")
+	require.Error(t, err)
+	_, err = parse(strings.Replace(base, "subject=player", "subject=guild", 1) + "&class=WARRIOR")
+	require.Error(t, err, "guild boards have no class")
+	_, err = parse(base + "&spec=Fury")
+	require.Error(t, err, "spec needs a class")
+	_, err = parse(base + "&limit=500")
+	require.Error(t, err)
+	_, err = parse(base + "&cursor=x")
+	require.Error(t, err)
 }

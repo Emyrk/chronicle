@@ -85,3 +85,33 @@ type HubGuildRatingEntry struct {
 	GuildName string    `json:"guild_name"`
 	Score     float64   `json:"score"`
 }
+
+// HubSetBoardRow is one ranked subject on a chosen-boss board. Peak and Ranked
+// Mastery average over the chosen bosses (a missed one is 0); Renown sums.
+type HubSetBoardRow struct {
+	Rank          int64     `json:"rank"`
+	RealmID       uuid.UUID `json:"realm_id"`
+	RealmName     string    `json:"realm_name"`
+	SubjectID     string    `json:"subject_id"`
+	Name          string    `json:"name"`
+	GuildName     string    `json:"guild_name"`
+	PlayerClass   string    `json:"player_class"`
+	PlayerSpec    string    `json:"player_spec"`
+	PlayerSubSpec string    `json:"player_sub_spec"`
+	// Score is the ranked metric's; Peak, Mastery, and Renown are all three.
+	Score   float64 `json:"score"`
+	Peak    float64 `json:"peak"`
+	Mastery float64 `json:"mastery"`
+	Renown  float64 `json:"renown"`
+	// PeakRaw is the Peak's duration-weighted DPS/HPS; unset when unknown.
+	PeakRaw *float64 `json:"peak_raw,omitempty"`
+}
+
+// HubSetBoardResponse is a page of a chosen-boss board. Ranks cover the whole
+// cohort; realm and search filters only narrow the displayed rows.
+type HubSetBoardResponse struct {
+	Rows        []HubSetBoardRow `json:"rows"`
+	Total       int64            `json:"total"`
+	Page        int              `json:"page"`
+	HasNextPage bool             `json:"has_next_page"`
+}

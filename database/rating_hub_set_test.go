@@ -56,7 +56,7 @@ func TestHubSetRatingRows(t *testing.T) {
 	insert("steady", "Ragnaros", "renown", "none", "", 0, 5, 0, 0)
 
 	rows, err := q.HubSetRatingRows(ctx, database.HubSetRatingRowsParams{TenantID: tenant, GenerationID: gen, InstanceName: "Molten Core",
-		EncounterNames: []string{"Lucifron", "Ragnaros"}, PerformanceMetric: "dps"})
+		EncounterNames: []string{"Lucifron", "Ragnaros"}, PerformanceMetric: "dps", WindowKind: "period", RenownWindow: "period"})
 	require.NoError(t, err)
 	var peaks []database.HubSetRatingRowsRow
 	var renown float64
@@ -76,4 +76,52 @@ func TestHubSetRatingRows(t *testing.T) {
 	require.Equal(t, "spike", peaks[1].SubjectID)
 	require.InDelta(t, 50, peaks[1].Score, 1e-9, "a missed chosen boss counts as 0")
 	require.InDelta(t, 8, renown, 1e-9)
+
+	// The paged board ranks the same way and carries all three scores per row.
+	page := func(metric, query string, offset, limit int32) []database.HubSetBoardPageRow {
+		rows, err := q.HubSetBoardPage(ctx, database.HubSetBoardPageParams{Subject: "player", TenantID: tenant, GenerationID: gen, InstanceName: "Molten Core",
+			EncounterNames: []string{"Lucifron", "Ragnaros"}, RatingMetric: metric, WindowKind: "period", RenownWindow: "period",
+			PerformanceMetric: "dps", SearchQuery: query, OffsetCount: offset, LimitCount: limit})
+		require.NoError(t, err)
+		return rows
+	}
+	board := page("peak", "", 0, 10)
+	require.Len(t, board, 2)
+	require.Equal(t, int64(1), board[0].Rank)
+	require.Equal(t, int64(2), board[0].Total)
+	require.Equal(t, "steady", board[0].SubjectID)
+	require.InDelta(t, 90, board[0].Peak, 1e-9)
+	require.InDelta(t, 8, board[0].Renown, 1e-9)
+	require.InDelta(t, 1800, board[0].PeakRaw, 1e-9)
+	require.InDelta(t, 50, board[1].Score, 1e-9)
+	second := page("peak", "", 1, 1)
+	require.Len(t, second, 1)
+	require.Equal(t, "spike", second[0].SubjectID)
+	require.Equal(t, int64(2), second[0].Rank)
+	// Renown ranks "steady" alone, and still reports its Peak.
+	renownBoard := page("renown", "", 0, 10)
+	require.Len(t, renownBoard, 1)
+	require.InDelta(t, 90, renownBoard[0].Peak, 1e-9)
+	require.Empty(t, page("peak", "nobody", 0, 10))
+
+	// Guild boards: same averaging, ranked by guild.
+	guild := uuid.New()
+	_, err = conn.Exec(ctx, "INSERT INTO guilds (id, realm_id, name) VALUES ($1,$2,'Set Guild')", guild, realm)
+	require.NoError(t, err)
+	for _, boss := range []struct {
+		name  string
+		score float64
+	}{{"Lucifron", 80}, {"Ragnaros", 60}} {
+		_, err = conn.Exec(ctx, `INSERT INTO guild_tenant_rating_boss_scores
+			(generation_id,tenant_id,realm_id,guild_id,instance_name,encounter_name,difficulty_name,max_players,rating_metric,window_kind,window_start,window_end,score)
+			VALUES ($1,$2,$3,$4,'Molten Core',$5,'',0,'peak','period',now()-interval '1 day',now(),$6)`, gen, tenant, realm, guild, boss.name, boss.score)
+		require.NoError(t, err)
+	}
+	guilds, err := q.HubSetBoardPage(ctx, database.HubSetBoardPageParams{Subject: "guild", TenantID: tenant, GenerationID: gen, InstanceName: "Molten Core",
+		EncounterNames: []string{"Lucifron", "Ragnaros", "Garr"}, RatingMetric: "peak", WindowKind: "period", RenownWindow: "period",
+		PerformanceMetric: "dps", LimitCount: 10})
+	require.NoError(t, err)
+	require.Len(t, guilds, 1)
+	require.Equal(t, "Set Guild", guilds[0].SubjectName)
+	require.InDelta(t, 140.0/3, guilds[0].Score, 1e-9, "a missed chosen boss (Garr) counts as 0")
 }

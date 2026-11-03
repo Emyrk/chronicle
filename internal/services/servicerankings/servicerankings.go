@@ -217,6 +217,7 @@ func (s *Service) setupRoutes() {
 
 	// Published tenant-wide rating leaderboards. Realm IDs filter rows only.
 	s.router.Get("/ratings/hub-summary", s.handleHubSummary)
+	s.router.Get("/ratings/set-board", s.handleHubSetBoard)
 	s.router.Get("/ratings/guild-full-list", s.handlePublishedGuildFullList)
 	s.router.Get("/ratings/player-full-list", s.handlePublishedPlayerFullList)
 	s.router.Get("/ratings/scope-leaderboard", s.handleTenantPlayerScopeLeaderboard)

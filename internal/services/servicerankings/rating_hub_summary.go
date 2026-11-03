@@ -114,17 +114,21 @@ func hubClassFilter(class string) string {
 type hubSummaryInput struct {
 	instance, featured, difficulty, metric, class, spec, subSpec, tab string
 	// set is two or more chosen bosses; ratings and performances span them.
-	set      []string
-	size     int16
-	exact    bool
-	realmIDs []uuid.UUID
+	set []string
+	// window and renownWindow pick the rating windows (180 days, or all time).
+	window, renownWindow string
+	// bossDepth is how many leaders each boss board returns (1, or 3 for the Ratings tab).
+	bossDepth int32
+	size      int16
+	exact     bool
+	realmIDs  []uuid.UUID
 }
 
 func parseHubSummaryInput(r *http.Request) (hubSummaryInput, error) {
 	q := r.URL.Query()
 	for key, values := range q {
 		switch key {
-		case "instance_name", "encounter_name", "encounter_names", "difficulty_name", "max_players", "performance_metric", "class", "spec", "sub_spec", "realm_ids", "tab":
+		case "instance_name", "encounter_name", "encounter_names", "window", "boss_depth", "difficulty_name", "max_players", "performance_metric", "class", "spec", "sub_spec", "realm_ids", "tab":
 		default:
 			return hubSummaryInput{}, errors.New("unknown parameter: " + key)
 		}
@@ -150,7 +154,23 @@ func parseHubSummaryInput(r *http.Request) (hubSummaryInput, error) {
 			return in, errors.New("encounter_names must list 2 to 64 bosses")
 		}
 	}
-	if in.instance == "" && (q.Has("encounter_name") || q.Has("encounter_names") || q.Has("difficulty_name") || q.Has("max_players") || q.Has("class") || q.Has("spec") || q.Has("sub_spec") || q.Has("performance_metric")) {
+	switch q.Get("window") {
+	case "", "period":
+		in.window, in.renownWindow = "period", "period"
+	case "all":
+		in.window, in.renownWindow = "all_time", "career"
+	default:
+		return in, errors.New("window must be period or all")
+	}
+	switch q.Get("boss_depth") {
+	case "", "1":
+		in.bossDepth = 1
+	case "3":
+		in.bossDepth = 3
+	default:
+		return in, errors.New("boss_depth must be 1 or 3")
+	}
+	if in.instance == "" && (q.Has("encounter_name") || q.Has("encounter_names") || q.Has("window") || q.Has("boss_depth") || q.Has("difficulty_name") || q.Has("max_players") || q.Has("class") || q.Has("spec") || q.Has("sub_spec") || q.Has("performance_metric")) {
 		return in, errors.New("instance_name is required for selected overview filters")
 	}
 	if in.tab == "" {
@@ -496,7 +516,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if genErr == nil && generation != uuid.Nil {
-		rows, e := s.store.HubSummaryRatingRows(ctx, database.HubSummaryRatingRowsParams{TenantID: tenant, GenerationID: generation, InstanceName: in.instance, FeaturedEncounter: in.featured, DifficultyName: in.difficulty, MaxPlayers: in.size, ExactCohort: in.exact, PerformanceMetric: in.metric, PlayerClass: hubClassFilter(in.class), PlayerSpec: in.spec, PlayerSubSpec: in.subSpec, RealmIds: in.realmIDs})
+		rows, e := s.store.HubSummaryRatingRows(ctx, database.HubSummaryRatingRowsParams{TenantID: tenant, GenerationID: generation, InstanceName: in.instance, FeaturedEncounter: in.featured, DifficultyName: in.difficulty, MaxPlayers: in.size, ExactCohort: in.exact, PerformanceMetric: in.metric, PlayerClass: hubClassFilter(in.class), PlayerSpec: in.spec, PlayerSubSpec: in.subSpec, RealmIds: in.realmIDs, WindowKind: in.window, RenownWindow: in.renownWindow, BossDepth: in.bossDepth})
 		if e != nil {
 			httpapi.InternalServerError(w, e)
 			return
@@ -544,7 +564,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 
 	}
 	if genErr == nil && generation != uuid.Nil && in.featured == "" && len(in.set) > 0 {
-		rows, e := s.store.HubSetRatingRows(ctx, database.HubSetRatingRowsParams{TenantID: tenant, GenerationID: generation, InstanceName: in.instance, EncounterNames: in.set, DifficultyName: in.difficulty, MaxPlayers: in.size, PerformanceMetric: in.metric, PlayerClass: hubClassFilter(in.class), PlayerSpec: in.spec, PlayerSubSpec: in.subSpec, RealmIds: in.realmIDs})
+		rows, e := s.store.HubSetRatingRows(ctx, database.HubSetRatingRowsParams{TenantID: tenant, GenerationID: generation, InstanceName: in.instance, EncounterNames: in.set, DifficultyName: in.difficulty, MaxPlayers: in.size, PerformanceMetric: in.metric, PlayerClass: hubClassFilter(in.class), PlayerSpec: in.spec, PlayerSubSpec: in.subSpec, RealmIds: in.realmIDs, WindowKind: in.window, RenownWindow: in.renownWindow})
 		if e != nil {
 			httpapi.InternalServerError(w, e)
 			return

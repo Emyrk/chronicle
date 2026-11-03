@@ -23,7 +23,7 @@ WITH selected_bosses AS (
     WHERE s.tenant_id = @tenant_id AND s.generation_id = @generation_id AND s.instance_name = @instance_name
       AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
       AND (COALESCE(cardinality(@realm_ids::uuid[]), 0) = 0 OR s.realm_id = ANY(@realm_ids::uuid[]))
-      AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none') OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND @exact_cohort::boolean AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players AND s.performance_metric = sqlc.arg(performance_metric)::text))
+      AND ((s.rating_metric = 'renown' AND s.window_kind = @renown_window::text AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none') OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = @window_kind::text AND @exact_cohort::boolean AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players AND s.performance_metric = sqlc.arg(performance_metric)::text))
     AND (s.rating_metric = 'renown' OR ((@player_class::text = '' OR s.player_class = @player_class) AND (@player_spec::text = '' OR s.player_spec = @player_spec) AND (@player_sub_spec::text = '' OR s.player_sub_spec = @player_sub_spec)))
 
     ORDER BY s.rating_metric, s.realm_id, s.player_guid, s.score DESC, COALESCE(s.best_raw, 0) DESC, s.player_class, s.player_spec, s.player_sub_spec
@@ -45,7 +45,7 @@ WITH selected_bosses AS (
     WHERE s.tenant_id = @tenant_id AND s.generation_id = @generation_id AND s.instance_name = @instance_name
       AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
       AND (COALESCE(cardinality(@realm_ids::uuid[]), 0) = 0 OR s.realm_id = ANY(@realm_ids::uuid[]))
-      AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none') OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND @exact_cohort::boolean AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players AND s.performance_metric = sqlc.arg(performance_metric)::text))
+      AND ((s.rating_metric = 'renown' AND s.window_kind = @renown_window::text AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none') OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = @window_kind::text AND @exact_cohort::boolean AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players AND s.performance_metric = sqlc.arg(performance_metric)::text))
     AND (s.rating_metric = 'renown' OR ((@player_class::text = '' OR s.player_class = @player_class) AND (@player_spec::text = '' OR s.player_spec = @player_spec) AND (@player_sub_spec::text = '' OR s.player_sub_spec = @player_sub_spec)))
       AND s.encounter_name IN (SELECT encounter_name FROM selected_bosses)
     ORDER BY s.encounter_name, s.rating_metric, s.realm_id, s.player_guid, s.score DESC, COALESCE(s.best_raw, 0) DESC, s.player_class, s.player_spec, s.player_sub_spec
@@ -67,7 +67,7 @@ WITH selected_bosses AS (
     WHERE s.tenant_id = @tenant_id AND s.generation_id = @generation_id AND s.instance_name = @instance_name
       AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
       AND (COALESCE(cardinality(@realm_ids::uuid[]), 0) = 0 OR s.realm_id = ANY(@realm_ids::uuid[]))
-      AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0) OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND @exact_cohort::boolean AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players))
+      AND ((s.rating_metric = 'renown' AND s.window_kind = @renown_window::text AND s.difficulty_name = '' AND s.max_players = 0) OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = @window_kind::text AND @exact_cohort::boolean AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players))
     ORDER BY s.rating_metric, s.realm_id, s.guild_id, s.score DESC
   ) b
   JOIN wow_server_realms realm ON realm.id = b.realm_id
@@ -87,7 +87,7 @@ WITH selected_bosses AS (
     WHERE s.tenant_id = @tenant_id AND s.generation_id = @generation_id AND s.instance_name = @instance_name
       AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
       AND (COALESCE(cardinality(@realm_ids::uuid[]), 0) = 0 OR s.realm_id = ANY(@realm_ids::uuid[]))
-      AND ((s.rating_metric = 'renown' AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0) OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = 'period' AND @exact_cohort::boolean AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players))
+      AND ((s.rating_metric = 'renown' AND s.window_kind = @renown_window::text AND s.difficulty_name = '' AND s.max_players = 0) OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = @window_kind::text AND @exact_cohort::boolean AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players))
       AND s.encounter_name IN (SELECT encounter_name FROM selected_bosses)
     ORDER BY s.encounter_name, s.rating_metric, s.realm_id, s.guild_id, s.score DESC
   ) b
@@ -101,7 +101,7 @@ SELECT subject, board, rating_metric, encounter_name, realm_id, subject_id, scor
        COALESCE(CASE WHEN subject = 'player' AND rating_metric = 'peak' THEN best_raw END, 0)::float8 AS peak_raw,
        player_class, player_spec, player_sub_spec, subject_name, realm_name
 FROM boards
-WHERE position <= CASE WHEN board = 'scope' OR encounter_name = @featured_encounter::text THEN 5 ELSE 1 END
+WHERE position <= CASE WHEN board = 'scope' OR encounter_name = @featured_encounter::text THEN 5 ELSE GREATEST(LEAST(@boss_depth::int, 3), 1) END
 ORDER BY board, encounter_name, subject, rating_metric, position;
 
 -- name: HubSummaryInstances :many
@@ -229,7 +229,7 @@ WITH chosen AS (
     AND s.encounter_name IN (SELECT encounter_name FROM chosen)
     AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
     AND (COALESCE(cardinality(@realm_ids::uuid[]), 0) = 0 OR s.realm_id = ANY(@realm_ids::uuid[]))
-    AND s.window_kind = 'period'
+    AND s.window_kind = CASE WHEN s.rating_metric = 'renown' THEN @renown_window::text ELSE @window_kind::text END
     AND ((s.rating_metric = 'renown' AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none')
       OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players
           AND s.performance_metric = sqlc.arg(performance_metric)::text
@@ -253,7 +253,7 @@ WITH chosen AS (
     AND s.encounter_name IN (SELECT encounter_name FROM chosen)
     AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
     AND (COALESCE(cardinality(@realm_ids::uuid[]), 0) = 0 OR s.realm_id = ANY(@realm_ids::uuid[]))
-    AND s.window_kind = 'period'
+    AND s.window_kind = CASE WHEN s.rating_metric = 'renown' THEN @renown_window::text ELSE @window_kind::text END
     AND ((s.rating_metric = 'renown' AND s.difficulty_name = '' AND s.max_players = 0)
       OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players))
   GROUP BY s.rating_metric, s.realm_id, s.guild_id
@@ -280,3 +280,118 @@ LEFT JOIN guilds guild ON r.subject = 'guild' AND guild.id = (CASE WHEN r.subjec
   AND guild.realm_id = r.realm_id
 WHERE r.position <= 5
 ORDER BY r.subject, r.rating_metric, r.position;
+
+-- name: HubSetBoardPage :many
+-- One ranked page of a chosen-boss board (any number of bosses, one included):
+-- Peak and Ranked Mastery average over every chosen boss (a missed one is 0),
+-- Renown sums. Only the ranked metric is aggregated for the whole cohort; the
+-- page's other two scores are looked up per row. Ranks cover the whole tenant
+-- cohort before the display-only realm and name filters, as on the full lists.
+WITH chosen AS (
+  SELECT DISTINCT unnest(@encounter_names::text[]) AS encounter_name LIMIT 64
+), n AS (SELECT count(*)::float8 AS bosses FROM chosen),
+player_cohorts AS (
+  SELECT s.realm_id, s.player_guid::text AS subject_id, s.player_class, s.player_spec, s.player_sub_spec,
+         CASE WHEN @rating_metric::text = 'renown' THEN sum(s.score) ELSE sum(s.score) / (SELECT bosses FROM n) END AS score,
+         COALESCE(sum(s.best_raw * s.best_duration_secs) FILTER (WHERE s.best_raw > 0 AND s.best_duration_secs > 0)
+           / NULLIF(sum(s.best_duration_secs) FILTER (WHERE s.best_raw > 0 AND s.best_duration_secs > 0), 0), 0) AS raw
+  FROM player_tenant_rating_boss_scores s
+  JOIN rating_score_generations generation ON generation.id = s.generation_id AND generation.tenant_id = s.tenant_id AND generation.status = 'active'
+  JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
+  JOIN wow_servers server ON server.id = source_realm.server_id
+  WHERE @subject::text = 'player' AND s.tenant_id = @tenant_id AND s.generation_id = @generation_id AND s.instance_name = @instance_name
+    AND s.encounter_name IN (SELECT encounter_name FROM chosen)
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND s.rating_metric = @rating_metric::text
+    AND ((@rating_metric::text = 'renown' AND s.window_kind = @renown_window::text AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none')
+      OR (@rating_metric::text <> 'renown' AND s.window_kind = @window_kind::text AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players
+          AND s.performance_metric = sqlc.arg(performance_metric)::text
+          AND (@player_class::text = '' OR s.player_class = @player_class)
+          AND (@player_spec::text = '' OR s.player_spec = @player_spec)
+          AND (@player_sub_spec::text = '' OR s.player_sub_spec = @player_sub_spec)))
+  GROUP BY s.realm_id, s.player_guid, s.player_class, s.player_spec, s.player_sub_spec
+), players AS (
+  SELECT DISTINCT ON (realm_id, subject_id) *
+  FROM player_cohorts
+  ORDER BY realm_id, subject_id, score DESC, raw DESC, player_class, player_spec, player_sub_spec
+), guilds_scored AS (
+  SELECT s.realm_id, s.guild_id::text AS subject_id, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec,
+         CASE WHEN @rating_metric::text = 'renown' THEN sum(s.score) ELSE sum(s.score) / (SELECT bosses FROM n) END AS score,
+         0::float8 AS raw
+  FROM guild_tenant_rating_boss_scores s
+  JOIN rating_score_generations generation ON generation.id = s.generation_id AND generation.tenant_id = s.tenant_id AND generation.status = 'active'
+  JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
+  JOIN wow_servers server ON server.id = source_realm.server_id
+  WHERE @subject::text = 'guild' AND s.tenant_id = @tenant_id AND s.generation_id = @generation_id AND s.instance_name = @instance_name
+    AND s.encounter_name IN (SELECT encounter_name FROM chosen)
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND s.rating_metric = @rating_metric::text
+    AND ((@rating_metric::text = 'renown' AND s.window_kind = @renown_window::text AND s.difficulty_name = '' AND s.max_players = 0)
+      OR (@rating_metric::text <> 'renown' AND s.window_kind = @window_kind::text AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players))
+  GROUP BY s.realm_id, s.guild_id
+), ranked AS (
+  SELECT b.*, row_number() OVER (ORDER BY b.score DESC, CASE WHEN @rating_metric::text = 'peak' THEN b.raw ELSE 0 END DESC, b.realm_id, b.subject_id) AS rank
+  FROM (SELECT * FROM players UNION ALL SELECT * FROM guilds_scored) b
+), displayed AS (
+  SELECT r.*, realm.name::text AS realm_name,
+         COALESCE(CASE WHEN @subject::text = 'player' THEN gp.name ELSE guild.name END, '')::text AS subject_name,
+         COALESCE(player_guild.name, '')::text AS guild_name
+  FROM ranked r
+  JOIN wow_server_realms realm ON realm.id = r.realm_id
+  LEFT JOIN game_players gp ON @subject::text = 'player' AND gp.realm_id = r.realm_id
+    AND gp.id = (CASE WHEN r.subject_id ~ '^0x[0-9A-Fa-f]{16}$' THEN r.subject_id::wow_guid ELSE NULL::wow_guid END)
+  LEFT JOIN guilds player_guild ON player_guild.id = gp.guild_id AND player_guild.realm_id = r.realm_id
+  LEFT JOIN guilds guild ON @subject::text = 'guild' AND guild.realm_id = r.realm_id
+    AND guild.id = (CASE WHEN r.subject_id ~ '^[0-9a-f-]{36}$' THEN r.subject_id::uuid ELSE NULL::uuid END)
+  WHERE (COALESCE(cardinality(@realm_ids::uuid[]), 0) = 0 OR r.realm_id = ANY(@realm_ids::uuid[]))
+    AND (@search_query::text = '' OR position(lower(@search_query::text) in lower(COALESCE(gp.name, guild.name, r.subject_id))) > 0
+         OR position(lower(@search_query::text) in lower(COALESCE(player_guild.name, ''))) > 0)
+), paged AS (
+  SELECT d.*, count(*) OVER () AS total
+  FROM displayed d
+  ORDER BY d.rank
+  LIMIT LEAST(GREATEST(@limit_count::int, 1), 500) OFFSET GREATEST(@offset_count::int, 0)
+)
+SELECT p.rank::bigint AS rank, p.total::bigint AS total, p.realm_id, p.realm_name, p.subject_id, p.subject_name, p.guild_name,
+       p.player_class, p.player_spec, p.player_sub_spec, p.score::float8 AS score,
+       COALESCE(other.peak, 0)::float8 AS peak, COALESCE(other.mastery, 0)::float8 AS mastery, COALESCE(other.renown, 0)::float8 AS renown,
+       COALESCE(other.peak_raw, 0)::float8 AS peak_raw
+FROM paged p
+LEFT JOIN LATERAL (
+  -- The row's three scores over the same bosses. A class/spec-ranked row keeps its
+  -- cohort; a Renown-ranked player (Renown has no spec) takes its best cohort.
+  SELECT max(c.peak) AS peak, max(c.mastery) AS mastery, max(c.renown) AS renown,
+         (array_agg(c.peak_raw ORDER BY c.peak DESC NULLS LAST))[1] AS peak_raw
+  FROM (
+    SELECT x.cohort,
+           sum(x.score) FILTER (WHERE x.rating_metric = 'peak') / (SELECT bosses FROM n) AS peak,
+           sum(x.score) FILTER (WHERE x.rating_metric = 'ranked_mastery') / (SELECT bosses FROM n) AS mastery,
+           sum(x.score) FILTER (WHERE x.rating_metric = 'renown') AS renown,
+           sum(x.best_raw * x.best_duration_secs) FILTER (WHERE x.rating_metric = 'peak' AND x.best_raw > 0 AND x.best_duration_secs > 0)
+             / NULLIF(sum(x.best_duration_secs) FILTER (WHERE x.rating_metric = 'peak' AND x.best_raw > 0 AND x.best_duration_secs > 0), 0) AS peak_raw
+    FROM (
+      SELECT CASE WHEN s.rating_metric = 'renown' THEN '' ELSE s.player_class || '|' || s.player_spec || '|' || s.player_sub_spec END AS cohort,
+             s.rating_metric, s.score, s.best_raw, s.best_duration_secs
+      FROM player_tenant_rating_boss_scores s
+      WHERE @subject::text = 'player' AND s.tenant_id = @tenant_id AND s.generation_id = @generation_id
+        AND s.realm_id = p.realm_id AND s.player_guid = p.subject_id AND s.instance_name = @instance_name
+        AND s.encounter_name IN (SELECT encounter_name FROM chosen)
+        AND ((s.rating_metric = 'renown' AND s.window_kind = @renown_window::text AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none')
+          OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = @window_kind::text AND s.difficulty_name = @difficulty_name
+              AND s.max_players = @max_players AND s.performance_metric = sqlc.arg(performance_metric)::text
+              AND (@player_class::text = '' OR s.player_class = @player_class)
+              AND (@player_spec::text = '' OR s.player_spec = @player_spec)
+              AND (@player_sub_spec::text = '' OR s.player_sub_spec = @player_sub_spec)
+              AND (p.player_class = '' OR (s.player_class = p.player_class AND s.player_spec = p.player_spec AND s.player_sub_spec = p.player_sub_spec))))
+      UNION ALL
+      SELECT '', s.rating_metric, s.score, NULL::float8, NULL::float8 FROM guild_tenant_rating_boss_scores s
+      WHERE @subject::text = 'guild' AND s.tenant_id = @tenant_id AND s.generation_id = @generation_id
+        AND s.realm_id = p.realm_id AND s.guild_id::text = p.subject_id AND s.instance_name = @instance_name
+        AND s.encounter_name IN (SELECT encounter_name FROM chosen)
+        AND ((s.rating_metric = 'renown' AND s.window_kind = @renown_window::text AND s.difficulty_name = '' AND s.max_players = 0)
+          OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = @window_kind::text AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players))
+    ) x
+    GROUP BY x.cohort
+  ) c
+) other ON true
+ORDER BY p.rank;

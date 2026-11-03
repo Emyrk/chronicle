@@ -81,7 +81,7 @@ func TestTenantPeakTieBreaksByThroughput(t *testing.T) {
 	require.Empty(t, b)
 
 	// The hub summary ranks the same way and reports each Peak's throughput.
-	hub, err := q.HubSummaryRatingRows(ctx, database.HubSummaryRatingRowsParams{TenantID: tenant, GenerationID: gen, InstanceName: "Molten Core", FeaturedEncounter: "Ragnaros", ExactCohort: true, PerformanceMetric: "dps"})
+	hub, err := q.HubSummaryRatingRows(ctx, database.HubSummaryRatingRowsParams{TenantID: tenant, GenerationID: gen, InstanceName: "Molten Core", FeaturedEncounter: "Ragnaros", ExactCohort: true, PerformanceMetric: "dps", WindowKind: "period", RenownWindow: "period", BossDepth: 1})
 	require.NoError(t, err)
 	var scopeOrder []string
 	for _, row := range hub {

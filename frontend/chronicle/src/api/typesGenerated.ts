@@ -2298,6 +2298,46 @@ export interface HubSelectedCohort {
 
 // From chroniclesdk/rating_hub_summary.go
 /**
+ * HubSetBoardResponse is a page of a chosen-boss board. Ranks cover the whole
+ * cohort; realm and search filters only narrow the displayed rows.
+ */
+export interface HubSetBoardResponse {
+    readonly rows: readonly HubSetBoardRow[];
+    readonly total: number;
+    readonly page: number;
+    readonly has_next_page: boolean;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
+ * HubSetBoardRow is one ranked subject on a chosen-boss board. Peak and Ranked
+ * Mastery average over the chosen bosses (a missed one is 0); Renown sums.
+ */
+export interface HubSetBoardRow {
+    readonly rank: number;
+    readonly realm_id: string;
+    readonly realm_name: string;
+    readonly subject_id: string;
+    readonly name: string;
+    readonly guild_name: string;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    /**
+     * Score is the ranked metric's; Peak, Mastery, and Renown are all three.
+     */
+    readonly score: number;
+    readonly peak: number;
+    readonly mastery: number;
+    readonly renown: number;
+    /**
+     * PeakRaw is the Peak's duration-weighted DPS/HPS; unset when unknown.
+     */
+    readonly peak_raw?: number;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
  * HubSummary is a public, tenant-wide snapshot for the live leaderboards overview.
  */
 export interface HubSummary {

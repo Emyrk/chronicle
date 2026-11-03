@@ -657,6 +657,12 @@ type sqlcQuerier interface {
 	// Mirrors the full-clear leaderboard: version gates, duplicate groups, best
 	// per guild, ranked duration with legacy raw fallback. Do not load video proof.
 	HubLandingSpeedruns(ctx context.Context, arg HubLandingSpeedrunsParams) ([]HubLandingSpeedrunsRow, error)
+	// One ranked page of a chosen-boss board (any number of bosses, one included):
+	// Peak and Ranked Mastery average over every chosen boss (a missed one is 0),
+	// Renown sums. Only the ranked metric is aggregated for the whole cohort; the
+	// page's other two scores are looked up per row. Ranks cover the whole tenant
+	// cohort before the display-only realm and name filters, as on the full lists.
+	HubSetBoardPage(ctx context.Context, arg HubSetBoardPageParams) ([]HubSetBoardPageRow, error)
 	// Ratings over a chosen set of bosses, computed from the published boss boards:
 	// Peak and Ranked Mastery average over every chosen boss (a missed one is 0),
 	// Renown sums. A subject's best class/spec cohort stands for it. Peak carries
