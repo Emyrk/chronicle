@@ -33,7 +33,7 @@ type tenantRatingReader interface {
 	ListActiveGuildTenantScopeScores(context.Context, database.ListActiveGuildTenantScopeScoresParams) ([]database.GuildTenantRatingScopeScore, error)
 }
 
-// Tenant handlers are deliberately not registered until the tenant projection writer is live.
+// Tenant leaderboard handlers read only published tenant generations.
 func (s *Service) handleTenantPlayerBossLeaderboard(w http.ResponseWriter, r *http.Request) {
 	handleTenantRatingLeaderboardWithStore(s.store, w, r, false, true)
 }

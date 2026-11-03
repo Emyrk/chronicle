@@ -1,5 +1,4 @@
--- Non-serving readers for tenant-wide projections. Do not route public handlers here
--- until the tenant projection writer is activated. realm_ids is display-only;
+-- Published tenant-wide projection readers. realm_ids is display-only;
 -- an empty array shows every realm owned by the tenant.
 -- Pass zero generation_id and zero after_realm_id on the first page. Continue
 -- with the returned generation_id and the last row's (score, realm_id,
