@@ -20,8 +20,12 @@ export interface RatingEntry {
   subSpec: string
   score: number
   detail: string
+  /** Peak only: the DPS/HPS behind the score (a boss kill's, or duration-weighted across bosses). */
+  raw?: number
   /** Ranked Mastery entries: the parts it is built from. Across a raid, Peak/Form/Floor average every boss. */
   mastery?: MasteryParts
+  /** Published boss-score components; absent for raid aggregate projections. */
+  publishedMastery?: { peak?: number; form?: number; floor?: number; eligibleKills?: number }
 }
 
 export interface MasteryParts {
@@ -303,7 +307,8 @@ export function scopeEntries(metric: RatingMetric, period: RatingPeriod, scope: 
 
 export function scopeBoard(metric: RatingMetric, period: RatingPeriod, scope: RatingScope, limit = 25): RatingBoardData {
   const kind = scopeKind(scope)
-  const entries = scopeEntries(metric, period, scope)
+  // Peak shows the throughput behind it; the mock derives one from the score.
+  const entries = scopeEntries(metric, period, scope).map((e) => (metric === "peak" ? { ...e, raw: Math.round(12 * e.score + 150) } : e))
   const title = kind === "spec" ? scope.spec! : kind === "class" ? scope.cls! : kind === "boss" ? scope.boss! : "Molten Core"
   return {
     id: [scope.boss, scope.cls, scope.spec].filter(Boolean).join("/") || "raid",

@@ -140,7 +140,7 @@ export const RaidGuilds: Story = {
 }
 
 /**
- * Ratings tab, reached from the overview card's metric link. Full clear: the board on top and a compact
+ * Ratings tab, reached from the overview card's metric link. All bosses: the board on top and a compact
  * card per boss; a class or spec filter keeps the boss cards. One boss opens its full table straight
  * away. "All N ranked" swaps the board for the table (cards stay below), and the table stays open across
  * metrics; it sorts, searches, and leads with the ranking's own number.
@@ -165,7 +165,7 @@ export const RatingsTab: Story = {
     await expect(canvas.queryByRole("region", { name: "By boss" })).not.toBeInTheDocument()
 
     // Back on the full clear, a spec filter keeps a card per boss, each showing that spec's leaders.
-    await userEvent.click(within(canvas.getByRole("navigation", { name: "Encounters" })).getByRole("button", { name: /Full clear/ }))
+    await userEvent.click(within(canvas.getByRole("navigation", { name: "Encounters" })).getByRole("button", { name: "All bosses" }))
     await userEvent.click(within(canvas.getByRole("group", { name: "Class" })).getByRole("button", { name: "Warrior" }))
     await userEvent.click(within(await canvas.findByRole("group", { name: "Warrior spec" })).getByRole("button", { name: "Fury" }))
     await expect(await canvas.findByRole("region", { name: "By boss" })).toBeInTheDocument()
@@ -210,24 +210,27 @@ export const ZulGurubOverview: Story = {
 }
 
 /**
- * The encounter list: Full clear (whole-raid runs) is not "All bosses" (every boss combined, total kill
- * time). Click picks one boss; Ctrl+Click combines. The column collapses to the left.
+ * The encounter list, as on /leaderboards: every boss is selected on entry (full clears), click picks
+ * one boss, Ctrl+Click adds or removes one, and "All bosses" goes back. The column collapses to the left.
  */
 export const EncounterSelection: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     const sidebar = within(canvas.getByRole("navigation", { name: "Encounters" }))
-    await expect(sidebar.getByRole("button", { name: /Full clear/ })).toHaveAttribute("aria-pressed", "true")
+    await expect(sidebar.queryByRole("button", { name: /Full clear/ })).not.toBeInTheDocument()
+    await expect(sidebar.getByRole("button", { name: /Ragnaros/ })).toHaveAttribute("aria-pressed", "true")
     await expect(canvas.getByText("Fastest full clears")).toBeInTheDocument()
-
-    await userEvent.click(sidebar.getByRole("button", { name: "All bosses" }))
-    await expect(sidebar.getByRole("button", { name: /Full clear/ })).toHaveAttribute("aria-pressed", "false")
-    await expect(canvas.getByText(/Fastest total kill time · 12 bosses/)).toBeInTheDocument()
 
     await userEvent.click(sidebar.getByRole("button", { name: /Ragnaros/ }))
     await expect(within(canvas.getByRole("navigation", { name: "Breadcrumb" })).getByText("Ragnaros")).toBeInTheDocument()
+    await expect(sidebar.getByRole("button", { name: /Lucifron/ })).toHaveAttribute("aria-pressed", "false")
     fireEvent.click(sidebar.getByRole("button", { name: /Lucifron/ }), { ctrlKey: true })
     await expect(within(canvas.getByRole("navigation", { name: "Breadcrumb" })).getByText("2 bosses")).toBeInTheDocument()
+    await expect(canvas.getByText(/Fastest total kill time · 2 bosses/)).toBeInTheDocument()
+
+    await userEvent.click(sidebar.getByRole("button", { name: "All bosses" }))
+    await expect(sidebar.getByRole("button", { name: /Lucifron/ })).toHaveAttribute("aria-pressed", "true")
+    await expect(canvas.getByText("Fastest full clears")).toBeInTheDocument()
 
     // The column collapses to the left and comes back (left open, since the choice is remembered).
     await userEvent.click(canvas.getByRole("button", { name: "Hide encounters" }))
@@ -291,12 +294,19 @@ export const ParsingTab: Story = {
   },
 }
 
-/** Speedruns, a top-level tab, follow the encounter selection: a boss ranks its fastest kills. */
+/**
+ * Speedruns, a top-level tab, with a Full clear / Kill times switch. A picked boss opens on its fastest
+ * kills; the switch goes to full clears.
+ */
 export const SpeedrunsBoss: Story = {
   args: { initialTab: "speedruns", initialScope: { boss: "Ragnaros" } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await expect(canvas.getByRole("region", { name: "Fastest Ragnaros kills" })).toBeInTheDocument()
+    const board = () => within(canvas.getByRole("navigation", { name: "Speedrun board" }))
+    await expect(board().getByRole("button", { name: /Kill times/ })).toHaveAttribute("aria-pressed", "true")
+    await expect(within(canvas.getByRole("region", { name: "Kill times" })).getByText("Ragnaros")).toBeInTheDocument()
+    await userEvent.click(board().getByRole("button", { name: "Full clear" }))
+    await expect(canvas.getByRole("region", { name: "Fastest full clears" })).toBeInTheDocument()
   },
 }
 
@@ -351,7 +361,7 @@ export const RealmSwitch: StoryObj<typeof LeaderboardsHubApp> = {
   },
 }
 
-/** The title switches instance in place: same tab and filters, encounter choice back to Full clear. */
+/** The title switches instance in place: same tab and filters, encounter choice back to every boss. */
 export const SwitchInstance: StoryObj<typeof LeaderboardsHubApp> = {
   render: () => <LeaderboardsHubApp initialInstance="Molten Core" initialTab="statistics" initialRole="healing" />,
   play: async ({ canvasElement }) => {

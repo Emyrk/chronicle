@@ -1616,6 +1616,57 @@ type GuildPageTab struct {
 	Visibility string             `db:"visibility" json:"visibility"`
 }
 
+type GuildRatingBossScore struct {
+	GenerationID    uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID         uuid.UUID          `db:"guild_id" json:"guild_id"`
+	GroupID         uuid.UUID          `db:"group_id" json:"group_id"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16              `db:"max_players" json:"max_players"`
+	RatingMetric    string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind      string             `db:"window_kind" json:"window_kind"`
+	WindowStart     pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd       pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score           float64            `db:"score" json:"score"`
+	BestRaw         pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	RankOneRaw      pgtype.Float8      `db:"rank_one_raw" json:"rank_one_raw"`
+	BestLockedParse pgtype.Float8      `db:"best_locked_parse" json:"best_locked_parse"`
+	Form            pgtype.Float8      `db:"form" json:"form"`
+	FloorScore      pgtype.Float8      `db:"floor_score" json:"floor_score"`
+	EligibleKills   int32              `db:"eligible_kills" json:"eligible_kills"`
+	ComputedAt      pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+}
+
+type GuildRatingScopeScore struct {
+	GenerationID   uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID          `db:"guild_id" json:"guild_id"`
+	GroupID        uuid.UUID          `db:"group_id" json:"group_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	RatingMetric   string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind     string             `db:"window_kind" json:"window_kind"`
+	Score          float64            `db:"score" json:"score"`
+	ComputedAt     pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+}
+
+type GuildRenownKillFact struct {
+	ID            uuid.UUID          `db:"id" json:"id"`
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
+	RunID         uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	RecordedAt    pgtype.Timestamptz `db:"recorded_at" json:"recorded_at"`
+}
+
 type GuildResourceDailyStat struct {
 	GuildID        uuid.UUID   `db:"guild_id" json:"guild_id"`
 	ResourceKind   string      `db:"resource_kind" json:"resource_kind"`
@@ -1647,6 +1698,45 @@ type GuildSpeedrunRank struct {
 	GuildID      uuid.NullUUID `db:"guild_id" json:"guild_id"`
 	DurationMs   int64         `db:"duration_ms" json:"duration_ms"`
 	GuildRank    int64         `db:"guild_rank" json:"guild_rank"`
+}
+
+type GuildTenantRatingBossScore struct {
+	GenerationID    uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID         uuid.UUID          `db:"guild_id" json:"guild_id"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16              `db:"max_players" json:"max_players"`
+	RatingMetric    string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind      string             `db:"window_kind" json:"window_kind"`
+	WindowStart     pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd       pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score           float64            `db:"score" json:"score"`
+	BestRaw         pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	RankOneRaw      pgtype.Float8      `db:"rank_one_raw" json:"rank_one_raw"`
+	BestLockedParse pgtype.Float8      `db:"best_locked_parse" json:"best_locked_parse"`
+	Form            pgtype.Float8      `db:"form" json:"form"`
+	FloorScore      pgtype.Float8      `db:"floor_score" json:"floor_score"`
+	EligibleKills   int32              `db:"eligible_kills" json:"eligible_kills"`
+	ComputedAt      pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+}
+
+type GuildTenantRatingScopeScore struct {
+	GenerationID   uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID          `db:"guild_id" json:"guild_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	RatingMetric   string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind     string             `db:"window_kind" json:"window_kind"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd      pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score          float64            `db:"score" json:"score"`
+	ComputedAt     pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
 }
 
 type InferenceClientToolRequest struct {
@@ -2203,6 +2293,56 @@ type ParsedLogGroup struct {
 	FinalizedAt     pgtype.Timestamptz `db:"finalized_at" json:"finalized_at"`
 }
 
+type PlayerTenantRatingBossScore struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	BestRaw           pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	RankOneRaw        pgtype.Float8      `db:"rank_one_raw" json:"rank_one_raw"`
+	BestLockedParse   pgtype.Float8      `db:"best_locked_parse" json:"best_locked_parse"`
+	Form              pgtype.Float8      `db:"form" json:"form"`
+	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
+	EligibleKills     int32              `db:"eligible_kills" json:"eligible_kills"`
+	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	BestDurationSecs  float64            `db:"best_duration_secs" json:"best_duration_secs"`
+}
+
+type PlayerTenantRatingScopeScore struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	BestRaw           float64            `db:"best_raw" json:"best_raw"`
+	BestDurationSecs  float64            `db:"best_duration_secs" json:"best_duration_secs"`
+}
+
 type ProofRequest struct {
 	ID                    uuid.UUID          `db:"id" json:"id"`
 	ApplicantID           uuid.UUID          `db:"applicant_id" json:"applicant_id"`
@@ -2277,6 +2417,224 @@ type RateLimitBucket struct {
 	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
+type RatingBossScore struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	BestRaw           pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	RankOneRaw        pgtype.Float8      `db:"rank_one_raw" json:"rank_one_raw"`
+	BestLockedParse   pgtype.Float8      `db:"best_locked_parse" json:"best_locked_parse"`
+	Form              pgtype.Float8      `db:"form" json:"form"`
+	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
+	EligibleKills     int32              `db:"eligible_kills" json:"eligible_kills"`
+	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	GroupID           uuid.NullUUID      `db:"group_id" json:"group_id"`
+}
+
+type RatingConfigRevision struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Revision int64     `db:"revision" json:"revision"`
+}
+
+type RatingGroupBossPolicy struct {
+	GroupID       uuid.UUID `db:"group_id" json:"group_id"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+	PeakWeight    float64   `db:"peak_weight" json:"peak_weight"`
+	MasteryWeight float64   `db:"mastery_weight" json:"mastery_weight"`
+	RenownPoints  float64   `db:"renown_points" json:"renown_points"`
+}
+
+type RatingGroupPolicy struct {
+	GroupID       uuid.UUID          `db:"group_id" json:"group_id"`
+	Version       int32              `db:"version" json:"version"`
+	PeriodDays    int32              `db:"period_days" json:"period_days"`
+	HalfLifeDays  float64            `db:"half_life_days" json:"half_life_days"`
+	BestWeight    float64            `db:"best_weight" json:"best_weight"`
+	FormWeight    float64            `db:"form_weight" json:"form_weight"`
+	FloorWeight   float64            `db:"floor_weight" json:"floor_weight"`
+	RankOneWeight float64            `db:"rank_one_weight" json:"rank_one_weight"`
+	FullRankKills int32              `db:"full_rank_kills" json:"full_rank_kills"`
+	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type RatingGroupRaidPolicy struct {
+	GroupID       uuid.UUID `db:"group_id" json:"group_id"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	PeakWeight    float64   `db:"peak_weight" json:"peak_weight"`
+	MasteryWeight float64   `db:"mastery_weight" json:"mastery_weight"`
+}
+
+type RatingMasteryAccumulator struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string             `db:"subject_kind" json:"subject_kind"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	SubjectID         string             `db:"subject_id" json:"subject_id"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	Pass              string             `db:"pass" json:"pass"`
+	Version           int64              `db:"version" json:"version"`
+	CursorScore       pgtype.Float8      `db:"cursor_score" json:"cursor_score"`
+	CursorKilledAt    pgtype.Timestamptz `db:"cursor_killed_at" json:"cursor_killed_at"`
+	CursorRunID       uuid.NullUUID      `db:"cursor_run_id" json:"cursor_run_id"`
+	Position          int64              `db:"position" json:"position"`
+	EligibleKills     int64              `db:"eligible_kills" json:"eligible_kills"`
+	ExcludedKills     int64              `db:"excluded_kills" json:"excluded_kills"`
+	Best              float64            `db:"best" json:"best"`
+	LatestRetainedAt  pgtype.Timestamptz `db:"latest_retained_at" json:"latest_retained_at"`
+	TotalWeight       float64            `db:"total_weight" json:"total_weight"`
+	CumulativeWeight  float64            `db:"cumulative_weight" json:"cumulative_weight"`
+	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
+	FormScore         pgtype.Float8      `db:"form_score" json:"form_score"`
+	LastRetainedScore pgtype.Float8      `db:"last_retained_score" json:"last_retained_score"`
+}
+
+type RatingRealmGroup struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	ServerID uuid.UUID `db:"server_id" json:"server_id"`
+	Name     string    `db:"name" json:"name"`
+}
+
+type RatingRealmGroupMembership struct {
+	RealmID  uuid.UUID `db:"realm_id" json:"realm_id"`
+	ServerID uuid.UUID `db:"server_id" json:"server_id"`
+	GroupID  uuid.UUID `db:"group_id" json:"group_id"`
+}
+
+type RatingRebuildCheckpoint struct {
+	GenerationID   uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	ConfigRevision int64              `db:"config_revision" json:"config_revision"`
+	AsOf           pgtype.Timestamptz `db:"as_of" json:"as_of"`
+	SourceCutoff   pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	Phase          string             `db:"phase" json:"phase"`
+	Cursor         []byte             `db:"cursor" json:"cursor"`
+	Manifest       []byte             `db:"manifest" json:"manifest"`
+	HeartbeatAt    pgtype.Timestamptz `db:"heartbeat_at" json:"heartbeat_at"`
+}
+
+type RatingRenownTemplate struct {
+	Flavor  string `db:"flavor" json:"flavor"`
+	Version int32  `db:"version" json:"version"`
+}
+
+type RatingRenownTemplateBoss struct {
+	Flavor        string  `db:"flavor" json:"flavor"`
+	Version       int32   `db:"version" json:"version"`
+	InstanceName  string  `db:"instance_name" json:"instance_name"`
+	EncounterName string  `db:"encounter_name" json:"encounter_name"`
+	RenownPoints  float64 `db:"renown_points" json:"renown_points"`
+}
+
+type RatingScopeScore struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	GroupID           uuid.UUID          `db:"group_id" json:"group_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	Score             float64            `db:"score" json:"score"`
+	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+}
+
+type RatingScoreGeneration struct {
+	ID            uuid.UUID          `db:"id" json:"id"`
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int32              `db:"policy_version" json:"policy_version"`
+	AsOf          pgtype.Timestamptz `db:"as_of" json:"as_of"`
+	Status        string             `db:"status" json:"status"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type RatingStageGuildObservation struct {
+	GenerationID   uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	RawDurationMs  float64            `db:"raw_duration_ms" json:"raw_duration_ms"`
+	LockedParse    pgtype.Float8      `db:"locked_parse" json:"locked_parse"`
+}
+
+type RatingStageGuildRenown struct {
+	GenerationID  uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
+	RunID         uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	SourceID      uuid.UUID          `db:"source_id" json:"source_id"`
+}
+
+type RatingStagePlayerObservation struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RunID             uuid.UUID          `db:"run_id" json:"run_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	KilledAt          pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RawValue          float64            `db:"raw_value" json:"raw_value"`
+	LockedParse       pgtype.Float8      `db:"locked_parse" json:"locked_parse"`
+	DurationSecs      float64            `db:"duration_secs" json:"duration_secs"`
+}
+
+type RatingStagePlayerRenown struct {
+	GenerationID  uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	RunID         uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	SourceID      uuid.UUID          `db:"source_id" json:"source_id"`
+}
+
 type RegressionFixture struct {
 	ID         uuid.UUID          `db:"id" json:"id"`
 	LogGroupID uuid.UUID          `db:"log_group_id" json:"log_group_id"`
@@ -2293,6 +2651,17 @@ type RegressionSnapshot struct {
 	BuildTime          string             `db:"build_time" json:"build_time"`
 	MatchesPrevious    pgtype.Bool        `db:"matches_previous" json:"matches_previous"`
 	PreviousSnapshotID uuid.NullUUID      `db:"previous_snapshot_id" json:"previous_snapshot_id"`
+}
+
+type RenownKillFact struct {
+	ID            uuid.UUID          `db:"id" json:"id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	RunID         uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	RecordedAt    pgtype.Timestamptz `db:"recorded_at" json:"recorded_at"`
 }
 
 type RetentionPolicy struct {

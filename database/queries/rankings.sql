@@ -87,8 +87,19 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
       -- Boss encounters only: trash is excluded from the top-3 preview by default.
       AND edr.encounter_id IS NOT NULL
 ),
+run_encounter_counts AS (
+    SELECT d.run_id, COUNT(DISTINCT d.encounter_name) AS cnt FROM ranking_rows d GROUP BY d.run_id
+),
+-- A complete run kills as many distinct bosses as the instance's full clears
+-- do: the largest boss count at least three runs reach (else the largest seen).
+-- Requiring every boss name ever recorded fails when a server changes a raid's
+-- roster (Turtle's Molten Core dropped Gehennas) or ranks a hard mode as its
+-- own encounter, leaving no run complete and no top players.
 instance_encounter_count AS (
-    SELECT COUNT(DISTINCT d.encounter_name) AS cnt FROM ranking_rows d
+    SELECT COALESCE(
+        (SELECT max(c.cnt) FROM (SELECT cnt FROM run_encounter_counts GROUP BY cnt HAVING COUNT(*) >= 3) c),
+        (SELECT max(cnt) FROM run_encounter_counts)
+    ) AS cnt
 ),
 -- Step 1: aggregate per player per run (sum encounters within one instance run).
 per_run AS (
@@ -101,7 +112,7 @@ per_run AS (
         (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0)) AS dps
     FROM ranking_rows d
     GROUP BY d.player_guid, d.run_id
-    HAVING COUNT(DISTINCT d.encounter_name) = (SELECT cnt FROM instance_encounter_count)
+    HAVING COUNT(DISTINCT d.encounter_name) >= (SELECT cnt FROM instance_encounter_count)
 ),
 -- Step 2: pick each player's best run.
 per_player AS (
@@ -413,7 +424,7 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         ELSE true
     END
     AND CASE
-        WHEN @filter_max_players :: smallint > 0 THEN edr.max_players = @filter_max_players
+        WHEN @exact_cohort::boolean OR @filter_max_players :: smallint > 0 THEN edr.max_players = @filter_max_players
         ELSE true
     END
     AND (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) > 0
@@ -706,7 +717,7 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         ELSE true
     END
     AND CASE
-        WHEN @filter_max_players :: smallint > 0 THEN edr.max_players = @filter_max_players
+        WHEN @exact_cohort::boolean OR @filter_max_players :: smallint > 0 THEN edr.max_players = @filter_max_players
         ELSE true
     END
 ),
@@ -1183,6 +1194,44 @@ WHERE d.duration_secs > 0
 ORDER BY d.duration_secs ASC
 LIMIT @query_limit::bigint OFFSET @query_offset::bigint;
 
+-- name: RankingsKillTimeTopPerEncounter :many
+-- The fastest clean kills of each chosen boss in one round trip, deduplicated
+-- across duplicate log groups like RankingsKillTimeLeaderboard.
+WITH deduped AS (
+    SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))
+        lie.id AS encounter_id,
+        lie.name AS encounter_name,
+        li.id AS instance_id,
+        li.hashed_slug AS log_hashed_slug,
+        li.name AS instance_name,
+        COALESCE(g.name, '')::text AS guild_name,
+        COALESCE(li.guild_id::text, '')::text AS guild_id,
+        wsr.name AS realm_name,
+        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
+        lie.end_time AS killed_at
+    FROM log_instance_encounters lie
+    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    LEFT JOIN guilds g ON g.id = li.guild_id
+    WHERE li.name = @instance_name
+      AND lie.boss = true
+      AND lie.kill_type = 'clean'
+      AND lie.name = ANY(@encounter_names::text[])
+      AND cardinality(@encounter_names::text[]) <= 64
+    ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
+             EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) ASC
+), ranked AS (
+    SELECT d.*, row_number() OVER (PARTITION BY d.encounter_name ORDER BY d.duration_secs ASC, d.killed_at ASC) AS position
+    FROM deduped d
+    WHERE d.duration_secs > 0
+)
+SELECT encounter_id, encounter_name, instance_id, log_hashed_slug, instance_name, guild_name, guild_id,
+       realm_name, duration_secs, killed_at
+FROM ranked
+WHERE position <= LEAST(GREATEST(@per_encounter::int, 1), 10)
+ORDER BY encounter_name, position;
+
 -- name: RankingsSuccessRates :many
 -- Kill/wipe/total counts per encounter name within an instance.
 -- Deduplicates across duplicate log groups.
@@ -1202,7 +1251,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           ELSE true
       END
       AND CASE
-          WHEN @filter_max_players :: smallint > 0 THEN li.max_players = @filter_max_players
+          WHEN @exact_cohort::boolean OR @filter_max_players :: smallint > 0 THEN li.max_players = @filter_max_players
           ELSE true
       END
       AND CASE

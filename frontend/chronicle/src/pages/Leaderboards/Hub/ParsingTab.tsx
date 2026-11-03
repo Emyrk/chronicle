@@ -1,4 +1,6 @@
 import { useState } from "react"
+import type { ParseScoreSpread, TimeParseSpread } from "@/api/typesGenerated"
+import type { SpreadDifficultyOption } from "@/pages/Leaderboards/Parsing/spreadBands"
 import { BarChart3, Timer, UserRound, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SpecView } from "@/pages/Leaderboards/Parsing/SpecView"
@@ -17,6 +19,22 @@ const PARSING_VIEWS: { id: ParsingView; label: string; icon: LucideIcon }[] = [
   { id: "times", label: "Kill times", icon: Timer },
 ]
 
+type LiveResult<T> = { status: "loading" | "error" } | { status: "ready"; data: T }
+
+/** Parent supplies 60-day API spreads and an explicit raid population. */
+export interface LiveParsingData {
+  difficulty?: SpreadDifficultyOption
+  spreads?: LiveResult<readonly ParseScoreSpread[]>
+  times?: LiveResult<readonly TimeParseSpread[]>
+}
+
+function liveState<T>(result: LiveResult<T> | undefined, label: string) {
+  if (!result) return <p className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">{label} unavailable for this selection.</p>
+  if (result.status === "loading") return <p role="status" className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">Loading {label.toLowerCase()}…</p>
+  if (result.status === "error") return <p role="alert" className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">Could not load {label.toLowerCase()}.</p>
+  return null
+}
+
 /**
  * What each parse takes: today's parsing views and their switch (All specs bar chart, Spec details,
  * Kill times), filtered by the hub instead of their own pickers. Guilds see kill-time parses.
@@ -32,6 +50,7 @@ export function ParsingTab({
   onBoss,
   onClear,
   onScope,
+  live,
 }: {
   instanceName: string
   allBosses: readonly string[]
@@ -42,28 +61,39 @@ export function ParsingTab({
   onBoss: (boss: string) => void
   onClear: () => void
   onScope: (scope: RatingScope) => void
+  live?: LiveParsingData
 }) {
   const [showOffRole, setShowOffRole] = useState(false)
   const metric = role === "dps" ? "dps" : "hps"
   const chosen = selection.kind === "bosses" ? selection.bosses : []
   const boss = chosen[0] ?? allBosses[0]
+  const difficulty = live?.difficulty
+  const validDifficulty = !!difficulty && Number.isInteger(difficulty.maxPlayers) && difficulty.maxPlayers >= 0
+  const scoreSpreads = live?.spreads?.status === "ready" && validDifficulty
+    ? live.spreads.data.filter((s) => s.encounter_name === boss && s.difficulty_name === difficulty.difficultyName && s.max_players === difficulty.maxPlayers)
+    : []
+  const timeSpreads = live?.times?.status === "ready" && validDifficulty
+    ? live.times.data.filter((s) => s.difficulty_name === difficulty.difficultyName && s.max_players === difficulty.maxPlayers)
+    : []
 
   // Picking a spec in the hub opens its detail; the switch can still go back to the bar chart.
   const [view, setView] = useState<ParsingView>(scope.spec ? "spec" : "spreads")
 
-  const killTimes = (
-    <KillTimesView
+  const killTimes = live && (!validDifficulty || !boss)
+    ? liveState(undefined, "Kill-time parses (choose a boss and raid population)")
+    : live && live.times?.status !== "ready"
+      ? liveState(live.times, "Kill-time parses")
+      : <KillTimesView
       instanceName={instanceName}
       bosses={allBosses}
       boss={boss}
       showClear={selection.kind === "clear"}
-      spreads={timeParseSpreads(instanceName, allBosses)}
-      difficulty={MOCK_SPREAD_DIFFICULTY}
+      spreads={live ? timeSpreads : timeParseSpreads(instanceName, allBosses)}
+      difficulty={live ? difficulty : MOCK_SPREAD_DIFFICULTY}
       loading={false}
       onSelectBoss={onBoss}
       onSelectClear={onClear}
     />
-  )
 
   // A guild's parse is its run time; the spec views have nothing to say about guilds.
   if (subject === "guilds") return killTimes
@@ -93,15 +123,19 @@ export function ParsingTab({
 
       {view === "times" ? (
         killTimes
+      ) : live && (!validDifficulty || !boss) ? (
+        liveState(undefined, "Parse spreads (choose a boss and raid population)")
+      ) : live && live.spreads?.status !== "ready" ? (
+        liveState(live.spreads, "Parse spreads")
       ) : view === "spec" ? (
         // One spec's detail on the boss and its cutoffs on every boss; without a spec, a spec picker.
         <SpecView
           instanceName={instanceName}
           bosses={allBosses}
           boss={boss}
-          bossSpreads={parseSpreads(metric, [boss])}
+          bossSpreads={live ? scoreSpreads : parseSpreads(metric, [boss])}
           metric={metric}
-          difficulty={MOCK_SPREAD_DIFFICULTY}
+          difficulty={live ? difficulty : MOCK_SPREAD_DIFFICULTY}
           cohortMode="spec"
           hideClassFilter
           playerClass={scope.cls ?? ""}
@@ -125,7 +159,7 @@ export function ParsingTab({
             </p>
           )}
           <SpreadsView
-            spreads={parseSpreads(metric, [boss], scope.cls)}
+            spreads={live ? scoreSpreads.filter((s) => !scope.cls || s.player_class === scope.cls) : parseSpreads(metric, [boss], scope.cls)}
             hidden={NO_HIDDEN}
             metricLabel={metric.toUpperCase()}
             loading={false}

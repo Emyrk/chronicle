@@ -15,6 +15,7 @@ import type {
 } from "@/api/typesGenerated"
 import { calculateMastery } from "@/pages/ArmoryPage/overview/masteryRenownModel"
 import { mockRealm, mockRealmSeed } from "@/pages/Leaderboards/Ratings/mockRealm"
+import type { OverviewData } from "./LeaderboardHub"
 import { MOLTEN_CORE_BOSSES, type MasteryParts, type RatingMetric, type RatingScope } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 
 export type HubRole = "dps" | "healing"
@@ -38,6 +39,7 @@ export interface ThroughputRow {
 
 export interface GuildRow {
   guild: string
+  logo?: string
   value: number
   detail: string
 }
@@ -83,6 +85,8 @@ export interface Cohort extends SpecStanding {
   /** The role this spec is measured in; a class page lists specs from both. */
   role: HubRole
   characters: number
+  /** What `characters` counts, when not ranked characters (live data counts parses). */
+  charactersLabel?: string
   best?: ThroughputRow
   peak?: RatingLeader
 }
@@ -90,6 +94,8 @@ export interface Cohort extends SpecStanding {
 export interface RatingLeader {
   player: HubPlayer
   score: number
+  /** Peak only: the DPS or HPS behind the score (a boss kill's, or the mean of the best per boss). */
+  raw?: number
 }
 
 const DPS_SPECS: [string, string][] = [
@@ -289,7 +295,10 @@ export function ratingLeaders(scope: RatingScope, role: HubRole): Record<RatingM
       for (const s of scored) best.set(key(s.player), Math.max(best.get(key(s.player)) ?? 0, s.score))
       for (const s of scored) s.score = (s.score / best.get(key(s.player))!) * 100
     }
-    return scored.sort((a, b) => b.score - a.score).slice(0, 5)
+    const top = scored.sort((a, b) => b.score - a.score).slice(0, 5)
+    if (metric !== "peak") return top
+    const base = role === "dps" ? 1250 : 1050
+    return top.map((l) => ({ ...l, raw: Math.round(base * (l.score / 100) * (scope.boss ? 1 : 0.92)) }))
   }
   const renownRand = scopedRand("renown", scope.boss, role)
   const renown = realmPlayers()
@@ -417,13 +426,14 @@ export function guildRows(
   const rand = scopedRand("guild", kind, scope.boss, scope.cls, scope.spec, role)
   return HUB_GUILDS.map((guild, i) => {
     const strength = 1 - i * 0.05 + rand() * 0.12
-    if (kind === "clears") return { guild, value: Math.round(26 * strength), detail: perBoss ? "kills" : "clears" }
+    if (kind === "clears") return { guild, logo: guildLogo(guild), value: Math.round(26 * strength), detail: perBoss ? "kills" : "clears" }
     if (kind === "renown") {
       // Renown rewards staying power: long-running guilds with many clears lead.
       const months = 4 + Math.round(strength * 20 + rand() * 6)
       const since = new Date(Date.UTC(2026, 10 - months, 1)).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" })
       return {
         guild,
+        logo: guildLogo(guild),
         value: Math.round((scope.boss ? 3800 : 42000) * strength),
         detail: `${Math.round(months * 1.6)} ${perBoss ? "kills" : "clears"} · raiding since ${since}`,
       }
@@ -483,7 +493,10 @@ export function instanceHeadlines(): InstanceHeadline[] {
       })),
       renown: { guild: pick(HUB_GUILDS.slice(0, 5)), value: Math.round(inst.bosses * 3500 * (0.8 + rand() * 0.4)) },
       ratings: {
-        peak: { player: player(), score: 97 + rand() * 3 },
+        peak: (() => {
+          const score = 97 + rand() * 3
+          return { player: player(), score, raw: Math.round(inst.dps * 0.92 * (score / 100)) }
+        })(),
         mastery: { player: player(), score: 90 + rand() * 5 },
         renown: { player: player(), score: Math.round(inst.bosses * 1000 * (0.9 + rand() * 0.3)) },
       },
@@ -950,5 +963,26 @@ export function parseCohort(metric: "dps" | "hps", boss: string, cls: string, sp
     sample_size: count,
     status: "ok",
     entries,
+  }
+}
+
+/** The Overview's data for a scope, generated: what the live adapter fills from published boards. */
+export function fixtureOverviewData(instanceName: string, scope: RatingScope, role: HubRole, set?: readonly string[]): OverviewData {
+  const allBosses = instanceBosses(instanceName)
+  const selected = set ?? (scope.boss ? [scope.boss] : undefined)
+  const perBoss = !!scope.boss || !!set
+  return {
+    speedruns: speedruns(selected, allBosses, instanceName, 8),
+    ratings: ratingLeaders(scope, role),
+    guildRatings: guildRatings(selected, allBosses, instanceName, 5),
+    guildRenown: guildRows("renown", scope, role, 5, perBoss),
+    guildClears: guildRows("clears", scope, role, 5, perBoss),
+    performances: topThroughput(scope, role, 8),
+    specSpreads: specStanding(scope.boss, role),
+    cohorts: cohorts(scope, role),
+    guildTimeSpreads: guildTimeSpreads(selected, allBosses, instanceName),
+    boss: scope.boss ? bossSummary(scope.boss, allBosses) : undefined,
+    bosses: bossSummaries(scope, role, allBosses),
+    optionalBosses: OPTIONAL_BOSSES,
   }
 }

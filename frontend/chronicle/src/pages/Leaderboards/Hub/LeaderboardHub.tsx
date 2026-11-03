@@ -13,6 +13,7 @@ import { BossPortrait, SpecIcon } from "@/pages/Leaderboards/Ratings/RatingParts
 import { METRIC_THEMES, scopeTitle, type RatingView } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { ScopeBar } from "@/pages/Leaderboards/Ratings/ScopeBar"
 import { useBossModelImage } from "./bossModels"
+import { formatPeakRaw, peakWithRaw } from "./peakDisplay"
 import { TABS, type HubTab } from "./hubTabs"
 import { EncounterSidebar } from "./EncounterSidebar"
 import { GuildName, GuildRatingBoards, GuildRatingLeaders, MetricColumns } from "./GuildRatings"
@@ -25,29 +26,23 @@ import { FULL_CLEAR, type EncounterSelection } from "./encounterSelection"
 import { HUB_REALMS, useHubRealm } from "./hubRealm"
 import { setMockRealm } from "@/pages/Leaderboards/Ratings/mockRealm"
 import {
-  bossSummaries,
-  bossSummary,
-  cohorts,
-  specStanding,
+  fixtureOverviewData,
   formatClock,
-  guildLogo,
-  guildTimeSpreads,
-  speedruns,
   instanceBosses,
   OPTIONAL_BOSSES,
-  guildRows,
-  ratingLeaders,
-  specSpreads,
   specsFor,
   subSpecsFor,
-  topThroughput,
   type BossSummary,
   type Cohort,
+  type GuildRating,
   type GuildRow,
   type GuildTimeSpread,
   type HubPlayer,
   type HubRole,
   type HubSubject,
+  type RatingLeader,
+  type SpecSpread,
+  type ThroughputRow,
 } from "./hub.fixtures"
 
 /**
@@ -107,7 +102,49 @@ function readEncountersOpen(): boolean {
 /** Guilds mode's color: the toggle, the page tint, and the guild time box plots. */
 const GUILD_GOLD = "#e6c36a"
 
+export interface HubLiveTabContext {
+  tab: HubTab
+  instanceName: string
+  realm: string
+  onSwitchInstance?: (instance: string) => void
+  scope: RatingScope
+  role: HubRole
+  subject: HubSubject
+  ratingView: RatingView
+  statisticsView: StatisticsView
+  onStatisticsView: (view: StatisticsView) => void
+  period: RatingPeriod
+  onView: (view: RatingView) => void
+  onPeriod: (period: RatingPeriod) => void
+  selection: EncounterSelection
+  setSelection: (selection: EncounterSelection) => void
+  onTab: (tab: HubTab) => void
+  onRatings: (view: RatingView) => void
+  onStatistics: (view: StatisticsView) => void
+  onScope: (scope: RatingScope) => void
+  onRole: (role: HubRole) => void
+  /** The Overview's framing, computed once by the hub so live and Storybook read the same. */
+  overview: Pick<OverviewProps, "kind" | "set" | "where" | "noRole">
+}
+
+export interface HubLiveData {
+  bosses: readonly string[]
+  optionalBosses?: ReadonlySet<string>
+  /** Persist a selected encounter in the host URL without changing the Storybook path. */
+  onSelection?: (selection: EncounterSelection) => void
+  selection?: EncounterSelection
+  cohortPicker?: ReactNode
+  realms: readonly string[]
+  specsFor: (cls: string, role: HubRole) => string[]
+  subSpecsFor: (cls: string, spec: string) => string[]
+  /** Every live tab is supplied by the adapter; fixture-backed tab components are never mounted. */
+  renderTab: (context: HubLiveTabContext) => ReactNode
+  /** Render `Overview` with live data; the hub passes everything but the data. */
+  renderOverview?: (context: HubLiveTabContext) => ReactNode
+}
+
 export interface LeaderboardHubProps {
+  live?: HubLiveData
   instanceName?: string
   initialScope?: RatingScope
   /** Start on a combined set of bosses instead of the full clear or one boss. */
@@ -140,7 +177,8 @@ export interface LeaderboardHubProps {
  * tab that holds its full board.
  */
 export function LeaderboardHub({
-  instanceName = "Molten Core",
+  live,
+  instanceName: requestedInstanceName,
   initialScope = {},
   initialBosses,
   initialRole = "dps",
@@ -157,14 +195,21 @@ export function LeaderboardHub({
   onRealm,
   initialRealm,
 }: LeaderboardHubProps) {
+  const instanceName = requestedInstanceName ?? (live ? "" : "Molten Core")
   // Ratings are per realm, so the realm scopes the whole page. Stored per browser.
-  const [ownRealm, setOwnRealm] = useHubRealm(HUB_REALMS, initialRealm)
-  const realm = controlledRealm ?? ownRealm
+  const realms = live ? live.realms : HUB_REALMS
+  const [ownRealm, setOwnRealm] = useHubRealm(realms, initialRealm)
+  const realm = controlledRealm ?? (live && !realms.includes(ownRealm) ? realms[0] ?? "" : ownRealm)
   const setRealm = onRealm ?? setOwnRealm
-  setMockRealm(realm)
-  const [selection, setSelection] = useState<EncounterSelection>(
-    initialBosses ? { kind: "bosses", bosses: initialBosses } : initialScope.boss ? { kind: "bosses", bosses: [initialScope.boss] } : FULL_CLEAR,
+  if (!live) setMockRealm(realm)
+  const [ownSelection, setSelection] = useState<EncounterSelection>(
+    initialBosses?.length ? { kind: "bosses", bosses: initialBosses } : initialScope.boss ? { kind: "bosses", bosses: [initialScope.boss] } : FULL_CLEAR,
   )
+  const selection = live?.selection ?? ownSelection
+  const selectEncounter = (next: EncounterSelection) => {
+    setSelection(next)
+    live?.onSelection?.(next)
+  }
   const [classScope, setClassScope] = useState<RatingScope>({ cls: initialScope.cls, spec: initialScope.spec, subSpec: initialScope.subSpec })
   // Switching instance keeps tab and filters; only the encounter choice resets, since bosses differ.
   const [shownInstance, setShownInstance] = useState(instanceName)
@@ -189,10 +234,10 @@ export function LeaderboardHub({
   const scope: RatingScope = { boss: chosen.length === 1 ? chosen[0] : undefined, ...(subject === "guilds" ? {} : classScope) }
   /** Boards and cards narrow by scope: a boss opens that boss, a class/spec narrows the class filter. */
   const setScope = (next: RatingScope) => {
-    if (next.boss !== scope.boss) setSelection(next.boss ? { kind: "bosses", bosses: [next.boss] } : FULL_CLEAR)
+    if (next.boss !== scope.boss) selectEncounter(next.boss ? { kind: "bosses", bosses: [next.boss] } : FULL_CLEAR)
     setClassScope({ cls: next.cls, spec: next.spec, subSpec: next.subSpec })
   }
-  const bosses = instanceBosses(instanceName)
+  const bosses = live ? live.bosses : instanceBosses(instanceName)
   const [role, setRole] = useState<HubRole>(initialRole)
   const [ownTab, setOwnTab] = useState<HubTab>(initialTab)
   const tab = controlledTab ?? ownTab
@@ -215,8 +260,8 @@ export function LeaderboardHub({
     setTab("statistics")
   }
   const kind = scopeKind(scope)
-  const where = set ? `${set.length} bosses` : (scope.boss ?? getInstanceConfig(instanceName)?.abbrev ?? instanceName)
-  const title = set ? `${instanceName} · ${set.length} bosses` : scopeTitle(scope, instanceName)
+  const where = set ? `${set.length} bosses` : (scope.boss ?? (live ? instanceName : getInstanceConfig(instanceName)?.abbrev ?? instanceName))
+  const title = set ? `${instanceName} · ${set.length} bosses` : live ? instanceName : scopeTitle(scope, instanceName)
   const crumbs: { label: string; color?: string }[] = [
     { label: set ? `${set.length} bosses` : (scope.boss ?? "Full clear") },
     ...(scope.cls ? [{ label: CLASS_DISPLAY[scope.cls], color: CLASS_CSS_VAR[scope.cls] }] : []),
@@ -227,7 +272,14 @@ export function LeaderboardHub({
   const changeRole = (next: HubRole) => {
     setRole(next)
     // A spec belongs to one role; drop it when it no longer fits.
-    if (scope.cls && scope.spec && !specsFor(scope.cls, next).includes(scope.spec)) setClassScope({ cls: scope.cls })
+    if (scope.cls && scope.spec && !(live ? live.specsFor : specsFor)(scope.cls, next).includes(scope.spec)) setClassScope({ cls: scope.cls })
+  }
+  const liveContext: HubLiveTabContext = {
+    tab, instanceName, realm, onSwitchInstance, scope, role, subject, ratingView, statisticsView, period,
+    onView: setRatingView, onStatisticsView: setStatisticsView, onPeriod: setPeriod, selection,
+    setSelection: selectEncounter, onTab: setTab, onRatings: openRatings,
+    onStatistics: openStatistics, onScope: setScope, onRole: changeRole,
+    overview: { kind, set, where, noRole: !!scope.cls && (live ? live.specsFor : specsFor)(scope.cls, role).length === 0 },
   }
 
   // Guilds mode tints the page gold, the Guilds toggle's color: a faint wash from the top, a gold-edged
@@ -290,12 +342,12 @@ export function LeaderboardHub({
                       <span style={c.color ? { color: c.color } : undefined}>{c.label}</span>
                     </Fragment>
                   ))}
-                  {scope.boss && OPTIONAL_BOSSES.has(scope.boss) && <span className="text-muted-foreground/70">· Optional</span>}
+                  {scope.boss && (live ? live.optionalBosses?.has(scope.boss) : OPTIONAL_BOSSES.has(scope.boss)) && <span className="text-muted-foreground/70">· Optional</span>}
                 </nav>
                 {/* The realm sits beside the title: together they name what every board below ranks. */}
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                   <InstanceTitle instanceName={instanceName} instances={instances} onSwitch={onSwitchInstance} />
-                  <RealmPicker realm={realm} realms={HUB_REALMS} onChange={setRealm} />
+                  <RealmPicker realm={realm} realms={realms} onChange={setRealm} />
                 </div>
                 {set && <p className="mt-1 text-xs text-muted-foreground">Combined: {set.join(", ")} · ratings averaged, time is total kill time</p>}
               </div>
@@ -323,15 +375,16 @@ export function LeaderboardHub({
               scope={scope}
               classDisabled={subject === "guilds" ? "Guild ratings don't split by class. Switch to Characters to filter by class." : undefined}
               showBoss={false}
-              specs={scope.cls ? specsFor(scope.cls, role) : []}
-              subSpecs={scope.cls && scope.spec ? subSpecsFor(scope.cls, scope.spec) : []}
+              specs={scope.cls ? (live ? live.specsFor : specsFor)(scope.cls, role) : []}
+              subSpecs={scope.cls && scope.spec ? (live ? live.subSpecsFor : subSpecsFor)(scope.cls, scope.spec) : []}
               onChange={(next) => {
                 // "Whole raid" clears everything, the encounter choice included.
-                if (!next.boss && !next.cls && !next.spec) setSelection(FULL_CLEAR)
+                if (!next.boss && !next.cls && !next.spec) selectEncounter(FULL_CLEAR)
                 setClassScope({ cls: next.cls, spec: next.spec, subSpec: next.subSpec })
               }}
               extra={
                 <>
+                  {live?.cohortPicker}
                   <Segmented
                     label="Role"
                     value={role}
@@ -364,9 +417,10 @@ export function LeaderboardHub({
                 <div className="shrink-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:w-[267px] lg:self-start lg:overflow-y-auto lg:border-r lg:pt-1 lg:pr-4 styled-scrollbar">
                   <EncounterSidebar
                     bosses={bosses}
-                    optional={OPTIONAL_BOSSES}
+                    optional={live ? live.optionalBosses ?? new Set<string>() : OPTIONAL_BOSSES}
+                    trash={live && tab === "performances" ? new Set(["Trash"]) : undefined}
                     selection={selection}
-                    onSelect={setSelection}
+                    onSelect={selectEncounter}
                     onCollapse={() => setEncountersOpen(false)}
                   />
                 </div>
@@ -386,15 +440,16 @@ export function LeaderboardHub({
                 </div>
               ))}
             <div className={cn("min-w-0 flex-1 space-y-5", tab !== "rulesets" && (encountersOpen ? "lg:pl-6" : "lg:pl-4"))}>
-              {tab === "overview" ? (
+              {live ? (
+                tab === "overview" && live.renderOverview ? live.renderOverview(liveContext) : live.renderTab(liveContext)
+              ) : tab === "overview" ? (
                 <Overview
+                  {...liveContext.overview}
+                  data={fixtureOverviewData(instanceName, scope, role, set)}
                   instanceName={instanceName}
                   scope={scope}
                   role={role}
                   subject={subject}
-                  kind={kind}
-                  set={set}
-                  where={where}
                   onScope={setScope}
                   onTab={setTab}
                   onRatings={openRatings}
@@ -473,7 +528,7 @@ export function LeaderboardHub({
             </div>
           </div>
 
-          <p className="px-1 text-xs text-muted-foreground/70">Mock data for design review. Names, guilds, and numbers are generated.</p>
+          {!live && <p className="px-1 text-xs text-muted-foreground/70">Mock data for design review. Names, guilds, and numbers are generated.</p>}
         </div>
       </div>
     </div>
@@ -513,20 +568,74 @@ function InstanceTitle({
   )
 }
 
-function Overview({
-  instanceName,
-  scope,
-  role,
-  subject,
-  kind,
-  set,
-  where,
-  onScope,
-  onTab,
-  onRatings,
-  onStatistics,
-  onRole,
-}: {
+/**
+ * Everything the Overview draws, already scoped to the page's boss, class, spec, role, and realm.
+ * A missing slot means the data is not published for this scope: its card keeps its place and says so.
+ */
+export interface OverviewData {
+  /** Fastest runs, fastest first: the podium shows three, the guild card all of them. */
+  speedruns?: readonly SpeedrunLeaderboardEntry[]
+  /** The runs are full clears even with a set of bosses chosen (set kill times live on Speedruns). */
+  speedrunsAreClears?: boolean
+  ratings?: Record<RatingMetric, RatingLeader[]>
+  guildRatings?: Record<RatingMetric, GuildRating[]>
+  guildRenown?: GuildRow[]
+  guildClears?: GuildRow[]
+  performances?: ThroughputRow[]
+  /** Every spec in the role, best median first. */
+  specSpreads?: SpecSpread[]
+  /** The chosen class's specs, for the class overview's headline cards. */
+  cohorts?: Cohort[]
+  guildTimeSpreads?: GuildTimeSpread[]
+  /** The chosen boss's stats. */
+  boss?: LiveBossSummary
+  bosses?: readonly LiveBossSummary[]
+  optionalBosses?: ReadonlySet<string>
+  /** Still loading: empty slots read as loading rather than unpublished. */
+  pending?: boolean
+}
+
+/** A card body for a slot without rows: skeleton rows while loading, else why it is empty. */
+function Empty({ pending, text = "Not published for this selection yet" }: { pending?: boolean; text?: string }) {
+  if (pending) return <SkeletonRows />
+  return <p className="px-4 py-6 text-center text-xs text-muted-foreground">{text}</p>
+}
+
+/** Placeholder rows in a card's row rhythm while its data loads. */
+export function SkeletonRows({ rows = 5 }: { rows?: number }) {
+  return (
+    <div role="status" aria-label="Loading" className="divide-y divide-white/5">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex items-center gap-3 px-4 py-2.5">
+          <span className="size-5 shrink-0 animate-pulse rounded-sm bg-white/[.06]" />
+          <span className="h-3 animate-pulse rounded bg-white/[.06]" style={{ width: `${55 - i * 6}%` }} />
+          <span className="ml-auto h-3 w-12 animate-pulse rounded bg-white/[.06]" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** The boss cards' grid while it loads. */
+function BossGridSkeleton() {
+  return (
+    <section aria-label="Bosses" className="space-y-3">
+      <h2 className="px-1 text-sm font-semibold">Bosses</h2>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="h-40 animate-pulse rounded-xl border bg-card" />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function filled<T>(rows: readonly T[] | undefined, pending: boolean | undefined, render: (rows: readonly T[]) => ReactNode) {
+  return rows?.length ? render(rows) : <Empty pending={pending} text={rows ? "No entries yet" : undefined} />
+}
+
+export interface OverviewProps {
+  data: OverviewData
   instanceName: string
   scope: RatingScope
   role: HubRole
@@ -535,18 +644,22 @@ function Overview({
   /** Combined bosses, when two or more are chosen. */
   set?: readonly string[]
   where: string
+  /** The chosen class has no spec in this role. */
+  noRole: boolean
   onScope: (scope: RatingScope) => void
   onTab: (tab: HubTab) => void
   onRatings: (view: RatingView) => void
   onStatistics: (view: StatisticsView) => void
   onRole: (role: HubRole) => void
-}) {
+}
+
+export function Overview({ data, instanceName, scope, role, subject, kind, set, where, noRole, onScope, onTab, onRatings, onStatistics, onRole }: OverviewProps) {
   const roleLabel = role === "dps" ? "DPS" : "HPS"
   const guilds = subject === "guilds"
-  const noRole = scope.cls && specsFor(scope.cls, role).length === 0
+  const { pending } = data
   const spreadCard = (
     <Card title={`Typical ${roleLabel} parse by spec`} action={{ label: "Box plot", onClick: () => onStatistics("specs") }}>
-      <SpecSpreads scope={scope} role={role} />
+      {filled(data.specSpreads, pending, (rows) => <SpecSpreads rows={rows.slice(0, 8)} />)}
     </Card>
   )
 
@@ -557,11 +670,18 @@ function Overview({
   return (
     <div className="space-y-5">
       {cohort ? (
-        <CohortHero scope={scope} role={role} onScope={onScope} onRole={onRole} />
+        data.cohorts?.length ? <CohortHero cohorts={data.cohorts} scope={scope} role={role} onScope={onScope} onRole={onRole} /> : null
       ) : (
-        <SpeedHero instanceName={instanceName} scope={scope} set={set} onOpen={() => onTab("speedruns")} />
+        <SpeedHero
+          instanceName={instanceName}
+          scope={data.speedrunsAreClears ? {} : scope}
+          set={data.speedrunsAreClears ? undefined : set}
+          onOpen={() => onTab("speedruns")}
+          entries={data.speedruns?.slice(0, 3)}
+          pending={pending}
+        />
       )}
-      {scope.boss && <BossStats boss={bossSummary(scope.boss, instanceBosses(instanceName))} />}
+      {scope.boss && <BossStats boss={data.boss ?? { boss: scope.boss }} />}
 
       {noRole ? (
         <div className="rounded-xl border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
@@ -573,14 +693,11 @@ function Overview({
           <Card title={`${guilds ? "Guild Ratings" : "Ratings"} · ${where}`} action={{ label: "Ratings", onClick: () => onRatings("overview") }}>
             {guilds ? (
               // A guild run is rated like a player's parse: its time against the fastest.
-              <GuildRatingLeaders
-                bosses={set ?? (scope.boss ? [scope.boss] : undefined)}
-                allBosses={instanceBosses(instanceName)}
-                instanceName={instanceName}
-                onOpen={onRatings}
-              />
+              data.guildRatings ? <GuildRatingLeaders ratings={data.guildRatings} onOpen={onRatings} /> : <Empty pending={pending} />
+            ) : data.ratings ? (
+              <RatingLeaders leaders={data.ratings} role={role} onOpen={onRatings} />
             ) : (
-              <RatingLeaders scope={scope} role={role} onOpen={onRatings} />
+              <Empty pending={pending} />
             )}
           </Card>
           {cohort ? (
@@ -589,7 +706,9 @@ function Overview({
               action={{ label: "Box plot", onClick: () => onStatistics("specs") }}
               className="lg:row-span-2"
             >
-              <SpecStandingList scope={scope} role={role} onPick={(cls, spec, subSpec) => onScope({ boss: scope.boss, cls, spec, subSpec })} />
+              {filled(data.specSpreads, pending, (rows) => (
+                <SpecStandingList rows={rows} scope={scope} onPick={(cls, spec, subSpec) => onScope({ boss: scope.boss, cls, spec, subSpec })} />
+              ))}
             </Card>
           ) : guilds ? (
             // Renown is already a column of Guild Ratings; this slot counts clears instead.
@@ -597,17 +716,13 @@ function Overview({
               title={`${scope.boss || set ? "Kills" : "# Clears"} by guild · ${where}`}
               action={{ label: "Speedruns", onClick: () => onTab("speedruns") }}
             >
-              <GuildList rows={guildRows("clears", scope, role, 5, !!scope.boss || !!set)} format={(v) => String(v)} bars />
+              {filled(data.guildClears, pending, (rows) => <GuildList rows={rows} format={(v) => String(v)} bars />)}
             </Card>
           ) : (
             <Card title={`Guild Renown · ${where}`} metric="renown" action={{ label: "Renown", onClick: () => onRatings("renown") }}>
-              <GuildList
-                rows={guildRows("renown", scope, role, 5, !!scope.boss || !!set)}
-                format={(v) => v.toLocaleString()}
-                bars
-                showDetail
-                accent={METRIC_THEMES.renown.accent}
-              />
+              {filled(data.guildRenown, pending, (rows) => (
+                <GuildList rows={rows} format={(v) => v.toLocaleString()} bars showDetail accent={METRIC_THEMES.renown.accent} />
+              ))}
             </Card>
           )}
           {guilds ? (
@@ -616,11 +731,11 @@ function Overview({
               title={`Best Performances (${set ? "Total kill time" : scope.boss ? "Kill time" : "Clear time"}) · ${where}`}
               action={{ label: "Speedruns", onClick: () => onTab("speedruns") }}
             >
-              <RunList runs={speedruns(set ?? (scope.boss ? [scope.boss] : undefined), instanceBosses(instanceName), instanceName, 8)} />
+              {filled(data.speedruns, pending, (runs) => <RunList runs={runs} />)}
             </Card>
           ) : (
             <Card title={`Best Performances (${roleLabel}) · ${where}`} action={{ label: "Performances", onClick: () => onTab("performances") }}>
-              <ThroughputList scope={scope} role={role} />
+              {filled(data.performances, pending, (rows) => <ThroughputList rows={rows} />)}
             </Card>
           )}
           {guilds ? (
@@ -628,7 +743,7 @@ function Overview({
               title={`Typical ${set ? "total kill time" : scope.boss ? "kill time" : "clear time"} by guild · ${where}`}
               action={{ label: "Kill times", onClick: () => onStatistics("killtimes") }}
             >
-              <GuildSpreads spreads={guildTimeSpreads(set ?? (scope.boss ? [scope.boss] : undefined), instanceBosses(instanceName), instanceName)} />
+              {filled(data.guildTimeSpreads, pending, (spreads) => <GuildSpreads spreads={spreads} />)}
             </Card>
           ) : (
             !cohort && spreadCard
@@ -636,7 +751,10 @@ function Overview({
         </div>
       )}
 
-      {!scope.boss && <BossGrid instanceName={instanceName} scope={scope} role={role} only={set} onBoss={(boss) => onScope({ ...scope, boss })} />}
+      {!scope.boss && !data.bosses && pending && <BossGridSkeleton />}
+      {!scope.boss && data.bosses && (
+        <BossGrid role={role} only={set} onBoss={(boss) => onScope({ ...scope, boss })} summaries={data.bosses} optionalBosses={data.optionalBosses} />
+      )}
     </div>
   )
 }
@@ -646,17 +764,18 @@ function Overview({
  * per subspec once a spec with subspecs is chosen). Clicking narrows to it.
  */
 function CohortHero({
+  cohorts: list,
   scope,
   role,
   onScope,
   onRole,
 }: {
+  cohorts: readonly Cohort[]
   scope: RatingScope
   role: HubRole
   onScope: (scope: RatingScope) => void
   onRole: (role: HubRole) => void
 }) {
-  const list = cohorts(scope, role)
   const single = list.length === 1
   return (
     <section
@@ -724,7 +843,7 @@ function CohortCard({ cohort: c, offRole, current, onOpen }: { cohort: Cohort; o
             )}
           </div>
           <div className="text-xs text-muted-foreground">
-            <span className="font-mono tabular-nums">{c.characters.toLocaleString()}</span> ranked characters
+            <span className="font-mono tabular-nums">{c.characters.toLocaleString()}</span> {c.charactersLabel ?? "ranked characters"}
           </div>
         </div>
       </div>
@@ -739,7 +858,7 @@ function CohortCard({ cohort: c, offRole, current, onOpen }: { cohort: Cohort; o
         <BossStat
           icon={<METRIC_THEMES.peak.icon className="size-3.5" style={{ color: METRIC_THEMES.peak.accent }} />}
           label="#1 Peak"
-          value={c.peak ? METRIC_THEMES.peak.format(c.peak.score) : "—"}
+          value={c.peak ? peakWithRaw(c.peak.score, c.peak.raw, c.role === "dps" ? "dps" : "hps") : "—"}
         >
           {c.peak && (
             <span className="truncate" style={{ color }}>
@@ -800,15 +919,14 @@ function specLabel(s: { cls: string; spec: string; subSpec?: string }, rows: rea
  * and the rest dimmed: is this class good here? Any row opens that spec.
  */
 function SpecStandingList({
+  rows,
   scope,
-  role,
   onPick,
 }: {
+  rows: readonly SpecSpread[]
   scope: RatingScope
-  role: HubRole
   onPick: (cls: string, spec: string, subSpec?: string) => void
 }) {
-  const rows = specStanding(scope.boss, role)
   const lo = Math.min(...rows.map((r) => r.min))
   const hi = Math.max(...rows.map((r) => r.max))
   const pct = (v: number) => ((v - lo) / (hi - lo || 1)) * 100
@@ -854,7 +972,21 @@ function SpecStandingList({
   )
 }
 
-function SpeedHero({ instanceName, scope, set, onOpen }: { instanceName: string; scope: RatingScope; set?: readonly string[]; onOpen: () => void }) {
+export function SpeedHero({
+  instanceName,
+  scope,
+  set,
+  onOpen,
+  entries,
+  pending,
+}: {
+  instanceName: string
+  scope: RatingScope
+  set?: readonly string[]
+  onOpen: () => void
+  entries?: readonly SpeedrunLeaderboardEntry[]
+  pending?: boolean
+}) {
   return (
     <section
       className="relative overflow-hidden rounded-xl border bg-cover bg-center"
@@ -865,23 +997,35 @@ function SpeedHero({ instanceName, scope, set, onOpen }: { instanceName: string;
         {set ? `Fastest total kill time · ${set.length} bosses` : scope.boss ? `Fastest ${scope.boss} kills` : "Fastest full clears"}
       </span>
       <CardLink label="Speedruns" onClick={onOpen} className="absolute top-3 right-4 z-10" />
-      <div className="relative px-4 pt-10">
-        <Podium
-          entries={speedruns(set ?? (scope.boss ? [scope.boss] : undefined), instanceBosses(instanceName), instanceName, 3)}
-          instanceName={instanceName}
-        />
-      </div>
+      {entries?.length ? (
+        <div className="relative px-4 pt-10">
+          <Podium entries={[...entries]} instanceName={instanceName} />
+        </div>
+      ) : pending ? (
+        // The podium's three steps, second / first / third.
+        <div role="status" aria-label="Loading" className="relative flex items-end justify-center gap-4 px-4 pt-10 pb-6">
+          {["h-28", "h-36", "h-24"].map((h, i) => (
+            <span key={i} className={cn("w-40 animate-pulse rounded-xl bg-white/[.06]", h)} />
+          ))}
+        </div>
+      ) : (
+        <p className="relative px-4 pt-10 pb-8 text-center text-sm text-muted-foreground">
+          {pending ? "Loading…" : entries ? "No qualifying runs yet" : "Not published for this selection yet"}
+        </p>
+      )}
     </section>
   )
 }
 
-function BossStats({ boss }: { boss: BossSummary }) {
-  const rate = (boss.kills / boss.attempts) * 100
+export type LiveBossSummary = Pick<BossSummary, "boss"> & Partial<Omit<BossSummary, "boss">> & { topDps?: number }
+
+export function BossStats({ boss }: { boss: LiveBossSummary }) {
+  const rate = boss.kills !== undefined && boss.attempts ? (boss.kills / boss.attempts) * 100 : undefined
   const stats = [
-    { label: "Success rate", value: `${rate.toFixed(0)}%`, bar: rate },
-    { label: "Kills / pulls", value: `${boss.kills.toLocaleString()} / ${boss.attempts.toLocaleString()}` },
-    { label: "Median kill", value: formatClock(boss.medianKillMs) },
-    { label: "Fastest kill", value: formatClock(boss.best.ms), sub: boss.best.guild },
+    { label: "Success rate", value: rate === undefined ? "—" : `${rate.toFixed(0)}%`, bar: rate },
+    { label: "Kills / pulls", value: boss.kills !== undefined && boss.attempts !== undefined ? `${boss.kills.toLocaleString()} / ${boss.attempts.toLocaleString()}` : "—" },
+    { label: "Median kill", value: boss.medianKillMs === undefined ? "—" : formatClock(boss.medianKillMs) },
+    { label: "Fastest kill", value: boss.best ? formatClock(boss.best.ms) : "—", sub: boss.best?.guild },
   ]
   return (
     <section aria-label={`${boss.boss} stats`} className="grid grid-cols-2 overflow-hidden rounded-xl border bg-card sm:grid-cols-4 sm:divide-x">
@@ -902,24 +1046,25 @@ function BossStats({ boss }: { boss: BossSummary }) {
 }
 
 /** One card per boss, its model standing behind the stats: the raid overview's answer to "MC has twelve bosses". */
-function BossGrid({
-  instanceName,
-  scope,
+export function BossGrid({
   role,
   only,
   onBoss,
+  summaries,
+  optionalBosses,
 }: {
-  instanceName: string
-  scope: RatingScope
   role: HubRole
   /** Limit to a combined set of bosses. */
   only?: readonly string[]
   onBoss: (boss: string) => void
+  summaries: readonly LiveBossSummary[]
+  optionalBosses?: ReadonlySet<string>
 }) {
-  const rows = bossSummaries(scope, role, instanceBosses(instanceName)).filter((b) => !only || only.includes(b.boss))
-  const required = rows.filter((b) => !OPTIONAL_BOSSES.has(b.boss))
-  const optional = rows.filter((b) => OPTIONAL_BOSSES.has(b.boss))
-  const grid = (list: BossSummary[], isOptional: boolean) => (
+  const rows = summaries.filter((b) => !only || only.includes(b.boss))
+  const optionalSet = optionalBosses ?? new Set<string>()
+  const required = rows.filter((b) => !optionalSet.has(b.boss))
+  const optional = rows.filter((b) => optionalSet.has(b.boss))
+  const grid = (list: LiveBossSummary[], isOptional: boolean) => (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
       {list.map((b) => (
         <BossCard key={b.boss} summary={b} role={role} optional={isOptional} onOpen={() => onBoss(b.boss)} />
@@ -944,9 +1089,9 @@ function BossGrid({
   )
 }
 
-function BossCard({ summary: b, role, optional, onOpen }: { summary: BossSummary; role: HubRole; optional: boolean; onOpen: () => void }) {
+function BossCard({ summary: b, role, optional, onOpen }: { summary: LiveBossSummary; role: HubRole; optional: boolean; onOpen: () => void }) {
   const model = useBossModelImage(b.boss)
-  const rate = (b.kills / b.attempts) * 100
+  const rate = b.kills !== undefined && b.attempts ? (b.kills / b.attempts) * 100 : undefined
   return (
     <button
       type="button"
@@ -990,15 +1135,25 @@ function BossCard({ summary: b, role, optional, onOpen }: { summary: BossSummary
             </span>
           )}
         </div>
-        <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="h-1 w-10 overflow-hidden rounded-full bg-red-500/30">
-            <span className="block h-full bg-green-500/70" style={{ width: `${rate}%` }} />
-          </span>
-          <span className="font-mono tabular-nums">{rate.toFixed(0)}%</span>
-          <span>·</span>
-          <span className="font-mono tabular-nums">{formatClock(b.medianKillMs)}</span>
-          <span>median</span>
-        </div>
+        {(rate !== undefined || b.medianKillMs !== undefined) && (
+          <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+            {rate !== undefined && (
+              <>
+                <span className="h-1 w-10 overflow-hidden rounded-full bg-red-500/30">
+                  <span className="block h-full bg-green-500/70" style={{ width: `${rate}%` }} />
+                </span>
+                <span className="font-mono tabular-nums">{rate.toFixed(0)}%</span>
+              </>
+            )}
+            {b.medianKillMs !== undefined && (
+              <>
+                {rate !== undefined && <span>·</span>}
+                <span className="font-mono tabular-nums">{formatClock(b.medianKillMs)}</span>
+                <span>median</span>
+              </>
+            )}
+          </div>
+        )}
       </div>
       <dl className="w-[56%] space-y-0.5 px-3 pb-3 text-xs">
         {b.standing ? (
@@ -1016,20 +1171,22 @@ function BossCard({ summary: b, role, optional, onOpen }: { summary: BossSummary
               <span className="text-muted-foreground/60">/{b.standing.of}</span>
             </span>
           </BossStat>
-        ) : (
+        ) : b.best ? (
           <BossStat icon={<Timer className="size-3.5 text-muted-foreground" />} label="Fastest" value={formatClock(b.best.ms)}>
             <span className="truncate text-muted-foreground">{b.best.guild}</span>
           </BossStat>
-        )}
+        ) : null}
         {RATING_METRICS.map((m) => {
           const t = METRIC_THEMES[m]
-          const leader = b.ratings[m]
+          const leader = b.ratings?.[m]
           return (
             <BossStat
               key={m}
               icon={<t.icon className="size-3.5" style={{ color: t.accent }} />}
               label={t.label}
               value={leader ? t.format(leader.score) : "—"}
+              // Peak's DPS stacks under the score so the name keeps its room.
+              sub={leader?.raw ? `${Math.round(leader.raw).toLocaleString()}/s` : undefined}
             >
               {leader && <PlayerName player={leader.player} />}
             </BossStat>
@@ -1038,7 +1195,7 @@ function BossCard({ summary: b, role, optional, onOpen }: { summary: BossSummary
         <BossStat
           icon={role === "dps" ? <Swords className="size-3.5 text-muted-foreground" /> : <HeartPulse className="size-3.5 text-muted-foreground" />}
           label={`Best performance (${role === "dps" ? "DPS" : "HPS"})`}
-          value={b.performance ? `${b.performance.value}/s` : "—"}
+          value={b.performance ? `${b.performance.value}/s` : role === "dps" && b.topDps !== undefined ? `${Math.round(b.topDps).toLocaleString()}/s` : "—"}
         >
           {b.performance && <PlayerName player={b.performance.player} />}
         </BossStat>
@@ -1047,7 +1204,7 @@ function BossCard({ summary: b, role, optional, onOpen }: { summary: BossSummary
   )
 }
 
-function BossStat({ icon, label, value, children }: { icon: ReactNode; label: string; value: string; children?: ReactNode }) {
+function BossStat({ icon, label, value, sub, children }: { icon: ReactNode; label: string; value: string; sub?: string; children?: ReactNode }) {
   return (
     <div className="flex items-center gap-2 rounded px-1.5 py-1 [text-shadow:0_1px_2px_rgba(0,0,0,.8)]">
       <dt className="shrink-0" title={label}>
@@ -1055,7 +1212,10 @@ function BossStat({ icon, label, value, children }: { icon: ReactNode; label: st
         <span className="sr-only">{label}</span>
       </dt>
       <dd className="flex min-w-0 flex-1 items-center gap-1.5 truncate">{children}</dd>
-      <dd className="shrink-0 font-mono tabular-nums">{value}</dd>
+      <dd className="shrink-0 text-right font-mono tabular-nums">
+        {value}
+        {sub && <span className="block text-[9px] leading-tight text-muted-foreground">{sub}</span>}
+      </dd>
     </div>
   )
 }
@@ -1071,8 +1231,7 @@ function PlayerName({ player }: { player: HubPlayer }) {
   )
 }
 
-function RatingLeaders({ scope, role, onOpen }: { scope: RatingScope; role: HubRole; onOpen: (metric: RatingMetric) => void }) {
-  const leaders = ratingLeaders(scope, role)
+function RatingLeaders({ leaders, role, onOpen }: { leaders: Record<RatingMetric, RatingLeader[]>; role: HubRole; onOpen: (metric: RatingMetric) => void }) {
   const rows = (m: RatingMetric) =>
     leaders[m].map((l) => ({
       id: l.player.id,
@@ -1085,12 +1244,13 @@ function RatingLeaders({ scope, role, onOpen }: { scope: RatingScope; role: HubR
         </>
       ),
       score: l.score,
+      raw: l.raw ? formatPeakRaw(l.raw, role === "dps" ? "dps" : "hps") : undefined,
     }))
   return <MetricColumns columns={{ peak: rows("peak"), mastery: rows("mastery"), renown: rows("renown") }} onOpen={onOpen} />
 }
 
 /** A guild's best runs, fastest first: the guild counterpart of a player's best parses. */
-function RunList({ runs }: { runs: SpeedrunLeaderboardEntry[] }) {
+function RunList({ runs }: { runs: readonly SpeedrunLeaderboardEntry[] }) {
   return (
     <ol>
       {runs.map((r, i) => (
@@ -1113,8 +1273,7 @@ function RunList({ runs }: { runs: SpeedrunLeaderboardEntry[] }) {
   )
 }
 
-function ThroughputList({ scope, role }: { scope: RatingScope; role: HubRole }) {
-  const rows = topThroughput(scope, role, 8)
+function ThroughputList({ rows }: { rows: readonly ThroughputRow[] }) {
   return (
     <ol>
       {rows.map((r, i) => (
@@ -1130,7 +1289,7 @@ function ThroughputList({ scope, role }: { scope: RatingScope; role: HubRole }) 
             </span>
           </span>
           <span className="hidden truncate text-xs opacity-80 md:block" style={{ color: CLASS_CSS_VAR[r.player.cls] }}>
-            {r.player.spec}
+            {r.player.subSpec ? specName(r.player) : r.player.spec}
           </span>
           <span className="text-right font-mono font-bold tabular-nums">{r.value}/s</span>
           <span className="hidden truncate text-right text-xs text-muted-foreground md:block">{r.player.guild}</span>
@@ -1147,7 +1306,7 @@ function GuildList({
   showDetail = !bars,
   accent,
 }: {
-  rows: GuildRow[]
+  rows: readonly GuildRow[]
   format: (v: number) => string
   bars?: boolean
   showDetail?: boolean
@@ -1162,9 +1321,9 @@ function GuildList({
           <span className="w-4 font-mono text-xs text-muted-foreground">{i + 1}</span>
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center gap-2 font-medium">
-              <GuildName guild={g.guild} logo={guildLogo(g.guild)} />
+              <GuildName guild={g.guild} logo={g.logo} />
             </span>
-            {showDetail && <span className="block text-[11px] text-muted-foreground">{g.detail}</span>}
+            {showDetail && g.detail && <span className="block text-[11px] text-muted-foreground">{g.detail}</span>}
           </span>
           {bars && (
             <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
@@ -1183,7 +1342,7 @@ function GuildList({
  * better, so the axis runs fast (left) to slow (right); a tight box is a
  * guild that clears the same way every week.
  */
-function GuildSpreads({ spreads }: { spreads: GuildTimeSpread[] }) {
+function GuildSpreads({ spreads }: { spreads: readonly GuildTimeSpread[] }) {
   const lo = Math.min(...spreads.map((s) => s.min))
   const hi = Math.max(...spreads.map((s) => s.max))
   const pct = (v: number) => ((v - lo) / (hi - lo || 1)) * 100
@@ -1217,8 +1376,7 @@ function GuildSpreads({ spreads }: { spreads: GuildTimeSpread[] }) {
   )
 }
 
-function SpecSpreads({ scope, role }: { scope: RatingScope; role: HubRole }) {
-  const rows = specSpreads(scope, role, 8)
+function SpecSpreads({ rows }: { rows: readonly SpecSpread[] }) {
   const lo = Math.min(...rows.map((r) => r.min))
   const hi = Math.max(...rows.map((r) => r.max))
   const pct = (v: number) => ((v - lo) / (hi - lo || 1)) * 100
@@ -1252,7 +1410,7 @@ function SpecSpreads({ scope, role }: { scope: RatingScope; role: HubRole }) {
   )
 }
 
-function Card({
+export function Card({
   title,
   action,
   metric,
@@ -1284,7 +1442,7 @@ function Card({
   )
 }
 
-function CardLink({ label, onClick, className }: { label: string; onClick: () => void; className?: string }) {
+export function CardLink({ label, onClick, className }: { label: string; onClick: () => void; className?: string }) {
   return (
     <button
       type="button"

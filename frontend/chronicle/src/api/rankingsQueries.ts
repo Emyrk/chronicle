@@ -175,6 +175,7 @@ export function useRankingsLeaderboard(params: {
   hide_unknowns?: boolean;
   metric?: "dps" | "hps";
   max_players?: number;
+  exact_cohort?: boolean;
   limit?: number;
   offset?: number;
 }, enabled = true) {
@@ -182,7 +183,7 @@ export function useRankingsLeaderboard(params: {
   if (params.instance_names) searchParams.set("instance_names", params.instance_names);
   if (params.encounter_names) searchParams.set("encounter_names", params.encounter_names);
   if (params.encounter_set !== undefined) searchParams.set("encounter_set", params.encounter_set);
-  if (params.difficulty_names) searchParams.set("difficulty_names", params.difficulty_names);
+  if (params.difficulty_names !== undefined) searchParams.set("difficulty_names", params.difficulty_names);
   if (params.realm_names) searchParams.set("realm_names", params.realm_names);
   if (params.period) searchParams.set("period", params.period);
   if (params.class) searchParams.set("class", params.class);
@@ -191,7 +192,8 @@ export function useRankingsLeaderboard(params: {
   if (params.role) searchParams.set("role", params.role);
   if (params.hide_unknowns) searchParams.set("hide_unknowns", "true");
   if (params.metric && params.metric !== "dps") searchParams.set("metric", params.metric);
-  if (params.max_players) searchParams.set("max_players", String(params.max_players));
+  if (params.max_players !== undefined) searchParams.set("max_players", String(params.max_players));
+  if (params.exact_cohort) searchParams.set("exact_cohort", "true");
   if (params.limit != null) searchParams.set("limit", String(params.limit));
   if (params.offset != null) searchParams.set("offset", String(params.offset));
   const qs = searchParams.toString();
@@ -216,18 +218,20 @@ export function useRankingsStats(params: {
   metric?: "dps" | "hps";
   group_by_class?: boolean;
   max_players?: number;
+  exact_cohort?: boolean;
 }, enabled = true) {
   const searchParams = new URLSearchParams();
   if (params.instance_names) searchParams.set("instance_names", params.instance_names);
   if (params.encounter_names) searchParams.set("encounter_names", params.encounter_names);
   if (params.encounter_set !== undefined) searchParams.set("encounter_set", params.encounter_set);
-  if (params.difficulty_names) searchParams.set("difficulty_names", params.difficulty_names);
+  if (params.difficulty_names !== undefined) searchParams.set("difficulty_names", params.difficulty_names);
   if (params.realm_names) searchParams.set("realm_names", params.realm_names);
   if (params.period) searchParams.set("period", params.period);
   if (params.role) searchParams.set("role", params.role);
   if (params.metric && params.metric !== "dps") searchParams.set("metric", params.metric);
   if (params.group_by_class) searchParams.set("group_by_class", "true");
-  if (params.max_players) searchParams.set("max_players", String(params.max_players));
+  if (params.max_players !== undefined) searchParams.set("max_players", String(params.max_players));
+  if (params.exact_cohort) searchParams.set("exact_cohort", "true");
   const qs = searchParams.toString();
 
   return useQuery({
@@ -279,14 +283,15 @@ export function useRankingsClearTimes(instanceName: string, period?: string, ena
 export function useRankingsSuccessRates(
   instanceName: string,
   period?: string,
-  opts?: { difficulty_names?: string; max_players?: number },
+  opts?: { difficulty_names?: string; max_players?: number; exact_cohort?: boolean },
   enabled = true,
 ) {
   const searchParams = new URLSearchParams();
   searchParams.set("instance_name", instanceName);
   if (period) searchParams.set("period", period);
-  if (opts?.difficulty_names) searchParams.set("difficulty_names", opts.difficulty_names);
-  if (opts?.max_players) searchParams.set("max_players", String(opts.max_players));
+  if (opts?.difficulty_names !== undefined) searchParams.set("difficulty_names", opts.difficulty_names);
+  if (opts?.max_players !== undefined) searchParams.set("max_players", String(opts.max_players));
+  if (opts?.exact_cohort) searchParams.set("exact_cohort", "true");
 
   return useQuery({
     queryKey: ["rankings", "success-rates", instanceName, period, opts],
@@ -320,6 +325,18 @@ export function useRankingsKillTimeLeaderboard(params: {
       ),
     staleTime: RANKINGS_STALE_TIME,
     enabled: enabled && !!params.instance_name,
+  });
+}
+
+/** Each chosen boss's fastest clean kills (up to `perBoss`, at most 10) in one request. */
+export function useRankingsKillTimesByBoss(instanceName: string, bosses: readonly string[], perBoss: number, enabled = true) {
+  const searchParams = new URLSearchParams({ instance_name: instanceName, encounter_names: bosses.join(","), limit: String(perBoss) });
+  return useQuery({
+    queryKey: ["rankings", "kill-times-by-boss", instanceName, [...bosses], perBoss],
+    queryFn: () =>
+      fetchJSON<KillTimeLeaderboardResponse>(`/api/v1/rankings/kill-time-leaderboard?${searchParams.toString()}`),
+    staleTime: RANKINGS_STALE_TIME,
+    enabled: enabled && !!instanceName && bosses.length > 0,
   });
 }
 

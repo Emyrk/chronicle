@@ -809,10 +809,12 @@ export function Podium({ entries, instanceName }: PodiumProps) {
                 <span {...speedrunClearAttributes(entry, instanceName)}>{formatDuration(entry.duration_ms)}</span>
               </span>
               <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Users className="h-3 w-3" />
-                  {entry.player_count}
-                </span>
+                {entry.player_count > 0 && (
+                  <span className="flex items-center gap-1">
+                    <Users className="h-3 w-3" />
+                    {entry.player_count}
+                  </span>
+                )}
                 <span>{entry.realm_name}</span>
               </div>
               <span className="text-xs text-muted-foreground mt-1">

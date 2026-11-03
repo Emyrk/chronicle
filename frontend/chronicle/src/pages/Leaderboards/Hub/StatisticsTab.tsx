@@ -1,5 +1,8 @@
 import { Activity, BarChart3, ChartNoAxesGantt, type LucideIcon } from "lucide-react"
+import type { RankingsBoxPlotStats, RankingsKillTimeStats, RankingsSuccessRate } from "@/api/typesGenerated"
+import { useState } from "react"
 import { cn } from "@/lib/utils"
+import { Checkbox } from "@/components/ui/Checkbox/Checkbox"
 import { BoxPlotChart } from "@/pages/Rankings/BoxPlotChart"
 import { CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { KillTimeContent, SuccessRateContent } from "@/pages/Rankings/InstanceView"
@@ -14,6 +17,23 @@ const VIEWS: { id: StatisticsView; label: string; icon: LucideIcon }[] = [
   { id: "killtimes", label: "Kill times", icon: BarChart3 },
   { id: "success", label: "Success rate", icon: Activity },
 ]
+
+type LiveResult<T> = { status: "loading" | "error" } | { status: "ready"; data: T }
+
+/** Parent supplies API results for the selected population; omitted panels are unavailable. */
+export interface LiveStatisticsData {
+  specs?: LiveResult<RankingsBoxPlotStats[]>
+  clearTimes?: LiveResult<RankingsKillTimeStats[]>
+  killTimes?: LiveResult<RankingsKillTimeStats[]>
+  successRates?: LiveResult<RankingsSuccessRate[]>
+}
+
+function liveState<T>(result: LiveResult<T> | undefined, label: string) {
+  if (!result) return <p className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">{label} unavailable for this selection.</p>
+  if (result.status === "loading") return <p role="status" className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">Loading {label.toLowerCase()}…</p>
+  if (result.status === "error") return <p role="alert" className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">Could not load {label.toLowerCase()}.</p>
+  return null
+}
 
 /**
  * Instance data: how fast and how reliably the raid goes down. Speedruns rank
@@ -30,6 +50,7 @@ export function StatisticsTab({
   scope,
   role,
   onScope,
+  live,
 }: {
   instanceName: string
   bosses: readonly string[]
@@ -40,8 +61,13 @@ export function StatisticsTab({
   scope: RatingScope
   role: HubRole
   onScope: (scope: RatingScope) => void
+  live?: LiveStatisticsData
 }) {
   const unit = role === "dps" ? "DPS" : "HPS"
+  // Unknown class or spec rows are hidden by default, as on /leaderboards; the box plot can show them.
+  const [showUnknowns, setShowUnknowns] = useState(false)
+  const known = (rows: readonly RankingsBoxPlotStats[]) =>
+    showUnknowns ? [...rows] : rows.filter((row) => row.player_class !== "Unknown" && row.player_spec !== "Unknown")
   // Full clear covers every boss for per-boss panels; required ones first, optional after.
   const ordered = [...bosses.filter((b) => !optional.has(b)), ...bosses.filter((b) => optional.has(b))]
   const chosen = selection.kind === "clear" ? ordered : selection.bosses
@@ -69,9 +95,15 @@ export function StatisticsTab({
       </nav>
 
       {view === "specs" && (
+        <label className="flex w-fit cursor-pointer items-center gap-2 px-1 text-xs text-muted-foreground select-none">
+          <Checkbox checked={showUnknowns} onCheckedChange={(checked) => setShowUnknowns(checked === true)} className="size-3.5" />
+          Show unknowns
+        </label>
+      )}
+      {view === "specs" && (live && live.specs?.status !== "ready" ? liveState(live.specs, "Spec distributions") : (
         // The overview's spec cards, full size: every spec in the role, the chosen class lit.
         <BoxPlotChart
-          stats={boxPlotStats(scope.boss, role)}
+          stats={known(live ? (live.specs?.status === "ready" ? live.specs.data : []) : boxPlotStats(scope.boss, role))}
           title={`${unit} distribution by spec · ${scope.boss ?? instanceName}`}
           subtitle={
             scope.cls
@@ -88,15 +120,18 @@ export function StatisticsTab({
           }
           onRowClick={(cls, spec, subSpec) => onScope({ boss: scope.boss, cls, spec, subSpec: subSpec || undefined })}
         />
-      )}
+      ))}
       {view === "killtimes" && (
         // As on today's board: the full-clear box sits on top, per-boss kill times below.
         <div className="space-y-4">
-          <KillTimeContent stats={clearTimeStats(instanceName)} loading={false} title="Full Clear Time" unit="clears" trimOutliers />
-          <KillTimeContent stats={killTimeStats(chosen, bosses)} loading={false} instanceName={instanceName} />
+          {live && live.clearTimes?.status !== "ready" ? liveState(live.clearTimes, "Full clear times") :
+            <KillTimeContent stats={live ? (live.clearTimes?.status === "ready" ? live.clearTimes.data : []) : clearTimeStats(instanceName)} loading={false} title="Full Clear Time" unit="clears" trimOutliers />}
+          {live && live.killTimes?.status !== "ready" ? liveState(live.killTimes, "Boss kill times") :
+            <KillTimeContent stats={live ? (live.killTimes?.status === "ready" ? live.killTimes.data.filter((row) => chosen.includes(row.encounter_name)) : []) : killTimeStats(chosen, bosses)} loading={false} instanceName={instanceName} />}
         </div>
       )}
-      {view === "success" && <SuccessRateContent rates={successRates(chosen, bosses)} loading={false} instanceName={instanceName} />}
+      {view === "success" && (live && live.successRates?.status !== "ready" ? liveState(live.successRates, "Success rates") :
+        <SuccessRateContent rates={live ? (live.successRates?.status === "ready" ? live.successRates.data.filter((row) => chosen.includes(row.encounter_name)) : []) : successRates(chosen, bosses)} loading={false} instanceName={instanceName} />)}
     </div>
   )
 }

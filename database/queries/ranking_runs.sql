@@ -11,6 +11,13 @@ FROM log_instances li
 WHERE li.id = ANY(@instance_ids::uuid[])
 ORDER BY li.id;
 
+-- name: RatingRealmsByInstanceIDs :many
+-- Capture affected tenants before deleting instances, including invalidated
+-- sources that RankingRunSources deliberately excludes.
+SELECT DISTINCT realm_id FROM log_instances
+WHERE id = ANY(@instance_ids::uuid[])
+ORDER BY realm_id;
+
 -- name: RankingRunIdentitiesByLogGroupID :many
 SELECT
     li.id AS instance_id,

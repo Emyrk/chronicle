@@ -14,11 +14,14 @@ import (
 
 type sqlcQuerier interface {
 	AbandonAwaitingInferenceRun(ctx context.Context, arg AbandonAwaitingInferenceRunParams) (InferenceRun, error)
+	AbortRatingRebuild(ctx context.Context, arg AbortRatingRebuildParams) (int64, error)
 	AcquireParseScoreLock(ctx context.Context, lockKey string) error
 	// Serialize refresh snapshots and commits across logical-run identity changes.
 	AcquireRankingRunRefreshLock(ctx context.Context) error
+	AcquireRatingRebuildConfigLock(ctx context.Context) error
 	AcquireTimeParseScoreLock(ctx context.Context, instanceID string) error
 	ActivateDiscordMembershipGrantCheckOnLogin(ctx context.Context, arg ActivateDiscordMembershipGrantCheckOnLoginParams) (ActivateDiscordMembershipGrantCheckOnLoginRow, error)
+	ActivateRatingScoreGeneration(ctx context.Context, arg ActivateRatingScoreGenerationParams) (int64, error)
 	// size_bytes is the logical uncompressed size. compressed_size_bytes remains
 	// NULL when the base object is not compressed; hash continues to identify the
 	// immutable base object, while each append part carries its own hash.
@@ -26,9 +29,38 @@ type sqlcQuerier interface {
 	AddUserFavoriteGuild(ctx context.Context, arg AddUserFavoriteGuildParams) (pgtype.Bool, error)
 	AddUserFavoritePlayer(ctx context.Context, arg AddUserFavoritePlayerParams) error
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
+	// The most recent tenant rating rebuild jobs with their timing and the
+	// worker's last progress snapshot (metadata.output), for the admin page.
+	AdminListRatingRebuildJobs(ctx context.Context, limitCount int32) ([]AdminListRatingRebuildJobsRow, error)
+	// All page fields are supplied together in a short transaction. The version
+	// and pass CAS reject stale/replayed pages. On pass transition clear cursor,
+	// set position=0; preserve completed pass aggregates. Caller verifies exactly
+	// one updated row and advances the rebuild checkpoint in this SAME transaction.
+	// Never commit an accumulator update if the checkpoint CAS returned zero.
+	AdvanceRatingMasteryAccumulator(ctx context.Context, arg AdvanceRatingMasteryAccumulatorParams) (int64, error)
+	// Caller owns phase-specific JSON cursor keys. CAS prevents stale workers from
+	// overwriting another worker's progress. Do not advance before staging writes
+	// commit; use the same transaction for inserts and this checkpoint update.
+	AdvanceRatingRebuildCheckpoint(ctx context.Context, arg AdvanceRatingRebuildCheckpointParams) (int64, error)
 	AdvanceWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
+	AssignRatingRealmToGroup(ctx context.Context, arg AssignRatingRealmToGroupParams) (int64, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
+	BackfillGuildRenownFactsForRun(ctx context.Context, arg BackfillGuildRenownFactsForRunParams) (int64, error)
+	// Repair a bounded page of canonical runs; parse refresh normally earns these facts.
+	BackfillGuildRenownFactsForRuns(ctx context.Context, arg BackfillGuildRenownFactsForRunsParams) (int64, error)
+	// Retain precisely one boss kill per guild/run, even if the source is later deleted.
+	BackfillGuildRenownFactsForSource(ctx context.Context, arg BackfillGuildRenownFactsForSourceParams) (int64, error)
+	BackfillRenownFactsForRun(ctx context.Context, runID uuid.UUID) (int64, error)
+	// Repair a bounded page of canonical runs; parse refresh normally earns these facts.
+	BackfillRenownFactsForRuns(ctx context.Context, runIds []uuid.UUID) (int64, error)
+	// Preserve canonical attendance even when a log is deleted before the
+	// asynchronous ranking_runs refresh has persisted its representative.
+	BackfillRenownFactsForSource(ctx context.Context, arg BackfillRenownFactsForSourceParams) (int64, error)
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
+	// Invalidate checkpoints staged before a canonical run's facts were removed.
+	// Caller supplies the affected realms in the same transaction as deletion.
+	// The realm list is bounded by the canonical refresh page size.
+	BumpRatingConfigRevisionForRealms(ctx context.Context, realmIds []uuid.UUID) (int64, error)
 	CarryForwardFinalizedParsedLogGroup(ctx context.Context, arg CarryForwardFinalizedParsedLogGroupParams) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
@@ -63,12 +95,17 @@ type sqlcQuerier interface {
 	CopyLegacySpellVariants(ctx context.Context, arg []CopyLegacySpellVariantsParams) *CopyLegacySpellVariantsBatchResults
 	CountActiveRegressionJobs(ctx context.Context) (int64, error)
 	CountAllWoWLogGroups(ctx context.Context, arg CountAllWoWLogGroupsParams) (int32, error)
+	CountCompletedTenantMasteryWindows(ctx context.Context, arg CountCompletedTenantMasteryWindowsParams) (int64, error)
 	CountGuildDiscordInstallationsByDiscordGuildID(ctx context.Context, discordGuildID string) (int64, error)
 	CountGuilds(ctx context.Context, arg CountGuildsParams) (int64, error)
 	CountLuaProjectStars(ctx context.Context, projectIds []uuid.UUID) ([]CountLuaProjectStarsRow, error)
 	CountLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	CountRaidCompositionsByUser(ctx context.Context, arg CountRaidCompositionsByUserParams) (int64, error)
 	CountReadyLuaProjectArtifactGarbage(ctx context.Context) (int64, error)
+	// During Mastery, every distinct eligible subject gets an all-time and a
+	// 180-day window. Count once per generation for an honest phase-level ETA;
+	// later scope phases have no comparable fixed total.
+	CountTenantMasteryWindows(ctx context.Context, arg CountTenantMasteryWindowsParams) (int32, error)
 	CountUserAuthLinks(ctx context.Context) (int64, error)
 	CountUserGearLists(ctx context.Context, arg CountUserGearListsParams) (int64, error)
 	CountUserGearProgressions(ctx context.Context, arg CountUserGearProgressionsParams) (int64, error)
@@ -97,6 +134,9 @@ type sqlcQuerier interface {
 	CreateOAuthDeviceSession(ctx context.Context, arg CreateOAuthDeviceSessionParams) error
 	CreateOAuthTokenSession(ctx context.Context, arg CreateOAuthTokenSessionParams) error
 	CreateRaidComposition(ctx context.Context, arg CreateRaidCompositionParams) (RaidComposition, error)
+	// Current-state named groups. A realm move changes its present cohort, not
+	// its realm-scoped evidence. All management queries require tenant ownership.
+	CreateRatingRealmGroup(ctx context.Context, arg CreateRatingRealmGroupParams) (RatingRealmGroup, error)
 	CreateSharedView(ctx context.Context, arg CreateSharedViewParams) (SharedView, error)
 	CreateUserPanelLayout(ctx context.Context, arg CreateUserPanelLayoutParams) (UserPanelLayout, error)
 	CreateUserTalentBuild(ctx context.Context, arg CreateUserTalentBuildParams) (UserTalentBuild, error)
@@ -134,6 +174,8 @@ type sqlcQuerier interface {
 	DeleteGuildPagePanelsByTab(ctx context.Context, tabID uuid.UUID) error
 	DeleteGuildPageTab(ctx context.Context, id uuid.UUID) error
 	DeleteGuildPageTabsByPage(ctx context.Context, pageID uuid.UUID) error
+	// Same bounded canonical-run repair as player Renown; no group membership gate.
+	DeleteGuildRenownFactsForRuns(ctx context.Context, runIds []uuid.UUID) (int64, error)
 	// Removes buckets untouched since the cutoff. Callers pick a cutoff longer
 	// than any bucket takes to refill, so deleting a bucket never changes a limit.
 	DeleteIdleRateLimitBuckets(ctx context.Context, idleBefore pgtype.Timestamptz) (int64, error)
@@ -157,11 +199,33 @@ type sqlcQuerier interface {
 	// Remove parse score results for a tenant+instance (before re-computation).
 	// Scoped to tenant_id so one tenant's recompute cannot erase another's projections.
 	DeleteParseScoreResultsForTenantInstance(ctx context.Context, arg DeleteParseScoreResultsForTenantInstanceParams) error
+	// Remove stale earned attendance only for the explicitly affected canonical runs.
+	// Keep batches bounded to match the refresh page size; never use a group filter.
+	DeletePlayerRenownFactsForRuns(ctx context.Context, runIds []uuid.UUID) (int64, error)
 	DeleteRaidCompositionByID(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteRatingBossPolicy(ctx context.Context, arg DeleteRatingBossPolicyParams) (int64, error)
+	DeleteRatingRaidPolicy(ctx context.Context, arg DeleteRatingRaidPolicyParams) (int64, error)
+	DeleteRatingRealmGroup(ctx context.Context, arg DeleteRatingRealmGroupParams) (int64, error)
 	DeleteRegressionFixture(ctx context.Context, id uuid.UUID) error
 	DeleteRegressionSnapshot(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionPolicy(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionRule(ctx context.Context, id uuid.UUID) error
+	DeleteRetiredRatingGeneration(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	// A single invocation deletes at most 200 rows. The PK begins with
+	// generation_id, so both selection and deletion are generation-local.
+	DeleteRetiredRatingStageGuildObservationsPage(ctx context.Context, arg DeleteRetiredRatingStageGuildObservationsPageParams) (int32, error)
+	// A single invocation deletes at most 200 rows. The PK begins with
+	// generation_id, so both selection and deletion are generation-local.
+	DeleteRetiredRatingStageGuildRenownPage(ctx context.Context, arg DeleteRetiredRatingStageGuildRenownPageParams) (int32, error)
+	// A single invocation deletes at most 200 rows. The PK begins with
+	// generation_id, so both selection and deletion are generation-local.
+	DeleteRetiredRatingStageMasteryAccumulatorsPage(ctx context.Context, arg DeleteRetiredRatingStageMasteryAccumulatorsPageParams) (int32, error)
+	// A single invocation deletes at most 200 rows. The PK begins with
+	// generation_id, so both selection and deletion are generation-local.
+	DeleteRetiredRatingStagePlayerObservationsPage(ctx context.Context, arg DeleteRetiredRatingStagePlayerObservationsPageParams) (int32, error)
+	// A single invocation deletes at most 200 rows. The PK begins with
+	// generation_id, so both selection and deletion are generation-local.
+	DeleteRetiredRatingStagePlayerRenownPage(ctx context.Context, arg DeleteRetiredRatingStagePlayerRenownPageParams) (int32, error)
 	DeleteServerApplicationsByInitiator(ctx context.Context, userID uuid.UUID) error
 	DeleteSidekickConfigOverride(ctx context.Context, arg DeleteSidekickConfigOverrideParams) ([]byte, error)
 	DeleteSidekickInstallation(ctx context.Context, arg DeleteSidekickInstallationParams) (SidekickInstallation, error)
@@ -240,6 +304,17 @@ type sqlcQuerier interface {
 	GetAccountPurge(ctx context.Context, id uuid.UUID) (AccountPurge, error)
 	GetActiveAccountPurgeByUser(ctx context.Context, userID uuid.UUID) (AccountPurge, error)
 	GetActiveInferenceRunByThreadForUpdate(ctx context.Context, arg GetActiveInferenceRunByThreadForUpdateParams) (InferenceRun, error)
+	// Published tenant-wide projection readers. realm_ids is display-only;
+	// an empty array shows every realm owned by the tenant.
+	// Pass zero generation_id and zero after_realm_id on the first page. Continue
+	// with the returned generation_id and the last row's (score, realm_id,
+	// player_guid/guild_id). Retired generations can be deleted with CASCADE, so
+	// continuation is active-only: callers must compare the cursor generation
+	// with the active tenant generation and report stale cursor on mismatch.
+	// Never restart at a new generation using an old position.
+	// Compare this ID with a continuation cursor before reading; a mismatch or
+	// no active generation means the cursor is stale, not an empty leaderboard.
+	GetActiveTenantRatingGeneration(ctx context.Context, tenantID uuid.UUID) (uuid.UUID, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
 	GetBillingEntitlementOwnerByProviderCustomerID(ctx context.Context, arg GetBillingEntitlementOwnerByProviderCustomerIDParams) (uuid.UUID, error)
@@ -247,6 +322,11 @@ type sqlcQuerier interface {
 	GetBillingSubscriptionByProviderID(ctx context.Context, arg GetBillingSubscriptionByProviderIDParams) (BillingSubscription, error)
 	GetBillingSubscriptionByUserID(ctx context.Context, userID uuid.UUID) (BillingSubscription, error)
 	GetBillingWebhookEvent(ctx context.Context, stripeEventID string) (BillingWebhookEvent, error)
+	GetBuildingRatingRebuildCheckpoint(ctx context.Context, tenantID uuid.UUID) (RatingRebuildCheckpoint, error)
+	// Serialize page workers for one generation and reject retired/active or
+	// legacy group checkpoints before any projection writes. Configuration changes
+	// remain fenced by the revision check in the same transaction.
+	GetBuildingTenantProjectionCheckpoint(ctx context.Context, arg GetBuildingTenantProjectionCheckpointParams) (RatingRebuildCheckpoint, error)
 	GetCacheGeneration(ctx context.Context, arg GetCacheGenerationParams) (CacheGeneration, error)
 	GetCanonicalSpellByID(ctx context.Context, arg GetCanonicalSpellByIDParams) (GetCanonicalSpellByIDRow, error)
 	GetCanonicalSpellsByName(ctx context.Context, arg GetCanonicalSpellsByNameParams) ([]GetCanonicalSpellsByNameRow, error)
@@ -416,8 +496,23 @@ type sqlcQuerier interface {
 	GetProofRequest(ctx context.Context, id uuid.UUID) (ProofRequest, error)
 	// A module with something to run: main or a release with files.
 	GetPublicLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error)
+	// Rank the full tenant guild cohort before applying display-only realm/name filters.
+	// A single statement computes the page and count from the same MVCC snapshot.
+	GetPublishedGuildBossFullList(ctx context.Context, arg GetPublishedGuildBossFullListParams) (GetPublishedGuildBossFullListRow, error)
+	// Rank the full tenant guild cohort before applying display-only realm/name filters.
+	// A single statement computes the page and count from the same MVCC snapshot.
+	GetPublishedGuildScopeFullList(ctx context.Context, arg GetPublishedGuildScopeFullListParams) (GetPublishedGuildScopeFullListRow, error)
 	GetPublishedLuaProjectArtifact(ctx context.Context, arg GetPublishedLuaProjectArtifactParams) (GetPublishedLuaProjectArtifactRow, error)
+	// Rank the full tenant cohort before applying display-only realm/name filters.
+	// A single statement computes the page and count from the same MVCC snapshot.
+	GetPublishedPlayerBossFullList(ctx context.Context, arg GetPublishedPlayerBossFullListParams) (GetPublishedPlayerBossFullListRow, error)
+	// Rank the full tenant cohort before applying display-only realm/name filters.
+	// A single statement computes the page and count from the same MVCC snapshot.
+	GetPublishedPlayerScopeFullList(ctx context.Context, arg GetPublishedPlayerScopeFullListParams) (GetPublishedPlayerScopeFullListRow, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
+	GetRatingConfigRevision(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	GetRatingMasteryAccumulator(ctx context.Context, arg GetRatingMasteryAccumulatorParams) (RatingMasteryAccumulator, error)
+	GetRatingRebuildCheckpoint(ctx context.Context, arg GetRatingRebuildCheckpointParams) (RatingRebuildCheckpoint, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).
 	GetRealmsWithRetentionPolicies(ctx context.Context) ([]uuid.UUID, error)
@@ -518,6 +613,10 @@ type sqlcQuerier interface {
 	// completion_time and a negative sentinel duration (see chronicle/logparse.go).
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	GuildRaidClears(ctx context.Context, arg GuildRaidClearsParams) ([]GuildRaidClearsRow, error)
+	// Clean boss encounter duration, not the player DPS/HPS ranking's fight duration.
+	// The fastest repeated clean encounter in a canonical run is its single boss
+	// time datapoint, matching the existing time-parse membership contract.
+	GuildRatingObservationsForRuns(ctx context.Context, arg GuildRatingObservationsForRunsParams) ([]GuildRatingObservationsForRunsRow, error)
 	GuildResourceAnalytics(ctx context.Context, arg GuildResourceAnalyticsParams) ([]GuildResourceAnalyticsRow, error)
 	// Returns the guild's average parse per encounter for each raid night (run),
 	// for the guild page "Recent" panel (per-boss bars; callers weight by
@@ -557,7 +656,39 @@ type sqlcQuerier interface {
 	HasBillingEntitlement(ctx context.Context, arg HasBillingEntitlementParams) (bool, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
+	HeartbeatRatingRebuildCheckpoint(ctx context.Context, arg HeartbeatRatingRebuildCheckpointParams) (int64, error)
+	// Only the same 64 published cohorts returned by HubSummaryInstances are eligible.
+	// Renown is instance-wide; its published period score is repeated for each cohort.
+	HubLandingRatingRows(ctx context.Context, arg HubLandingRatingRowsParams) ([]HubLandingRatingRowsRow, error)
+	// Mirrors the full-clear leaderboard: version gates, duplicate groups, best
+	// per guild, ranked duration with legacy raw fallback. Do not load video proof.
+	HubLandingSpeedruns(ctx context.Context, arg HubLandingSpeedrunsParams) ([]HubLandingSpeedrunsRow, error)
+	// One ranked page of a chosen-boss board (any number of bosses, one included):
+	// Peak and Ranked Mastery average over every chosen boss (a missed one is 0),
+	// Renown sums. Only the ranked metric is aggregated for the whole cohort; the
+	// page's other two scores are looked up per row. Ranks cover the whole tenant
+	// cohort before the display-only realm and name filters, as on the full lists.
+	HubSetBoardPage(ctx context.Context, arg HubSetBoardPageParams) ([]HubSetBoardPageRow, error)
+	// Ratings over a chosen set of bosses, computed from the published boss boards:
+	// Peak and Ranked Mastery average over every chosen boss (a missed one is 0),
+	// Renown sums. A subject's best class/spec cohort stands for it. Peak carries
+	// the duration-weighted throughput over its kills and breaks ties by it.
+	HubSetRatingRows(ctx context.Context, arg HubSetRatingRowsParams) ([]HubSetRatingRowsRow, error)
+	// Returns encounters available in rankings for a given instance.
+	HubSummaryEncounters(ctx context.Context, arg HubSummaryEncountersParams) ([]HubSummaryEncountersRow, error)
+	// Scope selector metadata to this tenant as well as the selected raid.
+	HubSummaryFilters(ctx context.Context, arg HubSummaryFiltersParams) ([]HubSummaryFiltersRow, error)
+	HubSummaryInstances(ctx context.Context, tenantID uuid.UUID) ([]HubSummaryInstancesRow, error)
+	// All boards share the caller-pinned active generation. Bound boss names and
+	// truncate each board in SQL, not in the HTTP handler.
+	// The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss.
+	HubSummaryRatingRows(ctx context.Context, arg HubSummaryRatingRowsParams) ([]HubSummaryRatingRowsRow, error)
+	HubSummaryRealms(ctx context.Context, tenantID uuid.UUID) ([]HubSummaryRealmsRow, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
+	// Persist one constant-size state per subject/window. The caller must use the
+	// frozen manifest to select the window and rank weight. Replays do
+	// not modify staging. Insert and update may share the checkpoint CAS transaction.
+	InitRatingMasteryAccumulator(ctx context.Context, arg InitRatingMasteryAccumulatorParams) error
 	InitializeUserWhatsNewState(ctx context.Context, arg InitializeUserWhatsNewStateParams) (UserWhatsNewState, error)
 	InsertAccountPurge(ctx context.Context, arg InsertAccountPurgeParams) (AccountPurge, error)
 	InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults
@@ -579,6 +710,10 @@ type sqlcQuerier interface {
 	InsertEncounterPhase(ctx context.Context, arg InsertEncounterPhaseParams) error
 	InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error)
 	InsertGuildPageTab(ctx context.Context, arg InsertGuildPageTabParams) (GuildPageTab, error)
+	InsertGuildRatingBossScore(ctx context.Context, arg InsertGuildRatingBossScoreParams) error
+	InsertGuildRatingScopeScore(ctx context.Context, arg InsertGuildRatingScopeScoreParams) error
+	InsertGuildTenantBossScore(ctx context.Context, arg InsertGuildTenantBossScoreParams) (int64, error)
+	InsertGuildTenantScopeScore(ctx context.Context, arg InsertGuildTenantScopeScoreParams) (int64, error)
 	InsertInferenceClientToolRequest(ctx context.Context, arg InsertInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
 	InsertInferenceConnection(ctx context.Context, arg InsertInferenceConnectionParams) (InferenceConnection, error)
 	InsertInferenceMessage(ctx context.Context, arg InsertInferenceMessageParams) (InsertInferenceMessageRow, error)
@@ -603,10 +738,19 @@ type sqlcQuerier interface {
 	// No unique constraint: duplicate uploads are collapsed at read time via run_id DISTINCT ON.
 	InsertParseScoreResult(ctx context.Context, arg InsertParseScoreResultParams) error
 	InsertParsedLogGroup(ctx context.Context, id uuid.UUID) error
+	// Immutable, generation-local writes. A replay does not change a previously
+	// projected score. Lock the building generation against concurrent activation
+	// or retirement while selecting the tenant-owned realm and subject.
+	InsertPlayerTenantBossScore(ctx context.Context, arg InsertPlayerTenantBossScoreParams) (int64, error)
+	InsertPlayerTenantScopeScore(ctx context.Context, arg InsertPlayerTenantScopeScoreParams) (int64, error)
 	InsertProofRequest(ctx context.Context, arg InsertProofRequestParams) (ProofRequest, error)
 	InsertProofSubject(ctx context.Context, arg InsertProofSubjectParams) error
+	InsertRatingBossScore(ctx context.Context, arg InsertRatingBossScoreParams) error
+	InsertRatingScopeScore(ctx context.Context, arg InsertRatingScopeScoreParams) error
+	InsertRatingScoreGeneration(ctx context.Context, arg InsertRatingScoreGenerationParams) (RatingScoreGeneration, error)
 	InsertRegressionFixture(ctx context.Context, arg InsertRegressionFixtureParams) (RegressionFixture, error)
 	InsertRegressionSnapshot(ctx context.Context, arg InsertRegressionSnapshotParams) (RegressionSnapshot, error)
+	InsertRenownKillFact(ctx context.Context, arg InsertRenownKillFactParams) (int64, error)
 	// Server Applications
 	InsertServerApplication(ctx context.Context, arg InsertServerApplicationParams) (ServerApplication, error)
 	InsertServerUploadMeta(ctx context.Context, arg InsertServerUploadMetaParams) error
@@ -657,7 +801,20 @@ type sqlcQuerier interface {
 	IsLogInstanceInvalid(ctx context.Context, id uuid.UUID) (bool, error)
 	IsParsedLogGroupVisible(ctx context.Context, id uuid.UUID) (bool, error)
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
+	ListActiveAllClassPlayerTenantBossScores(ctx context.Context, arg ListActiveAllClassPlayerTenantBossScoresParams) ([]ListActiveAllClassPlayerTenantBossScoresRow, error)
+	ListActiveAllClassPlayerTenantScopeScores(ctx context.Context, arg ListActiveAllClassPlayerTenantScopeScoresParams) ([]ListActiveAllClassPlayerTenantScopeScoresRow, error)
+	ListActiveBossRatingScores(ctx context.Context, arg ListActiveBossRatingScoresParams) ([]RatingBossScore, error)
+	ListActiveGroupBossRatingScores(ctx context.Context, arg ListActiveGroupBossRatingScoresParams) ([]RatingBossScore, error)
+	ListActiveGuildRatingBossScores(ctx context.Context, arg ListActiveGuildRatingBossScoresParams) ([]GuildRatingBossScore, error)
+	ListActiveGuildRatingScopeScores(ctx context.Context, arg ListActiveGuildRatingScopeScoresParams) ([]GuildRatingScopeScore, error)
+	ListActiveGuildTenantBossScores(ctx context.Context, arg ListActiveGuildTenantBossScoresParams) ([]ListActiveGuildTenantBossScoresRow, error)
+	ListActiveGuildTenantScopeScores(ctx context.Context, arg ListActiveGuildTenantScopeScoresParams) ([]ListActiveGuildTenantScopeScoresRow, error)
+	// Keep the indexed wow_guid column uncast. Non-GUID historical score text
+	// must safely miss the optional identity join rather than fail the board.
+	ListActivePlayerTenantBossScores(ctx context.Context, arg ListActivePlayerTenantBossScoresParams) ([]ListActivePlayerTenantBossScoresRow, error)
+	ListActivePlayerTenantScopeScores(ctx context.Context, arg ListActivePlayerTenantScopeScoresParams) ([]ListActivePlayerTenantScopeScoresRow, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
+	ListActiveRatingScopeScores(ctx context.Context, arg ListActiveRatingScopeScoresParams) ([]RatingScopeScore, error)
 	ListAdminActiveCustomPanelInstallations(ctx context.Context) ([]ListAdminActiveCustomPanelInstallationsRow, error)
 	ListAdminProofRequests(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error)
 	ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error)
@@ -702,6 +859,11 @@ type sqlcQuerier interface {
 	ListGearListsByUser(ctx context.Context, arg ListGearListsByUserParams) ([]GearList, error)
 	ListGearProgressionsByUser(ctx context.Context, arg ListGearProgressionsByUserParams) ([]GearProgression, error)
 	ListGearStatWeightsByUser(ctx context.Context, arg ListGearStatWeightsByUserParams) ([]GearStatWeight, error)
+	ListGroupGuildRenownFacts(ctx context.Context, arg ListGroupGuildRenownFactsParams) ([]ListGroupGuildRenownFactsRow, error)
+	ListGroupRatingBossScores(ctx context.Context, arg ListGroupRatingBossScoresParams) ([]RatingBossScore, error)
+	// Read retained evidence for the current group. Weight and boss eligibility
+	// are applied by the versioned group policy when computing career/period totals.
+	ListGroupRenownFacts(ctx context.Context, arg ListGroupRenownFactsParams) ([]ListGroupRenownFactsRow, error)
 	ListGuildDiscordAnnouncementAttempts(ctx context.Context, arg ListGuildDiscordAnnouncementAttemptsParams) ([]ListGuildDiscordAnnouncementAttemptsRow, error)
 	ListGuildIDsWithDiscordInstalledByUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 	ListGuildJoinRequests(ctx context.Context, guildID uuid.UUID) ([]ListGuildJoinRequestsRow, error)
@@ -709,6 +871,7 @@ type sqlcQuerier interface {
 	ListGuildPagePanels(ctx context.Context, tabID uuid.UUID) ([]GuildPagePanel, error)
 	// Guild Page Tabs
 	ListGuildPageTabs(ctx context.Context, pageID uuid.UUID) ([]GuildPageTab, error)
+	ListGuildRenownFacts(ctx context.Context, arg ListGuildRenownFactsParams) ([]GuildRenownKillFact, error)
 	ListGuildsWithPages(ctx context.Context, arg ListGuildsWithPagesParams) ([]ListGuildsWithPagesRow, error)
 	ListInferenceConnectionsByOwner(ctx context.Context, userID uuid.UUID) ([]InferenceConnection, error)
 	// Everyone's usage for one context, e.g. each contributor's Workshop chats on a module.
@@ -772,6 +935,50 @@ type sqlcQuerier interface {
 	// independent of snapshot membership (the instance may not be a member of the
 	// snapshot it scores against, e.g. historical canonical snapshots).
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error)
+	ListRatingBossPolicies(ctx context.Context, arg ListRatingBossPoliciesParams) ([]RatingGroupBossPolicy, error)
+	ListRatingGuildRenownSourcePage(ctx context.Context, arg ListRatingGuildRenownSourcePageParams) ([]GuildRenownKillFact, error)
+	ListRatingMasteryGuildKeys(ctx context.Context, arg ListRatingMasteryGuildKeysParams) ([]ListRatingMasteryGuildKeysRow, error)
+	ListRatingMasteryGuildPage(ctx context.Context, arg ListRatingMasteryGuildPageParams) ([]ListRatingMasteryGuildPageRow, error)
+	// Frozen staged subject keys with eligible locked parses. Membership and boss eligibility
+	// are checked against the frozen manifest by the orchestrator.
+	ListRatingMasteryPlayerKeys(ctx context.Context, arg ListRatingMasteryPlayerKeysParams) ([]ListRatingMasteryPlayerKeysRow, error)
+	// Stable ascending tie order is required to exclude exactly floor(N*0.2)
+	// observations. NULL (unlocked) parses are never eligible. The page limit is
+	// hard capped even if a caller supplies an excessive size. The first page
+	// uses first_page=true; subsequent pages use the previous row's complete key.
+	ListRatingMasteryPlayerPage(ctx context.Context, arg ListRatingMasteryPlayerPageParams) ([]ListRatingMasteryPlayerPageRow, error)
+	ListRatingPlayerRenownSourcePage(ctx context.Context, arg ListRatingPlayerRenownSourcePageParams) ([]RenownKillFact, error)
+	ListRatingProjectionGuildBosses(ctx context.Context, arg ListRatingProjectionGuildBossesParams) ([]ListRatingProjectionGuildBossesRow, error)
+	ListRatingProjectionGuildScopes(ctx context.Context, arg ListRatingProjectionGuildScopesParams) ([]ListRatingProjectionGuildScopesRow, error)
+	ListRatingProjectionPlayerBosses(ctx context.Context, arg ListRatingProjectionPlayerBossesParams) ([]ListRatingProjectionPlayerBossesRow, error)
+	// A scope subject is a distinct character/cohort/rating/window. Each page is
+	// bounded; the caller reads only that subject's configured boss rows.
+	ListRatingProjectionPlayerScopes(ctx context.Context, arg ListRatingProjectionPlayerScopesParams) ([]ListRatingProjectionPlayerScopesRow, error)
+	ListRatingRaidPolicies(ctx context.Context, arg ListRatingRaidPoliciesParams) ([]RatingGroupRaidPolicy, error)
+	ListRatingRealmGroupMembers(ctx context.Context, arg ListRatingRealmGroupMembersParams) ([]ListRatingRealmGroupMembersRow, error)
+	ListRatingRealmGroups(ctx context.Context, tenantID uuid.UUID) ([]RatingRealmGroup, error)
+	ListRatingRunsForGroup(ctx context.Context, arg ListRatingRunsForGroupParams) ([]uuid.UUID, error)
+	// Tenant-wide canonical cohort, independent of rating group membership.
+	ListRatingRunsForTenant(ctx context.Context, arg ListRatingRunsForTenantParams) ([]uuid.UUID, error)
+	ListRatingScoreTenants(ctx context.Context) ([]uuid.NullUUID, error)
+	ListRatingStageGuildKeys(ctx context.Context, arg ListRatingStageGuildKeysParams) ([]ListRatingStageGuildKeysRow, error)
+	ListRatingStageGuildRenownKeys(ctx context.Context, arg ListRatingStageGuildRenownKeysParams) ([]ListRatingStageGuildRenownKeysRow, error)
+	ListRatingStageGuildRenownSubject(ctx context.Context, arg ListRatingStageGuildRenownSubjectParams) ([]RatingStageGuildRenown, error)
+	ListRatingStageGuildSubject(ctx context.Context, arg ListRatingStageGuildSubjectParams) ([]RatingStageGuildObservation, error)
+	// Enumerate a bounded set of distinct player or guild subjects. The after-key
+	// is the last emitted key, not the last raw row in the staging table.
+	ListRatingStagePlayerKeys(ctx context.Context, arg ListRatingStagePlayerKeysParams) ([]ListRatingStagePlayerKeysRow, error)
+	ListRatingStagePlayerRenownKeys(ctx context.Context, arg ListRatingStagePlayerRenownKeysParams) ([]ListRatingStagePlayerRenownKeysRow, error)
+	ListRatingStagePlayerRenownSubject(ctx context.Context, arg ListRatingStagePlayerRenownSubjectParams) ([]RatingStagePlayerRenown, error)
+	// Ordered locked observations support exact Mastery replay and bounded reading.
+	ListRatingStagePlayerSubject(ctx context.Context, arg ListRatingStagePlayerSubjectParams) ([]RatingStagePlayerObservation, error)
+	// Tenant realms are a small configuration set; page independently within each
+	// realm using the existing source unique keys (no startup index/backfill).
+	ListRatingStageRealms(ctx context.Context, arg ListRatingStageRealmsParams) ([]uuid.UUID, error)
+	ListRatingStageRunsForTenant(ctx context.Context, arg ListRatingStageRunsForTenantParams) ([]uuid.UUID, error)
+	// A rating generation is per tenant; root servers use the zero UUID. Every
+	// tenant with a realm can rebuild, regardless of legacy realm-group policy.
+	ListRatingTenants(ctx context.Context) ([]uuid.NullUUID, error)
 	ListReadyLogFileParts(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListRecentBillingReconciliationRuns(ctx context.Context, limit int32) ([]BillingReconciliationRun, error)
 	ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]ListRecentBillingSubscriptionsRow, error)
@@ -785,6 +992,10 @@ type sqlcQuerier interface {
 	ListRecentInstancesByPlayer(ctx context.Context, arg ListRecentInstancesByPlayerParams) ([]ListRecentInstancesByPlayerRow, error)
 	ListRegressionFixtures(ctx context.Context) ([]ListRegressionFixturesRow, error)
 	ListRegressionSnapshots(ctx context.Context, arg ListRegressionSnapshotsParams) ([]ListRegressionSnapshotsRow, error)
+	// Bounded, deterministic keyset scan for an operator-initiated historical
+	// Renown evidence backfill. Never run a whole-history scan in a migration.
+	ListRenownBackfillRunIDs(ctx context.Context, arg ListRenownBackfillRunIDsParams) ([]uuid.UUID, error)
+	ListRenownFactsByCharacter(ctx context.Context, arg ListRenownFactsByCharacterParams) ([]ListRenownFactsByCharacterRow, error)
 	ListResolvedItemPrices(ctx context.Context, arg ListResolvedItemPricesParams) ([]ListResolvedItemPricesRow, error)
 	ListRiverQueueMetrics(ctx context.Context) ([]ListRiverQueueMetricsRow, error)
 	ListServerApplications(ctx context.Context) ([]ListServerApplicationsRow, error)
@@ -810,6 +1021,15 @@ type sqlcQuerier interface {
 	// Modules the user tracks, most recently starred first.
 	ListStarredLuaProjects(ctx context.Context, userID uuid.UUID) ([]LuaProject, error)
 	ListTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
+	ListTenantGuildRaidBosses(ctx context.Context, arg ListTenantGuildRaidBossesParams) ([]ListTenantGuildRaidBossesRow, error)
+	ListTenantGuildRaidScopeKeys(ctx context.Context, arg ListTenantGuildRaidScopeKeysParams) ([]ListTenantGuildRaidScopeKeysRow, error)
+	ListTenantPlayerRaidBosses(ctx context.Context, arg ListTenantPlayerRaidBossesParams) ([]ListTenantPlayerRaidBossesRow, error)
+	// One subject/raid/cohort/window per checkpoint page, never mix realms or
+	// specializations. The source primary key starts with generation and tenant.
+	ListTenantPlayerRaidScopeKeys(ctx context.Context, arg ListTenantPlayerRaidScopeKeysParams) ([]ListTenantPlayerRaidScopeKeysRow, error)
+	// Group configuration is explicit: no group has score eligibility until both
+	// a policy and eligible boss rows have been configured by an operator.
+	ListTenantRatingPolicies(ctx context.Context, tenantID uuid.UUID) ([]RatingGroupPolicy, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)
 	// Tenants that use this dataset, either directly (tenant.default_dataset_id)
 	// or via a server they own (wow_servers.default_dataset_id).
@@ -868,6 +1088,9 @@ type sqlcQuerier interface {
 	MarkWhatsNewRead(ctx context.Context, arg MarkWhatsNewReadParams) (UserWhatsNewState, error)
 	MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
+	// Only retired generations with remaining ephemeral state are eligible. This
+	// preserves published score rows and generation identities independently.
+	NextRetiredRatingStageGeneration(ctx context.Context) (uuid.UUID, error)
 	PauseInferenceRun(ctx context.Context, arg PauseInferenceRunParams) (InferenceRun, error)
 	// Returns a bucket's current (refilled) token level without changing it. A
 	// bucket that does not exist yet is full.
@@ -880,7 +1103,13 @@ type sqlcQuerier interface {
 	PublicInstance(ctx context.Context, id uuid.UUID) (LogInstancesGuild, error)
 	PublicInstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
 	PublishCacheGeneration(ctx context.Context, arg PublishCacheGenerationParams) (PublishCacheGenerationRow, error)
+	// Publish is atomic and gates on the revision row. Returns false for a stale
+	// config snapshot or an unfinished/non-building generation.
+	PublishRatingRebuild(ctx context.Context, arg PublishRatingRebuildParams) (bool, error)
 	PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjectArtifactParams) (string, error)
+	PutRatingBossPolicy(ctx context.Context, arg PutRatingBossPolicyParams) (int64, error)
+	PutRatingGroupPolicy(ctx context.Context, arg PutRatingGroupPolicyParams) (int64, error)
+	PutRatingRaidPolicy(ctx context.Context, arg PutRatingRaidPolicyParams) (int64, error)
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
 	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)
@@ -918,6 +1147,9 @@ type sqlcQuerier interface {
 	// Box plot stats on encounter duration (seconds) per encounter name.
 	// Deduplicates encounters across duplicate log groups.
 	RankingsKillTimeStats(ctx context.Context, arg RankingsKillTimeStatsParams) ([]RankingsKillTimeStatsRow, error)
+	// The fastest clean kills of each chosen boss in one round trip, deduplicated
+	// across duplicate log groups like RankingsKillTimeLeaderboard.
+	RankingsKillTimeTopPerEncounter(ctx context.Context, arg RankingsKillTimeTopPerEncounterParams) ([]RankingsKillTimeTopPerEncounterRow, error)
 	// Returns paginated DPS rankings showing each player's best single run.
 	// A "run" is one instance_id (deduplicated by duplicate_group_id).
 	// Within a run, damage and duration are summed across encounters to get run DPS.
@@ -954,6 +1186,28 @@ type sqlcQuerier interface {
 	RankingsSummaryMaxUpdatedAt(ctx context.Context, tenantID uuid.UUID) (pgtype.Timestamptz, error)
 	// Returns aggregate refresh metadata for one tenant's precomputed summaries.
 	RankingsSummaryStatus(ctx context.Context, tenantID uuid.UUID) (RankingsSummaryStatusRow, error)
+	// Per-boss canonical raw metric and its newest eligible locked parse for the
+	// requested DPS or HPS metric. has_locked_parse distinguishes missing parses
+	// from zero scores, so raw Peak need not invent a Mastery observation.
+	RatingObservationsForRun(ctx context.Context, arg RatingObservationsForRunParams) ([]RatingObservationsForRunRow, error)
+	// Set-based source extraction for one bounded page of canonical runs.
+	RatingObservationsForRuns(ctx context.Context, arg RatingObservationsForRunsParams) ([]RatingObservationsForRunsRow, error)
+	RatingProjectionGuildRankOne(ctx context.Context, arg RatingProjectionGuildRankOneParams) (RatingProjectionGuildRankOneRow, error)
+	RatingProjectionPlayerRankOne(ctx context.Context, arg RatingProjectionPlayerRankOneParams) (RatingProjectionPlayerRankOneRow, error)
+	// Capture affected tenants before deleting instances, including invalidated
+	// sources that RankingRunSources deliberately excludes.
+	RatingRealmsByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]uuid.UUID, error)
+	RatingStageGuildPeak(ctx context.Context, arg RatingStageGuildPeakParams) (RatingStageGuildPeakRow, error)
+	RatingStageGuildRankOne(ctx context.Context, arg RatingStageGuildRankOneParams) (float64, error)
+	RatingStageGuildRenownTotals(ctx context.Context, arg RatingStageGuildRenownTotalsParams) (RatingStageGuildRenownTotalsRow, error)
+	// Aggregate a single immutable subject, never retaining its history in Go.
+	// The best kill's throughput, and its fight length (0 when unknown) so raid
+	// Peak can weigh bosses by duration. Ties prefer the earlier kill.
+	RatingStagePlayerPeak(ctx context.Context, arg RatingStagePlayerPeakParams) (RatingStagePlayerPeakRow, error)
+	// Rank-one derives from *all* tenant runs (including unassigned realms and
+	// guild-less observations); the worker applies frozen membership afterwards.
+	RatingStagePlayerRankOne(ctx context.Context, arg RatingStagePlayerRankOneParams) (float64, error)
+	RatingStagePlayerRenownTotals(ctx context.Context, arg RatingStagePlayerRenownTotalsParams) (RatingStagePlayerRenownTotalsRow, error)
 	ReactivateDiscordMembershipGrantCheck(ctx context.Context, arg ReactivateDiscordMembershipGrantCheckParams) (ReactivateDiscordMembershipGrantCheckRow, error)
 	// Files the user appended to someone else's log group belong to that raid.
 	ReassignAppendedLogFilesToGroupOwner(ctx context.Context, userID uuid.UUID) error
@@ -966,6 +1220,7 @@ type sqlcQuerier interface {
 	RefreshTimeParseClearTimeMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseClearTimeMembershipsForLogGroupParams) (RefreshTimeParseClearTimeMembershipsForLogGroupRow, error)
 	RegisterLuaProjectUpload(ctx context.Context, objectKey string) error
 	ReleaseAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
+	RenameRatingRealmGroup(ctx context.Context, arg RenameRatingRealmGroupParams) (int64, error)
 	RenameSidekickInstallation(ctx context.Context, arg RenameSidekickInstallationParams) (SidekickInstallation, error)
 	RepairDiscordMembershipGrantChecks(ctx context.Context, arg RepairDiscordMembershipGrantChecksParams) ([]DiscordMembershipGrantCheck, error)
 	ReserveLogFilePart(ctx context.Context, arg ReserveLogFilePartParams) (LogFilePart, error)
@@ -988,6 +1243,7 @@ type sqlcQuerier interface {
 	// major.minor.patch comparison. The caller deduplicates rows by log group and
 	// applies its own distinct log-group limit.
 	ResyncCandidateLogGroups(ctx context.Context) ([]ResyncCandidateLogGroupsRow, error)
+	RetireActiveRatingScoreGeneration(ctx context.Context, tenantID uuid.UUID) error
 	RevokeActiveSidekickOAuthGrants(ctx context.Context, sidekickID uuid.UUID) ([]string, error)
 	RevokeOAuthTokenSessions(ctx context.Context, arg RevokeOAuthTokenSessionsParams) (int64, error)
 	RotateOAuthRefreshToken(ctx context.Context, arg RotateOAuthRefreshTokenParams) (int64, error)
@@ -1054,7 +1310,19 @@ type sqlcQuerier interface {
 	SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeaderboardParams) ([]SpeedrunLeaderboardRow, error)
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
+	StageRatingGuildRenownPage(ctx context.Context, arg StageRatingGuildRenownPageParams) (int64, error)
+	StageRatingGuildRuns(ctx context.Context, arg StageRatingGuildRunsParams) (int64, error)
+	StageRatingPlayerRenownPage(ctx context.Context, arg StageRatingPlayerRenownPageParams) (int64, error)
+	// Only a bounded page is passed to each insertion. Caller advances the
+	// checkpoint cursor in the same transaction. ON CONFLICT never rewrites the
+	// original evidence if a page is replayed after a crash.
+	StageRatingPlayerRuns(ctx context.Context, arg StageRatingPlayerRunsParams) (int64, error)
 	StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error
+	// The start function atomically locks the tenant revision, snapshots all config,
+	// creates a building generation and checkpoint, or returns the unfinished one.
+	StartRatingRebuild(ctx context.Context, arg StartRatingRebuildParams) (uuid.UUID, error)
+	// The fixed rules and per-realm flavor awards are frozen by the start function.
+	StartTenantRatingRebuild(ctx context.Context, arg StartTenantRatingRebuildParams) (uuid.UUID, error)
 	// Atomically refills a leaky bucket by the time since its last update
 	// (capped at burst) and takes cost tokens if enough are available. A new
 	// bucket starts full. A refused take still stores the refilled level, so
@@ -1078,6 +1346,7 @@ type sqlcQuerier interface {
 	// Only the newest @keep releases keep their files; older ones stay listed without a package.
 	TrimLuaProjectReleaseFiles(ctx context.Context, arg TrimLuaProjectReleaseFilesParams) error
 	TryAcquireAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
+	UnassignRatingRealmFromGroup(ctx context.Context, arg UnassignRatingRealmFromGroupParams) (int64, error)
 	UnassignWorldFromServer(ctx context.Context, arg UnassignWorldFromServerParams) error
 	UnlinkDuplicateGroup(ctx context.Context, id uuid.UUID) (UnlinkDuplicateGroupRow, error)
 	UnsetPrimaryUserCharacter(ctx context.Context, userID uuid.UUID) error
@@ -1163,6 +1432,11 @@ type sqlcQuerier interface {
 	// (instance, difficulty, max_players, tenant) combo.
 	// The caller sets tenant context so RLS on encounter_dps_rankings
 	// scopes to the correct realms automatically.
+	// A complete run kills as many distinct bosses as the instance's full clears
+	// do: the largest boss count at least three runs reach (else the largest seen).
+	// Requiring every boss name ever recorded fails when a server changes a raid's
+	// roster (Turtle's Molten Core dropped Gehennas) or ranks a hard mode as its
+	// own encounter, leaving no run complete and no top players.
 	// Step 1: aggregate per player per run (sum encounters within one instance run).
 	// Step 2: pick each player's best run.
 	UpsertRankingsInstanceSummary(ctx context.Context, arg UpsertRankingsInstanceSummaryParams) error

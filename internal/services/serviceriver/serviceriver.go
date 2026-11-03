@@ -29,6 +29,8 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceretention"
 	"github.com/Emyrk/chronicle/internal/services/servicetelemetry"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/riverqueue/river"
 
 	"github.com/coder/serpent"
@@ -282,6 +284,23 @@ func (s *Service) Start(ctx context.Context) error {
 	riverqueue.AddWorker(q, rank.RepairParseScoresWorker)
 	riverqueue.AddWorker(q, rank.RankingRunRefreshWorker)
 	riverqueue.AddWorker(q, rank.RankingRunRepairWorker)
+	rank.RatingDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.RatingDispatchWorker)
+	// One observation per successfully published generation, not per River
+	// invocation. No tenant/generation labels: those would grow without bound.
+	rank.RatingTenantWorker.RebuildDuration = promauto.With(serviceprometheus.Registry(s.broker)).NewHistogram(prometheus.HistogramOpts{
+		Namespace: "chronicle", Subsystem: "rating", Name: "rebuild_duration_seconds",
+		Help:    "Wall-clock seconds from tenant rating generation start to successful publication, including snoozes and retries",
+		Buckets: []float64{30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 28800, 86400},
+	})
+	riverqueue.AddWorker(q, rank.RatingTenantWorker)
+	// One bounded GC page per job; daily scheduling recovers lost continuations.
+	ratingStageGC := &servicerankings.WorkerRatingStageGC{Store: rank.RatingTenantWorker.Store, Queue: q}
+	riverqueue.AddWorker(q, ratingStageGC)
+	rank.RenownRepairWorker.Queue = q
+	rank.RenownDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.RenownRepairWorker)
+	riverqueue.AddWorker(q, rank.RenownDispatchWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
 		MaxWorkers: 1,
 	})
@@ -312,6 +331,38 @@ func (s *Service) Start(ctx context.Context) error {
 				return rankingargs.ArgsRepairRankingRuns{}, nil
 			},
 			&river.PeriodicJobOpts{RunOnStart: false},
+		),
+	)
+
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			river.PeriodicInterval(24*time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return servicerankings.ArgsRatingStageGC{}, nil
+			},
+			&river.PeriodicJobOpts{ID: "daily-rating-stage-gc", RunOnStart: false},
+		),
+	)
+	// Repair historical missing Renown facts in bounded pages each day.
+	// Dispatch is independent of the rating snapshot; a pass completing after
+	// that snapshot is incorporated by the next daily rebuild.
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			river.PeriodicInterval(24*time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return servicerankings.ArgsDispatchRenownRepair{}, nil
+			},
+			&river.PeriodicJobOpts{ID: "daily-renown-fact-repair", RunOnStart: false},
+		),
+	)
+	// Daily rating reconciliation for tenants with configured group policies.
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			river.PeriodicInterval(24*time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return servicerankings.ArgsDispatchRatingScores{}, nil
+			},
+			&river.PeriodicJobOpts{ID: "daily-rating-score-reconciliation", RunOnStart: false},
 		),
 	)
 

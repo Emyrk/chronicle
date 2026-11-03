@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -70,6 +71,12 @@ type Service struct {
 	RankingRunRefreshWorker *WorkerRefreshRankingRuns
 	// RankingRunRepairWorker discovers missed or stale representative rows.
 	RankingRunRepairWorker *WorkerRepairRankingRuns
+	// RatingDispatchWorker fans daily rating rebuilds out to tenants with realms.
+	RatingDispatchWorker *WorkerDispatchRatingScores
+	// RatingTenantWorker builds and publishes one tenant's rating generation.
+	RatingTenantWorker   *WorkerRebuildTenantRatings
+	RenownRepairWorker   *WorkerRepairRenownFacts
+	RenownDispatchWorker *WorkerDispatchRenownRepair
 }
 
 func New(broker *services.Services) *Service {
@@ -145,6 +152,10 @@ func (s *Service) Start(_ context.Context) error {
 		Store:  store,
 		Logger: namedLogger,
 	}
+	s.RatingDispatchWorker = &WorkerDispatchRatingScores{Store: store, Logger: namedLogger}
+	s.RatingTenantWorker = &WorkerRebuildTenantRatings{Store: store, Logger: namedLogger}
+	s.RenownRepairWorker = &WorkerRepairRenownFacts{Store: store}
+	s.RenownDispatchWorker = &WorkerDispatchRenownRepair{Store: store}
 
 	s.router = chi.NewRouter()
 	s.setupRoutes()
@@ -203,6 +214,16 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/time-parse-cohorts/buckets", s.handleTimeParseCohortBuckets)
 	s.router.Get("/time-parse-cohorts/cohort", s.handleTimeParseCohort)
 	s.router.Get("/time-parse-cohorts/spreads", s.handleTimeParseSpreads)
+
+	// Published tenant-wide rating leaderboards. Realm IDs filter rows only.
+	s.router.Get("/ratings/hub-summary", s.handleHubSummary)
+	s.router.Get("/ratings/set-board", s.handleHubSetBoard)
+	s.router.Get("/ratings/guild-full-list", s.handlePublishedGuildFullList)
+	s.router.Get("/ratings/player-full-list", s.handlePublishedPlayerFullList)
+	s.router.Get("/ratings/scope-leaderboard", s.handleTenantPlayerScopeLeaderboard)
+	s.router.Get("/ratings/boss-leaderboard", s.handleTenantPlayerBossLeaderboard)
+	s.router.Get("/ratings/guild-boss-leaderboard", s.handleTenantGuildBossLeaderboard)
+	s.router.Get("/ratings/guild-scope-leaderboard", s.handleTenantGuildScopeLeaderboard)
 
 	// Speedrun leaderboard
 	s.router.Get("/speedrun", s.handleSpeedrunLeaderboard)
@@ -383,7 +404,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.store.RankingsLeaderboardNoJIT(ctx, database.RankingsLeaderboardParams{
 		InstanceNames:    splitCSV(q.Get("instance_names")),
 		EncounterNames:   encounterNames,
-		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
+		DifficultyNames:  rankingDifficultyNames(q),
 		RealmNames:       splitCSV(q.Get("realm_names")),
 		Class:            classParam,
 		Spec:             q.Get("spec"),
@@ -393,6 +414,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		HideUnknowns:     q.Get("hide_unknowns") == "true",
 		Metric:           normalizeMetric(q.Get("metric")),
 		FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
+		ExactCohort:      q.Get("exact_cohort") == "true",
 		QueryLimit:       limit,
 		QueryOffset:      offset,
 	})
@@ -520,13 +542,14 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.store.RankingsBoxPlotStatsNoJIT(ctx, database.RankingsBoxPlotStatsParams{
 		InstanceNames:    splitCSV(q.Get("instance_names")),
 		EncounterNames:   encounterNames,
-		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
+		DifficultyNames:  rankingDifficultyNames(q),
 		RealmNames:       splitCSV(q.Get("realm_names")),
 		Role:             q.Get("role"),
 		SinceDays:        sinceDays,
 		Metric:           normalizeMetric(q.Get("metric")),
 		GroupByClass:     q.Get("group_by_class") == "true",
 		FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
+		ExactCohort:      q.Get("exact_cohort") == "true",
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -613,6 +636,14 @@ func parseMaxPlayers(s string) int16 {
 		return 0
 	}
 	return int16(v)
+}
+
+// Exact Hub cohorts may legitimately have an empty difficulty; legacy CSV filters cannot express it.
+func rankingDifficultyNames(q url.Values) []string {
+	if q.Get("exact_cohort") == "true" && q.Has("difficulty_names") {
+		return []string{q.Get("difficulty_names")}
+	}
+	return splitCSV(q.Get("difficulty_names"))
 }
 
 // splitCSV splits a comma-separated string into a slice, trimming whitespace.
@@ -779,6 +810,33 @@ func (s *Service) handleKillTimeLeaderboard(w http.ResponseWriter, r *http.Reque
 		offset, _ = strconv.ParseInt(v, 10, 64)
 	}
 
+	// encounter_names returns each chosen boss's fastest kills (limit per boss, at
+	// most 10) in one request, for boards that show several bosses side by side.
+	if q.Has("encounter_names") {
+		names := splitCSV(q.Get("encounter_names"))
+		if len(names) == 0 || len(names) > 64 {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "encounter_names must list 1 to 64 bosses"})
+			return
+		}
+		top, err := s.store.RankingsKillTimeTopPerEncounter(ctx, database.RankingsKillTimeTopPerEncounterParams{
+			InstanceName: instanceName, EncounterNames: names, PerEncounter: int32(min(limit, 10)),
+		})
+		if err != nil {
+			httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to fetch kill times", Detail: err.Error()}})
+			return
+		}
+		entries := make([]chroniclesdk.KillTimeLeaderboardEntry, 0, len(top))
+		for _, row := range top {
+			entries = append(entries, chroniclesdk.KillTimeLeaderboardEntry{
+				EncounterID: row.EncounterID, InstanceID: row.InstanceID, EncounterName: row.EncounterName,
+				InstanceName: row.InstanceName, GuildName: row.GuildName, GuildID: row.GuildID, RealmName: row.RealmName,
+				DurationSecs: row.DurationSecs, KilledAt: row.KilledAt.Time, LogHashedSlug: row.LogHashedSlug.String,
+			})
+		}
+		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.KillTimeLeaderboardResponse{Entries: entries, TotalCount: int64(len(entries))})
+		return
+	}
+
 	rows, err := s.store.RankingsKillTimeLeaderboard(ctx, database.RankingsKillTimeLeaderboardParams{
 		InstanceName:  instanceName,
 		EncounterName: q.Get("encounter_name"),
@@ -842,8 +900,9 @@ func (s *Service) handleSuccessRates(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := s.store.RankingsSuccessRates(ctx, database.RankingsSuccessRatesParams{
 		InstanceName:     instanceName,
-		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
+		DifficultyNames:  rankingDifficultyNames(q),
 		FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
+		ExactCohort:      q.Get("exact_cohort") == "true",
 		SinceDays:        sinceDays,
 	})
 	if err != nil {

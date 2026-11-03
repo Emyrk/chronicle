@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { ArrowDown, Check, ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay"
@@ -11,8 +12,9 @@ import {
   type RatingPeriod,
   type RatingScope,
 } from "./ratingBoards.fixtures"
-import { Emblem, RankMark, ScopeMark, SpecIcon } from "./RatingParts"
+import { Emblem, RankMark, RawTag, ScopeMark, SpecIcon } from "./RatingParts"
 import { METRIC_THEMES, type RatingView } from "./ratingThemes"
+import type { RatingLiveData } from "./ratingLiveData"
 
 const PAGE_SIZE = 50
 
@@ -21,6 +23,7 @@ interface FullRow {
   rank: number
   entry: RatingEntry
   scores: Partial<Record<RatingMetric, RatingEntry>>
+  peakRun?: { ms: number; date: string }
 }
 
 /**
@@ -36,6 +39,7 @@ export function RatingFullList({
   onQuery,
   onCollapse,
   toolbar,
+  live,
 }: {
   scope: RatingScope
   title: string
@@ -48,13 +52,15 @@ export function RatingFullList({
   onCollapse?: () => void
   /** Metric switch and period, shown in the header next to the title. */
   toolbar?: ReactNode
+  live?: RatingLiveData
 }) {
   const [sortBy, setSortBy] = useState<RatingMetric>(view === "overview" ? "peak" : view)
   const [page, setPage] = useState(0)
   const metric = view === "overview" ? sortBy : view
   const theme = METRIC_THEMES[view]
 
-  const rows = useMemo<FullRow[]>(() => {
+  const fixtureRows = useMemo<FullRow[]>(() => {
+    if (live) return []
     const byMetric = Object.fromEntries(RATING_METRICS.map((m) => [m, new Map(scopeEntries(m, period, scope).map((e) => [e.id, e]))])) as Record<
       RatingMetric,
       Map<string, RatingEntry>
@@ -64,16 +70,31 @@ export function RatingFullList({
       entry,
       scores: Object.fromEntries(RATING_METRICS.map((m) => [m, byMetric[m].get(entry.id)])),
     }))
-  }, [metric, period, scope])
+  }, [metric, period, scope, live])
 
+  const selection = { scope, metric, period, cohort: live?.cohort, query, page }
+  const published = useQuery({
+    queryKey: ["hub-rating-full-list", live?.pageKey, scope, metric, period, query, page],
+    queryFn: () => live!.loadPage!(selection),
+    enabled: !!live?.loadPage,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  })
+  const state = live?.loadPage
+    ? published.isError ? { status: "error" as const, error: "Published ratings unavailable." }
+      : published.data ? { status: "ready" as const, data: published.data } : { status: "loading" as const }
+    : live?.page?.(selection)
+  const livePage = state?.status === "ready" ? state.data : undefined
+  const rows: FullRow[] = livePage ? livePage.rows.map((row) => ({ ...row, scores: row.scores ?? {} })) : fixtureRows
   const top = rows[0]?.entry.score ?? 1
   const needle = query.trim().toLowerCase()
-  const filtered = rows.filter(
+  const filtered = live ? rows : rows.filter(
     (r) => !needle || [r.entry.name, r.entry.guild, r.entry.spec, r.entry.subSpec].some((value) => value?.toLowerCase().includes(needle)),
   )
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const current = Math.min(page, pages - 1)
-  const visible = filtered.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE)
+  const current = livePage?.page ?? Math.min(page, pages - 1)
+  const visible = live ? filtered : filtered.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE)
+  const total = livePage?.total ?? (live ? visible.length : filtered.length)
 
   return (
     <section aria-label={`${title} ${theme.label} full list`} className="overflow-hidden rounded-xl border bg-card">
@@ -99,7 +120,7 @@ export function RatingFullList({
           </Emblem>
           <div className="min-w-0">
             <h2 className="truncate font-wow text-xl leading-tight">{title}</h2>
-            <p className="text-xs text-muted-foreground">{rows.length} ranked</p>
+            <p className="text-xs text-muted-foreground">{state && state.status !== "ready" ? "Published ratings" : live && livePage?.total === undefined ? "Published rankings" : `${total} ranked`}</p>
           </div>
         </div>
         {toolbar}
@@ -149,7 +170,7 @@ export function RatingFullList({
               ) : (
                 <>
                   <th className="w-32 px-3 py-2.5 text-left font-medium">{theme.label}</th>
-                  {view === "mastery" && <MasteryPartHeaders />}
+                  {view === "mastery" && (live ? ["Peak", "Form", "Floor", "Eligible kills"].map((label) => <th key={label} className="px-3 py-2.5 text-right font-medium">{label}</th>) : <MasteryPartHeaders />)}
                   {view === "peak" && (
                     <>
                       <th className="px-3 py-2.5 text-right font-medium">{scope.boss ? "Kill time" : "Total kill time"}</th>
@@ -164,7 +185,12 @@ export function RatingFullList({
             </tr>
           </thead>
           <tbody>
-            {visible.map(({ rank, entry, scores }) => (
+            {state && state.status !== "ready" && (
+              <tr><td colSpan={9} role={state.status === "error" ? "alert" : "status"} className="px-5 py-10 text-center text-muted-foreground">
+                {state.status === "error" ? state.error : "Loading published ratings…"}
+              </td></tr>
+            )}
+            {visible.map(({ rank, entry, scores, peakRun: liveRun }) => (
               <tr key={entry.id} className="border-b border-white/5 transition-colors last:border-b-0 hover:bg-white/[.025]">
                 <td className="px-4 py-2 sm:px-5">
                   <RankMark rank={rank} size="sm" />
@@ -195,6 +221,7 @@ export function RatingFullList({
                         style={sortBy === m && rank === 1 ? { color: METRIC_THEMES[m].accent } : undefined}
                       >
                         {score ? METRIC_THEMES[m].format(score.score) : "—"}
+                        {m === "peak" && score?.raw ? <RawTag raw={score.raw} className="ml-1.5" /> : null}
                       </td>
                     )
                   })
@@ -204,6 +231,7 @@ export function RatingFullList({
                       <div className="flex flex-col items-start gap-1">
                         <span className="font-mono text-base tabular-nums" style={rank === 1 ? { color: theme.accent } : undefined}>
                           {theme.format(entry.score)}
+                          {view === "peak" && entry.raw ? <RawTag raw={entry.raw} className="ml-2" /> : null}
                         </span>
                         <span className="h-0.5 w-20 overflow-hidden rounded-full bg-white/5">
                           <span
@@ -213,14 +241,14 @@ export function RatingFullList({
                         </span>
                       </div>
                     </td>
-                    {view === "mastery" && <MasteryPartCells parts={entry.mastery} />}
+                    {view === "mastery" && (live ? <PublishedMasteryCells entry={entry} /> : <MasteryPartCells parts={entry.mastery} />)}
                     {view === "peak" &&
                       (() => {
-                        const run = peakRun(entry.id, scope.boss)
+                        const run = live ? liveRun : peakRun(entry.id, scope.boss)
                         return (
                           <>
-                            <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{formatClock(run.ms)}</td>
-                            <td className="hidden px-3 py-2 text-xs text-muted-foreground sm:table-cell">{run.date}</td>
+                            <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{run ? formatClock(run.ms) : "—"}</td>
+                            <td className="hidden px-3 py-2 text-xs text-muted-foreground sm:table-cell">{run?.date ?? "—"}</td>
                           </>
                         )
                       })()}
@@ -231,7 +259,7 @@ export function RatingFullList({
                 <td className="hidden px-2 py-2 pr-4 text-muted-foreground sm:pr-5 md:table-cell">{entry.subSpec}</td>
               </tr>
             ))}
-            {visible.length === 0 && (
+            {(!state || state.status === "ready") && visible.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-5 py-10 text-center text-muted-foreground">
                   No characters match.
@@ -244,22 +272,30 @@ export function RatingFullList({
 
       <div className="flex items-center justify-between gap-3 border-t px-4 py-2.5 text-xs text-muted-foreground sm:px-5">
         <span>
-          {filtered.length === 0 ? "0" : `${current * PAGE_SIZE + 1}–${Math.min((current + 1) * PAGE_SIZE, filtered.length)}`} of {filtered.length}
+          {live && (query.trim() || live.ranksKnown === false)
+            ? `${visible.length ? `${current * PAGE_SIZE + 1}–${current * PAGE_SIZE + visible.length}` : "0"} of ${total} matches${visible.length ? ` · global ranks ${visible[0].rank}–${visible[visible.length - 1].rank}` : ""}`
+            : `${visible.length === 0 ? "0" : live ? `${visible[0].rank}–${visible[visible.length - 1].rank}` : `${current * PAGE_SIZE + 1}–${Math.min((current + 1) * PAGE_SIZE, filtered.length)}`} of ${live && livePage?.total === undefined ? "published ratings" : total}`}
         </span>
         <div className="flex items-center gap-1">
-          <PageButton disabled={current === 0} onClick={() => setPage(current - 1)} label="Previous page">
+          <PageButton disabled={live ? !livePage?.hasPreviousPage : current === 0} onClick={() => setPage(current - 1)} label="Previous page">
             <ChevronLeft className="size-4" />
           </PageButton>
           <span className="px-2 tabular-nums">
-            {current + 1} / {pages}
+            {current + 1}{live && livePage?.total === undefined ? "" : ` / ${live ? Math.max(1, Math.ceil(total / PAGE_SIZE)) : pages}`}
           </span>
-          <PageButton disabled={current >= pages - 1} onClick={() => setPage(current + 1)} label="Next page">
+          <PageButton disabled={live ? !livePage?.hasNextPage : current >= pages - 1} onClick={() => setPage(current + 1)} label="Next page">
             <ChevronRight className="size-4" />
           </PageButton>
         </div>
       </div>
     </section>
   )
+}
+
+function PublishedMasteryCells({ entry }: { entry: RatingEntry }) {
+  const parts = entry.publishedMastery
+  const cells = [parts?.peak, parts?.form, parts?.floor, parts?.eligibleKills]
+  return <>{cells.map((value, i) => <td key={i} className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{value === undefined ? "—" : i === 3 ? value : value.toFixed(1)}</td>)}</>
 }
 
 function PageButton({ disabled, onClick, label, children }: { disabled: boolean; onClick: () => void; label: string; children: React.ReactNode }) {

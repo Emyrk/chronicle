@@ -17,8 +17,9 @@ import (
 // rankingsQueryVersion is bumped whenever the UpsertRankingsInstanceSummary
 // query logic changes (e.g. aggregation method). The staleness guard compares
 // this against the stored version to force a recompute even when row counts
-// have not changed. Version 3 stores each top player's GUID.
-const rankingsQueryVersion int16 = 3
+// have not changed. Version 3 stores each top player's GUID; version 4 counts
+// a run complete at the boss count most full clears reach, not every boss ever recorded.
+const rankingsQueryVersion int16 = 4
 
 // RankingsSummaryQueryVersion returns the current summary aggregation version.
 func RankingsSummaryQueryVersion() int16 {

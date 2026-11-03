@@ -7,23 +7,30 @@ import { scopeKind, type RatingEntry, type RatingScope } from "./ratingBoards.fi
 import { RANK_COLORS, specIconUrl, type MetricTheme } from "./ratingThemes"
 
 export function SpecIcon({ cls, spec, className }: { cls: string; spec: string; className?: string }) {
+  // Renown entries aggregate all classes, so they have no class/spec icon.
+  if (!cls) return null
   return (
     <img
-      src={specIconUrl(cls, spec)}
-      alt={spec}
+      src={spec ? specIconUrl(cls, spec) : `/c/icons/class_${cls.toLowerCase()}.png`}
+      alt={spec || cls}
       className={className}
       onError={(e) => {
-        ;(e.target as HTMLImageElement).src = `/c/icons/class_${cls.toLowerCase()}.png`
+        const image = e.currentTarget
+        const fallback = `/c/icons/class_${cls.toLowerCase()}.png`
+        // React's delegated onError still fires after assigning image.onerror = null.
+        // Never reassign a failed fallback to itself (including when offline).
+        if (image.getAttribute("src") === fallback) image.removeAttribute("src")
+        else image.src = fallback
       }}
     />
   )
 }
 
-export function EntryRow({ entry, rank, theme, size }: { entry: RatingEntry; rank: number; theme: MetricTheme; size: "lg" | "sm" }) {
+export function EntryRow({ entry, rank, theme, size }: { entry: RatingEntry; rank?: number; theme: MetricTheme; size: "lg" | "sm" }) {
   const lg = size === "lg"
   return (
     <li className={cn("flex items-center gap-3 border-b border-white/5 last:border-b-0", lg ? "px-4 py-3 sm:px-5" : "px-3 py-2")}>
-      <RankMark rank={rank} size={size} />
+      {rank === undefined ? <span aria-label="Global rank unavailable for realm filter" className={cn("shrink-0", lg ? "size-8" : "size-6")} /> : <RankMark rank={rank} size={size} />}
       <SpecIcon cls={entry.cls} spec={entry.spec} className={cn("shrink-0 rounded-sm", lg ? "size-7" : "size-5")} />
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-baseline gap-1.5">
@@ -36,6 +43,7 @@ export function EntryRow({ entry, rank, theme, size }: { entry: RatingEntry; ran
           {entry.spec} · {entry.detail}
         </span>
       </span>
+      {entry.raw ? <RawTag raw={entry.raw} /> : null}
       <span
         className={cn("shrink-0 text-right font-mono tabular-nums", lg ? "text-xl" : "text-sm")}
         style={rank === 1 ? { color: theme.accent } : undefined}
@@ -44,6 +52,11 @@ export function EntryRow({ entry, rank, theme, size }: { entry: RatingEntry; ran
       </span>
     </li>
   )
+}
+
+/** Peak's DPS/HPS, muted beside the score. */
+export function RawTag({ raw, className }: { raw: number; className?: string }) {
+  return <span className={cn("shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums", className)}>{Math.round(raw).toLocaleString()}/s</span>
 }
 
 export function RankMark({ rank, size }: { rank: number; size: "lg" | "sm" }) {

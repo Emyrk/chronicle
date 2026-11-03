@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/storage"
+	"github.com/Emyrk/chronicle/internal/ratingfacts"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river"
@@ -208,13 +209,34 @@ func (w *RealmWorker) Work(ctx context.Context, job *river.Job[ArgsRetentionReal
 			_, _ = w.Storage.RemoveFile(ctx, "raidlogs", []string{groupID.String()})
 		}
 
-		identities, err := w.Store.RankingRunIdentitiesByInstanceIDs(ctx, toDelete)
-		if err != nil {
-			return fmt.Errorf("load ranking run identities: %w", err)
-		}
-		deleted, err := w.Store.DeleteLogInstancesByIDs(ctx, toDelete)
-		if err != nil {
-			return fmt.Errorf("delete instances: %w", err)
+		// Serialize deletion and fact reconciliation with ranking refresh. A
+		// surviving duplicate retains credit; a deleted run does not.
+		var identities []database.RankingRunIdentitiesByInstanceIDsRow
+		var deleted int64
+		if err := w.Store.InTx(ctx, func(tx database.Store) error {
+			if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
+				return fmt.Errorf("lock ranking representatives before retention: %w", err)
+			}
+			var err error
+			identities, err = tx.RankingRunIdentitiesByInstanceIDs(ctx, toDelete)
+			if err != nil {
+				return fmt.Errorf("load ranking run identities: %w", err)
+			}
+			realms, err := tx.RatingRealmsByInstanceIDs(ctx, toDelete)
+			if err != nil {
+				return err
+			}
+			deleted, err = tx.DeleteLogInstancesByIDs(ctx, toDelete)
+			if err != nil {
+				return err
+			}
+			runIDs := make([]uuid.UUID, 0, len(identities))
+			for _, identity := range identities {
+				runIDs = append(runIDs, identity.RunID)
+			}
+			return ratingfacts.ReconcileDeletedRuns(ctx, tx, runIDs, realms)
+		}, nil); err != nil {
+			return fmt.Errorf("remove Renown and delete retained instances: %w", err)
 		}
 		affectedIDs := make([]uuid.UUID, 0, len(identities)*2)
 		for _, identity := range identities {

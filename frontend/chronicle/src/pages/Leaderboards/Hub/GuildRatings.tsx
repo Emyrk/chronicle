@@ -3,14 +3,27 @@ import { ArrowDown, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react"
 import { RATING_METRICS, type RatingMetric } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 import { cn } from "@/lib/utils"
 import { BoardSearch, MasteryPartCells, MasteryPartHeaders } from "@/pages/Leaderboards/Ratings/RatingFullList"
+import { BoardSkeleton } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
 import { BossPortrait, Emblem, RankMark } from "@/pages/Leaderboards/Ratings/RatingParts"
 import { METRIC_THEMES, type MetricTheme, type RatingView } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { formatClock, guildRatings, type GuildRating } from "./hub.fixtures"
+
+/** Published guild ratings for the guild boards: whole ranked lists, and each boss's leaders. */
+export interface GuildRatingData {
+  ratings: Record<RatingMetric, GuildRating[]>
+  perBoss: (boss: string) => Record<RatingMetric, GuildRating[]> | undefined
+  pending?: boolean
+  error?: string
+}
+
+const EMPTY_GUILD_RATINGS: Record<RatingMetric, GuildRating[]> = { peak: [], mastery: [], renown: [] }
 
 export interface MetricRow {
   id: string
   name: ReactNode
   score: number
+  /** What stands behind the score, shown muted beside it (Peak's DPS). */
+  raw?: string
 }
 
 /**
@@ -18,7 +31,7 @@ export interface MetricRow {
  * whose header (and footer link) opens the full one. Shared by the player and
  * guild rating cards so both read the same.
  */
-export function MetricColumns({ columns, onOpen }: { columns: Record<RatingMetric, MetricRow[]>; onOpen: (metric: RatingMetric) => void }) {
+export function MetricColumns({ columns, onOpen, ranksKnown = true }: { columns: Record<RatingMetric, MetricRow[]>; onOpen: (metric: RatingMetric) => void; ranksKnown?: boolean }) {
   return (
     <div className="grid flex-1 max-sm:divide-y sm:grid-cols-3 sm:divide-x">
       {RATING_METRICS.map((m) => {
@@ -39,8 +52,9 @@ export function MetricColumns({ columns, onOpen }: { columns: Record<RatingMetri
             <ol>
               {columns[m].map((r, i) => (
                 <li key={r.id} className="flex items-center gap-2 border-b border-white/5 px-3 py-2.5 last:border-b-0">
-                  <span className="w-3 font-mono text-xs text-muted-foreground">{i + 1}</span>
+                  <span className="w-3 font-mono text-xs text-muted-foreground">{ranksKnown ? i + 1 : ""}</span>
                   <span className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">{r.name}</span>
+                  {r.raw && <span className="shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">{r.raw}</span>}
                   <span className="font-mono text-sm tabular-nums" style={i === 0 ? { color: t.accent } : undefined}>
                     {t.format(r.score)}
                   </span>
@@ -82,19 +96,8 @@ function toRows(list: GuildRating[]): MetricRow[] {
 }
 
 /** The overview's ratings card in Guilds mode: top five guilds per metric. */
-export function GuildRatingLeaders({
-  bosses,
-  allBosses,
-  instanceName,
-  onOpen,
-}: {
-  bosses?: readonly string[]
-  allBosses: readonly string[]
-  instanceName: string
-  onOpen: (metric: RatingMetric) => void
-}) {
-  const r = guildRatings(bosses, allBosses, instanceName, 5)
-  return <MetricColumns columns={{ peak: toRows(r.peak), mastery: toRows(r.mastery), renown: toRows(r.renown) }} onOpen={onOpen} />
+export function GuildRatingLeaders({ ratings, onOpen }: { ratings: Record<RatingMetric, GuildRating[]>; onOpen: (metric: RatingMetric) => void }) {
+  return <MetricColumns columns={{ peak: toRows(ratings.peak), mastery: toRows(ratings.mastery), renown: toRows(ratings.renown) }} onOpen={onOpen} />
 }
 
 /**
@@ -111,9 +114,12 @@ export function GuildRatingBoards({
   where,
   onBoss,
   toolbar,
+  data,
 }: {
   instanceName: string
   view: RatingView
+  /** Published ratings; without it the boards show generated mock guilds. */
+  data?: GuildRatingData
   onView: (view: RatingView) => void
   /** Metric switch and period, shown in the board's (or table's) header. */
   toolbar?: ReactNode
@@ -134,8 +140,17 @@ export function GuildRatingBoards({
   const query = search.key === key ? search.text : ""
   const setQuery = (text: string) => setSearch({ key, text })
   const expanded = !!oneBoss || expandedKey === key || query.trim() !== ""
-  const all = guildRatings(bosses, allBosses, instanceName, 99)
+  const all = data ? data.ratings : guildRatings(bosses, allBosses, instanceName, 99)
   const label = `Guild ${view === "overview" ? "ratings" : theme.label} · ${where}`
+
+  if (data?.error) {
+    return (
+      <section role="alert" className="rounded-xl border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
+        {data.error}
+      </section>
+    )
+  }
+  if (data?.pending) return <BoardSkeleton />
 
   return (
     <div className="space-y-5" style={{ "--metric": theme.accent } as CSSProperties}>
@@ -197,7 +212,13 @@ export function GuildRatingBoards({
           <h2 className="px-1 text-sm font-semibold">By boss</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {(bosses ?? allBosses).map((boss) => (
-              <BossBoard key={boss} boss={boss} instanceName={instanceName} allBosses={allBosses} view={view} onOpen={() => onBoss(boss)} />
+              <BossBoard
+                key={boss}
+                boss={boss}
+                ratings={data ? (data.perBoss(boss) ?? EMPTY_GUILD_RATINGS) : guildRatings([boss], allBosses, instanceName, 3)}
+                view={view}
+                onOpen={() => onBoss(boss)}
+              />
             ))}
           </div>
         </section>
@@ -447,19 +468,18 @@ function GuildFullTable({
 /** One boss: #1 per metric on the overview, top three on a single metric. */
 function BossBoard({
   boss,
-  instanceName,
-  allBosses,
+  ratings: r,
   view,
   onOpen,
 }: {
   boss: string
-  instanceName: string
-  allBosses: readonly string[]
+  ratings: Record<RatingMetric, GuildRating[]>
   view: RatingView
   onOpen: () => void
 }) {
-  const r = guildRatings([boss], allBosses, instanceName, 3)
-  const rows = view === "overview" ? RATING_METRICS.map((m) => ({ metric: m, g: r[m][0] })) : r[view].map((g) => ({ metric: view, g }))
+  const rows = (view === "overview" ? RATING_METRICS.map((m) => ({ metric: m, g: r[m][0] })) : r[view].map((g) => ({ metric: view, g }))).filter(
+    (row): row is { metric: RatingMetric; g: GuildRating } => !!row.g,
+  )
   return (
     <button
       type="button"

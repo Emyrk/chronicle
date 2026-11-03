@@ -1,0 +1,5 @@
+BEGIN;
+
+DROP FUNCTION start_tenant_rating_rebuild(UUID, TIMESTAMPTZ, TIMESTAMPTZ);
+
+COMMIT;

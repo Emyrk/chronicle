@@ -225,6 +225,29 @@ export interface AdminCosmeticsResponse {
     readonly catalog: readonly CosmeticDefinition[];
 }
 
+// From chroniclesdk/admin_ratings.go
+/**
+ * Legacy rating group configuration types are retained for Go compatibility.
+ * Their admin HTTP routes are no longer registered; configuration is migration-owned.
+ */
+export interface AdminCreateRatingGroupRequest {
+    readonly server_id: string;
+    readonly name: string;
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminDeleteRatingBossPolicyRequest {
+    readonly expected_version: number;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminDeleteRatingRaidPolicyRequest {
+    readonly expected_version: number;
+    readonly instance_name: string;
+}
+
 // From chroniclesdk/user.go
 export interface AdminInvalidateLogsRequest {
     readonly log_ids: readonly string[];
@@ -284,6 +307,39 @@ export interface AdminOutdatedInstancesResponse {
     readonly min_version: string;
 }
 
+// From chroniclesdk/admin_ratings.go
+export interface AdminPutRatingBossPolicyRequest {
+    readonly expected_version: number;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly peak_weight: number;
+    readonly mastery_weight: number;
+    readonly renown_points: number;
+}
+
+// From chroniclesdk/admin_ratings.go
+/**
+ * A policy write must use a version strictly greater than the stored version.
+ */
+export interface AdminPutRatingGroupPolicyRequest {
+    readonly version: number;
+    readonly period_days: number;
+    readonly half_life_days: number;
+    readonly best_weight: number;
+    readonly form_weight: number;
+    readonly floor_weight: number;
+    readonly rank_one_weight: number;
+    readonly full_rank_kills: number;
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminPutRatingRaidPolicyRequest {
+    readonly expected_version: number;
+    readonly instance_name: string;
+    readonly peak_weight: number;
+    readonly mastery_weight: number;
+}
+
 // From chroniclesdk/rankings.go
 /**
  * AdminRankingsRefreshStatusResponse lists rankings summary freshness by tenant.
@@ -309,6 +365,121 @@ export interface AdminRankingsRefreshTenantStatus {
     readonly refresh_needed: boolean;
 }
 
+// From chroniclesdk/admin_ratings.go
+export interface AdminRatingBossPoliciesResponse {
+    readonly bosses: readonly AdminRatingBossPolicy[];
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminRatingBossPolicy {
+    readonly group_id: string;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly peak_weight: number;
+    readonly mastery_weight: number;
+    readonly renown_points: number;
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminRatingGroup {
+    readonly id: string;
+    readonly server_id: string;
+    readonly name: string;
+    readonly realms: readonly RatingRealmGroupRealm[];
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminRatingGroupPolicy {
+    readonly group_id: string;
+    readonly version: number;
+    readonly period_days: number;
+    readonly half_life_days: number;
+    readonly best_weight: number;
+    readonly form_weight: number;
+    readonly floor_weight: number;
+    readonly rank_one_weight: number;
+    readonly full_rank_kills: number;
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminRatingGroupsResponse {
+    readonly groups: readonly AdminRatingGroup[];
+}
+
+// From chroniclesdk/admin_ratings.go
+/**
+ * AdminRatingJobResponse reports an accepted River job. When unique_skipped_as_duplicate
+ * is true, job_id identifies the existing queued or running job, not a new job.
+ */
+export interface AdminRatingJobResponse {
+    readonly job_id: number;
+    readonly job_state: string;
+    readonly unique_skipped_as_duplicate: boolean;
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminRatingPoliciesResponse {
+    readonly policies: readonly AdminRatingGroupPolicy[];
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminRatingRaidPoliciesResponse {
+    readonly raids: readonly AdminRatingRaidPolicy[];
+}
+
+// From chroniclesdk/admin_ratings.go
+/**
+ * Raid policies explicitly configure instance-level rating weights.
+ */
+export interface AdminRatingRaidPolicy {
+    readonly group_id: string;
+    readonly instance_name: string;
+    readonly peak_weight: number;
+    readonly mastery_weight: number;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
+ * AdminRatingRebuildJob is one tenant rating rebuild job from River, with the
+ * worker's last progress snapshot.
+ */
+export interface AdminRatingRebuildJob {
+    readonly id: number;
+    readonly state: string;
+    readonly attempt: number;
+    readonly tenant_id: string;
+    readonly tenant_name: string;
+    readonly created_at: string;
+    readonly attempted_at?: string;
+    readonly finalized_at?: string;
+    /**
+     * DurationSeconds is the rebuild's elapsed time: the worker's recorded
+     * elapsed time when it has one, else creation to finish (or to now).
+     */
+    readonly duration_seconds: number;
+    /**
+     * Slow marks a job over twice the median of the listed finished rebuilds.
+     */
+    readonly slow: boolean;
+    readonly phase?: string;
+    readonly status?: string;
+    readonly pages_processed?: number;
+    readonly pages_per_second?: number;
+    readonly last_error?: string;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
+ * AdminRatingRebuildJobsResponse lists recent rebuilds, newest first.
+ */
+export interface AdminRatingRebuildJobsResponse {
+    readonly jobs: readonly AdminRatingRebuildJob[];
+    /**
+     * MedianSeconds is the median duration of the listed finished rebuilds.
+     */
+    readonly median_seconds: number;
+}
+
 // From chroniclesdk/rankings.go
 /**
  * AdminRefreshRankingsJob describes one tenant summary refresh job.
@@ -325,6 +496,11 @@ export interface AdminRefreshRankingsJob {
  */
 export interface AdminRefreshRankingsResponse {
     readonly jobs: readonly AdminRefreshRankingsJob[];
+}
+
+// From chroniclesdk/admin_ratings.go
+export interface AdminRenameRatingGroupRequest {
+    readonly name: string;
 }
 
 // From chroniclesdk/user.go
@@ -1847,6 +2023,62 @@ export interface GuildRaidClearsResponse {
     readonly clears: readonly GuildRaidClear[];
 }
 
+// From chroniclesdk/rating_guild_leaderboard.go
+export interface GuildRatingBossLeaderboardEntry {
+    readonly generation_id: string;
+    readonly group_id: string;
+    readonly realm_id: string;
+    readonly guild_id: string;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly window_start?: string;
+    readonly window_end?: string;
+    readonly score: number;
+    readonly best_raw?: number;
+    readonly rank_one_raw?: number;
+    readonly best_locked_parse?: number;
+    readonly form?: number;
+    readonly floor_score?: number;
+    readonly eligible_kills: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_guild_leaderboard.go
+/**
+ * GuildRatingBossLeaderboardResponse lists published guild scores for one exact boss cohort.
+ */
+export interface GuildRatingBossLeaderboardResponse {
+    readonly entries: readonly GuildRatingBossLeaderboardEntry[];
+}
+
+// From chroniclesdk/rating_guild_leaderboard.go
+export interface GuildRatingScopeLeaderboardEntry {
+    readonly generation_id: string;
+    readonly group_id: string;
+    readonly realm_id: string;
+    readonly guild_id: string;
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly score: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_guild_leaderboard.go
+/**
+ * GuildRatingScopeLeaderboardResponse lists published guild scores for an exact raid or global cohort.
+ */
+export interface GuildRatingScopeLeaderboardResponse {
+    readonly scope: string; // raid or global
+    readonly entries: readonly GuildRatingScopeLeaderboardEntry[];
+}
+
 // From chroniclesdk/guild_page.go
 export interface GuildResourceAnalyticsDay {
     readonly resource_kind: string;
@@ -2014,6 +2246,171 @@ export interface GuildTopParse {
 export interface GuildTopParsesResponse {
     readonly metric: string;
     readonly parses: readonly GuildTopParse[];
+}
+
+// From chroniclesdk/rating_hub_summary.go
+export interface HubBossRating extends HubRatingBoard {
+    readonly encounter_name: string;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+export interface HubGuildRatingEntry {
+    readonly realm_id: string;
+    readonly realm_name: string;
+    readonly guild_id: string;
+    readonly guild_name: string;
+    readonly score: number;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+export interface HubGuildRatings {
+    readonly peak: readonly HubGuildRatingEntry[];
+    readonly ranked_mastery: readonly HubGuildRatingEntry[];
+    readonly renown: readonly HubGuildRatingEntry[];
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
+ * HubLandingPreview contains published, bounded highlights for one instance cohort.
+ * Performances are each player's best complete run, aggregated across its encounters.
+ * Aggregate top-player DPS remains separately in HubSummary.Instances[].top_players.
+ * Statistics are per-run DPS distributions by class/spec, from the v1 box plot.
+ */
+export interface HubLandingPreview {
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly player: HubPlayerRatings;
+    readonly guild: HubGuildRatings;
+    readonly performances: readonly RankingsEntry[];
+    readonly statistics: readonly RankingsBoxPlotStats[];
+    readonly speedruns: readonly SpeedrunLeaderboardEntry[];
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
+ * Compact published score identities are sufficient for preview cards.
+ */
+export interface HubPlayerRatingEntry {
+    readonly realm_id: string;
+    readonly realm_name: string;
+    readonly player_guid: string;
+    readonly player_name: string;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly score: number;
+    /**
+     * PeakRaw is the DPS or HPS behind a Peak score: the kill's on a boss board,
+     * the mean of the player's best per boss on a raid board. Unset otherwise.
+     */
+    readonly peak_raw?: number;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+export interface HubPlayerRatings {
+    readonly peak: readonly HubPlayerRatingEntry[];
+    readonly ranked_mastery: readonly HubPlayerRatingEntry[];
+    readonly renown: readonly HubPlayerRatingEntry[];
+}
+
+// From chroniclesdk/rating_hub_summary.go
+export interface HubRatingBoard {
+    readonly player: HubPlayerRatings;
+    readonly guild: HubGuildRatings;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+export interface HubRatings {
+    readonly raid: HubRatingBoard;
+    readonly bosses: readonly HubBossRating[];
+}
+
+// From chroniclesdk/rating_hub_summary.go
+export interface HubRealm {
+    readonly id: string;
+    readonly name: string;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+export interface HubSelectedCohort {
+    readonly difficulty_name: string;
+    readonly max_players: number;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
+ * HubSetBoardMastery is the Peak, Form, and Floor a Ranked Mastery score is built from.
+ */
+export interface HubSetBoardMastery {
+    readonly peak: number;
+    readonly form: number;
+    readonly floor: number;
+    readonly eligible_kills: number;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
+ * HubSetBoardResponse is a page of a chosen-boss board. Ranks cover the whole
+ * cohort; realm and search filters only narrow the displayed rows.
+ */
+export interface HubSetBoardResponse {
+    readonly rows: readonly HubSetBoardRow[];
+    readonly total: number;
+    readonly page: number;
+    readonly has_next_page: boolean;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
+ * HubSetBoardRow is one ranked subject on a chosen-boss board. Peak and Ranked
+ * Mastery average over the chosen bosses (a missed one is 0); Renown sums.
+ */
+export interface HubSetBoardRow {
+    readonly rank: number;
+    readonly realm_id: string;
+    readonly realm_name: string;
+    readonly subject_id: string;
+    readonly name: string;
+    readonly guild_name: string;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    /**
+     * Score is the ranked metric's; Peak, Mastery, and Renown are all three.
+     */
+    readonly score: number;
+    readonly peak: number;
+    readonly mastery: number;
+    readonly renown: number;
+    /**
+     * PeakRaw is the Peak's duration-weighted DPS/HPS; unset when unknown.
+     */
+    readonly peak_raw?: number;
+    /**
+     * Mastery is Ranked Mastery's parts over the chosen bosses (a missed boss
+     * counts as 0) and the eligible kills behind it; unset without a Mastery score.
+     */
+    readonly mastery_parts?: HubSetBoardMastery;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
+ * HubSummary is a public, tenant-wide snapshot for the live leaderboards overview.
+ */
+export interface HubSummary {
+    readonly instances: readonly RankingsInstanceSummary[];
+    readonly landing_previews: readonly HubLandingPreview[];
+    readonly realms: readonly HubRealm[];
+    readonly encounters: readonly RankingsEncounterSummary[];
+    readonly progression_bosses: readonly string[];
+    readonly ranking_encounter_sets: readonly RankingEncounterSet[];
+    readonly filters: readonly RankingsFilterClass[];
+    readonly selected_cohort: HubSelectedCohort | null;
+    readonly generation_id: string | null;
+    readonly ratings: HubRatings;
+    readonly performances: readonly RankingsEntry[];
+    readonly speedruns: readonly SpeedrunLeaderboardEntry[];
 }
 
 // From chroniclesdk/log.go
@@ -3910,6 +4307,51 @@ export interface ProofSubject extends ProofCharacter {
     readonly warning?: string;
 }
 
+// From chroniclesdk/rating_tenant_leaderboard.go
+/**
+ * PublishedGuildFullListResponse carries globally ranked guild positions;
+ * search and realm filters affect total, not the original rank.
+ */
+export interface PublishedGuildFullListResponse {
+    readonly rows: readonly PublishedGuildFullListRow[];
+    readonly total: number;
+    readonly page: number;
+    readonly has_next_page: boolean;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface PublishedGuildFullListRow {
+    readonly rank: number;
+    readonly entry: TenantGuildBossLeaderboardEntry;
+    readonly scores: PublishedPlayerFullListScores;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+/**
+ * PublishedPlayerFullListResponse carries stable global positions within the
+ * requested cohort. Search and realm filters affect total, not row ranks.
+ */
+export interface PublishedPlayerFullListResponse {
+    readonly rows: readonly PublishedPlayerFullListRow[];
+    readonly total: number;
+    readonly page: number;
+    readonly has_next_page: boolean;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface PublishedPlayerFullListRow {
+    readonly rank: number;
+    readonly entry: TenantPlayerBossLeaderboardEntry;
+    readonly scores: PublishedPlayerFullListScores;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface PublishedPlayerFullListScores {
+    readonly peak: number | null;
+    readonly mastery: number | null;
+    readonly renown: number | null;
+}
+
 // From chroniclesdk/lua_project.go
 export interface PutLuaProjectContributorRequest {
     readonly permissions: readonly string[];
@@ -4159,6 +4601,102 @@ export interface RankingsSuccessRate {
     readonly kills: number;
     readonly wipes: number;
     readonly total: number;
+}
+
+// From chroniclesdk/rating_leaderboard.go
+export interface RatingBossLeaderboardEntry {
+    readonly generation_id: string;
+    readonly group_id: string;
+    readonly realm_id: string;
+    readonly player_guid: string;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly performance_metric: string;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly window_start?: string;
+    readonly window_end?: string;
+    readonly score: number;
+    readonly best_raw?: number;
+    readonly rank_one_raw?: number;
+    readonly best_locked_parse?: number;
+    readonly form?: number;
+    readonly floor_score?: number;
+    readonly eligible_kills: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_leaderboard.go
+/**
+ * RatingBossLeaderboardResponse lists persisted per-boss player scores from the
+ * active rating generation. A group-wide request returns rows across bosses; it
+ * does not aggregate scores across bosses.
+ */
+export interface RatingBossLeaderboardResponse {
+    readonly entries: readonly RatingBossLeaderboardEntry[];
+}
+
+// From chroniclesdk/rating_groups.go
+export interface RatingEligibleBoss {
+    readonly instance_name: string;
+    readonly encounter_name: string;
+}
+
+// From chroniclesdk/rating_groups.go
+/**
+ * RatingRealmGroup identifies a currently configured comparison cohort.
+ */
+export interface RatingRealmGroup {
+    readonly id: string;
+    readonly server_id: string;
+    readonly name: string;
+    readonly realms: readonly RatingRealmGroupRealm[];
+    readonly eligible_bosses: readonly RatingEligibleBoss[];
+}
+
+// From chroniclesdk/rating_groups.go
+export interface RatingRealmGroupRealm {
+    readonly id: string;
+    readonly name: string;
+}
+
+// From chroniclesdk/rating_groups.go
+export interface RatingRealmGroupsResponse {
+    readonly groups: readonly RatingRealmGroup[];
+}
+
+// From chroniclesdk/rating_leaderboard.go
+export interface RatingScopeLeaderboardEntry {
+    readonly generation_id: string;
+    readonly group_id: string;
+    readonly realm_id: string;
+    readonly player_guid: string;
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly performance_metric: string;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly score: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_leaderboard.go
+/**
+ * RatingScopeLeaderboardResponse is one materialized raid or global board for
+ * an exact cohort. Scores never combine character specs on demand.
+ */
+export interface RatingScopeLeaderboardResponse {
+    readonly scope: string; // raid or global
+    readonly entries: readonly RatingScopeLeaderboardEntry[];
 }
 
 // From chroniclesdk/server_application.go
@@ -5277,6 +5815,133 @@ export interface Tenant {
     readonly external_linking?: ExternalLinking;
     readonly created_at: string;
     readonly updated_at: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface TenantGuildBossLeaderboardEntry {
+    readonly generation_id: string;
+    readonly realm_id: string;
+    readonly guild_id: string;
+    readonly guild_name?: string;
+    readonly realm_name: string;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly window_start?: string;
+    readonly window_end?: string;
+    readonly score: number;
+    readonly best_raw?: number;
+    readonly rank_one_raw?: number;
+    readonly best_locked_parse?: number;
+    readonly form?: number;
+    readonly floor_score?: number;
+    readonly eligible_kills: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface TenantGuildBossLeaderboardResponse {
+    readonly entries: readonly TenantGuildBossLeaderboardEntry[];
+    readonly next_cursor?: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface TenantGuildScopeLeaderboardEntry {
+    readonly generation_id: string;
+    readonly realm_id: string;
+    readonly guild_id: string;
+    readonly guild_name?: string;
+    readonly realm_name: string;
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly score: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface TenantGuildScopeLeaderboardResponse {
+    readonly scope: string;
+    readonly entries: readonly TenantGuildScopeLeaderboardEntry[];
+    readonly next_cursor?: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface TenantPlayerBossLeaderboardEntry {
+    readonly generation_id: string;
+    readonly realm_id: string;
+    readonly player_guid: string;
+    readonly player_name?: string;
+    readonly guild_name?: string;
+    readonly realm_name: string;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly performance_metric: string;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly window_start?: string;
+    readonly window_end?: string;
+    readonly score: number;
+    readonly best_raw?: number;
+    readonly rank_one_raw?: number;
+    readonly best_locked_parse?: number;
+    readonly form?: number;
+    readonly floor_score?: number;
+    readonly eligible_kills: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+/**
+ * Tenant rating leaderboards expose materialized, raid-filtered scores, never a
+ * global board or a recomputed rank. Scope responses always report "raid".
+ */
+export interface TenantPlayerBossLeaderboardResponse {
+    readonly entries: readonly TenantPlayerBossLeaderboardEntry[];
+    readonly next_cursor?: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface TenantPlayerScopeLeaderboardEntry {
+    readonly generation_id: string;
+    readonly realm_id: string;
+    readonly player_guid: string;
+    readonly player_name?: string;
+    readonly guild_name?: string;
+    readonly realm_name: string;
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly performance_metric: string;
+    readonly rating_metric: string;
+    readonly window_kind: string;
+    readonly score: number;
+    /**
+     * BestRaw is a raid Peak's throughput: total output over total fight time
+     * across the bosses it counts.
+     */
+    readonly best_raw?: number;
+    readonly computed_at?: string;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface TenantPlayerScopeLeaderboardResponse {
+    readonly scope: string;
+    readonly entries: readonly TenantPlayerScopeLeaderboardEntry[];
+    readonly next_cursor?: string;
 }
 
 // From chroniclesdk/proofs.go

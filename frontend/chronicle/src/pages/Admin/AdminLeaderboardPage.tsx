@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { AdminRatingRebuilds } from "./AdminRatingRebuilds";
 import type { LeaderboardVersionRequirements } from "@/api/typesGenerated";
 import { useAdminInstanceNames } from "@/api/queries";
 import { Loader2 } from "lucide-react";
+import { enqueueRatingJob, type RatingJobAction, type RatingJobResult } from "./ratingJobs";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 
@@ -24,6 +26,23 @@ export function AdminLeaderboardPage() {
   const [minAddon, setMinAddon] = useState("");
   const [saving, setSaving] = useState(false);
   const [settingAll, setSettingAll] = useState(false);
+  const [pendingRatingJob, setPendingRatingJob] = useState<RatingJobAction | null>(null);
+  const [ratingJobResult, setRatingJobResult] = useState<{ action: RatingJobAction; job: RatingJobResult } | null>(null);
+  const [ratingJobError, setRatingJobError] = useState("");
+
+  const enqueueRatingMaintenance = async (action: RatingJobAction) => {
+    setPendingRatingJob(action);
+    setRatingJobResult(null);
+    setRatingJobError("");
+    try {
+      const job = await enqueueRatingJob(action);
+      setRatingJobResult({ action, job });
+    } catch (error) {
+      setRatingJobError(error instanceof Error ? error.message : "Could not enqueue rating maintenance");
+    } finally {
+      setPendingRatingJob(null);
+    }
+  };
 
   const upsertOne = async (name: string) => {
     const res = await fetch("/api/v1/admin/leaderboard/version-requirements", {
@@ -167,6 +186,34 @@ export function AdminLeaderboardPage() {
           </p>
         )}
       </Card>
+      <Card className="space-y-4 p-4">
+        <div>
+          <h3 className="font-semibold">Rating maintenance</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Both dispatchers also run daily. Repair missing Renown kill facts across all tenants first, wait for its child jobs to finish,
+            then rebuild ratings (including Renown scores) across all tenants with realms. Scoring is fixed; Renown awards follow each realm's game flavor.
+            Enqueueing is not the same as publishing scores.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Button variant="outline" disabled={pendingRatingJob !== null} onClick={() => void enqueueRatingMaintenance("renown-repair")}>
+            {pendingRatingJob === "renown-repair" && <Loader2 className="mr-2 size-4 animate-spin" />}
+            Repair Renown facts (all tenants)
+          </Button>
+          <Button disabled={pendingRatingJob !== null} onClick={() => void enqueueRatingMaintenance("rebuild-all")}>
+            {pendingRatingJob === "rebuild-all" && <Loader2 className="mr-2 size-4 animate-spin" />}
+            Rebuild ratings + Renown (all tenants with realms)
+          </Button>
+        </div>
+        {ratingJobResult && (
+          <p role="status" className="text-sm text-muted-foreground">
+            {ratingJobResult.action === "renown-repair" ? "Renown repair" : "Rating rebuild"} {ratingJobResult.job.unique_skipped_as_duplicate ? "was already queued" : "was queued"}
+            {" "}(job #{ratingJobResult.job.job_id}, {ratingJobResult.job.job_state}). Check the River jobs dashboard for completion.
+          </p>
+        )}
+        {ratingJobError && <p role="alert" className="text-sm text-destructive">{ratingJobError}</p>}
+      </Card>
+      <AdminRatingRebuilds />
     </div>
   );
 }
