@@ -73,10 +73,12 @@ export function LiveHubOverview({
     realm_names: realmName,
     ...exact,
   };
-  const stats = useRankingsStats({ ...statsParams, metric }, !!exact);
+  // Spec spreads only appear on character boards; Guilds mode never draws them.
+  const characters = subject === "characters";
+  const stats = useRankingsStats({ ...statsParams, metric }, !!exact && characters);
   const offRoleStats = useRankingsStats(
     { ...statsParams, metric: metric === "dps" ? "hps" : "dps" },
-    !!exact && !!scope.cls,
+    !!exact && characters && !!scope.cls,
   );
   // Kill counts and times are not realm-filtered, and kill times mix raid sizes; only show them where that cannot mislead.
   const instanceWide = !realmName && raids.length === 1;
@@ -130,7 +132,7 @@ export function LiveHubOverview({
         bossKills:
           instanceWide && scope.boss ? bossKills.data?.entries : undefined,
         unfiltered: !realmName && !scope.cls,
-        pending: stats.isPending && !!exact,
+        pending: stats.isPending && !!exact && characters,
       })
     : { pending: true };
 
