@@ -26,6 +26,8 @@ describe("live Ratings tab", () => {
   it("draws the board and a card per boss from one Ratings-depth summary, Peak with its DPS", () => {
     const html = renderToStaticMarkup(<LiveHubRatings {...props} />)
     expect(html).toContain("Top")
+    expect(html).toContain('data-entity-kind="character"')
+    expect(html).toContain('&quot;realm&quot;:&quot;Nordanaar&quot;')
     expect(html).toContain("1,300/s")
     expect(html).toContain("Rag")
     expect(html).toContain("Luc")
@@ -56,6 +58,7 @@ describe("set board client", () => {
     expect(page.rows[0].rank).toBe(7)
     expect(page.rows[0].scores?.peak?.raw).toBe(1500)
     expect(page.rows[0].entry.raw).toBeUndefined()
+    expect(page.rows[0].entry).toMatchObject({ realm: "R", guid: "g" })
     expect(page.hasPreviousPage && page.hasNextPage).toBe(true)
     const withParts = setBoardPage({ rows: [{ rank: 1, realm_id: "r", realm_name: "R", subject_id: "g", name: "Zed", guild_name: "", player_class: "MAGE",
       player_spec: "Fire", player_sub_spec: "", score: 80, peak: 90, mastery: 80, renown: 0, mastery_parts: { peak: 91, form: 82, floor: 60, eligible_kills: 7 } }],

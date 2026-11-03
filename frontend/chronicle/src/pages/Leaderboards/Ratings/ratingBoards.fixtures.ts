@@ -13,6 +13,9 @@ export type RatingPeriod = "180d" | "all"
 export interface RatingEntry {
   id: string
   name: string
+  /** Published character identity for the site-wide Alt+click entity menu. */
+  realm?: string
+  guid?: string
   guild?: string
   cls: string
   spec: string

@@ -7,6 +7,7 @@ import { BoardSkeleton } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
 import { BossPortrait, Emblem, RankMark } from "@/pages/Leaderboards/Ratings/RatingParts"
 import { METRIC_THEMES, type MetricTheme, type RatingView } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { formatClock, guildRatings, type GuildRating } from "./hub.fixtures"
+import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities"
 
 /** Published guild ratings for the guild boards: whole ranked lists, and each boss's leaders. */
 export interface GuildRatingData {
@@ -78,7 +79,7 @@ export function MetricColumns({ columns, onOpen, ranksKnown = true }: { columns:
 }
 
 /** Guild logo (when it has one) and name; a blank slot keeps names aligned. */
-export function GuildName({ guild, logo, size = "size-5" }: { guild: string; logo?: string; size?: string }) {
+export function GuildName({ guild, guildId, logo, size = "size-5" }: { guild: string; guildId?: string; logo?: string; size?: string }) {
   return (
     <>
       {logo ? (
@@ -86,13 +87,13 @@ export function GuildName({ guild, logo, size = "size-5" }: { guild: string; log
       ) : (
         <span className={`${size} shrink-0`} aria-hidden />
       )}
-      <span className="truncate">{guild}</span>
+      <span className="truncate" {...guildAttributes(guildId, guild)}>{guild}</span>
     </>
   )
 }
 
 function toRows(list: GuildRating[]): MetricRow[] {
-  return list.map((g) => ({ id: g.guild, name: <GuildName guild={g.guild} logo={g.logo} />, score: g.score }))
+  return list.map((g) => ({ id: g.guildId ?? g.guild, name: <GuildName guild={g.guild} guildId={g.guildId} logo={g.logo} />, score: g.score }))
 }
 
 /** The overview's ratings card in Guilds mode: top five guilds per metric. */
@@ -277,7 +278,7 @@ function GuildEntryRow({ rating: g, rank, theme }: { rating: GuildRating; rank: 
       <RankMark rank={rank} size="sm" />
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
-          <GuildName guild={g.guild} logo={g.logo} />
+          <GuildName guild={g.guild} guildId={g.guildId} logo={g.logo} />
         </span>
         <span className="block truncate pl-7 text-[11px] text-muted-foreground">
           {g.ms !== undefined ? `${formatClock(g.ms)} · ${g.date}` : g.detail}
@@ -403,7 +404,7 @@ function GuildFullTable({
                 </td>
                 <td className="px-2 py-2 pr-8 whitespace-nowrap">
                   <span className="flex items-center gap-2.5 font-medium">
-                    <GuildName guild={g.guild} logo={g.logo} size="size-6" />
+                    <GuildName guild={g.guild} guildId={g.guildId} logo={g.logo} size="size-6" />
                   </span>
                 </td>
                 {view === "overview" ? (
@@ -502,7 +503,7 @@ function BossBoard({
                 <span className="w-3.5 font-mono text-[10px] text-muted-foreground">{i + 1}</span>
               )}
               <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                <GuildName guild={g.guild} logo={g.logo} size="size-4" />
+                <GuildName guild={g.guild} guildId={g.guildId} logo={g.logo} size="size-4" />
               </span>
               <span className="font-mono tabular-nums">{t.format(g.score)}</span>
             </li>

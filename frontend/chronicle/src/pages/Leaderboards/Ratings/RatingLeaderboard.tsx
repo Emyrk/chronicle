@@ -14,6 +14,7 @@ import {
 import { BoardSearch, RatingFullList } from "./RatingFullList"
 import type { RatingLiveBoard, RatingLiveData, RatingLiveState } from "./ratingLiveData"
 import { Emblem, EntryRow, RawTag, ScopeMark, SpecIcon } from "./RatingParts"
+import { ratingEntryAttributes } from "./ratingEntities"
 import { METRIC_THEMES, VIEW_ORDER, scopeTitle, type MetricTheme, type RatingView } from "./ratingThemes"
 
 /** What the cards under the board split by. */
@@ -410,7 +411,7 @@ function CompactRow({ entry, theme, lead }: { entry: RatingEntry; theme: MetricT
     >
       {lead}
       <SpecIcon cls={entry.cls} spec={entry.spec} className="size-4 shrink-0 rounded-sm" />
-      <span className="min-w-0 flex-1 truncate" style={{ color: CLASS_CSS_VAR[entry.cls] }}>
+      <span className="min-w-0 flex-1 truncate" style={{ color: CLASS_CSS_VAR[entry.cls] }} {...ratingEntryAttributes(entry)}>
         {entry.name}
       </span>
       {entry.raw ? <RawTag raw={entry.raw} className="text-[10px]" /> : null}

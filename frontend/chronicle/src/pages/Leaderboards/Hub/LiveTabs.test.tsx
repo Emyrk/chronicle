@@ -16,8 +16,8 @@ vi.mock("@/pages/Rankings/RankingsTable", () => ({
 }))
 
 const speedrun = {
-  instance_id: "live-run", slug: "live-speedrun", guild_name: "Live guild", duration_ms: 321000,
-  completion_time: "2026-10-01T00:00:00Z", player_count: 20, realm_name: "Live realm",
+  instance_id: "live-run", slug: "live-speedrun", guild_id: "live-guild", guild_name: "Live guild", duration_ms: 321000,
+  start_time: "2026-10-01T00:00:00Z", completion_time: "2026-10-01T00:05:21Z", player_count: 20, realm_name: "Live realm",
 } as SpeedrunLeaderboardEntry
 const performance = { player_name: "Live player", log_hashed_slug: "live-log" } as RankingsEntry
 const response: RankingsLeaderboardResponse = { entries: [performance], total_count: 1 }
@@ -44,7 +44,9 @@ describe("Hub leaderboard live props", () => {
     expect(markup).toContain('data-testid="podium">Live guild')
     expect(markup).toContain("Live realm")
     expect(markup).toContain("5:21")
-    expect(markup.match(/Live guild/g)).toHaveLength(2)
+    expect(markup.match(/>Live guild</g)).toHaveLength(2)
+    expect(markup).toContain('data-entity-kind="guild"')
+    expect(markup).toContain('data-entity-kind="raid"')
     expect(markup).toContain("<table")
   })
 
@@ -58,12 +60,14 @@ describe("Hub leaderboard live props", () => {
   })
 
   it("opens a hand-picked set on its bosses' kill times and loads only that board", () => {
-    const kill = { encounter_id: "k1", encounter_name: "Ragnaros", guild_name: "Fast Guild", guild_id: "g1", realm_name: "Realm", duration_secs: 95, killed_at: "2026-10-01T00:00:00Z" }
+    const kill = { encounter_id: "k1", instance_id: "run-1", instance_name: "Molten Core", encounter_name: "Ragnaros", guild_name: "Fast Guild", guild_id: "g1", realm_name: "Realm", duration_secs: 95, killed_at: "2026-10-01T00:00:00Z" }
     const markup = renderToStaticMarkup(<SpeedrunsTab instanceName="Molten Core" bosses={["Lucifron", "Ragnaros"]} selection={{ kind: "bosses", bosses: ["Ragnaros"] }}
       live={{ kills: { entries: [kill as never] } }} />)
     expect(markup).toMatch(/aria-pressed="true"[^>]*>Kill times · Ragnaros/)
     expect(markup).toContain("&lt;Fast Guild&gt;")
     expect(markup).toContain("1:35")
+    expect(markup).toContain('data-entity-kind="guild"')
+    expect(markup).toContain('data-entity-kind="encounter"')
     expect(markup).not.toContain("Fastest full clears")
   })
 

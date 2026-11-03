@@ -24,6 +24,8 @@ export type HubSubject = "characters" | "guilds"
 export interface HubPlayer {
   id: string
   name: string
+  /** Published realm; fixtures omit it because their characters are not inspectable. */
+  realm?: string
   guild: string
   cls: string
   spec: string
@@ -39,6 +41,7 @@ export interface ThroughputRow {
 
 export interface GuildRow {
   guild: string
+  guildId?: string
   logo?: string
   value: number
   detail: string
@@ -653,6 +656,7 @@ export function boxPlotStats(boss: string | undefined, role: HubRole): RankingsB
 /** A guild on a rating board: its runs are rated like a player's parses. */
 export interface GuildRating {
   guild: string
+  guildId?: string
   logo?: string
   score: number
   /** What the score stands on: the run time for Peak, Form/Floor for Mastery, kills for Renown. */

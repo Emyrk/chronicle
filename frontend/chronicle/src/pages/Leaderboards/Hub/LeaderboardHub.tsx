@@ -17,6 +17,7 @@ import { formatPeakRaw, peakWithRaw } from "./peakDisplay"
 import { TABS, type HubTab } from "./hubTabs"
 import { EncounterSidebar } from "./EncounterSidebar"
 import { GuildName, GuildRatingBoards, GuildRatingLeaders, MetricColumns } from "./GuildRatings"
+import { entityAttributes } from "@/components/EntityMenu/entity"
 import { StatisticsTab, type StatisticsView } from "./StatisticsTab"
 import { SpeedrunsTab } from "./SpeedrunsTab"
 import { PerformancesTab } from "./PerformancesTab"
@@ -1220,11 +1221,14 @@ function BossStat({ icon, label, value, sub, children }: { icon: ReactNode; labe
   )
 }
 
-function PlayerName({ player }: { player: HubPlayer }) {
+function PlayerName({ player, iconSize = "size-4" }: { player: HubPlayer; iconSize?: string }) {
+  const attributes = player.realm
+    ? entityAttributes({ kind: "character", realm: player.realm, guid: player.id, name: player.name, className: player.cls })
+    : {}
   return (
     <>
-      <SpecIcon cls={player.cls} spec={player.spec} className="size-4 shrink-0 rounded-sm" />
-      <span className="truncate" style={{ color: CLASS_CSS_VAR[player.cls] }}>
+      <SpecIcon cls={player.cls} spec={player.spec} className={`${iconSize} shrink-0 rounded-sm`} />
+      <span className="truncate" style={{ color: CLASS_CSS_VAR[player.cls] }} {...attributes}>
         {player.name}
       </span>
     </>
@@ -1235,14 +1239,7 @@ function RatingLeaders({ leaders, role, onOpen }: { leaders: Record<RatingMetric
   const rows = (m: RatingMetric) =>
     leaders[m].map((l) => ({
       id: l.player.id,
-      name: (
-        <>
-          <SpecIcon cls={l.player.cls} spec={l.player.spec} className="size-5 shrink-0 rounded-sm" />
-          <span className="truncate" style={{ color: CLASS_CSS_VAR[l.player.cls] }}>
-            {l.player.name}
-          </span>
-        </>
-      ),
+      name: <PlayerName player={l.player} iconSize="size-5" />,
       score: l.score,
       raw: l.raw ? formatPeakRaw(l.raw, role === "dps" ? "dps" : "hps") : undefined,
     }))
@@ -1260,7 +1257,7 @@ function RunList({ runs }: { runs: readonly SpeedrunLeaderboardEntry[] }) {
         >
           <span className="font-mono text-xs text-muted-foreground">{i + 1}</span>
           <span className="flex min-w-0 items-center gap-2 font-medium">
-            <GuildName guild={r.guild_name} logo={r.guild_logo_url} />
+            <GuildName guild={r.guild_name} guildId={r.guild_id} logo={r.guild_logo_url} />
           </span>
           <span className="text-right font-mono font-bold tabular-nums">{formatClock(r.duration_ms)}</span>
           <span className="hidden truncate text-right text-xs text-muted-foreground md:block">
@@ -1282,11 +1279,8 @@ function ThroughputList({ rows }: { rows: readonly ThroughputRow[] }) {
           className="grid grid-cols-[24px_1fr_70px] items-center gap-2 border-b border-white/5 px-4 py-2 text-sm last:border-b-0 md:grid-cols-[24px_1fr_120px_70px_1fr]"
         >
           <span className="font-mono text-xs text-muted-foreground">{i + 1}</span>
-          <span className="flex min-w-0 items-center gap-2">
-            <SpecIcon cls={r.player.cls} spec={r.player.spec} className="size-5 shrink-0 rounded-sm" />
-            <span className="truncate font-medium" style={{ color: CLASS_CSS_VAR[r.player.cls] }}>
-              {r.player.name}
-            </span>
+          <span className="flex min-w-0 items-center gap-2 font-medium">
+            <PlayerName player={r.player} iconSize="size-5" />
           </span>
           <span className="hidden truncate text-xs opacity-80 md:block" style={{ color: CLASS_CSS_VAR[r.player.cls] }}>
             {r.player.subSpec ? specName(r.player) : r.player.spec}
@@ -1321,7 +1315,7 @@ function GuildList({
           <span className="w-4 font-mono text-xs text-muted-foreground">{i + 1}</span>
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center gap-2 font-medium">
-              <GuildName guild={g.guild} logo={g.logo} />
+              <GuildName guild={g.guild} guildId={g.guildId} logo={g.logo} />
             </span>
             {showDetail && g.detail && <span className="block text-[11px] text-muted-foreground">{g.detail}</span>}
           </span>

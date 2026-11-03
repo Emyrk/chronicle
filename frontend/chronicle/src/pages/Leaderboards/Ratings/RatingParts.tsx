@@ -5,6 +5,7 @@ import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay"
 import { getBossPortrait } from "./bossPortraits"
 import { scopeKind, type RatingEntry, type RatingScope } from "./ratingBoards.fixtures"
 import { RANK_COLORS, specIconUrl, type MetricTheme } from "./ratingThemes"
+import { ratingEntryAttributes } from "./ratingEntities"
 
 export function SpecIcon({ cls, spec, className }: { cls: string; spec: string; className?: string }) {
   // Renown entries aggregate all classes, so they have no class/spec icon.
@@ -34,7 +35,11 @@ export function EntryRow({ entry, rank, theme, size }: { entry: RatingEntry; ran
       <SpecIcon cls={entry.cls} spec={entry.spec} className={cn("shrink-0 rounded-sm", lg ? "size-7" : "size-5")} />
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-baseline gap-1.5">
-          <span className={cn("max-w-full shrink-0 truncate font-medium", lg ? "text-base" : "text-sm")} style={{ color: CLASS_CSS_VAR[entry.cls] }}>
+          <span
+            className={cn("max-w-full shrink-0 truncate font-medium", lg ? "text-base" : "text-sm")}
+            style={{ color: CLASS_CSS_VAR[entry.cls] }}
+            {...ratingEntryAttributes(entry)}
+          >
             {entry.name}
           </span>
           {entry.guild && <span className="min-w-0 truncate text-xs text-muted-foreground">&lt;{entry.guild}&gt;</span>}

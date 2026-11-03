@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon"
 import { EntryRow, SpecIcon } from "./RatingParts"
+import { GuildName } from "@/pages/Leaderboards/Hub/GuildRatings"
 import { METRIC_THEMES } from "./ratingThemes"
 
 describe("published rating icons", () => {
@@ -21,5 +22,14 @@ describe("published rating icons", () => {
     const html = renderToStaticMarkup(<SpecIcon cls="MAGE" spec="" />)
     expect(html).toContain("/c/icons/class_mage.png")
     expect(html).not.toContain("/c/icons/spec_mage_.png")
+  })
+
+  it("marks published character and guild names for Alt+click", () => {
+    const character = renderToStaticMarkup(<EntryRow entry={{ id: "one", name: "Raider", realm: "Turtle", guid: "Player-1", cls: "MAGE", spec: "Fire", subSpec: "", score: 10, detail: "Turtle" }} theme={METRIC_THEMES.peak} size="sm" />)
+    const guild = renderToStaticMarkup(<GuildName guild="Raiders" guildId="guild-1" />)
+    expect(character).toContain('data-entity-kind="character"')
+    expect(character).toContain('&quot;guid&quot;:&quot;Player-1&quot;')
+    expect(guild).toContain('data-entity-kind="guild"')
+    expect(guild).toContain('&quot;id&quot;:&quot;guild-1&quot;')
   })
 })

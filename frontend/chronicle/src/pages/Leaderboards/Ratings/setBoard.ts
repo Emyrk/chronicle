@@ -55,6 +55,8 @@ export function setBoardEntry(row: HubSetBoardRow, metric: RatingMetric): Rating
   return {
     id: `${row.realm_id}:${row.subject_id}`,
     name: row.name || row.subject_id,
+    realm: row.realm_name,
+    guid: row.subject_id,
     guild: row.guild_name || undefined,
     cls: row.player_class,
     spec: row.player_spec,

@@ -36,6 +36,8 @@ function playerEntry(e: HubPlayerRatingEntry, metric: RatingMetric): RatingEntry
   return {
     id: `${e.realm_id}:${e.player_guid}`,
     name: e.player_name || e.player_guid,
+    realm: e.realm_name,
+    guid: e.player_guid,
     cls: e.player_class,
     spec: e.player_spec,
     subSpec: e.player_sub_spec,
@@ -46,7 +48,7 @@ function playerEntry(e: HubPlayerRatingEntry, metric: RatingMetric): RatingEntry
 }
 
 function guildRating(e: HubGuildRatingEntry): GuildRating {
-  return { guild: e.guild_name || "Unknown guild", score: e.score, detail: e.realm_name }
+  return { guild: e.guild_name || "Unknown guild", guildId: e.guild_id, score: e.score, detail: e.realm_name }
 }
 
 /**
@@ -123,9 +125,9 @@ export function LiveHubRatings({
     const failed = guildLists.find((q) => q.isError)
     const data: GuildRatingData = {
       ratings: {
-        peak: (guildLists[0].data?.rows ?? []).map((r) => ({ guild: r.name || "Unknown guild", score: r.score, detail: r.realm_name })),
-        mastery: (guildLists[1].data?.rows ?? []).map((r) => ({ guild: r.name || "Unknown guild", score: r.score, detail: r.realm_name })),
-        renown: (guildLists[2].data?.rows ?? []).map((r) => ({ guild: r.name || "Unknown guild", score: r.score, detail: r.realm_name })),
+        peak: (guildLists[0].data?.rows ?? []).map((r) => ({ guild: r.name || "Unknown guild", guildId: r.subject_id, score: r.score, detail: r.realm_name })),
+        mastery: (guildLists[1].data?.rows ?? []).map((r) => ({ guild: r.name || "Unknown guild", guildId: r.subject_id, score: r.score, detail: r.realm_name })),
+        renown: (guildLists[2].data?.rows ?? []).map((r) => ({ guild: r.name || "Unknown guild", guildId: r.subject_id, score: r.score, detail: r.realm_name })),
       },
       perBoss: (boss) => {
         const board = summary.data?.ratings.bosses.find((b) => b.encounter_name === boss)?.guild

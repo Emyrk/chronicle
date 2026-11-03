@@ -13,6 +13,7 @@ import {
   type RatingScope,
 } from "./ratingBoards.fixtures"
 import { Emblem, RankMark, RawTag, ScopeMark, SpecIcon } from "./RatingParts"
+import { ratingEntryAttributes } from "./ratingEntities"
 import { METRIC_THEMES, type RatingView } from "./ratingThemes"
 import type { RatingLiveData } from "./ratingLiveData"
 
@@ -200,7 +201,7 @@ export function RatingFullList({
                     <SpecIcon cls={entry.cls} spec={entry.spec} className="size-6 shrink-0 rounded-sm" />
                     <div className="min-w-0">
                       <div className="flex min-w-0 items-baseline gap-1.5">
-                        <span className="shrink-0 font-medium" style={{ color: CLASS_CSS_VAR[entry.cls] }}>
+                        <span className="shrink-0 font-medium" style={{ color: CLASS_CSS_VAR[entry.cls] }} {...ratingEntryAttributes(entry)}>
                           {entry.name}
                         </span>
                         {entry.guild && <span className="truncate text-xs text-muted-foreground">&lt;{entry.guild}&gt;</span>}

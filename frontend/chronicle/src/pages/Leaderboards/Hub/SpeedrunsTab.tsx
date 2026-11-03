@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Timer, Users } from "lucide-react"
 import type { KillTimeLeaderboardEntry, SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
 import { cn } from "@/lib/utils"
-import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities"
+import { guildAttributes, killAttributes, speedrunClearAttributes } from "@/components/EntityMenu/leaderboardEntities"
 import { Podium } from "@/pages/Leaderboard/Podium"
 import { formatClock, speedruns } from "./hub.fixtures"
 import { defaultSpeedrunsView, selectedBosses, type EncounterSelection, type SpeedrunsView } from "./encounterSelection"
@@ -92,13 +92,13 @@ function KillTimes({
   if (live?.error) return <Status alert>Could not load kill times: {live.error.message}</Status>
   if (!story && (live?.loading || !live?.entries)) return <Status>Loading kill times…</Status>
   const limit = bosses.length === 1 ? 10 : 3
-  const rows = (boss: string): { key: string; guild: string; guildId?: string; ms: number; date: string; realm: string }[] =>
+  const rows = (boss: string): { key: string; guild: string; guildId?: string; ms: number; date: string; realm: string; entry?: KillTimeLeaderboardEntry }[] =>
     story
       ? speedruns([boss], allBosses, instanceName, limit).map((r) => ({ key: r.instance_id, guild: r.guild_name, ms: r.duration_ms, date: r.completion_time, realm: r.realm_name }))
       : (live?.entries ?? [])
           .filter((e) => e.encounter_name === boss)
           .slice(0, limit)
-          .map((e) => ({ key: e.encounter_id, guild: e.guild_name, guildId: e.guild_id, ms: Math.round(e.duration_secs * 1000), date: e.killed_at, realm: e.realm_name }))
+          .map((e) => ({ key: e.encounter_id, guild: e.guild_name, guildId: e.guild_id, ms: Math.round(e.duration_secs * 1000), date: e.killed_at, realm: e.realm_name, entry: e }))
   return (
     <section aria-label="Kill times" className={cn("grid gap-4", bosses.length > 1 && "sm:grid-cols-2 xl:grid-cols-3")}>
       {bosses.map((boss) => {
@@ -118,7 +118,7 @@ function KillTimes({
                       &lt;{r.guild || "Unknown guild"}&gt;
                     </span>
                     <span className="hidden truncate text-xs text-muted-foreground sm:inline">{r.realm}</span>
-                    <span className="font-mono tabular-nums">{formatClock(r.ms)}</span>
+                    <span className="font-mono tabular-nums" {...(r.entry ? killAttributes(r.entry) : {})}>{formatClock(r.ms)}</span>
                   </li>
                 ))}
               </ol>
@@ -170,10 +170,12 @@ function ClearBoard({ instanceName, bosses, live, story }: { instanceName: strin
                     ) : (
                       <span className="size-5 shrink-0" aria-hidden />
                     )}
-                    <span className="truncate">{r.guild_name}</span>
+                    <span className="truncate" {...guildAttributes(r.guild_id, r.guild_name)}>{r.guild_name}</span>
                   </span>
                 </td>
-                <td className="px-2 py-2 text-right font-mono tabular-nums">{formatClock(r.duration_ms)}</td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums">
+                  <span {...speedrunClearAttributes(r, instanceName)}>{formatClock(r.duration_ms)}</span>
+                </td>
                 <td className="hidden px-2 py-2 text-right text-muted-foreground sm:table-cell">
                   <span className="inline-flex items-center gap-1">
                     <Users className="size-3" />

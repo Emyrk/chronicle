@@ -57,6 +57,7 @@ function player(
     HubPlayerRatingEntry,
     | "player_guid"
     | "player_name"
+    | "realm_name"
     | "player_class"
     | "player_spec"
     | "player_sub_spec"
@@ -67,6 +68,7 @@ function player(
   return {
     id: entry.player_guid,
     name: entry.player_name || entry.player_guid,
+    realm: entry.realm_name,
     guild,
     cls: entry.player_class,
     spec: entry.player_spec,
@@ -105,6 +107,7 @@ function guildLeaders(
       .slice(0, LEADERS)
       .map((e) => ({
         guild: e.guild_name || "Unknown guild",
+        guildId: e.guild_id,
         score: e.score,
         detail: "",
       }));
@@ -121,6 +124,7 @@ function throughput(entry: RankingsEntry, role: HubRole): ThroughputRow {
       {
         player_guid: entry.player_guid,
         player_name: entry.player_name,
+        realm_name: entry.realm_name,
         player_class: entry.player_class,
         player_spec: entry.player_spec,
         player_sub_spec: entry.sub_spec ?? "",
@@ -270,6 +274,7 @@ export function liveOverviewData(src: LiveOverviewSources): OverviewData {
       .map(
         (e): GuildRow => ({
           guild: e.guild_name || "Unknown guild",
+          guildId: e.guild_id,
           value: Math.round(e.score),
           detail: "",
         }),
