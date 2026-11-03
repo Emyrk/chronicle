@@ -25821,6 +25821,211 @@ func (q *sqlQuerier) StartTenantRatingRebuild(ctx context.Context, arg StartTena
 	return column_1, err
 }
 
+const getPublishedGuildBossFullList = `-- name: GetPublishedGuildBossFullList :one
+WITH best AS (
+  SELECT DISTINCT ON (rated.realm_id, rated.guild_id) rated.generation_id, rated.tenant_id, rated.realm_id, rated.guild_id, rated.instance_name, rated.encounter_name, rated.difficulty_name, rated.max_players, rated.rating_metric, rated.window_kind, rated.window_start, rated.window_end, rated.score, rated.best_raw, rated.rank_one_raw, rated.best_locked_parse, rated.form, rated.floor_score, rated.eligible_kills, rated.computed_at, to_jsonb(rated) AS payload
+  FROM guild_tenant_rating_boss_scores rated
+  JOIN rating_score_generations generation ON generation.id = rated.generation_id
+    AND generation.tenant_id = rated.tenant_id AND generation.status = 'active'
+  JOIN wow_server_realms realm ON realm.id = rated.realm_id
+  JOIN wow_servers server ON server.id = realm.server_id
+  WHERE rated.tenant_id = $1 AND rated.generation_id = $2
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND rated.instance_name = $3
+    AND rated.encounter_name = $4
+    AND rated.difficulty_name = $5 AND rated.max_players = $6
+    AND rated.rating_metric = $7 AND rated.window_kind = $8
+  ORDER BY rated.realm_id, rated.guild_id, rated.score DESC
+),
+ranked AS (
+  SELECT best.generation_id, best.tenant_id, best.realm_id, best.guild_id, best.instance_name, best.encounter_name, best.difficulty_name, best.max_players, best.rating_metric, best.window_kind, best.window_start, best.window_end, best.score, best.best_raw, best.rank_one_raw, best.best_locked_parse, best.form, best.floor_score, best.eligible_kills, best.computed_at, best.payload, row_number() OVER (ORDER BY score DESC, realm_id, guild_id) AS global_rank
+  FROM best
+),
+displayed AS (
+  SELECT ranked.generation_id, ranked.tenant_id, ranked.realm_id, ranked.guild_id, ranked.instance_name, ranked.encounter_name, ranked.difficulty_name, ranked.max_players, ranked.rating_metric, ranked.window_kind, ranked.window_start, ranked.window_end, ranked.score, ranked.best_raw, ranked.rank_one_raw, ranked.best_locked_parse, ranked.form, ranked.floor_score, ranked.eligible_kills, ranked.computed_at, ranked.payload, ranked.global_rank, guild.name AS guild_name, realm.name AS realm_name
+  FROM ranked
+  JOIN wow_server_realms realm ON realm.id = ranked.realm_id
+  LEFT JOIN guilds guild ON guild.id = ranked.guild_id AND guild.realm_id = ranked.realm_id
+  WHERE (COALESCE(cardinality($9::uuid[]), 0) = 0 OR ranked.realm_id = ANY($9::uuid[]))
+    AND ($10::text = '' OR position(lower($10::text) in lower(COALESCE(guild.name, ranked.guild_id::text))) > 0)
+),
+paged AS (
+  SELECT displayed.generation_id, displayed.tenant_id, displayed.realm_id, displayed.guild_id, displayed.instance_name, displayed.encounter_name, displayed.difficulty_name, displayed.max_players, displayed.rating_metric, displayed.window_kind, displayed.window_start, displayed.window_end, displayed.score, displayed.best_raw, displayed.rank_one_raw, displayed.best_locked_parse, displayed.form, displayed.floor_score, displayed.eligible_kills, displayed.computed_at, displayed.payload, displayed.global_rank, displayed.guild_name, displayed.realm_name, scores.peak, scores.mastery, scores.renown
+  FROM displayed
+  LEFT JOIN LATERAL (
+    SELECT max(s.score) FILTER (WHERE s.rating_metric = 'peak' AND s.window_kind = $11::text) AS peak,
+           max(s.score) FILTER (WHERE s.rating_metric = 'mastery' AND s.window_kind = $11::text) AS mastery,
+           max(s.score) FILTER (WHERE s.rating_metric = 'renown' AND s.window_kind = $12::text) AS renown
+    FROM guild_tenant_rating_boss_scores s
+    WHERE s.tenant_id = $1 AND s.generation_id = $2 AND s.instance_name = $3 AND s.encounter_name = $4
+      AND s.realm_id = displayed.realm_id AND s.guild_id = displayed.guild_id
+      AND ((s.rating_metric IN ('peak', 'mastery')
+            AND s.difficulty_name = $13 AND s.max_players = $14)
+           OR (s.rating_metric = 'renown' AND s.difficulty_name = ''
+               AND s.max_players = 0))
+  ) scores ON true
+  ORDER BY displayed.global_rank
+  LIMIT $16::int OFFSET $15::int
+)
+SELECT (SELECT count(*) FROM displayed)::bigint AS total,
+       COALESCE((SELECT jsonb_agg(jsonb_build_object(
+         'rank', global_rank,
+         'entry', payload || jsonb_build_object('guild_name', guild_name, 'realm_name', realm_name),
+         'scores', jsonb_build_object('peak', peak, 'mastery', mastery, 'renown', renown)
+       ) ORDER BY global_rank) FROM paged), '[]'::jsonb) AS rows
+`
+
+type GetPublishedGuildBossFullListParams struct {
+	TenantID            uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID        uuid.UUID   `db:"generation_id" json:"generation_id"`
+	InstanceName        string      `db:"instance_name" json:"instance_name"`
+	EncounterName       string      `db:"encounter_name" json:"encounter_name"`
+	DifficultyName      string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers          int16       `db:"max_players" json:"max_players"`
+	RatingMetric        string      `db:"rating_metric" json:"rating_metric"`
+	WindowKind          string      `db:"window_kind" json:"window_kind"`
+	RealmIds            []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	SearchQuery         string      `db:"search_query" json:"search_query"`
+	OtherWindowKind     string      `db:"other_window_kind" json:"other_window_kind"`
+	RenownWindowKind    string      `db:"renown_window_kind" json:"renown_window_kind"`
+	OtherDifficultyName string      `db:"other_difficulty_name" json:"other_difficulty_name"`
+	OtherMaxPlayers     int16       `db:"other_max_players" json:"other_max_players"`
+	OffsetCount         int32       `db:"offset_count" json:"offset_count"`
+	LimitCount          int32       `db:"limit_count" json:"limit_count"`
+}
+
+type GetPublishedGuildBossFullListRow struct {
+	Total int64       `db:"total" json:"total"`
+	Rows  interface{} `db:"rows" json:"rows"`
+}
+
+// Rank the full tenant guild cohort before applying display-only realm/name filters.
+// A single statement computes the page and count from the same MVCC snapshot.
+func (q *sqlQuerier) GetPublishedGuildBossFullList(ctx context.Context, arg GetPublishedGuildBossFullListParams) (GetPublishedGuildBossFullListRow, error) {
+	row := q.db.QueryRow(ctx, getPublishedGuildBossFullList,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.RealmIds,
+		arg.SearchQuery,
+		arg.OtherWindowKind,
+		arg.RenownWindowKind,
+		arg.OtherDifficultyName,
+		arg.OtherMaxPlayers,
+		arg.OffsetCount,
+		arg.LimitCount,
+	)
+	var i GetPublishedGuildBossFullListRow
+	err := row.Scan(&i.Total, &i.Rows)
+	return i, err
+}
+
+const getPublishedGuildScopeFullList = `-- name: GetPublishedGuildScopeFullList :one
+WITH best AS (
+  SELECT DISTINCT ON (rated.realm_id, rated.guild_id) rated.generation_id, rated.tenant_id, rated.realm_id, rated.guild_id, rated.instance_name, rated.difficulty_name, rated.max_players, rated.rating_metric, rated.window_kind, rated.window_start, rated.window_end, rated.score, rated.computed_at, to_jsonb(rated) AS payload
+  FROM guild_tenant_rating_scope_scores rated
+  JOIN rating_score_generations generation ON generation.id = rated.generation_id
+    AND generation.tenant_id = rated.tenant_id AND generation.status = 'active'
+  JOIN wow_server_realms realm ON realm.id = rated.realm_id
+  JOIN wow_servers server ON server.id = realm.server_id
+  WHERE rated.tenant_id = $1 AND rated.generation_id = $2
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND rated.instance_name = $3
+    AND rated.difficulty_name = $4 AND rated.max_players = $5
+    AND rated.rating_metric = $6 AND rated.window_kind = $7
+  ORDER BY rated.realm_id, rated.guild_id, rated.score DESC
+),
+ranked AS (
+  SELECT best.generation_id, best.tenant_id, best.realm_id, best.guild_id, best.instance_name, best.difficulty_name, best.max_players, best.rating_metric, best.window_kind, best.window_start, best.window_end, best.score, best.computed_at, best.payload, row_number() OVER (ORDER BY score DESC, realm_id, guild_id) AS global_rank
+  FROM best
+),
+displayed AS (
+  SELECT ranked.generation_id, ranked.tenant_id, ranked.realm_id, ranked.guild_id, ranked.instance_name, ranked.difficulty_name, ranked.max_players, ranked.rating_metric, ranked.window_kind, ranked.window_start, ranked.window_end, ranked.score, ranked.computed_at, ranked.payload, ranked.global_rank, guild.name AS guild_name, realm.name AS realm_name
+  FROM ranked
+  JOIN wow_server_realms realm ON realm.id = ranked.realm_id
+  LEFT JOIN guilds guild ON guild.id = ranked.guild_id AND guild.realm_id = ranked.realm_id
+  WHERE (COALESCE(cardinality($8::uuid[]), 0) = 0 OR ranked.realm_id = ANY($8::uuid[]))
+    AND ($9::text = '' OR position(lower($9::text) in lower(COALESCE(guild.name, ranked.guild_id::text))) > 0)
+),
+paged AS (
+  SELECT displayed.generation_id, displayed.tenant_id, displayed.realm_id, displayed.guild_id, displayed.instance_name, displayed.difficulty_name, displayed.max_players, displayed.rating_metric, displayed.window_kind, displayed.window_start, displayed.window_end, displayed.score, displayed.computed_at, displayed.payload, displayed.global_rank, displayed.guild_name, displayed.realm_name, scores.peak, scores.mastery, scores.renown
+  FROM displayed
+  LEFT JOIN LATERAL (
+    SELECT max(s.score) FILTER (WHERE s.rating_metric = 'peak' AND s.window_kind = $10::text) AS peak,
+           max(s.score) FILTER (WHERE s.rating_metric = 'mastery' AND s.window_kind = $10::text) AS mastery,
+           max(s.score) FILTER (WHERE s.rating_metric = 'renown' AND s.window_kind = $11::text) AS renown
+    FROM guild_tenant_rating_scope_scores s
+    WHERE s.tenant_id = $1 AND s.generation_id = $2 AND s.instance_name = $3
+      AND s.realm_id = displayed.realm_id AND s.guild_id = displayed.guild_id
+      AND ((s.rating_metric IN ('peak', 'mastery')
+            AND s.difficulty_name = $12 AND s.max_players = $13)
+           OR (s.rating_metric = 'renown' AND s.difficulty_name = ''
+               AND s.max_players = 0))
+  ) scores ON true
+  ORDER BY displayed.global_rank
+  LIMIT $15::int OFFSET $14::int
+)
+SELECT (SELECT count(*) FROM displayed)::bigint AS total,
+       COALESCE((SELECT jsonb_agg(jsonb_build_object(
+         'rank', global_rank,
+         'entry', payload || jsonb_build_object('guild_name', guild_name, 'realm_name', realm_name),
+         'scores', jsonb_build_object('peak', peak, 'mastery', mastery, 'renown', renown)
+       ) ORDER BY global_rank) FROM paged), '[]'::jsonb) AS rows
+`
+
+type GetPublishedGuildScopeFullListParams struct {
+	TenantID            uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID        uuid.UUID   `db:"generation_id" json:"generation_id"`
+	InstanceName        string      `db:"instance_name" json:"instance_name"`
+	DifficultyName      string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers          int16       `db:"max_players" json:"max_players"`
+	RatingMetric        string      `db:"rating_metric" json:"rating_metric"`
+	WindowKind          string      `db:"window_kind" json:"window_kind"`
+	RealmIds            []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	SearchQuery         string      `db:"search_query" json:"search_query"`
+	OtherWindowKind     string      `db:"other_window_kind" json:"other_window_kind"`
+	RenownWindowKind    string      `db:"renown_window_kind" json:"renown_window_kind"`
+	OtherDifficultyName string      `db:"other_difficulty_name" json:"other_difficulty_name"`
+	OtherMaxPlayers     int16       `db:"other_max_players" json:"other_max_players"`
+	OffsetCount         int32       `db:"offset_count" json:"offset_count"`
+	LimitCount          int32       `db:"limit_count" json:"limit_count"`
+}
+
+type GetPublishedGuildScopeFullListRow struct {
+	Total int64       `db:"total" json:"total"`
+	Rows  interface{} `db:"rows" json:"rows"`
+}
+
+// Rank the full tenant guild cohort before applying display-only realm/name filters.
+// A single statement computes the page and count from the same MVCC snapshot.
+func (q *sqlQuerier) GetPublishedGuildScopeFullList(ctx context.Context, arg GetPublishedGuildScopeFullListParams) (GetPublishedGuildScopeFullListRow, error) {
+	row := q.db.QueryRow(ctx, getPublishedGuildScopeFullList,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.RealmIds,
+		arg.SearchQuery,
+		arg.OtherWindowKind,
+		arg.RenownWindowKind,
+		arg.OtherDifficultyName,
+		arg.OtherMaxPlayers,
+		arg.OffsetCount,
+		arg.LimitCount,
+	)
+	var i GetPublishedGuildScopeFullListRow
+	err := row.Scan(&i.Total, &i.Rows)
+	return i, err
+}
+
 const getBuildingTenantProjectionCheckpoint = `-- name: GetBuildingTenantProjectionCheckpoint :one
 SELECT cp.generation_id, cp.tenant_id, cp.config_revision, cp.as_of, cp.source_cutoff, cp.phase, cp.cursor, cp.manifest, cp.heartbeat_at FROM rating_rebuild_checkpoints cp
 JOIN rating_score_generations gen ON gen.id = cp.generation_id

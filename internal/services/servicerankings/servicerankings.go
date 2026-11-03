@@ -216,6 +216,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/time-parse-cohorts/spreads", s.handleTimeParseSpreads)
 
 	// Published tenant-wide rating leaderboards. Realm IDs filter rows only.
+	s.router.Get("/ratings/guild-full-list", s.handlePublishedGuildFullList)
 	s.router.Get("/ratings/player-full-list", s.handlePublishedPlayerFullList)
 	s.router.Get("/ratings/scope-leaderboard", s.handleTenantPlayerScopeLeaderboard)
 	s.router.Get("/ratings/boss-leaderboard", s.handleTenantPlayerBossLeaderboard)

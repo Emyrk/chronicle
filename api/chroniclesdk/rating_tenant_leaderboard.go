@@ -47,6 +47,21 @@ type PublishedPlayerFullListScores struct {
 	Renown  *float64 `json:"renown"`
 }
 
+// PublishedGuildFullListResponse carries globally ranked guild positions;
+// search and realm filters affect total, not the original rank.
+type PublishedGuildFullListResponse struct {
+	Rows        []PublishedGuildFullListRow `json:"rows"`
+	Total       int64                       `json:"total"`
+	Page        int                         `json:"page"`
+	HasNextPage bool                        `json:"has_next_page"`
+}
+
+type PublishedGuildFullListRow struct {
+	Rank   int64                           `json:"rank"`
+	Entry  TenantGuildBossLeaderboardEntry `json:"entry"`
+	Scores PublishedPlayerFullListScores   `json:"scores"`
+}
+
 type TenantPlayerBossLeaderboardEntry struct {
 	GenerationID      uuid.UUID  `json:"generation_id"`
 	RealmID           uuid.UUID  `json:"realm_id"`

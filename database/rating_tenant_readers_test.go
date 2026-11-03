@@ -133,6 +133,76 @@ func TestTenantRatingReaders(t *testing.T) {
 	guildBoss.RealmIds = playerBoss.RealmIds
 	guildScope.RealmIds = playerBoss.RealmIds
 	check(realms[1:2]) // cannot request another tenant's realm.
+	_, err = conn.Exec(ctx, "UPDATE guilds SET name='Filtered guild' WHERE id=$1", guilds[1])
+	require.NoError(t, err)
+	for _, table := range []string{"guild_tenant_rating_boss_scores", "guild_tenant_rating_scope_scores"} {
+		for _, metric := range []struct {
+			name, window, difficulty string
+			maxPlayers               int
+			score                    float64
+		}{{"mastery", "all_time", "Heroic", 40, 77}, {"renown", "career", "", 0, 18}} {
+			columns := "generation_id,tenant_id,realm_id,instance_name,difficulty_name,max_players,rating_metric,window_kind,score,guild_id"
+			values := "($1,$2,$3,'Molten Core',$4,$5,$6,$7,$8,$9)"
+			if table == "guild_tenant_rating_boss_scores" {
+				columns += ",encounter_name"
+				values = values[:len(values)-1] + ",'Ragnaros')"
+			}
+			_, err = conn.Exec(ctx, "INSERT INTO "+table+" ("+columns+") VALUES "+values, active, tenant, realms[1], metric.difficulty, metric.maxPlayers, metric.name, metric.window, metric.score, guilds[1])
+			require.NoError(t, err)
+		}
+	}
+	guildFullBoss := database.GetPublishedGuildBossFullListParams{TenantID: tenant, GenerationID: active, InstanceName: "Molten Core", EncounterName: "Ragnaros", DifficultyName: "Heroic", MaxPlayers: 40, RatingMetric: "peak", WindowKind: "all_time", OtherWindowKind: "all_time", RenownWindowKind: "career", OtherDifficultyName: "Heroic", OtherMaxPlayers: 40, LimitCount: 1, SearchQuery: "filtered"}
+	guildFullScope := database.GetPublishedGuildScopeFullListParams{TenantID: tenant, GenerationID: active, InstanceName: "Molten Core", DifficultyName: "Heroic", MaxPlayers: 40, RatingMetric: "peak", WindowKind: "all_time", OtherWindowKind: "all_time", RenownWindowKind: "career", OtherDifficultyName: "Heroic", OtherMaxPlayers: 40, LimitCount: 1, SearchQuery: "filtered"}
+	for _, boss := range []bool{true, false} {
+		var total int64
+		var payload any
+		if boss {
+			row, e := q.GetPublishedGuildBossFullList(ctx, guildFullBoss)
+			require.NoError(t, e)
+			total, payload = row.Total, row.Rows
+		} else {
+			row, e := q.GetPublishedGuildScopeFullList(ctx, guildFullScope)
+			require.NoError(t, e)
+			total, payload = row.Total, row.Rows
+		}
+		require.EqualValues(t, 1, total)
+		encoded, e := json.Marshal(payload)
+		require.NoError(t, e)
+		var matches []struct {
+			Rank  int64 `json:"rank"`
+			Entry struct {
+				GuildID   uuid.UUID `json:"guild_id"`
+				GuildName string    `json:"guild_name"`
+			} `json:"entry"`
+			Scores struct {
+				Peak    *float64 `json:"peak"`
+				Mastery *float64 `json:"mastery"`
+				Renown  *float64 `json:"renown"`
+			} `json:"scores"`
+		}
+		require.NoError(t, json.Unmarshal(encoded, &matches))
+		require.Len(t, matches, 1)
+		require.EqualValues(t, 2, matches[0].Rank)
+		require.Equal(t, guilds[1], matches[0].Entry.GuildID)
+		require.Equal(t, "Filtered guild", matches[0].Entry.GuildName)
+		require.Equal(t, float64(90), *matches[0].Scores.Peak)
+		require.Equal(t, float64(77), *matches[0].Scores.Mastery)
+		require.Equal(t, float64(18), *matches[0].Scores.Renown)
+	}
+	guildFullBoss.SearchQuery, guildFullScope.SearchQuery = "", ""
+	guildFullBoss.RealmIds, guildFullScope.RealmIds = []uuid.UUID{realms[1], realms[2]}, []uuid.UUID{realms[1], realms[2]}
+	bossPage, err := q.GetPublishedGuildBossFullList(ctx, guildFullBoss)
+	require.NoError(t, err)
+	scopePage, err := q.GetPublishedGuildScopeFullList(ctx, guildFullScope)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, bossPage.Total)
+	require.EqualValues(t, 1, scopePage.Total)
+	for _, table := range []string{"guild_tenant_rating_boss_scores", "guild_tenant_rating_scope_scores"} {
+		_, err = conn.Exec(ctx, "DELETE FROM "+table+" WHERE generation_id=$1 AND guild_id=$2 AND rating_metric IN ('mastery','renown')", active, guilds[1])
+		require.NoError(t, err)
+	}
+	_, err = conn.Exec(ctx, "UPDATE guilds SET name='Reader guild' WHERE id=$1", guilds[1])
+	require.NoError(t, err)
 	playerBoss.RealmIds, playerScope.RealmIds, guildBoss.RealmIds, guildScope.RealmIds = nil, nil, nil, nil
 	playerBoss.LimitCount, playerScope.LimitCount, guildBoss.LimitCount, guildScope.LimitCount = 1, 1, 1, 1
 	check(realms[:1])

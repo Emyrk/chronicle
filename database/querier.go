@@ -490,6 +490,12 @@ type sqlcQuerier interface {
 	GetProofRequest(ctx context.Context, id uuid.UUID) (ProofRequest, error)
 	// A module with something to run: main or a release with files.
 	GetPublicLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error)
+	// Rank the full tenant guild cohort before applying display-only realm/name filters.
+	// A single statement computes the page and count from the same MVCC snapshot.
+	GetPublishedGuildBossFullList(ctx context.Context, arg GetPublishedGuildBossFullListParams) (GetPublishedGuildBossFullListRow, error)
+	// Rank the full tenant guild cohort before applying display-only realm/name filters.
+	// A single statement computes the page and count from the same MVCC snapshot.
+	GetPublishedGuildScopeFullList(ctx context.Context, arg GetPublishedGuildScopeFullListParams) (GetPublishedGuildScopeFullListRow, error)
 	GetPublishedLuaProjectArtifact(ctx context.Context, arg GetPublishedLuaProjectArtifactParams) (GetPublishedLuaProjectArtifactRow, error)
 	// Rank the full tenant cohort before applying display-only realm/name filters.
 	// A single statement computes the page and count from the same MVCC snapshot.
