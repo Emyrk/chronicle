@@ -25,12 +25,13 @@ the wipe and the end.
 |---|---|
 | Player positions (13) | Per Internet Historian's map (2017), fan approximation. Tracked by `track-ih-map.py`, mapped to world X/Y by `fit-ih-map.py`, smoothed over 0.8 s. Before his map shows a player, they wait in the Hall of Binding and walk in through the door. |
 | Deaths (names and times) | Per Internet Historian's map: the dots he draws dithered from then on. Basphemy 2:10.5, Ctidalwave 2:11.7, Chrisym 2:18.3. The recorder's party frames disagree (see below). |
-| Heights | His map is flat. Each position takes the walkable floor under it (`rookery-floor.json`, derived from the map 229 mesh: the floor, or the rubble slope in the west). |
+| Heights | His map is flat. Everyone stays on the egg floor they entered on (see "Levels" below). |
 | Egg positions (198) | Real: CMaNGOS classic-db `gameobject` rows for Rookery Egg (175124) on map 229 (`rookery-spawns.json`). |
 | Clock | `sync-ih-inset.py`: his inset matched against the original upload, original = map + 78.5 s (slope 1.0012, worst residual 0.52 s over 72 one-second matches). |
 | Names and classes | Nameplates read in the frames, cross-checked against fan sources (the old wowwiki roster, dialogue analysis) and his legend. Each class says where it comes from. |
 | Timing cross-checks (fear, health, arrivals) | Observed in the frames by a vision model (`annotations.json`), now a cross-check on his map. |
-| Which eggs hatch, whelp swings, health between observations | Illustrative, so the replay reads. Not seen. |
+| Which eggs hatch | An egg hatches when any living player on the egg floor comes within its trigger radius, and the whelp attacks that player. The radius is real: 1.5 yd, from the egg trap's diameter of 3 in classic-db, halved by the mangos-classic core. A tuned 1.5 yd margin is added for his map's placement error (see below). |
+| Whelp swings, health | Illustrative, so the replay reads. Health follows the swings over an 8 s window. Not seen. |
 
 Rookery Guardians, Hatchers and Solakar are summoned by the Father Flame event,
 so the spawn tables have no rows for them (and none appear in this clip).
@@ -57,10 +58,58 @@ an affine fit maps his pixels to world X/Y:
 - His other three pillars land on pillar remains in the mesh: a stump to z 105
   at (94.1, −299.8), a column to z 117 at (94.2, −276.6), and rubble at
   (62.1, −274.8).
-- 1015 of 1020 per-second player positions sit on a walkable mesh surface.
+- 1019 of 1020 per-second player positions sit on a walkable mesh surface.
 
 His drawing is 15% wider than the room relative to its height (0.059 yd per
 pixel across, 0.068 down). The affine fit absorbs that.
+
+## Eggs and whelps
+
+Rookery Egg (gameobject 175124) is a trap: `data2` (diameter) = 3, spell 16474.
+The mangos-classic core triggers a trap at `radius = diameter / 2`, so the
+real radius is **1.5 yd**.
+
+His map places players to about 1 yd (worst pillar residual 1.30 yd), so with
+the bare radius a tracked player who really walked over an egg misses it about
+half the time. Against the footage, the bare radius gives 3 whelps by 1:39. A
+1.5 yd margin (his worst residual, rounded up) gives 8 by 1:39 and 9 by 1:41,
+matching the footage's roughly 8 whelps on Leeroy at 1:39 and roughly 10
+nameplates at 1:40. That margin is tuned, not sourced.
+
+With it, Leeroy hatches 7 whelps before anyone else hatches one. They hit him
+from 1:32.5, alone, about 5.5 s before the first raid member is within 8 yd
+of him (1:38). By then he is at 83% health.
+
+## Levels
+
+The footage shows the fight on the checkered egg floor (1:36–2:24), and the
+raid enters through the west door at floor level. The egg floor includes the
+low rubble the eggs also lie on (egg spawns go up to z 97). The west ramp and
+the ledges above z 97.5 are a different level.
+
+The one climb is annotated (`annotations.json` → `levelChanges`). Anfrony runs
+up the west ramp at 2:15 and fights Rage Talon Dragonspawn, which spawn on the
+terrace level, at 2:18–2:21. His map has him along the west wall from 2:13 to
+2:19.5, and he is back on the egg floor by 2:24.
+
+Everywhere else:
+
+- A tracked point that lands on the ramp, a ledge or a prop moves to the
+  nearest egg-floor cell: 104 samples, mean 1.9 yd, worst 3.4 yd.
+- Heights follow the egg floor under the player and change by at most
+  2.5 yd/s.
+
+Measured against the mesh with the 3D view's own rule (it stands a unit on the
+highest surface up to 2.5 yd above its logged z), over 5057 player samples at
+0.2 s:
+
+- **Before** (heights from the highest walkable surface below the terrace,
+  logged 1.9 yd above it): 72 samples on the upper level, and 166 jumps of
+  more than 1 yd in one step.
+- **After**: 2 samples on the upper level, both Anfrony climbing back down
+  right after his climb. 22 jumps remain, all 1–3 yd steps onto low rubble or
+  props on the egg floor, 3 of them inside Anfrony's ramp climb. Nobody changes
+  level outside that climb.
 
 ## Cross-check against the frame annotations
 
@@ -79,8 +128,11 @@ pixel across, 0.068 down). The affine fit absorbs that.
   in the frames.
 - **Deaths: unresolved.** His map marks three deaths (above) and draws everyone
   else alive until it ends at 2:49.7. The recorder's party frames show four
-  party members dead at 2:12.0, 2:14.4, 2:15.0 and 2:15.4. The fixture uses his
-  named deaths.
+  party members dead at 2:12.0, 2:14.4, 2:15.0 and 2:15.4. His chat log names
+  them: "Ctidalwave has died" (2:12.0), Therien (2:14), Forekin (2:15) and
+  Abduhl (by 2:17). A Release Spirit box shows the recorder dead by 2:36. The
+  fixture still uses his named deaths, which agree with the chat on
+  Ctidalwave. Switching to the chat deaths is a follow-up.
 
 ## Camera solve (not done)
 

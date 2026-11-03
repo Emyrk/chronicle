@@ -67,6 +67,19 @@ describe("loadMapFixture", () => {
     const leeroy = encounter?.positionsByUnit.get(guidOf("Leeroy")!);
     const atNinety = leeroy?.find((sample) => sample.timestampMs === startMs + 6_000);
     expect(atNinety?.x).toBeLessThan(105);
+    // Nothing waits for the raid: Leeroy's eggs hatch and their whelps hit him
+    // before anyone else is within 8 yd of him (video 1:38, 14 s into the clip).
+    const leeroyGuid = guidOf("Leeroy")!;
+    const hitsBeforeRaid = encounter?.effects.events.filter((event) => event.kind === "damage" && event.target === leeroyGuid && event.timestampMs < startMs + 14_000) ?? [];
+    expect(hitsBeforeRaid.length).toBeGreaterThanOrEqual(5);
+    // Everyone stays on the egg floor (z <= 97.5, which includes the low rubble the
+    // eggs lie on) except Anfrony's one climb up the west ramp (2:13-2:23).
+    for (const [guid, player] of Object.entries(leeroyRookery.players)) {
+      for (const sample of encounter?.positionsByUnit.get(guid) ?? []) {
+        const climbing = player.name === "Anfrony" && sample.timestampMs >= startMs + 49_000 && sample.timestampMs <= startMs + 59_000;
+        if (!climbing) expect(sample.z ?? 0).toBeLessThanOrEqual(97.5);
+      }
+    }
     // The video sync maps 1:24 to the clip's first log second.
     expect(LEEROY_VIDEO_TIMESTAMPS[0]).toMatchObject({ video_time_seconds: 84, utc_time: leeroyRookery.encounter.startTime.slice(11, 19) });
   });

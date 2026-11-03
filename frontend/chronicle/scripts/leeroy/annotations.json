@@ -158,6 +158,16 @@
    "source": "observed"
   },
   {
+   "t": 132.0,
+   "what": "Chat: 'Ctidalwave has died.'",
+   "source": "observed (chat log, 2 fps crops)"
+  },
+  {
+   "t": 134.0,
+   "what": "Chat: 'Therien has died.'",
+   "source": "observed (chat log)"
+  },
+  {
    "t": 134.4,
    "what": "Slot 3 portrait grey (dead).",
    "source": "observed"
@@ -168,40 +178,39 @@
    "source": "observed"
   },
   {
+   "t": 135.0,
+   "what": "Chat: 'Forekin has died.' then 'You call out for healing!'",
+   "source": "observed (chat log)"
+  },
+  {
+   "t": 135.0,
+   "what": "The POV runs up a grey stone ramp; at 138-141 he fights Rage Talon Dragonspawn; back on the checkered egg floor by 144.",
+   "source": "observed"
+  },
+  {
    "t": 135.4,
    "what": "Slot 4 portrait grey (dead): every other member of the Anfrony (POV) party is down.",
+   "source": "observed"
+  },
+  {
+   "t": 137.0,
+   "what": "Chat: 'Abduhl has died.' (first seen at 137.0; after 135.0)",
+   "source": "observed (chat log)"
+  },
+  {
+   "t": 156.0,
+   "what": "A 'Release Spirit' box: the recorder is dead.",
    "source": "observed"
   }
  ],
  "whelps": {
-  "source": "counts observed (nameplates per frame); which eggs hatch is inferred: the eggs nearest a player at each wave. Whelp targets and swings are illustrative. A fan analysis says eggs hatch when stepped on and the recorder keeps stepping on them.",
-  "waves": [
-   {
-    "t": 96.8,
-    "near": "Leeroy",
-    "count": 8
-   },
-   {
-    "t": 99.8,
-    "near": "Abduhl",
-    "count": 8
-   },
-   {
-    "t": 103.0,
-    "near": "Forekin",
-    "count": 10
-   },
-   {
-    "t": 107.0,
-    "near": "Anfrony",
-    "count": 8
-   },
-   {
-    "t": 111.0,
-    "near": "Anfrony",
-    "count": 8
-   }
-  ]
+  "trigger": {
+   "radiusYards": 1.5,
+   "source": "real: Rookery Egg (gameobject 175124) is a trap with data2 (diameter) = 3 in cmangos/classic-db gameobject_template; the cmangos/mangos-classic core triggers traps at radius = diameter / 2 (GameObject.cpp, GAMEOBJECT_TYPE_TRAP)",
+   "placementMarginYards": 1.5,
+   "marginSource": "tuned, not sourced: his map places players to about 1 yd (pillar fit RMS 0.96, worst 1.30), so the bare 1.5 yd radius misses eggs a player walked over. 1.5 yd is his worst residual rounded up, and gives the closest match to the footage's whelp counts (8 on Leeroy by 1:39, about 10 by 1:40); the bare radius gives 3 by 1:39"
+  },
+  "source": "which eggs hatch: any living player on the egg floor within the trigger radius (positions per Internet Historian's map); the whelp attacks the player who set it off, then the nearest living player. Swings and damage are illustrative."
  },
  "fear": {
   "t": 104.0,
@@ -260,7 +269,8 @@
    "topic": "Deaths",
    "ihMap": "three dots go dithered: Basphemy 2:10.5, Ctidalwave 2:11.7, Chrisym 2:18.3; everyone else is still drawn alive when his map ends (2:49.7)",
    "frames": "the recorder's party frames show four party members dead at 2:12.0, 2:14.4, 2:15.0 and 2:15.4",
-   "verdict": "unresolved: the fixture uses his named deaths; the party frames disagree on count and timing (he may not mark every death)"
+   "verdict": "the fixture still uses his named deaths (Basphemy, Ctidalwave, Chrisym); the chat agrees on Ctidalwave and names three more he draws alive. Using the chat deaths is a follow-up.",
+   "chat": "the recorder's chat names his party's deaths: Ctidalwave 2:12.0, Therien 2:14, Forekin 2:15, Abduhl by 2:17 (matching the party frames' 2:12.0, 2:14.4, 2:15.0, 2:15.4), and a Release Spirit box shows the recorder dead by 2:36"
   },
   {
    "topic": "Fear",
@@ -268,5 +278,15 @@
    "frames": "his fear (purple skulls over the whelps) at 1:44",
    "verdict": "agree"
   }
- ]
+ ],
+ "levelChanges": [
+  {
+   "name": "Anfrony",
+   "from": 133.0,
+   "to": 139.6,
+   "surface": "the west rubble ramp up towards the north terrace, then a drop back to the egg floor",
+   "source": "footage: the POV runs up a grey stone ramp at 2:15, fights Rage Talon Dragonspawn (terrace-level spawns) at 2:18-2:21 and is back on the checkered egg floor by 2:24; his map has Anfrony along the west wall (the ramp) from 2:13 to 2:19.5, then on the floor from 2:20"
+  }
+ ],
+ "levelsSource": "footage 1:36-2:24: the whole fight is on the checkered egg floor; the raid enters through the west door at floor level. Only the recorder climbs (levelChanges)."
 }
