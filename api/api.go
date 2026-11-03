@@ -65,8 +65,10 @@ type SidekickService interface {
 	AdminRoutes() http.Handler
 	// IsSidekickRequest reports whether OAuth linked the request to a Sidekick installation.
 	IsSidekickRequest(context.Context) bool
-	// RecordUpload records successful upload activity and reports whether the upload came from a Sidekick.
+	// RecordUpload records a successful new-log upload and reports whether it came from a Sidekick.
 	RecordUpload(context.Context) bool
+	// RecordAppend records a successful append upload and reports whether it came from a Sidekick.
+	RecordAppend(context.Context) bool
 }
 
 type InferenceService interface {
