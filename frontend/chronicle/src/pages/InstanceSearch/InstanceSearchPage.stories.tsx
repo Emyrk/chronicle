@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { InstanceSearchFieldsResponse, InstanceSearchQuery, InstanceSearchResult, SupportedInstance } from "@/api/typesGenerated";
 import { InstanceSearchPage } from "./InstanceSearchPage";
 import { encodeQuery, type Node } from "./queryModel";
+import { saveRecentSearches, type RecentSearch } from "./recentSearches";
 // Generated from the Go registry; kept in sync by TestDescribeFixture.
 import fieldsFixture from "./fixtures/searchFields.json";
 
@@ -224,6 +225,20 @@ export const RateLimited: Story = {
 
 export const TimedOut: Story = {
   parameters: { initialEntry: url(blockTree, "blocks"), msw: { handlers: handlers({ loggedIn: true, search: "timeout" }) } },
+};
+
+/** History from earlier searches in this browser, under the Recent menu. */
+export const RecentSearches: Story = {
+  beforeEach: () => {
+    const now = Date.now();
+    const list: RecentSearch[] = [
+      { q: encodeQuery(formTree), mode: "form", at: now - 5 * 60_000 },
+      { q: encodeQuery(blockTree), mode: "blocks", at: now - 3 * 3_600_000 },
+      { q: encodeQuery({ and: [{ field: "instance.name", op: "contains", value: "naxx" }] }), mode: "form", at: now - 2 * 86_400_000 },
+    ];
+    saveRecentSearches(list);
+    return () => saveRecentSearches([]);
+  },
 };
 
 export const NoResults: Story = {

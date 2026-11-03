@@ -15,7 +15,11 @@ import { ResultsTable } from "./ResultsTable";
 import { SearchSummary } from "./SearchSummary";
 import { CodeEditor } from "./CodeEditor";
 import { CelParseError, parseCEL } from "./celParser";
+import { AdRailStack } from "@/components/Ads/AdRailStack";
 import { ExamplesMenu } from "./ExamplesMenu";
+import { RecentSearchesMenu } from "./RecentSearchesMenu";
+import { addRecentSearch, loadRecentSearches, saveRecentSearches, type RecentSearch } from "./recentSearches";
+import { HonoredLockTooltip } from "./HonoredLockTooltip";
 import type { SearchExample } from "./examples";
 import { SearchForm } from "./SearchForm";
 import {
@@ -131,13 +135,44 @@ export function InstanceSearchPage() {
     setCollapsed(false);
   };
 
-  const submit = () => {
+  // The last ten searches run in this browser, newest first.
+  const [recent, setRecent] = useState<RecentSearch[]>(() => loadRecentSearches());
+  const rememberSearch = (q: string, m: Mode) => {
+    const list = addRecentSearch(recent, { q, mode: m, at: Date.now() });
+    setRecent(list);
+    saveRecentSearches(list);
+  };
+  const clearRecent = () => {
+    setRecent([]);
+    saveRecentSearches([]);
+  };
+
+  const runQuery = (q: string, m: Mode) => {
     setCollapsed(true);
     const next = new URLSearchParams(params);
-    next.set("q", encodeQuery(draftTree));
-    if (mode === "form") next.delete("mode");
-    else next.set("mode", mode);
+    next.set("q", q);
+    if (m === "form") next.delete("mode");
+    else next.set("mode", m);
     setParams(next);
+    rememberSearch(q, m);
+  };
+
+  const submit = () => runQuery(encodeQuery(draftTree), mode);
+
+  // Loads a recent search back into the editor and runs it again. It opens
+  // in the form when it fits there and the advanced editors are locked.
+  const pickRecent = (r: RecentSearch) => {
+    const tree = decodeQuery(r.q);
+    const asForm = treeToForm(tree);
+    let m: Mode = r.mode;
+    if (m === "form" && !asForm) m = "blocks";
+    if (m !== "form" && asForm && !advancedUnlocked) m = "form";
+    if (asForm) setForm(asForm);
+    setBlocks(tree);
+    setCode(tree ? formatCEL(tree) : "");
+    setExample(null);
+    setMode(m);
+    runQuery(r.q, m);
   };
 
   const results = useInfiniteQuery({
@@ -193,7 +228,11 @@ export function InstanceSearchPage() {
   }, [supported.data]);
 
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-4">
+    <div className="mx-auto flex w-full max-w-[2080px] items-start justify-center gap-6 p-4 md:p-8">
+      <div className="hidden self-stretch 2xl:block">
+        <AdRailStack primaryPlacement="instance-search-left-rail" secondaryPlacement="instance-search-left-rail-lower" railLayout="paired-wide" />
+      </div>
+    <main className="w-full min-w-0 max-w-5xl space-y-4">
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -236,7 +275,8 @@ export function InstanceSearchPage() {
             locked={!advancedUnlocked}
             onClick={() => (advancedUnlocked ? switchMode("blocks") : setShowUpsell(true))}
             disabled={advancedUnlocked && codeInvalid}
-            title={!advancedUnlocked ? "Honored supporters can build searches with blocks" : codeInvalid ? "Fix the query text first" : "Edit this search as blocks"}
+            title={codeInvalid ? "Fix the query text first" : "Edit this search as blocks"}
+            lockedPerk="blocks"
           >
             <Blocks className="h-3.5 w-3.5" /> Blocks
           </ModeButton>
@@ -244,12 +284,16 @@ export function InstanceSearchPage() {
             active={mode === "code"}
             locked={!advancedUnlocked}
             onClick={() => (advancedUnlocked ? switchMode("code") : setShowUpsell(true))}
-            title={advancedUnlocked ? "Edit this search as text" : "Honored supporters can write searches as text"}
+            title="Edit this search as text"
+            lockedPerk="code"
           >
             <Code2 className="h-3.5 w-3.5" /> Code
           </ModeButton>
         </div>
-        <ExamplesMenu onPick={loadExample} locked={!advancedUnlocked} onLocked={() => setShowUpsell(true)} />
+        <div className="flex items-center gap-2">
+          <ExamplesMenu onPick={loadExample} locked={!advancedUnlocked} onLocked={() => setShowUpsell(true)} />
+          <RecentSearchesMenu recent={recent} onPick={pickRecent} onClear={clearRecent} />
+        </div>
       </div>
       {!advancedUnlocked && (showUpsell || mode !== "form") && <HonoredUpsell loggedIn={isAuthenticated} readOnly={mode !== "form"} />}
 
@@ -334,17 +378,19 @@ export function InstanceSearchPage() {
           </Button>
         </div>
       )}
+    </main>
+      <AdRailStack primaryPlacement="instance-search-right-rail" secondaryPlacement="instance-search-right-rail-lower" railLayout="paired-wide" />
     </div>
   );
 }
 
-function ModeButton({ active, onClick, disabled, locked, title, children }: { active: boolean; onClick: () => void; disabled?: boolean; locked?: boolean; title?: string; children: ReactNode }) {
-  return (
+function ModeButton({ active, onClick, disabled, locked, lockedPerk, title, children }: { active: boolean; onClick: () => void; disabled?: boolean; locked?: boolean; lockedPerk?: "blocks" | "code"; title?: string; children: ReactNode }) {
+  const button = (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      title={title}
+      title={locked ? undefined : title}
       className={cn(
         "px-3 py-1 text-xs rounded inline-flex items-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
         active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
@@ -354,6 +400,7 @@ function ModeButton({ active, onClick, disabled, locked, title, children }: { ac
       {locked && <Lock className="h-3 w-3" style={{ color: TIER_COLOR.honored }} aria-label="Honored" />}
     </button>
   );
+  return locked && lockedPerk ? <HonoredLockTooltip highlight={lockedPerk}>{button}</HonoredLockTooltip> : button;
 }
 
 /** Blocks / Code / Examples are an Honored perk; links to the supporter page. */
