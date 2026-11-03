@@ -1,15 +1,14 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Blocks, Code2, Lightbulb, ListFilter, Lock } from "lucide-react";
+import { Code2, ListFilter, Lock, Trophy } from "lucide-react";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { TIER_COLOR } from "@/pages/Settings/billingPricing";
 import { cn } from "@/lib/utils";
 
 const PERKS = [
-  { key: "blocks", icon: Blocks, title: "Blocks", text: "Build searches from nested and/or blocks." },
   { key: "code", icon: Code2, title: "Code", text: "Write and edit searches as text." },
-  { key: "examples", icon: Lightbulb, title: "Examples", text: "Load ready-made searches and tweak them." },
+  { key: "conditions", icon: Trophy, title: "Costly conditions", text: "Player parses and stats, and boss, trash and idle time." },
 ] as const;
 
 /**
@@ -41,7 +40,7 @@ export function HonoredLockTooltip({ highlight, children }: { highlight: (typeof
           <li className="flex gap-2">
             <ListFilter className="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
             <span>
-              <span className="font-medium text-white">Form.</span> Free for everyone.
+              <span className="font-medium text-white">Form and Blocks.</span> Free for everyone.
             </span>
           </li>
         </ul>
