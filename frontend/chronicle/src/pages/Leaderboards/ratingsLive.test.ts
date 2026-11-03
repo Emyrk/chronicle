@@ -5,8 +5,8 @@ import { v2Selection } from "./v2Selection"
 describe("hidden V2 route selection", () => {
   it("defaults to overview and preserves selected live tab and instance", () => {
     expect(v2Selection(new URLSearchParams())).toEqual({ tab: "overview", instance: null, encounters: [], realmIDs: [] })
-    expect(v2Selection(new URLSearchParams("tab=ratings&instance=Molten+Core"))).toEqual({ tab: "ratings", instance: "Molten Core", encounters: [], realmIDs: [] })
-    expect(v2Selection(new URLSearchParams("tab=fixture"))).toEqual({ tab: "overview", instance: null, encounters: [], realmIDs: [] })
+    expect(v2Selection(new URLSearchParams("instance=Molten+Core"), "ratings")).toEqual({ tab: "ratings", instance: "Molten Core", encounters: [], realmIDs: [] })
+    expect(v2Selection(new URLSearchParams(), "fixture")).toEqual({ tab: "overview", instance: null, encounters: [], realmIDs: [] })
   })
 })
 

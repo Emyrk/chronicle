@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { MemoryRouter } from "react-router-dom"
+import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useRankingsLeaderboard } from "@/api/rankingsQueries"
 import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
@@ -41,10 +41,22 @@ function setSummary(data: HubSummary) {
   vi.mocked(useHubSummary).mockReturnValue({ data, isPending: false, isError: false } as ReturnType<typeof useHubSummary>)
 }
 
+/** The hub at a URL, through the app's routes so the tab path segment is read. */
+function hub(url: string) {
+  return renderToStaticMarkup(
+    <MemoryRouter initialEntries={[url]}>
+      <Routes>
+        <Route path="/leaderboard-v2" element={<LeaderboardsLiveHub />} />
+        <Route path="/leaderboard-v2/:tab" element={<LeaderboardsLiveHub />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
 describe("live Storybook Hub", () => {
   beforeEach(() => { vi.clearAllMocks(); setSummary(summary) })
   it("renders the original instance banner, realm/title, scope bar, encounters, and tabs with live names", () => {
-    const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&realm_ids=realm-id"]}><LeaderboardsLiveHub /></MemoryRouter>)
+    const html = hub("/leaderboard-v2?instance=Molten+Core&realm_ids=realm-id")
     expect(html).toContain('aria-label="Breadcrumb"')
     expect(html).toContain('aria-label="Realm: Nordanaar"')
     expect(html).toContain('aria-label="Leaderboard scope"')
@@ -56,20 +68,20 @@ describe("live Storybook Hub", () => {
     expect(useHubSummary).toHaveBeenCalledTimes(1)
   })
   it("uses the configured Turtle roster and exposes Trash only under Performances", () => {
-    const ratings = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&tab=ratings&encounter=Trash"]}><LeaderboardsLiveHub /></MemoryRouter>)
+    const ratings = hub("/leaderboard-v2/ratings?instance=Molten+Core&encounter=Trash")
     expect(ratings).toContain("Ragnaros")
     expect(ratings).not.toContain("Gehennas")
     expect(ratings).not.toContain("Trash")
     expect(ratings).toContain("Full clear") // invalid encounter falls back to raid selection
 
-    const performances = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&tab=performances"]}><LeaderboardsLiveHub /></MemoryRouter>)
+    const performances = hub("/leaderboard-v2/performances?instance=Molten+Core")
     expect(performances).not.toContain("Gehennas")
     expect(performances).toContain("Trash")
     expect(performances).toContain("Full clear")
   })
 
   it("hides the cohort selector for one raid cohort and uses it even with a stale URL choice", () => {
-    const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&difficulty=Old&size=25"]}><LeaderboardsLiveHub /></MemoryRouter>)
+    const html = hub("/leaderboard-v2?instance=Molten+Core&difficulty=Old&size=25")
     expect(html).not.toContain('aria-label="Raid cohort"')
     expect(html).toContain("Live overview")
   })
@@ -77,7 +89,7 @@ describe("live Storybook Hub", () => {
     setSummary({ ...summary, selected_cohort: null, instances: [...summary.instances, {
       ...summary.instances[0], difficulty_name: "Heroic", max_players: 25,
     }] })
-    const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core"]}><LeaderboardsLiveHub /></MemoryRouter>)
+    const html = hub("/leaderboard-v2?instance=Molten+Core")
     expect(html).toContain('aria-label="Raid cohort"')
     expect(html).toContain("Heroic · 25 players")
   })
@@ -85,16 +97,16 @@ describe("live Storybook Hub", () => {
     setSummary({ ...summary, instances: [...summary.instances, {
       ...summary.instances[0], difficulty_name: "", max_players: 0,
     }] })
-    const selected = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&difficulty=&size=0"]}><LeaderboardsLiveHub /></MemoryRouter>)
+    const selected = hub("/leaderboard-v2?instance=Molten+Core&difficulty=&size=0")
     expect(selected).toContain('<option value="|0" selected="">Default · 0 players</option>')
     // Without a URL choice the summary's resolved (busiest) cohort is selected, not an empty prompt.
-    const missing = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core"]}><LeaderboardsLiveHub /></MemoryRouter>)
+    const missing = hub("/leaderboard-v2?instance=Molten+Core")
     expect(missing).toContain('<option value="Normal|40" selected="">Normal · 40 players</option>')
   })
   it("requests all-role performances without a zero-size URL parameter", () => {
     setSummary({ ...summary, instances: [{ ...summary.instances[0], difficulty_name: "", max_players: 0 }],
       selected_cohort: { difficulty_name: "", max_players: 0 } })
-    renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&tab=performances"]}><LeaderboardsLiveHub /></MemoryRouter>)
+    hub("/leaderboard-v2/performances?instance=Molten+Core")
     const [params, enabled] = vi.mocked(useRankingsLeaderboard).mock.calls[0]
     expect(enabled).toBe(true)
     expect(params).toMatchObject({ instance_names: "Molten Core", difficulty_names: "", exact_cohort: true, metric: "dps" })
@@ -106,7 +118,7 @@ describe("live Storybook Hub", () => {
   })
 
   it("uses the Storybook landing grid with published cohorts", () => {
-    const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2"]}><LeaderboardsLiveHub /></MemoryRouter>)
+    const html = hub("/leaderboard-v2")
     expect(html).toContain("Molten Core")
     expect(html).toContain("12 recorded kills")
     expect(html).toContain('aria-label="Leaderboard section"')

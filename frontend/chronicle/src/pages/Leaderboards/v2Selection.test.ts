@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { hubParams, v2Selection } from "./v2Selection"
+import { hubParams, hubPath, v2Selection } from "./v2Selection"
 
 describe("hidden leaderboard v2 selection", () => {
   it("opens the live overview without selecting a mock instance", () => {
@@ -7,22 +7,22 @@ describe("hidden leaderboard v2 selection", () => {
   })
 
   it("preserves supported tabs and exact instance names in the URL", () => {
-    expect(v2Selection(new URLSearchParams("tab=ratings&instance=Blackwing+Lair"))).toEqual({
+    expect(v2Selection(new URLSearchParams("instance=Blackwing+Lair"), "ratings")).toEqual({
       tab: "ratings", instance: "Blackwing Lair", encounters: [], realmIDs: [],
     })
   })
 
   it("reads optional realm selection without duplicates", () => {
-    expect(v2Selection(new URLSearchParams("tab=ratings&realm_ids=realm-1%2Crealm-2%2Crealm-1"))).toEqual({
+    expect(v2Selection(new URLSearchParams("realm_ids=realm-1%2Crealm-2%2Crealm-1"), "ratings")).toEqual({
       tab: "ratings", instance: null, encounters: [], realmIDs: ["realm-1", "realm-2"],
     })
   })
 
   it("keeps tab and realm selection while entering or leaving an instance", () => {
-    const selected = new URLSearchParams("tab=ratings&realm_ids=realm-1%2Crealm-2")
+    const selected = new URLSearchParams("realm_ids=realm-1%2Crealm-2")
     const opened = hubParams(selected, "instance", "Molten Core")
-    expect(v2Selection(opened)).toEqual({ tab: "ratings", instance: "Molten Core", encounters: [], realmIDs: ["realm-1", "realm-2"] })
-    expect(v2Selection(hubParams(opened, "instance"))).toEqual({ tab: "ratings", instance: null, encounters: [], realmIDs: ["realm-1", "realm-2"] })
+    expect(v2Selection(opened, "ratings")).toEqual({ tab: "ratings", instance: "Molten Core", encounters: [], realmIDs: ["realm-1", "realm-2"] })
+    expect(v2Selection(hubParams(opened, "instance"), "ratings")).toEqual({ tab: "ratings", instance: null, encounters: [], realmIDs: ["realm-1", "realm-2"] })
     expect(hubParams(opened, "realm_ids").has("realm_ids")).toBe(false)
   })
 
@@ -48,8 +48,15 @@ describe("hidden leaderboard v2 selection", () => {
   })
 
   it("falls back to the overview for unknown tabs", () => {
-    expect(v2Selection(new URLSearchParams("tab=unknown&instance=Molten+Core"))).toEqual({
+    expect(v2Selection(new URLSearchParams("instance=Molten+Core"), "unknown")).toEqual({
       tab: "overview", instance: "Molten Core", encounters: [], realmIDs: [],
     })
+  })
+
+  it("puts each tab in the path and keeps the query", () => {
+    const params = new URLSearchParams("tab=ratings&instance=Molten+Core&encounters=Garr")
+    expect(hubPath("performances", params)).toBe("/leaderboard-v2/performances?instance=Molten+Core&encounters=Garr")
+    expect(hubPath("overview", params)).toBe("/leaderboard-v2?instance=Molten+Core&encounters=Garr")
+    expect(hubPath("overview", new URLSearchParams())).toBe("/leaderboard-v2")
   })
 })

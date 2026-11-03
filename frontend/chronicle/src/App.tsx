@@ -197,6 +197,7 @@ function App() {
         <Route path="/raidplanner" element={<RaidPlannerPage />} />
         {/* The live hub stays unlinked at /leaderboard-v2 until it replaces the classic index. */}
         <Route path="/leaderboard-v2" element={<LeaderboardsV2 />} />
+        <Route path="/leaderboard-v2/:tab" element={<LeaderboardsV2 />} />
         <Route path="/leaderboards" element={<LegacyLeaderboardsRedirect />} />
         <Route path="/leaderboards/statistics" element={<LeaderboardsPage mode="statistics" />} />
         <Route path="/leaderboards/speedruns" element={<LeaderboardsPage mode="speedruns" />} />
