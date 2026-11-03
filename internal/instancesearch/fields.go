@@ -195,7 +195,8 @@ func (c *compiler) parsePred(f *field, n *Node, path string) (pred, error) {
 		return p, &Error{Path: path + ".value", Message: "invalid value"}
 	}
 
-	if n.Op == OpIn || n.Op == OpNotIn {
+	switch n.Op {
+	case OpIn, OpNotIn:
 		var raw []json.RawMessage
 		if err := json.Unmarshal(value, &raw); err != nil {
 			return p, &Error{Path: path + ".value", Message: "must be a list for in / not_in"}
@@ -213,7 +214,7 @@ func (c *compiler) parsePred(f *field, n *Node, path string) (pred, error) {
 			list = append(list, v.(string))
 		}
 		p.value = list
-	} else if n.Op == OpBetween {
+	case OpBetween:
 		var raw []json.RawMessage
 		if err := json.Unmarshal(value, &raw); err != nil || len(raw) != 2 {
 			return p, &Error{Path: path + ".value", Message: "must be [low, high] for between"}
@@ -230,7 +231,7 @@ func (c *compiler) parsePred(f *field, n *Node, path string) (pred, error) {
 			return p, &Error{Path: path + ".value", Message: "low must not be above high"}
 		}
 		p.value = bounds
-	} else {
+	default:
 		v, err := decodeScalar(f, value)
 		if err != nil {
 			return p, &Error{Path: path + ".value", Message: err.Error()}
