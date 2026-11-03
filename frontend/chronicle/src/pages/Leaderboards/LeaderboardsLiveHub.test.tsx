@@ -5,7 +5,7 @@ import { useRankingsLeaderboard } from "@/api/rankingsQueries"
 import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
 import { LeaderboardsLiveHub } from "./LeaderboardsLiveHub"
 
-const summary = { instances: [{ instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40, category: "raid", total_kills: 12, top_players: [] }],
+const summary = { landing_previews: [], instances: [{ instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40, category: "raid", total_kills: 12, top_players: [] }],
   realms: [{ id: "realm-id", name: "Nordanaar" }], encounters: [
     { encounter_name: "Ragnaros", total_kills: 12, top_dps: 1450 },
     { encounter_name: "Gehennas", total_kills: 10, top_dps: 1300 },

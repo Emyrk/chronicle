@@ -28,7 +28,7 @@ export function hubSummaryURL({ instanceName, encounterName, cohort, performance
   if (cls) query.set("class", cls)
   if (spec) query.set("spec", spec)
   if (subSpec) query.set("sub_spec", subSpec)
-  if (instanceName && realmIDs?.length) query.set("realm_ids", [...new Set(realmIDs)].sort().join(","))
+  if (realmIDs?.length) query.set("realm_ids", [...new Set(realmIDs)].sort().join(","))
   return `/api/v1/rankings/ratings/hub-summary${query.size ? `?${query}` : ""}`
 }
 

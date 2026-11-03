@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest"
 import { hubSummaryURL } from "./hubSummaryAdapter"
 
 describe("CDN-keyed hub summary", () => {
-  it("uses a single metadata URL for all-instances landing, independent of display-only realm", () => {
-    expect(hubSummaryURL({ performance: "dps", realmIDs: ["realm-1"] })).toBe("/api/v1/rankings/ratings/hub-summary")
+  it("uses one canonical CDN URL per landing realm selection", () => {
+    expect(hubSummaryURL({ performance: "dps" })).toBe("/api/v1/rankings/ratings/hub-summary")
+    expect(hubSummaryURL({ performance: "dps", realmIDs: ["b", "a", "a"] }))
+      .toBe("/api/v1/rankings/ratings/hub-summary?realm_ids=a%2Cb")
   })
 
   it("preserves exact Turtle cohort zero and canonical realm order", () => {

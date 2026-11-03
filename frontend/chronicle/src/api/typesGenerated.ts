@@ -2229,6 +2229,21 @@ export interface HubGuildRatings {
 
 // From chroniclesdk/rating_hub_summary.go
 /**
+ * HubLandingPreview contains published, bounded highlights for one instance cohort.
+ * Aggregate top-player DPS remains in HubSummary.Instances[].top_players.
+ * Statistics are unavailable here.
+ */
+export interface HubLandingPreview {
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly player: HubPlayerRatings;
+    readonly guild: HubGuildRatings;
+    readonly speedruns: readonly SpeedrunLeaderboardEntry[];
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
  * Compact published score identities are sufficient for preview cards.
  */
 export interface HubPlayerRatingEntry {
@@ -2279,6 +2294,7 @@ export interface HubSelectedCohort {
  */
 export interface HubSummary {
     readonly instances: readonly RankingsInstanceSummary[];
+    readonly landing_previews: readonly HubLandingPreview[];
     readonly realms: readonly HubRealm[];
     readonly encounters: readonly RankingsEncounterSummary[];
     readonly progression_bosses: readonly string[];

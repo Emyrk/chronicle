@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react"
-import type { RankingsInstanceSummary } from "@/api/typesGenerated"
+import type { HubLandingPreview, HubPlayerRatingEntry, RankingsInstanceSummary } from "@/api/typesGenerated"
 import { Skull, Swords, Timer } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
@@ -32,6 +32,8 @@ export interface LeaderboardsHubAppProps extends Omit<LeaderboardHubProps, "inst
   realms?: readonly string[]
   /** Published instance cohorts. Supplying this switches the grid to live, non-fixture cards. */
   instances?: readonly RankingsInstanceSummary[]
+  /** Bounded published board highlights for the live all-instances grid. */
+  landingPreviews?: readonly HubLandingPreview[]
   /** Production instance view. Never render the fixture-only LeaderboardHub for live data. */
   renderInstance?: (instance: string) => ReactNode
 }
@@ -47,6 +49,7 @@ export function LeaderboardsHubApp({
   onRealm,
   realms,
   instances,
+  landingPreviews,
   renderInstance,
   ...hub
 }: LeaderboardsHubAppProps) {
@@ -109,13 +112,13 @@ export function LeaderboardsHubApp({
           />
         )
       ) : (
-        <HubLanding key={realm} tab={tab} onOpen={setInstance} instances={instances} />
+        <HubLanding key={realm} tab={tab} onOpen={setInstance} instances={instances} landingPreviews={landingPreviews} />
       )}
     </div>
   )
 }
 
-function HubLanding({ tab, onOpen, instances }: { tab: HubTab; onOpen: (instance: string) => void; instances?: readonly RankingsInstanceSummary[] }) {
+function HubLanding({ tab, onOpen, instances, landingPreviews }: { tab: HubTab; onOpen: (instance: string) => void; instances?: readonly RankingsInstanceSummary[]; landingPreviews?: readonly HubLandingPreview[] }) {
   if (tab === "rulesets") {
     // Today's rulesets grid as-is; its cards link to ?instance=<name>, opened in place.
     return (
@@ -136,21 +139,33 @@ function HubLanding({ tab, onOpen, instances }: { tab: HubTab; onOpen: (instance
   if (instances !== undefined) {
     const grid = (items: readonly RankingsInstanceSummary[]) => (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {[...new Set(items.map((row) => row.instance_name))].map((name) => (
-          <div key={name} onClickCapture={(e) => {
+        {[...new Set(items.map((row) => row.instance_name))].map((name) => {
+          const cohorts = items.filter((row) => row.instance_name === name)
+          const forCohort = (row: RankingsInstanceSummary) => landingPreviews?.find((item) =>
+            item.instance_name === row.instance_name && item.difficulty_name === row.difficulty_name && item.max_players === row.max_players)
+          const hasHighlight = (row: RankingsInstanceSummary) => {
+            const item = forCohort(row)
+            if (tab === "speedruns") return !!item?.speedruns.length
+            if (tab === "ratings") return !!(item?.player.peak.length || item?.player.ranked_mastery.length || item?.player.renown.length)
+            return !!(item?.speedruns.length || item?.guild.renown.length || item?.player.peak.length)
+          }
+          const displayed = cohorts.find(hasHighlight) ?? cohorts.find((row) => row.max_players > 0) ?? cohorts[0]
+          const preview = forCohort(displayed)
+          return <div key={name} onClickCapture={(e) => {
             e.preventDefault()
             onOpen(name)
           }}>
             <InstanceCard name={name} to="#">
+              <LiveCardBody tab={tab} preview={preview} />
               <div className="space-y-1">
-                {items.filter((row) => row.instance_name === name).map((row) => <div key={`${row.difficulty_name}-${row.max_players}`} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                {cohorts.map((row) => <div key={`${row.difficulty_name}-${row.max_players}`} className="flex items-center gap-1 text-[10px] text-muted-foreground">
                   <Skull className="h-3 w-3" />
-                  {row.difficulty_name || "Default"} · {row.max_players} players · {row.total_kills.toLocaleString()} recorded kills
+                  {row.difficulty_name || "Default"} · {row.max_players ? `${row.max_players} players` : "size not recorded"} · {row.total_kills.toLocaleString()} recorded kills
                 </div>)}
               </div>
             </InstanceCard>
           </div>
-        ))}
+        })}
       </div>
     )
     const raids = instances.filter((inst) => inst.category === "raid")
@@ -210,6 +225,52 @@ function HubLanding({ tab, onOpen, instances }: { tab: HubTab; onOpen: (instance
       <p className="px-1 text-xs text-muted-foreground/70">Mock data for design review. Names, guilds, and numbers are generated.</p>
     </div>
   )
+}
+
+/** Published highlights use the same tab-specific rows as the design mock. */
+function LiveCardBody({ tab, preview }: { tab: HubTab; preview?: HubLandingPreview }) {
+  const renown = METRIC_THEMES.renown
+  const playerLine = (metric: "peak" | "ranked_mastery" | "renown", label: string) => {
+    const entry = preview?.player[metric][0]
+    const theme = METRIC_THEMES[metric === "ranked_mastery" ? "mastery" : metric]
+    return entry && <Line key={metric} icon={<theme.icon className="size-3" style={{ color: theme.accent }} />}
+      value={theme.format(entry.score)} title={`${label} #1`}><LivePlayer entry={entry} /></Line>
+  }
+  const speedLine = (index: number) => {
+    const entry = preview?.speedruns[index]
+    return entry && <Line key={entry.instance_id} icon={<span className="font-mono text-[10px] text-muted-foreground">{index + 1}</span>}
+      value={formatClock(entry.duration_ms)} title="Full clear"><span className="truncate text-foreground/90">{entry.guild_name}</span></Line>
+  }
+  let rows: ReactNode = null
+  if (tab === "overview") {
+    const guild = preview?.guild.renown[0]
+    rows = <>{speedLine(0)}
+      {guild && <Line icon={<renown.icon className="size-3" style={{ color: renown.accent }} />}
+        value={renown.format(guild.score)} title="Guild Renown #1"><span className="truncate text-foreground/90">{guild.guild_name}</span></Line>}
+      {playerLine("peak", "Peak")}
+      {!preview?.speedruns.length && !guild && !preview?.player.peak.length && <UnavailableHighlight />}
+    </>
+  } else if (tab === "ratings") {
+    rows = <>{playerLine("peak", "Peak")}{playerLine("ranked_mastery", "Ranked Mastery")}{playerLine("renown", "Renown")}
+      {!preview?.player.peak.length && !preview?.player.ranked_mastery.length && !preview?.player.renown.length && <UnavailableHighlight />}</>
+  } else if (tab === "speedruns") {
+    rows = <>{[0, 1, 2].map(speedLine)}{!preview?.speedruns.length && <UnavailableHighlight label="No qualifying full clears" />}</>
+  } else if (tab === "performances") {
+    rows = <UnavailableHighlight label="Performance highlights unavailable" />
+  } else if (tab === "statistics") {
+    rows = <UnavailableHighlight label="Median DPS by spec unavailable" />
+  }
+  // Parsing keeps the compact card, as in Storybook.
+  return rows && <div className="mb-2 space-y-0.5">{rows}</div>
+}
+
+function LivePlayer({ entry }: { entry: HubPlayerRatingEntry }) {
+  return <><span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: CLASS_CSS_VAR[entry.player_class] }} />
+    <span className="truncate text-foreground/90">{entry.player_name || entry.player_guid}</span></>
+}
+
+function UnavailableHighlight({ label = "No published highlights yet" }: { label?: string }) {
+  return <span className="text-xs text-muted-foreground">{label}</span>
 }
 
 /** Each tab's headline, in the card's existing row style. */

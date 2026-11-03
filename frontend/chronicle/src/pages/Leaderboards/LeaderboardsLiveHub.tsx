@@ -49,7 +49,7 @@ export function LeaderboardsLiveHub() {
     <div className="min-w-0 flex-1">
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={(name) => choose("instance", name)}
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
-        realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data!.instances}
+        realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data!.instances} landingPreviews={summary.data!.landing_previews}
         renderInstance={(name) => <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} realm={realm}
           realmIDs={selectedRealmIDs} encounter={encounter} tab={tab}
           onInstance={(next) => choose("instance", next)} onTab={chooseTab}

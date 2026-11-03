@@ -28,6 +28,47 @@ describe("live Hub landing", () => {
     expect(markup).not.toContain("Mock data for design review")
   })
 
+  it("shows the published board summaries for each tab instead of mock rows", () => {
+    const player = { realm_id: "realm", realm_name: "Nordanaar", player_guid: "mage-1", player_name: "Live Mage",
+      player_class: "MAGE", player_spec: "Frost", player_sub_spec: "", score: 98 }
+    const guild = { realm_id: "realm", realm_name: "Nordanaar", guild_id: "guild-1", guild_name: "Live Guild", score: 1200 }
+    const landingPreviews = [{ instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40,
+      player: { peak: [player], ranked_mastery: [player], renown: [player] },
+      guild: { peak: [], ranked_mastery: [], renown: [guild] },
+      speedruns: [{ instance_id: "run-1", guild_name: "Live Clear", duration_ms: 120000 }],
+    }] as unknown as NonNullable<Parameters<typeof LeaderboardsHubApp>[0]["landingPreviews"]>
+    const overview = render({ tab: "overview", landingPreviews })
+    expect(overview).toContain("Live Clear")
+    expect(overview).toContain("Live Guild")
+    expect(overview).toContain("Live Mage")
+    expect(overview).not.toContain("Mock data for design review")
+    const ratings = render({ tab: "ratings", landingPreviews })
+    expect(ratings).toContain("Live Mage")
+    expect(ratings).not.toContain("Live Clear")
+    const speedruns = render({ tab: "speedruns", landingPreviews })
+    expect(speedruns).toContain("Live Clear")
+    expect(speedruns).not.toContain("Live Mage")
+    expect(render({ tab: "performances", landingPreviews })).toContain("Performance highlights unavailable")
+    expect(render({ tab: "statistics", landingPreviews })).toContain("Median DPS by spec unavailable")
+    expect(render({ tab: "parsing", landingPreviews })).not.toContain("Live Mage")
+  })
+
+  it("chooses a cohort with a published speedrun before an empty cohort", () => {
+    const hero = [{ instance_name: "Molten Core", difficulty_name: "Heroic", max_players: 25,
+      player: { peak: [], ranked_mastery: [], renown: [] }, guild: { peak: [], ranked_mastery: [], renown: [] },
+      speedruns: [{ instance_id: "hero-run", guild_name: "Heroic Clear", duration_ms: 95000 }] }]
+    const markup = render({ tab: "speedruns", landingPreviews: hero as unknown as NonNullable<Parameters<typeof LeaderboardsHubApp>[0]["landingPreviews"]> })
+    expect(markup).toContain("Heroic Clear")
+  })
+
+  it("treats legacy zero-size cohorts as missing data, not zero-player raids", () => {
+    const zero = [{ category: "raid", instance_name: "Onyxia's Lair", difficulty_name: "", max_players: 0,
+      total_kills: 10, top_players: [] }] satisfies RankingsInstanceSummary[]
+    const markup = render({ instances: zero })
+    expect(markup).toContain("size not recorded")
+    expect(markup).not.toContain("0 players")
+  })
+
   it("uses the caller's instance view and never falls back to fixture Hub data", () => {
     expect(render({ instance: "Molten Core", onInstance: () => {}, renderInstance: (name) => <p>Published {name}</p> })).toContain("Published Molten Core")
     const unavailable = render({ instance: "Molten Core", onInstance: () => {} })

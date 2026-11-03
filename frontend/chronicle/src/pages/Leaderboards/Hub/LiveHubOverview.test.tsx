@@ -9,7 +9,7 @@ const cohort = { difficulty: "", maxPlayers: 0 }
 const entry = { player_guid: "mage-1", player_name: "Actual Mage", player_class: "MAGE", player_spec: "Frost", player_sub_spec: "", score: 42, realm_id: "realm-1", realm_name: "Turtle" }
 const guild = { guild_id: "guild-1", guild_name: "Actual Guild", score: 15, realm_id: "realm-1", realm_name: "Turtle" }
 const ratings = { player: { peak: [entry], ranked_mastery: [entry], renown: [entry] }, guild: { peak: [guild], ranked_mastery: [guild], renown: [guild] } }
-const summary = { selected_cohort: { difficulty_name: "", max_players: 0 }, generation_id: null, instances: [{ category: "raid", instance_name: "Molten Core", difficulty_name: "", max_players: 0, total_kills: 12, top_players: [] }],
+const summary = { landing_previews: [], selected_cohort: { difficulty_name: "", max_players: 0 }, generation_id: null, instances: [{ category: "raid", instance_name: "Molten Core", difficulty_name: "", max_players: 0, total_kills: 12, top_players: [] }],
   encounters: [{ encounter_name: "Ragnaros", total_kills: 12, top_dps: 1532.69 }],
   ratings: { raid: ratings, bosses: [{ encounter_name: "Ragnaros", ...ratings }] },
   speedruns: [], performances: [], realms: [], filters: [], progression_bosses: ["Ragnaros"], ranking_encounter_sets: [],
