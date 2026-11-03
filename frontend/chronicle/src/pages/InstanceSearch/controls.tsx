@@ -1,7 +1,9 @@
-import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { ComboInput } from "./ComboInput";
+import { toOptions, type Suggestion } from "./comboOptions";
 
 /** Single-select pill toggle, styled like the panel filter toggles. */
 export function Segmented<T extends string>({
@@ -74,8 +76,8 @@ export function ToggleChips({
 }
 
 /**
- * Free-text chips: type a value (with suggestions) and press Enter to add it.
- * Used for boss and player name lists.
+ * Several values as removable chips, with a dropdown of suggestions. Enter or
+ * comma adds the typed text; Backspace on an empty box removes the last chip.
  */
 export function ChipInput({
   values,
@@ -87,32 +89,41 @@ export function ChipInput({
 }: {
   values: readonly string[];
   onChange: (values: string[]) => void;
-  suggestions?: readonly string[];
+  suggestions?: readonly Suggestion[];
   placeholder?: string;
   disabled?: boolean;
   className?: string;
 }) {
   const [draft, setDraft] = useState("");
-  const listId = useId();
   const add = (raw: string) => {
     const v = raw.trim();
-    if (!v || values.some((x) => x.toLowerCase() === v.toLowerCase())) {
-      setDraft("");
-      return;
-    }
-    onChange([...values, v]);
     setDraft("");
-  };
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" || e.key === ",") {
-      e.preventDefault();
-      add(draft);
-    } else if (e.key === "Backspace" && draft === "" && values.length > 0) {
-      onChange(values.slice(0, -1));
-    }
+    if (!v || values.some((x) => x.toLowerCase() === v.toLowerCase())) return;
+    onChange([...values, v]);
   };
   return (
-    <div className={cn("flex flex-wrap items-center gap-1 min-h-7 rounded-md border border-input bg-background px-1.5 py-0.5", disabled && "opacity-50", className)}>
+    <ComboInput
+      text={draft}
+      onTextChange={setDraft}
+      options={toOptions(suggestions)}
+      exclude={values}
+      onPick={(o) => add(o.value)}
+      onEnterText={add}
+      onBlurText={(t) => t && add(t)}
+      onKeyDown={(e) => {
+        if (e.key === ",") {
+          e.preventDefault();
+          add(draft);
+        } else if (e.key === "Backspace" && draft === "" && values.length > 0) {
+          e.preventDefault();
+          onChange(values.slice(0, -1));
+        }
+      }}
+      placeholder={values.length ? "" : placeholder}
+      disabled={disabled}
+      className={cn("flex flex-wrap items-center gap-1 min-h-7 rounded-md border border-input bg-background px-1.5 py-0.5", disabled && "opacity-50", className)}
+      inputClassName="flex-1 min-w-[90px] bg-transparent text-xs outline-none py-0.5"
+    >
       {values.map((v) => (
         <span key={v} className="inline-flex items-center gap-1 rounded bg-zinc-700/60 px-1.5 py-px text-2xs text-zinc-200">
           {v}
@@ -121,33 +132,11 @@ export function ChipInput({
           </button>
         </span>
       ))}
-      <input
-        list={suggestions.length ? listId : undefined}
-        disabled={disabled}
-        value={draft}
-        onChange={(e) => {
-          // Picking a datalist suggestion fills the input; add it right away.
-          const v = e.target.value;
-          if (suggestions.includes(v)) add(v);
-          else setDraft(v);
-        }}
-        onKeyDown={onKeyDown}
-        onBlur={() => draft && add(draft)}
-        placeholder={values.length ? "" : placeholder}
-        className="flex-1 min-w-[90px] bg-transparent text-xs outline-none py-0.5"
-      />
-      {suggestions.length > 0 && (
-        <datalist id={listId}>
-          {suggestions.map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-      )}
-    </div>
+    </ComboInput>
   );
 }
 
-/** Text input with optional suggestions. */
+/** Text input with a dropdown of suggestions; any text is allowed. */
 export function SuggestInput({
   value,
   onChange,
@@ -158,30 +147,22 @@ export function SuggestInput({
 }: {
   value: string;
   onChange: (v: string) => void;
-  suggestions?: readonly string[];
+  suggestions?: readonly Suggestion[];
   placeholder?: string;
   disabled?: boolean;
   className?: string;
 }) {
-  const listId = useId();
   return (
-    <>
-      <Input
-        list={suggestions.length ? listId : undefined}
-        className={cn("h-7 text-xs", className)}
-        value={value}
-        disabled={disabled}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {suggestions.length > 0 && (
-        <datalist id={listId}>
-          {suggestions.map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-      )}
-    </>
+    <ComboInput
+      text={value}
+      onTextChange={onChange}
+      options={toOptions(suggestions)}
+      onPick={(o) => onChange(o.value)}
+      placeholder={placeholder}
+      disabled={disabled}
+      className={className}
+      inputClassName="flex h-7 w-full min-w-0 rounded-md border border-input bg-background px-3 py-1 text-xs md:text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50"
+    />
   );
 }
 

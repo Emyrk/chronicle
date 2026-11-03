@@ -8,6 +8,7 @@ import { ChipInput, NumberInput, Segmented, SuggestInput, ToggleChips } from "./
 import { MATCH_OPTIONS, PARSE_SCOPE_OPTIONS, enumLabel } from "./fieldLabels";
 import { ClassSpecPicker } from "./ClassSpecPicker";
 import type { SearchForm as Form, TextMatch } from "./queryModel";
+import type { Suggestion } from "./comboOptions";
 
 const TEXT_MATCH_OPTIONS: { value: TextMatch; label: string }[] = [
   { value: "contains", label: "contains" },
@@ -17,16 +18,17 @@ const TEXT_MATCH_OPTIONS: { value: TextMatch; label: string }[] = [
 export interface SearchFormProps {
   form: Form;
   onChange: (form: Form) => void;
-  zones: readonly string[];
+  zones: readonly Suggestion[];
   /** Bosses for the chosen zone (or every boss when no zone is chosen). */
-  bosses: readonly string[];
+  bosses: readonly Suggestion[];
+  realms: readonly Suggestion[];
   classes: readonly string[];
   capabilities: readonly string[];
   /** Anonymous users only get the Run section. */
   loggedIn: boolean;
 }
 
-export function SearchForm({ form, onChange, zones, bosses, classes, capabilities, loggedIn }: SearchFormProps) {
+export function SearchForm({ form, onChange, zones, bosses, realms, classes, capabilities, loggedIn }: SearchFormProps) {
   const set = <K extends keyof Form>(key: K, value: Form[K]) => onChange({ ...form, [key]: value });
   const locked = !loggedIn;
 
@@ -42,7 +44,7 @@ export function SearchForm({ form, onChange, zones, bosses, classes, capabilitie
           <Segmented options={TEXT_MATCH_OPTIONS} value={form.guildMatch} onChange={(v) => set("guildMatch", v)} />
         </Row>
         <Row label="Realm">
-          <Input className="h-7 text-xs w-56" value={form.realm} onChange={(e) => set("realm", e.target.value)} placeholder="Realm name" />
+          <SuggestInput className="w-56" value={form.realm} onChange={(v) => set("realm", v)} suggestions={realms} placeholder="Realm name" />
         </Row>
         <Row label="Date">
           <Input type="date" className="h-7 text-xs w-36" value={form.from} onChange={(e) => set("from", e.target.value)} aria-label="From date" />

@@ -76,6 +76,7 @@ function handlers({ loggedIn, search = "ok", tier = "honored" }: { loggedIn: boo
   return [
     http.get("/api/v1/whoami", () => (loggedIn ? HttpResponse.json({ ...session, supporter_tier: tier }) : new HttpResponse(null, { status: 204 }))),
     http.get("/api/v1/raidlogs/supported", () => HttpResponse.json(supported)),
+    http.get("/api/v1/realms", () => HttpResponse.json(realms.map((name, i) => ({ id: `realm-${i}`, server_id: "s", name, description: "" })))),
     // Nightmare of Ursol records sub-specs (Bear / Cat, Tank / DPS, Fury Prot).
     http.get("/api/v1/site-config", () => HttpResponse.json({ dataset_flavor: ["nightmare-of-ursol"] })),
     http.get("/api/v1/raidlogs/search/fields", () => HttpResponse.json(fields)),

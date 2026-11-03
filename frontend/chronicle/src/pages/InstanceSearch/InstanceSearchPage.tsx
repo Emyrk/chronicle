@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Blocks, ChevronDown, ChevronRight, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
 import type { InstanceSearchCursor } from "@/api/typesGenerated";
-import { useSupportedInstances } from "@/api/queries";
+import { useRealms, useSupportedInstances } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation";
 import { useSupporterTier } from "@/hooks/useSupporterTier";
@@ -22,6 +22,7 @@ import { addRecentSearch, loadRecentSearches, saveRecentSearches, type RecentSea
 import { HonoredLockTooltip } from "./HonoredLockTooltip";
 import type { SearchExample } from "./examples";
 import { SearchForm } from "./SearchForm";
+import { bossOptions, realmOptions, zoneOptions } from "./searchOptions";
 import {
   buildQuery,
   decodeQuery,
@@ -92,14 +93,17 @@ export function InstanceSearchPage() {
   // Whether the current draft fits the form (it always fits blocks and code).
   const formFromDraft = useMemo(() => (mode === "form" || codeInvalid ? null : treeToForm(draftTree)), [mode, codeInvalid, draftTree]);
 
-  const zones = useMemo(() => (supported.data ?? []).map((i) => i.name).sort(), [supported.data]);
+  // Combobox options: supported instances, their bosses, and realms.
+  const realms = useRealms();
+  const zones = useMemo(() => zoneOptions(supported.data ?? []), [supported.data]);
   const bossesForZone = useMemo(() => {
     const all = supported.data ?? [];
     const zone = mode === "form" ? form.zone.trim().toLowerCase() : "";
     const picked = zone ? all.filter((i) => i.name.toLowerCase() === zone || (form.zoneMatch === "contains" && i.name.toLowerCase().includes(zone))) : all;
-    return [...new Set((picked.length ? picked : all).flatMap((i) => (i.bosses ?? []).map((b) => b.name)))].sort();
+    return bossOptions(picked.length ? picked : all);
   }, [supported.data, mode, form.zone, form.zoneMatch]);
-  const allBosses = useMemo(() => [...new Set((supported.data ?? []).flatMap((i) => (i.bosses ?? []).map((b) => b.name)))].sort(), [supported.data]);
+  const allBosses = useMemo(() => bossOptions(supported.data ?? []), [supported.data]);
+  const realmNames = useMemo(() => realmOptions(realms.data ?? []), [realms.data]);
   const enumOf = (name: string) => fields.data?.fields.find((f) => f.name === name)?.enum ?? [];
 
   const anonBlocked = !isAuthenticated && mode === "form" && !formIsBasic(form);
@@ -308,6 +312,7 @@ export function InstanceSearchPage() {
           onChange={setForm}
           zones={zones}
           bosses={bossesForZone}
+          realms={realmNames}
           classes={enumOf("player.class")}
           capabilities={enumOf("instance.capability")}
           loggedIn={isAuthenticated}
@@ -329,7 +334,7 @@ export function InstanceSearchPage() {
           {mode === "code" ? (
             <CodeEditor value={code} onChange={setCode} onSubmit={submit} parse={{ error: parsedCode.error }} disabled={!advancedUnlocked} />
           ) : (
-            <BlockEditor tree={blocks} onChange={setBlocks} ctx={{ fields: fields.data?.fields ?? [], zones, bosses: allBosses, disabled: !advancedUnlocked }} />
+            <BlockEditor tree={blocks} onChange={setBlocks} ctx={{ fields: fields.data?.fields ?? [], zones, bosses: allBosses, realms: realmNames, disabled: !advancedUnlocked }} />
           )}
         </div>
       )}

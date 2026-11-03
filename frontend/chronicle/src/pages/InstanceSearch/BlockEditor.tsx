@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { ChipInput, NATIVE_SELECT, NumberInput, Segmented, SuggestInput, ToggleChips } from "./controls";
 import { MATCH_OPTIONS, METRIC_OPTIONS, ON_OPTIONS, OP_LABELS, PARSE_SCOPE_OPTIONS, enumLabel, fieldLabel } from "./fieldLabels";
 import type { Node } from "./queryModel";
+import type { Suggestion } from "./comboOptions";
 import { ClassSpecPicker } from "./ClassSpecPicker";
 import { ANY_CLASS_SPEC, type ClassSpec, classLabel, useSubSpecs } from "./classSpec";
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
@@ -24,8 +25,9 @@ import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
 
 export interface BlockContext {
   fields: readonly InstanceSearchField[];
-  zones: readonly string[];
-  bosses: readonly string[];
+  zones: readonly Suggestion[];
+  bosses: readonly Suggestion[];
+  realms?: readonly Suggestion[];
   disabled?: boolean;
 }
 
@@ -407,10 +409,18 @@ function PredicateEditor({
   );
 }
 
-function suggestionsFor(field: InstanceSearchField, ctx: BlockContext): readonly string[] {
-  if (field.name === "instance.name") return ctx.zones;
-  if (field.name === "encounter.name") return ctx.bosses;
-  return [];
+/** Combobox options per field. Add a field here to give its block a picker. */
+function suggestionsFor(field: InstanceSearchField, ctx: BlockContext): readonly Suggestion[] {
+  switch (field.name) {
+    case "instance.name":
+      return ctx.zones;
+    case "encounter.name":
+      return ctx.bosses;
+    case "instance.realm":
+      return ctx.realms ?? [];
+    default:
+      return [];
+  }
 }
 
 function ValueEditor({
