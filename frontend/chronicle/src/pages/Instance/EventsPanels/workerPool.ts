@@ -7,14 +7,18 @@
 
 import type { WorkerRequest, WorkerResponse } from "./processorTypes";
 import { processWorkerRequest } from "./panelRequestProcessor";
+import { prepareWorkerRequest } from "./workerStreamCache";
 
 interface WorkerSlot {
   worker: Worker;
   busy: boolean;
+  streamCacheScope: string | null;
+  knownStreamIds: Set<number>;
 }
 
 interface QueuedRequest {
   request: WorkerRequest;
+  streamCacheScope: string;
   queuedAtMs: number;
   resolve: (response: WorkerResponse) => void;
   reject: (error: Error) => void;
@@ -47,7 +51,12 @@ function initializePool(): void {
   const slots: WorkerSlot[] = [];
   try {
     for (let i = 0; i < WORKER_POOL_SIZE; i++) {
-      slots.push({ worker: createWorker(), busy: false });
+      slots.push({
+        worker: createWorker(),
+        busy: false,
+        streamCacheScope: null,
+        knownStreamIds: new Set(),
+      });
     }
   } catch {
     for (const slot of slots) {
@@ -73,6 +82,8 @@ function getIdleSlot(): WorkerSlot | null {
 function replaceWorker(slot: WorkerSlot): void {
   slot.worker.terminate();
   slot.worker = createWorker();
+  slot.streamCacheScope = null;
+  slot.knownStreamIds.clear();
 }
 
 function dispatchQueuedRequests(): void {
@@ -125,13 +136,27 @@ function runRequest(slot: WorkerSlot, queued: QueuedRequest): void {
 
   worker.addEventListener("message", handleMessage);
   worker.addEventListener("error", handleError);
-  worker.postMessage(queued.request);
+
+  const resetStreamCache = slot.streamCacheScope !== queued.streamCacheScope;
+  const prepared = prepareWorkerRequest(queued.request, slot.knownStreamIds, resetStreamCache);
+  worker.postMessage(prepared.request);
+
+  if (resetStreamCache) {
+    slot.streamCacheScope = queued.streamCacheScope;
+    slot.knownStreamIds.clear();
+  }
+  for (const cacheId of prepared.transmittedCacheIds) {
+    slot.knownStreamIds.add(cacheId);
+  }
 }
 
 /**
  * Execute a request using the worker pool.
  */
-export function executeRequest(request: WorkerRequest): Promise<WorkerResponse> {
+export function executeRequest(
+  request: WorkerRequest,
+  streamCacheScope: string,
+): Promise<WorkerResponse> {
   initializePool();
 
   if (mainThreadMode) {
@@ -145,6 +170,7 @@ export function executeRequest(request: WorkerRequest): Promise<WorkerResponse> 
   return new Promise((resolve, reject) => {
     requestQueue.push({
       request,
+      streamCacheScope,
       queuedAtMs: performance.now(),
       resolve,
       reject,
