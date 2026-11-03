@@ -119,6 +119,13 @@ export interface MapView3DProps {
    * mesh) as it was instead of tearing the scene down, until fresh props arrive.
    */
   frozen?: boolean;
+  /**
+   * A video capture view (fixed output size, no input, drawn only through
+   * MapScene3D.captureFrame). Read once, when the scene is created.
+   */
+  capture?: { width: number; height: number } | null;
+  /** Called with the scene once created, and null when it is disposed. */
+  onScene?: (scene: MapScene3D | null) => void;
 }
 
 const NO_DEBUFFS: readonly number[] = [];
@@ -210,6 +217,8 @@ export default function MapView3D({
   planItems = NO_PLAN_ITEMS,
   planSelectedId = null,
   planInput = null,
+  capture = null,
+  onScene,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
@@ -217,6 +226,8 @@ export default function MapView3D({
   const onUserViewportRef = useRef(onUserViewport);
   const onDungeonMeshStateRef = useRef(onDungeonMeshState);
   const onCameraCaptureRef = useRef(onCameraCapture);
+  const onSceneRef = useRef(onScene);
+  const captureRef = useRef(capture);
   const colorCacheRef = useRef(new Map<string, string>());
   const smoothMs = useSmoothReplayTime(cursorMs, playing, playbackSpeed);
   const authoredCameraPose = useMemo(() => {
@@ -244,7 +255,8 @@ export default function MapView3D({
     onUserViewportRef.current = onUserViewport;
     onDungeonMeshStateRef.current = onDungeonMeshState;
     onCameraCaptureRef.current = onCameraCapture;
-  }, [onCameraCapture, onDungeonMeshState, onUnavailable, onUserViewport]);
+    onSceneRef.current = onScene;
+  }, [onCameraCapture, onDungeonMeshState, onScene, onUnavailable, onUserViewport]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -258,13 +270,16 @@ export default function MapView3D({
         (viewport) => onUserViewportRef.current?.(viewport),
         (state) => onDungeonMeshStateRef.current?.(state),
         setCompassYaw,
+        { capture: captureRef.current },
       );
     } catch {
       onUnavailableRef.current();
       return;
     }
     sceneRef.current = scene;
+    onSceneRef.current?.(scene);
     return () => {
+      onSceneRef.current?.(null);
       scene.dispose();
       sceneRef.current = null;
     };
@@ -418,6 +433,12 @@ export default function MapView3D({
   const isCooldown = useCallback((spellId: number) => majorCooldowns.has(spellId), [majorCooldowns]);
   const isProc = useCallback((spellId: number) => spellGcd(spellId) === 0, [spellGcd]);
 
+  // A capture waits for the spell data, or its first frames would show placeholder icons.
+  const castIconsPending = effectSettings.enabled && spellMetaLoading && castSpellIds.length > 0;
+  useEffect(() => {
+    sceneRef.current?.setExternalPending(castIconsPending);
+  }, [castIconsPending]);
+
   // Once the spell data is in, load the icon images ahead of playback.
   useEffect(() => {
     if (!effectSettings.enabled || spellMetaLoading || castSpellIds.length === 0) return;
@@ -553,7 +574,7 @@ export default function MapView3D({
           </div>
         </div>
       )}
-      <MapCompass northRadians={compassYaw} />
+      {!capture && <MapCompass northRadians={compassYaw} />}
       {effectHover && <EffectTooltip hover={effectHover} />}
     </div>
   );

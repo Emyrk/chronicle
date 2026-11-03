@@ -1,0 +1,17 @@
+{
+  "title": "Fast kills on both Rag and Domo",
+  "category": "Speed",
+  "description": "Kill-time parse of 90+ on both Ragnaros and Majordomo Executus.",
+  "query": {
+    "where": {
+      "field": "instance.kill_time_parse",
+      "op": ">=",
+      "value": 90,
+      "bosses": [
+        "Ragnaros",
+        "Majordomo Executus"
+      ],
+      "match": "each"
+    }
+  }
+}

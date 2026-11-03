@@ -1,0 +1,853 @@
+[
+  {
+    "id": "18_small_group_mc_or_ony",
+    "title": "Small-group Molten Core or Onyxia",
+    "category": "Run",
+    "description": "Molten Core or Onyxia's Lair done with 30 or fewer players.",
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "in",
+          "value": [
+            "Molten Core",
+            "Onyxia's Lair"
+          ]
+        },
+        {
+          "field": "instance.player_count",
+          "op": "\u003c=",
+          "value": 30
+        }
+      ]
+    }
+  },
+  {
+    "id": "26_partial_zone_and_guild_name",
+    "title": "Partial zone and guild names",
+    "category": "Run",
+    "description": "Partial, case-insensitive names: any zone containing \"molten\" by a guild whose name starts with \"alp\".",
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "contains",
+          "value": "molten"
+        },
+        {
+          "field": "instance.guild",
+          "op": "starts_with",
+          "value": "alp"
+        }
+      ]
+    }
+  },
+  {
+    "id": "02_rag_kill_without_wipes",
+    "title": "Ragnaros with no wipes",
+    "category": "Bosses",
+    "description": "Ragnaros was killed and never wiped on in the same run.",
+    "where": {
+      "and": [
+        {
+          "any_encounter": {
+            "and": [
+              {
+                "field": "encounter.name",
+                "op": "=",
+                "value": "Ragnaros"
+              },
+              {
+                "field": "encounter.killed",
+                "op": "=",
+                "value": true
+              }
+            ]
+          }
+        },
+        {
+          "not": {
+            "any_encounter": {
+              "and": [
+                {
+                  "field": "encounter.name",
+                  "op": "=",
+                  "value": "Ragnaros"
+                },
+                {
+                  "field": "encounter.outcome",
+                  "op": "=",
+                  "value": "wipe"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "03_nefarian_progression",
+    "title": "Nefarian progression nights",
+    "category": "Bosses",
+    "description": "Progression nights: 5 or more wipes on Nefarian.",
+    "where": {
+      "count_encounters": {
+        "where": {
+          "and": [
+            {
+              "field": "encounter.name",
+              "op": "=",
+              "value": "Nefarian"
+            },
+            {
+              "field": "encounter.outcome",
+              "op": "=",
+              "value": "wipe"
+            }
+          ]
+        },
+        "op": "\u003e=",
+        "value": 5
+      }
+    }
+  },
+  {
+    "id": "16_deathless_ragnaros",
+    "title": "Deathless Ragnaros kill",
+    "category": "Bosses",
+    "description": "Ragnaros killed with no player deaths on the kill.",
+    "where": {
+      "and": [
+        {
+          "field": "instance.kill_time_ms",
+          "op": "\u003e",
+          "value": 0,
+          "bosses": [
+            "Ragnaros"
+          ]
+        },
+        {
+          "not": {
+            "any_player": {
+              "field": "player.deaths",
+              "op": "\u003e=",
+              "value": 1,
+              "bosses": [
+                "Ragnaros"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "19_naxx_partial_progress",
+    "title": "Naxxramas progress (5-10 bosses)",
+    "category": "Bosses",
+    "description": "Naxxramas runs that killed between 5 and 10 bosses.",
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "=",
+          "value": "Naxxramas"
+        },
+        {
+          "field": "instance.bosses_killed",
+          "op": "\u003e=",
+          "value": 5
+        },
+        {
+          "field": "instance.bosses_killed",
+          "op": "\u003c=",
+          "value": 10
+        }
+      ]
+    }
+  },
+  {
+    "id": "04_top_realm_clear_parse",
+    "title": "Top 5% clear on the realm",
+    "category": "Speed",
+    "description": "Clears in the top 5% of their realm's clear times.",
+    "where": {
+      "field": "instance.clear_parse",
+      "op": "\u003e=",
+      "value": 95,
+      "parse_scope": "realm"
+    }
+  },
+  {
+    "id": "05_kill_parse_each_boss",
+    "title": "Fast kills on both Rag and Domo",
+    "category": "Speed",
+    "description": "Kill-time parse of 90+ on both Ragnaros and Majordomo Executus.",
+    "where": {
+      "field": "instance.kill_time_parse",
+      "op": "\u003e=",
+      "value": 90,
+      "bosses": [
+        "Ragnaros",
+        "Majordomo Executus"
+      ],
+      "match": "each"
+    }
+  },
+  {
+    "id": "06_guild_best_kill_any_boss",
+    "title": "A guild's own best kill",
+    "category": "Speed",
+    "description": "Any boss kill that was in the top 1% of the guild's own kill times.",
+    "where": {
+      "field": "instance.kill_time_parse",
+      "op": "\u003e=",
+      "value": 99,
+      "parse_scope": "guild"
+    }
+  },
+  {
+    "id": "07_tight_clear_low_idle",
+    "title": "Tight clears with little downtime",
+    "category": "Speed",
+    "description": "Clears with under 5 minutes idle and under 20 minutes of trash.",
+    "where": {
+      "and": [
+        {
+          "field": "instance.idle_time_ms",
+          "op": "\u003c",
+          "value": 300000
+        },
+        {
+          "field": "instance.trash_time_ms",
+          "op": "\u003c",
+          "value": 1200000
+        }
+      ]
+    }
+  },
+  {
+    "id": "08_bwl_short_boss_time",
+    "title": "Short BWL boss time",
+    "category": "Speed",
+    "description": "Blackwing Lair clears with at most 15 minutes total spent on bosses.",
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "=",
+          "value": "Blackwing Lair"
+        },
+        {
+          "field": "instance.boss_time_ms",
+          "op": "\u003c=",
+          "value": 900000
+        }
+      ]
+    }
+  },
+  {
+    "id": "17_fast_ragnaros_kill",
+    "title": "Ragnaros in 2 minutes",
+    "category": "Speed",
+    "description": "Ragnaros killed in 2 minutes or less.",
+    "where": {
+      "field": "instance.kill_time_ms",
+      "op": "\u003c=",
+      "value": 120000,
+      "bosses": [
+        "Ragnaros"
+      ]
+    }
+  },
+  {
+    "id": "29_october_mc_clears_60_to_75_min",
+    "title": "October Molten Core clears, 60-75 minutes",
+    "category": "Speed",
+    "description": "Molten Core full clears from October 2026 that took between 60 and 75 minutes.",
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "=",
+          "value": "Molten Core"
+        },
+        {
+          "field": "instance.started_at",
+          "op": "between",
+          "value": [
+            "2026-10-01T00:00:00Z",
+            "2026-10-31T23:59:59Z"
+          ]
+        },
+        {
+          "field": "instance.clear_time_ms",
+          "op": "between",
+          "value": [
+            3600000,
+            4500000
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "09_three_or_more_priests",
+    "title": "3+ Priests",
+    "category": "Roster",
+    "description": "Raids with at least 3 priests.",
+    "where": {
+      "count_players": {
+        "where": {
+          "field": "player.class",
+          "op": "=",
+          "value": "PRIEST"
+        },
+        "op": "\u003e=",
+        "value": 3
+      }
+    }
+  },
+  {
+    "id": "10_two_holy_paladins",
+    "title": "2+ Holy Paladins",
+    "category": "Roster",
+    "description": "Raids with at least 2 paladins who played Holy on a boss kill.",
+    "where": {
+      "count_players": {
+        "where": {
+          "and": [
+            {
+              "field": "player.class",
+              "op": "=",
+              "value": "PALADIN"
+            },
+            {
+              "field": "player.spec",
+              "op": "=",
+              "value": "Holy"
+            }
+          ]
+        },
+        "op": "\u003e=",
+        "value": 2
+      }
+    }
+  },
+  {
+    "id": "11_druid_bear_and_cat",
+    "title": "A druid who went Bear and Cat",
+    "category": "Roster",
+    "description": "A single druid played both Bear and Cat on boss kills in the same run.",
+    "where": {
+      "any_player": {
+        "and": [
+          {
+            "field": "player.class",
+            "op": "=",
+            "value": "DRUID"
+          },
+          {
+            "field": "player.sub_spec",
+            "op": "=",
+            "value": "Bear"
+          },
+          {
+            "field": "player.sub_spec",
+            "op": "=",
+            "value": "Cat"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "15_guild_core_in_pug",
+    "title": "PUG with a guild core",
+    "category": "Roster",
+    "description": "5+ members of Alpha in a run not attributed to Alpha (a PUG with an Alpha core).",
+    "where": {
+      "and": [
+        {
+          "count_players": {
+            "where": {
+              "field": "player.guild",
+              "op": "=",
+              "value": "Alpha"
+            },
+            "op": "\u003e=",
+            "value": 5
+          }
+        },
+        {
+          "not": {
+            "field": "instance.guild",
+            "op": "=",
+            "value": "Alpha"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "20_geared_tanks",
+    "title": "Two geared tanks",
+    "category": "Roster",
+    "description": "Two or more tanks with average item level 70 or higher on a boss kill.",
+    "where": {
+      "count_players": {
+        "where": {
+          "and": [
+            {
+              "field": "player.role",
+              "op": "=",
+              "value": "tank"
+            },
+            {
+              "field": "player.avg_ilvl",
+              "op": "\u003e=",
+              "value": 70
+            }
+          ]
+        },
+        "op": "\u003e=",
+        "value": 2
+      }
+    }
+  },
+  {
+    "id": "25_bear_trash_cat_bosses",
+    "title": "Bear on trash, Cat on bosses",
+    "category": "Roster",
+    "description": "A druid who tanked trash as Bear but played Cat on every boss kill they were ranked on: Bear on trash, Cat on bosses, never Bear on a boss.",
+    "where": {
+      "any_player": {
+        "and": [
+          {
+            "field": "player.sub_spec",
+            "op": "=",
+            "value": "Bear",
+            "on": "trash"
+          },
+          {
+            "field": "player.sub_spec",
+            "op": "=",
+            "value": "Cat",
+            "on": "bosses"
+          },
+          {
+            "not": {
+              "field": "player.sub_spec",
+              "op": "=",
+              "value": "Bear",
+              "on": "bosses"
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "12_player_rag_dps_parse",
+    "title": "One player's 95+ Ragnaros parse",
+    "category": "Parses",
+    "description": "Runs where Thrall parsed 95+ DPS on Ragnaros.",
+    "where": {
+      "any_player": {
+        "and": [
+          {
+            "field": "player.name",
+            "op": "=",
+            "value": "Thrall"
+          },
+          {
+            "field": "player.parse",
+            "op": "\u003e=",
+            "value": 95,
+            "bosses": [
+              "Ragnaros"
+            ],
+            "metric": "dps"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "13_healer_parse_each_boss",
+    "title": "A healer parsing 90+ on each boss",
+    "category": "Parses",
+    "description": "A healer with a 90+ HPS parse on each of Ragnaros and Golemagg the Incinerator.",
+    "where": {
+      "any_player": {
+        "field": "player.parse",
+        "op": "\u003e=",
+        "value": 90,
+        "bosses": [
+          "Ragnaros",
+          "Golemagg the Incinerator"
+        ],
+        "match": "each",
+        "metric": "hps"
+      }
+    }
+  },
+  {
+    "id": "24_full_telemetry_rag_kill",
+    "title": "Replay-ready Ragnaros kills",
+    "category": "Logs",
+    "description": "Ragnaros kills recorded with both unit positions and unit resources, so they work in the 3D replay.",
+    "where": {
+      "and": [
+        {
+          "field": "instance.capability",
+          "op": "=",
+          "value": "unit-position"
+        },
+        {
+          "field": "instance.capability",
+          "op": "=",
+          "value": "unit-resources"
+        },
+        {
+          "any_encounter": {
+            "and": [
+              {
+                "field": "encounter.name",
+                "op": "=",
+                "value": "Ragnaros"
+              },
+              {
+                "field": "encounter.killed",
+                "op": "=",
+                "value": true
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "23_complex_speed_comp",
+    "title": "Fast, clean, two warrior tanks",
+    "category": "Combined",
+    "description": "Fast and clean: (90+ kill parse on each of Rag and Domo OR 95+ clear parse), at least 2 warrior tanks, and nobody died 3+ times on any boss kill.",
+    "where": {
+      "and": [
+        {
+          "or": [
+            {
+              "field": "instance.kill_time_parse",
+              "op": "\u003e=",
+              "value": 90,
+              "bosses": [
+                "Ragnaros",
+                "Majordomo Executus"
+              ],
+              "match": "each"
+            },
+            {
+              "field": "instance.clear_parse",
+              "op": "\u003e=",
+              "value": 95
+            }
+          ]
+        },
+        {
+          "count_players": {
+            "where": {
+              "and": [
+                {
+                  "field": "player.class",
+                  "op": "=",
+                  "value": "WARRIOR"
+                },
+                {
+                  "field": "player.role",
+                  "op": "=",
+                  "value": "tank"
+                }
+              ]
+            },
+            "op": "\u003e=",
+            "value": 2
+          }
+        },
+        {
+          "not": {
+            "any_player": {
+              "field": "player.deaths",
+              "op": "\u003e=",
+              "value": 3
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "27_gnome_warrior_bwl_deathless_vod",
+    "title": "Deathless gnome-tanked BWL on video",
+    "category": "Combined",
+    "description": "A Blackwing Lair full clear under 75 minutes with under 8 minutes idle, zero wipes and a linked video, where a gnome warrior tanked both Vaelastrasz and Nefarian without dying on any boss, at least three priests healed 800+ HPS on Nefarian, Vaelastrasz died in under a minute, and nobody pulled Chromaggus more than once.",
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "=",
+          "value": "Blackwing Lair"
+        },
+        {
+          "field": "instance.clear_time_ms",
+          "op": "\u003c=",
+          "value": 4500000
+        },
+        {
+          "field": "instance.idle_time_ms",
+          "op": "\u003c",
+          "value": 480000
+        },
+        {
+          "field": "instance.wipes",
+          "op": "=",
+          "value": 0
+        },
+        {
+          "field": "instance.has_video",
+          "op": "=",
+          "value": true
+        },
+        {
+          "any_player": {
+            "and": [
+              {
+                "field": "player.race",
+                "op": "=",
+                "value": "Gnome"
+              },
+              {
+                "field": "player.class",
+                "op": "=",
+                "value": "WARRIOR"
+              },
+              {
+                "field": "player.role",
+                "op": "=",
+                "value": "tank",
+                "bosses": [
+                  "Vaelastrasz the Corrupt",
+                  "Nefarian"
+                ],
+                "match": "each"
+              },
+              {
+                "not": {
+                  "field": "player.deaths",
+                  "op": "\u003e=",
+                  "value": 1,
+                  "on": "bosses"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "count_players": {
+            "where": {
+              "and": [
+                {
+                  "field": "player.class",
+                  "op": "=",
+                  "value": "PRIEST"
+                },
+                {
+                  "field": "player.hps",
+                  "op": "\u003e=",
+                  "value": 800,
+                  "bosses": [
+                    "Nefarian"
+                  ]
+                }
+              ]
+            },
+            "op": "\u003e=",
+            "value": 3
+          }
+        },
+        {
+          "any_encounter": {
+            "and": [
+              {
+                "field": "encounter.name",
+                "op": "=",
+                "value": "Vaelastrasz the Corrupt"
+              },
+              {
+                "field": "encounter.killed",
+                "op": "=",
+                "value": true
+              },
+              {
+                "field": "encounter.duration_ms",
+                "op": "\u003c",
+                "value": 60000
+              }
+            ]
+          }
+        },
+        {
+          "count_encounters": {
+            "where": {
+              "field": "encounter.name",
+              "op": "=",
+              "value": "Chromaggus"
+            },
+            "op": "\u003c=",
+            "value": 1
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "28_one_pull_rag_cat_shaman_carry",
+    "title": "One-pull sub-2-minute Rag with a 95+ cat",
+    "category": "Combined",
+    "description": "A Molten Core run with mana and position data where Ragnaros died on the first pull in under 2 minutes with a 90+ kill-time parse vs the realm, a druid tanked trash as Bear then went Cat on Ragnaros for a 95+ DPS parse, at least two shamans did 600+ HPS on Ragnaros, and no warlock died on any boss.",
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "contains",
+          "value": "molten"
+        },
+        {
+          "field": "instance.capability",
+          "op": "=",
+          "value": "unit-resources"
+        },
+        {
+          "field": "instance.capability",
+          "op": "=",
+          "value": "unit-position"
+        },
+        {
+          "field": "instance.kill_time_ms",
+          "op": "\u003c",
+          "value": 120000,
+          "bosses": [
+            "Ragnaros"
+          ]
+        },
+        {
+          "field": "instance.kill_time_parse",
+          "op": "\u003e=",
+          "value": 90,
+          "bosses": [
+            "Ragnaros"
+          ],
+          "parse_scope": "realm"
+        },
+        {
+          "not": {
+            "any_encounter": {
+              "and": [
+                {
+                  "field": "encounter.name",
+                  "op": "=",
+                  "value": "Ragnaros"
+                },
+                {
+                  "field": "encounter.outcome",
+                  "op": "in",
+                  "value": [
+                    "wipe",
+                    "reset"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "any_player": {
+            "and": [
+              {
+                "field": "player.class",
+                "op": "=",
+                "value": "DRUID"
+              },
+              {
+                "field": "player.sub_spec",
+                "op": "=",
+                "value": "Bear",
+                "on": "trash"
+              },
+              {
+                "field": "player.sub_spec",
+                "op": "=",
+                "value": "Cat",
+                "bosses": [
+                  "Ragnaros"
+                ]
+              },
+              {
+                "field": "player.parse",
+                "op": "\u003e=",
+                "value": 95,
+                "bosses": [
+                  "Ragnaros"
+                ],
+                "metric": "dps"
+              }
+            ]
+          }
+        },
+        {
+          "count_players": {
+            "where": {
+              "and": [
+                {
+                  "field": "player.class",
+                  "op": "=",
+                  "value": "SHAMAN"
+                },
+                {
+                  "field": "player.hps",
+                  "op": "\u003e=",
+                  "value": 600,
+                  "bosses": [
+                    "Ragnaros"
+                  ]
+                }
+              ]
+            },
+            "op": "\u003e=",
+            "value": 2
+          }
+        },
+        {
+          "not": {
+            "any_player": {
+              "and": [
+                {
+                  "field": "player.class",
+                  "op": "=",
+                  "value": "WARLOCK"
+                },
+                {
+                  "field": "player.deaths",
+                  "op": "\u003e=",
+                  "value": 1,
+                  "on": "bosses"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+]

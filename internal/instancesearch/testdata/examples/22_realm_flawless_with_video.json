@@ -1,0 +1,24 @@
+{
+  "description": "Nordanaar runs with a video and zero wipes.",
+  "query": {
+    "where": {
+      "and": [
+        {
+          "field": "instance.realm",
+          "op": "=",
+          "value": "Nordanaar"
+        },
+        {
+          "field": "instance.has_video",
+          "op": "=",
+          "value": true
+        },
+        {
+          "field": "instance.wipes",
+          "op": "=",
+          "value": 0
+        }
+      ]
+    }
+  }
+}

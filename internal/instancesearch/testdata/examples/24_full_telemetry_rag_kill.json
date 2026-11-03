@@ -1,0 +1,37 @@
+{
+  "title": "Replay-ready Ragnaros kills",
+  "category": "Logs",
+  "description": "Ragnaros kills recorded with both unit positions and unit resources, so they work in the 3D replay.",
+  "query": {
+    "where": {
+      "and": [
+        {
+          "field": "instance.capability",
+          "op": "=",
+          "value": "unit-position"
+        },
+        {
+          "field": "instance.capability",
+          "op": "=",
+          "value": "unit-resources"
+        },
+        {
+          "any_encounter": {
+            "and": [
+              {
+                "field": "encounter.name",
+                "op": "=",
+                "value": "Ragnaros"
+              },
+              {
+                "field": "encounter.killed",
+                "op": "=",
+                "value": true
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

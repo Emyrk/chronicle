@@ -1,0 +1,29 @@
+{
+  "title": "PUG with a guild core",
+  "category": "Roster",
+  "description": "5+ members of Alpha in a run not attributed to Alpha (a PUG with an Alpha core).",
+  "query": {
+    "where": {
+      "and": [
+        {
+          "count_players": {
+            "where": {
+              "field": "player.guild",
+              "op": "=",
+              "value": "Alpha"
+            },
+            "op": ">=",
+            "value": 5
+          }
+        },
+        {
+          "not": {
+            "field": "instance.guild",
+            "op": "=",
+            "value": "Alpha"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -3,6 +3,8 @@ package chroniclebot
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -84,4 +86,30 @@ func TestDiscordDirectMessage(t *testing.T) {
 	require.Equal(t, []*discordgo.MessageEmbed{embed}, message.Embeds)
 	require.NotNil(t, message.AllowedMentions)
 	require.Empty(t, message.AllowedMentions.Parse)
+}
+
+func TestDiscordDMRecipientUnavailable(t *testing.T) {
+	t.Parallel()
+
+	cannotSend := &discordgo.RESTError{
+		Response:     &http.Response{Status: "403 Forbidden"},
+		ResponseBody: []byte(`{"message":"Cannot send messages to this user due to having no mutual guilds","code":50278}`),
+		Message: &discordgo.APIErrorMessage{
+			Code:    50278,
+			Message: "Cannot send messages to this user due to having no mutual guilds",
+		},
+	}
+	wrapped := fmt.Errorf("send Discord DM: %w", cannotSend)
+	require.True(t, discordDMRecipientUnavailable(wrapped))
+	require.Equal(t, discordDMDeliveryOutput{
+		Outcome: "not_delivered",
+		Error:   wrapped.Error(),
+	}, unavailableDiscordDMOutput(wrapped))
+
+	otherDiscordError := &discordgo.RESTError{
+		Response: &http.Response{Status: "403 Forbidden"},
+		Message:  &discordgo.APIErrorMessage{Code: 50013, Message: "Missing Permissions"},
+	}
+	require.False(t, discordDMRecipientUnavailable(otherDiscordError))
+	require.False(t, discordDMRecipientUnavailable(errors.New("network error")))
 }

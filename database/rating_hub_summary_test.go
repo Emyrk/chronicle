@@ -51,7 +51,7 @@ func TestHubSummaryTenantRealmsAndNoGeneration(t *testing.T) {
 	_, err = q.GetActiveTenantRatingGeneration(ctx, tenant)
 	require.True(t, errors.Is(err, pgx.ErrNoRows))
 	// The query must not wildcard the generation when the caller has none.
-	rows, err := q.HubSummaryRatingRows(ctx, database.HubSummaryRatingRowsParams{TenantID: tenant, GenerationID: uuid.Nil, InstanceName: "Molten Core", PerformanceMetric: "dps"})
+	rows, err := q.HubSummaryRatingRows(ctx, database.HubSummaryRatingRowsParams{TenantID: tenant, GenerationID: uuid.Nil, InstanceName: "Molten Core", WindowKind: "period", RenownWindow: "period", BossDepth: 1, PerformanceMetric: "dps"})
 	require.NoError(t, err)
 	require.Empty(t, rows)
 }
@@ -175,7 +175,7 @@ func TestHubSummaryRatingPreviewLimitsAndRealm(t *testing.T) {
 	runs, err = q.HubLandingSpeedruns(ctx, database.HubLandingSpeedrunsParams{TenantID: tenant, RealmIds: []uuid.UUID{realms[1]}})
 	require.NoError(t, err)
 	require.Empty(t, runs)
-	args := database.HubSummaryRatingRowsParams{TenantID: tenant, GenerationID: gen, InstanceName: "Molten Core", FeaturedEncounter: "Ragnaros", ExactCohort: true, DifficultyName: "", MaxPlayers: 0, PerformanceMetric: "dps"}
+	args := database.HubSummaryRatingRowsParams{TenantID: tenant, GenerationID: gen, InstanceName: "Molten Core", WindowKind: "period", RenownWindow: "period", BossDepth: 1, FeaturedEncounter: "Ragnaros", ExactCohort: true, DifficultyName: "", MaxPlayers: 0, PerformanceMetric: "dps"}
 	rows, err := q.HubSummaryRatingRows(ctx, args)
 	require.NoError(t, err)
 	counts := map[string]int{}

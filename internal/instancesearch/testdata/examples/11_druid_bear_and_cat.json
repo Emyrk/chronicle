@@ -1,0 +1,28 @@
+{
+  "title": "A druid who went Bear and Cat",
+  "category": "Roster",
+  "description": "A single druid played both Bear and Cat on boss kills in the same run.",
+  "query": {
+    "where": {
+      "any_player": {
+        "and": [
+          {
+            "field": "player.class",
+            "op": "=",
+            "value": "DRUID"
+          },
+          {
+            "field": "player.sub_spec",
+            "op": "=",
+            "value": "Bear"
+          },
+          {
+            "field": "player.sub_spec",
+            "op": "=",
+            "value": "Cat"
+          }
+        ]
+      }
+    }
+  }
+}

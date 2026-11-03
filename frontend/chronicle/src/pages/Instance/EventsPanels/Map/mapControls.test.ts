@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionForKey, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, keyLabel, MAP_CONTROL_ACTIONS, MAP_CONTROL_KEYBINDS, mobileJoystickAxis, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY } from "./mapControls";
+import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, FREE_CAM_FAST_FACTOR, freeCamTravelSpeed, lookDrag, LOOK_RADIANS_PER_PX, planarStep, wheelZoomDistance, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, keyLabel, MAP_CONTROL_ACTIONS, MAP_CONTROL_KEYBINDS, mobileJoystickAxis, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY } from "./mapControls";
 
 describe("easeAngleToward", () => {
   it("eases toward the target without snapping", () => {
@@ -138,5 +138,108 @@ describe("mapControls", () => {
     expect(keyLabel("ArrowUp")).toBe("↑");
     expect(keyLabel("Numpad8")).toBe("Num 8");
     expect(keyLabel("Space")).toBe("Space");
+  });
+});
+
+describe("cameraCollisionDistance", () => {
+  it("stays at the wanted distance when nothing is in the way", () => {
+    expect(cameraCollisionDistance(10, 10, null, 0.5, 0, 6, 0.016)).toBe(10);
+  });
+
+  it("pulls in at once, short of the wall", () => {
+    expect(cameraCollisionDistance(10, 10, 4, 0.5, 0, 6, 0.016)).toBe(3.5);
+    expect(cameraCollisionDistance(10, 10, 4, 0.5, 0, 6, 0)).toBe(3.5);
+  });
+
+  it("eases back out once the wall is gone instead of popping", () => {
+    const next = cameraCollisionDistance(3.5, 10, null, 0.5, 0, 6, 0.016);
+    expect(next).toBeGreaterThan(3.5);
+    expect(next).toBeLessThan(10);
+    let shown = 3.5;
+    for (let frame = 0; frame < 240; frame++) shown = cameraCollisionDistance(shown, 10, null, 0.5, 0, 6, 0.016);
+    expect(shown).toBe(10);
+  });
+
+  it("never goes closer than the minimum, even against the wall", () => {
+    expect(cameraCollisionDistance(10, 10, 0.2, 0.5, 1, 6, 0.016)).toBe(1);
+  });
+
+  it("follows a zoom in immediately", () => {
+    expect(cameraCollisionDistance(10, 5, null, 0.5, 0, 6, 0.016)).toBe(5);
+  });
+});
+
+describe("cameraOffset", () => {
+  it("places the camera behind and above the pivot along the yaw", () => {
+    const offset = cameraOffset(0, Math.PI / 6, 10);
+    expect(offset.x).toBeCloseTo(0);
+    expect(offset.y).toBeCloseTo(5);
+    expect(offset.z).toBeCloseTo(10 * Math.cos(Math.PI / 6));
+  });
+
+  it("round-trips through cameraAngles", () => {
+    const angles = cameraAngles(cameraOffset(-2.1, 0.4, 7));
+    expect(angles.yaw).toBeCloseTo(-2.1);
+    expect(angles.pitch).toBeCloseTo(0.4);
+    expect(angles.distance).toBeCloseTo(7);
+  });
+
+  it("reads straight down as yaw 0", () => {
+    expect(cameraAngles({ x: 0, y: 5, z: 0 })).toEqual({ yaw: 0, pitch: Math.PI / 2, distance: 5 });
+  });
+});
+
+describe("lookDrag", () => {
+  it("turns right on a drag right and raises the camera on a drag down, 1:1 with the pointer", () => {
+    const next = lookDrag(0, 0.2, 100, 10, -1, 1);
+    expect(next.yaw).toBeCloseTo(-100 * LOOK_RADIANS_PER_PX);
+    expect(next.pitch).toBeCloseTo(0.2 + 10 * LOOK_RADIANS_PER_PX);
+  });
+
+  it("clamps the pitch", () => {
+    expect(lookDrag(0, 0.5, 0, 1000, 0.1, 1.2).pitch).toBe(1.2);
+    expect(lookDrag(0, 0.5, 0, -1000, 0.1, 1.2).pitch).toBe(0.1);
+  });
+});
+
+describe("wheelZoomDistance", () => {
+  it("zooms out on a wheel down and in on a wheel up", () => {
+    expect(wheelZoomDistance(10, 100, 1, 100)).toBeGreaterThan(10);
+    expect(wheelZoomDistance(10, -100, 1, 100)).toBeLessThan(10);
+  });
+
+  it("stays within the bounds", () => {
+    expect(wheelZoomDistance(10, 1e5, 1, 100)).toBe(100);
+    expect(wheelZoomDistance(10, -1e5, 1, 100)).toBe(1);
+  });
+});
+
+describe("planarStep", () => {
+  it("moves away from a camera at yaw 0 (along -z), and strafes right along +x", () => {
+    const forward = planarStep(0, 1, 0, 2);
+    expect(forward.x).toBeCloseTo(0);
+    expect(forward.z).toBeCloseTo(-2);
+    const right = planarStep(0, 0, 1, 2);
+    expect(right.x).toBeCloseTo(2);
+    expect(right.z).toBeCloseTo(0);
+  });
+
+  it("is no faster diagonally", () => {
+    const step = planarStep(1.3, 1, 1, 2);
+    expect(Math.hypot(step.x, step.z)).toBeCloseTo(2);
+  });
+
+  it("stands still without input", () => {
+    expect(planarStep(1, 0, 0, 2)).toEqual({ x: 0, z: 0 });
+  });
+});
+
+describe("freeCamTravelSpeed", () => {
+  it("scales with the zoom distance", () => {
+    expect(freeCamTravelSpeed(200, 0.5, false)).toBe(2 * freeCamTravelSpeed(100, 0.5, false));
+  });
+
+  it("travels faster with Shift", () => {
+    expect(freeCamTravelSpeed(100, 0.5, true)).toBe(FREE_CAM_FAST_FACTOR * freeCamTravelSpeed(100, 0.5, false));
   });
 });

@@ -21,18 +21,17 @@ import {
 import { CoinAmount } from "./CoinAmount";
 import { useConsumablePrices } from "./useConsumablePrices";
 import { LedgerItemBreakout, type LedgerItemBreakoutData } from "./LedgerItemBreakout";
+import { LedgerFilterInput, useFilteredUses } from "./ConsumablesSearch";
 import {
   AmbiguousSection,
   COMPARISON_TABLE_TOKEN,
   ConsumableTimingFilter,
   CoverageLine,
-  LedgerFilterInput,
   LedgerRow,
   PRE_COMBAT_TOKEN,
   TimingColumnHeaders,
   panelOptionTokens,
   togglePanelOptionFlag,
-  useFilteredUses,
   VIEW_ALL_TOKEN,
 } from "./LedgerShared";
 import { ConsumablesTotalContent } from "./ConsumablesTotal";

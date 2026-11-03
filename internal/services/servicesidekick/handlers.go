@@ -272,6 +272,12 @@ func sidekickStatusMissingRequiredFields(request chroniclesdk.SidekickStatusRequ
 }
 
 func (s *Service) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
+	startedAt := time.Now()
+	result := sidekickHeartbeatResultBadRequest
+	defer func() {
+		s.metrics.observeHeartbeat(result, time.Since(startedAt))
+	}()
+
 	claims := chronauth.MustAuthenticatedClaims(r.Context())
 	installationID, ok := serviceoauth.SidekickInstallationID(r.Context())
 	if !ok {
@@ -378,6 +384,7 @@ func (s *Service) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 		activeCodes = append(activeCodes, issue.Code)
 	}
 
+	result = sidekickHeartbeatResultInternalError
 	var installation database.SidekickInstallation
 	err = s.zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
 		var err error
@@ -422,6 +429,7 @@ func (s *Service) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}, nil)
 	if errors.Is(err, pgx.ErrNoRows) {
+		result = sidekickHeartbeatResultNotFound
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Sidekick installation is disconnected."})
 		return
 	}
@@ -429,12 +437,17 @@ func (s *Service) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	s.metrics.observeOnline(installation.ID)
 	configuration, err := s.sidekickConfigState(r.Context(), claims.Subject, installation.ID)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 	response := sidekickStatusResponse(installation.ID, configuration, request.ConfigHash)
+	if response.Config != nil {
+		s.metrics.observeConfigUpdate()
+	}
+	result = sidekickHeartbeatResultSuccess
 	httpapi.Write(r.Context(), w, http.StatusOK, response)
 }
 
@@ -444,6 +457,14 @@ func (s *Service) IsSidekickRequest(ctx context.Context) bool {
 }
 
 func (s *Service) RecordUpload(ctx context.Context) bool {
+	return s.recordUpload(ctx, sidekickUploadKindNew)
+}
+
+func (s *Service) RecordAppend(ctx context.Context) bool {
+	return s.recordUpload(ctx, sidekickUploadKindAppend)
+}
+
+func (s *Service) recordUpload(ctx context.Context, kind string) bool {
 	installationID, ok := serviceoauth.SidekickInstallationID(ctx)
 	if !ok {
 		return false
@@ -454,5 +475,6 @@ func (s *Service) RecordUpload(ctx context.Context) bool {
 	}); err != nil {
 		s.logger.ErrorContext(ctx, "record sidekick upload", "sidekick_id", installationID, "error", err)
 	}
+	s.metrics.observeUpload(kind)
 	return true
 }

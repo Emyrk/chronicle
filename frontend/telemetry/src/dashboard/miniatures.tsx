@@ -36,11 +36,15 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
         button.publish { color:#1e180d; background:var(--bone); border-color:var(--bone); }
         button.danger { color:#ffaaa4; }
         .back { padding:9px 12px; border:1px solid var(--line); border-radius:6px; background:#171b18; font-size:12px; }
-        .toolbar { display:grid; grid-template-columns:minmax(240px,1fr) auto; gap:10px; margin-bottom:14px; padding:12px; border:1px solid var(--line); border-radius:9px; background:#171b18dd; box-shadow:0 14px 40px #0004; }
+        .toolbar { display:grid; grid-template-columns:minmax(220px,1fr) auto auto; gap:10px; margin-bottom:14px; padding:12px; border:1px solid var(--line); border-radius:9px; background:#171b18dd; box-shadow:0 14px 40px #0004; }
         input[type='search'],input[type='text'],input[type='number'],textarea { width:100%; color:var(--text); background:#0f1210; border:1px solid var(--line); border-radius:5px; padding:10px 11px; outline:none; }
         input:focus,textarea:focus { border-color:var(--bone); box-shadow:0 0 0 2px #d5c5a21a; }
         textarea { min-height:116px; resize:vertical; font:12px/1.55 'JetBrains Mono',monospace; }
-        .toolbar-actions { display:flex; gap:8px; }
+        .bulk-tools,.toolbar-actions { display:flex; gap:8px; align-items:center; }
+        .bulk-tools { padding:4px 4px 4px 10px; border:1px solid #3b463e; border-radius:7px; background:#121613; }
+        .bulk-tools .count { min-width:58px; color:var(--bone); }
+        .bulk-tools input { width:72px; padding:7px 8px; font:11px 'JetBrains Mono',monospace; }
+        .bulk-tools button { padding:7px 9px; }
         .status { min-height:38px; display:flex; align-items:center; gap:9px; margin-bottom:14px; padding:8px 11px; color:var(--muted); background:#151917; border:1px solid #29302b; border-radius:7px; font:11px 'JetBrains Mono',monospace; }
         .status.error { color:#ffc0bb; border-color:#633b37; background:#291b19; }
         .dot { width:7px; height:7px; border-radius:50%; background:var(--blue); box-shadow:0 0 12px var(--blue); }
@@ -51,9 +55,12 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
         .panel-head h2 { margin:0; font-size:12px; letter-spacing:.08em; text-transform:uppercase; }
         .count { color:var(--muted); font:10px 'JetBrains Mono',monospace; }
         .model-list { min-height:500px; max-height:calc(100vh - 245px); overflow:auto; scrollbar-color:#4b554d #171b18; }
-        .model-row { width:100%; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; padding:12px 14px; color:var(--text); background:transparent; border:0; border-bottom:1px solid #29302b; border-radius:0; text-align:left; }
+        .model-row { width:100%; display:grid; grid-template-columns:18px minmax(0,1fr) auto; gap:10px; align-items:center; padding:8px 14px; color:var(--text); background:transparent; border-bottom:1px solid #29302b; }
         .model-row:hover,.model-row.active { background:#252c26; }
         .model-row.active { box-shadow:inset 3px 0 var(--bone); }
+        .model-check { width:15px; height:15px; margin:0; accent-color:var(--moss); cursor:pointer; }
+        .model-open { min-width:0; padding:4px 0; color:inherit; background:transparent; border:0; border-radius:0; text-align:left; }
+        .model-open:hover:not(:disabled) { background:transparent; }
         .model-name { display:block; overflow:hidden; font-size:13px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
         .model-path { display:block; margin-top:3px; overflow:hidden; color:var(--muted); font:9px 'JetBrains Mono',monospace; text-overflow:ellipsis; white-space:nowrap; }
         .id-count { padding:4px 6px; color:var(--bone); border:1px solid #655b44; border-radius:4px; background:#29251c; font:9px 'JetBrains Mono',monospace; white-space:nowrap; }
@@ -89,7 +96,7 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
         .empty-editor { min-height:600px; display:grid; place-items:center; color:var(--muted); text-align:center; }
         .empty-editor strong { display:block; margin-bottom:6px; color:#c8cec9; }
         @media (max-width:980px) { .workspace,.editor-grid { grid-template-columns:1fr; } .model-list { min-height:0; max-height:330px; } }
-        @media (max-width:620px) { main { width:min(100% - 20px,1480px); } header { align-items:flex-start; flex-direction:column; } .header-actions,.toolbar-actions { width:100%; } .toolbar { grid-template-columns:1fr; } .toolbar-actions button { flex:1; } }
+        @media (max-width:620px) { main { width:min(100% - 20px,1480px); } header { align-items:flex-start; flex-direction:column; } .header-actions,.bulk-tools,.toolbar-actions { width:100%; } .toolbar { grid-template-columns:1fr; } .bulk-tools { flex-wrap:wrap; } .bulk-tools button,.toolbar-actions button { flex:1; } }
       </style>`}
     </head>
     <body>
@@ -100,6 +107,7 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
         </header>
         <section class="toolbar">
           <input id="search" type="search" aria-label="Search miniatures" placeholder="Search name, path, or entry ID" />
+          <div class="bulk-tools"><span class="count" id="selection-count">0 selected</span><button id="select-visible" type="button">Select shown</button><input id="bulk-scale" type="number" min="0.1" max="10" step="0.05" value="0.2" aria-label="Bulk map size" /><button id="apply-scale" class="primary" type="button" disabled>Apply size</button><button id="clear-selection" type="button" disabled>Clear</button></div>
           <div class="toolbar-actions"><button id="add-miniature">Add miniature</button><button id="add-game-model">Add game model</button><button id="discard" class="danger" disabled>Discard draft</button><button id="save" class="primary" disabled>Save draft</button><button id="publish" class="publish" disabled>Publish</button></div>
         </section>
         <div class="status" id="status" role="status" aria-live="polite"><span class="dot"></span><span>Loading the shared miniature manifest…</span></div>
@@ -113,9 +121,10 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
         import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-        const els = Object.fromEntries(['search','add-miniature','add-game-model','discard','save','publish','status','count','list','editor'].map(id => [id,document.getElementById(id)]));
+        const els = Object.fromEntries(['search','selection-count','select-visible','bulk-scale','apply-scale','clear-selection','add-miniature','add-game-model','discard','save','publish','status','count','list','editor'].map(id => [id,document.getElementById(id)]));
         let state = null;
         let selected = null;
+        let bulkSelected = new Set();
         let dirty = false;
         let busy = false;
         const PLAYER_GEOMETRY_HEIGHT=3;
@@ -126,21 +135,23 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
         let preview=null;
         function escapeHTML(value) { return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
         function setStatus(message,error=false) { els.status.className='status'+(error?' error':''); els.status.innerHTML='<span class="dot '+(!error&&state?.has_draft?'draft':'')+'"></span><span>'+escapeHTML(message)+'</span>'; }
-        function setBusy(value) { busy=value; els.search.disabled=value; updateButtons(); }
-        function updateButtons() { els['add-miniature'].disabled=busy||!state; els['add-game-model'].disabled=busy||!state; els.save.disabled=busy||!state||!dirty; els.publish.disabled=busy||!state?.has_draft||dirty; els.discard.disabled=busy||!state?.has_draft; }
+        function setBusy(value) { busy=value; els.search.disabled=value; els['bulk-scale'].disabled=value; updateButtons(); }
+        function updateButtons() { const hasSelection=bulkSelected.size>0;els['add-miniature'].disabled=busy||!state;els['add-game-model'].disabled=busy||!state;els['select-visible'].disabled=busy||!state||filteredItems().length===0;els['apply-scale'].disabled=busy||!hasSelection;els['clear-selection'].disabled=busy||!hasSelection;els.save.disabled=busy||!state||!dirty;els.publish.disabled=busy||!state?.has_draft||dirty;els.discard.disabled=busy||!state?.has_draft;els['selection-count'].textContent=bulkSelected.size+' selected'; }
         function collection(kind) { return state?.draft?.[kind] || []; }
         function items() { return ['miniatures','game_models'].flatMap(kind => collection(kind).map(item => ({kind,item}))); }
+        function filteredItems() { const query=els.search.value.trim().toLowerCase();return items().filter(({kind,item}) => (kind+' '+item.name+' '+item.path+' '+item.entry_ids.join(' ')).toLowerCase().includes(query)); }
         function itemKey(kind,item) { return kind+':'+item.path; }
         function current() { return items().find(({kind,item}) => itemKey(kind,item) === selected) || null; }
         function markDirty() { dirty=true; updateButtons(); renderJSON(); }
         function renderList() {
-          const query=els.search.value.trim().toLowerCase();
-          const rows=items().filter(({kind,item}) => (kind+' '+item.name+' '+item.path+' '+item.entry_ids.join(' ')).toLowerCase().includes(query));
+          const rows=filteredItems();
           els.count.textContent=rows.length+' models';
-          els.list.innerHTML=rows.map(({kind,item}) => {const key=itemKey(kind,item);const type=kind==='miniatures'?'tabletop':'game file';return '<button class="model-row '+(key===selected?'active':'')+'" data-key="'+escapeHTML(key)+'"><span><span class="model-name">'+escapeHTML(item.name)+'</span><span class="model-path">'+type+' · '+escapeHTML(item.path||'Upload required')+'</span></span><span class="id-count">'+item.entry_ids.length+' IDs</span></button>';}).join('') || '<div class="empty-editor"><div><strong>No models</strong>Add a tabletop miniature or original game model.</div></div>';
-          document.querySelectorAll('.model-row').forEach(row => row.addEventListener('click',()=>{if(busy)return;syncEditor();selected=row.dataset.key;renderList();renderEditor();}));
+          els.list.innerHTML=rows.map(({kind,item}) => {const key=itemKey(kind,item);const type=kind==='miniatures'?'tabletop':'game file';const label=item.name||'Unnamed model';return '<div class="model-row '+(key===selected?'active':'')+'"><input class="model-check" type="checkbox" data-key="'+escapeHTML(key)+'" '+(bulkSelected.has(item)?'checked ':'')+'aria-label="Select '+escapeHTML(label)+' for bulk resizing" /><button class="model-open" type="button" data-key="'+escapeHTML(key)+'"><span class="model-name">'+escapeHTML(label)+'</span><span class="model-path">'+type+' · '+escapeHTML(item.path||'Upload required')+'</span></button><span class="id-count">'+item.entry_ids.length+' IDs</span></div>';}).join('') || '<div class="empty-editor"><div><strong>No models</strong>Add a tabletop miniature or original game model.</div></div>';
+          document.querySelectorAll('.model-open').forEach(button => button.addEventListener('click',()=>{if(busy)return;syncEditor();selected=button.dataset.key;renderList();renderEditor();}));
+          document.querySelectorAll('.model-check').forEach(input => input.addEventListener('change',()=>{const selectedItem=items().find(({kind,item})=>itemKey(kind,item)===input.dataset.key);if(!selectedItem)return;if(input.checked)bulkSelected.add(selectedItem.item);else bulkSelected.delete(selectedItem.item);updateButtons();}));
+          updateButtons();
         }
-        function parseIDs(value) { return value.split(/[\s,]+/).filter(Boolean).map(raw=>Number(raw)); }
+        function parseIDs(value) { const escapedNewline=String.fromCharCode(92)+'n';const separators='[, '+String.fromCharCode(9,10,13)+']+';return value.replaceAll(escapedNewline,' ').split(new RegExp(separators)).filter(Boolean).map(raw=>Number(raw)); }
         function syncEditor() {
           const selectedItem=current(); if(!selectedItem)return;
           selectedItem.item.name=document.getElementById('name').value.trim();
@@ -193,6 +204,20 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
           document.getElementById('map-scale-number').value=String(scale);
           markDirty();renderJSON();preview?.setScale(scale);
         }
+        function selectVisible() { for(const {item} of filteredItems())bulkSelected.add(item);renderList(); }
+        function clearSelection() { bulkSelected.clear();renderList(); }
+        function applyBulkScale() {
+          syncEditor();
+          const numeric=Number(els['bulk-scale'].value);if(!Number.isFinite(numeric))return setStatus('Enter a valid bulk map size.',true);
+          const scale=Math.min(10,Math.max(.1,numeric));
+          els['bulk-scale'].value=String(scale);
+          for(const item of bulkSelected)item.map_scale=scale;
+          const selectedItem=current();
+          if(selectedItem&&bulkSelected.has(selectedItem.item)){document.getElementById('map-scale').value=String(scale);document.getElementById('map-scale-number').value=String(scale);preview?.setScale(scale);}
+          const count=bulkSelected.size;
+          markDirty();
+          setStatus('Set map size to '+scale+'× for '+count+' model'+(count===1?'':'s')+'. Save the draft when ready.');
+        }
         function previewURL(path) { const filename=path.split('/').pop(); return '/internal/api/v1/miniatures/preview/'+encodeURIComponent(filename); }
         function renderEditor() {
           disposePreview();
@@ -207,7 +232,7 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
             '<label>Display name<input id="name" type="text" value="'+escapeHTML(item.name)+'" placeholder="Deviate serpent" /></label>'+
             '<div class="path '+(!hasPath?'empty':'')+'">'+escapeHTML(item.path||'Upload a GLB to create its immutable path')+'</div>'+
             '<label class="upload">Upload or replace GLB<input id="file" type="file" accept="model/gltf-binary,.glb" /></label>'+
-            '<label>Creature entry IDs<textarea id="entry-ids" placeholder="3669, 3670, 3671">'+escapeHTML(item.entry_ids.join('\\n'))+'</textarea></label>'+
+            '<label>Creature entry IDs<textarea id="entry-ids" placeholder="3669, 3670, 3671">'+escapeHTML(item.entry_ids.join(', '))+'</textarea></label>'+
             '<p class="hint">Separate IDs with commas, spaces, or new lines. Positive 32-bit IDs only.</p>'+
             '<label>Map size<div class="scale-row"><input id="map-scale" type="range" min="0.1" max="10" step="0.05" value="'+(item.map_scale||1)+'" /><input id="map-scale-number" type="number" min="0.1" max="10" step="0.05" value="'+(item.map_scale||1)+'" /></div><span class="scale-readout"><span>0.1×</span><span>Baseline 1×</span><span>10× max</span></span></label>'+
             '<p class="hint">Adjust this model relative to a standard player on the 3D replay map. Existing models default to 1×.</p><div class="form-actions"><button id="remove" class="danger">Remove model</button></div></article>'+
@@ -223,19 +248,22 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
           if(hasPath){const entry=item.entry_ids[0];mountPreview(previewURL(item.path),isGameModel,item.map_scale||1,item.world_heights?.[entry]);}
         }
         function renderJSON(){const pre=document.getElementById('json');if(pre&&state)pre.textContent=JSON.stringify(state.draft,null,2);}
-        function remove(){const selectedItem=current();if(!selectedItem)return;const {kind,item}=selectedItem;if(!confirm('Remove "'+(item.name||'this model')+'" from the draft? The uploaded GLB will remain in R2 until cleaned up separately.'))return;state.draft[kind]=collection(kind).filter(candidate=>candidate!==item);selected=items()[0] ? itemKey(items()[0].kind,items()[0].item) : null;markDirty();renderList();renderEditor();}
+        function remove(){const selectedItem=current();if(!selectedItem)return;const {kind,item}=selectedItem;if(!confirm('Remove "'+(item.name||'this model')+'" from the draft? The uploaded GLB will remain in R2 until cleaned up separately.'))return;bulkSelected.delete(item);state.draft[kind]=collection(kind).filter(candidate=>candidate!==item);selected=items()[0] ? itemKey(items()[0].kind,items()[0].item) : null;markDirty();renderList();renderEditor();}
         async function upload(file){
           if(!file||!state)return;syncEditor();const selectedItem=current();if(!selectedItem)return;setBusy(true);setStatus('Uploading '+file.name+'…');
           try{const data=new FormData();data.append('file',file);const response=await fetch('/internal/api/v1/miniatures/assets',{method:'POST',body:data});const result=await response.json();if(!response.ok)throw new Error(result.error||'Upload failed');selectedItem.item.path=result.path;selected=itemKey(selectedItem.kind,selectedItem.item);dirty=true;setStatus('GLB uploaded. Save the draft to register it.');renderList();renderEditor();}
           catch(error){setStatus(error.message,true);}finally{setBusy(false);}
         }
         function firstKey(){const first=items()[0];return first?itemKey(first.kind,first.item):null;}
-        async function load(){setBusy(true);setStatus('Loading the shared miniature manifest…');try{const response=await fetch('/internal/api/v1/miniatures');const result=await response.json();if(!response.ok)throw new Error(result.error||'Load failed');state=result;selected=firstKey();dirty=false;setStatus(state.has_draft?'Saved draft loaded. Publish when ready.':'Published manifest loaded. Changes remain private until saved and published.');renderList();renderEditor();}catch(error){setStatus(error.message,true);}finally{setBusy(false);}}
-        async function save(){syncEditor();setBusy(true);setStatus('Validating and saving draft…');try{const response=await fetch('/internal/api/v1/miniatures/draft',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({version:state.draft_version,miniatures:collection('miniatures'),game_models:collection('game_models')})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Save failed');state.draft=result.draft;state.draft_version=result.draft_version;state.has_draft=true;if(!current())selected=firstKey();dirty=false;setStatus('Draft saved to R2. The public manifest is unchanged.');renderList();renderEditor();}catch(error){setStatus(error.message,true);}finally{setBusy(false);}}
+        async function load(){setBusy(true);setStatus('Loading the shared miniature manifest…');try{const response=await fetch('/internal/api/v1/miniatures');const result=await response.json();if(!response.ok)throw new Error(result.error||'Load failed');state=result;selected=firstKey();bulkSelected.clear();dirty=false;setStatus(state.has_draft?'Saved draft loaded. Publish when ready.':'Published manifest loaded. Changes remain private until saved and published.');renderList();renderEditor();}catch(error){setStatus(error.message,true);}finally{setBusy(false);}}
+        async function save(){syncEditor();setBusy(true);setStatus('Validating and saving draft…');try{const response=await fetch('/internal/api/v1/miniatures/draft',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({version:state.draft_version,miniatures:collection('miniatures'),game_models:collection('game_models')})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Save failed');state.draft=result.draft;state.draft_version=result.draft_version;state.has_draft=true;bulkSelected.clear();if(!current())selected=firstKey();dirty=false;setStatus('Draft saved to R2. The public manifest is unchanged.');renderList();renderEditor();}catch(error){setStatus(error.message,true);}finally{setBusy(false);}}
         async function discard(){if(!confirm('Discard the saved miniature draft? Uploaded but unpublished GLBs remain in R2.'))return;setBusy(true);try{const response=await fetch('/internal/api/v1/miniatures/draft',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({version:state.draft_version})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Discard failed');await load();}catch(error){setStatus(error.message,true);setBusy(false);}}
         async function publish(){if(!confirm('Publish miniatures/manifest.json for every Chronicle server?'))return;setBusy(true);setStatus('Checking assets and publishing the shared manifest…');try{const response=await fetch('/internal/api/v1/miniatures/publish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({version:state.draft_version})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Publish failed');await load();setStatus('Published '+result.manifest+'. CDN caches may take up to one hour to refresh.');}catch(error){setStatus(error.message,true);setBusy(false);}}
         function add(kind){syncEditor();const temporary='__new__'+crypto.randomUUID();const item={name:'',path:temporary,entry_ids:[],map_scale:1};state.draft[kind].push(item);selected=itemKey(kind,item);markDirty();renderList();renderEditor();}
         els.search.addEventListener('input',renderList);
+        els['select-visible'].addEventListener('click',selectVisible);
+        els['apply-scale'].addEventListener('click',applyBulkScale);
+        els['clear-selection'].addEventListener('click',clearSelection);
         els['add-miniature'].addEventListener('click',()=>add('miniatures'));
         els['add-game-model'].addEventListener('click',()=>add('game_models'));
         els.save.addEventListener('click',save);els.discard.addEventListener('click',discard);els.publish.addEventListener('click',publish);load();

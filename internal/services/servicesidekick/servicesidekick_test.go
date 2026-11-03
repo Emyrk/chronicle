@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -65,6 +66,23 @@ func TestSidekickStatusAllowsNullIssues(t *testing.T) {
 	}`), &request))
 	require.Nil(t, request.Issues)
 	require.False(t, sidekickStatusMissingRequiredFields(request))
+}
+
+func TestSidekickStatusMetricsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	metrics, err := newSidekickMetrics(prometheus.NewRegistry())
+	require.NoError(t, err)
+	service := &Service{metrics: metrics}
+
+	request := httptest.NewRequest(http.MethodPut, "/status", nil)
+	request = request.WithContext(chronauth.WithClaims(request.Context(), &claims.Claims{Subject: uuid.New()}))
+	response := httptest.NewRecorder()
+	service.UpdateSidekickStatus(response, request)
+
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Equal(t, float64(1), sidekickCounterValue(t, metrics.heartbeats.WithLabelValues(sidekickHeartbeatResultBadRequest)))
+	require.Equal(t, uint64(1), sidekickHistogramCount(t, metrics.heartbeatTime.WithLabelValues(sidekickHeartbeatResultBadRequest)))
 }
 
 func TestListMySidekicksWithoutSavedConfig(t *testing.T) {

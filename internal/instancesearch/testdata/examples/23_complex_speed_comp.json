@@ -1,0 +1,59 @@
+{
+  "title": "Fast, clean, two warrior tanks",
+  "category": "Combined",
+  "description": "Fast and clean: (90+ kill parse on each of Rag and Domo OR 95+ clear parse), at least 2 warrior tanks, and nobody died 3+ times on any boss kill.",
+  "query": {
+    "where": {
+      "and": [
+        {
+          "or": [
+            {
+              "field": "instance.kill_time_parse",
+              "op": ">=",
+              "value": 90,
+              "bosses": [
+                "Ragnaros",
+                "Majordomo Executus"
+              ],
+              "match": "each"
+            },
+            {
+              "field": "instance.clear_parse",
+              "op": ">=",
+              "value": 95
+            }
+          ]
+        },
+        {
+          "count_players": {
+            "where": {
+              "and": [
+                {
+                  "field": "player.class",
+                  "op": "=",
+                  "value": "WARRIOR"
+                },
+                {
+                  "field": "player.role",
+                  "op": "=",
+                  "value": "tank"
+                }
+              ]
+            },
+            "op": ">=",
+            "value": 2
+          }
+        },
+        {
+          "not": {
+            "any_player": {
+              "field": "player.deaths",
+              "op": ">=",
+              "value": 3
+            }
+          }
+        }
+      ]
+    }
+  }
+}

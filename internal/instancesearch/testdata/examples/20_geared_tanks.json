@@ -1,0 +1,27 @@
+{
+  "title": "Two geared tanks",
+  "category": "Roster",
+  "description": "Two or more tanks with average item level 70 or higher on a boss kill.",
+  "query": {
+    "where": {
+      "count_players": {
+        "where": {
+          "and": [
+            {
+              "field": "player.role",
+              "op": "=",
+              "value": "tank"
+            },
+            {
+              "field": "player.avg_ilvl",
+              "op": ">=",
+              "value": 70
+            }
+          ]
+        },
+        "op": ">=",
+        "value": 2
+      }
+    }
+  }
+}

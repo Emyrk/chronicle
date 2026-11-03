@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SyncModeProvider, useSyncModeContext } from "../../SyncModeContext";
@@ -20,6 +20,7 @@ import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
 import type { MapCameraMark, MapCameraPose } from "./cameraPath";
 import MapView3D from "./MapView3D";
+import VideoRenderDialog, { type VideoRenderResult } from "./VideoRenderDialog";
 import type { MapViewRequest } from "./MapView2D";
 import { addEffectEvent, createEncounterEffects, isDeadAt, type EncounterEffects, type ReplayEffectEvent } from "./replayEffects";
 import { useMapScene, type MapMarkerKind, type MapSceneGround, type MapSceneMarker } from "./useMapScene";
@@ -878,6 +879,11 @@ const KRESH_LOOP_PAUSE_MS = 1_000;
 
 // Replays a loaded fixture (the real Kresh kill, or a synthetic encounter
 // built in its shape) through the production useMapScene, looping.
+interface MapCaptureBridge {
+  setTime: (timestampMs: number, walkElapsedMs?: number) => void;
+  /** Renders the fight (or `fromMs`..`toMs` of the video) with the drone camera, as "Render video" does. */
+  exportVideo: (options?: { fromMs?: number; toMs?: number }) => Promise<VideoRenderResult & { status: string }>;
+}
 function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSettings, walkAvatar, capture = false, initialCameraMarks = [], captureRender = false, captureWalking = false, captureWalkStartGuid, captureWalkLookAtGuid }: {
   fixture: LoadedMapFixture;
   mesh?: boolean;
@@ -896,6 +902,11 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
   const sync = useSyncModeContext();
   const { enabled, isPlaying, currentTimestamp, enable, setEncounterBounds, setTimestamp, play, pause } = sync;
   const [captureHud, setCaptureHud] = useState(!captureRender);
+  // "Render video" (the drone camera, in browser): the open render, and the
+  // bridge call waiting on it.
+  const [videoRender, setVideoRender] = useState<{ range: { fromMs: number; toMs: number } | null } | null>(null);
+  const videoResolveRef = useRef<((result: VideoRenderResult) => void) | null>(null);
+  const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [cameraMarks, setCameraMarks] = useState<MapCameraMark[]>(() => [...initialCameraMarks]);
   const [cameraPathPreview, setCameraPathPreview] = useState(captureRender && !captureWalking);
   const [cameraCaptureKey, setCameraCaptureKey] = useState(0);
@@ -963,13 +974,26 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
 
   useEffect(() => {
     if (!captureRender) return;
-    const captureWindow = window as Window & { __chronicleMapCapture?: { setTime: (timestampMs: number, walkElapsedMs?: number) => void } };
+    const captureWindow = window as Window & { __chronicleMapCapture?: MapCaptureBridge };
+    const clampMs = (timestampMs: number) => Math.max(0, Math.min(fixture.endMs - fixture.startMs, timestampMs));
     captureWindow.__chronicleMapCapture = {
       setTime: (timestampMs, walkElapsedMs) => {
         pause();
-        setTimestamp(new Date(fixture.startMs + Math.max(0, Math.min(fixture.endMs - fixture.startMs, timestampMs))));
+        setTimestamp(new Date(fixture.startMs + clampMs(timestampMs)));
         if (walkElapsedMs !== undefined) setCaptureWalkMs(walkElapsedMs);
       },
+      exportVideo: (options = {}) => new Promise((resolve) => {
+        pause();
+        const range = options.fromMs !== undefined || options.toMs !== undefined
+          ? { fromMs: options.fromMs ?? 0, toMs: options.toMs ?? Number.POSITIVE_INFINITY }
+          : null;
+        videoResolveRef.current = (result) => {
+          const status = `${result.codec} ${result.width}x${result.height} · ${result.frameCount} frames · ${(result.blob.size / 1e6).toFixed(2)} MB · ${(result.elapsedMs / 1000).toFixed(1)}s (${(result.frameCount / (result.elapsedMs / 1000)).toFixed(2)} fps)`;
+          setExportStatus(status);
+          resolve({ ...result, status });
+        };
+        setVideoRender({ range });
+      }),
     };
     return () => {
       delete captureWindow.__chronicleMapCapture;
@@ -1062,6 +1086,25 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
       ) : (
         <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{scene.title}: {scene.detail}</div>
       )}
+      {videoRender && dungeonMesh ? (
+        <VideoRenderDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setVideoRender(null);
+          }}
+          panelProps={fixture.props}
+          dungeonMesh={dungeonMesh}
+          unitModelUrls={unitModelUrls}
+          effectSettings={effectSettings}
+          title={instance.encounters[0]?.name ?? "Boss"}
+          fileName="chronicle-replay.mp4"
+          range={videoRender.range}
+          onRendered={(result) => {
+            videoResolveRef.current?.(result);
+            videoResolveRef.current = null;
+          }}
+        />
+      ) : null}
       {capture && captureHud ? (
         <>
           <div className="absolute bottom-4 left-1/2 z-50 w-[min(760px,calc(100vw-32px))] -translate-x-1/2 rounded-xl border border-white/15 bg-black/80 px-4 py-3 text-white shadow-2xl backdrop-blur">
@@ -1069,6 +1112,19 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
               <span className="font-semibold">{instance.encounters[0]?.name} · {elapsed.toFixed(1)}s / {durationSeconds.toFixed(1)}s</span>
               <span className="text-white/55">H hide · X play/pause · ←/→ step · Home rewind · G walk · Space jump</span>
             </div>
+            {captureRender ? (
+              <div className="mb-2 flex items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  disabled={videoRender !== null || !dungeonMesh}
+                  onClick={() => setVideoRender({ range: null })}
+                  className="rounded-md bg-cyan-400 px-2.5 py-1 font-semibold text-black hover:bg-cyan-300 disabled:opacity-50"
+                >
+                  Render video (drone camera)
+                </button>
+                {exportStatus ? <span className="text-white/70">{exportStatus}</span> : null}
+              </div>
+            ) : null}
             <input
               aria-label="Replay time"
               type="range"

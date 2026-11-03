@@ -248,6 +248,14 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Missing static assets must remain 404s. Serving the SPA shell for a stale
+	// hashed chunk returns HTML with a 200 status, which browsers reject as a
+	// JavaScript module because of its MIME type.
+	if path.Ext(reqFile) != "" {
+		h.mux.ServeHTTP(resp, req)
+		return
+	}
+
 	// Serve the file assuming it's an html file
 	// This matches paths like `/app/terminal.html`
 	req.URL.Path = strings.TrimSuffix(req.URL.Path, "/")

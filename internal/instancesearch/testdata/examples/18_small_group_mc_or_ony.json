@@ -1,0 +1,24 @@
+{
+  "title": "Small-group Molten Core or Onyxia",
+  "category": "Run",
+  "description": "Molten Core or Onyxia's Lair done with 30 or fewer players.",
+  "query": {
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "in",
+          "value": [
+            "Molten Core",
+            "Onyxia's Lair"
+          ]
+        },
+        {
+          "field": "instance.player_count",
+          "op": "<=",
+          "value": 30
+        }
+      ]
+    }
+  }
+}

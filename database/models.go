@@ -2410,6 +2410,13 @@ type RankingsInstanceSummary struct {
 	QueryVersion   int16              `db:"query_version" json:"query_version"`
 }
 
+type RateLimitBucket struct {
+	Key         string             `db:"key" json:"key"`
+	Tokens      float64            `db:"tokens" json:"tokens"`
+	LastAllowed bool               `db:"last_allowed" json:"last_allowed"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type RatingBossScore struct {
 	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
 	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`

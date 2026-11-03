@@ -1,0 +1,26 @@
+{
+  "title": "Naxxramas progress (5-10 bosses)",
+  "category": "Bosses",
+  "description": "Naxxramas runs that killed between 5 and 10 bosses.",
+  "query": {
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "=",
+          "value": "Naxxramas"
+        },
+        {
+          "field": "instance.bosses_killed",
+          "op": ">=",
+          "value": 5
+        },
+        {
+          "field": "instance.bosses_killed",
+          "op": "<=",
+          "value": 10
+        }
+      ]
+    }
+  }
+}

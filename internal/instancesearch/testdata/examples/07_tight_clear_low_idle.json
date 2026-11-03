@@ -1,0 +1,21 @@
+{
+  "title": "Tight clears with little downtime",
+  "category": "Speed",
+  "description": "Clears with under 5 minutes idle and under 20 minutes of trash.",
+  "query": {
+    "where": {
+      "and": [
+        {
+          "field": "instance.idle_time_ms",
+          "op": "<",
+          "value": 300000
+        },
+        {
+          "field": "instance.trash_time_ms",
+          "op": "<",
+          "value": 1200000
+        }
+      ]
+    }
+  }
+}

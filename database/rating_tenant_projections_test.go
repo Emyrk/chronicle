@@ -123,7 +123,7 @@ func TestTenantRatingProjectionsDownAndUp(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _, _ = conn.Exec(context.Background(), "SET ROLE chronicle") }()
 	for _, suffix := range []string{"down", "up"} {
-		sql, err := os.ReadFile("migrations/000315_tenant_rating_projections." + suffix + ".sql")
+		sql, err := os.ReadFile("migrations/000317_tenant_rating_projections." + suffix + ".sql")
 		require.NoError(t, err)
 		_, err = conn.Exec(ctx, string(sql))
 		require.NoError(t, err, "migration %s", suffix)

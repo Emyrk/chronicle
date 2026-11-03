@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/cosmetics"
+	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
@@ -234,6 +235,17 @@ func (s *Service) Start(ctx context.Context) error {
 				return guildanalytics.ArgsCleanup{}, nil
 			},
 			&river.PeriodicJobOpts{RunOnStart: false},
+		),
+	)
+
+	riverqueue.AddWorker(q, &ratelimit.CleanupWorker{Store: cosmeticStore})
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			river.PeriodicInterval(ratelimit.CleanupInterval),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return ratelimit.ArgsCleanup{}, nil
+			},
+			&river.PeriodicJobOpts{ID: "rate-limit-bucket-cleanup", RunOnStart: false},
 		),
 	)
 

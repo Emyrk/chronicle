@@ -8,23 +8,19 @@
  *  - ambiguous is a bucket below a rule, hatched icon, never a normal row.
  */
 
-import { useQueries } from "@tanstack/react-query";
-import { ExternalLink, Search, X } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { Link } from "react-router-dom";
-import { fetchItemTooltip } from "@/api/gamedata";
 import { useSpell } from "@/api/queries";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { cn } from "@/lib/utils";
-import type { ConsumableUse } from "./consumables.processor";
 import { ItemCell } from "./ConsumablesContent";
 import {
   type LedgerAmbiguousRow,
   type LedgerItemRow,
 } from "./consumablesLedgerLogic";
 import { CoinAmount } from "./CoinAmount";
-import { fuzzyConsumableMatch, itemIdentity } from "./consumablesTotalLogic";
 
 /** Flag token: use the player-by-consumable comparison table in View All. */
 export const COMPARISON_TABLE_TOKEN = "ct";
@@ -57,56 +53,6 @@ export function togglePanelOptionFlag(
   return tokens.length > 0 ? tokens.join(",") : null;
 }
 
-/**
- * Fuzzy-filter resolved uses by item name (or id). Filtering happens at the
- * use level, BEFORE aggregation, so everything derived from it — rows, header
- * totals, roster bar heights, coverage — reacts to the filter. Item names
- * come from lazily fetched tooltips, so they load on the first keystroke. An
- * ambiguous use matches (and its bucket stays whole) when its effect name or
- * any candidate item matches.
- */
-// eslint-disable-next-line react-refresh/only-export-components
-export function useFilteredUses(uses: ConsumableUse[], filter: string): ConsumableUse[] {
-  const itemIds = [
-    ...new Set(
-      uses.flatMap((use) => {
-        const identified = itemIdentity(use).itemId;
-        return identified !== null ? [identified] : use.candidateItemIds;
-      }),
-    ),
-  ];
-  const itemQueries = useQueries({
-    queries: itemIds.map((itemId) => ({
-      queryKey: ["item-tooltip", itemId, undefined, undefined],
-      queryFn: () => fetchItemTooltip({ itemId }),
-      enabled: filter.trim().length > 0,
-      staleTime: 5 * 60 * 1000,
-      retry: false,
-    })),
-  });
-
-  const query = filter.trim();
-  if (!query) return uses;
-
-  const itemNames = new Map<number, string>();
-  itemIds.forEach((itemId, index) => {
-    const name = itemQueries[index]?.data?.name;
-    if (name) itemNames.set(itemId, name);
-  });
-
-  return uses.filter((use) => {
-    const identified = itemIdentity(use).itemId;
-    if (identified !== null) {
-      return fuzzyConsumableMatch(query, [itemNames.get(identified) ?? "", identified.toString()]);
-    }
-    return fuzzyConsumableMatch(query, [
-      use.spellName,
-      use.spellId?.toString() ?? "",
-      ...use.candidateItemIds.flatMap((itemId) => [itemNames.get(itemId) ?? "", itemId.toString()]),
-    ]);
-  });
-}
-
 export function ConsumableTimingFilter({
   label,
   description,
@@ -137,32 +83,6 @@ export function ConsumableTimingFilter({
       </TooltipTrigger>
       <TooltipContent className="max-w-64">{description}</TooltipContent>
     </HintTooltip>
-  );
-}
-
-export function LedgerFilterInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  return (
-    <label className="relative block shrink-0" data-demo-consumables-search>
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-      <input
-        type="search"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="Filter consumes..."
-        aria-label="Filter consumables by name"
-        className="h-7 w-full rounded border border-border bg-background/70 pl-8 pr-8 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
-      />
-      {value && (
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          className="absolute right-1.5 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-          aria-label="Clear consumables filter"
-        >
-          <X className="h-3 w-3" />
-        </button>
-      )}
-    </label>
   );
 }
 
