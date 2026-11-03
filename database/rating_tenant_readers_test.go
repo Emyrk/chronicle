@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -214,6 +215,83 @@ func TestTenantRatingReaders(t *testing.T) {
 	require.Len(t, warriorScope, 2)
 	require.Equal(t, "Fury", warriorScope[1].PlayerSpec)
 	allBoss.PlayerClass, allScope.PlayerClass = "", ""
+	for _, table := range []string{"player_tenant_rating_boss_scores", "player_tenant_rating_scope_scores"} {
+		for _, metric := range []struct {
+			name, window, difficulty, performance string
+			maxPlayers                            int
+			score                                 float64
+		}{{"ranked_mastery", "all_time", "Heroic", "dps", 40, 77}, {"renown", "career", "", "none", 0, 18}} {
+			columns := "generation_id,tenant_id,realm_id,instance_name,difficulty_name,max_players,rating_metric,window_kind,score,player_guid,player_class,player_spec,player_sub_spec,performance_metric"
+			values := "($1,$2,$3,'Molten Core',$4,$5,$6,$7,$8,'player','','','',$9)"
+			if table == "player_tenant_rating_boss_scores" {
+				columns += ",encounter_name"
+				values = values[:len(values)-1] + ",'Ragnaros')"
+			}
+			_, err = conn.Exec(ctx, "INSERT INTO "+table+" ("+columns+") VALUES "+values, active, tenant, realms[1], metric.difficulty, metric.maxPlayers, metric.name, metric.window, metric.score, metric.performance)
+			require.NoError(t, err)
+		}
+	}
+	// Full-list ranks precede realm filtering, and count matches the displayed set.
+	fullBoss := database.GetPublishedPlayerBossFullListParams{TenantID: tenant, GenerationID: active, InstanceName: "Molten Core", EncounterName: "Ragnaros", DifficultyName: "Heroic", MaxPlayers: 40, PerformanceMetric: "dps", RatingMetric: "peak", WindowKind: "all_time", OtherWindowKind: "all_time", RenownWindowKind: "career", OtherDifficultyName: "Heroic", OtherMaxPlayers: 40, OtherPerformanceMetric: "dps", LimitCount: 1, RealmIds: []uuid.UUID{realms[1]}}
+	fullScope := database.GetPublishedPlayerScopeFullListParams{TenantID: tenant, GenerationID: active, InstanceName: "Molten Core", DifficultyName: "Heroic", MaxPlayers: 40, PerformanceMetric: "dps", RatingMetric: "peak", WindowKind: "all_time", OtherWindowKind: "all_time", RenownWindowKind: "career", OtherDifficultyName: "Heroic", OtherMaxPlayers: 40, OtherPerformanceMetric: "dps", LimitCount: 1, RealmIds: []uuid.UUID{realms[1]}}
+	for _, boss := range []bool{true, false} {
+		var total int64
+		var payload any
+		if boss {
+			row, e := q.GetPublishedPlayerBossFullList(ctx, fullBoss)
+			require.NoError(t, e)
+			total, payload = row.Total, row.Rows
+		} else {
+			row, e := q.GetPublishedPlayerScopeFullList(ctx, fullScope)
+			require.NoError(t, e)
+			total, payload = row.Total, row.Rows
+		}
+		require.EqualValues(t, 1, total)
+		encoded, e := json.Marshal(payload)
+		require.NoError(t, e)
+		var matches []struct {
+			Rank  int64 `json:"rank"`
+			Entry struct {
+				PlayerGUID string `json:"player_guid"`
+			} `json:"entry"`
+			Scores struct {
+				Peak    *float64 `json:"peak"`
+				Mastery *float64 `json:"mastery"`
+				Renown  *float64 `json:"renown"`
+			} `json:"scores"`
+		}
+		require.NoError(t, json.Unmarshal(encoded, &matches))
+		require.Len(t, matches, 1)
+		require.EqualValues(t, 4, matches[0].Rank)
+		require.Equal(t, "player", matches[0].Entry.PlayerGUID)
+		require.Equal(t, float64(90), *matches[0].Scores.Peak)
+		require.Equal(t, float64(77), *matches[0].Scores.Mastery)
+		require.Equal(t, float64(18), *matches[0].Scores.Renown)
+	}
+	fullBoss.RealmIds, fullScope.RealmIds = nil, nil
+	fullBoss.SearchQuery, fullScope.SearchQuery = "CLASSMATE", "CLASSMATE"
+	for _, boss := range []bool{true, false} {
+		var total int64
+		var payload any
+		if boss {
+			row, e := q.GetPublishedPlayerBossFullList(ctx, fullBoss)
+			require.NoError(t, e)
+			total, payload = row.Total, row.Rows
+		} else {
+			row, e := q.GetPublishedPlayerScopeFullList(ctx, fullScope)
+			require.NoError(t, e)
+			total, payload = row.Total, row.Rows
+		}
+		require.EqualValues(t, 1, total)
+		encoded, e := json.Marshal(payload)
+		require.NoError(t, e)
+		var matches []struct {
+			Rank int64 `json:"rank"`
+		}
+		require.NoError(t, json.Unmarshal(encoded, &matches))
+		require.Len(t, matches, 1)
+		require.EqualValues(t, 3, matches[0].Rank)
+	}
 	// The same score and realm require the subject tie-break. Page through
 	// all four boards with a single-row limit, including the lower score.
 	for _, table := range []string{"player_tenant_rating_boss_scores", "player_tenant_rating_scope_scores"} {

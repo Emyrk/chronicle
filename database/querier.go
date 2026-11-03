@@ -491,6 +491,12 @@ type sqlcQuerier interface {
 	// A module with something to run: main or a release with files.
 	GetPublicLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error)
 	GetPublishedLuaProjectArtifact(ctx context.Context, arg GetPublishedLuaProjectArtifactParams) (GetPublishedLuaProjectArtifactRow, error)
+	// Rank the full tenant cohort before applying display-only realm/name filters.
+	// A single statement computes the page and count from the same MVCC snapshot.
+	GetPublishedPlayerBossFullList(ctx context.Context, arg GetPublishedPlayerBossFullListParams) (GetPublishedPlayerBossFullListRow, error)
+	// Rank the full tenant cohort before applying display-only realm/name filters.
+	// A single statement computes the page and count from the same MVCC snapshot.
+	GetPublishedPlayerScopeFullList(ctx context.Context, arg GetPublishedPlayerScopeFullListParams) (GetPublishedPlayerScopeFullListRow, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
 	GetRatingConfigRevision(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	GetRatingMasteryAccumulator(ctx context.Context, arg GetRatingMasteryAccumulatorParams) (RatingMasteryAccumulator, error)

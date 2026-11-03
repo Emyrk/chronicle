@@ -26,6 +26,27 @@ type TenantGuildScopeLeaderboardResponse struct {
 	NextCursor string                             `json:"next_cursor,omitempty"`
 }
 
+// PublishedPlayerFullListResponse carries stable global positions within the
+// requested cohort. Search and realm filters affect total, not row ranks.
+type PublishedPlayerFullListResponse struct {
+	Rows        []PublishedPlayerFullListRow `json:"rows"`
+	Total       int64                        `json:"total"`
+	Page        int                          `json:"page"`
+	HasNextPage bool                         `json:"has_next_page"`
+}
+
+type PublishedPlayerFullListRow struct {
+	Rank   int64                            `json:"rank"`
+	Entry  TenantPlayerBossLeaderboardEntry `json:"entry"`
+	Scores PublishedPlayerFullListScores    `json:"scores"`
+}
+
+type PublishedPlayerFullListScores struct {
+	Peak    *float64 `json:"peak"`
+	Mastery *float64 `json:"mastery"`
+	Renown  *float64 `json:"renown"`
+}
+
 type TenantPlayerBossLeaderboardEntry struct {
 	GenerationID      uuid.UUID  `json:"generation_id"`
 	RealmID           uuid.UUID  `json:"realm_id"`
