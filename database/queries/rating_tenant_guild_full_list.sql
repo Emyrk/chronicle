@@ -53,8 +53,6 @@ SELECT (SELECT count(*) FROM displayed)::bigint AS total,
          'scores', jsonb_build_object('peak', peak, 'mastery', mastery, 'renown', renown)
        ) ORDER BY global_rank) FROM paged), '[]'::jsonb) AS rows;
 
-
-
 -- name: GetPublishedGuildScopeFullList :one
 -- Rank the full tenant guild cohort before applying display-only realm/name filters.
 -- A single statement computes the page and count from the same MVCC snapshot.
@@ -108,4 +106,3 @@ SELECT (SELECT count(*) FROM displayed)::bigint AS total,
          'entry', payload || jsonb_build_object('guild_name', guild_name, 'realm_name', realm_name),
          'scores', jsonb_build_object('peak', peak, 'mastery', mastery, 'renown', renown)
        ) ORDER BY global_rank) FROM paged), '[]'::jsonb) AS rows;
-

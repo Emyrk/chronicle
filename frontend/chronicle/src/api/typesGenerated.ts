@@ -3714,6 +3714,51 @@ export interface ProofSubject extends ProofCharacter {
     readonly warning?: string;
 }
 
+// From chroniclesdk/rating_tenant_leaderboard.go
+/**
+ * PublishedGuildFullListResponse carries globally ranked guild positions;
+ * search and realm filters affect total, not the original rank.
+ */
+export interface PublishedGuildFullListResponse {
+    readonly rows: readonly PublishedGuildFullListRow[];
+    readonly total: number;
+    readonly page: number;
+    readonly has_next_page: boolean;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface PublishedGuildFullListRow {
+    readonly rank: number;
+    readonly entry: TenantGuildBossLeaderboardEntry;
+    readonly scores: PublishedPlayerFullListScores;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+/**
+ * PublishedPlayerFullListResponse carries stable global positions within the
+ * requested cohort. Search and realm filters affect total, not row ranks.
+ */
+export interface PublishedPlayerFullListResponse {
+    readonly rows: readonly PublishedPlayerFullListRow[];
+    readonly total: number;
+    readonly page: number;
+    readonly has_next_page: boolean;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface PublishedPlayerFullListRow {
+    readonly rank: number;
+    readonly entry: TenantPlayerBossLeaderboardEntry;
+    readonly scores: PublishedPlayerFullListScores;
+}
+
+// From chroniclesdk/rating_tenant_leaderboard.go
+export interface PublishedPlayerFullListScores {
+    readonly peak: number | null;
+    readonly mastery: number | null;
+    readonly renown: number | null;
+}
+
 // From chroniclesdk/lua_project.go
 export interface PutLuaProjectContributorRequest {
     readonly permissions: readonly string[];

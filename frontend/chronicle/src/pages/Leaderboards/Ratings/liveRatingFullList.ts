@@ -1,20 +1,9 @@
+import type { PublishedGuildFullListResponse, PublishedPlayerFullListResponse } from "@/api/typesGenerated"
 import type { RatingEntry, RatingMetric } from "./ratingBoards.fixtures"
 import type { RatingLivePage } from "./ratingLiveData"
 import { liveRatingURL, type LiveRatingBoardRequest, type LiveRatingEntry } from "./liveRatingAdapter"
 
 export type LiveFullListRequest = LiveRatingBoardRequest & { query: string; page: number }
-
-type PublishedRow = {
-  rank: number
-  entry: LiveRatingEntry
-  scores: Partial<Record<RatingMetric, number>>
-}
-type PublishedPage = {
-  rows: PublishedRow[]
-  total: number
-  page: number
-  has_next_page: boolean
-}
 
 /** Use the same cohort validation and filters as the published preview boards. */
 export function liveRatingFullListURL(request: LiveFullListRequest): string | null {
@@ -50,7 +39,7 @@ function asEntry(row: LiveRatingEntry): RatingEntry | undefined {
 export async function fetchLiveRatingFullList(url: string): Promise<RatingLivePage> {
   const response = await fetch(url)
   if (!response.ok) throw new Error(`Ratings full list failed (${response.status})`)
-  const result = await response.json() as PublishedPage
+  const result = await response.json() as PublishedPlayerFullListResponse
   if (!Array.isArray(result.rows) || !Number.isInteger(result.total)) throw new Error("Invalid full list response")
   return {
     rows: result.rows.flatMap((row) => {
@@ -82,17 +71,10 @@ export function liveGuildFullListURL(request: LiveFullListRequest): string | nul
   return url.pathname + url.search
 }
 
-export type PublishedGuildFullListPage = {
-  rows: { rank: number; entry: LiveRatingEntry; scores: Partial<Record<RatingMetric, number>> }[]
-  total: number
-  page: number
-  has_next_page: boolean
-}
-
-export async function fetchLiveGuildFullList(url: string): Promise<PublishedGuildFullListPage> {
+export async function fetchLiveGuildFullList(url: string): Promise<PublishedGuildFullListResponse> {
   const response = await fetch(url)
   if (!response.ok) throw new Error(`Guild ratings full list failed (${response.status})`)
-  const result = await response.json() as PublishedGuildFullListPage
+  const result = await response.json() as PublishedGuildFullListResponse
   if (!Array.isArray(result.rows) || !Number.isInteger(result.total)) throw new Error("Invalid guild full list response")
   return result
 }
