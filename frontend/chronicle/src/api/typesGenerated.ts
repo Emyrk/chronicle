@@ -2512,6 +2512,36 @@ export interface InstanceSearchCursor {
 }
 
 // From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchLimitResponse is the caller's instance search rate-limit
+ * bucket, from GET /api/v1/raidlogs/search/limit. Searches spend tokens equal
+ * to their cost (the Chronicle-Search-Cost header).
+ */
+export interface InstanceSearchLimitResponse {
+    /**
+     * LoggedIn is false for anonymous callers, who share a per-IP bucket and
+     * may only run simple searches.
+     */
+    readonly logged_in: boolean;
+    /**
+     * Limit is the bucket size: the most tokens that can be spent at once.
+     */
+    readonly limit: number;
+    /**
+     * Remaining is the tokens available now.
+     */
+    readonly remaining: number;
+    /**
+     * RefillPerMinute is how many tokens come back each minute.
+     */
+    readonly refill_per_minute: number;
+    /**
+     * ResetSeconds is how long until the bucket is full.
+     */
+    readonly reset_seconds: number;
+}
+
+// From chroniclesdk/instance_search.go
 export type InstanceSearchMatch = "any" | "each";
 
 export const InstanceSearchMatches: InstanceSearchMatch[] = ["any", "each"];

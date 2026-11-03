@@ -108,7 +108,7 @@ func TestInstanceSearch(t *testing.T) {
 		require.Contains(t, rec.Body.String(), "too complex")
 	})
 
-	t.Run("Busy", func(t *testing.T) {
+	t.Run("BusyRefunds", func(t *testing.T) {
 		t.Parallel()
 		api, _ := newInstanceSearchAPI(t)
 		for range cap(api.instanceSearch.slots) {
@@ -116,6 +116,85 @@ func TestInstanceSearch(t *testing.T) {
 		}
 		rec := doSearch(t, api, uuid.New(), "10.0.0.1", simpleSearch)
 		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+		// The search never ran, so the bucket is full again.
+		require.Equal(t, "300", rec.Header().Get("RateLimit-Remaining"))
+	})
+
+	// Every response reports the bucket; every response for a query that
+	// compiled reports its cost.
+	t.Run("HeadersAlwaysPresent", func(t *testing.T) {
+		t.Parallel()
+		api, _ := newInstanceSearchAPI(t)
+		user := uuid.New()
+		heavy := make([]string, 40)
+		for i := range heavy {
+			heavy[i] = `{"field": "instance.idle_time_ms", "op": "<", "value": 1}`
+		}
+
+		cases := []struct {
+			name     string
+			user     uuid.UUID
+			body     string
+			status   int
+			wantCost string
+		}{
+			{"BadJSON", user, `{not json`, http.StatusBadRequest, ""},
+			{"Invalid", user, `{"where": {"field": "instance.nope", "op": "=", "value": 1}}`, http.StatusBadRequest, ""},
+			{"OK", user, simpleSearch, http.StatusOK, "2"},
+			{"LoginRequired", uuid.Nil, advancedSearch, http.StatusForbidden, "5"},
+			{"TooComplex", user, `{"where": {"and": [` + strings.Join(heavy, ",") + `]}}`, http.StatusTooManyRequests, "401"},
+		}
+		for _, tc := range cases {
+			rec := doSearch(t, api, tc.user, "10.0.0.9", tc.body)
+			require.Equal(t, tc.status, rec.Code, tc.name)
+			require.NotEmpty(t, rec.Header().Get("RateLimit-Limit"), tc.name)
+			require.NotEmpty(t, rec.Header().Get("RateLimit-Remaining"), tc.name)
+			require.NotEmpty(t, rec.Header().Get("RateLimit-Reset"), tc.name)
+			require.Equal(t, tc.wantCost, rec.Header().Get(InstanceSearchCostHeader), tc.name)
+		}
+
+		// Only the successful search spent tokens: 300 - 2.
+		rec := doSearch(t, api, user, "10.0.0.9", `{not json`)
+		require.Equal(t, "298", rec.Header().Get("RateLimit-Remaining"))
+	})
+
+	t.Run("LimitEndpoint", func(t *testing.T) {
+		t.Parallel()
+		api, _ := newInstanceSearchAPI(t)
+		user := uuid.New()
+		get := func(user uuid.UUID) chroniclesdk.InstanceSearchLimitResponse {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/raidlogs/search/limit", nil)
+			req.Header.Set("X-Forwarded-For", "10.0.0.8")
+			ctx := testutil.Context(t, testutil.WaitShort)
+			if user != uuid.Nil {
+				ctx = chronauth.WithClaims(ctx, &claims.Claims{Subject: user})
+			}
+			rec := httptest.NewRecorder()
+			api.InstanceSearchLimit(rec, req.WithContext(ctx))
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.NotEmpty(t, rec.Header().Get("RateLimit-Remaining"))
+			var out chroniclesdk.InstanceSearchLimitResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+			return out
+		}
+
+		fresh := get(user)
+		require.True(t, fresh.LoggedIn)
+		require.Equal(t, 300.0, fresh.Limit)
+		require.Equal(t, 300.0, fresh.Remaining)
+		require.InDelta(t, 120, fresh.RefillPerMinute, 0.001)
+		require.EqualValues(t, 0, fresh.ResetSeconds)
+
+		require.Equal(t, http.StatusOK, doSearch(t, api, user, "10.0.0.8", advancedSearch).Code)
+		after := get(user)
+		require.InDelta(t, 295, after.Remaining, 0.5) // advancedSearch costs 5
+		require.Positive(t, after.ResetSeconds)
+		// Peeking does not spend.
+		require.InDelta(t, after.Remaining, get(user).Remaining, 0.5)
+
+		anon := get(uuid.Nil)
+		require.False(t, anon.LoggedIn)
+		require.Equal(t, 40.0, anon.Limit)
 	})
 
 	t.Run("Metrics", func(t *testing.T) {

@@ -114,6 +114,23 @@ type InstanceSearchResult struct {
 	StartedAt      time.Time     `json:"started_at" format:"date-time"`
 }
 
+// InstanceSearchLimitResponse is the caller's instance search rate-limit
+// bucket, from GET /api/v1/raidlogs/search/limit. Searches spend tokens equal
+// to their cost (the Chronicle-Search-Cost header).
+type InstanceSearchLimitResponse struct {
+	// LoggedIn is false for anonymous callers, who share a per-IP bucket and
+	// may only run simple searches.
+	LoggedIn bool `json:"logged_in"`
+	// Limit is the bucket size: the most tokens that can be spent at once.
+	Limit float64 `json:"limit"`
+	// Remaining is the tokens available now.
+	Remaining float64 `json:"remaining"`
+	// RefillPerMinute is how many tokens come back each minute.
+	RefillPerMinute float64 `json:"refill_per_minute"`
+	// ResetSeconds is how long until the bucket is full.
+	ResetSeconds int64 `json:"reset_seconds"`
+}
+
 // InstanceSearchResponse is one page of results.
 type InstanceSearchResponse struct {
 	Results []InstanceSearchResult `json:"results"`

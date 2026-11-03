@@ -684,6 +684,7 @@ func (api *API) Routes() chi.Router {
 					r.Get("/recent", api.RecentInstances)
 					r.Get("/range", api.InstancesByTimeRange)
 					r.Post("/search", api.InstanceSearch)
+					r.Get("/search/limit", api.InstanceSearchLimit)
 					r.Route("/logs", func(r chi.Router) {
 						r.Get("/by-file-hash/{file-hash}", api.WoWLogGroupByFile)
 						r.Route("/{logID}", func(r chi.Router) {

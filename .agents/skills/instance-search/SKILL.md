@@ -35,6 +35,14 @@ players.filter(p, p.class == "PRIEST").size() >= 3
 | 429 | rate limited; obey `Retry-After`. "too complex" means the query costs more than the whole bucket |
 | 503 | too many searches running at once; retry in a second |
 
+**Response headers.**
+- Every response carries the caller's bucket: `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (seconds until full).
+- Every response for a query that compiled also carries `Chronicle-Search-Cost`, the tokens the query costs. That includes 403, 429 and 503. Only a 400 for an invalid query has no cost.
+- Refused, invalid and login-required requests spend nothing.
+- A 503 (busy) refunds the tokens, so only searches that actually ran or timed out are charged.
+
+**Bucket status without searching:** `GET /api/v1/raidlogs/search/limit` returns `{logged_in, limit, remaining, refill_per_minute, reset_seconds}` and the same headers. It spends nothing.
+
 **Anonymous users** (`instancesearch.CheckAnonymous`) can only send:
 - up to 6 predicates ANDed together
 - fields from `instance.name`, `realm`, `guild`, `started_at`, `difficulty`, `category`
