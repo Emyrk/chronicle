@@ -111,6 +111,24 @@ func hubRaidDepth(bossDepth int32) int32 {
 	return 5
 }
 
+// hubFillCategories gives every cohort of an instance the instance's category.
+// A cohort's category comes from its latest categorized log, so a cohort whose
+// logs were never categorized (seen: Naxxramas 10 next to a raid Naxxramas 25)
+// would otherwise drop out of the raid grid and the cohort picker.
+func hubFillCategories(instances []chroniclesdk.RankingsInstanceSummary) {
+	categories := map[string]string{}
+	for _, v := range instances {
+		if v.Category != "" && (categories[v.InstanceName] == "" || v.Category == "raid") {
+			categories[v.InstanceName] = v.Category
+		}
+	}
+	for i := range instances {
+		if instances[i].Category == "" {
+			instances[i].Category = categories[instances[i].InstanceName]
+		}
+	}
+}
+
 // hubClassFilter is the DB class for a class filter, or "" for every class.
 // HeroClassToDB maps an empty class to UNKNOWN, which would match no player.
 func hubClassFilter(class string) string {
@@ -264,6 +282,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		}
 		out.Instances = append(out.Instances, chroniclesdk.RankingsInstanceSummary{InstanceName: v.InstanceName, DifficultyName: v.DifficultyName, MaxPlayers: v.MaxPlayers, Category: v.Category, TotalKills: v.TotalKills, TopPlayers: players})
 	}
+	hubFillCategories(out.Instances)
 	realms, err := s.store.HubSummaryRealms(ctx, tenant)
 	if err != nil {
 		httpapi.InternalServerError(w, err)

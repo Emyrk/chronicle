@@ -12,6 +12,7 @@ import { HUB_REALMS, useHubRealm } from "./hubRealm"
 import { setMockRealm } from "@/pages/Leaderboards/Ratings/mockRealm"
 import { TABS, type HubTab } from "./hubTabs"
 import { peakWithRaw } from "./peakDisplay"
+import { cohortLabel } from "./cohortLabel"
 import { entityAttributes } from "@/components/EntityMenu/entity"
 import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities"
 import { RulesetsLanding } from "@/pages/Leaderboards/RulesetsLanding"
@@ -39,6 +40,8 @@ export interface LeaderboardsHubAppProps extends Omit<LeaderboardHubProps, "inst
   landingPreviews?: readonly HubLandingPreview[]
   /** Production instance view. Never render the fixture-only LeaderboardHub for live data. */
   renderInstance?: (instance: string) => ReactNode
+  /** Open an instance on one difficulty/size: live cards are one per published combination. */
+  onOpenCohort?: (instance: string, cohort: { difficulty: string; maxPlayers: number }) => void
 }
 
 export function LeaderboardsHubApp({
@@ -54,6 +57,7 @@ export function LeaderboardsHubApp({
   instances,
   landingPreviews,
   renderInstance,
+  onOpenCohort,
   ...hub
 }: LeaderboardsHubAppProps) {
   const live = instances !== undefined
@@ -115,13 +119,29 @@ export function LeaderboardsHubApp({
           />
         )
       ) : (
-        <HubLanding key={realm} tab={tab} onOpen={setInstance} instances={instances} landingPreviews={landingPreviews} />
+        <HubLanding
+          key={realm}
+          tab={tab}
+          onOpen={(name, cohort) => (cohort && onOpenCohort ? onOpenCohort(name, cohort) : setInstance(name))}
+          instances={instances}
+          landingPreviews={landingPreviews}
+        />
       )}
     </div>
   )
 }
 
-function HubLanding({ tab, onOpen, instances, landingPreviews }: { tab: HubTab; onOpen: (instance: string) => void; instances?: readonly RankingsInstanceSummary[]; landingPreviews?: readonly HubLandingPreview[] }) {
+function HubLanding({
+  tab,
+  onOpen,
+  instances,
+  landingPreviews,
+}: {
+  tab: HubTab
+  onOpen: (instance: string, cohort?: { difficulty: string; maxPlayers: number }) => void
+  instances?: readonly RankingsInstanceSummary[]
+  landingPreviews?: readonly HubLandingPreview[]
+}) {
   if (tab === "rulesets") {
     // Today's rulesets grid as-is; its cards link to ?instance=<name>, opened in place.
     return (
@@ -140,35 +160,22 @@ function HubLanding({ tab, onOpen, instances, landingPreviews }: { tab: HubTab; 
     )
   }
   if (instances !== undefined) {
+    // One card per published difficulty/size, so each combination has its own headline.
     const grid = (items: readonly RankingsInstanceSummary[]) => (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {[...new Set(items.map((row) => row.instance_name))].map((name) => {
-          const cohorts = items.filter((row) => row.instance_name === name)
-          const forCohort = (row: RankingsInstanceSummary) => landingPreviews?.find((item) =>
+        {items.map((row) => {
+          const several = items.filter((other) => other.instance_name === row.instance_name).length > 1
+          const preview = landingPreviews?.find((item) =>
             item.instance_name === row.instance_name && item.difficulty_name === row.difficulty_name && item.max_players === row.max_players)
-          const hasHighlight = (row: RankingsInstanceSummary) => {
-            const item = forCohort(row)
-            if (tab === "speedruns") return !!item?.speedruns.length
-            if (tab === "ratings") return !!(item?.player.peak.length || item?.player.ranked_mastery.length || item?.player.renown.length)
-            if (tab === "performances") return !!item?.performances.length
-            if (tab === "statistics") return !!item?.statistics.length
-            return !!(item?.speedruns.length || item?.guild.renown.length || item?.player.peak.length || item?.performances.length)
-          }
-          const displayed = cohorts.find(hasHighlight) ?? cohorts.find((row) => row.max_players > 0) ?? cohorts[0]
-          const preview = forCohort(displayed)
-          return <div key={name} onClickCapture={(e) => {
+          return <div key={`${row.instance_name}|${row.difficulty_name}|${row.max_players}`} onClickCapture={(e) => {
             e.preventDefault()
-            onOpen(name)
+            onOpen(row.instance_name, { difficulty: row.difficulty_name, maxPlayers: row.max_players })
           }}>
-            <InstanceCard name={name} to="#">
+            <InstanceCard name={row.instance_name} to="#" badge={several ? cohortLabel(row) : undefined}>
               <LiveCardBody tab={tab} preview={preview} />
-              <div className="space-y-1">
-                {cohorts.map((row) => <div key={`${row.difficulty_name}-${row.max_players}`} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <Skull className="h-3 w-3" />
-                  {/* One cohort needs no difficulty/size label; only several need telling apart. */}
-                  {cohorts.length > 1 && <>{row.difficulty_name || "Default"} · {row.max_players ? `${row.max_players} players` : "size not recorded"} · </>}
-                  {row.total_kills.toLocaleString()} recorded kills
-                </div>)}
+              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                <Skull className="h-3 w-3" />
+                {row.total_kills.toLocaleString()} recorded kills
               </div>
             </InstanceCard>
           </div>

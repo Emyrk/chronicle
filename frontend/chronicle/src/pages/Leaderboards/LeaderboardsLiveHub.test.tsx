@@ -90,18 +90,18 @@ describe("live Storybook Hub", () => {
       ...summary.instances[0], difficulty_name: "Heroic", max_players: 25,
     }] })
     const html = hub("/leaderboard-v2?instance=Molten+Core")
-    expect(html).toContain('aria-label="Raid cohort"')
-    expect(html).toContain("Heroic · 25 players")
+    expect(html).toContain('aria-label="Difficulty and size"')
+    expect(html).toContain("Heroic · 25")
   })
   it("selects the URL's published empty-difficulty zero-size cohort, else the summary's resolved one", () => {
     setSummary({ ...summary, instances: [...summary.instances, {
       ...summary.instances[0], difficulty_name: "", max_players: 0,
     }] })
     const selected = hub("/leaderboard-v2?instance=Molten+Core&difficulty=&size=0")
-    expect(selected).toContain('<option value="|0" selected="">Default · 0 players</option>')
+    expect(selected).toMatch(/aria-pressed="true"[^>]*>Default</)
     // Without a URL choice the summary's resolved (busiest) cohort is selected, not an empty prompt.
     const missing = hub("/leaderboard-v2?instance=Molten+Core")
-    expect(missing).toContain('<option value="Normal|40" selected="">Normal · 40 players</option>')
+    expect(missing).toMatch(/aria-pressed="true"[^>]*>Normal · 40</)
   })
   it("requests all-role performances without a zero-size URL parameter", () => {
     setSummary({ ...summary, instances: [{ ...summary.instances[0], difficulty_name: "", max_players: 0 }],

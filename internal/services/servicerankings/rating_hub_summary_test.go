@@ -177,3 +177,16 @@ func TestParseHubSetBoardInput(t *testing.T) {
 	_, err = parse(base + "&cursor=x")
 	require.Error(t, err)
 }
+
+func TestHubFillCategories(t *testing.T) {
+	t.Parallel()
+	instances := []chroniclesdk.RankingsInstanceSummary{
+		{InstanceName: "Naxxramas", DifficultyName: "10 Player", MaxPlayers: 10},
+		{InstanceName: "Naxxramas", DifficultyName: "25 Player", MaxPlayers: 25, Category: "raid"},
+		{InstanceName: "Mystery", DifficultyName: "Normal"},
+	}
+	hubFillCategories(instances)
+	require.Equal(t, "raid", instances[0].Category, "an uncategorized cohort takes its instance's category")
+	require.Equal(t, "raid", instances[1].Category)
+	require.Equal(t, "", instances[2].Category, "no category to borrow")
+}

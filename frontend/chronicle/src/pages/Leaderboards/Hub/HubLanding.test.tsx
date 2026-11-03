@@ -20,8 +20,9 @@ describe("live Hub landing", () => {
     expect(markup).toContain("1,234 recorded kills")
     expect(markup).toContain("57 recorded kills")
     expect(markup).toContain("99 recorded kills")
-    expect(markup).toContain("Normal · 40 players")
-    expect(markup).toContain("Heroic · 25 players")
+    // One card per difficulty/size; the badge names it when an instance has several.
+    expect(markup).toContain("Normal · 40")
+    expect(markup).toContain("Heroic · 25")
     expect(markup).toContain("Realm: Nordanaar")
     expect(markup).not.toContain("Fastest full clear")
     expect(markup).not.toContain("Guild Renown")
@@ -74,8 +75,10 @@ describe("live Hub landing", () => {
     const lone = render({ instances: zero })
     expect(lone).toContain("10 recorded kills")
     expect(lone).not.toContain("size not recorded")
+    // Several cohorts: each card's badge names its own, a zero size as just the difficulty.
     const markup = render({ instances: [...zero, { ...zero[0], difficulty_name: "Normal", max_players: 25 }] })
-    expect(markup).toContain("size not recorded")
+    expect(markup).toContain(">Default<")
+    expect(markup).toContain("Normal · 25")
     expect(markup).not.toContain("0 players")
   })
 

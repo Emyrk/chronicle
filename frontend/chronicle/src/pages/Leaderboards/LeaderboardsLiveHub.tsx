@@ -1,9 +1,11 @@
 import { useState } from "react"
+import { cn } from "@/lib/utils"
 import { useQuery } from "@tanstack/react-query"
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import type { SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
 import { useRankingsKillTimesByBoss, useRankingsLeaderboard, useRankingsStats, useRankingsClearTimes, useRankingsKillTimes, useRankingsSuccessRates, useParseScoreSpreads, useTimeParseSpreads } from "@/api/rankingsQueries"
 import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
+import { cohortLabel } from "./Hub/cohortLabel"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
 import { LeaderboardsHubApp } from "./Hub/HubLanding"
 import { LeaderboardHub, type HubLiveTabContext } from "./Hub/LeaderboardHub"
@@ -66,6 +68,13 @@ export function LeaderboardsLiveHub() {
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={(name) => choose("instance", name)}
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
         realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data!.instances} landingPreviews={summary.data!.landing_previews}
+        onOpenCohort={(name, cohort) => {
+          // A card is one difficulty/size: open the instance on it.
+          const next = hubParams(params, "instance", name)
+          next.set("difficulty", cohort.difficulty)
+          next.set("size", String(cohort.maxPlayers))
+          setParams(next)
+        }}
         renderInstance={(name) => <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} realm={realm}
           realmIDs={selectedRealmIDs} encounters={encounters} tab={tab}
           onInstance={(next) => choose("instance", next)} onTab={chooseTab}
@@ -104,12 +113,17 @@ function LiveInstanceHub({ instanceName, names, summary, realm, realmIDs, encoun
     realms: [ALL_REALMS, ...summary.realms.map((row) => row.name)],
     specsFor: (cls: string) => summary.filters?.find((row) => row.player_class === cls)?.specs.map((row) => row.spec) ?? [],
     subSpecsFor: (cls: string, spec: string) => summary.filters?.find((row) => row.player_class === cls)?.specs.find((row) => row.spec === spec)?.sub_specs.filter(Boolean) as string[] ?? [],
-    cohortPicker: raids.length > 1 ? <label className="flex items-center gap-2 text-xs text-muted-foreground">Raid cohort
-      <select aria-label="Raid cohort" className="h-8 max-w-48 rounded-md border bg-background px-2 text-foreground" value={cohort ? `${cohort.difficulty_name}|${cohort.max_players}` : ""} onChange={(event) => {
-        const row = raids.find((item) => `${item.difficulty_name}|${item.max_players}` === event.target.value)
-        onCohort(row?.difficulty_name ?? "", row ? String(row.max_players) : "")
-      }}><option value="">Choose difficulty and size</option>{raids.map((row) => <option key={`${row.difficulty_name}|${row.max_players}`} value={`${row.difficulty_name}|${row.max_players}`}>{row.difficulty_name || "Default"} · {row.max_players} players</option>)}</select>
-    </label> : undefined,
+    // Difficulty and size: one button per published combination, shown when there is a choice.
+    cohortPicker: raids.length > 1 ? <div role="group" aria-label="Difficulty and size" className="flex rounded-md border bg-background/60 p-0.5 text-xs">
+      {raids.map((row) => {
+        const current = cohort?.difficulty_name === row.difficulty_name && cohort?.max_players === row.max_players
+        return <button key={`${row.difficulty_name}|${row.max_players}`} type="button" aria-pressed={current}
+          onClick={() => onCohort(row.difficulty_name, String(row.max_players))}
+          className={cn("cursor-pointer rounded px-2.5 py-1.5 font-medium transition-colors", current ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")}>
+          {cohortLabel(row)}
+        </button>
+      })}
+    </div> : undefined,
     renderOverview: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} overview />,
     renderTab: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} />,
   }
