@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query"
 import { Navigate, useSearchParams } from "react-router-dom"
 import type { SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
-import { useRankingsEncounters, useRankingsFilters, useRankingsInstances, useRankingsLeaderboard, useRankingsStats, useRankingsClearTimes, useRankingsKillTimes, useRankingsSuccessRates, useParseScoreSpreads, useTimeParseSpreads } from "@/api/rankingsQueries"
-import { useRealms, useSupportedInstanceProgressionBosses, useSupportedInstanceRankingEncounterSets } from "@/api/queries"
+import { useRankingsLeaderboard, useRankingsStats, useRankingsClearTimes, useRankingsKillTimes, useRankingsSuccessRates, useParseScoreSpreads, useTimeParseSpreads } from "@/api/rankingsQueries"
+import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
 import { LeaderboardsHubApp } from "./Hub/HubLanding"
 import { LeaderboardHub, type HubLiveTabContext } from "./Hub/LeaderboardHub"
@@ -25,13 +25,17 @@ const ALL_REALMS = "All realms"
 export function LeaderboardsLiveHub() {
   const [params, setParams] = useSearchParams()
   const { tab, instance, realmIDs, encounter } = v2Selection(params)
-  const instances = useRankingsInstances()
-  const realms = useRealms()
-  const available = realms.data ?? []
+  const requestedSize = params.get("size")
+  const parsedSize = requestedSize === null ? NaN : Number(requestedSize)
+  const requestedCohort = params.has("difficulty") && Number.isInteger(parsedSize) && parsedSize >= 0 && parsedSize <= 32767
+    ? { difficulty: params.get("difficulty")!, maxPlayers: parsedSize } : undefined
+  const summary = useHubSummary({ instanceName: instance ?? undefined, realmIDs, performance: "dps",
+    cohort: requestedCohort, encounterName: encounter ?? undefined })
+  const available = summary.data?.realms ?? []
   const activeRealm = realmIDs.length === 1 ? available.find((row) => row.id === realmIDs[0]) : undefined
   const selectedRealmIDs = activeRealm ? [activeRealm.id] : realmIDs.length > 1 ? realmIDs : []
   const realm = activeRealm?.name ?? ALL_REALMS
-  const names = [...new Set((instances.data ?? []).map((row) => row.instance_name))]
+  const names = [...new Set((summary.data?.instances ?? []).map((row) => row.instance_name))]
   const choose = (key: "tab" | "instance" | "realm_ids" | "encounter", value?: string) => setParams(hubParams(params, key, value))
   const chooseTab = (next: ReturnType<typeof v2Selection>["tab"]) => {
     const updated = hubParams(params, "tab", next)
@@ -39,14 +43,14 @@ export function LeaderboardsLiveHub() {
     setParams(updated)
   }
   if (params.get("tab") === "speedrun" || params.get("tab") === "leaderboard") return <Navigate to={legacyLeaderboardsTarget(params)} replace />
-  if (instances.isPending || realms.isPending) return <p role="status" className="mx-auto max-w-[1920px] p-8 text-muted-foreground">Loading leaderboards…</p>
-  if (instances.isError || realms.isError) return <p role="alert" className="mx-auto max-w-[1920px] p-8 text-muted-foreground">Could not load leaderboard instances or realms.</p>
+  if (summary.isPending) return <p role="status" className="mx-auto max-w-[1920px] p-8 text-muted-foreground">Loading leaderboards…</p>
+  if (summary.isError) return <p role="alert" className="mx-auto max-w-[1920px] p-8 text-muted-foreground">Could not load leaderboard summary.</p>
   return <div className="flex min-w-0 gap-6">
     <div className="min-w-0 flex-1">
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={(name) => choose("instance", name)}
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
-        realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={instances.data ?? []}
-        renderInstance={(name) => <LiveInstanceHub instanceName={name} names={names} realm={realm}
+        realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data!.instances}
+        renderInstance={(name) => <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} realm={realm}
           realmIDs={selectedRealmIDs} encounter={encounter} tab={tab}
           onInstance={(next) => choose("instance", next)} onTab={chooseTab}
           onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
@@ -58,26 +62,20 @@ export function LeaderboardsLiveHub() {
   </div>
 }
 
-function LiveInstanceHub({ instanceName, names, realm, realmIDs, encounter, tab, difficulty, size, onInstance, onTab, onRealm, onCohort, onEncounter }: {
-  instanceName: string; names: string[]; realm: string; realmIDs: string[]; encounter: string | null
+function LiveInstanceHub({ instanceName, names, summary, realm, realmIDs, encounter, tab, difficulty, size, onInstance, onTab, onRealm, onCohort, onEncounter }: {
+  instanceName: string; names: string[]; summary: HubSummary; realm: string; realmIDs: string[]; encounter: string | null
   tab: ReturnType<typeof v2Selection>["tab"]; difficulty: string | null; size: string | null
   onInstance: (name?: string) => void; onTab: (tab: ReturnType<typeof v2Selection>["tab"]) => void
   onRealm: (name: string) => void; onCohort: (difficulty: string, size: string) => void; onEncounter: (boss?: string) => void
 }) {
-  const encounters = useRankingsEncounters(instanceName)
-  const progression = useSupportedInstanceProgressionBosses()
-  const rankingSets = useSupportedInstanceRankingEncounterSets()
-  const filters = useRankingsFilters(instanceName)
-  const realms = useRealms()
-  const instances = useRankingsInstances()
-  const raids = (instances.data ?? []).filter((row) => row.instance_name === instanceName && row.category === "raid")
+  const raids = summary.instances.filter((row) => row.instance_name === instanceName && row.category === "raid")
   const cohort = raids.length === 1 ? raids[0]
     : size !== null && difficulty !== null
       ? raids.find((row) => row.difficulty_name === difficulty && String(row.max_players) === size)
       : undefined
   const realmName = realm === ALL_REALMS ? undefined : realm
-  const bosses = liveHubBosses((encounters.data ?? []).map((row) => row.encounter_name),
-    progression.data?.get(instanceName), rankingSets.data?.get(instanceName), tab === "performances")
+  const bosses = liveHubBosses(summary.encounters.map((row) => row.encounter_name),
+    new Set(summary.progression_bosses ?? []), summary.ranking_encounter_sets ?? [], tab === "performances")
   const selected = encounter && bosses.includes(encounter) ? encounter : undefined
   const selection: EncounterSelection = selected ? { kind: "bosses", bosses: [selected] } : FULL_CLEAR
   const live = {
@@ -85,32 +83,29 @@ function LiveInstanceHub({ instanceName, names, realm, realmIDs, encounter, tab,
     onSelection: (next: EncounterSelection) => onEncounter(next.kind === "bosses" ? next.bosses[0] : undefined),
     bosses,
     optionalBosses: new Set<string>(),
-    realms: [ALL_REALMS, ...(realms.data ?? []).map((row) => row.name)],
-    specsFor: (cls: string) => filters.data?.find((row) => row.player_class === cls)?.specs.map((row) => row.spec) ?? [],
-    subSpecsFor: (cls: string, spec: string) => filters.data?.find((row) => row.player_class === cls)?.specs.find((row) => row.spec === spec)?.sub_specs.filter(Boolean) as string[] ?? [],
+    realms: [ALL_REALMS, ...summary.realms.map((row) => row.name)],
+    specsFor: (cls: string) => summary.filters?.find((row) => row.player_class === cls)?.specs.map((row) => row.spec) ?? [],
+    subSpecsFor: (cls: string, spec: string) => summary.filters?.find((row) => row.player_class === cls)?.specs.find((row) => row.spec === spec)?.sub_specs.filter(Boolean) as string[] ?? [],
     cohortPicker: raids.length > 1 ? <label className="flex items-center gap-2 text-xs text-muted-foreground">Raid cohort
       <select aria-label="Raid cohort" className="h-8 max-w-48 rounded-md border bg-background px-2 text-foreground" value={cohort ? `${cohort.difficulty_name}|${cohort.max_players}` : ""} onChange={(event) => {
         const row = raids.find((item) => `${item.difficulty_name}|${item.max_players}` === event.target.value)
         onCohort(row?.difficulty_name ?? "", row ? String(row.max_players) : "")
       }}><option value="">Choose difficulty and size</option>{raids.map((row) => <option key={`${row.difficulty_name}|${row.max_players}`} value={`${row.difficulty_name}|${row.max_players}`}>{row.difficulty_name || "Default"} · {row.max_players} players</option>)}</select>
     </label> : undefined,
-    renderOverview: (context: HubLiveTabContext) => <LiveHubContent context={context} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} overview />,
-    renderTab: (context: HubLiveTabContext) => <LiveHubContent context={context} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} />,
+    renderOverview: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} requestedEncounter={encounter ?? undefined} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} overview />,
+    renderTab: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} />,
   }
-  if (encounters.isPending || progression.isPending || rankingSets.isPending || filters.isPending) return <p role="status" className="p-8">Loading encounters and cohorts…</p>
-  if (encounters.isError || progression.isError || rankingSets.isError || filters.isError) return <p role="alert" className="p-8">Could not load encounters or cohorts.</p>
   return <LeaderboardHub live={live} instanceName={instanceName} instances={names} onAllInstances={() => onInstance()}
     onSwitchInstance={(next) => onInstance(next)} tab={tab} onTab={onTab} realm={realm} onRealm={onRealm}
     initialBosses={selected ? [selected] : undefined} />
 }
 
-function LiveHubContent({ context, realmName, realmIDs, cohort, bosses, overview = false }: {
-  context: HubLiveTabContext; realmName?: string; realmIDs: readonly string[]
+function LiveHubContent({ context, summary, requestedEncounter, realmName, realmIDs, cohort, bosses, overview = false }: {
+  context: HubLiveTabContext; summary: HubSummary; requestedEncounter?: string; realmName?: string; realmIDs: readonly string[]
   cohort?: { difficulty_name: string; max_players: number }; bosses: readonly string[]; overview?: boolean
 }) {
   const { instanceName, scope, role, subject, selection, onTab, onRatings } = context
-  const instances = useRankingsInstances()
-  const raids = (instances.data ?? []).filter((row) => row.instance_name === instanceName && row.category === "raid")
+  const raids = summary.instances.filter((row) => row.instance_name === instanceName && row.category === "raid")
   const chosen = cohort && raids.some((row) => row.difficulty_name === cohort.difficulty_name && row.max_players === cohort.max_players) ? cohort : undefined
   const boss = selection.kind === "bosses" && selection.bosses.length === 1 ? selection.bosses[0] : undefined
   const exact = !!chosen
@@ -146,8 +141,8 @@ function LiveHubContent({ context, realmName, realmIDs, cohort, bosses, overview
     !overview && context.tab === "parsing" && !!chosen && !realmName)
   const timeSpreads = useTimeParseSpreads(instanceName, !overview && context.tab === "parsing" && !!chosen && !realmName)
   const queryState = <T,>(query: { data?: T; isPending: boolean; isError: boolean }) => query.isError ? { status: "error" as const } : query.isPending ? { status: "loading" as const } : { status: "ready" as const, data: query.data! }
-  if (realmIDs.length > 1) return <p role="status" className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">Choose one realm or All realms in the Hub selector. This view cannot apply multiple realms.</p>
-  if (overview) return <LiveHubOverview instanceName={instanceName} selection={selection} cls={scope.cls} spec={scope.spec} subSpec={scope.subSpec}
+  if (!overview && realmIDs.length > 1) return <p role="status" className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">Choose one realm or All realms in the Hub selector. This view cannot apply multiple realms.</p>
+  if (overview) return <LiveHubOverview instanceName={instanceName} summary={summary} requestedEncounter={requestedEncounter} selection={selection} cls={scope.cls} spec={scope.spec} subSpec={scope.subSpec}
     role={role} subject={subject === "guilds" ? "guild" : "player"} realmName={realmName} realmIDs={realmIDs}
     performanceCohort={chosen ? { difficulty: chosen.difficulty_name, maxPlayers: chosen.max_players } : undefined}
     ratingCohort={chosen ? {

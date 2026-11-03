@@ -22102,8 +22102,10 @@ WITH fallback_representative_instances AS (
     FROM log_instances li
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
-    WHERE li.invalidated_at IS NULL
-      AND li.name = $1
+    JOIN wow_servers tenant_server ON tenant_server.id = tenant_realm.server_id
+    WHERE tenant_server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND li.invalidated_at IS NULL
+      AND li.name = $2
       AND NOT EXISTS (
         SELECT 1
         FROM ranking_runs rr
@@ -22132,7 +22134,9 @@ representative_instances AS (
 
     JOIN wow_log_groups representative_group ON representative_group.id = representative.log_group_id AND NOT representative_group.unlisted
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
-    WHERE rr.instance_name = $1
+    JOIN wow_servers tenant_server ON tenant_server.id = tenant_realm.server_id
+    WHERE tenant_server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND rr.instance_name = $2
     UNION ALL
     SELECT id, run_id FROM fallback_representative_instances
 ),
@@ -22147,7 +22151,9 @@ JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
-    WHERE edr.instance_name = $1
+    JOIN wow_servers edr_server ON edr_server.id = wsr.server_id
+    WHERE edr_server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND edr.instance_name = $2
 )
 SELECT
     r.encounter_name,
@@ -22158,6 +22164,11 @@ GROUP BY r.encounter_name
 ORDER BY (r.encounter_name = 'Trash'), r.encounter_name LIMIT 30
 `
 
+type HubSummaryEncountersParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName string    `db:"instance_name" json:"instance_name"`
+}
+
 type HubSummaryEncountersRow struct {
 	EncounterName string  `db:"encounter_name" json:"encounter_name"`
 	TotalKills    int64   `db:"total_kills" json:"total_kills"`
@@ -22165,8 +22176,8 @@ type HubSummaryEncountersRow struct {
 }
 
 // Returns encounters available in rankings for a given instance.
-func (q *sqlQuerier) HubSummaryEncounters(ctx context.Context, instanceName string) ([]HubSummaryEncountersRow, error) {
-	rows, err := q.db.Query(ctx, hubSummaryEncounters, instanceName)
+func (q *sqlQuerier) HubSummaryEncounters(ctx context.Context, arg HubSummaryEncountersParams) ([]HubSummaryEncountersRow, error) {
+	rows, err := q.db.Query(ctx, hubSummaryEncounters, arg.TenantID, arg.InstanceName)
 	if err != nil {
 		return nil, err
 	}
@@ -22175,6 +22186,52 @@ func (q *sqlQuerier) HubSummaryEncounters(ctx context.Context, instanceName stri
 	for rows.Next() {
 		var i HubSummaryEncountersRow
 		if err := rows.Scan(&i.EncounterName, &i.TotalKills, &i.TopDps); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const hubSummaryFilters = `-- name: HubSummaryFilters :many
+SELECT DISTINCT edr.player_class, edr.player_spec, edr.player_sub_spec
+FROM encounter_dps_rankings edr
+JOIN log_instances li ON li.id = edr.instance_id
+JOIN wow_log_groups grp ON grp.id = li.log_group_id AND NOT grp.unlisted
+JOIN wow_server_realms realm ON realm.id = edr.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND edr.instance_name = $2
+  AND edr.player_class <> 'Unknown'
+  AND edr.player_spec <> 'Unknown'
+ORDER BY edr.player_class, edr.player_spec, edr.player_sub_spec
+`
+
+type HubSummaryFiltersParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName string    `db:"instance_name" json:"instance_name"`
+}
+
+type HubSummaryFiltersRow struct {
+	PlayerClass   string `db:"player_class" json:"player_class"`
+	PlayerSpec    string `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec string `db:"player_sub_spec" json:"player_sub_spec"`
+}
+
+// Scope selector metadata to this tenant as well as the selected raid.
+func (q *sqlQuerier) HubSummaryFilters(ctx context.Context, arg HubSummaryFiltersParams) ([]HubSummaryFiltersRow, error) {
+	rows, err := q.db.Query(ctx, hubSummaryFilters, arg.TenantID, arg.InstanceName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []HubSummaryFiltersRow
+	for rows.Next() {
+		var i HubSummaryFiltersRow
+		if err := rows.Scan(&i.PlayerClass, &i.PlayerSpec, &i.PlayerSubSpec); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

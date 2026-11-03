@@ -120,6 +120,20 @@ SELECT realm.id, realm.name FROM wow_server_realms realm
 JOIN wow_servers server ON server.id = realm.server_id
 WHERE server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
 ORDER BY realm.name, realm.id LIMIT 64;
+-- name: HubSummaryFilters :many
+-- Scope selector metadata to this tenant as well as the selected raid.
+SELECT DISTINCT edr.player_class, edr.player_spec, edr.player_sub_spec
+FROM encounter_dps_rankings edr
+JOIN log_instances li ON li.id = edr.instance_id
+JOIN wow_log_groups grp ON grp.id = li.log_group_id AND NOT grp.unlisted
+JOIN wow_server_realms realm ON realm.id = edr.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND edr.instance_name = @instance_name
+  AND edr.player_class <> 'Unknown'
+  AND edr.player_spec <> 'Unknown'
+ORDER BY edr.player_class, edr.player_spec, edr.player_sub_spec;
+
 -- name: HubSummaryEncounters :many
 -- Returns encounters available in rankings for a given instance.
 WITH fallback_representative_instances AS (
@@ -129,7 +143,9 @@ WITH fallback_representative_instances AS (
     FROM log_instances li
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
-    WHERE li.invalidated_at IS NULL
+    JOIN wow_servers tenant_server ON tenant_server.id = tenant_realm.server_id
+    WHERE tenant_server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND li.invalidated_at IS NULL
       AND li.name = @instance_name
       AND NOT EXISTS (
         SELECT 1
@@ -159,7 +175,9 @@ representative_instances AS (
 
     JOIN wow_log_groups representative_group ON representative_group.id = representative.log_group_id AND NOT representative_group.unlisted
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
-    WHERE rr.instance_name = @instance_name
+    JOIN wow_servers tenant_server ON tenant_server.id = tenant_realm.server_id
+    WHERE tenant_server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND rr.instance_name = @instance_name
     UNION ALL
     SELECT id, run_id FROM fallback_representative_instances
 ),
@@ -174,7 +192,9 @@ JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
-    WHERE edr.instance_name = @instance_name
+    JOIN wow_servers edr_server ON edr_server.id = wsr.server_id
+    WHERE edr_server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND edr.instance_name = @instance_name
 )
 SELECT
     r.encounter_name,

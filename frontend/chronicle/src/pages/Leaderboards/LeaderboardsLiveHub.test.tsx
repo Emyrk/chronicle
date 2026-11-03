@@ -1,18 +1,24 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter } from "react-router-dom"
-import { describe, expect, it, vi } from "vitest"
-import { useRankingsInstances, useRankingsLeaderboard } from "@/api/rankingsQueries"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { useRankingsLeaderboard } from "@/api/rankingsQueries"
+import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
 import { LeaderboardsLiveHub } from "./LeaderboardsLiveHub"
 
-vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: [], isPending: false, isError: false }) }))
-vi.mock("@/api/rankingsQueries", () => ({
-  useRankingsInstances: vi.fn(() => ({ data: [{ instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40, category: "raid", total_kills: 12, top_players: [] }], isPending: false, isError: false })),
-  useRankingsEncounters: () => ({ data: [
+const summary = { instances: [{ instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40, category: "raid", total_kills: 12, top_players: [] }],
+  realms: [{ id: "realm-id", name: "Nordanaar" }], encounters: [
     { encounter_name: "Ragnaros", total_kills: 12, top_dps: 1450 },
     { encounter_name: "Gehennas", total_kills: 10, top_dps: 1300 },
     { encounter_name: "Trash", total_kills: 25, top_dps: 1200 },
-  ], isPending: false, isError: false }),
-  useRankingsFilters: () => ({ data: [{ player_class: "MAGE", specs: [{ spec: "Frost", sub_specs: [""] }] }], isPending: false, isError: false }),
+  ], filters: [{ player_class: "MAGE", specs: [{ spec: "Frost", sub_specs: [""] }] }],
+  progression_bosses: ["Ragnaros"], ranking_encounter_sets: [{ id: "", label: "Default", encounters: ["Ragnaros"] }],
+  selected_cohort: { difficulty_name: "Normal", max_players: 40 }, generation_id: null,
+  ratings: { raid: { player: { peak: [], ranked_mastery: [], renown: [] }, guild: { peak: [], ranked_mastery: [], renown: [] } }, bosses: [] },
+  performances: [], speedruns: [],
+} as HubSummary
+vi.mock("./Hub/hubSummaryAdapter", () => ({ useHubSummary: vi.fn() }))
+vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: [], isPending: false, isError: false }) }))
+vi.mock("@/api/rankingsQueries", () => ({
   useRankingsLeaderboard: vi.fn(() => ({ data: { entries: [] }, isPending: false, isError: false })),
   useRankingsStats: () => ({ data: [], isPending: false, isError: false }),
   useRankingsClearTimes: () => ({ data: [], isPending: false, isError: false }),
@@ -30,7 +36,12 @@ vi.mock("@/components/Ads/AdRailStack", () => ({ AdRailStack: () => null }))
 vi.mock("./Hub/LiveHubRatings", () => ({ LiveHubRatings: () => <p>Live ratings</p> }))
 vi.mock("./Hub/LiveHubOverview", () => ({ LiveHubOverview: () => <p>Live overview</p> }))
 
+function setSummary(data: HubSummary) {
+  vi.mocked(useHubSummary).mockReturnValue({ data, isPending: false, isError: false } as ReturnType<typeof useHubSummary>)
+}
+
 describe("live Storybook Hub", () => {
+  beforeEach(() => { vi.clearAllMocks(); setSummary(summary) })
   it("renders the original instance banner, realm/title, scope bar, encounters, and tabs with live names", () => {
     const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&realm_ids=realm-id"]}><LeaderboardsLiveHub /></MemoryRouter>)
     expect(html).toContain('aria-label="Breadcrumb"')
@@ -41,6 +52,7 @@ describe("live Storybook Hub", () => {
     expect(html).toContain("Live overview")
     expect(html).not.toContain("Mock data for design review")
     expect(html).not.toContain("Ratings realms:")
+    expect(useHubSummary).toHaveBeenCalledTimes(1)
   })
   it("uses the configured Turtle roster and exposes Trash only under Performances", () => {
     const ratings = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&tab=ratings&encounter=Trash"]}><LeaderboardsLiveHub /></MemoryRouter>)
@@ -61,56 +73,31 @@ describe("live Storybook Hub", () => {
     expect(html).toContain("Live overview")
   })
   it("offers a cohort selector when multiple raid populations are published", () => {
-    const hook = vi.mocked(useRankingsInstances)
-    const original = hook.getMockImplementation()!
-    hook.mockImplementation(() => {
-      const result = original()
-      return { ...result, data: [...(result.data ?? []), {
-        instance_name: "Molten Core", difficulty_name: "Heroic", max_players: 25, category: "raid", total_kills: 3, top_players: [],
-      }] } as ReturnType<typeof useRankingsInstances>
-    })
-    try {
-      const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core"]}><LeaderboardsLiveHub /></MemoryRouter>)
-      expect(html).toContain('aria-label="Raid cohort"')
-      expect(html).toContain("Heroic · 25 players")
-    } finally {
-      hook.mockImplementation(original)
-    }
+    setSummary({ ...summary, selected_cohort: null, instances: [...summary.instances, {
+      ...summary.instances[0], difficulty_name: "Heroic", max_players: 25,
+    }] })
+    const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core"]}><LeaderboardsLiveHub /></MemoryRouter>)
+    expect(html).toContain('aria-label="Raid cohort"')
+    expect(html).toContain("Heroic · 25 players")
   })
   it("selects the published empty-difficulty zero-size cohort without treating its URL values as missing", () => {
-    const hook = vi.mocked(useRankingsInstances)
-    const original = hook.getMockImplementation()!
-    hook.mockImplementation(() => {
-      const result = original()
-      return { ...result, data: [...(result.data ?? []), {
-        instance_name: "Molten Core", difficulty_name: "", max_players: 0, category: "raid", total_kills: 3, top_players: [],
-      }] } as ReturnType<typeof useRankingsInstances>
-    })
-    try {
-      const selected = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&difficulty=&size=0"]}><LeaderboardsLiveHub /></MemoryRouter>)
-      expect(selected).toContain('<option value="|0" selected="">Default · 0 players</option>')
-      const missing = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core"]}><LeaderboardsLiveHub /></MemoryRouter>)
-      expect(missing).toContain('<option value="" selected="">Choose difficulty and size</option>')
-    } finally {
-      hook.mockImplementation(original)
-    }
+    setSummary({ ...summary, instances: [...summary.instances, {
+      ...summary.instances[0], difficulty_name: "", max_players: 0,
+    }] })
+    const selected = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&difficulty=&size=0"]}><LeaderboardsLiveHub /></MemoryRouter>)
+    expect(selected).toContain('<option value="|0" selected="">Default · 0 players</option>')
+    const missing = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core"]}><LeaderboardsLiveHub /></MemoryRouter>)
+    expect(missing).toContain('<option value="" selected="">Choose difficulty and size</option>')
   })
-
   it("requests all-role performances without a zero-size URL parameter", () => {
-    const hook = vi.mocked(useRankingsInstances)
-    const original = hook.getMockImplementation()!
-    hook.mockImplementation(() => ({ ...original(), data: [{ instance_name: "Molten Core", difficulty_name: "", max_players: 0, category: "raid", total_kills: 3, top_players: [] }] }) as ReturnType<typeof useRankingsInstances>)
-    try {
-      vi.mocked(useRankingsLeaderboard).mockClear()
-      renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&tab=performances"]}><LeaderboardsLiveHub /></MemoryRouter>)
-      const [params, enabled] = vi.mocked(useRankingsLeaderboard).mock.calls[0]
-      expect(enabled).toBe(true)
-      expect(params).toMatchObject({ instance_names: "Molten Core", difficulty_names: "", exact_cohort: true, metric: "dps" })
-      expect(params.role).toBeUndefined()
-      expect(params.max_players).toBeUndefined()
-    } finally {
-      hook.mockImplementation(original)
-    }
+    setSummary({ ...summary, instances: [{ ...summary.instances[0], difficulty_name: "", max_players: 0 }],
+      selected_cohort: { difficulty_name: "", max_players: 0 } })
+    renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboard-v2?instance=Molten+Core&tab=performances"]}><LeaderboardsLiveHub /></MemoryRouter>)
+    const [params, enabled] = vi.mocked(useRankingsLeaderboard).mock.calls[0]
+    expect(enabled).toBe(true)
+    expect(params).toMatchObject({ instance_names: "Molten Core", difficulty_names: "", exact_cohort: true, metric: "dps" })
+    expect(params.role).toBeUndefined()
+    expect(params.max_players).toBeUndefined()
   })
 
   it("uses the Storybook landing grid with published cohorts", () => {
@@ -119,5 +106,6 @@ describe("live Storybook Hub", () => {
     expect(html).toContain("12 recorded kills")
     expect(html).toContain('aria-label="Leaderboard section"')
     expect(html).not.toContain("Mock data for design review")
+    expect(useHubSummary).toHaveBeenCalledTimes(1)
   })
 })

@@ -18,17 +18,17 @@ import (
 )
 
 type hubSummaryInput struct {
-	instance, featured, difficulty, metric, class, spec, subSpec, realmName string
-	size                                                                    int16
-	exact                                                                   bool
-	realmIDs                                                                []uuid.UUID
+	instance, featured, difficulty, metric, class, spec, subSpec string
+	size                                                         int16
+	exact                                                        bool
+	realmIDs                                                     []uuid.UUID
 }
 
 func parseHubSummaryInput(r *http.Request) (hubSummaryInput, error) {
 	q := r.URL.Query()
 	for key, values := range q {
 		switch key {
-		case "instance_name", "encounter_name", "difficulty_name", "max_players", "performance_metric", "class", "spec", "sub_spec", "realm_ids", "realm_name":
+		case "instance_name", "encounter_name", "difficulty_name", "max_players", "performance_metric", "class", "spec", "sub_spec", "realm_ids":
 		default:
 			return hubSummaryInput{}, errors.New("unknown parameter: " + key)
 		}
@@ -36,8 +36,8 @@ func parseHubSummaryInput(r *http.Request) (hubSummaryInput, error) {
 			return hubSummaryInput{}, errors.New(key + " must appear once")
 		}
 	}
-	in := hubSummaryInput{instance: q.Get("instance_name"), featured: q.Get("encounter_name"), difficulty: q.Get("difficulty_name"), metric: q.Get("performance_metric"), class: q.Get("class"), spec: q.Get("spec"), subSpec: q.Get("sub_spec"), realmName: q.Get("realm_name")}
-	if in.instance == "" && (q.Has("encounter_name") || q.Has("difficulty_name") || q.Has("max_players") || q.Has("class") || q.Has("spec") || q.Has("sub_spec") || q.Has("performance_metric") || q.Has("realm_name")) {
+	in := hubSummaryInput{instance: q.Get("instance_name"), featured: q.Get("encounter_name"), difficulty: q.Get("difficulty_name"), metric: q.Get("performance_metric"), class: q.Get("class"), spec: q.Get("spec"), subSpec: q.Get("sub_spec")}
+	if in.instance == "" && (q.Has("encounter_name") || q.Has("difficulty_name") || q.Has("max_players") || q.Has("class") || q.Has("spec") || q.Has("sub_spec") || q.Has("performance_metric")) {
 		return in, errors.New("instance_name is required for selected overview filters")
 	}
 	if q.Has("difficulty_name") != q.Has("max_players") {
@@ -121,7 +121,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	// Resolve selected realm IDs from this tenant's public realm list. Never let
 	// an unknown ID turn into an unfiltered speedrun or performance query.
-	realmNames := hubRealmNames(in.realmName)
+	var realmNames []string
 	if len(in.realmIDs) > 0 {
 		realmNames = []string{}
 		for _, id := range in.realmIDs {
@@ -143,24 +143,28 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	known := false
 	cohorts := 0
+	matchedCohort := false
+	var soleCohort chroniclesdk.HubSelectedCohort
 	for _, v := range out.Instances {
-		if v.InstanceName == in.instance {
-			known = true
-			if v.Category == "raid" {
-				cohorts++
-				if !in.exact {
-					in.difficulty = v.DifficultyName
-					in.size = v.MaxPlayers
-				}
-			}
+		if v.InstanceName != in.instance {
+			continue
+		}
+		known = true
+		if v.Category == "raid" {
+			cohorts++
+			soleCohort = chroniclesdk.HubSelectedCohort{DifficultyName: v.DifficultyName, MaxPlayers: v.MaxPlayers}
+			matchedCohort = matchedCohort || (in.difficulty == v.DifficultyName && in.size == v.MaxPlayers)
 		}
 	}
 	if !known {
 		httpapi.Write(ctx, w, http.StatusOK, out)
 		return
 	}
+	// A stale URL cohort must not silently broaden to another population.
+	// A sole published cohort is unambiguous, even when its stored size is zero.
+	in.exact = in.exact && matchedCohort
 	if !in.exact && cohorts == 1 {
-		in.exact = true
+		in.difficulty, in.size, in.exact = soleCohort.DifficultyName, soleCohort.MaxPlayers, true
 	}
 	if in.exact {
 		out.SelectedCohort = &chroniclesdk.HubSelectedCohort{DifficultyName: in.difficulty, MaxPlayers: in.size}
@@ -177,7 +181,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		}
 		break
 	}
-	filters, err := s.store.RankingsFilterOptions(ctx, []string{in.instance})
+	filters, err := s.store.HubSummaryFilters(ctx, database.HubSummaryFiltersParams{TenantID: tenant, InstanceName: in.instance})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -204,7 +208,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 			out.Filters[ci].Specs[si].SubSpecs = append(out.Filters[ci].Specs[si].SubSpecs, row.PlayerSubSpec)
 		}
 	}
-	encounters, err := s.store.HubSummaryEncounters(ctx, in.instance)
+	encounters, err := s.store.HubSummaryEncounters(ctx, database.HubSummaryEncountersParams{TenantID: tenant, InstanceName: in.instance})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -298,10 +302,4 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	httpapi.Write(ctx, w, http.StatusOK, out)
-}
-func hubRealmNames(name string) []string {
-	if name == "" {
-		return nil
-	}
-	return []string{name}
 }

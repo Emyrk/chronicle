@@ -652,7 +652,9 @@ type sqlcQuerier interface {
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	HeartbeatRatingRebuildCheckpoint(ctx context.Context, arg HeartbeatRatingRebuildCheckpointParams) (int64, error)
 	// Returns encounters available in rankings for a given instance.
-	HubSummaryEncounters(ctx context.Context, instanceName string) ([]HubSummaryEncountersRow, error)
+	HubSummaryEncounters(ctx context.Context, arg HubSummaryEncountersParams) ([]HubSummaryEncountersRow, error)
+	// Scope selector metadata to this tenant as well as the selected raid.
+	HubSummaryFilters(ctx context.Context, arg HubSummaryFiltersParams) ([]HubSummaryFiltersRow, error)
 	HubSummaryInstances(ctx context.Context, tenantID uuid.UUID) ([]HubSummaryInstancesRow, error)
 	// All boards share the caller-pinned active generation. Bound boss names and
 	// truncate each board in SQL, not in the HTTP handler.

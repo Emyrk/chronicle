@@ -2206,6 +2206,91 @@ export interface GuildTopParsesResponse {
     readonly parses: readonly GuildTopParse[];
 }
 
+// From chroniclesdk/rating_hub_summary.go
+export interface HubBossRating extends HubRatingBoard {
+    readonly encounter_name: string;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+export interface HubGuildRatingEntry {
+    readonly realm_id: string;
+    readonly realm_name: string;
+    readonly guild_id: string;
+    readonly guild_name: string;
+    readonly score: number;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+export interface HubGuildRatings {
+    readonly peak: readonly HubGuildRatingEntry[];
+    readonly ranked_mastery: readonly HubGuildRatingEntry[];
+    readonly renown: readonly HubGuildRatingEntry[];
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
+ * Compact published score identities are sufficient for preview cards.
+ */
+export interface HubPlayerRatingEntry {
+    readonly realm_id: string;
+    readonly realm_name: string;
+    readonly player_guid: string;
+    readonly player_name: string;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly score: number;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+export interface HubPlayerRatings {
+    readonly peak: readonly HubPlayerRatingEntry[];
+    readonly ranked_mastery: readonly HubPlayerRatingEntry[];
+    readonly renown: readonly HubPlayerRatingEntry[];
+}
+
+// From chroniclesdk/rating_hub_summary.go
+export interface HubRatingBoard {
+    readonly player: HubPlayerRatings;
+    readonly guild: HubGuildRatings;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+export interface HubRatings {
+    readonly raid: HubRatingBoard;
+    readonly bosses: readonly HubBossRating[];
+}
+
+// From chroniclesdk/rating_hub_summary.go
+export interface HubRealm {
+    readonly id: string;
+    readonly name: string;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+export interface HubSelectedCohort {
+    readonly difficulty_name: string;
+    readonly max_players: number;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
+ * HubSummary is a public, tenant-wide snapshot for the live leaderboards overview.
+ */
+export interface HubSummary {
+    readonly instances: readonly RankingsInstanceSummary[];
+    readonly realms: readonly HubRealm[];
+    readonly encounters: readonly RankingsEncounterSummary[];
+    readonly progression_bosses: readonly string[];
+    readonly ranking_encounter_sets: readonly RankingEncounterSet[];
+    readonly filters: readonly RankingsFilterClass[];
+    readonly selected_cohort: HubSelectedCohort | null;
+    readonly generation_id: string | null;
+    readonly ratings: HubRatings;
+    readonly performances: readonly RankingsEntry[];
+    readonly speedruns: readonly SpeedrunLeaderboardEntry[];
+}
+
 // From chroniclesdk/log.go
 /**
  * IdentityCreature represents a creature seen during identity mode parsing.
