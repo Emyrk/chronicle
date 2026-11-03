@@ -22190,6 +22190,60 @@ func (q *sqlQuerier) AdvanceRatingMasteryAccumulator(ctx context.Context, arg Ad
 	return result.RowsAffected(), nil
 }
 
+const countCompletedTenantMasteryWindows = `-- name: CountCompletedTenantMasteryWindows :one
+SELECT count(*) FROM rating_mastery_accumulators
+WHERE generation_id = $1 AND tenant_id = $2 AND pass = 'complete'
+`
+
+type CountCompletedTenantMasteryWindowsParams struct {
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) CountCompletedTenantMasteryWindows(ctx context.Context, arg CountCompletedTenantMasteryWindowsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countCompletedTenantMasteryWindows, arg.GenerationID, arg.TenantID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countTenantMasteryWindows = `-- name: CountTenantMasteryWindows :one
+SELECT 2 * (
+    (SELECT count(*) FROM (
+        SELECT DISTINCT realm_id, player_guid, instance_name, encounter_name,
+               difficulty_name, max_players, player_class, player_spec,
+               player_sub_spec, performance_metric
+        FROM rating_stage_player_observations AS player_stage
+        WHERE player_stage.generation_id = $1 AND player_stage.tenant_id = $2
+          AND player_stage.locked_parse BETWEEN 0 AND 100 AND player_stage.killed_at < $3::timestamptz
+    ) players)
+    + (SELECT count(*) FROM (
+        SELECT DISTINCT realm_id, guild_id, instance_name, encounter_name,
+               difficulty_name, max_players
+        FROM rating_stage_guild_observations AS guild_stage
+        WHERE guild_stage.generation_id = $1 AND guild_stage.tenant_id = $2
+          AND guild_stage.locked_parse BETWEEN 0 AND 100 AND guild_stage.killed_at < $3::timestamptz
+          AND guild_stage.guild_id IS NOT NULL
+    ) guilds)
+)::bigint AS total_windows
+`
+
+type CountTenantMasteryWindowsParams struct {
+	TargetGenerationID uuid.UUID          `db:"target_generation_id" json:"target_generation_id"`
+	TargetTenantID     uuid.UUID          `db:"target_tenant_id" json:"target_tenant_id"`
+	AsOf               pgtype.Timestamptz `db:"as_of" json:"as_of"`
+}
+
+// During Mastery, every distinct eligible subject gets an all-time and a
+// 180-day window. Count once per generation for an honest phase-level ETA;
+// later scope phases have no comparable fixed total.
+func (q *sqlQuerier) CountTenantMasteryWindows(ctx context.Context, arg CountTenantMasteryWindowsParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countTenantMasteryWindows, arg.TargetGenerationID, arg.TargetTenantID, arg.AsOf)
+	var total_windows int32
+	err := row.Scan(&total_windows)
+	return total_windows, err
+}
+
 const getRatingMasteryAccumulator = `-- name: GetRatingMasteryAccumulator :one
 SELECT generation_id, tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, window_kind, pass, version, cursor_score, cursor_killed_at, cursor_run_id, position, eligible_kills, excluded_kills, best, latest_retained_at, total_weight, cumulative_weight, floor_score, form_score, last_retained_score FROM rating_mastery_accumulators
 WHERE generation_id = $1 AND tenant_id = $2

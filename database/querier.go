@@ -92,12 +92,17 @@ type sqlcQuerier interface {
 	CopyLegacySpellVariants(ctx context.Context, arg []CopyLegacySpellVariantsParams) *CopyLegacySpellVariantsBatchResults
 	CountActiveRegressionJobs(ctx context.Context) (int64, error)
 	CountAllWoWLogGroups(ctx context.Context, arg CountAllWoWLogGroupsParams) (int32, error)
+	CountCompletedTenantMasteryWindows(ctx context.Context, arg CountCompletedTenantMasteryWindowsParams) (int64, error)
 	CountGuildDiscordInstallationsByDiscordGuildID(ctx context.Context, discordGuildID string) (int64, error)
 	CountGuilds(ctx context.Context, arg CountGuildsParams) (int64, error)
 	CountLuaProjectStars(ctx context.Context, projectIds []uuid.UUID) ([]CountLuaProjectStarsRow, error)
 	CountLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	CountRaidCompositionsByUser(ctx context.Context, arg CountRaidCompositionsByUserParams) (int64, error)
 	CountReadyLuaProjectArtifactGarbage(ctx context.Context) (int64, error)
+	// During Mastery, every distinct eligible subject gets an all-time and a
+	// 180-day window. Count once per generation for an honest phase-level ETA;
+	// later scope phases have no comparable fixed total.
+	CountTenantMasteryWindows(ctx context.Context, arg CountTenantMasteryWindowsParams) (int32, error)
 	CountUserAuthLinks(ctx context.Context) (int64, error)
 	CountUserGearLists(ctx context.Context, arg CountUserGearListsParams) (int64, error)
 	CountUserGearProgressions(ctx context.Context, arg CountUserGearProgressionsParams) (int64, error)

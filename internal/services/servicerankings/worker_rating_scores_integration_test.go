@@ -67,6 +67,14 @@ func TestWorkerRebuildTenantRatingsCrossRealmToPublication(t *testing.T) {
 		require.Equal(t, "building", status, "no partial publication at phase "+cp.Phase)
 	}
 	require.True(t, completed, "bounded worker phases must reach publication")
+	windows, err := q.CountTenantMasteryWindows(ctx, database.CountTenantMasteryWindowsParams{
+		TargetGenerationID: generation, TargetTenantID: uuid.Nil, AsOf: database.Timestamptz(asOf),
+	})
+	require.NoError(t, err)
+	require.Zero(t, windows, "raw-only observations are not eligible for Mastery")
+	done, err := q.CountCompletedTenantMasteryWindows(ctx, database.CountCompletedTenantMasteryWindowsParams{GenerationID: generation, TenantID: uuid.Nil})
+	require.NoError(t, err)
+	require.Equal(t, int64(windows), done)
 	var score float64
 	require.NoError(t, pool.QueryRow(ctx, `SELECT score FROM player_tenant_rating_boss_scores WHERE generation_id=$1 AND realm_id=$2 AND rating_metric='peak' AND window_kind='period'`, generation, realms[0]).Scan(&score))
 	require.Equal(t, 80.0, score, "realm one competes against realm two")

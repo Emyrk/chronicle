@@ -65,6 +65,15 @@ func TestRatingMasteryAccumulatorPagesAndCheckpointCAS(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	windows, err := q.CountTenantMasteryWindows(ctx, database.CountTenantMasteryWindowsParams{
+		TargetGenerationID: generation, TargetTenantID: uuid.Nil, AsOf: database.Timestamptz(asOf),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int32(2), windows, "only the eligible subject contributes two windows")
+	done, err := q.CountCompletedTenantMasteryWindows(ctx, database.CountCompletedTenantMasteryWindowsParams{GenerationID: generation, TenantID: uuid.Nil})
+	require.NoError(t, err)
+	require.Zero(t, done)
+
 	page := database.ListRatingMasteryPlayerPageParams{
 		GenerationID: generation, TenantID: uuid.Nil, RealmID: realm, PlayerGuid: "player",
 		InstanceName: "Raid", EncounterName: "Boss", DifficultyName: "Normal", MaxPlayers: 40,
@@ -144,4 +153,9 @@ func TestRatingMasteryAccumulatorPagesAndCheckpointCAS(t *testing.T) {
 	require.Equal(t, int64(211), state.EligibleKills)
 	require.Equal(t, int64(42), state.ExcludedKills)
 	require.Equal(t, pgtype.Float8{}, state.CursorScore)
+	_, err = conn.Exec(ctx, `UPDATE rating_mastery_accumulators SET pass='complete' WHERE generation_id=$1`, generation)
+	require.NoError(t, err)
+	done, err = q.CountCompletedTenantMasteryWindows(ctx, database.CountCompletedTenantMasteryWindowsParams{GenerationID: generation, TenantID: uuid.Nil})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), done)
 }

@@ -88,7 +88,10 @@ type WorkerRebuildTenantRatings struct {
 // raid-scope page. Batch a fixed number of steps per River invocation so a
 // large tenant does not create thousands of one-second snoozes. Transactions
 // and checkpoint CAS remain page-sized; a later invocation resumes the cursor.
-const ratingPagesPerInvocation = 32
+const (
+	ratingPagesPerInvocation  = 128
+	ratingInvocationTimeLimit = 10 * time.Second
+)
 
 func (w *WorkerRebuildTenantRatings) Work(ctx context.Context, job *river.Job[ArgsRebuildTenantRatings]) error {
 	if job.Args.TenantID == uuid.Nil {
@@ -96,60 +99,131 @@ func (w *WorkerRebuildTenantRatings) Work(ctx context.Context, job *river.Job[Ar
 	} else {
 		ctx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
 	}
-	for page := range ratingPagesPerInvocation {
+	started := time.Now()
+	pages := 0
+	for pages < ratingPagesPerInvocation && (pages == 0 || time.Since(started) < ratingInvocationTimeLimit) {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		err := w.workPage(ctx, job)
+		pages++
 		if err == nil {
-			w.recordRatingProgress(ctx, job, page+1, "complete")
+			w.recordRatingProgress(ctx, job, pages, "complete")
 			return nil
 		}
 		var snooze *river.JobSnoozeError
 		if !errors.As(err, &snooze) {
-			w.recordRatingProgress(ctx, job, page+1, "failed")
+			w.recordRatingProgress(ctx, job, pages, "failed")
 			return err
 		}
 	}
-	w.recordRatingProgress(ctx, job, ratingPagesPerInvocation, "building")
+	w.recordRatingProgress(ctx, job, pages, "building")
 	return river.JobSnooze(time.Second)
 }
 
 // River stores this compact snapshot in metadata.output after each attempt,
-// including snoozes. A generation-bound page counter and phase convey progress
-// without guessing a percentage before the bounded staging scans finish.
+// including snoozes. The only exact remaining count is Mastery subject-windows;
+// stage and scope page counts cannot be known before their scans finish.
+type ratingPreviousOutput struct {
+	GenerationID          uuid.UUID `json:"generation_id"`
+	PagesProcessed        int       `json:"pages_processed"`
+	ReportedAt            time.Time `json:"reported_at"`
+	MasteryWindowsTotal   int32     `json:"mastery_windows_total"`
+	MasteryWindowsDone    int64     `json:"mastery_windows_done"`
+	MasteryWindowsAtStart int64     `json:"mastery_windows_at_start"`
+	MasteryStartedAt      time.Time `json:"mastery_started_at"`
+}
+
+func previousRatingOutput(job *river.Job[ArgsRebuildTenantRatings], generation uuid.UUID) ratingPreviousOutput {
+	if job.JobRow == nil || len(job.Metadata) == 0 || generation == uuid.Nil {
+		return ratingPreviousOutput{}
+	}
+	var metadata struct {
+		Output ratingPreviousOutput `json:"output"`
+	}
+	if json.Unmarshal(job.Metadata, &metadata) != nil || metadata.Output.GenerationID != generation {
+		return ratingPreviousOutput{}
+	}
+	return metadata.Output
+}
+
+func ratingPagesProcessed(job *river.Job[ArgsRebuildTenantRatings], generation uuid.UUID, pages int) int {
+	previous := previousRatingOutput(job, generation)
+	if previous.PagesProcessed > 0 {
+		return previous.PagesProcessed + pages
+	}
+	return pages
+}
+
 func (w *WorkerRebuildTenantRatings) recordRatingProgress(ctx context.Context, job *river.Job[ArgsRebuildTenantRatings], pages int, status string) {
 	tenant := job.Args.TenantID
-	output := map[string]any{"tenant_id": tenant, "status": status, "pages_this_attempt": pages}
+	now := time.Now().UTC()
+	output := map[string]any{"tenant_id": tenant, "status": status, "pages_this_attempt": pages, "reported_at": now}
 	var generation uuid.UUID
 	if cp, err := w.Store.GetBuildingRatingRebuildCheckpoint(ctx, tenant); err == nil {
 		generation = cp.GenerationID
 		output["phase"] = cp.Phase
+		if cp.AsOf.Valid && !cp.AsOf.Time.After(now) {
+			output["elapsed_seconds"] = int64(now.Sub(cp.AsOf.Time).Seconds())
+		}
+		if cp.Phase == "mastery_pending" {
+			w.recordMasteryProgress(ctx, output, job, cp, now)
+		}
 	} else if status == "complete" {
 		output["phase"] = "complete"
 		generation, _ = w.Store.GetActiveTenantRatingGeneration(ctx, tenant)
+		if generation != uuid.Nil {
+			if cp, err := w.Store.GetRatingRebuildCheckpoint(ctx, database.GetRatingRebuildCheckpointParams{TenantID: tenant, GenerationID: generation}); err == nil && cp.AsOf.Valid && !cp.AsOf.Time.After(now) {
+				output["elapsed_seconds"] = int64(now.Sub(cp.AsOf.Time).Seconds())
+			}
+		}
 	}
 	if generation != uuid.Nil {
 		output["generation_id"] = generation
 	}
-	output["pages_processed"] = ratingPagesProcessed(job, generation, pages)
+	previous := previousRatingOutput(job, generation)
+	processed := ratingPagesProcessed(job, generation, pages)
+	output["pages_processed"] = processed
+	if elapsed := now.Sub(previous.ReportedAt).Seconds(); previous.PagesProcessed > 0 && elapsed > 0 {
+		output["recent_pages_per_second"] = float64(processed-previous.PagesProcessed) / elapsed
+	}
 	_ = river.RecordOutput(ctx, output)
 }
 
-func ratingPagesProcessed(job *river.Job[ArgsRebuildTenantRatings], generation uuid.UUID, pages int) int {
-	if job.JobRow == nil || len(job.Metadata) == 0 || generation == uuid.Nil {
-		return pages
+func (w *WorkerRebuildTenantRatings) recordMasteryProgress(ctx context.Context, output map[string]any, job *river.Job[ArgsRebuildTenantRatings], cp database.RatingRebuildCheckpoint, now time.Time) {
+	previous := previousRatingOutput(job, cp.GenerationID)
+	total := previous.MasteryWindowsTotal
+	if total == 0 {
+		var err error
+		total, err = w.Store.CountTenantMasteryWindows(ctx, database.CountTenantMasteryWindowsParams{
+			TargetGenerationID: cp.GenerationID, TargetTenantID: cp.TenantID, AsOf: cp.AsOf,
+		})
+		if err != nil {
+			output["progress_error"] = err.Error()
+			return
+		}
 	}
-	var previous struct {
-		Output struct {
-			GenerationID   uuid.UUID `json:"generation_id"`
-			PagesProcessed int       `json:"pages_processed"`
-		} `json:"output"`
+	done, err := w.Store.CountCompletedTenantMasteryWindows(ctx, database.CountCompletedTenantMasteryWindowsParams{
+		GenerationID: cp.GenerationID, TenantID: cp.TenantID,
+	})
+	if err != nil {
+		output["progress_error"] = err.Error()
+		return
 	}
-	if json.Unmarshal(job.Metadata, &previous) == nil && previous.Output.GenerationID == generation && previous.Output.PagesProcessed > 0 {
-		return previous.Output.PagesProcessed + pages
+	output["mastery_windows_total"] = total
+	output["mastery_windows_done"] = done
+	output["mastery_windows_remaining"] = max(0, int64(total)-done)
+	started, baseline := previous.MasteryStartedAt, previous.MasteryWindowsAtStart
+	if started.IsZero() {
+		started, baseline = now, done
 	}
-	return pages
+	output["mastery_started_at"] = started
+	output["mastery_windows_at_start"] = baseline
+	if seconds := now.Sub(started).Seconds(); seconds >= 1 && done > baseline && done < int64(total) {
+		rate := float64(done-baseline) / seconds
+		output["mastery_windows_per_second"] = rate
+		output["mastery_eta_seconds"] = int64(float64(int64(total)-done) / rate)
+	}
 }
 
 func (w *WorkerRebuildTenantRatings) workPage(ctx context.Context, job *river.Job[ArgsRebuildTenantRatings]) error {

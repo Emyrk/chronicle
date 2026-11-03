@@ -51,6 +51,33 @@ WHERE acc.generation_id = @generation_id AND acc.tenant_id = @tenant_id
               WHERE gen.id = @generation_id AND gen.tenant_id = @tenant_id
                 AND gen.status = 'building');
 
+-- During Mastery, every distinct eligible subject gets an all-time and a
+-- 180-day window. Count once per generation for an honest phase-level ETA;
+-- later scope phases have no comparable fixed total.
+-- name: CountTenantMasteryWindows :one
+SELECT 2 * (
+    (SELECT count(*) FROM (
+        SELECT DISTINCT realm_id, player_guid, instance_name, encounter_name,
+               difficulty_name, max_players, player_class, player_spec,
+               player_sub_spec, performance_metric
+        FROM rating_stage_player_observations AS player_stage
+        WHERE player_stage.generation_id = @target_generation_id AND player_stage.tenant_id = @target_tenant_id
+          AND player_stage.locked_parse BETWEEN 0 AND 100 AND player_stage.killed_at < @as_of::timestamptz
+    ) players)
+    + (SELECT count(*) FROM (
+        SELECT DISTINCT realm_id, guild_id, instance_name, encounter_name,
+               difficulty_name, max_players
+        FROM rating_stage_guild_observations AS guild_stage
+        WHERE guild_stage.generation_id = @target_generation_id AND guild_stage.tenant_id = @target_tenant_id
+          AND guild_stage.locked_parse BETWEEN 0 AND 100 AND guild_stage.killed_at < @as_of::timestamptz
+          AND guild_stage.guild_id IS NOT NULL
+    ) guilds)
+)::bigint AS total_windows;
+
+-- name: CountCompletedTenantMasteryWindows :one
+SELECT count(*) FROM rating_mastery_accumulators
+WHERE generation_id = @generation_id AND tenant_id = @tenant_id AND pass = 'complete';
+
 -- Stable ascending tie order is required to exclude exactly floor(N*0.2)
 -- observations. NULL (unlocked) parses are never eligible. The page limit is
 -- hard capped even if a caller supplies an excessive size. The first page
