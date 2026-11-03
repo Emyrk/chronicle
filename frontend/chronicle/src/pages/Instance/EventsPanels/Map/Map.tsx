@@ -1096,8 +1096,10 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               ) : (
                 <>
                   <WalkHint keys={["W", "S"]}>move</WalkHint>
-                  <WalkHint keys={["A", "D"]}>turn</WalkHint>
-                  <WalkHint keys={["Space", "Z"]}>zoom out / in</WalkHint>
+                  <WalkHint keys={["A", "D"]}>{adStrafe ? "strafe" : "turn"}</WalkHint>
+                  <WalkHint keys={["Space", "Z"]}>up / down</WalkHint>
+                  <WalkHint keys={["Shift"]}>faster</WalkHint>
+                  <span>drag to look · middle-drag pan · wheel zoom</span>
                   <WalkHint keys={["Q", "E"]}>rewind / fast forward</WalkHint>
                   <WalkHint keys={["X"]}>play / pause replay</WalkHint>
                   <WalkHint keys={["G"]}>walk</WalkHint>
