@@ -1014,7 +1014,10 @@ export class MapScene3D {
     this.onDungeonMesh = onDungeonMesh;
     this.onCompassYaw = onCompassYaw;
     // Throws when WebGL is unavailable; the caller falls back to 2D.
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    // Spike: in-browser video export reads the canvas after the frame is
+    // composited, so it needs the drawing buffer kept.
+    const preserveDrawingBuffer = Boolean((window as Window & { __chronicleMapPreserveBuffer?: boolean }).__chronicleMapPreserveBuffer);
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(0x11100d);
     this.renderer.domElement.style.display = "block";
