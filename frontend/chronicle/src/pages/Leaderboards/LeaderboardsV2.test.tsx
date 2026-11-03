@@ -32,14 +32,15 @@ describe("production leaderboards hub", () => {
   it("renders only a published exact boss and resolves its selected realm name", () => {
     const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboards?tab=performances&instance=Molten+Core&encounter=Ragnaros&realm_ids=realm-id"]}><LeaderboardsV2 /></MemoryRouter>)
     expect(html).toContain("Molten Core / Ragnaros / Nordanaar")
-    expect(html).toContain('value="Ragnaros" selected=""')
+    expect(html).toMatch(/<button[^>]*aria-pressed="true"[^>]*title="Show Ragnaros ratings"/)
+    expect(html).toContain('aria-label="Encounters"')
     expect(html).toContain("Performance realm: Nordanaar")
   })
 
   it("passes an exact boss, guild cohort, all-time window and display-only realm IDs to live ratings", () => {
     const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboards?tab=ratings&instance=Molten+Core&encounter=Ragnaros&subject=guild&rating_metric=peak&rating_window=all_time&realm_ids=realm-id"]}><LeaderboardsV2 /></MemoryRouter>)
     expect(html).toContain("Molten Core / Ragnaros / guild / peak / all_time / Normal / 40 / realm-id / Nordanaar")
-    expect(html).toContain('value="Ragnaros" selected=""')
+    expect(html).toMatch(/<button[^>]*aria-pressed="true"[^>]*title="Show Ragnaros ratings"/)
     expect(html).toContain('value="guild" selected=""')
     expect(html).not.toContain('aria-label="Rating class"')
   })
@@ -49,6 +50,16 @@ describe("production leaderboards hub", () => {
     expect(html).toContain("Molten Core / raid / player / mastery / period / Normal / 40 / MAGE / Frost / dps / realm-id / Nordanaar")
     expect(html).toContain('aria-label="Rating class"')
     expect(html).toContain('aria-label="Rating sub-spec"')
+  })
+
+  it("uses live encounter names, with raid selected and multi-boss aggregation disabled", () => {
+    const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboards?tab=ratings&instance=Molten+Core"]}><LeaderboardsV2 /></MemoryRouter>)
+    expect(html).toContain('aria-label="Encounters"')
+    expect(html).toContain("Ragnaros")
+    expect(html).toMatch(/<button[^>]*aria-pressed="true"[^>]*title="Whole-raid runs/)
+    expect(html).not.toContain("Ctrl+Click")
+    expect(html).not.toContain("All bosses")
+    expect(html).not.toContain('aria-label="Rating encounter"')
   })
 
   it("rejects a boss not offered by live encounters", () => {

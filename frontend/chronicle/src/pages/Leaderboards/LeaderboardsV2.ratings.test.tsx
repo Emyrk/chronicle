@@ -22,6 +22,7 @@ describe("published ratings on the live hub", () => {
     client.setQueryData(["tenant-rating-board", liveRatingURL(request), 0], { pages: [{ entries: [] }], pageParams: [""] })
     const html = renderToStaticMarkup(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/leaderboards?tab=ratings&instance=Molten+Core&encounter=Ragnaros&subject=guild&realm_ids=a0000000-0000-4000-8000-000000000001"]}><LeaderboardsV2 /></MemoryRouter></QueryClientProvider>)
     expect(html).toContain("Molten Core · Ragnaros")
+    expect(html).toContain('aria-label="Encounters"')
     expect(html).toContain("No published scores for this cohort yet")
     expect(html).toContain("Ratings realms: Nordanaar")
     expect(html).not.toContain("Load more")
