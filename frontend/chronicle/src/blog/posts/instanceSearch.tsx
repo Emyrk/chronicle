@@ -64,8 +64,8 @@ export function InstanceSearchPost({ post }: PostProps) {
           numbers, like a clear time between 60 and 75 minutes.
         </li>
         <li>
-          <strong>Code</strong> is the same search as text. Switch between blocks and code at any time; each turns into
-          the other.
+          <strong>Code</strong> is the same search as text, coloured as you type, with mistakes underlined as you make
+          them. Switch between blocks and code at any time; each turns into the other.
         </li>
         <li>
           <strong>Examples</strong> load ready-made searches to learn from or tweak, and <strong>Recent</strong>{" "}
