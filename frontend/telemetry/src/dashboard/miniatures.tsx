@@ -140,7 +140,7 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
           els.list.innerHTML=rows.map(({kind,item}) => {const key=itemKey(kind,item);const type=kind==='miniatures'?'tabletop':'game file';return '<button class="model-row '+(key===selected?'active':'')+'" data-key="'+escapeHTML(key)+'"><span><span class="model-name">'+escapeHTML(item.name)+'</span><span class="model-path">'+type+' · '+escapeHTML(item.path||'Upload required')+'</span></span><span class="id-count">'+item.entry_ids.length+' IDs</span></button>';}).join('') || '<div class="empty-editor"><div><strong>No models</strong>Add a tabletop miniature or original game model.</div></div>';
           document.querySelectorAll('.model-row').forEach(row => row.addEventListener('click',()=>{if(busy)return;syncEditor();selected=row.dataset.key;renderList();renderEditor();}));
         }
-        function parseIDs(value) { return value.split(/[\s,]+/).filter(Boolean).map(raw=>Number(raw)); }
+        function parseIDs(value) { const escapedNewline=String.fromCharCode(92)+'n';const separators='[, '+String.fromCharCode(9,10,13)+']+';return value.replaceAll(escapedNewline,' ').split(new RegExp(separators)).filter(Boolean).map(raw=>Number(raw)); }
         function syncEditor() {
           const selectedItem=current(); if(!selectedItem)return;
           selectedItem.item.name=document.getElementById('name').value.trim();
@@ -207,7 +207,7 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
             '<label>Display name<input id="name" type="text" value="'+escapeHTML(item.name)+'" placeholder="Deviate serpent" /></label>'+
             '<div class="path '+(!hasPath?'empty':'')+'">'+escapeHTML(item.path||'Upload a GLB to create its immutable path')+'</div>'+
             '<label class="upload">Upload or replace GLB<input id="file" type="file" accept="model/gltf-binary,.glb" /></label>'+
-            '<label>Creature entry IDs<textarea id="entry-ids" placeholder="3669, 3670, 3671">'+escapeHTML(item.entry_ids.join(String.fromCharCode(10)))+'</textarea></label>'+
+            '<label>Creature entry IDs<textarea id="entry-ids" placeholder="3669, 3670, 3671">'+escapeHTML(item.entry_ids.join(', '))+'</textarea></label>'+
             '<p class="hint">Separate IDs with commas, spaces, or new lines. Positive 32-bit IDs only.</p>'+
             '<label>Map size<div class="scale-row"><input id="map-scale" type="range" min="0.1" max="10" step="0.05" value="'+(item.map_scale||1)+'" /><input id="map-scale-number" type="number" min="0.1" max="10" step="0.05" value="'+(item.map_scale||1)+'" /></div><span class="scale-readout"><span>0.1×</span><span>Baseline 1×</span><span>10× max</span></span></label>'+
             '<p class="hint">Adjust this model relative to a standard player on the 3D replay map. Existing models default to 1×.</p><div class="form-actions"><button id="remove" class="danger">Remove model</button></div></article>'+
