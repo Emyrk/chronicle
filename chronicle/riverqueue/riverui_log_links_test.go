@@ -52,6 +52,15 @@ func TestWithLogLinksServesScript(t *testing.T) {
 	require.Equal(t, string(riverLogLinksScript), resp.Body.String())
 }
 
+func TestRiverLogLinksScriptIncludesFormattedOutputCopy(t *testing.T) {
+	t.Parallel()
+
+	script := string(riverLogLinksScript)
+	require.Contains(t, script, `copyButton.textContent = "Copy output"`)
+	require.Contains(t, script, `JSON.stringify(output, null, 2)`)
+	require.Contains(t, script, `navigator.clipboard.writeText(formattedOutput)`)
+}
+
 func TestWithLogLinksLeavesNonHTMLResponsesAlone(t *testing.T) {
 	t.Parallel()
 
