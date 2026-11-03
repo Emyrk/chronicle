@@ -176,7 +176,9 @@ export default function VideoRenderDialog({ open, onOpenChange, title, fileName:
           <span>{speed === 1 ? "Real time" : "Shorter video, quicker render"}</span>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-          <div className="h-full bg-primary transition-[width]" style={{ width: `${fraction * 100}%` }} />
+          {/* No width transition: progress lands every frame, and each update restarts a
+              transition from where it stands before it ever plays, freezing the bar near 0. */}
+          <div className="h-full bg-primary" style={{ width: `${fraction * 100}%` }} />
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
           {status}
