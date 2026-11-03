@@ -107,7 +107,36 @@ function readEncountersOpen(): boolean {
 /** Guilds mode's color: the toggle, the page tint, and the guild time box plots. */
 const GUILD_GOLD = "#e6c36a"
 
+export interface HubLiveTabContext {
+  tab: HubTab
+  instanceName: string
+  realm: string
+  onSwitchInstance?: (instance: string) => void
+  scope: RatingScope
+  role: HubRole
+  subject: HubSubject
+  selection: EncounterSelection
+  setSelection: (selection: EncounterSelection) => void
+  onTab: (tab: HubTab) => void
+  onRatings: (view: RatingView) => void
+  onStatistics: (view: StatisticsView) => void
+  onScope: (scope: RatingScope) => void
+}
+
+export interface HubLiveData {
+  bosses: readonly string[]
+  optionalBosses?: ReadonlySet<string>
+  realms: readonly string[]
+  specsFor: (cls: string, role: HubRole) => string[]
+  subSpecsFor: (cls: string, spec: string) => string[]
+  /** Every live tab is supplied by the adapter; fixture-backed tab components are never mounted. */
+  renderTab: (context: HubLiveTabContext) => ReactNode
+  /** Render the Storybook Overview layout using the exported presentational pieces below. */
+  renderOverview?: (context: HubLiveTabContext) => ReactNode
+}
+
 export interface LeaderboardHubProps {
+  live?: HubLiveData
   instanceName?: string
   initialScope?: RatingScope
   /** Start on a combined set of bosses instead of the full clear or one boss. */
@@ -140,7 +169,8 @@ export interface LeaderboardHubProps {
  * tab that holds its full board.
  */
 export function LeaderboardHub({
-  instanceName = "Molten Core",
+  live,
+  instanceName: requestedInstanceName,
   initialScope = {},
   initialBosses,
   initialRole = "dps",
@@ -157,14 +187,18 @@ export function LeaderboardHub({
   onRealm,
   initialRealm,
 }: LeaderboardHubProps) {
+  const instanceName = requestedInstanceName ?? (live ? "" : "Molten Core")
   // Ratings are per realm, so the realm scopes the whole page. Stored per browser.
-  const [ownRealm, setOwnRealm] = useHubRealm(HUB_REALMS, initialRealm)
-  const realm = controlledRealm ?? ownRealm
+  const realms = live ? live.realms : HUB_REALMS
+  const [ownRealm, setOwnRealm] = useHubRealm(realms, initialRealm)
+  const realm = controlledRealm ?? (live && !realms.includes(ownRealm) ? realms[0] ?? "" : ownRealm)
   const setRealm = onRealm ?? setOwnRealm
-  setMockRealm(realm)
+  if (!live) setMockRealm(realm)
   const [selection, setSelection] = useState<EncounterSelection>(
-    initialBosses ? { kind: "bosses", bosses: initialBosses } : initialScope.boss ? { kind: "bosses", bosses: [initialScope.boss] } : FULL_CLEAR,
+    initialBosses?.length ? { kind: "bosses", bosses: live ? [initialBosses[0]] : initialBosses } : initialScope.boss ? { kind: "bosses", bosses: [initialScope.boss] } : FULL_CLEAR,
   )
+  const selectEncounter = (next: EncounterSelection) =>
+    setSelection(live && next.kind === "bosses" && next.bosses.length > 1 ? { kind: "bosses", bosses: [next.bosses[0]] } : next)
   const [classScope, setClassScope] = useState<RatingScope>({ cls: initialScope.cls, spec: initialScope.spec, subSpec: initialScope.subSpec })
   // Switching instance keeps tab and filters; only the encounter choice resets, since bosses differ.
   const [shownInstance, setShownInstance] = useState(instanceName)
@@ -192,7 +226,7 @@ export function LeaderboardHub({
     if (next.boss !== scope.boss) setSelection(next.boss ? { kind: "bosses", bosses: [next.boss] } : FULL_CLEAR)
     setClassScope({ cls: next.cls, spec: next.spec, subSpec: next.subSpec })
   }
-  const bosses = instanceBosses(instanceName)
+  const bosses = live ? live.bosses : instanceBosses(instanceName)
   const [role, setRole] = useState<HubRole>(initialRole)
   const [ownTab, setOwnTab] = useState<HubTab>(initialTab)
   const tab = controlledTab ?? ownTab
@@ -215,8 +249,8 @@ export function LeaderboardHub({
     setTab("statistics")
   }
   const kind = scopeKind(scope)
-  const where = set ? `${set.length} bosses` : (scope.boss ?? getInstanceConfig(instanceName)?.abbrev ?? instanceName)
-  const title = set ? `${instanceName} · ${set.length} bosses` : scopeTitle(scope, instanceName)
+  const where = set ? `${set.length} bosses` : (scope.boss ?? (live ? instanceName : getInstanceConfig(instanceName)?.abbrev ?? instanceName))
+  const title = set ? `${instanceName} · ${set.length} bosses` : live ? instanceName : scopeTitle(scope, instanceName)
   const crumbs: { label: string; color?: string }[] = [
     { label: set ? `${set.length} bosses` : (scope.boss ?? "Full clear") },
     ...(scope.cls ? [{ label: CLASS_DISPLAY[scope.cls], color: CLASS_CSS_VAR[scope.cls] }] : []),
@@ -227,7 +261,12 @@ export function LeaderboardHub({
   const changeRole = (next: HubRole) => {
     setRole(next)
     // A spec belongs to one role; drop it when it no longer fits.
-    if (scope.cls && scope.spec && !specsFor(scope.cls, next).includes(scope.spec)) setClassScope({ cls: scope.cls })
+    if (scope.cls && scope.spec && !(live ? live.specsFor : specsFor)(scope.cls, next).includes(scope.spec)) setClassScope({ cls: scope.cls })
+  }
+  const liveContext: HubLiveTabContext = {
+    tab, instanceName, realm, onSwitchInstance, scope, role, subject, selection,
+    setSelection: selectEncounter, onTab: setTab, onRatings: openRatings,
+    onStatistics: openStatistics, onScope: setScope,
   }
 
   // Guilds mode tints the page gold, the Guilds toggle's color: a faint wash from the top, a gold-edged
@@ -290,12 +329,12 @@ export function LeaderboardHub({
                       <span style={c.color ? { color: c.color } : undefined}>{c.label}</span>
                     </Fragment>
                   ))}
-                  {scope.boss && OPTIONAL_BOSSES.has(scope.boss) && <span className="text-muted-foreground/70">· Optional</span>}
+                  {scope.boss && (live ? live.optionalBosses?.has(scope.boss) : OPTIONAL_BOSSES.has(scope.boss)) && <span className="text-muted-foreground/70">· Optional</span>}
                 </nav>
                 {/* The realm sits beside the title: together they name what every board below ranks. */}
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                   <InstanceTitle instanceName={instanceName} instances={instances} onSwitch={onSwitchInstance} />
-                  <RealmPicker realm={realm} realms={HUB_REALMS} onChange={setRealm} />
+                  <RealmPicker realm={realm} realms={realms} onChange={setRealm} />
                 </div>
                 {set && <p className="mt-1 text-xs text-muted-foreground">Combined: {set.join(", ")} · ratings averaged, time is total kill time</p>}
               </div>
@@ -323,8 +362,8 @@ export function LeaderboardHub({
               scope={scope}
               classDisabled={subject === "guilds" ? "Guild ratings don't split by class. Switch to Characters to filter by class." : undefined}
               showBoss={false}
-              specs={scope.cls ? specsFor(scope.cls, role) : []}
-              subSpecs={scope.cls && scope.spec ? subSpecsFor(scope.cls, scope.spec) : []}
+              specs={scope.cls ? (live ? live.specsFor : specsFor)(scope.cls, role) : []}
+              subSpecs={scope.cls && scope.spec ? (live ? live.subSpecsFor : subSpecsFor)(scope.cls, scope.spec) : []}
               onChange={(next) => {
                 // "Whole raid" clears everything, the encounter choice included.
                 if (!next.boss && !next.cls && !next.spec) setSelection(FULL_CLEAR)
@@ -364,9 +403,10 @@ export function LeaderboardHub({
                 <div className="shrink-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:w-[267px] lg:self-start lg:overflow-y-auto lg:border-r lg:pt-1 lg:pr-4 styled-scrollbar">
                   <EncounterSidebar
                     bosses={bosses}
-                    optional={OPTIONAL_BOSSES}
+                    optional={live ? live.optionalBosses ?? new Set<string>() : OPTIONAL_BOSSES}
                     selection={selection}
-                    onSelect={setSelection}
+                    onSelect={selectEncounter}
+                    allowCombine={!live}
                     onCollapse={() => setEncountersOpen(false)}
                   />
                 </div>
@@ -386,7 +426,9 @@ export function LeaderboardHub({
                 </div>
               ))}
             <div className={cn("min-w-0 flex-1 space-y-5", tab !== "rulesets" && (encountersOpen ? "lg:pl-6" : "lg:pl-4"))}>
-              {tab === "overview" ? (
+              {live ? (
+                tab === "overview" && live.renderOverview ? live.renderOverview(liveContext) : live.renderTab(liveContext)
+              ) : tab === "overview" ? (
                 <Overview
                   instanceName={instanceName}
                   scope={scope}
@@ -473,7 +515,7 @@ export function LeaderboardHub({
             </div>
           </div>
 
-          <p className="px-1 text-xs text-muted-foreground/70">Mock data for design review. Names, guilds, and numbers are generated.</p>
+          {!live && <p className="px-1 text-xs text-muted-foreground/70">Mock data for design review. Names, guilds, and numbers are generated.</p>}
         </div>
       </div>
     </div>
@@ -854,7 +896,7 @@ function SpecStandingList({
   )
 }
 
-function SpeedHero({ instanceName, scope, set, onOpen }: { instanceName: string; scope: RatingScope; set?: readonly string[]; onOpen: () => void }) {
+export function SpeedHero({ instanceName, scope, set, onOpen, entries }: { instanceName: string; scope: RatingScope; set?: readonly string[]; onOpen: () => void; entries?: SpeedrunLeaderboardEntry[] }) {
   return (
     <section
       className="relative overflow-hidden rounded-xl border bg-cover bg-center"
@@ -867,7 +909,7 @@ function SpeedHero({ instanceName, scope, set, onOpen }: { instanceName: string;
       <CardLink label="Speedruns" onClick={onOpen} className="absolute top-3 right-4 z-10" />
       <div className="relative px-4 pt-10">
         <Podium
-          entries={speedruns(set ?? (scope.boss ? [scope.boss] : undefined), instanceBosses(instanceName), instanceName, 3)}
+          entries={entries ?? speedruns(set ?? (scope.boss ? [scope.boss] : undefined), instanceBosses(instanceName), instanceName, 3)}
           instanceName={instanceName}
         />
       </div>
@@ -875,13 +917,15 @@ function SpeedHero({ instanceName, scope, set, onOpen }: { instanceName: string;
   )
 }
 
-function BossStats({ boss }: { boss: BossSummary }) {
-  const rate = (boss.kills / boss.attempts) * 100
+export type LiveBossSummary = Pick<BossSummary, "boss"> & Partial<Omit<BossSummary, "boss">> & { topDps?: number }
+
+export function BossStats({ boss }: { boss: LiveBossSummary }) {
+  const rate = boss.kills !== undefined && boss.attempts ? (boss.kills / boss.attempts) * 100 : undefined
   const stats = [
-    { label: "Success rate", value: `${rate.toFixed(0)}%`, bar: rate },
-    { label: "Kills / pulls", value: `${boss.kills.toLocaleString()} / ${boss.attempts.toLocaleString()}` },
-    { label: "Median kill", value: formatClock(boss.medianKillMs) },
-    { label: "Fastest kill", value: formatClock(boss.best.ms), sub: boss.best.guild },
+    { label: "Success rate", value: rate === undefined ? "—" : `${rate.toFixed(0)}%`, bar: rate },
+    { label: "Kills / pulls", value: boss.kills !== undefined && boss.attempts !== undefined ? `${boss.kills.toLocaleString()} / ${boss.attempts.toLocaleString()}` : "—" },
+    { label: "Median kill", value: boss.medianKillMs === undefined ? "—" : formatClock(boss.medianKillMs) },
+    { label: "Fastest kill", value: boss.best ? formatClock(boss.best.ms) : "—", sub: boss.best?.guild },
   ]
   return (
     <section aria-label={`${boss.boss} stats`} className="grid grid-cols-2 overflow-hidden rounded-xl border bg-card sm:grid-cols-4 sm:divide-x">
@@ -902,12 +946,14 @@ function BossStats({ boss }: { boss: BossSummary }) {
 }
 
 /** One card per boss, its model standing behind the stats: the raid overview's answer to "MC has twelve bosses". */
-function BossGrid({
+export function BossGrid({
   instanceName,
   scope,
   role,
   only,
   onBoss,
+  summaries,
+  optionalBosses,
 }: {
   instanceName: string
   scope: RatingScope
@@ -915,11 +961,15 @@ function BossGrid({
   /** Limit to a combined set of bosses. */
   only?: readonly string[]
   onBoss: (boss: string) => void
+  /** Pass real summaries to retain the Storybook boss cards without calling fixtures. */
+  summaries?: readonly LiveBossSummary[]
+  optionalBosses?: ReadonlySet<string>
 }) {
-  const rows = bossSummaries(scope, role, instanceBosses(instanceName)).filter((b) => !only || only.includes(b.boss))
-  const required = rows.filter((b) => !OPTIONAL_BOSSES.has(b.boss))
-  const optional = rows.filter((b) => OPTIONAL_BOSSES.has(b.boss))
-  const grid = (list: BossSummary[], isOptional: boolean) => (
+  const rows = (summaries ?? bossSummaries(scope, role, instanceBosses(instanceName))).filter((b) => !only || only.includes(b.boss))
+  const optionalSet = optionalBosses ?? (summaries ? new Set<string>() : OPTIONAL_BOSSES)
+  const required = rows.filter((b) => !optionalSet.has(b.boss))
+  const optional = rows.filter((b) => optionalSet.has(b.boss))
+  const grid = (list: LiveBossSummary[], isOptional: boolean) => (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
       {list.map((b) => (
         <BossCard key={b.boss} summary={b} role={role} optional={isOptional} onOpen={() => onBoss(b.boss)} />
@@ -944,9 +994,9 @@ function BossGrid({
   )
 }
 
-function BossCard({ summary: b, role, optional, onOpen }: { summary: BossSummary; role: HubRole; optional: boolean; onOpen: () => void }) {
+function BossCard({ summary: b, role, optional, onOpen }: { summary: LiveBossSummary; role: HubRole; optional: boolean; onOpen: () => void }) {
   const model = useBossModelImage(b.boss)
-  const rate = (b.kills / b.attempts) * 100
+  const rate = b.kills !== undefined && b.attempts ? (b.kills / b.attempts) * 100 : undefined
   return (
     <button
       type="button"
@@ -990,15 +1040,25 @@ function BossCard({ summary: b, role, optional, onOpen }: { summary: BossSummary
             </span>
           )}
         </div>
-        <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="h-1 w-10 overflow-hidden rounded-full bg-red-500/30">
-            <span className="block h-full bg-green-500/70" style={{ width: `${rate}%` }} />
-          </span>
-          <span className="font-mono tabular-nums">{rate.toFixed(0)}%</span>
-          <span>·</span>
-          <span className="font-mono tabular-nums">{formatClock(b.medianKillMs)}</span>
-          <span>median</span>
-        </div>
+        {(rate !== undefined || b.medianKillMs !== undefined) && (
+          <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+            {rate !== undefined && (
+              <>
+                <span className="h-1 w-10 overflow-hidden rounded-full bg-red-500/30">
+                  <span className="block h-full bg-green-500/70" style={{ width: `${rate}%` }} />
+                </span>
+                <span className="font-mono tabular-nums">{rate.toFixed(0)}%</span>
+              </>
+            )}
+            {b.medianKillMs !== undefined && (
+              <>
+                {rate !== undefined && <span>·</span>}
+                <span className="font-mono tabular-nums">{formatClock(b.medianKillMs)}</span>
+                <span>median</span>
+              </>
+            )}
+          </div>
+        )}
       </div>
       <dl className="w-[56%] space-y-0.5 px-3 pb-3 text-xs">
         {b.standing ? (
@@ -1016,14 +1076,14 @@ function BossCard({ summary: b, role, optional, onOpen }: { summary: BossSummary
               <span className="text-muted-foreground/60">/{b.standing.of}</span>
             </span>
           </BossStat>
-        ) : (
+        ) : b.best ? (
           <BossStat icon={<Timer className="size-3.5 text-muted-foreground" />} label="Fastest" value={formatClock(b.best.ms)}>
             <span className="truncate text-muted-foreground">{b.best.guild}</span>
           </BossStat>
-        )}
+        ) : null}
         {RATING_METRICS.map((m) => {
           const t = METRIC_THEMES[m]
-          const leader = b.ratings[m]
+          const leader = b.ratings?.[m]
           return (
             <BossStat
               key={m}
@@ -1038,7 +1098,7 @@ function BossCard({ summary: b, role, optional, onOpen }: { summary: BossSummary
         <BossStat
           icon={role === "dps" ? <Swords className="size-3.5 text-muted-foreground" /> : <HeartPulse className="size-3.5 text-muted-foreground" />}
           label={`Best performance (${role === "dps" ? "DPS" : "HPS"})`}
-          value={b.performance ? `${b.performance.value}/s` : "—"}
+          value={b.performance ? `${b.performance.value}/s` : role === "dps" && b.topDps !== undefined ? `${b.topDps}/s` : "—"}
         >
           {b.performance && <PlayerName player={b.performance.player} />}
         </BossStat>
@@ -1252,7 +1312,7 @@ function SpecSpreads({ scope, role }: { scope: RatingScope; role: HubRole }) {
   )
 }
 
-function Card({
+export function Card({
   title,
   action,
   metric,
@@ -1284,7 +1344,7 @@ function Card({
   )
 }
 
-function CardLink({ label, onClick, className }: { label: string; onClick: () => void; className?: string }) {
+export function CardLink({ label, onClick, className }: { label: string; onClick: () => void; className?: string }) {
   return (
     <button
       type="button"
