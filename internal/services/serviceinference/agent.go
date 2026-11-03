@@ -61,6 +61,7 @@ func withServerTools(a assistant, enabled bool) assistant {
 }
 
 var pageCatalog = []map[string]string{
+	{"path": "/search", "name": "Advanced instance search", "description": "Find raid and dungeon runs using filters for encounters, players, and parses"},
 	{"path": "/recent", "name": "Recent raids", "description": "Browse recently uploaded raid logs"},
 	{"path": "/leaderboards/statistics", "name": "Rankings", "description": "Player performance leaderboards and filters"},
 	{"path": "/guilds", "name": "Guilds", "description": "Guild discovery and public guild pages"},
@@ -69,7 +70,7 @@ var pageCatalog = []map[string]string{
 	{"path": "/account/ai", "name": "AI assistant settings", "description": "Turn AI features and individual assistants on or off, and connect OpenRouter"},
 }
 var assistants = map[string]assistant{
-	"site-help": {ID: "site-help", Name: "Ask Chronicle", Description: "Site help on every page: finding pages, answering rankings questions, and researching external information.", System: "You are Chronicle site help. Explain how to navigate Chronicle and answer rankings questions using tools. Never invent pages or ranking results." + webResearchPrompt, Skills: []string{chronicleConceptsSkillID}, Tools: []ToolDefinition{
+	"site-help": {ID: "site-help", Name: "Ask Chronicle", Description: "Site help on every page: finding pages, answering rankings questions, and researching external information.", System: "You are Chronicle site help. Explain how to navigate Chronicle and answer rankings questions using tools. Never invent pages or ranking results." + webResearchPrompt, Skills: []string{chronicleConceptsSkillID, instanceSearchSkillID}, Tools: []ToolDefinition{
 		{Name: "list_pages", Description: "List known Chronicle pages.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "find_pages", Description: "Find Chronicle pages by name or description.", Parameters: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","maxLength":100}},"required":["query"],"additionalProperties":false}`)},
 		{Name: "query_rankings", Description: "Query a bounded Chronicle player leaderboard.", Parameters: json.RawMessage(`{"type":"object","properties":{"instance_name":{"type":"string","maxLength":100},"encounter":{"type":"string","maxLength":100},"class":{"type":"string","maxLength":30},"spec":{"type":"string","maxLength":50},"role":{"type":"string","maxLength":30},"metric":{"type":"string","enum":["dps","hps"]},"limit":{"type":"integer","minimum":1,"maximum":10}},"required":["instance_name"],"additionalProperties":false}`)},
@@ -234,6 +235,10 @@ func boundedJSON(v any) (string, error) {
 
 func (s *Service) executeTool(ctx context.Context, tc toolContext, name, args string) (string, error) {
 	switch name {
+	case "describe_instance_search":
+		return describeInstanceSearch(args)
+	case "build_instance_search_link":
+		return buildInstanceSearchLink(args)
 	case "list_pages":
 		var in struct{}
 		if err := decodeStrict(args, &in); err != nil {

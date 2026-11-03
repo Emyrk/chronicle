@@ -177,7 +177,9 @@ func TestDebugPreviewDoesNotInvokeProvider(t *testing.T) {
 	require.Equal(t, "provider/model", snapshot.Model)
 	require.NotEmpty(t, snapshot.Messages)
 	require.Equal(t, "system", snapshot.Messages[0].Role)
-	require.Len(t, snapshot.Tools, len(assistants["site-help"].Tools))
+	composed, err := withRuntimeSkills(assistants["site-help"])
+	require.NoError(t, err)
+	require.Len(t, snapshot.Tools, len(composed.Tools))
 	for _, tool := range snapshot.Tools {
 		require.NotEqual(t, "web_search", tool.Name)
 	}
