@@ -22,17 +22,8 @@ type ratingBossLeaderboardQuerier interface {
 	ListGroupRatingBossScores(context.Context, database.ListGroupRatingBossScoresParams) ([]database.RatingBossScore, error)
 }
 
-// handleRatingBossLeaderboard reads published per-boss scores. With all boss
-// cohort parameters it returns one exact board; without any boss parameters it
-// returns individual boss rows across the group (not a group-wide aggregate).
-//
-// GET /ratings/boss-leaderboard?group_id=...&class=...&spec=...&sub_spec=...&performance_metric=dps&rating_metric=peak&window_kind=period
-// Exact boss additionally requires instance_name, encounter_name,
-// difficulty_name (which may be empty), and max_players.
-func (s *Service) handleRatingBossLeaderboard(w http.ResponseWriter, r *http.Request) {
-	handleRatingBossLeaderboardWithStore(s.store, w, r)
-}
-
+// handleRatingBossLeaderboardWithStore retains the retired group-based reader
+// for legacy tests. Public boards now use the tenant-wide reader.
 func handleRatingBossLeaderboardWithStore(store ratingBossLeaderboardQuerier, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
@@ -160,12 +151,7 @@ func ratingBossLeaderboardEntry(row database.RatingBossScore) chroniclesdk.Ratin
 	}
 }
 
-// handleRatingScopeLeaderboard returns materialized raid or global scores for
-// one exact character cohort. Empty instance_name selects the global board.
-func (s *Service) handleRatingScopeLeaderboard(w http.ResponseWriter, r *http.Request) {
-	handleRatingScopeLeaderboardWithStore(s.store, w, r)
-}
-
+// Retired group scope reader, retained for legacy tests only.
 type ratingScopeLeaderboardQuerier interface {
 	ListActiveRatingScopeScores(context.Context, database.ListActiveRatingScopeScoresParams) ([]database.RatingScopeScore, error)
 }

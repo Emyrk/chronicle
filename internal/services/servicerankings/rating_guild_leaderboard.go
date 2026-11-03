@@ -73,11 +73,7 @@ func guildRatingParams(w http.ResponseWriter, r *http.Request) (uuid.UUID, strin
 	return groupID, metric, window, int32(limit), true
 }
 
-// GET /ratings/guild-boss-leaderboard?group_id=...&instance_name=...&encounter_name=...&difficulty_name=...&max_players=...&rating_metric=peak&window_kind=period
-func (s *Service) handleGuildRatingBossLeaderboard(w http.ResponseWriter, r *http.Request) {
-	handleGuildRatingBossLeaderboardWithStore(s.store, w, r)
-}
-
+// Retired group guild boss reader, retained for legacy tests only.
 func handleGuildRatingBossLeaderboardWithStore(store guildRatingBossLeaderboardQuerier, w http.ResponseWriter, r *http.Request) {
 	groupID, metric, window, limit, ok := guildRatingParams(w, r)
 	if !ok {
@@ -138,12 +134,7 @@ func guildRatingTime(value pgtype.Timestamptz) *time.Time {
 	return &value.Time
 }
 
-// GET /ratings/guild-scope-leaderboard?group_id=...&instance_name=...&difficulty_name=...&max_players=...&rating_metric=peak&window_kind=period
-// Empty instance_name selects the global board.
-func (s *Service) handleGuildRatingScopeLeaderboard(w http.ResponseWriter, r *http.Request) {
-	handleGuildRatingScopeLeaderboardWithStore(s.store, w, r)
-}
-
+// Retired group guild scope reader, retained for legacy tests only.
 func handleGuildRatingScopeLeaderboardWithStore(store guildRatingScopeLeaderboardQuerier, w http.ResponseWriter, r *http.Request) {
 	groupID, metric, window, limit, ok := guildRatingParams(w, r)
 	if !ok {

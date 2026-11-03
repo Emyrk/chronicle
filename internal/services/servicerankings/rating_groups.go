@@ -17,12 +17,8 @@ type ratingGroupsQuerier interface {
 	ListRatingBossPolicies(context.Context, database.ListRatingBossPoliciesParams) ([]database.RatingGroupBossPolicy, error)
 }
 
-func (s *Service) handleRatingRealmGroups(w http.ResponseWriter, r *http.Request) {
-	handleRatingRealmGroupsWithStore(s.store, w, r)
-}
-
-// handleRatingRealmGroupsWithStore exposes the active group manifest to clients
-// without requiring a frontend to hard-code tenant-specific group UUIDs.
+// handleRatingRealmGroupsWithStore retains the retired group response for legacy tests.
+// The public ratings/groups route is no longer registered.
 func handleRatingRealmGroupsWithStore(store ratingGroupsQuerier, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenant := servicetenant.TenantIDFromContext(ctx)
