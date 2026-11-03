@@ -77,7 +77,9 @@ func newInstanceSearch(logger *slog.Logger, store database.Store, registry prome
 				Subsystem: "instance_search",
 				Name:      "cost",
 				Help:      "Estimated cost of compiled instance searches.",
-				Buckets:   []float64{1, 2, 5, 10, 20, 40, 80, 160},
+				// Covers the most a valid query can cost (MaxNodes x the
+				// heaviest field, ~640) so heavy queries don't all land in +Inf.
+				Buckets: []float64{1, 2, 5, 10, 20, 40, 80, 160, 320, 640},
 			}, []string{"caller"}),
 			fieldUses: factory.NewCounterVec(prometheus.CounterOpts{
 				Namespace: "chronicle",
