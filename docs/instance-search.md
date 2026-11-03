@@ -206,3 +206,10 @@ date (default), clear time, clear-time parse.
 2. **`EXPLAIN ANALYZE` on production-size data.** Likely index candidates are `log_instances(name)` and `start_time`.
 3. **The UI query builder,** including the simple anonymous form with a log-in prompt.
 4. **Possibly larger buckets for supporters,** via `whoami` `supporter_tier`.
+
+## Possible upgrades (not planned)
+
+- **Typo-tolerant name matching.** Today text fields support exact `=` / `in` and partial `contains` / `starts_with`, all ignoring case. To also match misspellings ("molten croe"):
+  - Add `CREATE EXTENSION IF NOT EXISTS pg_trgm` in a migration. Production runs Postgres 17 with `pg_trgm` available but not installed. Creating it is quick and touches no data.
+  - Add a `similar` operator using trigram similarity (`similarity(lower(col), lower($n)) >= threshold`, or the `%` operator).
+  - Without a trigram GIN index on `lower(col)` it scans every row, so give it a higher cost. A GIN index on a large table such as `log_instance_players(name)` would need the usual migration-impact review.
