@@ -1,7 +1,7 @@
 {
   "title": "Replay-ready Ragnaros kills",
   "category": "Logs",
-  "description": "Ragnaros kills recorded with both unit positions and unit resources (good for the 3D replay), from client logs rather than server-side logging.",
+  "description": "Ragnaros kills recorded with both unit positions and unit resources, so they work in the 3D replay.",
   "query": {
     "where": {
       "and": [
@@ -14,11 +14,6 @@
           "field": "instance.capability",
           "op": "=",
           "value": "unit-resources"
-        },
-        {
-          "field": "instance.capability",
-          "op": "!=",
-          "value": "server-side"
         },
         {
           "any_encounter": {

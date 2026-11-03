@@ -1,9 +1,8 @@
--- Ragnaros kills recorded with both unit positions and unit resources (good for the 3D replay), from client logs rather than server-side logging.
+-- Ragnaros kills recorded with both unit positions and unit resources, so they work in the 3D replay.
 --
 -- CEL:
 --   "unit-position" in instance.capabilities
 --   && "unit-resources" in instance.capabilities
---   && !("server-side" in instance.capabilities)
 --   && encounters.exists(e, e.name == "Ragnaros" && e.killed == true)
 
 WITH matched AS (
@@ -28,7 +27,7 @@ WITH matched AS (
   LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
   LEFT JOIN guilds g ON g.id = li.guild_id
   WHERE li.invalidated_at IS NULL
-    AND (($1::text = ANY(li.capabilities)) AND ($2::text = ANY(li.capabilities)) AND (NOT ($3::text = ANY(li.capabilities))) AND (EXISTS (SELECT 1 FROM log_instance_encounters e1 WHERE e1.instance_id = li.id AND ((lower(e1.name) = lower($4::text)) AND ((e1.kill_type IN ('clean', 'partial')) = $5::boolean)))))
+    AND (($1::text = ANY(li.capabilities)) AND ($2::text = ANY(li.capabilities)) AND (EXISTS (SELECT 1 FROM log_instance_encounters e1 WHERE e1.instance_id = li.id AND ((lower(e1.name) = lower($3::text)) AND ((e1.kill_type IN ('clean', 'partial')) = $4::boolean)))))
   ORDER BY COALESCE(li.duplicate_group_id, li.id), li.id
 )
 SELECT m.id, m.hashed_slug, m.name, m.realm_id, m.realm_name, m.guild_id, m.guild_name,
@@ -36,13 +35,12 @@ SELECT m.id, m.hashed_slug, m.name, m.realm_id, m.realm_name, m.guild_id, m.guil
 FROM matched m
 WHERE TRUE
 ORDER BY m.started_at DESC, m.id DESC
-LIMIT $6
+LIMIT $5
 
 -- args:
 [
   "unit-position",
   "unit-resources",
-  "server-side",
   "Ragnaros",
   true,
   26
