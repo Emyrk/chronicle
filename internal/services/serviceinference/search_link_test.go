@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/Emyrk/chronicle/internal/instancesearch"
+	"github.com/Emyrk/chronicle/internal/services/serviceinference/agui"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,6 +22,17 @@ func TestSiteHelpSearchLinkTool(t *testing.T) {
 	require.Contains(t, a.System, "## Skill: Chronicle instance search")
 	require.Equal(t, []string{"chronicle-concepts", "instance-search"}, a.Skills)
 	require.Len(t, debugRuntimeSkills(a), 2)
+	_, example, found := strings.Cut(a.System, "call build_instance_search_link with ")
+	require.True(t, found)
+	example, _, found = strings.Cut(example, ". Keep the two")
+	require.True(t, found)
+	var input struct {
+		Where *instancesearch.Node `json:"where"`
+	}
+	require.NoError(t, decodeStrict(example, &input))
+	require.NotNil(t, input.Where)
+	_, err = instancesearch.Compile(instancesearch.Query{Where: input.Where}, instancesearch.Options{})
+	require.NoError(t, err)
 	require.False(t, assistantAllowsTool(a, "search_instances"))
 }
 
@@ -68,6 +81,41 @@ func TestDescribeInstanceSearchOnlyReturnsReference(t *testing.T) {
 	require.Contains(t, output, "player.name")
 	_, err = (&Service{}).executeTool(context.Background(), toolContext{}, "describe_instance_search", `{"ignore":true}`)
 	require.Error(t, err)
+}
+
+func TestSearchLinkValidationFeedsBackAndRecovers(t *testing.T) {
+	t.Parallel()
+	provider := &scriptedProvider{streams: [][]StreamEvent{
+		{{Type: StreamEventToolCallDelta, ToolCall: ToolCallDelta{Index: 0, ID: "bad-shape", Name: "build_instance_search_link", Arguments: `{"where":{"category":"raid"}}`}}, {Type: StreamEventFinish, FinishReason: FinishReasonToolCalls}},
+		{{Type: StreamEventToolCallDelta, ToolCall: ToolCallDelta{Index: 0, ID: "bad-scope", Name: "build_instance_search_link", Arguments: `{"where":{"field":"player.class","op":"=","value":"DRUID"}}`}}, {Type: StreamEventFinish, FinishReason: FinishReasonToolCalls}},
+		{{Type: StreamEventToolCallDelta, ToolCall: ToolCallDelta{Index: 0, ID: "corrected", Name: "build_instance_search_link", Arguments: `{"where":{"and":[{"field":"instance.category","op":"=","value":"raid"},{"any_player":{"field":"player.class","op":"=","value":"DRUID"}}]}}`}}, {Type: StreamEventFinish, FinishReason: FinishReasonToolCalls}},
+		{{Type: StreamEventTextDelta, Text: "Here is your link."}, {Type: StreamEventFinish, FinishReason: FinishReasonStop}},
+	}}
+	var stream strings.Builder
+	var persisted []Message
+	_, err := (&Service{}).agentLoop(context.Background(), agui.NewStreamWriter(&stream, nil), provider, nil, "model", assistants["site-help"], []Message{{Role: RoleUser, Content: "find a raid with a druid"}}, toolContext{}, debugRunContext{Enabled: true}, nil, agentLoopState{}, func(messages ...Message) error { persisted = append(persisted, messages...); return nil }, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, 4, provider.calls)
+	require.Contains(t, persisted[1].Content, "invalid_search_query")
+	require.Contains(t, persisted[1].Content, "field")
+	require.Contains(t, persisted[3].Content, "any_player")
+	require.Contains(t, persisted[5].Content, "/search?q=")
+	snapshots := debugSnapshots(t, stream.String())
+	require.Equal(t, "tool_results", snapshots[1].Phase)
+	require.Equal(t, "build_instance_search_link", snapshots[1].Messages[3].Name)
+	require.Contains(t, snapshots[1].Messages[3].Content, "invalid_search_query")
+}
+
+func TestSearchLinkValidationFeedbackIsBoundedAndDoesNotEchoParserDetails(t *testing.T) {
+	t.Parallel()
+	output, err := searchLinkValidationResult(&instancesearch.Error{Path: "where.field", Message: strings.Repeat("x", 2000)})
+	require.NoError(t, err)
+	require.Less(t, len(output), 650)
+	require.Contains(t, output, "where.field")
+	output, err = searchLinkValidationResult(fmt.Errorf("private parser detail: %s", strings.Repeat("secret", 100)))
+	require.NoError(t, err)
+	require.NotContains(t, output, "private parser detail")
+	require.NotContains(t, output, "secret")
 }
 
 func TestBuildInstanceSearchLinkRejectsExcessiveDepth(t *testing.T) {

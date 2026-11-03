@@ -916,23 +916,38 @@ type pauseClientToolFunc func(Message, []Message, clientToolPause, agentLoopStat
 
 var errSearchDraftRevisionMismatch = errors.New("search draft revision mismatch")
 
-// A rejected search draft is a model-correctable tool result, not a failed run.
-// Compiler errors describe only validated paths/fields; never echo JSON decoder
+// Compiler errors describe query paths and fields. Never echo JSON decoder
 // errors or arbitrary tool arguments back to the model.
+func searchQueryValidationDetail(err error, fallback string) string {
+	var searchErr *instancesearch.Error
+	if !errors.As(err, &searchErr) {
+		return fallback
+	}
+	detail := []rune(searchErr.Error())
+	if len(detail) > 500 {
+		return string(detail[:500]) + "…"
+	}
+	return string(detail)
+}
+
+func searchLinkValidationResult(err error) (string, error) {
+	return boundedJSON(struct {
+		Error  string `json:"error"`
+		Detail string `json:"detail"`
+	}{Error: "invalid_search_query", Detail: searchQueryValidationDetail(err, "Use a where node with field, op and value, or combine nodes with and/or/not and scoped quantifiers.")})
+}
+
+// A rejected search draft is a model-correctable tool result, not a failed run.
 func searchDraftValidationResult(err error) (string, error) {
 	result := struct {
 		Error  string `json:"error"`
 		Detail string `json:"detail"`
 	}{Error: "invalid_search_draft", Detail: "Use a valid JSON search tree and include expected_revision from inspect_search_draft."}
-	var searchErr *instancesearch.Error
 	if errors.Is(err, errSearchDraftRevisionMismatch) {
 		result.Error = "stale_state"
 		result.Detail = "The search draft revision changed. Call inspect_search_draft again before editing."
-	} else if errors.As(err, &searchErr) {
-		result.Detail = searchErr.Error()
-		if runes := []rune(result.Detail); len(runes) > 500 {
-			result.Detail = string(runes[:500]) + "…"
-		}
+	} else {
+		result.Detail = searchQueryValidationDetail(err, result.Detail)
 	}
 	return boundedJSON(result)
 }
@@ -1110,7 +1125,14 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			}
 			output, err := s.executeTool(ctx, tc, call.Name, call.Arguments)
 			if err != nil {
-				output = `{"error":"invalid tool request"}`
+				if call.Name == "build_instance_search_link" {
+					output, err = searchLinkValidationResult(err)
+					if err != nil {
+						return agentLoopResult{State: state}, err
+					}
+				} else {
+					output = `{"error":"invalid tool request"}`
+				}
 			}
 			toolMessages = append(toolMessages, Message{Role: RoleTool, Name: call.Name, ToolCallID: call.ID, Content: output})
 		}
