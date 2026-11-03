@@ -6,13 +6,13 @@ import {
   RATING_METRICS,
   childScopes,
   scopeBoard,
-  type RatingBoardData,
   type RatingEntry,
   type RatingMetric,
   type RatingPeriod,
   type RatingScope,
 } from "./ratingBoards.fixtures"
 import { BoardSearch, RatingFullList } from "./RatingFullList"
+import type { RatingLiveBoard, RatingLiveData, RatingLiveState } from "./ratingLiveData"
 import { Emblem, EntryRow, ScopeMark, SpecIcon } from "./RatingParts"
 import { METRIC_THEMES, VIEW_ORDER, scopeTitle, type MetricTheme, type RatingView } from "./ratingThemes"
 
@@ -34,6 +34,7 @@ export function RatingBoards({
   bosses,
   title: titleOverride,
   toolbar,
+  live,
 }: {
   instanceName: string
   scope: RatingScope
@@ -46,6 +47,7 @@ export function RatingBoards({
   title?: string
   /** Metric switch and period, shown in the board's (or table's) header. */
   toolbar?: ReactNode
+  live?: RatingLiveData
 }) {
   const theme = METRIC_THEMES[view]
   const title = titleOverride ?? scopeTitle(scope, instanceName)
@@ -71,17 +73,24 @@ export function RatingBoards({
   const tableOnly = !!scope.boss
   const boards = useMemo(
     () =>
-      RATING_METRICS.map((m) => ({
-        metric: m,
-        center: scopeBoard(m, period, scope, 10),
-        around: (scope.boss ? [] : childScopes({}).map((c) => ({ ...scope, boss: c.boss })))
+      RATING_METRICS.map((m) => {
+        const children = (scope.boss ? [] : live ? (bosses ?? []).map((boss) => ({ ...scope, boss })) : childScopes({}).map((c) => ({ ...scope, boss: c.boss })))
           .filter((child) => !bosses || !child.boss || bosses.includes(child.boss))
-          .map((child) => scopeBoard(m, period, child, 3))
-          .filter((b) => b.total > 0),
-      })),
-    [scope, period, bosses],
+        const getBoard = (target: RatingScope): RatingLiveState<RatingLiveBoard> => live
+          ? live.board({ scope: target, metric: m, period, cohort: live.cohort })
+          : { status: "ready", data: scopeBoard(m, period, target, target.boss ? 3 : 10) }
+        return {
+          metric: m,
+          center: getBoard(scope),
+          around: children.map(getBoard).filter((state): state is { status: "ready"; data: RatingLiveBoard } => state.status === "ready")
+            .map((state) => state.data).filter((board) => (board.total ?? board.entries.length) > 0),
+        }
+      }),
+    [scope, period, bosses, live],
   )
   const single = view === "overview" ? undefined : boards.find((b) => b.metric === view)!
+  const pending = (single ? [single] : boards).find((b) => b.center.status !== "ready")?.center
+  const readyBoards = boards.filter((b): b is { metric: RatingMetric; center: { status: "ready"; data: RatingLiveBoard }; around: RatingLiveBoard[] } => b.center.status === "ready")
 
   return (
     <div className="space-y-5" style={{ "--metric": theme.accent } as CSSProperties} data-metric={view}>
@@ -98,12 +107,17 @@ export function RatingBoards({
           onQuery={setQuery}
           onCollapse={tableOnly ? undefined : collapse}
           toolbar={toolbar}
+          live={live}
         />
-      ) : single ? (
-        <CenterBoard board={single.center} theme={theme} title={title} onShowAll={showTable} search={searchBox} toolbar={toolbar} />
+      ) : pending ? (
+        <section role={pending.status === "error" ? "alert" : "status"} className="rounded-xl border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
+          {pending.status === "error" ? pending.error : "Loading published ratings…"}
+        </section>
+      ) : single && single.center.status === "ready" ? (
+        <CenterBoard board={single.center.data} theme={theme} title={title} onShowAll={showTable} search={searchBox} toolbar={toolbar} />
       ) : (
         <OverviewCenter
-          boards={boards.map((b) => ({ metric: b.metric, board: b.center }))}
+          boards={readyBoards.map((b) => ({ metric: b.metric, board: b.center.data }))}
           theme={theme}
           title={title}
           onSelect={onView}
@@ -229,7 +243,7 @@ function CenterFrame({
   toolbar,
   children,
 }: {
-  board: RatingBoardData
+  board: RatingLiveBoard
   theme: MetricTheme
   title: string
   onShowAll: () => void
@@ -264,7 +278,7 @@ function CenterFrame({
         className="cursor-pointer relative mt-auto flex items-center justify-center gap-1.5 border-t px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-white/[.03] hover:text-foreground"
       >
         <ArrowDown className="size-3.5" />
-        All {board.total} ranked
+        All {board.total === undefined ? "" : `${board.total} `}ranked
       </button>
     </section>
   )
@@ -278,7 +292,7 @@ function CenterBoard({
   search,
   toolbar,
 }: {
-  board: RatingBoardData
+  board: RatingLiveBoard
   theme: MetricTheme
   title: string
   onShowAll: () => void
@@ -314,7 +328,7 @@ function OverviewCenter({
   search,
   toolbar,
 }: {
-  boards: { metric: RatingMetric; board: RatingBoardData }[]
+  boards: { metric: RatingMetric; board: RatingLiveBoard }[]
   theme: MetricTheme
   title: string
   onSelect: (metric: RatingMetric) => void
@@ -377,7 +391,7 @@ function SideFrame({
   onOpen,
   children,
 }: {
-  board: RatingBoardData
+  board: RatingLiveBoard
   /** What this card stands for: a boss card under a class or spec filter is still a boss card. */
   by: ChildKind
   label: string
