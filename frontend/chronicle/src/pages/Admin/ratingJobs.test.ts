@@ -18,12 +18,12 @@ describe("rating maintenance enqueue", () => {
     expect(fetchMock).toHaveBeenCalledExactlyOnceWith(path, { method: "POST" });
   });
 
-  it("shows the server error without treating the job as queued", async () => {
+  it("shows the active-job conflict without treating the job as queued", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: false,
-      status: 503,
-      json: async () => ({ message: "Queue unavailable" }),
+      status: 409,
+      json: async () => ({ message: "A matching rating maintenance job is already queued or running" }),
     }));
-    await expect(enqueueRatingJob("rebuild")).rejects.toThrow("Queue unavailable");
+    await expect(enqueueRatingJob("rebuild")).rejects.toThrow("A matching rating maintenance job is already queued or running");
   });
 });

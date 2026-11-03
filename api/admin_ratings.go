@@ -121,6 +121,10 @@ func (api *API) adminEnqueueRatingJob(w http.ResponseWriter, r *http.Request, ar
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	if result.UniqueSkippedAsDuplicate {
+		ratingAdminError(w, r, http.StatusConflict, "A matching rating maintenance job is already queued or running")
+		return
+	}
 	httpapi.Write(ctx, w, http.StatusAccepted, chroniclesdk.AdminRatingJobResponse{
 		JobID:                    result.Job.ID,
 		JobState:                 string(result.Job.State),

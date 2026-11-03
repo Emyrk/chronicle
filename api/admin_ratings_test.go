@@ -68,7 +68,7 @@ func TestAdminRatingMaintenanceJobs(t *testing.T) {
 	require.NoError(t, err)
 	api := &API{Queues: &riverqueue.Queues{Client: client}}
 
-	call := func(handler http.HandlerFunc, tenant uuid.UUID) chroniclesdk.AdminRatingJobResponse {
+	request := func(handler http.HandlerFunc, tenant uuid.UUID) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
 		if tenant != uuid.Nil {
@@ -76,32 +76,40 @@ func TestAdminRatingMaintenanceJobs(t *testing.T) {
 		}
 		rec := httptest.NewRecorder()
 		handler(rec, req)
+		return rec
+	}
+	call := func(handler http.HandlerFunc, tenant uuid.UUID) chroniclesdk.AdminRatingJobResponse {
+		t.Helper()
+		rec := request(handler, tenant)
 		require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
 		var response chroniclesdk.AdminRatingJobResponse
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 		require.Positive(t, response.JobID)
 		require.Equal(t, "available", response.JobState)
+		require.False(t, response.UniqueSkippedAsDuplicate)
 		return response
+	}
+	conflict := func(handler http.HandlerFunc, tenant uuid.UUID) {
+		t.Helper()
+		rec := request(handler, tenant)
+		require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+		var response chroniclesdk.Response
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		require.Equal(t, "A matching rating maintenance job is already queued or running", response.Message)
 	}
 
 	all := call(api.AdminDispatchAllRatingScores, uuid.Nil)
-	allDuplicate := call(api.AdminDispatchAllRatingScores, uuid.New())
-	require.True(t, allDuplicate.UniqueSkippedAsDuplicate)
-	require.Equal(t, all.JobID, allDuplicate.JobID)
+	conflict(api.AdminDispatchAllRatingScores, uuid.New())
 	allJob, err := client.JobGet(t.Context(), all.JobID)
 	require.NoError(t, err)
 	require.Equal(t, servicerankings.KindDispatchRatingScores, allJob.Kind)
 
-	repair := call(api.AdminDispatchRenownRepair, uuid.Nil)
-	repairDuplicate := call(api.AdminDispatchRenownRepair, uuid.Nil)
-	require.True(t, repairDuplicate.UniqueSkippedAsDuplicate)
-	require.Equal(t, repair.JobID, repairDuplicate.JobID)
+	call(api.AdminDispatchRenownRepair, uuid.Nil)
+	conflict(api.AdminDispatchRenownRepair, uuid.Nil)
 
 	tenant := uuid.New()
 	rebuild := call(api.AdminRebuildRatings, tenant)
-	rebuildDuplicate := call(api.AdminRebuildRatings, tenant)
-	require.True(t, rebuildDuplicate.UniqueSkippedAsDuplicate)
-	require.Equal(t, rebuild.JobID, rebuildDuplicate.JobID)
+	conflict(api.AdminRebuildRatings, tenant)
 	other := call(api.AdminRebuildRatings, uuid.New())
 	require.NotEqual(t, rebuild.JobID, other.JobID)
 

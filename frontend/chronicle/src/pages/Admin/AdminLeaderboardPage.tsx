@@ -207,7 +207,7 @@ export function AdminLeaderboardPage() {
         </div>
         {ratingJobResult && (
           <p role="status" className="text-sm text-muted-foreground">
-            {ratingJobResult.action === "renown-repair" ? "Renown repair" : "Rating rebuild"} {ratingJobResult.job.unique_skipped_as_duplicate ? "was already queued" : "was queued"}
+            {ratingJobResult.action === "renown-repair" ? "Renown repair" : "Rating rebuild"} was queued
             {" "}(job #{ratingJobResult.job.job_id}, {ratingJobResult.job.job_state}). Check the River jobs dashboard for completion.
           </p>
         )}
