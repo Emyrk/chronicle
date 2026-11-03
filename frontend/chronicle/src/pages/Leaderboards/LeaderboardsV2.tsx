@@ -1,5 +1,4 @@
 import { useState } from "react"
-import { useInfiniteQuery } from "@tanstack/react-query"
 import { Link, Navigate, useSearchParams } from "react-router-dom"
 import { ChevronLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -18,7 +17,8 @@ import { LivePerformances } from "./Hub/LivePerformances"
 import { TABS } from "./Hub/hubTabs"
 import { hubParams, v2Selection } from "./v2Selection"
 import { legacyLeaderboardsTarget } from "./leaderboardsState"
-import { ratingScopeURL, fetchLiveRating, type LiveRatingRequest } from "./ratingsLive"
+import { LiveRatingBoards } from "./Ratings/LiveRatingBoards"
+import type { LiveRatingMetric, LiveRatingWindow, LiveRatingCohort } from "./Ratings/liveRatingAdapter"
 
 export function LeaderboardsV2() {
   const [params, setParams] = useSearchParams()
@@ -58,7 +58,12 @@ export function LeaderboardsV2() {
         <div className="flex gap-6">
           <div className="min-w-0 flex-1">
         {instance ? (
-          tab === "ratings" ? <LiveRatings instance={instance} realmIDs={realmIDs} /> :
+          tab === "ratings" ? <LiveRatingsPanel instanceName={instance} encounter={encounter} realmIDs={realmIDs} params={params} onEncounter={(boss) => select("encounter", boss)} onControl={(key, value) => {
+            const next = new URLSearchParams(params)
+            next.set(key, value)
+            if (key === "rating_metric") next.delete("rating_window")
+            setParams(next)
+          }} /> :
           tab === "statistics" || tab === "overview" ? <InstanceView instanceName={instance} /> :
           tab === "performances" ? <LivePerformancesPanel instanceName={instance} encounter={encounter} realmIDs={realmIDs} onEncounter={(boss) => select("encounter", boss)} /> :
           tab === "parsing" ? <ParsingInstanceView key={instance} instanceName={instance} /> :
@@ -142,79 +147,77 @@ function LiveInstanceGrid({ params }: { params: URLSearchParams }) {
   })}</div>
 }
 
-function LiveRatings({ instance, realmIDs }: { instance: string | null; realmIDs: string[] }) {
+function LiveRatingsPanel({ instanceName, encounter, realmIDs, params, onEncounter, onControl }: {
+  instanceName: string
+  encounter: string | null
+  realmIDs: string[]
+  params: URLSearchParams
+  onEncounter: (boss?: string) => void
+  onControl: (key: "subject" | "rating_metric" | "rating_window", value: string) => void
+}) {
   const realms = useRealms()
-  const selectedRealmIDs = realmIDs.filter((id) => realms.data?.some((realm) => realm.id === id))
+  const bosses = useRankingsEncounters(instanceName)
   const summaries = useRankingsInstances()
-  const filters = useRankingsFilters(instance ?? undefined)
-  const [metric, setMetric] = useState<LiveRatingRequest["metric"]>("renown")
-  const [window, setWindow] = useState<LiveRatingRequest["window"]>("period")
-  const [performance, setPerformance] = useState<"dps" | "hps">("dps")
+  const filters = useRankingsFilters(instanceName)
+  const subject = params.get("subject") === "guild" ? "guild" : "player"
+  const selectedMetric = params.get("rating_metric")
+  const metric: LiveRatingMetric = selectedMetric === "peak" || selectedMetric === "mastery" || selectedMetric === "ranked_mastery" ? selectedMetric : "renown"
+  const selectedWindow = params.get("rating_window")
+  const window: LiveRatingWindow = metric === "renown" ? selectedWindow === "career" ? "career" : "period" : selectedWindow === "all_time" ? "all_time" : "period"
   const [cohortKey, setCohortKey] = useState("")
-  // A raid summary supplies the exact difficulty/size. Do not infer a global cohort from a random raid.
-  const cohorts = (summaries.data ?? []).filter((s) => instance && s.instance_name === instance)
-  const cohort = cohorts.find((s) => `${s.instance_name}|${s.difficulty_name}|${s.max_players}` === cohortKey) ?? cohorts[0]
   const [className, setClassName] = useState("")
   const [specName, setSpecName] = useState("")
   const [subSpec, setSubSpec] = useState("")
-  const cls = filters.data?.find((f) => f.player_class === className) ?? filters.data?.[0]
-  const spec = cls?.specs.find((s) => s.spec === specName) ?? cls?.specs[0]
+  const [performance, setPerformance] = useState<"dps" | "hps">("dps")
+  const selectedBoss = bosses.data?.some((row) => row.encounter_name === encounter) ? encounter ?? undefined : undefined
+  const cohorts = (summaries.data ?? []).filter((row) => row.instance_name === instanceName)
+  const cohort = cohorts.find((row) => `${row.difficulty_name}|${row.max_players}` === cohortKey) ?? cohorts[0]
+  const cls = filters.data?.find((row) => row.player_class === className) ?? filters.data?.[0]
+  const spec = cls?.specs.find((row) => row.spec === specName) ?? cls?.specs[0]
   const selectedSubSpec = spec?.sub_specs.includes(subSpec) ? subSpec : spec?.sub_specs[0] ?? ""
-  const request: LiveRatingRequest = {
-    realmIDs: selectedRealmIDs, instanceName: instance ?? undefined, metric, window,
-    cohort: metric === "renown" ? undefined : cohort && cls && spec ? {
-      difficulty: cohort.difficulty_name, maxPlayers: cohort.max_players,
-      playerClass: cls.player_class, spec: spec.spec, subSpec: selectedSubSpec, performance,
-    } : undefined,
+  const selectedRealmIDs = realmIDs.filter((id) => realms.data?.some((realm) => realm.id === id))
+  const exactCohort: LiveRatingCohort | undefined = metric === "renown" || !cohort ? undefined : {
+    difficulty: cohort.difficulty_name, maxPlayers: cohort.max_players,
+    ...(subject === "player" && cls && spec ? { playerClass: cls.player_class, spec: spec.spec, subSpec: selectedSubSpec, performance } : {}),
   }
-  const url = ratingScopeURL(request)
-  const ratings = useInfiniteQuery({
-    queryKey: ["rankings", "ratings", url],
-    queryFn: ({ pageParam }) => fetchLiveRating(url!, pageParam || undefined),
-    initialPageParam: "",
-    getNextPageParam: (page) => page.next_cursor || undefined,
-    enabled: !!url && realms.isSuccess,
-    retry: false,
-  })
-  const entries = ratings.data?.pages.flatMap((page) => page.entries) ?? []
-  if (realms.isPending || (metric !== "renown" && (summaries.isPending || filters.isPending))) return <p role="status">Loading rating cohorts…</p>
-  if (realms.isError || (metric !== "renown" && (summaries.isError || filters.isError))) return <p role="alert">Could not load rating cohorts. Please try again later.</p>
-  return <section className="space-y-5 rounded-xl border bg-card p-5">
-    <div className="flex flex-wrap gap-3">
-      <label>Rating <select aria-label="Rating metric" className="ml-2 rounded border bg-background p-2" value={metric} onChange={(e) => { setMetric(e.target.value as LiveRatingRequest["metric"]); setWindow("period") }}>
+  if (bosses.isPending || realms.isPending || (metric !== "renown" && (summaries.isPending || (subject === "player" && filters.isPending)))) return <p role="status">Loading rating cohorts…</p>
+  if (bosses.isError || realms.isError || (metric !== "renown" && (summaries.isError || (subject === "player" && filters.isError)))) return <p role="alert">Could not load rating cohorts.</p>
+  return <div className="space-y-5">
+    <div className="flex flex-wrap gap-3 rounded-xl border bg-card p-4 text-sm">
+      <label>Encounter <select aria-label="Rating encounter" className="ml-2 rounded border bg-background p-2" value={selectedBoss ?? ""} onChange={(event) => onEncounter(event.target.value || undefined)}>
+        <option value="">Full raid</option>
+        {bosses.data?.map((row) => <option key={row.encounter_name} value={row.encounter_name}>{row.encounter_name}</option>)}
+      </select></label>
+      <label>Rank <select aria-label="Rating subject" className="ml-2 rounded border bg-background p-2" value={subject} onChange={(event) => onControl("subject", event.target.value)}>
+        <option value="player">Characters</option><option value="guild">Guilds</option>
+      </select></label>
+      <label>Metric <select aria-label="Rating metric" className="ml-2 rounded border bg-background p-2" value={metric} onChange={(event) => onControl("rating_metric", event.target.value)}>
         <option value="renown">Renown</option><option value="peak">Peak</option><option value="mastery">Mastery</option><option value="ranked_mastery">Ranked Mastery</option>
       </select></label>
-      <label>Window <select aria-label="Rating window" className="ml-2 rounded border bg-background p-2" value={window} onChange={(e) => setWindow(e.target.value as LiveRatingRequest["window"])}>
-        <option value="period">Period</option>{metric === "renown" ? <option value="career">Career</option> : <option value="all_time">All time</option>}
+      <label>Window <select aria-label="Rating window" className="ml-2 rounded border bg-background p-2" value={window} onChange={(event) => onControl("rating_window", event.target.value)}>
+        <option value="period">180 days</option>{metric === "renown" ? <option value="career">Career</option> : <option value="all_time">All time</option>}
       </select></label>
     </div>
-    {metric !== "renown" && <div className="flex flex-wrap gap-3">
-      <label>Raid cohort <select aria-label="Raid cohort" className="ml-2 rounded border bg-background p-2" value={cohort ? `${cohort.instance_name}|${cohort.difficulty_name}|${cohort.max_players}` : ""} onChange={(e) => setCohortKey(e.target.value)}>
-        {cohorts.map((c) => <option key={`${c.instance_name}|${c.difficulty_name}|${c.max_players}`} value={`${c.instance_name}|${c.difficulty_name}|${c.max_players}`}>{c.instance_name} · {c.difficulty_name || "Default"} · {c.max_players} players</option>)}
+    {metric !== "renown" && <div className="flex flex-wrap gap-3 rounded-xl border bg-card p-4 text-sm">
+      <label>Raid cohort <select aria-label="Rating cohort" className="ml-2 rounded border bg-background p-2" value={cohort ? `${cohort.difficulty_name}|${cohort.max_players}` : ""} onChange={(event) => setCohortKey(event.target.value)}>
+        {cohorts.map((row) => <option key={`${row.difficulty_name}|${row.max_players}`} value={`${row.difficulty_name}|${row.max_players}`}>{row.difficulty_name || "Default"} · {row.max_players} players</option>)}
       </select></label>
-      <label>Class <select aria-label="Class" className="ml-2 rounded border bg-background p-2" value={cls?.player_class ?? ""} onChange={(e) => { setClassName(e.target.value); setSpecName(""); setSubSpec("") }}>
-        {filters.data?.map((c) => <option key={c.player_class} value={c.player_class}>{c.player_class}</option>)}
-      </select></label>
-      <label>Spec <select aria-label="Spec" className="ml-2 rounded border bg-background p-2" value={spec?.spec ?? ""} onChange={(e) => { setSpecName(e.target.value); setSubSpec("") }}>
-        {cls?.specs.map((s) => <option key={s.spec} value={s.spec}>{s.spec || "Unspecified"}</option>)}
-      </select></label>
-      <label>Sub-spec <select aria-label="Sub-spec" className="ml-2 rounded border bg-background p-2" value={selectedSubSpec} onChange={(e) => setSubSpec(e.target.value)}>
-        {(spec?.sub_specs.length ? spec.sub_specs : [""]).map((s) => <option key={s} value={s}>{s || "Unspecified"}</option>)}
-      </select></label>
-      <label>Performance <select aria-label="Performance metric" className="ml-2 rounded border bg-background p-2" value={performance} onChange={(e) => setPerformance(e.target.value as "dps" | "hps")}>
-        <option value="dps">DPS</option><option value="hps">HPS</option>
-      </select></label>
+      {subject === "player" && <>
+        <label>Class <select aria-label="Rating class" className="ml-2 rounded border bg-background p-2" value={cls?.player_class ?? ""} onChange={(event) => { setClassName(event.target.value); setSpecName(""); setSubSpec("") }}>
+          {filters.data?.map((row) => <option key={row.player_class} value={row.player_class}>{row.player_class}</option>)}
+        </select></label>
+        <label>Spec <select aria-label="Rating spec" className="ml-2 rounded border bg-background p-2" value={spec?.spec ?? ""} onChange={(event) => { setSpecName(event.target.value); setSubSpec("") }}>
+          {cls?.specs.map((row) => <option key={row.spec} value={row.spec}>{row.spec || "Unspecified"}</option>)}
+        </select></label>
+        <label>Sub-spec <select aria-label="Rating sub-spec" className="ml-2 rounded border bg-background p-2" value={selectedSubSpec} onChange={(event) => setSubSpec(event.target.value)}>
+          {(spec?.sub_specs.length ? spec.sub_specs : [""]).map((name) => <option key={name} value={name}>{name || "Unspecified"}</option>)}
+        </select></label>
+        <label>Performance <select aria-label="Rating performance" className="ml-2 rounded border bg-background p-2" value={performance} onChange={(event) => setPerformance(event.target.value as "dps" | "hps")}>
+          <option value="dps">DPS</option><option value="hps">HPS</option>
+        </select></label>
+      </>}
     </div>}
-    <p className="text-sm text-muted-foreground">{metric === "renown" ? "Renown has no class or spec cohort." : "Scores compare only the selected class, spec, performance metric and raid size."} Realm selection filters displayed entries without recomputing scores. Character names are not included in the published response; IDs are shown instead.</p>
-    {!url ? <p>{!instance ? "Select an instance from the Overview tab to view a raid rating board." : "No supported rating cohort is available for this selection."}</p> : ratings.isPending ? <p role="status">Loading ratings…</p> : ratings.isError && !entries.length ? <p role="alert">Could not load published ratings. <button type="button" className="underline" onClick={() => void ratings.refetch()}>Retry</button></p> : !entries.length ? <p>No published scores in this cohort yet.</p> : <>
-      <ul className="divide-y">{entries.map((entry, index) => <li key={`${entry.realm_id}-${entry.player_guid}-${index}`} className="flex flex-wrap items-center gap-3 py-3 text-sm">
-        <span className="font-mono text-xs">{entry.player_guid}</span>
-        <span className="text-muted-foreground">{entry.player_class ? `${entry.player_class} · ${entry.player_spec} · ` : ""}{entry.instance_name} · {realms.data?.find((realm) => realm.id === entry.realm_id)?.name ?? entry.realm_id}</span>
-        <strong className="ml-auto tabular-nums">{entry.score.toLocaleString()}</strong>
-      </li>)}</ul>
-      {ratings.isError && <p role="alert">Could not load more ratings. <button type="button" className="underline" onClick={() => void ratings.fetchNextPage()}>Retry</button></p>}
-      {ratings.hasNextPage && !ratings.isError && <button type="button" disabled={ratings.isFetchingNextPage} className="rounded border px-3 py-2 text-sm disabled:opacity-50" onClick={() => void ratings.fetchNextPage()}>{ratings.isFetchingNextPage ? "Loading…" : "Load more"}</button>}
-    </>}
-    <Link to="/leaderboards/statistics" className="text-xs text-muted-foreground underline">Current leaderboards</Link>
-  </section>
+    {encounter && !selectedBoss && <p role="alert">That encounter is not published for this instance. Showing the full raid.</p>}
+    <LiveRatingBoards instanceName={instanceName} encounterName={selectedBoss} subject={subject} metric={metric} window={window} cohort={exactCohort} realmIDs={selectedRealmIDs} realmNames={Object.fromEntries((realms.data ?? []).map((realm) => [realm.id, realm.name]))} />
+  </div>
 }

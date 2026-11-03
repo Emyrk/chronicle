@@ -5,13 +5,14 @@ import { LeaderboardsV2 } from "./LeaderboardsV2"
 
 vi.mock("@/api/rankingsQueries", () => ({
   useRankingsInstances: () => ({ data: [{ instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40, category: "raid", total_kills: 123, top_players: [] }], isPending: false, isError: false }),
-  useRankingsFilters: () => ({ data: [], isPending: false, isError: false }),
+  useRankingsFilters: () => ({ data: [{ player_class: "MAGE", specs: [{ spec: "Frost", sub_specs: [""] }] }], isPending: false, isError: false }),
   useRankingsEncounters: () => ({ data: [{ encounter_name: "Ragnaros", total_kills: 12, top_dps: 1400 }], isPending: false, isError: false }),
 }))
 vi.mock("@/api/queries", () => ({
   useRealms: () => ({ data: [{ id: "realm-id", name: "Nordanaar" }], isPending: false, isError: false, isSuccess: true }),
 }))
 vi.mock("./Hub/LivePerformances", () => ({ LivePerformances: ({ instanceName, selection, realmName }: { instanceName: string; selection: { bosses: string[] }; realmName?: string }) => <p>{instanceName} / {selection.bosses[0]} / {realmName ?? "All realms"}</p> }))
+vi.mock("./Ratings/LiveRatingBoards", () => ({ LiveRatingBoards: ({ instanceName, encounterName, subject, metric, window, cohort, realmIDs, realmNames }: { instanceName: string; encounterName?: string; subject: string; metric: string; window: string; cohort?: { difficulty: string; maxPlayers: number; playerClass?: string; spec?: string; performance?: string }; realmIDs?: string[]; realmNames?: Record<string, string> }) => <p>{[instanceName, encounterName ?? "raid", subject, metric, window, cohort?.difficulty, cohort?.maxPlayers, cohort?.playerClass, cohort?.spec, cohort?.performance, realmIDs?.join(","), realmNames?.["realm-id"]].filter(Boolean).join(" / ")}</p> }))
 vi.mock("@/components/Ads/AdRailStack", () => ({ AdRailStack: () => null }))
 
 describe("production leaderboards hub", () => {
@@ -33,6 +34,21 @@ describe("production leaderboards hub", () => {
     expect(html).toContain("Molten Core / Ragnaros / Nordanaar")
     expect(html).toContain('value="Ragnaros" selected=""')
     expect(html).toContain("Performance realm: Nordanaar")
+  })
+
+  it("passes an exact boss, guild cohort, all-time window and display-only realm IDs to live ratings", () => {
+    const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboards?tab=ratings&instance=Molten+Core&encounter=Ragnaros&subject=guild&rating_metric=peak&rating_window=all_time&realm_ids=realm-id"]}><LeaderboardsV2 /></MemoryRouter>)
+    expect(html).toContain("Molten Core / Ragnaros / guild / peak / all_time / Normal / 40 / realm-id / Nordanaar")
+    expect(html).toContain('value="Ragnaros" selected=""')
+    expect(html).toContain('value="guild" selected=""')
+    expect(html).not.toContain('aria-label="Rating class"')
+  })
+
+  it("passes an exact player class/spec/performance cohort for raid ratings", () => {
+    const html = renderToStaticMarkup(<MemoryRouter initialEntries={["/leaderboards?tab=ratings&instance=Molten+Core&rating_metric=mastery&realm_ids=realm-id"]}><LeaderboardsV2 /></MemoryRouter>)
+    expect(html).toContain("Molten Core / raid / player / mastery / period / Normal / 40 / MAGE / Frost / dps / realm-id / Nordanaar")
+    expect(html).toContain('aria-label="Rating class"')
+    expect(html).toContain('aria-label="Rating sub-spec"')
   })
 
   it("rejects a boss not offered by live encounters", () => {
