@@ -123,11 +123,11 @@ export function InstanceSearchPage() {
     available: isAuthenticated && !authLoading && !supporter.isLoading,
     tools: {
       inspect_search_draft: () => ({
-        draft: parsedCode.error ? null : (draftTree ?? null),
+        draft: codeInvalid ? null : (draftTree ?? null),
         submitted: submittedTree ?? null,
         mode,
         revision: draftRevision,
-        ...(parsedCode.error ? { codeError: parsedCode.error } : {}),
+        ...(codeInvalid ? { codeError: parsedCode.error } : {}),
         searchWasSubmitted: submittedParam !== null,
       }),
       set_search_draft: (argumentsValue) => {
