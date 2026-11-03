@@ -38,6 +38,28 @@ export function fuzzyConsumableMatch(query: string, values: Iterable<string>): b
   return false;
 }
 
+export function filterConsumableUses(
+  uses: ConsumableUse[],
+  query: string,
+  itemNames: ReadonlyMap<number, string>,
+  additionalSearchValues: (use: ConsumableUse) => Iterable<string> = () => [],
+): ConsumableUse[] {
+  if (!query.trim()) return uses;
+
+  return uses.filter((use) => {
+    const identified = itemIdentity(use).itemId;
+    const searchable = identified !== null
+      ? [itemNames.get(identified) ?? "", identified.toString()]
+      : [
+          use.spellName,
+          use.spellId?.toString() ?? "",
+          ...use.candidateItemIds.flatMap((itemId) => [itemNames.get(itemId) ?? "", itemId.toString()]),
+        ];
+
+    return fuzzyConsumableMatch(query, [...searchable, ...additionalSearchValues(use)]);
+  });
+}
+
 export function filterConsumablesTotal(
   rows: PlayerConsumablesTotal[],
   query: string,

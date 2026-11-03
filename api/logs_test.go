@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -84,4 +85,70 @@ func TestWoWLogArtifactDownloadUsesRawLogPermission(t *testing.T) {
 	require.Equal(t, "text/plain;charset=UTF-8", response.Header().Get("Content-Type"))
 	require.Equal(t, `attachment; filename=ChronicleSidekickBridgeWoTLK.lua`, response.Header().Get("Content-Disposition"))
 	require.Equal(t, "18", response.Header().Get("Content-Length"))
+}
+
+func TestWoWLogGroupDownloadRequiresAdminAndExactlyOneFile(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+	store := servicedbstore.DatabaseStore(broker)
+
+	userID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "group-download-" + userID.String()})
+	require.NoError(t, err)
+	logID := uuid.New()
+	now := database.Timestamptz(time.Now())
+	_, err = zed.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+		ID: logID, Owner: userID, LogType: database.LogTypeV2, CreatedAt: now, UpdatedAt: now,
+	})
+	require.NoError(t, err)
+
+	handlerAPI := &API{Opts: &Options{Zed: zed}, Zed: zed}
+	router := chi.NewRouter()
+	router.Route("/{logID}", func(r chi.Router) {
+		r.Use(httpmw.LogIDMiddleware)
+		r.Get("/download", handlerAPI.WoWLogGroupDownload)
+	})
+	request := func() *http.Request {
+		req := httptest.NewRequest(http.MethodGet, "/"+logID.String()+"/download", nil)
+		return req.WithContext(authz.AsUser(req.Context(), userID))
+	}
+
+	forbidden := httptest.NewRecorder()
+	router.ServeHTTP(forbidden, request())
+	require.Equal(t, http.StatusForbidden, forbidden.Code, forbidden.Body.String())
+
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"technical_admin"}))
+
+	noFiles := httptest.NewRecorder()
+	router.ServeHTTP(noFiles, request())
+	require.Equal(t, http.StatusNotFound, noFiles.Code, noFiles.Body.String())
+
+	firstFileID := uuid.New()
+	_, err = store.InsertLogFile(ctx, database.InsertLogFileParams{
+		ID: firstFileID, Owner: userID, Hash: uuid.NewString(), WowLogID: logID,
+		SizeBytes: 10, MimeType: "text/plain", CreatedAt: now, UpdatedAt: now,
+	})
+	require.NoError(t, err)
+
+	singleFile := httptest.NewRecorder()
+	router.ServeHTTP(singleFile, request())
+	require.Equal(t, http.StatusTemporaryRedirect, singleFile.Code, singleFile.Body.String())
+	require.Equal(t,
+		fmt.Sprintf("/api/v1/raidlogs/logs/%s/files/%s/download", logID, firstFileID),
+		singleFile.Header().Get("Location"),
+	)
+
+	_, err = store.InsertLogFile(ctx, database.InsertLogFileParams{
+		ID: uuid.New(), Owner: userID, Hash: uuid.NewString(), WowLogID: logID,
+		SizeBytes: 10, MimeType: "text/plain", CreatedAt: now, UpdatedAt: now,
+	})
+	require.NoError(t, err)
+
+	multipleFiles := httptest.NewRecorder()
+	router.ServeHTTP(multipleFiles, request())
+	require.Equal(t, http.StatusConflict, multipleFiles.Code, multipleFiles.Body.String())
+	require.Contains(t, multipleFiles.Body.String(), "Log has more than one file")
 }

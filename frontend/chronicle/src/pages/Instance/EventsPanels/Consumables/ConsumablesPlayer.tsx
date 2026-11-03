@@ -33,16 +33,15 @@ import { CoinAmount } from "./CoinAmount";
 import { useConsumablePrices } from "./useConsumablePrices";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
 import { PlayerItemBreakout, type PlayerItemBreakoutData } from "./LedgerItemBreakout";
+import { LedgerFilterInput, useFilteredUses } from "./ConsumablesSearch";
 import {
   AmbiguousSection,
   ConsumableTimingFilter,
-  LedgerFilterInput,
   LedgerRow,
   PRE_COMBAT_TOKEN,
   TimingColumnHeaders,
   panelOptionTokens,
   togglePanelOptionFlag,
-  useFilteredUses,
   VIEW_ALL_TOKEN,
 } from "./LedgerShared";
 

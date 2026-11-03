@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Menu, FileText, Copy, Upload, Download, RotateCcw, LayoutGrid, Clock, Share2, Unlink, ExternalLink, BarChart3, Check, List, Ban, Loader2, Pencil, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
+import type { WoWLogGroupState } from "@/api/typesGenerated";
 import { useAdminClearLogInvalidation, useAdminInvalidateLogs } from "@/api/queries";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,6 +80,7 @@ export function InstanceMenu({
   const [showInvalidateConfirm, setShowInvalidateConfirm] = useState(false);
   const [showMarkValidConfirm, setShowMarkValidConfirm] = useState(false);
   const [invalidReason, setInvalidReason] = useState("");
+  const [isDownloadingLog, setIsDownloadingLog] = useState(false);
   const invalidateLogs = useAdminInvalidateLogs();
   const clearInvalidation = useAdminClearLogInvalidation();
   const handleCopyInstanceId = async () => {
@@ -87,6 +89,38 @@ export function InstanceMenu({
       toast.success("Copied instance ID", { description: instanceId });
     } catch {
       toast.error("Failed to copy instance ID");
+    }
+  };
+
+  const handleDownloadLog = async () => {
+    if (!logGroupId || isDownloadingLog) return;
+
+    setIsDownloadingLog(true);
+    try {
+      const response = await fetch(`/api/v1/raidlogs/logs/${logGroupId}`);
+      if (!response.ok) throw new Error("Failed to load log details");
+
+      const log = await response.json() as WoWLogGroupState;
+      if (log.files.length !== 1) {
+        const description = log.files.length === 0
+          ? "This log has no files to download."
+          : `This log has ${log.files.length} files. Download them individually from the log detail page.`;
+        toast.error("Cannot download log", { description });
+        return;
+      }
+
+      const link = document.createElement("a");
+      link.href = `/api/v1/raidlogs/logs/${logGroupId}/download`;
+      link.download = "";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      toast.error("Failed to download log", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setIsDownloadingLog(false);
     }
   };
 
@@ -280,15 +314,33 @@ export function InstanceMenu({
           </DropdownMenuItem>
         )}
 
-        {logDetailUrl && (
+        {(logDetailUrl || (canAdminLogs && logGroupId)) && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link to={logDetailUrl}>
-                <FileText className="h-4 w-4 mr-2" />
-                View Log
-              </Link>
-            </DropdownMenuItem>
+            {logDetailUrl && (
+              <DropdownMenuItem asChild>
+                <Link to={logDetailUrl}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  View Log
+                </Link>
+              </DropdownMenuItem>
+            )}
+            {canAdminLogs && logGroupId && (
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  void handleDownloadLog();
+                }}
+                disabled={isDownloadingLog}
+              >
+                {isDownloadingLog ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                Download Log
+              </DropdownMenuItem>
+            )}
           </>
         )}
       </DropdownMenuContent>

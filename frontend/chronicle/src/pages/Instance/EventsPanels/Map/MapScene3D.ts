@@ -30,7 +30,7 @@ import {
   type DirectorUnit,
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
-import { actionForKey, cameraCollisionDistance, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, IDLE_MOBILE_MAP_INPUT, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, type MapControlAction, type MobileMapInput } from "./mapControls";
+import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, planarStep, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, wheelZoomDistance, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { unwrapCompassRadians } from "./mapCompassModel";
 import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
@@ -206,9 +206,10 @@ const FLOOR_PROBE_HEIGHT = 100;
 // the rock between the camera and a sunken chamber hides less of the fight.
 const MESH_ANGLED_OFFSET = new THREE.Vector3(0, 1.6, 0.75);
 
-// --- Navigation feel (chronicle-1079) ---
-// OrbitControls' inertia: the camera coasts to a stop instead of snapping.
-const ORBIT_DAMPING = 0.08;
+// --- Navigation feel (chronicle-1079, chronicle-1514) ---
+// The mouse and keys move the free cam 1:1 with no inertia, as walk mode
+// does; OrbitControls keeps touch (with damping on the mobile layout) and
+// the middle-drag pan.
 const ORBIT_ROTATE_SPEED = 0.6;
 const ORBIT_ZOOM_SPEED = 0.9;
 const MOBILE_ORBIT_DAMPING = 0.22;
@@ -217,16 +218,16 @@ const MOBILE_ORBIT_ZOOM_SPEED = 0.5;
 // A short two-finger swipe should cover useful ground on a small screen.
 const MOBILE_ORBIT_PAN_SPEED = 1;
 const ORBIT_PAN_SPEED = 0.8;
-// Keyboard camera (mapControls): pan as a fraction of the camera distance per
-// second, so it feels the same zoomed in or out; rotate in radians per second;
-// zoom by e^(rate) per second.
+// Free cam travel (W/S, strafes, Space/Z) as a fraction of the camera
+// distance per second, so it feels the same zoomed in or out; the mobile
+// pitch stick in radians per second.
 const KEY_PAN_SPEED = 0.6;
-const MOBILE_ORBIT_LOOK_SPEED = 0.55;
 const KEY_ROTATE_SPEED = 1.6;
-const KEY_ZOOM_SPEED = 1.2;
+// The free cam looks no closer to straight down than this (pitch, radians);
+// the bottom limit is OrbitControls' maxPolarAngle for the mode.
+const FREE_CAM_MAX_PITCH = Math.PI / 2 - 0.01;
 // A dropped frame never jumps the camera further than this.
 const KEY_MAX_STEP_S = 0.1;
-const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
 // --- Live session presence: everyone's camera or walking character ---
 /** Your presence goes out at most this often while it changes... */
@@ -293,7 +294,6 @@ const WALK_START_DISTANCE_YARDS = 10;
 const WALK_MAX_DISTANCE_YARDS = 45;
 /** Zoomed in closer than this, the camera is the character's eyes. */
 const WALK_FIRST_PERSON_YARDS = 0.8;
-const WALK_LOOK_RADIANS_PER_PX = 0.006;
 const WALK_PITCH_LIMIT = 1.35;
 const WALK_START_PITCH = 0.35;
 const WALK_EXIT_DISTANCE_YARDS = 30;
@@ -814,9 +814,14 @@ export class MapScene3D {
   // A click on a unit (inspect it); held briefly so a double-click (zoom) cancels it.
   private onUnitClick: ((guid: string) => void) | null = null;
   private pointerDownAt: { x: number; y: number } | null = null;
-  // An orbit-camera drag; once it moves past a click it hides the cursor and
-  // (virtual) drives OrbitControls from a pointer moved by movementX/Y.
-  private orbitDrag: { button: number; x: number; y: number; virtual: boolean } | null = null;
+  // A free-cam mouse drag, walk mode's left/right buttons; once it moves past
+  // a click (or both buttons are down) it hides the cursor and looks around.
+  private orbitDrag: { buttons: number; x: number; y: number; dragging: boolean } | null = null;
+  // The free cam's pivot (controls.target) rides this far (scene units)
+  // above the floor below it: Space/Z fly it up and down.
+  private pivotLift = 0;
+  // Shift is held: the free cam travels faster.
+  private fastTravel = false;
   private unitClickTimer = 0;
   private groundKey = "";
   private aspect = 1;
@@ -881,6 +886,7 @@ export class MapScene3D {
   private readonly collisionPoint = new THREE.Vector3();
   private readonly collisionBefore = new THREE.Vector3();
   private readonly collisionFrom = new THREE.Vector3();
+  private readonly collisionDirection = new THREE.Vector3();
   private orbitWantDistance: number | null = null;
   private orbitShownDistance: number | null = null;
   private collisionLastMs = 0;
@@ -1057,7 +1063,7 @@ export class MapScene3D {
       this.renderer.domElement.addEventListener("dblclick", this.handleDoubleClick);
       this.renderer.domElement.addEventListener("pointerdown", this.handlePointerDown);
       this.renderer.domElement.addEventListener("pointerup", this.handlePointerUp);
-      this.renderer.domElement.addEventListener("wheel", this.handleWalkWheel, { passive: false });
+      this.renderer.domElement.addEventListener("wheel", this.handleWheel, { passive: false });
       this.renderer.domElement.addEventListener("contextmenu", this.handleWalkContextMenu);
       // Capture, so walk mode's Esc is handled before the page's own Esc (focus mode) sees it.
       this.keyWindow.addEventListener("keydown", this.handleKeyDown, { capture: true });
@@ -1208,11 +1214,12 @@ export class MapScene3D {
     this.controls.maxPolarAngle = TILES_MAX_POLAR;
     this.controls.minDistance = 1;
     this.controls.maxDistance = TILES_MAX_DISTANCE;
-    // Inertia on orbit and pan, and the wheel zooming toward the cursor rather
-    // than the orbit target; the render loop keeps ticking until it settles.
-    this.controls.enableDamping = true;
-    this.controls.dampingFactor = ORBIT_DAMPING;
-    this.controls.zoomToCursor = true;
+    // The free cam's left/right drags, keys and wheel are our own, walk
+    // mode's (chronicle-1514); OrbitControls keeps touch and the middle-drag
+    // pan. No inertia, except on the mobile layout (setMobileInput).
+    this.controls.enableDamping = false;
+    this.controls.dampingFactor = MOBILE_ORBIT_DAMPING;
+    this.controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: null };
     this.controls.rotateSpeed = ORBIT_ROTATE_SPEED;
     this.controls.zoomSpeed = ORBIT_ZOOM_SPEED;
     this.controls.panSpeed = ORBIT_PAN_SPEED;
@@ -1634,6 +1641,7 @@ export class MapScene3D {
     this.viewAnimation = null;
     this.camera.position.fromArray(pose.position);
     this.controls.target.fromArray(pose.target);
+    this.pivotLift = Math.max(0, pose.target[1] - this.pivotFloor(pose.target[0], pose.target[2]));
     if (pose.fov !== undefined) this.camera.fov = pose.fov;
     if (pose.near !== undefined) this.camera.near = pose.near;
     if (pose.far !== undefined) this.camera.far = pose.far;
@@ -1702,7 +1710,8 @@ export class MapScene3D {
       this.aspect,
       GROUND_WIDTH,
     );
-    this.controls.target.set(x, this.floorHeights.heightAt("camera-target", x, z, this.cameraCeiling()), z);
+    this.pivotLift = 0;
+    this.controls.target.set(x, this.pivotFloor(x, z), z);
     this.camera.position.copy(direction).multiplyScalar(this.baseDistance() / viewport.zoom).add(this.controls.target);
     this.controls.update();
     this.updateUnitScale();
@@ -1831,6 +1840,11 @@ export class MapScene3D {
     return this.probeCeiling(medianHeight(heights), mesh.scale);
   }
 
+  // The floor below the free cam's pivot at (x, z), before its lift.
+  private pivotFloor(x: number, z: number): number {
+    return this.floorHeights.heightAt("camera-target", x, z, this.cameraCeiling());
+  }
+
   // The cave floor below (x, z) in scene units: the first surface below
   // `ceiling` when given and hit, else the highest; null when every probe
   // misses the mesh (or the tiles show).
@@ -1899,6 +1913,7 @@ export class MapScene3D {
       // Back onto the flat ground, camera and target together.
       this.camera.position.y -= this.controls.target.y;
       this.controls.target.y = 0;
+      this.pivotLift = 0;
     } else if (this.focus) {
       this.controls.maxPolarAngle = MESH_MAX_POLAR;
       const { x, z } = mapPointToScene(this.focus.centre, this.aspect, GROUND_WIDTH);
@@ -1917,8 +1932,8 @@ export class MapScene3D {
   }
 
   // On the mesh: keeps the target within the pan radius of the focus and on
-  // the floor, and the camera above the floor beneath it, moving the camera
-  // with the target so the view does not swing.
+  // the floor (plus the free cam's lift), and the camera above the floor
+  // beneath it, moving the camera with the target so the view does not swing.
   private constrainCamera(dt = 0): boolean {
     const mesh = this.dungeonMesh;
     if (this.constraining) return false;
@@ -1942,7 +1957,7 @@ export class MapScene3D {
         moved = true;
       }
     }
-    const floor = this.floorHeights.heightAt("camera-target", target.x, target.z, this.cameraCeiling());
+    const floor = this.pivotFloor(target.x, target.z) + this.pivotLift;
     if (floor !== target.y) {
       position.y += floor - target.y;
       target.y = floor;
@@ -1992,14 +2007,11 @@ export class MapScene3D {
   // Puts the camera `distance` from (x, z) on the floor, `elevationDeg` above
   // the horizon along `yaw`, and re-applies the mesh's floor and pan limits.
   private placeDirectorCamera(x: number, z: number, distance: number, elevationDeg: number, yaw: number) {
-    const floor = this.floorHeights.heightAt("camera-target", x, z, this.cameraCeiling());
+    const floor = this.pivotFloor(x, z);
+    this.pivotLift = 0;
     this.controls.target.set(x, floor, z);
-    const elevation = (elevationDeg * Math.PI) / 180;
-    this.camera.position.set(
-      x + Math.sin(yaw) * Math.cos(elevation) * distance,
-      floor + Math.sin(elevation) * distance,
-      z + Math.cos(yaw) * Math.cos(elevation) * distance,
-    );
+    const offset = cameraOffset(yaw, (elevationDeg * Math.PI) / 180, distance);
+    this.camera.position.set(x + offset.x, floor + offset.y, z + offset.z);
     this.controls.update();
     this.constrainCamera();
     this.updateUnitScale();
@@ -2050,11 +2062,20 @@ export class MapScene3D {
     // floor, which a ray from it would graze at once.
     const from = this.collisionFrom.copy(target);
     from.y += MESH_PLAYER_HEIGHT_YARDS * mesh.scale;
-    const eye = this.collisionEye.copy(position).sub(target).multiplyScalar(want / shown).add(from);
-    const hit = this.meshHitDistance(from, eye);
-    const next = cameraCollisionDistance(shown, want, hit, ORBIT_COLLISION_PADDING, Math.min(want, this.controls.minDistance), CAMERA_COLLISION_RETURN_RATE, dt);
+    const direction = this.collisionDirection.copy(position).sub(target).divideScalar(shown);
+    const { distance: next, easing } = this.collideCamera(from, direction, shown, want, ORBIT_COLLISION_PADDING, Math.min(want, this.controls.minDistance), dt);
     if (next !== shown) position.sub(target).multiplyScalar(next / shown).add(target);
-    return next < want && (hit === null || hit - ORBIT_COLLISION_PADDING > next);
+    return easing;
+  }
+
+  // Camera collision for both modes (chronicle-1513): how far out from
+  // `from` along `direction` (a unit vector) the camera may sit this frame,
+  // having been `shown` away and wanting to be `want` away (scene units).
+  // `easing` is true while it is still easing back out from a wall that is gone.
+  private collideCamera(from: THREE.Vector3, direction: THREE.Vector3, shown: number, want: number, padding: number, min: number, dt: number): { distance: number; easing: boolean } {
+    const hit = want > 0 ? this.meshHitDistance(from, this.collisionEye.copy(direction).multiplyScalar(want).add(from)) : null;
+    const distance = cameraCollisionDistance(shown, want, hit, padding, min, CAMERA_COLLISION_RETURN_RATE, dt);
+    return { distance, easing: distance < want && (hit === null || hit - padding > distance) };
   }
 
   // The lowest cinematic elevation with a clear line to the fight, climbing in
@@ -2274,7 +2295,7 @@ export class MapScene3D {
     canvas.removeEventListener("dblclick", this.handleDoubleClick);
     canvas.removeEventListener("pointerdown", this.handlePointerDown);
     canvas.removeEventListener("pointerup", this.handlePointerUp);
-    canvas.removeEventListener("wheel", this.handleWalkWheel);
+    canvas.removeEventListener("wheel", this.handleWheel);
     canvas.removeEventListener("contextmenu", this.handleWalkContextMenu);
     if (this.walk) this.disposeAvatar(this.walk.avatar);
     this.walk = null;
@@ -3485,23 +3506,19 @@ export class MapScene3D {
   private readonly handlePointerMove = (event: PointerEvent) => {
     const orbitDrag = this.orbitDrag;
     if (orbitDrag && !this.walk) {
-      if (orbitDrag.virtual) {
-        // OrbitControls reads clientX/Y, which stand still while the cursor is
-        // locked: hand it a pointer moved by the mouse instead. OrbitControls
-        // listens on the document, so it reads this event after the canvas.
-        orbitDrag.x += event.movementX;
-        orbitDrag.y += event.movementY;
-        Object.defineProperty(event, "clientX", { value: orbitDrag.x });
-        Object.defineProperty(event, "clientY", { value: orbitDrag.y });
+      if (orbitDrag.dragging) {
+        // Looks around the pivot exactly as walk mode looks around the head.
+        // With the cursor locked (hidden), clientX/Y stand still and only movement reports the drag.
+        const locked = document.pointerLockElement === this.renderer.domElement;
+        this.lookFreeCam(locked ? event.movementX : event.clientX - orbitDrag.x, locked ? event.movementY : event.clientY - orbitDrag.y);
+        orbitDrag.x = event.clientX;
+        orbitDrag.y = event.clientY;
         return;
       }
       if (Math.hypot(event.clientX - orbitDrag.x, event.clientY - orbitDrag.y) > UNIT_CLICK_SLOP_PX) {
-        // A drag, not a click: hide the cursor, as WoW does.
-        this.pointerDownAt = null;
         orbitDrag.x = event.clientX;
         orbitDrag.y = event.clientY;
-        orbitDrag.virtual = true;
-        this.lockPointer();
+        this.beginFreeCamDrag(orbitDrag);
       }
     }
     if (this.planInput && !this.walk) this.planInput.move(this.planPointAt(event), event, this.planPointer === event.pointerId);
@@ -3512,8 +3529,9 @@ export class MapScene3D {
       const locked = document.pointerLockElement === this.renderer.domElement;
       const dx = locked ? event.movementX : event.clientX - drag.x;
       const dy = locked ? event.movementY : event.clientY - drag.y;
-      this.walk.camYaw -= dx * WALK_LOOK_RADIANS_PER_PX;
-      this.walk.camPitch = Math.max(-WALK_PITCH_LIMIT, Math.min(WALK_PITCH_LIMIT, this.walk.camPitch + dy * WALK_LOOK_RADIANS_PER_PX));
+      const look = lookDrag(this.walk.camYaw, this.walk.camPitch, dx, dy, -WALK_PITCH_LIMIT, WALK_PITCH_LIMIT);
+      this.walk.camYaw = look.yaw;
+      this.walk.camPitch = look.pitch;
       if (walkMouseControl(drag.buttons).steering) this.walk.yaw = this.walk.camYaw;
       drag.x = event.clientX;
       drag.y = event.clientY;
@@ -3572,7 +3590,10 @@ export class MapScene3D {
     if (!this.walk && event.pointerType === "mouse" && (event.button === 0 || event.button === 2)) {
       // OrbitControls owns touch gestures. The custom pointer-lock drag is only
       // for a mouse; trying to lock a touch pointer makes mobile orbiting jump.
-      this.orbitDrag = { button: event.button, x: event.clientX, y: event.clientY, virtual: false };
+      const buttons = setWalkMouseButton(this.orbitDrag?.buttons ?? 0, event.button, true);
+      this.orbitDrag = { buttons, x: event.clientX, y: event.clientY, dragging: this.orbitDrag?.dragging ?? false };
+      // Both buttons move forward at once, as in walk mode, without waiting for a drag.
+      if (walkMouseControl(buttons).movingForward) this.beginFreeCamDrag(this.orbitDrag);
     }
     if (this.walk && (event.button === 0 || event.button === 2)) {
       const buttons = setWalkMouseButton(this.walk.drag?.buttons ?? 0, event.button, true);
@@ -3583,7 +3604,48 @@ export class MapScene3D {
     }
   };
 
-  // A press and release without moving (a drag orbits or pans) on a unit.
+  // A free-cam press became a drag (past a click, or both buttons): it takes
+  // the camera from the Director and hides the cursor, as WoW does.
+  private beginFreeCamDrag(drag: NonNullable<MapScene3D["orbitDrag"]>) {
+    if (drag.dragging) return;
+    drag.dragging = true;
+    this.pointerDownAt = null;
+    this.lockPointer();
+    this.handleControlsStart();
+    this.requestRender();
+  }
+
+  // The free cam's yaw and pitch around its pivot, as walk mode's
+  // camYaw/camPitch around the head; the distance stays.
+  private freeCamAngles(): { yaw: number; pitch: number; distance: number } {
+    return cameraAngles(this.directorVector.copy(this.camera.position).sub(this.controls.target));
+  }
+
+  // Places the free cam at yaw/pitch/distance from its pivot, walk mode's way,
+  // within the mode's tilt limit.
+  private placeFreeCam(yaw: number, pitch: number, distance: number) {
+    const clamped = Math.max(this.freeCamMinPitch(), Math.min(FREE_CAM_MAX_PITCH, pitch));
+    const offset = cameraOffset(yaw, clamped, distance);
+    this.camera.position.copy(this.controls.target).add(this.directorVector.set(offset.x, offset.y, offset.z));
+    this.controls.update();
+  }
+
+  // The lowest the free cam may look from: OrbitControls' polar limit (on the
+  // flat artwork the camera stays above the horizon so token faces show).
+  private freeCamMinPitch(): number {
+    return Math.PI / 2 - this.controls.maxPolarAngle;
+  }
+
+  // A mouse-look drag of (dx, dy) pixels on the free cam.
+  private lookFreeCam(dx: number, dy: number) {
+    if (!dx && !dy) return;
+    const { yaw, pitch, distance } = this.freeCamAngles();
+    const look = lookDrag(yaw, pitch, dx, dy, this.freeCamMinPitch(), FREE_CAM_MAX_PITCH);
+    this.placeFreeCam(look.yaw, look.pitch, distance);
+    this.requestRender();
+  }
+
+  // A press and release without moving (a drag looks around) on a unit.
   private readonly handlePointerUp = (event: PointerEvent) => {
     if (this.planInput && this.planPointer === event.pointerId) {
       this.planPointer = null;
@@ -3599,9 +3661,16 @@ export class MapScene3D {
         this.unlockPointer();
       }
     }
-    if (this.orbitDrag?.button === event.button) {
-      this.orbitDrag = null;
-      this.unlockPointer();
+    if (this.orbitDrag && (event.button === 0 || event.button === 2)) {
+      const buttons = setWalkMouseButton(this.orbitDrag.buttons, event.button, false);
+      if (buttons) {
+        this.orbitDrag.buttons = buttons;
+      } else {
+        const dragged = this.orbitDrag.dragging;
+        this.orbitDrag = null;
+        this.unlockPointer();
+        if (dragged) this.handleControlsEnd();
+      }
     }
     const down = this.pointerDownAt;
     this.pointerDownAt = null;
@@ -3653,17 +3722,19 @@ export class MapScene3D {
   };
 
   // Map keys act while the pointer is over the map (or while walking), never
-  // while typing. Modified presses (e.g. Shift+F for focus mode) belong to the page.
+  // while typing. Modified presses (e.g. Shift+F for focus mode) belong to the
+  // page, except Shift with a movement key: the free cam travels faster.
   private readonly handleKeyDown = (event: KeyboardEvent) => {
-    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    this.fastTravel = event.shiftKey;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
     const target = event.target as HTMLElement | null;
     if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
-    if (event.code === WALK_TOGGLE_KEY && (this.pointerInside || this.walk)) {
+    if (event.code === WALK_TOGGLE_KEY && !event.shiftKey && (this.pointerInside || this.walk)) {
       event.preventDefault();
       if (!event.repeat) this.setWalking(!this.walk);
       return;
     }
-    if (event.key === "Escape" && this.walk) {
+    if (event.key === "Escape" && !event.shiftKey && this.walk) {
       // Handled here, so focus mode's Esc (which skips handled presses) stays put.
       event.preventDefault();
       this.setWalking(false);
@@ -3684,6 +3755,7 @@ export class MapScene3D {
   };
 
   private readonly handleKeyUp = (event: KeyboardEvent) => {
+    this.fastTravel = event.shiftKey;
     const action = actionForKey(event.code, this.adStrafe);
     if (!action || !this.heldActions.delete(action)) return;
     if (!this.walk && this.heldActions.size === 0) this.handleControlsEnd();
@@ -3691,6 +3763,7 @@ export class MapScene3D {
 
   // Focus left the window mid-press: the keyup never arrives.
   private readonly releaseKeys = () => {
+    this.fastTravel = false;
     if (this.heldActions.size === 0) return;
     this.heldActions.clear();
     if (!this.walk) this.handleControlsEnd();
@@ -3699,15 +3772,15 @@ export class MapScene3D {
   /** Continuous input from the fullscreen mobile d-pad and look joystick. */
   setMobileInput(input: MobileMapInput | null) {
     const mobile = input !== null;
-    this.controls.dampingFactor = mobile ? MOBILE_ORBIT_DAMPING : ORBIT_DAMPING;
+    // Touch keeps its own inertia on the mobile layout; the mouse never coasts.
+    this.controls.enableDamping = mobile;
     this.controls.rotateSpeed = mobile ? MOBILE_ORBIT_ROTATE_SPEED : ORBIT_ROTATE_SPEED;
     this.controls.zoomSpeed = mobile ? MOBILE_ORBIT_ZOOM_SPEED : ORBIT_ZOOM_SPEED;
     this.controls.panSpeed = mobile ? MOBILE_ORBIT_PAN_SPEED : ORBIT_PAN_SPEED;
     // Phone gestures should be predictable: one finger orbits, while two
-    // fingers pinch and pan together. Keep zoom-to-finger off on mobile so the
-    // orbit target does not lurch toward either touch point.
+    // fingers pinch and pan together. Zoom-to-finger stays off so the orbit
+    // target does not lurch toward either touch point.
     this.controls.enablePan = true;
-    this.controls.zoomToCursor = !mobile;
     this.controls.touches.ONE = THREE.TOUCH.ROTATE;
     this.controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
     const next = clampMobileMapInput(input ?? IDLE_MOBILE_MAP_INPUT);
@@ -3722,55 +3795,48 @@ export class MapScene3D {
     if (active) this.requestRender();
   }
 
-  // Moves the camera for held keyboard keys or the mobile controls; true while either is active.
+  // Moves the free cam for held keys, both mouse buttons or the mobile
+  // controls, walk mode's way with a hidden character: W/S travel along the
+  // camera's facing, A/D turn (strafe while right-dragging), Space/Z fly the
+  // pivot up and down, with no gravity. True while any of them is active.
   private updateKeyboardCamera(now: number): boolean {
     const mobile = this.mobileInput;
     const mobileActive = Object.values(mobile).some((value) => value !== 0);
-    if (this.walk || (this.heldActions.size === 0 && !mobileActive)) return false;
+    const mouse = walkMouseControl(this.orbitDrag?.dragging ? this.orbitDrag.buttons : 0);
+    if (this.walk || (this.heldActions.size === 0 && !mobileActive && !mouse.movingForward)) {
+      this.keyMoveLastMs = 0;
+      return false;
+    }
     const dt = this.keyMoveLastMs ? Math.min(KEY_MAX_STEP_S, (now - this.keyMoveLastMs) / 1000) : 0;
     this.keyMoveLastMs = now;
     if (dt <= 0) return true;
     const held = this.heldActions;
     const axis = (positive: MapControlAction, negative: MapControlAction) => (held.has(positive) ? 1 : 0) - (held.has(negative) ? 1 : 0);
+    const clamp = (value: number) => Math.max(-1, Math.min(1, value));
     const target = this.controls.target;
-    const offset = this.directorVector.copy(this.camera.position).sub(target);
+    const angles = this.freeCamAngles();
+    const distance = angles.distance;
+    let { yaw, pitch } = angles;
 
-    let rotate = axis("turn_left", "turn_right");
-    const mobileRotate = -mobile.turn;
-    let strafe = axis("strafe_right", "strafe_left") + mobile.strafe;
-    if (this.orbitDrag?.button === 2) {
-      // Holding right-click, the turn keys strafe instead, as in WoW.
-      strafe = Math.max(-1, Math.min(1, strafe - rotate));
-      rotate = 0;
-    }
-    if (rotate) offset.applyAxisAngle(Y_AXIS, rotate * KEY_ROTATE_SPEED * dt);
-    if (mobileRotate) offset.applyAxisAngle(Y_AXIS, mobileRotate * MOBILE_ORBIT_LOOK_SPEED * dt);
-    if (mobile.pitch) {
-      const spherical = new THREE.Spherical().setFromVector3(offset);
-      spherical.phi = Math.max(0.18, Math.min(Math.PI / 2, spherical.phi + mobile.pitch * MOBILE_ORBIT_LOOK_SPEED * dt));
-      offset.setFromSpherical(spherical);
-    }
+    const axes = rightDragWalkAxes(axis("turn_left", "turn_right"), axis("strafe_right", "strafe_left"), mouse.steering);
+    const turn = clamp(axes.turn - mobile.turn);
+    const strafe = clamp(axes.strafe + mobile.strafe);
+    const forward = clamp(axis("forward", "back") + (mouse.movingForward ? 1 : 0) + mobile.forward);
+    if (turn) yaw += turn * WALK_TURN_RADIANS_PER_S * dt;
+    // Stick up raises the camera, as walk mode's camPitch does.
+    if (mobile.pitch) pitch += mobile.pitch * KEY_ROTATE_SPEED * dt;
 
-    // Space rises (zooms out), X lowers (zooms in).
-    const zoom = axis("up", "down");
-    if (zoom) {
-      const distance = offset.length() * Math.exp(zoom * KEY_ZOOM_SPEED * dt);
-      offset.setLength(Math.min(this.controls.maxDistance, Math.max(this.controls.minDistance, distance)));
-    }
+    // Travel scales with the zoom the user chose (not a wall's pull-in).
+    const speed = freeCamTravelSpeed(this.orbitWantDistance ?? distance, KEY_PAN_SPEED, this.fastTravel);
+    const step = planarStep(yaw, forward, strafe, speed * dt);
+    target.x += step.x;
+    target.z += step.z;
+    const rise = clamp(axis("up", "down") + (mobile.jump ? 1 : 0));
+    if (rise) this.pivotLift = Math.max(0, this.pivotLift + rise * speed * dt);
+    // The pivot rides the floor below it, like walk mode's feet, plus the lift.
+    target.y = this.pivotFloor(target.x, target.z) + this.pivotLift;
 
-    const forward = axis("forward", "back") + mobile.forward;
-    if (forward || strafe) {
-      // Along the ground, relative to where the camera looks.
-      const horizontal = Math.hypot(offset.x, offset.z) || 1;
-      const fx = -offset.x / horizontal;
-      const fz = -offset.z / horizontal;
-      const step = (offset.length() * KEY_PAN_SPEED * dt) / Math.hypot(forward, strafe);
-      target.x += (fx * forward - fz * strafe) * step;
-      target.z += (fz * forward + fx * strafe) * step;
-    }
-
-    this.camera.position.copy(target).add(offset);
-    this.controls.update();
+    this.placeFreeCam(yaw, pitch, distance);
     return true;
   }
 
@@ -4110,13 +4176,12 @@ export class MapScene3D {
 
   /**
    * A drawing tool's pointer handlers (null: none). While set, the left
-   * button draws instead of orbiting; points are world plan points on the
+   * button draws instead of looking around; points are world plan points on the
    * dungeon floor (null off the mesh).
    */
   setPlanInput(input: PlanInput | null) {
     this.planInput = input;
     this.planPointer = null;
-    this.controls.mouseButtons.LEFT = input ? null : THREE.MOUSE.ROTATE;
     this.updateCursor();
   }
 
@@ -4243,6 +4308,11 @@ export class MapScene3D {
       return;
     }
     this.releaseKeys();
+    // A free-cam drag in progress ends here; walk mode starts its own on the next press.
+    if (this.orbitDrag) {
+      this.orbitDrag = null;
+      this.unlockPointer();
+    }
     this.viewAnimation = null;
     this.cameraMove = null;
     this.directorPaused = true;
@@ -4252,7 +4322,7 @@ export class MapScene3D {
     const offset = new THREE.Vector3().copy(this.camera.position).sub(target);
     const position = target.clone();
     position.y = this.castFloor(position.x, position.z, position.y + WALK_STEP_YARDS * scale) ?? position.y;
-    const camYaw = Math.abs(offset.x) + Math.abs(offset.z) < 1e-6 ? 0 : Math.atan2(offset.x, offset.z);
+    const camYaw = cameraAngles(offset).yaw;
     const avatar = createAvatar(this.geometries);
     avatar.scale.setScalar((MESH_PLAYER_HEIGHT_YARDS * scale) / PLAYER_GEOMETRY_HEIGHT);
     this.scene.add(avatar);
@@ -4305,15 +4375,14 @@ export class MapScene3D {
     this.unlockPointer();
     walk.model?.mixer.stopAllAction();
     this.disposeAvatar(walk.avatar);
-    // The orbit camera picks up behind and above where the character stood.
+    // The free cam picks up behind and above where the character stood, its
+    // pivot at the character's feet (still in the air if they were flying).
     const distance = Math.max(walk.camDistance, WALK_EXIT_DISTANCE_YARDS) * (this.yardScale() ?? 1);
     const pitch = Math.max(walk.camPitch, WALK_START_PITCH);
     this.controls.target.copy(walk.position);
-    this.camera.position.set(
-      walk.position.x + Math.sin(walk.camYaw) * Math.cos(pitch) * distance,
-      walk.position.y + Math.sin(pitch) * distance,
-      walk.position.z + Math.cos(walk.camYaw) * Math.cos(pitch) * distance,
-    );
+    this.pivotLift = Math.max(0, walk.position.y - this.pivotFloor(walk.position.x, walk.position.z));
+    const offset = cameraOffset(walk.camYaw, pitch, distance);
+    this.camera.position.set(walk.position.x + offset.x, walk.position.y + offset.y, walk.position.z + offset.z);
     this.controls.enabled = true;
     this.camera.near = ORBIT_NEAR;
     this.camera.far = ORBIT_FAR;
@@ -4442,11 +4511,9 @@ export class MapScene3D {
     }
     if (forward || strafe) {
       // Facing (yaw) points along -z turned by yaw, as a unit's facing cone does.
-      const step = ((forward < 0 ? WALK_BACK_YPS : WALK_RUN_YPS) * scale * dt) / Math.hypot(forward, strafe);
-      const sin = Math.sin(walk.yaw);
-      const cos = Math.cos(walk.yaw);
-      walk.position.x += (-sin * forward + cos * strafe) * step;
-      walk.position.z += (-cos * forward - sin * strafe) * step;
+      const step = planarStep(walk.yaw, forward, strafe, (forward < 0 ? WALK_BACK_YPS : WALK_RUN_YPS) * scale * dt);
+      walk.position.x += step.x;
+      walk.position.z += step.z;
     }
 
     // Space jumps from the ground and, held, keeps flying up; Z flies down.
@@ -4486,28 +4553,28 @@ export class MapScene3D {
     walk.avatar.position.copy(walk.position);
     walk.avatar.rotation.y = walk.yaw + walk.bodyTurn;
     const head = this.walkHead.set(walk.position.x, walk.position.y + WALK_EYE_YARDS * scale, walk.position.z);
-    const pitchCos = Math.cos(walk.camPitch);
-    const pitchSin = Math.sin(walk.camPitch);
-    const yawSin = Math.sin(walk.camYaw);
-    const yawCos = Math.cos(walk.camYaw);
+    // The camera sits as the free cam's does around its pivot (cameraOffset).
+    const direction = cameraOffset(walk.camYaw, walk.camPitch, 1);
     // A wall between the head and the camera pulls the camera in front of it,
     // down to first person, so the character stays in view (chronicle-1513).
-    let hit: number | null = null;
-    if (walk.camDistance > 0) {
-      const want = walk.camDistance * scale;
-      const eye = this.collisionEye.set(head.x + yawSin * pitchCos * want, head.y + pitchSin * want, head.z + yawCos * pitchCos * want);
-      const distance = this.meshHitDistance(head, eye);
-      hit = distance === null ? null : distance / scale;
-    }
-    walk.camShown = cameraCollisionDistance(walk.camShown, walk.camDistance, hit, WALK_COLLISION_PADDING_YARDS, 0, CAMERA_COLLISION_RETURN_RATE, dt);
+    const collision = this.collideCamera(
+      head,
+      this.collisionDirection.set(direction.x, direction.y, direction.z),
+      walk.camShown * scale,
+      walk.camDistance * scale,
+      WALK_COLLISION_PADDING_YARDS * scale,
+      0,
+      dt,
+    );
+    walk.camShown = collision.distance / scale;
     const firstPerson = walk.camShown <= WALK_FIRST_PERSON_YARDS;
     walk.avatar.visible = !firstPerson;
     if (firstPerson) {
       this.camera.position.copy(head);
-      this.camera.lookAt(head.x - yawSin * pitchCos, head.y - pitchSin, head.z - yawCos * pitchCos);
+      this.camera.lookAt(head.x - direction.x, head.y - direction.y, head.z - direction.z);
     } else {
       const distance = walk.camShown * scale;
-      this.camera.position.set(head.x + yawSin * pitchCos * distance, head.y + pitchSin * distance, head.z + yawCos * pitchCos * distance);
+      this.camera.position.set(head.x + direction.x * distance, head.y + direction.y * distance, head.z + direction.z * distance);
       this.camera.lookAt(head);
     }
     this.controls.target.copy(head);
@@ -4515,17 +4582,30 @@ export class MapScene3D {
     return true;
   }
 
-  // While walking the wheel zooms the camera around the character, down to first person.
-  private readonly handleWalkWheel = (event: WheelEvent) => {
-    const walk = this.walk;
-    if (!walk) return;
+  // The wheel zooms the camera toward its pivot, the same in both modes:
+  // walking, down to first person; on the free cam, down to the closest the
+  // orbit camera goes. Registered before OrbitControls, which never sees it.
+  private readonly handleWheel = (event: WheelEvent) => {
     event.preventDefault();
+    event.stopImmediatePropagation();
+    const walk = this.walk;
+    if (!walk) {
+      if (!this.controls.enabled) return;
+      // From the distance the user chose, not where a wall pulled the camera in.
+      const { yaw, pitch, distance } = this.freeCamAngles();
+      const next = wheelZoomDistance(this.orbitWantDistance ?? distance, event.deltaY, this.controls.minDistance, this.controls.maxDistance);
+      this.handleControlsStart();
+      this.placeFreeCam(yaw, pitch, next);
+      this.handleControlsEnd();
+      this.requestRender();
+      return;
+    }
     const zoomingIn = event.deltaY < 0;
     if (walk.camDistance === 0 && !zoomingIn) {
       walk.camDistance = WALK_FIRST_PERSON_YARDS * 1.5;
     } else {
-      const next = walk.camDistance * Math.exp(event.deltaY * 0.0015);
-      walk.camDistance = zoomingIn && next <= WALK_FIRST_PERSON_YARDS ? 0 : Math.min(WALK_MAX_DISTANCE_YARDS, next);
+      const next = wheelZoomDistance(walk.camDistance, event.deltaY, 0, WALK_MAX_DISTANCE_YARDS);
+      walk.camDistance = zoomingIn && next <= WALK_FIRST_PERSON_YARDS ? 0 : next;
     }
     this.requestRender();
   };

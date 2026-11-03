@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/serviceoauth"
+	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/coder/serpent"
 	"github.com/go-chi/chi/v5"
 )
@@ -25,9 +26,10 @@ func OnSidekick() string {
 }
 
 type Service struct {
-	broker *services.Services
-	zed    *authz.Authz
-	logger *slog.Logger
+	broker  *services.Services
+	zed     *authz.Authz
+	logger  *slog.Logger
+	metrics *sidekickMetrics
 
 	accountRoutes chi.Router
 	statusRoutes  chi.Router
@@ -45,6 +47,7 @@ func (s *Service) DependsOn() []string {
 		serviceauthz.OnAuthz(),
 		servicelogger.OnLogger(),
 		serviceoauth.OnOAuth(),
+		serviceprometheus.OnPrometheus(),
 	}
 }
 
@@ -54,6 +57,11 @@ func (s *Service) Options() serpent.OptionSet { return nil }
 func (s *Service) Start(_ context.Context) error {
 	s.zed = serviceauthz.Authz(s.broker)
 	s.logger = services.NamedLogger(servicelogger.Logger(s.broker), s.Name())
+	metrics, err := newSidekickMetrics(serviceprometheus.Registry(s.broker))
+	if err != nil {
+		return err
+	}
+	s.metrics = metrics
 	s.setupRoutes()
 	s.logger.Info("sidekick service started")
 	return nil

@@ -65,8 +65,10 @@ type SidekickService interface {
 	AdminRoutes() http.Handler
 	// IsSidekickRequest reports whether OAuth linked the request to a Sidekick installation.
 	IsSidekickRequest(context.Context) bool
-	// RecordUpload records successful upload activity and reports whether the upload came from a Sidekick.
+	// RecordUpload records a successful new-log upload and reports whether it came from a Sidekick.
 	RecordUpload(context.Context) bool
+	// RecordAppend records a successful append upload and reports whether it came from a Sidekick.
+	RecordAppend(context.Context) bool
 }
 
 type InferenceService interface {
@@ -691,6 +693,7 @@ func (api *API) Routes() chi.Router {
 								r.Delete("/delete-files", api.DeleteWoWLogFiles)
 								r.Delete("/instances/{instance_id}", api.WoWLogDeleteInstance)
 								r.Put("/unlisted", api.MarkLogUnlisted)
+								r.Get("/download", api.WoWLogGroupDownload)
 								r.Get("/files/{fileID}/download", api.WoWLogFileDownload)
 								r.Get("/artifacts/{artifactID}/download", api.WoWLogArtifactDownload)
 								r.Delete("/", api.WoWLogDeleteGroup)
