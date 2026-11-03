@@ -3,89 +3,69 @@ package ratingmath
 import (
 	"fmt"
 	"math"
+	"sort"
 )
 
 // tenantScopeBoss is one already-projected tenant boss score within a single
-// generation, subject, cohort, rating metric and window. Slot identifies a
-// logical boss: rotating variants may share one slot, rather than occupying
-// several denominator positions. The caller must not mix cohorts here.
-// Renown scores are already curated points and are always summed as written.
+// generation, subject, cohort, rating metric and window. The caller must not
+// mix cohorts here. Renown scores are already curated earned points.
 type tenantScopeBoss struct {
-	instance, encounter, slot string
-	score                     float64
+	instance, encounter string
+	score               float64
 }
 
 type tenantScopeSlot struct{ instance, slot string }
 
-// tenantScopeScores computes scores only for raids with observed boss scores.
-// Competitive ratings average observed logical boss slots, then observed
-// raids, using explicitly supplied boss and raid weights. The caller must
-// freeze these weights with its generation checkpoint before writing scores.
-// Rotating variants in one slot contribute the best observed score once.
-// Renown sums earned points and ignores weights. No realm-group manifest or
-// boss allowlist applies.
-func tenantScopeScores(rating string, bosses []tenantScopeBoss, bossWeights map[tenantScopeSlot]float64, raidWeights map[string]float64) (map[string]float64, float64, error) {
+// tenantScopeScores computes raid-only scores. Every observed boss has equal
+// weight; unobserved bosses are omitted. ZG Edge variants occupy one slot,
+// choosing the best variant, while curated Renown always sums individual awards.
+func tenantScopeScores(rating string, bosses []tenantScopeBoss) (map[string]float64, error) {
 	if rating != "peak" && rating != "mastery" && rating != "ranked_mastery" && rating != "renown" {
-		return nil, 0, fmt.Errorf("unsupported tenant scope rating %q", rating)
+		return nil, fmt.Errorf("unsupported tenant scope rating %q", rating)
 	}
 	slots := make(map[tenantScopeSlot]float64, len(bosses))
 	seen := make(map[BossKey]bool, len(bosses))
 	for _, boss := range bosses {
 		key := BossKey{Instance: boss.instance, Encounter: boss.encounter}
-		if boss.instance == "" || boss.encounter == "" || boss.slot == "" || seen[key] || boss.score < 0 || math.IsNaN(boss.score) || math.IsInf(boss.score, 0) {
-			return nil, 0, fmt.Errorf("invalid tenant boss score for %q/%q", boss.instance, boss.encounter)
+		if boss.instance == "" || boss.encounter == "" || seen[key] || boss.score < 0 || math.IsNaN(boss.score) || math.IsInf(boss.score, 0) {
+			return nil, fmt.Errorf("invalid tenant boss score for %q/%q", boss.instance, boss.encounter)
 		}
 		seen[key] = true
-		if rating == "renown" {
-			// Renown awards are per kill, not an average of rotating slots.
-			slots[tenantScopeSlot{boss.instance, boss.encounter}] = boss.score
-			continue
+		slot := tenantScopeSlot{boss.instance, boss.encounter}
+		if rating != "renown" && boss.instance == "Zul'Gurub" {
+			switch boss.encounter {
+			case "Gri'lek", "Hazza'rah", "Renataki", "Wushoolay":
+				slot.slot = "Edge of Madness"
+			}
 		}
-		slot := tenantScopeSlot{boss.instance, boss.slot}
 		if value, ok := slots[slot]; !ok || boss.score > value {
 			slots[slot] = boss.score
 		}
 	}
-	if len(slots) == 0 {
-		return nil, 0, nil
+	ordered := make([]tenantScopeSlot, 0, len(slots))
+	for slot := range slots {
+		ordered = append(ordered, slot)
 	}
-	raids := make(map[string]float64)
-	bossTotals := make(map[string]float64)
-	for slot, score := range slots {
-		if rating == "renown" {
-			raids[slot.instance] += score
-			continue
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].instance != ordered[j].instance {
+			return ordered[i].instance < ordered[j].instance
 		}
-		weight := bossWeights[slot]
-		if weight <= 0 || math.IsNaN(weight) || math.IsInf(weight, 0) {
-			return nil, 0, fmt.Errorf("missing or invalid tenant boss weight for %q/%q", slot.instance, slot.slot)
-		}
-		raids[slot.instance] += score * weight
-		bossTotals[slot.instance] += weight
+		return ordered[i].slot < ordered[j].slot
+	})
+	totals := make(map[string]float64)
+	counts := make(map[string]int)
+	for _, slot := range ordered {
+		totals[slot.instance] += slots[slot]
+		counts[slot.instance]++
 	}
-	var numerator, denominator float64
-	for raid, score := range raids {
-		if rating == "renown" {
-			numerator += score
-		} else {
-			score /= bossTotals[raid]
-			weight := raidWeights[raid]
-			if weight <= 0 || math.IsNaN(weight) || math.IsInf(weight, 0) {
-				return nil, 0, fmt.Errorf("missing or invalid tenant raid weight for %q", raid)
-			}
-			numerator += score * weight
-			denominator += weight
+	for raid, score := range totals {
+		if rating != "renown" {
+			score /= float64(counts[raid])
 		}
 		if math.IsNaN(score) || math.IsInf(score, 0) {
-			return nil, 0, fmt.Errorf("tenant raid score overflow for %q", raid)
+			return nil, fmt.Errorf("tenant raid score overflow for %q", raid)
 		}
-		raids[raid] = score
+		totals[raid] = score
 	}
-	if rating != "renown" {
-		numerator /= denominator
-	}
-	if math.IsNaN(numerator) || math.IsInf(numerator, 0) || numerator < 0 {
-		return nil, 0, fmt.Errorf("tenant global score overflow")
-	}
-	return raids, numerator, nil
+	return totals, nil
 }

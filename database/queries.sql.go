@@ -25914,6 +25914,296 @@ func (q *sqlQuerier) GetBuildingTenantProjectionCheckpoint(ctx context.Context, 
 	return i, err
 }
 
+const listTenantGuildRaidBosses = `-- name: ListTenantGuildRaidBosses :many
+SELECT encounter_name, score FROM guild_tenant_rating_boss_scores
+WHERE generation_id = $1 AND tenant_id = $2 AND realm_id = $3
+  AND guild_id = $4 AND instance_name = $5
+  AND difficulty_name = $6 AND max_players = $7
+  AND rating_metric = $8 AND window_kind = $9
+ORDER BY encounter_name LIMIT 201
+`
+
+type ListTenantGuildRaidBossesParams struct {
+	GenerationID   uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	RatingMetric   string    `db:"rating_metric" json:"rating_metric"`
+	WindowKind     string    `db:"window_kind" json:"window_kind"`
+}
+
+type ListTenantGuildRaidBossesRow struct {
+	EncounterName string  `db:"encounter_name" json:"encounter_name"`
+	Score         float64 `db:"score" json:"score"`
+}
+
+func (q *sqlQuerier) ListTenantGuildRaidBosses(ctx context.Context, arg ListTenantGuildRaidBossesParams) ([]ListTenantGuildRaidBossesRow, error) {
+	rows, err := q.db.Query(ctx, listTenantGuildRaidBosses,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RatingMetric,
+		arg.WindowKind,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTenantGuildRaidBossesRow
+	for rows.Next() {
+		var i ListTenantGuildRaidBossesRow
+		if err := rows.Scan(&i.EncounterName, &i.Score); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTenantGuildRaidScopeKeys = `-- name: ListTenantGuildRaidScopeKeys :many
+SELECT DISTINCT realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind
+FROM guild_tenant_rating_boss_scores
+WHERE generation_id = $1 AND tenant_id = $2
+  AND (realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind) >
+      ($3::uuid, $4::uuid, $5::text,
+       $6::text, $7::smallint, $8::text, $9::text)
+ORDER BY realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind
+LIMIT LEAST(GREATEST($10::int, 0), 16)
+`
+
+type ListTenantGuildRaidScopeKeysParams struct {
+	GenerationID        uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID            uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	AfterRealmID        uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
+	AfterGuildID        uuid.UUID `db:"after_guild_id" json:"after_guild_id"`
+	AfterInstanceName   string    `db:"after_instance_name" json:"after_instance_name"`
+	AfterDifficultyName string    `db:"after_difficulty_name" json:"after_difficulty_name"`
+	AfterMaxPlayers     int16     `db:"after_max_players" json:"after_max_players"`
+	AfterRatingMetric   string    `db:"after_rating_metric" json:"after_rating_metric"`
+	AfterWindowKind     string    `db:"after_window_kind" json:"after_window_kind"`
+	BatchSize           int32     `db:"batch_size" json:"batch_size"`
+}
+
+type ListTenantGuildRaidScopeKeysRow struct {
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	RatingMetric   string    `db:"rating_metric" json:"rating_metric"`
+	WindowKind     string    `db:"window_kind" json:"window_kind"`
+}
+
+func (q *sqlQuerier) ListTenantGuildRaidScopeKeys(ctx context.Context, arg ListTenantGuildRaidScopeKeysParams) ([]ListTenantGuildRaidScopeKeysRow, error) {
+	rows, err := q.db.Query(ctx, listTenantGuildRaidScopeKeys,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.AfterRealmID,
+		arg.AfterGuildID,
+		arg.AfterInstanceName,
+		arg.AfterDifficultyName,
+		arg.AfterMaxPlayers,
+		arg.AfterRatingMetric,
+		arg.AfterWindowKind,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTenantGuildRaidScopeKeysRow
+	for rows.Next() {
+		var i ListTenantGuildRaidScopeKeysRow
+		if err := rows.Scan(
+			&i.RealmID,
+			&i.GuildID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.RatingMetric,
+			&i.WindowKind,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTenantPlayerRaidBosses = `-- name: ListTenantPlayerRaidBosses :many
+SELECT encounter_name, score FROM player_tenant_rating_boss_scores
+WHERE generation_id = $1 AND tenant_id = $2 AND realm_id = $3
+  AND player_guid = $4 AND instance_name = $5
+  AND difficulty_name = $6 AND max_players = $7
+  AND player_class = $8 AND player_spec = $9 AND player_sub_spec = $10
+  AND performance_metric = $11 AND rating_metric = $12 AND window_kind = $13
+ORDER BY encounter_name LIMIT 201
+`
+
+type ListTenantPlayerRaidBossesParams struct {
+	GenerationID      uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string    `db:"player_guid" json:"player_guid"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string    `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string    `db:"window_kind" json:"window_kind"`
+}
+
+type ListTenantPlayerRaidBossesRow struct {
+	EncounterName string  `db:"encounter_name" json:"encounter_name"`
+	Score         float64 `db:"score" json:"score"`
+}
+
+func (q *sqlQuerier) ListTenantPlayerRaidBosses(ctx context.Context, arg ListTenantPlayerRaidBossesParams) ([]ListTenantPlayerRaidBossesRow, error) {
+	rows, err := q.db.Query(ctx, listTenantPlayerRaidBosses,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTenantPlayerRaidBossesRow
+	for rows.Next() {
+		var i ListTenantPlayerRaidBossesRow
+		if err := rows.Scan(&i.EncounterName, &i.Score); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTenantPlayerRaidScopeKeys = `-- name: ListTenantPlayerRaidScopeKeys :many
+SELECT DISTINCT realm_id, player_guid, instance_name, difficulty_name, max_players,
+       player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind
+FROM player_tenant_rating_boss_scores
+WHERE generation_id = $1 AND tenant_id = $2
+  AND (realm_id, player_guid, instance_name, difficulty_name, max_players,
+       player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind) >
+      ($3::uuid, $4::text, $5::text,
+       $6::text, $7::smallint, $8::text,
+       $9::text, $10::text, $11::text,
+       $12::text, $13::text)
+ORDER BY realm_id, player_guid, instance_name, difficulty_name, max_players,
+         player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind
+LIMIT LEAST(GREATEST($14::int, 0), 16)
+`
+
+type ListTenantPlayerRaidScopeKeysParams struct {
+	GenerationID           uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID               uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	AfterRealmID           uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
+	AfterPlayerGuid        string    `db:"after_player_guid" json:"after_player_guid"`
+	AfterInstanceName      string    `db:"after_instance_name" json:"after_instance_name"`
+	AfterDifficultyName    string    `db:"after_difficulty_name" json:"after_difficulty_name"`
+	AfterMaxPlayers        int16     `db:"after_max_players" json:"after_max_players"`
+	AfterPlayerClass       string    `db:"after_player_class" json:"after_player_class"`
+	AfterPlayerSpec        string    `db:"after_player_spec" json:"after_player_spec"`
+	AfterPlayerSubSpec     string    `db:"after_player_sub_spec" json:"after_player_sub_spec"`
+	AfterPerformanceMetric string    `db:"after_performance_metric" json:"after_performance_metric"`
+	AfterRatingMetric      string    `db:"after_rating_metric" json:"after_rating_metric"`
+	AfterWindowKind        string    `db:"after_window_kind" json:"after_window_kind"`
+	BatchSize              int32     `db:"batch_size" json:"batch_size"`
+}
+
+type ListTenantPlayerRaidScopeKeysRow struct {
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string    `db:"player_guid" json:"player_guid"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string    `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string    `db:"window_kind" json:"window_kind"`
+}
+
+// One subject/raid/cohort/window per checkpoint page, never mix realms or
+// specializations. The source primary key starts with generation and tenant.
+func (q *sqlQuerier) ListTenantPlayerRaidScopeKeys(ctx context.Context, arg ListTenantPlayerRaidScopeKeysParams) ([]ListTenantPlayerRaidScopeKeysRow, error) {
+	rows, err := q.db.Query(ctx, listTenantPlayerRaidScopeKeys,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.AfterRealmID,
+		arg.AfterPlayerGuid,
+		arg.AfterInstanceName,
+		arg.AfterDifficultyName,
+		arg.AfterMaxPlayers,
+		arg.AfterPlayerClass,
+		arg.AfterPlayerSpec,
+		arg.AfterPlayerSubSpec,
+		arg.AfterPerformanceMetric,
+		arg.AfterRatingMetric,
+		arg.AfterWindowKind,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTenantPlayerRaidScopeKeysRow
+	for rows.Next() {
+		var i ListTenantPlayerRaidScopeKeysRow
+		if err := rows.Scan(
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.PerformanceMetric,
+			&i.RatingMetric,
+			&i.WindowKind,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertGuildTenantBossScore = `-- name: InsertGuildTenantBossScore :execrows
 INSERT INTO guild_tenant_rating_boss_scores (
     generation_id, tenant_id, realm_id, guild_id, instance_name, encounter_name, difficulty_name, max_players, rating_metric, window_kind, window_start, window_end, score, best_raw, rank_one_raw, best_locked_parse, form, floor_score, eligible_kills

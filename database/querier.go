@@ -969,6 +969,12 @@ type sqlcQuerier interface {
 	// Modules the user tracks, most recently starred first.
 	ListStarredLuaProjects(ctx context.Context, userID uuid.UUID) ([]LuaProject, error)
 	ListTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
+	ListTenantGuildRaidBosses(ctx context.Context, arg ListTenantGuildRaidBossesParams) ([]ListTenantGuildRaidBossesRow, error)
+	ListTenantGuildRaidScopeKeys(ctx context.Context, arg ListTenantGuildRaidScopeKeysParams) ([]ListTenantGuildRaidScopeKeysRow, error)
+	ListTenantPlayerRaidBosses(ctx context.Context, arg ListTenantPlayerRaidBossesParams) ([]ListTenantPlayerRaidBossesRow, error)
+	// One subject/raid/cohort/window per checkpoint page, never mix realms or
+	// specializations. The source primary key starts with generation and tenant.
+	ListTenantPlayerRaidScopeKeys(ctx context.Context, arg ListTenantPlayerRaidScopeKeysParams) ([]ListTenantPlayerRaidScopeKeysRow, error)
 	// Group configuration is explicit: no group has score eligibility until both
 	// a policy and eligible boss rows have been configured by an operator.
 	ListTenantRatingPolicies(ctx context.Context, tenantID uuid.UUID) ([]RatingGroupPolicy, error)
