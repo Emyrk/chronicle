@@ -102,6 +102,14 @@ func hubPresetBosses(sets []chroniclesdk.RankingEncounterSet, progression []stri
 	return out
 }
 
+// hubRaidDepth is the raid board's length: ten on the Ratings tab (boss_depth 3), else five.
+func hubRaidDepth(bossDepth int32) int32 {
+	if bossDepth >= 3 {
+		return 10
+	}
+	return 5
+}
+
 // hubClassFilter is the DB class for a class filter, or "" for every class.
 // HeroClassToDB maps an empty class to UNKNOWN, which would match no player.
 func hubClassFilter(class string) string {
@@ -564,7 +572,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 
 	}
 	if genErr == nil && generation != uuid.Nil && in.featured == "" && len(in.set) > 0 {
-		rows, e := s.store.HubSetRatingRows(ctx, database.HubSetRatingRowsParams{TenantID: tenant, GenerationID: generation, InstanceName: in.instance, EncounterNames: in.set, DifficultyName: in.difficulty, MaxPlayers: in.size, PerformanceMetric: in.metric, PlayerClass: hubClassFilter(in.class), PlayerSpec: in.spec, PlayerSubSpec: in.subSpec, RealmIds: in.realmIDs, WindowKind: in.window, RenownWindow: in.renownWindow})
+		rows, e := s.store.HubSetRatingRows(ctx, database.HubSetRatingRowsParams{TenantID: tenant, GenerationID: generation, InstanceName: in.instance, EncounterNames: in.set, DifficultyName: in.difficulty, MaxPlayers: in.size, PerformanceMetric: in.metric, PlayerClass: hubClassFilter(in.class), PlayerSpec: in.spec, PlayerSubSpec: in.subSpec, RealmIds: in.realmIDs, WindowKind: in.window, RenownWindow: in.renownWindow, Depth: hubRaidDepth(in.bossDepth)})
 		if e != nil {
 			httpapi.InternalServerError(w, e)
 			return

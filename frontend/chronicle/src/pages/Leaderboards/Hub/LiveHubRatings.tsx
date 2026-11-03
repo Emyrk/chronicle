@@ -1,19 +1,21 @@
 import { useMemo, type ReactNode } from "react"
 import { useQueries } from "@tanstack/react-query"
-import {
-  fetchLiveRatingPage, liveRatingURL, type LiveRatingCohort, type LiveRatingEntry,
-  type LiveRatingMetric,
-} from "@/pages/Leaderboards/Ratings/liveRatingAdapter"
-import { fetchLiveRatingFullList, liveRatingFullListURL } from "@/pages/Leaderboards/Ratings/liveRatingFullList"
-import { LiveGuildRatings } from "./LiveGuildRatings"
+import type { HubGuildRatingEntry, HubPlayerRatingEntry, HubRatingBoard } from "@/api/typesGenerated"
 import { RatingBoards } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
-import type { RatingLiveCohort, RatingLiveData, RatingLiveState, RatingLiveBoard } from "@/pages/Leaderboards/Ratings/ratingLiveData"
-import type { RatingEntry, RatingMetric, RatingPeriod, RatingScope } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
+import type { RatingLiveData, RatingLiveState, RatingLiveBoard } from "@/pages/Leaderboards/Ratings/ratingLiveData"
+import { RATING_METRICS, type RatingEntry, type RatingMetric, type RatingPeriod, type RatingScope } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 import type { RatingView } from "@/pages/Leaderboards/Ratings/ratingThemes"
+import { fetchSetBoard, setBoardPage, setBoardURL } from "@/pages/Leaderboards/Ratings/setBoard"
+import { GuildRatingBoards, type GuildRatingData } from "./GuildRatings"
+import type { GuildRating } from "./hub.fixtures"
+import { useHubSummary } from "./hubSummaryAdapter"
 
 export interface LiveHubRatingsProps {
   instanceName: string
+  /** The raid's bosses, in order. */
   bosses: readonly string[]
+  /** Hand-picked bosses; empty is the preset (every boss). */
+  selected: readonly string[]
   scope: RatingScope
   onScope: (scope: RatingScope) => void
   view: RatingView
@@ -21,103 +23,132 @@ export interface LiveHubRatingsProps {
   period: RatingPeriod
   subject: "player" | "guild"
   realmIDs?: readonly string[]
-  /** Published raid cohort; unset class/spec spans all classes/specs. */
-  ratingCohort?: LiveRatingCohort
-  cls?: string
-  spec?: string
-  subSpec?: string
+  /** The instance's exact raid cohort; Peak and Mastery need one. */
+  cohort?: { difficulty: string; maxPlayers: number }
   role: "dps" | "healing"
+  where: string
   toolbar?: ReactNode
 }
 
-const metrics: readonly RatingMetric[] = ["peak", "mastery", "renown"]
-const apiMetric = (metric: RatingMetric): LiveRatingMetric => metric === "mastery" ? "ranked_mastery" : metric
-const apiWindow = (metric: RatingMetric, period: RatingPeriod) => metric === "renown"
-  ? period === "all" ? "career" as const : "period" as const
-  : period === "all" ? "all_time" as const : "period" as const
+const KEYS: Record<RatingMetric, keyof HubRatingBoard["player"]> = { peak: "peak", mastery: "ranked_mastery", renown: "renown" }
 
-function asEntry(row: LiveRatingEntry): RatingEntry | null {
-  if (!("player_guid" in row)) return null
+function playerEntry(e: HubPlayerRatingEntry, metric: RatingMetric): RatingEntry {
   return {
-    id: `${row.realm_id}:${row.player_guid}`,
-    name: row.player_name || row.player_guid,
-    guild: row.guild_name,
-    cls: row.player_class,
-    spec: row.player_spec,
-    subSpec: row.player_sub_spec,
-    score: row.score,
-    detail: row.realm_name || row.realm_id,
+    id: `${e.realm_id}:${e.player_guid}`,
+    name: e.player_name || e.player_guid,
+    cls: e.player_class,
+    spec: e.player_spec,
+    subSpec: e.player_sub_spec,
+    score: e.score,
+    detail: e.realm_name,
+    raw: metric === "peak" ? e.peak_raw : undefined,
   }
 }
 
+function guildRating(e: HubGuildRatingEntry): GuildRating {
+  return { guild: e.guild_name || "Unknown guild", score: e.score, detail: e.realm_name }
+}
+
 /**
- * The published endpoint returns an ordered page, but not rank or total fields.
- * Its first page can supply the board preview; it cannot supply authoritative
- * full-list ranks or a search across the complete cursor chain.
+ * The Storybook Ratings tab on published data. The boards and the per-boss cards
+ * come from one hub summary request for the selection; the full tables page through
+ * the chosen-boss board endpoint (a single boss is a set of one).
  */
 export function LiveHubRatings({
-  instanceName, bosses, scope, onScope, view, onView, period, subject, realmIDs,
-  ratingCohort, cls, spec, subSpec, role, toolbar,
+  instanceName, bosses, selected, scope, onScope, view, onView, period, subject, realmIDs: realmIDsProp, cohort: cohortProp, role, where, toolbar,
 }: LiveHubRatingsProps) {
-  const valid = !!ratingCohort?.performance && ratingCohort.performance === (role === "healing" ? "hps" : "dps") &&
-    Number.isInteger(ratingCohort.maxPlayers) && ratingCohort.maxPlayers >= 0 &&
-    (!scope.cls || scope.cls === cls) && (!scope.spec || scope.spec === spec) && (!scope.subSpec || scope.subSpec === subSpec)
-  const exact = valid && !!cls && !!spec && ratingCohort?.playerClass === cls && ratingCohort.spec === spec &&
-    ratingCohort.subSpec === (subSpec ?? "") && (!scope.cls || scope.cls === cls) &&
-    (!scope.spec || scope.spec === spec) && (!scope.subSpec || scope.subSpec === (subSpec ?? ""))
-  const cohort: RatingLiveCohort | undefined = exact ? ratingCohort as RatingLiveCohort : undefined
-  const selectedCohort = valid ? exact ? cohort : { ...ratingCohort!, playerClass: cls || undefined,
-    spec: scope.spec || undefined, subSpec: scope.spec ? (scope.subSpec ?? "") : undefined } : undefined
-  const targets = useMemo(() => [scope, ...(scope.boss ? [] : bosses.map((boss) => ({ ...scope, boss })))], [scope, bosses])
-  const requests = targets.flatMap((target) => metrics.map((metric) => ({
-    target, metric,
-    url: metric === "renown" || selectedCohort ? liveRatingURL({ instanceName, encounterName: target.boss, subject: "player",
-      metric: apiMetric(metric), window: apiWindow(metric, period),
-      cohort: metric === "renown" ? undefined : selectedCohort, allClasses: metric !== "renown" && !exact, realmIDs }) : null,
-  })))
-  const results = useQueries({ queries: requests.map(({ url }) => ({
-    queryKey: ["hub-rating-preview", url],
-    queryFn: () => fetchLiveRatingPage(url!),
-    enabled: !!url && subject === "player",
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  })) })
-  const states = new Map<string, RatingLiveState<RatingLiveBoard>>()
-  requests.forEach(({ target, metric, url }, i) => {
-    const id = JSON.stringify([target, metric])
-    const result = results[i]
-    const title = target.boss ?? instanceName
-    const state: RatingLiveState<RatingLiveBoard> = !url
-      ? { status: "error", error: "Exact published rating cohort unavailable." }
-      : result.isError ? { status: "error", error: "Published ratings unavailable." }
-      : !result.data ? { status: "loading" }
-      : { status: "ready", data: {
-        id, kind: target.boss ? "boss" : "raid", scope: target, title,
-        subtitle: metric === "renown" ? "Published renown" : `${selectedCohort!.difficulty || "Default"} · ${selectedCohort!.maxPlayers || "Unrecorded size"} · ${exact ? `${cohort!.playerClass} / ${cohort!.spec}` : scope.cls ? `${scope.cls} / All specs` : "All classes / specs"} · ${selectedCohort!.performance!.toUpperCase()}`,
-        entries: result.data.entries.map(asEntry).filter((entry): entry is RatingEntry => entry !== null).slice(0, target.boss ? 3 : 10),
-      } }
-    states.set(id, state)
+  // The host rebuilds these each render; key them by value so the boards stay memoized.
+  const realmKey = realmIDsProp?.join(",") ?? ""
+  const realmIDs = useMemo(() => (realmKey ? realmKey.split(",") : undefined), [realmKey])
+  const cohortKey = cohortProp ? `${cohortProp.difficulty}|${cohortProp.maxPlayers}` : ""
+  const cohort = useMemo(() => {
+    if (!cohortKey) return undefined
+    const split = cohortKey.lastIndexOf("|")
+    return { difficulty: cohortKey.slice(0, split), maxPlayers: Number(cohortKey.slice(split + 1)) }
+  }, [cohortKey])
+  const performance = role === "healing" ? "hps" : "dps"
+  // The bosses the boards span: one boss, the hand-picked set, or every boss for the preset.
+  // Keyed by name, not array identity: the host rebuilds these arrays every render.
+  const encountersKey = (scope.boss ? [scope.boss] : selected.length ? selected : bosses).join("\u0000")
+  const encounters = useMemo(() => (encountersKey ? encountersKey.split("\u0000") : []), [encountersKey])
+  const summary = useHubSummary({
+    instanceName, encounters: scope.boss ? [scope.boss] : selected, window: period === "all" ? "all" : "period", bossDepth: 3,
+    cohort, performance, cls: subject === "player" ? scope.cls : undefined, spec: subject === "player" ? scope.spec : undefined,
+    subSpec: subject === "player" ? scope.subSpec : undefined, realmIDs,
+  }, !!cohort)
+
+  // Guilds: whole ranked lists (small) for the browser-side table, one request per metric.
+  const guildLists = useQueries({
+    queries: RATING_METRICS.map((metric) => {
+      const url = cohort ? setBoardURL({ instanceName, encounters, subject: "guild", metric, period, cohort, performance, realmIDs, limit: 500 }) : ""
+      return { queryKey: ["hub-guild-set-board", url], queryFn: () => fetchSetBoard(url), enabled: subject === "guild" && !!cohort, staleTime: 5 * 60 * 1000, retry: false }
+    }),
   })
 
+  const live = useMemo<RatingLiveData>(() => {
+    const data = summary.data
+    const boardFor = (target: RatingScope): HubRatingBoard | undefined =>
+      target.boss ? data?.ratings.bosses.find((b) => b.encounter_name === target.boss) : data?.ratings.raid
+    return {
+      ranksKnown: true,
+      board: ({ scope: target, metric }) => {
+        if (!cohort) return { status: "error", error: "No published raid cohort for this instance." }
+        if (summary.isError) return { status: "error", error: "Published ratings unavailable." }
+        if (!data) return { status: "loading" }
+        const rows = boardFor(target)?.player[KEYS[metric]] ?? []
+        const board: RatingLiveBoard = {
+          id: target.boss ?? "raid",
+          kind: target.boss ? "boss" : "raid",
+          scope: target,
+          title: target.boss ?? where,
+          subtitle: target.boss ? "" : `${encounters.length} ${encounters.length === 1 ? "boss" : "bosses"} · a missed boss counts as 0`,
+          entries: rows.map((e) => playerEntry(e, metric)),
+        }
+        return { status: "ready", data: board } satisfies RatingLiveState<RatingLiveBoard>
+      },
+      pageKey: JSON.stringify([instanceName, encounters, cohort, performance, realmIDs]),
+      loadPage: async ({ scope: target, metric, period: selectedPeriod, query, page }) => {
+        if (!cohort) throw new Error("No published raid cohort for this instance")
+        const url = setBoardURL({
+          instanceName, encounters: target.boss ? [target.boss] : encounters, subject: "player", metric, period: selectedPeriod,
+          cohort, performance, cls: target.cls, spec: target.spec, subSpec: target.subSpec, realmIDs, query, page, limit: 50,
+        })
+        return setBoardPage(await fetchSetBoard(url), metric)
+      },
+    }
+  }, [summary.data, summary.isError, cohort, encounters, instanceName, performance, realmIDs, where])
+
   if (subject === "guild") {
-    return <LiveGuildRatings instanceName={instanceName} bosses={bosses} encounterName={scope.boss}
-      onBoss={(boss) => onScope({ boss })} view={view} onView={onView} period={period}
-      cohort={ratingCohort} realmIDs={realmIDs} toolbar={toolbar} />
+    const failed = guildLists.find((q) => q.isError)
+    const data: GuildRatingData = {
+      ratings: {
+        peak: (guildLists[0].data?.rows ?? []).map((r) => ({ guild: r.name || "Unknown guild", score: r.score, detail: r.realm_name })),
+        mastery: (guildLists[1].data?.rows ?? []).map((r) => ({ guild: r.name || "Unknown guild", score: r.score, detail: r.realm_name })),
+        renown: (guildLists[2].data?.rows ?? []).map((r) => ({ guild: r.name || "Unknown guild", score: r.score, detail: r.realm_name })),
+      },
+      perBoss: (boss) => {
+        const board = summary.data?.ratings.bosses.find((b) => b.encounter_name === boss)?.guild
+        return board && { peak: board.peak.map(guildRating), mastery: board.ranked_mastery.map(guildRating), renown: board.renown.map(guildRating) }
+      },
+      pending: !!cohort && guildLists.some((q) => q.isPending),
+      error: !cohort ? "No published raid cohort for this instance." : failed ? "Published guild ratings unavailable." : undefined,
+    }
+    return (
+      <GuildRatingBoards
+        instanceName={instanceName}
+        view={view}
+        onView={onView}
+        bosses={scope.boss ? [scope.boss] : selected.length ? selected : undefined}
+        allBosses={bosses}
+        where={where}
+        onBoss={(boss) => onScope({ boss })}
+        toolbar={toolbar}
+        data={data}
+      />
+    )
   }
-  const live: RatingLiveData = {
-    cohort,
-    ranksKnown: !realmIDs?.length,
-    board: ({ scope: target, metric }) => states.get(JSON.stringify([target, metric])) ?? { status: "error", error: "Published ratings unavailable for this selection." },
-    pageKey: JSON.stringify([instanceName, selectedCohort, realmIDs, subject]),
-    loadPage: async ({ scope: target, metric, period: selectedPeriod, query, page }) => {
-      const url = liveRatingFullListURL({ instanceName, encounterName: target.boss, subject: "player",
-        metric: apiMetric(metric), window: apiWindow(metric, selectedPeriod),
-        cohort: metric === "renown" ? undefined : selectedCohort, allClasses: metric !== "renown" && !exact,
-        realmIDs, query, page })
-      if (!url) throw new Error("Exact published rating cohort unavailable")
-      return fetchLiveRatingFullList(url)
-    },
-  }
-  return <RatingBoards instanceName={instanceName} bosses={bosses} scope={scope} onScope={onScope}
-    view={view} onView={onView} period={period} toolbar={toolbar} live={live} />
+  return (
+    <RatingBoards instanceName={instanceName} bosses={encounters} scope={scope} onScope={onScope}
+      view={view} onView={onView} period={period} toolbar={toolbar} live={live} title={where} />
+  )
 }

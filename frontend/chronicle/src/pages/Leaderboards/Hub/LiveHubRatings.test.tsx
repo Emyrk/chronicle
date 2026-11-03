@@ -1,120 +1,61 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it, vi, type Mock } from "vitest"
-import { useQueries } from "@tanstack/react-query"
-import { RatingBoards } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
-import { LiveGuildRatings } from "./LiveGuildRatings"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { HubSummary } from "@/api/typesGenerated"
+import { setBoardPage, setBoardURL } from "@/pages/Leaderboards/Ratings/setBoard"
+import { useHubSummary } from "./hubSummaryAdapter"
 import { LiveHubRatings, type LiveHubRatingsProps } from "./LiveHubRatings"
 
-vi.mock("@tanstack/react-query", () => ({ useQueries: vi.fn() }))
-vi.mock("@/pages/Leaderboards/Ratings/RatingLeaderboard", () => ({ RatingBoards: vi.fn(() => null) }))
-vi.mock("./LiveGuildRatings", () => ({ LiveGuildRatings: vi.fn(() => null) }))
+vi.mock("./hubSummaryAdapter", () => ({ useHubSummary: vi.fn() }))
+vi.mock("@tanstack/react-query", () => ({ useQueries: ({ queries }: { queries: unknown[] }) => queries.map(() => ({ isPending: false, isError: false, data: { rows: [], total: 0, page: 0, has_next_page: false } })) }))
 
-const querySpy = useQueries as unknown as Mock
-type QueryOptions = { queries: Array<{ queryKey?: readonly unknown[]; enabled?: boolean }> }
+const player = (name: string, score: number, raw?: number) => ({ realm_id: "r", realm_name: "Nordanaar", player_guid: name, player_name: name, player_class: "MAGE", player_spec: "Fire", player_sub_spec: "", score, peak_raw: raw })
+const board = (names: string[]) => ({ player: { peak: names.map((n, i) => player(n, 100 - i, 1300 - i)), ranked_mastery: [], renown: [] }, guild: { peak: [], ranked_mastery: [], renown: [] } })
+const summary = { ratings: { raid: board(["Top", "Second"]), bosses: [{ encounter_name: "Ragnaros", ...board(["Rag"]) }, { encounter_name: "Lucifron", ...board(["Luc"]) }] } } as unknown as HubSummary
 
-const cohort = { difficulty: "Normal", maxPlayers: 40, playerClass: "MAGE", spec: "Fire", subSpec: "", performance: "dps" as const }
 const props: LiveHubRatingsProps = {
-  instanceName: "Molten Core", bosses: ["Ragnaros"], scope: {}, onScope: vi.fn(),
-  view: "peak", onView: vi.fn(), period: "180d", subject: "player", role: "dps",
-  cls: "MAGE", spec: "Fire", subSpec: "", ratingCohort: cohort, realmIDs: ["realm-1"],
-}
-function render(extra: Partial<LiveHubRatingsProps> = {}) {
-  return renderToStaticMarkup(<LiveHubRatings {...props} {...extra} />)
+  instanceName: "Molten Core", bosses: ["Lucifron", "Ragnaros"], selected: [], scope: {}, onScope: vi.fn(), view: "peak", onView: vi.fn(),
+  period: "180d", subject: "player", role: "dps", cohort: { difficulty: "", maxPlayers: 0 }, where: "Molten Core",
 }
 
-describe("LiveHubRatings", () => {
-  it("feeds the actual RatingBoards with published entries and no invented total", () => {
-    vi.clearAllMocks()
-    querySpy.mockImplementation(({ queries }: QueryOptions) => queries.map(() => ({
-      data: { entries: [{ realm_id: "realm-1", player_guid: "mage-1", player_name: "Actual Mage", guild_name: "Raid", realm_name: "Realm", player_class: "MAGE", player_spec: "Fire", player_sub_spec: "", score: 95 }] },
-      isError: false,
-    })))
-    render()
-    const boardProps = vi.mocked(RatingBoards).mock.calls[0][0]
-    const state = boardProps.live!.board({ scope: {}, metric: "peak", period: "180d", cohort: boardProps.live!.cohort })
-    expect(state.status).toBe("ready")
-    if (state.status === "ready") {
-      expect(state.data.entries[0].name).toBe("Actual Mage")
-      expect(state.data.total).toBeUndefined()
-    }
-    expect(boardProps.live!.loadPage).toBeTypeOf("function")
-    const options = querySpy.mock.calls[0][0] as QueryOptions
-    expect(options.queries[0].queryKey?.[1]).toContain("realm_ids=realm-1")
-    expect(options.queries[0].queryKey?.[1]).toContain("class=MAGE")
-    expect(options.queries[0].queryKey?.[1]).toContain("max_players=40")
-    expect(LiveGuildRatings).not.toHaveBeenCalled()
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(useHubSummary).mockReturnValue({ isPending: false, isError: false, data: summary } as ReturnType<typeof useHubSummary>)
+})
+
+describe("live Ratings tab", () => {
+  it("draws the board and a card per boss from one Ratings-depth summary, Peak with its DPS", () => {
+    const html = renderToStaticMarkup(<LiveHubRatings {...props} />)
+    expect(html).toContain("Top")
+    expect(html).toContain("1,300/s")
+    expect(html).toContain("Rag")
+    expect(html).toContain("Luc")
+    expect(vi.mocked(useHubSummary)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(useHubSummary).mock.calls[0][0]).toMatchObject({ instanceName: "Molten Core", encounters: [], bossDepth: 3, window: "period" })
   })
 
-  it("marks preview ranks unknown when realm display filters are active", () => {
-    vi.clearAllMocks()
-    querySpy.mockImplementation(({ queries }: QueryOptions) => queries.map(() => ({ isError: false })))
-    render()
-    expect(vi.mocked(RatingBoards).mock.calls[0][0].live?.ranksKnown).toBe(false)
-    vi.clearAllMocks()
-    render({ realmIDs: undefined })
-    expect(vi.mocked(RatingBoards).mock.calls[0][0].live?.ranksKnown).toBe(true)
+  it("asks for the hand-picked bosses and the all-time window", () => {
+    renderToStaticMarkup(<LiveHubRatings {...props} selected={["Lucifron", "Ragnaros"]} period="all" />)
+    expect(vi.mocked(useHubSummary).mock.calls[0][0]).toMatchObject({ encounters: ["Lucifron", "Ragnaros"], window: "all" })
   })
 
-  it("requests the exact default cohort in the full rating view", () => {
-    vi.clearAllMocks()
-    querySpy.mockImplementation(({ queries }: QueryOptions) => queries.map(() => ({ isError: false })))
-    render({ ratingCohort: { ...cohort, difficulty: "", maxPlayers: 0 } })
-    const queries = (querySpy.mock.calls[0][0] as QueryOptions).queries
-    expect(queries[0].enabled).toBe(true)
-    expect(queries[0].queryKey?.[1]).toContain("difficulty_name=&max_players=0")
-    expect(queries[1].enabled).toBe(true)
-    expect(RatingBoards).toHaveBeenCalled()
+  it("says so instead of loading without a published raid cohort", () => {
+    const html = renderToStaticMarkup(<LiveHubRatings {...props} cohort={undefined} />)
+    expect(html).toContain("No published raid cohort")
   })
+})
 
-  it("shows Peak and Mastery across all classes when no class/spec is chosen", () => {
-    vi.clearAllMocks()
-    querySpy.mockImplementation(({ queries }: QueryOptions) => queries.map((q) => ({
-      isError: false, data: q.enabled ? { entries: [{ realm_id: "realm-1", player_guid: "mage-1", player_name: "Actual Mage", player_class: "MAGE", player_spec: "Arcane", player_sub_spec: "", score: 49 }] } : undefined,
-    })))
-    render({ scope: {}, cls: undefined, spec: undefined, subSpec: undefined,
-      ratingCohort: { difficulty: "", maxPlayers: 0, performance: "dps" }, view: "overview" })
-    const queries = (querySpy.mock.calls[0][0] as QueryOptions).queries
-    expect(queries[0].enabled).toBe(true)
-    expect(queries[0].queryKey?.[1]).toContain("all_classes=true")
-    expect(queries[1].enabled).toBe(true)
-    expect(queries[1].queryKey?.[1]).toContain("rating_metric=ranked_mastery")
-    const board = vi.mocked(RatingBoards).mock.calls[0][0]
-    expect(board.live!.board({ scope: {}, metric: "peak", period: "180d" }).status).toBe("ready")
-    expect(board.live!.loadPage).toBeTypeOf("function")
-    expect(LiveGuildRatings).not.toHaveBeenCalled()
-  })
-
-  it("does not broaden a mismatched class cohort", () => {
-    vi.clearAllMocks()
-    querySpy.mockImplementation(({ queries }: QueryOptions) => queries.map(() => ({ isError: false })))
-    render({ scope: { cls: "PRIEST" } })
-    const queries = (querySpy.mock.calls[0][0] as QueryOptions).queries
-    expect(queries[0].enabled).toBe(false)
-    expect(queries[1].enabled).toBe(false)
-    expect(queries[2].enabled).toBe(true) // Renown does not require a class cohort.
-    expect(vi.mocked(RatingBoards).mock.calls[0][0].live!.board({ scope: { cls: "PRIEST" }, metric: "peak", period: "180d" }).status).toBe("error")
-  })
-
-  it("keeps all-cohort Renown available without a class, spec or raid cohort", () => {
-    vi.clearAllMocks()
-    querySpy.mockImplementation(({ queries }: QueryOptions) => queries.map((q) => ({
-      isError: false, data: q.enabled ? { entries: [{ realm_id: "realm-1", player_guid: "mage-1", player_name: "Actual Mage", player_class: "MAGE", player_spec: "Fire", player_sub_spec: "", score: 20 }] } : undefined,
-    })))
-    render({ view: "renown", scope: {}, ratingCohort: undefined, cls: undefined, spec: undefined })
-    const board = vi.mocked(RatingBoards).mock.calls[0][0]
-    expect(board.live!.board({ scope: {}, metric: "renown", period: "180d" }).status).toBe("ready")
-    const urls = (querySpy.mock.calls[0][0] as QueryOptions).queries
-    expect(urls[2].enabled).toBe(true)
-    expect(urls[2].queryKey?.[1]).toContain("rating_metric=renown")
-    expect(urls[0].enabled).toBe(false)
-    expect(urls[1].enabled).toBe(false)
-  })
-
-  it("shows a published guild board rather than fixture-backed guild cards", () => {
-    vi.clearAllMocks()
-    querySpy.mockImplementation(({ queries }: QueryOptions) => queries.map(() => ({ isError: false })))
-    render({ subject: "guild", view: "mastery" })
-    expect(RatingBoards).not.toHaveBeenCalled()
-    expect(vi.mocked(LiveGuildRatings).mock.calls[0][0]).toMatchObject({ view: "mastery", cohort, bosses: ["Ragnaros"] })
+describe("set board client", () => {
+  it("builds one canonical URL per page and maps rows with all three scores", () => {
+    const url = new URL(setBoardURL({ instanceName: "Molten Core", encounters: ["Lucifron", "Ragnaros"], subject: "player", metric: "mastery", period: "all",
+      cohort: { difficulty: "", maxPlayers: 0 }, performance: "dps", cls: "MAGE", spec: "Fire", realmIDs: ["b", "a"], query: " zed ", page: 2, limit: 50 }), "http://x")
+    expect(url.pathname).toBe("/api/v1/rankings/ratings/set-board")
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({ encounter_names: "Lucifron,Ragnaros", rating_metric: "mastery", window: "all",
+      class: "MAGE", spec: "Fire", realm_ids: "a,b", query: "zed", page: "2", max_players: "0", difficulty_name: "" })
+    const page = setBoardPage({ rows: [{ rank: 7, realm_id: "r", realm_name: "R", subject_id: "g", name: "Zed", guild_name: "G", player_class: "MAGE",
+      player_spec: "Fire", player_sub_spec: "", score: 80, peak: 90, mastery: 80, renown: 12, peak_raw: 1500 }], total: 40, page: 2, has_next_page: true }, "mastery")
+    expect(page.rows[0].rank).toBe(7)
+    expect(page.rows[0].scores?.peak?.raw).toBe(1500)
+    expect(page.rows[0].entry.raw).toBeUndefined()
+    expect(page.hasPreviousPage && page.hasNextPage).toBe(true)
   })
 })

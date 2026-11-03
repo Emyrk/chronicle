@@ -107,8 +107,13 @@ func parseHubSetBoardInput(r *http.Request) (hubSetBoardInput, error) {
 	}
 	limit, page := int64(50), int64(0)
 	if q.Has("limit") {
-		if limit, err = strconv.ParseInt(q.Get("limit"), 10, 32); err != nil || limit < 1 || limit > 100 {
-			return hubSetBoardInput{}, errors.New("limit must be between 1 and 100")
+		// Guild boards are small and sorted and searched in the browser: up to 500.
+		maxLimit := int64(100)
+		if p.Subject == "guild" {
+			maxLimit = 500
+		}
+		if limit, err = strconv.ParseInt(q.Get("limit"), 10, 32); err != nil || limit < 1 || limit > maxLimit {
+			return hubSetBoardInput{}, errors.New("limit is too large for this board")
 		}
 	}
 	if q.Has("page") {

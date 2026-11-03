@@ -12,7 +12,7 @@ import {
   type RatingPeriod,
   type RatingScope,
 } from "./ratingBoards.fixtures"
-import { Emblem, RankMark, ScopeMark, SpecIcon } from "./RatingParts"
+import { Emblem, RankMark, RawTag, ScopeMark, SpecIcon } from "./RatingParts"
 import { METRIC_THEMES, type RatingView } from "./ratingThemes"
 import type { RatingLiveData } from "./ratingLiveData"
 
@@ -221,6 +221,7 @@ export function RatingFullList({
                         style={sortBy === m && rank === 1 ? { color: METRIC_THEMES[m].accent } : undefined}
                       >
                         {score ? METRIC_THEMES[m].format(score.score) : "—"}
+                        {m === "peak" && score?.raw ? <RawTag raw={score.raw} className="ml-1.5" /> : null}
                       </td>
                     )
                   })
@@ -230,6 +231,7 @@ export function RatingFullList({
                       <div className="flex flex-col items-start gap-1">
                         <span className="font-mono text-base tabular-nums" style={rank === 1 ? { color: theme.accent } : undefined}>
                           {theme.format(entry.score)}
+                          {view === "peak" && entry.raw ? <RawTag raw={entry.raw} className="ml-2" /> : null}
                         </span>
                         <span className="h-0.5 w-20 overflow-hidden rounded-full bg-white/5">
                           <span

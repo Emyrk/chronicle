@@ -163,11 +163,11 @@ function LiveHubContent({ context, summary, requestedEncounters = [], realmName,
   const queryState = <T,>(query: { data?: T; isPending: boolean; isError: boolean }) => query.isError ? { status: "error" as const } : query.isPending ? { status: "loading" as const } : { status: "ready" as const, data: query.data! }
   if (!overview && realmIDs.length > 1) return <p role="status" className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">Choose one realm or All realms in the Hub selector. This view cannot apply multiple realms.</p>
   if (overview) return <LiveHubOverview context={context} summary={summary} requestedEncounters={requestedEncounters} realmName={realmName} realmIDs={realmIDs} bosses={bosses} />
-  if (context.tab === "ratings") return <LiveHubRatings instanceName={instanceName} bosses={bosses}
-    scope={scope} onScope={context.onScope} view={context.ratingView} onView={context.onView} period={context.period}
-    subject={subject === "guilds" ? "guild" : "player"} realmIDs={realmIDs} role={role} cls={scope.cls} spec={scope.spec} subSpec={scope.subSpec}
-    ratingCohort={chosen ? { difficulty: chosen.difficulty_name, maxPlayers: chosen.max_players,
-      ...(subject === "characters" ? { playerClass: scope.cls, spec: scope.spec ?? "", subSpec: scope.subSpec ?? "", performance: role === "healing" ? "hps" as const : "dps" as const } : {}) } : undefined}
+  if (context.tab === "ratings") return <LiveHubRatings instanceName={instanceName} bosses={bosses.filter((name) => name !== "Trash")}
+    selected={picked.filter((name) => name !== "Trash")} scope={scope} onScope={context.onScope} view={context.ratingView} onView={context.onView}
+    period={context.period} subject={subject === "guilds" ? "guild" : "player"} realmIDs={realmIDs} role={role}
+    cohort={chosen ? { difficulty: chosen.difficulty_name, maxPlayers: chosen.max_players } : undefined}
+    where={boss ?? (picked.length > 1 ? `${picked.length} bosses` : instanceName)}
     toolbar={<div className="flex flex-wrap items-center gap-2"><MetricTabs view={context.ratingView} onView={context.onView} /><PeriodToggle value={context.period} onChange={context.onPeriod} /></div>} />
   if (context.tab === "rulesets") return <RulesetInstanceView instanceName={instanceName} embedded />
   if (context.tab === "performances") return !exact ? <CohortPrompt raids={raids} /> :

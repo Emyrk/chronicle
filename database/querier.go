@@ -675,6 +675,7 @@ type sqlcQuerier interface {
 	HubSummaryInstances(ctx context.Context, tenantID uuid.UUID) ([]HubSummaryInstancesRow, error)
 	// All boards share the caller-pinned active generation. Bound boss names and
 	// truncate each board in SQL, not in the HTTP handler.
+	// The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss.
 	HubSummaryRatingRows(ctx context.Context, arg HubSummaryRatingRowsParams) ([]HubSummaryRatingRowsRow, error)
 	HubSummaryRealms(ctx context.Context, tenantID uuid.UUID) ([]HubSummaryRealmsRow, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)

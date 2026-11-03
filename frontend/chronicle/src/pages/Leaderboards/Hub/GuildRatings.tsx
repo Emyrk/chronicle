@@ -7,6 +7,16 @@ import { BossPortrait, Emblem, RankMark } from "@/pages/Leaderboards/Ratings/Rat
 import { METRIC_THEMES, type MetricTheme, type RatingView } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { formatClock, guildRatings, type GuildRating } from "./hub.fixtures"
 
+/** Published guild ratings for the guild boards: whole ranked lists, and each boss's leaders. */
+export interface GuildRatingData {
+  ratings: Record<RatingMetric, GuildRating[]>
+  perBoss: (boss: string) => Record<RatingMetric, GuildRating[]> | undefined
+  pending?: boolean
+  error?: string
+}
+
+const EMPTY_GUILD_RATINGS: Record<RatingMetric, GuildRating[]> = { peak: [], mastery: [], renown: [] }
+
 export interface MetricRow {
   id: string
   name: ReactNode
@@ -103,9 +113,12 @@ export function GuildRatingBoards({
   where,
   onBoss,
   toolbar,
+  data,
 }: {
   instanceName: string
   view: RatingView
+  /** Published ratings; without it the boards show generated mock guilds. */
+  data?: GuildRatingData
   onView: (view: RatingView) => void
   /** Metric switch and period, shown in the board's (or table's) header. */
   toolbar?: ReactNode
@@ -126,8 +139,16 @@ export function GuildRatingBoards({
   const query = search.key === key ? search.text : ""
   const setQuery = (text: string) => setSearch({ key, text })
   const expanded = !!oneBoss || expandedKey === key || query.trim() !== ""
-  const all = guildRatings(bosses, allBosses, instanceName, 99)
+  const all = data ? data.ratings : guildRatings(bosses, allBosses, instanceName, 99)
   const label = `Guild ${view === "overview" ? "ratings" : theme.label} · ${where}`
+
+  if (data?.error || data?.pending) {
+    return (
+      <section role={data.error ? "alert" : "status"} className="rounded-xl border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
+        {data.error ?? "Loading guild ratings…"}
+      </section>
+    )
+  }
 
   return (
     <div className="space-y-5" style={{ "--metric": theme.accent } as CSSProperties}>
@@ -189,7 +210,13 @@ export function GuildRatingBoards({
           <h2 className="px-1 text-sm font-semibold">By boss</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {(bosses ?? allBosses).map((boss) => (
-              <BossBoard key={boss} boss={boss} instanceName={instanceName} allBosses={allBosses} view={view} onOpen={() => onBoss(boss)} />
+              <BossBoard
+                key={boss}
+                boss={boss}
+                ratings={data ? (data.perBoss(boss) ?? EMPTY_GUILD_RATINGS) : guildRatings([boss], allBosses, instanceName, 3)}
+                view={view}
+                onOpen={() => onBoss(boss)}
+              />
             ))}
           </div>
         </section>
@@ -439,19 +466,18 @@ function GuildFullTable({
 /** One boss: #1 per metric on the overview, top three on a single metric. */
 function BossBoard({
   boss,
-  instanceName,
-  allBosses,
+  ratings: r,
   view,
   onOpen,
 }: {
   boss: string
-  instanceName: string
-  allBosses: readonly string[]
+  ratings: Record<RatingMetric, GuildRating[]>
   view: RatingView
   onOpen: () => void
 }) {
-  const r = guildRatings([boss], allBosses, instanceName, 3)
-  const rows = view === "overview" ? RATING_METRICS.map((m) => ({ metric: m, g: r[m][0] })) : r[view].map((g) => ({ metric: view, g }))
+  const rows = (view === "overview" ? RATING_METRICS.map((m) => ({ metric: m, g: r[m][0] })) : r[view].map((g) => ({ metric: view, g }))).filter(
+    (row): row is { metric: RatingMetric; g: GuildRating } => !!row.g,
+  )
   return (
     <button
       type="button"

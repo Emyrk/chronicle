@@ -22618,7 +22618,7 @@ func (q *sqlQuerier) HubSetBoardPage(ctx context.Context, arg HubSetBoardPagePar
 
 const hubSetRatingRows = `-- name: HubSetRatingRows :many
 WITH chosen AS (
-  SELECT DISTINCT unnest($1::text[]) AS encounter_name LIMIT 64
+  SELECT DISTINCT unnest($2::text[]) AS encounter_name LIMIT 64
 ), player_cohorts AS (
   SELECT s.rating_metric, s.realm_id, s.player_guid, s.player_class, s.player_spec, s.player_sub_spec,
          CASE WHEN s.rating_metric = 'renown' THEN sum(s.score)
@@ -22629,17 +22629,17 @@ WITH chosen AS (
   JOIN rating_score_generations generation ON generation.id = s.generation_id AND generation.tenant_id = s.tenant_id AND generation.status = 'active'
   JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
   JOIN wow_servers server ON server.id = source_realm.server_id
-  WHERE s.tenant_id = $2 AND s.generation_id = $3 AND s.instance_name = $4
+  WHERE s.tenant_id = $3 AND s.generation_id = $4 AND s.instance_name = $5
     AND s.encounter_name IN (SELECT encounter_name FROM chosen)
-    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-    AND (COALESCE(cardinality($5::uuid[]), 0) = 0 OR s.realm_id = ANY($5::uuid[]))
-    AND s.window_kind = CASE WHEN s.rating_metric = 'renown' THEN $6::text ELSE $7::text END
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND (COALESCE(cardinality($6::uuid[]), 0) = 0 OR s.realm_id = ANY($6::uuid[]))
+    AND s.window_kind = CASE WHEN s.rating_metric = 'renown' THEN $7::text ELSE $8::text END
     AND ((s.rating_metric = 'renown' AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none')
-      OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.difficulty_name = $8 AND s.max_players = $9
-          AND s.performance_metric = $10::text
-          AND ($11::text = '' OR s.player_class = $11)
-          AND ($12::text = '' OR s.player_spec = $12)
-          AND ($13::text = '' OR s.player_sub_spec = $13)))
+      OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.difficulty_name = $9 AND s.max_players = $10
+          AND s.performance_metric = $11::text
+          AND ($12::text = '' OR s.player_class = $12)
+          AND ($13::text = '' OR s.player_spec = $13)
+          AND ($14::text = '' OR s.player_sub_spec = $14)))
   GROUP BY s.rating_metric, s.realm_id, s.player_guid, s.player_class, s.player_spec, s.player_sub_spec
 ), players AS (
   SELECT DISTINCT ON (rating_metric, realm_id, player_guid) rating_metric, realm_id, player_guid, player_class, player_spec, player_sub_spec, score, raw
@@ -22653,13 +22653,13 @@ WITH chosen AS (
   JOIN rating_score_generations generation ON generation.id = s.generation_id AND generation.tenant_id = s.tenant_id AND generation.status = 'active'
   JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
   JOIN wow_servers server ON server.id = source_realm.server_id
-  WHERE s.tenant_id = $2 AND s.generation_id = $3 AND s.instance_name = $4
+  WHERE s.tenant_id = $3 AND s.generation_id = $4 AND s.instance_name = $5
     AND s.encounter_name IN (SELECT encounter_name FROM chosen)
-    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-    AND (COALESCE(cardinality($5::uuid[]), 0) = 0 OR s.realm_id = ANY($5::uuid[]))
-    AND s.window_kind = CASE WHEN s.rating_metric = 'renown' THEN $6::text ELSE $7::text END
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND (COALESCE(cardinality($6::uuid[]), 0) = 0 OR s.realm_id = ANY($6::uuid[]))
+    AND s.window_kind = CASE WHEN s.rating_metric = 'renown' THEN $7::text ELSE $8::text END
     AND ((s.rating_metric = 'renown' AND s.difficulty_name = '' AND s.max_players = 0)
-      OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.difficulty_name = $8 AND s.max_players = $9))
+      OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.difficulty_name = $9 AND s.max_players = $10))
   GROUP BY s.rating_metric, s.realm_id, s.guild_id
 ), ranked AS (
   SELECT 'player'::text AS subject, p.rating_metric, p.realm_id, p.player_guid::text AS subject_id, p.score,
@@ -22682,11 +22682,12 @@ LEFT JOIN game_players gp ON r.subject = 'player' AND gp.realm_id = r.realm_id
   AND gp.id = (CASE WHEN r.subject_id ~ '^0x[0-9A-Fa-f]{16}$' THEN r.subject_id::wow_guid ELSE NULL::wow_guid END)
 LEFT JOIN guilds guild ON r.subject = 'guild' AND guild.id = (CASE WHEN r.subject_id ~ '^[0-9a-f-]{36}$' THEN r.subject_id::uuid ELSE NULL::uuid END)
   AND guild.realm_id = r.realm_id
-WHERE r.position <= 5
+WHERE r.position <= LEAST(GREATEST($1::int, 1), 10)
 ORDER BY r.subject, r.rating_metric, r.position
 `
 
 type HubSetRatingRowsParams struct {
+	Depth             int32       `db:"depth" json:"depth"`
 	EncounterNames    []string    `db:"encounter_names" json:"encounter_names"`
 	TenantID          uuid.UUID   `db:"tenant_id" json:"tenant_id"`
 	GenerationID      uuid.UUID   `db:"generation_id" json:"generation_id"`
@@ -22722,6 +22723,7 @@ type HubSetRatingRowsRow struct {
 // the duration-weighted throughput over its kills and breaks ties by it.
 func (q *sqlQuerier) HubSetRatingRows(ctx context.Context, arg HubSetRatingRowsParams) ([]HubSetRatingRowsRow, error) {
 	rows, err := q.db.Query(ctx, hubSetRatingRows,
+		arg.Depth,
 		arg.EncounterNames,
 		arg.TenantID,
 		arg.GenerationID,
@@ -23066,7 +23068,7 @@ SELECT subject, board, rating_metric, encounter_name, realm_id, subject_id, scor
        COALESCE(CASE WHEN subject = 'player' AND rating_metric = 'peak' THEN best_raw END, 0)::float8 AS peak_raw,
        player_class, player_spec, player_sub_spec, subject_name, realm_name
 FROM boards
-WHERE position <= CASE WHEN board = 'scope' OR encounter_name = $1::text THEN 5 ELSE GREATEST(LEAST($2::int, 3), 1) END
+WHERE position <= CASE WHEN board = 'scope' OR encounter_name = $1::text THEN CASE WHEN $2::int >= 3 THEN 10 ELSE 5 END ELSE GREATEST(LEAST($2::int, 3), 1) END
 ORDER BY board, encounter_name, subject, rating_metric, position
 `
 
@@ -23106,6 +23108,7 @@ type HubSummaryRatingRowsRow struct {
 
 // All boards share the caller-pinned active generation. Bound boss names and
 // truncate each board in SQL, not in the HTTP handler.
+// The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss.
 func (q *sqlQuerier) HubSummaryRatingRows(ctx context.Context, arg HubSummaryRatingRowsParams) ([]HubSummaryRatingRowsRow, error) {
 	rows, err := q.db.Query(ctx, hubSummaryRatingRows,
 		arg.FeaturedEncounter,

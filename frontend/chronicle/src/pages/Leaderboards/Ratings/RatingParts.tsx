@@ -43,6 +43,7 @@ export function EntryRow({ entry, rank, theme, size }: { entry: RatingEntry; ran
           {entry.spec} · {entry.detail}
         </span>
       </span>
+      {entry.raw ? <RawTag raw={entry.raw} /> : null}
       <span
         className={cn("shrink-0 text-right font-mono tabular-nums", lg ? "text-xl" : "text-sm")}
         style={rank === 1 ? { color: theme.accent } : undefined}
@@ -51,6 +52,11 @@ export function EntryRow({ entry, rank, theme, size }: { entry: RatingEntry; ran
       </span>
     </li>
   )
+}
+
+/** Peak's DPS/HPS, muted beside the score. */
+export function RawTag({ raw, className }: { raw: number; className?: string }) {
+  return <span className={cn("shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums", className)}>{Math.round(raw).toLocaleString()}/s</span>
 }
 
 export function RankMark({ rank, size }: { rank: number; size: "lg" | "sm" }) {

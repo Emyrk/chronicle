@@ -56,7 +56,7 @@ func TestHubSetRatingRows(t *testing.T) {
 	insert("steady", "Ragnaros", "renown", "none", "", 0, 5, 0, 0)
 
 	rows, err := q.HubSetRatingRows(ctx, database.HubSetRatingRowsParams{TenantID: tenant, GenerationID: gen, InstanceName: "Molten Core",
-		EncounterNames: []string{"Lucifron", "Ragnaros"}, PerformanceMetric: "dps", WindowKind: "period", RenownWindow: "period"})
+		EncounterNames: []string{"Lucifron", "Ragnaros"}, PerformanceMetric: "dps", WindowKind: "period", RenownWindow: "period", Depth: 5})
 	require.NoError(t, err)
 	var peaks []database.HubSetRatingRowsRow
 	var renown float64

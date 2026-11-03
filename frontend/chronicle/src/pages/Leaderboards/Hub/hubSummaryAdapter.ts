@@ -9,6 +9,10 @@ export type HubSummaryRequest = {
   tab?: "overview" | "ratings" | "performances" | "speedruns" | "statistics" | "parsing" | "rulesets"
   /** Chosen bosses; empty is the instance's preset. */
   encounters?: readonly string[]
+  /** Rating window: the last 180 days (default) or all time. */
+  window?: "period" | "all"
+  /** Leaders per boss board: 1 (overview, default) or 3 (Ratings tab, which also gets ten raid rows). */
+  bossDepth?: 1 | 3
   cohort?: LiveRatingCohort
   performance: "dps" | "hps"
   cls?: string
@@ -18,7 +22,7 @@ export type HubSummaryRequest = {
 }
 
 /** Canonical URL is the CDN cache key; no per-user parameters or cursor. */
-export function hubSummaryURL({ instanceName, tab, encounters = [], cohort, performance, cls, spec, subSpec, realmIDs }: HubSummaryRequest) {
+export function hubSummaryURL({ instanceName, tab, encounters = [], window, bossDepth, cohort, performance, cls, spec, subSpec, realmIDs }: HubSummaryRequest) {
   const query = new URLSearchParams()
   if (instanceName) query.set("instance_name", instanceName)
   if (!instanceName && tab && tab !== "overview") query.set("tab", tab)
@@ -29,6 +33,8 @@ export function hubSummaryURL({ instanceName, tab, encounters = [], cohort, perf
   if (instanceName) query.set("performance_metric", performance)
   if (instanceName && encounters.length === 1) query.set("encounter_name", encounters[0])
   if (instanceName && encounters.length > 1) query.set("encounter_names", encounters.join(","))
+  if (instanceName && window === "all") query.set("window", "all")
+  if (instanceName && bossDepth === 3) query.set("boss_depth", "3")
   if (cls) query.set("class", cls)
   if (spec) query.set("spec", spec)
   if (subSpec) query.set("sub_spec", subSpec)

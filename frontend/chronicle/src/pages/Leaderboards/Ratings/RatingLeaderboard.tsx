@@ -13,7 +13,7 @@ import {
 } from "./ratingBoards.fixtures"
 import { BoardSearch, RatingFullList } from "./RatingFullList"
 import type { RatingLiveBoard, RatingLiveData, RatingLiveState } from "./ratingLiveData"
-import { Emblem, EntryRow, ScopeMark, SpecIcon } from "./RatingParts"
+import { Emblem, EntryRow, RawTag, ScopeMark, SpecIcon } from "./RatingParts"
 import { METRIC_THEMES, VIEW_ORDER, scopeTitle, type MetricTheme, type RatingView } from "./ratingThemes"
 
 /** What the cards under the board split by. */
@@ -282,7 +282,7 @@ function CenterFrame({
         className="cursor-pointer relative mt-auto flex items-center justify-center gap-1.5 border-t px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-white/[.03] hover:text-foreground"
       >
         <ArrowDown className="size-3.5" />
-        All {board.total === undefined ? "" : `${board.total} `}ranked
+        {board.total === undefined ? "Full ranking" : `All ${board.total} ranked`}
       </button>
     </section>
   )
@@ -386,6 +386,7 @@ function CompactRow({ entry, theme, lead }: { entry: RatingEntry; theme: MetricT
       <span className="min-w-0 flex-1 truncate" style={{ color: CLASS_CSS_VAR[entry.cls] }}>
         {entry.name}
       </span>
+      {entry.raw ? <RawTag raw={entry.raw} className="text-[10px]" /> : null}
       <span className="shrink-0 font-mono tabular-nums">{theme.format(entry.score)}</span>
     </li>
   )
@@ -424,7 +425,7 @@ function SideFrame({
         <span className="truncate font-wow text-base group-hover/open:text-[color:var(--metric)]" style={{ color }}>
           {title}
         </span>
-        <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{board.total} ranked</span>
+        {board.total !== undefined && <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{board.total} ranked</span>}
       </button>
       <ol className="border-t py-0.5 text-xs">{children}</ol>
     </section>
