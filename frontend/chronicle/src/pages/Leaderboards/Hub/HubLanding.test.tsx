@@ -70,7 +70,11 @@ describe("live Hub landing", () => {
   it("treats legacy zero-size cohorts as missing data, not zero-player raids", () => {
     const zero = [{ category: "raid", instance_name: "Onyxia's Lair", difficulty_name: "", max_players: 0,
       total_kills: 10, top_players: [] }] satisfies RankingsInstanceSummary[]
-    const markup = render({ instances: zero })
+    // A lone cohort shows only its kills; the label only tells several cohorts apart.
+    const lone = render({ instances: zero })
+    expect(lone).toContain("10 recorded kills")
+    expect(lone).not.toContain("size not recorded")
+    const markup = render({ instances: [...zero, { ...zero[0], difficulty_name: "Normal", max_players: 25 }] })
     expect(markup).toContain("size not recorded")
     expect(markup).not.toContain("0 players")
   })

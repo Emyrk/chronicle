@@ -165,7 +165,9 @@ function HubLanding({ tab, onOpen, instances, landingPreviews }: { tab: HubTab; 
               <div className="space-y-1">
                 {cohorts.map((row) => <div key={`${row.difficulty_name}-${row.max_players}`} className="flex items-center gap-1 text-[10px] text-muted-foreground">
                   <Skull className="h-3 w-3" />
-                  {row.difficulty_name || "Default"} · {row.max_players ? `${row.max_players} players` : "size not recorded"} · {row.total_kills.toLocaleString()} recorded kills
+                  {/* One cohort needs no difficulty/size label; only several need telling apart. */}
+                  {cohorts.length > 1 && <>{row.difficulty_name || "Default"} · {row.max_players ? `${row.max_players} players` : "size not recorded"} · </>}
+                  {row.total_kills.toLocaleString()} recorded kills
                 </div>)}
               </div>
             </InstanceCard>
