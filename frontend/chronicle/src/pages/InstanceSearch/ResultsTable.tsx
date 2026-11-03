@@ -58,7 +58,7 @@ export function ResultsTable({
             <th className="text-left px-3 py-2 font-medium hidden sm:table-cell">Guild</th>
             <th className="text-left px-3 py-2 font-medium">Bosses</th>
             <th className="text-right px-3 py-2 font-medium hidden md:table-cell">Players</th>
-            <th className="text-right px-3 py-2 font-medium hidden md:table-cell">Clear</th>
+            <th className="text-right px-3 py-2 font-medium hidden md:table-cell min-w-[6rem] whitespace-nowrap">Clear</th>
             <th className="text-right px-3 py-2 font-medium hidden sm:table-cell">Date</th>
           </tr>
         </thead>
@@ -122,8 +122,8 @@ export function ResultsTable({
                     </div>
                   ) : null}
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums text-xs text-foreground/90 hidden md:table-cell">{r.player_count}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-xs hidden md:table-cell">
+                <td className="px-3 py-2 text-right tabular-nums text-xs text-foreground/90 hidden md:table-cell whitespace-nowrap">{r.player_count}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-xs hidden md:table-cell whitespace-nowrap">
                   {r.clear_time_ms != null ? <span className="text-foreground/90">{formatMinutes(r.clear_time_ms)}</span> : <span className="text-muted-foreground/50">—</span>}
                 </td>
                 <td className="px-3 py-2 text-right whitespace-nowrap hidden sm:table-cell" title={new Date(r.started_at).toLocaleString()}>
