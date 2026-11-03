@@ -35,3 +35,37 @@ func TestTenantScopeThroughput(t *testing.T) {
 	})
 	require.False(t, ok)
 }
+
+func TestTenantRaidPeak(t *testing.T) {
+	t.Parallel()
+	roster := []string{"Lucifron", "Magmadar", "Ragnaros"}
+
+	// One boss at 100 is not a 100 raid: the two missed bosses count as 0.
+	score, ok := tenantRaidPeak([]tenantScopeBoss{{instance: "Molten Core", encounter: "Ragnaros", score: 100}}, roster)
+	require.True(t, ok)
+	require.InDelta(t, 100.0/3, score, 1e-9)
+
+	// 100 on every required boss is 100; kills outside the roster are ignored.
+	score, ok = tenantRaidPeak([]tenantScopeBoss{
+		{instance: "Molten Core", encounter: "Lucifron", score: 100}, {instance: "Molten Core", encounter: "Magmadar", score: 100},
+		{instance: "Molten Core", encounter: "Ragnaros", score: 100}, {instance: "Molten Core", encounter: "Gehennas", score: 10},
+	}, roster)
+	require.True(t, ok)
+	require.InDelta(t, 100, score, 1e-9)
+
+	// Optional bosses never count against you, but count when killed; Edge of Madness is one slot.
+	zg := []string{"Hakkar", "Bloodlord Mandokir", "Gri'lek", "Renataki"}
+	score, ok = tenantRaidPeak([]tenantScopeBoss{{instance: "Zul'Gurub", encounter: "Hakkar", score: 80}}, zg)
+	require.True(t, ok)
+	require.InDelta(t, 80, score, 1e-9)
+	score, ok = tenantRaidPeak([]tenantScopeBoss{
+		{instance: "Zul'Gurub", encounter: "Hakkar", score: 80},
+		{instance: "Zul'Gurub", encounter: "Gri'lek", score: 40}, {instance: "Zul'Gurub", encounter: "Renataki", score: 60},
+	}, zg)
+	require.True(t, ok)
+	require.InDelta(t, 70, score, 1e-9)
+
+	// Without a roster (an uncurated raid) the caller keeps the observed average.
+	_, ok = tenantRaidPeak([]tenantScopeBoss{{instance: "Molten Core", encounter: "Ragnaros", score: 100}}, nil)
+	require.False(t, ok)
+}

@@ -103,3 +103,65 @@ func tenantScopeThroughput(bosses []tenantScopeBoss) (raw, duration float64, ok 
 	}
 	return output / duration, duration, true
 }
+
+// tenantOptionalSlots never count against a raid Peak when missed; killed, they
+// count like any boss. Mirrors the hub's optional bosses (ZG's Edge of Madness
+// is one slot) plus Emerald Sanctum's separately ranked hard mode.
+var tenantOptionalSlots = map[tenantScopeSlot]bool{
+	{"Zul'Gurub", "Bloodlord Mandokir"}:        true,
+	{"Zul'Gurub", "Jin'do the Hexxer"}:         true,
+	{"Zul'Gurub", "Gahz'ranka"}:                true,
+	{"Zul'Gurub", "Edge of Madness"}:           true,
+	{"Emerald Sanctum", "Solnius (Hard Mode)"}: true,
+}
+
+func tenantSlot(instance, encounter string) tenantScopeSlot {
+	slot := tenantScopeSlot{instance, encounter}
+	if instance == "Zul'Gurub" {
+		switch encounter {
+		case "Gri'lek", "Hazza'rah", "Renataki", "Wushoolay":
+			slot.slot = "Edge of Madness"
+		}
+	}
+	return slot
+}
+
+// tenantRaidPeak is a raid Peak over the raid's roster: every required boss
+// counts, a missed one as 0, so 100 means a 100 Peak on every required boss.
+// Optional bosses count only when killed. Kills outside the roster are ignored.
+// ok is false without a roster (an uncurated raid), where callers keep the
+// observed-boss average.
+func tenantRaidPeak(bosses []tenantScopeBoss, roster []string) (score float64, ok bool) {
+	if len(roster) == 0 || len(bosses) == 0 {
+		return 0, false
+	}
+	instance := bosses[0].instance
+	slots := make(map[tenantScopeSlot]bool, len(roster))
+	for _, encounter := range roster {
+		slots[tenantSlot(instance, encounter)] = true
+	}
+	best := make(map[tenantScopeSlot]float64, len(bosses))
+	for _, boss := range bosses {
+		slot := tenantSlot(boss.instance, boss.encounter)
+		if !slots[slot] {
+			continue
+		}
+		if value, seen := best[slot]; !seen || boss.score > value {
+			best[slot] = boss.score
+		}
+	}
+	var total float64
+	var count int
+	for slot := range slots {
+		value, killed := best[slot]
+		if tenantOptionalSlots[slot] && !killed {
+			continue
+		}
+		total += value
+		count++
+	}
+	if count == 0 {
+		return 0, false
+	}
+	return total / float64(count), true
+}

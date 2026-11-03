@@ -33,6 +33,15 @@ func TestTenantScopeProjectionRaidPages(t *testing.T) {
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, "UPDATE rating_rebuild_checkpoints SET phase='player_scopes' WHERE generation_id=$1", gen)
 	require.NoError(t, err)
+	// The first realm has a roster: a missed required boss (Jeklik) counts as 0 in
+	// its raid Peak, a missed optional one (Mandokir) does not. The second has none.
+	roster := `[{"realm_id":"` + realms[0].String() + `","instance_name":"Zul'Gurub","encounter_name":"High Priestess Jeklik","renown_points":0},` +
+		`{"realm_id":"` + realms[0].String() + `","instance_name":"Zul'Gurub","encounter_name":"Hakkar","renown_points":3},` +
+		`{"realm_id":"` + realms[0].String() + `","instance_name":"Zul'Gurub","encounter_name":"Bloodlord Mandokir","renown_points":1},` +
+		`{"realm_id":"` + realms[0].String() + `","instance_name":"Zul'Gurub","encounter_name":"Gri'lek","renown_points":1},` +
+		`{"realm_id":"` + realms[0].String() + `","instance_name":"Zul'Gurub","encounter_name":"Hazza'rah","renown_points":1}]`
+	_, err = pool.Exec(ctx, "UPDATE rating_rebuild_checkpoints SET manifest = jsonb_set(manifest, '{renown_bosses}', $2::jsonb) WHERE generation_id=$1", gen, roster)
+	require.NoError(t, err)
 	for i, realm := range realms {
 		for _, boss := range []struct {
 			name          string
@@ -72,10 +81,15 @@ func TestTenantScopeProjectionRaidPages(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "scopes_complete", cp.Phase)
 	for i, realm := range realms {
+		// Roster realm: (Jeklik 0 + Hakkar 50 + Edge of Madness 90) / 3. Otherwise the observed average.
+		wantPeak := 70.0 + float64(i*10)
+		if i == 0 {
+			wantPeak = 140.0 / 3
+		}
 		var score float64
 		err = pool.QueryRow(ctx, `SELECT score FROM player_tenant_rating_scope_scores WHERE generation_id=$1 AND realm_id=$2 AND rating_metric='peak'`, gen, realm).Scan(&score)
 		require.NoError(t, err)
-		require.Equal(t, 70.0+float64(i*10), score)
+		require.InDelta(t, wantPeak, score, 1e-9)
 		// Raid Peak DPS weighs the counted kills by length: Edge of Madness keeps
 		// Hazza'rah (900 dps, 50s) with Hakkar (500 dps, 150s): 120000 / 200s.
 		var raw, duration float64
@@ -85,7 +99,7 @@ func TestTenantScopeProjectionRaidPages(t *testing.T) {
 		require.InDelta(t, 200.0, duration, 1e-9)
 		err = pool.QueryRow(ctx, `SELECT score FROM guild_tenant_rating_scope_scores WHERE generation_id=$1 AND realm_id=$2`, gen, realm).Scan(&score)
 		require.NoError(t, err)
-		require.Equal(t, 70.0+float64(i*10), score)
+		require.InDelta(t, wantPeak, score, 1e-9)
 		err = pool.QueryRow(ctx, `SELECT score FROM player_tenant_rating_scope_scores WHERE generation_id=$1 AND realm_id=$2 AND rating_metric='renown'`, gen, realm).Scan(&score)
 		require.NoError(t, err)
 		require.Equal(t, 15.0, score)

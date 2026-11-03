@@ -29,6 +29,35 @@ func TenantScopeProjectionPage(ctx context.Context, store database.Store, tenant
 		if err := json.Unmarshal(cp.Cursor, &c); err != nil {
 			return fmt.Errorf("invalid tenant scope cursor: %w", err)
 		}
+		// The frozen per-realm boss roster: a raid Peak counts every required boss.
+		var manifest struct {
+			RenownBosses []struct {
+				Realm     uuid.UUID `json:"realm_id"`
+				Instance  string    `json:"instance_name"`
+				Encounter string    `json:"encounter_name"`
+			} `json:"renown_bosses"`
+		}
+		if err := json.Unmarshal(cp.Manifest, &manifest); err != nil {
+			return fmt.Errorf("invalid tenant scope manifest: %w", err)
+		}
+		type realmRaid struct {
+			realm    uuid.UUID
+			instance string
+		}
+		rosters := make(map[realmRaid][]string)
+		for _, boss := range manifest.RenownBosses {
+			key := realmRaid{boss.Realm, boss.Instance}
+			rosters[key] = append(rosters[key], boss.Encounter)
+		}
+		raidPeak := func(rating string, realm uuid.UUID, instance string, bosses []tenantScopeBoss, observed float64) float64 {
+			if rating != "peak" {
+				return observed
+			}
+			if score, ok := tenantRaidPeak(bosses, rosters[realmRaid{realm, instance}]); ok {
+				return score
+			}
+			return observed
+		}
 		next := projectionCursor{}
 		phase := cp.Phase
 		switch phase {
@@ -81,7 +110,8 @@ func TenantScopeProjectionPage(ctx context.Context, store database.Store, tenant
 					InstanceName: k.InstanceName, DifficultyName: k.DifficultyName, MaxPlayers: k.MaxPlayers,
 					PlayerClass: k.PlayerClass, PlayerSpec: k.PlayerSpec, PlayerSubSpec: k.PlayerSubSpec,
 					PerformanceMetric: k.PerformanceMetric, RatingMetric: k.RatingMetric, WindowKind: k.WindowKind,
-					WindowStart: start, WindowEnd: end, Score: raids[k.InstanceName], BestRaw: bestRaw, BestDurationSecs: bestDuration,
+					WindowStart: start, WindowEnd: end, Score: raidPeak(k.RatingMetric, k.RealmID, k.InstanceName, bosses, raids[k.InstanceName]),
+					BestRaw: bestRaw, BestDurationSecs: bestDuration,
 				})
 				if err != nil {
 					return err
@@ -130,7 +160,7 @@ func TenantScopeProjectionPage(ctx context.Context, store database.Store, tenant
 					GenerationID: generation, TenantID: tenant, RealmID: k.RealmID, GuildID: k.GuildID,
 					InstanceName: k.InstanceName, DifficultyName: k.DifficultyName, MaxPlayers: k.MaxPlayers,
 					RatingMetric: k.RatingMetric, WindowKind: k.WindowKind, WindowStart: start, WindowEnd: end,
-					Score: raids[k.InstanceName],
+					Score: raidPeak(k.RatingMetric, k.RealmID, k.InstanceName, bosses, raids[k.InstanceName]),
 				})
 				if err != nil {
 					return err
