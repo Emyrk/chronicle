@@ -57,6 +57,7 @@ func TestWorkerRebuildTenantRatingsCrossRealmToPublication(t *testing.T) {
 		require.NoError(t, cpErr)
 		if cp.Phase == "complete" {
 			require.NoError(t, err)
+			require.Zero(t, i, "small tenant should publish without one snooze per phase")
 			completed = true
 			break
 		}

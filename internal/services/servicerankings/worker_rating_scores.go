@@ -2,6 +2,7 @@ package servicerankings
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -83,9 +84,75 @@ type WorkerRebuildTenantRatings struct {
 	Logger *slog.Logger
 }
 
-// Every invocation commits at most one bounded tenant evidence, Peak/Renown,
-// Mastery, or raid-scope page. River snoozing does not consume an attempt.
+// Each step commits at most one bounded evidence, projection, Mastery, or
+// raid-scope page. Batch a fixed number of steps per River invocation so a
+// large tenant does not create thousands of one-second snoozes. Transactions
+// and checkpoint CAS remain page-sized; a later invocation resumes the cursor.
+const ratingPagesPerInvocation = 32
+
 func (w *WorkerRebuildTenantRatings) Work(ctx context.Context, job *river.Job[ArgsRebuildTenantRatings]) error {
+	if job.Args.TenantID == uuid.Nil {
+		ctx = servicetenant.AdminBypass(ctx)
+	} else {
+		ctx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
+	}
+	for page := range ratingPagesPerInvocation {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := w.workPage(ctx, job)
+		if err == nil {
+			w.recordRatingProgress(ctx, job, page+1, "complete")
+			return nil
+		}
+		var snooze *river.JobSnoozeError
+		if !errors.As(err, &snooze) {
+			w.recordRatingProgress(ctx, job, page+1, "failed")
+			return err
+		}
+	}
+	w.recordRatingProgress(ctx, job, ratingPagesPerInvocation, "building")
+	return river.JobSnooze(time.Second)
+}
+
+// River stores this compact snapshot in metadata.output after each attempt,
+// including snoozes. A generation-bound page counter and phase convey progress
+// without guessing a percentage before the bounded staging scans finish.
+func (w *WorkerRebuildTenantRatings) recordRatingProgress(ctx context.Context, job *river.Job[ArgsRebuildTenantRatings], pages int, status string) {
+	tenant := job.Args.TenantID
+	output := map[string]any{"tenant_id": tenant, "status": status, "pages_this_attempt": pages}
+	var generation uuid.UUID
+	if cp, err := w.Store.GetBuildingRatingRebuildCheckpoint(ctx, tenant); err == nil {
+		generation = cp.GenerationID
+		output["phase"] = cp.Phase
+	} else if status == "complete" {
+		output["phase"] = "complete"
+		generation, _ = w.Store.GetActiveTenantRatingGeneration(ctx, tenant)
+	}
+	if generation != uuid.Nil {
+		output["generation_id"] = generation
+	}
+	output["pages_processed"] = ratingPagesProcessed(job, generation, pages)
+	_ = river.RecordOutput(ctx, output)
+}
+
+func ratingPagesProcessed(job *river.Job[ArgsRebuildTenantRatings], generation uuid.UUID, pages int) int {
+	if job.JobRow == nil || len(job.Metadata) == 0 || generation == uuid.Nil {
+		return pages
+	}
+	var previous struct {
+		Output struct {
+			GenerationID   uuid.UUID `json:"generation_id"`
+			PagesProcessed int       `json:"pages_processed"`
+		} `json:"output"`
+	}
+	if json.Unmarshal(job.Metadata, &previous) == nil && previous.Output.GenerationID == generation && previous.Output.PagesProcessed > 0 {
+		return previous.Output.PagesProcessed + pages
+	}
+	return pages
+}
+
+func (w *WorkerRebuildTenantRatings) workPage(ctx context.Context, job *river.Job[ArgsRebuildTenantRatings]) error {
 	tenant := job.Args.TenantID
 	if tenant == uuid.Nil {
 		ctx = servicetenant.AdminBypass(ctx)

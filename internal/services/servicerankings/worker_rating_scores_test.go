@@ -136,9 +136,8 @@ func TestWorkerRebuildTenantRatingsPublishesOnlyReady(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, store.published)
 			} else {
-				require.Error(t, err) // River snooze after the ready transition.
-				require.Equal(t, "ready", store.cp.Phase)
-				require.False(t, store.published)
+				require.NoError(t, err) // Ready and publish can finish in one bounded invocation.
+				require.True(t, store.published)
 			}
 		})
 	}
