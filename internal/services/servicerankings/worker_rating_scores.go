@@ -84,6 +84,8 @@ type WorkerRebuildTenantRatings struct {
 	Store           database.Store
 	Logger          *slog.Logger
 	RebuildDuration prometheus.Observer // Nil in workers constructed outside the service (e.g. tests).
+	// PagesPerInvocation caps the steps per River invocation; 0 uses ratingPagesPerInvocation.
+	PagesPerInvocation int
 }
 
 // Each step commits at most one bounded evidence, projection, Mastery, or
@@ -103,7 +105,11 @@ func (w *WorkerRebuildTenantRatings) Work(ctx context.Context, job *river.Job[Ar
 	}
 	started := time.Now()
 	pages := 0
-	for pages < ratingPagesPerInvocation && (pages == 0 || time.Since(started) < ratingInvocationTimeLimit) {
+	limit := w.PagesPerInvocation
+	if limit <= 0 {
+		limit = ratingPagesPerInvocation
+	}
+	for pages < limit && (pages == 0 || time.Since(started) < ratingInvocationTimeLimit) {
 		if err := ctx.Err(); err != nil {
 			return err
 		}

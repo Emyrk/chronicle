@@ -56,15 +56,36 @@ func TestTenantRatingStageIncludesUnassignedRealmsAndBosses(t *testing.T) {
 	require.NoError(t, conn.QueryRow(ctx, `SELECT count(DISTINCT realm_id) FROM rating_stage_player_observations
 		WHERE generation_id=$1 AND instance_name='Uncurated Raid' AND encounter_name='Uncurated Boss'`, generation).Scan(&realms))
 	require.Equal(t, 2, realms)
-	// The scheduled worker now resumes this tenant checkpoint, but must not
-	// publish before every tenant projection phase completes.
+	// The scheduled worker resumes this tenant checkpoint. An invocation that stops
+	// partway snoozes and must not publish; the generation goes active only once
+	// every phase has completed.
+	job := &river.Job[servicerankings.ArgsRebuildTenantRatings]{Args: servicerankings.ArgsRebuildTenantRatings{TenantID: uuid.Nil}}
+	status := func() (string, string) {
+		var generationStatus, phase string
+		require.NoError(t, conn.QueryRow(ctx, "SELECT status FROM rating_score_generations WHERE id=$1", generation).Scan(&generationStatus))
+		require.NoError(t, conn.QueryRow(ctx, "SELECT phase FROM rating_rebuild_checkpoints WHERE generation_id=$1", generation).Scan(&phase))
+		return generationStatus, phase
+	}
+	oneStep := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default(), PagesPerInvocation: 1}
+	err = oneStep.Work(ctx, job)
+	var snooze *river.JobSnoozeError
+	require.ErrorAs(t, err, &snooze, "a partial invocation snoozes")
+	generationStatus, phase := status()
+	require.Equal(t, "building", generationStatus)
+	require.NotEqual(t, "complete", phase)
 	worker := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default()}
-	require.Error(t, worker.Work(ctx, &river.Job[servicerankings.ArgsRebuildTenantRatings]{
-		Args: servicerankings.ArgsRebuildTenantRatings{TenantID: uuid.Nil},
-	}))
-	var active int
-	require.NoError(t, conn.QueryRow(ctx, "SELECT count(*) FROM rating_score_generations WHERE id=$1 AND status='active'", generation).Scan(&active))
-	require.Zero(t, active)
+	for i := 0; ; i++ {
+		require.Less(t, i, 20, "rebuild did not finish")
+		if err = worker.Work(ctx, job); err == nil {
+			break
+		}
+		require.ErrorAs(t, err, &snooze)
+		generationStatus, _ = status()
+		require.Equal(t, "building", generationStatus, "never published before the rebuild finishes")
+	}
+	generationStatus, phase = status()
+	require.Equal(t, "active", generationStatus)
+	require.Equal(t, "complete", phase)
 }
 
 // The tenant snapshot freezes the fixed policy and realm-specific flavor awards.
