@@ -33,8 +33,8 @@ func TestTenantScopeProjectionRaidPages(t *testing.T) {
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, "UPDATE rating_rebuild_checkpoints SET phase='player_scopes' WHERE generation_id=$1", gen)
 	require.NoError(t, err)
-	// The first realm has a roster: a missed required boss (Jeklik) counts as 0 in
-	// its raid Peak, a missed optional one (Mandokir) does not. The second has none.
+	// The first realm has a roster: missed bosses (Jeklik, and optional Mandokir)
+	// count as 0 in its raid Peak. The second has none.
 	roster := `[{"realm_id":"` + realms[0].String() + `","instance_name":"Zul'Gurub","encounter_name":"High Priestess Jeklik","renown_points":0},` +
 		`{"realm_id":"` + realms[0].String() + `","instance_name":"Zul'Gurub","encounter_name":"Hakkar","renown_points":3},` +
 		`{"realm_id":"` + realms[0].String() + `","instance_name":"Zul'Gurub","encounter_name":"Bloodlord Mandokir","renown_points":1},` +
@@ -81,10 +81,10 @@ func TestTenantScopeProjectionRaidPages(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "scopes_complete", cp.Phase)
 	for i, realm := range realms {
-		// Roster realm: (Jeklik 0 + Hakkar 50 + Edge of Madness 90) / 3. Otherwise the observed average.
+		// Roster realm: (Jeklik 0 + Hakkar 50 + Mandokir 0 + Edge of Madness 90) / 4. Otherwise the observed average.
 		wantPeak := 70.0 + float64(i*10)
 		if i == 0 {
-			wantPeak = 140.0 / 3
+			wantPeak = 140.0 / 4
 		}
 		var score float64
 		err = pool.QueryRow(ctx, `SELECT score FROM player_tenant_rating_scope_scores WHERE generation_id=$1 AND realm_id=$2 AND rating_metric='peak'`, gen, realm).Scan(&score)

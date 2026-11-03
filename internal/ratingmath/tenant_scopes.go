@@ -104,17 +104,6 @@ func tenantScopeThroughput(bosses []tenantScopeBoss) (raw, duration float64, ok 
 	return output / duration, duration, true
 }
 
-// tenantOptionalSlots never count against a raid Peak when missed; killed, they
-// count like any boss. Mirrors the hub's optional bosses (ZG's Edge of Madness
-// is one slot) plus Emerald Sanctum's separately ranked hard mode.
-var tenantOptionalSlots = map[tenantScopeSlot]bool{
-	{"Zul'Gurub", "Bloodlord Mandokir"}:        true,
-	{"Zul'Gurub", "Jin'do the Hexxer"}:         true,
-	{"Zul'Gurub", "Gahz'ranka"}:                true,
-	{"Zul'Gurub", "Edge of Madness"}:           true,
-	{"Emerald Sanctum", "Solnius (Hard Mode)"}: true,
-}
-
 func tenantSlot(instance, encounter string) tenantScopeSlot {
 	slot := tenantScopeSlot{instance, encounter}
 	if instance == "Zul'Gurub" {
@@ -126,9 +115,10 @@ func tenantSlot(instance, encounter string) tenantScopeSlot {
 	return slot
 }
 
-// tenantRaidPeak is a raid Peak over the raid's roster: every required boss
-// counts, a missed one as 0, so 100 means a 100 Peak on every required boss.
-// Optional bosses count only when killed. Kills outside the roster are ignored.
+// tenantRaidPeak is a raid Peak over the raid's roster: every boss counts,
+// optional ones included, a missed one as 0, so 100 means a 100 Peak on every
+// boss. ZG's Edge of Madness is one slot (one of four is up per reset). Kills
+// outside the roster are ignored.
 // ok is false without a roster (an uncurated raid), where callers keep the
 // observed-boss average.
 func tenantRaidPeak(bosses []tenantScopeBoss, roster []string) (score float64, ok bool) {
@@ -153,11 +143,7 @@ func tenantRaidPeak(bosses []tenantScopeBoss, roster []string) (score float64, o
 	var total float64
 	var count int
 	for slot := range slots {
-		value, killed := best[slot]
-		if tenantOptionalSlots[slot] && !killed {
-			continue
-		}
-		total += value
+		total += best[slot]
 		count++
 	}
 	if count == 0 {

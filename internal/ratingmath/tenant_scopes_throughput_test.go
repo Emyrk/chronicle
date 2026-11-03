@@ -53,13 +53,13 @@ func TestTenantRaidPeak(t *testing.T) {
 	require.True(t, ok)
 	require.InDelta(t, 100, score, 1e-9)
 
-	// Optional bosses never count against you, but count when killed; Edge of Madness is one slot.
+	// Optional bosses count like any boss, a missed one as 0; Edge of Madness is one slot.
 	zg := []string{"Hakkar", "Bloodlord Mandokir", "Gri'lek", "Renataki"}
 	score, ok = tenantRaidPeak([]tenantScopeBoss{{instance: "Zul'Gurub", encounter: "Hakkar", score: 80}}, zg)
 	require.True(t, ok)
-	require.InDelta(t, 80, score, 1e-9)
+	require.InDelta(t, 80.0/3, score, 1e-9)
 	score, ok = tenantRaidPeak([]tenantScopeBoss{
-		{instance: "Zul'Gurub", encounter: "Hakkar", score: 80},
+		{instance: "Zul'Gurub", encounter: "Hakkar", score: 80}, {instance: "Zul'Gurub", encounter: "Bloodlord Mandokir", score: 70},
 		{instance: "Zul'Gurub", encounter: "Gri'lek", score: 40}, {instance: "Zul'Gurub", encounter: "Renataki", score: 60},
 	}, zg)
 	require.True(t, ok)
