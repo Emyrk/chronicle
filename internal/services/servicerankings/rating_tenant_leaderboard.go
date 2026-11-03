@@ -30,6 +30,8 @@ type tenantRatingReader interface {
 	GetActiveTenantRatingGeneration(context.Context, uuid.UUID) (uuid.UUID, error)
 	ListActivePlayerTenantBossScores(context.Context, database.ListActivePlayerTenantBossScoresParams) ([]database.ListActivePlayerTenantBossScoresRow, error)
 	ListActivePlayerTenantScopeScores(context.Context, database.ListActivePlayerTenantScopeScoresParams) ([]database.ListActivePlayerTenantScopeScoresRow, error)
+	ListActiveAllClassPlayerTenantBossScores(context.Context, database.ListActiveAllClassPlayerTenantBossScoresParams) ([]database.ListActiveAllClassPlayerTenantBossScoresRow, error)
+	ListActiveAllClassPlayerTenantScopeScores(context.Context, database.ListActiveAllClassPlayerTenantScopeScoresParams) ([]database.ListActiveAllClassPlayerTenantScopeScoresRow, error)
 	ListActiveGuildTenantBossScores(context.Context, database.ListActiveGuildTenantBossScoresParams) ([]database.ListActiveGuildTenantBossScoresRow, error)
 	ListActiveGuildTenantScopeScores(context.Context, database.ListActiveGuildTenantScopeScoresParams) ([]database.ListActiveGuildTenantScopeScoresRow, error)
 }
@@ -80,7 +82,7 @@ func tenantRatingInput(r *http.Request, guild, boss bool) (url.Values, []uuid.UU
 	}
 	if !guild {
 		required = append(required, "performance_metric")
-		if q.Get("rating_metric") != "renown" {
+		if q.Get("rating_metric") != "renown" && !q.Has("all_classes") {
 			required = append(required, "class", "spec", "sub_spec")
 		}
 	}
@@ -119,6 +121,9 @@ func tenantRatingInput(r *http.Request, guild, boss bool) (url.Values, []uuid.UU
 	default:
 		return nil, nil, 0, "", tenantRatingCursor{}, errors.New("invalid rating_metric")
 	}
+	if q.Has("all_classes") && (q.Get("all_classes") != "true" || guild || metric == "renown") {
+		return nil, nil, 0, "", tenantRatingCursor{}, errors.New("all_classes is only supported for non-renown player boards")
+	}
 	if guild {
 		for _, key := range []string{"class", "spec", "sub_spec", "performance_metric"} {
 			if q.Has(key) {
@@ -129,8 +134,14 @@ func tenantRatingInput(r *http.Request, guild, boss bool) (url.Values, []uuid.UU
 		if q.Get("class") != "" || q.Get("spec") != "" || q.Get("sub_spec") != "" || q.Get("performance_metric") != "none" {
 			return nil, nil, 0, "", tenantRatingCursor{}, errors.New("invalid renown player cohort")
 		}
-	} else if strings.TrimSpace(q.Get("class")) == "" || (q.Get("performance_metric") != "dps" && q.Get("performance_metric") != "hps") {
+	} else if (q.Get("performance_metric") != "dps" && q.Get("performance_metric") != "hps") ||
+		(q.Has("all_classes") && ((q.Get("class") == "" && (q.Get("spec") != "" || q.Get("sub_spec") != "")) || (q.Get("spec") == "" && q.Get("sub_spec") != ""))) ||
+		(!q.Has("all_classes") && strings.TrimSpace(q.Get("class")) == "") ||
+		(q.Has("all_classes") && q.Get("class") != "" && strings.TrimSpace(q.Get("class")) == "") {
 		return nil, nil, 0, "", tenantRatingCursor{}, errors.New("invalid player cohort")
+	}
+	if q.Has("all_classes") && (strings.TrimSpace(q.Get("difficulty_name")) == "" || max == 0) {
+		return nil, nil, 0, "", tenantRatingCursor{}, errors.New("all_classes requires difficulty_name and max_players")
 	}
 	if metric == "renown" && (max != 0 || q.Get("difficulty_name") != "") {
 		return nil, nil, 0, "", tenantRatingCursor{}, errors.New("max_players and difficulty_name must match the rating cohort")
@@ -163,6 +174,9 @@ func tenantRatingInput(r *http.Request, guild, boss bool) (url.Values, []uuid.UU
 	// Bind only semantic cohort/filter fields, not page size. A canonical encoding also
 	// allows equivalent realm orderings to resume the same board.
 	cohort := []any{servicetenant.TenantIDFromContext(r.Context()), guild, boss, q.Get("instance_name"), q.Get("encounter_name"), q.Get("difficulty_name"), max, q.Get("class"), q.Get("spec"), q.Get("sub_spec"), q.Get("performance_metric"), metric, window, realms}
+	if q.Has("all_classes") {
+		cohort = append(cohort, "all_classes")
+	}
 	raw, _ := json.Marshal(cohort)
 	hash := sha256.Sum256(raw)
 	binding := hex.EncodeToString(hash[:])
@@ -269,9 +283,29 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 		}
 		payload = chroniclesdk.TenantGuildScopeLeaderboardResponse{Scope: "raid", Entries: entries, NextCursor: next}
 	} else if boss {
+		read := func(p database.ListActivePlayerTenantBossScoresParams) ([]database.ListActivePlayerTenantBossScoresRow, error) {
+			if !q.Has("all_classes") {
+				return store.ListActivePlayerTenantBossScores(ctx, p)
+			}
+			all := database.ListActiveAllClassPlayerTenantBossScoresParams{TenantID: p.TenantID, GenerationID: p.GenerationID,
+				InstanceName: p.InstanceName, EncounterName: p.EncounterName, DifficultyName: p.DifficultyName,
+				MaxPlayers: p.MaxPlayers, PlayerClass: p.PlayerClass, PlayerSpec: p.PlayerSpec, PlayerSubSpec: p.PlayerSubSpec,
+				PerformanceMetric: p.PerformanceMetric, RatingMetric: p.RatingMetric, WindowKind: p.WindowKind,
+				RealmIds: p.RealmIds, LimitCount: p.LimitCount, AfterScore: p.AfterScore,
+				AfterRealmID: p.AfterRealmID, AfterPlayerGuid: p.AfterPlayerGuid}
+			selected, err := store.ListActiveAllClassPlayerTenantBossScores(ctx, all)
+			if err != nil {
+				return nil, err
+			}
+			rows := make([]database.ListActivePlayerTenantBossScoresRow, len(selected))
+			for i, row := range selected {
+				rows[i] = database.ListActivePlayerTenantBossScoresRow(row)
+			}
+			return rows, nil
+		}
 		params := database.ListActivePlayerTenantBossScoresParams{TenantID: tenant, GenerationID: generation, InstanceName: q.Get("instance_name"), EncounterName: q.Get("encounter_name"), DifficultyName: q.Get("difficulty_name"), MaxPlayers: tenantMax(q), PlayerClass: tenantClass(q), PlayerSpec: q.Get("spec"), PlayerSubSpec: q.Get("sub_spec"), PerformanceMetric: q.Get("performance_metric"), RatingMetric: q.Get("rating_metric"), WindowKind: q.Get("window_kind"), RealmIds: realms, LimitCount: limit}
 		params.AfterScore, params.AfterRealmID, params.AfterPlayerGuid = cursor.Score, cursor.Realm, cursor.Player
-		rows, e := store.ListActivePlayerTenantBossScores(ctx, params)
+		rows, e := read(params)
 		if e != nil {
 			httpapi.InternalServerError(w, e)
 			return
@@ -288,7 +322,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 			last := rows[len(rows)-1]
 			params.AfterScore, params.AfterRealmID, params.AfterPlayerGuid = last.Score, last.RealmID, last.PlayerGuid
 			params.LimitCount = 1
-			more, e := store.ListActivePlayerTenantBossScores(ctx, params)
+			more, e := read(params)
 			if e != nil {
 				httpapi.InternalServerError(w, e)
 				return
@@ -299,9 +333,29 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 		}
 		payload = chroniclesdk.TenantPlayerBossLeaderboardResponse{Entries: entries, NextCursor: next}
 	} else {
+		read := func(p database.ListActivePlayerTenantScopeScoresParams) ([]database.ListActivePlayerTenantScopeScoresRow, error) {
+			if !q.Has("all_classes") {
+				return store.ListActivePlayerTenantScopeScores(ctx, p)
+			}
+			all := database.ListActiveAllClassPlayerTenantScopeScoresParams{TenantID: p.TenantID, GenerationID: p.GenerationID,
+				InstanceName: p.InstanceName, DifficultyName: p.DifficultyName,
+				MaxPlayers: p.MaxPlayers, PlayerClass: p.PlayerClass, PlayerSpec: p.PlayerSpec, PlayerSubSpec: p.PlayerSubSpec,
+				PerformanceMetric: p.PerformanceMetric, RatingMetric: p.RatingMetric, WindowKind: p.WindowKind,
+				RealmIds: p.RealmIds, LimitCount: p.LimitCount, AfterScore: p.AfterScore,
+				AfterRealmID: p.AfterRealmID, AfterPlayerGuid: p.AfterPlayerGuid}
+			selected, err := store.ListActiveAllClassPlayerTenantScopeScores(ctx, all)
+			if err != nil {
+				return nil, err
+			}
+			rows := make([]database.ListActivePlayerTenantScopeScoresRow, len(selected))
+			for i, row := range selected {
+				rows[i] = database.ListActivePlayerTenantScopeScoresRow(row)
+			}
+			return rows, nil
+		}
 		params := database.ListActivePlayerTenantScopeScoresParams{TenantID: tenant, GenerationID: generation, InstanceName: q.Get("instance_name"), DifficultyName: q.Get("difficulty_name"), MaxPlayers: tenantMax(q), PlayerClass: tenantClass(q), PlayerSpec: q.Get("spec"), PlayerSubSpec: q.Get("sub_spec"), PerformanceMetric: q.Get("performance_metric"), RatingMetric: q.Get("rating_metric"), WindowKind: q.Get("window_kind"), RealmIds: realms, LimitCount: limit}
 		params.AfterScore, params.AfterRealmID, params.AfterPlayerGuid = cursor.Score, cursor.Realm, cursor.Player
-		rows, e := store.ListActivePlayerTenantScopeScores(ctx, params)
+		rows, e := read(params)
 		if e != nil {
 			httpapi.InternalServerError(w, e)
 			return
@@ -318,7 +372,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 			last := rows[len(rows)-1]
 			params.AfterScore, params.AfterRealmID, params.AfterPlayerGuid = last.Score, last.RealmID, last.PlayerGuid
 			params.LimitCount = 1
-			more, e := store.ListActivePlayerTenantScopeScores(ctx, params)
+			more, e := read(params)
 			if e != nil {
 				httpapi.InternalServerError(w, e)
 				return
@@ -352,7 +406,7 @@ func tenantMax(q url.Values) int16 {
 	return int16(n)
 }
 func tenantClass(q url.Values) string {
-	if q.Get("rating_metric") == "renown" {
+	if q.Get("rating_metric") == "renown" || q.Get("class") == "" {
 		return ""
 	}
 	return string(db2sdk.HeroClassToDB(types.HeroClasses(q.Get("class"))))

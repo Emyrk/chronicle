@@ -76,6 +76,28 @@ func (s *tenantLeaderboardStub) ListActivePlayerTenantScopeScores(_ context.Cont
 		return row.Score, row.RealmID, row.PlayerGuid
 	}), nil
 }
+func (s *tenantLeaderboardStub) ListActiveAllClassPlayerTenantBossScores(_ context.Context, p database.ListActiveAllClassPlayerTenantBossScoresParams) ([]database.ListActiveAllClassPlayerTenantBossScoresRow, error) {
+	s.params = append(s.params, p)
+	rows := pageRows(s.playerBoss, p.LimitCount, p.AfterScore, p.AfterRealmID, p.AfterPlayerGuid, func(row database.ListActivePlayerTenantBossScoresRow) (float64, uuid.UUID, string) {
+		return row.Score, row.RealmID, row.PlayerGuid
+	})
+	out := make([]database.ListActiveAllClassPlayerTenantBossScoresRow, len(rows))
+	for i, row := range rows {
+		out[i] = database.ListActiveAllClassPlayerTenantBossScoresRow(row)
+	}
+	return out, nil
+}
+func (s *tenantLeaderboardStub) ListActiveAllClassPlayerTenantScopeScores(_ context.Context, p database.ListActiveAllClassPlayerTenantScopeScoresParams) ([]database.ListActiveAllClassPlayerTenantScopeScoresRow, error) {
+	s.params = append(s.params, p)
+	rows := pageRows(s.playerScope, p.LimitCount, p.AfterScore, p.AfterRealmID, p.AfterPlayerGuid, func(row database.ListActivePlayerTenantScopeScoresRow) (float64, uuid.UUID, string) {
+		return row.Score, row.RealmID, row.PlayerGuid
+	})
+	out := make([]database.ListActiveAllClassPlayerTenantScopeScoresRow, len(rows))
+	for i, row := range rows {
+		out[i] = database.ListActiveAllClassPlayerTenantScopeScoresRow(row)
+	}
+	return out, nil
+}
 func tenantRequest(q url.Values, tenant uuid.UUID, stub *tenantLeaderboardStub, guild, boss bool) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodGet, "/ratings/tenant?"+q.Encode(), nil)
 	req = req.WithContext(servicetenant.WithTenantID(req.Context(), tenant))
@@ -306,4 +328,88 @@ func TestTenantRatingLeaderboardValidationAndRace(t *testing.T) {
 	var result chroniclesdk.TenantPlayerScopeLeaderboardResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
 	require.Empty(t, result.Entries)
+}
+
+func TestTenantAllClassPlayerLeaderboard(t *testing.T) {
+	t.Parallel()
+	tenant, gen, realm := uuid.New(), uuid.New(), uuid.New()
+	for _, boss := range []bool{true, false} {
+		t.Run(strconv.FormatBool(boss), func(t *testing.T) {
+			t.Parallel()
+			stub := &tenantLeaderboardStub{tenant: tenant, generation: gen,
+				playerBoss:  []database.ListActivePlayerTenantBossScoresRow{{TenantID: tenant, GenerationID: gen, RealmID: realm, PlayerGuid: "a", Score: 42}, {TenantID: tenant, GenerationID: gen, RealmID: realm, PlayerGuid: "b", Score: 42}},
+				playerScope: []database.ListActivePlayerTenantScopeScoresRow{{TenantID: tenant, GenerationID: gen, RealmID: realm, PlayerGuid: "a", Score: 42}, {TenantID: tenant, GenerationID: gen, RealmID: realm, PlayerGuid: "b", Score: 42}}}
+			q := tenantBase(false, boss)
+			q.Set("difficulty_name", "Heroic")
+			q.Del("class")
+			q.Del("spec")
+			q.Del("sub_spec")
+			require.Equal(t, http.StatusBadRequest, tenantRequest(q, tenant, stub, false, boss).Code)
+			q.Set("all_classes", "true")
+			first := tenantRequest(q, tenant, stub, false, boss)
+			require.Equal(t, http.StatusOK, first.Code, first.Body.String())
+			var result struct {
+				NextCursor string            `json:"next_cursor"`
+				Entries    []json.RawMessage `json:"entries"`
+			}
+			require.NoError(t, json.Unmarshal(first.Body.Bytes(), &result))
+			require.Len(t, result.Entries, 1)
+			require.NotEmpty(t, result.NextCursor)
+			switch p := stub.params[0].(type) {
+			case database.ListActiveAllClassPlayerTenantBossScoresParams:
+				require.Empty(t, p.PlayerClass)
+				require.Equal(t, gen, p.GenerationID)
+			case database.ListActiveAllClassPlayerTenantScopeScoresParams:
+				require.Empty(t, p.PlayerClass)
+				require.Equal(t, gen, p.GenerationID)
+			default:
+				t.Fatalf("unexpected query: %T", p)
+			}
+			q.Set("cursor", result.NextCursor)
+			require.Equal(t, http.StatusOK, tenantRequest(q, tenant, stub, false, boss).Code)
+			// Even a fully specified cohort cannot reuse a cursor across reader modes.
+			mode := tenantBase(false, boss)
+			mode.Set("difficulty_name", "Heroic")
+			mode.Set("all_classes", "true")
+			modeFirst := tenantRequest(mode, tenant, stub, false, boss)
+			require.Equal(t, http.StatusOK, modeFirst.Code)
+			var modeResult struct {
+				NextCursor string `json:"next_cursor"`
+			}
+			require.NoError(t, json.Unmarshal(modeFirst.Body.Bytes(), &modeResult))
+			mode.Del("all_classes")
+			mode.Set("cursor", modeResult.NextCursor)
+			require.Equal(t, http.StatusBadRequest, tenantRequest(mode, tenant, stub, false, boss).Code)
+			q.Set("class", "Warrior")
+			require.Equal(t, http.StatusBadRequest, tenantRequest(q, tenant, stub, false, boss).Code, "class change invalidates cursor")
+			q.Del("cursor")
+			q.Set("spec", "Fury")
+			require.Equal(t, http.StatusOK, tenantRequest(q, tenant, stub, false, boss).Code)
+			q.Del("spec")
+			require.Equal(t, http.StatusOK, tenantRequest(q, tenant, stub, false, boss).Code, "class-only cohort")
+			switch p := stub.params[len(stub.params)-1].(type) {
+			case database.ListActiveAllClassPlayerTenantBossScoresParams:
+				require.Equal(t, "WARRIOR", p.PlayerClass)
+				require.Empty(t, p.PlayerSpec)
+			case database.ListActiveAllClassPlayerTenantScopeScoresParams:
+				require.Equal(t, "WARRIOR", p.PlayerClass)
+				require.Empty(t, p.PlayerSpec)
+			default:
+				t.Fatalf("unexpected query: %T", p)
+			}
+			q.Del("class")
+			q.Set("spec", "Fury")
+			require.Equal(t, http.StatusBadRequest, tenantRequest(q, tenant, stub, false, boss).Code)
+			q.Del("spec")
+			q.Set("difficulty_name", "")
+			require.Equal(t, http.StatusBadRequest, tenantRequest(q, tenant, stub, false, boss).Code)
+			q.Set("difficulty_name", "Heroic")
+			q.Set("all_classes", "false")
+			require.Equal(t, http.StatusBadRequest, tenantRequest(q, tenant, stub, false, boss).Code)
+			q.Set("all_classes", "true")
+			q.Set("rating_metric", "renown")
+			q.Set("window_kind", "career")
+			require.Equal(t, http.StatusBadRequest, tenantRequest(q, tenant, stub, false, boss).Code)
+		})
+	}
 }

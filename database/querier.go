@@ -756,6 +756,8 @@ type sqlcQuerier interface {
 	IsLogInstanceInvalid(ctx context.Context, id uuid.UUID) (bool, error)
 	IsParsedLogGroupVisible(ctx context.Context, id uuid.UUID) (bool, error)
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
+	ListActiveAllClassPlayerTenantBossScores(ctx context.Context, arg ListActiveAllClassPlayerTenantBossScoresParams) ([]ListActiveAllClassPlayerTenantBossScoresRow, error)
+	ListActiveAllClassPlayerTenantScopeScores(ctx context.Context, arg ListActiveAllClassPlayerTenantScopeScoresParams) ([]ListActiveAllClassPlayerTenantScopeScoresRow, error)
 	ListActiveBossRatingScores(ctx context.Context, arg ListActiveBossRatingScoresParams) ([]RatingBossScore, error)
 	ListActiveGroupBossRatingScores(ctx context.Context, arg ListActiveGroupBossRatingScoresParams) ([]RatingBossScore, error)
 	ListActiveGuildRatingBossScores(ctx context.Context, arg ListActiveGuildRatingBossScoresParams) ([]GuildRatingBossScore, error)

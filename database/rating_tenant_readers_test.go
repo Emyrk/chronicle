@@ -136,6 +136,84 @@ func TestTenantRatingReaders(t *testing.T) {
 	playerBoss.LimitCount, playerScope.LimitCount, guildBoss.LimitCount, guildScope.LimitCount = 1, 1, 1, 1
 	check(realms[:1])
 	playerBoss.LimitCount, playerScope.LimitCount, guildBoss.LimitCount, guildScope.LimitCount = 100, 100, 100, 100
+	// A player's strongest class/spec wins before pagination. A lower-scoring
+	// second cohort must not reappear on later pages, including across ties.
+	for _, table := range []string{"player_tenant_rating_boss_scores", "player_tenant_rating_scope_scores"} {
+		columns := "generation_id,tenant_id,realm_id,instance_name,difficulty_name,max_players,rating_metric,window_kind,score,player_guid,player_class,player_spec,player_sub_spec,performance_metric"
+		for _, row := range []struct {
+			guid, class, spec string
+			score             float64
+		}{{"player", "Warrior", "Arms", 105}, {"other", "Rogue", "Combat", 105}} {
+			values := "($1,$2,$3,'Molten Core','Heroic',40,'peak','all_time',$4,$5,$6,$7,'','dps')"
+			if table == "player_tenant_rating_boss_scores" {
+				columns += ",encounter_name"
+				values = values[:len(values)-1] + ",'Ragnaros')"
+			}
+			_, err = conn.Exec(ctx, "INSERT INTO "+table+" ("+columns+") VALUES "+values, active, tenant, realms[0], row.score, row.guid, row.class, row.spec)
+			require.NoError(t, err)
+			if table == "player_tenant_rating_boss_scores" {
+				columns = columns[:len(columns)-len(",encounter_name")]
+			}
+		}
+	}
+	for _, table := range []string{"player_tenant_rating_boss_scores", "player_tenant_rating_scope_scores"} {
+		columns := "generation_id,tenant_id,realm_id,instance_name,difficulty_name,max_players,rating_metric,window_kind,score,player_guid,player_class,player_spec,player_sub_spec,performance_metric"
+		values := "($1,$2,$3,'Molten Core','Heroic',40,'peak','all_time',95,'classmate','Warrior','Fury','','dps')"
+		if table == "player_tenant_rating_boss_scores" {
+			columns += ",encounter_name"
+			values = values[:len(values)-1] + ",'Ragnaros')"
+		}
+		_, err = conn.Exec(ctx, "INSERT INTO "+table+" ("+columns+") VALUES "+values, active, tenant, realms[0])
+		require.NoError(t, err)
+	}
+	allBoss := database.ListActiveAllClassPlayerTenantBossScoresParams{TenantID: tenant, GenerationID: active, InstanceName: "Molten Core", EncounterName: "Ragnaros", DifficultyName: "Heroic", MaxPlayers: 40, PerformanceMetric: "dps", RatingMetric: "peak", WindowKind: "all_time", LimitCount: 1}
+	allScope := database.ListActiveAllClassPlayerTenantScopeScoresParams{TenantID: tenant, GenerationID: active, InstanceName: "Molten Core", DifficultyName: "Heroic", MaxPlayers: 40, PerformanceMetric: "dps", RatingMetric: "peak", WindowKind: "all_time", LimitCount: 1}
+	for page, want := range []string{"other", "player", "classmate", "player"} {
+		bossRows, e := q.ListActiveAllClassPlayerTenantBossScores(ctx, allBoss)
+		require.NoError(t, e)
+		require.Len(t, bossRows, 1, "boss page %d", page)
+		scopeRows, e := q.ListActiveAllClassPlayerTenantScopeScores(ctx, allScope)
+		require.NoError(t, e)
+		require.Len(t, scopeRows, 1, "scope page %d", page)
+		require.Equal(t, want, bossRows[0].PlayerGuid)
+		require.Equal(t, want, scopeRows[0].PlayerGuid)
+		wantRealm := realms[0]
+		if page == 3 {
+			wantRealm = realms[1]
+		}
+		require.Equal(t, wantRealm, bossRows[0].RealmID)
+		require.Equal(t, bossRows[0].RealmID, scopeRows[0].RealmID)
+		allBoss.AfterScore, allBoss.AfterRealmID, allBoss.AfterPlayerGuid = bossRows[0].Score, bossRows[0].RealmID, bossRows[0].PlayerGuid
+		allScope.AfterScore, allScope.AfterRealmID, allScope.AfterPlayerGuid = scopeRows[0].Score, scopeRows[0].RealmID, scopeRows[0].PlayerGuid
+	}
+	bossEnd, e := q.ListActiveAllClassPlayerTenantBossScores(ctx, allBoss)
+	require.NoError(t, e)
+	require.Empty(t, bossEnd)
+	scopeEnd, e := q.ListActiveAllClassPlayerTenantScopeScores(ctx, allScope)
+	require.NoError(t, e)
+	require.Empty(t, scopeEnd)
+	allBoss.AfterRealmID, allScope.AfterRealmID = uuid.Nil, uuid.Nil
+	allBoss.AfterPlayerGuid, allScope.AfterPlayerGuid = "", ""
+	allBoss.PlayerClass, allScope.PlayerClass = "Mage", "Mage"
+	mageBoss, e := q.ListActiveAllClassPlayerTenantBossScores(ctx, allBoss)
+	require.NoError(t, e)
+	require.Equal(t, "player", mageBoss[0].PlayerGuid)
+	require.Equal(t, float64(100), mageBoss[0].Score)
+	mageScope, e := q.ListActiveAllClassPlayerTenantScopeScores(ctx, allScope)
+	require.NoError(t, e)
+	require.Equal(t, float64(100), mageScope[0].Score)
+	allBoss.PlayerClass, allScope.PlayerClass = "Warrior", "Warrior"
+	allBoss.LimitCount, allScope.LimitCount = 100, 100
+	warriorBoss, e := q.ListActiveAllClassPlayerTenantBossScores(ctx, allBoss)
+	require.NoError(t, e)
+	require.Len(t, warriorBoss, 2)
+	require.Equal(t, "Arms", warriorBoss[0].PlayerSpec)
+	require.Equal(t, "Fury", warriorBoss[1].PlayerSpec)
+	warriorScope, e := q.ListActiveAllClassPlayerTenantScopeScores(ctx, allScope)
+	require.NoError(t, e)
+	require.Len(t, warriorScope, 2)
+	require.Equal(t, "Fury", warriorScope[1].PlayerSpec)
+	allBoss.PlayerClass, allScope.PlayerClass = "", ""
 	// The same score and realm require the subject tie-break. Page through
 	// all four boards with a single-row limit, including the lower score.
 	for _, table := range []string{"player_tenant_rating_boss_scores", "player_tenant_rating_scope_scores"} {
