@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import type { HubSummary, HubPlayerRatingEntry, HubGuildRatingEntry } from "@/api/typesGenerated"
 import type { LiveRatingCohort } from "@/pages/Leaderboards/Ratings/liveRatingAdapter"
 
@@ -54,5 +54,8 @@ export function useHubSummary(request: HubSummaryRequest, enabled = true) {
     staleTime: 5 * 60 * 1000,
     enabled,
     retry: false,
+    // A new selection keeps the last summary on screen (flagged isPlaceholderData), so the
+    // page never blanks; content checks the flag and shows its skeleton instead.
+    placeholderData: keepPreviousData,
   })
 }

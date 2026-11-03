@@ -3,6 +3,7 @@ import { ArrowDown, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react"
 import { RATING_METRICS, type RatingMetric } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 import { cn } from "@/lib/utils"
 import { BoardSearch, MasteryPartCells, MasteryPartHeaders } from "@/pages/Leaderboards/Ratings/RatingFullList"
+import { BoardSkeleton } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
 import { BossPortrait, Emblem, RankMark } from "@/pages/Leaderboards/Ratings/RatingParts"
 import { METRIC_THEMES, type MetricTheme, type RatingView } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { formatClock, guildRatings, type GuildRating } from "./hub.fixtures"
@@ -142,13 +143,14 @@ export function GuildRatingBoards({
   const all = data ? data.ratings : guildRatings(bosses, allBosses, instanceName, 99)
   const label = `Guild ${view === "overview" ? "ratings" : theme.label} · ${where}`
 
-  if (data?.error || data?.pending) {
+  if (data?.error) {
     return (
-      <section role={data.error ? "alert" : "status"} className="rounded-xl border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
-        {data.error ?? "Loading guild ratings…"}
+      <section role="alert" className="rounded-xl border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
+        {data.error}
       </section>
     )
   }
+  if (data?.pending) return <BoardSkeleton />
 
   return (
     <div className="space-y-5" style={{ "--metric": theme.accent } as CSSProperties}>

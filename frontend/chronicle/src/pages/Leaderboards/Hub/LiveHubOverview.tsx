@@ -60,7 +60,8 @@ export function LiveHubOverview({
     },
     changedScope,
   );
-  const summary = changedScope ? refreshed.data : pageSummary;
+  // A new scope keeps the last summary as placeholder data; show skeletons until its own arrives.
+  const summary = changedScope ? (refreshed.isPlaceholderData ? undefined : refreshed.data) : pageSummary;
   const exact = cohort
     ? {
         difficulty_names: cohort.difficulty_name,

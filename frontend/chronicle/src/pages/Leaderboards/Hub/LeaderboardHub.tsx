@@ -595,9 +595,39 @@ export interface OverviewData {
   pending?: boolean
 }
 
-/** A card body for a slot without rows. */
+/** A card body for a slot without rows: skeleton rows while loading, else why it is empty. */
 function Empty({ pending, text = "Not published for this selection yet" }: { pending?: boolean; text?: string }) {
-  return <p className="px-4 py-6 text-center text-xs text-muted-foreground">{pending ? "Loading…" : text}</p>
+  if (pending) return <SkeletonRows />
+  return <p className="px-4 py-6 text-center text-xs text-muted-foreground">{text}</p>
+}
+
+/** Placeholder rows in a card's row rhythm while its data loads. */
+export function SkeletonRows({ rows = 5 }: { rows?: number }) {
+  return (
+    <div role="status" aria-label="Loading" className="divide-y divide-white/5">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex items-center gap-3 px-4 py-2.5">
+          <span className="size-5 shrink-0 animate-pulse rounded-sm bg-white/[.06]" />
+          <span className="h-3 animate-pulse rounded bg-white/[.06]" style={{ width: `${55 - i * 6}%` }} />
+          <span className="ml-auto h-3 w-12 animate-pulse rounded bg-white/[.06]" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** The boss cards' grid while it loads. */
+function BossGridSkeleton() {
+  return (
+    <section aria-label="Bosses" className="space-y-3">
+      <h2 className="px-1 text-sm font-semibold">Bosses</h2>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="h-40 animate-pulse rounded-xl border bg-card" />
+        ))}
+      </div>
+    </section>
+  )
 }
 
 function filled<T>(rows: readonly T[] | undefined, pending: boolean | undefined, render: (rows: readonly T[]) => ReactNode) {
@@ -721,6 +751,7 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
         </div>
       )}
 
+      {!scope.boss && !data.bosses && pending && <BossGridSkeleton />}
       {!scope.boss && data.bosses && (
         <BossGrid role={role} only={set} onBoss={(boss) => onScope({ ...scope, boss })} summaries={data.bosses} optionalBosses={data.optionalBosses} />
       )}
@@ -969,6 +1000,13 @@ export function SpeedHero({
       {entries?.length ? (
         <div className="relative px-4 pt-10">
           <Podium entries={[...entries]} instanceName={instanceName} />
+        </div>
+      ) : pending ? (
+        // The podium's three steps, second / first / third.
+        <div role="status" aria-label="Loading" className="relative flex items-end justify-center gap-4 px-4 pt-10 pb-6">
+          {["h-28", "h-36", "h-24"].map((h, i) => (
+            <span key={i} className={cn("w-40 animate-pulse rounded-xl bg-white/[.06]", h)} />
+          ))}
         </div>
       ) : (
         <p className="relative px-4 pt-10 pb-8 text-center text-sm text-muted-foreground">

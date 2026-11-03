@@ -110,10 +110,12 @@ export function RatingBoards({
           toolbar={toolbar}
           live={live}
         />
-      ) : pending ? (
-        <section role={pending.status === "error" ? "alert" : "status"} className="rounded-xl border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
-          {pending.status === "error" ? pending.error : "Loading published ratings…"}
+      ) : pending?.status === "error" ? (
+        <section role="alert" className="rounded-xl border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
+          {pending.error}
         </section>
+      ) : pending ? (
+        <BoardSkeleton />
       ) : !single && readyBoards.length === 0 ? (
         <section role="status" className="rounded-xl border bg-card px-5 py-10 text-center text-sm text-muted-foreground">No published ratings for this selection.</section>
       ) : single && single.center.status === "ready" ? (
@@ -171,6 +173,31 @@ export function RatingBoards({
         </>
       )}
     </div>
+  )
+}
+
+/** The board's frame and rows while it loads. */
+export function BoardSkeleton() {
+  return (
+    <section role="status" aria-label="Loading ratings" className="overflow-hidden rounded-xl border bg-card">
+      <div className="flex items-center gap-3 border-b px-5 py-4">
+        <span className="size-9 animate-pulse rounded-md bg-white/[.06]" />
+        <span className="h-4 w-48 animate-pulse rounded bg-white/[.06]" />
+      </div>
+      <div className="grid sm:grid-cols-3 sm:divide-x">
+        {[0, 1, 2].map((column) => (
+          <div key={column} className="divide-y divide-white/5">
+            {Array.from({ length: 5 }, (_, i) => (
+              <div key={i} className="flex items-center gap-3 px-4 py-3">
+                <span className="size-6 shrink-0 animate-pulse rounded-full bg-white/[.06]" />
+                <span className="h-3 animate-pulse rounded bg-white/[.06]" style={{ width: `${60 - i * 7}%` }} />
+                <span className="ml-auto h-3 w-10 animate-pulse rounded bg-white/[.06]" />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 

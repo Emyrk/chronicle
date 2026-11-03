@@ -86,7 +86,8 @@ export function LiveHubRatings({
   })
 
   const live = useMemo<RatingLiveData>(() => {
-    const data = summary.data
+    // The last selection's summary stays as placeholder data while this one loads: not ready yet.
+    const data = summary.isPlaceholderData ? undefined : summary.data
     const boardFor = (target: RatingScope): HubRatingBoard | undefined =>
       target.boss ? data?.ratings.bosses.find((b) => b.encounter_name === target.boss) : data?.ratings.raid
     return {
@@ -116,7 +117,7 @@ export function LiveHubRatings({
         return setBoardPage(await fetchSetBoard(url), metric)
       },
     }
-  }, [summary.data, summary.isError, cohort, encounters, instanceName, performance, realmIDs, where])
+  }, [summary.data, summary.isPlaceholderData, summary.isError, cohort, encounters, instanceName, performance, realmIDs, where])
 
   if (subject === "guild") {
     const failed = guildLists.find((q) => q.isError)

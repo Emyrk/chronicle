@@ -32,8 +32,10 @@ export function LeaderboardsLiveHub() {
   const parsedSize = requestedSize === null ? NaN : Number(requestedSize)
   const requestedCohort = params.has("difficulty") && Number.isInteger(parsedSize) && parsedSize >= 0 && parsedSize <= 32767
     ? { difficulty: params.get("difficulty")!, maxPlayers: parsedSize } : undefined
+  // The page's summary is instance metadata (cohorts, realms, roster); it does not depend on the
+  // selected bosses, so picking a boss never reloads the page. Content fetches its own selection.
   const summary = useHubSummary({ instanceName: instance ?? undefined, tab: instance ? undefined : tab, realmIDs, performance: "dps",
-    cohort: requestedCohort, encounters: encounters.filter((name) => name !== "Trash") })
+    cohort: requestedCohort })
   const available = summary.data?.realms ?? []
   const activeRealm = realmIDs.length === 1 ? available.find((row) => row.id === realmIDs[0]) : undefined
   const selectedRealmIDs = activeRealm ? [activeRealm.id] : realmIDs.length > 1 ? realmIDs : []
@@ -56,8 +58,9 @@ export function LeaderboardsLiveHub() {
   // Older links put the tab in the query; an unknown or "overview" path segment is the Overview.
   if (params.has("tab")) return <Navigate to={hubPath(hubTab(params.get("tab")) ?? tab, params)} replace />
   if (pathTab !== undefined && (hubTab(pathTab) === undefined || pathTab === "overview")) return <Navigate to={hubPath("overview", params)} replace />
-  if (summary.isPending) return <p role="status" className="mx-auto max-w-[1920px] p-8 text-muted-foreground">Loading leaderboards…</p>
-  if (summary.isError) return <p role="alert" className="mx-auto max-w-[1920px] p-8 text-muted-foreground">Could not load leaderboard summary.</p>
+  // Only the first load (nothing on screen yet) replaces the page.
+  if (!summary.data && summary.isError) return <p role="alert" className="mx-auto max-w-[1920px] p-8 text-muted-foreground">Could not load leaderboard summary.</p>
+  if (!summary.data) return <p role="status" className="mx-auto max-w-[1920px] p-8 text-muted-foreground">Loading leaderboards…</p>
   return <div className="flex min-w-0 gap-6">
     <div className="min-w-0 flex-1">
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={(name) => choose("instance", name)}
@@ -93,7 +96,6 @@ function LiveInstanceHub({ instanceName, names, summary, realm, realmIDs, encoun
   // Stale names (another instance, a removed boss) drop out; nothing left is the preset.
   const chosen = bosses.filter((name) => encounters.includes(name))
   const selection: EncounterSelection = chosen.length ? { kind: "bosses", bosses: chosen } : FULL_CLEAR
-  const requested = chosen.filter((name) => name !== "Trash")
   const live = {
     selection,
     onSelection: (next: EncounterSelection) => onEncounters(next.kind === "bosses" ? next.bosses : []),
@@ -108,7 +110,7 @@ function LiveInstanceHub({ instanceName, names, summary, realm, realmIDs, encoun
         onCohort(row?.difficulty_name ?? "", row ? String(row.max_players) : "")
       }}><option value="">Choose difficulty and size</option>{raids.map((row) => <option key={`${row.difficulty_name}|${row.max_players}`} value={`${row.difficulty_name}|${row.max_players}`}>{row.difficulty_name || "Default"} · {row.max_players} players</option>)}</select>
     </label> : undefined,
-    renderOverview: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} requestedEncounters={requested} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} overview />,
+    renderOverview: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} overview />,
     renderTab: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} />,
   }
   return <LeaderboardHub live={live} instanceName={instanceName} instances={names} onAllInstances={() => onInstance()}
