@@ -8,10 +8,11 @@ Every key is optional; a missing key falls back to the default below. LOCAL.md (
 follows the same lookup order; the tools do not read it, the skill does.
 
 All state lives under `workdir`: maps/<slug>/{map.yaml,fetch.json,raw,renders,published}, cache/ and
-data/wdt-index.csv. The tools refuse a workdir inside any git repository that has a remote: the files
+data/wdt-index.csv. The tools refuse a workdir inside any git repository that has a pushable remote: the files
 there are Blizzard-derived and must never be one `git add -A` away from a public repo.
 """
 import os
+import re
 import subprocess
 import sys
 
@@ -58,15 +59,41 @@ def expand(p):
     return os.path.abspath(os.path.expanduser(str(p)))
 
 
+def url_host(url):
+    """Host of a git remote URL (scheme://[user@]host[:port]/path or scp-style [user@]host:path)."""
+    m = re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://(?:[^/@]*@)?(\[[^\]]*\]|[^/:]*)", url)
+    if not m:
+        m = re.match(r"^(?:[^/@:]*@)?([^/:]+):", url)
+    return m.group(1).lower().rstrip(".") if m else ""
+
+
+def pushable(url):
+    """False for a push URL that can never receive a push: `DISABLED`, or a `.invalid` host (RFC 2606)."""
+    url = url.strip()
+    return url != "DISABLED" and not url_host(url).endswith(".invalid")
+
+
+def has_pushable_remote(d):
+    """True when git repo `d` has a remote with a pushable push URL (or git cannot tell us)."""
+    r = subprocess.run(["git", "-C", d, "remote"], capture_output=True, text=True)
+    if r.returncode != 0:
+        return True
+    for name in r.stdout.split():
+        u = subprocess.run(["git", "-C", d, "remote", "get-url", "--all", "--push", name],
+                           capture_output=True, text=True)
+        if u.returncode != 0 or any(pushable(x) for x in u.stdout.splitlines()):
+            return True
+    return False
+
+
 def git_repos_with_remote(path):
-    """Every enclosing git repository of `path` (nested ones included) that has a remote."""
+    """Every enclosing git repository of `path` (nested ones included) that has a pushable remote."""
     hits = []
     d = path
     while True:
-        if os.path.exists(os.path.join(d, ".git")):
+        if os.path.exists(os.path.join(d, ".git")) and has_pushable_remote(d):
             r = subprocess.run(["git", "-C", d, "remote", "-v"], capture_output=True, text=True)
-            if r.returncode != 0 or r.stdout.strip():
-                hits.append((d, r.stdout.strip() or r.stderr.strip()))
+            hits.append((d, r.stdout.strip() or r.stderr.strip()))
         parent = os.path.dirname(d)
         if parent == d:
             return hits

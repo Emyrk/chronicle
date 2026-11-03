@@ -4,7 +4,7 @@
 # Check what is in effect: .venv/bin/python -I tools/rmconfig.py
 
 # All state: maps/<slug>/{map.yaml,fetch.json,raw,renders,published}, cache/, data/wdt-index.csv.
-# Refused when inside any git repo that has a remote (Blizzard-derived files must never be committable).
+# Refused when inside any git repo that has a pushable remote (Blizzard-derived files must never be committable).
 workdir: ~/.cache/chronicle-render-map
 
 # Blender 4.3.x; render_set.py refuses another major.minor unless --allow-blender-drift.
