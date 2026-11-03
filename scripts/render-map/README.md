@@ -8,7 +8,7 @@ manifest in each that says exactly what produced it. The agent skill that drives
 
 **Local use only (Blizzard assets).** The code lives here; every fetched file, render, GLB and
 manifest lives in the **workdir**, outside this repo (default `~/.cache/chronicle-render-map/`).
-The tools refuse a workdir inside any git repository that has a remote, and
+The tools refuse a workdir inside any git repository that has a pushable remote, and
 `scripts/render-map/.gitignore` drops images/GLBs/BLPs as a second line of defence. Nothing here
 is wired into the Makefile, CI or any package manifest.
 
@@ -538,7 +538,7 @@ scripts/render-map/            (this repo: code + docs only)
   local.example.yaml  LOCAL.example.md   -> local.yaml / LOCAL.md (gitignored; or ~/.config/chronicle-render-map/)
   .venv/          (gitignored)
 
-<workdir>/                     (default ~/.cache/chronicle-render-map/; never inside a repo with a remote)
+<workdir>/                     (default ~/.cache/chronicle-render-map/; never inside a repo with a pushable remote)
   data/           wdt-index.csv (built from the community listfile on first use)
   maps/<slug>/    map.yaml  fetch.json  raw/ (wmo: wmo+blp+obj; terrain: minimap/ adt/ terrain-textures/
                   wmo/<fid>/ obj/)
@@ -548,5 +548,5 @@ scripts/render-map/            (this repo: code + docs only)
 ```
 
 The workdir may be a git repo of its own (to version manifests next to the tools that made them),
-but only one with no remote: Blizzard-derived files must stay private, GLBs included (they embed the
+but only one with no pushable remote (a `DISABLED` push URL or a `.invalid` host does not count): Blizzard-derived files must stay private, GLBs included (they embed the
 textures). Never post renders publicly.
