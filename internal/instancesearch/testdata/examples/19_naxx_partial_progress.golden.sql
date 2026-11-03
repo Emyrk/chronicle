@@ -1,4 +1,10 @@
 -- Naxxramas runs that killed between 5 and 10 bosses.
+--
+-- CEL:
+--   instance.name == "Naxxramas"
+--   && instance.bosses_killed >= 5
+--   && instance.bosses_killed <= 10
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

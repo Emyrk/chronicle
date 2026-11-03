@@ -97,6 +97,8 @@ func newFixture(t *testing.T) *fixture {
 	instance(f.mc2, realmA, beta, false, nil)
 	instance(f.hidden, realmA, alpha, true, nil)
 	instance(f.other, realmB, gammaB, false, nil)
+	exec("UPDATE log_instances SET capabilities = '{overheal,unit-resources,unit-position}' WHERE id = ANY($1)", []uuid.UUID{f.mc1, f.mc1dup})
+	exec("UPDATE log_instances SET capabilities = '{overheal,unit-resources}' WHERE id = $1", f.mc2)
 
 	guidN := 0
 	player := func(inst uuid.UUID, name, class string, guildID any) string {
@@ -278,6 +280,11 @@ func TestSearch(t *testing.T) {
 			{"GuildMembers", `{"count_players": {"where": {"field": "player.guild", "op": "in", "value": ["Beta"]}, "op": ">=", "value": 3}}`, []uuid.UUID{f.mc2}},
 			{"DeathlessRag", `{"and": [{"field": "instance.kill_time_ms", "op": ">", "value": 0, "bosses": ["Ragnaros"]},
 				{"not": {"any_player": {"field": "player.deaths", "op": ">=", "value": 1, "bosses": ["Ragnaros"]}}}]}`, mc1},
+			{"HasCapability", `{"field": "instance.capability", "op": "=", "value": "unit-position"}`, mc1},
+			{"LacksCapability", `{"and": [{"field": "instance.capability", "op": "=", "value": "unit-resources"},
+				{"field": "instance.capability", "op": "!=", "value": "unit-position"}]}`, []uuid.UUID{f.mc2}},
+			{"AnyCapability", `{"field": "instance.capability", "op": "in", "value": ["unit-position", "interrupt"]}`, mc1},
+			{"NoCapability", `{"field": "instance.capability", "op": "not_in", "value": ["unit-position", "interrupt"]}`, []uuid.UUID{f.mc2}},
 			{"InstanceGuild", `{"field": "instance.guild", "op": "=", "value": "Beta"}`, []uuid.UUID{f.mc2}},
 		}
 		for _, tc := range cases {

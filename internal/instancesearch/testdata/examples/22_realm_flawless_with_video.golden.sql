@@ -1,4 +1,10 @@
 -- Nordanaar runs with a video and zero wipes.
+--
+-- CEL:
+--   instance.realm == "Nordanaar"
+--   && instance.has_video == true
+--   && instance.wipes == 0
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

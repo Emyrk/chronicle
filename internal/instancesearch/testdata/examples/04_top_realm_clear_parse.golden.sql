@@ -1,4 +1,8 @@
 -- Clears in the top 5% of their realm's clear times.
+--
+-- CEL:
+--   instance.clear_parse({"parse_scope": "realm"}) >= 95
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

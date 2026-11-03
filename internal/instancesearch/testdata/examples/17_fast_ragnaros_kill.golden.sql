@@ -1,4 +1,8 @@
 -- Ragnaros killed in 2 minutes or less.
+--
+-- CEL:
+--   instance.kill_time_ms({"bosses": ["Ragnaros"]}) <= 120000
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

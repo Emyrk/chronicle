@@ -1,4 +1,8 @@
 -- Raids with at least 2 paladins who played Holy on a boss kill.
+--
+-- CEL:
+--   players.filter(p, p.class == "PALADIN" && p.spec == "Holy").size() >= 2
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

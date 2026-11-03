@@ -1,4 +1,9 @@
 -- Ragnaros killed with no player deaths on the kill.
+--
+-- CEL:
+--   instance.kill_time_ms({"bosses": ["Ragnaros"]}) > 0
+--   && !(players.exists(p, p.deaths({"bosses": ["Ragnaros"]}) >= 1))
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

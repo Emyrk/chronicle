@@ -1,4 +1,8 @@
 -- Two or more tanks with average item level 70 or higher on a boss kill.
+--
+-- CEL:
+--   players.filter(p, p.role == "tank" && p.avg_ilvl >= 70).size() >= 2
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

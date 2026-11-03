@@ -18,6 +18,7 @@ Use at the top level (outside any quantifier).
 | `instance.category` | enum: raid, dungeon | =, !=, in, not_in |  | raid or dungeon. |
 | `instance.recorder` | string | =, !=, in, not_in |  | Name of the character that recorded the log. |
 | `instance.has_video` | bool | =, != |  | A YouTube video is linked to the run. |
+| `instance.capability` | enum: overheal, absorb, unit-resources, unit-position, raidgroup, interrupt, server-side | =, !=, in, not_in |  | What the log recorded. `=` has it, `!=` lacks it, `in` has any of them, `not_in` has none of them. AND several `=` to require all. |
 | `instance.player_count` | int | =, !=, <, <=, >, >= |  | Number of distinct players in the run. |
 | `instance.bosses_killed` | int | =, !=, <, <=, >, >= |  | Number of distinct bosses killed (clean or partial). |
 | `instance.wipes` | int | =, !=, <, <=, >, >= |  | Total wipes in the run (overview metrics). |

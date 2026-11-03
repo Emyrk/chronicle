@@ -1,4 +1,8 @@
 -- Runs where Thrall parsed 95+ DPS on Ragnaros.
+--
+-- CEL:
+--   players.exists(p, p.name == "Thrall" && p.parse({"bosses": ["Ragnaros"], "metric": "dps"}) >= 95)
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

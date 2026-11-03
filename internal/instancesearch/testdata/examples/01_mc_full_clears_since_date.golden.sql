@@ -1,4 +1,10 @@
 -- Molten Core full clears that started on or after 2026-10-01.
+--
+-- CEL:
+--   instance.name == "Molten Core"
+--   && instance.clear_time_ms > 0
+--   && instance.started_at >= timestamp("2026-10-01T00:00:00Z")
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

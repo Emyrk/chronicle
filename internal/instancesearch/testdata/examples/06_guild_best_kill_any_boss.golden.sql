@@ -1,4 +1,8 @@
 -- Any boss kill that was in the top 1% of the guild's own kill times.
+--
+-- CEL:
+--   instance.kill_time_parse({"parse_scope": "guild"}) >= 99
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

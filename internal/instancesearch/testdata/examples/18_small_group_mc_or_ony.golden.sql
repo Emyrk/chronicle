@@ -1,4 +1,9 @@
 -- Molten Core or Onyxia's Lair done with 30 or fewer players.
+--
+-- CEL:
+--   instance.name in ["Molten Core", "Onyxia's Lair"]
+--   && instance.player_count <= 30
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

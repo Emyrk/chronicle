@@ -1,4 +1,10 @@
 -- Fast and clean: (90+ kill parse on each of Rag and Domo OR 95+ clear parse), at least 2 warrior tanks, and nobody died 3+ times on any boss kill.
+--
+-- CEL:
+--   (instance.kill_time_parse({"bosses": ["Ragnaros", "Majordomo Executus"], "match": "each"}) >= 90 || instance.clear_parse >= 95)
+--   && players.filter(p, p.class == "WARRIOR" && p.role == "tank").size() >= 2
+--   && !(players.exists(p, p.deaths >= 3))
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

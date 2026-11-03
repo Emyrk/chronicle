@@ -1,4 +1,9 @@
 -- Runs a specific character was in that had a clear parse of 50+.
+--
+-- CEL:
+--   players.exists(p, p.guid == "0x0000000000012345")
+--   && instance.clear_parse >= 50
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

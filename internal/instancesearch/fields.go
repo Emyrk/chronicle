@@ -374,6 +374,9 @@ var (
 		"Human", "Dwarf", "NightElf", "Gnome", "Draenei", "Orc", "Scourge", "Tauren", "Troll", "Goblin", "BloodElf",
 	}
 	outcomes = []string{"clean", "partial", "wipe", "reset"}
+	// capabilities are the values the log parser writes to
+	// log_instances.capabilities (chronicle/logparse_parse.go).
+	capabilities = []string{"overheal", "absorb", "unit-resources", "unit-position", "raidgroup", "interrupt", "server-side"}
 )
 
 var fields = []*field{
@@ -402,7 +405,21 @@ var fields = []*field{
 	{Name: "instance.has_video", Scope: scopeInstance, Type: typeBool,
 		Doc:     "A YouTube video is linked to the run.",
 		compile: column("EXISTS (SELECT 1 FROM log_instance_youtube_timestamped yt WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug)")},
-	{Name: "instance.player_count", Scope: scopeInstance, Type: typeInt,
+	{Name: "instance.capability", Scope: scopeInstance, Type: typeEnum, Enum: capabilities,
+		Doc: "What the log recorded. `=` has it, `!=` lacks it, `in` has any of them, `not_in` has none of them. AND several `=` to require all.",
+		compile: func(c *compiler, s scope, p pred) string {
+			switch p.op {
+			case OpIn:
+				return fmt.Sprintf("li.capabilities && %s::text[]", c.arg(p.value))
+			case OpNotIn:
+				return fmt.Sprintf("NOT (li.capabilities && %s::text[])", c.arg(p.value))
+			case OpNe:
+				return fmt.Sprintf("NOT (%s::text = ANY(li.capabilities))", c.arg(p.value))
+			default:
+				return fmt.Sprintf("%s::text = ANY(li.capabilities)", c.arg(p.value))
+			}
+		}},
+	{Name: "instance.player_count",Scope: scopeInstance, Type: typeInt,
 		Doc:     "Number of distinct players in the run.",
 		compile: column("(SELECT count(DISTINCT lp.unit_guid) FROM log_instance_players lp WHERE lp.instance_id = li.id)")},
 	{Name: "instance.bosses_killed", Scope: scopeInstance, Type: typeInt,

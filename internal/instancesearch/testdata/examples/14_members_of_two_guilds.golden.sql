@@ -1,4 +1,8 @@
 -- At least 10 players from Alpha or Beta guild.
+--
+-- CEL:
+--   players.filter(p, p.guild in ["Alpha", "Beta"]).size() >= 10
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

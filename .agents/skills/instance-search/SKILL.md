@@ -13,7 +13,14 @@ advertise: true
 
 Package: `internal/instancesearch`. Design: `docs/instance-search.md`.
 Field list (generated, always current): [fields.md](fields.md).
-Worked examples: `internal/instancesearch/testdata/examples/*.json`, with the SQL each one compiles to in the matching `.golden.sql`.
+Worked examples: `internal/instancesearch/testdata/examples/*.json`. The matching `.golden.sql` shows the query as CEL-style text (`FormatCEL`, display only; there is no CEL parser yet) and the SQL it compiles to. Reading the CEL headers is the fastest way to learn the language:
+
+```
+players.filter(p, p.class == "PRIEST").size() >= 3
+&& players.exists(p, p.sub_spec == "Bear" && p.sub_spec == "Cat")
+&& instance.kill_time_parse({"bosses": ["Ragnaros", "Majordomo Executus"], "match": "each"}) >= 90
+&& "unit-position" in instance.capabilities
+```
 
 ## Query shape
 
@@ -81,6 +88,8 @@ This means one druid played both Bear and Cat. Two separate `any_player` nodes A
 | "fast clear" | `instance.clear_parse >= 95` (or `instance.clear_time_ms <= N`) |
 | "little downtime" | `instance.idle_time_ms < 300000` |
 | "nobody died on Rag" | `NOT any_player(player.deaths >= 1, bosses [Ragnaros])` plus a Rag kill |
+| "logs with positions and resources" | `instance.capability = unit-position AND instance.capability = unit-resources` |
+| "logs without positions" | `instance.capability != unit-position` |
 | "10+ from guild Alpha or Beta" | `count_players(where player.guild in [Alpha, Beta]) >= 10` |
 
 ## Semantics to keep in mind

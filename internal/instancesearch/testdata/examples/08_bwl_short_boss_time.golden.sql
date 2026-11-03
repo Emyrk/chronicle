@@ -1,4 +1,9 @@
 -- Blackwing Lair clears with at most 15 minutes total spent on bosses.
+--
+-- CEL:
+--   instance.name == "Blackwing Lair"
+--   && instance.boss_time_ms <= 900000
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

@@ -1,4 +1,8 @@
 -- Kill-time parse of 90+ on both Ragnaros and Majordomo Executus.
+--
+-- CEL:
+--   instance.kill_time_parse({"bosses": ["Ragnaros", "Majordomo Executus"], "match": "each"}) >= 90
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

@@ -1,4 +1,8 @@
 -- A healer with a 90+ HPS parse on each of Ragnaros and Golemagg the Incinerator.
+--
+-- CEL:
+--   players.exists(p, p.parse({"bosses": ["Ragnaros", "Golemagg the Incinerator"], "match": "each", "metric": "hps"}) >= 90)
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

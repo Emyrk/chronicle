@@ -1,4 +1,8 @@
 -- Progression nights: 5 or more wipes on Nefarian.
+--
+-- CEL:
+--   encounters.filter(e, e.name == "Nefarian" && e.outcome == "wipe").size() >= 5
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

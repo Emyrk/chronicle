@@ -59,7 +59,8 @@ func TestExamplesGolden(t *testing.T) {
 
 			args, err := json.MarshalIndent(compiled.Args, "", "  ")
 			require.NoError(t, err)
-			got := "-- " + ex.Description + "\n" + compiled.SQL + "\n\n-- args:\n" + string(args) + "\n"
+			cel := "--   " + strings.ReplaceAll(instancesearch.FormatCEL(ex.Query.Where), "\n", "\n--   ")
+			got := "-- " + ex.Description + "\n--\n-- CEL:\n" + cel + "\n\n" + compiled.SQL + "\n\n-- args:\n" + string(args) + "\n"
 
 			path := filepath.Join("testdata", "examples", ex.Name+".golden.sql")
 			if *update {

@@ -1,4 +1,9 @@
 -- Ragnaros was killed and never wiped on in the same run.
+--
+-- CEL:
+--   encounters.exists(e, e.name == "Ragnaros" && e.killed == true)
+--   && !(encounters.exists(e, e.name == "Ragnaros" && e.outcome == "wipe"))
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

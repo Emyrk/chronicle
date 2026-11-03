@@ -1,4 +1,8 @@
 -- Raids with at least 3 priests.
+--
+-- CEL:
+--   players.filter(p, p.class == "PRIEST").size() >= 3
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

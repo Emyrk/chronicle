@@ -1,4 +1,9 @@
 -- Clears with under 5 minutes idle and under 20 minutes of trash.
+--
+-- CEL:
+--   instance.idle_time_ms < 300000
+--   && instance.trash_time_ms < 1200000
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

@@ -1,4 +1,8 @@
 -- A single druid played both Bear and Cat on boss kills in the same run.
+--
+-- CEL:
+--   players.exists(p, p.class == "DRUID" && p.sub_spec == "Bear" && p.sub_spec == "Cat")
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,

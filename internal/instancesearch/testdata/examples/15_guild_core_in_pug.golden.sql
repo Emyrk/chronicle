@@ -1,4 +1,9 @@
 -- 5+ members of Alpha in a run not attributed to Alpha (a PUG with an Alpha core).
+--
+-- CEL:
+--   players.filter(p, p.guild == "Alpha").size() >= 5
+--   && !(instance.guild == "Alpha")
+
 WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
     li.id,
