@@ -1,15 +1,7 @@
-import { useState, type ReactNode } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { Check, Lock, Plus, X } from "lucide-react";
 import { Link } from "react-router-dom";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/DropdownMenu/DropdownMenu";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
@@ -835,51 +827,118 @@ function AddConditionMenu({
   honored: boolean;
   onAdd: (k: Kind) => void;
 }) {
-  const groups = [...new Set(kinds.map((k) => k.group))];
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const q = query.trim().toLowerCase();
+  const matches = q ? kinds.filter((k) => `${k.label} ${k.group}`.toLowerCase().includes(q)) : kinds;
+  const groups = [...new Set(matches.map((k) => k.group))];
+  // Arrow keys walk the enabled options in the grouped display order.
+  const selectable = groups.flatMap((g) => matches.filter((k) => k.group === g && !isLocked(k.kind)));
+  const activeKind = selectable[Math.min(active, selectable.length - 1)]?.kind;
+
+  const onOpenChange = (o: boolean) => {
+    setOpen(o);
+    if (!o) {
+      setQuery("");
+      setActive(0);
+    }
+  };
+  const pick = (k: Kind) => {
+    onOpenChange(false);
+    onAdd(k);
+  };
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (selectable.length === 0) return;
+      const cur = Math.min(active, selectable.length - 1);
+      setActive((cur + (e.key === "ArrowDown" ? 1 : selectable.length - 1)) % selectable.length);
+    } else if (e.key === "Enter" && activeKind) {
+      e.preventDefault();
+      pick(activeKind);
+    }
+  };
+
   return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
+    <PopoverPrimitive.Root open={open} onOpenChange={onOpenChange}>
+      <PopoverPrimitive.Trigger asChild>
         <button
           type="button"
           className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-primary/50 px-3 py-1.5 text-sm text-primary hover:bg-primary/10 transition-colors"
         >
           <Plus className="h-4 w-4" /> Add a condition
         </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        className="w-80 max-h-[70vh] overflow-y-auto styled-scrollbar"
-        // The new condition opens its own editor; don't pull focus back here.
-        onCloseAutoFocus={(e) => e.preventDefault()}
-      >
-        <p className="px-2 py-1.5 text-2xs text-muted-foreground">Only show runs where…</p>
-        {groups.map((g, i) => (
-          <div key={g}>
-            {i > 0 && <DropdownMenuSeparator />}
-            <DropdownMenuLabel className="text-2xs uppercase tracking-wider text-muted-foreground">{g}</DropdownMenuLabel>
-            {kinds.filter((k) => k.group === g).map((k) => {
-              const Icon = k.icon;
-              const lock = isLocked(k.kind);
-              return (
-                <DropdownMenuItem key={k.kind} disabled={lock} onSelect={() => onAdd(k.kind)} className="gap-2">
-                  <Icon className="h-4 w-4 text-primary/80" />
-                  <span className="flex-1">{k.label}</span>
-                  {k.tier === "honored" && (
-                    <span className="inline-flex items-center gap-1 text-2xs font-semibold" style={{ color: HONORED }}>
-                      {lock && <Lock className="h-3 w-3" />}
-                      Honored
-                    </span>
-                  )}
-                  {k.tier === "free" && lock && <Lock className="h-3 w-3 text-amber-400/90" />}
-                </DropdownMenuItem>
-              );
-            })}
+      </PopoverPrimitive.Trigger>
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content
+          align="start"
+          sideOffset={6}
+          collisionPadding={12}
+          className="z-50 w-80 max-w-[calc(100vw-24px)] rounded-lg border bg-popover text-popover-foreground shadow-lg outline-none animate-in fade-in-0 zoom-in-95"
+          // The new condition opens its own editor; don't pull focus back here.
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
+          <div className="border-b p-2">
+            <Input
+              autoFocus
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setActive(0);
+              }}
+              onKeyDown={onKeyDown}
+              placeholder="Only show runs where…"
+              className="h-8 text-sm"
+              role="combobox"
+              aria-label="Search conditions"
+              aria-expanded
+              aria-controls="add-condition-list"
+            />
           </div>
-        ))}
-        {(!honored || !loggedIn) && (
-          <>
-            <DropdownMenuSeparator />
-            <div className="px-2 py-2 text-2xs text-muted-foreground">
+          <div id="add-condition-list" role="listbox" className="max-h-[60vh] overflow-y-auto styled-scrollbar p-1">
+            {groups.length === 0 && <p className="px-2 py-3 text-center text-xs text-muted-foreground">No matching conditions.</p>}
+            {groups.map((g, i) => (
+              <div key={g}>
+                {i > 0 && <div className="-mx-1 my-1 h-px bg-border" />}
+                <p className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">{g}</p>
+                {matches.filter((k) => k.group === g).map((k) => {
+                  const Icon = k.icon;
+                  const lock = isLocked(k.kind);
+                  const on = k.kind === activeKind;
+                  return (
+                    <button
+                      key={k.kind}
+                      type="button"
+                      role="option"
+                      aria-selected={on}
+                      disabled={lock}
+                      tabIndex={-1}
+                      ref={on ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
+                      onMouseMove={() => !lock && !on && setActive(selectable.findIndex((s) => s.kind === k.kind))}
+                      onClick={() => pick(k.kind)}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none disabled:pointer-events-none disabled:opacity-50",
+                        on && "bg-accent text-accent-foreground",
+                      )}
+                    >
+                      <Icon className="h-4 w-4 text-primary/80" />
+                      <span className="flex-1">{k.label}</span>
+                      {k.tier === "honored" && (
+                        <span className="inline-flex items-center gap-1 text-2xs font-semibold" style={{ color: HONORED }}>
+                          {lock && <Lock className="h-3 w-3" />}
+                          Honored
+                        </span>
+                      )}
+                      {k.tier === "free" && lock && <Lock className="h-3 w-3 text-amber-400/90" />}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          {(!honored || !loggedIn) && (
+            <div className="border-t px-3 py-2 text-2xs text-muted-foreground">
               {!loggedIn && (
                 <p className="mb-1">
                   <Link to="/login" className="text-sky-400 hover:underline">Log in</Link> to search by bosses, parses, speed and roster.
@@ -891,9 +950,9 @@ function AddConditionMenu({
                 </p>
               )}
             </div>
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+          )}
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
   );
 }
