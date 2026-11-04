@@ -102,14 +102,12 @@ describe("SupporterOverview", () => {
   it("keeps raw downloads and unlisted logs locked at Honored", () => {
     const markup = renderSupporterOverview("honored")
 
-    expect(markup).toContain("Reward: Ad-free browsing and +300 MB storage")
     expect(markup).toContain('style="color:#ff2020">Requires Chronicle – Revered')
   })
 
   it("unlocks raw downloads and unlisted logs at Revered", () => {
     const markup = renderSupporterOverview("revered")
 
-    expect(markup).toContain("Reward: Ad-free browsing, +1 GB storage, raw log downloads, and unlisted logs")
     expect(markup).toContain('style="color:#ffffff">Requires Chronicle – Revered')
   })
 })

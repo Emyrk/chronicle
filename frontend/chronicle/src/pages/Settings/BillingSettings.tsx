@@ -496,11 +496,8 @@ function Achievement({ billing }: { billing?: BillingSummary }) {
   const billingDate = subscriptionState?.effectiveDate
   const tier = billing?.tier ?? "honored"
   const standing = hasTierAccess ? billingTierLabel(tier) : "Friendly"
-  const storageLabel = billingTierStorageLabel(tier) ?? "300 MB"
-  const storageReward = hasTierAccess ? `+${storageLabel}` : "tier-based"
   const tierRank = billingTierRank(tier)
   const fill = hasTierAccess && tierRank >= 0 ? ((tierRank + 1) / PAID_BILLING_TIERS.length) * 100 : FRIENDLY_FILL
-  const hasReveredRewards = hasTierAccess && tierRank >= billingTierRank("revered")
 
   return (
     <div className={cn(FRAME, "p-4 sm:p-5")}>
@@ -557,12 +554,6 @@ function Achievement({ billing }: { billing?: BillingSummary }) {
           <span className="absolute inset-0 flex items-center justify-center font-wow text-xs text-white [text-shadow:1px_1px_1px_#000]">Chronicle – {standing}</span>
         </div>
       </div>
-
-      <p className="mt-4 border-t border-border pt-3 text-center font-wow text-sm" style={{ color: "#ffd200" }}>
-        {hasReveredRewards
-          ? `Reward: Ad-free browsing, ${storageReward} storage, raw log downloads, and unlisted logs`
-          : `Reward: Ad-free browsing and ${storageReward} storage`}
-      </p>
     </div>
   )
 }
