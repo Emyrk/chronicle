@@ -1,10 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { BASE_UNIT_MODEL_SIZE, publishedModelGeometryScale, publishedModelGroupScale } from "./modelSizing";
+import {
+  BASE_UNIT_MODEL_SIZE,
+  MAX_TABLETOP_MODEL_SPAN_YARDS,
+  publishedModelGeometryScale,
+  publishedModelGroupScale,
+} from "./modelSizing";
 
 describe("publishedModelGroupScale", () => {
   it("uses true world scale on calibrated maps and the readable baseline elsewhere", () => {
     expect(publishedModelGroupScale(10.4, 0.75, 2)).toBe(0.75);
     expect(publishedModelGroupScale(10.4, null, 2)).toBeCloseTo(0.5);
+  });
+
+  it("caps oversized tabletop sculpts without changing original game models", () => {
+    const onyxiaSpan = 12.22;
+    expect(publishedModelGroupScale(81.4688, 0.75, 2, false, onyxiaSpan))
+      .toBeCloseTo(0.75 * MAX_TABLETOP_MODEL_SPAN_YARDS / onyxiaSpan);
+    expect(publishedModelGroupScale(81.4688, 0.75, 2, true, onyxiaSpan)).toBe(0.75);
+  });
+
+  it("leaves ordinary tabletop sculpts and uncalibrated artwork unchanged", () => {
+    expect(publishedModelGroupScale(6.733, 0.75, 2, false, 7.36)).toBe(0.75);
+    expect(publishedModelGroupScale(81.4688, null, 2, false, 12.22)).toBeCloseTo(2 * BASE_UNIT_MODEL_SIZE / 81.4688);
   });
 });
 
