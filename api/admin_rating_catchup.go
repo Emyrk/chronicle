@@ -59,7 +59,7 @@ func ratingCatchupSnapshot(rows []database.ListTenantRatingCatchupStatusRow, job
 			status = "caught_up"
 		}
 		item := chroniclesdk.AdminTenantRatingCatchup{
-			TenantID: row.TenantID, Status: status, ReadState: row.ReadState,
+			TenantID: row.TenantID, TenantSlug: row.TenantSlug, Status: status, ReadState: row.ReadState,
 			DirtyRuns: row.DirtyRuns, DirtyRenown: row.DirtyRenown,
 			DirtyMastery: row.DirtyMastery, DirtyPeak: row.DirtyPeak,
 			PeakPages: row.PeakPages, ActiveDrainJobs: row.ActiveDrainJobs,

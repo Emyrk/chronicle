@@ -190,7 +190,7 @@ export function AdminLeaderboardPage() {
         <div>
           <h3 className="font-semibold">Rating maintenance</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Renown fact repair runs daily. Rating changes flow through durable dirty keys and are repaired by the tenant drain worker; the catch-up board below shows progress.
+            Rating changes repair automatically through the tenant drain. Renown fact repair also runs daily; use the button to run that historical fact repair now. Policy scans are started separately per tenant after a policy change.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
