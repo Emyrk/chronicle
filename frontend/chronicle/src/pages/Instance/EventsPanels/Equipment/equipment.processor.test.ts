@@ -15,6 +15,7 @@ function combatantInfo(): CombatantInfoProcessorEvent {
     type: "combatant_info",
     index: 1,
     offsetMilli: 0,
+    globalOffsetMilli: 1234,
     activity: [],
     activityCount: 0,
     isSynthetic: false,
@@ -35,7 +36,7 @@ function combatantInfo(): CombatantInfoProcessorEvent {
     }],
     gearCount: 1,
     v22: null,
-    talents: null,
+    talents: { summary: [31, 0, 20], trees: ["500", "", "300"] },
   };
 }
 
@@ -48,10 +49,43 @@ describe("equipmentProcessor", () => {
     event.gear[0].gemEnchantIds[2] = 0;
     event.gear[0].bonusIds[0] = 0;
     event.gear[0].gems[0].itemId = 0;
+    event.talents!.summary[0] = 0;
+    event.talents!.trees[0] = "";
 
-    const gear = state.players.get("player")?.gear[0];
+    const snapshot = state.players.get("player");
+    const gear = snapshot?.gear[0];
+    expect(snapshot?.offsetMilli).toBe(1234);
+    expect(snapshot?.talents).toEqual({ summary: [31, 0, 20], trees: ["500", "", "300"] });
     expect(gear?.gemEnchantIds).toEqual([0, 0, 3637, 0]);
     expect(gear?.bonusIds).toEqual([6652, 10356]);
     expect(gear?.gems).toEqual([{ itemId: 25897, itemLevel: 70 }]);
+  });
+
+  it("coalesces consecutive identical snapshots while extending their observed duration", () => {
+    const state = equipmentProcessor.createState();
+    const first = combatantInfo();
+    const repeated = combatantInfo();
+    repeated.globalOffsetMilli = 5000;
+
+    equipmentProcessor.processEvent(state, first, "encounter", new Date(0), "combatant_info", context());
+    equipmentProcessor.processEvent(state, repeated, "encounter", new Date(0), "combatant_info", context());
+
+    expect(state.history.get("player")).toHaveLength(1);
+    expect(state.history.get("player")?.[0]).toMatchObject({ offsetMilli: 1234, endOffsetMilli: 5000 });
+  });
+
+  it("keeps every selected combatant snapshot in timeline order", () => {
+    const state = equipmentProcessor.createState();
+    const first = combatantInfo();
+    const second = combatantInfo();
+    second.globalOffsetMilli = 5000;
+    second.gear[0].itemId = 999;
+
+    equipmentProcessor.processEvent(state, first, "encounter", new Date(0), "combatant_info", context());
+    equipmentProcessor.processEvent(state, second, "encounter", new Date(0), "combatant_info", context());
+
+    expect(state.history.get("player")?.map((snapshot) => snapshot.offsetMilli)).toEqual([1234, 5000]);
+    expect(state.history.get("player")?.map((snapshot) => snapshot.gear[0].itemId)).toEqual([51396, 999]);
+    expect(state.players.get("player")?.gear[0].itemId).toBe(999);
   });
 });

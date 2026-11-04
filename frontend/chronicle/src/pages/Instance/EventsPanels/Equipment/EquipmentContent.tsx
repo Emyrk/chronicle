@@ -27,6 +27,7 @@ import {
   serializeEquipmentPanelOption,
   type EquipmentSubTab,
 } from "./equipmentOptions";
+import { EquipmentTimelineView } from "./EquipmentTimelineView";
 
 const SLOT_ORDER = [
   { index: 0, label: "Head" },
@@ -249,7 +250,7 @@ function PlayerTalentsView({
 }
 
 export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
-  const { result, context, panelOption, setPanelOption } = props;
+  const { result, context, panelOption, setPanelOption, checkboxChecked } = props;
   const persistedOption = useMemo(
     () => parseEquipmentPanelOption(panelOption),
     [panelOption],
@@ -292,12 +293,12 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
 
   const selectPlayer = (guid: string) => {
     setLocalSelectedGuid(guid);
-    setPanelOption?.(serializeEquipmentPanelOption(guid, subTab));
+    setPanelOption?.(serializeEquipmentPanelOption(guid, subTab, checkboxChecked));
   };
 
   const selectSubTab = (tab: EquipmentSubTab) => {
     setLocalSubTab(tab);
-    setPanelOption?.(serializeEquipmentPanelOption(selected?.guid ?? selectedGuid, tab));
+    setPanelOption?.(serializeEquipmentPanelOption(selected?.guid ?? selectedGuid, tab, checkboxChecked));
   };
 
   const equippedItemIds = selected
@@ -371,25 +372,35 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
         </div>
 
         {/* Sub-tab toggle */}
-        <div className="flex gap-1 border-b border-border mb-1">
-          {(["gear", "talents"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => selectSubTab(tab)}
-              className={cn(
-                "px-2 py-1 text-2xs font-medium border-b -mb-px transition-colors capitalize",
-                subTab === tab
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
+        {checkboxChecked && (
+          <div className="flex gap-1 border-b border-border mb-1">
+            {(["gear", "talents"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => selectSubTab(tab)}
+                className={cn(
+                  "px-2 py-1 text-2xs font-medium border-b -mb-px transition-colors capitalize",
+                  subTab === tab
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {selected && !checkboxChecked && (
+          <EquipmentTimelineView
+            player={selected}
+            snapshots={cachedValue.history?.get(selected.guid) ?? [selected]}
+            context={context}
+          />
+        )}
 
         {/* Gear list */}
-        {selected && subTab === "gear" && (
+        {selected && checkboxChecked && subTab === "gear" && (
           <div key={selected.guid} className="grid grid-cols-2 gap-x-4 gap-y-0" data-lesson-target="understand-gear">
             {SLOT_ORDER.map((slot, i) => {
               const g = selected!.gear[slot.index];
@@ -408,7 +419,7 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
         )}
 
         {/* Talents view */}
-        {selected && subTab === "talents" && (
+        {selected && checkboxChecked && subTab === "talents" && (
           <div data-lesson-target="read-talents">
             <PlayerTalentsView player={selected} datasetId={context.instance.datasetId} />
           </div>

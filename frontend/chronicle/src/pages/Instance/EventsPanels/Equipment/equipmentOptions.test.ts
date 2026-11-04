@@ -23,6 +23,7 @@ describe("equipment panel options", () => {
     expect(parseEquipmentPanelOption(option)).toEqual({
       playerGuid: "0x0000000000001234",
       subTab: "talents",
+      paperDoll: false,
     });
   });
 
@@ -30,6 +31,18 @@ describe("equipment panel options", () => {
     expect(parseEquipmentPanelOption("other,t:unknown,p:")).toEqual({
       playerGuid: null,
       subTab: null,
+      paperDoll: false,
+    });
+  });
+
+  it("preserves paper doll mode with player and tab changes", () => {
+    const option = serializeEquipmentPanelOption("player-guid", "talents", true);
+
+    expect(option).toBe("cb,p:player-guid,t:talents");
+    expect(parseEquipmentPanelOption(option)).toEqual({
+      playerGuid: "player-guid",
+      subTab: "talents",
+      paperDoll: true,
     });
   });
 });
