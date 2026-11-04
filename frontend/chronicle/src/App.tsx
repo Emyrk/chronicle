@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react"
+import { lazy, Suspense } from "react"
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import { Home } from "./pages/Home"
 import { NitroPayRuntime } from "./components/Ads/NitroPayRuntime"
@@ -15,7 +15,6 @@ const Disclaimer = lazy(() => import("./pages/Disclaimer").then(({ Disclaimer })
 const SupportedInstances = lazy(() => import("./pages/SupportedInstances").then(({ SupportedInstances }) => ({ default: SupportedInstances })))
 const Terms = lazy(() => import("./pages/Terms").then(({ Terms }) => ({ default: Terms })))
 const ParsingPage = lazy(() => import("./pages/Parsing/ParsingPage").then(({ ParsingPage }) => ({ default: ParsingPage })))
-const StartPage = lazy(() => import("./pages/Landing/StartPage").then(({ StartPage }) => ({ default: StartPage })))
 const Start2Page = lazy(() => import("./pages/Landing/Start2Page").then(({ Start2Page }) => ({ default: Start2Page })))
 const CohortViewerPage = lazy(() => import("./pages/Parsing/CohortViewerPage").then(({ CohortViewerPage }) => ({ default: CohortViewerPage })))
 const Empty = lazy(() => import("./pages/Empty").then(({ Empty }) => ({ default: Empty })))
@@ -167,18 +166,6 @@ function CatchAllRoute() {
   return <Navigate to="/login" replace />
 }
 
-/** The /start ad landing is WoW Forever only; every other flavor gets what it got before (the catch-all). */
-function StartRoute() {
-  const { data: siteConfig, isPending } = useSiteConfig()
-  const forever = siteConfig?.dataset_flavor?.includes("wow-forever") ?? false
-  // index.html paints the landing's poster shell on /start before the flavor is known; StartPage removes it, others must.
-  useEffect(() => {
-    if (!isPending && !forever) document.getElementById("start-poster-shell")?.remove()
-  }, [isPending, forever])
-  if (isPending) return null
-  return forever ? <StartPage /> : <CatchAllRoute />
-}
-
 /**
  * "/": WoW Forever serves the replay landing (Start2Page) while the admin toggle (site config
  * forever_landing_enabled) is on; off, or any other flavor, gets the standard Home.
@@ -204,7 +191,8 @@ function App() {
       <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/start" element={<StartRoute />} />
+      {/* The old ad landing: its links now land on the home page (the replay landing on WoW Forever). */}
+      <Route path="/start" element={<Navigate to="/" replace />} />
       <Route path="/youtube-sync" element={<LegacyYouTubeSyncRedirect />} />
       <Route path="/youtube-sync-v2" element={<LegacyYouTubeSyncRedirect />} />
       <Route path="/youtube-sync-v3" element={<YouTubeSyncV3Page />} />

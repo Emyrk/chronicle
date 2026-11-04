@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useLandingFeatured } from "@/api/landingFeatured";
 import type { LandingFeaturedRun } from "@/api/typesGenerated";
 import { useSiteConfig } from "@/api/siteConfigQuery";
@@ -73,7 +73,7 @@ function SendLinkSection() {
   };
 
   const copyLink = () => {
-    void navigator.clipboard?.writeText(`${window.location.origin}/start`).then(() => setCopied(true));
+    void navigator.clipboard?.writeText(`${window.location.origin}/`).then(() => setCopied(true));
   };
 
   return (
@@ -287,10 +287,6 @@ export function Start2Page() {
     </Suspense>
   );
 
-  // Our hero now covers the static poster index.html painted before the bundle loaded.
-  useLayoutEffect(() => {
-    document.getElementById("start-poster-shell")?.remove();
-  }, []);
 
   return (
     <div className="flex flex-col overflow-x-hidden bg-background text-foreground">

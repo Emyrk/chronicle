@@ -248,7 +248,7 @@ export function AdminSiteSettingsPage() {
             <p className="font-medium">Replay landing on the home page</p>
             <p className="text-sm text-muted-foreground">
               WoW Forever's home page (/) shows the 3D replay landing. Disable to switch back to the standard home
-              page right away. /start2 keeps the landing either way. No effect on other flavors.
+              page right away. /start2 shows the landing either way. No effect on other flavors.
             </p>
           </div>
           <Button
