@@ -57,21 +57,6 @@ test("shows the Standing tier promotion on the support page", async () => {
   assert.doesNotMatch(supportPage, /className="hidden">\s*<aside[^>]*>[\s\S]*?Earn Standing with Chronicle/);
 });
 
-test("home hero shows a replay and links to the public Sidekick download", async () => {
-  const [app, hero, trackedLinks] = await Promise.all([
-    read("src/App.tsx"),
-    read("src/components/Hero.tsx"),
-    read("src/trackedLinks.ts"),
-  ]);
-
-  assert.match(app, /<Hero \/>/);
-  assert.match(hero, /Every pull,/);
-  assert.match(hero, /ragnaros\.webm/);
-  assert.match(hero, /legacy\.chronicleclassic\.com\/download/);
-  assert.match(hero, /hero_sidekick_download/);
-  assert.match(trackedLinks, /"hero_sidekick_download"/);
-});
-
 test("unknown landing paths show a local not-found page instead of redirecting", async () => {
   const [notFoundPage, servers] = await Promise.all([
     read("public/404.html"),

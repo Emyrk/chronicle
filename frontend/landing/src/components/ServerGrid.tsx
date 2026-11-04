@@ -127,17 +127,31 @@ export function ServerGrid({ servers, loading }: { servers: ServerEntry[]; loadi
   }, [servers, query]);
 
   return (
-    <section id="supported-servers" className="relative mx-auto w-full max-w-6xl scroll-mt-8 px-4 pb-12 pt-14 sm:px-6 sm:pt-18 lg:px-8">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[34rem] bg-[radial-gradient(ellipse_at_top,_var(--primary-darker)_0%,_transparent_65%)] opacity-35" />
+    <section id="supported-servers" className="relative mx-auto w-full max-w-6xl scroll-mt-8 px-4 pb-12 pt-14 sm:px-6 sm:pt-20 lg:px-8">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--primary-darker)_0%,_transparent_58%)] opacity-40" />
 
-      <header className="relative mb-9 max-w-2xl">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Choose your world</p>
-        <h2 className="mt-2 font-wow text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          Chronicle for your server
-        </h2>
-        <p className="mt-3 text-base leading-7 text-muted-foreground">
-          Open your server's Chronicle to browse recent raids, rankings, replays, and detailed combat analysis.
-        </p>
+      <header className="relative mb-10 text-center">
+        <img
+          src="/chronicle-logo.svg"
+          alt="Chronicle"
+          className="mx-auto h-20 w-auto drop-shadow-[0_4px_12px_rgba(0,0,0,0.55)] sm:h-28"
+        />
+        <h1 className="mt-5 font-wow text-2xl font-bold tracking-tight sm:text-4xl">
+          Combat Log Analysis for <span className="text-primary">Classic WoW</span>
+        </h1>
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-7 gap-y-2 text-sm text-muted-foreground">
+          <a
+            href="https://github.com/Emyrk/chronicle"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="transition-colors hover:text-foreground"
+          >
+            GitHub
+          </a>
+          <a href="/self-hosting/" className="transition-colors hover:text-foreground">
+            Ask Chronicle about your server →
+          </a>
+        </div>
       </header>
 
       <article className="relative mb-12 overflow-hidden rounded-xl border border-primary/60 bg-card shadow-2xl shadow-black/20">

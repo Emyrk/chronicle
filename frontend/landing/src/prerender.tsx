@@ -34,7 +34,7 @@ export async function prerenderHome(): Promise<PrerenderResult> {
           name: "Chronicle",
           url: "https://chronicleclassic.com/",
           description:
-            "Classic World of Warcraft raid replays, combat log analysis, and automatic uploads with Chronicle Sidekick.",
+            "Combat log analysis for Classic World of Warcraft private servers.",
         },
         {
           "@type": "ItemList",

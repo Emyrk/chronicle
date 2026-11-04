@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   selectSupportedInstanceProgressionBosses,
@@ -33,7 +32,7 @@ import {
   getInstanceBackground,
 } from "@/pages/Logs/utils/instanceImages";
 import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
-import { seoProductName } from "@/lib/seo";
+import { HomeHero } from "./HomeHero";
 import { Podium } from "@/pages/Leaderboard/Podium";
 import { RaidCard } from "@/pages/Recent/RaidCard";
 
@@ -175,52 +174,6 @@ function BoardToggle({
         </button>
       ))}
     </div>
-  );
-}
-
-/** Hero: headline left, stacked CTAs right. */
-function HeroSection() {
-  const { isAuthenticated } = useAuth();
-  const { data: siteConfig } = useSiteConfig();
-  const showUpload = !siteConfig?.client_uploads_disabled;
-  const productName = seoProductName(siteConfig?.dataset_flavor);
-
-  return (
-    <section
-      className="relative px-6 py-14 md:py-20 bg-cover bg-center bg-no-repeat border-b"
-      style={{ backgroundImage: "url('/c/images/herobackground.avif')" }}
-    >
-      <div className="absolute inset-0 bg-background/80" />
-      <div className="relative max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-10">
-        <div className="max-w-2xl text-center md:text-left">
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
-            {productName ? `${productName} Combat Logs` : "Every raid tells a story."}
-            <br />
-            <span className="text-(--tertiary)">
-              {productName ? "Raid analysis by Chronicle." : "Chronicle helps you read it."}
-            </span>
-          </h1>
-          <p className="mt-4 text-lg text-muted-foreground">
-            {productName
-              ? `Upload and analyze ${productName} combat logs. Review damage, healing, deaths, rankings, and raid performance.`
-              : "Logs in, insight out. Easy to read, easy to share."}
-          </p>
-        </div>
-        <div className="flex flex-col gap-3 min-w-56">
-          {showUpload && (
-            <Button asChild size="lg" className="md:h-12 md:px-8 md:text-base">
-              <Link to="/upload">{isAuthenticated ? "Upload a Log" : "Upload Your First Log"}</Link>
-            </Button>
-          )}
-          <Button variant="outline" size="lg" asChild className="md:h-12 md:px-8 md:text-base">
-            <Link to={isAuthenticated ? "/logs" : "/recent"}>
-              {isAuthenticated ? "View Your Logs" : "View a Sample"}
-            </Link>
-          </Button>
-          <p className="text-center text-sm text-muted-foreground">No account required.</p>
-        </div>
-      </div>
-    </section>
   );
 }
 
@@ -1047,7 +1000,7 @@ function LatestUploads() {
 export function Home() {
   return (
     <div className="flex flex-col">
-      <HeroSection />
+      <HomeHero />
       <StatsStrip />
       <RaidSpotlight />
       <LatestUploads />
