@@ -3062,6 +3062,7 @@ export const InstanceSearchFieldScopes: InstanceSearchFieldScope[] = ["encounter
  */
 export interface InstanceSearchFieldsResponse {
     readonly fields: readonly InstanceSearchField[];
+    readonly sorts: readonly InstanceSearchSortOption[];
     /**
      * MaxNodes and MaxDepth bound the size of a query tree.
      */
@@ -3213,8 +3214,8 @@ export interface InstanceSearchQuery {
      */
     readonly where?: InstanceSearchNode;
     /**
-     * Sort changes the result order. Omit it for newest first. Custom sorting
-     * is a Revered supporter perk.
+     * Sort changes the result order. Omit it for newest first. Each allowlisted
+     * property declares its minimum supporter tier in GET /search/fields.
      */
     readonly sort?: InstanceSearchSort;
     /**
@@ -3286,9 +3287,27 @@ export type InstanceSearchSortDirection = "asc" | "desc";
 export const InstanceSearchSortDirections: InstanceSearchSortDirection[] = ["asc", "desc"];
 
 // From chroniclesdk/instance_search.go
-export type InstanceSearchSortField = "instance.clear_parse" | "instance.clear_time_ms" | "instance.started_at";
+export type InstanceSearchSortField = "instance.bosses_killed" | "instance.clear_parse" | "instance.clear_time_ms" | "instance.difficulty" | "instance.guild" | "instance.max_players" | "instance.name" | "instance.player_count" | "instance.realm" | "instance.started_at";
 
-export const InstanceSearchSortFields: InstanceSearchSortField[] = ["instance.clear_parse", "instance.clear_time_ms", "instance.started_at"];
+export const InstanceSearchSortFields: InstanceSearchSortField[] = ["instance.bosses_killed", "instance.clear_parse", "instance.clear_time_ms", "instance.difficulty", "instance.guild", "instance.max_players", "instance.name", "instance.player_count", "instance.realm", "instance.started_at"];
+
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchSortOption describes one fixed result order for search UIs.
+ */
+export interface InstanceSearchSortOption {
+    readonly field: InstanceSearchSortField;
+    readonly label: string;
+    readonly default_direction: InstanceSearchSortDirection;
+    readonly parse_scope: boolean;
+    readonly minimum_tier: InstanceSearchSortTier;
+    readonly cost: number;
+}
+
+// From chroniclesdk/instance_search.go
+export type InstanceSearchSortTier = "free" | "honored" | "revered";
+
+export const InstanceSearchSortTiers: InstanceSearchSortTier[] = ["free", "honored", "revered"];
 
 // From chroniclesdk/instance_search.go
 /**

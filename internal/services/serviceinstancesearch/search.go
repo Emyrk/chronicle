@@ -220,10 +220,13 @@ func (s *Service) run(ctx context.Context, c Caller, q chroniclesdk.InstanceSear
 	if !explain {
 		s.cost.WithLabelValues(s.kind(c)).Observe(float64(compiled.Cost))
 	}
-	if !explain && q.Sort != nil && !tierAtLeast(access.Tier, billing.TierRevered) {
-		result.RequiredTier = billing.TierRevered
-		result.Status, _ = limiter.PeekWithLimit(ctx, subject, limit)
-		return fail(ErrSupporterRequired, "supporter_required")
+	if !explain && q.Sort != nil {
+		minimum := instancesearch.SortMinimumTier(compiled.Sort.Field)
+		if !tierAtLeast(access.Tier, string(minimum)) {
+			result.RequiredTier = string(minimum)
+			result.Status, _ = limiter.PeekWithLimit(ctx, subject, limit)
+			return fail(ErrSupporterRequired, "supporter_required")
+		}
 	}
 	if c.UserID == uuid.Nil {
 		if err = instancesearch.CheckAnonymous(q); err != nil {

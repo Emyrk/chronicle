@@ -142,6 +142,9 @@ func newFixture(t *testing.T) *fixture {
 	exec(`INSERT INTO instance_speedruns (instance_id, instance_name, realm_id, qualified, start_time, completion_time, duration_ms, proof,
 			ranked_start_time, ranked_completion_time, ranked_duration_ms)
 		VALUES ($1, 'Molten Core', $2, true, $3, $4, 1500000, '{}', $3, $4, 1500000)`, f.mc1, realmA, t0, t0.Add(1500*time.Second))
+	exec(`INSERT INTO instance_speedruns (instance_id, instance_name, realm_id, qualified, start_time, completion_time, duration_ms, proof,
+			ranked_start_time, ranked_completion_time, ranked_duration_ms)
+			VALUES ($1, 'Molten Core', $2, true, $3, $4, 1500000, '{}', $3, $4, 1500000)`, f.mc1dup, realmA, t0, t0.Add(1500*time.Second))
 	exec(`INSERT INTO parse_score_results (tenant_id, instance_id, run_id, encounter_name, player_guid, metric, metric_value,
 			precise_score, display_score, rank, sample_size, status)
 		VALUES ($1, $2, $3, 'Ragnaros', $4, 'dps', 1000, 97, 97, 1, 20, 'ok')`, f.tenantA, f.mc1, uuid.New(), thrall)
@@ -152,6 +155,12 @@ func newFixture(t *testing.T) *fixture {
 			cutoff, window_start, lookback_days, policy_version, query_version)
 		VALUES ($1, $2, $3, $4, $5, 1500000, 96, 96, 1, 20, 'ok', 96, 96, 1, 20, 'ok', now(), now(), $6, $7, $8)`,
 		tps, f.tenantA, f.mc1, uuid.New(), realmA, instancesearch.DefaultTimeParseLookbackDays, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.QueryVersion)
+	exec(`INSERT INTO time_parse_scores (id, tenant_id, instance_id, run_id, realm_id, clear_duration_ms,
+			clear_server_precise_score, clear_server_display_score, clear_server_rank, clear_server_sample_size, clear_server_status,
+			clear_realm_precise_score, clear_realm_display_score, clear_realm_rank, clear_realm_sample_size, clear_realm_status,
+			cutoff, window_start, lookback_days, policy_version, query_version)
+			VALUES ($1, $2, $3, $4, $5, 1500000, 96, 96, 1, 20, 'ok', 96, 96, 1, 20, 'ok', now(), now(), $6, $7, $8)`,
+		uuid.New(), f.tenantA, f.mc1dup, uuid.New(), realmA, instancesearch.DefaultTimeParseLookbackDays, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.QueryVersion)
 	bossScore := func(enc uuid.UUID, name string, score int) {
 		exec(`INSERT INTO time_parse_boss_scores (time_parse_score_id, encounter_id, encounter_name, duration_ms,
 				server_precise_score, server_display_score, server_rank, server_sample_size, server_status,
@@ -515,6 +524,11 @@ func TestSearch(t *testing.T) {
 
 	t.Run("Sorting", func(t *testing.T) {
 		t.Parallel()
+
+		for _, option := range instancesearch.DescribeSorts() {
+			page := f.search(t, f.tenantA, instancesearch.Query{Sort: &instancesearch.Sort{Field: option.Field}})
+			require.Len(t, page.Results, 2, option.Field)
+		}
 
 		q := instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortClearTime, Direction: instancesearch.SortAsc}}
 		page := f.search(t, f.tenantA, q)

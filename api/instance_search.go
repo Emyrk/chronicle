@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"net"
@@ -69,9 +70,14 @@ func writeSearchResult(w http.ResponseWriter, r *http.Request, result serviceins
 	case errors.Is(result.Err, serviceinstancesearch.ErrInvalid):
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid search.", Detail: strings.TrimPrefix(result.Err.Error(), serviceinstancesearch.ErrInvalid.Error()+"\n")})
 	case errors.Is(result.Err, serviceinstancesearch.ErrSupporterRequired):
+		tierName := strings.ToUpper(result.RequiredTier[:1]) + result.RequiredTier[1:]
+		article := "a"
+		if result.RequiredTier == "honored" {
+			article = "an"
+		}
 		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
-			Message:      "Sorting search results is a Revered supporter perk.",
-			CallToAction: "Become a Revered supporter to sort by date, clear time or clear parse.",
+			Message:      fmt.Sprintf("Sorting by this property is %s %s supporter perk.", article, tierName),
+			CallToAction: fmt.Sprintf("Become %s %s supporter to use this sort order.", article, tierName),
 			Link:         "/supporter",
 			LinkText:     "View supporter perks",
 		})

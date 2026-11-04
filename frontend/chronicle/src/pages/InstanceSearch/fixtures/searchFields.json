@@ -949,6 +949,88 @@
       "cost": 21
     }
   ],
+  "sorts": [
+    {
+      "field": "instance.started_at",
+      "label": "Date",
+      "default_direction": "desc",
+      "parse_scope": false,
+      "minimum_tier": "free",
+      "cost": 0
+    },
+    {
+      "field": "instance.name",
+      "label": "Run",
+      "default_direction": "asc",
+      "parse_scope": false,
+      "minimum_tier": "free",
+      "cost": 0
+    },
+    {
+      "field": "instance.realm",
+      "label": "Realm",
+      "default_direction": "asc",
+      "parse_scope": false,
+      "minimum_tier": "free",
+      "cost": 0
+    },
+    {
+      "field": "instance.guild",
+      "label": "Guild",
+      "default_direction": "asc",
+      "parse_scope": false,
+      "minimum_tier": "free",
+      "cost": 0
+    },
+    {
+      "field": "instance.difficulty",
+      "label": "Difficulty",
+      "default_direction": "asc",
+      "parse_scope": false,
+      "minimum_tier": "free",
+      "cost": 0
+    },
+    {
+      "field": "instance.max_players",
+      "label": "Maximum players",
+      "default_direction": "desc",
+      "parse_scope": false,
+      "minimum_tier": "free",
+      "cost": 0
+    },
+    {
+      "field": "instance.player_count",
+      "label": "Players",
+      "default_direction": "desc",
+      "parse_scope": false,
+      "minimum_tier": "honored",
+      "cost": 8
+    },
+    {
+      "field": "instance.bosses_killed",
+      "label": "Bosses killed",
+      "default_direction": "desc",
+      "parse_scope": false,
+      "minimum_tier": "honored",
+      "cost": 4
+    },
+    {
+      "field": "instance.clear_time_ms",
+      "label": "Clear time",
+      "default_direction": "asc",
+      "parse_scope": false,
+      "minimum_tier": "honored",
+      "cost": 4
+    },
+    {
+      "field": "instance.clear_parse",
+      "label": "Clear parse",
+      "default_direction": "desc",
+      "parse_scope": true,
+      "minimum_tier": "revered",
+      "cost": 6
+    }
+  ],
   "max_nodes": 64,
   "max_depth": 8,
   "anonymous_max_predicates": 6,

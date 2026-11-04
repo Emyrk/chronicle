@@ -3,6 +3,7 @@ import { useInferenceCapability } from "@/features/chat";
 import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpDown, Blocks, BookOpen, ChevronDown, ChevronUp, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
+import { InstanceSearchSortFields } from "@/api/typesGenerated";
 import type {
   InstanceSearchCursor,
   InstanceSearchLimitResponse,
@@ -10,6 +11,8 @@ import type {
   InstanceSearchSort,
   InstanceSearchSortDirection,
   InstanceSearchSortField,
+  InstanceSearchSortOption,
+  InstanceSearchSortTier,
 } from "@/api/typesGenerated";
 import { useRealms, useSiteConfig, useSupportedInstances } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
@@ -57,18 +60,21 @@ type Mode = "form" | "blocks" | "code";
 /** What Blocks / Code show non-Honored users first: or, count and not in one search. */
 const PREVIEW_EXAMPLE = EXAMPLES.find((e) => e.id === "23_complex_speed_comp") ?? EXAMPLES[0];
 
-const SORT_FIELDS: { value: InstanceSearchSortField; label: string }[] = [
-  { value: "instance.started_at", label: "Date" },
-  { value: "instance.clear_time_ms", label: "Clear time" },
-  { value: "instance.clear_parse", label: "Clear parse" },
-];
-
 function defaultSortDirection(field: InstanceSearchSortField): InstanceSearchSortDirection {
-  return field === "instance.clear_time_ms" ? "asc" : "desc";
+  switch (field) {
+    case "instance.name":
+    case "instance.realm":
+    case "instance.guild":
+    case "instance.difficulty":
+    case "instance.clear_time_ms":
+      return "asc";
+    default:
+      return "desc";
+  }
 }
 
 function readSort(field: string | null, direction: string | null, parseScope: string | null): InstanceSearchSort | undefined {
-  if (!SORT_FIELDS.some((option) => option.value === field)) return undefined;
+  if (!InstanceSearchSortFields.some((option) => option === field)) return undefined;
   const typedField = field as InstanceSearchSortField;
   const typedDirection: InstanceSearchSortDirection = direction === "asc" || direction === "desc" ? direction : defaultSortDirection(typedField);
   if (typedField !== "instance.clear_parse") return { field: typedField, direction: typedDirection };
@@ -87,7 +93,6 @@ export function InstanceSearchPage() {
   // Blocks are open to everyone. Assume unlocked while the session loads so
   // supporters never see a flash of locks.
   const advancedUnlocked = supporter.isLoading || supporter.atLeast("honored");
-  const sortUnlocked = supporter.isLoading || supporter.atLeast("revered");
   const [showUpsell, setShowUpsell] = useState(false);
   const fields = useSearchFields();
   const supported = useSupportedInstances();
@@ -572,7 +577,9 @@ export function InstanceSearchPage() {
       {submittedParam !== null && (
         <SortControls
           sort={selectedSort}
-          unlocked={sortUnlocked}
+          options={fields.data?.sorts ?? []}
+          supporterTier={supporter.tier}
+          supporterLoading={supporter.isLoading}
           onChange={updateSort}
         />
       )}
@@ -599,8 +606,28 @@ export function InstanceSearchPage() {
   );
 }
 
-function SortControls({ sort, unlocked, onChange }: { sort: InstanceSearchSort; unlocked: boolean; onChange: (sort: InstanceSearchSort) => void }) {
+function sortTierUnlocked(minimum: InstanceSearchSortTier, supporterTier: string | null, loading: boolean): boolean {
+  if (minimum === "free" || loading) return true;
+  const order = ["honored", "revered", "exalted"];
+  return supporterTier !== null && order.indexOf(supporterTier) >= order.indexOf(minimum);
+}
+
+function SortControls({
+  sort,
+  options,
+  supporterTier,
+  supporterLoading,
+  onChange,
+}: {
+  sort: InstanceSearchSort;
+  options: readonly InstanceSearchSortOption[];
+  supporterTier: string | null;
+  supporterLoading: boolean;
+  onChange: (sort: InstanceSearchSort) => void;
+}) {
   const selectClass = "h-8 rounded-md border border-border/70 bg-background px-2 text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-60";
+  const current = options.find((option) => option.field === sort.field);
+  const currentUnlocked = current ? sortTierUnlocked(current.minimum_tier, supporterTier, supporterLoading) : true;
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 py-2">
       <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -610,24 +637,29 @@ function SortControls({ sort, unlocked, onChange }: { sort: InstanceSearchSort; 
         aria-label="Sort property"
         className={selectClass}
         value={sort.field}
-        disabled={!unlocked}
+        disabled={options.length === 0}
         onChange={(event) => {
-          const field = event.target.value as InstanceSearchSortField;
+          const option = options.find((candidate) => candidate.field === event.target.value);
+          if (!option) return;
           onChange({
-            field,
-            direction: defaultSortDirection(field),
-            ...(field === "instance.clear_parse" ? { parse_scope: "server" as const } : {}),
+            field: option.field,
+            direction: option.default_direction,
+            ...(option.parse_scope ? { parse_scope: "server" as const } : {}),
           });
         }}
       >
-        {SORT_FIELDS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        {options.map((option) => {
+          const unlocked = sortTierUnlocked(option.minimum_tier, supporterTier, supporterLoading);
+          const suffix = option.minimum_tier === "free" ? "" : ` · ${option.minimum_tier[0].toUpperCase()}${option.minimum_tier.slice(1)}`;
+          return <option key={option.field} value={option.field} disabled={!unlocked}>{option.label}{suffix}</option>;
+        })}
       </select>
-      {sort.field === "instance.clear_parse" && (
+      {current?.parse_scope && (
         <select
           aria-label="Clear parse scope"
           className={selectClass}
           value={sort.parse_scope ?? "server"}
-          disabled={!unlocked}
+          disabled={!currentUnlocked}
           onChange={(event) => onChange({ ...sort, parse_scope: event.target.value as InstanceSearchParseScope })}
         >
           <option value="server">Server</option>
@@ -638,16 +670,17 @@ function SortControls({ sort, unlocked, onChange }: { sort: InstanceSearchSort; 
       <select
         aria-label="Sort direction"
         className={selectClass}
-        value={sort.direction ?? defaultSortDirection(sort.field)}
-        disabled={!unlocked}
+        value={sort.direction ?? current?.default_direction ?? defaultSortDirection(sort.field)}
+        disabled={!currentUnlocked}
         onChange={(event) => onChange({ ...sort, direction: event.target.value as InstanceSearchSortDirection })}
       >
         <option value="asc">Ascending</option>
         <option value="desc">Descending</option>
       </select>
-      {!unlocked && (
-        <Link to="/supporter" className="ml-auto inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: TIER_COLOR.revered }}>
-          <Lock className="h-3.5 w-3.5" /> Revered perk
+      {current && current.cost > 0 && <span className="text-2xs text-muted-foreground">+{current.cost} search cost</span>}
+      {current && !currentUnlocked && current.minimum_tier !== "free" && (
+        <Link to="/supporter" className="ml-auto inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: TIER_COLOR[current.minimum_tier] }}>
+          <Lock className="h-3.5 w-3.5" /> {current.minimum_tier[0].toUpperCase()}{current.minimum_tier.slice(1)} perk
         </Link>
       )}
     </div>

@@ -127,7 +127,7 @@ func Compile(q Query, opts Options) (Compiled, error) {
 		}
 	}
 
-	sort, err := c.compileSort(q.Sort)
+	sort, err := c.compileSort(q.Sort, true)
 	if err != nil {
 		return Compiled{}, err
 	}
@@ -176,31 +176,24 @@ func (s compiledSort) cursorValue(alias string) string {
 	return alias + ".sort_value::text"
 }
 
-func (c *compiler) compileSort(requested *Sort) (compiledSort, error) {
+func (c *compiler) compileSort(requested *Sort, chargeCost bool) (compiledSort, error) {
 	wire := Sort{Field: SortStartedAt, Direction: SortDesc}
 	if requested != nil {
 		wire = *requested
 	}
 
-	var defaultDirection SortDirection
-	switch wire.Field {
-	case SortStartedAt:
-		defaultDirection = SortDesc
-	case SortClearTime:
-		defaultDirection = SortAsc
-	case SortClearParse:
-		defaultDirection = SortDesc
-	default:
-		return compiledSort{}, &Error{Path: "sort.field", Message: "must be instance.started_at, instance.clear_time_ms or instance.clear_parse"}
+	definition := sortDefinitionsByField[wire.Field]
+	if definition == nil {
+		return compiledSort{}, &Error{Path: "sort.field", Message: sortFieldsMessage()}
 	}
 	if wire.Direction == "" {
-		wire.Direction = defaultDirection
+		wire.Direction = definition.Option.DefaultDirection
 	}
 	if wire.Direction != SortAsc && wire.Direction != SortDesc {
 		return compiledSort{}, &Error{Path: "sort.direction", Message: "must be asc or desc"}
 	}
 
-	if wire.Field == SortClearParse {
+	if definition.Option.ParseScope {
 		if wire.ParseScope == "" {
 			wire.ParseScope = ParseScopeServer
 		}
@@ -211,31 +204,15 @@ func (c *compiler) compileSort(requested *Sort) (compiledSort, error) {
 		return compiledSort{}, &Error{Path: "sort.parse_scope", Message: "only instance.clear_parse takes parse_scope"}
 	}
 
-	var expr, sqlType string
-	switch wire.Field {
-	case SortStartedAt:
-		expr = "COALESCE(li.start_time, wlg.created_at)"
-		sqlType = "timestamptz"
-	case SortClearTime:
-		expr = `(SELECT min(sr.ranked_duration_ms)
-      FROM instance_speedruns sr
-      JOIN log_instances sort_li ON sort_li.id = sr.instance_id
-      WHERE COALESCE(sort_li.duplicate_group_id, sort_li.id) = COALESCE(li.duplicate_group_id, li.id)
-        AND sr.ranked_duration_ms > 0)`
-		sqlType = "bigint"
-	case SortClearParse:
-		tps := c.alias("sort_tps")
-		sortInstance := c.alias("sort_li")
-		col := fmt.Sprintf("%s.clear_%s", tps, wire.ParseScope)
-		expr = fmt.Sprintf(`(SELECT max(%[1]s_display_score)::float8
-      FROM time_parse_scores %[2]s
-      JOIN log_instances %[3]s ON %[3]s.id = %[2]s.instance_id
-      WHERE %[4]s
-        AND COALESCE(%[3]s.duplicate_group_id, %[3]s.id) = COALESCE(li.duplicate_group_id, li.id)
-        AND %[1]s_status %[5]s)`, col, tps, sortInstance, c.timeParseContractFor(tps, sortInstance+".id"), scoredStatusSQL)
-		sqlType = "float8"
+	if chargeCost {
+		c.cost += definition.Option.Cost
 	}
-	return compiledSort{wire: wire, expr: expr, sqlType: sqlType, direction: wire.Direction}, nil
+	return compiledSort{
+		wire:      wire,
+		expr:      definition.Expr(c, wire),
+		sqlType:   definition.Type.sqlType(),
+		direction: wire.Direction,
+	}, nil
 }
 
 func (c *compiler) compileCursor(cursor *Cursor, sort compiledSort) (string, error) {
@@ -245,7 +222,7 @@ func (c *compiler) compileCursor(cursor *Cursor, sort compiledSort) (string, err
 	if cursor.ID == uuid.Nil {
 		return "", &Error{Path: "cursor.id", Message: "is required"}
 	}
-	cursorSort, err := c.compileSort(&cursor.Sort)
+	cursorSort, err := c.compileSort(&cursor.Sort, false)
 	if err != nil {
 		return "", &Error{Path: "cursor." + strings.TrimPrefix(err.(*Error).Path, "sort."), Message: err.(*Error).Message}
 	}
@@ -268,27 +245,30 @@ func (c *compiler) compileCursor(cursor *Cursor, sort compiledSort) (string, err
 }
 
 func parseCursorValue(value string, sort compiledSort) (any, error) {
-	switch sort.wire.Field {
-	case SortStartedAt:
+	definition := sortDefinitionsByField[sort.wire.Field]
+	switch definition.Type {
+	case typeTime:
 		parsed, err := time.Parse(time.RFC3339Nano, value)
 		if err != nil {
 			return nil, fmt.Errorf("must be an RFC 3339 timestamp")
 		}
 		return parsed, nil
-	case SortClearTime:
+	case typeInt:
 		parsed, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("must be an integer")
 		}
 		return parsed, nil
-	case SortClearParse:
+	case typeFloat:
 		parsed, err := strconv.ParseFloat(value, 64)
 		if err != nil {
 			return nil, fmt.Errorf("must be a number")
 		}
 		return parsed, nil
+	case typeString:
+		return value, nil
 	default:
-		panic("validated sort field")
+		panic("validated sort type")
 	}
 }
 

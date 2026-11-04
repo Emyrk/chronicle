@@ -10,6 +10,7 @@ import (
 func Describe() chroniclesdk.InstanceSearchFieldsResponse {
 	out := chroniclesdk.InstanceSearchFieldsResponse{
 		Fields:                 make([]chroniclesdk.InstanceSearchField, 0, len(fields)),
+		Sorts:                  DescribeSorts(),
 		MaxNodes:               DefaultMaxNodes,
 		MaxDepth:               DefaultMaxDepth,
 		AnonymousMaxPredicates: anonymousMaxPredicates,

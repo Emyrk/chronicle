@@ -11,8 +11,8 @@ import (
 type InstanceSearchQuery struct {
 	// Where is the search tree. Omit it to match every visible run.
 	Where *InstanceSearchNode `json:"where,omitempty"`
-	// Sort changes the result order. Omit it for newest first. Custom sorting
-	// is a Revered supporter perk.
+	// Sort changes the result order. Omit it for newest first. Each allowlisted
+	// property declares its minimum supporter tier in GET /search/fields.
 	Sort *InstanceSearchSort `json:"sort,omitempty"`
 	// Limit is the page size. Zero uses the default (25).
 	Limit int `json:"limit,omitempty"`
@@ -31,9 +31,16 @@ type InstanceSearchSort struct {
 type InstanceSearchSortField string
 
 const (
-	InstanceSearchSortStartedAt  InstanceSearchSortField = "instance.started_at"
-	InstanceSearchSortClearTime  InstanceSearchSortField = "instance.clear_time_ms"
-	InstanceSearchSortClearParse InstanceSearchSortField = "instance.clear_parse"
+	InstanceSearchSortStartedAt    InstanceSearchSortField = "instance.started_at"
+	InstanceSearchSortName         InstanceSearchSortField = "instance.name"
+	InstanceSearchSortRealm        InstanceSearchSortField = "instance.realm"
+	InstanceSearchSortGuild        InstanceSearchSortField = "instance.guild"
+	InstanceSearchSortDifficulty   InstanceSearchSortField = "instance.difficulty"
+	InstanceSearchSortMaxPlayers   InstanceSearchSortField = "instance.max_players"
+	InstanceSearchSortPlayerCount  InstanceSearchSortField = "instance.player_count"
+	InstanceSearchSortBossesKilled InstanceSearchSortField = "instance.bosses_killed"
+	InstanceSearchSortClearTime    InstanceSearchSortField = "instance.clear_time_ms"
+	InstanceSearchSortClearParse   InstanceSearchSortField = "instance.clear_parse"
 )
 
 type InstanceSearchSortDirection string
@@ -42,6 +49,24 @@ const (
 	InstanceSearchSortAsc  InstanceSearchSortDirection = "asc"
 	InstanceSearchSortDesc InstanceSearchSortDirection = "desc"
 )
+
+type InstanceSearchSortTier string
+
+const (
+	InstanceSearchSortTierFree    InstanceSearchSortTier = "free"
+	InstanceSearchSortTierHonored InstanceSearchSortTier = "honored"
+	InstanceSearchSortTierRevered InstanceSearchSortTier = "revered"
+)
+
+// InstanceSearchSortOption describes one fixed result order for search UIs.
+type InstanceSearchSortOption struct {
+	Field            InstanceSearchSortField     `json:"field"`
+	Label            string                      `json:"label"`
+	DefaultDirection InstanceSearchSortDirection `json:"default_direction"`
+	ParseScope       bool                        `json:"parse_scope"`
+	MinimumTier      InstanceSearchSortTier      `json:"minimum_tier"`
+	Cost             int                         `json:"cost"`
+}
 
 // InstanceSearchCursor is a keyset pagination position. Value is the selected
 // sort property's canonical string value, or null when that value is missing.
@@ -228,7 +253,8 @@ type InstanceSearchField struct {
 
 // InstanceSearchFieldsResponse is GET /api/v1/raidlogs/search/fields.
 type InstanceSearchFieldsResponse struct {
-	Fields []InstanceSearchField `json:"fields"`
+	Fields []InstanceSearchField      `json:"fields"`
+	Sorts  []InstanceSearchSortOption `json:"sorts"`
 	// MaxNodes and MaxDepth bound the size of a query tree.
 	MaxNodes int `json:"max_nodes"`
 	MaxDepth int `json:"max_depth"`

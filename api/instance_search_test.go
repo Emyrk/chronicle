@@ -77,6 +77,40 @@ func TestInstanceSearch(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	})
 
+	t.Run("SortTierRequirements", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			name      string
+			user      uuid.UUID
+			tier      string
+			field     string
+			status    int
+			wantError string
+		}{
+			{name: "AnonymousFree", field: "instance.name", status: http.StatusOK},
+			{name: "Free", user: uuid.New(), tier: "free", field: "instance.name", status: http.StatusOK},
+			{name: "FreeNeedsHonored", user: uuid.New(), tier: "free", field: "instance.player_count", status: http.StatusForbidden, wantError: "Honored"},
+			{name: "Honored", user: uuid.New(), tier: "honored", field: "instance.player_count", status: http.StatusOK},
+			{name: "HonoredNeedsRevered", user: uuid.New(), tier: "honored", field: "instance.clear_parse", status: http.StatusForbidden, wantError: "Revered"},
+			{name: "Revered", user: uuid.New(), tier: "revered", field: "instance.clear_parse", status: http.StatusOK},
+			{name: "Exalted", user: uuid.New(), tier: "exalted", field: "instance.clear_parse", status: http.StatusOK},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				api, _ := newInstanceSearchAPI(t)
+				api.instanceSearch.SetUserAccessResolver(func(context.Context, uuid.UUID) (serviceinstancesearch.UserAccess, error) {
+					return serviceinstancesearch.AccessForTier(tc.tier), nil
+				})
+				body := `{"sort": {"field": "` + tc.field + `"}}`
+				rec := doSearch(t, api, tc.user, "10.0.0.1", body)
+				require.Equal(t, tc.status, rec.Code, rec.Body.String())
+				if tc.wantError != "" {
+					require.Contains(t, rec.Body.String(), tc.wantError)
+				}
+			})
+		}
+	})
+
 	t.Run("Invalid", func(t *testing.T) {
 		t.Parallel()
 		api, _ := newInstanceSearchAPI(t)

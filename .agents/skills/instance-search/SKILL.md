@@ -85,13 +85,22 @@ UIs can show the cost before running: `GET /api/v1/raidlogs/search/fields` retur
 }
 ```
 
-`where` is optional (omit = every visible run). `limit` defaults to 25, max 100. Without `sort`, results are newest first. Sorting is a **Revered supporter perk** (Exalted also qualifies) and supports:
+`where` is optional (omit = every visible run). `limit` defaults to 25, max 100. Without `sort`, results are newest first. Sorting uses a fixed allowlist returned by `GET /search/fields` as `sorts`:
 
-- `instance.started_at` (default direction `desc`)
-- `instance.clear_time_ms` (default direction `asc`; missing clears sort last)
-- `instance.clear_parse` (default direction `desc`; missing parses sort last), with optional `parse_scope: "server" | "realm" | "guild"`
+| Property | Default | Minimum tier | Added cost |
+|---|---:|---:|---:|
+| `instance.started_at` | desc | free | 0 |
+| `instance.name` | asc | free | 0 |
+| `instance.realm` | asc | free | 0 |
+| `instance.guild` | asc | free | 0 |
+| `instance.difficulty` | asc | free | 0 |
+| `instance.max_players` | desc | free | 0 |
+| `instance.player_count` | desc | Honored | 8 |
+| `instance.bosses_killed` | desc | Honored | 4 |
+| `instance.clear_time_ms` | asc | Honored | 4 |
+| `instance.clear_parse` | desc | Revered | 6 |
 
-Directions are `asc` and `desc`. Pass the returned `next` object back unchanged as `cursor`; it pins the normalized sort and keyset value.
+`instance.clear_parse` accepts `parse_scope: "server" | "realm" | "guild"`. Directions are `asc` and `desc`; missing values always sort last. Free sorts are also available to anonymous callers whose query otherwise fits the anonymous subset. Pass the returned `next` object back unchanged as `cursor`; it pins the normalized sort and keyset value.
 
 A **node** sets exactly one of:
 

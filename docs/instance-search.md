@@ -175,7 +175,7 @@ priests", "≥2 Holy Paladins", "≥10 members of guild X".
 
 ## Pagination & sorting
 
-Keyset pagination on `(sort_key, li.id)` like `ListRecentInstances`. v1 sorts by date (default), clear time, or clear-time parse, in either direction. Missing clear times/parses sort last. The request carries an allowlisted `sort` object and the returned cursor pins the normalized sort. Custom sorting is restricted server-side to Revered and Exalted supporters.
+Keyset pagination on `(sort_key, li.id)` like `ListRecentInstances`. The fixed sort registry covers every property shown in the result table: date, run name, realm, guild, difficulty, maximum players, player count, bosses killed, clear time, and clear parse. Every property supports both directions and missing values sort last. Direct frame columns are free; player/boss counts and clear time require Honored; clear parse requires Revered. The field-list endpoint publishes each sort's label, default direction, minimum tier, parse-scope support, and added search cost so the UI and server use the same contract. The returned cursor pins the normalized sort.
 
 ## Decisions made while implementing
 

@@ -62,9 +62,16 @@ const (
 	MetricDPS = chroniclesdk.InstanceSearchMetricDPS
 	MetricHPS = chroniclesdk.InstanceSearchMetricHPS
 
-	SortStartedAt  = chroniclesdk.InstanceSearchSortStartedAt
-	SortClearTime  = chroniclesdk.InstanceSearchSortClearTime
-	SortClearParse = chroniclesdk.InstanceSearchSortClearParse
+	SortStartedAt    = chroniclesdk.InstanceSearchSortStartedAt
+	SortName         = chroniclesdk.InstanceSearchSortName
+	SortRealm        = chroniclesdk.InstanceSearchSortRealm
+	SortGuild        = chroniclesdk.InstanceSearchSortGuild
+	SortDifficulty   = chroniclesdk.InstanceSearchSortDifficulty
+	SortMaxPlayers   = chroniclesdk.InstanceSearchSortMaxPlayers
+	SortPlayerCount  = chroniclesdk.InstanceSearchSortPlayerCount
+	SortBossesKilled = chroniclesdk.InstanceSearchSortBossesKilled
+	SortClearTime    = chroniclesdk.InstanceSearchSortClearTime
+	SortClearParse   = chroniclesdk.InstanceSearchSortClearParse
 
 	SortAsc  = chroniclesdk.InstanceSearchSortAsc
 	SortDesc = chroniclesdk.InstanceSearchSortDesc
