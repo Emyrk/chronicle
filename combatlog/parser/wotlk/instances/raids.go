@@ -77,13 +77,31 @@ func ObsidianSanctumHostiles() map[uint32]instances.Identity {
 	})
 
 	primaryDrakeEncounter := func(f encounter.Fight) *identifier.EncounterFuncResult {
+		hasSartharion := false
+		drakeCount := 0
 		for _, participant := range f.Hostiles {
 			entry, ok := participant.ID.GetEntry()
-			if ok && entry == 28860 {
-				return &identifier.EncounterFuncResult{EncounterName: "Sartharion"}
+			if !ok {
+				continue
+			}
+			switch entry {
+			case 28860:
+				hasSartharion = true
+			case 30449, 30451, 30452:
+				drakeCount++
 			}
 		}
-		return nil
+		if !hasSartharion {
+			return nil
+		}
+
+		encounterNames := []string{
+			"Sartharion",
+			"Sartharion (1 Drake)",
+			"Sartharion (2 Drakes)",
+			"Sartharion (3 Drakes)",
+		}
+		return &identifier.EncounterFuncResult{EncounterName: encounterNames[drakeCount]}
 	}
 	for _, entry := range []uint32{28860, 30449, 30451, 30452} {
 		identity := hostile[entry]
@@ -100,6 +118,25 @@ var ObsidianSanctumFactory = &instances.CommonFactory{
 	ZoneNames: []string{"the obsidian sanctum"},
 	MapIDs:    []uint32{615},
 	Hostiles:  instances.FromMap(ObsidianSanctumHostiles()),
+	ProgressionBosses: func(database.WoWFlavor) []string {
+		return []string{
+			"Sartharion",
+			"Sartharion (1 Drake)",
+			"Sartharion (2 Drakes)",
+			"Sartharion (3 Drakes)",
+		}
+	},
+	RankingEncounterSets: func(database.WoWFlavor) []instances.RankingEncounterSet {
+		return []instances.RankingEncounterSet{
+			{Encounters: []string{"Sartharion"}},
+			{ID: "1d", Label: "1 Drake", Encounters: []string{"Sartharion (1 Drake)"}},
+			{ID: "2d", Label: "2 Drakes", Encounters: []string{"Sartharion (2 Drakes)"}},
+			{ID: "3d", Label: "3 Drakes", Encounters: []string{"Sartharion (3 Drakes)"}},
+		}
+	},
+	FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
+		return &rankings.Rankings{}
+	},
 }
 
 func onyxiaZoneName(ctx context.Context, z zone.Zone, fl database.WoWFlavor) string {

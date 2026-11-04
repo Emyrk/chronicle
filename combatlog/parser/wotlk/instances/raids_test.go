@@ -901,6 +901,43 @@ func TestUlduarAssemblyRespawnStartsNewEncounter(t *testing.T) {
 	require.Empty(t, second.Remaining)
 }
 
+func TestObsidianSanctumSartharionEncounterFlavor(t *testing.T) {
+	t.Parallel()
+
+	hostiles := ObsidianSanctumHostiles()
+	resolver := hostiles[28860].EncounterNameFn
+	require.NotNil(t, resolver)
+
+	drakes := []uint32{30449, 30451, 30452}
+	for drakeCount, expected := range []string{
+		"Sartharion",
+		"Sartharion (1 Drake)",
+		"Sartharion (2 Drakes)",
+		"Sartharion (3 Drakes)",
+	} {
+		drakeCount := drakeCount
+		expected := expected
+		t.Run(expected, func(t *testing.T) {
+			t.Parallel()
+
+			sartharion := creatureGUID(28860)
+			fight := encounter.Fight{
+				Hostiles: map[guid.GUID]encounter.CharacterFight{
+					sartharion: {ID: sartharion},
+				},
+			}
+			for _, entry := range drakes[:drakeCount] {
+				drake := creatureGUID(entry)
+				fight.Hostiles[drake] = encounter.CharacterFight{ID: drake}
+			}
+
+			result := resolver(fight)
+			require.NotNil(t, result)
+			require.Equal(t, expected, result.EncounterName)
+		})
+	}
+}
+
 func TestObsidianSanctumSartharionKillFinalizesDrakes(t *testing.T) {
 	t.Parallel()
 
@@ -965,7 +1002,7 @@ func TestObsidianSanctumSartharionKillFinalizesDrakes(t *testing.T) {
 			require.Len(t, result.Encounters, 1)
 
 			got := result.Encounters[0]
-			require.Equal(t, "Sartharion", got.Name)
+			require.Equal(t, "Sartharion (3 Drakes)", got.Name)
 			require.True(t, got.Boss)
 			require.Equal(t, encounter.KillTypeClean, got.KillType)
 			require.Empty(t, got.Remaining)
