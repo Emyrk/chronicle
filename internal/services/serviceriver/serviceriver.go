@@ -346,7 +346,7 @@ func (s *Service) Start(ctx context.Context) error {
 	)
 	// Durable dirty facts survive missed enqueues; poll for affected tenants.
 	q.AddPeriodicJob(river.NewPeriodicJob(
-		river.PeriodicInterval(time.Minute),
+		river.PeriodicInterval(5*time.Minute),
 		func() (river.JobArgs, *river.InsertOpts) {
 			return servicerankings.ArgsDispatchIncrementalRenown{}, nil
 		},
@@ -404,7 +404,7 @@ func (s *Service) Start(ctx context.Context) error {
 	))
 	// Recover missed observation enqueues from durable, transactional run keys.
 	q.AddPeriodicJob(river.NewPeriodicJob(
-		river.PeriodicInterval(time.Minute),
+		river.PeriodicInterval(5*time.Minute),
 		func() (river.JobArgs, *river.InsertOpts) {
 			return servicerankings.ArgsDispatchRatingObservations{}, nil
 		},
@@ -412,7 +412,7 @@ func (s *Service) Start(ctx context.Context) error {
 	))
 	// Drain exact dirty Mastery subjects after canonical evidence reconciliation.
 	q.AddPeriodicJob(river.NewPeriodicJob(
-		river.PeriodicInterval(time.Minute),
+		river.PeriodicInterval(5*time.Minute),
 		func() (river.JobArgs, *river.InsertOpts) {
 			return servicerankings.ArgsDispatchIncrementalMastery{}, nil
 		},
@@ -446,7 +446,7 @@ func (s *Service) Start(ctx context.Context) error {
 	))
 	// Refresh raw Peak bests and one tenant-wide denominator per dirty cohort.
 	q.AddPeriodicJob(river.NewPeriodicJob(
-		river.PeriodicInterval(time.Minute),
+		river.PeriodicInterval(5*time.Minute),
 		func() (river.JobArgs, *river.InsertOpts) {
 			return servicerankings.ArgsDispatchIncrementalPeak{}, nil
 		},

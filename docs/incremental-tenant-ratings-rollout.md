@@ -36,7 +36,7 @@ After a **separate, approved staging deployment** of the schema, run `EXPLAIN (A
 ## Launch and observe
 
 1. Deploy only after reviewing the migration lock risk. The new tables start empty; **do not click “Rebuild ratings + Renown” to start incremental processing**. Existing active score generations continue serving while the jobs build durable evidence. A tenant without an existing active generation cannot publish incremental scores and would need a deliberate manual baseline rebuild.
-2. Watch the River jobs dashboard after startup. `dispatch-live-evidence-bootstrap` starts automatically; `bootstrap-tenant-live-evidence` resumes a 100-run keyset cursor until the source scan and dirty-run queue are both finished. The every-minute observation, Renown, Mastery, and Peak dispatchers then drain dirty work. The daily evidence repair scans source/version state in bounded pages; its `after_run_id` lives in the current job's args, **not** in the bootstrap marker.
+2. Watch the River jobs dashboard after startup. `dispatch-live-evidence-bootstrap` starts automatically; `bootstrap-tenant-live-evidence` resumes a 100-run keyset cursor until the source scan and dirty-run queue are both finished. The five-minute observation, Renown, Mastery, and Peak dispatchers then drain dirty work. The daily evidence repair scans source/version state in bounded pages; its `after_run_id` lives in the current job's args, **not** in the bootstrap marker.
 3. With a DB role allowed to view the tenant rows, inspect this read-only snapshot repeatedly. The root tenant is the all-zero UUID. Other tenants may be hidden by row-level security unless the role has appropriate access.
 
 ```sql
