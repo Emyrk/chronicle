@@ -4,7 +4,11 @@ import { describe, expect, it } from "vitest";
 import type { RecentInstance } from "@/api/typesGenerated";
 import { RaidCard } from "./RaidCard";
 
-function recentInstance(id: string, uploaderName: string): RecentInstance {
+function recentInstance(
+  id: string,
+  uploaderName: string,
+  overrides: Partial<RecentInstance> = {},
+): RecentInstance {
   return {
     id,
     slug: id,
@@ -24,6 +28,7 @@ function recentInstance(id: string, uploaderName: string): RecentInstance {
     difficulty_name: "",
     max_players: 40,
     dynamic_difficulty: 0,
+    ...overrides,
   };
 }
 
@@ -65,5 +70,28 @@ describe("RaidCard grouped uploads", () => {
 
     expect(markup).not.toContain('aria-label="Uploads"');
     expect(markup).not.toContain('aria-label="1 duplicate logs"');
+  });
+});
+
+describe("RaidCard 3D badge", () => {
+  it("renders on cards with 3D positions without requiring an explore action", () => {
+    const markup = renderToStaticMarkup(
+      <MemoryRouter>
+        <RaidCard instance={recentInstance("positions", "Emyrk", { has_positions: true })} />
+      </MemoryRouter>,
+    );
+
+    expect(markup).toContain('title="Has 3D positions"');
+    expect(markup).toContain(">3D</span>");
+  });
+
+  it("does not render on cards without 3D positions", () => {
+    const markup = renderToStaticMarkup(
+      <MemoryRouter>
+        <RaidCard instance={recentInstance("no-positions", "Emyrk")} />
+      </MemoryRouter>,
+    );
+
+    expect(markup).not.toContain('title="Has 3D positions"');
   });
 });

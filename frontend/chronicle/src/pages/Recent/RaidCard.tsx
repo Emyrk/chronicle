@@ -40,7 +40,7 @@ interface RaidCardProps {
   bossCount?: number;
   /** Average guild parse for this raid; shown as a badge in the top-right corner. */
   parseScore?: number;
-  /** Shows an "Explore in 3D" action and a "3D replay" badge on runs with unit positions (the landing only); the card still links to the run. */
+  /** Shows an "Explore in 3D" action on runs with unit positions; the card still links to the run. */
   onExplore?: (instance: RecentInstance) => void;
 }
 
@@ -154,7 +154,7 @@ export function RaidCard({ instance, instances, bossCount, parseScore, onExplore
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/30" />
         
         {/* Badge stack - top right corner */}
-        {(parseScore !== undefined || (onExplore && activeInstance.has_positions) || activeInstance.has_youtube_video || isHeroic(activeInstance)) && (
+        {(parseScore !== undefined || activeInstance.has_positions || activeInstance.has_youtube_video || isHeroic(activeInstance)) && (
           <div className={`absolute right-2 z-20 flex flex-col items-end gap-1.5 ${uploads.length > 1 ? "top-11" : "top-2"}`}>
             {parseScore !== undefined && (
               <div
@@ -164,10 +164,10 @@ export function RaidCard({ instance, instances, bossCount, parseScore, onExplore
                 {Math.round(parseScore)}
               </div>
             )}
-            {onExplore && activeInstance.has_positions && (
-              <div className="flex items-center gap-1.5 bg-sky-600/75 backdrop-blur-sm text-white/85 px-2 py-1 rounded shadow-lg" title="Has a 3D replay">
+            {activeInstance.has_positions && (
+              <div className="flex items-center gap-1.5 bg-sky-600/75 backdrop-blur-sm text-white/85 px-2 py-1 rounded shadow-lg" title="Has 3D positions">
                 <Box className="h-4 w-4" />
-                <span className="text-xs font-semibold">3D replay</span>
+                <span className="text-xs font-semibold">3D</span>
               </div>
             )}
             {activeInstance.has_youtube_video && (
