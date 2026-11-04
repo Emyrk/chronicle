@@ -92,7 +92,7 @@ function ClosingBand() {
             [DOWNLOAD_MAC_URL, "Download for macOS"],
             [DOWNLOAD_WINDOWS_URL, "Download for Windows"],
           ].map(([href, label]) => (
-            <Button key={href} asChild variant="button-bright" size="lg" className="h-12 text-[15px] font-semibold">
+            <Button key={href} asChild variant="default" size="lg" className="h-12 text-[15px] font-semibold">
               <a href={href} onClick={() => trackFunnel("cta_sidekick", { placement: "band" })} className="no-underline">
                 {label}
               </a>

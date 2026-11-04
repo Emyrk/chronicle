@@ -60,7 +60,7 @@ const STEPS = [
   },
   {
     title: "Your run appears here",
-    body: "Minutes after you leave the instance. Replay it, share it, argue about it.",
+    body: "Minutes after you exit the game. Replay it, share it, argue about it.",
   },
 ];
 

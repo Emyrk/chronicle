@@ -59,7 +59,7 @@ const STEPS = [
   },
   {
     title: "Your run appears here",
-    body: "Minutes after you leave the instance. Replay it, share it, argue about it.",
+    body: "Minutes after you exit the game. Replay it, share it, argue about it.",
   },
 ];
 
@@ -94,7 +94,7 @@ function SendLinkSection() {
           placeholder="you@example.com"
           className="h-[46px] rounded-md border border-input bg-background px-3 text-[15px] text-foreground placeholder:text-muted-foreground"
         />
-        <Button type="submit" variant="button-bright" className="h-12 text-[15px] font-semibold">
+        <Button type="submit" variant="default" className="h-12 text-[15px] font-semibold">
           Send me the download link
         </Button>
       </form>
