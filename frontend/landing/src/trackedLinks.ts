@@ -1,6 +1,7 @@
 export type TenantLinkPosition =
   | "featured_server_logs"
   | "featured_server_upload"
+  | "hero_sidekick_download"
   | "server_card"
   | "support_standing";
 

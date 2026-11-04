@@ -6,6 +6,7 @@ import { PrivacyPage } from "./components/PrivacyPage";
 import { AdsPage } from "./components/AdsPage";
 import { WarcraftLogsComparisonPage } from "./components/WarcraftLogsComparisonPage";
 import { SupportRibbon } from "./components/SupportRibbon";
+import { Hero } from "./components/Hero";
 import { useDiscovery } from "./hooks/useDiscovery";
 import { SERVERS, DISCOVERY_URLS } from "./data/servers";
 import type { ServerEntry } from "./types";
@@ -19,7 +20,12 @@ export interface AppProps {
 function HomePage({ initialServers }: { initialServers?: ServerEntry[] }) {
   const { servers, loading } = useDiscovery(SERVERS, DISCOVERY_URLS, initialServers);
 
-  return <ServerGrid servers={servers} loading={loading} />;
+  return (
+    <>
+      <Hero />
+      <ServerGrid servers={servers} loading={loading} />
+    </>
+  );
 }
 
 export function App({ pathname, initialServers, copyrightYear }: AppProps) {
