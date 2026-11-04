@@ -338,6 +338,40 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION mark_rating_renown_fact_dirty() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    fact RECORD;
+    owner_tenant UUID;
+    owner_kind TEXT;
+    owner_id TEXT;
+BEGIN
+    FOR fact IN SELECT * FROM (
+        SELECT CASE WHEN TG_OP <> 'INSERT' THEN to_jsonb(OLD) END AS payload
+        UNION ALL
+        SELECT CASE WHEN TG_OP <> 'DELETE' THEN to_jsonb(NEW) END
+    ) sides WHERE payload IS NOT NULL LOOP
+        SELECT COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid)
+          INTO STRICT owner_tenant
+        FROM wow_server_realms realm
+        JOIN wow_servers server ON server.id = realm.server_id
+        WHERE realm.id = (fact.payload->>'realm_id')::uuid;
+        owner_kind := CASE WHEN TG_TABLE_NAME = 'renown_kill_facts' THEN 'player' ELSE 'guild' END;
+        owner_id := CASE WHEN owner_kind = 'player' THEN fact.payload->>'player_guid'
+                         ELSE fact.payload->>'guild_id' END;
+        INSERT INTO rating_dirty_renown_subjects
+            (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name)
+        VALUES (owner_tenant, owner_kind, (fact.payload->>'realm_id')::uuid,
+                owner_id, fact.payload->>'instance_name', fact.payload->>'encounter_name')
+        ON CONFLICT (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name)
+        DO UPDATE SET revision = rating_dirty_renown_subjects.revision + 1,
+                      changed_at = now();
+    END LOOP;
+    RETURN NULL;
+END;
+$$;
+
 CREATE FUNCTION publish_rating_rebuild(p_generation_id uuid, p_tenant_id uuid) RETURNS boolean
     LANGUAGE plpgsql
     AS $$
@@ -2452,6 +2486,22 @@ CREATE TABLE rating_config_revisions (
     CONSTRAINT rating_config_revisions_revision_check CHECK ((revision >= 0))
 );
 
+CREATE TABLE rating_dirty_renown_subjects (
+    tenant_id uuid NOT NULL,
+    subject_kind text NOT NULL,
+    realm_id uuid NOT NULL,
+    subject_id text NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    changed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT rating_dirty_renown_subjects_revision_check CHECK ((revision > 0)),
+    CONSTRAINT rating_dirty_renown_subjects_subject_id_check CHECK ((subject_id <> ''::text)),
+    CONSTRAINT rating_dirty_renown_subjects_subject_kind_check CHECK ((subject_kind = ANY (ARRAY['player'::text, 'guild'::text])))
+);
+
+ALTER TABLE ONLY rating_dirty_renown_subjects FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE rating_group_boss_policies (
     group_id uuid NOT NULL,
     instance_name text NOT NULL,
@@ -3939,6 +3989,9 @@ ALTER TABLE ONLY rating_boss_scores
 ALTER TABLE ONLY rating_config_revisions
     ADD CONSTRAINT rating_config_revisions_pkey PRIMARY KEY (tenant_id);
 
+ALTER TABLE ONLY rating_dirty_renown_subjects
+    ADD CONSTRAINT rating_dirty_renown_subjects_pkey PRIMARY KEY (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name);
+
 ALTER TABLE ONLY rating_group_boss_policies
     ADD CONSTRAINT rating_group_boss_policies_pkey PRIMARY KEY (group_id, instance_name, encounter_name);
 
@@ -4543,6 +4596,8 @@ CREATE INDEX rating_boss_scores_group_idx ON rating_boss_scores USING btree (gen
 
 CREATE INDEX rating_boss_scores_leaderboard_idx ON rating_boss_scores USING btree (generation_id, tenant_id, rating_metric, window_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, score DESC);
 
+CREATE INDEX rating_dirty_renown_subjects_queue_idx ON rating_dirty_renown_subjects USING btree (tenant_id, changed_at, subject_kind, realm_id, subject_id);
+
 CREATE INDEX rating_realm_group_memberships_group_idx ON rating_realm_group_memberships USING btree (group_id, realm_id);
 
 CREATE UNIQUE INDEX rating_rebuild_checkpoints_building_idx ON rating_rebuild_checkpoints USING btree (tenant_id) WHERE (phase <> ALL (ARRAY['complete'::text, 'aborted'::text]));
@@ -4626,6 +4681,10 @@ CREATE TRIGGER fixed_rating_template_boss_revision AFTER INSERT OR DELETE OR UPD
 CREATE TRIGGER fixed_rating_template_revision AFTER INSERT OR DELETE OR UPDATE ON rating_renown_templates FOR EACH ROW EXECUTE FUNCTION bump_fixed_rating_flavor_revision();
 
 CREATE TRIGGER fixed_rating_tenant_revision AFTER UPDATE OF default_dataset_id ON tenants FOR EACH ROW EXECUTE FUNCTION bump_fixed_rating_flavor_revision();
+
+CREATE TRIGGER mark_guild_renown_dirty AFTER INSERT OR DELETE OR UPDATE ON guild_renown_kill_facts FOR EACH ROW EXECUTE FUNCTION mark_rating_renown_fact_dirty();
+
+CREATE TRIGGER mark_player_renown_dirty AFTER INSERT OR DELETE OR UPDATE ON renown_kill_facts FOR EACH ROW EXECUTE FUNCTION mark_rating_renown_fact_dirty();
 
 CREATE TRIGGER rating_boss_policy_revision AFTER INSERT OR DELETE OR UPDATE ON rating_group_boss_policies FOR EACH ROW EXECUTE FUNCTION bump_rating_config_revision();
 
@@ -5130,6 +5189,9 @@ ALTER TABLE ONLY rating_boss_scores
 ALTER TABLE ONLY rating_boss_scores
     ADD CONSTRAINT rating_boss_scores_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
 
+ALTER TABLE ONLY rating_dirty_renown_subjects
+    ADD CONSTRAINT rating_dirty_renown_subjects_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
 ALTER TABLE ONLY rating_group_boss_policies
     ADD CONSTRAINT rating_group_boss_policies_group_id_fkey FOREIGN KEY (group_id) REFERENCES rating_group_policies(group_id) ON DELETE CASCADE;
 
@@ -5423,6 +5485,8 @@ ALTER TABLE player_tenant_rating_scope_scores ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_boss_scores ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE rating_dirty_renown_subjects ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE rating_group_boss_policies ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_group_policies ENABLE ROW LEVEL SECURITY;
@@ -5466,6 +5530,8 @@ CREATE POLICY tenant_admin_bypass ON player_tenant_rating_boss_scores USING ((cu
 CREATE POLICY tenant_admin_bypass ON player_tenant_rating_scope_scores USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_boss_scores USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_dirty_renown_subjects USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_group_boss_policies USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -5532,6 +5598,8 @@ CREATE POLICY tenant_isolation ON player_tenant_rating_scope_scores USING ((tena
 
 CREATE POLICY tenant_isolation ON rating_boss_scores USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON rating_dirty_renown_subjects USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON rating_group_boss_policies USING ((group_id IN ( SELECT rating_realm_groups.id
    FROM rating_realm_groups)));

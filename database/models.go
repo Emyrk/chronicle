@@ -2451,6 +2451,17 @@ type RatingConfigRevision struct {
 	Revision int64     `db:"revision" json:"revision"`
 }
 
+type RatingDirtyRenownSubject struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SubjectKind   string             `db:"subject_kind" json:"subject_kind"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	SubjectID     string             `db:"subject_id" json:"subject_id"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	Revision      int64              `db:"revision" json:"revision"`
+	ChangedAt     pgtype.Timestamptz `db:"changed_at" json:"changed_at"`
+}
+
 type RatingGroupBossPolicy struct {
 	GroupID       uuid.UUID `db:"group_id" json:"group_id"`
 	InstanceName  string    `db:"instance_name" json:"instance_name"`
