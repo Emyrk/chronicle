@@ -389,7 +389,7 @@ function LockedPreview({ kind, entities }: { kind: EntityKind; entities: EntityR
           viewing, their usual and their trend, without leaving the page.
         </p>
         <Link
-          to="/supporter"
+          to="/supporter#compare"
           target="_blank"
           className="rounded-md px-3 py-1 text-xs font-semibold text-white transition-opacity hover:opacity-90"
           style={{ backgroundColor: tierColor }}

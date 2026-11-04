@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react"
 import type { ReactNode } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { Activity, ArrowRight, BadgeCheck, Camera, Check, Download, ExternalLink, FileText, LockKeyhole, Map as MapIcon, Plus, Shield, Sparkles, Swords, Timer, Trophy, Users } from "lucide-react"
+import { Activity, ArrowRight, BadgeCheck, Camera, Check, Download, ExternalLink, FileText, GitCompareArrows, LockKeyhole, Map as MapIcon, Plus, Shield, Sparkles, Swords, Timer, Trophy, Users } from "lucide-react"
 import { BACKGROUND_STYLES, BORDER_STYLES, COSMETIC_CSS, NAME_STYLES, TIER_RANK, combineCosmetics, tierFromAPI, type Preset } from "@/components/ui/PlayerMetricChart/PlayerCosmetics"
 import { MiniRow } from "@/features/characterCosmetics/CharacterCosmeticsEditor"
 import { TierPill } from "@/components/Supporter/Supporter"
@@ -268,6 +268,54 @@ function UnlistedVisual() {
   )
 }
 
+const COMPARE_ROWS = [
+  { name: "Thrall", cls: "shaman", focus: "94.2", typical: "88.7", best: "97.1" },
+  { name: "Jaina", cls: "mage", focus: "91.8", typical: "90.3", best: "95.6" },
+  { name: "Varian", cls: "warrior", focus: "86.5", typical: "84.9", best: "92.4" },
+]
+
+/** A compare tray of three Alt+clicked players with their scores on the open log. */
+function CompareVisual() {
+  return (
+    <div className="space-y-3">
+      <div className="rounded-md border border-border bg-background/60">
+        <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs">
+          <GitCompareArrows className="size-4 text-sky-400" aria-hidden="true" />
+          <span className="font-semibold text-zinc-200">Compare</span>
+          <span className="text-muted-foreground">· 3 players</span>
+          <span className="ml-auto rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-muted-foreground">30d</span>
+        </div>
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <th className="px-3 pt-2 text-left font-normal">Player</th>
+              <th className="pt-2 text-right font-normal">This log</th>
+              <th className="pt-2 text-right font-normal">Typical</th>
+              <th className="px-3 pt-2 text-right font-normal">Best</th>
+            </tr>
+          </thead>
+          <tbody>
+            {COMPARE_ROWS.map((row) => (
+              <tr key={row.name} className="border-t border-border/50 first:border-t-0">
+                <td className="px-3 py-1.5 font-medium" style={{ color: `var(--color-class-${row.cls})` }}>
+                  {row.name}
+                </td>
+                <td className="py-1.5 text-right font-mono font-semibold text-[#a335ee]">{row.focus}</td>
+                <td className="py-1.5 text-right font-mono text-zinc-300">{row.typical}</td>
+                <td className="px-3 py-1.5 text-right font-mono text-zinc-300">{row.best}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-center text-xs text-muted-foreground">
+        <kbd className="rounded border border-border bg-white/5 px-1 font-mono text-[10px] text-zinc-300">Alt</kbd> + click any player or guild
+        to add them
+      </p>
+    </div>
+  )
+}
+
 
 // Rounded down from the panel picker (PANEL_CATEGORIES in EventsPanels/PanelSelector.tsx, 57 today)
 // so it stays true as panels are added without importing the panel registry here.
@@ -405,6 +453,18 @@ const SLIDES: PerkSlide[] = [
       { tier: "revered", text: "Unlist any log you upload" },
     ],
     visual: <UnlistedVisual />,
+  },
+  {
+    id: "compare",
+    tab: "Compare Tray",
+    tier: "revered",
+    headline: "Size anyone up without leaving the page.",
+    body: "Alt+click players and guilds to see their scores, charts, and full history right where you are. Boss and raid comparisons are free for everyone.",
+    levels: [
+      { tier: "free", text: "Blurred preview for players and guilds" },
+      { tier: "revered", text: "Scores, charts, and full history in the tray" },
+    ],
+    visual: <CompareVisual />,
   },
 ]
 

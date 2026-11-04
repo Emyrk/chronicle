@@ -344,6 +344,16 @@ const COMPARISON: { feature: string; description: string; friendly: string; hono
     href: "/blog/alt-click-compare",
   },
   {
+    // Multipliers of the free search burst in api/instance_search.go (100 / 300 / 800 / 2000).
+    feature: "Raid search bandwidth",
+    description: "Search every raid log by boss, player, gear, and more. Heavier searches cost more; higher tiers get a bigger budget that refills every minute.",
+    friendly: "Standard",
+    honored: "3×",
+    revered: "8×",
+    exalted: "20×",
+    href: "/blog/instance-search",
+  },
+  {
     feature: "Supporting Chronicle",
     description: "Your subscription directly funds hosting and ongoing development.",
     friendly: "—",
