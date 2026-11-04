@@ -22,6 +22,8 @@ export interface CompanionAddon {
   requires: ClientMod[];
   /** Extras that add unit positions for the replay map. */
   optional: ClientMod[];
+  /** What it does, when not the default ("turns on combat logging every time you log in"). */
+  note?: string;
 }
 
 const NAMPOWER: ClientMod = {
@@ -74,7 +76,7 @@ const WOTLK: CompanionAddon = {
 export interface ClientOption {
   /** Short client name for the picker, e.g. "1.12". */
   label: string;
-  /** Null when the client logs without an addon (WoW Forever's Blizzard log). */
+  /** Null when the client logs without an addon. */
   addon: CompanionAddon | null;
 }
 
@@ -107,7 +109,17 @@ const FORMAT_CLIENTS: Record<string, ClientOption> = {
       optional: [],
     },
   },
-  "v22-cleu": { label: "WoW Forever", addon: null },
+  "v22-cleu": {
+    label: "WoW Forever",
+    addon: {
+      name: "ChronicleCompanionForever",
+      url: "https://github.com/Emyrk/ChronicleCompanionForever",
+      client: "WoW Forever",
+      requires: [],
+      optional: [],
+      note: "It turns on combat logging and Advanced Combat Logging when you enter a dungeon or raid, and stops it when you leave, so there's nothing to type and nothing to forget.",
+    },
+  },
 };
 
 /**

@@ -29,8 +29,8 @@ describe("tenantClients", () => {
     expect(clients.map((c) => c.label)).toEqual(["1.12", "1.14"]);
   });
 
-  it("gives WoW Forever no addon", () => {
-    expect(tenantClients(config("v22-cleu"))[0].addon).toBeNull();
+  it("gives WoW Forever its companion addon", () => {
+    expect(tenantClients(config("v22-cleu"))[0].addon?.name).toBe("ChronicleCompanionForever");
   });
 });
 
@@ -84,8 +84,10 @@ describe("DownloadView", () => {
     expect(markup).toContain("ChronicleCompanionTBC");
   });
 
-  it("falls back to /combatlog only when the format has no addon", () => {
-    expect(render("linux", config("v22-cleu"))).toContain("/combatlog");
+  it("tells WoW Forever players what its addon does", () => {
+    const markup = render("linux", config("v22-cleu"));
+    expect(markup).toContain("ChronicleCompanionForever");
+    expect(markup).toContain("Advanced Combat Logging when you enter a dungeon or raid");
   });
 });
 

@@ -114,8 +114,8 @@ function AddonStep({ addon: primary, n }: { addon: CompanionAddon | null; n: num
         <a href={primary.url} target="_blank" rel="noopener noreferrer">
           <strong>{primary.name}</strong>
         </a>{" "}
-        for the {primary.client} client. It turns on combat logging every time you log in, so there's nothing to type
-        and nothing to forget.
+        for the {primary.client} client.{" "}
+        {primary.note ?? "It turns on combat logging every time you log in, so there's nothing to type and nothing to forget."}
       </p>
       <a href={primary.url} target="_blank" rel="noopener noreferrer" className={s.addonCta}>
         Get the addon

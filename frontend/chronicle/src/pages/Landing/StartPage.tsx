@@ -33,6 +33,9 @@ const BOSS_PICK_HOLD_MS = 60_000;
 // The 3D hero's run when the site setting names none.
 const FALLBACK_FEATURED_INSTANCE: string | undefined = import.meta.env.VITE_LANDING_FEATURED_INSTANCE || undefined;
 
+/** WoW Forever's companion addon: combat logging (and Advanced Combat Logging) on inside instances, off outside. */
+const COMPANION_ADDON_URL = "https://github.com/Emyrk/ChronicleCompanionForever";
+
 const STEPS = [
   {
     title: "Install Sidekick, click Pair",
@@ -41,13 +44,19 @@ const STEPS = [
   {
     title: (
       <>
-        Type <span className="rounded bg-background px-1.5 py-px font-mono text-[#40ff40]">/combatlog</span> inside the instance
+        Add the{" "}
+        <a href={COMPANION_ADDON_URL} target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
+          ChronicleCompanionForever
+        </a>{" "}
+        addon
       </>
     ),
     body: (
       <>
-        Only once you are inside the dungeon. First turn on <strong className="text-foreground">Advanced Combat Logging</strong> in
-        Options &gt; System &gt; Network. The tray stone turns teal when it hears the first fight.
+        It turns combat logging on when you enter a dungeon and off when you leave. No addon? Turn on{" "}
+        <strong className="text-foreground">Advanced Combat Logging</strong> in Options &gt; System &gt; Network and type{" "}
+        <span className="rounded bg-background px-1 font-mono text-[#40ff40]">/combatlog</span> once you are inside. The tray
+        stone turns teal when it hears the first fight.
       </>
     ),
   },
