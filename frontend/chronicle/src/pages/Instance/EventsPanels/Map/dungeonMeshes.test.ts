@@ -3,6 +3,7 @@ import * as THREE from "three";
 import type { WowMapFloorBounds, WowMapInstance, WowMapMeshInstance } from "@/pages/Technical/mapGallery";
 import {
   clampToRadius,
+  corsTextureUrl,
   dungeonMeshLiquid,
   dungeonMeshPlacement,
   dungeonMeshUrl,
@@ -119,6 +120,21 @@ describe("replayDungeonMesh", () => {
 describe("dungeonMeshUrl", () => {
   it("resolves the manifest path under the icon CDN's maps", () => {
     expect(dungeonMeshUrl(WC_MESH, "https://icons.example.com/forever/")).toBe("https://icons.example.com/forever/maps/3d/wailing-caverns-open-top.glb");
+  });
+});
+
+describe("corsTextureUrl", () => {
+  it("isolates cross-origin WebGL textures from ordinary image cache entries", () => {
+    expect(corsTextureUrl("https://icons.example.com/turtle/spell_frost_stun.webp", "https://octo.example.com"))
+      .toBe("https://icons.example.com/turtle/spell_frost_stun.webp?cors=3d-map-v2");
+    expect(corsTextureUrl("https://icons.example.com/icon.webp?v=1", "https://octo.example.com"))
+      .toBe("https://icons.example.com/icon.webp?v=1&cors=3d-map-v2");
+  });
+
+  it("leaves relative and same-origin textures unchanged", () => {
+    expect(corsTextureUrl("/c/icons/class_mage.png", "https://octo.example.com")).toBe("/c/icons/class_mage.png");
+    expect(corsTextureUrl("https://octo.example.com/c/icons/class_mage.png", "https://octo.example.com"))
+      .toBe("https://octo.example.com/c/icons/class_mage.png");
   });
 });
 

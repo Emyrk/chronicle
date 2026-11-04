@@ -75,6 +75,17 @@ export function dungeonMeshUrl(mesh: WowMapMeshInstance, iconBaseUrl: string): s
   return mapAssetUrl(iconBaseUrl, mesh.path);
 }
 
+/**
+ * Keeps CORS-enabled WebGL texture requests out of the cache entry used by
+ * ordinary images. A stale CDN response without CORS headers can otherwise be
+ * reused by TextureLoader and make the 3D map's spell icons fail to load.
+ */
+export function corsTextureUrl(url: string, origin: string | undefined = globalThis.location?.origin): string {
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return url;
+  if (origin && (url === origin || url.startsWith(`${origin}/`))) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}cors=3d-map-v2`;
+}
+
 // Mesh files are large (tens of MB); their bytes are fetched once, as early
 // as the map knows which mesh it wants, and handed to the scene's parser.
 const meshBytes = new Map<string, Promise<ArrayBuffer>>();

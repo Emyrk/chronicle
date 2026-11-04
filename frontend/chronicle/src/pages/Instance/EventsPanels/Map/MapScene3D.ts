@@ -39,6 +39,7 @@ import { PlanLayer, type PlanSurface } from "./plan/planLayer";
 import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, CAST_ARC_OPACITY, COOLDOWN_ICON_COLOR, COOLDOWN_ICON_SCALE, CUT_ARC_COLOR, CUT_TICK_COLOR, DEAD_COLOR, INTERRUPT_LABEL_COLOR, WALK_AVATAR_COLOR, WALK_AVATAR_EMISSIVE } from "./mapPalette";
 import {
   clampToRadius,
+  corsTextureUrl,
   dungeonMeshBytes,
   dungeonMeshPlacement,
   floorBelow,
@@ -3207,7 +3208,7 @@ export class MapScene3D {
     }
     this.iconTextures.delete(url);
     this.iconTextures.set(url, "loading");
-    this.textureLoader.load(url, (texture) => {
+    this.textureLoader.load(corsTextureUrl(url), (texture) => {
       if (this.disposed || this.iconTextures.get(url) !== "loading") {
         texture.dispose();
         return;
