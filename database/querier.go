@@ -191,6 +191,11 @@ type sqlcQuerier interface {
 	// than any bucket takes to refill, so deleting a bucket never changes a limit.
 	DeleteIdleRateLimitBuckets(ctx context.Context, idleBefore pgtype.Timestamptz) (int64, error)
 	DeleteInferenceConnectionByOwner(ctx context.Context, arg DeleteInferenceConnectionByOwnerParams) error
+	DeleteLiveGuildObservationsForRun(ctx context.Context, arg DeleteLiveGuildObservationsForRunParams) (int64, error)
+	// Replace a single logical run atomically. DELETE triggers record old subjects
+	// and cohorts; INSERT triggers record new subjects and cohorts, including a
+	// guildless clean kill's contribution to the tenant Peak denominator.
+	DeleteLivePlayerObservationsForRun(ctx context.Context, arg DeleteLivePlayerObservationsForRunParams) (int64, error)
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
 	// Queue every stored package before cascades remove the project's dependent rows.
@@ -742,6 +747,12 @@ type sqlcQuerier interface {
 	InsertInstanceRaidGroupSnapshot(ctx context.Context, arg InsertInstanceRaidGroupSnapshotParams) error
 	InsertInstanceSpeedrun(ctx context.Context, arg InsertInstanceSpeedrunParams) error
 	InsertInstanceUnits(ctx context.Context, arg []InsertInstanceUnitsParams) *InsertInstanceUnitsBatchResults
+	// Match StageRatingGuildRuns: choose the fastest clean boss kill per run,
+	// including guildless observations used to calculate rank one.
+	InsertLiveGuildObservationsForRun(ctx context.Context, arg InsertLiveGuildObservationsForRunParams) (int64, error)
+	// Match StageRatingPlayerRuns, except live evidence has no generation cutoff.
+	// The latest eligible locked parse is picked again if score results change.
+	InsertLivePlayerObservationsForRun(ctx context.Context, arg InsertLivePlayerObservationsForRunParams) (int64, error)
 	InsertLogFile(ctx context.Context, arg InsertLogFileParams) (LogFile, error)
 	InsertLogGroupArtifact(ctx context.Context, arg InsertLogGroupArtifactParams) (LogGroupArtifact, error)
 	InsertLogInstanceEvents(ctx context.Context, arg []InsertLogInstanceEventsParams) *InsertLogInstanceEventsBatchResults

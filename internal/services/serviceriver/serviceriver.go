@@ -308,6 +308,9 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.RenownExpiryDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.RenownExpiryWorker)
 	riverqueue.AddWorker(q, rank.RenownExpiryDispatchWorker)
+	rank.RatingObservationDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.RatingObservationDispatchWorker)
+	riverqueue.AddWorker(q, rank.RatingObservationWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
 		MaxWorkers: 1,
 	})
@@ -377,6 +380,14 @@ func (s *Service) Start(ctx context.Context) error {
 			return servicerankings.ArgsDispatchRenownExpiry{}, nil
 		},
 		&river.PeriodicJobOpts{ID: "daily-renown-expiry", RunOnStart: false},
+	))
+	// Recover missed observation enqueues from durable, transactional run keys.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(time.Minute),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchRatingObservations{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "incremental-rating-observations", RunOnStart: true},
 	))
 	// Daily rating reconciliation for tenants with configured group policies.
 	q.AddPeriodicJob(

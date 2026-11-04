@@ -99,8 +99,9 @@ func main() {
 		"s/ public\\./ /g",
 		"s/::public\\./::/g",
 		"s/'public\\./'/g",
-		// Remove database settings.
-		"s/SET .* = .*;//g",
+		// pg_dump settings start at column zero. Do not erase indented
+		// ON CONFLICT DO UPDATE SET assignments inside PL/pgSQL functions.
+		"/^SET .* = .*;/d",
 		// Remove select statements. These aren't useful
 		// to a reader of the dump.
 		"s/SELECT.*;//g",

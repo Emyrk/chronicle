@@ -81,6 +81,8 @@ type Service struct {
 	IncrementalRenownDispatchWorker *WorkerDispatchIncrementalRenown
 	RenownExpiryWorker              *WorkerExpireTenantRenown
 	RenownExpiryDispatchWorker      *WorkerDispatchRenownExpiry
+	RatingObservationWorker         *WorkerReconcileTenantRatingObservations
+	RatingObservationDispatchWorker *WorkerDispatchRatingObservations
 }
 
 func New(broker *services.Services) *Service {
@@ -164,6 +166,8 @@ func (s *Service) Start(_ context.Context) error {
 	s.IncrementalRenownDispatchWorker = &WorkerDispatchIncrementalRenown{Store: store}
 	s.RenownExpiryWorker = &WorkerExpireTenantRenown{Store: store}
 	s.RenownExpiryDispatchWorker = &WorkerDispatchRenownExpiry{Store: store}
+	s.RatingObservationWorker = &WorkerReconcileTenantRatingObservations{Store: store}
+	s.RatingObservationDispatchWorker = &WorkerDispatchRatingObservations{Store: store}
 
 	s.router = chi.NewRouter()
 	s.setupRoutes()
