@@ -66,11 +66,18 @@ describe("buildLeeroyStreams", () => {
     }
   });
 
-  it("publishes mage AoE and Leeroy's protection through normal cast and damage streams", () => {
+  it("publishes authored class abilities through normal cast and damage streams", () => {
     const streams = buildLeeroyStreams(leeroyRookery);
     const casts = decodeAllPayloads(CastSchema, streams.get("cast")!.data)[0].messages;
     const damage = decodeAllPayloads(DamageSchema, streams.get("damage")!.data)[0].messages;
     const leeroy = Object.entries(leeroyRookery.players).find(([, player]) => player.name === "Leeroy")![0];
+    const madtoker = Object.entries(leeroyRookery.players).find(([, player]) => player.name === "MadToker")!;
+    expect(madtoker[1].class).toBe("DRUID");
+    expect(casts).toContainEqual(expect.objectContaining({
+      caster: madtoker[0], target: madtoker[0], action: CastAction.ActionCasts,
+      spell: expect.objectContaining({ id: 9863, name: "Tranquility" }),
+      meta: expect.objectContaining({ offsetMilli: 18_000n }),
+    }));
     expect(casts).toContainEqual(expect.objectContaining({
       caster: leeroy, target: leeroy, action: CastAction.ActionCasts,
       spell: expect.objectContaining({ id: 5573, name: "Divine Protection" }),

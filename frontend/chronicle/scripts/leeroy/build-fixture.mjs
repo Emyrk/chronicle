@@ -154,10 +154,12 @@ const objectGuid = (entry, low) => `0xF110${hex(entry, 6)}${hex(low, 6)}`
 
 const players = {}
 const playerByName = new Map()
+const trackNameByGuid = new Map()
 annotations.roster.forEach((member, index) => {
   const guid = playerGuid(index)
   players[guid] = { name: member.name, class: member.class }
   playerByName.set(member.name, guid)
+  trackNameByGuid.set(guid, member.trackName ?? member.name)
 })
 const units = {}
 
@@ -175,8 +177,9 @@ function throughDoor(point) {
 // A dot he draws dithered from some moment on, and never solid again, is a
 // death (85% of later samples dithered tolerates the odd missed frame).
 const ihDeaths = new Map()
-for (const name of playerByName.keys()) {
-  const flags = ihTracks.samples.map((sample) => sample.dithered.includes(name))
+for (const [name, guid] of playerByName) {
+  const trackName = trackNameByGuid.get(guid)
+  const flags = ihTracks.samples.map((sample) => sample.dithered.includes(trackName))
   const index = flags.findIndex((flag, i) => flag && flags.slice(i).filter(Boolean).length / (flags.length - i) >= 0.85)
   if (index >= 0) ihDeaths.set(name, ihTracks.samples[index].t + offsetSeconds)
 }
@@ -217,7 +220,7 @@ function ihTrack(name, slot) {
 
 const tracks = new Map()
 let slot = 0
-for (const [name, guid] of playerByName) tracks.set(guid, ihTrack(name, slot++))
+for (const guid of playerByName.values()) tracks.set(guid, ihTrack(trackNameByGuid.get(guid), slot++))
 const deathMs = new Map([...ihDeaths].map(([name, seconds]) => [playerByName.get(name), ms(seconds)]))
 // Annotated climbs: [from, to] clip ms per player, on the surface under them.
 const climbs = new Map()
@@ -379,6 +382,17 @@ queue(protectionStartMs, 0, () => {
   push(["s", currentTime, g(leeroy), g(leeroy), 0, 5573, "Divine Protection"])
   push(["g", currentTime, g(leeroy), g(leeroy), 0, 5573, "Divine Protection"])
 })
+const tranquilityStartMs = 18_000
+const tranquilityEndMs = tranquilityStartMs + 10_000
+queue(tranquilityStartMs, 2, () => {
+  const madtoker = playerByName.get("MadToker")
+  if (!alive(madtoker, currentTime)) return
+  resource(madtoker, -925, "Tranquility")
+  // Tranquility is channeled. Its successful cast begins the channel at 18 s;
+  // the replay does not invent healing ticks that were not supplied.
+  push(["s", currentTime, g(madtoker), g(madtoker), 0, 9863, "Tranquility"])
+  push(["g", currentTime, g(madtoker), g(madtoker), 0, 9863, "Tranquility"])
+})
 const firstRaidCombat = Math.min(...whelpList.filter((w) => w.target !== playerByName.get("Leeroy")).map((w) => w.egg.hatchMs))
 const lastIncoming = new Map()
 for (const whelp of whelpList) {
@@ -427,7 +441,7 @@ for (const guid of pileGuids) {
   const [name, spellId, amount, range, cost] = attacks[player.class]
   const interval = player.class === "MAGE" || player.class === "PRIEST" ? 2900 : 2200
   for (let t = 12500 + pileGuids.indexOf(guid) * 130; t < durationMs; t += interval) queue(t, 2, () => {
-    if (!alive(guid, currentTime)) return
+    if (!alive(guid, currentTime) || (player.name === "MadToker" && currentTime >= tranquilityStartMs && currentTime < tranquilityEndMs)) return
     const from = playerAt(guid, currentTime)
     const nearby = whelpList.filter((w) => w.egg.hatchMs <= currentTime && alive(w.guid, currentTime))
       .sort((a, b) => Math.hypot(whelpAt(a, currentTime).x - from.x, whelpAt(a, currentTime).y - from.y) - Math.hypot(whelpAt(b, currentTime).x - from.x, whelpAt(b, currentTime).y - from.y))
@@ -445,7 +459,7 @@ for (const guid of pileGuids) {
   if (player.class === "MAGE") {
     // A burst of close-range AoE as the party piles in. Frost Nova's root is
     // not applied to the tracked positions: those come from the fan map.
-    const mageOffset = ["Chrisym", "Ctidalwave", "Madtoker"].indexOf(player.name) * 800
+    const mageOffset = ["Chrisym", "Ctidalwave"].indexOf(player.name) * 800
     for (const [time, name, spellId, cost, amount, school] of [
       [20_000 + mageOffset, "Frost Nova", 122, 120, 90, 6],
       [24_000 + mageOffset, "Arcane Explosion", 1449, 210, 230, 8],

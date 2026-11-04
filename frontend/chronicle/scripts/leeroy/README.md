@@ -53,8 +53,10 @@ instance.
 The simulated mage rotation adds Frost Nova and close-range Arcane Explosion
 bursts against whelps during the pile-in. Leeroy casts Divine Protection at
 clip offset 9 s (video 1:33); the simulation ignores incoming whelp damage for
-its eight-second duration. These casts and effects are authored, not observed
-combat-log events. Frost Nova does not alter the fan-tracked movement paths.
+its eight-second duration. MadToker is a druid and begins channeling Tranquility
+at clip offset 18 s. The surrounding combat and effects are authored rather
+than recovered from a combat log. Frost Nova does not alter the fan-tracked
+movement paths.
 
 Rookery Guardians, Hatchers and Solakar are summoned by the Father Flame event,
 so the spawn tables have no rows for them (and none appear in this clip).

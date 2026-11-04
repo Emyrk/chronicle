@@ -66,9 +66,10 @@
    "classSource": "guess"
   },
   {
-   "name": "Madtoker",
-   "class": "MAGE",
-   "classSource": "guess: the dialogue mentions mages and no warlock"
+   "name": "MadToker",
+   "trackName": "Madtoker",
+   "class": "DRUID",
+   "classSource": "confirmed by player ability: casts Tranquility at encounter time 18 s"
   },
   {
    "name": "Ritter",
