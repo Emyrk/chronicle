@@ -89,12 +89,13 @@ type WorkerRebuildTenantRatings struct {
 }
 
 // Each step commits at most one bounded evidence, projection, Mastery, or
-// raid-scope page. Batch a fixed number of steps per River invocation so a
-// large tenant does not create thousands of one-second snoozes. Transactions
-// and checkpoint CAS remain page-sized; a later invocation resumes the cursor.
+// raid-scope page. Batch pages per River invocation so a large tenant does not
+// create thousands of one-second snoozes. The 30s limit leaves room below
+// River's default 1m job timeout for a slow final page and progress recording.
+// Transactions and checkpoint CAS remain page-sized; a later invocation resumes.
 const (
-	ratingPagesPerInvocation  = 128
-	ratingInvocationTimeLimit = 10 * time.Second
+	ratingPagesPerInvocation  = 512
+	ratingInvocationTimeLimit = 30 * time.Second
 )
 
 func (w *WorkerRebuildTenantRatings) Work(ctx context.Context, job *river.Job[ArgsRebuildTenantRatings]) error {
