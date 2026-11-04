@@ -355,7 +355,7 @@ export default function MapView3D({
     const scene = sceneRef.current;
     if (!container || !scene || frozen) return;
     const units = markers.flatMap((marker): MapScene3DUnit[] => {
-      const sample = smoothMs !== null
+      const sample = smoothMs !== null && !marker.held
         ? replayPositionAt(marker.positions, smoothMs, marker.kind === "player") ?? marker.sample
         : marker.sample;
       const point = sample === marker.sample ? marker.point : projectSample(sample) ?? marker.point;

@@ -1,5 +1,5 @@
 import type { MapDebuff, MapEncounterPositions, MapHealthSample, MapPositionSample } from "./map.processor";
-import type { MapPoint } from "./mapModel";
+import { replayPositionAt, type MapPoint } from "./mapModel";
 import { createEncounterEffects, type ReplayEffectEvent } from "./replayEffects";
 
 export type MapPresentation = "replay-3d" | "overview-2d";
@@ -16,9 +16,12 @@ export function mapPresentationForSelection(selectedEncounterCount: number, whol
   return wholeRun ? "replay-3d" : "overview-2d";
 }
 
-/** The camera lead-in before an encounter's first sample when jumping to it. */
+/** The camera lead-in before an encounter's first sample when jumping to it, kept only when another encounter's data covers it. */
 export const ENCOUNTER_JUMP_LEAD_MS = 5_000;
-/** A non-player unit whose latest sample is older than this has left the scene (died, despawned, out of the log). */
+/**
+ * A non-player unit whose latest sample is older than this has left the scene (died, despawned, out of the log).
+ * Players never go stale: between encounters they hold their last known positions.
+ */
 export const RUN_UNIT_STALE_MS = 15_000;
 
 function sortedByTime<T>(items: T[], time: (item: T) => number): T[] {
@@ -97,15 +100,27 @@ export interface RunEncounterRef {
 export interface EncounterJump {
   id: string;
   name: string;
-  /** Where the replay clock goes: the encounter's start less the lead-in, never before the run starts. */
+  /**
+   * Where the replay clock goes: the encounter's first sample less the lead-in when another encounter's
+   * data covers the lead-in, else the first sample itself (never before the run starts).
+   */
   timestampMs: number;
   /** The encounter's start as a 0..1 fraction of the run, for the boundary marks. */
   fraction: number;
 }
 
+function firstSampleMs(encounter: MapEncounterPositions): number {
+  let first = Infinity;
+  for (const samples of encounter.positionsByUnit.values()) first = Math.min(first, samples[0]?.timestampMs ?? Infinity);
+  return Number.isFinite(first) ? first : encounter.startMs;
+}
+
 /**
  * The boss encounters of the run as clock jumps. Start comes from the
  * processed encounter when it has data, else the instance's own start time.
+ * Positions only exist inside encounters, so the lead-in is kept only when
+ * another processed encounter reaches into it; otherwise (a gap between
+ * pulls) the jump lands on the encounter's first sample.
  */
 export function encounterJumps(
   instanceEncounters: RunEncounterRef[],
@@ -117,13 +132,17 @@ export function encounterJumps(
   return instanceEncounters
     .filter((encounter) => encounter.boss && encounter.kill_type !== "wipe" && encounter.kill_type !== "reset")
     .flatMap((encounter): EncounterJump[] => {
-      const startMs = processed.get(encounter.id)?.startMs ?? Date.parse(encounter.start_time);
+      const own = processed.get(encounter.id);
+      const startMs = own?.startMs ?? Date.parse(encounter.start_time);
       if (!Number.isFinite(startMs)) return [];
       const fraction = Math.min(1, Math.max(0, (startMs - runStartMs) / span));
+      const landMs = own ? firstSampleMs(own) : startMs;
+      const leadMs = Math.max(runStartMs, landMs - ENCOUNTER_JUMP_LEAD_MS);
+      const leadCovered = [...processed.values()].some((other) => other !== own && other.startMs <= leadMs && other.endMs >= leadMs);
       return [{
         id: encounter.id,
         name: encounter.name,
-        timestampMs: Math.max(runStartMs, startMs - ENCOUNTER_JUMP_LEAD_MS),
+        timestampMs: leadCovered ? leadMs : Math.max(runStartMs, landMs),
         fraction,
       }];
     })
@@ -145,7 +164,26 @@ export function groupCentre(points: MapPoint[]): MapPoint | null {
   };
 }
 
-/** Whether a non-player unit's latest sample is too old for it to still be on the map. */
+/**
+ * A unit's position at the cursor across a whole run, or null when it is off
+ * the map. Players are held at their last known position through gaps between
+ * encounters (or at their first, before it); other units drop off once stale.
+ * `held` marks a player standing on a stale sample, which must not be
+ * interpolated toward the next encounter's.
+ */
+export function runPositionAt(
+  positions: MapPositionSample[],
+  cursorMs: number,
+  player: boolean,
+): { sample: MapPositionSample; held: boolean } | null {
+  const sample = replayPositionAt(positions, cursorMs, player, RUN_UNIT_STALE_MS);
+  if (!sample) return null;
+  const stale = isStaleRunSample(sample, cursorMs);
+  if (stale && !player) return null;
+  return { sample, held: stale };
+}
+
+/** Whether a unit's latest sample is too old for it to still be on the map (players are held instead). */
 export function isStaleRunSample(sample: MapPositionSample, cursorMs: number): boolean {
   return cursorMs - sample.timestampMs > RUN_UNIT_STALE_MS;
 }

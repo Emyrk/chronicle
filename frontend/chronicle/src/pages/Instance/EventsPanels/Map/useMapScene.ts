@@ -12,7 +12,7 @@ import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
 import { placeableDungeonMesh, replayDungeonMesh } from "./dungeonMeshes";
-import { groupCentre, isStaleRunSample, mergeRunEncounters, RUN_UNIT_STALE_MS, runSignature } from "./wholeRun";
+import { groupCentre, isStaleRunSample, mergeRunEncounters, RUN_UNIT_STALE_MS, runPositionAt, runSignature } from "./wholeRun";
 import { POWER_COLORS } from "../RaidFrames/raidFrameShared";
 import { activeDebuffsAt, type MapDebuff, type MapEncounterPositions, type MapPositionSample, type MapResult } from "./map.processor";
 import { inferRoles } from "../Roles/roles.processor";
@@ -130,6 +130,8 @@ export interface MapSceneMarker {
   sample: MapPositionSample;
   /** Every sample for this unit in the encounter, for interpolation. */
   positions: MapPositionSample[];
+  /** Whole run: a player held at a stale sample between encounters; the view must not interpolate it toward the next one. */
+  held?: boolean;
   point: MapPoint;
   color: string;
   kind: MapMarkerKind;
@@ -365,10 +367,13 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
         metadata?.entry,
         options.showHiddenUnits,
       )) return [];
-      const sample = replayPositionAt(positions, cursorMs, Boolean(player), wholeRun ? RUN_UNIT_STALE_MS : undefined);
+      // Across a run, nobody glides between distant encounter samples and other units leave once telemetry
+      // stops, while players hold their last known positions so a gap between encounters keeps the scene up.
+      const run = wholeRun
+        ? runPositionAt(positions, cursorMs, Boolean(player))
+        : { sample: replayPositionAt(positions, cursorMs, Boolean(player)), held: false };
+      const sample = run?.sample;
       if (!sample) return [];
-      // Across a run, nobody should glide between distant encounter samples or linger after telemetry stops.
-      if (wholeRun && isStaleRunSample(sample, cursorMs)) return [];
       if (!player && isMapUnitPositionExpired(
         props.context.instance.name,
         props.context.instance.flavor ?? [],
@@ -376,7 +381,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
         sample.timestampMs,
         cursorMs,
       )) return [];
-      return [{ guid, sample, positions }];
+      return [{ guid, sample, positions, held: run.held }];
     });
   }, [
     cursorMs,
@@ -510,7 +515,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const selectedPlayers = props.context.entitySelection.playerIds;
   const bossGuids = new Set((wholeRun ? props.context.instance.encounters : instanceEncounter ? [instanceEncounter] : [])
     .flatMap((candidate) => candidate.enemies?.filter((enemy) => enemy.boss).map((enemy) => enemy.id) ?? []));
-  const markers = visibleUnits.flatMap(({ guid, sample, positions }): MapSceneMarker[] => {
+  const markers = visibleUnits.flatMap(({ guid, sample, positions, held }): MapSceneMarker[] => {
     if (sample.mapId !== mapId) return [];
     if (sample.floor !== undefined && selectedFloorNumber !== null && sample.floor !== selectedFloorNumber) return [];
     const point = projectSample(sample);
@@ -524,6 +529,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       guid,
       sample,
       positions,
+      ...(held ? { held } : {}),
       point,
       color: player ? getClassColorVar(player.class) : kind === "pet" ? "#67e8f9" : "#fb7185",
       kind,
