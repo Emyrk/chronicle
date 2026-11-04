@@ -38,6 +38,9 @@ func TestRenownFactDirtySubjectsUseRealmTenant(t *testing.T) {
 		(realm_id, player_guid, run_id, instance_name, encounter_name, killed_at)
 		VALUES ($1,'player',$2,'Raid','Boss',$3)`, realm, uuid.New(), time.Now().UTC())
 	require.NoError(t, err)
+	dirtyTenants, err := q.ListDirtyRenownTenants(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{tenant}, dirtyTenants)
 	var markedTenant uuid.UUID
 	require.NoError(t, conn.QueryRow(ctx, `SELECT tenant_id FROM rating_dirty_renown_subjects
 		WHERE realm_id=$1 AND subject_kind='player'`, realm).Scan(&markedTenant))

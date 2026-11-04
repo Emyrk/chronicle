@@ -102,9 +102,11 @@ type sqlcQuerier interface {
 	CountAllWoWLogGroups(ctx context.Context, arg CountAllWoWLogGroupsParams) (int32, error)
 	CountCompletedTenantMasteryWindows(ctx context.Context, arg CountCompletedTenantMasteryWindowsParams) (int64, error)
 	CountGuildDiscordInstallationsByDiscordGuildID(ctx context.Context, discordGuildID string) (int64, error)
+	CountGuildRenownFactsForSubject(ctx context.Context, arg CountGuildRenownFactsForSubjectParams) (CountGuildRenownFactsForSubjectRow, error)
 	CountGuilds(ctx context.Context, arg CountGuildsParams) (int64, error)
 	CountLuaProjectStars(ctx context.Context, projectIds []uuid.UUID) ([]CountLuaProjectStarsRow, error)
 	CountLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
+	CountPlayerRenownFactsForSubject(ctx context.Context, arg CountPlayerRenownFactsForSubjectParams) (CountPlayerRenownFactsForSubjectRow, error)
 	CountRaidCompositionsByUser(ctx context.Context, arg CountRaidCompositionsByUserParams) (int64, error)
 	CountReadyLuaProjectArtifactGarbage(ctx context.Context) (int64, error)
 	// During Mastery, every distinct eligible subject gets an all-time and a
@@ -161,6 +163,7 @@ type sqlcQuerier interface {
 	DeleteDataset(ctx context.Context, id uuid.UUID) error
 	DeleteDatasetCacheGenerations(ctx context.Context, datasetID uuid.UUID) error
 	DeleteDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) error
+	DeleteDirtyRenownSubjectIfRevision(ctx context.Context, arg DeleteDirtyRenownSubjectIfRevisionParams) (int64, error)
 	DeleteDiscordAnnouncement(ctx context.Context, id uuid.UUID) error
 	DeleteDiscordAnnouncementSource(ctx context.Context, arg DeleteDiscordAnnouncementSourceParams) error
 	DeleteDiscordMembershipGrantCheck(ctx context.Context, userID uuid.UUID) error
@@ -181,6 +184,8 @@ type sqlcQuerier interface {
 	DeleteGuildPageTabsByPage(ctx context.Context, pageID uuid.UUID) error
 	// Same bounded canonical-run repair as player Renown; no group membership gate.
 	DeleteGuildRenownFactsForRuns(ctx context.Context, runIds []uuid.UUID) (int64, error)
+	DeleteGuildTenantRenownBoss(ctx context.Context, arg DeleteGuildTenantRenownBossParams) error
+	DeleteGuildTenantRenownScope(ctx context.Context, arg DeleteGuildTenantRenownScopeParams) error
 	// Removes buckets untouched since the cutoff. Callers pick a cutoff longer
 	// than any bucket takes to refill, so deleting a bucket never changes a limit.
 	DeleteIdleRateLimitBuckets(ctx context.Context, idleBefore pgtype.Timestamptz) (int64, error)
@@ -207,6 +212,8 @@ type sqlcQuerier interface {
 	// Remove stale earned attendance only for the explicitly affected canonical runs.
 	// Keep batches bounded to match the refresh page size; never use a group filter.
 	DeletePlayerRenownFactsForRuns(ctx context.Context, runIds []uuid.UUID) (int64, error)
+	DeletePlayerTenantRenownBoss(ctx context.Context, arg DeletePlayerTenantRenownBossParams) error
+	DeletePlayerTenantRenownScope(ctx context.Context, arg DeletePlayerTenantRenownScopeParams) error
 	DeleteRaidCompositionByID(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteRatingBossPolicy(ctx context.Context, arg DeleteRatingBossPolicyParams) (int64, error)
 	DeleteRatingRaidPolicy(ctx context.Context, arg DeleteRatingRaidPolicyParams) (int64, error)
@@ -719,6 +726,7 @@ type sqlcQuerier interface {
 	InsertGuildRatingScopeScore(ctx context.Context, arg InsertGuildRatingScopeScoreParams) error
 	InsertGuildTenantBossScore(ctx context.Context, arg InsertGuildTenantBossScoreParams) (int64, error)
 	InsertGuildTenantBossScores(ctx context.Context, arg []InsertGuildTenantBossScoresParams) *InsertGuildTenantBossScoresBatchResults
+	InsertGuildTenantRenownScopes(ctx context.Context, arg InsertGuildTenantRenownScopesParams) error
 	InsertGuildTenantScopeScore(ctx context.Context, arg InsertGuildTenantScopeScoreParams) (int64, error)
 	InsertInferenceClientToolRequest(ctx context.Context, arg InsertInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
 	InsertInferenceConnection(ctx context.Context, arg InsertInferenceConnectionParams) (InferenceConnection, error)
@@ -749,6 +757,7 @@ type sqlcQuerier interface {
 	// or retirement while selecting the tenant-owned realm and subject.
 	InsertPlayerTenantBossScore(ctx context.Context, arg InsertPlayerTenantBossScoreParams) (int64, error)
 	InsertPlayerTenantBossScores(ctx context.Context, arg []InsertPlayerTenantBossScoresParams) *InsertPlayerTenantBossScoresBatchResults
+	InsertPlayerTenantRenownScopes(ctx context.Context, arg InsertPlayerTenantRenownScopesParams) error
 	InsertPlayerTenantScopeScore(ctx context.Context, arg InsertPlayerTenantScopeScoreParams) (int64, error)
 	InsertProofRequest(ctx context.Context, arg InsertProofRequestParams) (ProofRequest, error)
 	InsertProofSubject(ctx context.Context, arg InsertProofSubjectParams) error
@@ -864,6 +873,8 @@ type sqlcQuerier interface {
 	// table is scanned once, avoiding the dataset page's previous N+1 count queries.
 	ListDatasetImportCounts(ctx context.Context) ([]ListDatasetImportCountsRow, error)
 	ListDatasets(ctx context.Context) ([]Dataset, error)
+	// Periodic dispatch only visits tenants with pending fact changes.
+	ListDirtyRenownTenants(ctx context.Context) ([]uuid.UUID, error)
 	ListDiscordAnnouncementEncounters(ctx context.Context, instanceID uuid.UUID) ([]ListDiscordAnnouncementEncountersRow, error)
 	ListDiscordAnnouncementSources(ctx context.Context, announcementID uuid.UUID) ([]GuildDiscordLogAnnouncementSource, error)
 	ListDistinctInstanceNames(ctx context.Context) ([]string, error)
@@ -892,6 +903,7 @@ type sqlcQuerier interface {
 	ListGuildPagePanels(ctx context.Context, tabID uuid.UUID) ([]GuildPagePanel, error)
 	// Guild Page Tabs
 	ListGuildPageTabs(ctx context.Context, pageID uuid.UUID) ([]GuildPageTab, error)
+	ListGuildRenownExpiryPage(ctx context.Context, arg ListGuildRenownExpiryPageParams) ([]ListGuildRenownExpiryPageRow, error)
 	ListGuildRenownFacts(ctx context.Context, arg ListGuildRenownFactsParams) ([]GuildRenownKillFact, error)
 	ListGuildsWithPages(ctx context.Context, arg ListGuildsWithPagesParams) ([]ListGuildsWithPagesRow, error)
 	ListInferenceConnectionsByOwner(ctx context.Context, userID uuid.UUID) ([]InferenceConnection, error)
@@ -944,6 +956,10 @@ type sqlcQuerier interface {
 	// Receipt-less results are authoritative historical data. Read them without
 	// joining snapshot tables or score memberships so they can never be recomputed.
 	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg ListPersistedParseScoreResultsForInstanceParams) ([]ParseScoreResult, error)
+	// Daily period expiry scans only active projected Renown rows, not the full
+	// historical fact table. Each subject's fact lookup uses existing subject
+	// indexes. The caller keyset-paginates both kinds and marks expired keys.
+	ListPlayerRenownExpiryPage(ctx context.Context, arg ListPlayerRenownExpiryPageParams) ([]ListPlayerRenownExpiryPageRow, error)
 	ListProofEvidenceCleanup(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error)
 	// Resolve current armory classes and guilds in one query per request; old
 	// requests and characters removed from the armory still render without them.
@@ -1091,6 +1107,11 @@ type sqlcQuerier interface {
 	ListWoWServers(ctx context.Context) ([]WowServer, error)
 	ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error)
 	ListWorlds(ctx context.Context) ([]World, error)
+	LockActiveTenantRatingGeneration(ctx context.Context, tenantID uuid.UUID) (uuid.UUID, error)
+	// Workers lock a bounded batch inside their score-write transaction. Concurrent
+	// updates to the same key wait, then increment its revision. The CAS delete
+	// keeps a newer change queued instead of losing it behind an in-flight worker.
+	LockDirtyRenownSubjects(ctx context.Context, arg LockDirtyRenownSubjectsParams) ([]LockDirtyRenownSubjectsRow, error)
 	LockLogFilePartSequence(ctx context.Context, logFileID uuid.UUID) (uuid.UUID, error)
 	// Serializes module creation for one owner so concurrent requests cannot exceed the quota.
 	LockLuaProjectOwner(ctx context.Context, ownerID uuid.UUID) (uuid.UUID, error)
@@ -1100,10 +1121,15 @@ type sqlcQuerier interface {
 	// Serialize submissions by the same account across all tenants. Locking the
 	// applicant, not a proof row, also works for their first request.
 	LockProofApplicant(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	// Serialize incremental publication with full rebuild start/publish, both of
+	// which lock this tenant revision row. A later rebuild snapshots our writes.
+	// An earlier rebuilding generation keeps dirty keys queued until it publishes.
+	LockTenantRatingRevision(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	LockUserStorageQuota(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	LockUsersForUpdate(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
 	LockWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error
+	MarkDirtyRenownSubject(ctx context.Context, arg MarkDirtyRenownSubjectParams) error
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	MarkLogFilePartFailed(ctx context.Context, arg MarkLogFilePartFailedParams) error
 	MarkLogGroupArtifactsStorageDeleted(ctx context.Context, arg MarkLogGroupArtifactsStorageDeletedParams) ([]LogGroupArtifact, error)
@@ -1365,6 +1391,9 @@ type sqlcQuerier interface {
 	// Returns instance and unique player counts per discoverable tenant within a
 	// time window. Used by the discovery endpoint to surface activity metrics.
 	TenantDiscoveryStats(ctx context.Context, since pgtype.Timestamptz) ([]TenantDiscoveryStatsRow, error)
+	// Do not discard dirty keys while a frozen full rebuild may replace the active
+	// projection with a snapshot older than these fact changes.
+	TenantRatingGenerationBuilding(ctx context.Context, tenantID uuid.UUID) (bool, error)
 	TouchLogInstanceRankingSource(ctx context.Context, instanceID uuid.UUID) error
 	TouchSidekickUpload(ctx context.Context, arg TouchSidekickUploadParams) (int64, error)
 	TouchUploadKeyLastUsed(ctx context.Context, id uuid.UUID) error
@@ -1449,12 +1478,14 @@ type sqlcQuerier interface {
 	UpsertGuildDiscordInstallation(ctx context.Context, arg UpsertGuildDiscordInstallationParams) (GuildDiscordInstallation, error)
 	UpsertGuildPage(ctx context.Context, arg UpsertGuildPageParams) (GuildPage, error)
 	UpsertGuildSettings(ctx context.Context, arg UpsertGuildSettingsParams) (GuildSetting, error)
+	UpsertGuildTenantRenownBoss(ctx context.Context, arg UpsertGuildTenantRenownBossParams) (int64, error)
 	UpsertInstanceOverviewMetrics(ctx context.Context, arg UpsertInstanceOverviewMetricsParams) error
 	UpsertItemDailyPrice(ctx context.Context, arg []UpsertItemDailyPriceParams) *UpsertItemDailyPriceBatchResults
 	UpsertLeaderboardVersionRequirements(ctx context.Context, arg UpsertLeaderboardVersionRequirementsParams) (LeaderboardVersionRequirement, error)
 	UpsertLuaProjectContributor(ctx context.Context, arg UpsertLuaProjectContributorParams) (LuaProjectContributor, error)
 	UpsertPendingModificationRequest(ctx context.Context, arg UpsertPendingModificationRequestParams) (ApplicationModificationRequest, error)
 	UpsertPlayerGearHistory(ctx context.Context, arg []UpsertPlayerGearHistoryParams) *UpsertPlayerGearHistoryBatchResults
+	UpsertPlayerTenantRenownBoss(ctx context.Context, arg UpsertPlayerTenantRenownBossParams) (int64, error)
 	UpsertPlayers(ctx context.Context, arg []UpsertPlayersParams) *UpsertPlayersBatchResults
 	UpsertRankingRun(ctx context.Context, arg UpsertRankingRunParams) (bool, error)
 	// Recompute and upsert the rankings summary for a single

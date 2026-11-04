@@ -22184,6 +22184,723 @@ func (q *sqlQuerier) RatingObservationsForRuns(ctx context.Context, arg RatingOb
 	return items, nil
 }
 
+const countGuildRenownFactsForSubject = `-- name: CountGuildRenownFactsForSubject :one
+SELECT count(*)::int AS career_kills,
+       count(*) FILTER (WHERE killed_at >= $1::timestamptz
+                          AND killed_at < $2::timestamptz)::int AS period_kills
+FROM guild_renown_kill_facts
+WHERE tenant_id = $3 AND realm_id = $4 AND guild_id = $5
+  AND instance_name = $6 AND encounter_name = $7
+  AND killed_at < $2::timestamptz
+`
+
+type CountGuildRenownFactsForSubjectParams struct {
+	PeriodStart   pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	AsOf          pgtype.Timestamptz `db:"as_of" json:"as_of"`
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+}
+
+type CountGuildRenownFactsForSubjectRow struct {
+	CareerKills int32 `db:"career_kills" json:"career_kills"`
+	PeriodKills int32 `db:"period_kills" json:"period_kills"`
+}
+
+func (q *sqlQuerier) CountGuildRenownFactsForSubject(ctx context.Context, arg CountGuildRenownFactsForSubjectParams) (CountGuildRenownFactsForSubjectRow, error) {
+	row := q.db.QueryRow(ctx, countGuildRenownFactsForSubject,
+		arg.PeriodStart,
+		arg.AsOf,
+		arg.TenantID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.InstanceName,
+		arg.EncounterName,
+	)
+	var i CountGuildRenownFactsForSubjectRow
+	err := row.Scan(&i.CareerKills, &i.PeriodKills)
+	return i, err
+}
+
+const countPlayerRenownFactsForSubject = `-- name: CountPlayerRenownFactsForSubject :one
+SELECT count(*)::int AS career_kills,
+       count(*) FILTER (WHERE killed_at >= $1::timestamptz
+                          AND killed_at < $2::timestamptz)::int AS period_kills
+FROM renown_kill_facts
+WHERE realm_id = $3 AND player_guid = $4
+  AND instance_name = $5 AND encounter_name = $6
+  AND killed_at < $2::timestamptz
+`
+
+type CountPlayerRenownFactsForSubjectParams struct {
+	PeriodStart   pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	AsOf          pgtype.Timestamptz `db:"as_of" json:"as_of"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+}
+
+type CountPlayerRenownFactsForSubjectRow struct {
+	CareerKills int32 `db:"career_kills" json:"career_kills"`
+	PeriodKills int32 `db:"period_kills" json:"period_kills"`
+}
+
+func (q *sqlQuerier) CountPlayerRenownFactsForSubject(ctx context.Context, arg CountPlayerRenownFactsForSubjectParams) (CountPlayerRenownFactsForSubjectRow, error) {
+	row := q.db.QueryRow(ctx, countPlayerRenownFactsForSubject,
+		arg.PeriodStart,
+		arg.AsOf,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.EncounterName,
+	)
+	var i CountPlayerRenownFactsForSubjectRow
+	err := row.Scan(&i.CareerKills, &i.PeriodKills)
+	return i, err
+}
+
+const deleteDirtyRenownSubjectIfRevision = `-- name: DeleteDirtyRenownSubjectIfRevision :execrows
+DELETE FROM rating_dirty_renown_subjects
+WHERE tenant_id = $1 AND subject_kind = $2 AND realm_id = $3
+  AND subject_id = $4 AND instance_name = $5
+  AND encounter_name = $6 AND revision = $7
+`
+
+type DeleteDirtyRenownSubjectIfRevisionParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind   string    `db:"subject_kind" json:"subject_kind"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID     string    `db:"subject_id" json:"subject_id"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+	Revision      int64     `db:"revision" json:"revision"`
+}
+
+func (q *sqlQuerier) DeleteDirtyRenownSubjectIfRevision(ctx context.Context, arg DeleteDirtyRenownSubjectIfRevisionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteDirtyRenownSubjectIfRevision,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.RealmID,
+		arg.SubjectID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.Revision,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteGuildTenantRenownBoss = `-- name: DeleteGuildTenantRenownBoss :exec
+DELETE FROM guild_tenant_rating_boss_scores AS score
+WHERE score.generation_id = $1 AND score.tenant_id = $2
+  AND score.realm_id = $3 AND score.guild_id = $4
+  AND score.instance_name = $5 AND score.encounter_name = $6
+  AND score.rating_metric = 'renown' AND score.window_kind = $7
+`
+
+type DeleteGuildTenantRenownBossParams struct {
+	GenerationID  uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID       uuid.UUID `db:"guild_id" json:"guild_id"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+	WindowKind    string    `db:"window_kind" json:"window_kind"`
+}
+
+func (q *sqlQuerier) DeleteGuildTenantRenownBoss(ctx context.Context, arg DeleteGuildTenantRenownBossParams) error {
+	_, err := q.db.Exec(ctx, deleteGuildTenantRenownBoss,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.WindowKind,
+	)
+	return err
+}
+
+const deleteGuildTenantRenownScope = `-- name: DeleteGuildTenantRenownScope :exec
+DELETE FROM guild_tenant_rating_scope_scores AS scope
+WHERE scope.generation_id = $1 AND scope.tenant_id = $2
+  AND scope.realm_id = $3 AND scope.guild_id = $4
+  AND scope.rating_metric = 'renown' AND scope.window_kind = $5
+  AND scope.instance_name = $6
+`
+
+type DeleteGuildTenantRenownScopeParams struct {
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID      uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID      uuid.UUID `db:"guild_id" json:"guild_id"`
+	WindowKind   string    `db:"window_kind" json:"window_kind"`
+	InstanceName string    `db:"instance_name" json:"instance_name"`
+}
+
+func (q *sqlQuerier) DeleteGuildTenantRenownScope(ctx context.Context, arg DeleteGuildTenantRenownScopeParams) error {
+	_, err := q.db.Exec(ctx, deleteGuildTenantRenownScope,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.WindowKind,
+		arg.InstanceName,
+	)
+	return err
+}
+
+const deletePlayerTenantRenownBoss = `-- name: DeletePlayerTenantRenownBoss :exec
+DELETE FROM player_tenant_rating_boss_scores AS score
+WHERE score.generation_id = $1 AND score.tenant_id = $2
+  AND score.realm_id = $3 AND score.player_guid = $4
+  AND score.instance_name = $5 AND score.encounter_name = $6
+  AND score.rating_metric = 'renown' AND score.window_kind = $7
+`
+
+type DeletePlayerTenantRenownBossParams struct {
+	GenerationID  uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid    string    `db:"player_guid" json:"player_guid"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+	WindowKind    string    `db:"window_kind" json:"window_kind"`
+}
+
+func (q *sqlQuerier) DeletePlayerTenantRenownBoss(ctx context.Context, arg DeletePlayerTenantRenownBossParams) error {
+	_, err := q.db.Exec(ctx, deletePlayerTenantRenownBoss,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.WindowKind,
+	)
+	return err
+}
+
+const deletePlayerTenantRenownScope = `-- name: DeletePlayerTenantRenownScope :exec
+DELETE FROM player_tenant_rating_scope_scores AS scope
+WHERE scope.generation_id = $1 AND scope.tenant_id = $2
+  AND scope.realm_id = $3 AND scope.player_guid = $4
+  AND scope.rating_metric = 'renown' AND scope.window_kind = $5
+  AND scope.instance_name = $6
+`
+
+type DeletePlayerTenantRenownScopeParams struct {
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID      uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid   string    `db:"player_guid" json:"player_guid"`
+	WindowKind   string    `db:"window_kind" json:"window_kind"`
+	InstanceName string    `db:"instance_name" json:"instance_name"`
+}
+
+func (q *sqlQuerier) DeletePlayerTenantRenownScope(ctx context.Context, arg DeletePlayerTenantRenownScopeParams) error {
+	_, err := q.db.Exec(ctx, deletePlayerTenantRenownScope,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.WindowKind,
+		arg.InstanceName,
+	)
+	return err
+}
+
+const insertGuildTenantRenownScopes = `-- name: InsertGuildTenantRenownScopes :exec
+INSERT INTO guild_tenant_rating_scope_scores
+    (generation_id, tenant_id, realm_id, guild_id, instance_name, rating_metric,
+     window_kind, window_start, window_end, score)
+SELECT $1, $2, $3, $4, boss.instance_name,
+       'renown', $5, $6::timestamptz,
+       $7::timestamptz, sum(boss.score)::double precision
+FROM guild_tenant_rating_boss_scores boss
+WHERE boss.generation_id = $1 AND boss.tenant_id = $2
+  AND boss.realm_id = $3 AND boss.guild_id = $4
+  AND boss.rating_metric = 'renown' AND boss.window_kind = $5
+  AND boss.instance_name = $8
+GROUP BY boss.instance_name
+`
+
+type InsertGuildTenantRenownScopesParams struct {
+	GenerationID uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID      uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID      uuid.UUID          `db:"guild_id" json:"guild_id"`
+	WindowKind   string             `db:"window_kind" json:"window_kind"`
+	WindowStart  pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd    pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	InstanceName string             `db:"instance_name" json:"instance_name"`
+}
+
+func (q *sqlQuerier) InsertGuildTenantRenownScopes(ctx context.Context, arg InsertGuildTenantRenownScopesParams) error {
+	_, err := q.db.Exec(ctx, insertGuildTenantRenownScopes,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.InstanceName,
+	)
+	return err
+}
+
+const insertPlayerTenantRenownScopes = `-- name: InsertPlayerTenantRenownScopes :exec
+INSERT INTO player_tenant_rating_scope_scores
+    (generation_id, tenant_id, realm_id, player_guid, instance_name, performance_metric,
+     rating_metric, window_kind, window_start, window_end, score)
+SELECT $1, $2, $3, $4, boss.instance_name,
+       'none', 'renown', $5, $6::timestamptz,
+       $7::timestamptz, sum(boss.score)::double precision
+FROM player_tenant_rating_boss_scores boss
+WHERE boss.generation_id = $1 AND boss.tenant_id = $2
+  AND boss.realm_id = $3 AND boss.player_guid = $4
+  AND boss.rating_metric = 'renown' AND boss.window_kind = $5
+  AND boss.instance_name = $8
+GROUP BY boss.instance_name
+`
+
+type InsertPlayerTenantRenownScopesParams struct {
+	GenerationID uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID      uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid   string             `db:"player_guid" json:"player_guid"`
+	WindowKind   string             `db:"window_kind" json:"window_kind"`
+	WindowStart  pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd    pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	InstanceName string             `db:"instance_name" json:"instance_name"`
+}
+
+func (q *sqlQuerier) InsertPlayerTenantRenownScopes(ctx context.Context, arg InsertPlayerTenantRenownScopesParams) error {
+	_, err := q.db.Exec(ctx, insertPlayerTenantRenownScopes,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.InstanceName,
+	)
+	return err
+}
+
+const listDirtyRenownTenants = `-- name: ListDirtyRenownTenants :many
+SELECT DISTINCT tenant_id FROM rating_dirty_renown_subjects ORDER BY tenant_id
+`
+
+// Periodic dispatch only visits tenants with pending fact changes.
+func (q *sqlQuerier) ListDirtyRenownTenants(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listDirtyRenownTenants)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var tenant_id uuid.UUID
+		if err := rows.Scan(&tenant_id); err != nil {
+			return nil, err
+		}
+		items = append(items, tenant_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGuildRenownExpiryPage = `-- name: ListGuildRenownExpiryPage :many
+SELECT score.realm_id, score.guild_id, score.instance_name, score.encounter_name,
+       EXISTS (
+           SELECT 1 FROM guild_renown_kill_facts fact
+           WHERE fact.tenant_id = score.tenant_id AND fact.realm_id = score.realm_id
+             AND fact.guild_id = score.guild_id AND fact.instance_name = score.instance_name
+             AND fact.encounter_name = score.encounter_name
+             AND fact.killed_at >= score.window_start AND fact.killed_at < $1::timestamptz
+       ) AS expired
+FROM guild_tenant_rating_boss_scores score
+JOIN rating_score_generations gen ON gen.id = score.generation_id AND gen.status = 'active'
+WHERE score.tenant_id = $2 AND score.rating_metric = 'renown'
+  AND score.window_kind = 'period' AND score.window_start < $1::timestamptz
+  AND (score.realm_id, score.guild_id, score.instance_name, score.encounter_name) >
+      ($3::uuid, $4::uuid, $5::text, $6::text)
+ORDER BY score.realm_id, score.guild_id, score.instance_name, score.encounter_name
+LIMIT LEAST(GREATEST($7::int, 0), 200)
+`
+
+type ListGuildRenownExpiryPageParams struct {
+	PeriodStart        pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	TenantID           uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	AfterRealmID       uuid.UUID          `db:"after_realm_id" json:"after_realm_id"`
+	AfterGuildID       uuid.UUID          `db:"after_guild_id" json:"after_guild_id"`
+	AfterInstanceName  string             `db:"after_instance_name" json:"after_instance_name"`
+	AfterEncounterName string             `db:"after_encounter_name" json:"after_encounter_name"`
+	BatchSize          int32              `db:"batch_size" json:"batch_size"`
+}
+
+type ListGuildRenownExpiryPageRow struct {
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID       uuid.UUID `db:"guild_id" json:"guild_id"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+	Expired       bool      `db:"expired" json:"expired"`
+}
+
+func (q *sqlQuerier) ListGuildRenownExpiryPage(ctx context.Context, arg ListGuildRenownExpiryPageParams) ([]ListGuildRenownExpiryPageRow, error) {
+	rows, err := q.db.Query(ctx, listGuildRenownExpiryPage,
+		arg.PeriodStart,
+		arg.TenantID,
+		arg.AfterRealmID,
+		arg.AfterGuildID,
+		arg.AfterInstanceName,
+		arg.AfterEncounterName,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGuildRenownExpiryPageRow
+	for rows.Next() {
+		var i ListGuildRenownExpiryPageRow
+		if err := rows.Scan(
+			&i.RealmID,
+			&i.GuildID,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.Expired,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlayerRenownExpiryPage = `-- name: ListPlayerRenownExpiryPage :many
+SELECT score.realm_id, score.player_guid, score.instance_name, score.encounter_name,
+       EXISTS (
+           SELECT 1 FROM renown_kill_facts fact
+           WHERE fact.realm_id = score.realm_id AND fact.player_guid = score.player_guid
+             AND fact.instance_name = score.instance_name AND fact.encounter_name = score.encounter_name
+             AND fact.killed_at >= score.window_start AND fact.killed_at < $1::timestamptz
+       ) AS expired
+FROM player_tenant_rating_boss_scores score
+JOIN rating_score_generations gen ON gen.id = score.generation_id AND gen.status = 'active'
+WHERE score.tenant_id = $2 AND score.rating_metric = 'renown'
+  AND score.window_kind = 'period' AND score.window_start < $1::timestamptz
+  AND (score.realm_id, score.player_guid, score.instance_name, score.encounter_name) >
+      ($3::uuid, $4::text, $5::text, $6::text)
+ORDER BY score.realm_id, score.player_guid, score.instance_name, score.encounter_name
+LIMIT LEAST(GREATEST($7::int, 0), 200)
+`
+
+type ListPlayerRenownExpiryPageParams struct {
+	PeriodStart        pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	TenantID           uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	AfterRealmID       uuid.UUID          `db:"after_realm_id" json:"after_realm_id"`
+	AfterPlayerGuid    string             `db:"after_player_guid" json:"after_player_guid"`
+	AfterInstanceName  string             `db:"after_instance_name" json:"after_instance_name"`
+	AfterEncounterName string             `db:"after_encounter_name" json:"after_encounter_name"`
+	BatchSize          int32              `db:"batch_size" json:"batch_size"`
+}
+
+type ListPlayerRenownExpiryPageRow struct {
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid    string    `db:"player_guid" json:"player_guid"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+	Expired       bool      `db:"expired" json:"expired"`
+}
+
+// Daily period expiry scans only active projected Renown rows, not the full
+// historical fact table. Each subject's fact lookup uses existing subject
+// indexes. The caller keyset-paginates both kinds and marks expired keys.
+func (q *sqlQuerier) ListPlayerRenownExpiryPage(ctx context.Context, arg ListPlayerRenownExpiryPageParams) ([]ListPlayerRenownExpiryPageRow, error) {
+	rows, err := q.db.Query(ctx, listPlayerRenownExpiryPage,
+		arg.PeriodStart,
+		arg.TenantID,
+		arg.AfterRealmID,
+		arg.AfterPlayerGuid,
+		arg.AfterInstanceName,
+		arg.AfterEncounterName,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlayerRenownExpiryPageRow
+	for rows.Next() {
+		var i ListPlayerRenownExpiryPageRow
+		if err := rows.Scan(
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.Expired,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockActiveTenantRatingGeneration = `-- name: LockActiveTenantRatingGeneration :one
+SELECT id FROM rating_score_generations
+WHERE tenant_id = $1 AND status = 'active'
+FOR SHARE
+`
+
+func (q *sqlQuerier) LockActiveTenantRatingGeneration(ctx context.Context, tenantID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockActiveTenantRatingGeneration, tenantID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockDirtyRenownSubjects = `-- name: LockDirtyRenownSubjects :many
+SELECT tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name, revision
+FROM rating_dirty_renown_subjects
+WHERE tenant_id = $1
+ORDER BY changed_at, subject_kind, realm_id, subject_id, instance_name, encounter_name
+LIMIT LEAST(GREATEST($2::int, 0), 100)
+FOR UPDATE SKIP LOCKED
+`
+
+type LockDirtyRenownSubjectsParams struct {
+	TenantID  uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	BatchSize int32     `db:"batch_size" json:"batch_size"`
+}
+
+type LockDirtyRenownSubjectsRow struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind   string    `db:"subject_kind" json:"subject_kind"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID     string    `db:"subject_id" json:"subject_id"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+	Revision      int64     `db:"revision" json:"revision"`
+}
+
+// Workers lock a bounded batch inside their score-write transaction. Concurrent
+// updates to the same key wait, then increment its revision. The CAS delete
+// keeps a newer change queued instead of losing it behind an in-flight worker.
+func (q *sqlQuerier) LockDirtyRenownSubjects(ctx context.Context, arg LockDirtyRenownSubjectsParams) ([]LockDirtyRenownSubjectsRow, error) {
+	rows, err := q.db.Query(ctx, lockDirtyRenownSubjects, arg.TenantID, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockDirtyRenownSubjectsRow
+	for rows.Next() {
+		var i LockDirtyRenownSubjectsRow
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.SubjectKind,
+			&i.RealmID,
+			&i.SubjectID,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.Revision,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockTenantRatingRevision = `-- name: LockTenantRatingRevision :one
+SELECT revision FROM rating_config_revisions
+WHERE tenant_id = $1 FOR UPDATE
+`
+
+// Serialize incremental publication with full rebuild start/publish, both of
+// which lock this tenant revision row. A later rebuild snapshots our writes.
+// An earlier rebuilding generation keeps dirty keys queued until it publishes.
+func (q *sqlQuerier) LockTenantRatingRevision(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, lockTenantRatingRevision, tenantID)
+	var revision int64
+	err := row.Scan(&revision)
+	return revision, err
+}
+
+const markDirtyRenownSubject = `-- name: MarkDirtyRenownSubject :exec
+INSERT INTO rating_dirty_renown_subjects
+    (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name)
+DO UPDATE SET revision = rating_dirty_renown_subjects.revision + 1, changed_at = now()
+`
+
+type MarkDirtyRenownSubjectParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind   string    `db:"subject_kind" json:"subject_kind"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID     string    `db:"subject_id" json:"subject_id"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+}
+
+func (q *sqlQuerier) MarkDirtyRenownSubject(ctx context.Context, arg MarkDirtyRenownSubjectParams) error {
+	_, err := q.db.Exec(ctx, markDirtyRenownSubject,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.RealmID,
+		arg.SubjectID,
+		arg.InstanceName,
+		arg.EncounterName,
+	)
+	return err
+}
+
+const tenantRatingGenerationBuilding = `-- name: TenantRatingGenerationBuilding :one
+SELECT EXISTS (SELECT 1 FROM rating_score_generations
+               WHERE tenant_id = $1 AND status = 'building')
+`
+
+// Do not discard dirty keys while a frozen full rebuild may replace the active
+// projection with a snapshot older than these fact changes.
+func (q *sqlQuerier) TenantRatingGenerationBuilding(ctx context.Context, tenantID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, tenantRatingGenerationBuilding, tenantID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const upsertGuildTenantRenownBoss = `-- name: UpsertGuildTenantRenownBoss :execrows
+INSERT INTO guild_tenant_rating_boss_scores
+    (generation_id, tenant_id, realm_id, guild_id, instance_name, encounter_name,
+     rating_metric, window_kind, window_start, window_end, score, eligible_kills)
+SELECT gen.id, gen.tenant_id, realm.id, guild.id, $1, $2,
+       'renown', $3, $4::timestamptz,
+       $5::timestamptz, $6::double precision, $7::int
+FROM rating_score_generations gen
+JOIN wow_server_realms realm ON realm.id = $8
+JOIN wow_servers server ON server.id = realm.server_id
+JOIN guilds guild ON guild.id = $9 AND guild.realm_id = realm.id
+WHERE gen.id = $10 AND gen.tenant_id = $11 AND gen.status = 'active'
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($11::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND $7::int > 0
+ON CONFLICT (generation_id, tenant_id, realm_id, guild_id, instance_name,
+             encounter_name, difficulty_name, max_players, rating_metric, window_kind)
+DO UPDATE SET score = EXCLUDED.score, eligible_kills = EXCLUDED.eligible_kills,
+              window_start = EXCLUDED.window_start, window_end = EXCLUDED.window_end,
+              computed_at = now()
+`
+
+type UpsertGuildTenantRenownBossParams struct {
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	WindowKind    string             `db:"window_kind" json:"window_kind"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd     pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score         float64            `db:"score" json:"score"`
+	EligibleKills int32              `db:"eligible_kills" json:"eligible_kills"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
+	GenerationID  uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) UpsertGuildTenantRenownBoss(ctx context.Context, arg UpsertGuildTenantRenownBossParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertGuildTenantRenownBoss,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.EligibleKills,
+		arg.RealmID,
+		arg.GuildID,
+		arg.GenerationID,
+		arg.TenantID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const upsertPlayerTenantRenownBoss = `-- name: UpsertPlayerTenantRenownBoss :execrows
+INSERT INTO player_tenant_rating_boss_scores
+    (generation_id, tenant_id, realm_id, player_guid, instance_name, encounter_name,
+     performance_metric, rating_metric, window_kind, window_start, window_end,
+     score, eligible_kills)
+SELECT gen.id, gen.tenant_id, realm.id, $1, $2, $3,
+       'none', 'renown', $4, $5::timestamptz,
+       $6::timestamptz, $7::double precision, $8::int
+FROM rating_score_generations gen
+JOIN wow_server_realms realm ON realm.id = $9
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE gen.id = $10 AND gen.tenant_id = $11 AND gen.status = 'active'
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($11::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND $8::int > 0
+ON CONFLICT (generation_id, tenant_id, realm_id, player_guid, instance_name,
+             encounter_name, difficulty_name, max_players, player_class,
+             player_spec, player_sub_spec, performance_metric, rating_metric, window_kind)
+DO UPDATE SET score = EXCLUDED.score, eligible_kills = EXCLUDED.eligible_kills,
+              window_start = EXCLUDED.window_start, window_end = EXCLUDED.window_end,
+              computed_at = now()
+`
+
+type UpsertPlayerTenantRenownBossParams struct {
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	WindowKind    string             `db:"window_kind" json:"window_kind"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd     pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score         float64            `db:"score" json:"score"`
+	EligibleKills int32              `db:"eligible_kills" json:"eligible_kills"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GenerationID  uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) UpsertPlayerTenantRenownBoss(ctx context.Context, arg UpsertPlayerTenantRenownBossParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertPlayerTenantRenownBoss,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.EligibleKills,
+		arg.RealmID,
+		arg.GenerationID,
+		arg.TenantID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const assignRatingRealmToGroup = `-- name: AssignRatingRealmToGroup :execrows
 INSERT INTO rating_realm_group_memberships (realm_id, server_id, group_id)
 SELECT realm.id, realm.server_id, grp.id

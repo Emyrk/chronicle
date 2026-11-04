@@ -74,9 +74,13 @@ type Service struct {
 	// RatingDispatchWorker fans daily rating rebuilds out to tenants with realms.
 	RatingDispatchWorker *WorkerDispatchRatingScores
 	// RatingTenantWorker builds and publishes one tenant's rating generation.
-	RatingTenantWorker   *WorkerRebuildTenantRatings
-	RenownRepairWorker   *WorkerRepairRenownFacts
-	RenownDispatchWorker *WorkerDispatchRenownRepair
+	RatingTenantWorker              *WorkerRebuildTenantRatings
+	RenownRepairWorker              *WorkerRepairRenownFacts
+	RenownDispatchWorker            *WorkerDispatchRenownRepair
+	IncrementalRenownWorker         *WorkerRefreshTenantRenown
+	IncrementalRenownDispatchWorker *WorkerDispatchIncrementalRenown
+	RenownExpiryWorker              *WorkerExpireTenantRenown
+	RenownExpiryDispatchWorker      *WorkerDispatchRenownExpiry
 }
 
 func New(broker *services.Services) *Service {
@@ -156,6 +160,10 @@ func (s *Service) Start(_ context.Context) error {
 	s.RatingTenantWorker = &WorkerRebuildTenantRatings{Store: store, Logger: namedLogger}
 	s.RenownRepairWorker = &WorkerRepairRenownFacts{Store: store}
 	s.RenownDispatchWorker = &WorkerDispatchRenownRepair{Store: store}
+	s.IncrementalRenownWorker = &WorkerRefreshTenantRenown{Store: store}
+	s.IncrementalRenownDispatchWorker = &WorkerDispatchIncrementalRenown{Store: store}
+	s.RenownExpiryWorker = &WorkerExpireTenantRenown{Store: store}
+	s.RenownExpiryDispatchWorker = &WorkerDispatchRenownExpiry{Store: store}
 
 	s.router = chi.NewRouter()
 	s.setupRoutes()
