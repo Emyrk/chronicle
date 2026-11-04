@@ -4,12 +4,18 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDrainTenantRatingPagesInterleavesAndStopsWhenEmpty(t *testing.T) {
@@ -145,6 +151,36 @@ func TestDrainTenantRatingPageMetrics(t *testing.T) {
 			t.Fatalf("%s duration samples=%v", stage, got)
 		}
 	}
+}
+
+func TestTenantRatingDrainConcurrentEnqueueDeduplicates(t *testing.T) {
+	t.Parallel()
+	pool, _ := dbtestutil.NewPGXPool(t)
+	clients := make([]*river.Client[pgx.Tx], 2)
+	for i := range clients {
+		var err error
+		clients[i], err = river.NewClient(riverpgxv5.New(pool), &river.Config{})
+		require.NoError(t, err)
+	}
+	tenant := uuid.New()
+	var wg sync.WaitGroup
+	errors := make(chan error, len(clients))
+	for _, client := range clients {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := client.Insert(t.Context(), ArgsDrainTenantRatings{TenantID: tenant}, nil)
+			errors <- err
+		}()
+	}
+	wg.Wait()
+	close(errors)
+	for err := range errors {
+		require.NoError(t, err)
+	}
+	var count int
+	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FROM river_job WHERE kind = 'drain-tenant-ratings' AND args->>'tenant_id' = $1`, tenant.String()).Scan(&count))
+	require.Equal(t, 1, count)
 }
 
 func ratingCounterValue(t *testing.T, counter prometheus.Counter) float64 {

@@ -28,6 +28,7 @@ beforeEach(() => {
 describe("live Ratings tab", () => {
   it("draws the board and a card per boss from one Ratings-depth summary, Peak with its DPS", () => {
     const html = renderToStaticMarkup(<LiveHubRatings {...props} />)
+    expect(html).toContain("Catching up")
     expect(html).toContain("Top")
     expect(html).toContain('data-entity-kind="character"')
     expect(html).toContain('&quot;realm&quot;:&quot;Nordanaar&quot;')
