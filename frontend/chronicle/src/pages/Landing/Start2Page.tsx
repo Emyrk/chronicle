@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { useLandingFeatured } from "@/api/landingFeatured";
 import type { LandingFeaturedRun } from "@/api/typesGenerated";
 import { useSiteConfig } from "@/api/siteConfigQuery";
+import { seoProductName } from "@/lib/seo";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { trackFunnel } from "@/utils/funnel";
@@ -169,6 +170,8 @@ export function Start2Page() {
   const { data: landing, isError: landingFailed } = useLandingFeatured();
   const { data: siteConfig } = useSiteConfig();
   const siteName = (siteConfig?.tenant?.branding ?? siteConfig?.branding)?.display_name;
+  // The SEO headline Home uses ("WoW Forever Combat Logs"), with the landing's line under it, muted.
+  const productName = seoProductName(siteConfig?.dataset_flavor) || "WoW Forever";
   // The live 3D replay's position and controls, for the hero's scrubber; null while the poster shows.
   const [replay, setReplay] = useState<HeroReplay | null>(null);
   // The run the live 3D plays, kept while it changes pulls.
@@ -191,8 +194,6 @@ export function Start2Page() {
     : FALLBACK_FEATURED_INSTANCE ? [{ instanceId: FALLBACK_FEATURED_INSTANCE }] : [],
   [heroes]);
   const [heroIndex, setHeroIndex] = useState(0);
-  // The stats column's shared slot from lg up: Threat (estimated) or Raid Frames.
-  const [statsPane, setStatsPane] = useState<"threat" | "frames">("threat");
   const holding = bossPick?.hold ?? false;
   const advanceHero = useCallback(() => {
     if (holding) return;
@@ -292,22 +293,23 @@ export function Start2Page() {
           live={replay !== null}
           onRequestLive={requestLive}
           siteName={siteName}
+          headline={
+            <div className="flex flex-col gap-2 lg:gap-3">
+              <h1 className="m-0 max-w-[700px] text-[32px] font-bold leading-[1.08] tracking-tight text-foreground lg:text-[44px] lg:leading-[1.06]">
+                {productName} Combat Logs
+                <br />
+                <span className="text-(--tertiary)">Raid analysis by Chronicle.</span>
+              </h1>
+              <p className="m-0 text-lg font-semibold text-muted-foreground lg:text-xl">Every dungeon you run, saved in detail.</p>
+            </div>
+          }
           meter={meter && (
             <div className="pointer-events-none absolute inset-0 mx-auto hidden max-w-[1180px] min-[900px]:block">
-              {/* The stats column, following the replay's cursor: the glass meter, then Threat (estimated). From lg up
-                  Raid Frames share that slot with a switch (the hero's fixed height has no room for both). */}
+              {/* The stats column, following the replay's cursor: the glass meter, then Raid Frames from lg up.
+                  No Threat panel: it is not a panel the site supports yet. */}
               <div className="pointer-events-auto absolute right-4 top-4 flex w-[300px] flex-col gap-2 lg:right-8 lg:top-auto lg:bottom-[112px] lg:w-[320px]">
                 <HeroMeter data={meter} sourceKey={meterKey} pane={pane} onPaneChange={changePane} onDrill={requestLive} run={meterRun} />
-                {replay?.renderThreat && (
-                  <div className={statsPane === "frames" && replay.renderRaidFrames ? "lg:hidden" : undefined}>
-                    {replay.renderThreat(replay.renderRaidFrames ? () => setStatsPane("frames") : null)}
-                  </div>
-                )}
-                {replay?.renderRaidFrames && (
-                  <div className={statsPane === "frames" || !replay.renderThreat ? "hidden lg:block" : "hidden"}>
-                    {replay.renderRaidFrames(replay.renderThreat ? () => setStatsPane("threat") : null)}
-                  </div>
-                )}
+                {replay?.renderRaidFrames && <div className="hidden lg:block">{replay.renderRaidFrames(null)}</div>}
               </div>
             </div>
           )}

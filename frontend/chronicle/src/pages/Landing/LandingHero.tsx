@@ -36,6 +36,8 @@ interface LandingHeroProps {
   onRequestLive?: () => void;
   /** The tenant's name from site config, for the copy. */
   siteName?: string;
+  /** Replaces the default headline (the h1). */
+  headline?: ReactNode;
   /** The glass meter, docked over the replay from 900 px up. */
   meter?: ReactNode;
   /** The featured run (scoped to the boss pull the hero plays). Without one the hero shows the poster and copy only. */
@@ -428,6 +430,7 @@ export function LandingHero({
   live = false,
   onRequestLive,
   siteName,
+  headline,
   meter,
   featured,
   currentMs = 0,
@@ -522,9 +525,11 @@ export function LandingHero({
             Fastest replayed {featured.instance_name} clear · {formatClock(featured.speedrun.duration_ms)} · rank {featured.speedrun.rank}
           </div>
         )}
-        <h1 className="m-0 max-w-[640px] text-[34px] font-bold leading-[1.06] tracking-tight text-foreground lg:text-[54px] lg:leading-[1.04]">
-          Every dungeon you run, saved in detail.
-        </h1>
+        {headline ?? (
+          <h1 className="m-0 max-w-[640px] text-[34px] font-bold leading-[1.06] tracking-tight text-foreground lg:text-[54px] lg:leading-[1.04]">
+            Every dungeon you run, saved in detail.
+          </h1>
+        )}
         <p className="m-0 max-w-[540px] text-[15px] leading-normal text-foreground/85 lg:text-lg">
           Sidekick sits in your tray and uploads each fight{siteName ? ` to ${siteName}` : ""} in the background while you play.
         </p>
