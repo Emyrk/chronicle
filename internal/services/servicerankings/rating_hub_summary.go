@@ -579,6 +579,9 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, genErr)
 		return
 	}
+	if evolving {
+		generation = uuid.Nil
+	}
 	if evolving || (genErr == nil && generation != uuid.Nil) {
 		params := database.HubSummaryRatingRowsParams{TenantID: tenant, GenerationID: generation, InstanceName: in.instance, FeaturedEncounter: in.featured, DifficultyName: in.difficulty, MaxPlayers: in.size, ExactCohort: in.exact, PerformanceMetric: in.metric, PlayerClass: hubClassFilter(in.class), PlayerSpec: in.spec, PlayerSubSpec: in.subSpec, RealmIds: in.realmIDs, WindowKind: in.window, RenownWindow: in.renownWindow, BossDepth: in.bossDepth}
 		var rows []database.HubSummaryRatingRowsRow
