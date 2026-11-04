@@ -69,6 +69,40 @@ describe("preset layout availability", () => {
   });
 });
 
+describe("Consumes & Cooldowns preset", () => {
+  it("uses the supplied ledger, cooldown, and consumables layout", () => {
+    const preset = PRESET_LAYOUTS_BY_ID.consumes_cooldowns;
+    if (!isPanelPresetLayout(preset)) throw new Error("Consumes & Cooldowns should be a panels preset");
+
+    expect(preset.panelTypes).toEqual({
+      "panel-3": "consumables_ledger",
+      "panel-2": "cooldown_usage",
+      "panel-1": "consumables",
+    });
+    expect(preset.layoutItems).toEqual([
+      expect.objectContaining({ id: "panel-3", x: 0, y: 0, w: 8, h: 4 }),
+      expect.objectContaining({ id: "panel-2", x: 8, y: 0, w: 4, h: 4 }),
+      expect.objectContaining({ id: "panel-1", x: 0, y: 4, w: 12, h: 5 }),
+    ]);
+    expect(preset.panelOptions).toEqual({ "panel-2": "cb" });
+    expect(preset.panelFilters["panel-3"]).toEqual([
+      { type: "source_type", value: ["player"], applyTo: ["consume"] },
+      {
+        type: "consume_effect",
+        value: ["Drink", "Food", "Strong Alcohol"],
+        negate: true,
+        applyTo: ["consume"],
+      },
+    ]);
+  });
+
+  it("appears after Player Timeline and before Loot", () => {
+    const ids = PRESET_LAYOUTS.map((preset) => preset.id);
+    expect(ids.indexOf("consumes_cooldowns")).toBeGreaterThan(ids.indexOf("player_timeline"));
+    expect(ids.indexOf("consumes_cooldowns")).toBeLessThan(ids.indexOf("loot"));
+  });
+});
+
 describe("Player Timeline preset", () => {
   it("uses a seamless panel layout with grouped panels above an intrinsic timeline", () => {
     const preset = PRESET_LAYOUTS_BY_ID.player_timeline;
