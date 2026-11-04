@@ -1,6 +1,6 @@
 # Incremental tenant ratings: pre-deployment review
 
-Incremental Renown, Mastery, and Peak updates are implemented alongside the existing full rebuild. **Keep `daily-rating-score-reconciliation` enabled** until production-scale costs and parity are verified. Do not deploy these migrations solely on the basis of local integration tests.
+Incremental Renown, Mastery, and Peak updates are implemented alongside a **manual-only** full rebuild. The automatic `daily-rating-score-reconciliation` dispatcher is removed because a full tenant rebuild is too slow; the admin single-tenant and all-tenant rebuild actions remain available for recovery or rule changes. Do not deploy these migrations solely on the basis of local integration tests.
 
 ## Migration impact
 
@@ -31,4 +31,33 @@ WHERE server.tenant_id IS NOT DISTINCT FROM NULLIF('00000000-0000-0000-0000-0000
 ORDER BY rr.run_id LIMIT 100;
 ```
 
-After a **separate, approved staging deployment** of the schema, run `EXPLAIN (ANALYZE, BUFFERS, WAL)` on representative tenant/cohort queries in staging (not casually on production), measure bootstrap/repair duration and fact-write throughput, and compare incremental versus full-rebuild boss and scope rows over multiple cohorts, realms, periods, deletions, and representative changes. Do not disable daily full rebuilds or enable a production rollout until these checks pass and any startup-lock risk has been accepted.
+After a **separate, approved staging deployment** of the schema, run `EXPLAIN (ANALYZE, BUFFERS, WAL)` on representative tenant/cohort queries in staging (not casually on production), measure bootstrap/repair duration and fact-write throughput, and compare incremental versus full-rebuild boss and scope rows over multiple cohorts, realms, periods, deletions, and representative changes. Automatic full rebuilds are disabled; investigate stalled incremental work rather than assuming a scheduled full rebuild will correct it. Get approval before production rollout if startup-lock or runtime write costs remain uncertain.
+
+## Launch and observe
+
+1. Deploy only after reviewing the migration lock risk. The new tables start empty; **do not click “Rebuild ratings + Renown” to start incremental processing**. Existing active score generations continue serving while the jobs build durable evidence. A tenant without an existing active generation cannot publish incremental scores and would need a deliberate manual baseline rebuild.
+2. Watch the River jobs dashboard after startup. `dispatch-live-evidence-bootstrap` starts automatically; `bootstrap-tenant-live-evidence` resumes a 100-run keyset cursor until the source scan and dirty-run queue are both finished. The every-minute observation, Renown, Mastery, and Peak dispatchers then drain dirty work. The daily evidence repair scans source/version state in bounded pages; its `after_run_id` lives in the current job's args, **not** in the bootstrap marker.
+3. With a DB role allowed to view the tenant rows, inspect this read-only snapshot repeatedly. The root tenant is the all-zero UUID. Other tenants may be hidden by row-level security unless the role has appropriate access.
+
+```sql
+SELECT b.tenant_id, b.after_run_id, b.source_cutoff, b.completed_at,
+       (SELECT count(*) FROM rating_dirty_observation_runs d WHERE d.tenant_id = b.tenant_id) AS dirty_runs,
+       (SELECT count(*) FROM rating_dirty_renown_subjects d WHERE d.tenant_id = b.tenant_id) AS dirty_renown,
+       (SELECT count(*) FROM rating_dirty_mastery_subjects d WHERE d.tenant_id = b.tenant_id) AS dirty_mastery,
+       (SELECT count(*) FROM rating_dirty_peak_cohorts d WHERE d.tenant_id = b.tenant_id) AS dirty_peak
+FROM rating_live_evidence_bootstraps b ORDER BY b.tenant_id;
+
+SELECT kind, state, count(*) AS jobs, min(created_at) AS oldest_created_at
+FROM river_job
+WHERE kind IN ('bootstrap-tenant-live-evidence', 'reconcile-tenant-rating-observations',
+               'refresh-tenant-renown', 'refresh-tenant-mastery', 'refresh-tenant-peak',
+               'repair-live-rating-evidence', 'rebuild-tenant-ratings', 'dispatch-rating-scores')
+  AND state IN ('available', 'pending', 'retryable', 'running', 'scheduled')
+GROUP BY kind, state ORDER BY kind, state;
+
+SELECT tenant_id, status, id AS generation_id, created_at
+FROM rating_score_generations
+WHERE status IN ('active', 'building') ORDER BY tenant_id, created_at DESC;
+```
+
+A completed bootstrap marker plus falling dirty queues indicates historical catch-up; it does not itself prove score parity. Check a few known boss and raid scores after each queue drains. If any dirty count grows persistently, inspect the corresponding River job errors and DB load instead of triggering a full rebuild. Existing `rebuild-tenant-ratings` jobs already queued or running before deployment **are not canceled by removing the cron**; review them in the River dashboard. The `/admin` → Leaderboard → **Rating maintenance** controls (and `POST /api/v1/admin/ratings/rebuild` for one host tenant, `/rebuild/all` for all tenants) remain the explicit recovery actions, not launch steps.

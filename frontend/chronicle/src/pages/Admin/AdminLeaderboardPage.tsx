@@ -190,8 +190,8 @@ export function AdminLeaderboardPage() {
         <div>
           <h3 className="font-semibold">Rating maintenance</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Both dispatchers also run daily. Repair missing Renown kill facts across all tenants first, wait for its child jobs to finish,
-            then rebuild ratings (including Renown scores) across all tenants with realms. Scoring is fixed; Renown awards follow each realm's game flavor.
+            Renown fact repair runs daily; full rating rebuilds are manual and expensive. For recovery or rule changes, wait for Renown repair to finish
+            before rebuilding ratings across all tenants. Incremental observation repair and rolling-window expiry run separately.
             Enqueueing is not the same as publishing scores.
           </p>
         </div>

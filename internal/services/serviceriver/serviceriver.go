@@ -384,7 +384,7 @@ func (s *Service) Start(ctx context.Context) error {
 	)
 	// Repair historical missing Renown facts in bounded pages each day.
 	// Fact changes mark incremental Renown subjects, including repaired facts;
-	// the retained daily full rebuild remains the recovery path.
+	// full rebuild remains available manually for recovery.
 	q.AddPeriodicJob(
 		river.NewPeriodicJob(
 			river.PeriodicInterval(24*time.Hour),
@@ -460,16 +460,9 @@ func (s *Service) Start(ctx context.Context) error {
 		},
 		&river.PeriodicJobOpts{ID: "daily-peak-expiry", RunOnStart: false},
 	))
-	// Daily rating reconciliation for tenants with configured group policies.
-	q.AddPeriodicJob(
-		river.NewPeriodicJob(
-			river.PeriodicInterval(24*time.Hour),
-			func() (river.JobArgs, *river.InsertOpts) {
-				return servicerankings.ArgsDispatchRatingScores{}, nil
-			},
-			&river.PeriodicJobOpts{ID: "daily-rating-score-reconciliation", RunOnStart: false},
-		),
-	)
+	// Full tenant rating rebuilds are intentionally manual. The admin routes
+	// still enqueue ArgsDispatchRatingScores or ArgsRebuildTenantRatings for
+	// recovery and rule changes; daily repair and expiry remain scheduled.
 
 	err = q.Start(ctx)
 	if err != nil {
