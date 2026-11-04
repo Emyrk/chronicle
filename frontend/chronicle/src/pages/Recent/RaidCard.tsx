@@ -165,13 +165,13 @@ export function RaidCard({ instance, instances, bossCount, parseScore, onExplore
               </div>
             )}
             {activeInstance.has_positions && (
-              <div className="flex items-center gap-1.5 bg-sky-600/75 backdrop-blur-sm text-white/85 px-2 py-1 rounded shadow-lg" title="Has 3D positions">
+              <div className="flex items-center gap-1.5 bg-sky-600/75 backdrop-blur-sm text-white/85 px-2 py-0.5 rounded shadow-lg" title="Has 3D positions">
                 <Box className="h-4 w-4" />
                 <span className="text-xs font-semibold">3D</span>
               </div>
             )}
             {activeInstance.has_youtube_video && (
-              <div className="flex items-center gap-1.5 bg-red-600/75 backdrop-blur-sm text-white/85 px-2 py-1 rounded shadow-lg" title="Has YouTube video">
+              <div className="flex items-center gap-1.5 bg-red-600/75 backdrop-blur-sm text-white/85 px-2 py-0.5 rounded shadow-lg" title="Has YouTube video">
                 <Youtube className="h-4 w-4" />
                 <span className="text-xs font-semibold">Video</span>
               </div>

@@ -74,6 +74,7 @@ export const Has3DPositions: Story = {
     instance: {
       ...baseInstance,
       has_positions: true,
+      has_youtube_video: true,
     },
   },
 };
