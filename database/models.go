@@ -2451,6 +2451,13 @@ type RatingConfigRevision struct {
 	Revision int64     `db:"revision" json:"revision"`
 }
 
+type RatingDirtyObservationRun struct {
+	TenantID  uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RunID     uuid.UUID          `db:"run_id" json:"run_id"`
+	Revision  int64              `db:"revision" json:"revision"`
+	ChangedAt pgtype.Timestamptz `db:"changed_at" json:"changed_at"`
+}
+
 type RatingDirtyRenownSubject struct {
 	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 	SubjectKind   string             `db:"subject_kind" json:"subject_kind"`

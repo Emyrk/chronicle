@@ -1015,17 +1015,33 @@ func (c *Chronicle) WoWLogGroup(ctx context.Context, groupID uuid.UUID) (*chroni
 }
 
 func (c *Chronicle) InvalidateWoWLogGroup(ctx context.Context, logID uuid.UUID, reason string) error {
-	if _, err := c.Zed.GetWoWLogGroupByID(ctx, logID); err != nil {
-		return fmt.Errorf("load log group: %w", err)
-	}
-	identities, err := c.Zed.RankingRunIdentitiesByLogGroupID(ctx, logID)
+	var identities []database.RankingRunIdentitiesByLogGroupIDRow
+	// Share the representative lock with ranking reconciliation. Persist dirty
+	// intent before the source becomes ineligible, even if enqueue later fails.
+	err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
+			return err
+		}
+		if _, err := tx.GetWoWLogGroupByID(ctx, logID); err != nil {
+			return fmt.Errorf("load log group: %w", err)
+		}
+		var err error
+		identities, err = tx.RankingRunIdentitiesByLogGroupID(ctx, logID)
+		if err != nil {
+			return fmt.Errorf("load ranking run identities: %w", err)
+		}
+		runIDs := make([]uuid.UUID, 0, len(identities))
+		for _, identity := range identities {
+			runIDs = append(runIDs, identity.RunID)
+		}
+		for start := 0; start < len(runIDs); start += 200 {
+			if err := tx.MarkDirtyObservationRunsByIDs(ctx, runIDs[start:min(start+200, len(runIDs))]); err != nil {
+				return fmt.Errorf("mark invalidated rating runs: %w", err)
+			}
+		}
+		return tx.InvalidateWoWLogGroup(ctx, database.InvalidateWoWLogGroupParams{LogGroupID: logID, Reason: reason})
+	}, nil)
 	if err != nil {
-		return fmt.Errorf("load ranking run identities: %w", err)
-	}
-	if err := c.Zed.InvalidateWoWLogGroup(ctx, database.InvalidateWoWLogGroupParams{
-		LogGroupID: logID,
-		Reason:     reason,
-	}); err != nil {
 		return fmt.Errorf("invalidate log group: %w", err)
 	}
 
@@ -1072,14 +1088,31 @@ func (c *Chronicle) InvalidateWoWLogGroup(ctx context.Context, logID uuid.UUID, 
 }
 
 func (c *Chronicle) ClearWoWLogGroupInvalidation(ctx context.Context, logID uuid.UUID) error {
-	if _, err := c.Zed.GetWoWLogGroupByID(ctx, logID); err != nil {
-		return fmt.Errorf("load log group: %w", err)
-	}
-	identities, err := c.Zed.RankingRunIdentitiesByLogGroupID(ctx, logID)
+	var identities []database.RankingRunIdentitiesByLogGroupIDRow
+	err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
+			return err
+		}
+		if _, err := tx.GetWoWLogGroupByID(ctx, logID); err != nil {
+			return fmt.Errorf("load log group: %w", err)
+		}
+		var err error
+		identities, err = tx.RankingRunIdentitiesByLogGroupID(ctx, logID)
+		if err != nil {
+			return fmt.Errorf("load ranking run identities: %w", err)
+		}
+		runIDs := make([]uuid.UUID, 0, len(identities))
+		for _, identity := range identities {
+			runIDs = append(runIDs, identity.RunID)
+		}
+		for start := 0; start < len(runIDs); start += 200 {
+			if err := tx.MarkDirtyObservationRunsByIDs(ctx, runIDs[start:min(start+200, len(runIDs))]); err != nil {
+				return fmt.Errorf("mark restored rating runs: %w", err)
+			}
+		}
+		return tx.ClearWoWLogGroupInvalidation(ctx, logID)
+	}, nil)
 	if err != nil {
-		return fmt.Errorf("load ranking run identities: %w", err)
-	}
-	if err := c.Zed.ClearWoWLogGroupInvalidation(ctx, logID); err != nil {
 		return fmt.Errorf("clear log group invalidation: %w", err)
 	}
 

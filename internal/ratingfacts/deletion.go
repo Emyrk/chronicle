@@ -39,6 +39,14 @@ func DeleteParsedLogGroupEvidence(ctx context.Context, tx database.Store, logID 
 // only from remaining canonical sources prevents deleted logs from retaining
 // credit, while preserving credit backed by another duplicate upload.
 func ReconcileDeletedRuns(ctx context.Context, tx database.Store, runIDs, realmIDs []uuid.UUID) error {
+	// The canonical row can still be present even after source deletion; record
+	// intent before a later representative refresh removes it. Retries coalesce.
+	for start := 0; start < len(runIDs); start += deletePageSize {
+		page := runIDs[start:min(start+deletePageSize, len(runIDs))]
+		if err := tx.MarkDirtyObservationRunsByIDs(ctx, page); err != nil {
+			return fmt.Errorf("mark deleted rating observation runs: %w", err)
+		}
+	}
 	for start := 0; start < len(runIDs); start += deletePageSize {
 		page := runIDs[start:min(start+deletePageSize, len(runIDs))]
 		if _, err := tx.DeletePlayerRenownFactsForRuns(ctx, page); err != nil {

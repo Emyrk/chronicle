@@ -2486,6 +2486,16 @@ CREATE TABLE rating_config_revisions (
     CONSTRAINT rating_config_revisions_revision_check CHECK ((revision >= 0))
 );
 
+CREATE TABLE rating_dirty_observation_runs (
+    tenant_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    changed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT rating_dirty_observation_runs_revision_check CHECK ((revision > 0))
+);
+
+ALTER TABLE ONLY rating_dirty_observation_runs FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE rating_dirty_renown_subjects (
     tenant_id uuid NOT NULL,
     subject_kind text NOT NULL,
@@ -3989,6 +3999,9 @@ ALTER TABLE ONLY rating_boss_scores
 ALTER TABLE ONLY rating_config_revisions
     ADD CONSTRAINT rating_config_revisions_pkey PRIMARY KEY (tenant_id);
 
+ALTER TABLE ONLY rating_dirty_observation_runs
+    ADD CONSTRAINT rating_dirty_observation_runs_pkey PRIMARY KEY (tenant_id, run_id);
+
 ALTER TABLE ONLY rating_dirty_renown_subjects
     ADD CONSTRAINT rating_dirty_renown_subjects_pkey PRIMARY KEY (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name);
 
@@ -4595,6 +4608,8 @@ CREATE INDEX rating_boss_scores_character_idx ON rating_boss_scores USING btree 
 CREATE INDEX rating_boss_scores_group_idx ON rating_boss_scores USING btree (generation_id, group_id, rating_metric, window_kind, instance_name, encounter_name, score DESC);
 
 CREATE INDEX rating_boss_scores_leaderboard_idx ON rating_boss_scores USING btree (generation_id, tenant_id, rating_metric, window_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, score DESC);
+
+CREATE INDEX rating_dirty_observation_runs_queue_idx ON rating_dirty_observation_runs USING btree (tenant_id, changed_at, run_id);
 
 CREATE INDEX rating_dirty_renown_subjects_queue_idx ON rating_dirty_renown_subjects USING btree (tenant_id, changed_at, subject_kind, realm_id, subject_id);
 
@@ -5485,6 +5500,8 @@ ALTER TABLE player_tenant_rating_scope_scores ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_boss_scores ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE rating_dirty_observation_runs ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE rating_dirty_renown_subjects ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_group_boss_policies ENABLE ROW LEVEL SECURITY;
@@ -5530,6 +5547,8 @@ CREATE POLICY tenant_admin_bypass ON player_tenant_rating_boss_scores USING ((cu
 CREATE POLICY tenant_admin_bypass ON player_tenant_rating_scope_scores USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_boss_scores USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_dirty_observation_runs USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_dirty_renown_subjects USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -5598,6 +5617,8 @@ CREATE POLICY tenant_isolation ON player_tenant_rating_scope_scores USING ((tena
 
 CREATE POLICY tenant_isolation ON rating_boss_scores USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON rating_dirty_observation_runs USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON rating_dirty_renown_subjects USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 

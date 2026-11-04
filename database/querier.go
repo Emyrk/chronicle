@@ -163,6 +163,7 @@ type sqlcQuerier interface {
 	DeleteDataset(ctx context.Context, id uuid.UUID) error
 	DeleteDatasetCacheGenerations(ctx context.Context, datasetID uuid.UUID) error
 	DeleteDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) error
+	DeleteDirtyObservationRunIfRevision(ctx context.Context, arg DeleteDirtyObservationRunIfRevisionParams) (int64, error)
 	DeleteDirtyRenownSubjectIfRevision(ctx context.Context, arg DeleteDirtyRenownSubjectIfRevisionParams) (int64, error)
 	DeleteDiscordAnnouncement(ctx context.Context, id uuid.UUID) error
 	DeleteDiscordAnnouncementSource(ctx context.Context, arg DeleteDiscordAnnouncementSourceParams) error
@@ -873,6 +874,7 @@ type sqlcQuerier interface {
 	// table is scanned once, avoiding the dataset page's previous N+1 count queries.
 	ListDatasetImportCounts(ctx context.Context) ([]ListDatasetImportCountsRow, error)
 	ListDatasets(ctx context.Context) ([]Dataset, error)
+	ListDirtyObservationRunTenants(ctx context.Context) ([]uuid.UUID, error)
 	// Periodic dispatch only visits tenants with pending fact changes.
 	ListDirtyRenownTenants(ctx context.Context) ([]uuid.UUID, error)
 	ListDiscordAnnouncementEncounters(ctx context.Context, instanceID uuid.UUID) ([]ListDiscordAnnouncementEncountersRow, error)
@@ -1108,6 +1110,7 @@ type sqlcQuerier interface {
 	ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error)
 	ListWorlds(ctx context.Context) ([]World, error)
 	LockActiveTenantRatingGeneration(ctx context.Context, tenantID uuid.UUID) (uuid.UUID, error)
+	LockDirtyObservationRuns(ctx context.Context, arg LockDirtyObservationRunsParams) ([]LockDirtyObservationRunsRow, error)
 	// Workers lock a bounded batch inside their score-write transaction. Concurrent
 	// updates to the same key wait, then increment its revision. The CAS delete
 	// keeps a newer change queued instead of losing it behind an in-flight worker.
@@ -1129,6 +1132,13 @@ type sqlcQuerier interface {
 	LockUsersForUpdate(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
 	LockWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error
+	// Locked parse scores can change after canonicalization without changing
+	// ranking_runs. Mark only the actual run for the scoring source and tenant.
+	MarkDirtyObservationRunForInstance(ctx context.Context, arg MarkDirtyObservationRunForInstanceParams) error
+	// Capture the old mapping before a canonical run changes or disappears, and
+	// the new mapping after reconciliation. Calls share the source transaction.
+	// Repeated markings coalesce under one key without dropping a concurrent edit.
+	MarkDirtyObservationRunsByIDs(ctx context.Context, runIds []uuid.UUID) error
 	MarkDirtyRenownSubject(ctx context.Context, arg MarkDirtyRenownSubjectParams) error
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	MarkLogFilePartFailed(ctx context.Context, arg MarkLogFilePartFailedParams) error

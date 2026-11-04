@@ -22184,6 +22184,132 @@ func (q *sqlQuerier) RatingObservationsForRuns(ctx context.Context, arg RatingOb
 	return items, nil
 }
 
+const deleteDirtyObservationRunIfRevision = `-- name: DeleteDirtyObservationRunIfRevision :execrows
+DELETE FROM rating_dirty_observation_runs
+WHERE tenant_id = $1 AND run_id = $2 AND revision = $3
+`
+
+type DeleteDirtyObservationRunIfRevisionParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+	Revision int64     `db:"revision" json:"revision"`
+}
+
+func (q *sqlQuerier) DeleteDirtyObservationRunIfRevision(ctx context.Context, arg DeleteDirtyObservationRunIfRevisionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteDirtyObservationRunIfRevision, arg.TenantID, arg.RunID, arg.Revision)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listDirtyObservationRunTenants = `-- name: ListDirtyObservationRunTenants :many
+SELECT DISTINCT tenant_id FROM rating_dirty_observation_runs ORDER BY tenant_id
+`
+
+func (q *sqlQuerier) ListDirtyObservationRunTenants(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listDirtyObservationRunTenants)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var tenant_id uuid.UUID
+		if err := rows.Scan(&tenant_id); err != nil {
+			return nil, err
+		}
+		items = append(items, tenant_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockDirtyObservationRuns = `-- name: LockDirtyObservationRuns :many
+SELECT tenant_id, run_id, revision FROM rating_dirty_observation_runs
+WHERE tenant_id = $1
+ORDER BY changed_at, run_id
+LIMIT LEAST(GREATEST($2::int, 0), 200)
+FOR UPDATE SKIP LOCKED
+`
+
+type LockDirtyObservationRunsParams struct {
+	TenantID  uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	BatchSize int32     `db:"batch_size" json:"batch_size"`
+}
+
+type LockDirtyObservationRunsRow struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+	Revision int64     `db:"revision" json:"revision"`
+}
+
+func (q *sqlQuerier) LockDirtyObservationRuns(ctx context.Context, arg LockDirtyObservationRunsParams) ([]LockDirtyObservationRunsRow, error) {
+	rows, err := q.db.Query(ctx, lockDirtyObservationRuns, arg.TenantID, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockDirtyObservationRunsRow
+	for rows.Next() {
+		var i LockDirtyObservationRunsRow
+		if err := rows.Scan(&i.TenantID, &i.RunID, &i.Revision); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markDirtyObservationRunForInstance = `-- name: MarkDirtyObservationRunForInstance :exec
+INSERT INTO rating_dirty_observation_runs (tenant_id, run_id)
+SELECT DISTINCT $1::uuid, rr.run_id
+FROM log_instances instance
+JOIN ranking_runs rr ON rr.run_id = COALESCE(instance.duplicate_group_id, instance.id)
+JOIN wow_server_realms realm ON realm.id = rr.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE instance.id = $2
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+ON CONFLICT (tenant_id, run_id) DO UPDATE
+SET revision = rating_dirty_observation_runs.revision + 1, changed_at = now()
+`
+
+type MarkDirtyObservationRunForInstanceParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+}
+
+// Locked parse scores can change after canonicalization without changing
+// ranking_runs. Mark only the actual run for the scoring source and tenant.
+func (q *sqlQuerier) MarkDirtyObservationRunForInstance(ctx context.Context, arg MarkDirtyObservationRunForInstanceParams) error {
+	_, err := q.db.Exec(ctx, markDirtyObservationRunForInstance, arg.TenantID, arg.InstanceID)
+	return err
+}
+
+const markDirtyObservationRunsByIDs = `-- name: MarkDirtyObservationRunsByIDs :exec
+INSERT INTO rating_dirty_observation_runs (tenant_id, run_id)
+SELECT DISTINCT COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), rr.run_id
+FROM ranking_runs rr
+JOIN wow_server_realms realm ON realm.id = rr.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE rr.run_id = ANY($1::uuid[]) AND cardinality($1::uuid[]) <= 200
+ON CONFLICT (tenant_id, run_id) DO UPDATE
+SET revision = rating_dirty_observation_runs.revision + 1, changed_at = now()
+`
+
+// Capture the old mapping before a canonical run changes or disappears, and
+// the new mapping after reconciliation. Calls share the source transaction.
+// Repeated markings coalesce under one key without dropping a concurrent edit.
+func (q *sqlQuerier) MarkDirtyObservationRunsByIDs(ctx context.Context, runIds []uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markDirtyObservationRunsByIDs, runIds)
+	return err
+}
+
 const countGuildRenownFactsForSubject = `-- name: CountGuildRenownFactsForSubject :one
 SELECT count(*)::int AS career_kills,
        count(*) FILTER (WHERE killed_at >= $1::timestamptz
