@@ -4,6 +4,9 @@
 -- hero's pick. Newest first.
 SELECT li.id, li.realm_id
 FROM log_instances li
+-- The tenant scope: wow_server_realms' RLS policy hides other tenants' realms
+-- (log_instances has no policy of its own).
+JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation
@@ -93,3 +96,14 @@ SELECT
 FROM numbered
 WHERE instance_place <= @per_instance::int
 ORDER BY instance_name, instance_place;
+
+-- name: LandingInstanceInTenant :one
+-- Whether the instance is on the request's tenant (wow_server_realms' RLS
+-- policy hides other tenants' realms), for the admin-pinned landing run:
+-- site_config, and so the pin, spans every tenant.
+SELECT EXISTS (
+    SELECT 1
+    FROM log_instances li
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    WHERE li.id = @instance_id::uuid
+)::bool AS in_tenant;

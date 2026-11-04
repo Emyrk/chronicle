@@ -132,11 +132,14 @@ func (a *API) loadLandingFeatured(ctx context.Context) ([]chroniclesdk.LandingFe
 	var entries []chroniclesdk.LandingFeaturedRun
 	overrideID := a.landingFeaturedInstanceID(config)
 	if overrideID != uuid.Nil {
-		run, err := a.loadLandingRun(ctx, overrideID, nil)
+		// The pin is deployment-wide (site_config spans every tenant): play it only on its own
+		// tenant, and never let a bad pin take the rest of the hero down with it.
+		run, err := a.loadLandingPin(ctx, overrideID)
 		if err != nil {
-			return nil, err
+			a.Opts.Logger.WarnContext(ctx, "skip landing featured instance", "instance_id", overrideID, "error", err)
+		} else if run != nil {
+			entries = append(entries, *run)
 		}
-		entries = append(entries, *run)
 	}
 	meshes := a.landingMeshes()
 	montage, err := a.landingMontage(ctx, meshes, overrideID, landingMontageMax-len(entries))
@@ -236,6 +239,19 @@ func (a *API) landingMontage(ctx context.Context, meshes *landingMeshes, skip uu
 		entries = append(entries, *run)
 	}
 	return entries, nil
+}
+
+// loadLandingPin loads the admin-pinned run, or nil when it is on another
+// tenant (the request's RLS realm scope cannot see it).
+func (a *API) loadLandingPin(ctx context.Context, id uuid.UUID) (*chroniclesdk.LandingFeaturedRun, error) {
+	inTenant, err := a.Opts.Zed.LandingInstanceInTenant(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("check featured instance tenant: %w", err)
+	}
+	if !inTenant {
+		return nil, nil
+	}
+	return a.loadLandingRun(ctx, id, nil)
 }
 
 // pickLandingRun is the tenant's newest public run with unit positions whose
