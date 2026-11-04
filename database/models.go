@@ -2538,6 +2538,16 @@ type RatingLiveEvidenceBootstrap struct {
 	StartedAt    pgtype.Timestamptz `db:"started_at" json:"started_at"`
 }
 
+type RatingLiveEvidenceRevision struct {
+	TenantID                 uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RunID                    uuid.UUID          `db:"run_id" json:"run_id"`
+	RepresentativeInstanceID uuid.UUID          `db:"representative_instance_id" json:"representative_instance_id"`
+	SourceUpdatedAt          pgtype.Timestamptz `db:"source_updated_at" json:"source_updated_at"`
+	RunUpdatedAt             pgtype.Timestamptz `db:"run_updated_at" json:"run_updated_at"`
+	PlayerObservationCount   int32              `db:"player_observation_count" json:"player_observation_count"`
+	GuildObservationCount    int32              `db:"guild_observation_count" json:"guild_observation_count"`
+}
+
 type RatingLiveGuildObservation struct {
 	TenantID                 uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 	RealmID                  uuid.UUID          `db:"realm_id" json:"realm_id"`

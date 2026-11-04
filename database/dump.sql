@@ -2666,6 +2666,18 @@ CREATE TABLE rating_live_evidence_bootstraps (
 
 ALTER TABLE ONLY rating_live_evidence_bootstraps FORCE ROW LEVEL SECURITY;
 
+CREATE TABLE rating_live_evidence_revisions (
+    tenant_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    representative_instance_id uuid NOT NULL,
+    source_updated_at timestamp with time zone NOT NULL,
+    run_updated_at timestamp with time zone NOT NULL,
+    player_observation_count integer DEFAULT 0 NOT NULL,
+    guild_observation_count integer DEFAULT 0 NOT NULL
+);
+
+ALTER TABLE ONLY rating_live_evidence_revisions FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE rating_live_guild_observations (
     tenant_id uuid NOT NULL,
     realm_id uuid NOT NULL,
@@ -4214,6 +4226,9 @@ ALTER TABLE ONLY rating_group_raid_policies
 ALTER TABLE ONLY rating_live_evidence_bootstraps
     ADD CONSTRAINT rating_live_evidence_bootstraps_pkey PRIMARY KEY (tenant_id);
 
+ALTER TABLE ONLY rating_live_evidence_revisions
+    ADD CONSTRAINT rating_live_evidence_revisions_pkey PRIMARY KEY (tenant_id, run_id);
+
 ALTER TABLE ONLY rating_live_guild_observations
     ADD CONSTRAINT rating_live_guild_observations_pkey PRIMARY KEY (tenant_id, run_id, encounter_name);
 
@@ -4831,9 +4846,13 @@ CREATE INDEX rating_dirty_renown_subjects_queue_idx ON rating_dirty_renown_subje
 
 CREATE INDEX rating_live_guild_cohort_idx ON rating_live_guild_observations USING btree (tenant_id, instance_name, encounter_name, difficulty_name, max_players, killed_at);
 
+CREATE INDEX rating_live_guild_peak_page_idx ON rating_live_guild_observations USING btree (tenant_id, instance_name, encounter_name, difficulty_name, max_players, realm_id, guild_id);
+
 CREATE INDEX rating_live_guild_subject_idx ON rating_live_guild_observations USING btree (tenant_id, realm_id, guild_id, instance_name, encounter_name, difficulty_name, max_players, killed_at);
 
 CREATE INDEX rating_live_player_cohort_idx ON rating_live_player_observations USING btree (tenant_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, killed_at);
+
+CREATE INDEX rating_live_player_peak_page_idx ON rating_live_player_observations USING btree (tenant_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, realm_id, player_guid);
 
 CREATE INDEX rating_live_player_subject_idx ON rating_live_player_observations USING btree (tenant_id, realm_id, player_guid, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, killed_at);
 
@@ -5762,6 +5781,8 @@ ALTER TABLE rating_group_raid_policies ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_live_evidence_bootstraps ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE rating_live_evidence_revisions ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE rating_live_guild_observations ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_live_player_observations ENABLE ROW LEVEL SECURITY;
@@ -5823,6 +5844,8 @@ CREATE POLICY tenant_admin_bypass ON rating_group_policies USING ((current_setti
 CREATE POLICY tenant_admin_bypass ON rating_group_raid_policies USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_live_evidence_bootstraps USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_live_evidence_revisions USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_live_guild_observations USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -5910,6 +5933,8 @@ CREATE POLICY tenant_isolation ON rating_group_raid_policies USING ((group_id IN
    FROM rating_realm_groups)));
 
 CREATE POLICY tenant_isolation ON rating_live_evidence_bootstraps USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON rating_live_evidence_revisions USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON rating_live_guild_observations USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 

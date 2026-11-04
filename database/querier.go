@@ -978,6 +978,10 @@ type sqlcQuerier interface {
 	ListItemPricingRealms(ctx context.Context) ([]ListItemPricingRealmsRow, error)
 	ListLatestRenownTemplateBosses(ctx context.Context, flavors []string) ([]ListLatestRenownTemplateBossesRow, error)
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
+	// A fixed cutoff and ordered keyset make each daily audit resumable across
+	// retries. Bound each input before UNION so a tenant never materializes its
+	// entire history for one page; include stamps for deleted canonical runs.
+	ListLiveEvidenceRepairPage(ctx context.Context, arg ListLiveEvidenceRepairPageParams) ([]ListLiveEvidenceRepairPageRow, error)
 	ListLivePeakGuildSubjectPage(ctx context.Context, arg ListLivePeakGuildSubjectPageParams) ([]ListLivePeakGuildSubjectPageRow, error)
 	// Include stale old-score subjects so deleting their last observation removes
 	// their displayed Peak rather than leaving an orphan. Union removes duplicates.
@@ -1216,6 +1220,8 @@ type sqlcQuerier interface {
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	MarkLogFilePartFailed(ctx context.Context, arg MarkLogFilePartFailedParams) error
 	MarkLogGroupArtifactsStorageDeleted(ctx context.Context, arg MarkLogGroupArtifactsStorageDeletedParams) ([]LogGroupArtifact, error)
+	// Do not bump a dirty revision on every audit retry; existing intent is enough.
+	MarkMissingLiveEvidenceRevision(ctx context.Context, arg MarkMissingLiveEvidenceRevisionParams) error
 	MarkWhatsNewRead(ctx context.Context, arg MarkWhatsNewReadParams) (UserWhatsNewState, error)
 	MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
@@ -1347,6 +1353,9 @@ type sqlcQuerier interface {
 	RecordGuildInstanceView(ctx context.Context, arg RecordGuildInstanceViewParams) error
 	RecordGuildResourceView(ctx context.Context, arg RecordGuildResourceViewParams) error
 	RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) (RedeemOAuthRelayCodeRow, error)
+	// Reconciliation owns this stamp in the same transaction as evidence and the
+	// dirty-run acknowledgement. No canonical row means a deleted run.
+	RefreshLiveEvidenceRevision(ctx context.Context, arg RefreshLiveEvidenceRevisionParams) error
 	RefreshParseScoreMembershipsForLogGroup(ctx context.Context, arg RefreshParseScoreMembershipsForLogGroupParams) (RefreshParseScoreMembershipsForLogGroupRow, error)
 	RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseBossKillMembershipsForLogGroupParams) (RefreshTimeParseBossKillMembershipsForLogGroupRow, error)
 	RefreshTimeParseClearTimeMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseClearTimeMembershipsForLogGroupParams) (RefreshTimeParseClearTimeMembershipsForLogGroupRow, error)

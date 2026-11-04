@@ -321,6 +321,10 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.LiveEvidenceBootstrapDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.LiveEvidenceBootstrapDispatchWorker)
 	riverqueue.AddWorker(q, rank.LiveEvidenceBootstrapWorker)
+	rank.LiveEvidenceRepairDispatchWorker.Queue = q
+	rank.LiveEvidenceRepairWorker.Queue = q
+	riverqueue.AddWorker(q, rank.LiveEvidenceRepairDispatchWorker)
+	riverqueue.AddWorker(q, rank.LiveEvidenceRepairWorker)
 	rank.IncrementalPeakDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.IncrementalPeakDispatchWorker)
 	riverqueue.AddWorker(q, rank.IncrementalPeakWorker)
@@ -430,6 +434,15 @@ func (s *Service) Start(ctx context.Context) error {
 			return servicerankings.ArgsDispatchLiveEvidenceBootstrap{}, nil
 		},
 		&river.PeriodicJobOpts{ID: "tenant-live-evidence-bootstrap", RunOnStart: true},
+	))
+	// Audit canonical run source versions in bounded pages and repair missed
+	// observation intent without replaying every unchanged run.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(24*time.Hour),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchLiveEvidenceRepair{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "daily-live-rating-evidence-repair", RunOnStart: false},
 	))
 	// Refresh raw Peak bests and one tenant-wide denominator per dirty cohort.
 	q.AddPeriodicJob(river.NewPeriodicJob(

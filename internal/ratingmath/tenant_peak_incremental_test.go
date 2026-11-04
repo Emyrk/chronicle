@@ -190,6 +190,54 @@ func TestRefreshDirtyTenantPeakRebasesCohortAfterDeletion(t *testing.T) {
 	require.Zero(t, retired)
 }
 
+func TestRefreshDirtyTenantPeakUsesFrozenRaidRoster(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	realm, _, generation := setupActiveRenownProjection(t, ctx, pool, store, now)
+	_, err := pool.Exec(ctx, `UPDATE rating_rebuild_checkpoints SET manifest=jsonb_set(manifest::jsonb,
+		'{renown_bosses}', $2::jsonb) WHERE generation_id=$1`, generation,
+		fmt.Sprintf(`[{"realm_id":%q,"instance_name":"Raid","encounter_name":"Boss"},
+		{"realm_id":%q,"instance_name":"Raid","encounter_name":"Other"}]`, realm, realm))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, "INSERT INTO rating_live_evidence_bootstraps (tenant_id,completed_at) VALUES ($1,now())", uuid.Nil)
+	require.NoError(t, err)
+	insert := func(encounter string) uuid.UUID {
+		t.Helper()
+		run := uuid.New()
+		_, err := pool.Exec(ctx, `INSERT INTO rating_live_player_observations
+			(tenant_id,realm_id,run_id,representative_instance_id,player_guid,instance_name,
+			 encounter_name,difficulty_name,max_players,player_class,player_spec,player_sub_spec,
+			 performance_metric,killed_at,raw_value,duration_secs)
+			VALUES ($1,$2,$3,$3,'hero','Raid',$4,'Normal',40,'MAGE','','','dps',$5,100,10)`,
+			uuid.Nil, realm, run, encounter, now.Add(-time.Hour))
+		require.NoError(t, err)
+		return run
+	}
+	readScope := func() float64 {
+		t.Helper()
+		var score float64
+		require.NoError(t, pool.QueryRow(ctx, `SELECT score FROM player_tenant_rating_scope_scores
+			WHERE generation_id=$1 AND player_guid='hero' AND rating_metric='peak' AND window_kind='all_time'`, generation).Scan(&score))
+		return score
+	}
+	first := insert("Boss")
+	_, err = RefreshDirtyTenantPeak(ctx, store, uuid.Nil, now)
+	require.NoError(t, err)
+	require.InDelta(t, 50, readScope(), 1e-9, "unobserved roster boss counts as zero")
+	insert("Other")
+	_, err = RefreshDirtyTenantPeak(ctx, store, uuid.Nil, now)
+	require.NoError(t, err)
+	require.InDelta(t, 100, readScope(), 1e-9)
+	_, err = pool.Exec(ctx, "DELETE FROM rating_live_player_observations WHERE run_id=$1", first)
+	require.NoError(t, err)
+	_, err = RefreshDirtyTenantPeak(ctx, store, uuid.Nil, now)
+	require.NoError(t, err)
+	require.InDelta(t, 50, readScope(), 1e-9, "deleting one boss retracts its raid contribution")
+}
+
 func TestRefreshDirtyTenantPeakRestartsPageAfterNewRankOne(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)

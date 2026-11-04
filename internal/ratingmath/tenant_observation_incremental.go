@@ -50,6 +50,11 @@ func ReconcileDirtyTenantObservations(ctx context.Context, store database.Store,
 			}); err != nil {
 				return fmt.Errorf("stage guild evidence for run %s: %w", run.RunID, err)
 			}
+			if err := tx.RefreshLiveEvidenceRevision(ctx, database.RefreshLiveEvidenceRevisionParams{
+				TenantID: tenant, RunID: run.RunID,
+			}); err != nil {
+				return fmt.Errorf("stamp rating run %s: %w", run.RunID, err)
+			}
 			n, err := tx.DeleteDirtyObservationRunIfRevision(ctx, database.DeleteDirtyObservationRunIfRevisionParams{
 				TenantID: tenant, RunID: run.RunID, Revision: run.Revision,
 			})
