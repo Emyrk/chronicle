@@ -334,6 +334,9 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 			httpapi.InternalServerError(w, genErr)
 			return
 		}
+		if evolving {
+			generation = uuid.Nil
+		}
 		if (in.tab == "overview" || in.tab == "ratings") && (evolving || (genErr == nil && generation != uuid.Nil)) {
 			params := database.HubLandingRatingRowsParams{TenantID: tenant, GenerationID: generation, RealmIds: in.realmIDs}
 			var rows []database.HubLandingRatingRowsRow

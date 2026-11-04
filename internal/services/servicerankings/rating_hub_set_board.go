@@ -152,6 +152,9 @@ func (s *Service) handleHubSetBoard(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	if evolving {
+		generation = uuid.Nil
+	}
 	in.params.TenantID, in.params.GenerationID = tenant, generation
 	var rows []database.HubSetBoardPageRow
 	if evolving {
