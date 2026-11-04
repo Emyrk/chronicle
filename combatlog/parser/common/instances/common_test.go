@@ -85,6 +85,13 @@ func TestTempleOfAhnQirajFactoryMatchZoneAliases(t *testing.T) {
 	require.False(t, TempleOfAhnQirajFactory.MatchZone(zone.Zone{Name: "ruins of ahn'qiraj"}))
 }
 
+func TestTimbermawHoldFactoryMatchZoneAliases(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, TimbermawHoldFactory.MatchZone(zone.Zone{Name: "timbermaw hold"}))
+	require.True(t, TimbermawHoldFactory.MatchZone(zone.Zone{Name: "荒芜巨岩"}))
+}
+
 func TestHeadlessHorsemanIsWrathOnly(t *testing.T) {
 	t.Parallel()
 
