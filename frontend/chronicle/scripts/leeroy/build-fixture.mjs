@@ -337,6 +337,7 @@ const resource = (guid, amount, source) => {
 }
 const damage = (source, target, amount, spellId, spellName, school = 2) => {
   if (health.get(target) <= 0 || (deathMs.get(target) ?? Infinity) < currentTime) return
+  if (target === playerByName.get("Leeroy") && units[source] && currentTime >= protectionStartMs && currentTime < protectionEndMs) return
   // Named deaths are from the map, not guessed from the illustrative combat.
   // Prevent an invented blow from moving an observed death earlier.
   const minimum = players[target] && currentTime !== deathMs.get(target) ? 1 : 0
@@ -366,6 +367,17 @@ for (let t = 0; t <= durationMs; t += 1000) queue(t, 4, () => {
     const [type] = PLAYER_RESOURCE[players[guid].class]
     resource(guid, type === 0 ? 17 : type === 3 ? 10 : -2, type === 0 ? "Mana Regeneration" : type === 3 ? "Energy Regeneration" : "Rage Decay")
   }
+})
+// A deliberately illustrative defensive beat near video 1:33: protect Leeroy
+// for eight seconds, with the immunity represented by skipped incoming blows.
+const protectionStartMs = 9000
+const protectionEndMs = protectionStartMs + 8000
+queue(protectionStartMs, 0, () => {
+  const leeroy = playerByName.get("Leeroy")
+  if (!alive(leeroy, currentTime)) return
+  resource(leeroy, -150, "Divine Protection")
+  push(["s", currentTime, g(leeroy), g(leeroy), 0, 5573, "Divine Protection"])
+  push(["g", currentTime, g(leeroy), g(leeroy), 0, 5573, "Divine Protection"])
 })
 const firstRaidCombat = Math.min(...whelpList.filter((w) => w.target !== playerByName.get("Leeroy")).map((w) => w.egg.hatchMs))
 const lastIncoming = new Map()
@@ -430,6 +442,26 @@ for (const guid of pileGuids) {
     push(["g", currentTime, g(guid), g(target.guid), 1, spellId, name])
     damage(guid, target.guid, amount, spellId, name, player.class === "MAGE" ? 4 : player.class === "WARLOCK" ? 7 : player.class === "PRIEST" || player.class === "PALADIN" ? 3 : player.class === "DRUID" ? 5 : player.class === "HUNTER" ? 8 : 2)
   })
+  if (player.class === "MAGE") {
+    // A burst of close-range AoE as the party piles in. Frost Nova's root is
+    // not applied to the tracked positions: those come from the fan map.
+    const mageOffset = ["Chrisym", "Ctidalwave", "Madtoker"].indexOf(player.name) * 800
+    for (const [time, name, spellId, cost, amount, school] of [
+      [20_000 + mageOffset, "Frost Nova", 122, 120, 90, 6],
+      [24_000 + mageOffset, "Arcane Explosion", 1449, 210, 230, 8],
+      [28_000 + mageOffset, "Arcane Explosion", 1449, 210, 230, 8],
+      [29_000 + mageOffset, "Arcane Explosion", 1449, 210, 230, 8],
+    ]) queue(time, 2, () => {
+      if (!alive(guid, currentTime) || resources.get(guid) < cost) return
+      resource(guid, -cost, name)
+      const from = playerAt(guid, currentTime)
+      const targets = whelpList.filter((w) => w.egg.hatchMs <= currentTime && alive(w.guid, currentTime)
+        && Math.hypot(whelpAt(w, currentTime).x - from.x, whelpAt(w, currentTime).y - from.y) <= 10)
+      push(["s", currentTime, g(guid), g(guid), 0, spellId, name])
+      push(["g", currentTime, g(guid), g(guid), targets.length, spellId, name])
+      for (const target of targets) damage(guid, target.guid, amount, spellId, name, school)
+    })
+  }
   if (player.class !== "PRIEST" && player.class !== "PALADIN") continue
   for (let t = 15500 + pileGuids.indexOf(guid) * 310; t < durationMs; t += player.class === "PRIEST" ? 3400 : 5100) queue(t, 3, () => {
     if (!alive(guid, currentTime)) return

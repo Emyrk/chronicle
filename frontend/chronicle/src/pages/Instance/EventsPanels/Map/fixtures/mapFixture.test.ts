@@ -67,11 +67,11 @@ describe("loadMapFixture", () => {
     const leeroy = encounter?.positionsByUnit.get(guidOf("Leeroy")!);
     const atNinety = leeroy?.find((sample) => sample.timestampMs === startMs + 6_000);
     expect(atNinety?.x).toBeLessThan(105);
-    // Nothing waits for the raid: Leeroy's eggs hatch and their whelps hit him
-    // before anyone else is within 8 yd of him (video 1:38, 14 s into the clip).
+    // Leeroy takes whelp hits alone before the raid arrives, then protects
+    // himself at 9 s; the old five-hit floor no longer applies.
     const leeroyGuid = guidOf("Leeroy")!;
-    const hitsBeforeRaid = encounter?.effects.events.filter((event) => event.kind === "damage" && event.target === leeroyGuid && event.timestampMs < startMs + 14_000) ?? [];
-    expect(hitsBeforeRaid.length).toBeGreaterThanOrEqual(5);
+    const hitsBeforeProtection = encounter?.effects.events.filter((event) => event.kind === "damage" && event.target === leeroyGuid && event.timestampMs < startMs + 9_000) ?? [];
+    expect(hitsBeforeProtection.length).toBeGreaterThan(0);
     // Everyone stays on the egg floor (z <= 97.5, which includes the low rubble the
     // eggs lie on) except Anfrony's one climb up the west ramp (2:13-2:23).
     for (const [guid, player] of Object.entries(leeroyRookery.players)) {
@@ -151,6 +151,27 @@ describe("loadMapFixture", () => {
     expect(anfronyAt24).toBeLessThan(0.65);
     for (const [target, deadAt] of deaths) {
       expect(rows.some((row) => row[0] === "d" && guid(Number(row[2])) === target && Number(row[1]) > deadAt)).toBe(false);
+    }
+  });
+
+  it("authors mage AoE and Leeroy's early protection in the simulated combat", () => {
+    const fixture = leeroyRookery;
+    const guid = (index: number) => fixture.guids[index];
+    const rows = fixture.events;
+    const leeroy = Object.entries(fixture.players).find(([, player]) => player.name === "Leeroy")![0];
+    const protection = rows.filter((row) => row[0] === "g" && guid(Number(row[2])) === leeroy && row[5] === 5573);
+    expect(protection).toHaveLength(1);
+    expect(protection[0]).toMatchObject(["g", 9000, fixture.guids.indexOf(leeroy), fixture.guids.indexOf(leeroy), 0, 5573, "Divine Protection"]);
+    expect(rows.some((row) => row[0] === "d" && guid(Number(row[3])) === leeroy && Number(row[1]) >= 9000 && Number(row[1]) < 17000)).toBe(false);
+
+    for (const [mage, player] of Object.entries(fixture.players)) {
+      if (player.class !== "MAGE") continue;
+      for (const [spellId, school] of [[122, 6], [1449, 8]]) {
+        const casts = rows.filter((row) => row[0] === "g" && guid(Number(row[2])) === mage && row[5] === spellId);
+        expect(casts.length).toBeGreaterThan(0);
+        expect(casts.some((row) => Number(row[4]) > 0)).toBe(true);
+        expect(rows.some((row) => row[0] === "d" && guid(Number(row[2])) === mage && row[7] === spellId && row[6] === school)).toBe(true);
+      }
     }
   });
 
