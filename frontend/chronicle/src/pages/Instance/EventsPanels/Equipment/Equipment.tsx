@@ -10,7 +10,7 @@ export function createEquipmentPanel(): PanelDefinition<EquipmentResult, Combata
     label: "Equipment",
     icon: <Shirt className="h-4 w-4" />,
     keybinds: [],
-    checkboxLabel: "Timeline",
+    checkboxLabel: "Paper doll",
     renderOnlyOptionTokens: ["cb", "p:", "t:"],
     render: (props: PanelRenderProps<EquipmentResult>) => (
       <EquipmentContent {...props} />
