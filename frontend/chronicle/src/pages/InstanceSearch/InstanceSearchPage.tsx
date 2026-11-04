@@ -4,7 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Blocks, BookOpen, ChevronDown, ChevronUp, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
 import type { InstanceSearchCursor, InstanceSearchLimitResponse } from "@/api/typesGenerated";
-import { useRealms, useSupportedInstances } from "@/api/queries";
+import { useRealms, useSiteConfig, useSupportedInstances } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation";
 import { useSupporterTier } from "@/hooks/useSupporterTier";
@@ -64,6 +64,7 @@ export function InstanceSearchPage() {
   const [showUpsell, setShowUpsell] = useState(false);
   const fields = useSearchFields();
   const supported = useSupportedInstances();
+  const siteConfig = useSiteConfig();
 
   // The submitted search lives in the URL so it can be shared.
   const submittedParam = params.get("q");
@@ -151,7 +152,10 @@ export function InstanceSearchPage() {
 
   // Combobox options: supported instances, their bosses, and realms.
   const realms = useRealms();
-  const zones = useMemo(() => zoneOptions(supported.data ?? []), [supported.data]);
+  const zones = useMemo(
+    () => zoneOptions(supported.data ?? [], siteConfig.data?.dataset_flavor ?? []),
+    [siteConfig.data?.dataset_flavor, supported.data],
+  );
   const bossesForZone = useMemo(() => {
     const all = supported.data ?? [];
     const zone = mode === "form" ? form.zone.trim().toLowerCase() : "";

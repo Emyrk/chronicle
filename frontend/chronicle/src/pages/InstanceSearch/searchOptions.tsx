@@ -1,5 +1,5 @@
 import type { SupportedInstance, WoWServerRealm } from "@/api/typesGenerated";
-import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
+import { getInstanceBackground, getInstanceConfig } from "@/pages/Logs/utils/instanceImages";
 import {
   compareByRaidProgression,
   getRaidLevel,
@@ -11,6 +11,10 @@ import type { ComboOption } from "./comboOptions";
  * its options here and map the field to them in BlockEditor's optionsFor and
  * the form.
  */
+
+const NIGHTMARE_OF_URSOL = "nightmare-of-ursol";
+const TOWER_OF_KARAZHAN = "Tower of Karazhan";
+const NIGHTMARE_TOWER_NAMES = ["Upper Tower of Karazhan", "Lower Tower of Karazhan"] as const;
 
 const CATEGORY_LABELS: Record<string, string> = { raid: "Raids", dungeon: "Dungeons" };
 
@@ -32,19 +36,31 @@ function byProgression(a: SupportedInstance, b: SupportedInstance): number {
 }
 
 /** Supported instances with their art and boss count, grouped by raid level or category. */
-export function zoneOptions(instances: readonly SupportedInstance[]): ComboOption[] {
-  return [...instances].sort(byProgression).map((i) => ({
-    value: i.name,
-    group: zoneGroup(i),
-    hint: i.boss_count ? `${i.boss_count} ${i.boss_count === 1 ? "boss" : "bosses"}` : undefined,
-    icon: (
-      <span
-        className="h-4 w-6 shrink-0 rounded-sm bg-cover bg-center ring-1 ring-white/10"
-        style={{ backgroundImage: `url(${getInstanceBackground(i.name)})` }}
-        aria-hidden="true"
-      />
-    ),
-  }));
+export function zoneOptions(instances: readonly SupportedInstance[], flavor: readonly string[] = []): ComboOption[] {
+  const nightmareOfUrsol = flavor.includes(NIGHTMARE_OF_URSOL);
+
+  return [...instances].sort(byProgression).flatMap((instance) => {
+    const names = nightmareOfUrsol && instance.name === TOWER_OF_KARAZHAN
+      ? NIGHTMARE_TOWER_NAMES
+      : [instance.name];
+
+    return names.map((name) => {
+      const optionInstance = name === instance.name ? instance : { ...instance, name };
+      const bossCount = name === instance.name ? instance.boss_count : getInstanceConfig(name)?.bossCount;
+      return {
+        value: name,
+        group: zoneGroup(optionInstance),
+        hint: bossCount ? `${bossCount} ${bossCount === 1 ? "boss" : "bosses"}` : undefined,
+        icon: (
+          <span
+            className="h-4 w-6 shrink-0 rounded-sm bg-cover bg-center ring-1 ring-white/10"
+            style={{ backgroundImage: `url(${getInstanceBackground(name)})` }}
+            aria-hidden="true"
+          />
+        ),
+      };
+    });
+  });
 }
 
 /** Bosses grouped under their zone, in kill order. A boss listed in two zones appears once. */
