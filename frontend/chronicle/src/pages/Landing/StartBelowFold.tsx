@@ -76,7 +76,7 @@ function ClosingBand() {
         <div className="flex max-w-[560px] flex-col gap-1.5">
           <h2 className="m-0 text-[26px] font-bold">Tonight's run could be on this page.</h2>
           <p className="m-0 text-sm leading-normal text-muted-foreground">
-            Sidekick is a 9 MB tray app. It never opens a window, never asks you to upload anything, and the stone
+            Sidekick is a tray app. It never opens a window, never asks you to upload anything, and the stone
             tells you it is working.
           </p>
         </div>

@@ -145,7 +145,7 @@ function SendLinkSection() {
         Sidekick runs on the PC you play on. Send it there.
       </h2>
       <p className="m-0 text-[13px] leading-normal text-muted-foreground">
-        9 MB tray app for Mac and Windows. We will send one link, nothing else.
+        A tray app for Mac and Windows. We will send one link, nothing else.
       </p>
       <form className="flex flex-col gap-2" onSubmit={onSubmit}>
         <label htmlFor="landing-send-link" className="text-xs text-muted-foreground">
