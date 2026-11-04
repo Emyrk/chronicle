@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
@@ -26,10 +27,10 @@ type pendingTalent struct {
 	talents *combatant.Talents
 }
 
-// respecSpellID is the Turtle WoW goblin respec spell.
-// When a player casts this, their talent data is invalidated until a new
-// COMBATANT_INFO message arrives with fresh talents.
-const respecSpellID = 57734
+// respecAuraSpellID is the Turtle WoW goblin respec debuff.
+// When this aura is applied to a player, their talent data is invalidated until
+// a fresh talent update arrives.
+const respecAuraSpellID = 57734
 
 type Tracker struct {
 	instancehook.BaseHook
@@ -41,23 +42,31 @@ type Tracker struct {
 	ByName         map[string]guid.GUID
 	PendingTalents map[guid.GUID]pendingTalent
 	// InvalidatedTalents tracks players who have respecced but haven't yet
-	// received a fresh COMBATANT_INFO. Their Talents field is set to nil
-	// so downstream consumers (DPS rankings) see "Unknown" spec.
+	// received a fresh talent update. Their Talents field is set to nil so
+	// downstream consumers (DPS rankings) see "Unknown" spec.
 	InvalidatedTalents map[guid.GUID]struct{}
+	// observedRespecAura prevents a persistent UNIT_INFO aura snapshot from
+	// repeatedly invalidating talents after a fresh talent update repairs them.
+	observedRespecAura map[guid.GUID]struct{}
+	// invalidatedTalentBuild retains the pre-respec build so repeated stale
+	// COMBATANT_INFO messages cannot repair invalidation with the same talents.
+	invalidatedTalentBuild map[guid.GUID]*combatant.Talents
 
 	PlayerLevel map[guid.GUID]int32
 }
 
 func New(units *unitdb.Units) *Tracker {
 	return &Tracker{
-		units:              units,
-		Guilds:             make(map[string]map[guid.GUID]struct{}),
-		Participant:        make(map[guid.GUID]struct{}),
-		Players:            make(map[guid.GUID]combatant.Combatant),
-		ByName:             make(map[string]guid.GUID),
-		PendingTalents:     make(map[guid.GUID]pendingTalent),
-		InvalidatedTalents: make(map[guid.GUID]struct{}),
-		PlayerLevel:        make(map[guid.GUID]int32),
+		units:                  units,
+		Guilds:                 make(map[string]map[guid.GUID]struct{}),
+		Participant:            make(map[guid.GUID]struct{}),
+		Players:                make(map[guid.GUID]combatant.Combatant),
+		ByName:                 make(map[string]guid.GUID),
+		PendingTalents:         make(map[guid.GUID]pendingTalent),
+		InvalidatedTalents:     make(map[guid.GUID]struct{}),
+		observedRespecAura:     make(map[guid.GUID]struct{}),
+		invalidatedTalentBuild: make(map[guid.GUID]*combatant.Talents),
+		PlayerLevel:            make(map[guid.GUID]int32),
 	}
 }
 
@@ -371,33 +380,101 @@ func (g *Tracker) ProcessMessage(active bool, encounterID uuid.UUID, msg message
 		}
 	case *messages.Unit:
 		g.Unit(ty)
+		if ty.Guid.IsPlayer() && hasUnitAura(ty, respecAuraSpellID) {
+			if _, observed := g.observedRespecAura[ty.Guid]; !observed {
+				g.observedRespecAura[ty.Guid] = struct{}{}
+				g.invalidateTalents(ty.Guid)
+			}
+		}
 	case *messages.Combatant:
 		g.Guild(ty)
 		g.Player(ty)
-		if ty.Talents != nil {
-			// Fresh COMBATANT_INFO talent data repairs invalidation.
-			delete(g.InvalidatedTalents, ty.Guid)
+		if talents := g.Players[ty.Guid].Talents; talents != nil {
+			if invalidated, ok := g.invalidatedTalentBuild[ty.Guid]; ok && talentsEqual(talents, invalidated) {
+				// UNIT_INFO emits COMBATANT_INFO even when its cached talent data is
+				// unchanged. Keep the old build invalidated until a different build or
+				// a direct COMBATANT_TALENTS update arrives.
+				g.invalidateTalents(ty.Guid)
+			} else {
+				g.repairTalents(ty.Guid)
+			}
 		}
 	case *messages.CombatantTalents:
 		g.CombatantTalents(ty)
-		// Fresh talent data also repairs invalidation.
-		delete(g.InvalidatedTalents, ty.Guid)
-	case *messages.SpellGo:
-		// Detect respec: when a player casts the goblin respec spell,
-		// invalidate their talent data until the next talent update.
-		if ty.SpellData != nil && int(ty.SpellData.ID) == respecSpellID && ty.Caster.IsPlayer() {
-			g.InvalidatedTalents[ty.Caster] = struct{}{}
-			if p, ok := g.Players[ty.Caster]; ok {
-				p.Talents = nil
-				g.Players[ty.Caster] = p
-			}
-			g.units.InvalidatePlayerTalents(ty.Caster)
+		// Direct talent data is authoritative, even if the player selected the
+		// same build again.
+		g.repairTalents(ty.Guid)
+	case *messages.Aura:
+		// The goblin respec is only logged as a debuff application. Invalidate
+		// the affected player's talents until the next talent update.
+		if ty.State == types.AuraStateAdded && ty.SpellData != nil && int(ty.SpellData.ID) == respecAuraSpellID && ty.Target.IsPlayer() {
+			g.observedRespecAura[ty.Target] = struct{}{}
+			g.invalidateTalents(ty.Target)
 		}
 	case *messages.Transmog:
 		g.Transmog(ty)
 	}
 
 	return nil
+}
+
+func hasUnitAura(unit *messages.Unit, spellID int) bool {
+	for _, aura := range unit.Buffs {
+		if aura.ID == spellID {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *Tracker) invalidateTalents(player guid.GUID) {
+	if _, invalidated := g.InvalidatedTalents[player]; !invalidated {
+		if p, ok := g.Players[player]; ok {
+			g.invalidatedTalentBuild[player] = cloneTalents(p.Talents)
+		} else if p, ok := g.units.Players[player]; ok {
+			g.invalidatedTalentBuild[player] = cloneTalents(p.Talents)
+		} else {
+			g.invalidatedTalentBuild[player] = nil
+		}
+	}
+
+	g.InvalidatedTalents[player] = struct{}{}
+	if p, ok := g.Players[player]; ok {
+		p.Talents = nil
+		g.Players[player] = p
+	}
+	g.units.InvalidatePlayerTalents(player)
+}
+
+func (g *Tracker) repairTalents(player guid.GUID) {
+	delete(g.InvalidatedTalents, player)
+	delete(g.invalidatedTalentBuild, player)
+}
+
+func cloneTalents(talents *combatant.Talents) *combatant.Talents {
+	if talents == nil {
+		return nil
+	}
+	clone := *talents
+	for i := range clone.Trees {
+		clone.Trees[i] = slices.Clone(talents.Trees[i])
+	}
+	return &clone
+}
+
+func talentsEqual(a, b *combatant.Talents) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	if a.Summary != b.Summary {
+		return false
+	}
+	for i := range a.Trees {
+		if !slices.Equal(a.Trees[i], b.Trees[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 func (g *Tracker) Guild(msg *messages.Combatant) {

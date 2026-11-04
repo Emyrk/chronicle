@@ -687,6 +687,37 @@ func TestDPSTracker_TalentSnapshotNilWhenInvalidated(t *testing.T) {
 	assert.Nil(t, r[encID].Units[player].Talents)
 }
 
+func TestDPSTracker_BackfillsInvalidatedTalentSnapshot(t *testing.T) {
+	t.Parallel()
+	tracker, units := setupDPSTracker()
+
+	player := makePlayerGUID(1)
+	boss := makeCreatureGUID(100, 1)
+	encID := uuid.New()
+
+	units.Info[player] = unitinfo.Info{Guid: player, Name: "Paladin", IsPlayer: true, CanCooperate: true}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false, Boss: true}
+	units.Players[player] = combatant.Combatant{Name: "Paladin", Guid: player}
+
+	tracker.FightStarted(encID, nil)
+	caster := player
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{
+		Caster: &caster, Target: boss, Amount: 100,
+		HitType: types.HitTypeHit,
+	}))
+	tracker.FightEnded(encID, nil)
+
+	result := tracker.Result()[encID].Units[player]
+	assert.Nil(t, result.Talents)
+
+	fresh := &combatant.Talents{Summary: [3]uint8{11, 9, 31}}
+	units.UpdatePlayerTalents(player, fresh)
+	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, &messages.CombatantTalents{Guid: player}))
+
+	require.NotNil(t, result.Talents)
+	assert.Equal(t, fresh.Summary, result.Talents.Summary)
+}
+
 func TestDPSTrackerForwardsFormLifecycle(t *testing.T) {
 	t.Parallel()
 

@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -98,6 +99,61 @@ func TestPersistedPlayerLevel(t *testing.T) {
 	}, units))
 }
 
+func TestUnitRespecAuraInvalidatesOnlyFirstObservation(t *testing.T) {
+	t.Parallel()
+
+	player, err := guid.FromString("0x0000000000000001")
+	require.NoError(t, err)
+
+	units := unitdb.New()
+	tracker := New(units)
+	initial := combatant.Combatant{
+		Name: "Mage",
+		Guid: player,
+		Talents: &combatant.Talents{
+			Summary: [3]uint8{10, 41, 0},
+		},
+	}
+	units.UpdatePlayer(initial)
+	tracker.Players[player] = initial
+
+	unitSnapshot := &messages.Unit{Info: unitinfo.Info{
+		Guid:  player,
+		Level: 60,
+		Buffs: []unitinfo.Buff{{ID: respecAuraSpellID, Applications: 1}},
+	}}
+	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, unitSnapshot))
+	assert.Nil(t, tracker.Players[player].Talents)
+	assert.Nil(t, units.Players[player].Talents)
+
+	// UNIT_INFO is followed by COMBATANT_INFO containing the addon's cached
+	// pre-respec build. It must not repair the invalidation.
+	staleCombatant := &messages.Combatant{Combatant: initial}
+	require.NoError(t, units.ProcessMessage(staleCombatant))
+	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, staleCombatant))
+	assert.Nil(t, tracker.Players[player].Talents)
+	assert.Nil(t, units.Players[player].Talents)
+
+	freshTalents := &messages.CombatantTalents{
+		Guid:       player,
+		PlayerName: "Mage",
+		Tabs: [3]messages.CombatantTalentTab{
+			{TabName: "Arcane", RankDigits: "510"},
+			{TabName: "Fire", RankDigits: "000"},
+			{TabName: "Frost", RankDigits: "000"},
+		},
+	}
+	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, freshTalents))
+	require.NotNil(t, tracker.Players[player].Talents)
+	require.NotNil(t, units.Players[player].Talents)
+
+	// The persistent aura remains in UNIT_INFO snapshots. Seeing it again must
+	// not invalidate the fresh talent data.
+	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, unitSnapshot))
+	require.NotNil(t, tracker.Players[player].Talents)
+	require.NotNil(t, units.Players[player].Talents)
+}
+
 func TestRespecInvalidatesRankingTalentsUntilFreshUpdate(t *testing.T) {
 	t.Parallel()
 
@@ -116,9 +172,10 @@ func TestRespecInvalidatesRankingTalentsUntilFreshUpdate(t *testing.T) {
 	units.UpdatePlayer(initial)
 	tracker.Players[player] = initial
 
-	respec := &messages.SpellGo{
-		Caster:    player,
-		SpellData: &chrondbc.Spell{ID: respecSpellID},
+	respec := &messages.Aura{
+		Target:    player,
+		SpellData: &chrondbc.Spell{ID: respecAuraSpellID},
+		State:     types.AuraStateAdded,
 	}
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, respec))
 
@@ -140,6 +197,12 @@ func TestRespecInvalidatesRankingTalentsUntilFreshUpdate(t *testing.T) {
 	require.NotNil(t, units.Players[player].Talents)
 	assert.Equal(t, [3]uint8{6, 0, 0}, tracker.Players[player].Talents.Summary)
 	assert.Equal(t, [3]uint8{6, 0, 0}, units.Players[player].Talents.Summary)
+
+	respecRemoved := *respec
+	respecRemoved.State = types.AuraStateRemoved
+	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, &respecRemoved))
+	require.NotNil(t, tracker.Players[player].Talents)
+	require.NotNil(t, units.Players[player].Talents)
 
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, respec))
 	freshCombatant := &messages.Combatant{
