@@ -53,10 +53,8 @@ const STEPS = [
     ),
     body: (
       <>
-        It turns combat logging on when you enter a dungeon and off when you leave. No addon? Turn on{" "}
-        <strong className="text-foreground">Advanced Combat Logging</strong> in Options &gt; System &gt; Network and type{" "}
-        <span className="rounded bg-background px-1 font-mono text-[#40ff40]">/combatlog</span> once you are inside. The tray
-        stone turns teal when it hears the first fight.
+        Logs every dungeon for you. No addon? Turn on Advanced Combat Logging and type{" "}
+        <span className="rounded bg-background px-1 font-mono text-[#40ff40]">/combatlog</span> inside.
       </>
     ),
   },
