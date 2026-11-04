@@ -157,6 +157,7 @@ jobs:
     name: Build live signaling image
     needs: [golangci-lint, test]
     runs-on: ubuntu-latest
+    environment: actions
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
