@@ -132,18 +132,19 @@ export const RaidGuilds: Story = {
     await expect(canvas.queryByRole("region", { name: /Typical DPS parse/ })).not.toBeInTheDocument()
     await expect(canvas.getByRole("group", { name: "Class" }).closest("[aria-disabled]")).not.toBeNull()
     await expect(within(canvas.getByRole("navigation", { name: "Breadcrumb" })).getByText("Guilds")).toBeInTheDocument()
-    // The metric link opens the full guild board on the Ratings tab, with a board per boss below.
+    // The metric link opens the full guild table on the Ratings tab straight away, no boss cards.
     await userEvent.click(card.getByRole("button", { name: "Full Ranked Mastery board" }))
-    await expect(await canvas.findByRole("region", { name: "Guild Ranked Mastery · MC" })).toBeInTheDocument()
-    await expect(canvas.getByRole("region", { name: "Boss boards" })).toBeInTheDocument()
+    await expect(await canvas.findByRole("region", { name: "Guild Ranked Mastery · MC full list" })).toBeInTheDocument()
+    await expect(canvas.queryByRole("region", { name: "Boss boards" })).not.toBeInTheDocument()
   },
 }
 
 /**
- * Ratings tab, reached from the overview card's metric link. All bosses: the board on top and a compact
- * card per boss; a class or spec filter keeps the boss cards. One boss opens its full table straight
- * away. "All N ranked" swaps the board for the table (cards stay below), and the table stays open across
- * metrics; it sorts, searches, and leads with the ranking's own number.
+ * Ratings tab, reached from the overview card's metric link. A single metric (Peak, Mastery, Renown)
+ * opens its full table straight away, no boss cards. Overview on all bosses: the board on top and a
+ * compact card per boss; a class or spec filter keeps the boss cards. One boss opens its full table.
+ * "All N ranked" swaps the overview board for the table (cards stay below); the table sorts, searches,
+ * and leads with the ranking's own number.
  */
 export const RatingsTab: Story = {
   play: async ({ canvasElement }) => {
@@ -154,13 +155,16 @@ export const RatingsTab: Story = {
     await canvas.findByRole("navigation", { name: "Rating metric" })
     const tabs = () => within(canvas.getByRole("navigation", { name: "Rating metric" }))
     await expect(tabs().getByRole("button", { name: "Peak" })).toHaveAttribute("aria-pressed", "true")
-    await expect(canvas.getByRole("region", { name: "By boss" })).toBeInTheDocument()
+    const peak = within(await canvas.findByRole("region", { name: /Peak full list/ }))
+    await expect(peak.queryByRole("button", { name: "Back to boards" })).not.toBeInTheDocument()
+    await expect(canvas.queryByRole("region", { name: "By boss" })).not.toBeInTheDocument()
 
-    // A boss card opens that boss: its table, no cards.
-    await userEvent.click(within(canvas.getByRole("region", { name: "Ragnaros Peak leaderboard" })).getByRole("button", { name: /Ragnaros/ }))
+    // Overview keeps the board and a card per boss; a boss card opens that boss: its table, no cards.
+    await userEvent.click(tabs().getByRole("button", { name: "Overview" }))
+    await expect(await canvas.findByRole("region", { name: "By boss" })).toBeInTheDocument()
+    await userEvent.click(within(canvas.getByRole("region", { name: /^Ragnaros .* leaderboard$/ })).getByRole("button", { name: /Ragnaros/ }))
     await expect(crumbs().getByText("Ragnaros")).toBeInTheDocument()
-    const boss = within(await canvas.findByRole("region", { name: "Ragnaros Peak full list" }))
-    await expect(boss.getByRole("columnheader", { name: "Kill time" })).toBeInTheDocument()
+    const boss = within(await canvas.findByRole("region", { name: "Ragnaros Overview full list" }))
     await expect(boss.queryByRole("button", { name: "Back to boards" })).not.toBeInTheDocument()
     await expect(canvas.queryByRole("region", { name: "By boss" })).not.toBeInTheDocument()
 
@@ -169,11 +173,10 @@ export const RatingsTab: Story = {
     await userEvent.click(within(canvas.getByRole("group", { name: "Class" })).getByRole("button", { name: "Warrior" }))
     await userEvent.click(within(await canvas.findByRole("group", { name: "Warrior spec" })).getByRole("button", { name: "Fury" }))
     await expect(await canvas.findByRole("region", { name: "By boss" })).toBeInTheDocument()
-    await expect(canvas.getByRole("region", { name: "Ragnaros Peak leaderboard" })).toBeInTheDocument()
+    await expect(canvas.getByRole("region", { name: /^Ragnaros .* leaderboard$/ })).toBeInTheDocument()
     await userEvent.click(canvas.getByRole("button", { name: "Whole raid" }))
 
     // "All N ranked" swaps the board for the full table; the boss cards stay below.
-    await userEvent.click(tabs().getByRole("button", { name: "Overview" }))
     await expect(canvas.queryByRole("region", { name: /full list/ })).not.toBeInTheDocument()
     await userEvent.click(canvas.getByRole("button", { name: /^All \d+ ranked$/ }))
     await expect(canvas.getByRole("region", { name: "By boss" })).toBeInTheDocument()
@@ -184,11 +187,11 @@ export const RatingsTab: Story = {
     await expect(renownColumn.getByRole("button")).toHaveAttribute("aria-pressed", "true")
     await userEvent.type(list.getByRole("textbox", { name: "Find character or guild" }), "zzzz")
     await expect(list.getByText("No characters match.")).toBeInTheDocument()
-    // Switching metric keeps the table open, now ranked by that metric.
+    // A single metric is the table alone: no way back to boards, no boss cards.
     await userEvent.click(tabs().getByRole("button", { name: "Ranked Mastery" }))
     const mastery = within(await canvas.findByRole("region", { name: /Ranked Mastery full list/ }))
-    await userEvent.click(mastery.getByRole("button", { name: "Back to boards" }))
-    await expect(await canvas.findByRole("region", { name: "Molten Core Ranked Mastery leaderboard" })).toBeInTheDocument()
+    await expect(mastery.queryByRole("button", { name: "Back to boards" })).not.toBeInTheDocument()
+    await expect(canvas.queryByRole("region", { name: "By boss" })).not.toBeInTheDocument()
   },
 }
 

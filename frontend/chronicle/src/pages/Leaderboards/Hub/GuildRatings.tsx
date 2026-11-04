@@ -140,7 +140,9 @@ export function GuildRatingBoards({
   const [search, setSearch] = useState({ key: "", text: "" })
   const query = search.key === key ? search.text : ""
   const setQuery = (text: string) => setSearch({ key, text })
-  const expanded = !!oneBoss || expandedKey === key || query.trim() !== ""
+  // One boss, or a single metric (Peak, Mastery, Renown): the full table straight away, no boss cards.
+  const tableOnly = !!oneBoss || view !== "overview"
+  const expanded = tableOnly || expandedKey === key || query.trim() !== ""
   const all = data ? data.ratings : guildRatings(bosses, allBosses, instanceName, 99)
   const label = `Guild ${view === "overview" ? "ratings" : theme.label} · ${where}`
 
@@ -167,7 +169,7 @@ export function GuildRatingBoards({
           query={query}
           onQuery={setQuery}
           onCollapse={
-            oneBoss
+            tableOnly
               ? undefined
               : () => {
                   setExpandedKey(undefined)
@@ -180,23 +182,10 @@ export function GuildRatingBoards({
           <BoardHeader oneBoss={oneBoss} title={title} theme={theme} subtitle={`${all.peak.length} guilds ranked`} toolbar={toolbar}>
             <BoardSearch query={query} onQuery={setQuery} />
           </BoardHeader>
-          {view === "overview" ? (
-            <MetricColumns
-              columns={{ peak: toRows(all.peak.slice(0, 5)), mastery: toRows(all.mastery.slice(0, 5)), renown: toRows(all.renown.slice(0, 5)) }}
-              onOpen={onView}
-            />
-          ) : (
-            // Top ten in two columns, 1–5 and 6–10, like the character board.
-            <div className="relative grid border-t max-lg:divide-y lg:grid-cols-2 lg:divide-x">
-              {[0, 5].map((start) => (
-                <ol key={start}>
-                  {all[view].slice(start, start + 5).map((g, i) => (
-                    <GuildEntryRow key={g.guild} rating={g} rank={start + i + 1} theme={theme} />
-                  ))}
-                </ol>
-              ))}
-            </div>
-          )}
+          <MetricColumns
+            columns={{ peak: toRows(all.peak.slice(0, 5)), mastery: toRows(all.mastery.slice(0, 5)), renown: toRows(all.renown.slice(0, 5)) }}
+            onOpen={onView}
+          />
           <button
             type="button"
             onClick={() => setExpandedKey(key)}
@@ -208,7 +197,7 @@ export function GuildRatingBoards({
         </section>
       )}
 
-      {!oneBoss && (
+      {!tableOnly && (
         <section aria-label="Boss boards" className="space-y-3">
           <h2 className="px-1 text-sm font-semibold">By boss</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
@@ -268,26 +257,6 @@ function BoardHeader({
         <div className="ml-auto flex items-center gap-3">{children}</div>
       </div>
     </>
-  )
-}
-
-/** A board row: rank, guild with logo, what the score stands on, the score. EntryRow's guild twin. */
-function GuildEntryRow({ rating: g, rank, theme }: { rating: GuildRating; rank: number; theme: MetricTheme }) {
-  return (
-    <li className="flex items-center gap-3 border-b border-white/5 px-3 py-2 last:border-b-0">
-      <RankMark rank={rank} size="sm" />
-      <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
-          <GuildName guild={g.guild} guildId={g.guildId} logo={g.logo} />
-        </span>
-        <span className="block truncate pl-7 text-[11px] text-muted-foreground">
-          {g.ms !== undefined ? `${formatClock(g.ms)} · ${g.date}` : g.detail}
-        </span>
-      </span>
-      <span className="shrink-0 text-right font-mono text-sm tabular-nums" style={rank === 1 ? { color: theme.accent } : undefined}>
-        {theme.format(g.score)}
-      </span>
-    </li>
   )
 }
 

@@ -13,7 +13,7 @@ const board = (names: string[]) => ({ player: { peak: names.map((n, i) => player
 const summary = { ratings: { raid: board(["Top", "Second"]), bosses: [{ encounter_name: "Ragnaros", ...board(["Rag"]) }, { encounter_name: "Lucifron", ...board(["Luc"]) }] } } as unknown as HubSummary
 
 const props: LiveHubRatingsProps = {
-  instanceName: "Molten Core", bosses: ["Lucifron", "Ragnaros"], selected: [], scope: {}, onScope: vi.fn(), view: "peak", onView: vi.fn(),
+  instanceName: "Molten Core", bosses: ["Lucifron", "Ragnaros"], selected: [], scope: {}, onScope: vi.fn(), view: "overview", onView: vi.fn(),
   period: "180d", subject: "player", role: "dps", cohort: { difficulty: "", maxPlayers: 0 }, where: "Molten Core",
 }
 
@@ -41,7 +41,7 @@ describe("live Ratings tab", () => {
   })
 
   it("says so instead of loading without a published raid cohort", () => {
-    const html = renderToStaticMarkup(<LiveHubRatings {...props} cohort={undefined} />)
+    const html = renderToStaticMarkup(<LiveHubRatings {...props} view="peak" cohort={undefined} />)
     expect(html).toContain("No published raid cohort")
   })
 })

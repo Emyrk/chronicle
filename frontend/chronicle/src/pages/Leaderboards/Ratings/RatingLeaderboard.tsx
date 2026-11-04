@@ -68,10 +68,10 @@ export function RatingBoards({
   }
   const searchBox = <BoardSearch query={query} onQuery={setQuery} />
 
-  // Full clear: the board, then a card per boss (filtered by any class or spec). One boss: its full
-  // table straight away; the encounter list already moves between bosses.
+  // Overview on a full clear: the board, then a card per boss. One boss, or a single metric (Peak,
+  // Mastery, Renown): its full table straight away; the encounter list already moves between bosses.
   const childBy: ChildKind = "boss"
-  const tableOnly = !!scope.boss
+  const tableOnly = !!scope.boss || view !== "overview"
   const boards = useMemo(
     () =>
       RATING_METRICS.map((m) => {
@@ -98,7 +98,11 @@ export function RatingBoards({
     <div className="space-y-5" style={{ "--metric": theme.accent } as CSSProperties} data-metric={view}>
       {/* Metric taglines (METRIC_THEMES[*].tagline) are hidden for now to save vertical space; they come back later. */}
       {/* The top: the board, or (opened, searched, or a spec, which has no smaller boards) the full table. */}
-      {tableOnly || expanded ? (
+      {pending?.status === "error" ? (
+        <section role="alert" className="rounded-xl border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
+          {pending.error}
+        </section>
+      ) : tableOnly || expanded ? (
         <RatingFullList
           key={`${boardKey}|${view}|${period}`}
           scope={scope}
@@ -111,16 +115,10 @@ export function RatingBoards({
           toolbar={toolbar}
           live={live}
         />
-      ) : pending?.status === "error" ? (
-        <section role="alert" className="rounded-xl border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
-          {pending.error}
-        </section>
       ) : pending ? (
         <BoardSkeleton />
-      ) : !single && readyBoards.length === 0 ? (
+      ) : readyBoards.length === 0 ? (
         <section role="status" className="rounded-xl border bg-card px-5 py-10 text-center text-sm text-muted-foreground">No published ratings for this selection.</section>
-      ) : single && single.center.status === "ready" ? (
-        <CenterBoard board={single.center.data} theme={theme} title={title} onShowAll={showTable} search={searchBox} toolbar={toolbar} ranksKnown={live?.ranksKnown !== false} />
       ) : (
         <OverviewCenter
           boards={readyBoards.map((b) => ({ metric: b.metric, board: b.center.data }))}
@@ -140,33 +138,24 @@ export function RatingBoards({
           <section aria-label={`By ${childBy}`} className="space-y-3">
             <h2 className="px-1 text-sm font-semibold">By {childBy}</h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-              {(single ?? readyBoards[0] ?? boards[0]).around.map((board) => (
+              {(readyBoards[0] ?? boards[0]).around.map((board) => (
                 <SideFrame key={board.id} board={board} by={childBy} label={theme.label} onOpen={() => onScope(board.scope)}>
-                  {single
-                    ? board.entries.map((entry, i) => (
-                        <CompactRow
-                          key={entry.id}
-                          entry={entry}
-                          theme={theme}
-                          lead={<span className="w-3.5 font-mono text-[10px] text-muted-foreground">{live?.ranksKnown === false ? "" : i + 1}</span>}
-                        />
-                      ))
-                    : boards.map((b) => {
-                        const t = METRIC_THEMES[b.metric]
-                        const entry = b.around.find((x) => x.id === board.id)?.entries[0]
-                        return entry ? (
-                          <CompactRow
-                            key={b.metric}
-                            entry={entry}
-                            theme={t}
-                            lead={<t.icon className="size-3.5 shrink-0" style={{ color: t.accent }} aria-label={t.label} />}
-                          />
-                        ) : (
-                          <li key={b.metric} className="px-3 py-1.5 text-xs text-muted-foreground">
-                            {live && b.center.status === "error" ? "Exact cohort required" : "No ranked kills"}
-                          </li>
-                        )
-                      })}
+                  {boards.map((b) => {
+                    const t = METRIC_THEMES[b.metric]
+                    const entry = b.around.find((x) => x.id === board.id)?.entries[0]
+                    return entry ? (
+                      <CompactRow
+                        key={b.metric}
+                        entry={entry}
+                        theme={t}
+                        lead={<t.icon className="size-3.5 shrink-0" style={{ color: t.accent }} aria-label={t.label} />}
+                      />
+                    ) : (
+                      <li key={b.metric} className="px-3 py-1.5 text-xs text-muted-foreground">
+                        {live && b.center.status === "error" ? "Exact cohort required" : "No ranked kills"}
+                      </li>
+                    )
+                  })}
                 </SideFrame>
               ))}
             </div>
@@ -313,42 +302,6 @@ function CenterFrame({
         {board.total === undefined ? "Full ranking" : `All ${board.total} ranked`}
       </button>
     </section>
-  )
-}
-
-function CenterBoard({
-  board,
-  theme,
-  title,
-  onShowAll,
-  search,
-  toolbar,
-  ranksKnown = true,
-}: {
-  board: RatingLiveBoard
-  theme: MetricTheme
-  title: string
-  onShowAll: () => void
-  search: ReactNode
-  toolbar?: ReactNode
-  ranksKnown?: boolean
-}) {
-  return (
-    <CenterFrame board={board} theme={theme} title={title} onShowAll={onShowAll} search={search} toolbar={toolbar}>
-      {/* Top ten in two columns: 1–5 and 6–10, so the full-width board stays short. */}
-      <div className="relative grid border-t max-lg:divide-y lg:grid-cols-2 lg:divide-x">
-        <ol>
-          {board.entries.slice(0, 5).map((entry, i) => (
-            <EntryRow key={entry.id} entry={entry} rank={ranksKnown ? i + 1 : undefined} theme={theme} size="sm" />
-          ))}
-        </ol>
-        <ol>
-          {board.entries.slice(5, 10).map((entry, i) => (
-            <EntryRow key={entry.id} entry={entry} rank={ranksKnown ? i + 6 : undefined} theme={theme} size="sm" />
-          ))}
-        </ol>
-      </div>
-    </CenterFrame>
   )
 }
 
