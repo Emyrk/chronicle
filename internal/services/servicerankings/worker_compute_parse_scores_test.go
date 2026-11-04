@@ -686,7 +686,8 @@ func TestWorkerComputeParseScores_WindowedMemberships(t *testing.T) {
 
 	target, err := store.GetLogInstanceForScoring(ctx, fixture.instanceID)
 	require.NoError(t, err)
-	cutoff := target.StartTime.Time
+	// Match the worker's UTC calendar-day window across local DST boundaries.
+	cutoff := target.StartTime.Time.UTC()
 	windowStart := cutoff.AddDate(0, 0, -int(parsepolicy.DefaultLookbackDays))
 
 	insertRanking(t, ctx, store, fixture.instanceID, fixture.realmID, "Player-target", "Target", 1500, 0, cutoff)
