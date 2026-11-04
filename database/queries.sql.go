@@ -23406,7 +23406,8 @@ WITH cohorts AS (
 ), scores AS (
   SELECT c.instance_name, c.difficulty_name, c.max_players,
     'player'::text AS subject, s.rating_metric, s.realm_id, s.player_guid::text AS subject_id,
-    s.score, s.best_raw, s.player_class, s.player_spec, s.player_sub_spec,
+    -- Renown has no class cohort; fall back to the character's class for display.
+    s.score, s.best_raw, COALESCE(NULLIF(s.player_class, ''), gp.class::text, '')::text AS player_class, s.player_spec, s.player_sub_spec,
     COALESCE(gp.name, '')::text AS subject_name, realm.name::text AS realm_name
   FROM cohorts c
   JOIN player_tenant_rating_scope_scores s ON s.tenant_id = $2 AND s.generation_id = $1
@@ -23670,7 +23671,8 @@ player_cohorts AS (
 ), displayed AS (
   SELECT r.realm_id, r.subject_id, r.player_class, r.player_spec, r.player_sub_spec, r.score, r.raw, r.rank, realm.name::text AS realm_name,
          COALESCE(CASE WHEN $1::text = 'player' THEN gp.name ELSE guild.name END, '')::text AS subject_name,
-         COALESCE(player_guild.name, '')::text AS guild_name
+         COALESCE(player_guild.name, '')::text AS guild_name,
+         COALESCE(gp.class::text, '')::text AS game_class
   FROM ranked r
   JOIN wow_server_realms realm ON realm.id = r.realm_id
   LEFT JOIN game_players gp ON $1::text = 'player' AND gp.realm_id = r.realm_id
@@ -23682,13 +23684,14 @@ player_cohorts AS (
     AND ($16::text = '' OR position(lower($16::text) in lower(COALESCE(gp.name, guild.name, r.subject_id))) > 0
          OR position(lower($16::text) in lower(COALESCE(player_guild.name, ''))) > 0)
 ), paged AS (
-  SELECT d.realm_id, d.subject_id, d.player_class, d.player_spec, d.player_sub_spec, d.score, d.raw, d.rank, d.realm_name, d.subject_name, d.guild_name, count(*) OVER () AS total
+  SELECT d.realm_id, d.subject_id, d.player_class, d.player_spec, d.player_sub_spec, d.score, d.raw, d.rank, d.realm_name, d.subject_name, d.guild_name, d.game_class, count(*) OVER () AS total
   FROM displayed d
   ORDER BY d.rank
   LIMIT LEAST(GREATEST($18::int, 1), 500) OFFSET GREATEST($17::int, 0)
 )
 SELECT p.rank::bigint AS rank, p.total::bigint AS total, p.realm_id, p.realm_name, p.subject_id, p.subject_name, p.guild_name,
-       p.player_class, p.player_spec, p.player_sub_spec, p.score::float8 AS score,
+       -- Renown has no class cohort; fall back to the character's class for display.
+       COALESCE(NULLIF(p.player_class, ''), NULLIF(p.game_class, ''), '')::text AS player_class, p.player_spec, p.player_sub_spec, p.score::float8 AS score,
        COALESCE(other.peak, 0)::float8 AS peak, COALESCE(other.mastery, 0)::float8 AS mastery, COALESCE(other.renown, 0)::float8 AS renown,
        COALESCE(other.peak_raw, 0)::float8 AS peak_raw,
        -- Ranked Mastery's parts over the chosen bosses (a missed boss as 0), kills summed.
@@ -23907,7 +23910,8 @@ WITH chosen AS (
   FROM guild_scores g
 )
 SELECT r.subject, r.rating_metric, r.realm_id, r.subject_id, r.score::float8 AS score, r.raw::float8 AS peak_raw,
-       r.player_class, r.player_spec, r.player_sub_spec,
+       -- Renown has no class cohort; fall back to the character's class for display.
+       COALESCE(NULLIF(r.player_class, ''), gp.class::text, '')::text AS player_class, r.player_spec, r.player_sub_spec,
        COALESCE(CASE WHEN r.subject = 'player' THEN gp.name ELSE guild.name END, '')::text AS subject_name,
        realm.name::text AS realm_name
 FROM ranked r
@@ -24212,7 +24216,8 @@ WITH selected_bosses AS (
   ) names ORDER BY (names.encounter_name <> $1::text), names.encounter_name LIMIT 30
 ), boards AS (
   SELECT 'player'::text AS subject, 'scope'::text AS board, b.rating_metric, ''::text AS encounter_name,
-         b.realm_id, b.player_guid::text AS subject_id, b.score, b.best_raw, b.player_class, b.player_spec, b.player_sub_spec,
+         -- Renown has no class cohort; fall back to the character's class for display.
+         b.realm_id, b.player_guid::text AS subject_id, b.score, b.best_raw, COALESCE(NULLIF(b.player_class, ''), gp.class::text, '')::text AS player_class, b.player_spec, b.player_sub_spec,
          COALESCE(gp.name, '')::text AS subject_name, realm.name::text AS realm_name,
          row_number() OVER (PARTITION BY b.rating_metric ORDER BY b.score DESC, (CASE WHEN b.rating_metric = 'peak' THEN COALESCE(b.best_raw, 0) ELSE 0 END) DESC, b.realm_id, b.player_guid) AS position
   FROM (
@@ -24234,7 +24239,8 @@ WITH selected_bosses AS (
   LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = b.realm_id
   UNION ALL
   SELECT 'player'::text AS subject, 'boss'::text AS board, b.rating_metric, b.encounter_name AS encounter_name,
-         b.realm_id, b.player_guid::text AS subject_id, b.score, b.best_raw, b.player_class, b.player_spec, b.player_sub_spec,
+         -- Renown has no class cohort; fall back to the character's class for display.
+         b.realm_id, b.player_guid::text AS subject_id, b.score, b.best_raw, COALESCE(NULLIF(b.player_class, ''), gp.class::text, '')::text AS player_class, b.player_spec, b.player_sub_spec,
          COALESCE(gp.name, '')::text AS subject_name, realm.name::text AS realm_name,
          row_number() OVER (PARTITION BY b.encounter_name, b.rating_metric ORDER BY b.score DESC, (CASE WHEN b.rating_metric = 'peak' THEN COALESCE(b.best_raw, 0) ELSE 0 END) DESC, b.realm_id, b.player_guid) AS position
   FROM (

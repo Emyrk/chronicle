@@ -8,7 +8,8 @@ WITH cohorts AS (
 ), scores AS (
   SELECT c.instance_name, c.difficulty_name, c.max_players,
     'player'::text AS subject, s.rating_metric, s.realm_id, s.player_guid::text AS subject_id,
-    s.score, s.best_raw, s.player_class, s.player_spec, s.player_sub_spec,
+    -- Renown has no class cohort; fall back to the character's class for display.
+    s.score, s.best_raw, COALESCE(NULLIF(s.player_class, ''), gp.class::text, '')::text AS player_class, s.player_spec, s.player_sub_spec,
     COALESCE(gp.name, '')::text AS subject_name, realm.name::text AS realm_name
   FROM cohorts c
   JOIN player_tenant_rating_scope_scores s ON s.tenant_id = @tenant_id AND s.generation_id = @generation_id

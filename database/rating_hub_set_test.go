@@ -104,6 +104,23 @@ func TestHubSetRatingRows(t *testing.T) {
 	require.InDelta(t, 90, renownBoard[0].Peak, 1e-9)
 	require.Empty(t, page("peak", "nobody", 0, 10))
 
+	// Renown is stored without a class; rows take the character's class for display.
+	const known = "0x0000000000000042"
+	_, err = conn.Exec(ctx, `INSERT INTO game_players (id, realm_id, name, class, gender, race) VALUES ($1,$2,'Known','WARLOCK','Male','Orc')`, known, realm)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, `INSERT INTO player_tenant_rating_boss_scores
+		(generation_id,tenant_id,realm_id,player_guid,instance_name,encounter_name,difficulty_name,max_players,player_class,player_spec,player_sub_spec,
+		 performance_metric,rating_metric,window_kind,window_start,window_end,score)
+		VALUES ($1,$2,$3,$4,'Molten Core','Lucifron','',0,'','','','none','renown','period',now()-interval '1 day',now(),1)`, gen, tenant, realm, known)
+	require.NoError(t, err)
+	var knownClass string
+	for _, row := range page("renown", "", 0, 10) {
+		if row.SubjectID == known {
+			knownClass = row.PlayerClass
+		}
+	}
+	require.Equal(t, "WARLOCK", knownClass)
+
 	// Ranked Mastery carries its parts over the chosen bosses: averaged with a missed
 	// boss as 0, eligible kills summed.
 	_, err = conn.Exec(ctx, `INSERT INTO player_tenant_rating_boss_scores
