@@ -107,6 +107,11 @@ export function chooseDefaultModel(models: readonly InferenceModel[], storedMode
   )[0]?.id;
 }
 
+export function chooseAssistantModel(models: readonly InferenceModel[], explicit?: string, assistantDefault?: string): string | undefined {
+  if (explicit && models.some((model) => model.id === explicit)) return explicit;
+  return chooseDefaultModel(models, assistantDefault);
+}
+
 export function safeLocalReturnPath(pathname: string, search: string): string {
   const path = `${pathname}${search}`;
   return pathname.startsWith("/") && !pathname.startsWith("//") ? path : "/account/ai";

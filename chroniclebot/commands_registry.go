@@ -7,13 +7,13 @@ import (
 )
 
 func DefaultCommands(bot *Bot) []Command {
-	// Commands must never be registered globally. Guild commands are available
-	// immediately and cannot be invoked from another Discord server.
-	if bot.ChronicleGuildID() == "" {
-		return nil
+	// AI commands are global so linked users can invoke them in DMs. The
+	// operational ping command remains confined to Chronicle's guild.
+	commands := aiCommands(bot)
+	if bot.ChronicleGuildID() != "" {
+		commands = append(commands, pingCommand(bot))
 	}
-
-	return []Command{pingCommand(bot)}
+	return commands
 }
 
 func pingCommand(bot *Bot) Command {

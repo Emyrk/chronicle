@@ -9,9 +9,11 @@ import {
   useAuthorizeOpenRouter,
   useDeleteInferenceConnection,
   useInferenceConnections,
+  useInferenceModels,
   useInferenceSettings,
   useUpdateInferenceSettings,
 } from "./api";
+import { ModelCombobox } from "./ModelCombobox";
 import { parseInferenceOAuthResult, safeLocalReturnPath } from "./inference";
 import { inferenceStatus, type InferenceStatus } from "./inferencePreference";
 
@@ -28,6 +30,9 @@ export function InferenceSettings() {
   const updateSettings = useUpdateInferenceSettings();
   // Listed even while AI is off: a stored credential still exists and should stay removable.
   const connections = useInferenceConnections({ enabled: isAuthenticated && Boolean(settings.data) });
+  const modelConnection = connections.data?.connections.find((connection) => connection.status === "active");
+  const modelConnectionId = modelConnection?.id;
+  const models = useInferenceModels(modelConnectionId, { enabled: isAuthenticated && Boolean(settings.data?.enabled && modelConnectionId) });
   const authorize = useAuthorizeOpenRouter();
   const disconnect = useDeleteInferenceConnection();
   const location = useLocation();
@@ -106,25 +111,80 @@ export function InferenceSettings() {
           description={preference.disabled ? "Turn on AI features to choose assistants." : "Choose which assistants appear. A turned-off assistant is hidden and cannot run for your account."}
         >
           {preference.assistants.map((assistant) => (
-            <Row
-              key={assistant.id}
-              muted={preference.disabled}
-              title={<label htmlFor={`assistant-${assistant.id}`}>{assistant.name}</label>}
-              description={assistant.description}
-              aside={
-                <Switch
-                  id={`assistant-${assistant.id}`}
-                  checked={assistant.enabled}
-                  disabled={preference.disabled || updateSettings.isPending}
-                  onCheckedChange={(checked) => updateSettings.mutate(
-                    { assistants: { [assistant.id]: checked } },
-                    { onError: (error) => toast.error(`Could not update ${assistant.name}`, { description: error.message }) },
-                  )}
-                  aria-label={assistant.name}
-                />
-              }
-            />
+            <div key={assistant.id} className="divide-y">
+              <Row
+                muted={preference.disabled}
+                title={<label htmlFor={`assistant-${assistant.id}`}>{assistant.name}</label>}
+                description={assistant.description}
+                aside={
+                  <Switch
+                    id={`assistant-${assistant.id}`}
+                    checked={assistant.enabled}
+                    disabled={preference.disabled || updateSettings.isPending}
+                    onCheckedChange={(checked) => updateSettings.mutate(
+                      { assistants: { [assistant.id]: checked } },
+                      { onError: (error) => toast.error(`Could not update ${assistant.name}`, { description: error.message }) },
+                    )}
+                    aria-label={assistant.name}
+                  />
+                }
+              />
+              <Row
+                muted={preference.disabled || !assistant.enabled}
+                title={`Default model for ${assistant.name}`}
+                description={`Used when you haven't selected a model for this assistant.${assistant.id === "site-help" ? " Ask Chronicle also uses this model in Discord." : ""}${modelConnection ? ` Models from ${modelConnection.label}.` : " Connect OpenRouter to choose a model."}`}
+                aside={<div className="flex items-center gap-2">
+                  <fieldset disabled={preference.disabled || !assistant.enabled || updateSettings.isPending || !modelConnectionId || models.isLoading} className="w-60">
+                    <ModelCombobox
+                      models={models.data?.models ?? []}
+                      value={assistant.default_model || undefined}
+                      onChange={(model) => updateSettings.mutate(
+                        { assistant_models: { [assistant.id]: model } },
+                        { onError: (error) => toast.error("Could not update default model", { description: error.message }) },
+                      )}
+                    />
+                  </fieldset>
+                  {assistant.default_model && <Button variant="ghost" size="sm" disabled={updateSettings.isPending} onClick={() => updateSettings.mutate(
+                    { assistant_models: { [assistant.id]: "" } },
+                    { onError: (error) => toast.error("Could not clear default model", { description: error.message }) },
+                  )}>Clear</Button>}
+                </div>}
+              />
+            </div>
           ))}
+        </SettingsSection>
+      )}
+
+      {preference?.discord_linked && (
+        <SettingsSection title="Discord Bot" description="Ask Chronicle in Discord using your linked account and personal OpenRouter connection. Your account-wide AI opt-out also blocks Discord.">
+          <Row
+            title={<label htmlFor="discord-bot-enabled">Discord Bot</label>}
+            description="Enabled by default for linked Discord accounts."
+            aside={<Switch
+              id="discord-bot-enabled"
+              checked={preference.discord_enabled}
+              disabled={preference.disabled || updateSettings.isPending}
+              onCheckedChange={(checked) => updateSettings.mutate(
+                { discord_enabled: checked },
+                { onError: (error) => toast.error("Could not update Discord Bot", { description: error.message }) },
+              )}
+            />}
+          />
+          <Row title="OpenRouter connection" description={modelConnection ? `${modelConnection.label} (your most recently connected active account)` : "Connect a personal OpenRouter account below to use /ask."} />
+          <Row title="Default agent" description="Discord uses the Ask Chronicle assistant." aside={<input className="w-44 rounded-md border bg-muted px-2 py-1 text-sm" value="Ask Chronicle" disabled readOnly aria-label="Default Discord agent" />} />
+          <Row
+            title="Default tenant"
+            description={preference.discord_default_tenant || "Not set. Visit the tenant site you want and select Update to current tenant."}
+            aside={<Button
+              variant="outline"
+              size="sm"
+              disabled={preference.disabled || !preference.discord_enabled || updateSettings.isPending}
+              onClick={() => updateSettings.mutate(
+                { discord_use_current_tenant: true },
+                { onError: (error) => toast.error("Could not update Discord tenant", { description: error.message }) },
+              )}
+            >Update to current tenant</Button>}
+          />
         </SettingsSection>
       )}
 
