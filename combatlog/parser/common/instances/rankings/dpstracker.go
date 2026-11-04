@@ -83,21 +83,25 @@ type DPSTracker struct {
 
 	// Results across all encounters.
 	results map[uuid.UUID]*DPSResult
+	// pendingTalentSnapshots contains encounter snapshots finalized while talent
+	// data was unavailable. The next fresh talent update repairs those snapshots.
+	pendingTalentSnapshots map[guid.GUID][]*UnitCombatStats
 }
 
 // NewDPSTracker creates a DPS tracker that uses the unit database and instance
 // identifier to classify targets for raw and ranked damage totals.
 func NewDPSTracker(units *unitdb.Units, idf *identifier.Identifier, rule DamageRule) *DPSTracker {
 	tracker := &DPSTracker{
-		units:            units,
-		identifier:       idf,
-		damageDone:       make(map[guid.GUID]int64),
-		rankedDamageDone: make(map[guid.GUID]int64),
-		damageTaken:      make(map[guid.GUID]int64),
-		healingDone:      make(map[guid.GUID]int64),
-		absorbDone:       make(map[guid.GUID]int64),
-		forms:            newDruidFormTracker(),
-		results:          make(map[uuid.UUID]*DPSResult),
+		units:                  units,
+		identifier:             idf,
+		damageDone:             make(map[guid.GUID]int64),
+		rankedDamageDone:       make(map[guid.GUID]int64),
+		damageTaken:            make(map[guid.GUID]int64),
+		healingDone:            make(map[guid.GUID]int64),
+		absorbDone:             make(map[guid.GUID]int64),
+		forms:                  newDruidFormTracker(),
+		results:                make(map[uuid.UUID]*DPSResult),
+		pendingTalentSnapshots: make(map[guid.GUID][]*UnitCombatStats),
 	}
 	if rule == DamageRuleAssemblyOfIron {
 		tracker.assemblyOfIron = newDPSTrackerAssemblyOfIron()
@@ -220,6 +224,16 @@ func (t *DPSTracker) FinishDamageClassification(encounterID uuid.UUID) {
 
 func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message) error {
 	t.forms.ProcessMessage(active, m)
+
+	// Armory processing runs before the DPS tracker, so the unit database now
+	// contains either authoritative fresh talents or a still-invalidated nil.
+	switch msg := m.(type) {
+	case *messages.Combatant:
+		t.repairPendingTalentSnapshots(msg.Guid)
+	case *messages.CombatantTalents:
+		t.repairPendingTalentSnapshots(msg.Guid)
+	}
+
 	if !active {
 		return nil
 	}
@@ -383,9 +397,29 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, m messages.Message) {
 			stats.OwnerGUID = &owner
 		}
 		result.Units[g] = stats
+		if isPlayer && talents == nil {
+			t.pendingTalentSnapshots[g] = append(t.pendingTalentSnapshots[g], stats)
+		}
 	}
 
 	t.results[encounterID] = result
+}
+
+func (t *DPSTracker) repairPendingTalentSnapshots(player guid.GUID) {
+	pending := t.pendingTalentSnapshots[player]
+	if len(pending) == 0 {
+		return
+	}
+	combatantInfo, ok := t.units.Players[player]
+	if !ok || combatantInfo.Talents == nil {
+		return
+	}
+
+	for _, stats := range pending {
+		copy := *combatantInfo.Talents
+		stats.Talents = &copy
+	}
+	delete(t.pendingTalentSnapshots, player)
 }
 
 // FightFinalized corrects form durations to the materialized fight boundaries.

@@ -126,6 +126,14 @@ func TestUnitRespecAuraInvalidatesOnlyFirstObservation(t *testing.T) {
 	assert.Nil(t, tracker.Players[player].Talents)
 	assert.Nil(t, units.Players[player].Talents)
 
+	// UNIT_INFO is followed by COMBATANT_INFO containing the addon's cached
+	// pre-respec build. It must not repair the invalidation.
+	staleCombatant := &messages.Combatant{Combatant: initial}
+	require.NoError(t, units.ProcessMessage(staleCombatant))
+	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, staleCombatant))
+	assert.Nil(t, tracker.Players[player].Talents)
+	assert.Nil(t, units.Players[player].Talents)
+
 	freshTalents := &messages.CombatantTalents{
 		Guid:       player,
 		PlayerName: "Mage",
