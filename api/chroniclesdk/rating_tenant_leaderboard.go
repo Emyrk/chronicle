@@ -63,7 +63,7 @@ type PublishedGuildFullListRow struct {
 }
 
 type TenantPlayerBossLeaderboardEntry struct {
-	GenerationID      uuid.UUID  `json:"generation_id"`
+	GenerationID      *uuid.UUID `json:"generation_id"`
 	RealmID           uuid.UUID  `json:"realm_id"`
 	PlayerGUID        string     `json:"player_guid"`
 	PlayerName        *string    `json:"player_name,omitempty"`
@@ -91,29 +91,29 @@ type TenantPlayerBossLeaderboardEntry struct {
 	ComputedAt        *time.Time `json:"computed_at,omitempty"`
 }
 type TenantPlayerScopeLeaderboardEntry struct {
-	GenerationID      uuid.UUID `json:"generation_id"`
-	RealmID           uuid.UUID `json:"realm_id"`
-	PlayerGUID        string    `json:"player_guid"`
-	PlayerName        *string   `json:"player_name,omitempty"`
-	GuildName         *string   `json:"guild_name,omitempty"`
-	RealmName         string    `json:"realm_name"`
-	InstanceName      string    `json:"instance_name"`
-	DifficultyName    string    `json:"difficulty_name"`
-	MaxPlayers        int16     `json:"max_players"`
-	PlayerClass       string    `json:"player_class"`
-	PlayerSpec        string    `json:"player_spec"`
-	PlayerSubSpec     string    `json:"player_sub_spec"`
-	PerformanceMetric string    `json:"performance_metric"`
-	RatingMetric      string    `json:"rating_metric"`
-	WindowKind        string    `json:"window_kind"`
-	Score             float64   `json:"score"`
+	GenerationID      *uuid.UUID `json:"generation_id"`
+	RealmID           uuid.UUID  `json:"realm_id"`
+	PlayerGUID        string     `json:"player_guid"`
+	PlayerName        *string    `json:"player_name,omitempty"`
+	GuildName         *string    `json:"guild_name,omitempty"`
+	RealmName         string     `json:"realm_name"`
+	InstanceName      string     `json:"instance_name"`
+	DifficultyName    string     `json:"difficulty_name"`
+	MaxPlayers        int16      `json:"max_players"`
+	PlayerClass       string     `json:"player_class"`
+	PlayerSpec        string     `json:"player_spec"`
+	PlayerSubSpec     string     `json:"player_sub_spec"`
+	PerformanceMetric string     `json:"performance_metric"`
+	RatingMetric      string     `json:"rating_metric"`
+	WindowKind        string     `json:"window_kind"`
+	Score             float64    `json:"score"`
 	// BestRaw is a raid Peak's throughput: total output over total fight time
 	// across the bosses it counts.
 	BestRaw    *float64   `json:"best_raw,omitempty"`
 	ComputedAt *time.Time `json:"computed_at,omitempty"`
 }
 type TenantGuildBossLeaderboardEntry struct {
-	GenerationID    uuid.UUID  `json:"generation_id"`
+	GenerationID    *uuid.UUID `json:"generation_id"`
 	RealmID         uuid.UUID  `json:"realm_id"`
 	GuildID         uuid.UUID  `json:"guild_id"`
 	GuildName       *string    `json:"guild_name,omitempty"`
@@ -136,7 +136,7 @@ type TenantGuildBossLeaderboardEntry struct {
 	ComputedAt      *time.Time `json:"computed_at,omitempty"`
 }
 type TenantGuildScopeLeaderboardEntry struct {
-	GenerationID   uuid.UUID  `json:"generation_id"`
+	GenerationID   *uuid.UUID `json:"generation_id"`
 	RealmID        uuid.UUID  `json:"realm_id"`
 	GuildID        uuid.UUID  `json:"guild_id"`
 	GuildName      *string    `json:"guild_name,omitempty"`

@@ -110,5 +110,7 @@ func TestEvolvingPlayerFullListWithoutGeneration(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
 	require.EqualValues(t, 1, out.Total)
 	require.Len(t, out.Rows, 1)
+	require.Nil(t, out.Rows[0].Entry.GenerationID)
+	require.Contains(t, w.Body.String(), `"generation_id": null`)
 	require.Equal(t, "abc", out.Rows[0].Entry.PlayerGUID)
 }

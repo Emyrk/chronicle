@@ -6072,7 +6072,7 @@ export interface Tenant {
 
 // From chroniclesdk/rating_tenant_leaderboard.go
 export interface TenantGuildBossLeaderboardEntry {
-    readonly generation_id: string;
+    readonly generation_id: string | null;
     readonly realm_id: string;
     readonly guild_id: string;
     readonly guild_name?: string;
@@ -6103,7 +6103,7 @@ export interface TenantGuildBossLeaderboardResponse {
 
 // From chroniclesdk/rating_tenant_leaderboard.go
 export interface TenantGuildScopeLeaderboardEntry {
-    readonly generation_id: string;
+    readonly generation_id: string | null;
     readonly realm_id: string;
     readonly guild_id: string;
     readonly guild_name?: string;
@@ -6126,7 +6126,7 @@ export interface TenantGuildScopeLeaderboardResponse {
 
 // From chroniclesdk/rating_tenant_leaderboard.go
 export interface TenantPlayerBossLeaderboardEntry {
-    readonly generation_id: string;
+    readonly generation_id: string | null;
     readonly realm_id: string;
     readonly player_guid: string;
     readonly player_name?: string;
@@ -6166,7 +6166,7 @@ export interface TenantPlayerBossLeaderboardResponse {
 
 // From chroniclesdk/rating_tenant_leaderboard.go
 export interface TenantPlayerScopeLeaderboardEntry {
-    readonly generation_id: string;
+    readonly generation_id: string | null;
     readonly realm_id: string;
     readonly player_guid: string;
     readonly player_name?: string;

@@ -203,6 +203,15 @@ func tenantRatingInput(r *http.Request, guild, boss bool) (url.Values, []uuid.UU
 	return q, realms, int32(limit), binding, cursor, nil
 }
 
+// publishedTenantGeneration is null for evolving rows; the nil UUID is an internal
+// projection key, not a published version. Legacy rows retain their generation.
+func publishedTenantGeneration(id uuid.UUID) *uuid.UUID {
+	if id == uuid.Nil {
+		return nil
+	}
+	return &id
+}
+
 // tenantPeakTieRaw is the player board's tie-break key after the score: the
 // Peak's DPS/HPS, or 0 when unknown or for other metrics (matches the SQL).
 func tenantPeakTieRaw(metric string, raw float64) float64 {
@@ -273,7 +282,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				httpapi.InternalServerError(w, errors.New("tenant rating row generation mismatch"))
 				return
 			}
-			entries = append(entries, chroniclesdk.TenantGuildBossLeaderboardEntry{GenerationID: row.GenerationID, RealmID: row.RealmID, GuildID: row.GuildID, GuildName: tenantRatingName(row.GuildName), RealmName: row.RealmName, InstanceName: row.InstanceName, EncounterName: row.EncounterName, DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, RatingMetric: row.RatingMetric, WindowKind: row.WindowKind, WindowStart: guildRatingTime(row.WindowStart), WindowEnd: guildRatingTime(row.WindowEnd), Score: row.Score, BestRaw: guildRatingFloat(row.BestRaw), RankOneRaw: guildRatingFloat(row.RankOneRaw), BestLockedParse: guildRatingFloat(row.BestLockedParse), Form: guildRatingFloat(row.Form), FloorScore: guildRatingFloat(row.FloorScore), EligibleKills: row.EligibleKills, ComputedAt: guildRatingTime(row.ComputedAt)})
+			entries = append(entries, chroniclesdk.TenantGuildBossLeaderboardEntry{GenerationID: publishedTenantGeneration(row.GenerationID), RealmID: row.RealmID, GuildID: row.GuildID, GuildName: tenantRatingName(row.GuildName), RealmName: row.RealmName, InstanceName: row.InstanceName, EncounterName: row.EncounterName, DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, RatingMetric: row.RatingMetric, WindowKind: row.WindowKind, WindowStart: guildRatingTime(row.WindowStart), WindowEnd: guildRatingTime(row.WindowEnd), Score: row.Score, BestRaw: guildRatingFloat(row.BestRaw), RankOneRaw: guildRatingFloat(row.RankOneRaw), BestLockedParse: guildRatingFloat(row.BestLockedParse), Form: guildRatingFloat(row.Form), FloorScore: guildRatingFloat(row.FloorScore), EligibleKills: row.EligibleKills, ComputedAt: guildRatingTime(row.ComputedAt)})
 		}
 		if len(rows) == int(limit) {
 			last := rows[len(rows)-1]
@@ -322,7 +331,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				httpapi.InternalServerError(w, errors.New("tenant rating row generation mismatch"))
 				return
 			}
-			entries = append(entries, chroniclesdk.TenantGuildScopeLeaderboardEntry{GenerationID: row.GenerationID, RealmID: row.RealmID, GuildID: row.GuildID, GuildName: tenantRatingName(row.GuildName), RealmName: row.RealmName, InstanceName: row.InstanceName, DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, RatingMetric: row.RatingMetric, WindowKind: row.WindowKind, Score: row.Score, ComputedAt: guildRatingTime(row.ComputedAt)})
+			entries = append(entries, chroniclesdk.TenantGuildScopeLeaderboardEntry{GenerationID: publishedTenantGeneration(row.GenerationID), RealmID: row.RealmID, GuildID: row.GuildID, GuildName: tenantRatingName(row.GuildName), RealmName: row.RealmName, InstanceName: row.InstanceName, DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, RatingMetric: row.RatingMetric, WindowKind: row.WindowKind, Score: row.Score, ComputedAt: guildRatingTime(row.ComputedAt)})
 		}
 		if len(rows) == int(limit) {
 			last := rows[len(rows)-1]
@@ -399,7 +408,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				httpapi.InternalServerError(w, errors.New("tenant rating row generation mismatch"))
 				return
 			}
-			entries = append(entries, chroniclesdk.TenantPlayerBossLeaderboardEntry{GenerationID: row.GenerationID, RealmID: row.RealmID, PlayerGUID: row.PlayerGuid, PlayerName: tenantRatingName(row.PlayerName), GuildName: tenantRatingName(row.GuildName), RealmName: row.RealmName, InstanceName: row.InstanceName, EncounterName: row.EncounterName, DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, PerformanceMetric: row.PerformanceMetric, RatingMetric: row.RatingMetric, WindowKind: row.WindowKind, WindowStart: guildRatingTime(row.WindowStart), WindowEnd: guildRatingTime(row.WindowEnd), Score: row.Score, BestRaw: guildRatingFloat(row.BestRaw), RankOneRaw: guildRatingFloat(row.RankOneRaw), BestLockedParse: guildRatingFloat(row.BestLockedParse), Form: guildRatingFloat(row.Form), FloorScore: guildRatingFloat(row.FloorScore), EligibleKills: row.EligibleKills, ComputedAt: guildRatingTime(row.ComputedAt)})
+			entries = append(entries, chroniclesdk.TenantPlayerBossLeaderboardEntry{GenerationID: publishedTenantGeneration(row.GenerationID), RealmID: row.RealmID, PlayerGUID: row.PlayerGuid, PlayerName: tenantRatingName(row.PlayerName), GuildName: tenantRatingName(row.GuildName), RealmName: row.RealmName, InstanceName: row.InstanceName, EncounterName: row.EncounterName, DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, PerformanceMetric: row.PerformanceMetric, RatingMetric: row.RatingMetric, WindowKind: row.WindowKind, WindowStart: guildRatingTime(row.WindowStart), WindowEnd: guildRatingTime(row.WindowEnd), Score: row.Score, BestRaw: guildRatingFloat(row.BestRaw), RankOneRaw: guildRatingFloat(row.RankOneRaw), BestLockedParse: guildRatingFloat(row.BestLockedParse), Form: guildRatingFloat(row.Form), FloorScore: guildRatingFloat(row.FloorScore), EligibleKills: row.EligibleKills, ComputedAt: guildRatingTime(row.ComputedAt)})
 		}
 		if len(rows) == int(limit) {
 			last := rows[len(rows)-1]
@@ -468,7 +477,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				httpapi.InternalServerError(w, errors.New("tenant rating row generation mismatch"))
 				return
 			}
-			entries = append(entries, chroniclesdk.TenantPlayerScopeLeaderboardEntry{GenerationID: row.GenerationID, RealmID: row.RealmID, PlayerGUID: row.PlayerGuid, PlayerName: tenantRatingName(row.PlayerName), GuildName: tenantRatingName(row.GuildName), RealmName: row.RealmName, InstanceName: row.InstanceName, DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, PerformanceMetric: row.PerformanceMetric, RatingMetric: row.RatingMetric, WindowKind: row.WindowKind, Score: row.Score, BestRaw: hubPeakRaw(row.BestRaw), ComputedAt: guildRatingTime(row.ComputedAt)})
+			entries = append(entries, chroniclesdk.TenantPlayerScopeLeaderboardEntry{GenerationID: publishedTenantGeneration(row.GenerationID), RealmID: row.RealmID, PlayerGUID: row.PlayerGuid, PlayerName: tenantRatingName(row.PlayerName), GuildName: tenantRatingName(row.GuildName), RealmName: row.RealmName, InstanceName: row.InstanceName, DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, PerformanceMetric: row.PerformanceMetric, RatingMetric: row.RatingMetric, WindowKind: row.WindowKind, Score: row.Score, BestRaw: hubPeakRaw(row.BestRaw), ComputedAt: guildRatingTime(row.ComputedAt)})
 		}
 		if len(rows) == int(limit) {
 			last := rows[len(rows)-1]

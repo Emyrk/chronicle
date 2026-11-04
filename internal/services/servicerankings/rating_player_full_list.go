@@ -172,6 +172,11 @@ func handlePublishedPlayerFullListWithStore(store publishedPlayerFullListReader,
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	if evolving {
+		for i := range result.Rows {
+			result.Rows[i].Entry.GenerationID = nil
+		}
+	}
 	result.Total = total
 	result.HasNextPage = page*limit+int64(len(result.Rows)) < result.Total
 	httpapi.Write(ctx, w, http.StatusOK, result)

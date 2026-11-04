@@ -119,6 +119,28 @@ func tenantBase(guild, boss bool) url.Values {
 	}
 	return q
 }
+func TestTenantRatingPublicGeneration(t *testing.T) {
+	t.Parallel()
+	generation := uuid.New()
+	for _, tc := range []struct {
+		name  string
+		entry any
+	}{
+		{"player boss", chroniclesdk.TenantPlayerBossLeaderboardEntry{GenerationID: publishedTenantGeneration(uuid.Nil)}},
+		{"player scope", chroniclesdk.TenantPlayerScopeLeaderboardEntry{GenerationID: publishedTenantGeneration(uuid.Nil)}},
+		{"guild boss", chroniclesdk.TenantGuildBossLeaderboardEntry{GenerationID: publishedTenantGeneration(uuid.Nil)}},
+		{"guild scope", chroniclesdk.TenantGuildScopeLeaderboardEntry{GenerationID: publishedTenantGeneration(uuid.Nil)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			body, err := json.Marshal(tc.entry)
+			require.NoError(t, err)
+			require.Contains(t, string(body), `"generation_id":null`)
+		})
+	}
+	require.Equal(t, generation, *publishedTenantGeneration(generation))
+}
+
 func TestTenantRatingLeaderboardTraversal(t *testing.T) {
 	t.Parallel()
 	tenant, gen, realm := uuid.New(), uuid.New(), uuid.New()
