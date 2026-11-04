@@ -1,6 +1,6 @@
 export type LeaderboardsMode = "statistics" | "speedruns" | "parsing" | "ruleset" | "rulesets"
 
-const INSTANCES_WITHOUT_SPEEDRUNS = new Set(["Emerald Sanctum"])
+const INSTANCES_WITHOUT_SPEEDRUNS = new Set(["Emerald Sanctum", "Obsidian Sanctum"])
 
 export function leaderboardsModePath(mode: LeaderboardsMode): string {
   return `/leaderboards/${mode}`

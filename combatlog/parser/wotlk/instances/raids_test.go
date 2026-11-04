@@ -19,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
 func TestOnyxiaZoneName(t *testing.T) {
@@ -901,6 +902,43 @@ func TestUlduarAssemblyRespawnStartsNewEncounter(t *testing.T) {
 	require.Empty(t, second.Remaining)
 }
 
+func TestObsidianSanctumSartharionEncounterFlavor(t *testing.T) {
+	t.Parallel()
+
+	hostiles := ObsidianSanctumHostiles()
+	resolver := hostiles[28860].EncounterNameFn
+	require.NotNil(t, resolver)
+
+	drakes := []uint32{30449, 30451, 30452}
+	for drakeCount, expected := range []string{
+		"Sartharion",
+		"Sartharion (1 Drake)",
+		"Sartharion (2 Drakes)",
+		"Sartharion (3 Drakes)",
+	} {
+		drakeCount := drakeCount
+		expected := expected
+		t.Run(expected, func(t *testing.T) {
+			t.Parallel()
+
+			sartharion := creatureGUID(28860)
+			fight := encounter.Fight{
+				Hostiles: map[guid.GUID]encounter.CharacterFight{
+					sartharion: {ID: sartharion},
+				},
+			}
+			for _, entry := range drakes[:drakeCount] {
+				drake := creatureGUID(entry)
+				fight.Hostiles[drake] = encounter.CharacterFight{ID: drake}
+			}
+
+			result := resolver(fight)
+			require.NotNil(t, result)
+			require.Equal(t, expected, result.EncounterName)
+		})
+	}
+}
+
 func TestObsidianSanctumSartharionKillFinalizesDrakes(t *testing.T) {
 	t.Parallel()
 
@@ -932,12 +970,22 @@ func TestObsidianSanctumSartharionKillFinalizesDrakes(t *testing.T) {
 			}
 			start := time.Date(2026, time.October, 3, 20, 0, 0, 0, time.UTC)
 
-			// Let a lieutenant act first to prove the encounter name still comes from
-			// the primary drake rather than activity ordering.
-			participants := append([]guid.GUID{drakes[0], sartharion}, drakes[1:]...)
-			for i, participant := range participants {
-				require.NoError(t, instance.Process(&messages.Damage{
+			// The drake power auras are applied at the pull even when a fast kill ends
+			// before Shadron or Vesperon land and deal damage. Their aura sources are
+			// the evidence that all three drakes were alive for the encounter.
+			for i, power := range []chrondbc.SpellID{powerOfVesperon, powerOfShadron, powerOfTenebron} {
+				drake := drakes[i]
+				require.NoError(t, instance.Process(&messages.Aura{
 					MessageBase: messages.Base(start.Add(time.Duration(i) * time.Millisecond)),
+					Source:      &drake,
+					Target:      player,
+					SpellData:   &chrondbc.Spell{ID: power},
+					Amount:      1,
+				}))
+			}
+			for i, participant := range []guid.GUID{sartharion, drakes[2]} {
+				require.NoError(t, instance.Process(&messages.Damage{
+					MessageBase: messages.Base(start.Add(10*time.Millisecond + time.Duration(i)*time.Millisecond)),
 					Caster:      &player,
 					Target:      participant,
 					Amount:      1,
@@ -965,7 +1013,7 @@ func TestObsidianSanctumSartharionKillFinalizesDrakes(t *testing.T) {
 			require.Len(t, result.Encounters, 1)
 
 			got := result.Encounters[0]
-			require.Equal(t, "Sartharion", got.Name)
+			require.Equal(t, "Sartharion (3 Drakes)", got.Name)
 			require.True(t, got.Boss)
 			require.Equal(t, encounter.KillTypeClean, got.KillType)
 			require.Empty(t, got.Remaining)

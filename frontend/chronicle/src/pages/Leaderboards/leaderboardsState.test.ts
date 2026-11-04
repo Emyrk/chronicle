@@ -6,8 +6,9 @@ import {
 } from "./leaderboardsState"
 
 describe("leaderboard routes", () => {
-  it("hides speedruns for Emerald Sanctum", () => {
+  it("hides speedruns for instances without speedrun rankings", () => {
     expect(supportsSpeedruns("Emerald Sanctum")).toBe(false)
+    expect(supportsSpeedruns("Obsidian Sanctum")).toBe(false)
   })
 
   it("keeps speedruns available globally and for configured instances", () => {
