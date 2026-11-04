@@ -132,4 +132,3 @@ WITH sources AS (
 )
 SELECT (SELECT jsonb_build_array(subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric) FROM page ORDER BY subject_kind DESC, instance_name DESC, encounter_name DESC, difficulty_name DESC, max_players DESC, player_class DESC, player_spec DESC, player_sub_spec DESC, performance_metric DESC LIMIT 1) AS next_key,
  (SELECT count(*)::int FROM page) AS page_size, (SELECT count(*)::int FROM dirty) AS marked;
-
