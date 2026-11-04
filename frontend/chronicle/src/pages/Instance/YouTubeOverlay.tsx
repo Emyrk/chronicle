@@ -10,6 +10,7 @@ import type { VideoTimestamp, WoWEncounterWithHostiles } from "@/api/typesGenera
 import type { YTPlayer } from "@/types/youtube";
 import { useSyncModeContextOptional } from "./SyncModeContext";
 import { toggleYoutubePlayback, useReplayToggleKey } from "./replayToggleKey";
+import { clampFloatingPanelPosition } from "./floatingPanelPosition";
 
 interface YouTubeOverlayProps {
   videoUrl: string;
@@ -526,10 +527,19 @@ export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, on
     if (!dragStartRef.current) return;
     const dx = e.clientX - dragStartRef.current.x;
     const dy = e.clientY - dragStartRef.current.y;
-    setPosition({
+    const panelRect = containerRef.current?.getBoundingClientRect();
+    const nextPosition = {
       x: dragStartRef.current.posX + dx,
       y: dragStartRef.current.posY + dy,
-    });
+    };
+
+    setPosition(panelRect
+      ? clampFloatingPanelPosition(
+          nextPosition,
+          { width: panelRect.width, height: panelRect.height },
+          { width: window.innerWidth, height: window.innerHeight },
+        )
+      : nextPosition);
   }, []);
 
   const handleDragEnd = useCallback(() => {
@@ -553,11 +563,17 @@ export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, on
   const handleResizeMove = useCallback((e: MouseEvent) => {
     if (!resizeStartRef.current) return;
     const dx = e.clientX - resizeStartRef.current.x;
-    // Maintain 16:9 aspect ratio based on width change
-    const newWidth = Math.max(320, resizeStartRef.current.width + dx);
+    const panelRect = containerRef.current?.getBoundingClientRect();
+    const nonVideoHeight = Math.max(0, (panelRect?.height ?? size.height) - size.height);
+    const maxWidth = Math.max(320, Math.min(
+      window.innerWidth - position.x,
+      (window.innerHeight - position.y - nonVideoHeight) * (16 / 9),
+    ));
+    // Maintain 16:9 aspect ratio while keeping the full panel in the viewport.
+    const newWidth = Math.min(maxWidth, Math.max(320, resizeStartRef.current.width + dx));
     const newHeight = Math.max(180, newWidth * (9 / 16));
     setSize({ width: newWidth, height: newHeight });
-  }, []);
+  }, [position, size.height]);
 
   const handleResizeEnd = useCallback(() => {
     setIsResizing(false);
@@ -586,6 +602,28 @@ export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, on
       };
     }
   }, [isResizing, handleResizeMove, handleResizeEnd]);
+
+  useEffect(() => {
+    if (isMobile) return;
+
+    const keepPanelInViewport = () => {
+      const panelRect = containerRef.current?.getBoundingClientRect();
+      if (!panelRect) return;
+
+      setPosition((current) => {
+        const next = clampFloatingPanelPosition(
+          current,
+          { width: panelRect.width, height: panelRect.height },
+          { width: window.innerWidth, height: window.innerHeight },
+        );
+        return next.x === current.x && next.y === current.y ? current : next;
+      });
+    };
+
+    keepPanelInViewport();
+    window.addEventListener("resize", keepPanelInViewport);
+    return () => window.removeEventListener("resize", keepPanelInViewport);
+  }, [encounterVideoTimes, isMinimized, isMobile, size.height, size.width]);
 
   // Handle seek bar click
   const handleSeekBarClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
