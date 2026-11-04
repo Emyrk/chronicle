@@ -118,6 +118,9 @@ var ObsidianSanctumFactory = &instances.CommonFactory{
 	ZoneNames: []string{"the obsidian sanctum"},
 	MapIDs:    []uint32{615},
 	Hostiles:  instances.FromMap(ObsidianSanctumHostiles()),
+	Preprocessors: func() []instancehook.Preprocessor {
+		return []instancehook.Preprocessor{&sartharionDrakePowerActivity{}}
+	},
 	ProgressionBosses: func(database.WoWFlavor) []string {
 		return []string{
 			"Sartharion",

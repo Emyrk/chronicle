@@ -19,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
 func TestOnyxiaZoneName(t *testing.T) {
@@ -969,12 +970,22 @@ func TestObsidianSanctumSartharionKillFinalizesDrakes(t *testing.T) {
 			}
 			start := time.Date(2026, time.October, 3, 20, 0, 0, 0, time.UTC)
 
-			// Let a lieutenant act first to prove the encounter name still comes from
-			// the primary drake rather than activity ordering.
-			participants := append([]guid.GUID{drakes[0], sartharion}, drakes[1:]...)
-			for i, participant := range participants {
-				require.NoError(t, instance.Process(&messages.Damage{
+			// The drake power auras are applied at the pull even when a fast kill ends
+			// before Shadron or Vesperon land and deal damage. Their aura sources are
+			// the evidence that all three drakes were alive for the encounter.
+			for i, power := range []chrondbc.SpellID{powerOfVesperon, powerOfShadron, powerOfTenebron} {
+				drake := drakes[i]
+				require.NoError(t, instance.Process(&messages.Aura{
 					MessageBase: messages.Base(start.Add(time.Duration(i) * time.Millisecond)),
+					Source:      &drake,
+					Target:      player,
+					SpellData:   &chrondbc.Spell{ID: power},
+					Amount:      1,
+				}))
+			}
+			for i, participant := range []guid.GUID{sartharion, drakes[2]} {
+				require.NoError(t, instance.Process(&messages.Damage{
+					MessageBase: messages.Base(start.Add(10*time.Millisecond + time.Duration(i)*time.Millisecond)),
 					Caster:      &player,
 					Target:      participant,
 					Amount:      1,
