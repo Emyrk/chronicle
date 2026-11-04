@@ -2949,6 +2949,7 @@ CREATE TABLE site_config (
     parse_config jsonb,
     ads_enabled boolean DEFAULT false NOT NULL,
     root_domain_discovery boolean DEFAULT false NOT NULL,
+    landing_featured_instance_id uuid,
     CONSTRAINT site_config_id_check CHECK (id)
 );
 
