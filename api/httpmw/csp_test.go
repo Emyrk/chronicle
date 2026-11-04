@@ -39,6 +39,16 @@ func TestContentSecurityPolicy(t *testing.T) {
 	assert.Contains(t, csp, "worker-src 'self' blob:")
 }
 
+func TestContentSecurityPolicyAllowsConfiguredSignalingOrigin(t *testing.T) {
+	t.Parallel()
+	handler := httpmw.ContentSecurityPolicy(nil, "wss://live.example.com")(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	assert.Contains(t, rec.Header().Get("Content-Security-Policy"), "connect-src 'self' blob:")
+	assert.Contains(t, rec.Header().Get("Content-Security-Policy"), " wss://live.example.com;")
+}
+
 func TestContentSecurityPolicyAllowsAdResourcesOnlyWhenEnabled(t *testing.T) {
 	t.Parallel()
 
