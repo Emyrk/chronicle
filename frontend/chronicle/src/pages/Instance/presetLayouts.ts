@@ -231,21 +231,6 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
     },
   },
   {
-    id: "consumes_cooldowns",
-    label: "Consumes & Cooldowns",
-    kind: "panels",
-    layoutItems: [
-      { id: "panel-1", title: "Consumables Log", x: 0, y: 0, w: 12, h: 6, minW: 4 },
-      { id: "panel-2", title: "Cooldown Usage", x: 0, y: 6, w: 12, h: 6, minW: 4 },
-    ],
-    panelTypes: {
-      "panel-1": "consumables",
-      "panel-2": "cooldown_usage",
-    },
-    panelOptions: {},
-    panelFilters: {},
-  },
-  {
     id: "dispels",
     label: "Dispels",
     kind: "panels",
@@ -348,6 +333,35 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
     panelOptions: {},
     panelFilters: {},
     requiredCapabilities: ["unit-position"],
+  },
+  {
+    id: "consumes_cooldowns",
+    label: "Consumes & Cooldowns",
+    kind: "panels",
+    layoutItems: [
+      { id: "panel-3", title: "Damage Done", x: 0, y: 0, w: 8, h: 4, minW: 4, minH: 4, kind: "panel", maxW: 12, maxH: 20 },
+      { id: "panel-2", title: "Cooldown Usage", x: 8, y: 0, w: 4, h: 4, minW: 4, minH: 4, kind: "panel", maxW: 12, maxH: 20 },
+      { id: "panel-1", title: "Consumables Log", x: 0, y: 4, w: 12, h: 5, minW: 4, minH: 4, kind: "panel", maxW: 12, maxH: 20 },
+    ],
+    panelTypes: {
+      "panel-3": "consumables_ledger",
+      "panel-2": "cooldown_usage",
+      "panel-1": "consumables",
+    },
+    panelOptions: {
+      "panel-2": "cb",
+    },
+    panelFilters: {
+      "panel-3": [
+        { type: "source_type", value: ["player"], applyTo: ["consume"] },
+        {
+          type: "consume_effect",
+          value: ["Drink", "Food", "Strong Alcohol"],
+          negate: true,
+          applyTo: ["consume"],
+        },
+      ],
+    },
   },
   {
     id: "loot",
