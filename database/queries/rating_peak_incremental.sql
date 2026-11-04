@@ -76,7 +76,7 @@ WHERE generation_id = @generation_id AND tenant_id = @tenant_id
 
 -- A previous partial pass can be reused only while its dirty revision matches.
 -- name: GetLivePeakCohortPage :one
-SELECT revision, after_realm_id, after_subject_id FROM rating_peak_cohort_pages
+SELECT revision, generation_id, after_realm_id, after_subject_id FROM rating_peak_cohort_pages
 WHERE tenant_id = @tenant_id AND subject_kind = @subject_kind
   AND instance_name = @instance_name AND encounter_name = @encounter_name
   AND difficulty_name = @difficulty_name AND max_players = @max_players
@@ -87,14 +87,14 @@ WHERE tenant_id = @tenant_id AND subject_kind = @subject_kind
 INSERT INTO rating_peak_cohort_pages
     (tenant_id, subject_kind, instance_name, encounter_name, difficulty_name,
      max_players, player_class, player_spec, player_sub_spec, performance_metric,
-     revision, after_realm_id, after_subject_id)
+     revision, generation_id, after_realm_id, after_subject_id)
 VALUES (@tenant_id, @subject_kind, @instance_name, @encounter_name, @difficulty_name,
         @max_players, @player_class, @player_spec, @player_sub_spec, @performance_metric,
-        @revision, @after_realm_id, @after_subject_id)
+        @revision, @generation_id, @after_realm_id, @after_subject_id)
 ON CONFLICT (tenant_id, subject_kind, instance_name, encounter_name, difficulty_name,
              max_players, player_class, player_spec, player_sub_spec, performance_metric)
-DO UPDATE SET revision = EXCLUDED.revision, after_realm_id = EXCLUDED.after_realm_id,
-              after_subject_id = EXCLUDED.after_subject_id;
+DO UPDATE SET revision = EXCLUDED.revision, generation_id = EXCLUDED.generation_id,
+              after_realm_id = EXCLUDED.after_realm_id, after_subject_id = EXCLUDED.after_subject_id;
 
 -- Include stale old-score subjects so deleting their last observation removes
 -- their displayed Peak rather than leaving an orphan. Union removes duplicates.

@@ -2810,7 +2810,8 @@ CREATE TABLE rating_peak_cohort_pages (
     performance_metric text NOT NULL,
     revision bigint NOT NULL,
     after_realm_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
-    after_subject_id text DEFAULT ''::text NOT NULL
+    after_subject_id text DEFAULT ''::text NOT NULL,
+    generation_id uuid
 );
 
 ALTER TABLE ONLY rating_peak_cohort_pages FORCE ROW LEVEL SECURITY;

@@ -238,6 +238,49 @@ func TestRefreshDirtyTenantPeakUsesFrozenRaidRoster(t *testing.T) {
 	require.InDelta(t, 50, readScope(), 1e-9, "deleting one boss retracts its raid contribution")
 }
 
+func TestRefreshDirtyTenantPeakRestartsAfterGenerationPublish(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	realm, _, oldGeneration := setupActiveRenownProjection(t, ctx, pool, store, now)
+	_, err := pool.Exec(ctx, "INSERT INTO rating_live_evidence_bootstraps (tenant_id,completed_at) VALUES ($1,now())", uuid.Nil)
+	require.NoError(t, err)
+	for i := 0; i < 17; i++ {
+		_, err = pool.Exec(ctx, `INSERT INTO rating_live_player_observations
+			(tenant_id,realm_id,run_id,representative_instance_id,player_guid,instance_name,
+			 encounter_name,difficulty_name,max_players,player_class,player_spec,player_sub_spec,
+			 performance_metric,killed_at,raw_value,duration_secs)
+			VALUES ($1,$2,$3,$3,$4,'Raid','Boss','Normal',40,'MAGE','','','dps',$5,100,10)`,
+			uuid.Nil, realm, uuid.New(), fmt.Sprintf("p%02d", i), now.Add(-time.Hour))
+		require.NoError(t, err)
+	}
+	processed, err := RefreshDirtyTenantPeak(ctx, store, uuid.Nil, now)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	generation, err := store.StartTenantRatingRebuild(ctx, database.StartTenantRatingRebuildParams{
+		TenantID: uuid.Nil, AsOf: database.Timestamptz(now.Add(time.Minute)),
+		SourceCutoff: database.Timestamptz(now),
+	})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE rating_rebuild_checkpoints AS next
+		SET manifest=previous.manifest, phase='ready'
+		FROM rating_rebuild_checkpoints previous
+		WHERE next.generation_id=$1 AND previous.generation_id=$2`, generation, oldGeneration)
+	require.NoError(t, err)
+	published, err := store.PublishRatingRebuild(ctx, database.PublishRatingRebuildParams{TenantID: uuid.Nil, GenerationID: generation})
+	require.NoError(t, err)
+	require.True(t, published)
+	processed, err = RefreshDirtyTenantPeak(ctx, store, uuid.Nil, now.Add(time.Minute))
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM player_tenant_rating_boss_scores
+		WHERE generation_id=$1 AND rating_metric='peak' AND window_kind='all_time'`, generation).Scan(&count))
+	require.Equal(t, 16, count, "saved cursor from the prior generation must not skip first subjects")
+}
+
 func TestRefreshDirtyTenantPeakRestartsPageAfterNewRankOne(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)

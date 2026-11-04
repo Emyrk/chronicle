@@ -26772,7 +26772,7 @@ func (q *sqlQuerier) DeleteLivePeakPlayerScores(ctx context.Context, arg DeleteL
 }
 
 const getLivePeakCohortPage = `-- name: GetLivePeakCohortPage :one
-SELECT revision, after_realm_id, after_subject_id FROM rating_peak_cohort_pages
+SELECT revision, generation_id, after_realm_id, after_subject_id FROM rating_peak_cohort_pages
 WHERE tenant_id = $1 AND subject_kind = $2
   AND instance_name = $3 AND encounter_name = $4
   AND difficulty_name = $5 AND max_players = $6
@@ -26794,9 +26794,10 @@ type GetLivePeakCohortPageParams struct {
 }
 
 type GetLivePeakCohortPageRow struct {
-	Revision       int64     `db:"revision" json:"revision"`
-	AfterRealmID   uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
-	AfterSubjectID string    `db:"after_subject_id" json:"after_subject_id"`
+	Revision       int64         `db:"revision" json:"revision"`
+	GenerationID   uuid.NullUUID `db:"generation_id" json:"generation_id"`
+	AfterRealmID   uuid.UUID     `db:"after_realm_id" json:"after_realm_id"`
+	AfterSubjectID string        `db:"after_subject_id" json:"after_subject_id"`
 }
 
 // A previous partial pass can be reused only while its dirty revision matches.
@@ -26814,7 +26815,12 @@ func (q *sqlQuerier) GetLivePeakCohortPage(ctx context.Context, arg GetLivePeakC
 		arg.PerformanceMetric,
 	)
 	var i GetLivePeakCohortPageRow
-	err := row.Scan(&i.Revision, &i.AfterRealmID, &i.AfterSubjectID)
+	err := row.Scan(
+		&i.Revision,
+		&i.GenerationID,
+		&i.AfterRealmID,
+		&i.AfterSubjectID,
+	)
 	return i, err
 }
 
@@ -27517,30 +27523,31 @@ const upsertLivePeakCohortPage = `-- name: UpsertLivePeakCohortPage :exec
 INSERT INTO rating_peak_cohort_pages
     (tenant_id, subject_kind, instance_name, encounter_name, difficulty_name,
      max_players, player_class, player_spec, player_sub_spec, performance_metric,
-     revision, after_realm_id, after_subject_id)
+     revision, generation_id, after_realm_id, after_subject_id)
 VALUES ($1, $2, $3, $4, $5,
         $6, $7, $8, $9, $10,
-        $11, $12, $13)
+        $11, $12, $13, $14)
 ON CONFLICT (tenant_id, subject_kind, instance_name, encounter_name, difficulty_name,
              max_players, player_class, player_spec, player_sub_spec, performance_metric)
-DO UPDATE SET revision = EXCLUDED.revision, after_realm_id = EXCLUDED.after_realm_id,
-              after_subject_id = EXCLUDED.after_subject_id
+DO UPDATE SET revision = EXCLUDED.revision, generation_id = EXCLUDED.generation_id,
+              after_realm_id = EXCLUDED.after_realm_id, after_subject_id = EXCLUDED.after_subject_id
 `
 
 type UpsertLivePeakCohortPageParams struct {
-	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	SubjectKind       string    `db:"subject_kind" json:"subject_kind"`
-	InstanceName      string    `db:"instance_name" json:"instance_name"`
-	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
-	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers        int16     `db:"max_players" json:"max_players"`
-	PlayerClass       string    `db:"player_class" json:"player_class"`
-	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
-	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
-	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
-	Revision          int64     `db:"revision" json:"revision"`
-	AfterRealmID      uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
-	AfterSubjectID    string    `db:"after_subject_id" json:"after_subject_id"`
+	TenantID          uuid.UUID     `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string        `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string        `db:"instance_name" json:"instance_name"`
+	EncounterName     string        `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string        `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16         `db:"max_players" json:"max_players"`
+	PlayerClass       string        `db:"player_class" json:"player_class"`
+	PlayerSpec        string        `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string        `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string        `db:"performance_metric" json:"performance_metric"`
+	Revision          int64         `db:"revision" json:"revision"`
+	GenerationID      uuid.NullUUID `db:"generation_id" json:"generation_id"`
+	AfterRealmID      uuid.UUID     `db:"after_realm_id" json:"after_realm_id"`
+	AfterSubjectID    string        `db:"after_subject_id" json:"after_subject_id"`
 }
 
 func (q *sqlQuerier) UpsertLivePeakCohortPage(ctx context.Context, arg UpsertLivePeakCohortPageParams) error {
@@ -27556,6 +27563,7 @@ func (q *sqlQuerier) UpsertLivePeakCohortPage(ctx context.Context, arg UpsertLiv
 		arg.PlayerSubSpec,
 		arg.PerformanceMetric,
 		arg.Revision,
+		arg.GenerationID,
 		arg.AfterRealmID,
 		arg.AfterSubjectID,
 	)

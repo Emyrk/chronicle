@@ -122,7 +122,7 @@ func refreshLivePeakCohortPage(ctx context.Context, tx database.Store, generatio
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
-	if err == nil && progress.Revision == key.Revision {
+	if err == nil && progress.Revision == key.Revision && progress.GenerationID.Valid && progress.GenerationID.UUID == generation {
 		afterRealm, afterSubject = progress.AfterRealmID, progress.AfterSubjectID
 	}
 	periodStart := now.AddDate(0, 0, -180)
@@ -253,7 +253,8 @@ func refreshLivePeakCohortPage(ctx context.Context, tx database.Store, generatio
 		DifficultyName: key.DifficultyName, MaxPlayers: key.MaxPlayers,
 		PlayerClass: key.PlayerClass, PlayerSpec: key.PlayerSpec,
 		PlayerSubSpec: key.PlayerSubSpec, PerformanceMetric: key.PerformanceMetric,
-		Revision: key.Revision, AfterRealmID: afterRealm, AfterSubjectID: afterSubject,
+		Revision: key.Revision, GenerationID: uuid.NullUUID{UUID: generation, Valid: true},
+		AfterRealmID: afterRealm, AfterSubjectID: afterSubject,
 	})
 }
 
