@@ -40,10 +40,15 @@ const STEPS = [
   {
     title: (
       <>
-        Type <span className="rounded bg-background px-1.5 py-px font-mono text-[#40ff40]">/combatlog</span> in game
+        Type <span className="rounded bg-background px-1.5 py-px font-mono text-[#40ff40]">/combatlog</span> inside the instance
       </>
     ),
-    body: "Once per session. The tray stone turns teal when it hears the first fight.",
+    body: (
+      <>
+        Only once you are inside the dungeon. First turn on <strong className="text-foreground">Advanced Combat Logging</strong> in
+        Options &gt; System &gt; Network. The tray stone turns teal when it hears the first fight.
+      </>
+    ),
   },
   {
     title: "Your run appears here",
