@@ -473,8 +473,6 @@ interface BossMini {
   geometry: THREE.BufferGeometry;
   /** The model's own materials when every primitive has a base-colour texture; cloned per unit. */
   materials: THREE.MeshStandardMaterial[] | null;
-  /** Largest fitted geometry dimension in world yards, for tabletop arena-size capping. */
-  worldSpan: number | undefined;
   /** Health bar height, above the model's bounding box. */
   barHeight: number;
   /** Hover label height, the same distance above the bar as for primitives. */
@@ -527,8 +525,6 @@ interface UnitObject {
   mapScale: number;
   /** Client-derived standing height in world yards. */
   worldHeight: number | undefined;
-  /** Largest fitted model dimension in world yards once the published asset has loaded. */
-  modelWorldSpan: number | undefined;
   barHeight: number;
   labelHeight: number;
   deadLift: number;
@@ -1782,19 +1778,10 @@ export class MapScene3D {
     this.updateLabel();
   }
 
-  // Client-sized models use true world yards on calibrated maps. Tabletop
-  // sculpts are capped by their largest dimension so wings and long bodies do
-  // not cover the arena. On uncalibrated artwork, keep the readable baseline.
+  // Client-sized models use true world yards on calibrated maps. On artwork
+  // without yard calibration, keep the old readable baseline instead.
   private scaleOf(object: UnitObject): number {
-    if (object.worldHeight !== undefined) {
-      return publishedModelGroupScale(
-        object.worldHeight,
-        this.worldUnitScale,
-        this.unitScale,
-        object.gameModel,
-        object.modelWorldSpan,
-      );
-    }
+    if (object.worldHeight !== undefined) return publishedModelGroupScale(object.worldHeight, this.worldUnitScale, this.unitScale);
     return this.dungeonMesh && object.miniatureUrl && object.kind !== "pet" ? this.unitScale * MESH_BOSS_SCALE : this.unitScale;
   }
 
@@ -2462,7 +2449,6 @@ export class MapScene3D {
       gameModel: Boolean(unit.gameModel),
       mapScale: unit.mapScale ?? 1,
       worldHeight: unit.worldHeight,
-      modelWorldSpan: undefined,
       barHeight: BAR_HEIGHT,
       labelHeight: LABEL_HEIGHT,
       deadLift: DEAD_LIFT,
@@ -2616,12 +2602,10 @@ export class MapScene3D {
       }
       mini.computeBoundingSphere();
       const box = mini.boundingBox!;
-      const size = box.getSize(new THREE.Vector3());
       const barHeight = Math.max(BAR_HEIGHT, box.max.y + BOSS_MINI_BAR_GAP);
       const result = {
         geometry: mini,
         materials,
-        worldSpan: !gameModel && worldHeight !== undefined ? Math.max(size.x, size.y, size.z) : undefined,
         barHeight,
         labelHeight: barHeight + LABEL_HEIGHT - BAR_HEIGHT,
         // Lying down turns -z into +y, so the back of the model rests on the ground.
@@ -2664,8 +2648,6 @@ export class MapScene3D {
   }
 
   private applyBossMini(object: UnitObject, mini: BossMini) {
-    object.modelWorldSpan = mini.worldSpan;
-    object.group.scale.setScalar(this.scaleOf(object));
     if (!object.boss && object.kind === "pet") {
       this.applyGuardianMini(object, mini);
       return;

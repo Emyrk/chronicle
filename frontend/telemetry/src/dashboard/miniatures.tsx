@@ -131,7 +131,6 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
         const PLAYER_WORLD_HEIGHT=2;
         const BASE_MODEL_HEIGHT=2.6;
         const MESH_MODEL_SCALE=2.5;
-        const MAX_TABLETOP_MODEL_SPAN_YARDS=8;
         const previewLoader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
         let preview=null;
         function escapeHTML(value) { return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
@@ -175,13 +174,11 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
           const floor=new THREE.Mesh(new THREE.CircleGeometry(30,64),new THREE.MeshStandardMaterial({color:0x171b18,roughness:.95,metalness:0}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;scene.add(floor);
           const player=new THREE.Mesh(new THREE.CapsuleGeometry(.9,1.2,4,12).translate(0,1.5,0),new THREE.MeshStandardMaterial({color:0x78b9d5,roughness:.5,metalness:.08}));player.castShadow=true;player.receiveShadow=true;scene.add(player);
           const modelRoot=new THREE.Group();scene.add(modelRoot);
-          let model=null,mixer=null,baseScale=1,nativeSpan=1,currentScale=mapScale,disposed=false,frame=0;
+          let model=null,mixer=null,baseScale=1,currentScale=mapScale,disposed=false,frame=0;
           const clock=new THREE.Clock();
           function fit() {
             if(!model)return;
-            const requestedScale=baseScale*currentScale;
-            const maxScale=isGameModel||worldHeight===undefined?requestedScale:MAX_TABLETOP_MODEL_SPAN_YARDS*PLAYER_GEOMETRY_HEIGHT/(PLAYER_WORLD_HEIGHT*nativeSpan);
-            modelRoot.scale.setScalar(Math.min(requestedScale,maxScale));modelRoot.position.set(0,0,0);
+            modelRoot.scale.setScalar(baseScale*currentScale);modelRoot.position.set(0,0,0);
             let box=new THREE.Box3().setFromObject(modelRoot);const center=box.getCenter(new THREE.Vector3());
             modelRoot.position.set(-center.x,-box.min.y,-center.z);box=new THREE.Box3().setFromObject(modelRoot);
             player.position.set(box.min.x-1.5,0,0);
@@ -193,7 +190,7 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
           function resize() { const width=Math.max(1,stage.clientWidth),height=Math.max(1,stage.clientHeight);renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix(); }
           const observer=new ResizeObserver(resize);observer.observe(stage);resize();
           function animate() { if(disposed)return;frame=requestAnimationFrame(animate);const delta=Math.min(.05,clock.getDelta());mixer?.update(delta);controls.update();renderer.render(scene,camera); }
-          previewLoader.load(url,gltf=>{if(disposed){disposeObject(gltf.scene);return;}model=gltf.scene;model.traverse(child=>{if(child.isMesh){child.castShadow=true;child.receiveShadow=true;}});modelRoot.add(model);const nativeBox=new THREE.Box3().setFromObject(model);const nativeSize=nativeBox.getSize(new THREE.Vector3());const nativeHeight=Math.max(.001,nativeSize.y);nativeSpan=Math.max(.001,nativeSize.x,nativeSize.y,nativeSize.z);baseScale=worldHeight===undefined?(isGameModel?BASE_MODEL_HEIGHT/nativeHeight:BASE_MODEL_HEIGHT)*MESH_MODEL_SCALE:(worldHeight*PLAYER_GEOMETRY_HEIGHT)/(PLAYER_WORLD_HEIGHT*nativeHeight);if(gltf.animations.length){mixer=new THREE.AnimationMixer(model);mixer.clipAction(gltf.animations.find(clip=>/^stand$/i.test(clip.name))||gltf.animations[0]).play();}fit();},undefined,error=>{if(disposed)return;console.error('Unable to load model preview',error);stage.insertAdjacentHTML('beforeend','<div class="preview-empty"><div><strong>Preview failed</strong>Open the asset to inspect it directly.</div></div>');});
+          previewLoader.load(url,gltf=>{if(disposed){disposeObject(gltf.scene);return;}model=gltf.scene;model.traverse(child=>{if(child.isMesh){child.castShadow=true;child.receiveShadow=true;}});modelRoot.add(model);const nativeBox=new THREE.Box3().setFromObject(model);const nativeHeight=Math.max(.001,nativeBox.max.y-nativeBox.min.y);baseScale=worldHeight===undefined?(isGameModel?BASE_MODEL_HEIGHT/nativeHeight:BASE_MODEL_HEIGHT)*MESH_MODEL_SCALE:(worldHeight*PLAYER_GEOMETRY_HEIGHT)/(PLAYER_WORLD_HEIGHT*nativeHeight);if(gltf.animations.length){mixer=new THREE.AnimationMixer(model);mixer.clipAction(gltf.animations.find(clip=>/^stand$/i.test(clip.name))||gltf.animations[0]).play();}fit();},undefined,error=>{if(disposed)return;console.error('Unable to load model preview',error);stage.insertAdjacentHTML('beforeend','<div class="preview-empty"><div><strong>Preview failed</strong>Open the asset to inspect it directly.</div></div>');});
           animate();
           preview={setScale(scale){currentScale=scale;fit();},dispose(){disposed=true;cancelAnimationFrame(frame);observer.disconnect();controls.dispose();mixer?.stopAllAction();disposeObject(scene);renderer.dispose();renderer.domElement.remove();}};
         }
@@ -240,7 +237,7 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
             '<label>Map size<div class="scale-row"><input id="map-scale" type="range" min="0.1" max="10" step="0.05" value="'+(item.map_scale||1)+'" /><input id="map-scale-number" type="number" min="0.1" max="10" step="0.05" value="'+(item.map_scale||1)+'" /></div><span class="scale-readout"><span>0.1×</span><span>Baseline 1×</span><span>10× max</span></span></label>'+
             '<p class="hint">Adjust this model relative to a standard player on the 3D replay map. Existing models default to 1×.</p><div class="form-actions"><button id="remove" class="danger">Remove model</button></div></article>'+
             '<article class="preview-card"><h3>Model preview</h3><p class="hint">Drag to orbit and scroll to zoom.'+(isGameModel?' Animation clips from the extracted game model are available in compatible viewers.':' This model is optimized for the replay map.')+'</p>'+
-            (hasPath?'<div class="model-stage" id="model-stage" role="img" aria-label="'+escapeHTML((item.name||typeLabel)+' beside a standard player')+'"><div class="model-stage-note"><strong>Blue capsule</strong> = standard player</div></div><div class="preview-meta"><span>GLB 2.0 · '+(isGameModel?'true relative map size':'relative map size · 8 yd span cap')+'</span><a href="'+previewURL(item.path)+'" target="_blank" rel="noreferrer">Open asset ↗</a></div>':'<div class="preview-empty"><div><strong>No GLB uploaded</strong>Upload a model to inspect it here.</div></div>')+'</article></div><details><summary>Draft manifest</summary><pre id="json"></pre></details></div>';
+            (hasPath?'<div class="model-stage" id="model-stage" role="img" aria-label="'+escapeHTML((item.name||typeLabel)+' beside a standard player')+'"><div class="model-stage-note"><strong>Blue capsule</strong> = standard player</div></div><div class="preview-meta"><span>GLB 2.0 · true relative map size</span><a href="'+previewURL(item.path)+'" target="_blank" rel="noreferrer">Open asset ↗</a></div>':'<div class="preview-empty"><div><strong>No GLB uploaded</strong>Upload a model to inspect it here.</div></div>')+'</article></div><details><summary>Draft manifest</summary><pre id="json"></pre></details></div>';
           document.getElementById('name').addEventListener('input',()=>{syncEditor();markDirty();renderList();});
           document.getElementById('entry-ids').addEventListener('input',()=>{syncEditor();markDirty();renderList();});
           document.getElementById('map-scale').addEventListener('input',event=>setMapScale(event.target.value));

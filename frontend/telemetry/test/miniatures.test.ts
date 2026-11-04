@@ -117,8 +117,6 @@ test("Miniature Foundry edits tabletop and original game models", async () => {
   assert.match(page, /id="bulk-scale"/);
   assert.match(page, /id="apply-scale"/);
   assert.match(page, /for\(const item of bulkSelected\)item\.map_scale=scale/);
-  assert.match(page, /MAX_TABLETOP_MODEL_SPAN_YARDS=8/);
-  assert.match(page, /Math\.min\(requestedScale,maxScale\)/);
 });
 
 test("provides an empty manifest for first-time setup", () => {
