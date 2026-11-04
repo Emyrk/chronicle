@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/ratingmath"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/riverqueue/river"
 )
 
@@ -59,6 +60,12 @@ func (ArgsDrainTenantRatings) InsertOpts() river.InsertOpts {
 type WorkerDrainTenantRatings struct {
 	river.WorkerDefaults[ArgsDrainTenantRatings]
 	Store database.Store
+	// Each collector has one bounded "stage" label (runs, renown, mastery, peak).
+	// Optional so standalone workers and tests need no metrics registry.
+	PageDuration   prometheus.ObserverVec
+	PagesProcessed *prometheus.CounterVec
+	KeysProcessed  *prometheus.CounterVec
+	PageErrors     *prometheus.CounterVec
 }
 
 func (w *WorkerDrainTenantRatings) Work(ctx context.Context, job *river.Job[ArgsDrainTenantRatings]) error {
@@ -84,7 +91,7 @@ func (w *WorkerDrainTenantRatings) Work(ctx context.Context, job *river.Job[Args
 	}
 	// River is configured with a 30-minute job timeout; the one-minute budget
 	// is deliberately soft, allowing a page already started to finish.
-	return drainTenantRatingPages(ctx, stages, time.Now().Add(time.Minute), time.Now)
+	return drainTenantRatingPages(ctx, stages, time.Now().Add(time.Minute), time.Now, w)
 }
 
 type ratingDrainStage struct {
@@ -95,7 +102,7 @@ type ratingDrainStage struct {
 // Each stage commits one bounded page before moving to the next. A zero-count
 // cycle means no stage made progress (including when generation gates prevent
 // writes), so leave remaining dirty intent for the next periodic dispatch.
-func drainTenantRatingPages(ctx context.Context, stages []ratingDrainStage, deadline time.Time, now func() time.Time) error {
+func drainTenantRatingPages(ctx context.Context, stages []ratingDrainStage, deadline time.Time, now func() time.Time, metrics *WorkerDrainTenantRatings) error {
 	firstPage := true
 	for {
 		progress := false
@@ -107,7 +114,25 @@ func drainTenantRatingPages(ctx context.Context, stages []ratingDrainStage, dead
 				return river.JobSnooze(time.Second)
 			}
 			firstPage = false
+			started := time.Now()
 			count, err := stage.run(ctx)
+			if metrics != nil {
+				if metrics.PageDuration != nil {
+					metrics.PageDuration.WithLabelValues(stage.name).Observe(time.Since(started).Seconds())
+				}
+				if err != nil {
+					if metrics.PageErrors != nil {
+						metrics.PageErrors.WithLabelValues(stage.name).Inc()
+					}
+				} else if count > 0 {
+					if metrics.PagesProcessed != nil {
+						metrics.PagesProcessed.WithLabelValues(stage.name).Inc()
+					}
+					if metrics.KeysProcessed != nil {
+						metrics.KeysProcessed.WithLabelValues(stage.name).Add(float64(count))
+					}
+				}
+			}
 			if err != nil {
 				return fmt.Errorf("drain tenant rating %s: %w", stage.name, err)
 			}

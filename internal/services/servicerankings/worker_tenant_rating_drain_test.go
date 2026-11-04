@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/riverqueue/river"
 )
 
@@ -32,7 +34,7 @@ func TestDrainTenantRatingPagesInterleavesAndStopsWhenEmpty(t *testing.T) {
 			return n, nil
 		}})
 	}
-	err := drainTenantRatingPages(context.Background(), stages, time.Now().Add(time.Hour), time.Now)
+	err := drainTenantRatingPages(context.Background(), stages, time.Now().Add(time.Hour), time.Now, nil)
 	if err != nil {
 		t.Fatalf("drain: %v", err)
 	}
@@ -52,7 +54,7 @@ func TestDrainTenantRatingPagesSnoozesAfterDeadlineWithProgress(t *testing.T) {
 		{name: "mastery", run: func(context.Context) (int, error) { calls = append(calls, "mastery"); return 0, nil }},
 		{name: "peak", run: func(context.Context) (int, error) { calls = append(calls, "peak"); return 0, nil }},
 	}
-	err := drainTenantRatingPages(context.Background(), stages, deadline, func() time.Time { return deadline })
+	err := drainTenantRatingPages(context.Background(), stages, deadline, func() time.Time { return deadline }, nil)
 	var snooze *river.JobSnoozeError
 	if !errors.As(err, &snooze) {
 		t.Fatalf("expected River snooze, got %v", err)
@@ -68,7 +70,7 @@ func TestDrainTenantRatingPagesEmptyCycleDoesNotSnooze(t *testing.T) {
 	calls := 0
 	err := drainTenantRatingPages(context.Background(), []ratingDrainStage{
 		{name: "runs", run: func(context.Context) (int, error) { calls++; return 0, nil }},
-	}, deadline, func() time.Time { return deadline })
+	}, deadline, func() time.Time { return deadline }, nil)
 	if err != nil || calls != 1 {
 		t.Fatalf("empty drain: error=%v calls=%d", err, calls)
 	}
@@ -82,10 +84,76 @@ func TestDrainTenantRatingPagesPropagatesStageError(t *testing.T) {
 		{name: "runs", run: func(context.Context) (int, error) { calls = append(calls, "runs"); return 1, nil }},
 		{name: "renown", run: func(context.Context) (int, error) { return 0, failure }},
 		{name: "mastery", run: func(context.Context) (int, error) { calls = append(calls, "mastery"); return 0, nil }},
-	}, time.Now().Add(time.Hour), time.Now)
+	}, time.Now().Add(time.Hour), time.Now, nil)
 	if !errors.Is(err, failure) || len(calls) != 1 {
 		t.Fatalf("error=%v calls=%v", err, calls)
 	}
+}
+
+func TestDrainTenantRatingPageMetrics(t *testing.T) {
+	t.Parallel()
+	worker := &WorkerDrainTenantRatings{
+		PageDuration:   prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "test_rating_drain_duration_seconds"}, []string{"stage"}),
+		PagesProcessed: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "test_rating_drain_pages_total"}, []string{"stage"}),
+		KeysProcessed:  prometheus.NewCounterVec(prometheus.CounterOpts{Name: "test_rating_drain_keys_total"}, []string{"stage"}),
+		PageErrors:     prometheus.NewCounterVec(prometheus.CounterOpts{Name: "test_rating_drain_errors_total"}, []string{"stage"}),
+	}
+	failure := errors.New("failed page")
+	calls := 0
+	err := drainTenantRatingPages(context.Background(), []ratingDrainStage{
+		{name: "runs", run: func(context.Context) (int, error) {
+			calls++
+			if calls == 1 {
+				return 3, nil
+			}
+			return 0, nil
+		}},
+		{name: "renown", run: func(context.Context) (int, error) { return 0, nil }},
+	}, time.Now().Add(time.Hour), time.Now, worker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ratingCounterValue(t, worker.PagesProcessed.WithLabelValues("runs")); got != 1 {
+		t.Fatalf("pages=%v", got)
+	}
+	if got := ratingCounterValue(t, worker.KeysProcessed.WithLabelValues("runs")); got != 3 {
+		t.Fatalf("keys=%v", got)
+	}
+	if got := ratingCounterValue(t, worker.PagesProcessed.WithLabelValues("renown")); got != 0 {
+		t.Fatalf("empty pages=%v", got)
+	}
+	err = drainTenantRatingPages(context.Background(), []ratingDrainStage{
+		{name: "peak", run: func(context.Context) (int, error) { return 0, failure }},
+	}, time.Now().Add(time.Hour), time.Now, worker)
+	if !errors.Is(err, failure) {
+		t.Fatalf("error=%v", err)
+	}
+	if got := ratingCounterValue(t, worker.PageErrors.WithLabelValues("peak")); got != 1 {
+		t.Fatalf("errors=%v", got)
+	}
+	// Both successful and failed page attempts record durations without tenant labels.
+	for _, stage := range []string{"runs", "renown", "peak"} {
+		metric := &dto.Metric{}
+		if err := worker.PageDuration.WithLabelValues(stage).(prometheus.Metric).Write(metric); err != nil {
+			t.Fatal(err)
+		}
+		want := uint64(2)
+		if stage == "peak" {
+			want = 1
+		}
+		if got := metric.GetHistogram().GetSampleCount(); got != want {
+			t.Fatalf("%s duration samples=%v", stage, got)
+		}
+	}
+}
+
+func ratingCounterValue(t *testing.T, counter prometheus.Counter) float64 {
+	t.Helper()
+	metric := &dto.Metric{}
+	if err := counter.Write(metric); err != nil {
+		t.Fatal(err)
+	}
+	return metric.GetCounter().GetValue()
 }
 
 func TestTenantRatingDrainJobUniquePerTenant(t *testing.T) {
