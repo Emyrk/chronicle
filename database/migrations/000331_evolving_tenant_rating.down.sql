@@ -1,0 +1,9 @@
+BEGIN;
+DROP TABLE rating_peak_cohort_pages_evolving;
+DROP TABLE rating_peak_cohort_denominators_evolving;
+DROP TABLE player_tenant_rating_boss_scores_evolving;
+DROP TABLE player_tenant_rating_scope_scores_evolving;
+DROP TABLE guild_tenant_rating_boss_scores_evolving;
+DROP TABLE guild_tenant_rating_scope_scores_evolving;
+DROP FUNCTION current_tenant_rating_policy(UUID);
+COMMIT;

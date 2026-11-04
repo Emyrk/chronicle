@@ -1,0 +1,6 @@
+BEGIN;
+DROP VIEW player_tenant_rating_boss_scores_evolving_read;
+DROP VIEW player_tenant_rating_scope_scores_evolving_read;
+DROP VIEW guild_tenant_rating_boss_scores_evolving_read;
+DROP VIEW guild_tenant_rating_scope_scores_evolving_read;
+COMMIT;

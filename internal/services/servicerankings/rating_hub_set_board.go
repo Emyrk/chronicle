@@ -138,17 +138,34 @@ func (s *Service) handleHubSetBoard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenant := servicetenant.TenantIDFromContext(ctx)
 	out := chroniclesdk.HubSetBoardResponse{Rows: []chroniclesdk.HubSetBoardRow{}, Page: int(in.page)}
+	evolving, modeErr := ratingEvolvingReader(ctx, s.store, tenant)
+	if modeErr != nil {
+		httpapi.InternalServerError(w, modeErr)
+		return
+	}
 	generation, err := s.store.GetActiveTenantRatingGeneration(ctx, tenant)
-	if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, sql.ErrNoRows) || (err == nil && generation == uuid.Nil) {
+	if !evolving && (errors.Is(err, pgx.ErrNoRows) || errors.Is(err, sql.ErrNoRows) || (err == nil && generation == uuid.Nil)) {
 		httpapi.Write(ctx, w, http.StatusOK, out)
 		return
 	}
-	if err != nil {
+	if err != nil && !evolving {
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	if evolving {
+		generation = uuid.Nil
+	}
 	in.params.TenantID, in.params.GenerationID = tenant, generation
-	rows, err := s.store.HubSetBoardPage(ctx, in.params)
+	var rows []database.HubSetBoardPageRow
+	if evolving {
+		var selected []database.EvolvingHubSetBoardPageRow
+		selected, err = s.store.EvolvingHubSetBoardPage(ctx, database.EvolvingHubSetBoardPageParams(in.params))
+		for _, row := range selected {
+			rows = append(rows, database.HubSetBoardPageRow(row))
+		}
+	} else {
+		rows, err = s.store.HubSetBoardPage(ctx, in.params)
+	}
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return

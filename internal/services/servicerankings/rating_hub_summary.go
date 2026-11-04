@@ -324,18 +324,39 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 				Statistics: []chroniclesdk.RankingsBoxPlotStats{}, Speedruns: []chroniclesdk.SpeedrunLeaderboardEntry{},
 			})
 		}
+		evolving, modeErr := ratingEvolvingReader(ctx, s.store, tenant)
+		if modeErr != nil {
+			httpapi.InternalServerError(w, modeErr)
+			return
+		}
 		generation, genErr := s.store.GetActiveTenantRatingGeneration(ctx, tenant)
 		if genErr != nil && !errors.Is(genErr, pgx.ErrNoRows) && !errors.Is(genErr, sql.ErrNoRows) {
 			httpapi.InternalServerError(w, genErr)
 			return
 		}
-		if (in.tab == "overview" || in.tab == "ratings") && genErr == nil && generation != uuid.Nil {
-			rows, e := s.store.HubLandingRatingRows(ctx, database.HubLandingRatingRowsParams{TenantID: tenant, GenerationID: generation, RealmIds: in.realmIDs})
+		if evolving {
+			generation = uuid.Nil
+		}
+		if (in.tab == "overview" || in.tab == "ratings") && (evolving || (genErr == nil && generation != uuid.Nil)) {
+			params := database.HubLandingRatingRowsParams{TenantID: tenant, GenerationID: generation, RealmIds: in.realmIDs}
+			var rows []database.HubLandingRatingRowsRow
+			var e error
+			if evolving {
+				var selected []database.EvolvingHubLandingRatingRowsRow
+				selected, e = s.store.EvolvingHubLandingRatingRows(ctx, database.EvolvingHubLandingRatingRowsParams{TenantID: params.TenantID, GenerationID: params.GenerationID, RealmIds: params.RealmIds})
+				for _, row := range selected {
+					rows = append(rows, database.HubLandingRatingRowsRow(row))
+				}
+			} else {
+				rows, e = s.store.HubLandingRatingRows(ctx, params)
+			}
 			if e != nil {
 				httpapi.InternalServerError(w, e)
 				return
 			}
-			out.GenerationID = &generation
+			if !evolving {
+				out.GenerationID = &generation
+			}
 			for _, v := range rows {
 				index, found := byCohort[hubLandingCohort{v.InstanceName, v.DifficultyName, v.MaxPlayers}]
 				if !found {
@@ -548,18 +569,39 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 			in.featured = "" // A stale deep link falls back to the full-clear overview.
 		}
 	}
+	evolving, modeErr := ratingEvolvingReader(ctx, s.store, tenant)
+	if modeErr != nil {
+		httpapi.InternalServerError(w, modeErr)
+		return
+	}
 	generation, genErr := s.store.GetActiveTenantRatingGeneration(ctx, tenant)
 	if genErr != nil && !errors.Is(genErr, pgx.ErrNoRows) && !errors.Is(genErr, sql.ErrNoRows) {
 		httpapi.InternalServerError(w, genErr)
 		return
 	}
-	if genErr == nil && generation != uuid.Nil {
-		rows, e := s.store.HubSummaryRatingRows(ctx, database.HubSummaryRatingRowsParams{TenantID: tenant, GenerationID: generation, InstanceName: in.instance, FeaturedEncounter: in.featured, DifficultyName: in.difficulty, MaxPlayers: in.size, ExactCohort: in.exact, PerformanceMetric: in.metric, PlayerClass: hubClassFilter(in.class), PlayerSpec: in.spec, PlayerSubSpec: in.subSpec, RealmIds: in.realmIDs, WindowKind: in.window, RenownWindow: in.renownWindow, BossDepth: in.bossDepth})
+	if evolving {
+		generation = uuid.Nil
+	}
+	if evolving || (genErr == nil && generation != uuid.Nil) {
+		params := database.HubSummaryRatingRowsParams{TenantID: tenant, GenerationID: generation, InstanceName: in.instance, FeaturedEncounter: in.featured, DifficultyName: in.difficulty, MaxPlayers: in.size, ExactCohort: in.exact, PerformanceMetric: in.metric, PlayerClass: hubClassFilter(in.class), PlayerSpec: in.spec, PlayerSubSpec: in.subSpec, RealmIds: in.realmIDs, WindowKind: in.window, RenownWindow: in.renownWindow, BossDepth: in.bossDepth}
+		var rows []database.HubSummaryRatingRowsRow
+		var e error
+		if evolving {
+			var selected []database.EvolvingHubSummaryRatingRowsRow
+			selected, e = s.store.EvolvingHubSummaryRatingRows(ctx, database.EvolvingHubSummaryRatingRowsParams(params))
+			for _, row := range selected {
+				rows = append(rows, database.HubSummaryRatingRowsRow(row))
+			}
+		} else {
+			rows, e = s.store.HubSummaryRatingRows(ctx, params)
+		}
 		if e != nil {
 			httpapi.InternalServerError(w, e)
 			return
 		}
-		out.GenerationID = &generation
+		if !evolving {
+			out.GenerationID = &generation
+		}
 		byBoss := map[string]int{}
 		for _, v := range rows {
 			board := &out.Ratings.Raid
@@ -601,8 +643,19 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
-	if genErr == nil && generation != uuid.Nil && in.featured == "" && len(in.set) > 0 {
-		rows, e := s.store.HubSetRatingRows(ctx, database.HubSetRatingRowsParams{TenantID: tenant, GenerationID: generation, InstanceName: in.instance, EncounterNames: in.set, DifficultyName: in.difficulty, MaxPlayers: in.size, PerformanceMetric: in.metric, PlayerClass: hubClassFilter(in.class), PlayerSpec: in.spec, PlayerSubSpec: in.subSpec, RealmIds: in.realmIDs, WindowKind: in.window, RenownWindow: in.renownWindow, Depth: hubRaidDepth(in.bossDepth)})
+	if (evolving || (genErr == nil && generation != uuid.Nil)) && in.featured == "" && len(in.set) > 0 {
+		params := database.HubSetRatingRowsParams{TenantID: tenant, GenerationID: generation, InstanceName: in.instance, EncounterNames: in.set, DifficultyName: in.difficulty, MaxPlayers: in.size, PerformanceMetric: in.metric, PlayerClass: hubClassFilter(in.class), PlayerSpec: in.spec, PlayerSubSpec: in.subSpec, RealmIds: in.realmIDs, WindowKind: in.window, RenownWindow: in.renownWindow, Depth: hubRaidDepth(in.bossDepth)}
+		var rows []database.HubSetRatingRowsRow
+		var e error
+		if evolving {
+			var selected []database.EvolvingHubSetRatingRowsRow
+			selected, e = s.store.EvolvingHubSetRatingRows(ctx, database.EvolvingHubSetRatingRowsParams(params))
+			for _, row := range selected {
+				rows = append(rows, database.HubSetRatingRowsRow(row))
+			}
+		} else {
+			rows, e = s.store.HubSetRatingRows(ctx, params)
+		}
 		if e != nil {
 			httpapi.InternalServerError(w, e)
 			return

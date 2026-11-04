@@ -1,6 +1,6 @@
--- Existing tenants must establish complete canonical history before any
--- incremental Mastery or Peak projection writes. Pages and cursor commit in
--- one transaction; concurrent source mutations carry their own dirty run.
+-- Discover canonical history into durable dirty keys before claiming caught
+-- up. Evolving projections can show partial scores while this scan runs.
+-- Pages and cursor commit together; concurrent source mutations mark dirt.
 -- name: StartRatingLiveEvidenceBootstrap :exec
 INSERT INTO rating_live_evidence_bootstraps (tenant_id, source_cutoff)
 VALUES (@tenant_id, @source_cutoff::timestamptz)

@@ -93,6 +93,12 @@ type Service struct {
 	LiveEvidenceRepairDispatchWorker    *WorkerDispatchLiveEvidenceRepair
 	IncrementalPeakWorker               *WorkerRefreshTenantPeak
 	IncrementalPeakDispatchWorker       *WorkerDispatchIncrementalPeak
+	TenantRatingDrainDispatchWorker     *WorkerDispatchTenantRatingDrain
+	TenantRatingDrainWorker             *WorkerDrainTenantRatings
+	TenantRatingCopyDispatchWorker      *WorkerDispatchTenantRatingCopy
+	TenantRatingCopyWorker              *WorkerCopyTenantRatings
+	RatingPolicyScanWorker              *WorkerRatingPolicyScan
+	RatingPolicyScanDispatchWorker      *WorkerDispatchRatingPolicyScan
 	PeakExpiryWorker                    *WorkerExpireTenantPeak
 	PeakExpiryDispatchWorker            *WorkerDispatchPeakExpiry
 }
@@ -190,6 +196,12 @@ func (s *Service) Start(_ context.Context) error {
 	s.LiveEvidenceRepairDispatchWorker = &WorkerDispatchLiveEvidenceRepair{Store: store}
 	s.IncrementalPeakWorker = &WorkerRefreshTenantPeak{Store: store}
 	s.IncrementalPeakDispatchWorker = &WorkerDispatchIncrementalPeak{Store: store}
+	s.TenantRatingDrainDispatchWorker = &WorkerDispatchTenantRatingDrain{Store: store}
+	s.TenantRatingDrainWorker = &WorkerDrainTenantRatings{Store: store}
+	s.TenantRatingCopyDispatchWorker = &WorkerDispatchTenantRatingCopy{Store: store}
+	s.TenantRatingCopyWorker = &WorkerCopyTenantRatings{Store: store}
+	s.RatingPolicyScanWorker = &WorkerRatingPolicyScan{Store: store}
+	s.RatingPolicyScanDispatchWorker = &WorkerDispatchRatingPolicyScan{Store: store}
 	s.PeakExpiryWorker = &WorkerExpireTenantPeak{Store: store}
 	s.PeakExpiryDispatchWorker = &WorkerDispatchPeakExpiry{Store: store}
 
@@ -252,6 +264,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/time-parse-cohorts/spreads", s.handleTimeParseSpreads)
 
 	// Published tenant-wide rating leaderboards. Realm IDs filter rows only.
+	s.router.Get("/ratings/catchup", s.handleRatingCatchup)
 	s.router.Get("/ratings/hub-summary", s.handleHubSummary)
 	s.router.Get("/ratings/set-board", s.handleHubSetBoard)
 	s.router.Get("/ratings/guild-full-list", s.handlePublishedGuildFullList)

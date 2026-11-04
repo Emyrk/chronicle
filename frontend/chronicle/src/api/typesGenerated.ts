@@ -380,6 +380,16 @@ export interface AdminRatingBossPolicy {
     readonly renown_points: number;
 }
 
+// From chroniclesdk/rating_catchup.go
+/**
+ * AdminRatingCatchupStatusResponse is a current database snapshot; it has no
+ * durable chart history. Re-fetching it never starts a repair job.
+ */
+export interface AdminRatingCatchupStatusResponse {
+    readonly observed_at: string;
+    readonly tenants: readonly AdminTenantRatingCatchup[];
+}
+
 // From chroniclesdk/admin_ratings.go
 export interface AdminRatingGroup {
     readonly id: string;
@@ -513,6 +523,34 @@ export interface AdminSetUserRetentionRequest {
      * 0 means keep forever (sets NULL in DB).
      */
     readonly raw_log_retention_hours: number;
+}
+
+// From chroniclesdk/rating_catchup.go
+export interface AdminTenantRatingCatchup {
+    readonly tenant_id: string;
+    readonly status: string;
+    readonly read_state: string;
+    readonly dirty_runs: number;
+    readonly dirty_renown: number;
+    readonly dirty_mastery: number;
+    readonly dirty_peak: number;
+    readonly policy_scan_stages: number;
+    readonly unfinished_policy_scan_stages: number;
+    readonly policy_scan_stage_number: number;
+    readonly active_drain_jobs: number;
+    readonly peak_pages: number;
+    readonly oldest_run?: string;
+    readonly oldest_renown?: string;
+    readonly oldest_mastery?: string;
+    readonly oldest_peak?: string;
+    readonly job_kind?: string;
+    readonly job_state?: string;
+    readonly job_last_error?: string;
+    readonly job_attempted_at?: string;
+    readonly last_succeeded_at?: string;
+    readonly scan_after_run_id?: string;
+    readonly scan_source_cutoff?: string;
+    readonly scan_completed_at?: string;
 }
 
 // From chroniclesdk/user.go
@@ -6038,7 +6076,7 @@ export interface Tenant {
 
 // From chroniclesdk/rating_tenant_leaderboard.go
 export interface TenantGuildBossLeaderboardEntry {
-    readonly generation_id: string;
+    readonly generation_id: string | null;
     readonly realm_id: string;
     readonly guild_id: string;
     readonly guild_name?: string;
@@ -6069,7 +6107,7 @@ export interface TenantGuildBossLeaderboardResponse {
 
 // From chroniclesdk/rating_tenant_leaderboard.go
 export interface TenantGuildScopeLeaderboardEntry {
-    readonly generation_id: string;
+    readonly generation_id: string | null;
     readonly realm_id: string;
     readonly guild_id: string;
     readonly guild_name?: string;
@@ -6092,7 +6130,7 @@ export interface TenantGuildScopeLeaderboardResponse {
 
 // From chroniclesdk/rating_tenant_leaderboard.go
 export interface TenantPlayerBossLeaderboardEntry {
-    readonly generation_id: string;
+    readonly generation_id: string | null;
     readonly realm_id: string;
     readonly player_guid: string;
     readonly player_name?: string;
@@ -6132,7 +6170,7 @@ export interface TenantPlayerBossLeaderboardResponse {
 
 // From chroniclesdk/rating_tenant_leaderboard.go
 export interface TenantPlayerScopeLeaderboardEntry {
-    readonly generation_id: string;
+    readonly generation_id: string | null;
     readonly realm_id: string;
     readonly player_guid: string;
     readonly player_name?: string;
@@ -6171,6 +6209,14 @@ export interface TenantProofGrant {
     readonly user_id: string;
     readonly submit: boolean;
     readonly review: boolean;
+}
+
+// From chroniclesdk/rating_catchup.go
+/**
+ * TenantRatingCatchupResponse is a lightweight public status for an evolving board.
+ */
+export interface TenantRatingCatchupResponse {
+    readonly caught_up: boolean;
 }
 
 // From chroniclesdk/server_application.go

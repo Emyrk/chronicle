@@ -20,7 +20,9 @@ import (
 type publishedPlayerFullListReader interface {
 	GetActiveTenantRatingGeneration(context.Context, uuid.UUID) (uuid.UUID, error)
 	GetPublishedPlayerBossFullList(context.Context, database.GetPublishedPlayerBossFullListParams) (database.GetPublishedPlayerBossFullListRow, error)
+	GetEvolvingPlayerBossFullList(context.Context, database.GetEvolvingPlayerBossFullListParams) (database.GetEvolvingPlayerBossFullListRow, error)
 	GetPublishedPlayerScopeFullList(context.Context, database.GetPublishedPlayerScopeFullListParams) (database.GetPublishedPlayerScopeFullListRow, error)
+	GetEvolvingPlayerScopeFullList(context.Context, database.GetEvolvingPlayerScopeFullListParams) (database.GetEvolvingPlayerScopeFullListRow, error)
 }
 
 func (s *Service) handlePublishedPlayerFullList(w http.ResponseWriter, r *http.Request) {
@@ -71,8 +73,13 @@ func handlePublishedPlayerFullListWithStore(store publishedPlayerFullListReader,
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	evolving, modeErr := ratingEvolvingReader(ctx, store, tenant)
+	if modeErr != nil {
+		httpapi.InternalServerError(w, modeErr)
+		return
+	}
 	result := chroniclesdk.PublishedPlayerFullListResponse{Rows: []chroniclesdk.PublishedPlayerFullListRow{}, Page: int(page)}
-	if generation == uuid.Nil || err != nil {
+	if !evolving && (generation == uuid.Nil || err != nil) {
 		httpapi.Write(ctx, w, http.StatusOK, result)
 		return
 	}
@@ -101,13 +108,24 @@ func handlePublishedPlayerFullListWithStore(store publishedPlayerFullListReader,
 		OtherPerformanceMetric: otherPerformance, RealmIds: realms, SearchQuery: query,
 		LimitCount: int32(limit), OffsetCount: int32(page * limit),
 	}
+	if evolving {
+		params.GenerationID = uuid.Nil
+	}
 	var total int64
 	var rawRows any
 	if q.Has("encounter_name") {
-		row, readErr := store.GetPublishedPlayerBossFullList(ctx, params)
+		var row database.GetPublishedPlayerBossFullListRow
+		var readErr error
+		if evolving {
+			var selected database.GetEvolvingPlayerBossFullListRow
+			selected, readErr = store.GetEvolvingPlayerBossFullList(ctx, database.GetEvolvingPlayerBossFullListParams(params))
+			row = database.GetPublishedPlayerBossFullListRow(selected)
+		} else {
+			row, readErr = store.GetPublishedPlayerBossFullList(ctx, params)
+		}
 		total, rawRows, err = row.Total, row.Rows, readErr
 	} else {
-		row, readErr := store.GetPublishedPlayerScopeFullList(ctx, database.GetPublishedPlayerScopeFullListParams{
+		paramsScope := database.GetPublishedPlayerScopeFullListParams{
 			TenantID: params.TenantID, GenerationID: params.GenerationID, InstanceName: params.InstanceName,
 			DifficultyName: params.DifficultyName, MaxPlayers: params.MaxPlayers, PlayerClass: params.PlayerClass,
 			PlayerSpec: params.PlayerSpec, PlayerSubSpec: params.PlayerSubSpec, PerformanceMetric: params.PerformanceMetric,
@@ -116,7 +134,16 @@ func handlePublishedPlayerFullListWithStore(store publishedPlayerFullListReader,
 			RenownWindowKind: params.RenownWindowKind, OtherDifficultyName: params.OtherDifficultyName,
 			OtherMaxPlayers: params.OtherMaxPlayers, OtherPerformanceMetric: params.OtherPerformanceMetric,
 			OffsetCount: params.OffsetCount, LimitCount: params.LimitCount,
-		})
+		}
+		var row database.GetPublishedPlayerScopeFullListRow
+		var readErr error
+		if evolving {
+			var selected database.GetEvolvingPlayerScopeFullListRow
+			selected, readErr = store.GetEvolvingPlayerScopeFullList(ctx, database.GetEvolvingPlayerScopeFullListParams(paramsScope))
+			row = database.GetPublishedPlayerScopeFullListRow(selected)
+		} else {
+			row, readErr = store.GetPublishedPlayerScopeFullList(ctx, paramsScope)
+		}
 		total, rawRows, err = row.Total, row.Rows, readErr
 	}
 	if err != nil {
@@ -126,6 +153,9 @@ func handlePublishedPlayerFullListWithStore(store publishedPlayerFullListReader,
 	// Offset pages have no cursor. Reject a page assembled across a published
 	// generation switch rather than returning misleading ranks/total.
 	active, err := store.GetActiveTenantRatingGeneration(ctx, tenant)
+	if evolving {
+		active, err = generation, nil
+	}
 	if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, sql.ErrNoRows) || (err == nil && active != generation) {
 		tenantRatingStale(w, r)
 		return
@@ -141,6 +171,11 @@ func handlePublishedPlayerFullListWithStore(store publishedPlayerFullListReader,
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
+	}
+	if evolving {
+		for i := range result.Rows {
+			result.Rows[i].Entry.GenerationID = nil
+		}
 	}
 	result.Total = total
 	result.HasNextPage = page*limit+int64(len(result.Rows)) < result.Total

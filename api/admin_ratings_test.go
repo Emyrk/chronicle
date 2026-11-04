@@ -51,7 +51,10 @@ func TestAdminRatingConfigurationRoutesRemoved(t *testing.T) {
 			require.False(t, routes.Match(chi.NewRouteContext(), tc.method, path))
 		})
 	}
-	for _, path := range []string{"/api/v1/admin/ratings/rebuild", "/api/v1/admin/ratings/rebuild/all", "/api/v1/admin/ratings/renown/repair"} {
+	for _, path := range []string{"/api/v1/admin/ratings/rebuild", "/api/v1/admin/ratings/rebuild/all"} {
+		require.False(t, routes.Match(chi.NewRouteContext(), http.MethodPost, path), path)
+	}
+	for _, path := range []string{"/api/v1/admin/ratings/renown/repair"} {
 		require.True(t, routes.Match(chi.NewRouteContext(), http.MethodPost, path), path)
 		rec := httptest.NewRecorder()
 		routes.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, nil))

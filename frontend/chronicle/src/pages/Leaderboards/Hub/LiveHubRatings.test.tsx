@@ -6,7 +6,10 @@ import { useHubSummary } from "./hubSummaryAdapter"
 import { LiveHubRatings, type LiveHubRatingsProps } from "./LiveHubRatings"
 
 vi.mock("./hubSummaryAdapter", () => ({ useHubSummary: vi.fn() }))
-vi.mock("@tanstack/react-query", () => ({ useQueries: ({ queries }: { queries: unknown[] }) => queries.map(() => ({ isPending: false, isError: false, data: { rows: [], total: 0, page: 0, has_next_page: false } })) }))
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: () => ({ data: { caught_up: false } }),
+  useQueries: ({ queries }: { queries: unknown[] }) => queries.map(() => ({ isPending: false, isError: false, data: { rows: [], total: 0, page: 0, has_next_page: false } })),
+}))
 
 const player = (name: string, score: number, raw?: number) => ({ realm_id: "r", realm_name: "Nordanaar", player_guid: name, player_name: name, player_class: "MAGE", player_spec: "Fire", player_sub_spec: "", score, peak_raw: raw })
 const board = (names: string[]) => ({ player: { peak: names.map((n, i) => player(n, 100 - i, 1300 - i)), ranked_mastery: [], renown: [] }, guild: { peak: [], ranked_mastery: [], renown: [] } })
@@ -25,6 +28,7 @@ beforeEach(() => {
 describe("live Ratings tab", () => {
   it("draws the board and a card per boss from one Ratings-depth summary, Peak with its DPS", () => {
     const html = renderToStaticMarkup(<LiveHubRatings {...props} />)
+    expect(html).toContain("Catching up")
     expect(html).toContain("Top")
     expect(html).toContain('data-entity-kind="character"')
     expect(html).toContain('&quot;realm&quot;:&quot;Nordanaar&quot;')
