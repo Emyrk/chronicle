@@ -22035,8 +22035,11 @@ WITH tenants AS (
     SELECT tenant_id, count(*)::bigint AS total
     FROM rating_peak_cohort_pages_evolving GROUP BY tenant_id
 ), policy_scan AS (
-    SELECT tenant_id, count(*)::bigint AS unfinished_stages
-    FROM rating_policy_scan_progress WHERE NOT completed GROUP BY tenant_id
+    SELECT tenant_id, count(*)::bigint AS total_stages,
+           count(*) FILTER (WHERE NOT completed)::bigint AS unfinished_stages,
+           min(array_position(ARRAY['runs','renown','mastery','peak','player_scope','guild_scope']::text[], stage))
+               FILTER (WHERE NOT completed) AS current_stage_number
+    FROM rating_policy_scan_progress GROUP BY tenant_id
 ), active_jobs AS (
     SELECT (args->>'tenant_id')::uuid AS tenant_id, count(*)::bigint AS total
     FROM river_job
@@ -22054,7 +22057,9 @@ SELECT tenants.tenant_id::uuid AS tenant_id,
        dirty_peak.oldest::timestamptz AS oldest_peak,
        COALESCE(peak_pages.total, 0)::bigint AS peak_pages,
        COALESCE(active_jobs.total, 0)::bigint AS active_drain_jobs,
+       COALESCE(policy_scan.total_stages, 0)::bigint AS policy_scan_stages,
        COALESCE(policy_scan.unfinished_stages, 0)::bigint AS unfinished_policy_scan_stages,
+       COALESCE(policy_scan.current_stage_number, 0)::int AS policy_scan_stage_number,
        bootstrap.after_run_id, bootstrap.source_cutoff, bootstrap.completed_at,
        COALESCE(read_state.state, CASE WHEN EXISTS (
            SELECT 1 FROM rating_score_generations g
@@ -22085,7 +22090,9 @@ type ListTenantRatingCatchupStatusRow struct {
 	OldestPeak                 pgtype.Timestamptz `db:"oldest_peak" json:"oldest_peak"`
 	PeakPages                  int64              `db:"peak_pages" json:"peak_pages"`
 	ActiveDrainJobs            int64              `db:"active_drain_jobs" json:"active_drain_jobs"`
+	PolicyScanStages           int64              `db:"policy_scan_stages" json:"policy_scan_stages"`
 	UnfinishedPolicyScanStages int64              `db:"unfinished_policy_scan_stages" json:"unfinished_policy_scan_stages"`
+	PolicyScanStageNumber      int32              `db:"policy_scan_stage_number" json:"policy_scan_stage_number"`
 	AfterRunID                 uuid.NullUUID      `db:"after_run_id" json:"after_run_id"`
 	SourceCutoff               pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
 	CompletedAt                pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
@@ -22115,7 +22122,9 @@ func (q *sqlQuerier) ListTenantRatingCatchupStatus(ctx context.Context) ([]ListT
 			&i.OldestPeak,
 			&i.PeakPages,
 			&i.ActiveDrainJobs,
+			&i.PolicyScanStages,
 			&i.UnfinishedPolicyScanStages,
+			&i.PolicyScanStageNumber,
 			&i.AfterRunID,
 			&i.SourceCutoff,
 			&i.CompletedAt,

@@ -20,7 +20,8 @@ func TestRatingCatchupSnapshot(t *testing.T) {
 		{TenantID: uuid.New()},
 		{TenantID: tenant, ReadState: "evolving", SourceCutoff: pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true},
 			CompletedAt:  pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true},
-			DirtyMastery: 2, OldestMastery: pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true}},
+			DirtyMastery: 2, OldestMastery: pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true},
+			PolicyScanStages: 6, UnfinishedPolicyScanStages: 4, PolicyScanStageNumber: 3},
 		{TenantID: uuid.New(), ReadState: "evolving", SourceCutoff: pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true},
 			CompletedAt: pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true}},
 	}
@@ -30,8 +31,14 @@ func TestRatingCatchupSnapshot(t *testing.T) {
 	require.Equal(t, "not_started", result.Tenants[0].Status)
 	require.Equal(t, "catching_up", result.Tenants[1].Status)
 	require.Equal(t, int64(2), result.Tenants[1].DirtyMastery)
+	require.Equal(t, int64(6), result.Tenants[1].PolicyScanStages)
+	require.Equal(t, int64(4), result.Tenants[1].UnfinishedPolicyScanStages)
+	require.Equal(t, int32(3), result.Tenants[1].PolicyScanStageNumber)
 	require.NotNil(t, result.Tenants[1].OldestMastery)
 	require.Nil(t, result.Tenants[1].OldestRun)
+	rows[0].PolicyScanStages = 6
+	rows[0].UnfinishedPolicyScanStages = 6
+	require.Equal(t, "catching_up", ratingCatchupSnapshot(rows, nil, now).Tenants[0].Status)
 	require.Equal(t, "caught_up", result.Tenants[2].Status)
 }
 
@@ -75,5 +82,15 @@ func TestListTenantRatingCatchupStatus(t *testing.T) {
 	require.Equal(t, int64(1), rows[0].DirtyRuns)
 	require.True(t, rows[0].OldestRun.Valid)
 	require.True(t, rows[0].SourceCutoff.Valid)
+	require.Equal(t, int64(0), rows[0].PolicyScanStages)
+	_, err = pool.Exec(ctx, `INSERT INTO rating_policy_scan_progress (tenant_id, stage, completed)
+		SELECT $1, stage, stage IN ('runs', 'renown') FROM unnest(ARRAY['runs','renown','mastery','peak','player_scope','guild_scope']::text[]) stage`, uuid.Nil)
+	require.NoError(t, err)
+	rows, err = store.ListTenantRatingCatchupStatus(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, int64(6), rows[0].PolicyScanStages)
+	require.Equal(t, int64(4), rows[0].UnfinishedPolicyScanStages)
+	require.Equal(t, int32(3), rows[0].PolicyScanStageNumber)
 	require.False(t, rows[0].CompletedAt.Valid)
 }

@@ -26,7 +26,9 @@ type AdminTenantRatingCatchup struct {
 	DirtyRenown                int64      `json:"dirty_renown"`
 	DirtyMastery               int64      `json:"dirty_mastery"`
 	DirtyPeak                  int64      `json:"dirty_peak"`
+	PolicyScanStages           int64      `json:"policy_scan_stages"`
 	UnfinishedPolicyScanStages int64      `json:"unfinished_policy_scan_stages"`
+	PolicyScanStageNumber      int32      `json:"policy_scan_stage_number"`
 	ActiveDrainJobs            int64      `json:"active_drain_jobs"`
 	PeakPages                  int64      `json:"peak_pages"`
 	OldestRun                  *time.Time `json:"oldest_run,omitempty"`

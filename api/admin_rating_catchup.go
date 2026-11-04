@@ -53,7 +53,7 @@ func ratingCatchupSnapshot(rows []database.ListTenantRatingCatchupStatusRow, job
 	}
 	for _, row := range rows {
 		status := "catching_up"
-		if !row.SourceCutoff.Valid {
+		if !row.SourceCutoff.Valid && row.UnfinishedPolicyScanStages == 0 {
 			status = "not_started"
 		} else if row.ReadState == "evolving" && row.CompletedAt.Valid && row.DirtyRuns+row.DirtyRenown+row.DirtyMastery+row.DirtyPeak+row.PeakPages+row.ActiveDrainJobs+row.UnfinishedPolicyScanStages == 0 {
 			status = "caught_up"
@@ -63,7 +63,8 @@ func ratingCatchupSnapshot(rows []database.ListTenantRatingCatchupStatusRow, job
 			DirtyRuns: row.DirtyRuns, DirtyRenown: row.DirtyRenown,
 			DirtyMastery: row.DirtyMastery, DirtyPeak: row.DirtyPeak,
 			PeakPages: row.PeakPages, ActiveDrainJobs: row.ActiveDrainJobs,
-			UnfinishedPolicyScanStages: row.UnfinishedPolicyScanStages, OldestRun: ratingCatchupTimestamp(row.OldestRun),
+			PolicyScanStages: row.PolicyScanStages, UnfinishedPolicyScanStages: row.UnfinishedPolicyScanStages,
+			PolicyScanStageNumber: row.PolicyScanStageNumber, OldestRun: ratingCatchupTimestamp(row.OldestRun),
 			OldestRenown:     ratingCatchupTimestamp(row.OldestRenown),
 			OldestMastery:    ratingCatchupTimestamp(row.OldestMastery),
 			OldestPeak:       ratingCatchupTimestamp(row.OldestPeak),
