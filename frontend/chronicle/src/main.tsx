@@ -38,6 +38,9 @@ const tree = (
   </StrictMode>
 )
 
+// Replace the public HTML summary with its React counterpart for client-side navigation.
+document.getElementById('server-public-summary')?.remove()
+
 if (root.hasChildNodes()) {
   hydrateRoot(root, tree)
 } else {

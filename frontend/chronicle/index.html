@@ -46,9 +46,33 @@
     <meta property="GitTag" content="{{ .GitTag }}" />
     <meta property="BuildTime" content="{{ .BuildTime }}" />
     <title>{{ if .Title }}{{ .Title }}{{ else }}Chronicle{{ end }}</title>
+    <style>
+      .public-summary { max-width: 80rem; margin: 0 auto; padding: 2rem 1.5rem 3rem; border-top: 1px solid #52525b; color: #d4d4d8; background: #18181b; }
+      .public-summary h1, .public-summary h2 { font-size: 1.25rem; font-weight: 600; color: #fafafa; margin-bottom: .5rem; }
+      .public-summary p { max-width: 48rem; line-height: 1.65; }
+      .public-summary nav { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; margin-top: 1rem; }
+      .public-summary a { color: #b5d9ed; text-decoration: underline; text-underline-offset: .2rem; }
+      html:not(.dark) .public-summary { color: #3f3f46; border-color: #d4d4d8; background: #fff; }
+      html:not(.dark) .public-summary h1, html:not(.dark) .public-summary h2 { color: #18181b; }
+      html:not(.dark) .public-summary a { color: #155e75; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <!-- Public summaries remain readable without JavaScript. React replaces this section on startup. -->
+    <!-- {{ if .SEOHome }} -->
+    <section id="server-public-summary" class="public-summary" aria-label="About Chronicle">
+      <h1>{{ if .SiteName }}{{ .SiteName }}{{ else }}Chronicle{{ end }} combat log analysis</h1>
+      <p>Upload combat logs to explore raid damage, healing, deaths, and performance. Browse public reports and compare players and guilds.</p>
+      <nav aria-label="Explore raid analysis"><a href="/recent">Recent raids</a><a href="/leaderboards/statistics">Raid statistics</a><a href="/guilds">Guilds</a></nav>
+    </section>
+    <!-- {{ else if .SEOStatistics }} -->
+    <section id="server-public-summary" class="public-summary" aria-label="About raid statistics">
+      <h1>{{ if .SiteName }}{{ .SiteName }}{{ else }}Chronicle{{ end }} raid statistics</h1>
+      <p>Explore combat log rankings and raid performance statistics. Compare damage and healing across encounters, then open a public raid report for more detail.</p>
+      <nav aria-label="Explore raid analysis"><a href="/recent">Recent raids</a><a href="/leaderboards/speedruns">Speedrun leaderboards</a><a href="/guilds">Guilds</a></nav>
+    </section>
+    <!-- {{ end }} -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

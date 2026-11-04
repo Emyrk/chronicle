@@ -236,6 +236,16 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	// Serve visible pre-rendered summaries only on public indexable pages.
+	// React replaces the summary when the application starts.
+	if state.Robots == "" {
+		switch path.Clean(req.URL.Path) {
+		case "/":
+			state.SEOHome = true
+		case "/leaderboards/statistics":
+			state.SEOStatistics = true
+		}
+	}
 	state.escapeHTMLAttributes()
 
 	if h.serveHTML(resp, req, reqFile, state) {
@@ -335,16 +345,18 @@ type htmlState struct {
 	OGURL         string
 
 	// Branding and SEO overrides populated from tenant context.
-	Title        string
-	SiteName     string
-	Description  string
-	CanonicalURL string
-	ImageURL     string
-	Robots       string
-	JSONLD       string
-	Favicon      string
-	ThemeCSS     string
-	GA4ID        string
+	SEOHome       bool
+	SEOStatistics bool
+	Title         string
+	SiteName      string
+	Description   string
+	CanonicalURL  string
+	ImageURL      string
+	Robots        string
+	JSONLD        string
+	Favicon       string
+	ThemeCSS      string
+	GA4ID         string
 }
 
 func (s *htmlState) escapeHTMLAttributes() {
