@@ -869,6 +869,10 @@ type sqlcQuerier interface {
 	IsLayoutTrackedByUser(ctx context.Context, arg IsLayoutTrackedByUserParams) (bool, error)
 	IsLogInstanceInvalid(ctx context.Context, id uuid.UUID) (bool, error)
 	IsParsedLogGroupVisible(ctx context.Context, id uuid.UUID) (bool, error)
+	// Whether the instance is on the request's tenant (wow_server_realms' RLS
+	// policy hides other tenants' realms), for the admin-pinned landing run:
+	// site_config, and so the pin, spans every tenant.
+	LandingInstanceInTenant(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	// The /start montage's candidates: for each instance name on the tenant, its
 	// fastest positional runs by the default speedrun board's rules
 	// (SpeedrunLeaderboard with full timing: qualified, meeting the version
@@ -882,6 +886,8 @@ type sqlcQuerier interface {
 	// The newest public, listed, finalized instances on the tenant whose log
 	// recorded unit positions and that have a boss encounter, for the /start
 	// hero's pick. Newest first.
+	// The tenant scope: wow_server_realms' RLS policy hides other tenants' realms
+	// (log_instances has no policy of its own).
 	LandingPositionalInstances(ctx context.Context, limitCount int32) ([]LandingPositionalInstancesRow, error)
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActiveAllClassPlayerTenantBossScores(ctx context.Context, arg ListActiveAllClassPlayerTenantBossScoresParams) ([]ListActiveAllClassPlayerTenantBossScoresRow, error)

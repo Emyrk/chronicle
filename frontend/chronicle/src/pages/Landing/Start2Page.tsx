@@ -7,9 +7,8 @@ import { Button } from "@/components/ui/button";
 import { trackFunnel } from "@/utils/funnel";
 import { BossRail } from "./BossRail";
 import type { ExploreTarget } from "./explore3D";
-import { useHeroClips, visitClip } from "./heroClips";
 import { HeroMeter } from "./HeroMeter";
-import { clipMeter, type HeroMeterPane } from "./heroMeter";
+import type { HeroMeterPane } from "./heroMeter";
 import { HeroReplayLayer, type HeroEntry } from "./HeroReplayLayer";
 import { heroWindow, type HeroReplay } from "./heroReplay";
 import { HeroScrubber, LandingHero } from "./LandingHero";
@@ -225,23 +224,16 @@ export function Start2Page() {
   const releaseHold = useCallback(() => setBossPick((pick) => pick && { ...pick, hold: false }), []);
   // The hero and its boss rail: scrolling it away releases a held pick.
   const replaySectionRef = useRef<HTMLDivElement>(null);
-  // The pre-rendered clips play until the live 3D shows: index.html picked this visit's (and painted its poster),
-  // and each pass moves on to the next.
-  const { data: clips } = useHeroClips();
-  const [visit] = useState(visitClip);
-  const [clipPasses, setClipPasses] = useState(0);
-  const nextClip = useCallback(() => setClipPasses((passes) => passes + 1), []);
-  const firstClip = clips ? Math.max(0, clips.findIndex((clip) => clip.slug === visit?.slug)) : 0;
-  const clip = clips?.length ? clips[(firstClip + clipPasses) % clips.length] : null;
-  // The glass meter: the clip's numbers, then the live run's once processed.
+  // No pre-rendered clips: the bundled ones are another server's runs (names and numbers baked in), so the hero
+  // shows a neutral poster until this tenant's live replay is up.
+  // The phone meter strip: the live run's numbers once processed.
   const [pane, setPane] = useState<HeroMeterPane>("damage_done");
-  const meter = replay?.meter ?? (clip ? clipMeter(clip) : null);
-  const meterKey = replay?.meter ? `live-${hero?.run.instance_id}` : `clip-${clip?.slug}`;
+  const meter = replay?.meter ?? null;
+  const meterKey = `live-${hero?.run.instance_id}`;
   // The run page link: the live replay's run, else the run it will play.
   const meterRun = meter?.run ?? (hero ? { id: hero.run.instance_id } : null);
   const changePane = (next: HeroMeterPane) => {
     setPane(next);
-    // A clip has no healing numbers: the live replay brings them.
     if (next === "healing_done" && !meter?.healing) requestLive();
   };
 
@@ -277,7 +269,7 @@ export function Start2Page() {
       run,
       encounterId: hero?.window?.encounterId ?? null,
       startMs: replay?.currentMs,
-      poster: clip?.poster ?? visit?.poster ?? null,
+      poster: null,
     }, replay !== null);
   };
   const exploreModal = explore && (
@@ -292,12 +284,9 @@ export function Start2Page() {
     <div className="flex flex-col overflow-x-hidden bg-background text-foreground">
       <div ref={replaySectionRef}>
         <LandingHero
-          poster={visit?.poster ?? clip?.poster ?? `${IMAGES}/ruins-courtyard-poster.jpg`}
-          posterPortrait={visit?.posterPortrait ?? clip?.portrait.poster ?? `${IMAGES}/ruins-courtyard-poster-portrait.jpg`}
+          poster={`${IMAGES}/ruins-courtyard-poster.jpg`}
+          posterPortrait={`${IMAGES}/ruins-courtyard-poster-portrait.jpg`}
           posterAlt="3D replay of a dungeon boss fight"
-          clip={clip}
-          clipLoops={clips?.length === 1}
-          onClipEnded={nextClip}
           live={replay !== null}
           onRequestLive={requestLive}
           siteName={siteName}

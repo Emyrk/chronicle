@@ -20,9 +20,12 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 )
 
@@ -416,4 +419,80 @@ func seedLandingInstance(t *testing.T, store database.Store, start, end time.Tim
 	}).Exec(func(_ int, err error) { require.NoError(t, err) })
 
 	return instanceID
+}
+
+// The hero only ever shows the requesting tenant's runs: the newest-positional
+// fallback and the admin pin both go through the tenant's RLS realm scope
+// (site_config, and so the pin, spans every tenant).
+func TestLandingFeaturedRespectsTenant(t *testing.T) {
+	t.Parallel()
+
+	ctx := testutil.Context(t, testutil.WaitLong)
+	url := dbtestutil.NewConnectionURL(t)
+
+	// Seed with RLS bypassed.
+	seedCfg, err := pgxpool.ParseConfig(url)
+	require.NoError(t, err)
+	seedCfg.ConnConfig.RuntimeParams["app.tenant_bypass"] = "true"
+	seedPool, err := pgxpool.NewWithConfig(ctx, seedCfg)
+	require.NoError(t, err)
+	t.Cleanup(seedPool.Close)
+	seed := database.New(seedPool)
+
+	start := time.Date(2026, 10, 20, 20, 0, 0, 0, time.UTC)
+	ours := seedLandingInstance(t, seed, start, start.Add(time.Hour), []string{"unit-position"}, 33)
+	// Another tenant's run: newer, so a tenant-blind "newest" pick would choose it.
+	theirs := seedLandingInstance(t, seed, start.Add(24*time.Hour), start.Add(25*time.Hour), []string{"unit-position"}, 33)
+	tenantOf := func(instanceID uuid.UUID) uuid.UUID {
+		t.Helper()
+		tenant := uuid.New()
+		_, err := seedPool.Exec(ctx, "INSERT INTO tenants (id, name, include_in_all) VALUES ($1, $2, false)", tenant, "tenant-"+tenant.String()[:8])
+		require.NoError(t, err)
+		_, err = seedPool.Exec(ctx, `UPDATE wow_servers SET tenant_id = $1
+			WHERE id = (SELECT server_id FROM wow_server_realms WHERE id = (SELECT realm_id FROM log_instances WHERE id = $2))`, tenant, instanceID)
+		require.NoError(t, err)
+		return tenant
+	}
+	ourTenant := tenantOf(ours)
+	tenantOf(theirs)
+
+	// Queries as production runs them: app.tenant_id on the connection, as the chronicle role so RLS applies.
+	cfg, err := pgxpool.ParseConfig(url)
+	require.NoError(t, err)
+	cfg.ConnConfig.RuntimeParams["app.tenant_id"] = ourTenant.String()
+	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "SET ROLE chronicle")
+		return err
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	zed := authz.NewDatabaseOnly(testutil.Logger(t), database.New(pool))
+	handlerAPI := &API{AppContext: ctx, Opts: &Options{Zed: zed, Logger: testutil.Logger(t)}, landingMeshMaps: func(context.Context, uuid.UUID) (map[int32]bool, error) {
+		return map[int32]bool{33: true}, nil
+	}}
+	get := func() []uuid.UUID {
+		t.Helper()
+		handlerAPI.landing.invalidate()
+		req := httptest.NewRequest(http.MethodGet, "/landing/featured", nil)
+		req = req.WithContext(servicetenant.WithTenantID(req.Context(), ourTenant))
+		res := httptest.NewRecorder()
+		handlerAPI.LandingFeatured(res, req)
+		require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+		var out chroniclesdk.LandingFeaturedResponse
+		require.NoError(t, json.Unmarshal(res.Body.Bytes(), &out))
+		ids := make([]uuid.UUID, 0, len(out.Entries))
+		for _, entry := range out.Entries {
+			ids = append(ids, entry.InstanceID)
+		}
+		return ids
+	}
+
+	require.Equal(t, []uuid.UUID{ours}, get(), "the fallback picks only this tenant's run")
+
+	// A pin on another tenant's run is skipped: not shown, and not fatal to the rest.
+	_, err = seedPool.Exec(ctx, "UPDATE site_config SET landing_featured_instance_id = $1 WHERE id = TRUE", theirs)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{ours}, get(), "another tenant's pin is skipped")
 }

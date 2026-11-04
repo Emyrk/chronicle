@@ -1,28 +1,6 @@
 <!doctype html>
 <html lang="en" class="dark" style="{{ .ThemeCSS }}">
   <head>
-    <script>
-      // The WoW Forever landing (/ and /start2): pick this visit's hero clip (they rotate per visit).
-      // The app reads the pick from these data attributes (pages/Landing/heroClips.ts).
-      // HERO_CLIPS mirrors clips.json's slug, poster and portrait.poster (heroClips.test.ts checks it).
-      (function () {
-        var HERO_CLIPS = [
-          ["-8uWqvAo4Qa4Oa5l", "/c/images/landing/clips/zg-hakkar.5e485f45.webp", "/c/images/landing/clips/zg-hakkar-portrait.3211329e.webp"],
-          ["cpegIP_Qz9m6JEnZ", "/c/images/landing/clips/mc-ragnaros.d3702349.webp", "/c/images/landing/clips/mc-ragnaros-portrait.38792648.webp"]
-        ];
-        var landing = location.pathname === "/" || location.pathname === "/start2";
-        var visit = 0;
-        try {
-          visit = Number(localStorage.getItem("landing-hero-clip")) || 0;
-          if (landing) localStorage.setItem("landing-hero-clip", String(visit + 1));
-        } catch (e) {}
-        var clip = HERO_CLIPS[visit % HERO_CLIPS.length];
-        var data = document.documentElement.dataset;
-        data.heroClip = clip[0];
-        data.heroPoster = clip[1];
-        data.heroPosterPortrait = clip[2];
-      })();
-    </script>
     <!-- {{ if .GA4ID }} -->
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id={{ .GA4ID }}"></script>
