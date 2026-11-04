@@ -7,6 +7,7 @@ function player(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
     guid: "player",
     name: "Player",
     heroClass: "Mage",
+    offsetMilli: 0,
     race: "Human",
     gender: 0,
     guildName: null,
