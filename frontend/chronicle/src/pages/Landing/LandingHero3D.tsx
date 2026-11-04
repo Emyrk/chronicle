@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { InstanceEventsProvider, useInstanceEventsContext, type CachedStream, type StreamType } from "@/hooks/instanceEvents";
 import type { Instance } from "@/pages/Instance/InstancePage";
@@ -16,6 +17,7 @@ import { previewSpeed, useMapScene } from "@/pages/Instance/EventsPanels/Map/use
 import { liveHeroRun } from "./explore3D";
 import { serializableContext, type HeroDeathBeat, type HeroDeathRecap, type HeroReplay, type HeroWindow } from "./heroReplay";
 import { meterTotals, type HeroMeterData } from "./heroMeter";
+import { HeroMapMeter } from "./HeroMapMeter";
 import { HeroRaidFramesCard, HeroThreatCard } from "./HeroStats";
 import { useHeroStats } from "./useHeroStats";
 import { useLandingInstance } from "./useLandingInstance";
@@ -63,6 +65,8 @@ interface LandingHero3DProps {
   startPaused?: boolean;
   /** Where in the pull's window the replay begins, in ms (the hero's position when the Explore modal takes over). */
   initialMs?: number;
+  /** Where to draw the 3D map's own meter window (Damage Done) following the replay; unset draws none. */
+  meterSlot?: HTMLElement | null;
 }
 
 /**
@@ -200,7 +204,7 @@ function useHeroMeterAmounts(instance: Instance, encounterIds: string[] | undefi
   });
 }
 
-export function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, onReplay, explore = false, startPaused = false, initialMs = 0 }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
+export function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, onReplay, explore = false, startPaused = false, initialMs = 0, meterSlot = null }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
   const encounterId = pull?.encounterId ?? null;
   const run = useHeroRun(instance, encounterId);
   const processedRecaps = useHeroDeaths(instance, encounterId, run.isSuccess).data ?? null;
@@ -458,6 +462,16 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
         // The compass only where the camera is free (Explore): on the hero backdrop it sits over the overlays.
         showCompass={explore}
       />
+      {meterSlot && shown && span && currentMs !== null && createPortal(
+        <HeroMapMeter
+          context={props.context}
+          durationMs={span.durationMs}
+          cursorMs={span.startMs + playableMs}
+          startMs={span.startMs}
+          endMs={span.endMs}
+        />,
+        meterSlot,
+      )}
       {explore && shown && (
         <div className="absolute left-3 top-3 flex items-center gap-2 rounded-md border bg-background/80 px-2.5 py-1.5 text-xs text-foreground shadow-lg backdrop-blur-sm lg:left-4 lg:top-4">
           {followedName && <span>Following <span className="font-semibold">{followedName}</span></span>}

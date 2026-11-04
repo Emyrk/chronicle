@@ -194,6 +194,8 @@ export function Start2Page() {
     : FALLBACK_FEATURED_INSTANCE ? [{ instanceId: FALLBACK_FEATURED_INSTANCE }] : [],
   [heroes]);
   const [heroIndex, setHeroIndex] = useState(0);
+  // The hero's overlay the live replay portals the 3D map's meter window into.
+  const [meterSlot, setMeterSlot] = useState<HTMLDivElement | null>(null);
   const holding = bossPick?.hold ?? false;
   const advanceHero = useCallback(() => {
     if (holding) return;
@@ -303,16 +305,10 @@ export function Start2Page() {
               <p className="m-0 text-lg font-semibold text-muted-foreground lg:text-xl">Every dungeon you run, saved in detail.</p>
             </div>
           }
-          meter={meter && (
-            <div className="pointer-events-none absolute inset-0 mx-auto hidden max-w-[1180px] min-[900px]:block">
-              {/* The stats column, following the replay's cursor: the glass meter, then Raid Frames from lg up.
-                  No Threat panel: it is not a panel the site supports yet. */}
-              <div className="pointer-events-auto absolute right-4 top-4 flex w-[300px] flex-col gap-2 lg:right-8 lg:top-auto lg:bottom-[112px] lg:w-[320px]">
-                <HeroMeter data={meter} sourceKey={meterKey} pane={pane} onPaneChange={changePane} onDrill={requestLive} run={meterRun} />
-                {replay?.renderRaidFrames && <div className="hidden lg:block">{replay.renderRaidFrames(null)}</div>}
-              </div>
-            </div>
-          )}
+          meter={
+            // From 900 px up the live replay draws the 3D map's own meter window (Damage Done) here.
+            <div ref={setMeterSlot} className="pointer-events-none absolute inset-0 mx-auto hidden max-w-[1180px] min-[900px]:block" />
+          }
           featured={hero?.run}
           currentMs={replay?.currentMs}
           playback={replay}
@@ -326,6 +322,7 @@ export function Start2Page() {
               explore={explore?.hosted ? exploreModal : null}
               onAdvance={advanceHero}
               onReplay={setReplay}
+              meterSlot={meterSlot}
             />
           ) : null}
           onExplore={hero ? exploreHero : undefined}

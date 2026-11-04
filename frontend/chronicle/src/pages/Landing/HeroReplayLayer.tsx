@@ -64,13 +64,14 @@ export interface HeroEntry {
 }
 
 /** One entry's replay. A hidden slot preloads (instance, streams, mesh) without playing or showing. */
-function HeroSlot({ slotKey, entry, active, hidden, onPullEnd, onReplay, children }: {
+function HeroSlot({ slotKey, entry, active, hidden, onPullEnd, onReplay, meterSlot, children }: {
   slotKey: string;
   entry: HeroEntry;
   active: boolean;
   hidden: boolean;
   onPullEnd?: () => void;
   onReplay: (slotKey: string, replay: HeroReplay | null) => void;
+  meterSlot?: HTMLElement | null;
   /** Rendered inside the entry's run (its stream cache): the Explore modal taking it over. */
   children?: ReactNode;
 }) {
@@ -87,6 +88,7 @@ function HeroSlot({ slotKey, entry, active, hidden, onPullEnd, onReplay, childre
             active={active}
             onPullEnd={onPullEnd}
             onReplay={report}
+            meterSlot={meterSlot}
           >
             {children}
           </LandingHero3D>
@@ -111,7 +113,7 @@ function HeroSlot({ slotKey, entry, active, hidden, onPullEnd, onReplay, childre
  * While `paused` (the Explore modal is open) the replay holds still; `explore` renders
  * inside the playing entry's run, so the modal reuses its instance, streams and mesh.
  */
-export function HeroReplayLayer({ entries, index, requested = false, paused = false, explore, onAdvance, onReplay }: {
+export function HeroReplayLayer({ entries, index, requested = false, paused = false, explore, onAdvance, onReplay, meterSlot }: {
   /** The montage; empty leaves the poster. */
   entries: HeroEntry[];
   /** The entry playing. */
@@ -125,6 +127,8 @@ export function HeroReplayLayer({ entries, index, requested = false, paused = fa
   /** Moves the montage on to the next entry. */
   onAdvance: () => void;
   onReplay: (replay: HeroReplay | null) => void;
+  /** Where the playing entry draws the 3D map's meter window; unset draws none. */
+  meterSlot?: HTMLElement | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [webgl] = useState(() => entries.length > 0 && hasWebGL2());
@@ -206,6 +210,7 @@ export function HeroReplayLayer({ entries, index, requested = false, paused = fa
           hidden={false}
           onPullEnd={nextKey ? handlePullEnd : undefined}
           onReplay={handleReplay}
+          meterSlot={meterSlot}
         >
           {explore}
         </HeroSlot>
