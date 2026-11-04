@@ -4,7 +4,6 @@ import type { LandingFeaturedRun } from "@/api/typesGenerated";
 import { useSiteConfig } from "@/api/siteConfigQuery";
 import { seoProductName } from "@/lib/seo";
 import { Button } from "@/components/ui/button";
-import { useIsMobile } from "@/hooks/useIsMobile";
 import { trackFunnel } from "@/utils/funnel";
 import { BossRail } from "./BossRail";
 import type { ExploreTarget } from "./explore3D";
@@ -165,8 +164,7 @@ function BelowFold({ onExplore }: { onExplore: (target: ExploreTarget) => void }
 
 /** /start2: a working copy of StartPage inside the site Layout (our NavBar and Footer), to be edited down. */
 export function Start2Page() {
-  const isMobile = useIsMobile();
-  const getSidekickHref = isMobile ? "#send-link" : "#get";
+  const getSidekickHref = "/download";
   const { data: landing, isError: landingFailed } = useLandingFeatured();
   const { data: siteConfig } = useSiteConfig();
   const siteName = (siteConfig?.tenant?.branding ?? siteConfig?.branding)?.display_name;
@@ -330,6 +328,7 @@ export function Start2Page() {
           currentMs={replay?.currentMs}
           playback={replay}
           getSidekickHref={getSidekickHref}
+          ctaVariant="default"
           layer3D={landing || landingFailed ? (
             <HeroReplayLayer
               entries={heroEntries}

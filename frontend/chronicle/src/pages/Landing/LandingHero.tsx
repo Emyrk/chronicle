@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { Pause, Play, Rotate3d } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { LandingFeaturedDeath, LandingFeaturedRun } from "@/api/typesGenerated";
 import { Button } from "@/components/ui/button";
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
@@ -52,6 +53,8 @@ interface LandingHeroProps {
   playback?: HeroReplay | null;
   /** Where the hero's install CTA points (the download band on desktop, the send-link form on phones). */
   getSidekickHref: string;
+  /** The Get Sidekick button's style (the site's default, or the landing's bright one). */
+  ctaVariant?: "default" | "button-bright";
   /**
    * Slot for the live 3D replay, layered above the poster and below the
    * gradients and copy (HeroReplayLayer mounts the lazy LandingHero3D here).
@@ -442,6 +445,7 @@ export function LandingHero({
   currentMs = 0,
   playback,
   getSidekickHref,
+  ctaVariant = "button-bright",
   layer3D,
   onExplore,
 }: LandingHeroProps) {
@@ -542,10 +546,17 @@ export function LandingHero({
           </p>
         )}
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <Button asChild variant="button-bright" size="lg" className="h-11 text-[15px] font-semibold lg:h-12 lg:text-base">
-            <a href={getSidekickHref} onClick={() => trackFunnel("cta_sidekick", { placement: "hero" })} className="no-underline">
-              Get Sidekick, free
-            </a>
+          <Button asChild variant={ctaVariant} size="lg" className="h-11 text-[15px] font-semibold lg:h-12 lg:text-base">
+            {/* An app route (e.g. /download) navigates in place; an anchor scrolls the page. */}
+            {getSidekickHref.startsWith("/") ? (
+              <Link to={getSidekickHref} onClick={() => trackFunnel("cta_sidekick", { placement: "hero" })} className="no-underline">
+                Get Sidekick, free
+              </Link>
+            ) : (
+              <a href={getSidekickHref} onClick={() => trackFunnel("cta_sidekick", { placement: "hero" })} className="no-underline">
+                Get Sidekick, free
+              </a>
+            )}
           </Button>
           <span className="text-xs text-muted-foreground lg:text-[13px]">Mac &amp; Windows · no account to watch</span>
         </div>
