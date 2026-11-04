@@ -288,10 +288,10 @@ func TestRankingEncounterSets(t *testing.T) {
 	wrath := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorWrath})
 	obsidianSanctum := instanceDetailByName(t, wrath, "Obsidian Sanctum")
 	require.Equal(t, []instances.RankingEncounterSet{
-		{Label: "Normal", Encounters: []string{"Sartharion"}},
-		{ID: "1d", Label: "1 Drake", Encounters: []string{"Sartharion (1 Drake)"}},
-		{ID: "2d", Label: "2 Drakes", Encounters: []string{"Sartharion (2 Drakes)"}},
-		{ID: "3d", Label: "3 Drakes", Encounters: []string{"Sartharion (3 Drakes)"}},
+		{Label: "0D", Encounters: []string{"Sartharion"}},
+		{ID: "1d", Label: "1D", Encounters: []string{"Sartharion (1 Drake)"}},
+		{ID: "2d", Label: "2D", Encounters: []string{"Sartharion (2 Drakes)"}},
+		{ID: "3d", Label: "3D", Encounters: []string{"Sartharion (3 Drakes)"}},
 	}, obsidianSanctum.RankingEncounterSets)
 	require.Equal(t, []string{
 		"Sartharion",
