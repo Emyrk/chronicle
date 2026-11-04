@@ -3,11 +3,13 @@ package database_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/ratingmath"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/google/uuid"
 	"github.com/riverqueue/river"
@@ -86,6 +88,134 @@ func TestTenantRatingStageIncludesUnassignedRealmsAndBosses(t *testing.T) {
 	generationStatus, phase = status()
 	require.Equal(t, "active", generationStatus)
 	require.Equal(t, "complete", phase)
+}
+
+// Compare the incremental raw-best and roster-aware scope projections against
+// a published full rebuild over the same canonical runs.
+func TestIncrementalPeakMatchesFullRebuildForCanonicalRuns(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	pool, store, realm := setupParsesTest(t)
+	guild, err := store.UpsertGuild(ctx, database.UpsertGuildParams{
+		RealmID: realm, Name: "peak-parity-guild", CreatedAt: database.Timestamptz(time.Now().UTC()),
+	})
+	require.NoError(t, err)
+	for i, raw := range []float64{100, 200} {
+		run := uuid.New()
+		insertRankingRow(t, pool, store, realm, rankingOpts{
+			instanceID: run, instanceName: "Uncurated Raid", encounterName: "Uncurated Boss",
+			playerGUID: fmt.Sprintf("player-%d", i), playerClass: "MAGE", difficultyName: "Normal",
+			maxPlayers: 40, durationSecs: float64(5 + 5*i), dps: raw, killedAt: time.Now().UTC().Add(-time.Hour), isBoss: true,
+		})
+		if i == 1 {
+			_, err = pool.Exec(ctx, "UPDATE log_instances SET guild_id=$2 WHERE id=$1", run, guild.ID)
+			require.NoError(t, err)
+		}
+		sources, err := store.RankingRunSources(ctx, []uuid.UUID{run})
+		require.NoError(t, err)
+		require.Len(t, sources, 1)
+		_, err = store.UpsertRankingRun(ctx, database.UpsertRankingRunParams(sources[0]))
+		require.NoError(t, err)
+	}
+	worker := &servicerankings.WorkerRebuildTenantRatings{Store: store, Logger: slog.Default()}
+	job := &river.Job[servicerankings.ArgsRebuildTenantRatings]{Args: servicerankings.ArgsRebuildTenantRatings{TenantID: uuid.Nil}}
+	for i := 0; ; i++ {
+		require.Less(t, i, 25)
+		err := worker.Work(ctx, job)
+		if err == nil {
+			break
+		}
+		var snooze *river.JobSnoozeError
+		require.ErrorAs(t, err, &snooze)
+	}
+	var generation uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, "SELECT id FROM rating_score_generations WHERE tenant_id=$1 AND status='active'", uuid.Nil).Scan(&generation))
+	read := func(table string) map[string][2]float64 {
+		t.Helper()
+		rows, err := pool.Query(ctx, "SELECT player_guid,score,best_raw FROM "+table+
+			" WHERE generation_id=$1 AND rating_metric='peak' AND window_kind='all_time'", generation)
+		require.NoError(t, err)
+		defer rows.Close()
+		result := map[string][2]float64{}
+		for rows.Next() {
+			var player string
+			var score float64
+			var raw *float64
+			require.NoError(t, rows.Scan(&player, &score, &raw))
+			if raw != nil {
+				result[player] = [2]float64{score, *raw}
+			}
+		}
+		require.NoError(t, rows.Err())
+		return result
+	}
+	fullBoss, fullScope := read("player_tenant_rating_boss_scores"), read("player_tenant_rating_scope_scores")
+	require.Len(t, fullBoss, 2)
+	require.Len(t, fullScope, 2)
+	readGuild := func(table string) [3]float64 {
+		t.Helper()
+		var score float64
+		var raw, rank *float64
+		query := "SELECT score,best_raw,rank_one_raw FROM " + table +
+			" WHERE generation_id=$1 AND guild_id=$2 AND rating_metric='peak' AND window_kind='all_time'"
+		if table == "guild_tenant_rating_scope_scores" {
+			query = "SELECT score,NULL::double precision,NULL::double precision FROM " + table +
+				" WHERE generation_id=$1 AND guild_id=$2 AND rating_metric='peak' AND window_kind='all_time'"
+		}
+		require.NoError(t, pool.QueryRow(ctx, query, generation, guild.ID).Scan(&score, &raw, &rank))
+		result := [3]float64{score}
+		if raw != nil {
+			result[1] = *raw
+		}
+		if rank != nil {
+			result[2] = *rank
+		}
+		return result
+	}
+	fullGuildBoss, fullGuildScope := readGuild("guild_tenant_rating_boss_scores"), readGuild("guild_tenant_rating_scope_scores")
+	require.InDelta(t, 50, fullGuildBoss[0], 1e-9, "guildless faster kill defines guild rank one")
+	_, err = pool.Exec(ctx, "INSERT INTO rating_live_evidence_bootstraps (tenant_id,completed_at) VALUES ($1,now())", uuid.Nil)
+	require.NoError(t, err)
+	var runs []uuid.UUID
+	rows, err := pool.Query(ctx, "SELECT run_id FROM ranking_runs")
+	require.NoError(t, err)
+	for rows.Next() {
+		var id uuid.UUID
+		require.NoError(t, rows.Scan(&id))
+		runs = append(runs, id)
+	}
+	require.NoError(t, rows.Err())
+	rows.Close()
+	require.NoError(t, store.MarkDirtyObservationRunsByIDs(ctx, runs))
+	processed, err := ratingmath.ReconcileDirtyTenantObservations(ctx, store, uuid.Nil)
+	require.NoError(t, err)
+	require.Equal(t, 2, processed)
+	for i := 0; i < 2; i++ {
+		processed, err = ratingmath.RefreshDirtyTenantPeak(ctx, store, uuid.Nil, time.Now().UTC())
+		require.NoError(t, err)
+		require.Equal(t, 1, processed)
+	}
+	for _, table := range []struct {
+		name string
+		want map[string][2]float64
+	}{{"player_tenant_rating_boss_scores", fullBoss}, {"player_tenant_rating_scope_scores", fullScope}} {
+		got := read(table.name)
+		require.Equal(t, len(table.want), len(got), table.name)
+		for player, expected := range table.want {
+			require.InDelta(t, expected[0], got[player][0], 1e-9, table.name+" score for "+player)
+			require.InDelta(t, expected[1], got[player][1], 1e-9, table.name+" raw for "+player)
+		}
+	}
+	for _, table := range []struct {
+		name string
+		want [3]float64
+	}{{"guild_tenant_rating_boss_scores", fullGuildBoss}, {"guild_tenant_rating_scope_scores", fullGuildScope}} {
+		got := readGuild(table.name)
+		for i := range got {
+			require.InDelta(t, table.want[i], got[i], 1e-9, table.name)
+		}
+	}
 }
 
 // The tenant snapshot freezes the fixed policy and realm-specific flavor awards.
