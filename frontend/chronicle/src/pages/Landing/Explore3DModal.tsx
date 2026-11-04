@@ -144,13 +144,19 @@ function ExploreStats({ replay, Meter }: { replay: HeroReplay; Meter: typeof Her
  * Esc or the close button dismisses it; focus stays inside and returns to where it was on close.
  * The page hands over its own scrubber, boss rail and glass meter: imported here, they would split out of /start's first chunk.
  */
-export default function Explore3DModal({ target, onClose, Scrubber, Rail, Meter }: {
+/** Explore's map meter: bottom-right, above the scene's compass. */
+const EXPLORE_METER_POSITION = { right: 16, bottom: 88 };
+
+export default function Explore3DModal({ target, onClose, Scrubber, Rail, Meter, mapMeter = false }: {
   target: ExploreTarget;
   onClose: () => void;
   Scrubber: typeof HeroScrubber;
   Rail: typeof BossRail;
   Meter: typeof HeroMeter;
+  /** The 3D map's own Damage Done meter window instead of the stats column (glass meter, Threat, Raid Frames). */
+  mapMeter?: boolean;
 }) {
+  const [meterSlot, setMeterSlot] = useState<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const instance = useLandingInstance(target.instanceId);
@@ -199,7 +205,7 @@ export default function Explore3DModal({ target, onClose, Scrubber, Rail, Meter 
     }
   };
 
-  const href = fullRunHref({ id: target.instanceId, slug: instance?.slug });
+  const href = fullRunHref({ id: target.instanceId, slug: instance?.slug }, shown?.window?.encounterId ?? null);
 
   return createPortal(
     <div
@@ -265,11 +271,15 @@ export default function Explore3DModal({ target, onClose, Scrubber, Rail, Meter 
                 explore
                 startPaused={startPaused}
                 initialMs={target.startMs ?? 0}
+                meterSlot={mapMeter ? meterSlot : null}
+                meterPosition={EXPLORE_METER_POSITION}
               />
             </RunEvents>
           </SceneBoundary>
         )}
-        {replay && <ExploreStats replay={replay} Meter={Meter} />}
+        {mapMeter
+          ? <div ref={setMeterSlot} className="pointer-events-none absolute inset-0 z-20" />
+          : replay && <ExploreStats replay={replay} Meter={Meter} />}
       </div>
 
       {scrubberRun && (

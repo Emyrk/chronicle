@@ -84,8 +84,9 @@ describe("liveHeroRun", () => {
 });
 
 describe("fullRunHref", () => {
-  it("opens the run page's Watch preset by slug, else by id", () => {
-    expect(fullRunHref({ id: "run-id", slug: "abc" })).toBe("/instances/abc?preset=watch");
-    expect(fullRunHref({ id: "run-id" })).toBe("/instances/run-id?preset=watch");
+  it("opens the run page's Map preset by slug, else by id, on the fight shown", () => {
+    expect(fullRunHref({ id: "run-id", slug: "abc" })).toBe("/instances/abc?preset=map");
+    expect(fullRunHref({ id: "run-id" })).toBe("/instances/run-id?preset=map");
+    expect(fullRunHref({ id: "run-id", slug: "abc" }, "enc-1")).toBe("/instances/abc?preset=map&encounter=enc-1");
   });
 });

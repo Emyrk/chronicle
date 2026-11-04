@@ -2,7 +2,6 @@ import type { LandingFeaturedDeath, LandingFeaturedRun } from "@/api/typesGenera
 import type { Instance } from "@/pages/Instance/InstancePage";
 import type { ExplorePlacement } from "@/utils/funnel";
 import type { HeroDeathRecap } from "./heroReplay";
-import { runPageHref } from "./heroMeter";
 
 /** What the Explore in 3D modal opens on: a run, the pull to play, and where it was opened from. */
 export interface ExploreTarget {
@@ -18,9 +17,11 @@ export interface ExploreTarget {
   poster?: string | null;
 }
 
-/** The run page's Watch preset for a run. */
-export function fullRunHref(instance: { id: string; slug?: string | null }): string {
-  return runPageHref(instance);
+/** The run page on its Map preset, scoped to the fight being shown when there is one. */
+export function fullRunHref(instance: { id: string; slug?: string | null }, encounterId?: string | null): string {
+  const params = new URLSearchParams({ preset: "map" });
+  if (encounterId) params.set("encounter", encounterId);
+  return `/instances/${instance.slug || instance.id}?${params}`;
 }
 
 /** Boss pulls shorter than this are near-zero duplicates (the Ruins log ends on a 15 ms Rath'mael pull), as `landingMinBossPull` in api/landing.go. */

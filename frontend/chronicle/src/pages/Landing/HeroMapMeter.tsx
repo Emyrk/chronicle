@@ -21,16 +21,18 @@ function HeroSyncCursor({ cursorMs, startMs, endMs }: { cursorMs: number; startM
  * The 3D map's own meter window (Damage Done, the same panel and processor as the run page's Map),
  * following the hero replay's cursor. Rendered inside the hero's run, so it shares its stream cache.
  */
-export function HeroMapMeter({ context, durationMs, cursorMs, startMs, endMs }: {
+export function HeroMapMeter({ context, durationMs, cursorMs, startMs, endMs, position }: {
   context: PanelContext;
   durationMs: number;
   /** The replay's cursor, absolute (combat log time). */
   cursorMs: number;
   startMs: number;
   endMs: number;
+  /** Where the window opens, from the slot's bottom-right corner (default: above the hero's scrubber). */
+  position?: { right: number; bottom: number };
 }) {
   // Not remembered: the landing always opens on Damage Done.
-  const [windows, setWindows] = useState<MeterWindow[]>([HERO_METER]);
+  const [windows, setWindows] = useState<MeterWindow[]>(() => [{ ...HERO_METER, ...position }]);
   return (
     <SyncModeProvider>
       <HeroSyncCursor cursorMs={cursorMs} startMs={startMs} endMs={endMs} />

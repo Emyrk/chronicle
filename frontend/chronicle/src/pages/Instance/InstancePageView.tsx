@@ -2918,6 +2918,32 @@ function InstancePageViewContent({
     setActivePresetId(presetId);
   }, [canEditSharedView, instance.capabilities, isMobile]);
 
+  // Deep link: ?preset=<id>&encounter=<id> (e.g. the landing's "Open the full run" → the Map preset on that fight).
+  // Applied once on load, then dropped from the URL so later edits are not overridden on refresh.
+  const deepLinkAppliedRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkAppliedRef.current || !canEditSharedView) return;
+    deepLinkAppliedRef.current = true;
+    const presetParam = searchParams.get("preset");
+    const encounterParam = searchParams.get("encounter");
+    if (!presetParam && !encounterParam) return;
+    if (presetParam) applyPreset(presetParam);
+    const encounter = encounterParam ? instance.encounters.find((e) => e.id === encounterParam) : undefined;
+    if (encounter) {
+      setEncounters([encounter.id]);
+      // The parent's selection too, or its sync effect overwrites ours (as a shared link's import does).
+      onSelectEncounters?.([encounter.id]);
+      // A wipe is hidden unless wipes are shown.
+      if (encounter.kill_type === "wipe" || encounter.kill_type === "reset") setIncludeWipes(true);
+    }
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("preset");
+      next.delete("encounter");
+      return next;
+    }, { replace: true });
+  }, [applyPreset, canEditSharedView, instance.encounters, onSelectEncounters, searchParams, setEncounters, setIncludeWipes, setSearchParams]);
+
   useEffect(() => {
     if (!layoutPopup) return;
 

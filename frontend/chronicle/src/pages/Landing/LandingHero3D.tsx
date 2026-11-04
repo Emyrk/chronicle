@@ -67,6 +67,8 @@ interface LandingHero3DProps {
   initialMs?: number;
   /** Where to draw the 3D map's own meter window (Damage Done) following the replay; unset draws none. */
   meterSlot?: HTMLElement | null;
+  /** Where in the slot the meter window opens (default: above the hero's scrubber). */
+  meterPosition?: { right: number; bottom: number };
 }
 
 /**
@@ -204,7 +206,7 @@ function useHeroMeterAmounts(instance: Instance, encounterIds: string[] | undefi
   });
 }
 
-export function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, onReplay, explore = false, startPaused = false, initialMs = 0, meterSlot = null }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
+export function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, onReplay, explore = false, startPaused = false, initialMs = 0, meterSlot = null, meterPosition }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
   const encounterId = pull?.encounterId ?? null;
   const run = useHeroRun(instance, encounterId);
   const processedRecaps = useHeroDeaths(instance, encounterId, run.isSuccess).data ?? null;
@@ -469,6 +471,7 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
           cursorMs={span.startMs + playableMs}
           startMs={span.startMs}
           endMs={span.endMs}
+          position={meterPosition}
         />,
         meterSlot,
       )}
