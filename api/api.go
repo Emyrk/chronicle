@@ -40,6 +40,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicechoose"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
+	"github.com/Emyrk/chronicle/internal/services/serviceinstancesearch"
 	"github.com/Emyrk/chronicle/internal/services/servicelivesession"
 	"github.com/Emyrk/chronicle/internal/services/serviceproof"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
@@ -156,6 +157,10 @@ type Options struct {
 	// Dataset is the dataset CRUD service for managing game-data payloads.
 	Dataset *servicedataset.Service
 
+	// InstanceSearch shares admission, rate buckets and metrics with in-process callers.
+	// When nil, New creates one for the HTTP adapter.
+	InstanceSearch *serviceinstancesearch.Service
+
 	// CacheSvc is the centralized cache service for admin introspection.
 	CacheSvc *servicecache.Service
 
@@ -175,7 +180,7 @@ type API struct {
 	liveSessionRemote  *liveSessionRemote
 	luaArtifactBacklog prometheus.Gauge
 	uiUsageMetrics     *uiUsageMetrics
-	instanceSearch     *instanceSearch
+	instanceSearch     *serviceinstancesearch.Service
 	discoveryStats     discoveryStatsCache
 	landing            landingFeaturedCache
 	// landingMeshMaps overrides datasetMeshMaps (tests).
@@ -253,10 +258,13 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	if err != nil {
 		return nil, fmt.Errorf("configure live signaling: %w", err)
 	}
+	if opts.InstanceSearch == nil {
+		opts.InstanceSearch = serviceinstancesearch.New(opts.Logger, database.New(opts.Pool), opts.Registry, newInstanceSearchUserLimitResolver(opts.Zed))
+	}
 	api := &API{
 		luaArtifactBacklog: luaArtifactBacklog,
 		uiUsageMetrics:     newUIUsageMetrics(opts.Registry),
-		instanceSearch:     newInstanceSearch(opts.Logger, database.New(opts.Pool), opts.Registry, newInstanceSearchUserLimitResolver(opts.Zed)),
+		instanceSearch:     opts.InstanceSearch,
 		Opts:               &opts,
 		AppContext:         ctx,
 		Auth:               service,

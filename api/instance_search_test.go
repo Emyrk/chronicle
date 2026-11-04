@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -18,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/ratelimit"
+	"github.com/Emyrk/chronicle/internal/services/serviceinstancesearch"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
 
@@ -25,7 +27,7 @@ func newInstanceSearchAPI(t *testing.T) (*API, *prometheus.Registry) {
 	t.Helper()
 	db, _ := dbtestutil.NewDB(t)
 	registry := prometheus.NewRegistry()
-	return &API{instanceSearch: newInstanceSearch(testutil.Logger(t), db, registry, nil)}, registry
+	return &API{instanceSearch: serviceinstancesearch.New(testutil.Logger(t), db, registry, nil)}, registry
 }
 
 // doSearch posts body as the given user (uuid.Nil = anonymous) from ip.
@@ -114,8 +116,8 @@ func TestInstanceSearch(t *testing.T) {
 	t.Run("BusyRefunds", func(t *testing.T) {
 		t.Parallel()
 		api, _ := newInstanceSearchAPI(t)
-		for range cap(api.instanceSearch.slots) {
-			api.instanceSearch.slots <- struct{}{}
+		for range cap(api.instanceSearch.Slots()) {
+			api.instanceSearch.Slots() <- struct{}{}
 		}
 		rec := doSearch(t, api, uuid.New(), "10.0.0.1", simpleSearch)
 		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
@@ -242,14 +244,14 @@ func TestInstanceSearchSupporterLimits(t *testing.T) {
 	} {
 		t.Run(tc.tier, func(t *testing.T) {
 			t.Parallel()
-			limit := instanceSearchLimitForTier(tc.tier)
+			limit := serviceinstancesearch.LimitForTier(tc.tier)
 			require.Equal(t, tc.burst, limit.Burst)
 			require.InDelta(t, 60, limit.PerSecond*60, 0.001)
 
 			api, _ := newInstanceSearchAPI(t)
-			api.instanceSearch.resolveUserLimit = func(context.Context, uuid.UUID) (ratelimit.Limit, error) {
+			api.instanceSearch.SetUserLimitResolver(func(context.Context, uuid.UUID) (ratelimit.Limit, error) {
 				return limit, nil
-			}
+			})
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/raidlogs/search/limit", nil)
 			ctx := chronauth.WithClaims(testutil.Context(t, testutil.WaitShort), &claims.Claims{Subject: uuid.New()})
 			rec := httptest.NewRecorder()
@@ -270,6 +272,29 @@ func mustAtoi(t *testing.T, value string) int {
 	n, err := strconv.Atoi(value)
 	require.NoError(t, err)
 	return n
+}
+
+func TestInstanceSearchMalformedBodyTierFailure(t *testing.T) {
+	t.Parallel()
+	for _, explain := range []bool{false, true} {
+		t.Run(strconv.FormatBool(explain), func(t *testing.T) {
+			t.Parallel()
+			api, _ := newInstanceSearchAPI(t)
+			api.instanceSearch.SetUserLimitResolver(func(context.Context, uuid.UUID) (ratelimit.Limit, error) {
+				return ratelimit.Limit{}, errors.New("supporter authorization unavailable")
+			})
+			user := uuid.New()
+			var rec *httptest.ResponseRecorder
+			if explain {
+				rec = doExplain(t, api, user, "{")
+			} else {
+				rec = doSearch(t, api, user, "10.0.0.1", "{")
+			}
+			require.Equal(t, http.StatusInternalServerError, rec.Code, rec.Body.String())
+			require.Contains(t, rec.Body.String(), "Search is unavailable right now")
+			require.Empty(t, rec.Header().Get("RateLimit-Remaining"))
+		})
+	}
 }
 
 func doExplain(t *testing.T, api *API, user uuid.UUID, body string) *httptest.ResponseRecorder {
@@ -320,4 +345,30 @@ func TestInstanceSearchExplain(t *testing.T) {
 			require.NotEmpty(t, rec.Header().Get("RateLimit-Remaining"))
 		})
 	}
+}
+
+// Internal and HTTP searches share the same per-user bucket and per-replica slots.
+func TestInstanceSearchInternalHTTPParity(t *testing.T) {
+	t.Parallel()
+	api, _ := newInstanceSearchAPI(t)
+	user := uuid.New()
+	caller := serviceinstancesearch.Caller{UserID: user}
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	_, result := api.instanceSearch.Search(ctx, caller, chroniclesdk.InstanceSearchQuery{})
+	require.NoError(t, result.Err)
+	require.Equal(t, 1, result.Cost)
+	rec := doSearch(t, api, user, "10.0.0.1", simpleSearch)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "3", rec.Header().Get(InstanceSearchCostHeader))
+	remaining := mustAtoi(t, rec.Header().Get("RateLimit-Remaining"))
+	require.GreaterOrEqual(t, remaining, 96)
+	require.LessOrEqual(t, remaining, 100)
+	for range cap(api.instanceSearch.Slots()) {
+		api.instanceSearch.Slots() <- struct{}{}
+	}
+	rec = doSearch(t, api, user, "10.0.0.1", simpleSearch)
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	after := mustAtoi(t, rec.Header().Get("RateLimit-Remaining"))
+	require.GreaterOrEqual(t, after, remaining)
+	require.LessOrEqual(t, after, 100)
 }
