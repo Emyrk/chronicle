@@ -150,7 +150,7 @@ export function windowed(values: readonly number[], half: number, reduce: "mean"
 
 // A window of maxima, then a mean of the same width: smooth, and never below
 // the raw value (each mean only averages maxima that already cover it).
-export function smoothCeiling(values: readonly number[], half: number): number[] {
+function smoothCeiling(values: readonly number[], half: number): number[] {
   return windowed(windowed(values, half, "max"), half, "mean");
 }
 

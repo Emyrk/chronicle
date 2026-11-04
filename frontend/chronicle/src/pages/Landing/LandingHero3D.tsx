@@ -457,6 +457,8 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
         onDungeonMeshState={explore ? (state) => setMeshState(state === "failed" ? "ready" : state) : setMeshState}
         focus={focus}
         cinematic={cinematic}
+        // The recorded run, for the camera to look ahead in: the gaps the clock skips and the loop back glide.
+        followSource={ready.followSource}
         cutKey={cutKey}
         debuffSpellIds={ready.debuffSpellIds}
         planItems={NO_PLAN_ITEMS}

@@ -74,20 +74,16 @@ function cachedFocusBounds(
 }
 
 // The Director's look-ahead source (chronicle-1579): the players' and bosses'
-// recorded tracks, kept stable per encounter, projection and effects so the
-// scene builds its framing track once instead of on every replay tick.
-const followSourceCache = new WeakMap<Map<string, MapPositionSample[]>, { key: string; effects: EncounterEffects; source: MapSceneFollowSource }>();
+// recorded tracks, one object per encounter and projection so replay ticks
+// reuse it. Its `key` leaves out how far the data has streamed, so the scene
+// does not rebuild its framing track for every streamed chunk.
+const followSourceCache = new WeakMap<MapEncounterPositions, { key: string; source: MapSceneFollowSource }>();
 
-function cachedFollowSource(
-  positionsByUnit: Map<string, MapPositionSample[]>,
-  effects: EncounterEffects,
-  key: string,
-  create: () => MapSceneFollowSource,
-): MapSceneFollowSource {
-  const cached = followSourceCache.get(positionsByUnit);
-  if (cached && cached.key === key && cached.effects === effects) return cached.source;
+function cachedFollowSource(encounter: MapEncounterPositions, key: string, create: () => MapSceneFollowSource): MapSceneFollowSource {
+  const cached = followSourceCache.get(encounter);
+  if (cached && cached.key === key) return cached.source;
   const source = create();
-  followSourceCache.set(positionsByUnit, { key, effects, source });
+  followSourceCache.set(encounter, { key, source });
   return source;
 }
 
@@ -599,26 +595,29 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const tankGuids = cachedTankGuids(encounter.effects, props.context.instance.players ?? {});
   // The same units the markers show (players and bosses on this map and
   // floor), at any replay time, for the Director to look ahead in.
+  const followKey = `${encounter.encounterId}|${encounter.startMs}|${mapId}|${selectedFloorNumber}|${projectionKey}|${wholeRun}|${[...bossGuids].join(",")}`;
   const followSource = cachedFollowSource(
-    encounter.positionsByUnit,
-    encounter.effects,
-    `${encounter.startMs}|${encounter.endMs}|${mapId}|${selectedFloorNumber}|${projectionKey}|${wholeRun}|${[...bossGuids].join(",")}`,
+    encounter,
+    followKey,
     () => {
       const players = props.context.instance.players ?? {};
-      const tracked = [...encounter.positionsByUnit.entries()].filter(([guid]) => Boolean(players[guid]) || bossGuids.has(guid));
-      const { effects } = encounter;
       return {
+        key: followKey,
         startMs: encounter.startMs,
-        endMs: encounter.endMs,
-        unitsAt: (ms) => tracked.flatMap(([guid, positions]): MapSceneFollowUnit[] => {
+        // Read live: the processor grows the encounter while the result streams in.
+        get endMs() {
+          return encounter.endMs;
+        },
+        unitsAt: (ms) => [...encounter.positionsByUnit.entries()].flatMap(([guid, positions]): MapSceneFollowUnit[] => {
           const player = Boolean(players[guid]);
+          if (!player && !bossGuids.has(guid)) return [];
           const sample = replayPositionAt(positions, ms, player, wholeRun ? RUN_UNIT_STALE_MS : undefined);
           if (!sample || (wholeRun && isStaleRunSample(sample, ms))) return [];
           if (sample.mapId !== mapId) return [];
           if (sample.floor !== undefined && selectedFloorNumber !== null && sample.floor !== selectedFloorNumber) return [];
           const point = projectSample(sample);
           if (!point) return [];
-          return [{ guid, point, player, boss: bossGuids.has(guid), dead: isDeadAt(effects, guid, ms) }];
+          return [{ guid, point, player, boss: bossGuids.has(guid), dead: isDeadAt(encounter.effects, guid, ms) }];
         }),
       };
     },

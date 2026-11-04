@@ -22,13 +22,19 @@ import {
   STRAGGLER_RELEASE_YARDS,
   type DirectorUnit,
 } from "./cameraDirector";
-import { smoothCeiling, windowed } from "./droneCamera";
+import { windowed } from "./droneCamera";
 
 /** How often the framing is sampled (replay time, at 1x). */
 export const FOLLOW_SAMPLE_MS = 250;
 /** Half-widths of the smoothing windows (replay time at 1x), as the drone's. */
 export const FOLLOW_CENTRE_WINDOW_MS = 3_000;
 export const FOLLOW_RADIUS_WINDOW_MS = 2_000;
+/**
+ * The cover radius first takes the largest value within this half-width,
+ * then the radius window's mean: a straggler blinking in and out at the
+ * cutoff widens the frame a little, not to its widest for the whole window.
+ */
+export const FOLLOW_RADIUS_PEAK_MS = 500;
 /** A followed unit is a single point: a shorter window keeps it centred. */
 export const FOLLOW_SUBJECT_WINDOW_MS = 1_000;
 /** The springs only smooth what the track leaves over, so they can be quick. */
@@ -64,6 +70,9 @@ export interface FollowTrackOptions {
   /** Replay ms per real ms: sampling and windows stretch with it, so a fast replay moves the camera as calmly as a real-time one. */
   speed?: number;
   sampleMs?: number;
+  /** Half-widths of the centre and radius windows (replay ms at 1x); the defaults when left out. */
+  centreWindowMs?: number;
+  radiusWindowMs?: number;
 }
 
 /** The smoothed framing over a replay span; sample it with followKeyAt. */
@@ -85,81 +94,172 @@ export interface FollowKey {
   radius: number;
 }
 
+/** How long one slice of a track build may block the main thread (ms). */
+export const FOLLOW_SLICE_MS = 6;
+
 /**
- * Samples the Director's framing over the span and smooths it over replay
- * time. Null when nobody is ever there to frame.
+ * A follow track being built in slices, so a long run never blocks a frame:
+ * call `step` until it returns true, then read `result`.
  */
-export function buildFollowTrack(options: FollowTrackOptions): FollowTrack | null {
+export interface FollowTrackBuild {
+  /** Works for about `budgetMs` (at least one sample), then yields; true once the track is done. */
+  step(budgetMs?: number): boolean;
+  /**
+   * The finished track. Null when nobody is ever there to frame, or when the
+   * followed unit never appears in the source (frame it frame by frame).
+   */
+  readonly result: FollowTrack | null;
+}
+
+// A moving average over `half` samples either side, in O(n) with a running sum.
+function movingMean(values: ArrayLike<number>, half: number): Float64Array {
+  const n = values.length;
+  const out = new Float64Array(n);
+  let sum = 0;
+  let from = 0;
+  let to = -1;
+  for (let i = 0; i < n; i++) {
+    const nextFrom = Math.max(0, i - half);
+    const nextTo = Math.min(n - 1, i + half);
+    while (to < nextTo) sum += values[++to]!;
+    while (from < nextFrom) sum -= values[from++]!;
+    out[i] = sum / (to - from + 1);
+  }
+  return out;
+}
+
+/**
+ * Starts building the follow track: the Director's framing sampled over the
+ * span and smoothed over replay time. `now` is the clock the slices are
+ * timed with.
+ */
+export function startFollowTrackBuild(options: FollowTrackOptions, now: () => number = () => performance.now()): FollowTrackBuild {
   const { startMs, endMs, unitsAt, scale, subjectGuid = null } = options;
   const speed = Math.max(1, options.speed ?? 1);
   const baseSampleMs = options.sampleMs ?? FOLLOW_SAMPLE_MS;
   const sampleMs = baseSampleMs * speed;
   const span = Math.max(0, endMs - startMs);
   const count = Math.max(1, Math.ceil(span / sampleMs) + 1);
+  const frameOptions = {
+    stragglerCutoff: STRAGGLER_CUTOFF_YARDS * scale,
+    stragglerRelease: STRAGGLER_RELEASE_YARDS * scale,
+    bossEngageDistance: BOSS_ENGAGE_YARDS * scale,
+    subjectGuid,
+  };
 
-  // 1. The Director's framing at each sample (with its straggler hysteresis),
-  // keeping the framed units so the cover radius is measured from the
-  // smoothed centre.
-  const rawX = new Array<number>(count);
-  const rawZ = new Array<number>(count);
-  const framed = new Array<{ x: number; z: number }[]>(count);
+  // The Director's framing at each sample (with its straggler hysteresis),
+  // and the framed units' positions (x, z pairs, one small array per sample:
+  // one huge growing array would stall a slice each time it is copied) so
+  // the cover radius can be measured from the smoothed centre.
+  const rawX = new Float64Array(count).fill(Number.NaN);
+  const rawZ = new Float64Array(count).fill(Number.NaN);
+  const NONE = new Float64Array(0);
+  const framed = new Array<Float64Array>(count).fill(NONE);
   let inFrame = new Set<string>();
-  for (let i = 0; i < count; i++) {
-    const units = unitsAt(startMs + Math.min(span, i * sampleMs));
-    const frame = directorFrame(units, inFrame, {
-      stragglerCutoff: STRAGGLER_CUTOFF_YARDS * scale,
-      stragglerRelease: STRAGGLER_RELEASE_YARDS * scale,
-      bossEngageDistance: BOSS_ENGAGE_YARDS * scale,
-      subjectGuid,
-    });
-    if (!frame) {
-      rawX[i] = Number.NaN;
-      rawZ[i] = Number.NaN;
-      framed[i] = [];
-      continue;
-    }
-    inFrame = new Set(frame.guids);
-    rawX[i] = frame.x;
-    rawZ[i] = frame.z;
-    framed[i] = units.filter((unit) => inFrame.has(unit.guid)).map((unit) => ({ x: unit.x, z: unit.z }));
-  }
+  let subjectSeen = subjectGuid === null;
+  let sampled = 0;
+  let xs: Float64Array | null = null;
+  let zs: Float64Array | null = null;
+  let cover: Float64Array | null = null;
+  let covered = 0;
+  let done = false;
+  let result: FollowTrack | null = null;
+  const minRadius = MIN_FRAME_RADIUS_YARDS * scale;
+
   // Gaps (nobody to frame) hold the nearest framing on either side, so the
   // centred window glides into the next one before the group appears there.
-  const firstValid = rawX.findIndex((value) => !Number.isNaN(value));
-  if (firstValid < 0) return null;
-  for (let i = 0; i < count; i++) {
-    if (!Number.isNaN(rawX[i]!)) continue;
-    const from = i < firstValid ? firstValid : i - 1;
-    rawX[i] = rawX[from]!;
-    rawZ[i] = rawZ[from]!;
-    framed[i] = framed[from]!;
-  }
+  // Then the centre: a moving average over replay time, applied twice at half
+  // the width (a triangular window), so a jump in the framing becomes a slide
+  // that also eases in and out instead of starting at full speed.
+  const smoothCentre = (): boolean => {
+    let firstValid = -1;
+    for (let i = 0; i < count && firstValid < 0; i++) if (!Number.isNaN(rawX[i]!)) firstValid = i;
+    if (firstValid < 0 || !subjectSeen) return false;
+    for (let i = 0; i < count; i++) {
+      if (!Number.isNaN(rawX[i]!)) continue;
+      const from = i < firstValid ? firstValid : i - 1;
+      rawX[i] = rawX[from]!;
+      rawZ[i] = rawZ[from]!;
+      framed[i] = framed[from]!;
+    }
+    const half = Math.max(1, Math.round((subjectGuid ? FOLLOW_SUBJECT_WINDOW_MS : options.centreWindowMs ?? FOLLOW_CENTRE_WINDOW_MS) / baseSampleMs / 2));
+    xs = movingMean(movingMean(rawX, half), half);
+    zs = movingMean(movingMean(rawZ, half), half);
+    cover = new Float64Array(count);
+    return true;
+  };
 
-  // 2. The centre: a moving average over replay time, applied twice at half
-  // the width (a triangular window), so a jump in the framing becomes a
-  // slide that also eases in and out instead of starting at full speed.
-  const centreHalf = Math.max(1, Math.round((subjectGuid ? FOLLOW_SUBJECT_WINDOW_MS : FOLLOW_CENTRE_WINDOW_MS) / baseSampleMs / 2));
-  const xs = windowed(windowed(rawX, centreHalf, "mean"), centreHalf, "mean");
-  const zs = windowed(windowed(rawZ, centreHalf, "mean"), centreHalf, "mean");
-
-  // 3. The radius that covers everyone framed, from the smoothed centre, as a
-  // smooth ceiling: nobody framed slips out while the centre lags, a
-  // straggler leaving or a boss engaging eases the frame instead of jumping
-  // it, and a long slide to the next fight pulls the camera out on the way.
-  const minRadius = MIN_FRAME_RADIUS_YARDS * scale;
-  const cover = framed.map((points, i) => points.reduce((radius, point) => Math.max(radius, Math.hypot(point.x - xs[i]!, point.z - zs[i]!)), minRadius));
-  const radii = smoothCeiling(cover, Math.round(FOLLOW_RADIUS_WINDOW_MS / baseSampleMs));
+  // The radius that covers everyone framed, from the smoothed centre: a short
+  // peak hold then a mean, so a straggler leaving or a boss engaging eases
+  // the frame instead of jumping it, a long slide to the next fight pulls the
+  // camera out on the way, and a straggler hovering at the cutoff does not
+  // hold the frame at its widest (chronicle-1579 review: that backed the
+  // camera into the cave walls).
+  const finish = () => {
+    const peakHalf = Math.max(1, Math.round(FOLLOW_RADIUS_PEAK_MS / baseSampleMs));
+    const meanHalf = Math.max(1, Math.round((options.radiusWindowMs ?? FOLLOW_RADIUS_WINDOW_MS) / baseSampleMs / 2));
+    const radii = movingMean(movingMean(windowed(Array.from(cover!), peakHalf, "max"), meanHalf), meanHalf);
+    result = { startMs, endMs: startMs + span, sampleMs, subjectGuid, speed, x: xs!, z: zs!, radius: Float64Array.from(radii) };
+  };
 
   return {
-    startMs,
-    endMs: startMs + span,
-    sampleMs,
-    subjectGuid,
-    speed,
-    x: Float64Array.from(xs),
-    z: Float64Array.from(zs),
-    radius: Float64Array.from(radii),
+    get result() {
+      return result;
+    },
+    step(budgetMs = Number.POSITIVE_INFINITY) {
+      if (done) return true;
+      const until = now() + budgetMs;
+      while (sampled < count) {
+        const units = unitsAt(startMs + Math.min(span, sampled * sampleMs));
+        const frame = directorFrame(units, inFrame, frameOptions);
+        if (frame) {
+          inFrame = new Set(frame.guids);
+          rawX[sampled] = frame.x;
+          rawZ[sampled] = frame.z;
+          const points = new Float64Array(frame.guids.length * 2);
+          let p = 0;
+          for (const unit of units) {
+            if (!inFrame.has(unit.guid)) continue;
+            points[p++] = unit.x;
+            points[p++] = unit.z;
+            if (unit.guid === subjectGuid) subjectSeen = true;
+          }
+          framed[sampled] = p === points.length ? points : points.subarray(0, p);
+        }
+        sampled++;
+        if (now() >= until) return false;
+      }
+      // Each finishing pass is a slice of its own.
+      if (!xs) {
+        if (!smoothCentre()) {
+          done = true;
+          return true;
+        }
+        return false;
+      }
+      while (covered < count) {
+        let radius = minRadius;
+        const cx = xs![covered]!;
+        const cz = zs![covered]!;
+        const points = framed[covered]!;
+        for (let p = 0; p < points.length; p += 2) radius = Math.max(radius, Math.hypot(points[p]! - cx, points[p + 1]! - cz));
+        cover![covered] = radius;
+        covered++;
+        if ((covered & 255) === 0 && now() >= until) return false;
+        if (covered === count) return false;
+      }
+      finish();
+      done = true;
+      return true;
+    },
   };
+}
+
+/** Builds the whole follow track at once (tests, small spans); see startFollowTrackBuild. */
+export function buildFollowTrack(options: FollowTrackOptions): FollowTrack | null {
+  const build = startFollowTrackBuild(options);
+  while (!build.step());
+  return build.result;
 }
 
 // Catmull-Rom through four keys, `t` of the way from b to c.

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { directorFrame, type DirectorUnit } from "./cameraDirector";
+import { directorFrame, FRAME_FILL, MIN_FRAME_RADIUS_YARDS, type DirectorUnit } from "./cameraDirector";
 import {
   buildFollowTrack,
+  startFollowTrackBuild,
   createShotHold,
   FOLLOW_JUMP_MS,
   followKeyAt,
@@ -101,19 +102,27 @@ describe("buildFollowTrack", () => {
     expect(before).toBeGreaterThan(stillBefore);
   });
 
-  it("covers everyone framed, whatever the smoothing", () => {
+  it("keeps everyone framed inside the shot's headroom, whatever the smoothing", () => {
     const track = buildFollowTrack({ startMs: 0, endMs: durationMs, unitsAt: walkingGroup, scale: 1 })!;
     const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    // Who the per-frame rule frames at each sample.
+    const framedAt: Set<string>[] = [];
     let inFrame = new Set<string>();
     for (let ms = 0; ms <= durationMs; ms += 250) {
-      const units = walkingGroup(ms);
-      const frame = directorFrame(units, inFrame)!;
-      inFrame = new Set(frame.guids);
-      const key = followKeyAt(track, ms, out);
-      for (const framed of units.filter((candidate) => inFrame.has(candidate.guid))) {
-        expect(Math.hypot(framed.x - key.x, framed.z - key.z)).toBeLessThanOrEqual(key.radius + 0.5);
-      }
+      inFrame = new Set(directorFrame(walkingGroup(ms), inFrame)!.guids);
+      framedAt.push(inFrame);
     }
+    framedAt.forEach((_framed, i) => {
+      const ms = i * 250;
+      const key = followKeyAt(track, ms, out);
+      for (const unit of walkingGroup(ms)) {
+        // The centred window lets the frame shrink up to a second before a
+        // straggler drops out (it looks ahead); anyone framed for the second
+        // either side stays inside the fit's FRAME_FILL headroom.
+        if (![-4, 0, 4].every((offset) => framedAt[i + offset]?.has(unit.guid) ?? true)) continue;
+        expect(Math.hypot(unit.x - key.x, unit.z - key.z)).toBeLessThanOrEqual(Math.max(key.radius, MIN_FRAME_RADIUS_YARDS) * FRAME_FILL + 0.5);
+      }
+    });
   });
 
   it("glides across a gap with nobody to frame instead of teleporting", () => {
@@ -236,5 +245,71 @@ describe("glidePoseAt", () => {
     const out: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
     const pose = glidePoseAt({ x: 0, z: 0, distance: 30, elevationDeg: 28 }, { x: 3, z: 0, distance: 30, elevationDeg: 28 }, 0.5, out);
     expect(pose.distance).toBeLessThan(30 * 1.06);
+  });
+});
+
+describe("startFollowTrackBuild", () => {
+  it("builds in slices that each stop at the budget, giving the same track as one go", () => {
+    // A fake clock: every unitsAt call costs 1 ms.
+    let clock = 0;
+    const unitsAt = (ms: number) => {
+      clock += 1;
+      return walkingGroup(ms);
+    };
+    const build = startFollowTrackBuild({ startMs: 0, endMs: 30_000, unitsAt, scale: 1 }, () => clock);
+    let slices = 0;
+    let longest = 0;
+    for (;;) {
+      const before = clock;
+      const finished = build.step(6);
+      longest = Math.max(longest, clock - before);
+      slices++;
+      if (finished) break;
+    }
+    // 121 samples at 1 ms each: about 20 slices of at most 6 ms.
+    expect(slices).toBeGreaterThan(15);
+    expect(longest).toBeLessThanOrEqual(6);
+    const whole = buildFollowTrack({ startMs: 0, endMs: 30_000, unitsAt: walkingGroup, scale: 1 })!;
+    expect(Array.from(build.result!.x)).toEqual(Array.from(whole.x));
+    expect(Array.from(build.result!.radius)).toEqual(Array.from(whole.radius));
+  });
+
+  it("keeps every blocking slice short on a 3 h, 40-player run (benchmark)", () => {
+    // 40 players walking a loop and 10 bosses standing about: the reviewer's worst case.
+    const players = Array.from({ length: 40 }, (_, i) => i);
+    const bosses = Array.from({ length: 10 }, (_, i) => unit(`boss${i}`, i * 120, 0, { player: false, boss: true }));
+    const unitsAt = (ms: number) => [
+      ...players.map((i) => unit(`p${i}`, ((ms / 1000) * 5) % 1200 + (i % 8) * 2, Math.floor(i / 8) * 2)),
+      ...bosses,
+    ];
+    const build = startFollowTrackBuild({ startMs: 0, endMs: 3 * 60 * 60_000, unitsAt, scale: 1 });
+    const spent: number[] = [];
+    for (;;) {
+      const started = performance.now();
+      const finished = build.step(6);
+      spent.push(performance.now() - started);
+      if (finished) break;
+    }
+    const sorted = [...spent].sort((a, b) => a - b);
+    const p95 = sorted[Math.floor(0.95 * (sorted.length - 1))]!;
+    const total = spent.reduce((sum, ms) => sum + ms, 0);
+    console.info(`follow track 3 h x 50 units: ${spent.length} slices, ${total.toFixed(0)} ms total, p95 ${p95.toFixed(1)} ms, longest ${sorted.at(-1)!.toFixed(1)} ms`);
+    expect(build.result).not.toBeNull();
+    expect(spent.length).toBeGreaterThan(100);
+    // The budget is 6 ms (the fake-clock test above proves the slicing);
+    // wall time here also carries GC and other test workers, so only the
+    // typical slice is held to it, generously for slow CI machines.
+    expect(p95).toBeLessThan(15);
+  });
+
+  it("is null when the followed unit is not in the source, so the per-frame path frames it", () => {
+    // Following a mob or a pet: the source only holds players and bosses.
+    expect(buildFollowTrack({ startMs: 0, endMs: 10_000, unitsAt: walkingGroup, scale: 1, subjectGuid: "mob-1" })).toBeNull();
+    // A followed player who is in it gets a track centred on them.
+    const track = buildFollowTrack({ startMs: 0, endMs: 10_000, unitsAt: walkingGroup, scale: 1, subjectGuid: "p4" })!;
+    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const key = followKeyAt(track, 5_000, out);
+    const p4 = walkingGroup(5_000).find((candidate) => candidate.guid === "p4")!;
+    expect(Math.hypot(key.x - p4.x, key.z - p4.z)).toBeLessThan(2);
   });
 });

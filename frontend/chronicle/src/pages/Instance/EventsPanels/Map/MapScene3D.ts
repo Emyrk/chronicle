@@ -33,7 +33,7 @@ import {
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, planarStep, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, wheelZoomDistance, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { unwrapCompassRadians } from "./mapCompassModel";
-import { buildFollowTrack, createShotHold, FOLLOW_SMOOTH_SECONDS, followKeyAt, glideDurationMs, glidePoseAt, holdShot, isReplayJump, type FollowKey, type FollowTrack, type GlidePose } from "./followCamera";
+import { createShotHold, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SLICE_MS, startFollowTrackBuild, type FollowTrackBuild, FOLLOW_SMOOTH_SECONDS, followKeyAt, glideDurationMs, glidePoseAt, holdShot, isReplayJump, type FollowKey, type FollowTrack, type GlidePose } from "./followCamera";
 import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanMarkerIcon, PlanPoint } from "./plan/mapPlan";
@@ -384,9 +384,22 @@ export interface MapSceneFollowUnit {
  * same; a new one rebuilds the track.
  */
 export interface MapSceneFollowSource {
+  /** What the data is, apart from how far it has streamed: a new key rebuilds the track; growth alone does not. */
+  key: string;
   startMs: number;
-  endMs: number;
+  /** How far the data reaches now; it may grow while the result streams in. */
+  readonly endMs: number;
   unitsAt: (ms: number) => readonly MapSceneFollowUnit[];
+}
+
+/** What a follow track was built for. */
+interface FollowTrackInputs {
+  key: string;
+  subject: string | null;
+  aspect: number;
+  scale: number;
+  speed: number;
+  endMs: number;
 }
 
 /** The fight the mesh camera is locked to: its centre (artwork point) and Fit zoom. */
@@ -964,9 +977,20 @@ export class MapScene3D {
   // The look-ahead (chronicle-1579): the recorded replay, the framing track
   // built from it off the frame loop, and what that track was built for.
   private followSource: MapSceneFollowSource | null = null;
+  // The last finished build and what it was for; its track is null when
+  // nobody (or the followed unit) was ever there to frame, which is cached
+  // too, so an empty floor is not rebuilt every frame.
   private followTrack: FollowTrack | null = null;
-  private followTrackFor = { source: null as MapSceneFollowSource | null, subject: null as string | null, aspect: 0, scale: 0, speed: 0 };
-  private followBuildTimer: ReturnType<typeof setTimeout> | null = null;
+  private followTrackFor: FollowTrackInputs | null = null;
+  // The build in flight, a slice per timer tick so a long run never blocks a frame.
+  private followBuild: { build: FollowTrackBuild; inputs: FollowTrackInputs; timer: ReturnType<typeof setTimeout> } | null = null;
+  // How far past the pan radius the Director left the camera: the user's
+  // pan limit grows by this on handover (and only shrinks), so grabbing the
+  // camera never snaps it back toward the focus in one step.
+  private panSlack = 0;
+  // Whether the replay was playing at the Director's last frame: a pause or
+  // resume re-anchors the jump check rather than reading as a jump.
+  private directorReplayPlaying = false;
   private readonly followKey: FollowKey = { x: 0, z: 0, radius: 0 };
   // The replay time the Director last framed, and when, to spot a jump.
   private directorReplayMs: number | null = null;
@@ -1702,39 +1726,63 @@ export class MapScene3D {
     return clock.playing ? clock.ms + Math.min(now - clock.at, MAX_EXTRAPOLATE_MS) * clock.speed : clock.ms;
   }
 
-  // The framing track for the current source, subject and playback speed, or
-  // null while none fits; a missing one is built on a timer, not in the frame.
-  // A track for another speed still serves until its replacement is ready.
-  private currentFollowTrack(): FollowTrack | null {
+  // The framing track for the current source and followed unit, or null
+  // while none fits (or the last build found nobody to frame: the per-frame
+  // path then frames). A missing track is built in slices off the frame loop;
+  // one for another speed, or one the data has grown past, still serves until
+  // its replacement is ready. Growth only rebuilds once the replay nears the
+  // old track's end, so a streaming result does not rebuild on every chunk.
+  private currentFollowTrack(replayMs: number): FollowTrack | null {
     const mesh = this.dungeonMesh;
     const source = this.followSource;
     if (!mesh || !source) return null;
     const subject = this.directorSubject;
     const speed = Math.max(1, this.clock.speed);
     const built = this.followTrackFor;
-    const fits = this.followTrack !== null && built.source === source && built.subject === subject && built.aspect === this.aspect && built.scale === mesh.scale;
-    if (fits && built.speed === speed) return this.followTrack;
-    if (this.followBuildTimer === null) {
-      this.followBuildTimer = setTimeout(() => {
-        this.followBuildTimer = null;
-        if (this.disposed || this.followSource !== source || this.dungeonMesh !== mesh) return;
-        const aspect = this.aspect;
-        this.followTrack = buildFollowTrack({
-          startMs: source.startMs,
-          endMs: source.endMs,
-          scale: mesh.scale,
-          subjectGuid: subject,
-          speed,
-          unitsAt: (ms) => source.unitsAt(ms).map((unit): DirectorUnit => {
-            const { x, z } = mapPointToScene(unit.point, aspect, GROUND_WIDTH);
-            return { guid: unit.guid, x, z, player: unit.player, boss: unit.boss, dead: unit.dead };
-          }),
-        });
-        this.followTrackFor = { source, subject, aspect, scale: mesh.scale, speed };
-        this.requestRender();
-      }, 0);
+    const fits = this.followInputsMatch(built, source.key, subject, mesh.scale);
+    const stale = !fits
+      || built!.speed !== speed
+      || (source.endMs > built!.endMs && replayMs > built!.endMs - FOLLOW_CENTRE_WINDOW_MS * speed);
+    const pending = this.followBuild?.inputs ?? null;
+    if (stale && !(this.followInputsMatch(pending, source.key, subject, mesh.scale) && pending!.speed === speed)) {
+      this.startFollowBuild(source, { key: source.key, subject, aspect: this.aspect, scale: mesh.scale, speed, endMs: source.endMs });
     }
     return fits ? this.followTrack : null;
+  }
+
+  // Whether `inputs` is a build of the same data, followed unit and placement.
+  private followInputsMatch(inputs: FollowTrackInputs | null, key: string, subject: string | null, scale: number): boolean {
+    return inputs !== null && inputs.key === key && inputs.subject === subject && inputs.aspect === this.aspect && inputs.scale === scale;
+  }
+
+  // Starts (or restarts) the sliced follow-track build for `inputs`.
+  private startFollowBuild(source: MapSceneFollowSource, inputs: FollowTrackInputs) {
+    if (this.followBuild) clearTimeout(this.followBuild.timer);
+    const { aspect } = inputs;
+    const build = startFollowTrackBuild({
+      startMs: source.startMs,
+      endMs: inputs.endMs,
+      scale: inputs.scale,
+      subjectGuid: inputs.subject,
+      speed: inputs.speed,
+      unitsAt: (ms) => source.unitsAt(ms).map((unit): DirectorUnit => {
+        const { x, z } = mapPointToScene(unit.point, aspect, GROUND_WIDTH);
+        return { guid: unit.guid, x, z, player: unit.player, boss: unit.boss, dead: unit.dead };
+      }),
+    });
+    const slice = () => {
+      const current = this.followBuild;
+      if (this.disposed || !current || current.build !== build) return;
+      if (!build.step(FOLLOW_SLICE_MS)) {
+        current.timer = setTimeout(slice, 0);
+        return;
+      }
+      this.followBuild = null;
+      this.followTrack = build.result;
+      this.followTrackFor = inputs;
+      this.requestRender();
+    };
+    this.followBuild = { build, inputs, timer: setTimeout(slice, 0) };
   }
 
   /** Whether the Director is the one moving the camera right now. */
@@ -2113,14 +2161,24 @@ export class MapScene3D {
     // The pan limit is for the user's camera: the Director's shot follows the
     // recorded group, and clamping it to the (grid-snapped, per-tick) follow
     // centre would step it.
-    if (this.focusCentre && !this.directing()) {
-      const clamped = clampToRadius(target, this.focusCentre, MESH_PAN_RADIUS_YARDS * mesh.scale);
-      if (clamped !== target) {
-        position.x += clamped.x - target.x;
-        position.z += clamped.z - target.z;
-        target.x = clamped.x;
-        target.z = clamped.z;
-        moved = true;
+    // Handing over, the limit is re-based to where the Director left the
+    // camera (panSlack), so grabbing it never snaps it back in one step.
+    if (this.focusCentre) {
+      const panRadius = MESH_PAN_RADIUS_YARDS * mesh.scale;
+      const beyond = () => Math.max(0, Math.hypot(target.x - this.focusCentre!.x, target.z - this.focusCentre!.z) - panRadius);
+      if (this.directing()) {
+        this.panSlack = beyond();
+      } else {
+        const clamped = clampToRadius(target, this.focusCentre, panRadius + this.panSlack);
+        if (clamped !== target) {
+          position.x += clamped.x - target.x;
+          position.z += clamped.z - target.z;
+          target.x = clamped.x;
+          target.z = clamped.z;
+          moved = true;
+        }
+        // Only shrinks: panning back toward the focus gives the slack up.
+        this.panSlack = Math.min(this.panSlack, beyond());
       }
     }
     const floor = this.pivotFloor(target.x, target.z) + this.pivotLift;
@@ -2322,16 +2380,19 @@ export class MapScene3D {
     this.directorAt = now;
     this.directorInFrame.clear();
     if (frame) for (const guid of frame.guids) this.directorInFrame.add(guid);
-    const track = this.currentFollowTrack();
+    const replayMs = this.replayNow(now);
+    const track = this.currentFollowTrack(replayMs);
     if (!frame && !track) return false;
 
-    // A replay jump: the clock moved by more than playback explains.
-    const replayMs = this.replayNow(now);
-    const previousMs = this.directorReplayMs;
+    // A replay jump: the clock moved by more than playback explains. A pause
+    // or resume since the last frame re-anchors instead (the paused time is
+    // not playback it missed).
+    const previousMs = this.clock.playing === this.directorReplayPlaying ? this.directorReplayMs : null;
     const expectedMs = this.clock.playing ? (now - this.directorReplayAt) * this.clock.speed : 0;
     const jumped = previousMs !== null && isReplayJump(previousMs, replayMs, expectedMs, this.clock.speed);
     this.directorReplayMs = replayMs;
     this.directorReplayAt = now;
+    this.directorReplayPlaying = this.clock.playing;
 
     const key = track ? followKeyAt(track, replayMs, this.followKey) : null;
     const centreX = key ? key.x : frame!.x;
@@ -2540,7 +2601,7 @@ export class MapScene3D {
 
   dispose() {
     this.disposed = true;
-    if (this.followBuildTimer !== null) clearTimeout(this.followBuildTimer);
+    if (this.followBuild) clearTimeout(this.followBuild.timer);
     this.unlockPointer();
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
