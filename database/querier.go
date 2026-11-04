@@ -63,6 +63,9 @@ type sqlcQuerier interface {
 	// The realm list is bounded by the canonical refresh page size.
 	BumpRatingConfigRevisionForRealms(ctx context.Context, realmIds []uuid.UUID) (int64, error)
 	CalculateLiveMasterySubject(ctx context.Context, arg CalculateLiveMasterySubjectParams) ([]CalculateLiveMasterySubjectRow, error)
+	// Guildless observations count toward guild rank one. The player and guild
+	// cohorts are tenant-wide (not partitioned by realm or visible UI filters).
+	CalculateLivePeakCohortDenominators(ctx context.Context, arg CalculateLivePeakCohortDenominatorsParams) (CalculateLivePeakCohortDenominatorsRow, error)
 	CalculateTenantGuildMasteryPage(ctx context.Context, arg CalculateTenantGuildMasteryPageParams) ([]CalculateTenantGuildMasteryPageRow, error)
 	// Set-based tenant Mastery calculation. Each query computes both all-time and
 	// period windows for a bounded subject page. The caller writes the returned
@@ -168,6 +171,7 @@ type sqlcQuerier interface {
 	DeleteDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) error
 	DeleteDirtyMasterySubjectIfRevision(ctx context.Context, arg DeleteDirtyMasterySubjectIfRevisionParams) (int64, error)
 	DeleteDirtyObservationRunIfRevision(ctx context.Context, arg DeleteDirtyObservationRunIfRevisionParams) (int64, error)
+	DeleteDirtyPeakCohortIfRevision(ctx context.Context, arg DeleteDirtyPeakCohortIfRevisionParams) (int64, error)
 	DeleteDirtyRenownSubjectIfRevision(ctx context.Context, arg DeleteDirtyRenownSubjectIfRevisionParams) (int64, error)
 	DeleteDiscordAnnouncement(ctx context.Context, id uuid.UUID) error
 	DeleteDiscordAnnouncementSource(ctx context.Context, arg DeleteDiscordAnnouncementSourceParams) error
@@ -198,6 +202,7 @@ type sqlcQuerier interface {
 	DeleteIdleRateLimitBuckets(ctx context.Context, idleBefore pgtype.Timestamptz) (int64, error)
 	DeleteInferenceConnectionByOwner(ctx context.Context, arg DeleteInferenceConnectionByOwnerParams) error
 	DeleteLiveGuildObservationsForRun(ctx context.Context, arg DeleteLiveGuildObservationsForRunParams) (int64, error)
+	DeleteLivePeakCohortDenominator(ctx context.Context, arg DeleteLivePeakCohortDenominatorParams) error
 	// Replace a single logical run atomically. DELETE triggers record old subjects
 	// and cohorts; INSERT triggers record new subjects and cohorts, including a
 	// guildless clean kill's contribution to the tenant Peak denominator.
@@ -903,6 +908,7 @@ type sqlcQuerier interface {
 	ListDatasets(ctx context.Context) ([]Dataset, error)
 	ListDirtyMasteryTenants(ctx context.Context) ([]uuid.UUID, error)
 	ListDirtyObservationRunTenants(ctx context.Context) ([]uuid.UUID, error)
+	ListDirtyPeakTenants(ctx context.Context) ([]uuid.UUID, error)
 	// Periodic dispatch only visits tenants with pending fact changes.
 	ListDirtyRenownTenants(ctx context.Context) ([]uuid.UUID, error)
 	ListDiscordAnnouncementEncounters(ctx context.Context, instanceID uuid.UUID) ([]ListDiscordAnnouncementEncountersRow, error)
@@ -1149,6 +1155,9 @@ type sqlcQuerier interface {
 	// count mirror CalculateTenantPlayerMasteryPage/GuildMasteryPage exactly.
 	LockDirtyMasterySubjects(ctx context.Context, arg LockDirtyMasterySubjectsParams) ([]LockDirtyMasterySubjectsRow, error)
 	LockDirtyObservationRuns(ctx context.Context, arg LockDirtyObservationRunsParams) ([]LockDirtyObservationRunsRow, error)
+	// A cohort dirty key covers all subjects and both windows. Lock it before
+	// computing the tenant-wide best; new observations increment its revision.
+	LockDirtyPeakCohorts(ctx context.Context, arg LockDirtyPeakCohortsParams) ([]LockDirtyPeakCohortsRow, error)
 	// Workers lock a bounded batch inside their score-write transaction. Concurrent
 	// updates to the same key wait, then increment its revision. The CAS delete
 	// keeps a newer change queued instead of losing it behind an in-flight worker.
@@ -1537,6 +1546,7 @@ type sqlcQuerier interface {
 	UpsertInstanceOverviewMetrics(ctx context.Context, arg UpsertInstanceOverviewMetricsParams) error
 	UpsertItemDailyPrice(ctx context.Context, arg []UpsertItemDailyPriceParams) *UpsertItemDailyPriceBatchResults
 	UpsertLeaderboardVersionRequirements(ctx context.Context, arg UpsertLeaderboardVersionRequirementsParams) (LeaderboardVersionRequirement, error)
+	UpsertLivePeakCohortDenominator(ctx context.Context, arg UpsertLivePeakCohortDenominatorParams) (int64, error)
 	UpsertLuaProjectContributor(ctx context.Context, arg UpsertLuaProjectContributorParams) (LuaProjectContributor, error)
 	UpsertPendingModificationRequest(ctx context.Context, arg UpsertPendingModificationRequestParams) (ApplicationModificationRequest, error)
 	UpsertPlayerGearHistory(ctx context.Context, arg []UpsertPlayerGearHistoryParams) *UpsertPlayerGearHistoryBatchResults

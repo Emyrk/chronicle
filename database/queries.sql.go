@@ -26209,6 +26209,315 @@ func (q *sqlQuerier) ListRatingMasteryPlayerKeys(ctx context.Context, arg ListRa
 	return items, nil
 }
 
+const calculateLivePeakCohortDenominators = `-- name: CalculateLivePeakCohortDenominators :one
+WITH player AS (
+    SELECT COALESCE(MAX(p.raw_value), 0)::double precision AS all_time,
+           COALESCE(MAX(p.raw_value) FILTER (WHERE p.killed_at >= $1::timestamptz), 0)::double precision AS period
+    FROM rating_live_player_observations p
+    WHERE $2::text = 'player' AND p.tenant_id = $3
+      AND p.instance_name = $4 AND p.encounter_name = $5
+      AND p.difficulty_name = $6 AND p.max_players = $7
+      AND p.player_class = $8 AND p.player_spec = $9
+      AND p.player_sub_spec = $10 AND p.performance_metric = $11
+      AND p.killed_at < $12::timestamptz
+), guild AS (
+    SELECT COALESCE(MIN(g.raw_duration_ms), 0)::double precision AS all_time,
+           COALESCE(MIN(g.raw_duration_ms) FILTER (WHERE g.killed_at >= $1::timestamptz), 0)::double precision AS period
+    FROM rating_live_guild_observations g
+    WHERE $2::text = 'guild' AND g.tenant_id = $3
+      AND g.instance_name = $4 AND g.encounter_name = $5
+      AND g.difficulty_name = $6 AND g.max_players = $7
+      AND g.killed_at < $12::timestamptz
+)
+SELECT player.all_time AS player_all_time, player.period AS player_period,
+       guild.all_time AS guild_all_time, guild.period AS guild_period
+FROM player CROSS JOIN guild
+`
+
+type CalculateLivePeakCohortDenominatorsParams struct {
+	PeriodStart       pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	SubjectKind       string             `db:"subject_kind" json:"subject_kind"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	AsOf              pgtype.Timestamptz `db:"as_of" json:"as_of"`
+}
+
+type CalculateLivePeakCohortDenominatorsRow struct {
+	PlayerAllTime float64 `db:"player_all_time" json:"player_all_time"`
+	PlayerPeriod  float64 `db:"player_period" json:"player_period"`
+	GuildAllTime  float64 `db:"guild_all_time" json:"guild_all_time"`
+	GuildPeriod   float64 `db:"guild_period" json:"guild_period"`
+}
+
+// Guildless observations count toward guild rank one. The player and guild
+// cohorts are tenant-wide (not partitioned by realm or visible UI filters).
+func (q *sqlQuerier) CalculateLivePeakCohortDenominators(ctx context.Context, arg CalculateLivePeakCohortDenominatorsParams) (CalculateLivePeakCohortDenominatorsRow, error) {
+	row := q.db.QueryRow(ctx, calculateLivePeakCohortDenominators,
+		arg.PeriodStart,
+		arg.SubjectKind,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.AsOf,
+	)
+	var i CalculateLivePeakCohortDenominatorsRow
+	err := row.Scan(
+		&i.PlayerAllTime,
+		&i.PlayerPeriod,
+		&i.GuildAllTime,
+		&i.GuildPeriod,
+	)
+	return i, err
+}
+
+const deleteDirtyPeakCohortIfRevision = `-- name: DeleteDirtyPeakCohortIfRevision :execrows
+DELETE FROM rating_dirty_peak_cohorts
+WHERE tenant_id = $1 AND subject_kind = $2
+  AND instance_name = $3 AND encounter_name = $4
+  AND difficulty_name = $5 AND max_players = $6
+  AND player_class = $7 AND player_spec = $8
+  AND player_sub_spec = $9 AND performance_metric = $10
+  AND revision = $11
+`
+
+type DeleteDirtyPeakCohortIfRevisionParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string    `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	Revision          int64     `db:"revision" json:"revision"`
+}
+
+func (q *sqlQuerier) DeleteDirtyPeakCohortIfRevision(ctx context.Context, arg DeleteDirtyPeakCohortIfRevisionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteDirtyPeakCohortIfRevision,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.Revision,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteLivePeakCohortDenominator = `-- name: DeleteLivePeakCohortDenominator :exec
+DELETE FROM rating_peak_cohort_denominators
+WHERE generation_id = $1 AND tenant_id = $2
+  AND subject_kind = $3 AND instance_name = $4
+  AND encounter_name = $5 AND difficulty_name = $6
+  AND max_players = $7 AND player_class = $8
+  AND player_spec = $9 AND player_sub_spec = $10
+  AND performance_metric = $11 AND window_kind = $12
+`
+
+type DeleteLivePeakCohortDenominatorParams struct {
+	GenerationID      uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string    `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	WindowKind        string    `db:"window_kind" json:"window_kind"`
+}
+
+func (q *sqlQuerier) DeleteLivePeakCohortDenominator(ctx context.Context, arg DeleteLivePeakCohortDenominatorParams) error {
+	_, err := q.db.Exec(ctx, deleteLivePeakCohortDenominator,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.WindowKind,
+	)
+	return err
+}
+
+const listDirtyPeakTenants = `-- name: ListDirtyPeakTenants :many
+SELECT DISTINCT tenant_id FROM rating_dirty_peak_cohorts ORDER BY tenant_id
+`
+
+func (q *sqlQuerier) ListDirtyPeakTenants(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listDirtyPeakTenants)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var tenant_id uuid.UUID
+		if err := rows.Scan(&tenant_id); err != nil {
+			return nil, err
+		}
+		items = append(items, tenant_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockDirtyPeakCohorts = `-- name: LockDirtyPeakCohorts :many
+SELECT tenant_id, subject_kind, instance_name, encounter_name, difficulty_name,
+       max_players, player_class, player_spec, player_sub_spec, performance_metric, revision
+FROM rating_dirty_peak_cohorts WHERE tenant_id = $1
+ORDER BY changed_at, subject_kind, instance_name, encounter_name, difficulty_name,
+         max_players, player_class, player_spec, player_sub_spec, performance_metric
+LIMIT LEAST(GREATEST($2::int, 0), 16)
+FOR UPDATE SKIP LOCKED
+`
+
+type LockDirtyPeakCohortsParams struct {
+	TenantID  uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	BatchSize int32     `db:"batch_size" json:"batch_size"`
+}
+
+type LockDirtyPeakCohortsRow struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string    `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	Revision          int64     `db:"revision" json:"revision"`
+}
+
+// A cohort dirty key covers all subjects and both windows. Lock it before
+// computing the tenant-wide best; new observations increment its revision.
+func (q *sqlQuerier) LockDirtyPeakCohorts(ctx context.Context, arg LockDirtyPeakCohortsParams) ([]LockDirtyPeakCohortsRow, error) {
+	rows, err := q.db.Query(ctx, lockDirtyPeakCohorts, arg.TenantID, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockDirtyPeakCohortsRow
+	for rows.Next() {
+		var i LockDirtyPeakCohortsRow
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.SubjectKind,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.PerformanceMetric,
+			&i.Revision,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertLivePeakCohortDenominator = `-- name: UpsertLivePeakCohortDenominator :execrows
+INSERT INTO rating_peak_cohort_denominators
+    (generation_id, tenant_id, subject_kind, instance_name, encounter_name,
+     difficulty_name, max_players, player_class, player_spec, player_sub_spec,
+     performance_metric, window_kind, window_start, window_end, rank_one_raw)
+SELECT gen.id, gen.tenant_id, $1, $2, $3,
+       $4, $5, $6, $7, $8,
+       $9, $10, $11::timestamptz,
+       $12::timestamptz, $13::double precision
+FROM rating_score_generations gen
+WHERE gen.id = $14 AND gen.tenant_id = $15
+  AND gen.status = 'active' AND $13::double precision > 0
+ON CONFLICT (generation_id, tenant_id, subject_kind, instance_name, encounter_name,
+             difficulty_name, max_players, player_class, player_spec, player_sub_spec,
+             performance_metric, window_kind)
+DO UPDATE SET rank_one_raw = EXCLUDED.rank_one_raw, window_start = EXCLUDED.window_start,
+              window_end = EXCLUDED.window_end, updated_at = now()
+`
+
+type UpsertLivePeakCohortDenominatorParams struct {
+	SubjectKind       string             `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	RankOneRaw        float64            `db:"rank_one_raw" json:"rank_one_raw"`
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) UpsertLivePeakCohortDenominator(ctx context.Context, arg UpsertLivePeakCohortDenominatorParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertLivePeakCohortDenominator,
+		arg.SubjectKind,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.RankOneRaw,
+		arg.GenerationID,
+		arg.TenantID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteRatingBossPolicy = `-- name: DeleteRatingBossPolicy :execrows
 DELETE FROM rating_group_boss_policies boss
 USING rating_realm_groups grp, wow_servers server
