@@ -175,8 +175,7 @@ priests", "≥2 Holy Paladins", "≥10 members of guild X".
 
 ## Pagination & sorting
 
-Keyset pagination on `(sort_key, li.id)` like `ListRecentInstances`. v1 sorts:
-date (default), clear time, clear-time parse.
+Keyset pagination on `(sort_key, li.id)` like `ListRecentInstances`. v1 sorts by date (default), clear time, or clear-time parse, in either direction. Missing clear times/parses sort last. The request carries an allowlisted `sort` object and the returned cursor pins the normalized sort. Custom sorting is restricted server-side to Revered and Exalted supporters.
 
 ## Decisions made while implementing
 

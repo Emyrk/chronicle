@@ -2905,12 +2905,13 @@ export interface InstanceSearchCount {
 
 // From chroniclesdk/instance_search.go
 /**
- * InstanceSearchCursor is a keyset pagination position. Results are ordered
- * by (started_at DESC, id DESC).
+ * InstanceSearchCursor is a keyset pagination position. Value is the selected
+ * sort property's canonical string value, or null when that value is missing.
  */
 export interface InstanceSearchCursor {
-    readonly started_at: string;
+    readonly value: string | null;
     readonly id: string;
+    readonly sort: InstanceSearchSort;
 }
 
 // From chroniclesdk/instance_search.go
@@ -3212,6 +3213,11 @@ export interface InstanceSearchQuery {
      */
     readonly where?: InstanceSearchNode;
     /**
+     * Sort changes the result order. Omit it for newest first. Custom sorting
+     * is a Revered supporter perk.
+     */
+    readonly sort?: InstanceSearchSort;
+    /**
      * Limit is the page size. Zero uses the default (25).
      */
     readonly limit?: number;
@@ -3262,6 +3268,27 @@ export interface InstanceSearchResult {
      */
     readonly clear_time_ms?: number;
 }
+
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchSort selects an allowlisted result property and direction.
+ * ParseScope only applies to instance.clear_parse.
+ */
+export interface InstanceSearchSort {
+    readonly field: InstanceSearchSortField;
+    readonly direction?: InstanceSearchSortDirection;
+    readonly parse_scope?: InstanceSearchParseScope;
+}
+
+// From chroniclesdk/instance_search.go
+export type InstanceSearchSortDirection = "asc" | "desc";
+
+export const InstanceSearchSortDirections: InstanceSearchSortDirection[] = ["asc", "desc"];
+
+// From chroniclesdk/instance_search.go
+export type InstanceSearchSortField = "instance.clear_parse" | "instance.clear_time_ms" | "instance.started_at";
+
+export const InstanceSearchSortFields: InstanceSearchSortField[] = ["instance.clear_parse", "instance.clear_time_ms", "instance.started_at"];
 
 // From chroniclesdk/instance_search.go
 /**

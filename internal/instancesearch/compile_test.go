@@ -190,6 +190,53 @@ func TestDescribeFixture(t *testing.T) {
 	require.Equal(t, string(want), string(got), "run go test ./internal/instancesearch -run TestDescribeFixture -update")
 }
 
+func TestCompileSort(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := instancesearch.Compile(instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortClearParse, ParseScope: instancesearch.ParseScopeRealm}}, instancesearch.Options{})
+	require.NoError(t, err)
+	require.Equal(t, instancesearch.Sort{Field: instancesearch.SortClearParse, Direction: instancesearch.SortDesc, ParseScope: instancesearch.ParseScopeRealm}, compiled.Sort)
+	require.Contains(t, compiled.SQL, "clear_realm_display_score")
+	require.Contains(t, compiled.SQL, "ORDER BY m.sort_value DESC NULLS LAST, m.id DESC")
+
+	value := "96"
+	compiled, err = instancesearch.Compile(instancesearch.Query{
+		Sort: &instancesearch.Sort{Field: instancesearch.SortClearParse, Direction: instancesearch.SortDesc, ParseScope: instancesearch.ParseScopeRealm},
+		Cursor: &instancesearch.Cursor{
+			Value: &value,
+			ID:    uuid.New(),
+			Sort:  instancesearch.Sort{Field: instancesearch.SortClearParse, Direction: instancesearch.SortDesc, ParseScope: instancesearch.ParseScopeRealm},
+		},
+	}, instancesearch.Options{})
+	require.NoError(t, err)
+	require.Contains(t, compiled.SQL, "m.sort_value <")
+	require.Contains(t, compiled.SQL, "m.sort_value IS NULL")
+}
+
+func TestCompileSortErrors(t *testing.T) {
+	t.Parallel()
+
+	value := "not-a-time"
+	id := uuid.New()
+	for _, tc := range []struct {
+		name string
+		q    instancesearch.Query
+		want string
+	}{
+		{name: "UnknownField", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: "instance.name"}}, want: "sort.field"},
+		{name: "BadDirection", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortStartedAt, Direction: "sideways"}}, want: "sort.direction"},
+		{name: "ScopeOnDate", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortStartedAt, ParseScope: instancesearch.ParseScopeRealm}}, want: "sort.parse_scope"},
+		{name: "CursorSortMismatch", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortClearTime}, Cursor: &instancesearch.Cursor{ID: id, Sort: instancesearch.Sort{Field: instancesearch.SortStartedAt}}}, want: "cursor.sort"},
+		{name: "BadCursorValue", q: instancesearch.Query{Cursor: &instancesearch.Cursor{Value: &value, ID: id, Sort: instancesearch.Sort{Field: instancesearch.SortStartedAt}}}, want: "cursor.value"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := instancesearch.Compile(tc.q, instancesearch.Options{})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 func TestCompileEnumsAreCanonicalized(t *testing.T) {
 	t.Parallel()
 

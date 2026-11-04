@@ -42,6 +42,15 @@ func LimitForTier(tier string) ratelimit.Limit {
 	return ratelimit.PerMinute(60, burst)
 }
 
+func AccessForTier(tier string) UserAccess {
+	return UserAccess{Limit: LimitForTier(tier), Tier: tier}
+}
+
+func tierAtLeast(tier, minimum string) bool {
+	rank := map[string]int{"free": 0, billing.TierHonored: 1, billing.TierRevered: 2, billing.TierExalted: 3}
+	return rank[tier] >= rank[minimum]
+}
+
 // Caller is an explicit identity and tenant selection. A nil UserID identifies
 // an anonymous caller, bucketed by IP. A user is bucketed by UUID across both
 // HTTP and internal consumers; neither identity nor tenant is taken from ctx.
@@ -55,44 +64,51 @@ type Caller struct {
 	TenantID uuid.UUID
 	IP       string
 }
-type UserLimitResolver func(context.Context, uuid.UUID) (ratelimit.Limit, error)
+type UserAccess struct {
+	Limit ratelimit.Limit
+	Tier  string
+}
+
+type UserAccessResolver func(context.Context, uuid.UUID) (UserAccess, error)
 type Service struct {
-	logger           *slog.Logger
-	store            database.Store
-	users, anon      *ratelimit.Limiter
-	resolveUserLimit UserLimitResolver
-	search           func(context.Context, database.Store, instancesearch.Compiled, instancesearch.SearchOptions) (instancesearch.Page, error)
-	explain          func(context.Context, database.Store, instancesearch.CompiledExplain, instancesearch.SearchOptions) (instancesearch.Explanation, error)
-	runtimeCost      func(time.Duration) int
-	slots            chan struct{}
-	duration, cost   *prometheus.HistogramVec
-	fieldUses        *prometheus.CounterVec
+	logger            *slog.Logger
+	store             database.Store
+	users, anon       *ratelimit.Limiter
+	resolveUserAccess UserAccessResolver
+	search            func(context.Context, database.Store, instancesearch.Compiled, instancesearch.SearchOptions) (instancesearch.Page, error)
+	explain           func(context.Context, database.Store, instancesearch.CompiledExplain, instancesearch.SearchOptions) (instancesearch.Explanation, error)
+	runtimeCost       func(time.Duration) int
+	slots             chan struct{}
+	duration, cost    *prometheus.HistogramVec
+	fieldUses         *prometheus.CounterVec
 }
 type Result struct {
-	Cost        int
-	RuntimeCost int
-	Status      ratelimit.Status
-	RetryAfter  time.Duration
-	Err         error
+	Cost         int
+	RuntimeCost  int
+	Status       ratelimit.Status
+	RetryAfter   time.Duration
+	RequiredTier string
+	Err          error
 }
 
 var (
-	ErrInvalid       = errors.New("invalid search")
-	ErrLoginRequired = errors.New("login required")
-	ErrRateLimited   = errors.New("rate limited")
-	ErrTooComplex    = errors.New("search too complex")
-	ErrBusy          = errors.New("search busy")
+	ErrInvalid           = errors.New("invalid search")
+	ErrLoginRequired     = errors.New("login required")
+	ErrRateLimited       = errors.New("rate limited")
+	ErrTooComplex        = errors.New("search too complex")
+	ErrBusy              = errors.New("search busy")
+	ErrSupporterRequired = errors.New("supporter tier required")
 )
 
 // New constructs the shared service. Pass this same pointer to HTTP and internal callers.
-func New(logger *slog.Logger, store database.Store, registry prometheus.Registerer, resolver UserLimitResolver) *Service {
+func New(logger *slog.Logger, store database.Store, registry prometheus.Registerer, resolver UserAccessResolver) *Service {
 	if resolver == nil {
-		resolver = func(context.Context, uuid.UUID) (ratelimit.Limit, error) { return UserLimit, nil }
+		resolver = func(context.Context, uuid.UUID) (UserAccess, error) { return AccessForTier("free"), nil }
 	}
 	f := promauto.With(registry)
 	return &Service{logger: logger.With(slog.String("component", "instance_search")), store: store,
 		users: ratelimit.New(store, "instance_search", UserLimit), anon: ratelimit.New(store, "instance_search_anon", AnonLimit),
-		resolveUserLimit: resolver, search: instancesearch.Search, explain: instancesearch.Explain,
+		resolveUserAccess: resolver, search: instancesearch.Search, explain: instancesearch.Explain,
 		runtimeCost: runtimeCost, slots: make(chan struct{}, MaxConcurrent),
 		duration:  f.NewHistogramVec(prometheus.HistogramOpts{Namespace: "chronicle", Subsystem: "instance_search", Name: "duration_seconds", Help: "Instance search request duration by outcome and caller kind.", Buckets: []float64{.01, .05, .1, .25, .5, 1, 2, 3, 5, 7.5}}, []string{"outcome", "caller"}),
 		cost:      f.NewHistogramVec(prometheus.HistogramOpts{Namespace: "chronicle", Subsystem: "instance_search", Name: "cost", Help: "Estimated cost of compiled instance searches.", Buckets: []float64{1, 2, 5, 10, 20, 40, 80, 160, 320, 640, 1280}}, []string{"caller"}),
@@ -108,20 +124,22 @@ func (s *Service) ObserveInvalidBody(c Caller, explain bool, start time.Time) {
 	s.duration.WithLabelValues(outcome, s.kind(c)).Observe(time.Since(start).Seconds())
 }
 
-func (s *Service) Slots() chan struct{}                            { return s.slots } // Useful for deterministic admission tests.
-func (s *Service) SetUserLimitResolver(resolver UserLimitResolver) { s.resolveUserLimit = resolver }
+func (s *Service) Slots() chan struct{} { return s.slots } // Useful for deterministic admission tests.
+func (s *Service) SetUserAccessResolver(resolver UserAccessResolver) {
+	s.resolveUserAccess = resolver
+}
 func (s *Service) kind(c Caller) string {
 	if c.UserID != uuid.Nil {
 		return "user"
 	}
 	return "anon"
 }
-func (s *Service) bucket(ctx context.Context, c Caller) (*ratelimit.Limiter, string, ratelimit.Limit, error) {
+func (s *Service) bucket(ctx context.Context, c Caller) (*ratelimit.Limiter, string, UserAccess, error) {
 	if c.UserID == uuid.Nil {
-		return s.anon, ratelimit.IPSubject(c.IP), AnonLimit, nil
+		return s.anon, ratelimit.IPSubject(c.IP), UserAccess{Limit: AnonLimit, Tier: "free"}, nil
 	}
-	limit, err := s.resolveUserLimit(ctx, c.UserID)
-	return s.users, ratelimit.UserSubject(c.UserID.String()), limit, err
+	access, err := s.resolveUserAccess(ctx, c.UserID)
+	return s.users, ratelimit.UserSubject(c.UserID.String()), access, err
 }
 
 // ResolveCaller checks the user's supporter permissions without touching the
@@ -132,12 +150,12 @@ func (s *Service) ResolveCaller(ctx context.Context, c Caller) error {
 }
 
 func (s *Service) Peek(ctx context.Context, c Caller) (ratelimit.Status, ratelimit.Limit, error) {
-	limiter, subject, limit, err := s.bucket(ctx, c)
+	limiter, subject, access, err := s.bucket(ctx, c)
 	if err != nil {
-		return ratelimit.Status{}, limit, err
+		return ratelimit.Status{}, access.Limit, err
 	}
-	st, err := limiter.PeekWithLimit(ctx, subject, limit)
-	return st, limit, err
+	st, err := limiter.PeekWithLimit(ctx, subject, access.Limit)
+	return st, access.Limit, err
 }
 func (s *Service) observe(start time.Time, c Caller, explain bool, outcome string) {
 	if explain {
@@ -181,10 +199,11 @@ func (s *Service) run(ctx context.Context, c Caller, q chroniclesdk.InstanceSear
 		return fail(errors.New("instance search must not run with tenant RLS bypassed"), "error")
 	}
 	ctx = servicetenant.WithTenantID(ctx, c.TenantID)
-	limiter, subject, limit, err := s.bucket(ctx, c)
+	limiter, subject, access, err := s.bucket(ctx, c)
 	if err != nil {
 		return fail(err, "error")
 	}
+	limit := access.Limit
 	compiled, err := instancesearch.CompileForContext(ctx, q, instancesearch.Options{})
 	var compiledExplain instancesearch.CompiledExplain
 	if err == nil && explain {
@@ -200,6 +219,11 @@ func (s *Service) run(ctx context.Context, c Caller, q chroniclesdk.InstanceSear
 	}
 	if !explain {
 		s.cost.WithLabelValues(s.kind(c)).Observe(float64(compiled.Cost))
+	}
+	if !explain && q.Sort != nil && !tierAtLeast(access.Tier, billing.TierRevered) {
+		result.RequiredTier = billing.TierRevered
+		result.Status, _ = limiter.PeekWithLimit(ctx, subject, limit)
+		return fail(ErrSupporterRequired, "supporter_required")
 	}
 	if c.UserID == uuid.Nil {
 		if err = instancesearch.CheckAnonymous(q); err != nil {

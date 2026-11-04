@@ -22,17 +22,20 @@ package instancesearch
 import "github.com/Emyrk/chronicle/api/chroniclesdk"
 
 type (
-	Query      = chroniclesdk.InstanceSearchQuery
-	Cursor     = chroniclesdk.InstanceSearchCursor
-	Node       = chroniclesdk.InstanceSearchNode
-	Count      = chroniclesdk.InstanceSearchCount
-	Op         = chroniclesdk.InstanceSearchOp
-	Match      = chroniclesdk.InstanceSearchMatch
-	ParseScope = chroniclesdk.InstanceSearchParseScope
-	Metric     = chroniclesdk.InstanceSearchMetric
-	On         = chroniclesdk.InstanceSearchOn
-	Result     = chroniclesdk.InstanceSearchResult
-	Page       = chroniclesdk.InstanceSearchResponse
+	Query         = chroniclesdk.InstanceSearchQuery
+	Sort          = chroniclesdk.InstanceSearchSort
+	SortField     = chroniclesdk.InstanceSearchSortField
+	SortDirection = chroniclesdk.InstanceSearchSortDirection
+	Cursor        = chroniclesdk.InstanceSearchCursor
+	Node          = chroniclesdk.InstanceSearchNode
+	Count         = chroniclesdk.InstanceSearchCount
+	Op            = chroniclesdk.InstanceSearchOp
+	Match         = chroniclesdk.InstanceSearchMatch
+	ParseScope    = chroniclesdk.InstanceSearchParseScope
+	Metric        = chroniclesdk.InstanceSearchMetric
+	On            = chroniclesdk.InstanceSearchOn
+	Result        = chroniclesdk.InstanceSearchResult
+	Page          = chroniclesdk.InstanceSearchResponse
 )
 
 const (
@@ -58,6 +61,13 @@ const (
 
 	MetricDPS = chroniclesdk.InstanceSearchMetricDPS
 	MetricHPS = chroniclesdk.InstanceSearchMetricHPS
+
+	SortStartedAt  = chroniclesdk.InstanceSearchSortStartedAt
+	SortClearTime  = chroniclesdk.InstanceSearchSortClearTime
+	SortClearParse = chroniclesdk.InstanceSearchSortClearParse
+
+	SortAsc  = chroniclesdk.InstanceSearchSortAsc
+	SortDesc = chroniclesdk.InstanceSearchSortDesc
 
 	OnBosses = chroniclesdk.InstanceSearchOnBosses
 	OnTrash  = chroniclesdk.InstanceSearchOnTrash

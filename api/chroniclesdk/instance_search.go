@@ -11,17 +11,44 @@ import (
 type InstanceSearchQuery struct {
 	// Where is the search tree. Omit it to match every visible run.
 	Where *InstanceSearchNode `json:"where,omitempty"`
+	// Sort changes the result order. Omit it for newest first. Custom sorting
+	// is a Revered supporter perk.
+	Sort *InstanceSearchSort `json:"sort,omitempty"`
 	// Limit is the page size. Zero uses the default (25).
 	Limit int `json:"limit,omitempty"`
 	// Cursor continues from a previous page's Next.
 	Cursor *InstanceSearchCursor `json:"cursor,omitempty"`
 }
 
-// InstanceSearchCursor is a keyset pagination position. Results are ordered
-// by (started_at DESC, id DESC).
+// InstanceSearchSort selects an allowlisted result property and direction.
+// ParseScope only applies to instance.clear_parse.
+type InstanceSearchSort struct {
+	Field      InstanceSearchSortField     `json:"field"`
+	Direction  InstanceSearchSortDirection `json:"direction,omitempty"`
+	ParseScope InstanceSearchParseScope    `json:"parse_scope,omitempty"`
+}
+
+type InstanceSearchSortField string
+
+const (
+	InstanceSearchSortStartedAt  InstanceSearchSortField = "instance.started_at"
+	InstanceSearchSortClearTime  InstanceSearchSortField = "instance.clear_time_ms"
+	InstanceSearchSortClearParse InstanceSearchSortField = "instance.clear_parse"
+)
+
+type InstanceSearchSortDirection string
+
+const (
+	InstanceSearchSortAsc  InstanceSearchSortDirection = "asc"
+	InstanceSearchSortDesc InstanceSearchSortDirection = "desc"
+)
+
+// InstanceSearchCursor is a keyset pagination position. Value is the selected
+// sort property's canonical string value, or null when that value is missing.
 type InstanceSearchCursor struct {
-	StartedAt time.Time `json:"started_at" format:"date-time"`
-	ID        uuid.UUID `json:"id" format:"uuid"`
+	Value *string            `json:"value"`
+	ID    uuid.UUID          `json:"id" format:"uuid"`
+	Sort  InstanceSearchSort `json:"sort"`
 }
 
 // InstanceSearchNode is one node of the search tree. Exactly one of And, Or,
@@ -279,7 +306,7 @@ type InstanceSearchEvidence struct {
 	Count *int64 `json:"count,omitempty"`
 	// Witnesses are up to five of the players or pulls that satisfy a
 	// quantifier's subtree.
-	Witnesses []InstanceSearchWitness `json:"witnesses,omitempty"`
+	Witnesses []InstanceSearchWitness  `json:"witnesses,omitempty"`
 	Children  []InstanceSearchEvidence `json:"children,omitempty"`
 }
 

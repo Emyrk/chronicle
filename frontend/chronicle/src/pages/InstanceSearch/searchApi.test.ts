@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { InstanceSearchLimitResponse } from "@/api/typesGenerated";
-import { runSearch, SEARCH_LIMIT_REFETCH_MS, searchLimitRefetchInterval } from "./searchApi";
+import { runSearch, SEARCH_LIMIT_REFETCH_MS, SearchError, searchLimitRefetchInterval } from "./searchApi";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -37,6 +37,13 @@ describe("search charges", () => {
     expect(result.cost).toBe(13);
     expect(result.runtimeCost).toBe(7);
     expect(result.budget).toEqual({ limit: 100, remaining: 80, resetSeconds: 20 });
+  });
+});
+
+describe("search errors", () => {
+  it("does not treat supporter upsells as login prompts", () => {
+    expect(new SearchError("Log in", 403).loginRequired).toBe(true);
+    expect(new SearchError("Revered perk", 403, undefined, undefined, "/supporter", "View perks").loginRequired).toBe(false);
   });
 });
 

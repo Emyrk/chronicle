@@ -41,8 +41,8 @@ func TestRuntimeCost(t *testing.T) {
 func TestRuntimeChargeCanExceedBudget(t *testing.T) {
 	t.Parallel()
 	db, _ := dbtestutil.NewDB(t)
-	s := New(testutil.Logger(t), db, prometheus.NewRegistry(), func(context.Context, uuid.UUID) (ratelimit.Limit, error) {
-		return ratelimit.Limit{PerSecond: 0, Burst: 5}, nil
+	s := New(testutil.Logger(t), db, prometheus.NewRegistry(), func(context.Context, uuid.UUID) (UserAccess, error) {
+		return UserAccess{Limit: ratelimit.Limit{PerSecond: 0, Burst: 5}, Tier: "free"}, nil
 	})
 	s.runtimeCost = func(time.Duration) int { return 10 }
 	s.search = func(context.Context, database.Store, instancesearch.Compiled, instancesearch.SearchOptions) (instancesearch.Page, error) {
@@ -66,8 +66,8 @@ func TestCancellationStillChargesRuntime(t *testing.T) {
 	t.Parallel()
 	db, _ := dbtestutil.NewDB(t)
 	limit := ratelimit.Limit{PerSecond: 0, Burst: 100}
-	s := New(testutil.Logger(t), db, prometheus.NewRegistry(), func(context.Context, uuid.UUID) (ratelimit.Limit, error) {
-		return limit, nil
+	s := New(testutil.Logger(t), db, prometheus.NewRegistry(), func(context.Context, uuid.UUID) (UserAccess, error) {
+		return UserAccess{Limit: limit, Tier: "free"}, nil
 	})
 	s.runtimeCost = func(time.Duration) int { return 7 }
 	started := make(chan struct{})

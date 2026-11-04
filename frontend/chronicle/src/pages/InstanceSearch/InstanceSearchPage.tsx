@@ -2,8 +2,15 @@ import { useCallback, useEffect, useMemo, useReducer, useState, type ReactNode }
 import { useInferenceCapability } from "@/features/chat";
 import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { Blocks, BookOpen, ChevronDown, ChevronUp, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
-import type { InstanceSearchCursor, InstanceSearchLimitResponse } from "@/api/typesGenerated";
+import { ArrowUpDown, Blocks, BookOpen, ChevronDown, ChevronUp, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
+import type {
+  InstanceSearchCursor,
+  InstanceSearchLimitResponse,
+  InstanceSearchParseScope,
+  InstanceSearchSort,
+  InstanceSearchSortDirection,
+  InstanceSearchSortField,
+} from "@/api/typesGenerated";
 import { useRealms, useSiteConfig, useSupportedInstances } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation";
@@ -50,6 +57,25 @@ type Mode = "form" | "blocks" | "code";
 /** What Blocks / Code show non-Honored users first: or, count and not in one search. */
 const PREVIEW_EXAMPLE = EXAMPLES.find((e) => e.id === "23_complex_speed_comp") ?? EXAMPLES[0];
 
+const SORT_FIELDS: { value: InstanceSearchSortField; label: string }[] = [
+  { value: "instance.started_at", label: "Date" },
+  { value: "instance.clear_time_ms", label: "Clear time" },
+  { value: "instance.clear_parse", label: "Clear parse" },
+];
+
+function defaultSortDirection(field: InstanceSearchSortField): InstanceSearchSortDirection {
+  return field === "instance.clear_time_ms" ? "asc" : "desc";
+}
+
+function readSort(field: string | null, direction: string | null, parseScope: string | null): InstanceSearchSort | undefined {
+  if (!SORT_FIELDS.some((option) => option.value === field)) return undefined;
+  const typedField = field as InstanceSearchSortField;
+  const typedDirection: InstanceSearchSortDirection = direction === "asc" || direction === "desc" ? direction : defaultSortDirection(typedField);
+  if (typedField !== "instance.clear_parse") return { field: typedField, direction: typedDirection };
+  const typedScope: InstanceSearchParseScope = parseScope === "realm" || parseScope === "guild" ? parseScope : "server";
+  return { field: typedField, direction: typedDirection, parse_scope: typedScope };
+}
+
 export function InstanceSearchPage() {
   const [params, writeParams] = useSearchParams();
   const [draftRevision, bumpDraftRevision] = useReducer((revision: number) => revision + 1, 0);
@@ -61,6 +87,7 @@ export function InstanceSearchPage() {
   // Blocks are open to everyone. Assume unlocked while the session loads so
   // supporters never see a flash of locks.
   const advancedUnlocked = supporter.isLoading || supporter.atLeast("honored");
+  const sortUnlocked = supporter.isLoading || supporter.atLeast("revered");
   const [showUpsell, setShowUpsell] = useState(false);
   const fields = useSearchFields();
   const supported = useSupportedInstances();
@@ -69,6 +96,14 @@ export function InstanceSearchPage() {
   // The submitted search lives in the URL so it can be shared.
   const submittedParam = params.get("q");
   const submittedTree = useMemo(() => decodeQuery(submittedParam), [submittedParam]);
+  const sortFieldParam = params.get("sort");
+  const sortDirectionParam = params.get("order");
+  const sortScopeParam = params.get("sort_scope");
+  const submittedSort = useMemo(
+    () => readSort(sortFieldParam, sortDirectionParam, sortScopeParam),
+    [sortFieldParam, sortDirectionParam, sortScopeParam],
+  );
+  const selectedSort: InstanceSearchSort = submittedSort ?? { field: "instance.started_at", direction: "desc" };
   // Logged-out users can view a shared block / code search read-only.
   const modeParam = params.get("mode");
   const urlMode: Mode = modeParam === "blocks" || modeParam === "code" ? modeParam : "form";
@@ -211,6 +246,9 @@ export function InstanceSearchPage() {
     const next = new URLSearchParams(params);
     next.delete("q");
     next.delete("mode");
+    next.delete("sort");
+    next.delete("order");
+    next.delete("sort_scope");
     setParams(next);
     setCollapsed(false);
   };
@@ -237,6 +275,21 @@ export function InstanceSearchPage() {
     rememberSearch(q, m);
   };
 
+  const updateSort = (sort: InstanceSearchSort) => {
+    const next = new URLSearchParams(params);
+    if (sort.field === "instance.started_at" && sort.direction === "desc") {
+      next.delete("sort");
+      next.delete("order");
+      next.delete("sort_scope");
+    } else {
+      next.set("sort", sort.field);
+      next.set("order", sort.direction ?? defaultSortDirection(sort.field));
+      if (sort.field === "instance.clear_parse") next.set("sort_scope", sort.parse_scope ?? "server");
+      else next.delete("sort_scope");
+    }
+    setParams(next);
+  };
+
   const submit = () => runQuery(encodeQuery(draftTree), mode);
 
   // Loads a recent search back into the editor and runs it again. It opens
@@ -256,8 +309,8 @@ export function InstanceSearchPage() {
   };
 
   const results = useInfiniteQuery({
-    queryKey: ["instance-search", "results", submittedParam, isAuthenticated],
-    queryFn: ({ pageParam }) => runSearch(buildQuery(submittedTree, isAuthenticated ? undefined : 25), pageParam),
+    queryKey: ["instance-search", "results", submittedParam, submittedSort, isAuthenticated],
+    queryFn: ({ pageParam }) => runSearch(buildQuery(submittedTree, isAuthenticated ? undefined : 25, submittedSort), pageParam),
     initialPageParam: undefined as InstanceSearchCursor | undefined,
     getNextPageParam: (last) => last.page.next ?? undefined,
     // Wait for the session: searching before it loads would run (and spend)
@@ -516,6 +569,14 @@ export function InstanceSearchPage() {
       {error && <ErrorBox error={error} />}
       {results.error && !error && <ErrorBox error={new SearchError("Search failed.", 0)} />}
 
+      {submittedParam !== null && (
+        <SortControls
+          sort={selectedSort}
+          unlocked={sortUnlocked}
+          onChange={updateSort}
+        />
+      )}
+
       {submittedParam !== null && !results.error && (
         <ResultsTable
           rows={rows}
@@ -534,6 +595,61 @@ export function InstanceSearchPage() {
       )}
     </main>
       <AdRailStack primaryPlacement="instance-search-right-rail" secondaryPlacement="instance-search-right-rail-lower" railLayout="paired-wide" />
+    </div>
+  );
+}
+
+function SortControls({ sort, unlocked, onChange }: { sort: InstanceSearchSort; unlocked: boolean; onChange: (sort: InstanceSearchSort) => void }) {
+  const selectClass = "h-8 rounded-md border border-border/70 bg-background px-2 text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-60";
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 py-2">
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <ArrowUpDown className="h-3.5 w-3.5" /> Sort
+      </span>
+      <select
+        aria-label="Sort property"
+        className={selectClass}
+        value={sort.field}
+        disabled={!unlocked}
+        onChange={(event) => {
+          const field = event.target.value as InstanceSearchSortField;
+          onChange({
+            field,
+            direction: defaultSortDirection(field),
+            ...(field === "instance.clear_parse" ? { parse_scope: "server" as const } : {}),
+          });
+        }}
+      >
+        {SORT_FIELDS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+      {sort.field === "instance.clear_parse" && (
+        <select
+          aria-label="Clear parse scope"
+          className={selectClass}
+          value={sort.parse_scope ?? "server"}
+          disabled={!unlocked}
+          onChange={(event) => onChange({ ...sort, parse_scope: event.target.value as InstanceSearchParseScope })}
+        >
+          <option value="server">Server</option>
+          <option value="realm">Realm</option>
+          <option value="guild">Guild</option>
+        </select>
+      )}
+      <select
+        aria-label="Sort direction"
+        className={selectClass}
+        value={sort.direction ?? defaultSortDirection(sort.field)}
+        disabled={!unlocked}
+        onChange={(event) => onChange({ ...sort, direction: event.target.value as InstanceSearchSortDirection })}
+      >
+        <option value="asc">Ascending</option>
+        <option value="desc">Descending</option>
+      </select>
+      {!unlocked && (
+        <Link to="/supporter" className="ml-auto inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: TIER_COLOR.revered }}>
+          <Lock className="h-3.5 w-3.5" /> Revered perk
+        </Link>
+      )}
     </div>
   );
 }
@@ -655,6 +771,9 @@ function ErrorBox({ error }: { error: SearchError }) {
       {error.callToAction && <p className="text-muted-foreground">{error.callToAction}</p>}
       {error.detail && <p className="text-muted-foreground font-mono">{error.detail}</p>}
       {error.retryAfterSeconds != null && error.status === 429 && <p className="text-muted-foreground">Try again in {error.retryAfterSeconds}s.</p>}
+      {error.link && (
+        <p><Link to={error.link} className="underline text-amber-300">{error.linkText ?? "Learn more"}</Link></p>
+      )}
       {error.loginRequired && (
         <p><Link to="/login" className="underline text-amber-300">Log in</Link> to run this search.</p>
       )}

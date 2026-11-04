@@ -18,7 +18,6 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
-	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/Emyrk/chronicle/internal/services/serviceinstancesearch"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
@@ -260,8 +259,8 @@ func TestInstanceSearchSupporterLimits(t *testing.T) {
 			require.InDelta(t, 60, limit.PerSecond*60, 0.001)
 
 			api, _ := newInstanceSearchAPI(t)
-			api.instanceSearch.SetUserLimitResolver(func(context.Context, uuid.UUID) (ratelimit.Limit, error) {
-				return limit, nil
+			api.instanceSearch.SetUserAccessResolver(func(context.Context, uuid.UUID) (serviceinstancesearch.UserAccess, error) {
+				return serviceinstancesearch.UserAccess{Limit: limit, Tier: tc.tier}, nil
 			})
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/raidlogs/search/limit", nil)
 			ctx := chronauth.WithClaims(testutil.Context(t, testutil.WaitShort), &claims.Claims{Subject: uuid.New()})
@@ -291,8 +290,8 @@ func TestInstanceSearchMalformedBodyTierFailure(t *testing.T) {
 		t.Run(strconv.FormatBool(explain), func(t *testing.T) {
 			t.Parallel()
 			api, _ := newInstanceSearchAPI(t)
-			api.instanceSearch.SetUserLimitResolver(func(context.Context, uuid.UUID) (ratelimit.Limit, error) {
-				return ratelimit.Limit{}, errors.New("supporter authorization unavailable")
+			api.instanceSearch.SetUserAccessResolver(func(context.Context, uuid.UUID) (serviceinstancesearch.UserAccess, error) {
+				return serviceinstancesearch.UserAccess{}, errors.New("supporter authorization unavailable")
 			})
 			user := uuid.New()
 			var rec *httptest.ResponseRecorder

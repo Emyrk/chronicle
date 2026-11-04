@@ -513,6 +513,25 @@ func TestSearch(t *testing.T) {
 		require.Empty(t, f.search(t, f.tenantB, q).Results)
 	})
 
+	t.Run("Sorting", func(t *testing.T) {
+		t.Parallel()
+
+		q := instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortClearTime, Direction: instancesearch.SortAsc}}
+		page := f.search(t, f.tenantA, q)
+		require.Equal(t, []string{"Alpha", "Beta"}, []string{page.Results[0].GuildName, page.Results[1].GuildName})
+
+		q.Sort = &instancesearch.Sort{Field: instancesearch.SortClearParse, ParseScope: instancesearch.ParseScopeServer}
+		page = f.search(t, f.tenantA, q)
+		require.Equal(t, []string{"Alpha", "Beta"}, []string{page.Results[0].GuildName, page.Results[1].GuildName})
+
+		q.Sort = &instancesearch.Sort{Field: instancesearch.SortStartedAt, Direction: instancesearch.SortAsc}
+		ascending := f.search(t, f.tenantA, q)
+		q.Sort.Direction = instancesearch.SortDesc
+		descending := f.search(t, f.tenantA, q)
+		require.Equal(t, ascending.Results[0].ID, descending.Results[1].ID)
+		require.Equal(t, ascending.Results[1].ID, descending.Results[0].ID)
+	})
+
 	t.Run("Pagination", func(t *testing.T) {
 		t.Parallel()
 		q := where(t, `{"any_encounter": {"field": "encounter.name", "op": "=", "value": "Ragnaros"}}`)
@@ -520,6 +539,8 @@ func TestSearch(t *testing.T) {
 		first := f.search(t, f.tenantA, q)
 		require.Len(t, first.Results, 1)
 		require.NotNil(t, first.Next)
+		require.NotNil(t, first.Next.Value)
+		require.Equal(t, instancesearch.Sort{Field: instancesearch.SortStartedAt, Direction: instancesearch.SortDesc}, first.Next.Sort)
 
 		q.Cursor = first.Next
 		second := f.search(t, f.tenantA, q)

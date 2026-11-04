@@ -79,12 +79,19 @@ UIs can show the cost before running: `GET /api/v1/raidlogs/search/fields` retur
 ```json
 {
   "where": <node>,
+  "sort": {"field": "instance.clear_time_ms", "direction": "asc"},
   "limit": 25,
-  "cursor": {"started_at": "...", "id": "..."}
+  "cursor": <the previous response's next>
 }
 ```
 
-`where` is optional (omit = every visible run). `limit` defaults to 25, max 100. Results are newest first; pass the returned `next` as `cursor` for the next page.
+`where` is optional (omit = every visible run). `limit` defaults to 25, max 100. Without `sort`, results are newest first. Sorting is a **Revered supporter perk** (Exalted also qualifies) and supports:
+
+- `instance.started_at` (default direction `desc`)
+- `instance.clear_time_ms` (default direction `asc`; missing clears sort last)
+- `instance.clear_parse` (default direction `desc`; missing parses sort last), with optional `parse_scope: "server" | "realm" | "guild"`
+
+Directions are `asc` and `desc`. Pass the returned `next` object back unchanged as `cursor`; it pins the normalized sort and keyset value.
 
 A **node** sets exactly one of:
 

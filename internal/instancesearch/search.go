@@ -45,6 +45,7 @@ func Search(ctx context.Context, db database.Store, compiled Compiled, opts Sear
 	}
 
 	var results []Result
+	var cursorValues []*string
 	err := db.InTx(ctx, func(tx database.Store) error {
 		if _, err := tx.Exec(ctx, "SELECT set_config('statement_timeout', $1::text, true)", strconv.FormatInt(timeout.Milliseconds(), 10)); err != nil {
 			return xerrors.Errorf("set statement timeout: %w", err)
@@ -61,8 +62,9 @@ func Search(ctx context.Context, db database.Store, compiled Compiled, opts Sear
 				guildName pgtype.Text
 			)
 			var clear pgtype.Int8
+			var cursorValue pgtype.Text
 			if err := rows.Scan(&r.ID, &slug, &r.Name, &r.RealmID, &r.RealmName, &r.GuildID, &guildName,
-				&r.DifficultyName, &r.MaxPlayers, &r.StartedAt, &r.PlayerCount, &r.BossesKilled, &clear); err != nil {
+				&r.DifficultyName, &r.MaxPlayers, &r.StartedAt, &r.PlayerCount, &r.BossesKilled, &clear, &cursorValue); err != nil {
 				return xerrors.Errorf("scan: %w", err)
 			}
 			if clear.Valid {
@@ -71,6 +73,12 @@ func Search(ctx context.Context, db database.Store, compiled Compiled, opts Sear
 			r.Slug = slug.String
 			r.GuildName = guildName.String
 			results = append(results, r)
+			if cursorValue.Valid {
+				value := cursorValue.String
+				cursorValues = append(cursorValues, &value)
+			} else {
+				cursorValues = append(cursorValues, nil)
+			}
 		}
 		return rows.Err()
 	}, &pgx.TxOptions{AccessMode: pgx.ReadOnly})
@@ -85,8 +93,9 @@ func Search(ctx context.Context, db database.Store, compiled Compiled, opts Sear
 	page := Page{Results: results}
 	if len(results) > compiled.Limit {
 		page.Results = results[:compiled.Limit]
-		last := page.Results[len(page.Results)-1]
-		page.Next = &Cursor{StartedAt: last.StartedAt, ID: last.ID}
+		lastIndex := len(page.Results) - 1
+		last := page.Results[lastIndex]
+		page.Next = &Cursor{Value: cursorValues[lastIndex], ID: last.ID, Sort: compiled.Sort}
 	}
 	if page.Results == nil {
 		page.Results = []Result{}
