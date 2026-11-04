@@ -470,6 +470,10 @@ WITH matching_runs AS (
                 AND lip_filter.unit_guid = @player_guid
           )
       )
+      AND (
+          NOT @has_positions::boolean
+          OR 'unit-position' = ANY(li.capabilities)
+      )
 ),
 instance_rows AS (
     SELECT
@@ -496,7 +500,8 @@ instance_rows AS (
         li.recorder_name,
         li.difficulty_name,
         li.max_players,
-        li.dynamic_difficulty
+        li.dynamic_difficulty,
+        ('unit-position' = ANY(li.capabilities))::boolean AS has_positions
     FROM log_instances li
     JOIN matching_runs ON matching_runs.run_id = COALESCE(li.duplicate_group_id, li.id)
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
@@ -551,10 +556,20 @@ ranked_instances AS (
     JOIN matching_runs USING (run_id)
 ),
 selected_runs AS (
-    SELECT id, run_id, first_encounter_time
+    SELECT
+        id,
+        run_id,
+        first_encounter_time,
+        -- prefer_replay groups runs: replays, then videos, then the rest.
+        CASE
+            WHEN NOT @prefer_replay::boolean THEN 0
+            WHEN has_positions THEN 0
+            WHEN has_youtube_video THEN 1
+            ELSE 2
+        END AS preference_rank
     FROM ranked_instances
     WHERE representative_rank = 1
-    ORDER BY first_encounter_time DESC, id DESC
+    ORDER BY preference_rank ASC, first_encounter_time DESC, id DESC
     LIMIT CASE WHEN @limit_count::int > 0 THEN @limit_count ELSE NULL END
     OFFSET @offset_count
 )
@@ -580,10 +595,12 @@ SELECT
     ranked_instances.recorder_name,
     ranked_instances.difficulty_name,
     ranked_instances.max_players,
-    ranked_instances.dynamic_difficulty
+    ranked_instances.dynamic_difficulty,
+    ranked_instances.has_positions
 FROM ranked_instances
 JOIN selected_runs USING (run_id)
 ORDER BY
+    selected_runs.preference_rank ASC,
     selected_runs.first_encounter_time DESC,
     selected_runs.id DESC,
     ranked_instances.representative_rank ASC;
