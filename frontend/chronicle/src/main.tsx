@@ -38,8 +38,19 @@ const tree = (
   </StrictMode>
 )
 
-if (root.hasChildNodes()) {
-  hydrateRoot(root, tree)
+function mount() {
+  if (root.hasChildNodes()) {
+    hydrateRoot(root, tree)
+  } else {
+    createRoot(root).render(tree)
+  }
+}
+
+// On /start the app stylesheet does not block first paint (see vite.config.ts): mount once it has loaded.
+const deferredStylesheet = document.querySelector<HTMLLinkElement>('link[rel="stylesheet"][media="print"]')
+if (deferredStylesheet) {
+  deferredStylesheet.addEventListener('load', mount, { once: true })
+  deferredStylesheet.addEventListener('error', mount, { once: true })
 } else {
-  createRoot(root).render(tree)
+  mount()
 }

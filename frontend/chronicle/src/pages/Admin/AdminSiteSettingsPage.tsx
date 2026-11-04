@@ -26,11 +26,14 @@ export function AdminSiteSettingsPage() {
   const [defaultFormat, setDefaultFormat] = useState("");
   const [availableFormats, setAvailableFormats] = useState<string[]>([]);
 
+  const [featuredInstanceID, setFeaturedInstanceID] = useState("");
+
   // Sync all server-derived state when config loads.
   useEffect(() => {
     if (!config) return;
     setDefaultFormat(config.default_format ?? "");
     setAvailableFormats([...(config.available_formats ?? [])]);
+    setFeaturedInstanceID(config.landing_featured_instance_id ?? "");
     if (config.branding) {
       setSquareLogo(config.branding.square_logo ?? "");
       setLogoWide(config.branding.logo_wide ?? "");
@@ -236,6 +239,41 @@ export function AdminSiteSettingsPage() {
           </Button>
         </div>
       </Card>
+
+      {/* The /start landing is WoW Forever only (App.tsx StartRoute). */}
+      {config?.dataset_flavor?.includes("wow-forever") && (
+        <Card className="p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Landing</h2>
+          <p className="text-sm text-muted-foreground">
+            Public instance replayed first in the /start hero, ahead of the montage of the community's best
+            replayed runs. Empty uses the deployment default (VITE_LANDING_FEATURED_INSTANCE), if any.
+          </p>
+          <input
+            className={`${inputClass} font-mono`}
+            placeholder="Featured instance ID"
+            value={featuredInstanceID}
+            onChange={(e) => setFeaturedInstanceID(e.target.value)}
+          />
+          {updateConfig.error && <p className="text-sm text-destructive">{updateConfig.error.message}</p>}
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              disabled={updateConfig.isPending}
+              onClick={() => updateConfig.mutate({ landing_featured_instance_id: featuredInstanceID.trim() })}
+            >
+              {updateConfig.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save Featured Run"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={updateConfig.isPending || !config?.landing_featured_instance_id}
+              onClick={() => updateConfig.mutate({ landing_featured_instance_id: "" })}
+            >
+              Clear
+            </Button>
+          </div>
+        </Card>
+      )}
 
       <Card className="p-6 space-y-4">
         <h2 className="text-lg font-semibold">Parse Defaults</h2>
