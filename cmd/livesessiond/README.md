@@ -13,8 +13,8 @@ Environment:
 - `CHRONICLE_ACCESS_URL` (required): base URL of the main Chronicle site,
   used to build the share link in the create response.
 - `LIVESESSION_PUBLIC_ADDR` (default `:$PORT` when Railway provides `PORT`,
-  otherwise `:8080`): public listener, expose only `/healthz` and
-  `GET /api/v1/live-sessions/{code}/ws?token=...`.
+  otherwise `:8080`): public listener, exposing the informational `/` page,
+  `/healthz`, and `GET /api/v1/live-sessions/{code}/ws?token=...`.
 - `LIVESESSION_PRIVATE_ADDR` (default `:8081`): private listener, reachable
   from the backend over the platform's private network. Never publish it publicly.
 

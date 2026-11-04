@@ -17,6 +17,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestPublicLandingPage(t *testing.T) {
+	t.Parallel()
+	accessURL, err := url.Parse("https://legacy.chronicleclassic.com")
+	require.NoError(t, err)
+	service := New(Options{AccessURL: accessURL})
+	public := service.PublicHandler()
+
+	response := httptest.NewRecorder()
+	public.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, "text/html; charset=utf-8", response.Header().Get("Content-Type"))
+	require.Contains(t, response.Header().Get("Content-Security-Policy"), "default-src 'none'")
+	require.Equal(t, "nosniff", response.Header().Get("X-Content-Type-Options"))
+	require.Contains(t, response.Body.String(), "Chronicle infrastructure")
+	require.Contains(t, response.Body.String(), "Nothing to click")
+	require.Contains(t, response.Body.String(), "WebRTC signaling")
+	require.Contains(t, response.Body.String(), `href="https://legacy.chronicleclassic.com"`)
+}
+
 func TestDaemonPrivateAuthAndLifecycle(t *testing.T) {
 	t.Parallel()
 	accessURL, err := url.Parse("https://chronicle.example")

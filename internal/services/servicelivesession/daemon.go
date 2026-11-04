@@ -14,9 +14,10 @@ import (
 
 const maxPrivateBodyBytes = 8 << 10
 
-// PublicHandler exposes only the signaling WebSocket and a health check.
+// PublicHandler exposes the service landing page, health check, and signaling WebSocket.
 func (s *Service) PublicHandler() http.Handler {
 	r := chi.NewRouter()
+	r.Get("/", s.LandingPage)
 	r.Get("/healthz", func(w http.ResponseWriter, req *http.Request) {
 		httpapi.Write(req.Context(), w, http.StatusOK, chroniclesdk.Response{Message: "ok"})
 	})
