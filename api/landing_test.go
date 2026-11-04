@@ -26,6 +26,48 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The WoW Forever home page toggle: on by default (the migration's default), and the admin
+// PUT flips it, reflected in the site config GET the frontend reads.
+func TestForeverLandingToggle(t *testing.T) {
+	t.Parallel()
+
+	store, _ := dbtestutil.NewDB(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+
+	zed := authz.NewDatabaseOnly(testutil.Logger(t), store)
+	handlerAPI := &API{AppContext: ctx, Opts: &Options{Zed: zed, Logger: testutil.Logger(t)}}
+	router := chi.NewRouter()
+	router.Get("/site-config", handlerAPI.AdminGetSiteConfig)
+	router.Put("/site-config", handlerAPI.AdminUpdateSiteConfig)
+
+	get := func() chroniclesdk.SiteConfig {
+		t.Helper()
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/site-config", nil))
+		require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+		var out chroniclesdk.SiteConfig
+		require.NoError(t, json.Unmarshal(res.Body.Bytes(), &out))
+		return out
+	}
+	put := func(body string) chroniclesdk.SiteConfig {
+		t.Helper()
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, httptest.NewRequest(http.MethodPut, "/site-config", strings.NewReader(body)))
+		require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+		var out chroniclesdk.SiteConfig
+		require.NoError(t, json.Unmarshal(res.Body.Bytes(), &out))
+		return out
+	}
+
+	require.True(t, get().ForeverLandingEnabled, "on by default")
+	require.False(t, put(`{"forever_landing_enabled":false}`).ForeverLandingEnabled)
+	require.False(t, get().ForeverLandingEnabled)
+	// An unrelated update leaves it alone.
+	require.False(t, put(`{"signups_enabled":true}`).ForeverLandingEnabled)
+	require.True(t, put(`{"forever_landing_enabled":true}`).ForeverLandingEnabled)
+	require.True(t, get().ForeverLandingEnabled)
+}
+
 func TestLandingFeatured(t *testing.T) {
 	t.Parallel()
 

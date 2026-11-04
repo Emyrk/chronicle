@@ -179,6 +179,17 @@ function StartRoute() {
   return forever ? <StartPage /> : <CatchAllRoute />
 }
 
+/**
+ * "/": WoW Forever serves the replay landing (Start2Page) while the admin toggle (site config
+ * forever_landing_enabled) is on; off, or any other flavor, gets the standard Home.
+ */
+function HomeRoute() {
+  const { data: siteConfig, isPending } = useSiteConfig()
+  if (isPending) return null
+  const foreverLanding = (siteConfig?.dataset_flavor?.includes("wow-forever") ?? false) && (siteConfig?.forever_landing_enabled ?? false)
+  return foreverLanding ? <Start2Page /> : <Home />
+}
+
 /** /start2: the landing inside the site Layout, WoW Forever only like /start. */
 function Start2Route() {
   const { data: siteConfig, isPending } = useSiteConfig()
@@ -200,7 +211,7 @@ function App() {
       {/* Pop-out window opened from a chat's Prompt inspector; no site chrome. */}
       <Route path="/debug/assistant" element={<AssistantDebugPage />} />
       <Route element={<Layout />}>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<HomeRoute />} />
         <Route path="/start2" element={<Start2Route />} />
         <Route path="/recent" element={<RecentRaids />} />
         <Route path="/search" element={<InstanceSearchPage />} />

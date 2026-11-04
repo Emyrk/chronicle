@@ -31778,7 +31778,7 @@ func (q *sqlQuerier) UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertS
 }
 
 const getSiteConfig = `-- name: GetSiteConfig :one
-SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id FROM site_config WHERE id = TRUE
+SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled FROM site_config WHERE id = TRUE
 `
 
 func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
@@ -31797,6 +31797,7 @@ func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
 		&i.AdsEnabled,
 		&i.RootDomainDiscovery,
 		&i.LandingFeaturedInstanceID,
+		&i.ForeverLandingEnabled,
 	)
 	return i, err
 }
@@ -31811,9 +31812,10 @@ UPDATE site_config SET
     available_formats = COALESCE($6, available_formats),
     client_uploads_disabled = COALESCE($7, client_uploads_disabled),
     ads_enabled = COALESCE($8, ads_enabled),
+    forever_landing_enabled = COALESCE($9, forever_landing_enabled),
     updated_at = now()
 WHERE id = TRUE
-RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled
 `
 
 type UpdateSiteConfigParams struct {
@@ -31825,6 +31827,7 @@ type UpdateSiteConfigParams struct {
 	AvailableFormats      []string      `db:"available_formats" json:"available_formats"`
 	ClientUploadsDisabled pgtype.Bool   `db:"client_uploads_disabled" json:"client_uploads_disabled"`
 	AdsEnabled            pgtype.Bool   `db:"ads_enabled" json:"ads_enabled"`
+	ForeverLandingEnabled pgtype.Bool   `db:"forever_landing_enabled" json:"forever_landing_enabled"`
 }
 
 func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigParams) (SiteConfig, error) {
@@ -31837,6 +31840,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		arg.AvailableFormats,
 		arg.ClientUploadsDisabled,
 		arg.AdsEnabled,
+		arg.ForeverLandingEnabled,
 	)
 	var i SiteConfig
 	err := row.Scan(
@@ -31852,6 +31856,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		&i.AdsEnabled,
 		&i.RootDomainDiscovery,
 		&i.LandingFeaturedInstanceID,
+		&i.ForeverLandingEnabled,
 	)
 	return i, err
 }
@@ -31861,7 +31866,7 @@ UPDATE site_config SET
     landing_featured_instance_id = $1::uuid,
     updated_at = now()
 WHERE id = TRUE
-RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled
 `
 
 // NULL clears the setting, so this cannot share UpdateSiteConfig's COALESCE pattern.
@@ -31881,6 +31886,7 @@ func (q *sqlQuerier) UpdateSiteConfigLandingFeaturedInstance(ctx context.Context
 		&i.AdsEnabled,
 		&i.RootDomainDiscovery,
 		&i.LandingFeaturedInstanceID,
+		&i.ForeverLandingEnabled,
 	)
 	return i, err
 }

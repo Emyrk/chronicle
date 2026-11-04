@@ -5522,6 +5522,11 @@ export interface SiteConfig {
      * its deployment default).
      */
     readonly landing_featured_instance_id?: string;
+    /**
+     * ForeverLandingEnabled makes WoW Forever's "/" serve the replay landing
+     * (/start2). Off reverts "/" to the standard home page. Other flavors ignore it.
+     */
+    readonly forever_landing_enabled: boolean;
 }
 
 // From chroniclesdk/stats.go
@@ -6466,6 +6471,10 @@ export interface UpdateSiteConfigRequest {
      * An empty string clears it.
      */
     readonly landing_featured_instance_id?: string;
+    /**
+     * ForeverLandingEnabled toggles WoW Forever's "/" between the replay landing and the standard home page.
+     */
+    readonly forever_landing_enabled?: boolean;
 }
 
 // From chroniclesdk/guild_page.go

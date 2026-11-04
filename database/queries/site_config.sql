@@ -11,6 +11,7 @@ UPDATE site_config SET
     available_formats = COALESCE(sqlc.narg('available_formats'), available_formats),
     client_uploads_disabled = COALESCE(sqlc.narg('client_uploads_disabled'), client_uploads_disabled),
     ads_enabled = COALESCE(sqlc.narg('ads_enabled'), ads_enabled),
+    forever_landing_enabled = COALESCE(sqlc.narg('forever_landing_enabled'), forever_landing_enabled),
     updated_at = now()
 WHERE id = TRUE
 RETURNING *;

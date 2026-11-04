@@ -854,6 +854,7 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	resp.Branding = unmarshalBranding(config.Branding)
 	resp.Discoverable = config.Discoverable
 	resp.RootDomainDiscovery = config.RootDomainDiscovery
+	resp.ForeverLandingEnabled = config.ForeverLandingEnabled
 	if config.DefaultFormat.Valid {
 		s := string(config.DefaultFormat.LogFormat)
 		resp.DefaultFormat = &s
@@ -920,6 +921,9 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 	if req.DisableClientUpload != nil {
 		params.ClientUploadsDisabled = pgtype.Bool{Bool: *req.DisableClientUpload, Valid: true}
 	}
+	if req.ForeverLandingEnabled != nil {
+		params.ForeverLandingEnabled = pgtype.Bool{Bool: *req.ForeverLandingEnabled, Valid: true}
+	}
 	var featured uuid.NullUUID
 	if req.LandingFeaturedInstanceID != nil && *req.LandingFeaturedInstanceID != "" {
 		id, err := uuid.Parse(*req.LandingFeaturedInstanceID)
@@ -968,6 +972,7 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 		Branding:              unmarshalBranding(config.Branding),
 		Discoverable:          config.Discoverable,
 		RootDomainDiscovery:   config.RootDomainDiscovery,
+		ForeverLandingEnabled: config.ForeverLandingEnabled,
 	}
 	if config.LandingFeaturedInstanceID.Valid {
 		resp.LandingFeaturedInstanceID = config.LandingFeaturedInstanceID.UUID.String()
