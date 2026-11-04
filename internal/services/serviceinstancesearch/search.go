@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -21,6 +22,8 @@ import (
 
 const MaxConcurrent = 6
 const slowLog = 2 * time.Second
+const runtimeTokensPerSecond = 10
+const accountingTimeout = 2 * time.Second
 
 var UserLimit = ratelimit.PerMinute(60, 100)
 var AnonLimit = ratelimit.PerMinute(20, 40)
@@ -58,15 +61,19 @@ type Service struct {
 	store            database.Store
 	users, anon      *ratelimit.Limiter
 	resolveUserLimit UserLimitResolver
+	search           func(context.Context, database.Store, instancesearch.Compiled, instancesearch.SearchOptions) (instancesearch.Page, error)
+	explain          func(context.Context, database.Store, instancesearch.CompiledExplain, instancesearch.SearchOptions) (instancesearch.Explanation, error)
+	runtimeCost      func(time.Duration) int
 	slots            chan struct{}
 	duration, cost   *prometheus.HistogramVec
 	fieldUses        *prometheus.CounterVec
 }
 type Result struct {
-	Cost       int
-	Status     ratelimit.Status
-	RetryAfter time.Duration
-	Err        error
+	Cost        int
+	RuntimeCost int
+	Status      ratelimit.Status
+	RetryAfter  time.Duration
+	Err         error
 }
 
 var (
@@ -85,7 +92,8 @@ func New(logger *slog.Logger, store database.Store, registry prometheus.Register
 	f := promauto.With(registry)
 	return &Service{logger: logger.With(slog.String("component", "instance_search")), store: store,
 		users: ratelimit.New(store, "instance_search", UserLimit), anon: ratelimit.New(store, "instance_search_anon", AnonLimit),
-		resolveUserLimit: resolver, slots: make(chan struct{}, MaxConcurrent),
+		resolveUserLimit: resolver, search: instancesearch.Search, explain: instancesearch.Explain,
+		runtimeCost: runtimeCost, slots: make(chan struct{}, MaxConcurrent),
 		duration:  f.NewHistogramVec(prometheus.HistogramOpts{Namespace: "chronicle", Subsystem: "instance_search", Name: "duration_seconds", Help: "Instance search request duration by outcome and caller kind.", Buckets: []float64{.01, .05, .1, .25, .5, 1, 2, 3, 5, 7.5}}, []string{"outcome", "caller"}),
 		cost:      f.NewHistogramVec(prometheus.HistogramOpts{Namespace: "chronicle", Subsystem: "instance_search", Name: "cost", Help: "Estimated cost of compiled instance searches.", Buckets: []float64{1, 2, 5, 10, 20, 40, 80, 160, 320, 640, 1280}}, []string{"caller"}),
 		fieldUses: f.NewCounterVec(prometheus.CounterOpts{Namespace: "chronicle", Subsystem: "instance_search", Name: "field_uses_total", Help: "Predicate fields used in compiled instance searches."}, []string{"field"})}
@@ -137,6 +145,29 @@ func (s *Service) observe(start time.Time, c Caller, explain bool, outcome strin
 	}
 	s.duration.WithLabelValues(outcome, s.kind(c)).Observe(time.Since(start).Seconds())
 }
+func runtimeCost(elapsed time.Duration) int {
+	if elapsed <= 0 {
+		return 0
+	}
+	return int(math.Ceil(elapsed.Seconds() * runtimeTokensPerSecond))
+}
+
+func (s *Service) chargeRuntime(ctx context.Context, limiter *ratelimit.Limiter, subject string, limit ratelimit.Limit, elapsed time.Duration, result *Result) {
+	cost := s.runtimeCost(elapsed)
+	if cost == 0 {
+		return
+	}
+	accountingCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), accountingTimeout)
+	defer cancel()
+	status, err := limiter.ForceTakeWithLimit(accountingCtx, subject, float64(cost), limit)
+	if err != nil {
+		s.logger.Error("instance search runtime charge", slog.String("caller", subject), slog.Int("cost", cost), slog.String("error", err.Error()))
+		return
+	}
+	result.RuntimeCost = cost
+	result.Status = status
+}
+
 func (s *Service) run(ctx context.Context, c Caller, q chroniclesdk.InstanceSearchQuery, instanceID uuid.UUID, explain bool) (any, Result) {
 	start := time.Now()
 	result := Result{}
@@ -204,11 +235,13 @@ func (s *Service) run(ctx context.Context, c Caller, q chroniclesdk.InstanceSear
 		s.fieldUses.WithLabelValues(field).Inc()
 	}
 	var value any
+	executionStart := time.Now()
 	if explain {
-		value, err = instancesearch.Explain(ctx, s.store, compiledExplain, instancesearch.SearchOptions{})
+		value, err = s.explain(ctx, s.store, compiledExplain, instancesearch.SearchOptions{})
 	} else {
-		value, err = instancesearch.Search(ctx, s.store, compiled, instancesearch.SearchOptions{})
+		value, err = s.search(ctx, s.store, compiled, instancesearch.SearchOptions{})
 	}
+	s.chargeRuntime(ctx, limiter, subject, limit, time.Since(executionStart), &result)
 	elapsed := time.Since(start)
 	if errors.Is(err, instancesearch.ErrTimeout) || elapsed > slowLog {
 		s.logger.Warn("slow instance search", slog.String("caller", subject), slog.Duration("elapsed", elapsed), slog.Bool("timed_out", errors.Is(err, instancesearch.ErrTimeout)), slog.Int("cost", compiled.Cost), slog.String("query", instancesearch.FormatCEL(q.Where)))

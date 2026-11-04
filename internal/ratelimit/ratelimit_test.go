@@ -194,6 +194,57 @@ func TestTake(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("ForceTakeCanMakeBalanceNegative", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
+		l := ratelimit.New(db, "force", ratelimit.PerMinute(60, 10))
+
+		_, err := l.Take(ctx, "user:a", 8)
+		require.NoError(t, err)
+		st, err := l.ForceTake(ctx, "user:a", 5)
+		require.NoError(t, err)
+		require.InDelta(t, -3, st.Remaining, 0.1)
+		require.InDelta(t, 13*time.Second, st.Reset, float64(200*time.Millisecond))
+
+		res, err := l.Take(ctx, "user:a", 1)
+		require.NoError(t, err)
+		require.False(t, res.Allowed)
+
+		age(ctx, t, db, "force:user:a", 5*time.Second)
+		res, err = l.Take(ctx, "user:a", 1)
+		require.NoError(t, err)
+		require.True(t, res.Allowed)
+
+		_, err = l.ForceTake(ctx, "user:a", -1)
+		require.Error(t, err)
+	})
+
+	t.Run("ConcurrentForceTakesAreSerialized", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitMedium)
+		l := ratelimit.New(db, "force-concurrent", ratelimit.Limit{PerSecond: 0, Burst: 5})
+
+		var wg sync.WaitGroup
+		errs := make(chan error, 20)
+		for range 20 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, err := l.ForceTake(ctx, "user:a", 1)
+				errs <- err
+			}()
+		}
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			require.NoError(t, err)
+		}
+
+		st, err := l.Peek(ctx, "user:a")
+		require.NoError(t, err)
+		require.Equal(t, -15.0, st.Remaining)
+	})
+
 	t.Run("PerRequestLimitUsesSameBucket", func(t *testing.T) {
 		t.Parallel()
 		ctx := testutil.Context(t, testutil.WaitShort)

@@ -19,8 +19,10 @@ export interface SearchBudget {
 
 export interface SearchPageResult {
   page: InstanceSearchResponse;
-  /** Tokens this search cost (Chronicle-Search-Cost). */
+  /** Static compiled-query tokens (Chronicle-Search-Cost). */
   cost: number | null;
+  /** Post-execution tokens charged for database runtime. */
+  runtimeCost: number | null;
   budget: SearchBudget | null;
 }
 
@@ -30,6 +32,7 @@ export class SearchError extends Error {
   readonly detail?: string;
   readonly callToAction?: string;
   readonly cost: number | null;
+  readonly runtimeCost: number | null;
   readonly budget: SearchBudget | null;
   readonly retryAfterSeconds: number | null;
 
@@ -39,6 +42,7 @@ export class SearchError extends Error {
     detail?: string,
     callToAction?: string,
     cost: number | null = null,
+    runtimeCost: number | null = null,
     budget: SearchBudget | null = null,
     retryAfterSeconds: number | null = null,
   ) {
@@ -47,6 +51,7 @@ export class SearchError extends Error {
     this.detail = detail;
     this.callToAction = callToAction;
     this.cost = cost;
+    this.runtimeCost = runtimeCost;
     this.budget = budget;
     this.retryAfterSeconds = retryAfterSeconds;
   }
@@ -77,12 +82,19 @@ export async function runSearch(query: InstanceSearchQuery, cursor?: InstanceSea
     body: JSON.stringify(cursor ? { ...query, cursor } : query),
   });
   const cost = num(response.headers.get("Chronicle-Search-Cost"));
+  const runtimeCost = num(response.headers.get("Chronicle-Search-Runtime-Cost"));
   const budget = readBudget(response.headers);
-  if (!response.ok) throw await searchError(response, cost, budget, "Search failed.");
-  return { page: (await response.json()) as InstanceSearchResponse, cost, budget };
+  if (!response.ok) throw await searchError(response, cost, runtimeCost, budget, "Search failed.");
+  return { page: (await response.json()) as InstanceSearchResponse, cost, runtimeCost, budget };
 }
 
-async function searchError(response: Response, cost: number | null, budget: SearchBudget | null, fallback: string): Promise<SearchError> {
+async function searchError(
+  response: Response,
+  cost: number | null,
+  runtimeCost: number | null,
+  budget: SearchBudget | null,
+  fallback: string,
+): Promise<SearchError> {
   let body: { message?: string; detail?: string; call_to_action?: string } = {};
   try {
     body = await response.json();
@@ -95,6 +107,7 @@ async function searchError(response: Response, cost: number | null, budget: Sear
     body.detail,
     body.call_to_action,
     cost,
+    runtimeCost,
     budget,
     num(response.headers.get("Retry-After")),
   );
@@ -103,6 +116,7 @@ async function searchError(response: Response, cost: number | null, budget: Sear
 export interface ExplainResult {
   explanation: InstanceSearchExplainResponse;
   cost: number | null;
+  runtimeCost: number | null;
   budget: SearchBudget | null;
 }
 
@@ -114,9 +128,10 @@ export async function explainRun(query: InstanceSearchQuery, instanceId: string)
     body: JSON.stringify({ query: { where: query.where }, instance_id: instanceId }),
   });
   const cost = num(response.headers.get("Chronicle-Search-Cost"));
+  const runtimeCost = num(response.headers.get("Chronicle-Search-Runtime-Cost"));
   const budget = readBudget(response.headers);
-  if (!response.ok) throw await searchError(response, cost, budget, "Explain failed.");
-  return { explanation: (await response.json()) as InstanceSearchExplainResponse, cost, budget };
+  if (!response.ok) throw await searchError(response, cost, runtimeCost, budget, "Explain failed.");
+  return { explanation: (await response.json()) as InstanceSearchExplainResponse, cost, runtimeCost, budget };
 }
 
 async function fetchJSON<T>(path: string): Promise<T> {

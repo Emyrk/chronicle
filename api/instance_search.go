@@ -24,7 +24,10 @@ import (
 	"github.com/google/uuid"
 )
 
-const InstanceSearchCostHeader = "Chronicle-Search-Cost"
+const (
+	InstanceSearchCostHeader        = "Chronicle-Search-Cost"
+	InstanceSearchRuntimeCostHeader = "Chronicle-Search-Runtime-Cost"
+)
 const instanceSearchMaxBody = 64 << 10
 
 func newInstanceSearchUserLimitResolver(zed *authz.Authz) serviceinstancesearch.UserLimitResolver {
@@ -55,6 +58,9 @@ func writeSearchResult(w http.ResponseWriter, r *http.Request, result serviceins
 	}
 	if result.Cost != 0 {
 		w.Header().Set(InstanceSearchCostHeader, strconv.Itoa(result.Cost))
+	}
+	if result.RuntimeCost != 0 {
+		w.Header().Set(InstanceSearchRuntimeCostHeader, strconv.Itoa(result.RuntimeCost))
 	}
 	if result.Err == nil {
 		return

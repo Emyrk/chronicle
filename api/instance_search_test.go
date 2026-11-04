@@ -89,12 +89,15 @@ func TestInstanceSearch(t *testing.T) {
 	t.Run("AnonymousRateLimitedPerIP", func(t *testing.T) {
 		t.Parallel()
 		api, _ := newInstanceSearchAPI(t)
-		// A simple search costs 3, so the 40-token anonymous burst allows 13.
-		for i := range 13 {
-			rec := doSearch(t, api, uuid.Nil, "10.0.0.2", simpleSearch)
-			require.Equal(t, http.StatusOK, rec.Code, "search %d", i)
+		var rec *httptest.ResponseRecorder
+		for range 40 {
+			rec = doSearch(t, api, uuid.Nil, "10.0.0.2", simpleSearch)
+			if rec.Code == http.StatusTooManyRequests {
+				break
+			}
+			require.Equal(t, http.StatusOK, rec.Code)
 		}
-		rec := doSearch(t, api, uuid.Nil, "10.0.0.2", simpleSearch)
+		require.NotNil(t, rec)
 		require.Equal(t, http.StatusTooManyRequests, rec.Code)
 		require.NotEmpty(t, rec.Header().Get("Retry-After"))
 		// Other IPs have their own bucket.
@@ -121,6 +124,7 @@ func TestInstanceSearch(t *testing.T) {
 		}
 		rec := doSearch(t, api, uuid.New(), "10.0.0.1", simpleSearch)
 		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+		require.Empty(t, rec.Header().Get(InstanceSearchRuntimeCostHeader))
 		// The search never ran, so the bucket is full again.
 		require.Equal(t, "100", rec.Header().Get("RateLimit-Remaining"))
 	})
@@ -156,11 +160,18 @@ func TestInstanceSearch(t *testing.T) {
 			require.NotEmpty(t, rec.Header().Get("RateLimit-Remaining"), tc.name)
 			require.NotEmpty(t, rec.Header().Get("RateLimit-Reset"), tc.name)
 			require.Equal(t, tc.wantCost, rec.Header().Get(InstanceSearchCostHeader), tc.name)
+			if tc.name == "OK" {
+				require.NotEmpty(t, rec.Header().Get(InstanceSearchRuntimeCostHeader))
+			} else {
+				require.Empty(t, rec.Header().Get(InstanceSearchRuntimeCostHeader))
+			}
 		}
 
-		// Only the successful search spent tokens: 100 - 3.
+		// Only the successful search spent tokens: 3 static plus runtime.
 		rec := doSearch(t, api, user, "10.0.0.9", `{not json`)
-		require.Equal(t, "97", rec.Header().Get("RateLimit-Remaining"))
+		remaining := mustAtoi(t, rec.Header().Get("RateLimit-Remaining"))
+		require.GreaterOrEqual(t, remaining, 90)
+		require.LessOrEqual(t, remaining, 96)
 	})
 
 	t.Run("LimitEndpoint", func(t *testing.T) {
@@ -192,7 +203,7 @@ func TestInstanceSearch(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, doSearch(t, api, user, "10.0.0.8", advancedSearch).Code)
 		after := get(user)
-		require.InDelta(t, 87, after.Remaining, 0.5) // advancedSearch costs 13
+		require.InDelta(t, 86, after.Remaining, 0.5) // 13 static plus runtime
 		require.Positive(t, after.ResetSeconds)
 		// Peeking does not spend.
 		require.InDelta(t, after.Remaining, get(user).Remaining, 0.5)
@@ -360,8 +371,9 @@ func TestInstanceSearchInternalHTTPParity(t *testing.T) {
 	rec := doSearch(t, api, user, "10.0.0.1", simpleSearch)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	require.Equal(t, "3", rec.Header().Get(InstanceSearchCostHeader))
+	require.NotEmpty(t, rec.Header().Get(InstanceSearchRuntimeCostHeader))
 	remaining := mustAtoi(t, rec.Header().Get("RateLimit-Remaining"))
-	require.GreaterOrEqual(t, remaining, 96)
+	require.GreaterOrEqual(t, remaining, 90)
 	require.LessOrEqual(t, remaining, 100)
 	for range cap(api.instanceSearch.Slots()) {
 		api.instanceSearch.Slots() <- struct{}{}

@@ -201,7 +201,7 @@ date (default), clear time, clear-time parse.
 
 ## Abuse protection
 
-- **Rate limiting.** Searches use a leaky bucket in Postgres (`internal/ratelimit`), keyed per user, or per IP for anonymous callers. The bucket is charged the query's estimated cost (`Compiled.Cost`), so heavy queries drain it faster.
+- **Rate limiting.** Searches use a leaky bucket in Postgres (`internal/ratelimit`), keyed per user, or per IP for anonymous callers. Admission charges the query's estimated static cost (`Compiled.Cost`). After execution starts, the bucket is force-charged another 10 tokens per second of database runtime, rounded up, even when the request is canceled, times out or fails. This final charge may make the bucket negative, blocking later searches until refill clears the debt. A busy 503 still refunds the static cost because no query ran. Responses expose the static and runtime portions through `Chronicle-Search-Cost` and `Chronicle-Search-Runtime-Cost`, and the UI shows their total and breakdown after execution.
 - **Concurrency cap.** At most 6 searches run at once per process, so searches can't use up the shared connection pool. Searches beyond that return 503.
 - **Timeout.** A 5s statement timeout runs in a read-only transaction.
 - **Anonymous subset.** Anonymous callers get a small subset of cheap instance-level filters. Everything else returns 403 with a log-in prompt.

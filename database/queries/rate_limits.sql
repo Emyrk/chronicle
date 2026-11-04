@@ -24,6 +24,24 @@ ON CONFLICT (key) DO UPDATE SET
   updated_at = now()
 RETURNING last_allowed AS allowed, tokens;
 
+-- name: ForceTakeRateLimitTokens :one
+-- Atomically refills a leaky bucket and always takes cost tokens, even when
+-- that makes the balance negative. This is for work whose final cost is only
+-- known after it has completed. The row lock taken by the upsert serializes
+-- concurrent charges on the same key.
+INSERT INTO rate_limit_buckets (key, tokens, last_allowed, updated_at)
+VALUES (
+  sqlc.arg(key)::text,
+  sqlc.arg(burst)::float8 - sqlc.arg(cost)::float8,
+  true,
+  now()
+)
+ON CONFLICT (key) DO UPDATE SET
+  tokens = rate_limit_refill(rate_limit_buckets.tokens, rate_limit_buckets.updated_at, sqlc.arg(rate_per_second)::float8, sqlc.arg(burst)::float8) - sqlc.arg(cost)::float8,
+  last_allowed = true,
+  updated_at = now()
+RETURNING tokens;
+
 -- name: PeekRateLimitTokens :one
 -- Returns a bucket's current (refilled) token level without changing it. A
 -- bucket that does not exist yet is full.

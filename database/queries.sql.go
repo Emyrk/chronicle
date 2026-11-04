@@ -21851,6 +21851,44 @@ func (q *sqlQuerier) DeleteIdleRateLimitBuckets(ctx context.Context, idleBefore 
 	return result.RowsAffected(), nil
 }
 
+const forceTakeRateLimitTokens = `-- name: ForceTakeRateLimitTokens :one
+INSERT INTO rate_limit_buckets (key, tokens, last_allowed, updated_at)
+VALUES (
+  $1::text,
+  $2::float8 - $3::float8,
+  true,
+  now()
+)
+ON CONFLICT (key) DO UPDATE SET
+  tokens = rate_limit_refill(rate_limit_buckets.tokens, rate_limit_buckets.updated_at, $4::float8, $2::float8) - $3::float8,
+  last_allowed = true,
+  updated_at = now()
+RETURNING tokens
+`
+
+type ForceTakeRateLimitTokensParams struct {
+	Key           string  `db:"key" json:"key"`
+	Burst         float64 `db:"burst" json:"burst"`
+	Cost          float64 `db:"cost" json:"cost"`
+	RatePerSecond float64 `db:"rate_per_second" json:"rate_per_second"`
+}
+
+// Atomically refills a leaky bucket and always takes cost tokens, even when
+// that makes the balance negative. This is for work whose final cost is only
+// known after it has completed. The row lock taken by the upsert serializes
+// concurrent charges on the same key.
+func (q *sqlQuerier) ForceTakeRateLimitTokens(ctx context.Context, arg ForceTakeRateLimitTokensParams) (float64, error) {
+	row := q.db.QueryRow(ctx, forceTakeRateLimitTokens,
+		arg.Key,
+		arg.Burst,
+		arg.Cost,
+		arg.RatePerSecond,
+	)
+	var tokens float64
+	err := row.Scan(&tokens)
+	return tokens, err
+}
+
 const peekRateLimitTokens = `-- name: PeekRateLimitTokens :one
 SELECT COALESCE(
   (SELECT rate_limit_refill(b.tokens, b.updated_at, $1::float8, $2::float8)
