@@ -34,7 +34,8 @@ import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clam
 import { unwrapCompassRadians } from "./mapCompassModel";
 import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
-import type { PlanInput, PlanItem, PlanPoint } from "./plan/mapPlan";
+import type { PlanInput, PlanItem, PlanMarkerIcon, PlanPoint } from "./plan/mapPlan";
+import { raidTargetMarkerImage } from "./plan/planArt";
 import { PlanLayer, type PlanSurface } from "./plan/planLayer";
 import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, CAST_ARC_OPACITY, COOLDOWN_ICON_COLOR, COOLDOWN_ICON_SCALE, CUT_ARC_COLOR, CUT_TICK_COLOR, DEAD_COLOR, INTERRUPT_LABEL_COLOR, WALK_AVATAR_COLOR, WALK_AVATAR_EMISSIVE } from "./mapPalette";
 import {
@@ -242,6 +243,9 @@ const PRESENCE_LABEL_HEIGHT = 0.03;
 
 // --- Unit tokens: flat discs on the ground (geometry units, as PLAYER_GEOMETRY_HEIGHT) ---
 // Sizes come from unitTokenArt, which the map legend page lays its art out with too.
+// WoW raid target markers use the same authored art and token-relative scale as map-plan markers.
+const RAID_TARGET_MARKER_SIZE = 3.2;
+const RAID_TARGET_MARKER_LIFT = 0.25;
 const TOKEN_RADIUS: Record<MapMarkerKind, number> = TOKEN_LAYOUT.radius;
 const BOSS_TOKEN_RADIUS = TOKEN_LAYOUT.bossRadius;
 const MINI_TOKEN_RADIUS = TOKEN_LAYOUT.miniRadius;
@@ -384,8 +388,17 @@ interface DungeonMesh {
   radius: number;
 }
 
+export interface MapUnitCallout {
+  title: string;
+  subtitle: string;
+  color: string;
+  marker: PlanMarkerIcon;
+}
+
 export interface MapScene3DUnit {
   guid: string;
+  /** WoW raid target marker above a featured character in an authored reconstruction. */
+  callout?: MapUnitCallout;
   point: MapPoint;
   /** Radians; undefined when the log does not record facing (no notch is drawn). */
   facing?: number;
@@ -484,6 +497,8 @@ interface BossMini {
 interface UnitObject {
   group: THREE.Group;
   body: THREE.Mesh;
+  calloutMarker: THREE.Sprite | null;
+  calloutKey: string;
   // Lambert with the unit's tint, or a textured model's cloned materials.
   bodyMaterial: THREE.MeshLambertMaterial | THREE.MeshStandardMaterial;
   bodyMaterials: (THREE.MeshLambertMaterial | THREE.MeshStandardMaterial)[];
@@ -1347,7 +1362,8 @@ export class MapScene3D {
     for (const unit of units) {
       seen.add(unit.guid);
       let object = this.units.get(unit.guid);
-      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl || object.gameModel !== Boolean(unit.gameModel) || object.mapScale !== (unit.mapScale ?? 1) || object.worldHeight !== unit.worldHeight)) {
+      const calloutKey = unit.callout ? `${unit.callout.title}|${unit.callout.subtitle}|${unit.callout.marker}` : "";
+      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl || object.gameModel !== Boolean(unit.gameModel) || object.mapScale !== (unit.mapScale ?? 1) || object.worldHeight !== unit.worldHeight || object.calloutKey !== calloutKey)) {
         this.removeUnit(unit.guid);
         object = undefined;
       }
@@ -2417,9 +2433,13 @@ export class MapScene3D {
     if (ticks) group.add(ticks);
     if (bossSpire) group.add(bossSpire);
     this.unitsGroup.add(group);
+    const calloutMarker = unit.callout ? createUnitCalloutMarker(unit.callout, () => this.requestRender()) : null;
+    if (calloutMarker) this.scene.add(calloutMarker);
     const object: UnitObject = {
       group,
       body,
+      calloutMarker,
+      calloutKey: unit.callout ? `${unit.callout.title}|${unit.callout.subtitle}|${unit.callout.marker}` : "",
       bodyMaterial,
       bodyMaterials: [bodyMaterial],
       coneMaterial,
@@ -2729,6 +2749,11 @@ export class MapScene3D {
     const object = this.units.get(guid);
     if (!object) return;
     this.unitsGroup.remove(object.group);
+    if (object.calloutMarker) {
+      this.scene.remove(object.calloutMarker);
+      object.calloutMarker.material.map?.dispose();
+      object.calloutMarker.material.dispose();
+    }
     for (const material of object.bodyMaterials) material.dispose();
     object.coneMaterial.dispose();
     const { token } = object;
@@ -4024,6 +4049,17 @@ export class MapScene3D {
         token.halo.material.color.setHex(HALO_COLORS[kind]);
       }
       token.pin.visible = roles.pinned.has(guid);
+      token.pin.material.color.setHex(HALO_COLORS.pinned);
+      if (object.calloutMarker) {
+        const unitScale = this.scaleOf(object);
+        object.calloutMarker.visible = object.group.visible;
+        object.calloutMarker.position.set(
+          object.group.position.x,
+          object.group.position.y + (object.barHeight + RAID_TARGET_MARKER_LIFT) * unitScale,
+          object.group.position.z,
+        );
+        object.calloutMarker.scale.setScalar(RAID_TARGET_MARKER_SIZE * unitScale);
+      }
       if (token.ticks) token.ticks.rotation.y = (now / 1000) * SIGIL_SPIN - object.group.rotation.y;
       if (token.bossSpire) {
         const { material } = token.bossSpire;
@@ -4847,6 +4883,16 @@ function shortNumber(value: number): string {
   if (value >= 1_000_000) return `${+(value / 1_000_000).toFixed(2)}M`;
   if (value >= 10_000) return `${+(value / 1000).toFixed(1)}k`;
   return String(Math.round(value));
+}
+
+function createUnitCalloutMarker(callout: MapUnitCallout, onLoad: () => void): THREE.Sprite {
+  const texture = new THREE.TextureLoader().load(raidTargetMarkerImage(callout.marker), onLoad);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
+  sprite.center.set(0.5, 0);
+  sprite.visible = false;
+  sprite.renderOrder = 6;
+  return sprite;
 }
 
 function createLabelSprite(text: string): THREE.Sprite {

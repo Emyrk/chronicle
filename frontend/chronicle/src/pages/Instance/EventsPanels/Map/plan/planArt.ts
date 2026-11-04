@@ -30,6 +30,10 @@ export const MARKER_NAMES: Record<PlanMarkerIcon, string> = {
   skull: "Skull",
 };
 
+export function raidTargetMarkerImage(icon: PlanMarkerIcon): string {
+  return `/c/images/raid-targets/${icon}.png`;
+}
+
 /** One raid target marker, filling a PLAN_ART_SIZE square with a dark outline. */
 export function drawPlanMarker(context: CanvasRenderingContext2D, icon: PlanMarkerIcon) {
   const size = PLAN_ART_SIZE;

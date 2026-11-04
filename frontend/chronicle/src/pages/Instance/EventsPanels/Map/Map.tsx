@@ -63,7 +63,9 @@ import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
 import { PlanControls } from "./plan/PlanControls";
 import { ROLE_TOKENS, usePlanEditor, usePlanShortcuts, type PlanRosterEntry } from "./plan/usePlanEditor";
 import type { PlanItem } from "./plan/mapPlan";
+import { raidTargetMarkerImage } from "./plan/planArt";
 import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
+import { LEEROY_FEATURED_UNITS, LEEROY_UNIT_CALLOUTS } from "../../Leeroy/leeroyFeaturedUnits";
 
 export { mapPresentationForSelection };
 
@@ -908,6 +910,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               walkAvatar={walkAvatar}
               livePresence={livePresence}
               presenceSurface={presenceSurface}
+              unitCallouts={props.context.instance.id === "leeroy" ? LEEROY_UNIT_CALLOUTS : undefined}
               unitRoles={unitRoles}
               frozen={reloading}
               debuffSpellIds={ready.debuffSpellIds}
@@ -918,6 +921,21 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               planInput={planOpen && canPlan ? planEditor.input : null}
             />
           </Suspense>
+        )}
+        {props.context.instance.id === "leeroy" && (
+          <div className="pointer-events-none absolute left-2 top-1/2 z-40 flex -translate-y-1/2 flex-col gap-1.5" aria-label="Featured characters">
+            {LEEROY_FEATURED_UNITS.map((unit) => (
+              <div
+                key={unit.guid}
+                className="flex items-center gap-2 rounded-md border bg-black/85 px-2.5 py-1.5 shadow-[0_6px_20px_rgba(0,0,0,.55)] backdrop-blur-sm"
+                style={{ borderColor: `${unit.color}99` }}
+              >
+                <img src={raidTargetMarkerImage(unit.marker)} alt="" className="size-[18px] shrink-0 object-contain" />
+                <span className="text-[11px] font-black uppercase tracking-[0.12em] text-white">{unit.name}</span>
+                <span className="text-[9px] font-bold uppercase tracking-[0.16em]" style={{ color: unit.color }}>{unit.role}</span>
+              </div>
+            ))}
+          </div>
         )}
         {videoOpen && videoEncounter && dungeonMesh && (
           <Suspense fallback={null}>

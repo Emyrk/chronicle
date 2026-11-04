@@ -22,6 +22,7 @@ import {
   type MapScene3DUnit,
   type MapSceneDirector,
   type MapSceneFocus,
+  type MapUnitCallout,
   type MapUnitRoles,
 } from "./MapScene3D";
 import { collectCastSpellIds, DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, iconPreloadUrls, schoolNameColor, type EncounterEffects } from "./replayEffects";
@@ -90,6 +91,8 @@ export interface MapView3DProps {
   livePresence?: MapLivePresence | null;
   /** Unique panel-instance surface that replaces the generic shared cursor. */
   presenceSurface?: string;
+  /** WoW raid target markers above authored featured characters. */
+  unitCallouts?: ReadonlyMap<string, MapUnitCallout>;
   /** The target frames' units: halos for the selected chain and pins, and target lines. */
   unitRoles?: MapUnitRoles | null;
   /** The raid plan to draw on the floor (the current step's items, and any being drawn). */
@@ -203,6 +206,7 @@ export default function MapView3D({
   walkAvatar = CAPSULE_AVATAR,
   livePresence = null,
   presenceSurface,
+  unitCallouts,
   unitRoles = null,
   frozen = false,
   debuffSpellIds = NO_DEBUFFS,
@@ -346,6 +350,7 @@ export default function MapView3D({
         : undefined;
       return [{
         guid: marker.guid,
+        callout: unitCallouts?.get(marker.guid),
         point,
         facing: sample.facing,
         worldX: sample.x,
@@ -370,7 +375,7 @@ export default function MapView3D({
       }];
     });
     scene.setUnits(units);
-  }, [bossGuids, dispelOf, effectSettings.gameModelsOnly, effectSettings.trailSeconds, frozen, markers, projectSample, showBars, smoothMs, specializations, unitModelUrls]);
+  }, [bossGuids, dispelOf, effectSettings.gameModelsOnly, effectSettings.trailSeconds, frozen, markers, projectSample, showBars, smoothMs, specializations, unitCallouts, unitModelUrls]);
 
   useEffect(() => {
     sceneRef.current?.setUnitRoles(unitRoles ?? NO_ROLES);
