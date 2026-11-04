@@ -203,6 +203,12 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 			return fmt.Errorf("insert windowed parse score receipt: %w", err)
 		}
 
+		if err := tx.MarkDirtyObservationRunForInstance(ctx, database.MarkDirtyObservationRunForInstanceParams{
+			TenantID: tenantID, InstanceID: instanceID,
+		}); err != nil {
+			return fmt.Errorf("mark rating observations after parse scores: %w", err)
+		}
+
 		logger.Info("computed windowed parse scores", slog.Int("source_count", sourceCount), slog.Int("result_count", scored))
 		return nil
 	}, nil)

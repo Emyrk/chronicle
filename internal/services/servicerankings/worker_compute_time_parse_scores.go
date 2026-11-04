@@ -199,6 +199,11 @@ func (w *WorkerComputeTimeParseScores) Work(ctx context.Context, job *river.Job[
 				return fmt.Errorf("insert time parse boss score: %w", err)
 			}
 		}
+		if err := tx.MarkDirtyObservationRunForInstance(ctx, database.MarkDirtyObservationRunForInstanceParams{
+			TenantID: args.TenantID, InstanceID: args.InstanceID,
+		}); err != nil {
+			return fmt.Errorf("mark rating observations after time parse scores: %w", err)
+		}
 		return nil
 	}, nil)
 }

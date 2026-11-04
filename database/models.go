@@ -2451,6 +2451,56 @@ type RatingConfigRevision struct {
 	Revision int64     `db:"revision" json:"revision"`
 }
 
+type RatingDirtyMasterySubject struct {
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string             `db:"subject_kind" json:"subject_kind"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	SubjectID         string             `db:"subject_id" json:"subject_id"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	Revision          int64              `db:"revision" json:"revision"`
+	ChangedAt         pgtype.Timestamptz `db:"changed_at" json:"changed_at"`
+}
+
+type RatingDirtyObservationRun struct {
+	TenantID  uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RunID     uuid.UUID          `db:"run_id" json:"run_id"`
+	Revision  int64              `db:"revision" json:"revision"`
+	ChangedAt pgtype.Timestamptz `db:"changed_at" json:"changed_at"`
+}
+
+type RatingDirtyPeakCohort struct {
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string             `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	Revision          int64              `db:"revision" json:"revision"`
+	ChangedAt         pgtype.Timestamptz `db:"changed_at" json:"changed_at"`
+}
+
+type RatingDirtyRenownSubject struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SubjectKind   string             `db:"subject_kind" json:"subject_kind"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	SubjectID     string             `db:"subject_id" json:"subject_id"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	Revision      int64              `db:"revision" json:"revision"`
+	ChangedAt     pgtype.Timestamptz `db:"changed_at" json:"changed_at"`
+}
+
 type RatingGroupBossPolicy struct {
 	GroupID       uuid.UUID `db:"group_id" json:"group_id"`
 	InstanceName  string    `db:"instance_name" json:"instance_name"`
@@ -2478,6 +2528,59 @@ type RatingGroupRaidPolicy struct {
 	InstanceName  string    `db:"instance_name" json:"instance_name"`
 	PeakWeight    float64   `db:"peak_weight" json:"peak_weight"`
 	MasteryWeight float64   `db:"mastery_weight" json:"mastery_weight"`
+}
+
+type RatingLiveEvidenceBootstrap struct {
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	AfterRunID   uuid.UUID          `db:"after_run_id" json:"after_run_id"`
+	SourceCutoff pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	CompletedAt  pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	StartedAt    pgtype.Timestamptz `db:"started_at" json:"started_at"`
+}
+
+type RatingLiveEvidenceRevision struct {
+	TenantID                 uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RunID                    uuid.UUID          `db:"run_id" json:"run_id"`
+	RepresentativeInstanceID uuid.UUID          `db:"representative_instance_id" json:"representative_instance_id"`
+	SourceUpdatedAt          pgtype.Timestamptz `db:"source_updated_at" json:"source_updated_at"`
+	RunUpdatedAt             pgtype.Timestamptz `db:"run_updated_at" json:"run_updated_at"`
+	PlayerObservationCount   int32              `db:"player_observation_count" json:"player_observation_count"`
+	GuildObservationCount    int32              `db:"guild_observation_count" json:"guild_observation_count"`
+}
+
+type RatingLiveGuildObservation struct {
+	TenantID                 uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID                  uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RunID                    uuid.UUID          `db:"run_id" json:"run_id"`
+	RepresentativeInstanceID uuid.UUID          `db:"representative_instance_id" json:"representative_instance_id"`
+	GuildID                  uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	InstanceName             string             `db:"instance_name" json:"instance_name"`
+	EncounterName            string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName           string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers               int16              `db:"max_players" json:"max_players"`
+	KilledAt                 pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	RawDurationMs            float64            `db:"raw_duration_ms" json:"raw_duration_ms"`
+	LockedParse              pgtype.Float8      `db:"locked_parse" json:"locked_parse"`
+}
+
+type RatingLivePlayerObservation struct {
+	TenantID                 uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID                  uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RunID                    uuid.UUID          `db:"run_id" json:"run_id"`
+	RepresentativeInstanceID uuid.UUID          `db:"representative_instance_id" json:"representative_instance_id"`
+	PlayerGuid               string             `db:"player_guid" json:"player_guid"`
+	InstanceName             string             `db:"instance_name" json:"instance_name"`
+	EncounterName            string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName           string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers               int16              `db:"max_players" json:"max_players"`
+	PlayerClass              string             `db:"player_class" json:"player_class"`
+	PlayerSpec               string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec            string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric        string             `db:"performance_metric" json:"performance_metric"`
+	KilledAt                 pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	RawValue                 float64            `db:"raw_value" json:"raw_value"`
+	DurationSecs             float64            `db:"duration_secs" json:"duration_secs"`
+	LockedParse              pgtype.Float8      `db:"locked_parse" json:"locked_parse"`
 }
 
 type RatingMasteryAccumulator struct {
@@ -2510,6 +2613,42 @@ type RatingMasteryAccumulator struct {
 	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
 	FormScore         pgtype.Float8      `db:"form_score" json:"form_score"`
 	LastRetainedScore pgtype.Float8      `db:"last_retained_score" json:"last_retained_score"`
+}
+
+type RatingPeakCohortDenominator struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string             `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	RankOneRaw        float64            `db:"rank_one_raw" json:"rank_one_raw"`
+	UpdatedAt         pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type RatingPeakCohortPage struct {
+	TenantID          uuid.UUID     `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string        `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string        `db:"instance_name" json:"instance_name"`
+	EncounterName     string        `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string        `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16         `db:"max_players" json:"max_players"`
+	PlayerClass       string        `db:"player_class" json:"player_class"`
+	PlayerSpec        string        `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string        `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string        `db:"performance_metric" json:"performance_metric"`
+	Revision          int64         `db:"revision" json:"revision"`
+	AfterRealmID      uuid.UUID     `db:"after_realm_id" json:"after_realm_id"`
+	AfterSubjectID    string        `db:"after_subject_id" json:"after_subject_id"`
+	GenerationID      uuid.NullUUID `db:"generation_id" json:"generation_id"`
 }
 
 type RatingRealmGroup struct {

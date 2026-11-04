@@ -301,6 +301,37 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.RenownDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.RenownRepairWorker)
 	riverqueue.AddWorker(q, rank.RenownDispatchWorker)
+	rank.IncrementalRenownDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.IncrementalRenownDispatchWorker)
+	riverqueue.AddWorker(q, rank.IncrementalRenownWorker)
+	rank.RenownExpiryWorker.Queue = q
+	rank.RenownExpiryDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.RenownExpiryWorker)
+	riverqueue.AddWorker(q, rank.RenownExpiryDispatchWorker)
+	rank.RatingObservationDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.RatingObservationDispatchWorker)
+	riverqueue.AddWorker(q, rank.RatingObservationWorker)
+	rank.IncrementalMasteryDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.IncrementalMasteryDispatchWorker)
+	riverqueue.AddWorker(q, rank.IncrementalMasteryWorker)
+	rank.MasteryExpiryWorker.Queue = q
+	rank.MasteryExpiryDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.MasteryExpiryWorker)
+	riverqueue.AddWorker(q, rank.MasteryExpiryDispatchWorker)
+	rank.LiveEvidenceBootstrapDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.LiveEvidenceBootstrapDispatchWorker)
+	riverqueue.AddWorker(q, rank.LiveEvidenceBootstrapWorker)
+	rank.LiveEvidenceRepairDispatchWorker.Queue = q
+	rank.LiveEvidenceRepairWorker.Queue = q
+	riverqueue.AddWorker(q, rank.LiveEvidenceRepairDispatchWorker)
+	riverqueue.AddWorker(q, rank.LiveEvidenceRepairWorker)
+	rank.IncrementalPeakDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.IncrementalPeakDispatchWorker)
+	riverqueue.AddWorker(q, rank.IncrementalPeakWorker)
+	rank.PeakExpiryWorker.Queue = q
+	rank.PeakExpiryDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.PeakExpiryWorker)
+	riverqueue.AddWorker(q, rank.PeakExpiryDispatchWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
 		MaxWorkers: 1,
 	})
@@ -313,6 +344,14 @@ func (s *Service) Start(ctx context.Context) error {
 			&river.PeriodicJobOpts{RunOnStart: true},
 		),
 	)
+	// Durable dirty facts survive missed enqueues; poll for affected tenants.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(time.Minute),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchIncrementalRenown{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "incremental-renown-refresh", RunOnStart: true},
+	))
 	// Daily bounded repair fan-out for root and every parse-enabled tenant.
 	q.AddPeriodicJob(
 		river.NewPeriodicJob(
@@ -344,8 +383,8 @@ func (s *Service) Start(ctx context.Context) error {
 		),
 	)
 	// Repair historical missing Renown facts in bounded pages each day.
-	// Dispatch is independent of the rating snapshot; a pass completing after
-	// that snapshot is incorporated by the next daily rebuild.
+	// Fact changes mark incremental Renown subjects, including repaired facts;
+	// full rebuild remains available manually for recovery.
 	q.AddPeriodicJob(
 		river.NewPeriodicJob(
 			river.PeriodicInterval(24*time.Hour),
@@ -355,16 +394,75 @@ func (s *Service) Start(ctx context.Context) error {
 			&river.PeriodicJobOpts{ID: "daily-renown-fact-repair", RunOnStart: false},
 		),
 	)
-	// Daily rating reconciliation for tenants with configured group policies.
-	q.AddPeriodicJob(
-		river.NewPeriodicJob(
-			river.PeriodicInterval(24*time.Hour),
-			func() (river.JobArgs, *river.InsertOpts) {
-				return servicerankings.ArgsDispatchRatingScores{}, nil
-			},
-			&river.PeriodicJobOpts{ID: "daily-rating-score-reconciliation", RunOnStart: false},
-		),
-	)
+	// Advance period windows without deleting career Renown evidence.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(24*time.Hour),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchRenownExpiry{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "daily-renown-expiry", RunOnStart: false},
+	))
+	// Recover missed observation enqueues from durable, transactional run keys.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(time.Minute),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchRatingObservations{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "incremental-rating-observations", RunOnStart: true},
+	))
+	// Drain exact dirty Mastery subjects after canonical evidence reconciliation.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(time.Minute),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchIncrementalMastery{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "incremental-tenant-mastery", RunOnStart: true},
+	))
+	// Revisit only active Mastery period subjects whose observations expired.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(24*time.Hour),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchMasteryExpiry{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "daily-mastery-expiry", RunOnStart: false},
+	))
+	// Seed historical canonical runs in bounded pages before incremental
+	// Mastery or Peak reads live evidence. Periodic dispatch repairs missed jobs.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(time.Hour),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchLiveEvidenceBootstrap{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "tenant-live-evidence-bootstrap", RunOnStart: true},
+	))
+	// Audit canonical run source versions in bounded pages and repair missed
+	// observation intent without replaying every unchanged run.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(24*time.Hour),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchLiveEvidenceRepair{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "daily-live-rating-evidence-repair", RunOnStart: false},
+	))
+	// Refresh raw Peak bests and one tenant-wide denominator per dirty cohort.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(time.Minute),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchIncrementalPeak{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "incremental-tenant-peak", RunOnStart: true},
+	))
+	// Rank-one can change when even a guildless period observation expires.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(24*time.Hour),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchPeakExpiry{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "daily-peak-expiry", RunOnStart: false},
+	))
+	// Full tenant rating rebuilds are intentionally manual. The admin routes
+	// still enqueue ArgsDispatchRatingScores or ArgsRebuildTenantRatings for
+	// recovery and rule changes; daily repair and expiry remain scheduled.
 
 	err = q.Start(ctx)
 	if err != nil {

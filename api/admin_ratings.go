@@ -59,16 +59,16 @@ func ratingAdminRead(w http.ResponseWriter, r *http.Request, v any) bool {
 	return httpapi.Read(r.Context(), w, r, v)
 }
 func (api *API) ratingAdminRebuild(r *http.Request) error {
-	// The daily dispatcher also rebuilds ratings. Enqueue immediately on membership
-	// or policy changes so an old active generation does not linger until then.
+	// Legacy configuration mutations request a rebuild immediately; automatic
+	// full rebuilds are disabled, so a failed enqueue needs operator attention.
 	if api.Queues == nil {
 		return nil
 	}
 	_, err := api.Queues.Insert(r.Context(), servicerankings.ArgsRebuildTenantRatings{TenantID: servicetenant.TenantIDFromContext(r.Context())}, nil)
 	if err != nil {
-		// The mutation has already committed. Report success and let the daily
-		// dispatcher repair freshness instead of claiming the write failed.
-		slog.WarnContext(r.Context(), "rating rebuild enqueue failed; daily reconciliation will retry", slog.Any("error", err))
+		// The mutation has already committed. Report success, but do not claim
+		// a scheduled full rebuild will repair it: an operator must retry.
+		slog.ErrorContext(r.Context(), "rating rebuild enqueue failed; manual retry required", slog.Any("error", err))
 	}
 	return nil
 }
@@ -100,7 +100,7 @@ func (api *API) AdminRebuildRatings(w http.ResponseWriter, r *http.Request) {
 	api.adminEnqueueRatingJob(w, r, servicerankings.ArgsRebuildTenantRatings{TenantID: servicetenant.TenantIDFromContext(r.Context())})
 }
 
-// AdminDispatchAllRatingScores queues the existing daily dispatcher immediately.
+// AdminDispatchAllRatingScores queues the manual all-tenant dispatcher.
 // It enqueues a deduplicated rebuild for every tenant with realms, including root when applicable;
 // each tenant job publishes Peak, Mastery, Ranked Mastery, and Renown scores.
 // Repair Renown facts separately first and wait for its child jobs to finish.

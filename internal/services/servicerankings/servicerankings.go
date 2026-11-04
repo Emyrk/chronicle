@@ -74,9 +74,27 @@ type Service struct {
 	// RatingDispatchWorker fans daily rating rebuilds out to tenants with realms.
 	RatingDispatchWorker *WorkerDispatchRatingScores
 	// RatingTenantWorker builds and publishes one tenant's rating generation.
-	RatingTenantWorker   *WorkerRebuildTenantRatings
-	RenownRepairWorker   *WorkerRepairRenownFacts
-	RenownDispatchWorker *WorkerDispatchRenownRepair
+	RatingTenantWorker                  *WorkerRebuildTenantRatings
+	RenownRepairWorker                  *WorkerRepairRenownFacts
+	RenownDispatchWorker                *WorkerDispatchRenownRepair
+	IncrementalRenownWorker             *WorkerRefreshTenantRenown
+	IncrementalRenownDispatchWorker     *WorkerDispatchIncrementalRenown
+	RenownExpiryWorker                  *WorkerExpireTenantRenown
+	RenownExpiryDispatchWorker          *WorkerDispatchRenownExpiry
+	RatingObservationWorker             *WorkerReconcileTenantRatingObservations
+	RatingObservationDispatchWorker     *WorkerDispatchRatingObservations
+	IncrementalMasteryWorker            *WorkerRefreshTenantMastery
+	IncrementalMasteryDispatchWorker    *WorkerDispatchIncrementalMastery
+	MasteryExpiryWorker                 *WorkerExpireTenantMastery
+	MasteryExpiryDispatchWorker         *WorkerDispatchMasteryExpiry
+	LiveEvidenceBootstrapWorker         *WorkerBootstrapTenantLiveEvidence
+	LiveEvidenceBootstrapDispatchWorker *WorkerDispatchLiveEvidenceBootstrap
+	LiveEvidenceRepairWorker            *WorkerRepairLiveEvidence
+	LiveEvidenceRepairDispatchWorker    *WorkerDispatchLiveEvidenceRepair
+	IncrementalPeakWorker               *WorkerRefreshTenantPeak
+	IncrementalPeakDispatchWorker       *WorkerDispatchIncrementalPeak
+	PeakExpiryWorker                    *WorkerExpireTenantPeak
+	PeakExpiryDispatchWorker            *WorkerDispatchPeakExpiry
 }
 
 func New(broker *services.Services) *Service {
@@ -156,6 +174,24 @@ func (s *Service) Start(_ context.Context) error {
 	s.RatingTenantWorker = &WorkerRebuildTenantRatings{Store: store, Logger: namedLogger}
 	s.RenownRepairWorker = &WorkerRepairRenownFacts{Store: store}
 	s.RenownDispatchWorker = &WorkerDispatchRenownRepair{Store: store}
+	s.IncrementalRenownWorker = &WorkerRefreshTenantRenown{Store: store}
+	s.IncrementalRenownDispatchWorker = &WorkerDispatchIncrementalRenown{Store: store}
+	s.RenownExpiryWorker = &WorkerExpireTenantRenown{Store: store}
+	s.RenownExpiryDispatchWorker = &WorkerDispatchRenownExpiry{Store: store}
+	s.RatingObservationWorker = &WorkerReconcileTenantRatingObservations{Store: store}
+	s.RatingObservationDispatchWorker = &WorkerDispatchRatingObservations{Store: store}
+	s.IncrementalMasteryWorker = &WorkerRefreshTenantMastery{Store: store}
+	s.IncrementalMasteryDispatchWorker = &WorkerDispatchIncrementalMastery{Store: store}
+	s.MasteryExpiryWorker = &WorkerExpireTenantMastery{Store: store}
+	s.MasteryExpiryDispatchWorker = &WorkerDispatchMasteryExpiry{Store: store}
+	s.LiveEvidenceBootstrapWorker = &WorkerBootstrapTenantLiveEvidence{Store: store}
+	s.LiveEvidenceBootstrapDispatchWorker = &WorkerDispatchLiveEvidenceBootstrap{Store: store}
+	s.LiveEvidenceRepairWorker = &WorkerRepairLiveEvidence{Store: store}
+	s.LiveEvidenceRepairDispatchWorker = &WorkerDispatchLiveEvidenceRepair{Store: store}
+	s.IncrementalPeakWorker = &WorkerRefreshTenantPeak{Store: store}
+	s.IncrementalPeakDispatchWorker = &WorkerDispatchIncrementalPeak{Store: store}
+	s.PeakExpiryWorker = &WorkerExpireTenantPeak{Store: store}
+	s.PeakExpiryDispatchWorker = &WorkerDispatchPeakExpiry{Store: store}
 
 	s.router = chi.NewRouter()
 	s.setupRoutes()

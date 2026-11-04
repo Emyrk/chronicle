@@ -897,7 +897,18 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				}
 				var err error
 				rankingRunAffectedIDs, err = detectAndLinkDuplicate(ctx, tx, dbinstance.ID, dbinstance.RealmID, dbinstance.Name, dbinstance.MaxPlayers, dbinstance.DynamicDifficulty, instanceStart, builder.participants)
-				return err
+				if err != nil {
+					return err
+				}
+				// Capture pre-refresh canonical rows before a duplicate merge can
+				// delete or replace their representatives. The ranking transaction
+				// later marks the newly resolved run as well.
+				for start := 0; start < len(rankingRunAffectedIDs); start += 200 {
+					if err := tx.MarkDirtyObservationRunsByIDs(ctx, rankingRunAffectedIDs[start:min(start+200, len(rankingRunAffectedIDs))]); err != nil {
+						return err
+					}
+				}
+				return nil
 			}, nil)
 			if errors.Is(dupErr, errStaleParseGeneration) {
 				w.parent.insertParsedInstanceMu.Unlock()
