@@ -92,6 +92,24 @@ function readSort(field: string | null, direction: string | null, parseScope: st
   return { field: typedField, direction: typedDirection };
 }
 
+const DEFAULT_SORT: InstanceSearchSort = { field: "instance.started_at", direction: "desc" };
+
+function writeSortParams(params: URLSearchParams, sort: InstanceSearchSort) {
+  if (sort.field === DEFAULT_SORT.field && sort.direction === DEFAULT_SORT.direction) {
+    params.delete("sort");
+    params.delete("order");
+    params.delete("sort_scope");
+    params.delete("sort_boss");
+    return;
+  }
+  params.set("sort", sort.field);
+  params.set("order", sort.direction ?? defaultSortDirection(sort.field));
+  if (sort.field === "instance.clear_parse") params.set("sort_scope", sort.parse_scope ?? "server");
+  else params.delete("sort_scope");
+  if (sort.field === "instance.kill_time_ms" && sort.boss) params.set("sort_boss", sort.boss);
+  else params.delete("sort_boss");
+}
+
 export function InstanceSearchPage() {
   const [params, writeParams] = useSearchParams();
   const [draftRevision, bumpDraftRevision] = useReducer((revision: number) => revision + 1, 0);
@@ -119,7 +137,9 @@ export function InstanceSearchPage() {
     () => readSort(sortFieldParam, sortDirectionParam, sortScopeParam, sortBossParam),
     [sortFieldParam, sortDirectionParam, sortScopeParam, sortBossParam],
   );
-  const selectedSort: InstanceSearchSort = submittedSort ?? { field: "instance.started_at", direction: "desc" };
+  const selectedSort: InstanceSearchSort = submittedSort ?? DEFAULT_SORT;
+  const [draftSort, writeDraftSort] = useState<InstanceSearchSort>(() => selectedSort);
+  const setDraftSort = (sort: InstanceSearchSort) => { bumpDraftRevision(); writeDraftSort(sort); };
   // Logged-out users can view a shared block / code search read-only.
   const modeParam = params.get("mode");
   const urlMode: Mode = modeParam === "blocks" || modeParam === "code" ? modeParam : "form";
@@ -220,6 +240,8 @@ export function InstanceSearchPage() {
   const anonBlocked = !isAuthenticated && mode === "form" && !formIsBasic(form);
   // Honored-only fields (UI-only lock, like Code).
   const honoredBlocked = !advancedUnlocked && !preview && treeNeedsHonored(draftTree);
+  const draftSortOption = fields.data?.sorts.find((option) => option.field === draftSort.field);
+  const sortBlocked = draftSortOption ? !sortTierUnlocked(draftSortOption.minimum_tier, supporter.tier, supporter.isLoading) : false;
 
   const leavePreview = () => {
     setPreview(false);
@@ -259,6 +281,7 @@ export function InstanceSearchPage() {
     setBlocks(undefined);
     setCode("");
     setExample(null);
+    setDraftSort(DEFAULT_SORT);
     const next = new URLSearchParams(params);
     next.delete("q");
     next.delete("mode");
@@ -288,26 +311,9 @@ export function InstanceSearchPage() {
     next.set("q", q);
     if (m === "form") next.delete("mode");
     else next.set("mode", m);
+    writeSortParams(next, draftSort);
     setParams(next);
     rememberSearch(q, m);
-  };
-
-  const updateSort = (sort: InstanceSearchSort) => {
-    const next = new URLSearchParams(params);
-    if (sort.field === "instance.started_at" && sort.direction === "desc") {
-      next.delete("sort");
-      next.delete("order");
-      next.delete("sort_scope");
-      next.delete("sort_boss");
-    } else {
-      next.set("sort", sort.field);
-      next.set("order", sort.direction ?? defaultSortDirection(sort.field));
-      if (sort.field === "instance.clear_parse") next.set("sort_scope", sort.parse_scope ?? "server");
-      else next.delete("sort_scope");
-      if (sort.field === "instance.kill_time_ms" && sort.boss) next.set("sort_boss", sort.boss);
-      else next.delete("sort_boss");
-    }
-    setParams(next);
   };
 
   const submit = () => runQuery(encodeQuery(draftTree), mode);
@@ -368,7 +374,7 @@ export function InstanceSearchPage() {
   const lastCost = lastPage?.cost ?? error?.cost ?? null;
   const lastRuntimeCost = lastPage?.runtimeCost ?? error?.runtimeCost ?? null;
   // The cost the server will charge for the current draft, live as it's edited.
-  const liveCost = useMemo(() => (fields.data && !codeInvalid ? queryCost(draftTree, fields.data) : null), [fields.data, codeInvalid, draftTree]);
+  const liveCost = useMemo(() => (fields.data && !codeInvalid ? queryCost(draftTree, fields.data, draftSort) : null), [fields.data, codeInvalid, draftTree, draftSort]);
   const tooComplex = liveCost != null && budget != null && liveCost.total > budget.limit;
   const rows = results.data?.pages.flatMap((p) => p.page.results) ?? [];
   // Ask before leaving while results are on screen: in-app links via the
@@ -535,6 +541,15 @@ export function InstanceSearchPage() {
         </div>
       )}
 
+      <SortControls
+        sort={draftSort}
+        options={fields.data?.sorts ?? []}
+        bosses={allBosses}
+        supporterTier={supporter.tier}
+        supporterLoading={supporter.isLoading}
+        onChange={setDraftSort}
+      />
+
       {/* Sticks to the bottom of the screen while a long search is being
           edited, so Search and the cost stay in reach; it settles back into
           place above the results. The query text opens inside it, above the
@@ -549,8 +564,8 @@ export function InstanceSearchPage() {
         <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
         <Button
           onClick={submit}
-          disabled={preview || anonBlocked || honoredBlocked || codeInvalid || tooComplex || results.isFetching}
-          title={preview ? "Honored supporters can run code searches" : honoredBlocked ? "This search uses conditions for Honored supporters" : undefined}
+          disabled={preview || anonBlocked || honoredBlocked || sortBlocked || codeInvalid || tooComplex || results.isFetching}
+          title={preview ? "Honored supporters can run code searches" : honoredBlocked ? "This search uses conditions for Honored supporters" : sortBlocked ? `This sort requires ${draftSortOption?.minimum_tier}` : undefined}
           className="gap-1.5"
         >
           {results.isFetching && !results.isFetchingNextPage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
@@ -588,17 +603,6 @@ export function InstanceSearchPage() {
 
       {error && <ErrorBox error={error} />}
       {results.error && !error && <ErrorBox error={new SearchError("Search failed.", 0)} />}
-
-      {submittedParam !== null && (
-        <SortControls
-          sort={selectedSort}
-          options={fields.data?.sorts ?? []}
-          bosses={allBosses}
-          supporterTier={supporter.tier}
-          supporterLoading={supporter.isLoading}
-          onChange={updateSort}
-        />
-      )}
 
       {submittedParam !== null && !results.error && (
         <ResultsTable

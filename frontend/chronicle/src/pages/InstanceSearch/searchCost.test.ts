@@ -43,6 +43,13 @@ describe("queryCost", () => {
     expect(cost.parts.at(-1)?.label).toBe("Base");
   });
 
+  it("includes the selected sort cost", () => {
+    const sort = desc.sorts.find((option) => option.field === "instance.player_count")!;
+    const cost = queryCost(undefined, desc, { field: sort.field, direction: sort.default_direction });
+    expect(cost.total).toBe(desc.cost_base + sort.cost);
+    expect(cost.parts).toContainEqual({ label: `Sort: ${sort.label}`, cost: sort.cost, count: 1 });
+  });
+
   it("charges or groups and not", () => {
     const zone = { field: "instance.name", op: "=" as const, value: "Molten Core" };
     const base = queryCost({ and: [zone, zone] }, desc).total;
