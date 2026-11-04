@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react"
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import { Home } from "./pages/Home"
 import { NitroPayRuntime } from "./components/Ads/NitroPayRuntime"
+import { PublicSummary } from "./components/PublicSummary"
 import { Layout } from "./components/Layout/Layout"
 import { RouteLoadingFallback } from "./components/Layout/RouteLoadingFallback"
 
@@ -344,6 +345,7 @@ function App() {
         <Route path="*" element={<CatchAllRoute />} />
         </Routes>
       </Suspense>
+      <PublicSummary />
     </>
   )
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -124,6 +125,45 @@ func TestHandlerRendersSEOMetadata(t *testing.T) {
 	require.NotContains(t, body, `Everlook "raid" <script>`)
 	require.Equal(t, "noindex, nofollow", recorder.Header().Get("X-Robots-Tag"))
 	require.Contains(t, body, `type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite"}</script>`)
+}
+
+func TestHandlerPublicSummaries(t *testing.T) {
+	t.Parallel()
+	indexHTML, err := os.ReadFile("chronicle/index.html")
+	require.NoError(t, err)
+	siteFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: indexHTML}}
+	handler := Handler(siteFS, nil, func(r *http.Request) *HTMLBranding {
+		branding := &HTMLBranding{SiteName: `WoW <Forever>`, CanonicalURL: "https://forever.example" + r.URL.Path}
+		if r.URL.Path == "/private" {
+			branding.Robots = "noindex, nofollow"
+		}
+		return branding
+	}, nil)
+
+	for _, tc := range []struct {
+		path        string
+		want        string
+		wantLink    string
+		wantSummary bool
+	}{
+		{path: "/", want: "WoW &lt;Forever&gt; combat log analysis", wantLink: `href="/leaderboards/statistics"`, wantSummary: true},
+		{path: "/leaderboards/statistics?tab=overview", want: "WoW &lt;Forever&gt; raid statistics", wantLink: `href="/leaderboards/speedruns"`, wantSummary: true},
+		{path: "/recent", wantSummary: false},
+		{path: "/private", wantSummary: false},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			t.Parallel()
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, tc.path, nil))
+			body := recorder.Body.String()
+			require.Equal(t, tc.wantSummary, strings.Contains(body, `id="server-public-summary"`))
+			if tc.wantSummary {
+				require.Contains(t, body, tc.want)
+				require.Contains(t, body, tc.wantLink)
+				require.NotContains(t, body, "WoW <Forever>")
+			}
+		})
+	}
 }
 
 func TestHandlerRouteMetadataOverridesSocialImage(t *testing.T) {
