@@ -660,6 +660,103 @@ func TestForeverBossDeathEndsExplicitEncounterAndIgnoresLaterBoundaryEnd(t *test
 	}
 }
 
+func TestForeverSuccessfulBoundaryImmediatelyBeforeBossDeathDoesNotSplitFight(t *testing.T) {
+	t.Parallel()
+
+	for _, format := range []database.LogFormat{database.LogFormatV9Cleu, database.LogFormatV22Cleu} {
+		t.Run(string(format), func(t *testing.T) {
+			t.Parallel()
+
+			hostiles := make(map[uint32]Identity)
+			LoadBosses(hostiles, map[uint32]string{finalizeTestBossEntry: "Final Boss"})
+			ctx := parsectx.With(context.Background(), parsectx.Context{
+				Flavor: database.WoWFlavor{database.FlavorWoWForever},
+				Format: format,
+			})
+			h := newFinalizeTestHookableWithContext(t, ctx, hostiles)
+			base := time.Date(2026, time.October, 14, 22, 23, 59, 845_000_000, time.UTC)
+			require.NoError(t, h.Process(&messages.EncounterBoundary{
+				MessageBase: messages.Base(base),
+				Active:      true,
+				EncounterID: 590,
+				Name:        "Final Boss",
+			}))
+			player, boss := startFinalizeTestFight(t, h, base)
+
+			boundaryEnd := base.Add(31*time.Second + 633*time.Millisecond)
+			success := true
+			require.NoError(t, h.Process(&messages.EncounterBoundary{
+				MessageBase: messages.Base(boundaryEnd),
+				Active:      false,
+				EncounterID: 590,
+				Name:        "Final Boss",
+				Success:     &success,
+			}))
+			require.NotNil(t, h.currentFight)
+			require.True(t, h.currentFight.active())
+			require.Empty(t, h.completedFights)
+
+			killingBlow := boundaryEnd.Add(time.Millisecond)
+			require.NoError(t, h.Process(&messages.Damage{
+				MessageBase: messages.Base(killingBlow),
+				Caster:      &player,
+				Target:      boss,
+				Amount:      9,
+				Overkill:    4,
+			}))
+			death := boundaryEnd.Add(16 * time.Millisecond)
+			require.NoError(t, h.Process(&messages.Slain{
+				MessageBase: messages.Base(death),
+				Victim:      boss,
+				Killer:      &player,
+			}))
+
+			require.Nil(t, h.currentFight)
+			require.Nil(t, h.deferredEncounterEnd)
+			require.Len(t, h.completedFights, 1)
+			require.Equal(t, death, h.completedFights[0].End)
+			require.False(t, h.HasExplicitEncounter(590))
+		})
+	}
+}
+
+func TestForeverDeferredBoundaryFallsBackWhenBossDeathDoesNotFollow(t *testing.T) {
+	t.Parallel()
+
+	hostiles := make(map[uint32]Identity)
+	LoadBosses(hostiles, map[uint32]string{finalizeTestBossEntry: "Final Boss"})
+	ctx := parsectx.With(context.Background(), parsectx.Context{
+		Flavor: database.WoWFlavor{database.FlavorWoWForever},
+		Format: database.LogFormatV22Cleu,
+	})
+	h := newFinalizeTestHookableWithContext(t, ctx, hostiles)
+	base := time.Date(2026, time.October, 14, 22, 23, 59, 845_000_000, time.UTC)
+	require.NoError(t, h.Process(&messages.EncounterBoundary{
+		MessageBase: messages.Base(base),
+		Active:      true,
+		EncounterID: 590,
+		Name:        "Final Boss",
+	}))
+	_, _ = startFinalizeTestFight(t, h, base)
+
+	boundaryEnd := base.Add(30 * time.Second)
+	success := true
+	require.NoError(t, h.Process(&messages.EncounterBoundary{
+		MessageBase: messages.Base(boundaryEnd),
+		Active:      false,
+		EncounterID: 590,
+		Name:        "Final Boss",
+		Success:     &success,
+	}))
+	require.NotNil(t, h.deferredEncounterEnd)
+
+	require.NoError(t, h.Process(messages.TimedOut(boundaryEnd.Add(bossDeathEncounterEndGrace+time.Millisecond))))
+	require.Nil(t, h.deferredEncounterEnd)
+	require.Nil(t, h.currentFight)
+	require.Len(t, h.completedFights, 1)
+	require.Equal(t, boundaryEnd, h.completedFights[0].End)
+}
+
 func TestBossDeathEndIsLimitedToForeverV9AndV22(t *testing.T) {
 	t.Parallel()
 

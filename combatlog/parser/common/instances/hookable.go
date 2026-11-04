@@ -46,8 +46,9 @@ const (
 	timingsFinalizeFight              = "finalize_fight"
 	timingsHooks                      = "hooks"
 
-	finalizeTickInterval = 2 * time.Second
-	finalizeTickHorizon  = 5 * time.Minute
+	finalizeTickInterval       = 2 * time.Second
+	finalizeTickHorizon        = 5 * time.Minute
+	bossDeathEncounterEndGrace = 100 * time.Millisecond
 )
 
 type Hookable struct {
@@ -90,6 +91,8 @@ type Hookable struct {
 	lastActivity               time.Time
 	completedFights            []encounter.Fight
 	explicitEncounter          *messages.EncounterBoundary
+	deferredEncounterEnd       *messages.EncounterBoundary
+	flushingDeferredEnd        bool
 	ignoredEncounterEnds       map[int32]struct{}
 	bossDeathEndsExplicitFight bool
 	lastProcessedAt            time.Time
@@ -552,6 +555,50 @@ func (h *Hookable) bossDeathEndsCurrentFight(m messages.Message) bool {
 	return identity.Boss && !identity.BossDeathDoesNotEndEncounter
 }
 
+// WoW Forever can emit a successful ENCOUNTER_END a few milliseconds before
+// the killing damage and UNIT_DIED records. Briefly hold that boundary so the
+// boss death remains part of the encounter instead of starting a duplicate.
+func (h *Hookable) shouldDeferEncounterEnd(boundary *messages.EncounterBoundary) bool {
+	if h.flushingDeferredEnd || boundary.Active || boundary.Success == nil || !*boundary.Success || !h.bossDeathEndsExplicitFight ||
+		h.currentFight == nil || !h.currentFight.active() || h.explicitEncounter == nil ||
+		h.explicitEncounter.EncounterID != boundary.EncounterID {
+		return false
+	}
+
+	for id := range h.currentFight.ActiveHostiles {
+		char, ok := h.Characters.Get(id)
+		if !ok || !char.IsActive() {
+			continue
+		}
+		identity := h.IdentifyUnit(id)
+		if identity.Boss && !identity.BossDeathDoesNotEndEncounter {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Hookable) flushDeferredEncounterEndBefore(m messages.Message) error {
+	boundary := h.deferredEncounterEnd
+	if boundary == nil {
+		return nil
+	}
+
+	_, nextIsBoundary := m.(*messages.EncounterBoundary)
+	delay := m.Date().Sub(boundary.Date())
+	if !nextIsBoundary && delay >= 0 && delay <= bossDeathEncounterEndGrace {
+		return nil
+	}
+
+	h.deferredEncounterEnd = nil
+	h.flushingDeferredEnd = true
+	defer func() { h.flushingDeferredEnd = false }()
+	if err := h.process(boundary); err != nil {
+		return fmt.Errorf("processing deferred encounter end: %w", err)
+	}
+	return nil
+}
+
 func (h *Hookable) Process(m messages.Message) error {
 	if h.finalizing || h.finalized {
 		return fmt.Errorf("cannot process message after instance finalization started")
@@ -563,6 +610,16 @@ func (h *Hookable) Process(m messages.Message) error {
 }
 
 func (h *Hookable) process(m messages.Message) (finalError error) {
+	if err := h.flushDeferredEncounterEndBefore(m); err != nil {
+		return err
+	}
+	if boundary, ok := m.(*messages.EncounterBoundary); ok && h.shouldDeferEncounterEnd(boundary) {
+		deferred := *boundary
+		h.deferredEncounterEnd = &deferred
+		h.currentFight.AuthoritativeSuccess = boundary.Success
+		return nil
+	}
+
 	if boundary, ok := m.(*messages.EncounterBoundary); ok {
 		if boundary.Active {
 			// Encounter IDs may be reused by later attempts.
@@ -644,10 +701,15 @@ func (h *Hookable) process(m messages.Message) (finalError error) {
 		encounterID := int32(0)
 		if h.explicitEncounter != nil {
 			encounterID = h.explicitEncounter.EncounterID
-			if h.ignoredEncounterEnds == nil {
-				h.ignoredEncounterEnds = make(map[int32]struct{})
+			endAlreadyObserved := h.deferredEncounterEnd != nil && h.deferredEncounterEnd.EncounterID == encounterID
+			if endAlreadyObserved {
+				h.deferredEncounterEnd = nil
+			} else {
+				if h.ignoredEncounterEnds == nil {
+					h.ignoredEncounterEnds = make(map[int32]struct{})
+				}
+				h.ignoredEncounterEnds[encounterID] = struct{}{}
 			}
-			h.ignoredEncounterEnds[encounterID] = struct{}{}
 			success := true
 			h.currentFight.AuthoritativeSuccess = &success
 			h.explicitEncounter = nil
