@@ -8,6 +8,7 @@ import {
   isStaleRunSample,
   mergeRunEncounters,
   RUN_UNIT_STALE_MS,
+  runPositionAt,
   WHOLE_RUN_ENCOUNTER_ID,
 } from "./wholeRun";
 
@@ -63,16 +64,39 @@ describe("encounterJumps", () => {
   const runStart = Date.parse("2026-01-01T00:00:00Z");
   const runEnd = Date.parse("2026-01-01T01:00:00Z");
 
-  it("lists boss kills in order, each jumping to its start less the lead-in", () => {
+  it("lists boss kills in order, without data jumping to their start", () => {
     const jumps = encounterJumps(instanceEncounters, new Map(), runStart, runEnd);
     expect(jumps.map((jump) => jump.id)).toEqual(["boss1", "boss2"]);
-    expect(jumps[0].timestampMs).toBe(Date.parse("2026-01-01T00:10:00Z") - ENCOUNTER_JUMP_LEAD_MS);
+    expect(jumps[0].timestampMs).toBe(Date.parse("2026-01-01T00:10:00Z"));
     expect(jumps[0].fraction).toBeCloseTo(1 / 6);
     expect(jumps[1].fraction).toBeCloseTo(0.5);
   });
 
-  it("prefers the processed encounter's start and never jumps before the run", () => {
-    const processed = new Map([["boss1", encounter("boss1", runStart + 2_000, runStart + 9_000, {})]]);
+  it("lands on the first sample when the lead-in falls in a gap with no samples", () => {
+    const bossStart = runStart + 600_000;
+    const processed = new Map([
+      ["trash1", encounter("trash1", runStart, runStart + 60_000, { p1: [runStart, runStart + 60_000] })],
+      ["boss1", encounter("boss1", bossStart, bossStart + 90_000, { p1: [bossStart + 1_500, bossStart + 90_000] })],
+    ]);
+    const jumps = encounterJumps(instanceEncounters, processed, runStart, runEnd);
+    expect(jumps[0].timestampMs).toBe(bossStart + 1_500);
+  });
+
+  it("keeps the lead-in when another encounter's samples cover it", () => {
+    const bossStart = runStart + 600_000;
+    const processed = new Map([
+      ["trash1", encounter("trash1", runStart, bossStart - 1_000, { p1: [runStart, bossStart - 1_000] })],
+      ["boss1", encounter("boss1", bossStart, bossStart + 90_000, { p1: [bossStart, bossStart + 90_000] })],
+    ]);
+    const jumps = encounterJumps(instanceEncounters, processed, runStart, runEnd);
+    expect(jumps[0].timestampMs).toBe(bossStart - ENCOUNTER_JUMP_LEAD_MS);
+  });
+
+  it("never jumps before the run", () => {
+    const processed = new Map([
+      ["trash1", encounter("trash1", runStart, runStart + 60_000, { p1: [runStart] })],
+      ["boss1", encounter("boss1", runStart + 2_000, runStart + 9_000, { p1: [runStart + 2_000] })],
+    ]);
     const jumps = encounterJumps(instanceEncounters, processed, runStart, runEnd);
     expect(jumps[0].timestampMs).toBe(runStart);
   });
@@ -99,5 +123,31 @@ describe("isStaleRunSample", () => {
   it("expires a track once it stopped reporting", () => {
     expect(isStaleRunSample(sample(0), RUN_UNIT_STALE_MS)).toBe(false);
     expect(isStaleRunSample(sample(0), RUN_UNIT_STALE_MS + 1)).toBe(true);
+  });
+});
+
+describe("runPositionAt", () => {
+  // Two encounters a minute apart: no samples at all in the gap between them.
+  const track = [sample(0, 1), sample(10_000, 2), sample(70_000, 3), sample(80_000, 4)];
+
+  it("holds a player at the last known position through a gap between encounters", () => {
+    const cursor = 10_000 + RUN_UNIT_STALE_MS + 20_000;
+    expect(runPositionAt(track, cursor, true)).toEqual({ sample: track[1], held: true });
+  });
+
+  it("drops a non-player once its track is stale", () => {
+    expect(runPositionAt(track, 10_000 + RUN_UNIT_STALE_MS + 1, false)).toBeNull();
+  });
+
+  it("holds a player at the first known position before it", () => {
+    expect(runPositionAt([sample(70_000, 3)], 20_000, true)).toEqual({ sample: sample(70_000, 3), held: false });
+  });
+
+  it("interpolates inside an encounter, unheld", () => {
+    expect(runPositionAt(track, 5_000, true)).toMatchObject({ sample: { x: 1.5 }, held: false });
+  });
+
+  it("is null for a unit without samples", () => {
+    expect(runPositionAt([], 5_000, true)).toBeNull();
   });
 });
