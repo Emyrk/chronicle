@@ -337,6 +337,8 @@ export function Start2Page() {
           bosses={landing || landingFailed ? runs[current]?.bosses ?? [] : undefined}
           selectedId={hero?.window?.encounterId ?? null}
           onPick={pickBoss}
+          label={false}
+          ticker
         />
       </div>
       <SendLinkSection />
