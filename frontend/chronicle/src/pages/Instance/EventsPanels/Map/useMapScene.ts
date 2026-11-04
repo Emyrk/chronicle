@@ -17,7 +17,7 @@ import { POWER_COLORS } from "../RaidFrames/raidFrameShared";
 import { activeDebuffsAt, type MapDebuff, type MapEncounterPositions, type MapPositionSample, type MapResult } from "./map.processor";
 import { inferRoles } from "../Roles/roles.processor";
 import { deriveRecentHealGain, isDeadAt, type EncounterEffects } from "./replayEffects";
-import type { MapSceneFollowSource, MapSceneFollowUnit } from "./MapScene3D";
+import type { MapSceneFollowSource, MapSceneFollowUnit, MapSceneUnitTrack } from "./MapScene3D";
 import { isMapUnitDespawned, isMapUnitPositionExpired, shouldShowMapUnit } from "./mapUnitVisibility";
 import {
   AUTO_FIT_MIN_SPAN_YARDS,
@@ -624,6 +624,24 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
           const point = projectSample(sample);
           if (!point) return [];
           return [{ guid, point, player, boss: bossGuids.has(guid), dead: isDeadAt(encounter.effects, guid, ms) }];
+        }),
+        // Every unit the log gives no height, for the scene's walkable floors
+        // (chronicle-1597); each unit's samples are projected when read.
+        unitTracks: () => [...encounter.positionsByUnit.entries()].flatMap(([guid, positions]): MapSceneUnitTrack[] => {
+          if (positions.some((sample) => sample.z !== undefined)) return [];
+          return [{
+            guid,
+            get samples() {
+              const samples: MapSceneUnitTrack["samples"][number][] = [];
+              for (const sample of positions) {
+                if (sample.mapId !== mapId) continue;
+                if (sample.floor !== undefined && selectedFloorNumber !== null && sample.floor !== selectedFloorNumber) continue;
+                const point = projectSample(sample);
+                if (point) samples.push({ ms: sample.timestampMs, point });
+              }
+              return samples;
+            },
+          }];
         }),
       };
     },

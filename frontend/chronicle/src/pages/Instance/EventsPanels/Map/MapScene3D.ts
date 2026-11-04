@@ -53,6 +53,7 @@ import {
   medianHeight,
 } from "./dungeonMeshes";
 import { MAP_CURSOR, MAP_HOSTILE_CURSOR, MAP_UNIT_CURSOR } from "./mapCursors";
+import { FLOOR_SLICE_MS, FLOOR_TRACK_TOLERANCE_YARDS, floorTrackAt, startFloorTrackBuild, type FloorTrackBuild, type FloorTracks } from "./walkableFloors";
 import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, topDownMapDistance, type MapPoint, type MapViewport } from "./mapModel";
 import { deepBreathPathForPrimarySpell, ONYXIA_DEEP_BREATH_RADIUS_YARDS } from "./deepBreathLanes";
 import { projectMapDebugPoints, type MapDebugOverlay } from "./mapDebugOverlays";
@@ -206,6 +207,9 @@ const MESH_FULL_MAP_DISTANCE_FACTOR = 3;
 const MESH_CAMERA_CLEARANCE = 0.3;
 // Floor probes span these scene heights, outside any published dungeon mesh.
 const FLOOR_PROBE_HEIGHT = 100;
+// A face steeper than this is a wall, not a floor a unit without a logged height can stand on.
+const FLOOR_MAX_SLOPE_DEG = 50;
+const FLOOR_MIN_UP = Math.cos((FLOOR_MAX_SLOPE_DEG * Math.PI) / 180);
 // The camera direction the mesh starts from: steeper than ANGLED_OFFSET so
 // the rock between the camera and a sunken chamber hides less of the fight.
 const MESH_ANGLED_OFFSET = new THREE.Vector3(0, 1.6, 0.75);
@@ -390,6 +394,26 @@ export interface MapSceneFollowSource {
   /** How far the data reaches now; it may grow while the result streams in. */
   readonly endMs: number;
   unitsAt: (ms: number) => readonly MapSceneFollowUnit[];
+  /**
+   * Every recorded sample of the units the log gives no height, on this map
+   * and floor: their floors on the mesh are chosen from these up front
+   * (walkableFloors). Leave it out when every unit has a logged height.
+   */
+  unitTracks?: () => readonly MapSceneUnitTrack[];
+}
+
+/** A unit's recorded samples (artwork points at replay times), in replay order. */
+export interface MapSceneUnitTrack {
+  guid: string;
+  samples: readonly { ms: number; point: MapPoint }[];
+}
+
+/** What the no-Z floor tracks were built for. */
+interface FloorTrackInputs {
+  key: string;
+  aspect: number;
+  url: string;
+  endMs: number;
 }
 
 /** What a follow track was built for. */
@@ -465,6 +489,8 @@ export interface MapScene3DUnit {
   worldHeight?: number;
   /** Logged world height (yards), when the log has one; picks the floor on the mesh. */
   z?: number;
+  /** The replay time of the sample `point` comes from (interpolated or held): without `z`, it reads the unit's floor track. */
+  atMs?: number;
   /** The token's icon (a player's class, a pet's paw), or null for none. */
   icon?: string | null;
   /** A boss: a sigil instead of a disc. */
@@ -584,6 +610,10 @@ interface UnitObject {
   worldY: number;
   /** Logged world height (yards), or undefined when the log has none. */
   loggedZ: number | undefined;
+  /** The replay time of the drawn sample (MapScene3DUnit.atMs). */
+  sampleMs: number | undefined;
+  /** `floorY` came from the unit's floor track (no logged height), not a probe. */
+  floorTracked: boolean;
   health: MapUnitHealth | null;
   /** Published miniature or original-model URL; the primitive shows until it loads. */
   miniatureUrl: string | undefined;
@@ -984,6 +1014,12 @@ export class MapScene3D {
   private followTrackFor: FollowTrackInputs | null = null;
   // The build in flight, a slice per timer tick so a long run never blocks a frame.
   private followBuild: { build: FollowTrackBuild; inputs: FollowTrackInputs; timer: ReturnType<typeof setTimeout> } | null = null;
+  // Floors for the units the log gives no height (chronicle-1597), chosen up
+  // front from the follow source's unit tracks, built off the frame loop like
+  // the follow track; the last finished build, what it was for, and the build in flight.
+  private floorTracks: FloorTracks | null = null;
+  private floorTracksFor: FloorTrackInputs | null = null;
+  private floorBuild: { build: FloorTrackBuild; inputs: FloorTrackInputs; timer: ReturnType<typeof setTimeout> } | null = null;
   // How far past the pan radius the Director left the camera: the user's
   // pan limit grows by this on handover (and only shrinks), so grabbing the
   // camera never snaps it back toward the focus in one step.
@@ -1459,6 +1495,7 @@ export class MapScene3D {
   }
 
   setUnits(units: MapScene3DUnit[]) {
+    this.ensureFloorTracks();
     const seen = new Set<string>();
     for (const unit of units) {
       seen.add(unit.guid);
@@ -1474,6 +1511,7 @@ export class MapScene3D {
       object.worldX = unit.worldX;
       object.worldY = unit.worldY;
       object.loggedZ = unit.z;
+      object.sampleMs = unit.atMs;
       object.healthFraction = unit.healthFraction ?? null;
       object.powerLevel = unit.power ?? null;
       object.owner = unit.owner;
@@ -1717,6 +1755,7 @@ export class MapScene3D {
   setFollowSource(source: MapSceneFollowSource | null) {
     if (source === this.followSource) return;
     this.followSource = source;
+    this.ensureFloorTracks();
     this.requestRender();
   }
 
@@ -1997,11 +2036,15 @@ export class MapScene3D {
 
   // Puts the unit at (x, z) on the mesh floor while it shows, else at 0. A
   // logged height (`loggedZ`, yards) picks the floor nearest below it, and
-  // lifts the unit off it when well above (a knock-up, a fall).
+  // lifts the unit off it when well above (a knock-up, a fall). Without one,
+  // the unit's floor track picks a floor it can walk to (until the track is
+  // built, or off it, the highest floor as before).
   private placeUnit(guid: string, object: UnitObject, x: number, z: number) {
     const mesh = this.dungeonMesh;
     const loggedZ = object.loggedZ;
-    const floor = mesh ? this.unitFloorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale)) : 0;
+    const tracked = mesh && loggedZ === undefined ? this.trackedFloor(guid, object, x, z, mesh.scale) : null;
+    const floor = !mesh ? 0 : tracked ?? this.unitFloorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale));
+    object.floorTracked = tracked !== null;
     const logged = mesh && loggedZ !== undefined ? loggedZ * mesh.scale : null;
     const y = mesh && logged !== null && logged - floor > AIRBORNE_YARDS * mesh.scale ? logged : floor;
     object.floorY = floor;
@@ -2038,15 +2081,16 @@ export class MapScene3D {
   }
 
   // The probe start for the camera's aim point: from the median logged height
-  // of the units the Director frames (every unit otherwise), so the camera
-  // does not aim at a canopy above the party. Undefined without logged heights.
+  // (or, without one, tracked floor) of the units the Director frames (every
+  // unit otherwise), so the camera does not aim at a canopy above the party.
+  // Undefined without either.
   private cameraCeiling(): number | undefined {
     const mesh = this.dungeonMesh;
     if (!mesh) return undefined;
     const framed = this.directing() && this.directorInFrame.size > 0 ? this.directorInFrame : null;
     const heights: (number | undefined)[] = [];
     for (const [guid, object] of this.units) {
-      if (!framed || framed.has(guid)) heights.push(object.loggedZ);
+      if (!framed || framed.has(guid)) heights.push(object.loggedZ ?? (object.floorTracked ? object.floorY / mesh.scale : undefined));
     }
     return this.probeCeiling(medianHeight(heights), mesh.scale);
   }
@@ -2074,6 +2118,102 @@ export class MapScene3D {
     // Liquid planes may be wound either way up.
     for (const liquid of mesh.liquids) best = this.highestHit(liquid, x, z, fromY, THREE.DoubleSide, best);
     return best;
+  }
+
+  // The unit's floor from its track (no logged height), or null while there
+  // is none for it here (not built yet, other data, no floor on its path).
+  private trackedFloor(guid: string, object: UnitObject, x: number, z: number, scale: number): number | null {
+    const track = this.floorTracks?.units.get(guid);
+    if (!track || object.sampleMs === undefined) return null;
+    return floorTrackAt(track, object.sampleMs, x, z, FLOOR_TRACK_TOLERANCE_YARDS * scale);
+  }
+
+  // Keeps the no-Z floor tracks current: a new source, aspect or mesh drops
+  // the old tracks and builds new ones; more streamed data rebuilds once the
+  // build in flight (if any) is done, the old tracks serving meanwhile.
+  private ensureFloorTracks() {
+    const mesh = this.dungeonMesh;
+    const source = this.followSource;
+    if (!mesh || !source?.unitTracks) {
+      if (this.floorBuild) clearTimeout(this.floorBuild.timer);
+      this.floorBuild = null;
+      this.floorTracks = null;
+      this.floorTracksFor = null;
+      return;
+    }
+    const inputs: FloorTrackInputs = { key: source.key, aspect: this.aspect, url: mesh.url, endMs: source.endMs };
+    const same = (other: FloorTrackInputs | null | undefined) => other !== null && other !== undefined
+      && other.key === inputs.key && other.aspect === inputs.aspect && other.url === inputs.url;
+    const built = this.floorTracksFor;
+    if (same(built) && built!.endMs >= inputs.endMs) return;
+    if (!same(built)) {
+      this.floorTracks = null;
+      this.floorTracksFor = null;
+    }
+    if (same(this.floorBuild?.inputs)) return;
+    this.startFloorBuild(source, inputs);
+  }
+
+  // Starts (or restarts) the sliced floor-track build for `inputs`; when it
+  // is done, every unit is placed again on its tracked floor.
+  private startFloorBuild(source: MapSceneFollowSource, inputs: FloorTrackInputs) {
+    if (this.floorBuild) clearTimeout(this.floorBuild.timer);
+    const mesh = this.dungeonMesh!;
+    const { aspect } = inputs;
+    const build = startFloorTrackBuild({
+      // Projected per unit as the build reaches it, not all up front.
+      units: (source.unitTracks?.() ?? []).map((unit) => ({
+        guid: unit.guid,
+        get samples() {
+          return unit.samples.map(({ ms, point }) => ({ ms, ...mapPointToScene(point, aspect, GROUND_WIDTH) }));
+        },
+      })),
+      scale: mesh.scale,
+      candidatesAt: (x, z) => this.floorCandidates(x, z),
+    });
+    const slice = () => {
+      const current = this.floorBuild;
+      if (this.disposed || !current || current.build !== build) return;
+      if (this.dungeonMesh?.url !== inputs.url) {
+        this.floorBuild = null;
+        return;
+      }
+      if (!build.step(FLOOR_SLICE_MS)) {
+        current.timer = setTimeout(slice, 0);
+        return;
+      }
+      this.floorBuild = null;
+      this.floorTracks = build.result;
+      this.floorTracksFor = inputs;
+      for (const [guid, object] of this.units) this.placeUnit(guid, object, object.base.x, object.base.z);
+      this.requestRender();
+      // Data that streamed in meanwhile gets its own build.
+      this.ensureFloorTracks();
+    };
+    this.floorBuild = { build, inputs, timer: setTimeout(slice, 0) };
+  }
+
+  // Every walkable surface under (x, z) in scene units, highest first: the
+  // cave faces a downward probe meets (walls, steeper than FLOOR_MAX_SLOPE_DEG,
+  // left out) and the water planes.
+  private floorCandidates(x: number, z: number): number[] {
+    const mesh = this.dungeonMesh;
+    if (!mesh) return [];
+    const floors: number[] = [];
+    for (const cave of mesh.caves) this.collectFloors(cave, x, z, THREE.FrontSide, floors);
+    for (const liquid of mesh.liquids) this.collectFloors(liquid, x, z, THREE.DoubleSide, floors);
+    return floors.sort((a, b) => b - a);
+  }
+
+  // Adds to `floors` every walkable surface a downward probe through (x, z) hits on `cave`.
+  private collectFloors(cave: DungeonMeshCave, x: number, z: number, side: THREE.Side, floors: number[]) {
+    this.floorRay.origin.set(x, FLOOR_PROBE_HEIGHT, z);
+    this.floorRay.direction.set(0, -1, 0);
+    this.floorRay.applyMatrix4(cave.inverse);
+    for (const hit of cave.bvh.raycast(this.floorRay, side)) {
+      if (!hit.face || Math.abs(this.vector.copy(hit.face.normal).transformDirection(cave.mesh.matrixWorld).y) < FLOOR_MIN_UP) continue;
+      floors.push(this.vector.copy(hit.point).applyMatrix4(cave.mesh.matrixWorld).y);
+    }
   }
 
   // The higher of `best` and the surface a downward probe from (x, fromY, z) hits on `cave`.
@@ -2107,6 +2247,7 @@ export class MapScene3D {
     this.meshLight.visible = mesh;
     this.floorHeights.clear();
     this.unitFloorHeights.clear();
+    this.ensureFloorTracks();
     for (const [guid, object] of this.units) this.placeUnit(guid, object, object.base.x, object.base.z);
     this.updateCameraLimits();
     this.updateUnitScale(true);
@@ -2602,6 +2743,7 @@ export class MapScene3D {
   dispose() {
     this.disposed = true;
     if (this.followBuild) clearTimeout(this.followBuild.timer);
+    if (this.floorBuild) clearTimeout(this.floorBuild.timer);
     this.unlockPointer();
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
@@ -2768,6 +2910,8 @@ export class MapScene3D {
       worldX: unit.worldX,
       worldY: unit.worldY,
       loggedZ: unit.z,
+      sampleMs: unit.atMs,
+      floorTracked: false,
       health: unit.health,
       miniatureUrl: unit.miniatureUrl,
       gameModel: Boolean(unit.gameModel),
