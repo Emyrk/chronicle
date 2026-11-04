@@ -382,7 +382,7 @@ const SLIDES: PerkSlide[] = [
   },
   {
     id: "linking",
-    tab: "Character Linking",
+    tab: "Linking",
     tier: "honored",
     headline: "Claim your characters.",
     body: "Link a character to your account with an in-game screenshot on servers that support photo proof. Linked characters wear your cosmetics everywhere they appear.",
@@ -432,7 +432,7 @@ const SLIDES: PerkSlide[] = [
   },
   {
     id: "downloads",
-    tab: "Raw Downloads",
+    tab: "Downloads",
     tier: "revered",
     headline: "Your combat logs, archived.",
     body: "Download the original combat log file behind any of your uploads. Use Chronicle as the archive for your raw data.",
@@ -444,7 +444,7 @@ const SLIDES: PerkSlide[] = [
   },
   {
     id: "unlisted",
-    tab: "Unlisted Logs",
+    tab: "Unlisted",
     tier: "revered",
     headline: "Progression stays in progression.",
     body: "Mark uploads unlisted so only people with the link can find them. Unlisting is permanent and removes the log from rankings.",
@@ -456,7 +456,7 @@ const SLIDES: PerkSlide[] = [
   },
   {
     id: "compare",
-    tab: "Compare Tray",
+    tab: "Compare",
     tier: "revered",
     headline: "Size anyone up without leaving the page.",
     body: "Alt+click players and guilds to see their scores, charts, and full history right where you are. Boss and raid comparisons are free for everyone.",
@@ -497,7 +497,7 @@ export function PerkShowcase() {
   return (
     <section ref={sectionRef} aria-label="Supporter perks" className="scroll-mt-4">
       <div className={cn(PANEL, "overflow-hidden")}>
-        <div role="tablist" aria-label="Perks" className="flex flex-wrap border-b border-border bg-black/20">
+        <div role="tablist" aria-label="Perks" className="styled-scrollbar flex overflow-x-auto border-b border-border bg-black/20">
           {SLIDES.map((s, i) => (
             <button
               key={s.id}
