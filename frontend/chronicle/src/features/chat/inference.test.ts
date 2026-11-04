@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildInstanceAnalystRunRequest,
   buildSiteHelpRunRequest,
+  chooseAssistantModel,
   chooseDefaultModel,
   parseInferenceOAuthResult,
   safeLocalReturnPath,
@@ -82,6 +83,17 @@ describe("inference selection and OAuth", () => {
     ];
     expect(chooseDefaultModel(models, "z")).toBe("z");
     expect(chooseDefaultModel(models, "missing")).toBe("a");
+  });
+
+  it("prefers an explicit choice, then this assistant's default model", () => {
+    const models = [
+      { id: "z", name: "Zulu", context_length: 1 },
+      { id: "a", name: "Alpha", context_length: 1 },
+    ];
+    expect(chooseAssistantModel(models, "a", "z")).toBe("a");
+    expect(chooseAssistantModel(models, "missing", "z")).toBe("z");
+    expect(chooseAssistantModel(models, undefined, "z")).toBe("z");
+    expect(chooseAssistantModel(models, undefined, "missing")).toBe("a");
   });
 
   it("parses success and error callback signals", () => {

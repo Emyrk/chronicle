@@ -19,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceinference/openrouter"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicesecrets"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/coder/serpent"
 )
 
@@ -41,6 +42,7 @@ type Service struct {
 	cipher     *secrets.CredentialCipher
 	registry   *Registry
 	openRouter *openrouter.Client
+	tenant     *servicetenant.Service
 	router     http.Handler
 	enabled    bool
 }
@@ -51,7 +53,7 @@ func OnInference() string                          { return (&Service{}).Name() 
 func (s *Service) Name() string                    { return services.ServiceInference }
 func (s *Service) Configures() []string            { return nil }
 func (s *Service) DependsOn() []string {
-	return []string{servicelogger.OnLogger(), servicedbstore.OnDatabaseStore(), serviceauthz.OnAuthz(), serviceaccessurl.OnAccessURL(), servicesecrets.OnSecrets()}
+	return []string{servicelogger.OnLogger(), servicedbstore.OnDatabaseStore(), serviceauthz.OnAuthz(), serviceaccessurl.OnAccessURL(), servicesecrets.OnSecrets(), servicetenant.OnTenant()}
 }
 func (s *Service) Enabled() bool                                    { return s.enabled }
 func (s *Service) Routes() http.Handler                             { return s }
@@ -62,6 +64,7 @@ func (s *Service) Start(ctx context.Context) error {
 	s.logger = servicelogger.Logger(s.broker)
 	s.db = servicedbstore.DatabaseStore(s.broker)
 	s.zed = serviceauthz.Authz(s.broker)
+	s.tenant = servicetenant.Tenant(s.broker)
 	accessURL, err := url.Parse(serviceaccessurl.AccessURL(s.broker))
 	if err != nil {
 		return fmt.Errorf("parse inference access URL: %w", err)

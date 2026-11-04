@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Check, ChevronsUpDown, Search } from "lucide-react";
 import type { InferenceModel } from "@/api/typesGenerated";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ function formatContextLength(tokens: number): string {
 }
 
 export function ModelCombobox({ models, value, onChange }: ModelComboboxProps) {
+  const listId = useId();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -76,8 +77,8 @@ export function ModelCombobox({ models, value, onChange }: ModelComboboxProps) {
           role="combobox"
           aria-label="Search AI models"
           aria-expanded={open}
-          aria-controls="inference-model-options"
-          aria-activedescendant={open && visibleMatches[highlightedIndex] ? `inference-model-${highlightedIndex}` : undefined}
+          aria-controls={listId}
+          aria-activedescendant={open && visibleMatches[highlightedIndex] ? `${listId}-model-${highlightedIndex}` : undefined}
           autoComplete="off"
           placeholder="Search models…"
           value={open ? query : selected?.name ?? ""}
@@ -99,12 +100,12 @@ export function ModelCombobox({ models, value, onChange }: ModelComboboxProps) {
 
       {open && (
         <div className="bg-popover absolute inset-x-0 top-full z-[100] mt-1 overflow-hidden rounded-md border shadow-xl">
-          <div id="inference-model-options" role="listbox" className="styled-scrollbar max-h-72 overflow-y-auto p-1">
+          <div id={listId} role="listbox" className="styled-scrollbar max-h-72 overflow-y-auto p-1">
             {visibleMatches.length > 0 ? visibleMatches.map((model, index) => {
               const isSelected = model.id === value;
               return (
                 <button
-                  id={`inference-model-${index}`}
+                  id={`${listId}-model-${index}`}
                   key={model.id}
                   type="button"
                   role="option"

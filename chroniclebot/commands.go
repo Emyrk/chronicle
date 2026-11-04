@@ -13,6 +13,8 @@ type Command struct {
 	Definition *discordgo.ApplicationCommand
 	// Handler is called when the command is invoked.
 	Handler func(s *discordgo.Session, i *discordgo.InteractionCreate)
+	// Global commands are available in DMs as well as guilds.
+	Global bool
 }
 
 // RegisterCommands registers slash commands with Discord.
@@ -42,9 +44,13 @@ func (b *Bot) RegisterCommands(commands []Command) error {
 
 	// Register commands with Discord
 	for _, cmd := range commands {
+		guildID := b.config.GuildID
+		if cmd.Global {
+			guildID = ""
+		}
 		_, err := b.session.ApplicationCommandCreate(
 			appID,
-			b.config.GuildID, // Empty string = global
+			guildID,
 			cmd.Definition,
 		)
 		if err != nil {
@@ -60,7 +66,14 @@ func (b *Bot) RegisterCommands(commands []Command) error {
 	// longer present in our command set.
 	registeredNames := make(map[string]bool, len(commands))
 	for _, cmd := range commands {
-		registeredNames[cmd.Definition.Name] = true
+		if !cmd.Global {
+			registeredNames[cmd.Definition.Name] = true
+		}
+	}
+	// Only clean guild-scoped commands. Global command registration may be shared
+	// with other bot features, and deleting them here would remove unrelated commands.
+	if b.config.GuildID == "" {
+		return nil
 	}
 	existing, err := b.session.ApplicationCommands(appID, b.config.GuildID)
 	if err != nil {

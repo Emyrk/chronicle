@@ -180,6 +180,8 @@ func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model strin
 type toolContext struct {
 	service    *Service
 	instanceID uuid.UUID
+	userID     uuid.UUID
+	tenantSlug string
 }
 
 func usedToolCallIDs(messages []Message) map[string]struct{} {
@@ -253,6 +255,10 @@ func (s *Service) executeTool(ctx context.Context, tc toolContext, name, args st
 		return describeInstanceSearch(args)
 	case "build_instance_search_link":
 		return buildInstanceSearchLink(args)
+	case "discord_describe_instance_search":
+		return s.describeInstanceSearch(tc, args)
+	case "search_instances":
+		return s.searchInstances(ctx, tc, args)
 	case "list_pages":
 		var in struct{}
 		if err := decodeStrict(args, &in); err != nil {

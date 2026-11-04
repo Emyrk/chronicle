@@ -66,7 +66,7 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
   const { session, isAuthenticated } = useAuth()
   const permission = useInferencePermission(isAuthenticated, "module-workshop-panel")
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed)
-  const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed)
+  const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed, "module-workshop-panel")
   const debugPreview = useInferenceDebugPreview()
   const clearThread = useClearInferenceThread()
   const createThread = useCreateLuaProjectInferenceThread()

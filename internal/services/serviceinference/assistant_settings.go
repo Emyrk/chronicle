@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -74,6 +75,75 @@ func (s *Service) setAssistantsEnabled(ctx context.Context, userID uuid.UUID, ch
 		return err
 	}
 	return s.db.SetInferenceUserConfigKey(ctx, database.SetInferenceUserConfigKeyParams{UserID: userID, Key: configDisabledAssistants, Value: value})
+}
+
+const (
+	configAssistantModels = "assistant_models"
+	configDiscordEnabled  = "discord_enabled"
+	configDiscordTenant   = "discord_default_tenant"
+)
+
+type personalInferenceConfig struct {
+	AssistantModels      map[string]string `json:"assistant_models"`
+	DiscordEnabled       *bool             `json:"discord_enabled"`
+	DiscordDefaultTenant string            `json:"discord_default_tenant"`
+}
+
+func (s *Service) personalConfig(ctx context.Context, id uuid.UUID) (personalInferenceConfig, error) {
+	raw, err := s.db.GetInferenceUserConfig(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return personalInferenceConfig{}, nil
+	}
+	if err != nil {
+		return personalInferenceConfig{}, err
+	}
+	var config personalInferenceConfig
+	if err := json.Unmarshal(raw, &config); err != nil {
+		return config, fmt.Errorf("decode inference user config: %w", err)
+	}
+	return config, nil
+}
+
+func (s *Service) setPersonalConfigKey(ctx context.Context, id uuid.UUID, key string, value any) error {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return s.db.SetInferenceUserConfigKey(ctx, database.SetInferenceUserConfigKeyParams{UserID: id, Key: key, Value: encoded})
+}
+
+func (s *Service) setAssistantModels(ctx context.Context, id uuid.UUID, changes map[string]string) error {
+	for assistantID, model := range changes {
+		if _, ok := assistants[assistantID]; !ok {
+			return fmt.Errorf("%w %q", errUnknownAssistant, assistantID)
+		}
+		if len(model) > 200 || model != strings.TrimSpace(model) {
+			return errors.New("invalid default model")
+		}
+	}
+	config, err := s.personalConfig(ctx, id)
+	if err != nil {
+		return err
+	}
+	if config.AssistantModels == nil {
+		config.AssistantModels = map[string]string{}
+	}
+	for assistantID, model := range changes {
+		if model == "" {
+			delete(config.AssistantModels, assistantID)
+		} else {
+			config.AssistantModels[assistantID] = model
+		}
+	}
+	return s.setPersonalConfigKey(ctx, id, configAssistantModels, config.AssistantModels)
+}
+
+func (s *Service) discordLinked(ctx context.Context, id uuid.UUID) (bool, error) {
+	_, err := s.db.GetUserAuthLinkByUserIDAndProvider(ctx, database.GetUserAuthLinkByUserIDAndProviderParams{UserID: id, Provider: "discord"})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 // requireAssistantEnabled writes a 403 and returns false when the user turned the assistant off.

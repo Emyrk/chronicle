@@ -80,7 +80,7 @@ function DesktopGlobalSiteHelpChat() {
   const { session, isAuthenticated } = useAuth();
   const permission = useInferencePermission(isAuthenticated, "site-help");
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);
-  const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed);
+  const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed, "site-help");
   const debugPreview = useInferenceDebugPreview();
   const chatWindow = useChatWindow("site-help", "Chronicle site help");
   const { debugEnabled, yoloEnabled, setDebugEnabled, setYoloEnabled } = useChatPreferences(session?.user_id, "site-help");
@@ -141,7 +141,7 @@ function DesktopInstanceAssistantChat({ instanceId, instanceName }: { instanceId
   const { session, isAuthenticated } = useAuth();
   const permission = useInferencePermission(isAuthenticated, "instance-analyst");
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);
-  const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed);
+  const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed, "instance-analyst");
   const debugPreview = useInferenceDebugPreview();
   const clearThread = useClearInferenceThread();
   const createThread = useCreateInstanceInferenceThread();

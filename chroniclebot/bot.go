@@ -32,6 +32,7 @@ type Config struct {
 	Zed                          *authz.Authz
 	AccessURL                    string
 	PrimaryDomain                string
+	DiscordAI                    DiscordAI
 }
 
 type gatewaySession interface {

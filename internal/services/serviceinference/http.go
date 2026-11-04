@@ -19,6 +19,7 @@ import (
 	dbauthz "github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/services/serviceinference/openrouter"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/authzed/gochugaru/rel"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -57,6 +58,24 @@ func (s *Service) updateInferenceSettings(w http.ResponseWriter, r *http.Request
 		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "AI features are not enabled for this account."})
 		return
 	}
+	if req.DiscordEnabled != nil || (req.DiscordUseCurrentTenant != nil && *req.DiscordUseCurrentTenant) {
+		linked, err := s.discordLinked(r.Context(), userID(r))
+		if err != nil {
+			s.internalError(w, "read Discord link", err)
+			return
+		}
+		if !linked {
+			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "Link your Discord account first."})
+			return
+		}
+		if req.DiscordUseCurrentTenant != nil && *req.DiscordUseCurrentTenant {
+			tenant := servicetenant.TenantFromContext(r.Context())
+			if tenant == nil || !tenant.Slug.Valid || tenant.Slug.String == "" {
+				badRequest(w, r, "Open this page on a Chronicle tenant site to save it as your default.")
+				return
+			}
+		}
+	}
 	if req.Disabled != nil {
 		if err := s.zed.SetInferenceDisabled(r.Context(), userID(r), *req.Disabled); err != nil {
 			s.internalError(w, "update inference preference", err)
@@ -71,6 +90,31 @@ func (s *Service) updateInferenceSettings(w http.ResponseWriter, r *http.Request
 			}
 			s.internalError(w, "update assistant preferences", err)
 			return
+		}
+	}
+	if len(req.AssistantModels) > 0 {
+		if err := s.setAssistantModels(r.Context(), userID(r), req.AssistantModels); err != nil {
+			if errors.Is(err, errUnknownAssistant) || err.Error() == "invalid default model" {
+				badRequest(w, r, err.Error())
+				return
+			}
+			s.internalError(w, "update assistant default models", err)
+			return
+		}
+	}
+	if req.DiscordEnabled != nil || (req.DiscordUseCurrentTenant != nil && *req.DiscordUseCurrentTenant) {
+		if req.DiscordUseCurrentTenant != nil && *req.DiscordUseCurrentTenant {
+			tenant := servicetenant.TenantFromContext(r.Context())
+			if err := s.setPersonalConfigKey(r.Context(), userID(r), configDiscordTenant, tenant.Slug.String); err != nil {
+				s.internalError(w, "save Discord tenant", err)
+				return
+			}
+		}
+		if req.DiscordEnabled != nil {
+			if err := s.setPersonalConfigKey(r.Context(), userID(r), configDiscordEnabled, *req.DiscordEnabled); err != nil {
+				s.internalError(w, "update Discord preference", err)
+				return
+			}
 		}
 	}
 	s.writeInferenceSettings(w, r)
@@ -100,17 +144,31 @@ func (s *Service) writeInferenceSettings(w http.ResponseWriter, r *http.Request)
 		s.internalError(w, "read assistant preferences", err)
 		return
 	}
+	config, err := s.personalConfig(r.Context(), userID(r))
+	if err != nil {
+		s.internalError(w, "read personal AI settings", err)
+		return
+	}
+	linked, err := s.discordLinked(r.Context(), userID(r))
+	if err != nil {
+		s.internalError(w, "read Discord link", err)
+		return
+	}
 	settings := make([]chroniclesdk.InferenceAssistantSetting, 0, len(assistantSettingsOrder))
 	for _, id := range assistantSettingsOrder {
 		a := assistants[id]
-		settings = append(settings, chroniclesdk.InferenceAssistantSetting{ID: a.ID, Name: a.Name, Description: a.Description, Enabled: !off[a.ID]})
+		settings = append(settings, chroniclesdk.InferenceAssistantSetting{ID: a.ID, Name: a.Name, Description: a.Description, Enabled: !off[a.ID], DefaultModel: config.AssistantModels[id]})
 	}
+	discordEnabled := linked && (config.DiscordEnabled == nil || *config.DiscordEnabled)
 	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceSettings{
-		Available:        available,
-		Disabled:         disabled,
-		Enabled:          s.enabled && permitted,
-		ServiceAvailable: s.enabled,
-		Assistants:       settings,
+		DiscordLinked:        linked,
+		DiscordEnabled:       discordEnabled,
+		DiscordDefaultTenant: config.DiscordDefaultTenant,
+		Available:            available,
+		Disabled:             disabled,
+		Enabled:              s.enabled && permitted,
+		ServiceAvailable:     s.enabled,
+		Assistants:           settings,
 	})
 }
 

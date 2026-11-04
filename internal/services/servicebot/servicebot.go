@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
+	"github.com/Emyrk/chronicle/internal/services/serviceinference"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
@@ -60,6 +61,7 @@ func (s *Service) DependsOn() []string {
 		serviceprometheus.OnPrometheus(),
 		serviceauthz.OnAuthz(),
 		servicetenant.OnTenant(),
+		serviceinference.OnInference(),
 	}
 }
 
@@ -82,6 +84,7 @@ func (s *Service) Start(ctx context.Context) error {
 		Zed:                          zed,
 		AccessURL:                    serviceaccessurl.AccessURL(s.broker),
 		PrimaryDomain:                tenant.PrimaryDomain(),
+		DiscordAI:                    serviceinference.Inference(s.broker),
 	})
 	if err != nil {
 		return fmt.Errorf("create chronicle bot: %w", err)

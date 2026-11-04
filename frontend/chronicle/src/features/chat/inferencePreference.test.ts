@@ -9,6 +9,9 @@ function settings(overrides: Partial<InferenceSettings> = {}): InferenceSettings
     enabled: true,
     service_available: true,
     assistants: [],
+    discord_linked: false,
+    discord_enabled: false,
+    discord_default_tenant: "",
     ...overrides,
   };
 }

@@ -2463,6 +2463,7 @@ export interface InferenceAssistantSetting {
     readonly name: string;
     readonly description: string;
     readonly enabled: boolean;
+    readonly default_model: string;
 }
 
 // From chroniclesdk/inference.go
@@ -2601,6 +2602,9 @@ export interface InferenceSettings {
      * Assistants lists every assistant with the user's choice. Each still needs AI features to be enabled.
      */
     readonly assistants: readonly InferenceAssistantSetting[];
+    readonly discord_linked: boolean;
+    readonly discord_enabled: boolean;
+    readonly discord_default_tenant: string;
 }
 
 // From chroniclesdk/inference.go
@@ -6396,6 +6400,12 @@ export interface UpdateInferenceSettingsRequest {
      * Assistants maps assistant IDs to whether the user wants them on.
      */
     readonly assistants?: Record<string, boolean>;
+    readonly assistant_models?: Record<string, string>;
+    readonly discord_enabled?: boolean;
+    /**
+     * DiscordUseCurrentTenant saves the validated tenant of the request host, never a browser-supplied slug.
+     */
+    readonly discord_use_current_tenant?: boolean;
 }
 
 // From chroniclesdk/panel_layout.go

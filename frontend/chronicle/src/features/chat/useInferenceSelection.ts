@@ -1,19 +1,19 @@
 import { useCallback, useMemo, useState } from "react";
 import type { InferenceConnection } from "@/api/typesGenerated";
-import { useInferenceConnections, useInferenceModels } from "./api";
-import { chooseDefaultModel } from "./inference";
+import { useInferenceConnections, useInferenceModels, useInferenceSettings } from "./api";
+import { chooseAssistantModel } from "./inference";
 
-function storageKey(userId: string, field: "connection" | "model"): string {
+function storageKey(userId: string, field: string): string {
   const host = typeof window === "undefined" ? "server" : window.location.host;
   return `chronicle.inference.${host}.${userId}.${field}`;
 }
 
-function readStored(userId: string, field: "connection" | "model"): string | undefined {
+function readStored(userId: string, field: string): string | undefined {
   if (typeof window === "undefined") return undefined;
   return window.localStorage.getItem(storageKey(userId, field)) ?? undefined;
 }
 
-function writeStored(userId: string, field: "connection" | "model", value: string | undefined) {
+function writeStored(userId: string, field: string, value: string | undefined) {
   if (typeof window === "undefined") return;
   const key = storageKey(userId, field);
   if (value) window.localStorage.setItem(key, value);
@@ -26,7 +26,8 @@ function chooseConnection(connections: readonly InferenceConnection[], storedId?
   return [...connections].sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id))[0]?.id;
 }
 
-export function useInferenceSelection(userId: string | undefined, enabled = true) {
+export function useInferenceSelection(userId: string | undefined, enabled = true, assistantId?: string) {
+  const settings = useInferenceSettings(enabled && Boolean(userId && assistantId));
   const connectionsQuery = useInferenceConnections({ enabled: enabled && Boolean(userId) });
   const connections = useMemo(
     () => (connectionsQuery.data?.connections ?? []).filter((connection) => connection.status === "active"),
@@ -40,11 +41,14 @@ export function useInferenceSelection(userId: string | undefined, enabled = true
   );
   const modelsQuery = useInferenceModels(connectionId, { enabled: enabled && Boolean(connectionId) });
   const models = useMemo(() => modelsQuery.data?.models ?? [], [modelsQuery.data]);
+  const modelField = assistantId ? `model.${assistantId}` : "model";
   const [chosenModel, setChosenModel] = useState<{ userId?: string; value?: string }>({});
   const chosenModelId = chosenModel.userId === userId ? chosenModel.value : undefined;
-  const modelId = chooseDefaultModel(
+  const assistantDefault = settings.data?.assistants.find((assistant) => assistant.id === assistantId)?.default_model;
+  const modelId = chooseAssistantModel(
     models,
-    chosenModelId ?? (userId ? readStored(userId, "model") : undefined),
+    chosenModelId ?? (userId ? readStored(userId, modelField) : undefined),
+    assistantDefault,
   );
   const setConnectionId = useCallback((value: string | undefined) => {
     setChosenConnection({ userId, value });
@@ -52,8 +56,8 @@ export function useInferenceSelection(userId: string | undefined, enabled = true
   }, [userId]);
   const setModelId = useCallback((value: string | undefined) => {
     setChosenModel({ userId, value });
-    if (userId) writeStored(userId, "model", value);
-  }, [userId]);
+    if (userId) writeStored(userId, modelField, value);
+  }, [userId, modelField]);
 
   return useMemo(() => ({
     connections,

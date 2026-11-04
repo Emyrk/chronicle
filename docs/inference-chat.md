@@ -34,6 +34,12 @@ Disconnecting a provider connection immediately erases Chronicle's encrypted cre
 
 The separate `chronicle:chronicle#debug_inference_chat` permission is granted by the administrator-managed `inference_debug_capable` role or by `administer`. It is reserved for the prompt, tool, and future skill inspector; ordinary `inference_capable` users do not receive debug access.
 
+## Discord personal assistant
+
+The bot registers global `/ask` and `/chronicle ask` commands (including DMs), both routed to the same personal AI handler. `/chronicle set tenant <slug>` validates the slug against Chronicle's configured tenants; `/chronicle get tenant` displays the saved preference. Answers are ephemeral, mention-free, and truncated to Discord's message limit. The bot looks up the linked Chronicle user on each invocation, and inference independently verifies the exact Discord identity and `use_inference_chat` permission. The user's Discord preference defaults to enabled when linked; opting out of AI denies Discord runs too.
+
+Discord AI uses only the user's first active personal OpenRouter connection in the same newest-first order as `/connections`. It uses the Ask Chronicle (`site-help`) default model and never uses a shared provider key. Missing connections, model selection, or tenant preference produce a setup prompt instead of a provider call. Each Discord interaction creates an owner-scoped inference run with its interaction ID as the idempotency key; existing usage accounting and bounded agent limits apply. Its read-only search tool compiles queries through the existing instance-search compiler under the validated saved tenant context, charges the standard per-user search rate limit, and returns no cross-tenant results. Discord settings and per-assistant models are stored in `inference_user_config` JSONB without a new migration. The HTTP setting `discord_use_current_tenant` saves only the server-resolved request-host tenant, not a client-supplied slug.
+
 ## Streaming contract
 
 The browser/backend contract is the Chronicle-owned subset of AG-UI 1.0 over server-sent events. Supported events are:

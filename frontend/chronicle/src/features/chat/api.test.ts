@@ -39,8 +39,8 @@ describe("inference authorization errors", () => {
 describe("assistantEnabled", () => {
   it("waits for settings, honours the user's choice and defaults unknown assistants on", () => {
     const settings = { assistants: [
-      { id: "site-help", name: "Ask Chronicle", description: "", enabled: false },
-      { id: "addon-workshop-panel", name: "Module Workshop", description: "", enabled: true },
+      { id: "site-help", name: "Ask Chronicle", description: "", enabled: false, default_model: "" },
+      { id: "addon-workshop-panel", name: "Module Workshop", description: "", enabled: true, default_model: "" },
     ] };
     expect(assistantEnabled(undefined, "site-help")).toBe(false);
     expect(assistantEnabled(settings, "site-help")).toBe(false);

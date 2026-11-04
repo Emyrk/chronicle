@@ -13,21 +13,29 @@ type InferenceSettings struct {
 	Enabled          bool `json:"enabled"`
 	ServiceAvailable bool `json:"service_available"`
 	// Assistants lists every assistant with the user's choice. Each still needs AI features to be enabled.
-	Assistants []InferenceAssistantSetting `json:"assistants"`
+	Assistants           []InferenceAssistantSetting `json:"assistants"`
+	DiscordLinked        bool                        `json:"discord_linked"`
+	DiscordEnabled       bool                        `json:"discord_enabled"`
+	DiscordDefaultTenant string                      `json:"discord_default_tenant"`
 }
 
 type InferenceAssistantSetting struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Enabled     bool   `json:"enabled"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	Enabled      bool   `json:"enabled"`
+	DefaultModel string `json:"default_model"`
 }
 
 // UpdateInferenceSettingsRequest changes only the fields that are present.
 type UpdateInferenceSettingsRequest struct {
 	Disabled *bool `json:"disabled,omitempty"`
 	// Assistants maps assistant IDs to whether the user wants them on.
-	Assistants map[string]bool `json:"assistants,omitempty"`
+	Assistants      map[string]bool   `json:"assistants,omitempty"`
+	AssistantModels map[string]string `json:"assistant_models,omitempty"`
+	DiscordEnabled  *bool             `json:"discord_enabled,omitempty"`
+	// DiscordUseCurrentTenant saves the validated tenant of the request host, never a browser-supplied slug.
+	DiscordUseCurrentTenant *bool `json:"discord_use_current_tenant,omitempty"`
 }
 
 type InferenceConnection struct {
