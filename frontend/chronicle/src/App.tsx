@@ -16,6 +16,7 @@ const SupportedInstances = lazy(() => import("./pages/SupportedInstances").then(
 const Terms = lazy(() => import("./pages/Terms").then(({ Terms }) => ({ default: Terms })))
 const ParsingPage = lazy(() => import("./pages/Parsing/ParsingPage").then(({ ParsingPage }) => ({ default: ParsingPage })))
 const StartPage = lazy(() => import("./pages/Landing/StartPage").then(({ StartPage }) => ({ default: StartPage })))
+const Start2Page = lazy(() => import("./pages/Landing/Start2Page").then(({ Start2Page }) => ({ default: Start2Page })))
 const CohortViewerPage = lazy(() => import("./pages/Parsing/CohortViewerPage").then(({ CohortViewerPage }) => ({ default: CohortViewerPage })))
 const Empty = lazy(() => import("./pages/Empty").then(({ Empty }) => ({ default: Empty })))
 const DownloadPage = lazy(() => import("./pages/Download/Download").then(({ DownloadPage }) => ({ default: DownloadPage })))
@@ -178,6 +179,13 @@ function StartRoute() {
   return forever ? <StartPage /> : <CatchAllRoute />
 }
 
+/** /start2: the landing inside the site Layout, WoW Forever only like /start. */
+function Start2Route() {
+  const { data: siteConfig, isPending } = useSiteConfig()
+  if (isPending) return null
+  return siteConfig?.dataset_flavor?.includes("wow-forever") ? <Start2Page /> : <CatchAllRoute />
+}
+
 function App() {
   return (
     <>
@@ -193,6 +201,7 @@ function App() {
       <Route path="/debug/assistant" element={<AssistantDebugPage />} />
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
+        <Route path="/start2" element={<Start2Route />} />
         <Route path="/recent" element={<RecentRaids />} />
         <Route path="/search" element={<InstanceSearchPage />} />
         <Route path="/search/guide" element={<SearchGuidePage />} />
