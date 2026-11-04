@@ -69,6 +69,22 @@ describe("preset layout availability", () => {
   });
 });
 
+describe("Consumes & Cooldowns preset", () => {
+  it("stacks the consumables log and cooldown usage panels in one layout", () => {
+    const preset = PRESET_LAYOUTS_BY_ID.consumes_cooldowns;
+    if (!isPanelPresetLayout(preset)) throw new Error("Consumes & Cooldowns should be a panels preset");
+
+    expect(preset.panelTypes).toEqual({
+      "panel-1": "consumables",
+      "panel-2": "cooldown_usage",
+    });
+    expect(preset.layoutItems).toEqual([
+      expect.objectContaining({ id: "panel-1", x: 0, y: 0, w: 12 }),
+      expect.objectContaining({ id: "panel-2", x: 0, y: 6, w: 12 }),
+    ]);
+  });
+});
+
 describe("Player Timeline preset", () => {
   it("uses a seamless panel layout with grouped panels above an intrinsic timeline", () => {
     const preset = PRESET_LAYOUTS_BY_ID.player_timeline;

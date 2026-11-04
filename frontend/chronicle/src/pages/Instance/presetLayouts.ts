@@ -231,6 +231,21 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
     },
   },
   {
+    id: "consumes_cooldowns",
+    label: "Consumes & Cooldowns",
+    kind: "panels",
+    layoutItems: [
+      { id: "panel-1", title: "Consumables Log", x: 0, y: 0, w: 12, h: 6, minW: 4 },
+      { id: "panel-2", title: "Cooldown Usage", x: 0, y: 6, w: 12, h: 6, minW: 4 },
+    ],
+    panelTypes: {
+      "panel-1": "consumables",
+      "panel-2": "cooldown_usage",
+    },
+    panelOptions: {},
+    panelFilters: {},
+  },
+  {
     id: "dispels",
     label: "Dispels",
     kind: "panels",
