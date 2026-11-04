@@ -29,11 +29,17 @@ import (
 type tenantRatingReader interface {
 	GetActiveTenantRatingGeneration(context.Context, uuid.UUID) (uuid.UUID, error)
 	ListActivePlayerTenantBossScores(context.Context, database.ListActivePlayerTenantBossScoresParams) ([]database.ListActivePlayerTenantBossScoresRow, error)
+	ListEvolvingPlayerTenantBossScores(context.Context, database.ListEvolvingPlayerTenantBossScoresParams) ([]database.ListEvolvingPlayerTenantBossScoresRow, error)
 	ListActivePlayerTenantScopeScores(context.Context, database.ListActivePlayerTenantScopeScoresParams) ([]database.ListActivePlayerTenantScopeScoresRow, error)
+	ListEvolvingPlayerTenantScopeScores(context.Context, database.ListEvolvingPlayerTenantScopeScoresParams) ([]database.ListEvolvingPlayerTenantScopeScoresRow, error)
 	ListActiveAllClassPlayerTenantBossScores(context.Context, database.ListActiveAllClassPlayerTenantBossScoresParams) ([]database.ListActiveAllClassPlayerTenantBossScoresRow, error)
+	ListEvolvingAllClassPlayerTenantBossScores(context.Context, database.ListEvolvingAllClassPlayerTenantBossScoresParams) ([]database.ListEvolvingAllClassPlayerTenantBossScoresRow, error)
 	ListActiveAllClassPlayerTenantScopeScores(context.Context, database.ListActiveAllClassPlayerTenantScopeScoresParams) ([]database.ListActiveAllClassPlayerTenantScopeScoresRow, error)
+	ListEvolvingAllClassPlayerTenantScopeScores(context.Context, database.ListEvolvingAllClassPlayerTenantScopeScoresParams) ([]database.ListEvolvingAllClassPlayerTenantScopeScoresRow, error)
 	ListActiveGuildTenantBossScores(context.Context, database.ListActiveGuildTenantBossScoresParams) ([]database.ListActiveGuildTenantBossScoresRow, error)
+	ListEvolvingGuildTenantBossScores(context.Context, database.ListEvolvingGuildTenantBossScoresParams) ([]database.ListEvolvingGuildTenantBossScoresRow, error)
 	ListActiveGuildTenantScopeScores(context.Context, database.ListActiveGuildTenantScopeScoresParams) ([]database.ListActiveGuildTenantScopeScoresRow, error)
+	ListEvolvingGuildTenantScopeScores(context.Context, database.ListEvolvingGuildTenantScopeScoresParams) ([]database.ListEvolvingGuildTenantScopeScoresRow, error)
 }
 
 // Tenant leaderboard handlers read only published tenant generations.
@@ -53,6 +59,7 @@ func (s *Service) handleTenantGuildScopeLeaderboard(w http.ResponseWriter, r *ht
 type tenantRatingCursor struct {
 	Binding    string    `json:"b"`
 	Generation uuid.UUID `json:"g"`
+	Evolving   bool      `json:"e,omitempty"`
 	Score      float64   `json:"s"`
 	// Raw breaks tied player Peaks (higher DPS/HPS first); 0 for other metrics,
 	// unknown throughput, and cursors issued before it existed.
@@ -189,7 +196,7 @@ func tenantRatingInput(r *http.Request, guild, boss bool) (url.Values, []uuid.UU
 			return nil, nil, 0, "", cursor, errors.New("invalid cursor")
 		}
 		bytes, e := base64.RawURLEncoding.DecodeString(encoded)
-		if e != nil || json.Unmarshal(bytes, &cursor) != nil || cursor.Binding != binding || cursor.Generation == uuid.Nil || cursor.Realm == uuid.Nil || math.IsNaN(cursor.Score) || math.IsInf(cursor.Score, 0) || (guild && (cursor.Guild == uuid.Nil || cursor.Player != "")) || (!guild && (cursor.Player == "" || cursor.Guild != uuid.Nil)) {
+		if e != nil || json.Unmarshal(bytes, &cursor) != nil || cursor.Binding != binding || (!cursor.Evolving && cursor.Generation == uuid.Nil) || cursor.Realm == uuid.Nil || math.IsNaN(cursor.Score) || math.IsInf(cursor.Score, 0) || (guild && (cursor.Guild == uuid.Nil || cursor.Player != "")) || (!guild && (cursor.Player == "" || cursor.Guild != uuid.Nil)) {
 			return nil, nil, 0, "", cursor, errors.New("invalid cursor for this leaderboard")
 		}
 	}
@@ -218,18 +225,26 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 	}
 	ctx := r.Context()
 	tenant := servicetenant.TenantIDFromContext(ctx)
+	evolving, modeErr := ratingEvolvingReader(ctx, store, tenant)
+	if modeErr != nil {
+		httpapi.InternalServerError(w, modeErr)
+		return
+	}
 	generation, err := store.GetActiveTenantRatingGeneration(ctx, tenant)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) && !errors.Is(err, sql.ErrNoRows) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	if cursor.Generation != uuid.Nil && (err != nil || cursor.Generation != generation) {
+	if cursor.Realm != uuid.Nil && (cursor.Evolving != evolving || (!evolving && (err != nil || cursor.Generation != generation))) {
 		tenantRatingStale(w, r)
 		return
 	}
-	if err != nil || generation == uuid.Nil {
+	if !evolving && (err != nil || generation == uuid.Nil) {
 		writeEmptyTenantRating(w, r, guild, boss)
 		return
+	}
+	if evolving {
+		generation = uuid.Nil
 	}
 	// Both first and continuation pages pin the generation; never use the SQL wildcard.
 	var payload any
@@ -237,7 +252,17 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 	if guild && boss {
 		params := database.ListActiveGuildTenantBossScoresParams{TenantID: tenant, GenerationID: generation, InstanceName: q.Get("instance_name"), EncounterName: q.Get("encounter_name"), DifficultyName: q.Get("difficulty_name"), MaxPlayers: tenantMax(q), RatingMetric: q.Get("rating_metric"), WindowKind: q.Get("window_kind"), RealmIds: realms, LimitCount: limit}
 		params.AfterScore, params.AfterRealmID, params.AfterGuildID = cursor.Score, cursor.Realm, cursor.Guild
-		rows, e := store.ListActiveGuildTenantBossScores(ctx, params)
+		var rows []database.ListActiveGuildTenantBossScoresRow
+		var e error
+		if evolving {
+			var selected []database.ListEvolvingGuildTenantBossScoresRow
+			selected, e = store.ListEvolvingGuildTenantBossScores(ctx, database.ListEvolvingGuildTenantBossScoresParams(params))
+			for _, row := range selected {
+				rows = append(rows, database.ListActiveGuildTenantBossScoresRow(row))
+			}
+		} else {
+			rows, e = store.ListActiveGuildTenantBossScores(ctx, params)
+		}
 		if e != nil {
 			httpapi.InternalServerError(w, e)
 			return
@@ -254,20 +279,39 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 			last := rows[len(rows)-1]
 			params.AfterScore, params.AfterRealmID, params.AfterGuildID = last.Score, last.RealmID, last.GuildID
 			params.LimitCount = 1
-			more, e := store.ListActiveGuildTenantBossScores(ctx, params)
+			var more []database.ListActiveGuildTenantBossScoresRow
+			if evolving {
+				var selected []database.ListEvolvingGuildTenantBossScoresRow
+				selected, e = store.ListEvolvingGuildTenantBossScores(ctx, database.ListEvolvingGuildTenantBossScoresParams(params))
+				for _, row := range selected {
+					more = append(more, database.ListActiveGuildTenantBossScoresRow(row))
+				}
+			} else {
+				more, e = store.ListActiveGuildTenantBossScores(ctx, params)
+			}
 			if e != nil {
 				httpapi.InternalServerError(w, e)
 				return
 			}
 			if len(more) > 0 {
-				next = tenantCursorEncode(tenantRatingCursor{Binding: binding, Generation: generation, Score: last.Score, Realm: last.RealmID, Guild: last.GuildID})
+				next = tenantCursorEncode(tenantRatingCursor{Binding: binding, Generation: generation, Evolving: evolving, Score: last.Score, Realm: last.RealmID, Guild: last.GuildID})
 			}
 		}
 		payload = chroniclesdk.TenantGuildBossLeaderboardResponse{Entries: entries, NextCursor: next}
 	} else if guild {
 		params := database.ListActiveGuildTenantScopeScoresParams{TenantID: tenant, GenerationID: generation, InstanceName: q.Get("instance_name"), DifficultyName: q.Get("difficulty_name"), MaxPlayers: tenantMax(q), RatingMetric: q.Get("rating_metric"), WindowKind: q.Get("window_kind"), RealmIds: realms, LimitCount: limit}
 		params.AfterScore, params.AfterRealmID, params.AfterGuildID = cursor.Score, cursor.Realm, cursor.Guild
-		rows, e := store.ListActiveGuildTenantScopeScores(ctx, params)
+		var rows []database.ListActiveGuildTenantScopeScoresRow
+		var e error
+		if evolving {
+			var selected []database.ListEvolvingGuildTenantScopeScoresRow
+			selected, e = store.ListEvolvingGuildTenantScopeScores(ctx, database.ListEvolvingGuildTenantScopeScoresParams(params))
+			for _, row := range selected {
+				rows = append(rows, database.ListActiveGuildTenantScopeScoresRow(row))
+			}
+		} else {
+			rows, e = store.ListActiveGuildTenantScopeScores(ctx, params)
+		}
 		if e != nil {
 			httpapi.InternalServerError(w, e)
 			return
@@ -284,19 +328,36 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 			last := rows[len(rows)-1]
 			params.AfterScore, params.AfterRealmID, params.AfterGuildID = last.Score, last.RealmID, last.GuildID
 			params.LimitCount = 1
-			more, e := store.ListActiveGuildTenantScopeScores(ctx, params)
+			var more []database.ListActiveGuildTenantScopeScoresRow
+			if evolving {
+				var selected []database.ListEvolvingGuildTenantScopeScoresRow
+				selected, e = store.ListEvolvingGuildTenantScopeScores(ctx, database.ListEvolvingGuildTenantScopeScoresParams(params))
+				for _, row := range selected {
+					more = append(more, database.ListActiveGuildTenantScopeScoresRow(row))
+				}
+			} else {
+				more, e = store.ListActiveGuildTenantScopeScores(ctx, params)
+			}
 			if e != nil {
 				httpapi.InternalServerError(w, e)
 				return
 			}
 			if len(more) > 0 {
-				next = tenantCursorEncode(tenantRatingCursor{Binding: binding, Generation: generation, Score: last.Score, Realm: last.RealmID, Guild: last.GuildID})
+				next = tenantCursorEncode(tenantRatingCursor{Binding: binding, Generation: generation, Evolving: evolving, Score: last.Score, Realm: last.RealmID, Guild: last.GuildID})
 			}
 		}
 		payload = chroniclesdk.TenantGuildScopeLeaderboardResponse{Scope: "raid", Entries: entries, NextCursor: next}
 	} else if boss {
 		read := func(p database.ListActivePlayerTenantBossScoresParams) ([]database.ListActivePlayerTenantBossScoresRow, error) {
 			if !q.Has("all_classes") {
+				if evolving {
+					selected, err := store.ListEvolvingPlayerTenantBossScores(ctx, database.ListEvolvingPlayerTenantBossScoresParams(p))
+					rows := make([]database.ListActivePlayerTenantBossScoresRow, len(selected))
+					for i, row := range selected {
+						rows[i] = convertEvolvingPlayerTenantBossScore(row)
+					}
+					return rows, err
+				}
 				return store.ListActivePlayerTenantBossScores(ctx, p)
 			}
 			all := database.ListActiveAllClassPlayerTenantBossScoresParams{TenantID: p.TenantID, GenerationID: p.GenerationID,
@@ -305,7 +366,17 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				PerformanceMetric: p.PerformanceMetric, RatingMetric: p.RatingMetric, WindowKind: p.WindowKind,
 				RealmIds: p.RealmIds, LimitCount: p.LimitCount, AfterScore: p.AfterScore, AfterRaw: p.AfterRaw,
 				AfterRealmID: p.AfterRealmID, AfterPlayerGuid: p.AfterPlayerGuid}
-			selected, err := store.ListActiveAllClassPlayerTenantBossScores(ctx, all)
+			var selected []database.ListActiveAllClassPlayerTenantBossScoresRow
+			var err error
+			if evolving {
+				var found []database.ListEvolvingAllClassPlayerTenantBossScoresRow
+				found, err = store.ListEvolvingAllClassPlayerTenantBossScores(ctx, database.ListEvolvingAllClassPlayerTenantBossScoresParams(all))
+				for _, row := range found {
+					selected = append(selected, convertEvolvingAllClassPlayerTenantBossScore(row))
+				}
+			} else {
+				selected, err = store.ListActiveAllClassPlayerTenantBossScores(ctx, all)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -341,13 +412,21 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				return
 			}
 			if len(more) > 0 {
-				next = tenantCursorEncode(tenantRatingCursor{Binding: binding, Generation: generation, Score: last.Score, Raw: raw, Realm: last.RealmID, Player: last.PlayerGuid})
+				next = tenantCursorEncode(tenantRatingCursor{Binding: binding, Generation: generation, Evolving: evolving, Score: last.Score, Raw: raw, Realm: last.RealmID, Player: last.PlayerGuid})
 			}
 		}
 		payload = chroniclesdk.TenantPlayerBossLeaderboardResponse{Entries: entries, NextCursor: next}
 	} else {
 		read := func(p database.ListActivePlayerTenantScopeScoresParams) ([]database.ListActivePlayerTenantScopeScoresRow, error) {
 			if !q.Has("all_classes") {
+				if evolving {
+					selected, err := store.ListEvolvingPlayerTenantScopeScores(ctx, database.ListEvolvingPlayerTenantScopeScoresParams(p))
+					rows := make([]database.ListActivePlayerTenantScopeScoresRow, len(selected))
+					for i, row := range selected {
+						rows[i] = convertEvolvingPlayerTenantScopeScore(row)
+					}
+					return rows, err
+				}
 				return store.ListActivePlayerTenantScopeScores(ctx, p)
 			}
 			all := database.ListActiveAllClassPlayerTenantScopeScoresParams{TenantID: p.TenantID, GenerationID: p.GenerationID,
@@ -356,7 +435,17 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				PerformanceMetric: p.PerformanceMetric, RatingMetric: p.RatingMetric, WindowKind: p.WindowKind,
 				RealmIds: p.RealmIds, LimitCount: p.LimitCount, AfterScore: p.AfterScore, AfterRaw: p.AfterRaw,
 				AfterRealmID: p.AfterRealmID, AfterPlayerGuid: p.AfterPlayerGuid}
-			selected, err := store.ListActiveAllClassPlayerTenantScopeScores(ctx, all)
+			var selected []database.ListActiveAllClassPlayerTenantScopeScoresRow
+			var err error
+			if evolving {
+				var found []database.ListEvolvingAllClassPlayerTenantScopeScoresRow
+				found, err = store.ListEvolvingAllClassPlayerTenantScopeScores(ctx, database.ListEvolvingAllClassPlayerTenantScopeScoresParams(all))
+				for _, row := range found {
+					selected = append(selected, convertEvolvingAllClassPlayerTenantScopeScore(row))
+				}
+			} else {
+				selected, err = store.ListActiveAllClassPlayerTenantScopeScores(ctx, all)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -392,7 +481,7 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 				return
 			}
 			if len(more) > 0 {
-				next = tenantCursorEncode(tenantRatingCursor{Binding: binding, Generation: generation, Score: last.Score, Raw: raw, Realm: last.RealmID, Player: last.PlayerGuid})
+				next = tenantCursorEncode(tenantRatingCursor{Binding: binding, Generation: generation, Evolving: evolving, Score: last.Score, Raw: raw, Realm: last.RealmID, Player: last.PlayerGuid})
 			}
 		}
 		payload = chroniclesdk.TenantPlayerScopeLeaderboardResponse{Scope: "raid", Entries: entries, NextCursor: next}
@@ -438,4 +527,120 @@ func writeEmptyTenantRating(w http.ResponseWriter, r *http.Request, guild, boss 
 		payload = chroniclesdk.TenantPlayerScopeLeaderboardResponse{Scope: "raid", Entries: []chroniclesdk.TenantPlayerScopeLeaderboardEntry{}}
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, payload)
+}
+
+func convertEvolvingPlayerTenantBossScore(row database.ListEvolvingPlayerTenantBossScoresRow) database.ListActivePlayerTenantBossScoresRow {
+	return database.ListActivePlayerTenantBossScoresRow{
+		TenantID:          row.TenantID,
+		RealmID:           row.RealmID,
+		PlayerGuid:        row.PlayerGuid,
+		InstanceName:      row.InstanceName,
+		EncounterName:     row.EncounterName,
+		DifficultyName:    row.DifficultyName,
+		MaxPlayers:        row.MaxPlayers,
+		PlayerClass:       row.PlayerClass,
+		PlayerSpec:        row.PlayerSpec,
+		PlayerSubSpec:     row.PlayerSubSpec,
+		PerformanceMetric: row.PerformanceMetric,
+		RatingMetric:      row.RatingMetric,
+		WindowKind:        row.WindowKind,
+		WindowStart:       row.WindowStart,
+		WindowEnd:         row.WindowEnd,
+		Score:             row.Score,
+		BestRaw:           row.BestRaw,
+		RankOneRaw:        row.RankOneRaw,
+		BestLockedParse:   row.BestLockedParse,
+		Form:              row.Form,
+		FloorScore:        row.FloorScore,
+		EligibleKills:     row.EligibleKills,
+		ComputedAt:        row.ComputedAt,
+		BestDurationSecs:  row.BestDurationSecs.Float64,
+		PlayerName:        row.PlayerName,
+		GuildName:         row.GuildName,
+		RealmName:         row.RealmName,
+	}
+}
+
+func convertEvolvingAllClassPlayerTenantBossScore(row database.ListEvolvingAllClassPlayerTenantBossScoresRow) database.ListActiveAllClassPlayerTenantBossScoresRow {
+	return database.ListActiveAllClassPlayerTenantBossScoresRow{
+		TenantID:          row.TenantID,
+		RealmID:           row.RealmID,
+		PlayerGuid:        row.PlayerGuid,
+		InstanceName:      row.InstanceName,
+		EncounterName:     row.EncounterName,
+		DifficultyName:    row.DifficultyName,
+		MaxPlayers:        row.MaxPlayers,
+		PlayerClass:       row.PlayerClass,
+		PlayerSpec:        row.PlayerSpec,
+		PlayerSubSpec:     row.PlayerSubSpec,
+		PerformanceMetric: row.PerformanceMetric,
+		RatingMetric:      row.RatingMetric,
+		WindowKind:        row.WindowKind,
+		WindowStart:       row.WindowStart,
+		WindowEnd:         row.WindowEnd,
+		Score:             row.Score,
+		BestRaw:           row.BestRaw,
+		RankOneRaw:        row.RankOneRaw,
+		BestLockedParse:   row.BestLockedParse,
+		Form:              row.Form,
+		FloorScore:        row.FloorScore,
+		EligibleKills:     row.EligibleKills,
+		ComputedAt:        row.ComputedAt,
+		BestDurationSecs:  row.BestDurationSecs.Float64,
+		PlayerName:        row.PlayerName,
+		GuildName:         row.GuildName,
+		RealmName:         row.RealmName,
+	}
+}
+
+func convertEvolvingPlayerTenantScopeScore(row database.ListEvolvingPlayerTenantScopeScoresRow) database.ListActivePlayerTenantScopeScoresRow {
+	return database.ListActivePlayerTenantScopeScoresRow{
+		TenantID:          row.TenantID,
+		RealmID:           row.RealmID,
+		PlayerGuid:        row.PlayerGuid,
+		InstanceName:      row.InstanceName,
+		DifficultyName:    row.DifficultyName,
+		MaxPlayers:        row.MaxPlayers,
+		PlayerClass:       row.PlayerClass,
+		PlayerSpec:        row.PlayerSpec,
+		PlayerSubSpec:     row.PlayerSubSpec,
+		PerformanceMetric: row.PerformanceMetric,
+		RatingMetric:      row.RatingMetric,
+		WindowKind:        row.WindowKind,
+		WindowStart:       row.WindowStart,
+		WindowEnd:         row.WindowEnd,
+		Score:             row.Score,
+		ComputedAt:        row.ComputedAt,
+		BestRaw:           row.BestRaw.Float64,
+		BestDurationSecs:  row.BestDurationSecs.Float64,
+		PlayerName:        row.PlayerName,
+		GuildName:         row.GuildName,
+		RealmName:         row.RealmName,
+	}
+}
+
+func convertEvolvingAllClassPlayerTenantScopeScore(row database.ListEvolvingAllClassPlayerTenantScopeScoresRow) database.ListActiveAllClassPlayerTenantScopeScoresRow {
+	return database.ListActiveAllClassPlayerTenantScopeScoresRow{
+		TenantID:          row.TenantID,
+		RealmID:           row.RealmID,
+		PlayerGuid:        row.PlayerGuid,
+		InstanceName:      row.InstanceName,
+		DifficultyName:    row.DifficultyName,
+		MaxPlayers:        row.MaxPlayers,
+		PlayerClass:       row.PlayerClass,
+		PlayerSpec:        row.PlayerSpec,
+		PlayerSubSpec:     row.PlayerSubSpec,
+		PerformanceMetric: row.PerformanceMetric,
+		RatingMetric:      row.RatingMetric,
+		WindowKind:        row.WindowKind,
+		WindowStart:       row.WindowStart,
+		WindowEnd:         row.WindowEnd,
+		Score:             row.Score,
+		ComputedAt:        row.ComputedAt,
+		BestRaw:           row.BestRaw.Float64,
+		BestDurationSecs:  row.BestDurationSecs.Float64,
+		PlayerName:        row.PlayerName,
+		GuildName:         row.GuildName,
+		RealmName:         row.RealmName,
+	}
 }

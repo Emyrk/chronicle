@@ -18,6 +18,7 @@ import (
 )
 
 type tenantLeaderboardStub struct {
+	tenantRatingReader
 	tenant, generation uuid.UUID
 	calls              int
 	changeAt           int

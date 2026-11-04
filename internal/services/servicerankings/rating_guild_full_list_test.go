@@ -16,6 +16,7 @@ import (
 )
 
 type publishedGuildListStub struct {
+	publishedGuildFullListReader
 	tenant, generation uuid.UUID
 	calls, changeAt    int
 	bossParams         *database.GetPublishedGuildBossFullListParams

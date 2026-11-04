@@ -16,7 +16,10 @@ import (
 )
 
 type publishedListStub struct {
+	publishedPlayerFullListReader
 	tenant, generation uuid.UUID
+	evolving           bool
+	evolvingRows       []any
 	bossParams         *database.GetPublishedPlayerBossFullListParams
 	scopeParams        *database.GetPublishedPlayerScopeFullListParams
 }
@@ -78,4 +81,35 @@ func TestPublishedPlayerFullList(t *testing.T) {
 	require.Equal(t, http.StatusOK, fullListRequest(q, tenant, stub).Code)
 	require.Equal(t, "all_time", stub.scopeParams.OtherWindowKind)
 	require.Equal(t, "career", stub.scopeParams.RenownWindowKind)
+}
+
+func (s *publishedListStub) GetTenantRatingReadState(context.Context, uuid.UUID) (string, error) {
+	if s.evolving {
+		return "evolving", nil
+	}
+	return "legacy", nil
+}
+func (s *publishedListStub) GetEvolvingPlayerBossFullList(_ context.Context, p database.GetEvolvingPlayerBossFullListParams) (database.GetEvolvingPlayerBossFullListRow, error) {
+	return database.GetEvolvingPlayerBossFullListRow{Total: int64(len(s.evolvingRows)), Rows: s.evolvingRows}, nil
+}
+func (s *publishedListStub) GetEvolvingPlayerScopeFullList(_ context.Context, p database.GetEvolvingPlayerScopeFullListParams) (database.GetEvolvingPlayerScopeFullListRow, error) {
+	return database.GetEvolvingPlayerScopeFullListRow{Total: int64(len(s.evolvingRows)), Rows: s.evolvingRows}, nil
+}
+func TestEvolvingPlayerFullListWithoutGeneration(t *testing.T) {
+	t.Parallel()
+	tenant := uuid.New()
+	stub := &publishedListStub{tenant: tenant, evolving: true}
+	q := url.Values{"instance_name": {"Molten Core"}, "encounter_name": {"Ragnaros"}, "difficulty_name": {"Heroic"}, "max_players": {"40"}, "performance_metric": {"dps"}, "rating_metric": {"peak"}, "window_kind": {"period"}}
+	w := fullListRequest(q, tenant, stub)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var out chroniclesdk.PublishedPlayerFullListResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	require.Empty(t, out.Rows)
+	stub.evolvingRows = []any{map[string]any{"rank": 1, "entry": map[string]any{"generation_id": uuid.Nil, "realm_id": uuid.New(), "player_guid": "abc", "score": 80.0}}}
+	w = fullListRequest(q, tenant, stub)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	require.EqualValues(t, 1, out.Total)
+	require.Len(t, out.Rows, 1)
+	require.Equal(t, "abc", out.Rows[0].Entry.PlayerGUID)
 }

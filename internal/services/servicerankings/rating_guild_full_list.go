@@ -20,7 +20,9 @@ import (
 type publishedGuildFullListReader interface {
 	GetActiveTenantRatingGeneration(context.Context, uuid.UUID) (uuid.UUID, error)
 	GetPublishedGuildBossFullList(context.Context, database.GetPublishedGuildBossFullListParams) (database.GetPublishedGuildBossFullListRow, error)
+	GetEvolvingGuildBossFullList(context.Context, database.GetEvolvingGuildBossFullListParams) (database.GetEvolvingGuildBossFullListRow, error)
 	GetPublishedGuildScopeFullList(context.Context, database.GetPublishedGuildScopeFullListParams) (database.GetPublishedGuildScopeFullListRow, error)
+	GetEvolvingGuildScopeFullList(context.Context, database.GetEvolvingGuildScopeFullListParams) (database.GetEvolvingGuildScopeFullListRow, error)
 }
 
 func (s *Service) handlePublishedGuildFullList(w http.ResponseWriter, r *http.Request) {
@@ -67,8 +69,13 @@ func handlePublishedGuildFullListWithStore(store publishedGuildFullListReader, w
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	evolving, modeErr := ratingEvolvingReader(ctx, store, tenant)
+	if modeErr != nil {
+		httpapi.InternalServerError(w, modeErr)
+		return
+	}
 	result := chroniclesdk.PublishedGuildFullListResponse{Rows: []chroniclesdk.PublishedGuildFullListRow{}, Page: int(page)}
-	if generation == uuid.Nil || err != nil {
+	if !evolving && (generation == uuid.Nil || err != nil) {
 		httpapi.Write(ctx, w, http.StatusOK, result)
 		return
 	}
@@ -91,20 +98,40 @@ func handlePublishedGuildFullListWithStore(store publishedGuildFullListReader, w
 		RealmIds: realms, SearchQuery: query,
 		LimitCount: int32(limit), OffsetCount: int32(page * limit),
 	}
+	if evolving {
+		params.GenerationID = uuid.Nil
+	}
 	var total int64
 	var rawRows any
 	if q.Has("encounter_name") {
-		row, readErr := store.GetPublishedGuildBossFullList(ctx, params)
+		var row database.GetPublishedGuildBossFullListRow
+		var readErr error
+		if evolving {
+			var selected database.GetEvolvingGuildBossFullListRow
+			selected, readErr = store.GetEvolvingGuildBossFullList(ctx, database.GetEvolvingGuildBossFullListParams(params))
+			row = database.GetPublishedGuildBossFullListRow(selected)
+		} else {
+			row, readErr = store.GetPublishedGuildBossFullList(ctx, params)
+		}
 		total, rawRows, err = row.Total, row.Rows, readErr
 	} else {
-		row, readErr := store.GetPublishedGuildScopeFullList(ctx, database.GetPublishedGuildScopeFullListParams{
+		paramsScope := database.GetPublishedGuildScopeFullListParams{
 			TenantID: params.TenantID, GenerationID: params.GenerationID, InstanceName: params.InstanceName,
 			DifficultyName: params.DifficultyName, MaxPlayers: params.MaxPlayers, RatingMetric: params.RatingMetric, WindowKind: params.WindowKind, RealmIds: params.RealmIds,
 			SearchQuery: params.SearchQuery, OtherWindowKind: params.OtherWindowKind,
 			RenownWindowKind: params.RenownWindowKind, OtherDifficultyName: params.OtherDifficultyName,
 			OtherMaxPlayers: params.OtherMaxPlayers,
 			OffsetCount:     params.OffsetCount, LimitCount: params.LimitCount,
-		})
+		}
+		var row database.GetPublishedGuildScopeFullListRow
+		var readErr error
+		if evolving {
+			var selected database.GetEvolvingGuildScopeFullListRow
+			selected, readErr = store.GetEvolvingGuildScopeFullList(ctx, database.GetEvolvingGuildScopeFullListParams(paramsScope))
+			row = database.GetPublishedGuildScopeFullListRow(selected)
+		} else {
+			row, readErr = store.GetPublishedGuildScopeFullList(ctx, paramsScope)
+		}
 		total, rawRows, err = row.Total, row.Rows, readErr
 	}
 	if err != nil {
@@ -114,6 +141,9 @@ func handlePublishedGuildFullListWithStore(store publishedGuildFullListReader, w
 	// Offset pages have no cursor. Reject a page assembled across a published
 	// generation switch rather than returning misleading ranks/total.
 	active, err := store.GetActiveTenantRatingGeneration(ctx, tenant)
+	if evolving {
+		active, err = generation, nil
+	}
 	if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, sql.ErrNoRows) || (err == nil && active != generation) {
 		tenantRatingStale(w, r)
 		return
