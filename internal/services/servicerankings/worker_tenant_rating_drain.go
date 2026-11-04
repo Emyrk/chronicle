@@ -82,8 +82,9 @@ func (w *WorkerDrainTenantRatings) Work(ctx context.Context, job *river.Job[Args
 			return ratingmath.RefreshDirtyTenantPeak(ctx, w.Store, tenant, time.Now().UTC())
 		}},
 	}
-	// Leave headroom under River's one-minute job timeout for the last page.
-	return drainTenantRatingPages(ctx, stages, time.Now().Add(45*time.Second), time.Now)
+	// River is configured with a 30-minute job timeout; the one-minute budget
+	// is deliberately soft, allowing a page already started to finish.
+	return drainTenantRatingPages(ctx, stages, time.Now().Add(time.Minute), time.Now)
 }
 
 type ratingDrainStage struct {
@@ -95,12 +96,17 @@ type ratingDrainStage struct {
 // cycle means no stage made progress (including when generation gates prevent
 // writes), so leave remaining dirty intent for the next periodic dispatch.
 func drainTenantRatingPages(ctx context.Context, stages []ratingDrainStage, deadline time.Time, now func() time.Time) error {
+	firstPage := true
 	for {
 		progress := false
 		for _, stage := range stages {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
+			if !firstPage && !now().Before(deadline) {
+				return river.JobSnooze(time.Second)
+			}
+			firstPage = false
 			count, err := stage.run(ctx)
 			if err != nil {
 				return fmt.Errorf("drain tenant rating %s: %w", stage.name, err)
@@ -109,9 +115,6 @@ func drainTenantRatingPages(ctx context.Context, stages []ratingDrainStage, dead
 		}
 		if !progress {
 			return nil
-		}
-		if !now().Before(deadline) {
-			return river.JobSnooze(time.Second)
 		}
 	}
 }

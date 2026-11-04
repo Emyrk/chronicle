@@ -57,8 +57,8 @@ func TestDrainTenantRatingPagesSnoozesAfterDeadlineWithProgress(t *testing.T) {
 	if !errors.As(err, &snooze) {
 		t.Fatalf("expected River snooze, got %v", err)
 	}
-	if !reflect.DeepEqual(calls, []string{"runs", "renown", "mastery", "peak"}) {
-		t.Fatalf("deadline interrupted cycle: %v", calls)
+	if !reflect.DeepEqual(calls, []string{"runs"}) {
+		t.Fatalf("deadline did not stop before starting another page: %v", calls)
 	}
 }
 
