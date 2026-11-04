@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
@@ -26,10 +27,10 @@ type pendingTalent struct {
 	talents *combatant.Talents
 }
 
-// respecSpellID is the Turtle WoW goblin respec spell.
-// When a player casts this, their talent data is invalidated until a new
-// COMBATANT_INFO message arrives with fresh talents.
-const respecSpellID = 57734
+// respecAuraSpellID is the Turtle WoW goblin respec debuff.
+// When this aura is applied to a player, their talent data is invalidated until
+// a fresh talent update arrives.
+const respecAuraSpellID = 57734
 
 type Tracker struct {
 	instancehook.BaseHook
@@ -382,16 +383,16 @@ func (g *Tracker) ProcessMessage(active bool, encounterID uuid.UUID, msg message
 		g.CombatantTalents(ty)
 		// Fresh talent data also repairs invalidation.
 		delete(g.InvalidatedTalents, ty.Guid)
-	case *messages.SpellGo:
-		// Detect respec: when a player casts the goblin respec spell,
-		// invalidate their talent data until the next talent update.
-		if ty.SpellData != nil && int(ty.SpellData.ID) == respecSpellID && ty.Caster.IsPlayer() {
-			g.InvalidatedTalents[ty.Caster] = struct{}{}
-			if p, ok := g.Players[ty.Caster]; ok {
+	case *messages.Aura:
+		// The goblin respec is only logged as a debuff application. Invalidate
+		// the affected player's talents until the next talent update.
+		if ty.State == types.AuraStateAdded && ty.SpellData != nil && int(ty.SpellData.ID) == respecAuraSpellID && ty.Target.IsPlayer() {
+			g.InvalidatedTalents[ty.Target] = struct{}{}
+			if p, ok := g.Players[ty.Target]; ok {
 				p.Talents = nil
-				g.Players[ty.Caster] = p
+				g.Players[ty.Target] = p
 			}
-			g.units.InvalidatePlayerTalents(ty.Caster)
+			g.units.InvalidatePlayerTalents(ty.Target)
 		}
 	case *messages.Transmog:
 		g.Transmog(ty)

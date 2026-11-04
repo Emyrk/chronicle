@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -116,9 +117,10 @@ func TestRespecInvalidatesRankingTalentsUntilFreshUpdate(t *testing.T) {
 	units.UpdatePlayer(initial)
 	tracker.Players[player] = initial
 
-	respec := &messages.SpellGo{
-		Caster:    player,
-		SpellData: &chrondbc.Spell{ID: respecSpellID},
+	respec := &messages.Aura{
+		Target:    player,
+		SpellData: &chrondbc.Spell{ID: respecAuraSpellID},
+		State:     types.AuraStateAdded,
 	}
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, respec))
 
@@ -140,6 +142,12 @@ func TestRespecInvalidatesRankingTalentsUntilFreshUpdate(t *testing.T) {
 	require.NotNil(t, units.Players[player].Talents)
 	assert.Equal(t, [3]uint8{6, 0, 0}, tracker.Players[player].Talents.Summary)
 	assert.Equal(t, [3]uint8{6, 0, 0}, units.Players[player].Talents.Summary)
+
+	respecRemoved := *respec
+	respecRemoved.State = types.AuraStateRemoved
+	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, &respecRemoved))
+	require.NotNil(t, tracker.Players[player].Talents)
+	require.NotNil(t, units.Players[player].Talents)
 
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, respec))
 	freshCombatant := &messages.Combatant{
