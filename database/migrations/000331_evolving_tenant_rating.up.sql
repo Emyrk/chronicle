@@ -230,6 +230,17 @@ CREATE TABLE rating_peak_cohort_pages_evolving (
                  player_spec, player_sub_spec, performance_metric) ON DELETE CASCADE
 );
 
+ALTER TABLE rating_peak_cohort_pages_evolving ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rating_peak_cohort_pages_evolving FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_admin_bypass ON rating_peak_cohort_pages_evolving
+    USING (current_setting('app.tenant_bypass', true) = 'true')
+    WITH CHECK (current_setting('app.tenant_bypass', true) = 'true');
+CREATE POLICY tenant_isolation ON rating_peak_cohort_pages_evolving
+    USING (tenant_id = COALESCE(NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+                                  '00000000-0000-0000-0000-000000000000'::uuid))
+    WITH CHECK (tenant_id = COALESCE(NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+                                       '00000000-0000-0000-0000-000000000000'::uuid));
+
 -- Fixed rules for the evolving writer. The old rebuild function's inline
 -- manifest literals are legacy-only until that writer is retired at cutover.
 -- Resolve flavor awards at refresh time, not from rebuild checkpoints.

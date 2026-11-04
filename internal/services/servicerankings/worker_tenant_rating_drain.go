@@ -66,32 +66,51 @@ type WorkerDrainTenantRatings struct {
 	PagesProcessed *prometheus.CounterVec
 	KeysProcessed  *prometheus.CounterVec
 	PageErrors     *prometheus.CounterVec
+	ActiveJobs     prometheus.Gauge
 }
 
 func (w *WorkerDrainTenantRatings) Work(ctx context.Context, job *river.Job[ArgsDrainTenantRatings]) error {
+	if w.ActiveJobs != nil {
+		w.ActiveJobs.Inc()
+		defer w.ActiveJobs.Dec()
+	}
 	tenant := job.Args.TenantID
 	if tenant == uuid.Nil {
 		ctx = servicetenant.AdminBypass(ctx)
 	} else {
 		ctx = servicetenant.WithTenantID(ctx, tenant)
 	}
-	stages := []ratingDrainStage{
-		{name: "runs", run: func(ctx context.Context) (int, error) {
-			return ratingmath.ReconcileDirtyTenantObservations(ctx, w.Store, tenant)
-		}},
-		{name: "renown", run: func(ctx context.Context) (int, error) {
-			return ratingmath.RefreshDirtyTenantRenown(ctx, w.Store, tenant, time.Now().UTC())
-		}},
-		{name: "mastery", run: func(ctx context.Context) (int, error) {
-			return ratingmath.RefreshDirtyTenantMastery(ctx, w.Store, tenant, time.Now().UTC())
-		}},
-		{name: "peak", run: func(ctx context.Context) (int, error) {
-			return ratingmath.RefreshDirtyTenantPeak(ctx, w.Store, tenant, time.Now().UTC())
-		}},
+	// Do not acknowledge dirty intent while the active generation is being
+	// copied. The copier changes the reader state only after its last page;
+	// the next dispatch then replays all mutations against evolving rows.
+	state, err := w.Store.GetTenantRatingReadState(ctx, tenant)
+	if err != nil {
+		return fmt.Errorf("read rating cutover state: %w", err)
 	}
+	if state != "evolving" {
+		return nil
+	}
+	stages := evolvingRatingDrainStages(w.Store, tenant)
 	// River is configured with a 30-minute job timeout; the one-minute budget
 	// is deliberately soft, allowing a page already started to finish.
 	return drainTenantRatingPages(ctx, stages, time.Now().Add(time.Minute), time.Now, w)
+}
+
+func evolvingRatingDrainStages(store database.Store, tenant uuid.UUID) []ratingDrainStage {
+	return []ratingDrainStage{
+		{name: "runs", run: func(ctx context.Context) (int, error) {
+			return ratingmath.ReconcileDirtyTenantObservations(ctx, store, tenant)
+		}},
+		{name: "renown", run: func(ctx context.Context) (int, error) {
+			return ratingmath.RefreshEvolvingTenantRenown(ctx, store, tenant, time.Now().UTC())
+		}},
+		{name: "mastery", run: func(ctx context.Context) (int, error) {
+			return ratingmath.RefreshEvolvingTenantMastery(ctx, store, tenant, time.Now().UTC())
+		}},
+		{name: "peak", run: func(ctx context.Context) (int, error) {
+			return ratingmath.RefreshEvolvingTenantPeak(ctx, store, tenant, time.Now().UTC())
+		}},
+	}
 }
 
 type ratingDrainStage struct {
@@ -115,7 +134,11 @@ func drainTenantRatingPages(ctx context.Context, stages []ratingDrainStage, dead
 			}
 			firstPage = false
 			started := time.Now()
-			count, err := stage.run(ctx)
+			// A slow page may overrun the soft invocation budget, but may not
+			// monopolize a rankings worker indefinitely.
+			pageCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+			count, err := stage.run(pageCtx)
+			cancel()
 			if metrics != nil {
 				if metrics.PageDuration != nil {
 					metrics.PageDuration.WithLabelValues(stage.name).Observe(time.Since(started).Seconds())

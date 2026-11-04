@@ -1,3 +1,5 @@
+import { useQuery } from "@tanstack/react-query"
+import type { TenantRatingCatchupResponse } from "@/api/typesGenerated"
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react"
 import { ArrowDown, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -50,6 +52,16 @@ export function RatingBoards({
   toolbar?: ReactNode
   live?: RatingLiveData
 }) {
+  const { data: catchup } = useQuery({
+    queryKey: ["ratings", "catchup"],
+    queryFn: async (): Promise<TenantRatingCatchupResponse> => {
+      const response = await fetch("/api/v1/rankings/ratings/catchup")
+      if (!response.ok) throw new Error(`Rating status failed (${response.status})`)
+      return response.json() as Promise<TenantRatingCatchupResponse>
+    },
+    enabled: !!live,
+    refetchInterval: 15_000,
+  })
   const theme = METRIC_THEMES[view]
   const title = titleOverride ?? scopeTitle(scope, instanceName)
   // "All N ranked" swaps the boards for the full table in place. It stays open across metrics and
@@ -96,6 +108,7 @@ export function RatingBoards({
 
   return (
     <div className="space-y-5" style={{ "--metric": theme.accent } as CSSProperties} data-metric={view}>
+      {live && <p role="status" className="px-1 text-xs text-muted-foreground">{catchup?.caught_up ? "Caught up" : "Catching up"} · Ratings can change as historical results are repaired.</p>}
       {/* Metric taglines (METRIC_THEMES[*].tagline) are hidden for now to save vertical space; they come back later. */}
       {/* The top: the board, or (opened, searched, or a spec, which has no smaller boards) the full table. */}
       {pending?.status === "error" ? (

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AdminRatingRebuilds } from "./AdminRatingRebuilds";
+import { AdminRatingCatchup } from "./AdminRatingCatchup";
 import type { LeaderboardVersionRequirements } from "@/api/typesGenerated";
 import { useAdminInstanceNames } from "@/api/queries";
 import { Loader2 } from "lucide-react";
@@ -190,9 +190,7 @@ export function AdminLeaderboardPage() {
         <div>
           <h3 className="font-semibold">Rating maintenance</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Renown fact repair runs daily; full rating rebuilds are manual and expensive. For recovery or rule changes, wait for Renown repair to finish
-            before rebuilding ratings across all tenants. Incremental observation repair and rolling-window expiry run separately.
-            Enqueueing is not the same as publishing scores.
+            Renown fact repair runs daily. Rating changes flow through durable dirty keys and are repaired by the tenant drain worker; the catch-up board below shows progress.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -200,20 +198,16 @@ export function AdminLeaderboardPage() {
             {pendingRatingJob === "renown-repair" && <Loader2 className="mr-2 size-4 animate-spin" />}
             Repair Renown facts (all tenants)
           </Button>
-          <Button disabled={pendingRatingJob !== null} onClick={() => void enqueueRatingMaintenance("rebuild-all")}>
-            {pendingRatingJob === "rebuild-all" && <Loader2 className="mr-2 size-4 animate-spin" />}
-            Rebuild ratings + Renown (all tenants with realms)
-          </Button>
         </div>
         {ratingJobResult && (
           <p role="status" className="text-sm text-muted-foreground">
-            {ratingJobResult.action === "renown-repair" ? "Renown repair" : "Rating rebuild"} was queued
+            Renown repair was queued
             {" "}(job #{ratingJobResult.job.job_id}, {ratingJobResult.job.job_state}). Check the River jobs dashboard for completion.
           </p>
         )}
         {ratingJobError && <p role="alert" className="text-sm text-destructive">{ratingJobError}</p>}
       </Card>
-      <AdminRatingRebuilds />
+      <AdminRatingCatchup />
     </div>
   );
 }

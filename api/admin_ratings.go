@@ -77,9 +77,8 @@ func (api *API) ratingAdminRebuild(r *http.Request) error {
 // migration-owned, so the legacy handlers below must not be registered here.
 func (api *API) adminRatingRoutes(r chi.Router) {
 	r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
+	r.Get("/catchup", api.AdminListRatingCatchup)
 	r.Post("/renown/repair", api.AdminDispatchRenownRepair)
-	r.Post("/rebuild", api.AdminRebuildRatings)
-	r.Post("/rebuild/all", api.AdminDispatchAllRatingScores)
 }
 
 // AdminDispatchRenownRepair starts a bounded historical repair pass across all

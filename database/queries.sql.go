@@ -21963,6 +21963,156 @@ func (q *sqlQuerier) TakeRateLimitTokens(ctx context.Context, arg TakeRateLimitT
 	return i, err
 }
 
+const listRecentTenantRatingDrainJobs = `-- name: ListRecentTenantRatingDrainJobs :many
+SELECT id, COALESCE(args->>'tenant_id', '')::text AS tenant_id, state::text AS state,
+       created_at, attempted_at, finalized_at,
+       COALESCE(errors[array_length(errors, 1)]->>'error', '')::text AS last_error
+FROM river_job
+WHERE kind = 'drain-tenant-ratings'
+ORDER BY id DESC
+LIMIT 2000
+`
+
+type ListRecentTenantRatingDrainJobsRow struct {
+	ID          int64              `db:"id" json:"id"`
+	TenantID    string             `db:"tenant_id" json:"tenant_id"`
+	State       string             `db:"state" json:"state"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	AttemptedAt pgtype.Timestamptz `db:"attempted_at" json:"attempted_at"`
+	FinalizedAt pgtype.Timestamptz `db:"finalized_at" json:"finalized_at"`
+	LastError   string             `db:"last_error" json:"last_error"`
+}
+
+// A bounded view of recent drain attempts for the admin catch-up board. Dirty
+// keys remain authoritative even when an older completed job ages out here.
+func (q *sqlQuerier) ListRecentTenantRatingDrainJobs(ctx context.Context) ([]ListRecentTenantRatingDrainJobsRow, error) {
+	rows, err := q.db.Query(ctx, listRecentTenantRatingDrainJobs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecentTenantRatingDrainJobsRow
+	for rows.Next() {
+		var i ListRecentTenantRatingDrainJobsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.State,
+			&i.CreatedAt,
+			&i.AttemptedAt,
+			&i.FinalizedAt,
+			&i.LastError,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTenantRatingCatchupStatus = `-- name: ListTenantRatingCatchupStatus :many
+WITH tenants AS (
+    SELECT DISTINCT COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id
+    FROM wow_servers server JOIN wow_server_realms realm ON realm.server_id = server.id
+), dirty_runs AS (
+    SELECT tenant_id, count(*)::bigint AS total, min(changed_at) AS oldest
+    FROM rating_dirty_observation_runs GROUP BY tenant_id
+), dirty_renown AS (
+    SELECT tenant_id, count(*)::bigint AS total, min(changed_at) AS oldest
+    FROM rating_dirty_renown_subjects GROUP BY tenant_id
+), dirty_mastery AS (
+    SELECT tenant_id, count(*)::bigint AS total, min(changed_at) AS oldest
+    FROM rating_dirty_mastery_subjects GROUP BY tenant_id
+), dirty_peak AS (
+    SELECT tenant_id, count(*)::bigint AS total, min(changed_at) AS oldest
+    FROM rating_dirty_peak_cohorts GROUP BY tenant_id
+), peak_pages AS (
+    SELECT tenant_id, count(*)::bigint AS total
+    FROM rating_peak_cohort_pages_evolving GROUP BY tenant_id
+)
+SELECT tenants.tenant_id::uuid AS tenant_id,
+       COALESCE(dirty_runs.total, 0)::bigint AS dirty_runs,
+       dirty_runs.oldest::timestamptz AS oldest_run,
+       COALESCE(dirty_renown.total, 0)::bigint AS dirty_renown,
+       dirty_renown.oldest::timestamptz AS oldest_renown,
+       COALESCE(dirty_mastery.total, 0)::bigint AS dirty_mastery,
+       dirty_mastery.oldest::timestamptz AS oldest_mastery,
+       COALESCE(dirty_peak.total, 0)::bigint AS dirty_peak,
+       dirty_peak.oldest::timestamptz AS oldest_peak,
+       COALESCE(peak_pages.total, 0)::bigint AS peak_pages,
+       bootstrap.after_run_id, bootstrap.source_cutoff, bootstrap.completed_at,
+       COALESCE(read_state.state, CASE WHEN EXISTS (
+           SELECT 1 FROM rating_score_generations g
+           WHERE g.tenant_id = tenants.tenant_id AND g.status = 'active'
+       ) THEN 'legacy' ELSE 'evolving' END)::text AS read_state
+FROM tenants
+LEFT JOIN dirty_runs USING (tenant_id)
+LEFT JOIN dirty_renown USING (tenant_id)
+LEFT JOIN dirty_mastery USING (tenant_id)
+LEFT JOIN dirty_peak USING (tenant_id)
+LEFT JOIN peak_pages USING (tenant_id)
+LEFT JOIN rating_live_evidence_bootstraps bootstrap USING (tenant_id)
+LEFT JOIN tenant_rating_read_states read_state USING (tenant_id)
+ORDER BY tenants.tenant_id
+`
+
+type ListTenantRatingCatchupStatusRow struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	DirtyRuns     int64              `db:"dirty_runs" json:"dirty_runs"`
+	OldestRun     pgtype.Timestamptz `db:"oldest_run" json:"oldest_run"`
+	DirtyRenown   int64              `db:"dirty_renown" json:"dirty_renown"`
+	OldestRenown  pgtype.Timestamptz `db:"oldest_renown" json:"oldest_renown"`
+	DirtyMastery  int64              `db:"dirty_mastery" json:"dirty_mastery"`
+	OldestMastery pgtype.Timestamptz `db:"oldest_mastery" json:"oldest_mastery"`
+	DirtyPeak     int64              `db:"dirty_peak" json:"dirty_peak"`
+	OldestPeak    pgtype.Timestamptz `db:"oldest_peak" json:"oldest_peak"`
+	PeakPages     int64              `db:"peak_pages" json:"peak_pages"`
+	AfterRunID    uuid.NullUUID      `db:"after_run_id" json:"after_run_id"`
+	SourceCutoff  pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	CompletedAt   pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	ReadState     string             `db:"read_state" json:"read_state"`
+}
+
+// One bounded row per tenant with realms. Aggregate each dirty table once rather
+// than running four correlated count(*) scans per tenant on every admin poll.
+func (q *sqlQuerier) ListTenantRatingCatchupStatus(ctx context.Context) ([]ListTenantRatingCatchupStatusRow, error) {
+	rows, err := q.db.Query(ctx, listTenantRatingCatchupStatus)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTenantRatingCatchupStatusRow
+	for rows.Next() {
+		var i ListTenantRatingCatchupStatusRow
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.DirtyRuns,
+			&i.OldestRun,
+			&i.DirtyRenown,
+			&i.OldestRenown,
+			&i.DirtyMastery,
+			&i.OldestMastery,
+			&i.DirtyPeak,
+			&i.OldestPeak,
+			&i.PeakPages,
+			&i.AfterRunID,
+			&i.SourceCutoff,
+			&i.CompletedAt,
+			&i.ReadState,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const acquireRatingRebuildConfigLock = `-- name: AcquireRatingRebuildConfigLock :exec
 SELECT pg_advisory_xact_lock(1131453276, 1)
 `
@@ -23087,6 +23237,1623 @@ func (q *sqlQuerier) UpsertPlayerTenantRenownBoss(ctx context.Context, arg Upser
 	return result.RowsAffected(), nil
 }
 
+const currentTenantRatingPolicy = `-- name: CurrentTenantRatingPolicy :one
+
+SELECT current_tenant_rating_policy($1::uuid)
+`
+
+// Evolving projections reuse the same fact and cohort calculations as legacy live scores.
+func (q *sqlQuerier) CurrentTenantRatingPolicy(ctx context.Context, tenantID uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, currentTenantRatingPolicy, tenantID)
+	var current_tenant_rating_policy []byte
+	err := row.Scan(&current_tenant_rating_policy)
+	return current_tenant_rating_policy, err
+}
+
+const evolvingDeleteGuildLiveMasteryScope = `-- name: EvolvingDeleteGuildLiveMasteryScope :exec
+DELETE FROM guild_tenant_rating_scope_scores_evolving
+WHERE tenant_id = $1 AND realm_id = $2
+  AND guild_id = $3 AND instance_name = $4
+  AND difficulty_name = $5 AND max_players = $6
+  AND rating_metric = $7 AND window_kind = $8
+`
+
+type EvolvingDeleteGuildLiveMasteryScopeParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	RatingMetric   string    `db:"rating_metric" json:"rating_metric"`
+	WindowKind     string    `db:"window_kind" json:"window_kind"`
+}
+
+func (q *sqlQuerier) EvolvingDeleteGuildLiveMasteryScope(ctx context.Context, arg EvolvingDeleteGuildLiveMasteryScopeParams) error {
+	_, err := q.db.Exec(ctx, evolvingDeleteGuildLiveMasteryScope,
+		arg.TenantID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RatingMetric,
+		arg.WindowKind,
+	)
+	return err
+}
+
+const evolvingDeleteGuildLiveMasteryScores = `-- name: EvolvingDeleteGuildLiveMasteryScores :exec
+DELETE FROM guild_tenant_rating_boss_scores_evolving
+WHERE tenant_id = $1 AND realm_id = $2
+  AND guild_id = $3 AND instance_name = $4 AND encounter_name = $5
+  AND difficulty_name = $6 AND max_players = $7
+  AND rating_metric IN ('mastery', 'ranked_mastery')
+`
+
+type EvolvingDeleteGuildLiveMasteryScoresParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+}
+
+func (q *sqlQuerier) EvolvingDeleteGuildLiveMasteryScores(ctx context.Context, arg EvolvingDeleteGuildLiveMasteryScoresParams) error {
+	_, err := q.db.Exec(ctx, evolvingDeleteGuildLiveMasteryScores,
+		arg.TenantID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+	)
+	return err
+}
+
+const evolvingDeleteGuildTenantRenownBoss = `-- name: EvolvingDeleteGuildTenantRenownBoss :exec
+DELETE FROM guild_tenant_rating_boss_scores_evolving AS score
+WHERE score.tenant_id = $1
+  AND score.realm_id = $2 AND score.guild_id = $3
+  AND score.instance_name = $4 AND score.encounter_name = $5
+  AND score.rating_metric = 'renown' AND score.window_kind = $6
+`
+
+type EvolvingDeleteGuildTenantRenownBossParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID       uuid.UUID `db:"guild_id" json:"guild_id"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+	WindowKind    string    `db:"window_kind" json:"window_kind"`
+}
+
+func (q *sqlQuerier) EvolvingDeleteGuildTenantRenownBoss(ctx context.Context, arg EvolvingDeleteGuildTenantRenownBossParams) error {
+	_, err := q.db.Exec(ctx, evolvingDeleteGuildTenantRenownBoss,
+		arg.TenantID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.WindowKind,
+	)
+	return err
+}
+
+const evolvingDeleteGuildTenantRenownScope = `-- name: EvolvingDeleteGuildTenantRenownScope :exec
+DELETE FROM guild_tenant_rating_scope_scores_evolving AS scope
+WHERE scope.tenant_id = $1
+  AND scope.realm_id = $2 AND scope.guild_id = $3
+  AND scope.rating_metric = 'renown' AND scope.window_kind = $4
+  AND scope.instance_name = $5
+`
+
+type EvolvingDeleteGuildTenantRenownScopeParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID      uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID      uuid.UUID `db:"guild_id" json:"guild_id"`
+	WindowKind   string    `db:"window_kind" json:"window_kind"`
+	InstanceName string    `db:"instance_name" json:"instance_name"`
+}
+
+func (q *sqlQuerier) EvolvingDeleteGuildTenantRenownScope(ctx context.Context, arg EvolvingDeleteGuildTenantRenownScopeParams) error {
+	_, err := q.db.Exec(ctx, evolvingDeleteGuildTenantRenownScope,
+		arg.TenantID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.WindowKind,
+		arg.InstanceName,
+	)
+	return err
+}
+
+const evolvingDeleteLivePeakCohortDenominator = `-- name: EvolvingDeleteLivePeakCohortDenominator :exec
+DELETE FROM rating_peak_cohort_denominators_evolving
+WHERE tenant_id = $1
+  AND subject_kind = $2 AND instance_name = $3
+  AND encounter_name = $4 AND difficulty_name = $5
+  AND max_players = $6 AND player_class = $7
+  AND player_spec = $8 AND player_sub_spec = $9
+  AND performance_metric = $10 AND window_kind = $11
+`
+
+type EvolvingDeleteLivePeakCohortDenominatorParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string    `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	WindowKind        string    `db:"window_kind" json:"window_kind"`
+}
+
+func (q *sqlQuerier) EvolvingDeleteLivePeakCohortDenominator(ctx context.Context, arg EvolvingDeleteLivePeakCohortDenominatorParams) error {
+	_, err := q.db.Exec(ctx, evolvingDeleteLivePeakCohortDenominator,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.WindowKind,
+	)
+	return err
+}
+
+const evolvingDeleteLivePeakGuildScope = `-- name: EvolvingDeleteLivePeakGuildScope :exec
+DELETE FROM guild_tenant_rating_scope_scores_evolving
+WHERE tenant_id = $1
+  AND realm_id = $2 AND guild_id = $3
+  AND instance_name = $4 AND difficulty_name = $5
+  AND max_players = $6 AND rating_metric = 'peak'
+  AND window_kind = $7
+`
+
+type EvolvingDeleteLivePeakGuildScopeParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	WindowKind     string    `db:"window_kind" json:"window_kind"`
+}
+
+func (q *sqlQuerier) EvolvingDeleteLivePeakGuildScope(ctx context.Context, arg EvolvingDeleteLivePeakGuildScopeParams) error {
+	_, err := q.db.Exec(ctx, evolvingDeleteLivePeakGuildScope,
+		arg.TenantID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.WindowKind,
+	)
+	return err
+}
+
+const evolvingDeleteLivePeakGuildScores = `-- name: EvolvingDeleteLivePeakGuildScores :exec
+DELETE FROM guild_tenant_rating_boss_scores_evolving
+WHERE tenant_id = $1
+  AND realm_id = $2 AND guild_id = $3
+  AND instance_name = $4 AND encounter_name = $5
+  AND difficulty_name = $6 AND max_players = $7
+  AND rating_metric = 'peak'
+`
+
+type EvolvingDeleteLivePeakGuildScoresParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+}
+
+func (q *sqlQuerier) EvolvingDeleteLivePeakGuildScores(ctx context.Context, arg EvolvingDeleteLivePeakGuildScoresParams) error {
+	_, err := q.db.Exec(ctx, evolvingDeleteLivePeakGuildScores,
+		arg.TenantID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+	)
+	return err
+}
+
+const evolvingDeleteLivePeakPlayerScope = `-- name: EvolvingDeleteLivePeakPlayerScope :exec
+DELETE FROM player_tenant_rating_scope_scores_evolving
+WHERE tenant_id = $1
+  AND realm_id = $2 AND player_guid = $3
+  AND instance_name = $4 AND difficulty_name = $5
+  AND max_players = $6 AND player_class = $7
+  AND player_spec = $8 AND player_sub_spec = $9
+  AND performance_metric = $10 AND rating_metric = 'peak'
+  AND window_kind = $11
+`
+
+type EvolvingDeleteLivePeakPlayerScopeParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID         string    `db:"subject_id" json:"subject_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	WindowKind        string    `db:"window_kind" json:"window_kind"`
+}
+
+func (q *sqlQuerier) EvolvingDeleteLivePeakPlayerScope(ctx context.Context, arg EvolvingDeleteLivePeakPlayerScopeParams) error {
+	_, err := q.db.Exec(ctx, evolvingDeleteLivePeakPlayerScope,
+		arg.TenantID,
+		arg.RealmID,
+		arg.SubjectID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.WindowKind,
+	)
+	return err
+}
+
+const evolvingDeleteLivePeakPlayerScores = `-- name: EvolvingDeleteLivePeakPlayerScores :exec
+
+DELETE FROM player_tenant_rating_boss_scores_evolving
+WHERE tenant_id = $1
+  AND realm_id = $2 AND player_guid = $3
+  AND instance_name = $4 AND encounter_name = $5
+  AND difficulty_name = $6 AND max_players = $7
+  AND player_class = $8 AND player_spec = $9
+  AND player_sub_spec = $10 AND performance_metric = $11
+  AND rating_metric = 'peak'
+`
+
+type EvolvingDeleteLivePeakPlayerScoresParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID         string    `db:"subject_id" json:"subject_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+}
+
+// These are the same best/tie-break semantics as RatingStagePlayerPeak and
+// RatingStageGuildPeak, applied only to one exact live subject.
+func (q *sqlQuerier) EvolvingDeleteLivePeakPlayerScores(ctx context.Context, arg EvolvingDeleteLivePeakPlayerScoresParams) error {
+	_, err := q.db.Exec(ctx, evolvingDeleteLivePeakPlayerScores,
+		arg.TenantID,
+		arg.RealmID,
+		arg.SubjectID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+	)
+	return err
+}
+
+const evolvingDeletePlayerLiveMasteryScope = `-- name: EvolvingDeletePlayerLiveMasteryScope :exec
+
+DELETE FROM player_tenant_rating_scope_scores_evolving
+WHERE tenant_id = $1 AND realm_id = $2
+  AND player_guid = $3 AND instance_name = $4
+  AND difficulty_name = $5 AND max_players = $6
+  AND player_class = $7 AND player_spec = $8
+  AND player_sub_spec = $9 AND performance_metric = $10
+  AND rating_metric = $11 AND window_kind = $12
+`
+
+type EvolvingDeletePlayerLiveMasteryScopeParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID         string    `db:"subject_id" json:"subject_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string    `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string    `db:"window_kind" json:"window_kind"`
+}
+
+// Recompute raid scopes from all surviving boss rows in this subject/cohort.
+// Go applies the same ZG Edge slot policy as full rebuild before inserting.
+func (q *sqlQuerier) EvolvingDeletePlayerLiveMasteryScope(ctx context.Context, arg EvolvingDeletePlayerLiveMasteryScopeParams) error {
+	_, err := q.db.Exec(ctx, evolvingDeletePlayerLiveMasteryScope,
+		arg.TenantID,
+		arg.RealmID,
+		arg.SubjectID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+	)
+	return err
+}
+
+const evolvingDeletePlayerLiveMasteryScores = `-- name: EvolvingDeletePlayerLiveMasteryScores :exec
+DELETE FROM player_tenant_rating_boss_scores_evolving
+WHERE tenant_id = $1 AND realm_id = $2
+  AND player_guid = $3 AND instance_name = $4 AND encounter_name = $5
+  AND difficulty_name = $6 AND max_players = $7
+  AND player_class = $8 AND player_spec = $9
+  AND player_sub_spec = $10 AND performance_metric = $11
+  AND rating_metric IN ('mastery', 'ranked_mastery')
+`
+
+type EvolvingDeletePlayerLiveMasteryScoresParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID         string    `db:"subject_id" json:"subject_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+}
+
+func (q *sqlQuerier) EvolvingDeletePlayerLiveMasteryScores(ctx context.Context, arg EvolvingDeletePlayerLiveMasteryScoresParams) error {
+	_, err := q.db.Exec(ctx, evolvingDeletePlayerLiveMasteryScores,
+		arg.TenantID,
+		arg.RealmID,
+		arg.SubjectID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+	)
+	return err
+}
+
+const evolvingDeletePlayerTenantRenownBoss = `-- name: EvolvingDeletePlayerTenantRenownBoss :exec
+DELETE FROM player_tenant_rating_boss_scores_evolving AS score
+WHERE score.tenant_id = $1
+  AND score.realm_id = $2 AND score.player_guid = $3
+  AND score.instance_name = $4 AND score.encounter_name = $5
+  AND score.rating_metric = 'renown' AND score.window_kind = $6
+`
+
+type EvolvingDeletePlayerTenantRenownBossParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid    string    `db:"player_guid" json:"player_guid"`
+	InstanceName  string    `db:"instance_name" json:"instance_name"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+	WindowKind    string    `db:"window_kind" json:"window_kind"`
+}
+
+func (q *sqlQuerier) EvolvingDeletePlayerTenantRenownBoss(ctx context.Context, arg EvolvingDeletePlayerTenantRenownBossParams) error {
+	_, err := q.db.Exec(ctx, evolvingDeletePlayerTenantRenownBoss,
+		arg.TenantID,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.WindowKind,
+	)
+	return err
+}
+
+const evolvingDeletePlayerTenantRenownScope = `-- name: EvolvingDeletePlayerTenantRenownScope :exec
+DELETE FROM player_tenant_rating_scope_scores_evolving AS scope
+WHERE scope.tenant_id = $1
+  AND scope.realm_id = $2 AND scope.player_guid = $3
+  AND scope.rating_metric = 'renown' AND scope.window_kind = $4
+  AND scope.instance_name = $5
+`
+
+type EvolvingDeletePlayerTenantRenownScopeParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID      uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid   string    `db:"player_guid" json:"player_guid"`
+	WindowKind   string    `db:"window_kind" json:"window_kind"`
+	InstanceName string    `db:"instance_name" json:"instance_name"`
+}
+
+func (q *sqlQuerier) EvolvingDeletePlayerTenantRenownScope(ctx context.Context, arg EvolvingDeletePlayerTenantRenownScopeParams) error {
+	_, err := q.db.Exec(ctx, evolvingDeletePlayerTenantRenownScope,
+		arg.TenantID,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.WindowKind,
+		arg.InstanceName,
+	)
+	return err
+}
+
+const evolvingGetLivePeakCohortDenominators = `-- name: EvolvingGetLivePeakCohortDenominators :one
+SELECT COALESCE(MAX(rank_one_raw) FILTER (WHERE window_kind = 'all_time'), 0)::double precision AS all_time_raw,
+       COALESCE(MAX(rank_one_raw) FILTER (WHERE window_kind = 'period'), 0)::double precision AS period_raw,
+       (MAX(window_start) FILTER (WHERE window_kind = 'period'))::timestamptz AS period_start,
+       (MAX(window_end) FILTER (WHERE window_kind = 'period'))::timestamptz AS as_of
+FROM rating_peak_cohort_denominators_evolving
+WHERE tenant_id = $1
+  AND subject_kind = $2 AND instance_name = $3
+  AND encounter_name = $4 AND difficulty_name = $5
+  AND max_players = $6 AND player_class = $7
+  AND player_spec = $8 AND player_sub_spec = $9
+  AND performance_metric = $10
+`
+
+type EvolvingGetLivePeakCohortDenominatorsParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string    `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+}
+
+type EvolvingGetLivePeakCohortDenominatorsRow struct {
+	AllTimeRaw  float64            `db:"all_time_raw" json:"all_time_raw"`
+	PeriodRaw   float64            `db:"period_raw" json:"period_raw"`
+	PeriodStart pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	AsOf        pgtype.Timestamptz `db:"as_of" json:"as_of"`
+}
+
+func (q *sqlQuerier) EvolvingGetLivePeakCohortDenominators(ctx context.Context, arg EvolvingGetLivePeakCohortDenominatorsParams) (EvolvingGetLivePeakCohortDenominatorsRow, error) {
+	row := q.db.QueryRow(ctx, evolvingGetLivePeakCohortDenominators,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+	)
+	var i EvolvingGetLivePeakCohortDenominatorsRow
+	err := row.Scan(
+		&i.AllTimeRaw,
+		&i.PeriodRaw,
+		&i.PeriodStart,
+		&i.AsOf,
+	)
+	return i, err
+}
+
+const evolvingGetLivePeakCohortPage = `-- name: EvolvingGetLivePeakCohortPage :one
+
+SELECT revision, after_realm_id, after_subject_id FROM rating_peak_cohort_pages_evolving
+WHERE tenant_id = $1 AND subject_kind = $2
+  AND instance_name = $3 AND encounter_name = $4
+  AND difficulty_name = $5 AND max_players = $6
+  AND player_class = $7 AND player_spec = $8
+  AND player_sub_spec = $9 AND performance_metric = $10
+`
+
+type EvolvingGetLivePeakCohortPageParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string    `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+}
+
+type EvolvingGetLivePeakCohortPageRow struct {
+	Revision       int64     `db:"revision" json:"revision"`
+	AfterRealmID   uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
+	AfterSubjectID string    `db:"after_subject_id" json:"after_subject_id"`
+}
+
+// A previous partial pass can be reused only while its dirty revision matches.
+func (q *sqlQuerier) EvolvingGetLivePeakCohortPage(ctx context.Context, arg EvolvingGetLivePeakCohortPageParams) (EvolvingGetLivePeakCohortPageRow, error) {
+	row := q.db.QueryRow(ctx, evolvingGetLivePeakCohortPage,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+	)
+	var i EvolvingGetLivePeakCohortPageRow
+	err := row.Scan(&i.Revision, &i.AfterRealmID, &i.AfterSubjectID)
+	return i, err
+}
+
+const evolvingInsertGuildLiveMasteryScope = `-- name: EvolvingInsertGuildLiveMasteryScope :execrows
+INSERT INTO guild_tenant_rating_scope_scores_evolving
+    (tenant_id, realm_id, guild_id, instance_name, difficulty_name,
+     max_players, rating_metric, window_kind, window_start, window_end, score)
+SELECT $1, realm.id, guild.id, $2,
+       $3, $4, $5, $6,
+       $7::timestamptz, $8::timestamptz,
+       $9::double precision
+FROM wow_server_realms realm
+JOIN wow_servers server ON server.id = realm.server_id
+JOIN guilds guild ON guild.id = $10 AND guild.realm_id = realm.id
+WHERE realm.id = $11
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+`
+
+type EvolvingInsertGuildLiveMasteryScopeParams struct {
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	RatingMetric   string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind     string             `db:"window_kind" json:"window_kind"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd      pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score          float64            `db:"score" json:"score"`
+	GuildID        uuid.UUID          `db:"guild_id" json:"guild_id"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+}
+
+func (q *sqlQuerier) EvolvingInsertGuildLiveMasteryScope(ctx context.Context, arg EvolvingInsertGuildLiveMasteryScopeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, evolvingInsertGuildLiveMasteryScope,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.GuildID,
+		arg.RealmID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const evolvingInsertGuildLiveMasteryScore = `-- name: EvolvingInsertGuildLiveMasteryScore :execrows
+INSERT INTO guild_tenant_rating_boss_scores_evolving
+    (tenant_id, realm_id, guild_id, instance_name, encounter_name,
+     difficulty_name, max_players, rating_metric, window_kind, window_start, window_end,
+     score, best_locked_parse, form, floor_score, eligible_kills)
+SELECT $1, realm.id, guild.id, $2, $3,
+       $4, $5, $6, $7,
+       $8::timestamptz, $9::timestamptz,
+       $10::double precision, $11::double precision, $12::double precision,
+       $13::double precision, $14::int
+FROM wow_server_realms realm
+JOIN wow_servers server ON server.id = realm.server_id
+JOIN guilds guild ON guild.id = $15 AND guild.realm_id = realm.id
+WHERE realm.id = $16
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+`
+
+type EvolvingInsertGuildLiveMasteryScoreParams struct {
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	RatingMetric   string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind     string             `db:"window_kind" json:"window_kind"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd      pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score          float64            `db:"score" json:"score"`
+	Best           float64            `db:"best" json:"best"`
+	Form           float64            `db:"form" json:"form"`
+	Floor          float64            `db:"floor" json:"floor"`
+	EligibleKills  int32              `db:"eligible_kills" json:"eligible_kills"`
+	GuildID        uuid.UUID          `db:"guild_id" json:"guild_id"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+}
+
+func (q *sqlQuerier) EvolvingInsertGuildLiveMasteryScore(ctx context.Context, arg EvolvingInsertGuildLiveMasteryScoreParams) (int64, error) {
+	result, err := q.db.Exec(ctx, evolvingInsertGuildLiveMasteryScore,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.Best,
+		arg.Form,
+		arg.Floor,
+		arg.EligibleKills,
+		arg.GuildID,
+		arg.RealmID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const evolvingInsertGuildTenantRenownScopes = `-- name: EvolvingInsertGuildTenantRenownScopes :exec
+INSERT INTO guild_tenant_rating_scope_scores_evolving
+    (tenant_id, realm_id, guild_id, instance_name, rating_metric,
+     window_kind, window_start, window_end, score)
+SELECT $1, $2, $3, boss.instance_name,
+       'renown', $4, $5::timestamptz,
+       $6::timestamptz, sum(boss.score)::double precision
+FROM guild_tenant_rating_boss_scores_evolving boss
+WHERE boss.tenant_id = $1
+  AND boss.realm_id = $2 AND boss.guild_id = $3
+  AND boss.rating_metric = 'renown' AND boss.window_kind = $4
+  AND boss.instance_name = $7
+GROUP BY boss.instance_name
+`
+
+type EvolvingInsertGuildTenantRenownScopesParams struct {
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID      uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID      uuid.UUID          `db:"guild_id" json:"guild_id"`
+	WindowKind   string             `db:"window_kind" json:"window_kind"`
+	WindowStart  pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd    pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	InstanceName string             `db:"instance_name" json:"instance_name"`
+}
+
+func (q *sqlQuerier) EvolvingInsertGuildTenantRenownScopes(ctx context.Context, arg EvolvingInsertGuildTenantRenownScopesParams) error {
+	_, err := q.db.Exec(ctx, evolvingInsertGuildTenantRenownScopes,
+		arg.TenantID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.InstanceName,
+	)
+	return err
+}
+
+const evolvingInsertLivePeakGuildScope = `-- name: EvolvingInsertLivePeakGuildScope :execrows
+INSERT INTO guild_tenant_rating_scope_scores_evolving
+    (tenant_id, realm_id, guild_id, instance_name, difficulty_name,
+     max_players, rating_metric, window_kind, window_start, window_end, score)
+SELECT $1, realm.id, guild.id, $2,
+       $3, $4, 'peak', $5,
+       $6::timestamptz, $7::timestamptz,
+       $8::double precision
+FROM wow_server_realms realm
+JOIN wow_servers server ON server.id = realm.server_id
+JOIN guilds guild ON guild.id = $9 AND guild.realm_id = realm.id
+WHERE realm.id = $10
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+`
+
+type EvolvingInsertLivePeakGuildScopeParams struct {
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	WindowKind     string             `db:"window_kind" json:"window_kind"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd      pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score          float64            `db:"score" json:"score"`
+	GuildID        uuid.UUID          `db:"guild_id" json:"guild_id"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+}
+
+func (q *sqlQuerier) EvolvingInsertLivePeakGuildScope(ctx context.Context, arg EvolvingInsertLivePeakGuildScopeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, evolvingInsertLivePeakGuildScope,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.GuildID,
+		arg.RealmID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const evolvingInsertLivePeakGuildScore = `-- name: EvolvingInsertLivePeakGuildScore :execrows
+INSERT INTO guild_tenant_rating_boss_scores_evolving
+    (tenant_id, realm_id, guild_id, instance_name, encounter_name,
+     difficulty_name, max_players, rating_metric, window_kind, window_start, window_end,
+     score, best_raw, rank_one_raw)
+SELECT $1, realm.id, guild.id, $2, $3,
+       $4, $5, 'peak', $6,
+       $7::timestamptz, $8::timestamptz,
+       $9::double precision, $10::double precision, $11::double precision
+FROM wow_server_realms realm
+JOIN wow_servers server ON server.id = realm.server_id
+JOIN guilds guild ON guild.id = $12 AND guild.realm_id = realm.id
+WHERE realm.id = $13
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+`
+
+type EvolvingInsertLivePeakGuildScoreParams struct {
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	WindowKind     string             `db:"window_kind" json:"window_kind"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd      pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score          float64            `db:"score" json:"score"`
+	BestRaw        float64            `db:"best_raw" json:"best_raw"`
+	RankOneRaw     float64            `db:"rank_one_raw" json:"rank_one_raw"`
+	GuildID        uuid.UUID          `db:"guild_id" json:"guild_id"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+}
+
+func (q *sqlQuerier) EvolvingInsertLivePeakGuildScore(ctx context.Context, arg EvolvingInsertLivePeakGuildScoreParams) (int64, error) {
+	result, err := q.db.Exec(ctx, evolvingInsertLivePeakGuildScore,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.BestRaw,
+		arg.RankOneRaw,
+		arg.GuildID,
+		arg.RealmID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const evolvingInsertLivePeakPlayerScope = `-- name: EvolvingInsertLivePeakPlayerScope :execrows
+INSERT INTO player_tenant_rating_scope_scores_evolving
+    (tenant_id, realm_id, player_guid, instance_name, difficulty_name,
+     max_players, player_class, player_spec, player_sub_spec, performance_metric,
+     rating_metric, window_kind, window_start, window_end, score, best_raw, best_duration_secs)
+SELECT $1, realm.id, $2, $3,
+       $4, $5, $6, $7, $8,
+       $9, 'peak', $10,
+       $11::timestamptz, $12::timestamptz,
+       $13::double precision, $14::double precision, $15::double precision
+FROM wow_server_realms realm
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE realm.id = $16
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+`
+
+type EvolvingInsertLivePeakPlayerScopeParams struct {
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SubjectID         string             `db:"subject_id" json:"subject_id"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	BestRaw           float64            `db:"best_raw" json:"best_raw"`
+	BestDurationSecs  float64            `db:"best_duration_secs" json:"best_duration_secs"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+}
+
+func (q *sqlQuerier) EvolvingInsertLivePeakPlayerScope(ctx context.Context, arg EvolvingInsertLivePeakPlayerScopeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, evolvingInsertLivePeakPlayerScope,
+		arg.TenantID,
+		arg.SubjectID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.BestRaw,
+		arg.BestDurationSecs,
+		arg.RealmID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const evolvingInsertLivePeakPlayerScore = `-- name: EvolvingInsertLivePeakPlayerScore :execrows
+
+INSERT INTO player_tenant_rating_boss_scores_evolving
+    (tenant_id, realm_id, player_guid, instance_name, encounter_name,
+     difficulty_name, max_players, player_class, player_spec, player_sub_spec,
+     performance_metric, rating_metric, window_kind, window_start, window_end,
+     score, best_raw, rank_one_raw, best_duration_secs)
+SELECT $1, realm.id, $2, $3, $4,
+       $5, $6, $7, $8, $9,
+       $10, 'peak', $11,
+       $12::timestamptz, $13::timestamptz,
+       $14::double precision, $15::double precision, $16::double precision,
+       $17::double precision
+FROM wow_server_realms realm
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE realm.id = $18
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+`
+
+type EvolvingInsertLivePeakPlayerScoreParams struct {
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SubjectID         string             `db:"subject_id" json:"subject_id"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	BestRaw           float64            `db:"best_raw" json:"best_raw"`
+	RankOneRaw        float64            `db:"rank_one_raw" json:"rank_one_raw"`
+	BestDurationSecs  float64            `db:"best_duration_secs" json:"best_duration_secs"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+}
+
+// Raw best is retained alongside the display score so readers can use the
+// current cohort denominator even if that denominator changes later.
+func (q *sqlQuerier) EvolvingInsertLivePeakPlayerScore(ctx context.Context, arg EvolvingInsertLivePeakPlayerScoreParams) (int64, error) {
+	result, err := q.db.Exec(ctx, evolvingInsertLivePeakPlayerScore,
+		arg.TenantID,
+		arg.SubjectID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.BestRaw,
+		arg.RankOneRaw,
+		arg.BestDurationSecs,
+		arg.RealmID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const evolvingInsertPlayerLiveMasteryScope = `-- name: EvolvingInsertPlayerLiveMasteryScope :execrows
+INSERT INTO player_tenant_rating_scope_scores_evolving
+    (tenant_id, realm_id, player_guid, instance_name, difficulty_name,
+     max_players, player_class, player_spec, player_sub_spec, performance_metric,
+     rating_metric, window_kind, window_start, window_end, score)
+SELECT $1, realm.id, $2, $3,
+       $4, $5, $6, $7, $8,
+       $9, $10, $11,
+       $12::timestamptz, $13::timestamptz,
+       $14::double precision
+FROM wow_server_realms realm
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE realm.id = $15
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+`
+
+type EvolvingInsertPlayerLiveMasteryScopeParams struct {
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SubjectID         string             `db:"subject_id" json:"subject_id"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+}
+
+func (q *sqlQuerier) EvolvingInsertPlayerLiveMasteryScope(ctx context.Context, arg EvolvingInsertPlayerLiveMasteryScopeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, evolvingInsertPlayerLiveMasteryScope,
+		arg.TenantID,
+		arg.SubjectID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.RealmID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const evolvingInsertPlayerLiveMasteryScore = `-- name: EvolvingInsertPlayerLiveMasteryScore :execrows
+INSERT INTO player_tenant_rating_boss_scores_evolving
+    (tenant_id, realm_id, player_guid, instance_name, encounter_name,
+     difficulty_name, max_players, player_class, player_spec, player_sub_spec,
+     performance_metric, rating_metric, window_kind, window_start, window_end,
+     score, best_locked_parse, form, floor_score, eligible_kills)
+SELECT $1, realm.id, $2, $3, $4,
+       $5, $6, $7, $8, $9,
+       $10, $11, $12,
+       $13::timestamptz, $14::timestamptz,
+       $15::double precision, $16::double precision, $17::double precision,
+       $18::double precision, $19::int
+FROM wow_server_realms realm
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE realm.id = $20
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+`
+
+type EvolvingInsertPlayerLiveMasteryScoreParams struct {
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SubjectID         string             `db:"subject_id" json:"subject_id"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	Best              float64            `db:"best" json:"best"`
+	Form              float64            `db:"form" json:"form"`
+	Floor             float64            `db:"floor" json:"floor"`
+	EligibleKills     int32              `db:"eligible_kills" json:"eligible_kills"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+}
+
+func (q *sqlQuerier) EvolvingInsertPlayerLiveMasteryScore(ctx context.Context, arg EvolvingInsertPlayerLiveMasteryScoreParams) (int64, error) {
+	result, err := q.db.Exec(ctx, evolvingInsertPlayerLiveMasteryScore,
+		arg.TenantID,
+		arg.SubjectID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.Best,
+		arg.Form,
+		arg.Floor,
+		arg.EligibleKills,
+		arg.RealmID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const evolvingInsertPlayerTenantRenownScopes = `-- name: EvolvingInsertPlayerTenantRenownScopes :exec
+INSERT INTO player_tenant_rating_scope_scores_evolving
+    (tenant_id, realm_id, player_guid, instance_name, performance_metric,
+     rating_metric, window_kind, window_start, window_end, score)
+SELECT $1, $2, $3, boss.instance_name,
+       'none', 'renown', $4, $5::timestamptz,
+       $6::timestamptz, sum(boss.score)::double precision
+FROM player_tenant_rating_boss_scores_evolving boss
+WHERE boss.tenant_id = $1
+  AND boss.realm_id = $2 AND boss.player_guid = $3
+  AND boss.rating_metric = 'renown' AND boss.window_kind = $4
+  AND boss.instance_name = $7
+GROUP BY boss.instance_name
+`
+
+type EvolvingInsertPlayerTenantRenownScopesParams struct {
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID      uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid   string             `db:"player_guid" json:"player_guid"`
+	WindowKind   string             `db:"window_kind" json:"window_kind"`
+	WindowStart  pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd    pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	InstanceName string             `db:"instance_name" json:"instance_name"`
+}
+
+func (q *sqlQuerier) EvolvingInsertPlayerTenantRenownScopes(ctx context.Context, arg EvolvingInsertPlayerTenantRenownScopesParams) error {
+	_, err := q.db.Exec(ctx, evolvingInsertPlayerTenantRenownScopes,
+		arg.TenantID,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.InstanceName,
+	)
+	return err
+}
+
+const evolvingListLivePeakGuildSubjectPage = `-- name: EvolvingListLivePeakGuildSubjectPage :many
+WITH subjects AS (
+  SELECT live.realm_id, live.guild_id AS subject_id
+  FROM rating_live_guild_observations live
+  WHERE live.tenant_id = $2 AND live.guild_id IS NOT NULL
+    AND live.instance_name = $3 AND live.encounter_name = $4
+    AND live.difficulty_name = $5 AND live.max_players = $6
+    AND (live.realm_id, live.guild_id) > ($7::uuid, $8::uuid)
+  UNION
+  SELECT score.realm_id, score.guild_id
+  FROM guild_tenant_rating_boss_scores_evolving score
+  WHERE score.tenant_id = $2
+    AND score.rating_metric = 'peak' AND score.instance_name = $3
+    AND score.encounter_name = $4 AND score.difficulty_name = $5
+    AND score.max_players = $6
+    AND (score.realm_id, score.guild_id) > ($7::uuid, $8::uuid)
+)
+SELECT realm_id, subject_id FROM subjects
+ORDER BY realm_id, subject_id LIMIT LEAST(GREATEST($1::int, 0), 100)
+`
+
+type EvolvingListLivePeakGuildSubjectPageParams struct {
+	BatchSize      int32     `db:"batch_size" json:"batch_size"`
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	AfterRealmID   uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
+	AfterSubjectID uuid.UUID `db:"after_subject_id" json:"after_subject_id"`
+}
+
+type EvolvingListLivePeakGuildSubjectPageRow struct {
+	RealmID   uuid.UUID     `db:"realm_id" json:"realm_id"`
+	SubjectID uuid.NullUUID `db:"subject_id" json:"subject_id"`
+}
+
+func (q *sqlQuerier) EvolvingListLivePeakGuildSubjectPage(ctx context.Context, arg EvolvingListLivePeakGuildSubjectPageParams) ([]EvolvingListLivePeakGuildSubjectPageRow, error) {
+	rows, err := q.db.Query(ctx, evolvingListLivePeakGuildSubjectPage,
+		arg.BatchSize,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.AfterRealmID,
+		arg.AfterSubjectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EvolvingListLivePeakGuildSubjectPageRow
+	for rows.Next() {
+		var i EvolvingListLivePeakGuildSubjectPageRow
+		if err := rows.Scan(&i.RealmID, &i.SubjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const evolvingListLivePeakPlayerSubjectPage = `-- name: EvolvingListLivePeakPlayerSubjectPage :many
+
+WITH subjects AS (
+  SELECT live.realm_id, live.player_guid AS subject_id
+  FROM rating_live_player_observations live
+  WHERE live.tenant_id = $2 AND live.instance_name = $3
+    AND live.encounter_name = $4 AND live.difficulty_name = $5
+    AND live.max_players = $6 AND live.player_class = $7
+    AND live.player_spec = $8 AND live.player_sub_spec = $9
+    AND live.performance_metric = $10
+    AND (live.realm_id, live.player_guid) > ($11::uuid, $12::text)
+  UNION
+  SELECT score.realm_id, score.player_guid
+  FROM player_tenant_rating_boss_scores_evolving score
+  WHERE score.tenant_id = $2
+    AND score.rating_metric = 'peak' AND score.instance_name = $3
+    AND score.encounter_name = $4 AND score.difficulty_name = $5
+    AND score.max_players = $6 AND score.player_class = $7
+    AND score.player_spec = $8 AND score.player_sub_spec = $9
+    AND score.performance_metric = $10
+    AND (score.realm_id, score.player_guid) > ($11::uuid, $12::text)
+)
+SELECT realm_id, subject_id FROM subjects
+ORDER BY realm_id, subject_id LIMIT LEAST(GREATEST($1::int, 0), 100)
+`
+
+type EvolvingListLivePeakPlayerSubjectPageParams struct {
+	BatchSize         int32     `db:"batch_size" json:"batch_size"`
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	AfterRealmID      uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
+	AfterSubjectID    string    `db:"after_subject_id" json:"after_subject_id"`
+}
+
+type EvolvingListLivePeakPlayerSubjectPageRow struct {
+	RealmID   uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID string    `db:"subject_id" json:"subject_id"`
+}
+
+// Include stale old-score subjects so deleting their last observation removes
+// their displayed Peak rather than leaving an orphan. Union removes duplicates.
+func (q *sqlQuerier) EvolvingListLivePeakPlayerSubjectPage(ctx context.Context, arg EvolvingListLivePeakPlayerSubjectPageParams) ([]EvolvingListLivePeakPlayerSubjectPageRow, error) {
+	rows, err := q.db.Query(ctx, evolvingListLivePeakPlayerSubjectPage,
+		arg.BatchSize,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.AfterRealmID,
+		arg.AfterSubjectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EvolvingListLivePeakPlayerSubjectPageRow
+	for rows.Next() {
+		var i EvolvingListLivePeakPlayerSubjectPageRow
+		if err := rows.Scan(&i.RealmID, &i.SubjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const evolvingListTenantGuildRaidBosses = `-- name: EvolvingListTenantGuildRaidBosses :many
+SELECT encounter_name, score FROM guild_tenant_rating_boss_scores_evolving
+WHERE tenant_id = $1 AND realm_id = $2
+  AND guild_id = $3 AND instance_name = $4
+  AND difficulty_name = $5 AND max_players = $6
+  AND rating_metric = $7 AND window_kind = $8
+ORDER BY encounter_name LIMIT 201
+`
+
+type EvolvingListTenantGuildRaidBossesParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	RatingMetric   string    `db:"rating_metric" json:"rating_metric"`
+	WindowKind     string    `db:"window_kind" json:"window_kind"`
+}
+
+type EvolvingListTenantGuildRaidBossesRow struct {
+	EncounterName string  `db:"encounter_name" json:"encounter_name"`
+	Score         float64 `db:"score" json:"score"`
+}
+
+func (q *sqlQuerier) EvolvingListTenantGuildRaidBosses(ctx context.Context, arg EvolvingListTenantGuildRaidBossesParams) ([]EvolvingListTenantGuildRaidBossesRow, error) {
+	rows, err := q.db.Query(ctx, evolvingListTenantGuildRaidBosses,
+		arg.TenantID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RatingMetric,
+		arg.WindowKind,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EvolvingListTenantGuildRaidBossesRow
+	for rows.Next() {
+		var i EvolvingListTenantGuildRaidBossesRow
+		if err := rows.Scan(&i.EncounterName, &i.Score); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const evolvingListTenantPlayerRaidBosses = `-- name: EvolvingListTenantPlayerRaidBosses :many
+
+SELECT encounter_name, score, best_raw, best_duration_secs FROM player_tenant_rating_boss_scores_evolving
+WHERE tenant_id = $1 AND realm_id = $2
+  AND player_guid = $3 AND instance_name = $4
+  AND difficulty_name = $5 AND max_players = $6
+  AND player_class = $7 AND player_spec = $8 AND player_sub_spec = $9
+  AND performance_metric = $10 AND rating_metric = $11 AND window_kind = $12
+ORDER BY encounter_name LIMIT 201
+`
+
+type EvolvingListTenantPlayerRaidBossesParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string    `db:"player_guid" json:"player_guid"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string    `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string    `db:"window_kind" json:"window_kind"`
+}
+
+type EvolvingListTenantPlayerRaidBossesRow struct {
+	EncounterName    string        `db:"encounter_name" json:"encounter_name"`
+	Score            float64       `db:"score" json:"score"`
+	BestRaw          pgtype.Float8 `db:"best_raw" json:"best_raw"`
+	BestDurationSecs pgtype.Float8 `db:"best_duration_secs" json:"best_duration_secs"`
+}
+
+// Expiring even a guildless observation can change the guild denominator.
+// Keyset by cohort, not by subject; historical observations remain durable.
+func (q *sqlQuerier) EvolvingListTenantPlayerRaidBosses(ctx context.Context, arg EvolvingListTenantPlayerRaidBossesParams) ([]EvolvingListTenantPlayerRaidBossesRow, error) {
+	rows, err := q.db.Query(ctx, evolvingListTenantPlayerRaidBosses,
+		arg.TenantID,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EvolvingListTenantPlayerRaidBossesRow
+	for rows.Next() {
+		var i EvolvingListTenantPlayerRaidBossesRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.Score,
+			&i.BestRaw,
+			&i.BestDurationSecs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const evolvingUpsertGuildTenantRenownBoss = `-- name: EvolvingUpsertGuildTenantRenownBoss :execrows
+INSERT INTO guild_tenant_rating_boss_scores_evolving
+    (tenant_id, realm_id, guild_id, instance_name, encounter_name,
+     rating_metric, window_kind, window_start, window_end, score, eligible_kills)
+SELECT $1, realm.id, guild.id, $2, $3,
+       'renown', $4, $5::timestamptz,
+       $6::timestamptz, $7::double precision, $8::int
+FROM wow_server_realms realm
+JOIN wow_servers server ON server.id = realm.server_id
+JOIN guilds guild ON guild.id = $9 AND guild.realm_id = realm.id
+WHERE realm.id = $10
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND $8::int > 0
+ON CONFLICT (tenant_id, realm_id, guild_id, instance_name,
+             encounter_name, difficulty_name, max_players, rating_metric, window_kind)
+DO UPDATE SET score = EXCLUDED.score, eligible_kills = EXCLUDED.eligible_kills,
+              window_start = EXCLUDED.window_start, window_end = EXCLUDED.window_end,
+              computed_at = now()
+`
+
+type EvolvingUpsertGuildTenantRenownBossParams struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	WindowKind    string             `db:"window_kind" json:"window_kind"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd     pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score         float64            `db:"score" json:"score"`
+	EligibleKills int32              `db:"eligible_kills" json:"eligible_kills"`
+	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+}
+
+func (q *sqlQuerier) EvolvingUpsertGuildTenantRenownBoss(ctx context.Context, arg EvolvingUpsertGuildTenantRenownBossParams) (int64, error) {
+	result, err := q.db.Exec(ctx, evolvingUpsertGuildTenantRenownBoss,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.EligibleKills,
+		arg.GuildID,
+		arg.RealmID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const evolvingUpsertLivePeakCohortDenominator = `-- name: EvolvingUpsertLivePeakCohortDenominator :execrows
+INSERT INTO rating_peak_cohort_denominators_evolving
+    (tenant_id, subject_kind, instance_name, encounter_name,
+     difficulty_name, max_players, player_class, player_spec, player_sub_spec,
+     performance_metric, window_kind, window_start, window_end, rank_one_raw)
+SELECT $1, $2, $3, $4,
+       $5, $6, $7, $8, $9,
+       $10, $11, $12::timestamptz,
+       $13::timestamptz, $14::double precision
+WHERE $14::double precision > 0
+ON CONFLICT (tenant_id, subject_kind, instance_name, encounter_name,
+             difficulty_name, max_players, player_class, player_spec, player_sub_spec,
+             performance_metric, window_kind)
+DO UPDATE SET rank_one_raw = EXCLUDED.rank_one_raw, window_start = EXCLUDED.window_start,
+              window_end = EXCLUDED.window_end, updated_at = now()
+`
+
+type EvolvingUpsertLivePeakCohortDenominatorParams struct {
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string             `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	RankOneRaw        float64            `db:"rank_one_raw" json:"rank_one_raw"`
+}
+
+func (q *sqlQuerier) EvolvingUpsertLivePeakCohortDenominator(ctx context.Context, arg EvolvingUpsertLivePeakCohortDenominatorParams) (int64, error) {
+	result, err := q.db.Exec(ctx, evolvingUpsertLivePeakCohortDenominator,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.RankOneRaw,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const evolvingUpsertLivePeakCohortPage = `-- name: EvolvingUpsertLivePeakCohortPage :exec
+INSERT INTO rating_peak_cohort_pages_evolving
+    (tenant_id, subject_kind, instance_name, encounter_name, difficulty_name,
+     max_players, player_class, player_spec, player_sub_spec, performance_metric,
+     revision, after_realm_id, after_subject_id)
+VALUES ($1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10,
+        $11, $12, $13)
+ON CONFLICT (tenant_id, subject_kind, instance_name, encounter_name, difficulty_name,
+             max_players, player_class, player_spec, player_sub_spec, performance_metric)
+DO UPDATE SET revision = EXCLUDED.revision,
+              after_realm_id = EXCLUDED.after_realm_id, after_subject_id = EXCLUDED.after_subject_id
+`
+
+type EvolvingUpsertLivePeakCohortPageParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string    `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	Revision          int64     `db:"revision" json:"revision"`
+	AfterRealmID      uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
+	AfterSubjectID    string    `db:"after_subject_id" json:"after_subject_id"`
+}
+
+func (q *sqlQuerier) EvolvingUpsertLivePeakCohortPage(ctx context.Context, arg EvolvingUpsertLivePeakCohortPageParams) error {
+	_, err := q.db.Exec(ctx, evolvingUpsertLivePeakCohortPage,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.Revision,
+		arg.AfterRealmID,
+		arg.AfterSubjectID,
+	)
+	return err
+}
+
+const evolvingUpsertPlayerTenantRenownBoss = `-- name: EvolvingUpsertPlayerTenantRenownBoss :execrows
+INSERT INTO player_tenant_rating_boss_scores_evolving
+    (tenant_id, realm_id, player_guid, instance_name, encounter_name,
+     performance_metric, rating_metric, window_kind, window_start, window_end,
+     score, eligible_kills)
+SELECT $1, realm.id, $2, $3, $4,
+       'none', 'renown', $5, $6::timestamptz,
+       $7::timestamptz, $8::double precision, $9::int
+FROM wow_server_realms realm
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE realm.id = $10
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND $9::int > 0
+ON CONFLICT (tenant_id, realm_id, player_guid, instance_name,
+             encounter_name, difficulty_name, max_players, player_class,
+             player_spec, player_sub_spec, performance_metric, rating_metric, window_kind)
+DO UPDATE SET score = EXCLUDED.score, eligible_kills = EXCLUDED.eligible_kills,
+              window_start = EXCLUDED.window_start, window_end = EXCLUDED.window_end,
+              computed_at = now()
+`
+
+type EvolvingUpsertPlayerTenantRenownBossParams struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	WindowKind    string             `db:"window_kind" json:"window_kind"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd     pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score         float64            `db:"score" json:"score"`
+	EligibleKills int32              `db:"eligible_kills" json:"eligible_kills"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+}
+
+func (q *sqlQuerier) EvolvingUpsertPlayerTenantRenownBoss(ctx context.Context, arg EvolvingUpsertPlayerTenantRenownBossParams) (int64, error) {
+	result, err := q.db.Exec(ctx, evolvingUpsertPlayerTenantRenownBoss,
+		arg.TenantID,
+		arg.PlayerGuid,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.WindowKind,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.Score,
+		arg.EligibleKills,
+		arg.RealmID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const lockEvolvingTenantRatingRevision = `-- name: LockEvolvingTenantRatingRevision :one
+INSERT INTO rating_config_revisions (tenant_id) VALUES ($1::uuid)
+ON CONFLICT (tenant_id) DO UPDATE SET revision = rating_config_revisions.revision
+RETURNING revision
+`
+
+// Serialize policy/config reads with tenant configuration revisions. A newly
+// created tenant need not have started any generation or checkpoint.
+func (q *sqlQuerier) LockEvolvingTenantRatingRevision(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, lockEvolvingTenantRatingRevision, tenantID)
+	var revision int64
+	err := row.Scan(&revision)
+	return revision, err
+}
+
 const assignRatingRealmToGroup = `-- name: AssignRatingRealmToGroup :execrows
 INSERT INTO rating_realm_group_memberships (realm_id, server_id, group_id)
 SELECT realm.id, realm.server_id, grp.id
@@ -23436,6 +25203,123 @@ func (q *sqlQuerier) UnassignRatingRealmFromGroup(ctx context.Context, arg Unass
 	return result.RowsAffected(), nil
 }
 
+const evolvingHubLandingRatingRows = `-- name: EvolvingHubLandingRatingRows :many
+
+WITH cohorts AS (
+  SELECT instance_name, difficulty_name, max_players
+  FROM rankings_instance_summaries ris WHERE ris.tenant_id = $1
+  ORDER BY instance_name, difficulty_name, max_players LIMIT 64
+), scores AS (
+  SELECT c.instance_name, c.difficulty_name, c.max_players,
+    'player'::text AS subject, s.rating_metric, s.realm_id, s.player_guid::text AS subject_id,
+    s.score, s.best_raw, s.player_class, s.player_spec, s.player_sub_spec,
+    COALESCE(gp.name, '')::text AS subject_name, realm.name::text AS realm_name
+  FROM cohorts c
+  JOIN player_tenant_rating_scope_scores_evolving_read s ON s.tenant_id = $1 AND s.generation_id = $2
+    AND s.instance_name = c.instance_name AND s.window_kind = 'period'
+    AND ((s.rating_metric IN ('peak', 'ranked_mastery') AND s.performance_metric = 'dps'
+      AND s.difficulty_name = c.difficulty_name AND s.max_players = c.max_players)
+      OR (s.rating_metric = 'renown' AND s.performance_metric = 'none'
+      AND s.difficulty_name = '' AND s.max_players = 0))
+  JOIN wow_server_realms realm ON realm.id = s.realm_id
+    AND (COALESCE(cardinality($3::uuid[]), 0) = 0 OR realm.id = ANY($3::uuid[]))
+  JOIN wow_servers server ON server.id = realm.server_id
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  LEFT JOIN game_players gp ON gp.realm_id = s.realm_id
+    AND gp.id = (CASE WHEN s.player_guid ~ '^0x[0-9A-Fa-f]{16}$' THEN s.player_guid::wow_guid ELSE NULL::wow_guid END)
+  UNION ALL
+  SELECT c.instance_name, c.difficulty_name, c.max_players,
+    'guild'::text, s.rating_metric, s.realm_id, s.guild_id::text,
+    s.score, NULL::float8, ''::text, ''::text, ''::text,
+    COALESCE(g.name, '')::text, realm.name::text
+  FROM cohorts c
+  JOIN guild_tenant_rating_scope_scores_evolving_read s ON s.tenant_id = $1 AND s.generation_id = $2
+    AND s.instance_name = c.instance_name AND s.rating_metric = 'renown'
+    AND s.window_kind = 'period' AND s.difficulty_name = '' AND s.max_players = 0
+  JOIN wow_server_realms realm ON realm.id = s.realm_id
+    AND (COALESCE(cardinality($3::uuid[]), 0) = 0 OR realm.id = ANY($3::uuid[]))
+  JOIN wow_servers server ON server.id = realm.server_id
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  JOIN guilds g ON g.id = s.guild_id AND g.realm_id = s.realm_id
+), unique_subjects AS (
+  SELECT instance_name, difficulty_name, max_players, subject, rating_metric, realm_id, subject_id, score, best_raw, player_class, player_spec, player_sub_spec, subject_name, realm_name, row_number() OVER (PARTITION BY instance_name, difficulty_name, max_players, subject, rating_metric, realm_id, subject_id
+    ORDER BY score DESC, COALESCE(best_raw, 0) DESC, player_class, player_spec, player_sub_spec) AS identity_position FROM scores
+), ranked AS (
+  SELECT instance_name, difficulty_name, max_players, subject, rating_metric, realm_id, subject_id, score, best_raw, player_class, player_spec, player_sub_spec, subject_name, realm_name, identity_position, row_number() OVER (PARTITION BY instance_name, difficulty_name, max_players, subject, rating_metric
+    ORDER BY score DESC, (CASE WHEN rating_metric = 'peak' THEN COALESCE(best_raw, 0) ELSE 0 END) DESC, realm_id, subject_id) AS position
+  FROM unique_subjects WHERE identity_position = 1
+)
+SELECT instance_name, difficulty_name, max_players, subject, rating_metric, realm_id,
+  subject_id, score,
+  -- Raid Peak's throughput (0 when unknown): total output over total fight time.
+  COALESCE(CASE WHEN subject = 'player' AND rating_metric = 'peak' THEN best_raw END, 0)::float8 AS peak_raw,
+  player_class, player_spec, player_sub_spec, subject_name, realm_name
+FROM ranked WHERE position <= 3
+
+ORDER BY instance_name, difficulty_name, max_players, subject, rating_metric, position
+`
+
+type EvolvingHubLandingRatingRowsParams struct {
+	TenantID     uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID uuid.UUID   `db:"generation_id" json:"generation_id"`
+	RealmIds     []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+}
+
+type EvolvingHubLandingRatingRowsRow struct {
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	Subject        string    `db:"subject" json:"subject"`
+	RatingMetric   string    `db:"rating_metric" json:"rating_metric"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID      string    `db:"subject_id" json:"subject_id"`
+	Score          float64   `db:"score" json:"score"`
+	PeakRaw        float64   `db:"peak_raw" json:"peak_raw"`
+	PlayerClass    string    `db:"player_class" json:"player_class"`
+	PlayerSpec     string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string    `db:"player_sub_spec" json:"player_sub_spec"`
+	SubjectName    string    `db:"subject_name" json:"subject_name"`
+	RealmName      string    `db:"realm_name" json:"realm_name"`
+}
+
+// Generation-free readers against the evolving projection compatibility views.
+// Only the same 64 published cohorts returned by HubSummaryInstances are eligible.
+// Renown is instance-wide; its published period score is repeated for each cohort.
+func (q *sqlQuerier) EvolvingHubLandingRatingRows(ctx context.Context, arg EvolvingHubLandingRatingRowsParams) ([]EvolvingHubLandingRatingRowsRow, error) {
+	rows, err := q.db.Query(ctx, evolvingHubLandingRatingRows, arg.TenantID, arg.GenerationID, arg.RealmIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EvolvingHubLandingRatingRowsRow
+	for rows.Next() {
+		var i EvolvingHubLandingRatingRowsRow
+		if err := rows.Scan(
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.Subject,
+			&i.RatingMetric,
+			&i.RealmID,
+			&i.SubjectID,
+			&i.Score,
+			&i.PeakRaw,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.SubjectName,
+			&i.RealmName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const hubLandingRatingRows = `-- name: HubLandingRatingRows :many
 WITH cohorts AS (
   SELECT instance_name, difficulty_name, max_players
@@ -23649,6 +25533,581 @@ func (q *sqlQuerier) HubLandingSpeedruns(ctx context.Context, arg HubLandingSpee
 			&i.RealmName,
 			&i.GuildLogoUrl,
 			&i.PlayerCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const evolvingHubSetBoardPage = `-- name: EvolvingHubSetBoardPage :many
+WITH chosen AS (
+  SELECT DISTINCT unnest($13::text[]) AS encounter_name LIMIT 64
+), n AS (SELECT count(*)::float8 AS bosses FROM chosen),
+player_cohorts AS (
+  SELECT s.realm_id, s.player_guid::text AS subject_id, s.player_class, s.player_spec, s.player_sub_spec,
+         CASE WHEN $14::text = 'renown' THEN sum(s.score) ELSE sum(s.score) / (SELECT bosses FROM n) END AS score,
+         COALESCE(sum(s.best_raw * s.best_duration_secs) FILTER (WHERE s.best_raw > 0 AND s.best_duration_secs > 0)
+           / NULLIF(sum(s.best_duration_secs) FILTER (WHERE s.best_raw > 0 AND s.best_duration_secs > 0), 0), 0) AS raw
+  FROM player_tenant_rating_boss_scores_evolving_read s
+
+  JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
+  JOIN wow_servers server ON server.id = source_realm.server_id
+  WHERE $1::text = 'player' AND s.tenant_id = $2 AND s.generation_id = $3 AND s.instance_name = $4
+    AND s.encounter_name IN (SELECT encounter_name FROM chosen)
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND s.rating_metric = $14::text
+    AND (($14::text = 'renown' AND s.window_kind = $5::text AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none')
+      OR ($14::text <> 'renown' AND s.window_kind = $6::text AND s.difficulty_name = $7 AND s.max_players = $8
+          AND s.performance_metric = $9::text
+          AND ($10::text = '' OR s.player_class = $10)
+          AND ($11::text = '' OR s.player_spec = $11)
+          AND ($12::text = '' OR s.player_sub_spec = $12)))
+  GROUP BY s.realm_id, s.player_guid, s.player_class, s.player_spec, s.player_sub_spec
+), players AS (
+  SELECT DISTINCT ON (realm_id, subject_id) realm_id, subject_id, player_class, player_spec, player_sub_spec, score, raw
+  FROM player_cohorts
+  ORDER BY realm_id, subject_id, score DESC, raw DESC, player_class, player_spec, player_sub_spec
+), guilds_scored AS (
+  SELECT s.realm_id, s.guild_id::text AS subject_id, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec,
+         CASE WHEN $14::text = 'renown' THEN sum(s.score) ELSE sum(s.score) / (SELECT bosses FROM n) END AS score,
+         0::float8 AS raw
+  FROM guild_tenant_rating_boss_scores_evolving_read s
+
+  JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
+  JOIN wow_servers server ON server.id = source_realm.server_id
+  WHERE $1::text = 'guild' AND s.tenant_id = $2 AND s.generation_id = $3 AND s.instance_name = $4
+    AND s.encounter_name IN (SELECT encounter_name FROM chosen)
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND s.rating_metric = $14::text
+    AND (($14::text = 'renown' AND s.window_kind = $5::text AND s.difficulty_name = '' AND s.max_players = 0)
+      OR ($14::text <> 'renown' AND s.window_kind = $6::text AND s.difficulty_name = $7 AND s.max_players = $8))
+  GROUP BY s.realm_id, s.guild_id
+), ranked AS (
+  SELECT b.realm_id, b.subject_id, b.player_class, b.player_spec, b.player_sub_spec, b.score, b.raw, row_number() OVER (ORDER BY b.score DESC, CASE WHEN $14::text = 'peak' THEN b.raw ELSE 0 END DESC, b.realm_id, b.subject_id) AS rank
+  FROM (SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec, score, raw FROM players UNION ALL SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec, score, raw FROM guilds_scored) b
+), displayed AS (
+  SELECT r.realm_id, r.subject_id, r.player_class, r.player_spec, r.player_sub_spec, r.score, r.raw, r.rank, realm.name::text AS realm_name,
+         COALESCE(CASE WHEN $1::text = 'player' THEN gp.name ELSE guild.name END, '')::text AS subject_name,
+         COALESCE(player_guild.name, '')::text AS guild_name
+  FROM ranked r
+  JOIN wow_server_realms realm ON realm.id = r.realm_id
+  LEFT JOIN game_players gp ON $1::text = 'player' AND gp.realm_id = r.realm_id
+    AND gp.id = (CASE WHEN r.subject_id ~ '^0x[0-9A-Fa-f]{16}$' THEN r.subject_id::wow_guid ELSE NULL::wow_guid END)
+  LEFT JOIN guilds player_guild ON player_guild.id = gp.guild_id AND player_guild.realm_id = r.realm_id
+  LEFT JOIN guilds guild ON $1::text = 'guild' AND guild.realm_id = r.realm_id
+    AND guild.id = (CASE WHEN r.subject_id ~ '^[0-9a-f-]{36}$' THEN r.subject_id::uuid ELSE NULL::uuid END)
+  WHERE (COALESCE(cardinality($15::uuid[]), 0) = 0 OR r.realm_id = ANY($15::uuid[]))
+    AND ($16::text = '' OR position(lower($16::text) in lower(COALESCE(gp.name, guild.name, r.subject_id))) > 0
+         OR position(lower($16::text) in lower(COALESCE(player_guild.name, ''))) > 0)
+), paged AS (
+  SELECT d.realm_id, d.subject_id, d.player_class, d.player_spec, d.player_sub_spec, d.score, d.raw, d.rank, d.realm_name, d.subject_name, d.guild_name, count(*) OVER () AS total
+  FROM displayed d
+  ORDER BY d.rank
+  LIMIT LEAST(GREATEST($18::int, 1), 500) OFFSET GREATEST($17::int, 0)
+)
+SELECT p.rank::bigint AS rank, p.total::bigint AS total, p.realm_id, p.realm_name, p.subject_id, p.subject_name, p.guild_name,
+       p.player_class, p.player_spec, p.player_sub_spec, p.score::float8 AS score,
+       COALESCE(other.peak, 0)::float8 AS peak, COALESCE(other.mastery, 0)::float8 AS mastery, COALESCE(other.renown, 0)::float8 AS renown,
+       COALESCE(other.peak_raw, 0)::float8 AS peak_raw,
+       -- Ranked Mastery's parts over the chosen bosses (a missed boss as 0), kills summed.
+       COALESCE(other.mastery_peak, 0)::float8 AS mastery_peak, COALESCE(other.mastery_form, 0)::float8 AS mastery_form,
+       COALESCE(other.mastery_floor, 0)::float8 AS mastery_floor, COALESCE(other.eligible_kills, 0)::bigint AS eligible_kills
+FROM paged p
+LEFT JOIN LATERAL (
+  -- The row's three scores over the same bosses. A class/spec-ranked row keeps its
+  -- cohort; a Renown-ranked player (Renown has no spec) takes its best cohort.
+  SELECT max(c.peak) AS peak, max(c.mastery) AS mastery, max(c.renown) AS renown,
+         (array_agg(c.peak_raw ORDER BY c.peak DESC NULLS LAST))[1] AS peak_raw,
+         (array_agg(c.mastery_peak ORDER BY c.mastery DESC NULLS LAST))[1] AS mastery_peak,
+         (array_agg(c.mastery_form ORDER BY c.mastery DESC NULLS LAST))[1] AS mastery_form,
+         (array_agg(c.mastery_floor ORDER BY c.mastery DESC NULLS LAST))[1] AS mastery_floor,
+         (array_agg(c.eligible_kills ORDER BY c.mastery DESC NULLS LAST))[1] AS eligible_kills
+  FROM (
+    SELECT x.cohort,
+           sum(x.score) FILTER (WHERE x.rating_metric = 'peak') / (SELECT bosses FROM n) AS peak,
+           sum(x.score) FILTER (WHERE x.rating_metric = 'ranked_mastery') / (SELECT bosses FROM n) AS mastery,
+           sum(x.score) FILTER (WHERE x.rating_metric = 'renown') AS renown,
+           sum(x.best_raw * x.best_duration_secs) FILTER (WHERE x.rating_metric = 'peak' AND x.best_raw > 0 AND x.best_duration_secs > 0)
+             / NULLIF(sum(x.best_duration_secs) FILTER (WHERE x.rating_metric = 'peak' AND x.best_raw > 0 AND x.best_duration_secs > 0), 0) AS peak_raw,
+           sum(x.best_locked_parse) FILTER (WHERE x.rating_metric = 'ranked_mastery') / (SELECT bosses FROM n) AS mastery_peak,
+           sum(x.form) FILTER (WHERE x.rating_metric = 'ranked_mastery') / (SELECT bosses FROM n) AS mastery_form,
+           sum(x.floor_score) FILTER (WHERE x.rating_metric = 'ranked_mastery') / (SELECT bosses FROM n) AS mastery_floor,
+           sum(x.eligible_kills) FILTER (WHERE x.rating_metric = 'ranked_mastery') AS eligible_kills
+    FROM (
+      SELECT CASE WHEN s.rating_metric = 'renown' THEN '' ELSE s.player_class || '|' || s.player_spec || '|' || s.player_sub_spec END AS cohort,
+             s.rating_metric, s.score, s.best_raw, s.best_duration_secs, s.best_locked_parse, s.form, s.floor_score, s.eligible_kills
+      FROM player_tenant_rating_boss_scores_evolving_read s
+      WHERE $1::text = 'player' AND s.tenant_id = $2 AND s.generation_id = $3
+        AND s.realm_id = p.realm_id AND s.player_guid = p.subject_id AND s.instance_name = $4
+        AND s.encounter_name IN (SELECT encounter_name FROM chosen)
+        AND ((s.rating_metric = 'renown' AND s.window_kind = $5::text AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none')
+          OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = $6::text AND s.difficulty_name = $7
+              AND s.max_players = $8 AND s.performance_metric = $9::text
+              AND ($10::text = '' OR s.player_class = $10)
+              AND ($11::text = '' OR s.player_spec = $11)
+              AND ($12::text = '' OR s.player_sub_spec = $12)
+              AND (p.player_class = '' OR (s.player_class = p.player_class AND s.player_spec = p.player_spec AND s.player_sub_spec = p.player_sub_spec))))
+      UNION ALL
+      SELECT '', s.rating_metric, s.score, NULL::float8, NULL::float8, s.best_locked_parse, s.form, s.floor_score, s.eligible_kills FROM guild_tenant_rating_boss_scores_evolving_read s
+      WHERE $1::text = 'guild' AND s.tenant_id = $2 AND s.generation_id = $3
+        AND s.realm_id = p.realm_id AND s.guild_id::text = p.subject_id AND s.instance_name = $4
+        AND s.encounter_name IN (SELECT encounter_name FROM chosen)
+        AND ((s.rating_metric = 'renown' AND s.window_kind = $5::text AND s.difficulty_name = '' AND s.max_players = 0)
+          OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = $6::text AND s.difficulty_name = $7 AND s.max_players = $8))
+    ) x
+    GROUP BY x.cohort
+  ) c
+) other ON true
+ORDER BY p.rank
+`
+
+type EvolvingHubSetBoardPageParams struct {
+	Subject           string      `db:"subject" json:"subject"`
+	TenantID          uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID      uuid.UUID   `db:"generation_id" json:"generation_id"`
+	InstanceName      string      `db:"instance_name" json:"instance_name"`
+	RenownWindow      string      `db:"renown_window" json:"renown_window"`
+	WindowKind        string      `db:"window_kind" json:"window_kind"`
+	DifficultyName    string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16       `db:"max_players" json:"max_players"`
+	PerformanceMetric string      `db:"performance_metric" json:"performance_metric"`
+	PlayerClass       string      `db:"player_class" json:"player_class"`
+	PlayerSpec        string      `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string      `db:"player_sub_spec" json:"player_sub_spec"`
+	EncounterNames    []string    `db:"encounter_names" json:"encounter_names"`
+	RatingMetric      string      `db:"rating_metric" json:"rating_metric"`
+	RealmIds          []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	SearchQuery       string      `db:"search_query" json:"search_query"`
+	OffsetCount       int32       `db:"offset_count" json:"offset_count"`
+	LimitCount        int32       `db:"limit_count" json:"limit_count"`
+}
+
+type EvolvingHubSetBoardPageRow struct {
+	Rank          int64     `db:"rank" json:"rank"`
+	Total         int64     `db:"total" json:"total"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	RealmName     string    `db:"realm_name" json:"realm_name"`
+	SubjectID     string    `db:"subject_id" json:"subject_id"`
+	SubjectName   string    `db:"subject_name" json:"subject_name"`
+	GuildName     string    `db:"guild_name" json:"guild_name"`
+	PlayerClass   string    `db:"player_class" json:"player_class"`
+	PlayerSpec    string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Score         float64   `db:"score" json:"score"`
+	Peak          float64   `db:"peak" json:"peak"`
+	Mastery       float64   `db:"mastery" json:"mastery"`
+	Renown        float64   `db:"renown" json:"renown"`
+	PeakRaw       float64   `db:"peak_raw" json:"peak_raw"`
+	MasteryPeak   float64   `db:"mastery_peak" json:"mastery_peak"`
+	MasteryForm   float64   `db:"mastery_form" json:"mastery_form"`
+	MasteryFloor  float64   `db:"mastery_floor" json:"mastery_floor"`
+	EligibleKills int64     `db:"eligible_kills" json:"eligible_kills"`
+}
+
+// One ranked page of a chosen-boss board (any number of bosses, one included):
+// Peak and Ranked Mastery average over every chosen boss (a missed one is 0),
+// Renown sums. Only the ranked metric is aggregated for the whole cohort; the
+// page's other two scores are looked up per row. Ranks cover the whole tenant
+// cohort before the display-only realm and name filters, as on the full lists.
+func (q *sqlQuerier) EvolvingHubSetBoardPage(ctx context.Context, arg EvolvingHubSetBoardPageParams) ([]EvolvingHubSetBoardPageRow, error) {
+	rows, err := q.db.Query(ctx, evolvingHubSetBoardPage,
+		arg.Subject,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.InstanceName,
+		arg.RenownWindow,
+		arg.WindowKind,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PerformanceMetric,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.EncounterNames,
+		arg.RatingMetric,
+		arg.RealmIds,
+		arg.SearchQuery,
+		arg.OffsetCount,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EvolvingHubSetBoardPageRow
+	for rows.Next() {
+		var i EvolvingHubSetBoardPageRow
+		if err := rows.Scan(
+			&i.Rank,
+			&i.Total,
+			&i.RealmID,
+			&i.RealmName,
+			&i.SubjectID,
+			&i.SubjectName,
+			&i.GuildName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.Score,
+			&i.Peak,
+			&i.Mastery,
+			&i.Renown,
+			&i.PeakRaw,
+			&i.MasteryPeak,
+			&i.MasteryForm,
+			&i.MasteryFloor,
+			&i.EligibleKills,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const evolvingHubSetRatingRows = `-- name: EvolvingHubSetRatingRows :many
+WITH chosen AS (
+  SELECT DISTINCT unnest($2::text[]) AS encounter_name LIMIT 64
+), player_cohorts AS (
+  SELECT s.rating_metric, s.realm_id, s.player_guid, s.player_class, s.player_spec, s.player_sub_spec,
+         CASE WHEN s.rating_metric = 'renown' THEN sum(s.score)
+              ELSE sum(s.score) / (SELECT count(*) FROM chosen) END AS score,
+         COALESCE(sum(s.best_raw * s.best_duration_secs) FILTER (WHERE s.best_raw > 0 AND s.best_duration_secs > 0)
+           / NULLIF(sum(s.best_duration_secs) FILTER (WHERE s.best_raw > 0 AND s.best_duration_secs > 0), 0), 0) AS raw
+  FROM player_tenant_rating_boss_scores_evolving_read s
+
+  JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
+  JOIN wow_servers server ON server.id = source_realm.server_id
+  WHERE s.tenant_id = $3 AND s.generation_id = $4 AND s.instance_name = $5
+    AND s.encounter_name IN (SELECT encounter_name FROM chosen)
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND (COALESCE(cardinality($6::uuid[]), 0) = 0 OR s.realm_id = ANY($6::uuid[]))
+    AND s.window_kind = CASE WHEN s.rating_metric = 'renown' THEN $7::text ELSE $8::text END
+    AND ((s.rating_metric = 'renown' AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none')
+      OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.difficulty_name = $9 AND s.max_players = $10
+          AND s.performance_metric = $11::text
+          AND ($12::text = '' OR s.player_class = $12)
+          AND ($13::text = '' OR s.player_spec = $13)
+          AND ($14::text = '' OR s.player_sub_spec = $14)))
+  GROUP BY s.rating_metric, s.realm_id, s.player_guid, s.player_class, s.player_spec, s.player_sub_spec
+), players AS (
+  SELECT DISTINCT ON (rating_metric, realm_id, player_guid) rating_metric, realm_id, player_guid, player_class, player_spec, player_sub_spec, score, raw
+  FROM player_cohorts
+  ORDER BY rating_metric, realm_id, player_guid, score DESC, raw DESC, player_class, player_spec, player_sub_spec
+), guild_scores AS (
+  SELECT s.rating_metric, s.realm_id, s.guild_id,
+         CASE WHEN s.rating_metric = 'renown' THEN sum(s.score)
+              ELSE sum(s.score) / (SELECT count(*) FROM chosen) END AS score
+  FROM guild_tenant_rating_boss_scores_evolving_read s
+
+  JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
+  JOIN wow_servers server ON server.id = source_realm.server_id
+  WHERE s.tenant_id = $3 AND s.generation_id = $4 AND s.instance_name = $5
+    AND s.encounter_name IN (SELECT encounter_name FROM chosen)
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND (COALESCE(cardinality($6::uuid[]), 0) = 0 OR s.realm_id = ANY($6::uuid[]))
+    AND s.window_kind = CASE WHEN s.rating_metric = 'renown' THEN $7::text ELSE $8::text END
+    AND ((s.rating_metric = 'renown' AND s.difficulty_name = '' AND s.max_players = 0)
+      OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.difficulty_name = $9 AND s.max_players = $10))
+  GROUP BY s.rating_metric, s.realm_id, s.guild_id
+), ranked AS (
+  SELECT 'player'::text AS subject, p.rating_metric, p.realm_id, p.player_guid::text AS subject_id, p.score,
+         CASE WHEN p.rating_metric = 'peak' THEN p.raw ELSE 0 END AS raw,
+         p.player_class, p.player_spec, p.player_sub_spec,
+         row_number() OVER (PARTITION BY p.rating_metric ORDER BY p.score DESC, CASE WHEN p.rating_metric = 'peak' THEN p.raw ELSE 0 END DESC, p.realm_id, p.player_guid) AS position
+  FROM players p
+  UNION ALL
+  SELECT 'guild'::text, g.rating_metric, g.realm_id, g.guild_id::text, g.score, 0, ''::text, ''::text, ''::text,
+         row_number() OVER (PARTITION BY g.rating_metric ORDER BY g.score DESC, g.realm_id, g.guild_id) AS position
+  FROM guild_scores g
+)
+SELECT r.subject, r.rating_metric, r.realm_id, r.subject_id, r.score::float8 AS score, r.raw::float8 AS peak_raw,
+       r.player_class, r.player_spec, r.player_sub_spec,
+       COALESCE(CASE WHEN r.subject = 'player' THEN gp.name ELSE guild.name END, '')::text AS subject_name,
+       realm.name::text AS realm_name
+FROM ranked r
+JOIN wow_server_realms realm ON realm.id = r.realm_id
+LEFT JOIN game_players gp ON r.subject = 'player' AND gp.realm_id = r.realm_id
+  AND gp.id = (CASE WHEN r.subject_id ~ '^0x[0-9A-Fa-f]{16}$' THEN r.subject_id::wow_guid ELSE NULL::wow_guid END)
+LEFT JOIN guilds guild ON r.subject = 'guild' AND guild.id = (CASE WHEN r.subject_id ~ '^[0-9a-f-]{36}$' THEN r.subject_id::uuid ELSE NULL::uuid END)
+  AND guild.realm_id = r.realm_id
+WHERE r.position <= LEAST(GREATEST($1::int, 1), 10)
+ORDER BY r.subject, r.rating_metric, r.position
+`
+
+type EvolvingHubSetRatingRowsParams struct {
+	Depth             int32       `db:"depth" json:"depth"`
+	EncounterNames    []string    `db:"encounter_names" json:"encounter_names"`
+	TenantID          uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID      uuid.UUID   `db:"generation_id" json:"generation_id"`
+	InstanceName      string      `db:"instance_name" json:"instance_name"`
+	RealmIds          []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	RenownWindow      string      `db:"renown_window" json:"renown_window"`
+	WindowKind        string      `db:"window_kind" json:"window_kind"`
+	DifficultyName    string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16       `db:"max_players" json:"max_players"`
+	PerformanceMetric string      `db:"performance_metric" json:"performance_metric"`
+	PlayerClass       string      `db:"player_class" json:"player_class"`
+	PlayerSpec        string      `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string      `db:"player_sub_spec" json:"player_sub_spec"`
+}
+
+type EvolvingHubSetRatingRowsRow struct {
+	Subject       string    `db:"subject" json:"subject"`
+	RatingMetric  string    `db:"rating_metric" json:"rating_metric"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID     string    `db:"subject_id" json:"subject_id"`
+	Score         float64   `db:"score" json:"score"`
+	PeakRaw       float64   `db:"peak_raw" json:"peak_raw"`
+	PlayerClass   string    `db:"player_class" json:"player_class"`
+	PlayerSpec    string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec string    `db:"player_sub_spec" json:"player_sub_spec"`
+	SubjectName   string    `db:"subject_name" json:"subject_name"`
+	RealmName     string    `db:"realm_name" json:"realm_name"`
+}
+
+// Ratings over a chosen set of bosses, computed from the published boss boards:
+// Peak and Ranked Mastery average over every chosen boss (a missed one is 0),
+// Renown sums. A subject's best class/spec cohort stands for it. Peak carries
+// the duration-weighted throughput over its kills and breaks ties by it.
+func (q *sqlQuerier) EvolvingHubSetRatingRows(ctx context.Context, arg EvolvingHubSetRatingRowsParams) ([]EvolvingHubSetRatingRowsRow, error) {
+	rows, err := q.db.Query(ctx, evolvingHubSetRatingRows,
+		arg.Depth,
+		arg.EncounterNames,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.InstanceName,
+		arg.RealmIds,
+		arg.RenownWindow,
+		arg.WindowKind,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PerformanceMetric,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EvolvingHubSetRatingRowsRow
+	for rows.Next() {
+		var i EvolvingHubSetRatingRowsRow
+		if err := rows.Scan(
+			&i.Subject,
+			&i.RatingMetric,
+			&i.RealmID,
+			&i.SubjectID,
+			&i.Score,
+			&i.PeakRaw,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.SubjectName,
+			&i.RealmName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const evolvingHubSummaryRatingRows = `-- name: EvolvingHubSummaryRatingRows :many
+
+WITH selected_bosses AS (
+  SELECT names.encounter_name FROM (
+    SELECT p.encounter_name FROM player_tenant_rating_boss_scores_evolving_read p
+    WHERE p.tenant_id = $3 AND p.generation_id = $4 AND p.instance_name = $5
+    UNION
+    SELECT g.encounter_name FROM guild_tenant_rating_boss_scores_evolving_read g
+    WHERE g.tenant_id = $3 AND g.generation_id = $4 AND g.instance_name = $5
+  ) names ORDER BY (names.encounter_name <> $1::text), names.encounter_name LIMIT 30
+), boards AS (
+  SELECT 'player'::text AS subject, 'scope'::text AS board, b.rating_metric, ''::text AS encounter_name,
+         b.realm_id, b.player_guid::text AS subject_id, b.score, b.best_raw, b.player_class, b.player_spec, b.player_sub_spec,
+         COALESCE(gp.name, '')::text AS subject_name, realm.name::text AS realm_name,
+         row_number() OVER (PARTITION BY b.rating_metric ORDER BY b.score DESC, (CASE WHEN b.rating_metric = 'peak' THEN COALESCE(b.best_raw, 0) ELSE 0 END) DESC, b.realm_id, b.player_guid) AS position
+  FROM (
+    SELECT DISTINCT ON (s.rating_metric, s.realm_id, s.player_guid) s.generation_id, s.tenant_id, s.realm_id, s.player_guid, s.instance_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.rating_metric, s.window_kind, s.window_start, s.window_end, s.score, s.computed_at, s.best_raw, s.best_duration_secs
+    FROM player_tenant_rating_scope_scores_evolving_read s
+
+    JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
+    JOIN wow_servers server ON server.id = source_realm.server_id
+    WHERE s.tenant_id = $3 AND s.generation_id = $4 AND s.instance_name = $5
+      AND server.tenant_id IS NOT DISTINCT FROM NULLIF($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND (COALESCE(cardinality($6::uuid[]), 0) = 0 OR s.realm_id = ANY($6::uuid[]))
+      AND ((s.rating_metric = 'renown' AND s.window_kind = $7::text AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none') OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = $8::text AND $9::boolean AND s.difficulty_name = $10 AND s.max_players = $11 AND s.performance_metric = $12::text))
+    AND (s.rating_metric = 'renown' OR (($13::text = '' OR s.player_class = $13) AND ($14::text = '' OR s.player_spec = $14) AND ($15::text = '' OR s.player_sub_spec = $15)))
+
+    ORDER BY s.rating_metric, s.realm_id, s.player_guid, s.score DESC, COALESCE(s.best_raw, 0) DESC, s.player_class, s.player_spec, s.player_sub_spec
+  ) b
+  JOIN wow_server_realms realm ON realm.id = b.realm_id
+  LEFT JOIN game_players gp ON gp.realm_id = b.realm_id AND gp.id = (CASE WHEN b.player_guid ~ '^0x[0-9A-Fa-f]{16}$' THEN b.player_guid::wow_guid ELSE NULL::wow_guid END)
+  LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = b.realm_id
+  UNION ALL
+  SELECT 'player'::text AS subject, 'boss'::text AS board, b.rating_metric, b.encounter_name AS encounter_name,
+         b.realm_id, b.player_guid::text AS subject_id, b.score, b.best_raw, b.player_class, b.player_spec, b.player_sub_spec,
+         COALESCE(gp.name, '')::text AS subject_name, realm.name::text AS realm_name,
+         row_number() OVER (PARTITION BY b.encounter_name, b.rating_metric ORDER BY b.score DESC, (CASE WHEN b.rating_metric = 'peak' THEN COALESCE(b.best_raw, 0) ELSE 0 END) DESC, b.realm_id, b.player_guid) AS position
+  FROM (
+    SELECT DISTINCT ON (s.encounter_name, s.rating_metric, s.realm_id, s.player_guid) s.generation_id, s.tenant_id, s.realm_id, s.player_guid, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.rating_metric, s.window_kind, s.window_start, s.window_end, s.score, s.best_raw, s.rank_one_raw, s.best_locked_parse, s.form, s.floor_score, s.eligible_kills, s.computed_at, s.best_duration_secs
+    FROM player_tenant_rating_boss_scores_evolving_read s
+
+    JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
+    JOIN wow_servers server ON server.id = source_realm.server_id
+    WHERE s.tenant_id = $3 AND s.generation_id = $4 AND s.instance_name = $5
+      AND server.tenant_id IS NOT DISTINCT FROM NULLIF($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND (COALESCE(cardinality($6::uuid[]), 0) = 0 OR s.realm_id = ANY($6::uuid[]))
+      AND ((s.rating_metric = 'renown' AND s.window_kind = $7::text AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none') OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = $8::text AND $9::boolean AND s.difficulty_name = $10 AND s.max_players = $11 AND s.performance_metric = $12::text))
+    AND (s.rating_metric = 'renown' OR (($13::text = '' OR s.player_class = $13) AND ($14::text = '' OR s.player_spec = $14) AND ($15::text = '' OR s.player_sub_spec = $15)))
+      AND s.encounter_name IN (SELECT encounter_name FROM selected_bosses)
+    ORDER BY s.encounter_name, s.rating_metric, s.realm_id, s.player_guid, s.score DESC, COALESCE(s.best_raw, 0) DESC, s.player_class, s.player_spec, s.player_sub_spec
+  ) b
+  JOIN wow_server_realms realm ON realm.id = b.realm_id
+  LEFT JOIN game_players gp ON gp.realm_id = b.realm_id AND gp.id = (CASE WHEN b.player_guid ~ '^0x[0-9A-Fa-f]{16}$' THEN b.player_guid::wow_guid ELSE NULL::wow_guid END)
+  LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = b.realm_id
+  UNION ALL
+  SELECT 'guild'::text AS subject, 'scope'::text AS board, b.rating_metric, ''::text AS encounter_name,
+         b.realm_id, b.guild_id::text AS subject_id, b.score, NULL::float8 AS best_raw, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec,
+         COALESCE(guild.name, '')::text AS subject_name, realm.name::text AS realm_name,
+         row_number() OVER (PARTITION BY b.rating_metric ORDER BY b.score DESC, b.realm_id, b.guild_id) AS position
+  FROM (
+    SELECT DISTINCT ON (s.rating_metric, s.realm_id, s.guild_id) s.generation_id, s.tenant_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.rating_metric, s.window_kind, s.window_start, s.window_end, s.score, s.computed_at
+    FROM guild_tenant_rating_scope_scores_evolving_read s
+
+    JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
+    JOIN wow_servers server ON server.id = source_realm.server_id
+    WHERE s.tenant_id = $3 AND s.generation_id = $4 AND s.instance_name = $5
+      AND server.tenant_id IS NOT DISTINCT FROM NULLIF($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND (COALESCE(cardinality($6::uuid[]), 0) = 0 OR s.realm_id = ANY($6::uuid[]))
+      AND ((s.rating_metric = 'renown' AND s.window_kind = $7::text AND s.difficulty_name = '' AND s.max_players = 0) OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = $8::text AND $9::boolean AND s.difficulty_name = $10 AND s.max_players = $11))
+    ORDER BY s.rating_metric, s.realm_id, s.guild_id, s.score DESC
+  ) b
+  JOIN wow_server_realms realm ON realm.id = b.realm_id
+
+  LEFT JOIN guilds guild ON guild.id = b.guild_id AND guild.realm_id = b.realm_id
+  UNION ALL
+  SELECT 'guild'::text AS subject, 'boss'::text AS board, b.rating_metric, b.encounter_name AS encounter_name,
+         b.realm_id, b.guild_id::text AS subject_id, b.score, NULL::float8 AS best_raw, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec,
+         COALESCE(guild.name, '')::text AS subject_name, realm.name::text AS realm_name,
+         row_number() OVER (PARTITION BY b.encounter_name, b.rating_metric ORDER BY b.score DESC, b.realm_id, b.guild_id) AS position
+  FROM (
+    SELECT DISTINCT ON (s.encounter_name, s.rating_metric, s.realm_id, s.guild_id) s.generation_id, s.tenant_id, s.realm_id, s.guild_id, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.rating_metric, s.window_kind, s.window_start, s.window_end, s.score, s.best_raw, s.rank_one_raw, s.best_locked_parse, s.form, s.floor_score, s.eligible_kills, s.computed_at
+    FROM guild_tenant_rating_boss_scores_evolving_read s
+
+    JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
+    JOIN wow_servers server ON server.id = source_realm.server_id
+    WHERE s.tenant_id = $3 AND s.generation_id = $4 AND s.instance_name = $5
+      AND server.tenant_id IS NOT DISTINCT FROM NULLIF($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+      AND (COALESCE(cardinality($6::uuid[]), 0) = 0 OR s.realm_id = ANY($6::uuid[]))
+      AND ((s.rating_metric = 'renown' AND s.window_kind = $7::text AND s.difficulty_name = '' AND s.max_players = 0) OR (s.rating_metric IN ('peak', 'ranked_mastery') AND s.window_kind = $8::text AND $9::boolean AND s.difficulty_name = $10 AND s.max_players = $11))
+      AND s.encounter_name IN (SELECT encounter_name FROM selected_bosses)
+    ORDER BY s.encounter_name, s.rating_metric, s.realm_id, s.guild_id, s.score DESC
+  ) b
+  JOIN wow_server_realms realm ON realm.id = b.realm_id
+
+  LEFT JOIN guilds guild ON guild.id = b.guild_id AND guild.realm_id = b.realm_id
+)
+SELECT subject, board, rating_metric, encounter_name, realm_id, subject_id, score,
+       -- Peak's throughput (0 when unknown): the kill's on a boss, and on the raid
+       -- total output over total fight time across the bosses it counts.
+       COALESCE(CASE WHEN subject = 'player' AND rating_metric = 'peak' THEN best_raw END, 0)::float8 AS peak_raw,
+       player_class, player_spec, player_sub_spec, subject_name, realm_name
+FROM boards
+WHERE position <= CASE WHEN board = 'scope' OR encounter_name = $1::text THEN CASE WHEN $2::int >= 3 THEN 10 ELSE 5 END ELSE GREATEST(LEAST($2::int, 3), 1) END
+ORDER BY board, encounter_name, subject, rating_metric, position
+`
+
+type EvolvingHubSummaryRatingRowsParams struct {
+	FeaturedEncounter string      `db:"featured_encounter" json:"featured_encounter"`
+	BossDepth         int32       `db:"boss_depth" json:"boss_depth"`
+	TenantID          uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID      uuid.UUID   `db:"generation_id" json:"generation_id"`
+	InstanceName      string      `db:"instance_name" json:"instance_name"`
+	RealmIds          []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	RenownWindow      string      `db:"renown_window" json:"renown_window"`
+	WindowKind        string      `db:"window_kind" json:"window_kind"`
+	ExactCohort       bool        `db:"exact_cohort" json:"exact_cohort"`
+	DifficultyName    string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16       `db:"max_players" json:"max_players"`
+	PerformanceMetric string      `db:"performance_metric" json:"performance_metric"`
+	PlayerClass       string      `db:"player_class" json:"player_class"`
+	PlayerSpec        string      `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string      `db:"player_sub_spec" json:"player_sub_spec"`
+}
+
+type EvolvingHubSummaryRatingRowsRow struct {
+	Subject       string    `db:"subject" json:"subject"`
+	Board         string    `db:"board" json:"board"`
+	RatingMetric  string    `db:"rating_metric" json:"rating_metric"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID     string    `db:"subject_id" json:"subject_id"`
+	Score         float64   `db:"score" json:"score"`
+	PeakRaw       float64   `db:"peak_raw" json:"peak_raw"`
+	PlayerClass   string    `db:"player_class" json:"player_class"`
+	PlayerSpec    string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec string    `db:"player_sub_spec" json:"player_sub_spec"`
+	SubjectName   string    `db:"subject_name" json:"subject_name"`
+	RealmName     string    `db:"realm_name" json:"realm_name"`
+}
+
+// Generation-free readers against the evolving projection compatibility views.
+// All boards share the caller-pinned active generation. Bound boss names and
+// truncate each board in SQL, not in the HTTP handler.
+// The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss.
+func (q *sqlQuerier) EvolvingHubSummaryRatingRows(ctx context.Context, arg EvolvingHubSummaryRatingRowsParams) ([]EvolvingHubSummaryRatingRowsRow, error) {
+	rows, err := q.db.Query(ctx, evolvingHubSummaryRatingRows,
+		arg.FeaturedEncounter,
+		arg.BossDepth,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.InstanceName,
+		arg.RealmIds,
+		arg.RenownWindow,
+		arg.WindowKind,
+		arg.ExactCohort,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PerformanceMetric,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EvolvingHubSummaryRatingRowsRow
+	for rows.Next() {
+		var i EvolvingHubSummaryRatingRowsRow
+		if err := rows.Scan(
+			&i.Subject,
+			&i.Board,
+			&i.RatingMetric,
+			&i.EncounterName,
+			&i.RealmID,
+			&i.SubjectID,
+			&i.Score,
+			&i.PeakRaw,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.SubjectName,
+			&i.RealmName,
 		); err != nil {
 			return nil, err
 		}
@@ -30858,6 +33317,244 @@ func (q *sqlQuerier) StartTenantRatingRebuild(ctx context.Context, arg StartTena
 	return column_1, err
 }
 
+const listDirtyTenantRatings = `-- name: ListDirtyTenantRatings :many
+SELECT tenant_id FROM rating_dirty_observation_runs
+UNION
+SELECT tenant_id FROM rating_dirty_renown_subjects
+UNION
+SELECT tenant_id FROM rating_dirty_mastery_subjects
+UNION
+SELECT tenant_id FROM rating_dirty_peak_cohorts
+ORDER BY tenant_id
+`
+
+// One recovery dispatch covers every durable rating intent. UNION removes
+// duplicate tenant IDs without requiring four separate River dispatch jobs.
+func (q *sqlQuerier) ListDirtyTenantRatings(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listDirtyTenantRatings)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var tenant_id uuid.UUID
+		if err := rows.Scan(&tenant_id); err != nil {
+			return nil, err
+		}
+		items = append(items, tenant_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getEvolvingGuildBossFullList = `-- name: GetEvolvingGuildBossFullList :one
+
+WITH best AS (
+  SELECT DISTINCT ON (rated.realm_id, rated.guild_id) rated.generation_id, rated.tenant_id, rated.realm_id, rated.guild_id, rated.instance_name, rated.encounter_name, rated.difficulty_name, rated.max_players, rated.rating_metric, rated.window_kind, rated.window_start, rated.window_end, rated.score, rated.best_raw, rated.rank_one_raw, rated.best_locked_parse, rated.form, rated.floor_score, rated.eligible_kills, rated.computed_at, to_jsonb(rated) AS payload
+  FROM guild_tenant_rating_boss_scores_evolving_read rated
+
+  JOIN wow_server_realms realm ON realm.id = rated.realm_id
+  JOIN wow_servers server ON server.id = realm.server_id
+  WHERE rated.tenant_id = $1 AND rated.generation_id = $2
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND rated.instance_name = $3
+    AND rated.encounter_name = $4
+    AND rated.difficulty_name = $5 AND rated.max_players = $6
+    AND rated.rating_metric = $7 AND rated.window_kind = $8
+  ORDER BY rated.realm_id, rated.guild_id, rated.score DESC
+),
+ranked AS (
+  SELECT best.generation_id, best.tenant_id, best.realm_id, best.guild_id, best.instance_name, best.encounter_name, best.difficulty_name, best.max_players, best.rating_metric, best.window_kind, best.window_start, best.window_end, best.score, best.best_raw, best.rank_one_raw, best.best_locked_parse, best.form, best.floor_score, best.eligible_kills, best.computed_at, best.payload, row_number() OVER (ORDER BY score DESC, realm_id, guild_id) AS global_rank
+  FROM best
+),
+displayed AS (
+  SELECT ranked.generation_id, ranked.tenant_id, ranked.realm_id, ranked.guild_id, ranked.instance_name, ranked.encounter_name, ranked.difficulty_name, ranked.max_players, ranked.rating_metric, ranked.window_kind, ranked.window_start, ranked.window_end, ranked.score, ranked.best_raw, ranked.rank_one_raw, ranked.best_locked_parse, ranked.form, ranked.floor_score, ranked.eligible_kills, ranked.computed_at, ranked.payload, ranked.global_rank, guild.name AS guild_name, realm.name AS realm_name
+  FROM ranked
+  JOIN wow_server_realms realm ON realm.id = ranked.realm_id
+  LEFT JOIN guilds guild ON guild.id = ranked.guild_id AND guild.realm_id = ranked.realm_id
+  WHERE (COALESCE(cardinality($9::uuid[]), 0) = 0 OR ranked.realm_id = ANY($9::uuid[]))
+    AND ($10::text = '' OR position(lower($10::text) in lower(COALESCE(guild.name, ranked.guild_id::text))) > 0)
+),
+paged AS (
+  SELECT displayed.generation_id, displayed.tenant_id, displayed.realm_id, displayed.guild_id, displayed.instance_name, displayed.encounter_name, displayed.difficulty_name, displayed.max_players, displayed.rating_metric, displayed.window_kind, displayed.window_start, displayed.window_end, displayed.score, displayed.best_raw, displayed.rank_one_raw, displayed.best_locked_parse, displayed.form, displayed.floor_score, displayed.eligible_kills, displayed.computed_at, displayed.payload, displayed.global_rank, displayed.guild_name, displayed.realm_name, scores.peak, scores.mastery, scores.renown
+  FROM displayed
+  LEFT JOIN LATERAL (
+    SELECT max(s.score) FILTER (WHERE s.rating_metric = 'peak' AND s.window_kind = $11::text) AS peak,
+           max(s.score) FILTER (WHERE s.rating_metric = 'mastery' AND s.window_kind = $11::text) AS mastery,
+           max(s.score) FILTER (WHERE s.rating_metric = 'renown' AND s.window_kind = $12::text) AS renown
+    FROM guild_tenant_rating_boss_scores_evolving_read s
+    WHERE s.tenant_id = $1 AND s.generation_id = $2 AND s.instance_name = $3 AND s.encounter_name = $4
+      AND s.realm_id = displayed.realm_id AND s.guild_id = displayed.guild_id
+      AND ((s.rating_metric IN ('peak', 'mastery')
+            AND s.difficulty_name = $13 AND s.max_players = $14)
+           OR (s.rating_metric = 'renown' AND s.difficulty_name = ''
+               AND s.max_players = 0))
+  ) scores ON true
+  ORDER BY displayed.global_rank
+  LIMIT $16::int OFFSET $15::int
+)
+SELECT (SELECT count(*) FROM displayed)::bigint AS total,
+       COALESCE((SELECT jsonb_agg(jsonb_build_object(
+         'rank', global_rank,
+         'entry', payload || jsonb_build_object('guild_name', guild_name, 'realm_name', realm_name),
+         'scores', jsonb_build_object('peak', peak, 'mastery', mastery, 'renown', renown)
+       ) ORDER BY global_rank) FROM paged), '[]'::jsonb) AS rows
+`
+
+type GetEvolvingGuildBossFullListParams struct {
+	TenantID            uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID        uuid.UUID   `db:"generation_id" json:"generation_id"`
+	InstanceName        string      `db:"instance_name" json:"instance_name"`
+	EncounterName       string      `db:"encounter_name" json:"encounter_name"`
+	DifficultyName      string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers          int16       `db:"max_players" json:"max_players"`
+	RatingMetric        string      `db:"rating_metric" json:"rating_metric"`
+	WindowKind          string      `db:"window_kind" json:"window_kind"`
+	RealmIds            []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	SearchQuery         string      `db:"search_query" json:"search_query"`
+	OtherWindowKind     string      `db:"other_window_kind" json:"other_window_kind"`
+	RenownWindowKind    string      `db:"renown_window_kind" json:"renown_window_kind"`
+	OtherDifficultyName string      `db:"other_difficulty_name" json:"other_difficulty_name"`
+	OtherMaxPlayers     int16       `db:"other_max_players" json:"other_max_players"`
+	OffsetCount         int32       `db:"offset_count" json:"offset_count"`
+	LimitCount          int32       `db:"limit_count" json:"limit_count"`
+}
+
+type GetEvolvingGuildBossFullListRow struct {
+	Total int64       `db:"total" json:"total"`
+	Rows  interface{} `db:"rows" json:"rows"`
+}
+
+// Generation-free readers against the evolving projection compatibility views.
+// Rank the full tenant guild cohort before applying display-only realm/name filters.
+// A single statement computes the page and count from the same MVCC snapshot.
+func (q *sqlQuerier) GetEvolvingGuildBossFullList(ctx context.Context, arg GetEvolvingGuildBossFullListParams) (GetEvolvingGuildBossFullListRow, error) {
+	row := q.db.QueryRow(ctx, getEvolvingGuildBossFullList,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.RealmIds,
+		arg.SearchQuery,
+		arg.OtherWindowKind,
+		arg.RenownWindowKind,
+		arg.OtherDifficultyName,
+		arg.OtherMaxPlayers,
+		arg.OffsetCount,
+		arg.LimitCount,
+	)
+	var i GetEvolvingGuildBossFullListRow
+	err := row.Scan(&i.Total, &i.Rows)
+	return i, err
+}
+
+const getEvolvingGuildScopeFullList = `-- name: GetEvolvingGuildScopeFullList :one
+WITH best AS (
+  SELECT DISTINCT ON (rated.realm_id, rated.guild_id) rated.generation_id, rated.tenant_id, rated.realm_id, rated.guild_id, rated.instance_name, rated.difficulty_name, rated.max_players, rated.rating_metric, rated.window_kind, rated.window_start, rated.window_end, rated.score, rated.computed_at, to_jsonb(rated) AS payload
+  FROM guild_tenant_rating_scope_scores_evolving_read rated
+
+  JOIN wow_server_realms realm ON realm.id = rated.realm_id
+  JOIN wow_servers server ON server.id = realm.server_id
+  WHERE rated.tenant_id = $1 AND rated.generation_id = $2
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND rated.instance_name = $3
+    AND rated.difficulty_name = $4 AND rated.max_players = $5
+    AND rated.rating_metric = $6 AND rated.window_kind = $7
+  ORDER BY rated.realm_id, rated.guild_id, rated.score DESC
+),
+ranked AS (
+  SELECT best.generation_id, best.tenant_id, best.realm_id, best.guild_id, best.instance_name, best.difficulty_name, best.max_players, best.rating_metric, best.window_kind, best.window_start, best.window_end, best.score, best.computed_at, best.payload, row_number() OVER (ORDER BY score DESC, realm_id, guild_id) AS global_rank
+  FROM best
+),
+displayed AS (
+  SELECT ranked.generation_id, ranked.tenant_id, ranked.realm_id, ranked.guild_id, ranked.instance_name, ranked.difficulty_name, ranked.max_players, ranked.rating_metric, ranked.window_kind, ranked.window_start, ranked.window_end, ranked.score, ranked.computed_at, ranked.payload, ranked.global_rank, guild.name AS guild_name, realm.name AS realm_name
+  FROM ranked
+  JOIN wow_server_realms realm ON realm.id = ranked.realm_id
+  LEFT JOIN guilds guild ON guild.id = ranked.guild_id AND guild.realm_id = ranked.realm_id
+  WHERE (COALESCE(cardinality($8::uuid[]), 0) = 0 OR ranked.realm_id = ANY($8::uuid[]))
+    AND ($9::text = '' OR position(lower($9::text) in lower(COALESCE(guild.name, ranked.guild_id::text))) > 0)
+),
+paged AS (
+  SELECT displayed.generation_id, displayed.tenant_id, displayed.realm_id, displayed.guild_id, displayed.instance_name, displayed.difficulty_name, displayed.max_players, displayed.rating_metric, displayed.window_kind, displayed.window_start, displayed.window_end, displayed.score, displayed.computed_at, displayed.payload, displayed.global_rank, displayed.guild_name, displayed.realm_name, scores.peak, scores.mastery, scores.renown
+  FROM displayed
+  LEFT JOIN LATERAL (
+    SELECT max(s.score) FILTER (WHERE s.rating_metric = 'peak' AND s.window_kind = $10::text) AS peak,
+           max(s.score) FILTER (WHERE s.rating_metric = 'mastery' AND s.window_kind = $10::text) AS mastery,
+           max(s.score) FILTER (WHERE s.rating_metric = 'renown' AND s.window_kind = $11::text) AS renown
+    FROM guild_tenant_rating_scope_scores_evolving_read s
+    WHERE s.tenant_id = $1 AND s.generation_id = $2 AND s.instance_name = $3
+      AND s.realm_id = displayed.realm_id AND s.guild_id = displayed.guild_id
+      AND ((s.rating_metric IN ('peak', 'mastery')
+            AND s.difficulty_name = $12 AND s.max_players = $13)
+           OR (s.rating_metric = 'renown' AND s.difficulty_name = ''
+               AND s.max_players = 0))
+  ) scores ON true
+  ORDER BY displayed.global_rank
+  LIMIT $15::int OFFSET $14::int
+)
+SELECT (SELECT count(*) FROM displayed)::bigint AS total,
+       COALESCE((SELECT jsonb_agg(jsonb_build_object(
+         'rank', global_rank,
+         'entry', payload || jsonb_build_object('guild_name', guild_name, 'realm_name', realm_name),
+         'scores', jsonb_build_object('peak', peak, 'mastery', mastery, 'renown', renown)
+       ) ORDER BY global_rank) FROM paged), '[]'::jsonb) AS rows
+`
+
+type GetEvolvingGuildScopeFullListParams struct {
+	TenantID            uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID        uuid.UUID   `db:"generation_id" json:"generation_id"`
+	InstanceName        string      `db:"instance_name" json:"instance_name"`
+	DifficultyName      string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers          int16       `db:"max_players" json:"max_players"`
+	RatingMetric        string      `db:"rating_metric" json:"rating_metric"`
+	WindowKind          string      `db:"window_kind" json:"window_kind"`
+	RealmIds            []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	SearchQuery         string      `db:"search_query" json:"search_query"`
+	OtherWindowKind     string      `db:"other_window_kind" json:"other_window_kind"`
+	RenownWindowKind    string      `db:"renown_window_kind" json:"renown_window_kind"`
+	OtherDifficultyName string      `db:"other_difficulty_name" json:"other_difficulty_name"`
+	OtherMaxPlayers     int16       `db:"other_max_players" json:"other_max_players"`
+	OffsetCount         int32       `db:"offset_count" json:"offset_count"`
+	LimitCount          int32       `db:"limit_count" json:"limit_count"`
+}
+
+type GetEvolvingGuildScopeFullListRow struct {
+	Total int64       `db:"total" json:"total"`
+	Rows  interface{} `db:"rows" json:"rows"`
+}
+
+// Rank the full tenant guild cohort before applying display-only realm/name filters.
+// A single statement computes the page and count from the same MVCC snapshot.
+func (q *sqlQuerier) GetEvolvingGuildScopeFullList(ctx context.Context, arg GetEvolvingGuildScopeFullListParams) (GetEvolvingGuildScopeFullListRow, error) {
+	row := q.db.QueryRow(ctx, getEvolvingGuildScopeFullList,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.RealmIds,
+		arg.SearchQuery,
+		arg.OtherWindowKind,
+		arg.RenownWindowKind,
+		arg.OtherDifficultyName,
+		arg.OtherMaxPlayers,
+		arg.OffsetCount,
+		arg.LimitCount,
+	)
+	var i GetEvolvingGuildScopeFullListRow
+	err := row.Scan(&i.Total, &i.Rows)
+	return i, err
+}
+
 const getPublishedGuildBossFullList = `-- name: GetPublishedGuildBossFullList :one
 WITH best AS (
   SELECT DISTINCT ON (rated.realm_id, rated.guild_id) rated.generation_id, rated.tenant_id, rated.realm_id, rated.guild_id, rated.instance_name, rated.encounter_name, rated.difficulty_name, rated.max_players, rated.rating_metric, rated.window_kind, rated.window_start, rated.window_end, rated.score, rated.best_raw, rated.rank_one_raw, rated.best_locked_parse, rated.form, rated.floor_score, rated.eligible_kills, rated.computed_at, to_jsonb(rated) AS payload
@@ -31992,6 +34689,1102 @@ func (q *sqlQuerier) InsertPlayerTenantScopeScore(ctx context.Context, arg Inser
 	return result.RowsAffected(), nil
 }
 
+const getEvolvingPlayerBossFullList = `-- name: GetEvolvingPlayerBossFullList :one
+
+WITH best AS (
+  SELECT DISTINCT ON (rated.realm_id, rated.player_guid) rated.generation_id, rated.tenant_id, rated.realm_id, rated.player_guid, rated.instance_name, rated.encounter_name, rated.difficulty_name, rated.max_players, rated.player_class, rated.player_spec, rated.player_sub_spec, rated.performance_metric, rated.rating_metric, rated.window_kind, rated.window_start, rated.window_end, rated.score, rated.best_raw, rated.rank_one_raw, rated.best_locked_parse, rated.form, rated.floor_score, rated.eligible_kills, rated.computed_at, rated.best_duration_secs, to_jsonb(rated) AS payload
+  FROM player_tenant_rating_boss_scores_evolving_read rated
+
+  JOIN wow_server_realms realm ON realm.id = rated.realm_id
+  JOIN wow_servers server ON server.id = realm.server_id
+  WHERE rated.tenant_id = $1 AND rated.generation_id = $2
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND rated.instance_name = $3
+    AND rated.encounter_name = $4
+    AND rated.difficulty_name = $5 AND rated.max_players = $6
+    AND ($7::text = '' OR rated.player_class = $7)
+    AND ($8::text = '' OR rated.player_spec = $8)
+    AND ($9::text = '' OR rated.player_sub_spec = $9)
+    AND rated.performance_metric = $10
+    AND rated.rating_metric = $11 AND rated.window_kind = $12
+  ORDER BY rated.realm_id, rated.player_guid, rated.score DESC, (CASE WHEN rated.rating_metric = 'peak' THEN COALESCE(rated.best_raw, 0) ELSE 0 END) DESC, rated.player_class, rated.player_spec, rated.player_sub_spec
+),
+ranked AS (
+  SELECT best.generation_id, best.tenant_id, best.realm_id, best.player_guid, best.instance_name, best.encounter_name, best.difficulty_name, best.max_players, best.player_class, best.player_spec, best.player_sub_spec, best.performance_metric, best.rating_metric, best.window_kind, best.window_start, best.window_end, best.score, best.best_raw, best.rank_one_raw, best.best_locked_parse, best.form, best.floor_score, best.eligible_kills, best.computed_at, best.best_duration_secs, best.payload, row_number() OVER (ORDER BY score DESC, (CASE WHEN rating_metric = 'peak' THEN COALESCE(best_raw, 0) ELSE 0 END) DESC, realm_id, player_guid) AS global_rank
+  FROM best
+),
+displayed AS (
+  SELECT ranked.generation_id, ranked.tenant_id, ranked.realm_id, ranked.player_guid, ranked.instance_name, ranked.encounter_name, ranked.difficulty_name, ranked.max_players, ranked.player_class, ranked.player_spec, ranked.player_sub_spec, ranked.performance_metric, ranked.rating_metric, ranked.window_kind, ranked.window_start, ranked.window_end, ranked.score, ranked.best_raw, ranked.rank_one_raw, ranked.best_locked_parse, ranked.form, ranked.floor_score, ranked.eligible_kills, ranked.computed_at, ranked.best_duration_secs, ranked.payload, ranked.global_rank, gp.name AS player_name, guild.name AS guild_name, realm.name AS realm_name
+  FROM ranked
+  JOIN wow_server_realms realm ON realm.id = ranked.realm_id
+  LEFT JOIN game_players gp ON gp.realm_id = ranked.realm_id AND gp.id =
+    (CASE WHEN ranked.player_guid ~ '^0x[0-9A-Fa-f]{16}$' THEN ranked.player_guid::wow_guid ELSE NULL::wow_guid END)
+  LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = ranked.realm_id
+  WHERE (COALESCE(cardinality($13::uuid[]), 0) = 0 OR ranked.realm_id = ANY($13::uuid[]))
+    AND ($14::text = '' OR position(lower($14::text) in lower(COALESCE(gp.name, ranked.player_guid))) > 0
+         OR position(lower($14::text) in lower(COALESCE(guild.name, ''))) > 0)
+),
+paged AS (
+  SELECT displayed.generation_id, displayed.tenant_id, displayed.realm_id, displayed.player_guid, displayed.instance_name, displayed.encounter_name, displayed.difficulty_name, displayed.max_players, displayed.player_class, displayed.player_spec, displayed.player_sub_spec, displayed.performance_metric, displayed.rating_metric, displayed.window_kind, displayed.window_start, displayed.window_end, displayed.score, displayed.best_raw, displayed.rank_one_raw, displayed.best_locked_parse, displayed.form, displayed.floor_score, displayed.eligible_kills, displayed.computed_at, displayed.best_duration_secs, displayed.payload, displayed.global_rank, displayed.player_name, displayed.guild_name, displayed.realm_name, scores.peak, scores.mastery, scores.renown
+  FROM displayed
+  LEFT JOIN LATERAL (
+    SELECT max(s.score) FILTER (WHERE s.rating_metric = 'peak' AND s.window_kind = $15::text) AS peak,
+           max(s.score) FILTER (WHERE s.rating_metric = 'ranked_mastery' AND s.window_kind = $15::text) AS mastery,
+           max(s.score) FILTER (WHERE s.rating_metric = 'renown' AND s.window_kind = $16::text) AS renown
+    FROM player_tenant_rating_boss_scores_evolving_read s
+    WHERE s.tenant_id = $1 AND s.generation_id = $2 AND s.instance_name = $3 AND s.encounter_name = $4
+      AND s.realm_id = displayed.realm_id AND s.player_guid = displayed.player_guid
+      AND ((s.rating_metric IN ('peak', 'ranked_mastery')
+            AND s.difficulty_name = $17 AND s.max_players = $18
+            AND s.performance_metric = $19
+            AND ($7::text = '' OR s.player_class = $7)
+            AND ($8::text = '' OR s.player_spec = $8)
+            AND ($9::text = '' OR s.player_sub_spec = $9))
+           OR (s.rating_metric = 'renown' AND s.difficulty_name = ''
+               AND s.max_players = 0 AND s.performance_metric = 'none'))
+  ) scores ON true
+  ORDER BY displayed.global_rank
+  LIMIT $21::int OFFSET $20::int
+)
+SELECT (SELECT count(*) FROM displayed)::bigint AS total,
+       COALESCE((SELECT jsonb_agg(jsonb_build_object(
+         'rank', global_rank,
+         'entry', payload || jsonb_build_object('player_name', player_name, 'guild_name', guild_name, 'realm_name', realm_name),
+         'scores', jsonb_build_object('peak', peak, 'mastery', mastery, 'renown', renown)
+       ) ORDER BY global_rank) FROM paged), '[]'::jsonb) AS rows
+`
+
+type GetEvolvingPlayerBossFullListParams struct {
+	TenantID               uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID           uuid.UUID   `db:"generation_id" json:"generation_id"`
+	InstanceName           string      `db:"instance_name" json:"instance_name"`
+	EncounterName          string      `db:"encounter_name" json:"encounter_name"`
+	DifficultyName         string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers             int16       `db:"max_players" json:"max_players"`
+	PlayerClass            string      `db:"player_class" json:"player_class"`
+	PlayerSpec             string      `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec          string      `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric      string      `db:"performance_metric" json:"performance_metric"`
+	RatingMetric           string      `db:"rating_metric" json:"rating_metric"`
+	WindowKind             string      `db:"window_kind" json:"window_kind"`
+	RealmIds               []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	SearchQuery            string      `db:"search_query" json:"search_query"`
+	OtherWindowKind        string      `db:"other_window_kind" json:"other_window_kind"`
+	RenownWindowKind       string      `db:"renown_window_kind" json:"renown_window_kind"`
+	OtherDifficultyName    string      `db:"other_difficulty_name" json:"other_difficulty_name"`
+	OtherMaxPlayers        int16       `db:"other_max_players" json:"other_max_players"`
+	OtherPerformanceMetric string      `db:"other_performance_metric" json:"other_performance_metric"`
+	OffsetCount            int32       `db:"offset_count" json:"offset_count"`
+	LimitCount             int32       `db:"limit_count" json:"limit_count"`
+}
+
+type GetEvolvingPlayerBossFullListRow struct {
+	Total int64       `db:"total" json:"total"`
+	Rows  interface{} `db:"rows" json:"rows"`
+}
+
+// Generation-free readers against the evolving projection compatibility views.
+// Rank the full tenant cohort before applying display-only realm/name filters.
+// A single statement computes the page and count from the same MVCC snapshot.
+func (q *sqlQuerier) GetEvolvingPlayerBossFullList(ctx context.Context, arg GetEvolvingPlayerBossFullListParams) (GetEvolvingPlayerBossFullListRow, error) {
+	row := q.db.QueryRow(ctx, getEvolvingPlayerBossFullList,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.RealmIds,
+		arg.SearchQuery,
+		arg.OtherWindowKind,
+		arg.RenownWindowKind,
+		arg.OtherDifficultyName,
+		arg.OtherMaxPlayers,
+		arg.OtherPerformanceMetric,
+		arg.OffsetCount,
+		arg.LimitCount,
+	)
+	var i GetEvolvingPlayerBossFullListRow
+	err := row.Scan(&i.Total, &i.Rows)
+	return i, err
+}
+
+const getEvolvingPlayerScopeFullList = `-- name: GetEvolvingPlayerScopeFullList :one
+WITH best AS (
+  SELECT DISTINCT ON (rated.realm_id, rated.player_guid) rated.generation_id, rated.tenant_id, rated.realm_id, rated.player_guid, rated.instance_name, rated.difficulty_name, rated.max_players, rated.player_class, rated.player_spec, rated.player_sub_spec, rated.performance_metric, rated.rating_metric, rated.window_kind, rated.window_start, rated.window_end, rated.score, rated.computed_at, rated.best_raw, rated.best_duration_secs, to_jsonb(rated) AS payload
+  FROM player_tenant_rating_scope_scores_evolving_read rated
+
+  JOIN wow_server_realms realm ON realm.id = rated.realm_id
+  JOIN wow_servers server ON server.id = realm.server_id
+  WHERE rated.tenant_id = $1 AND rated.generation_id = $2
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND rated.instance_name = $3
+    AND rated.difficulty_name = $4 AND rated.max_players = $5
+    AND ($6::text = '' OR rated.player_class = $6)
+    AND ($7::text = '' OR rated.player_spec = $7)
+    AND ($8::text = '' OR rated.player_sub_spec = $8)
+    AND rated.performance_metric = $9
+    AND rated.rating_metric = $10 AND rated.window_kind = $11
+  ORDER BY rated.realm_id, rated.player_guid, rated.score DESC, (CASE WHEN rated.rating_metric = 'peak' THEN COALESCE(rated.best_raw, 0) ELSE 0 END) DESC, rated.player_class, rated.player_spec, rated.player_sub_spec
+),
+ranked AS (
+  SELECT best.generation_id, best.tenant_id, best.realm_id, best.player_guid, best.instance_name, best.difficulty_name, best.max_players, best.player_class, best.player_spec, best.player_sub_spec, best.performance_metric, best.rating_metric, best.window_kind, best.window_start, best.window_end, best.score, best.computed_at, best.best_raw, best.best_duration_secs, best.payload, row_number() OVER (ORDER BY score DESC, (CASE WHEN rating_metric = 'peak' THEN COALESCE(best_raw, 0) ELSE 0 END) DESC, realm_id, player_guid) AS global_rank
+  FROM best
+),
+displayed AS (
+  SELECT ranked.generation_id, ranked.tenant_id, ranked.realm_id, ranked.player_guid, ranked.instance_name, ranked.difficulty_name, ranked.max_players, ranked.player_class, ranked.player_spec, ranked.player_sub_spec, ranked.performance_metric, ranked.rating_metric, ranked.window_kind, ranked.window_start, ranked.window_end, ranked.score, ranked.computed_at, ranked.best_raw, ranked.best_duration_secs, ranked.payload, ranked.global_rank, gp.name AS player_name, guild.name AS guild_name, realm.name AS realm_name
+  FROM ranked
+  JOIN wow_server_realms realm ON realm.id = ranked.realm_id
+  LEFT JOIN game_players gp ON gp.realm_id = ranked.realm_id AND gp.id =
+    (CASE WHEN ranked.player_guid ~ '^0x[0-9A-Fa-f]{16}$' THEN ranked.player_guid::wow_guid ELSE NULL::wow_guid END)
+  LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = ranked.realm_id
+  WHERE (COALESCE(cardinality($12::uuid[]), 0) = 0 OR ranked.realm_id = ANY($12::uuid[]))
+    AND ($13::text = '' OR position(lower($13::text) in lower(COALESCE(gp.name, ranked.player_guid))) > 0
+         OR position(lower($13::text) in lower(COALESCE(guild.name, ''))) > 0)
+),
+paged AS (
+  SELECT displayed.generation_id, displayed.tenant_id, displayed.realm_id, displayed.player_guid, displayed.instance_name, displayed.difficulty_name, displayed.max_players, displayed.player_class, displayed.player_spec, displayed.player_sub_spec, displayed.performance_metric, displayed.rating_metric, displayed.window_kind, displayed.window_start, displayed.window_end, displayed.score, displayed.computed_at, displayed.best_raw, displayed.best_duration_secs, displayed.payload, displayed.global_rank, displayed.player_name, displayed.guild_name, displayed.realm_name, scores.peak, scores.mastery, scores.renown
+  FROM displayed
+  LEFT JOIN LATERAL (
+    SELECT max(s.score) FILTER (WHERE s.rating_metric = 'peak' AND s.window_kind = $14::text) AS peak,
+           max(s.score) FILTER (WHERE s.rating_metric = 'ranked_mastery' AND s.window_kind = $14::text) AS mastery,
+           max(s.score) FILTER (WHERE s.rating_metric = 'renown' AND s.window_kind = $15::text) AS renown
+    FROM player_tenant_rating_scope_scores_evolving_read s
+    WHERE s.tenant_id = $1 AND s.generation_id = $2 AND s.instance_name = $3
+      AND s.realm_id = displayed.realm_id AND s.player_guid = displayed.player_guid
+      AND ((s.rating_metric IN ('peak', 'ranked_mastery')
+            AND s.difficulty_name = $16 AND s.max_players = $17
+            AND s.performance_metric = $18
+            AND ($6::text = '' OR s.player_class = $6)
+            AND ($7::text = '' OR s.player_spec = $7)
+            AND ($8::text = '' OR s.player_sub_spec = $8))
+           OR (s.rating_metric = 'renown' AND s.difficulty_name = ''
+               AND s.max_players = 0 AND s.performance_metric = 'none'))
+  ) scores ON true
+  ORDER BY displayed.global_rank
+  LIMIT $20::int OFFSET $19::int
+)
+SELECT (SELECT count(*) FROM displayed)::bigint AS total,
+       COALESCE((SELECT jsonb_agg(jsonb_build_object(
+         'rank', global_rank,
+         'entry', payload || jsonb_build_object('player_name', player_name, 'guild_name', guild_name, 'realm_name', realm_name),
+         'scores', jsonb_build_object('peak', peak, 'mastery', mastery, 'renown', renown)
+       ) ORDER BY global_rank) FROM paged), '[]'::jsonb) AS rows
+`
+
+type GetEvolvingPlayerScopeFullListParams struct {
+	TenantID               uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID           uuid.UUID   `db:"generation_id" json:"generation_id"`
+	InstanceName           string      `db:"instance_name" json:"instance_name"`
+	DifficultyName         string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers             int16       `db:"max_players" json:"max_players"`
+	PlayerClass            string      `db:"player_class" json:"player_class"`
+	PlayerSpec             string      `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec          string      `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric      string      `db:"performance_metric" json:"performance_metric"`
+	RatingMetric           string      `db:"rating_metric" json:"rating_metric"`
+	WindowKind             string      `db:"window_kind" json:"window_kind"`
+	RealmIds               []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	SearchQuery            string      `db:"search_query" json:"search_query"`
+	OtherWindowKind        string      `db:"other_window_kind" json:"other_window_kind"`
+	RenownWindowKind       string      `db:"renown_window_kind" json:"renown_window_kind"`
+	OtherDifficultyName    string      `db:"other_difficulty_name" json:"other_difficulty_name"`
+	OtherMaxPlayers        int16       `db:"other_max_players" json:"other_max_players"`
+	OtherPerformanceMetric string      `db:"other_performance_metric" json:"other_performance_metric"`
+	OffsetCount            int32       `db:"offset_count" json:"offset_count"`
+	LimitCount             int32       `db:"limit_count" json:"limit_count"`
+}
+
+type GetEvolvingPlayerScopeFullListRow struct {
+	Total int64       `db:"total" json:"total"`
+	Rows  interface{} `db:"rows" json:"rows"`
+}
+
+// Rank the full tenant cohort before applying display-only realm/name filters.
+// A single statement computes the page and count from the same MVCC snapshot.
+func (q *sqlQuerier) GetEvolvingPlayerScopeFullList(ctx context.Context, arg GetEvolvingPlayerScopeFullListParams) (GetEvolvingPlayerScopeFullListRow, error) {
+	row := q.db.QueryRow(ctx, getEvolvingPlayerScopeFullList,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.RealmIds,
+		arg.SearchQuery,
+		arg.OtherWindowKind,
+		arg.RenownWindowKind,
+		arg.OtherDifficultyName,
+		arg.OtherMaxPlayers,
+		arg.OtherPerformanceMetric,
+		arg.OffsetCount,
+		arg.LimitCount,
+	)
+	var i GetEvolvingPlayerScopeFullListRow
+	err := row.Scan(&i.Total, &i.Rows)
+	return i, err
+}
+
+const listEvolvingAllClassPlayerTenantBossScores = `-- name: ListEvolvingAllClassPlayerTenantBossScores :many
+WITH best AS (
+  SELECT DISTINCT ON (score.realm_id, score.player_guid) score.generation_id, score.tenant_id, score.realm_id, score.player_guid, score.instance_name, score.encounter_name, score.difficulty_name, score.max_players, score.player_class, score.player_spec, score.player_sub_spec, score.performance_metric, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.best_raw, score.rank_one_raw, score.best_locked_parse, score.form, score.floor_score, score.eligible_kills, score.computed_at, score.best_duration_secs
+  FROM player_tenant_rating_boss_scores_evolving_read score
+
+  JOIN wow_server_realms realm ON realm.id = score.realm_id
+  JOIN wow_servers server ON server.id = realm.server_id
+  WHERE score.tenant_id = $6
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($6::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND score.generation_id = $7
+    AND score.instance_name = $8
+    AND score.encounter_name = $9
+    AND score.difficulty_name = $10
+    AND score.max_players = $11
+    AND ($12::text = '' OR score.player_class = $12)
+    AND ($13::text = '' OR score.player_spec = $13)
+    AND ($14::text = '' OR score.player_sub_spec = $14)
+    AND score.performance_metric = $15
+    AND score.rating_metric = $16
+    AND score.window_kind = $17
+    AND (COALESCE(cardinality($18::uuid[]), 0) = 0 OR score.realm_id = ANY($18::uuid[]))
+  ORDER BY score.realm_id, score.player_guid, score.score DESC, (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) DESC, score.player_class, score.player_spec, score.player_sub_spec
+)
+SELECT score.generation_id, score.tenant_id, score.realm_id, score.player_guid, score.instance_name, score.encounter_name, score.difficulty_name, score.max_players, score.player_class, score.player_spec, score.player_sub_spec, score.performance_metric, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.best_raw, score.rank_one_raw, score.best_locked_parse, score.form, score.floor_score, score.eligible_kills, score.computed_at, score.best_duration_secs, gp.name AS player_name, guild.name AS guild_name, realm.name AS realm_name
+FROM best score
+JOIN wow_server_realms realm ON realm.id = score.realm_id
+LEFT JOIN game_players gp ON gp.realm_id = score.realm_id AND gp.id = (CASE WHEN score.player_guid ~ '^0x[0-9A-Fa-f]{16}$'
+     THEN score.player_guid::wow_guid ELSE NULL::wow_guid END)
+LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = score.realm_id
+WHERE ($1::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR score.score < $2::float8
+       -- Tied Peaks rank the higher DPS/HPS first; other metrics and unknowns tie on 0.
+       OR (score.score = $2::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) < $3::float8)
+       OR (score.score = $2::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = $3::float8 AND score.realm_id > $1::uuid)
+       OR (score.score = $2::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = $3::float8 AND score.realm_id = $1::uuid AND score.player_guid > $4::text))
+ORDER BY score.score DESC, (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) DESC, score.realm_id, score.player_guid
+LIMIT LEAST(GREATEST($5::int, 1), 100)
+`
+
+type ListEvolvingAllClassPlayerTenantBossScoresParams struct {
+	AfterRealmID      uuid.UUID   `db:"after_realm_id" json:"after_realm_id"`
+	AfterScore        float64     `db:"after_score" json:"after_score"`
+	AfterRaw          float64     `db:"after_raw" json:"after_raw"`
+	AfterPlayerGuid   string      `db:"after_player_guid" json:"after_player_guid"`
+	LimitCount        int32       `db:"limit_count" json:"limit_count"`
+	TenantID          uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID      uuid.UUID   `db:"generation_id" json:"generation_id"`
+	InstanceName      string      `db:"instance_name" json:"instance_name"`
+	EncounterName     string      `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16       `db:"max_players" json:"max_players"`
+	PlayerClass       string      `db:"player_class" json:"player_class"`
+	PlayerSpec        string      `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string      `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string      `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string      `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string      `db:"window_kind" json:"window_kind"`
+	RealmIds          []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+}
+
+type ListEvolvingAllClassPlayerTenantBossScoresRow struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	BestRaw           pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	RankOneRaw        pgtype.Float8      `db:"rank_one_raw" json:"rank_one_raw"`
+	BestLockedParse   pgtype.Float8      `db:"best_locked_parse" json:"best_locked_parse"`
+	Form              pgtype.Float8      `db:"form" json:"form"`
+	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
+	EligibleKills     int32              `db:"eligible_kills" json:"eligible_kills"`
+	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	BestDurationSecs  pgtype.Float8      `db:"best_duration_secs" json:"best_duration_secs"`
+	PlayerName        pgtype.Text        `db:"player_name" json:"player_name"`
+	GuildName         pgtype.Text        `db:"guild_name" json:"guild_name"`
+	RealmName         string             `db:"realm_name" json:"realm_name"`
+}
+
+func (q *sqlQuerier) ListEvolvingAllClassPlayerTenantBossScores(ctx context.Context, arg ListEvolvingAllClassPlayerTenantBossScoresParams) ([]ListEvolvingAllClassPlayerTenantBossScoresRow, error) {
+	rows, err := q.db.Query(ctx, listEvolvingAllClassPlayerTenantBossScores,
+		arg.AfterRealmID,
+		arg.AfterScore,
+		arg.AfterRaw,
+		arg.AfterPlayerGuid,
+		arg.LimitCount,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.RealmIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEvolvingAllClassPlayerTenantBossScoresRow
+	for rows.Next() {
+		var i ListEvolvingAllClassPlayerTenantBossScoresRow
+		if err := rows.Scan(
+			&i.GenerationID,
+			&i.TenantID,
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.PerformanceMetric,
+			&i.RatingMetric,
+			&i.WindowKind,
+			&i.WindowStart,
+			&i.WindowEnd,
+			&i.Score,
+			&i.BestRaw,
+			&i.RankOneRaw,
+			&i.BestLockedParse,
+			&i.Form,
+			&i.FloorScore,
+			&i.EligibleKills,
+			&i.ComputedAt,
+			&i.BestDurationSecs,
+			&i.PlayerName,
+			&i.GuildName,
+			&i.RealmName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEvolvingAllClassPlayerTenantScopeScores = `-- name: ListEvolvingAllClassPlayerTenantScopeScores :many
+WITH best AS (
+  SELECT DISTINCT ON (score.realm_id, score.player_guid) score.generation_id, score.tenant_id, score.realm_id, score.player_guid, score.instance_name, score.difficulty_name, score.max_players, score.player_class, score.player_spec, score.player_sub_spec, score.performance_metric, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.computed_at, score.best_raw, score.best_duration_secs
+  FROM player_tenant_rating_scope_scores_evolving_read score
+
+  JOIN wow_server_realms realm ON realm.id = score.realm_id
+  JOIN wow_servers server ON server.id = realm.server_id
+  WHERE score.tenant_id = $6
+    AND server.tenant_id IS NOT DISTINCT FROM NULLIF($6::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+    AND score.generation_id = $7
+    AND score.instance_name = $8
+    AND score.difficulty_name = $9
+    AND score.max_players = $10
+    AND ($11::text = '' OR score.player_class = $11)
+    AND ($12::text = '' OR score.player_spec = $12)
+    AND ($13::text = '' OR score.player_sub_spec = $13)
+    AND score.performance_metric = $14
+    AND score.rating_metric = $15
+    AND score.window_kind = $16
+    AND (COALESCE(cardinality($17::uuid[]), 0) = 0 OR score.realm_id = ANY($17::uuid[]))
+  ORDER BY score.realm_id, score.player_guid, score.score DESC, (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) DESC, score.player_class, score.player_spec, score.player_sub_spec
+)
+SELECT score.generation_id, score.tenant_id, score.realm_id, score.player_guid, score.instance_name, score.difficulty_name, score.max_players, score.player_class, score.player_spec, score.player_sub_spec, score.performance_metric, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.computed_at, score.best_raw, score.best_duration_secs, gp.name AS player_name, guild.name AS guild_name, realm.name AS realm_name
+FROM best score
+JOIN wow_server_realms realm ON realm.id = score.realm_id
+LEFT JOIN game_players gp ON gp.realm_id = score.realm_id AND gp.id = (CASE WHEN score.player_guid ~ '^0x[0-9A-Fa-f]{16}$'
+     THEN score.player_guid::wow_guid ELSE NULL::wow_guid END)
+LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = score.realm_id
+WHERE ($1::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR score.score < $2::float8
+       -- Tied Peaks rank the higher DPS/HPS first; other metrics and unknowns tie on 0.
+       OR (score.score = $2::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) < $3::float8)
+       OR (score.score = $2::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = $3::float8 AND score.realm_id > $1::uuid)
+       OR (score.score = $2::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = $3::float8 AND score.realm_id = $1::uuid AND score.player_guid > $4::text))
+ORDER BY score.score DESC, (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) DESC, score.realm_id, score.player_guid
+LIMIT LEAST(GREATEST($5::int, 1), 100)
+`
+
+type ListEvolvingAllClassPlayerTenantScopeScoresParams struct {
+	AfterRealmID      uuid.UUID   `db:"after_realm_id" json:"after_realm_id"`
+	AfterScore        float64     `db:"after_score" json:"after_score"`
+	AfterRaw          float64     `db:"after_raw" json:"after_raw"`
+	AfterPlayerGuid   string      `db:"after_player_guid" json:"after_player_guid"`
+	LimitCount        int32       `db:"limit_count" json:"limit_count"`
+	TenantID          uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID      uuid.UUID   `db:"generation_id" json:"generation_id"`
+	InstanceName      string      `db:"instance_name" json:"instance_name"`
+	DifficultyName    string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16       `db:"max_players" json:"max_players"`
+	PlayerClass       string      `db:"player_class" json:"player_class"`
+	PlayerSpec        string      `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string      `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string      `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string      `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string      `db:"window_kind" json:"window_kind"`
+	RealmIds          []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+}
+
+type ListEvolvingAllClassPlayerTenantScopeScoresRow struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	BestRaw           pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	BestDurationSecs  pgtype.Float8      `db:"best_duration_secs" json:"best_duration_secs"`
+	PlayerName        pgtype.Text        `db:"player_name" json:"player_name"`
+	GuildName         pgtype.Text        `db:"guild_name" json:"guild_name"`
+	RealmName         string             `db:"realm_name" json:"realm_name"`
+}
+
+func (q *sqlQuerier) ListEvolvingAllClassPlayerTenantScopeScores(ctx context.Context, arg ListEvolvingAllClassPlayerTenantScopeScoresParams) ([]ListEvolvingAllClassPlayerTenantScopeScoresRow, error) {
+	rows, err := q.db.Query(ctx, listEvolvingAllClassPlayerTenantScopeScores,
+		arg.AfterRealmID,
+		arg.AfterScore,
+		arg.AfterRaw,
+		arg.AfterPlayerGuid,
+		arg.LimitCount,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.RealmIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEvolvingAllClassPlayerTenantScopeScoresRow
+	for rows.Next() {
+		var i ListEvolvingAllClassPlayerTenantScopeScoresRow
+		if err := rows.Scan(
+			&i.GenerationID,
+			&i.TenantID,
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.PerformanceMetric,
+			&i.RatingMetric,
+			&i.WindowKind,
+			&i.WindowStart,
+			&i.WindowEnd,
+			&i.Score,
+			&i.ComputedAt,
+			&i.BestRaw,
+			&i.BestDurationSecs,
+			&i.PlayerName,
+			&i.GuildName,
+			&i.RealmName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEvolvingGuildTenantBossScores = `-- name: ListEvolvingGuildTenantBossScores :many
+SELECT score.generation_id, score.tenant_id, score.realm_id, score.guild_id, score.instance_name, score.encounter_name, score.difficulty_name, score.max_players, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.best_raw, score.rank_one_raw, score.best_locked_parse, score.form, score.floor_score, score.eligible_kills, score.computed_at, guild.name AS guild_name, realm.name AS realm_name
+FROM guild_tenant_rating_boss_scores_evolving_read score
+
+
+
+JOIN wow_server_realms realm ON realm.id = score.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+LEFT JOIN guilds guild ON guild.id = score.guild_id AND guild.realm_id = score.realm_id
+WHERE score.tenant_id = $1
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = $2::uuid)
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR $2::uuid <> '00000000-0000-0000-0000-000000000000'::uuid)
+  AND score.instance_name = $4
+  AND score.encounter_name = $5
+  AND score.difficulty_name = $6
+  AND score.max_players = $7
+  AND score.rating_metric = $8
+  AND score.window_kind = $9
+  AND (COALESCE(cardinality($10::uuid[]), 0) = 0 OR score.realm_id = ANY($10::uuid[]))
+  AND score.score <= CASE WHEN $3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+                          THEN 'Infinity'::float8 ELSE $11::float8 END
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR score.score < $11::float8
+       OR (score.score = $11::float8 AND score.realm_id > $3::uuid)
+       OR (score.score = $11::float8 AND score.realm_id = $3::uuid AND score.guild_id > $12::uuid))
+ORDER BY score.score DESC, score.realm_id, score.guild_id
+LIMIT LEAST(GREATEST($13::int, 1), 100)
+`
+
+type ListEvolvingGuildTenantBossScoresParams struct {
+	TenantID       uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID   uuid.UUID   `db:"generation_id" json:"generation_id"`
+	AfterRealmID   uuid.UUID   `db:"after_realm_id" json:"after_realm_id"`
+	InstanceName   string      `db:"instance_name" json:"instance_name"`
+	EncounterName  string      `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16       `db:"max_players" json:"max_players"`
+	RatingMetric   string      `db:"rating_metric" json:"rating_metric"`
+	WindowKind     string      `db:"window_kind" json:"window_kind"`
+	RealmIds       []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	AfterScore     float64     `db:"after_score" json:"after_score"`
+	AfterGuildID   uuid.UUID   `db:"after_guild_id" json:"after_guild_id"`
+	LimitCount     int32       `db:"limit_count" json:"limit_count"`
+}
+
+type ListEvolvingGuildTenantBossScoresRow struct {
+	GenerationID    uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID         uuid.UUID          `db:"guild_id" json:"guild_id"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16              `db:"max_players" json:"max_players"`
+	RatingMetric    string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind      string             `db:"window_kind" json:"window_kind"`
+	WindowStart     pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd       pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score           float64            `db:"score" json:"score"`
+	BestRaw         pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	RankOneRaw      pgtype.Float8      `db:"rank_one_raw" json:"rank_one_raw"`
+	BestLockedParse pgtype.Float8      `db:"best_locked_parse" json:"best_locked_parse"`
+	Form            pgtype.Float8      `db:"form" json:"form"`
+	FloorScore      pgtype.Float8      `db:"floor_score" json:"floor_score"`
+	EligibleKills   int32              `db:"eligible_kills" json:"eligible_kills"`
+	ComputedAt      pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	GuildName       pgtype.Text        `db:"guild_name" json:"guild_name"`
+	RealmName       string             `db:"realm_name" json:"realm_name"`
+}
+
+func (q *sqlQuerier) ListEvolvingGuildTenantBossScores(ctx context.Context, arg ListEvolvingGuildTenantBossScoresParams) ([]ListEvolvingGuildTenantBossScoresRow, error) {
+	rows, err := q.db.Query(ctx, listEvolvingGuildTenantBossScores,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.AfterRealmID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.RealmIds,
+		arg.AfterScore,
+		arg.AfterGuildID,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEvolvingGuildTenantBossScoresRow
+	for rows.Next() {
+		var i ListEvolvingGuildTenantBossScoresRow
+		if err := rows.Scan(
+			&i.GenerationID,
+			&i.TenantID,
+			&i.RealmID,
+			&i.GuildID,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.RatingMetric,
+			&i.WindowKind,
+			&i.WindowStart,
+			&i.WindowEnd,
+			&i.Score,
+			&i.BestRaw,
+			&i.RankOneRaw,
+			&i.BestLockedParse,
+			&i.Form,
+			&i.FloorScore,
+			&i.EligibleKills,
+			&i.ComputedAt,
+			&i.GuildName,
+			&i.RealmName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEvolvingGuildTenantScopeScores = `-- name: ListEvolvingGuildTenantScopeScores :many
+SELECT score.generation_id, score.tenant_id, score.realm_id, score.guild_id, score.instance_name, score.difficulty_name, score.max_players, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.computed_at, guild.name AS guild_name, realm.name AS realm_name
+FROM guild_tenant_rating_scope_scores_evolving_read score
+
+
+
+JOIN wow_server_realms realm ON realm.id = score.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+LEFT JOIN guilds guild ON guild.id = score.guild_id AND guild.realm_id = score.realm_id
+WHERE score.tenant_id = $1
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = $2::uuid)
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR $2::uuid <> '00000000-0000-0000-0000-000000000000'::uuid)
+  AND score.instance_name = $4
+  AND score.difficulty_name = $5
+  AND score.max_players = $6
+  AND score.rating_metric = $7
+  AND score.window_kind = $8
+  AND (COALESCE(cardinality($9::uuid[]), 0) = 0 OR score.realm_id = ANY($9::uuid[]))
+  AND score.score <= CASE WHEN $3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+                          THEN 'Infinity'::float8 ELSE $10::float8 END
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR score.score < $10::float8
+       OR (score.score = $10::float8 AND score.realm_id > $3::uuid)
+       OR (score.score = $10::float8 AND score.realm_id = $3::uuid AND score.guild_id > $11::uuid))
+ORDER BY score.score DESC, score.realm_id, score.guild_id
+LIMIT LEAST(GREATEST($12::int, 1), 100)
+`
+
+type ListEvolvingGuildTenantScopeScoresParams struct {
+	TenantID       uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID   uuid.UUID   `db:"generation_id" json:"generation_id"`
+	AfterRealmID   uuid.UUID   `db:"after_realm_id" json:"after_realm_id"`
+	InstanceName   string      `db:"instance_name" json:"instance_name"`
+	DifficultyName string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16       `db:"max_players" json:"max_players"`
+	RatingMetric   string      `db:"rating_metric" json:"rating_metric"`
+	WindowKind     string      `db:"window_kind" json:"window_kind"`
+	RealmIds       []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	AfterScore     float64     `db:"after_score" json:"after_score"`
+	AfterGuildID   uuid.UUID   `db:"after_guild_id" json:"after_guild_id"`
+	LimitCount     int32       `db:"limit_count" json:"limit_count"`
+}
+
+type ListEvolvingGuildTenantScopeScoresRow struct {
+	GenerationID   uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID          `db:"guild_id" json:"guild_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	RatingMetric   string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind     string             `db:"window_kind" json:"window_kind"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd      pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score          float64            `db:"score" json:"score"`
+	ComputedAt     pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	GuildName      pgtype.Text        `db:"guild_name" json:"guild_name"`
+	RealmName      string             `db:"realm_name" json:"realm_name"`
+}
+
+func (q *sqlQuerier) ListEvolvingGuildTenantScopeScores(ctx context.Context, arg ListEvolvingGuildTenantScopeScoresParams) ([]ListEvolvingGuildTenantScopeScoresRow, error) {
+	rows, err := q.db.Query(ctx, listEvolvingGuildTenantScopeScores,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.AfterRealmID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.RealmIds,
+		arg.AfterScore,
+		arg.AfterGuildID,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEvolvingGuildTenantScopeScoresRow
+	for rows.Next() {
+		var i ListEvolvingGuildTenantScopeScoresRow
+		if err := rows.Scan(
+			&i.GenerationID,
+			&i.TenantID,
+			&i.RealmID,
+			&i.GuildID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.RatingMetric,
+			&i.WindowKind,
+			&i.WindowStart,
+			&i.WindowEnd,
+			&i.Score,
+			&i.ComputedAt,
+			&i.GuildName,
+			&i.RealmName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEvolvingPlayerTenantBossScores = `-- name: ListEvolvingPlayerTenantBossScores :many
+SELECT score.generation_id, score.tenant_id, score.realm_id, score.player_guid, score.instance_name, score.encounter_name, score.difficulty_name, score.max_players, score.player_class, score.player_spec, score.player_sub_spec, score.performance_metric, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.best_raw, score.rank_one_raw, score.best_locked_parse, score.form, score.floor_score, score.eligible_kills, score.computed_at, score.best_duration_secs, gp.name AS player_name, guild.name AS guild_name, realm.name AS realm_name
+FROM player_tenant_rating_boss_scores_evolving_read score
+
+
+
+JOIN wow_server_realms realm ON realm.id = score.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+LEFT JOIN game_players gp ON gp.realm_id = score.realm_id AND gp.id = (CASE WHEN score.player_guid ~ '^0x[0-9A-Fa-f]{16}$'
+     THEN score.player_guid::wow_guid ELSE NULL::wow_guid END)
+LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = score.realm_id
+WHERE score.tenant_id = $1
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = $2::uuid)
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR $2::uuid <> '00000000-0000-0000-0000-000000000000'::uuid)
+  AND score.instance_name = $4
+  AND score.encounter_name = $5
+  AND score.difficulty_name = $6
+  AND score.max_players = $7
+  AND score.player_class = $8
+  AND score.player_spec = $9
+  AND score.player_sub_spec = $10
+  AND score.performance_metric = $11
+  AND score.rating_metric = $12
+  AND score.window_kind = $13
+  AND (COALESCE(cardinality($14::uuid[]), 0) = 0 OR score.realm_id = ANY($14::uuid[]))
+  AND score.score <= CASE WHEN $3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+                          THEN 'Infinity'::float8 ELSE $15::float8 END
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR score.score < $15::float8
+       -- Tied Peaks rank the higher DPS/HPS first; other metrics and unknowns tie on 0.
+       OR (score.score = $15::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) < $16::float8)
+       OR (score.score = $15::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = $16::float8 AND score.realm_id > $3::uuid)
+       OR (score.score = $15::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = $16::float8 AND score.realm_id = $3::uuid AND score.player_guid > $17::text))
+ORDER BY score.score DESC, (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) DESC, score.realm_id, score.player_guid
+LIMIT LEAST(GREATEST($18::int, 1), 100)
+`
+
+type ListEvolvingPlayerTenantBossScoresParams struct {
+	TenantID          uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID      uuid.UUID   `db:"generation_id" json:"generation_id"`
+	AfterRealmID      uuid.UUID   `db:"after_realm_id" json:"after_realm_id"`
+	InstanceName      string      `db:"instance_name" json:"instance_name"`
+	EncounterName     string      `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16       `db:"max_players" json:"max_players"`
+	PlayerClass       string      `db:"player_class" json:"player_class"`
+	PlayerSpec        string      `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string      `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string      `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string      `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string      `db:"window_kind" json:"window_kind"`
+	RealmIds          []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	AfterScore        float64     `db:"after_score" json:"after_score"`
+	AfterRaw          float64     `db:"after_raw" json:"after_raw"`
+	AfterPlayerGuid   string      `db:"after_player_guid" json:"after_player_guid"`
+	LimitCount        int32       `db:"limit_count" json:"limit_count"`
+}
+
+type ListEvolvingPlayerTenantBossScoresRow struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	BestRaw           pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	RankOneRaw        pgtype.Float8      `db:"rank_one_raw" json:"rank_one_raw"`
+	BestLockedParse   pgtype.Float8      `db:"best_locked_parse" json:"best_locked_parse"`
+	Form              pgtype.Float8      `db:"form" json:"form"`
+	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
+	EligibleKills     int32              `db:"eligible_kills" json:"eligible_kills"`
+	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	BestDurationSecs  pgtype.Float8      `db:"best_duration_secs" json:"best_duration_secs"`
+	PlayerName        pgtype.Text        `db:"player_name" json:"player_name"`
+	GuildName         pgtype.Text        `db:"guild_name" json:"guild_name"`
+	RealmName         string             `db:"realm_name" json:"realm_name"`
+}
+
+// Keep the indexed wow_guid column uncast. Non-GUID historical score text
+// must safely miss the optional identity join rather than fail the board.
+func (q *sqlQuerier) ListEvolvingPlayerTenantBossScores(ctx context.Context, arg ListEvolvingPlayerTenantBossScoresParams) ([]ListEvolvingPlayerTenantBossScoresRow, error) {
+	rows, err := q.db.Query(ctx, listEvolvingPlayerTenantBossScores,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.AfterRealmID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.RealmIds,
+		arg.AfterScore,
+		arg.AfterRaw,
+		arg.AfterPlayerGuid,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEvolvingPlayerTenantBossScoresRow
+	for rows.Next() {
+		var i ListEvolvingPlayerTenantBossScoresRow
+		if err := rows.Scan(
+			&i.GenerationID,
+			&i.TenantID,
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.PerformanceMetric,
+			&i.RatingMetric,
+			&i.WindowKind,
+			&i.WindowStart,
+			&i.WindowEnd,
+			&i.Score,
+			&i.BestRaw,
+			&i.RankOneRaw,
+			&i.BestLockedParse,
+			&i.Form,
+			&i.FloorScore,
+			&i.EligibleKills,
+			&i.ComputedAt,
+			&i.BestDurationSecs,
+			&i.PlayerName,
+			&i.GuildName,
+			&i.RealmName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEvolvingPlayerTenantScopeScores = `-- name: ListEvolvingPlayerTenantScopeScores :many
+SELECT score.generation_id, score.tenant_id, score.realm_id, score.player_guid, score.instance_name, score.difficulty_name, score.max_players, score.player_class, score.player_spec, score.player_sub_spec, score.performance_metric, score.rating_metric, score.window_kind, score.window_start, score.window_end, score.score, score.computed_at, score.best_raw, score.best_duration_secs, gp.name AS player_name, guild.name AS guild_name, realm.name AS realm_name
+FROM player_tenant_rating_scope_scores_evolving_read score
+
+
+
+JOIN wow_server_realms realm ON realm.id = score.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+LEFT JOIN game_players gp ON gp.realm_id = score.realm_id AND gp.id = (CASE WHEN score.player_guid ~ '^0x[0-9A-Fa-f]{16}$'
+     THEN score.player_guid::wow_guid ELSE NULL::wow_guid END)
+LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = score.realm_id
+WHERE score.tenant_id = $1
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR score.generation_id = $2::uuid)
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR $2::uuid <> '00000000-0000-0000-0000-000000000000'::uuid)
+  AND score.instance_name = $4
+  AND score.difficulty_name = $5
+  AND score.max_players = $6
+  AND score.player_class = $7
+  AND score.player_spec = $8
+  AND score.player_sub_spec = $9
+  AND score.performance_metric = $10
+  AND score.rating_metric = $11
+  AND score.window_kind = $12
+  AND (COALESCE(cardinality($13::uuid[]), 0) = 0 OR score.realm_id = ANY($13::uuid[]))
+  AND score.score <= CASE WHEN $3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+                          THEN 'Infinity'::float8 ELSE $14::float8 END
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+       OR score.score < $14::float8
+       -- Tied Peaks rank the higher DPS/HPS first; other metrics and unknowns tie on 0.
+       OR (score.score = $14::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) < $15::float8)
+       OR (score.score = $14::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = $15::float8 AND score.realm_id > $3::uuid)
+       OR (score.score = $14::float8 AND (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) = $15::float8 AND score.realm_id = $3::uuid AND score.player_guid > $16::text))
+ORDER BY score.score DESC, (CASE WHEN score.rating_metric = 'peak' THEN COALESCE(score.best_raw, 0) ELSE 0 END) DESC, score.realm_id, score.player_guid
+LIMIT LEAST(GREATEST($17::int, 1), 100)
+`
+
+type ListEvolvingPlayerTenantScopeScoresParams struct {
+	TenantID          uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GenerationID      uuid.UUID   `db:"generation_id" json:"generation_id"`
+	AfterRealmID      uuid.UUID   `db:"after_realm_id" json:"after_realm_id"`
+	InstanceName      string      `db:"instance_name" json:"instance_name"`
+	DifficultyName    string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16       `db:"max_players" json:"max_players"`
+	PlayerClass       string      `db:"player_class" json:"player_class"`
+	PlayerSpec        string      `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string      `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string      `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string      `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string      `db:"window_kind" json:"window_kind"`
+	RealmIds          []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	AfterScore        float64     `db:"after_score" json:"after_score"`
+	AfterRaw          float64     `db:"after_raw" json:"after_raw"`
+	AfterPlayerGuid   string      `db:"after_player_guid" json:"after_player_guid"`
+	LimitCount        int32       `db:"limit_count" json:"limit_count"`
+}
+
+type ListEvolvingPlayerTenantScopeScoresRow struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	RatingMetric      string             `db:"rating_metric" json:"rating_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	Score             float64            `db:"score" json:"score"`
+	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	BestRaw           pgtype.Float8      `db:"best_raw" json:"best_raw"`
+	BestDurationSecs  pgtype.Float8      `db:"best_duration_secs" json:"best_duration_secs"`
+	PlayerName        pgtype.Text        `db:"player_name" json:"player_name"`
+	GuildName         pgtype.Text        `db:"guild_name" json:"guild_name"`
+	RealmName         string             `db:"realm_name" json:"realm_name"`
+}
+
+func (q *sqlQuerier) ListEvolvingPlayerTenantScopeScores(ctx context.Context, arg ListEvolvingPlayerTenantScopeScoresParams) ([]ListEvolvingPlayerTenantScopeScoresRow, error) {
+	rows, err := q.db.Query(ctx, listEvolvingPlayerTenantScopeScores,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.AfterRealmID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.RatingMetric,
+		arg.WindowKind,
+		arg.RealmIds,
+		arg.AfterScore,
+		arg.AfterRaw,
+		arg.AfterPlayerGuid,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEvolvingPlayerTenantScopeScoresRow
+	for rows.Next() {
+		var i ListEvolvingPlayerTenantScopeScoresRow
+		if err := rows.Scan(
+			&i.GenerationID,
+			&i.TenantID,
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.PerformanceMetric,
+			&i.RatingMetric,
+			&i.WindowKind,
+			&i.WindowStart,
+			&i.WindowEnd,
+			&i.Score,
+			&i.ComputedAt,
+			&i.BestRaw,
+			&i.BestDurationSecs,
+			&i.PlayerName,
+			&i.GuildName,
+			&i.RealmName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getActiveTenantRatingGeneration = `-- name: GetActiveTenantRatingGeneration :one
 
 SELECT id FROM rating_score_generations
@@ -33115,6 +36908,59 @@ func (q *sqlQuerier) ListActivePlayerTenantScopeScores(ctx context.Context, arg 
 		return nil, err
 	}
 	return items, nil
+}
+
+const getTenantRatingCatchupSummary = `-- name: GetTenantRatingCatchupSummary :one
+SELECT (COALESCE((SELECT state FROM tenant_rating_read_states WHERE tenant_id = $1::uuid),
+    CASE WHEN EXISTS (SELECT 1 FROM rating_score_generations WHERE tenant_id = $1::uuid AND status = 'active')
+         THEN 'legacy' ELSE 'evolving' END) = 'evolving'
+  AND EXISTS (SELECT 1 FROM rating_live_evidence_bootstraps WHERE tenant_id = $1::uuid AND completed_at IS NOT NULL)
+  AND NOT EXISTS (SELECT 1 FROM rating_dirty_observation_runs WHERE tenant_id = $1::uuid)
+  AND NOT EXISTS (SELECT 1 FROM rating_dirty_renown_subjects WHERE tenant_id = $1::uuid)
+  AND NOT EXISTS (SELECT 1 FROM rating_dirty_mastery_subjects WHERE tenant_id = $1::uuid)
+  AND NOT EXISTS (SELECT 1 FROM rating_dirty_peak_cohorts WHERE tenant_id = $1::uuid)
+  AND NOT EXISTS (SELECT 1 FROM rating_peak_cohort_pages_evolving WHERE tenant_id = $1::uuid)) AS caught_up
+`
+
+// EXISTS uses the tenant indexes and avoids counting large dirty queues.
+func (q *sqlQuerier) GetTenantRatingCatchupSummary(ctx context.Context, tenantID uuid.UUID) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, getTenantRatingCatchupSummary, tenantID)
+	var caught_up pgtype.Bool
+	err := row.Scan(&caught_up)
+	return caught_up, err
+}
+
+const getTenantRatingReadState = `-- name: GetTenantRatingReadState :one
+SELECT COALESCE((SELECT state FROM tenant_rating_read_states rs WHERE rs.tenant_id = $1::uuid),
+  CASE WHEN EXISTS (SELECT 1 FROM rating_score_generations g
+                    WHERE g.tenant_id = $1::uuid AND status = 'active')
+       THEN 'legacy' ELSE 'evolving' END)::text AS state
+`
+
+// Missing rows are evolving only when there is no active published generation.
+func (q *sqlQuerier) GetTenantRatingReadState(ctx context.Context, tenantID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getTenantRatingReadState, tenantID)
+	var state string
+	err := row.Scan(&state)
+	return state, err
+}
+
+const lockTenantRatingReadStateForEvolvingPage = `-- name: LockTenantRatingReadStateForEvolvingPage :one
+SELECT COALESCE((SELECT state FROM tenant_rating_read_states rs
+                 WHERE rs.tenant_id = $1::uuid FOR SHARE),
+  CASE WHEN EXISTS (SELECT 1 FROM rating_score_generations g
+                    WHERE g.tenant_id = $1::uuid AND status = 'active')
+       THEN 'legacy' ELSE 'evolving' END)::text AS state
+`
+
+// Held inside each evolving writer transaction. A copier's legacy→copying
+// update waits for in-flight pages, and pages beginning afterward cannot
+// acknowledge keys until the final copying→evolving commit.
+func (q *sqlQuerier) LockTenantRatingReadStateForEvolvingPage(ctx context.Context, tenantID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, lockTenantRatingReadStateForEvolvingPage, tenantID)
+	var state string
+	err := row.Scan(&state)
+	return state, err
 }
 
 const adminListOutdatedParserVersionInstances = `-- name: AdminListOutdatedParserVersionInstances :many

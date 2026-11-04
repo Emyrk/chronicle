@@ -21,6 +21,14 @@ type evolvingTenantRatingManifest struct {
 	} `json:"renown_bosses"`
 }
 
+// Hold a shared read-state lock through a writer page. This serializes the
+// legacy→copying transition with in-flight acknowledgements, so mutations
+// committed during the active-row copy remain dirty for replay afterward.
+func shouldRefreshEvolvingTenantRating(ctx context.Context, tx database.Store, tenant uuid.UUID) (bool, error) {
+	state, err := tx.LockTenantRatingReadStateForEvolvingPage(ctx, tenant)
+	return state == "evolving", err
+}
+
 // Lock the tenant's config revision before resolving its current policy. A
 // first-time tenant has no generation or existing revision row to depend on.
 func currentEvolvingTenantRatingPolicy(ctx context.Context, tx database.Store, tenant uuid.UUID) (evolvingTenantRatingManifest, error) {

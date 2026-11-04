@@ -14,6 +14,10 @@ import (
 func RefreshEvolvingTenantMastery(ctx context.Context, store database.Store, tenant uuid.UUID, now time.Time) (int, error) {
 	var processed int
 	err := store.InTx(ctx, func(tx database.Store) error {
+		allowed, err := shouldRefreshEvolvingTenantRating(ctx, tx, tenant)
+		if err != nil || !allowed {
+			return err
+		}
 		manifest, err := currentEvolvingTenantRatingPolicy(ctx, tx, tenant)
 		if err != nil {
 			return err

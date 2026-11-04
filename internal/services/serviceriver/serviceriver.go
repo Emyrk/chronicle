@@ -51,7 +51,9 @@ type Service struct {
 	broker *services.Services
 
 	*riverqueue.Queues
-	logParsingWorkers int64
+	logParsingWorkers    int64
+	catchupMetricsCancel context.CancelFunc
+	catchupMetricsDone   <-chan struct{}
 }
 
 func New(broker *services.Services) *Service {
@@ -284,36 +286,16 @@ func (s *Service) Start(ctx context.Context) error {
 	riverqueue.AddWorker(q, rank.RepairParseScoresWorker)
 	riverqueue.AddWorker(q, rank.RankingRunRefreshWorker)
 	riverqueue.AddWorker(q, rank.RankingRunRepairWorker)
-	rank.RatingDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.RatingDispatchWorker)
-	// One observation per successfully published generation, not per River
-	// invocation. No tenant/generation labels: those would grow without bound.
-	rank.RatingTenantWorker.RebuildDuration = promauto.With(serviceprometheus.Registry(s.broker)).NewHistogram(prometheus.HistogramOpts{
-		Namespace: "chronicle", Subsystem: "rating", Name: "rebuild_duration_seconds",
-		Help:    "Wall-clock seconds from tenant rating generation start to successful publication, including snoozes and retries",
-		Buckets: []float64{30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 28800, 86400},
-	})
-	riverqueue.AddWorker(q, rank.RatingTenantWorker)
-	// One bounded GC page per job; daily scheduling recovers lost continuations.
-	ratingStageGC := &servicerankings.WorkerRatingStageGC{Store: rank.RatingTenantWorker.Store, Queue: q}
-	riverqueue.AddWorker(q, ratingStageGC)
+	// Legacy full-generation workers are deliberately not registered. Operators
+	// cancel any queued rebuilds before rolling out the evolving projection.
 	rank.RenownRepairWorker.Queue = q
 	rank.RenownDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.RenownRepairWorker)
 	riverqueue.AddWorker(q, rank.RenownDispatchWorker)
-	rank.IncrementalRenownDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.IncrementalRenownDispatchWorker)
-	riverqueue.AddWorker(q, rank.IncrementalRenownWorker)
 	rank.RenownExpiryWorker.Queue = q
 	rank.RenownExpiryDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.RenownExpiryWorker)
 	riverqueue.AddWorker(q, rank.RenownExpiryDispatchWorker)
-	rank.RatingObservationDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.RatingObservationDispatchWorker)
-	riverqueue.AddWorker(q, rank.RatingObservationWorker)
-	rank.IncrementalMasteryDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.IncrementalMasteryDispatchWorker)
-	riverqueue.AddWorker(q, rank.IncrementalMasteryWorker)
 	rank.MasteryExpiryWorker.Queue = q
 	rank.MasteryExpiryDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.MasteryExpiryWorker)
@@ -325,14 +307,32 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.LiveEvidenceRepairWorker.Queue = q
 	riverqueue.AddWorker(q, rank.LiveEvidenceRepairDispatchWorker)
 	riverqueue.AddWorker(q, rank.LiveEvidenceRepairWorker)
-	rank.IncrementalPeakDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.IncrementalPeakDispatchWorker)
-	riverqueue.AddWorker(q, rank.IncrementalPeakWorker)
 	rank.PeakExpiryWorker.Queue = q
 	rank.PeakExpiryDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.PeakExpiryWorker)
 	riverqueue.AddWorker(q, rank.PeakExpiryDispatchWorker)
-	// Keep old incremental worker kinds registered for jobs queued by prior deployments.
+	ratingRegistry := promauto.With(serviceprometheus.Registry(s.broker))
+	rank.TenantRatingDrainWorker.PageDuration = ratingRegistry.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "chronicle", Subsystem: "rating", Name: "repair_page_duration_seconds",
+		Help:    "Duration of a rating repair page by stage, including failures",
+		Buckets: []float64{0.005, 0.02, 0.1, 0.5, 1, 5, 15, 60},
+	}, []string{"stage"})
+	rank.TenantRatingDrainWorker.PagesProcessed = ratingRegistry.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "chronicle", Subsystem: "rating", Name: "repair_pages_total",
+		Help: "Successful nonempty rating repair pages by stage",
+	}, []string{"stage"})
+	rank.TenantRatingDrainWorker.KeysProcessed = ratingRegistry.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "chronicle", Subsystem: "rating", Name: "repair_keys_total",
+		Help: "Successful rating repair keys or Peak cohort pages by stage",
+	}, []string{"stage"})
+	rank.TenantRatingDrainWorker.PageErrors = ratingRegistry.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "chronicle", Subsystem: "rating", Name: "repair_errors_total",
+		Help: "Failed rating repair page attempts by stage",
+	}, []string{"stage"})
+	rank.TenantRatingDrainWorker.ActiveJobs = ratingRegistry.NewGauge(prometheus.GaugeOpts{
+		Namespace: "chronicle", Subsystem: "rating", Name: "drain_active_jobs",
+		Help: "Active drain jobs in this daemon (sum across replicas for total concurrency)",
+	})
 	rank.TenantRatingDrainDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.TenantRatingDrainDispatchWorker)
 	riverqueue.AddWorker(q, rank.TenantRatingDrainWorker)
@@ -440,9 +440,8 @@ func (s *Service) Start(ctx context.Context) error {
 		},
 		&river.PeriodicJobOpts{ID: "daily-peak-expiry", RunOnStart: false},
 	))
-	// Full tenant rating rebuilds are intentionally manual. The admin routes
-	// still enqueue ArgsDispatchRatingScores or ArgsRebuildTenantRatings for
-	// recovery and rule changes; daily repair and expiry remain scheduled.
+	// Historical discovery and expiry only mark durable dirty keys; the
+	// five-minute tenant dispatcher repairs them into the evolving board.
 
 	err = q.Start(ctx)
 	if err != nil {
@@ -451,10 +450,20 @@ func (s *Service) Start(ctx context.Context) error {
 
 	s.Queues = q
 	chron.SetQueue(s.Queues)
+	metricsCtx, cancel := context.WithCancel(context.Background())
+	s.catchupMetricsCancel = cancel
+	s.catchupMetricsDone = runRatingCatchupMetrics(metricsCtx, servicedbstore.DatabaseStore(s.broker), serviceprometheus.Registry(s.broker), logger)
 	return nil
 }
 
 func (s *Service) Close(ctx context.Context) error {
+	if s.catchupMetricsCancel != nil {
+		s.catchupMetricsCancel()
+		select {
+		case <-s.catchupMetricsDone:
+		case <-ctx.Done():
+		}
+	}
 	return s.Queues.Close(ctx)
 }
 

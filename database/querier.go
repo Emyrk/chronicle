@@ -157,6 +157,8 @@ type sqlcQuerier interface {
 	CreateSharedView(ctx context.Context, arg CreateSharedViewParams) (SharedView, error)
 	CreateUserPanelLayout(ctx context.Context, arg CreateUserPanelLayoutParams) (UserPanelLayout, error)
 	CreateUserTalentBuild(ctx context.Context, arg CreateUserTalentBuildParams) (UserTalentBuild, error)
+	// Evolving projections reuse the same fact and cohort calculations as legacy live scores.
+	CurrentTenantRatingPolicy(ctx context.Context, tenantID uuid.UUID) ([]byte, error)
 	DecideProofRequest(ctx context.Context, arg DecideProofRequestParams) (int64, error)
 	DecideProofSubject(ctx context.Context, arg DecideProofSubjectParams) (int64, error)
 	DeleteAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) error
@@ -307,6 +309,70 @@ type sqlcQuerier interface {
 	DisconnectSidekickInstallation(ctx context.Context, arg DisconnectSidekickInstallationParams) (SidekickInstallation, error)
 	EncountersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
 	EnsureDeploymentToken(ctx context.Context, deploymentToken pgtype.Text) (pgtype.Text, error)
+	EvolvingDeleteGuildLiveMasteryScope(ctx context.Context, arg EvolvingDeleteGuildLiveMasteryScopeParams) error
+	EvolvingDeleteGuildLiveMasteryScores(ctx context.Context, arg EvolvingDeleteGuildLiveMasteryScoresParams) error
+	EvolvingDeleteGuildTenantRenownBoss(ctx context.Context, arg EvolvingDeleteGuildTenantRenownBossParams) error
+	EvolvingDeleteGuildTenantRenownScope(ctx context.Context, arg EvolvingDeleteGuildTenantRenownScopeParams) error
+	EvolvingDeleteLivePeakCohortDenominator(ctx context.Context, arg EvolvingDeleteLivePeakCohortDenominatorParams) error
+	EvolvingDeleteLivePeakGuildScope(ctx context.Context, arg EvolvingDeleteLivePeakGuildScopeParams) error
+	EvolvingDeleteLivePeakGuildScores(ctx context.Context, arg EvolvingDeleteLivePeakGuildScoresParams) error
+	EvolvingDeleteLivePeakPlayerScope(ctx context.Context, arg EvolvingDeleteLivePeakPlayerScopeParams) error
+	// These are the same best/tie-break semantics as RatingStagePlayerPeak and
+	// RatingStageGuildPeak, applied only to one exact live subject.
+	EvolvingDeleteLivePeakPlayerScores(ctx context.Context, arg EvolvingDeleteLivePeakPlayerScoresParams) error
+	// Recompute raid scopes from all surviving boss rows in this subject/cohort.
+	// Go applies the same ZG Edge slot policy as full rebuild before inserting.
+	EvolvingDeletePlayerLiveMasteryScope(ctx context.Context, arg EvolvingDeletePlayerLiveMasteryScopeParams) error
+	EvolvingDeletePlayerLiveMasteryScores(ctx context.Context, arg EvolvingDeletePlayerLiveMasteryScoresParams) error
+	EvolvingDeletePlayerTenantRenownBoss(ctx context.Context, arg EvolvingDeletePlayerTenantRenownBossParams) error
+	EvolvingDeletePlayerTenantRenownScope(ctx context.Context, arg EvolvingDeletePlayerTenantRenownScopeParams) error
+	EvolvingGetLivePeakCohortDenominators(ctx context.Context, arg EvolvingGetLivePeakCohortDenominatorsParams) (EvolvingGetLivePeakCohortDenominatorsRow, error)
+	// A previous partial pass can be reused only while its dirty revision matches.
+	EvolvingGetLivePeakCohortPage(ctx context.Context, arg EvolvingGetLivePeakCohortPageParams) (EvolvingGetLivePeakCohortPageRow, error)
+	// Generation-free readers against the evolving projection compatibility views.
+	// Only the same 64 published cohorts returned by HubSummaryInstances are eligible.
+	// Renown is instance-wide; its published period score is repeated for each cohort.
+	EvolvingHubLandingRatingRows(ctx context.Context, arg EvolvingHubLandingRatingRowsParams) ([]EvolvingHubLandingRatingRowsRow, error)
+	// One ranked page of a chosen-boss board (any number of bosses, one included):
+	// Peak and Ranked Mastery average over every chosen boss (a missed one is 0),
+	// Renown sums. Only the ranked metric is aggregated for the whole cohort; the
+	// page's other two scores are looked up per row. Ranks cover the whole tenant
+	// cohort before the display-only realm and name filters, as on the full lists.
+	EvolvingHubSetBoardPage(ctx context.Context, arg EvolvingHubSetBoardPageParams) ([]EvolvingHubSetBoardPageRow, error)
+	// Ratings over a chosen set of bosses, computed from the published boss boards:
+	// Peak and Ranked Mastery average over every chosen boss (a missed one is 0),
+	// Renown sums. A subject's best class/spec cohort stands for it. Peak carries
+	// the duration-weighted throughput over its kills and breaks ties by it.
+	EvolvingHubSetRatingRows(ctx context.Context, arg EvolvingHubSetRatingRowsParams) ([]EvolvingHubSetRatingRowsRow, error)
+	// Generation-free readers against the evolving projection compatibility views.
+	// All boards share the caller-pinned active generation. Bound boss names and
+	// truncate each board in SQL, not in the HTTP handler.
+	// The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss.
+	EvolvingHubSummaryRatingRows(ctx context.Context, arg EvolvingHubSummaryRatingRowsParams) ([]EvolvingHubSummaryRatingRowsRow, error)
+	EvolvingInsertGuildLiveMasteryScope(ctx context.Context, arg EvolvingInsertGuildLiveMasteryScopeParams) (int64, error)
+	EvolvingInsertGuildLiveMasteryScore(ctx context.Context, arg EvolvingInsertGuildLiveMasteryScoreParams) (int64, error)
+	EvolvingInsertGuildTenantRenownScopes(ctx context.Context, arg EvolvingInsertGuildTenantRenownScopesParams) error
+	EvolvingInsertLivePeakGuildScope(ctx context.Context, arg EvolvingInsertLivePeakGuildScopeParams) (int64, error)
+	EvolvingInsertLivePeakGuildScore(ctx context.Context, arg EvolvingInsertLivePeakGuildScoreParams) (int64, error)
+	EvolvingInsertLivePeakPlayerScope(ctx context.Context, arg EvolvingInsertLivePeakPlayerScopeParams) (int64, error)
+	// Raw best is retained alongside the display score so readers can use the
+	// current cohort denominator even if that denominator changes later.
+	EvolvingInsertLivePeakPlayerScore(ctx context.Context, arg EvolvingInsertLivePeakPlayerScoreParams) (int64, error)
+	EvolvingInsertPlayerLiveMasteryScope(ctx context.Context, arg EvolvingInsertPlayerLiveMasteryScopeParams) (int64, error)
+	EvolvingInsertPlayerLiveMasteryScore(ctx context.Context, arg EvolvingInsertPlayerLiveMasteryScoreParams) (int64, error)
+	EvolvingInsertPlayerTenantRenownScopes(ctx context.Context, arg EvolvingInsertPlayerTenantRenownScopesParams) error
+	EvolvingListLivePeakGuildSubjectPage(ctx context.Context, arg EvolvingListLivePeakGuildSubjectPageParams) ([]EvolvingListLivePeakGuildSubjectPageRow, error)
+	// Include stale old-score subjects so deleting their last observation removes
+	// their displayed Peak rather than leaving an orphan. Union removes duplicates.
+	EvolvingListLivePeakPlayerSubjectPage(ctx context.Context, arg EvolvingListLivePeakPlayerSubjectPageParams) ([]EvolvingListLivePeakPlayerSubjectPageRow, error)
+	EvolvingListTenantGuildRaidBosses(ctx context.Context, arg EvolvingListTenantGuildRaidBossesParams) ([]EvolvingListTenantGuildRaidBossesRow, error)
+	// Expiring even a guildless observation can change the guild denominator.
+	// Keyset by cohort, not by subject; historical observations remain durable.
+	EvolvingListTenantPlayerRaidBosses(ctx context.Context, arg EvolvingListTenantPlayerRaidBossesParams) ([]EvolvingListTenantPlayerRaidBossesRow, error)
+	EvolvingUpsertGuildTenantRenownBoss(ctx context.Context, arg EvolvingUpsertGuildTenantRenownBossParams) (int64, error)
+	EvolvingUpsertLivePeakCohortDenominator(ctx context.Context, arg EvolvingUpsertLivePeakCohortDenominatorParams) (int64, error)
+	EvolvingUpsertLivePeakCohortPage(ctx context.Context, arg EvolvingUpsertLivePeakCohortPageParams) error
+	EvolvingUpsertPlayerTenantRenownBoss(ctx context.Context, arg EvolvingUpsertPlayerTenantRenownBossParams) (int64, error)
 	ExpireInferenceClientToolRequest(ctx context.Context, arg ExpireInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
 	ExpireStaleInferenceRuns(ctx context.Context) (int64, error)
 	ExpireStaleLogFileParts(ctx context.Context, arg ExpireStaleLogFilePartsParams) ([]LogFilePart, error)
@@ -432,6 +498,20 @@ type sqlcQuerier interface {
 	GetEncounterPhasesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounterPhase, error)
 	GetEncounterSummariesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]GetEncounterSummariesByInstanceIDRow, error)
 	GetEncounterSummariesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]GetEncounterSummariesByInstanceIDsRow, error)
+	// Generation-free readers against the evolving projection compatibility views.
+	// Rank the full tenant guild cohort before applying display-only realm/name filters.
+	// A single statement computes the page and count from the same MVCC snapshot.
+	GetEvolvingGuildBossFullList(ctx context.Context, arg GetEvolvingGuildBossFullListParams) (GetEvolvingGuildBossFullListRow, error)
+	// Rank the full tenant guild cohort before applying display-only realm/name filters.
+	// A single statement computes the page and count from the same MVCC snapshot.
+	GetEvolvingGuildScopeFullList(ctx context.Context, arg GetEvolvingGuildScopeFullListParams) (GetEvolvingGuildScopeFullListRow, error)
+	// Generation-free readers against the evolving projection compatibility views.
+	// Rank the full tenant cohort before applying display-only realm/name filters.
+	// A single statement computes the page and count from the same MVCC snapshot.
+	GetEvolvingPlayerBossFullList(ctx context.Context, arg GetEvolvingPlayerBossFullListParams) (GetEvolvingPlayerBossFullListRow, error)
+	// Rank the full tenant cohort before applying display-only realm/name filters.
+	// A single statement computes the page and count from the same MVCC snapshot.
+	GetEvolvingPlayerScopeFullList(ctx context.Context, arg GetEvolvingPlayerScopeFullListParams) (GetEvolvingPlayerScopeFullListRow, error)
 	// Returns log groups whose raw files are past their owner's retention window.
 	// Only considers users who have set a retention policy (non-NULL).
 	GetExpiredRawLogGroups(ctx context.Context, limit int32) ([]uuid.UUID, error)
@@ -594,6 +674,10 @@ type sqlcQuerier interface {
 	// itself is not behind RLS (only wow_servers/wow_server_realms are).
 	GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Tenant, error)
 	GetTenantProofRequest(ctx context.Context, arg GetTenantProofRequestParams) (ProofRequest, error)
+	// EXISTS uses the tenant indexes and avoids counting large dirty queues.
+	GetTenantRatingCatchupSummary(ctx context.Context, tenantID uuid.UUID) (pgtype.Bool, error)
+	// Missing rows are evolving only when there is no active published generation.
+	GetTenantRatingReadState(ctx context.Context, tenantID uuid.UUID) (string, error)
 	GetTimeParseBossKillCohortEntries(ctx context.Context, arg GetTimeParseBossKillCohortEntriesParams) ([]GetTimeParseBossKillCohortEntriesRow, error)
 	GetTimeParseBossKillMembershipCohort(ctx context.Context, arg GetTimeParseBossKillMembershipCohortParams) ([]int64, error)
 	GetTimeParseClearTimeCohortEntries(ctx context.Context, arg GetTimeParseClearTimeCohortEntriesParams) ([]GetTimeParseClearTimeCohortEntriesRow, error)
@@ -942,9 +1026,20 @@ type sqlcQuerier interface {
 	ListDirtyPeakTenants(ctx context.Context) ([]uuid.UUID, error)
 	// Periodic dispatch only visits tenants with pending fact changes.
 	ListDirtyRenownTenants(ctx context.Context) ([]uuid.UUID, error)
+	// One recovery dispatch covers every durable rating intent. UNION removes
+	// duplicate tenant IDs without requiring four separate River dispatch jobs.
+	ListDirtyTenantRatings(ctx context.Context) ([]uuid.UUID, error)
 	ListDiscordAnnouncementEncounters(ctx context.Context, instanceID uuid.UUID) ([]ListDiscordAnnouncementEncountersRow, error)
 	ListDiscordAnnouncementSources(ctx context.Context, announcementID uuid.UUID) ([]GuildDiscordLogAnnouncementSource, error)
 	ListDistinctInstanceNames(ctx context.Context) ([]string, error)
+	ListEvolvingAllClassPlayerTenantBossScores(ctx context.Context, arg ListEvolvingAllClassPlayerTenantBossScoresParams) ([]ListEvolvingAllClassPlayerTenantBossScoresRow, error)
+	ListEvolvingAllClassPlayerTenantScopeScores(ctx context.Context, arg ListEvolvingAllClassPlayerTenantScopeScoresParams) ([]ListEvolvingAllClassPlayerTenantScopeScoresRow, error)
+	ListEvolvingGuildTenantBossScores(ctx context.Context, arg ListEvolvingGuildTenantBossScoresParams) ([]ListEvolvingGuildTenantBossScoresRow, error)
+	ListEvolvingGuildTenantScopeScores(ctx context.Context, arg ListEvolvingGuildTenantScopeScoresParams) ([]ListEvolvingGuildTenantScopeScoresRow, error)
+	// Keep the indexed wow_guid column uncast. Non-GUID historical score text
+	// must safely miss the optional identity join rather than fail the board.
+	ListEvolvingPlayerTenantBossScores(ctx context.Context, arg ListEvolvingPlayerTenantBossScoresParams) ([]ListEvolvingPlayerTenantBossScoresRow, error)
+	ListEvolvingPlayerTenantScopeScores(ctx context.Context, arg ListEvolvingPlayerTenantScopeScoresParams) ([]ListEvolvingPlayerTenantScopeScoresRow, error)
 	ListExternalAPICharacterLogs(ctx context.Context, arg ListExternalAPICharacterLogsParams) ([]ListExternalAPICharacterLogsRow, error)
 	// Returns the logs excluded by duplicate-group deduplication for each selected
 	// leaderboard instance. The selected instance is the canonical leaderboard log
@@ -1112,6 +1207,9 @@ type sqlcQuerier interface {
 	ListRecentInstanceGroups(ctx context.Context, arg ListRecentInstanceGroupsParams) ([]ListRecentInstanceGroupsRow, error)
 	ListRecentInstances(ctx context.Context, arg ListRecentInstancesParams) ([]ListRecentInstancesRow, error)
 	ListRecentInstancesByPlayer(ctx context.Context, arg ListRecentInstancesByPlayerParams) ([]ListRecentInstancesByPlayerRow, error)
+	// A bounded view of recent drain attempts for the admin catch-up board. Dirty
+	// keys remain authoritative even when an older completed job ages out here.
+	ListRecentTenantRatingDrainJobs(ctx context.Context) ([]ListRecentTenantRatingDrainJobsRow, error)
 	ListRegressionFixtures(ctx context.Context) ([]ListRegressionFixturesRow, error)
 	ListRegressionSnapshots(ctx context.Context, arg ListRegressionSnapshotsParams) ([]ListRegressionSnapshotsRow, error)
 	// Bounded, deterministic keyset scan for an operator-initiated historical
@@ -1149,6 +1247,9 @@ type sqlcQuerier interface {
 	// One subject/raid/cohort/window per checkpoint page, never mix realms or
 	// specializations. The source primary key starts with generation and tenant.
 	ListTenantPlayerRaidScopeKeys(ctx context.Context, arg ListTenantPlayerRaidScopeKeysParams) ([]ListTenantPlayerRaidScopeKeysRow, error)
+	// One bounded row per tenant with realms. Aggregate each dirty table once rather
+	// than running four correlated count(*) scans per tenant on every admin poll.
+	ListTenantRatingCatchupStatus(ctx context.Context) ([]ListTenantRatingCatchupStatusRow, error)
 	// Group configuration is explicit: no group has score eligibility until both
 	// a policy and eligible boss rows have been configured by an operator.
 	ListTenantRatingPolicies(ctx context.Context, tenantID uuid.UUID) ([]RatingGroupPolicy, error)
@@ -1204,6 +1305,9 @@ type sqlcQuerier interface {
 	// updates to the same key wait, then increment its revision. The CAS delete
 	// keeps a newer change queued instead of losing it behind an in-flight worker.
 	LockDirtyRenownSubjects(ctx context.Context, arg LockDirtyRenownSubjectsParams) ([]LockDirtyRenownSubjectsRow, error)
+	// Serialize policy/config reads with tenant configuration revisions. A newly
+	// created tenant need not have started any generation or checkpoint.
+	LockEvolvingTenantRatingRevision(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	LockLogFilePartSequence(ctx context.Context, logFileID uuid.UUID) (uuid.UUID, error)
 	// Serializes module creation for one owner so concurrent requests cannot exceed the quota.
 	LockLuaProjectOwner(ctx context.Context, ownerID uuid.UUID) (uuid.UUID, error)
@@ -1214,6 +1318,10 @@ type sqlcQuerier interface {
 	// applicant, not a proof row, also works for their first request.
 	LockProofApplicant(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	LockRatingLiveEvidenceBootstrap(ctx context.Context, tenantID uuid.UUID) (LockRatingLiveEvidenceBootstrapRow, error)
+	// Held inside each evolving writer transaction. A copier's legacy→copying
+	// update waits for in-flight pages, and pages beginning afterward cannot
+	// acknowledge keys until the final copying→evolving commit.
+	LockTenantRatingReadStateForEvolvingPage(ctx context.Context, tenantID uuid.UUID) (string, error)
 	// Serialize incremental publication with full rebuild start/publish, both of
 	// which lock this tenant revision row. A later rebuild snapshots our writes.
 	// An earlier rebuilding generation keeps dirty keys queued until it publishes.
