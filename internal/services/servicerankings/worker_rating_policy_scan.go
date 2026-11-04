@@ -117,6 +117,18 @@ func ScanRatingPolicyPage(ctx context.Context, store database.Store, tenant uuid
 				return err
 			}
 			next, size = row.NextKey, row.PageSize
+		case "player_scope":
+			row, err := tx.CleanPolicyScanPlayerScopePage(ctx, database.CleanPolicyScanPlayerScopePageParams{TenantID: tenant, AfterKey: progress.AfterKey})
+			if err != nil {
+				return err
+			}
+			next, size = row.NextKey, row.PageSize
+		case "guild_scope":
+			row, err := tx.CleanPolicyScanGuildScopePage(ctx, database.CleanPolicyScanGuildScopePageParams{TenantID: tenant, AfterKey: progress.AfterKey})
+			if err != nil {
+				return err
+			}
+			next, size = row.NextKey, row.PageSize
 		case "peak":
 			row, err := tx.MarkPolicyScanPeakPage(ctx, database.MarkPolicyScanPeakPageParams{TenantID: tenant, AfterKey: progress.AfterKey})
 			if err != nil {

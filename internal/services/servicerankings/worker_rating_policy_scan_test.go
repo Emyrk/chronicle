@@ -49,6 +49,23 @@ func TestRatingPolicyScanCheckpointAndScoreOnly(t *testing.T) {
         (tenant_id, subject_kind, instance_name, encounter_name, difficulty_name, max_players, performance_metric, window_kind, rank_one_raw)
         VALUES ($1,'guild','Retired raid','Retired boss','heroic',40,'none','all_time',1)`, tenant)
 	require.NoError(t, err)
+	guild := uuid.New()
+	_, err = db.Exec(admin, `INSERT INTO guilds(id,realm_id,name) VALUES($1,$2,'Scan guild')`, guild, realm)
+	require.NoError(t, err)
+	_, err = db.Exec(admin, `INSERT INTO guild_tenant_rating_scope_scores_evolving
+        (tenant_id,realm_id,guild_id,instance_name,rating_metric,window_kind,score)
+        VALUES ($1,$2,$3,'Retired raid','peak','all_time',1)`, tenant, realm, guild)
+	require.NoError(t, err)
+	for i := 0; i < 105; i++ {
+		_, err = db.Exec(admin, `INSERT INTO player_tenant_rating_scope_scores_evolving
+            (tenant_id,realm_id,player_guid,instance_name,performance_metric,rating_metric,window_kind,score)
+            VALUES ($1,$2,$3,'Orphan raid','dps','peak','all_time',1)`, tenant, realm, fmt.Sprintf("orphan-%03d", i))
+		require.NoError(t, err)
+	}
+	_, err = db.Exec(admin, `INSERT INTO player_tenant_rating_scope_scores_evolving
+        (tenant_id,realm_id,player_guid,instance_name,performance_metric,rating_metric,window_kind,score)
+        VALUES ($1,$2,'peak-only','Removed raid','dps','peak','all_time',1)`, tenant, realm)
+	require.NoError(t, err)
 	require.NoError(t, db.ResetRatingPolicyScan(admin, tenant))
 	// First page ends empty runs stage; second marks 100 renown keys.
 	for i := 0; i < 2; i++ {
@@ -64,7 +81,7 @@ func TestRatingPolicyScanCheckpointAndScoreOnly(t *testing.T) {
 	require.NoError(t, db.QueryRow(admin, `SELECT count(*) FROM rating_dirty_renown_subjects WHERE tenant_id=$1`, tenant).Scan(&count))
 	require.Equal(t, 100, count)
 	// A new worker resumes the same committed cursor, then visits all stages.
-	for i := 0; i < 12; i++ {
+	for i := 0; i < 20; i++ {
 		done, err := ScanRatingPolicyPage(admin, db, tenant)
 		require.NoError(t, err)
 		if done {
@@ -82,6 +99,16 @@ func TestRatingPolicyScanCheckpointAndScoreOnly(t *testing.T) {
 	} {
 		require.NoError(t, db.QueryRow(admin, "SELECT count(*) FROM "+tc.table+" WHERE tenant_id=$1", tenant).Scan(&count))
 		require.Equal(t, tc.want, count, tc.table)
+	}
+	for _, tc := range []struct {
+		query string
+		want  int
+	}{
+		{`SELECT count(*) FROM player_tenant_rating_scope_scores_evolving WHERE tenant_id=$1`, 1},
+		{`SELECT count(*) FROM guild_tenant_rating_scope_scores_evolving WHERE tenant_id=$1`, 0},
+	} {
+		require.NoError(t, db.QueryRow(admin, tc.query, tenant).Scan(&count))
+		require.Equal(t, tc.want, count)
 	}
 	// A failed page must roll back its dirty insert and cursor together.
 	rollback := errors.New("injected rollback")

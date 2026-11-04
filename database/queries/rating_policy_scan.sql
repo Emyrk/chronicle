@@ -1,13 +1,13 @@
 -- Operator explicitly resets progress after a policy migration; never run this at startup.
 -- name: ResetRatingPolicyScan :exec
 INSERT INTO rating_policy_scan_progress (tenant_id, stage)
-SELECT @tenant_id::uuid, stage FROM unnest(ARRAY['runs','renown','mastery','peak']::text[]) stage
+SELECT @tenant_id::uuid, stage FROM unnest(ARRAY['runs','renown','mastery','peak','player_scope','guild_scope']::text[]) stage
 ON CONFLICT (tenant_id, stage) DO UPDATE SET after_key = NULL, completed = false, updated_at = now();
 
 -- name: LockRatingPolicyScanProgress :one
 SELECT stage, after_key, completed FROM rating_policy_scan_progress
 WHERE tenant_id = @tenant_id AND NOT completed
-ORDER BY array_position(ARRAY['runs','renown','mastery','peak']::text[], stage)
+ORDER BY array_position(ARRAY['runs','renown','mastery','peak','player_scope','guild_scope']::text[], stage)
 LIMIT 1 FOR UPDATE;
 
 -- name: ListRatingPolicyScanTenants :many
@@ -132,3 +132,36 @@ WITH sources AS (
 )
 SELECT (SELECT jsonb_build_array(subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric) FROM page ORDER BY subject_kind DESC, instance_name DESC, encounter_name DESC, difficulty_name DESC, max_players DESC, player_class DESC, player_spec DESC, player_sub_spec DESC, performance_metric DESC LIMIT 1) AS next_key,
  (SELECT count(*)::int FROM page) AS page_size, (SELECT count(*)::int FROM dirty) AS marked;
+-- Scan scope-only historical projection rows, including removed raids.
+-- A scope has no source boss identity; remove it only when no boss score
+-- can contribute to that exact subject/metric/window scope.
+-- name: CleanPolicyScanPlayerScopePage :one
+WITH page AS MATERIALIZED (
+ SELECT realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind FROM player_tenant_rating_scope_scores_evolving
+ WHERE player_tenant_rating_scope_scores_evolving.tenant_id = @tenant_id AND (@after_key::jsonb IS NULL OR (realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind) > ((@after_key::jsonb->>0)::uuid, (@after_key::jsonb->>1)::text, (@after_key::jsonb->>2)::text, (@after_key::jsonb->>3)::text, (@after_key::jsonb->>4)::smallint, (@after_key::jsonb->>5)::text, (@after_key::jsonb->>6)::text, (@after_key::jsonb->>7)::text, (@after_key::jsonb->>8)::text, (@after_key::jsonb->>9)::text, (@after_key::jsonb->>10)::text))
+ ORDER BY realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind LIMIT 100
+), removed AS (
+ DELETE FROM player_tenant_rating_scope_scores_evolving scope USING page
+ WHERE scope.tenant_id = @tenant_id AND scope.realm_id = page.realm_id AND scope.player_guid = page.player_guid AND scope.instance_name = page.instance_name AND scope.difficulty_name = page.difficulty_name AND scope.max_players = page.max_players AND scope.player_class = page.player_class AND scope.player_spec = page.player_spec AND scope.player_sub_spec = page.player_sub_spec AND scope.performance_metric = page.performance_metric AND scope.rating_metric = page.rating_metric AND scope.window_kind = page.window_kind
+ AND NOT EXISTS (SELECT 1 FROM player_tenant_rating_boss_scores_evolving boss WHERE boss.tenant_id = scope.tenant_id AND boss.realm_id = scope.realm_id AND boss.player_guid = scope.player_guid AND boss.instance_name = scope.instance_name AND boss.difficulty_name = scope.difficulty_name AND boss.max_players = scope.max_players AND boss.player_class = scope.player_class AND boss.player_spec = scope.player_spec AND boss.player_sub_spec = scope.player_sub_spec AND boss.performance_metric = scope.performance_metric AND boss.rating_metric = scope.rating_metric AND boss.window_kind = scope.window_kind)
+ RETURNING 1
+)
+SELECT (SELECT jsonb_build_array(realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind) FROM page ORDER BY realm_id DESC, player_guid DESC, instance_name DESC, difficulty_name DESC, max_players DESC, player_class DESC, player_spec DESC, player_sub_spec DESC, performance_metric DESC, rating_metric DESC, window_kind DESC LIMIT 1) AS next_key,
+ (SELECT count(*)::int FROM page) AS page_size, (SELECT count(*)::int FROM removed) AS removed;
+
+-- Scan scope-only historical projection rows, including removed raids.
+-- A scope has no source boss identity; remove it only when no boss score
+-- can contribute to that exact subject/metric/window scope.
+-- name: CleanPolicyScanGuildScopePage :one
+WITH page AS MATERIALIZED (
+ SELECT realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind FROM guild_tenant_rating_scope_scores_evolving
+ WHERE guild_tenant_rating_scope_scores_evolving.tenant_id = @tenant_id AND (@after_key::jsonb IS NULL OR (realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind) > ((@after_key::jsonb->>0)::uuid, (@after_key::jsonb->>1)::uuid, (@after_key::jsonb->>2)::text, (@after_key::jsonb->>3)::text, (@after_key::jsonb->>4)::smallint, (@after_key::jsonb->>5)::text, (@after_key::jsonb->>6)::text))
+ ORDER BY realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind LIMIT 100
+), removed AS (
+ DELETE FROM guild_tenant_rating_scope_scores_evolving scope USING page
+ WHERE scope.tenant_id = @tenant_id AND scope.realm_id = page.realm_id AND scope.guild_id = page.guild_id AND scope.instance_name = page.instance_name AND scope.difficulty_name = page.difficulty_name AND scope.max_players = page.max_players AND scope.rating_metric = page.rating_metric AND scope.window_kind = page.window_kind
+ AND NOT EXISTS (SELECT 1 FROM guild_tenant_rating_boss_scores_evolving boss WHERE boss.tenant_id = scope.tenant_id AND boss.realm_id = scope.realm_id AND boss.guild_id = scope.guild_id AND boss.instance_name = scope.instance_name AND boss.difficulty_name = scope.difficulty_name AND boss.max_players = scope.max_players AND boss.rating_metric = scope.rating_metric AND boss.window_kind = scope.window_kind)
+ RETURNING 1
+)
+SELECT (SELECT jsonb_build_array(realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind) FROM page ORDER BY realm_id DESC, guild_id DESC, instance_name DESC, difficulty_name DESC, max_players DESC, rating_metric DESC, window_kind DESC LIMIT 1) AS next_key,
+ (SELECT count(*)::int FROM page) AS page_size, (SELECT count(*)::int FROM removed) AS removed;
