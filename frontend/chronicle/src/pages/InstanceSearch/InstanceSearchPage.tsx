@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useState, type ReactNode }
 import { useInferenceCapability } from "@/features/chat";
 import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpDown, Blocks, BookOpen, ChevronDown, ChevronUp, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowUpDown, ArrowUpNarrowWide, Blocks, BookOpen, ChevronDown, ChevronUp, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
 import { InstanceSearchSortFields } from "@/api/typesGenerated";
 import type {
   InstanceSearchCursor,
@@ -23,6 +23,9 @@ import { Button } from "@/components/ui/button";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { BlockEditor } from "./BlockEditor";
+import { SelectCombo } from "./ComboInput";
+import type { ComboOption } from "./comboOptions";
+import { NATIVE_SELECT } from "./controls";
 import { ResultsTable } from "./ResultsTable";
 import { SearchSummary } from "./SearchSummary";
 import { CelCode } from "./CelCode";
@@ -457,6 +460,7 @@ export function InstanceSearchPage() {
       )}
 
       <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="inline-flex items-center gap-0.5 bg-muted/50 rounded-md p-0.5">
           <ModeButton
             active={mode === "form"}
@@ -489,6 +493,15 @@ export function InstanceSearchPage() {
           >
             <Code2 className="h-3.5 w-3.5" /> Code
           </ModeButton>
+        </div>
+        <SortControls
+          sort={draftSort}
+          options={fields.data?.sorts ?? []}
+          bosses={allBosses}
+          supporterTier={supporter.tier}
+          supporterLoading={supporter.isLoading}
+          onChange={setDraftSort}
+        />
         </div>
         <div className="flex items-center gap-2">
           <ExamplesMenu onPick={loadExample} />
@@ -540,15 +553,6 @@ export function InstanceSearchPage() {
           )}
         </div>
       )}
-
-      <SortControls
-        sort={draftSort}
-        options={fields.data?.sorts ?? []}
-        bosses={allBosses}
-        supporterTier={supporter.tier}
-        supporterLoading={supporter.isLoading}
-        onChange={setDraftSort}
-      />
 
       {/* Sticks to the bottom of the screen while a long search is being
           edited, so Search and the cost stay in reach; it settles back into
@@ -610,6 +614,8 @@ export function InstanceSearchPage() {
           loading={results.isLoading}
           bossCounts={bossCounts}
           tree={submittedTree}
+          sort={selectedSort}
+          sortLabel={sortColumnLabel(selectedSort, fields.data?.sorts ?? [])}
           onBudget={recordBudget}
         />
       )}
@@ -626,12 +632,45 @@ export function InstanceSearchPage() {
   );
 }
 
+/** Header for the results' sort column: the sort's label, plus its boss or parse scope. */
+function sortColumnLabel(sort: InstanceSearchSort, options: readonly InstanceSearchSortOption[]): string {
+  const label = options.find((option) => option.field === sort.field)?.label ?? "Sort";
+  if (sort.boss) return `${sort.boss} kill`;
+  if (sort.parse_scope) return `${label} (${sort.parse_scope})`;
+  return label;
+}
+
 function sortTierUnlocked(minimum: InstanceSearchSortTier, supporterTier: string | null, loading: boolean): boolean {
   if (minimum === "free" || loading) return true;
   const order = ["honored", "revered", "exalted"];
   return supporterTier !== null && order.indexOf(supporterTier) >= order.indexOf(minimum);
 }
 
+function tierName(tier: InstanceSearchSortTier): string {
+  return tier[0].toUpperCase() + tier.slice(1);
+}
+
+/** Sort options for the picker: locked ones show their tier in its colour and can't be picked. */
+function sortComboOptions(
+  options: readonly InstanceSearchSortOption[],
+  hasBosses: boolean,
+  supporterTier: string | null,
+  supporterLoading: boolean,
+): ComboOption[] {
+  return options.map((option) => {
+    if (!sortTierUnlocked(option.minimum_tier, supporterTier, supporterLoading) && option.minimum_tier !== "free") {
+      return { value: option.field, label: option.label, disabled: true, hint: tierName(option.minimum_tier), hintColor: TIER_COLOR[option.minimum_tier] };
+    }
+    return {
+      value: option.field,
+      label: option.label,
+      disabled: option.boss && !hasBosses,
+      hint: option.cost > 0 ? `+${option.cost} cost` : undefined,
+    };
+  });
+}
+
+/** Sort picker for the toolbar: a searchable property, its scope or boss, and a direction toggle. */
 function SortControls({
   sort,
   options,
@@ -647,21 +686,23 @@ function SortControls({
   supporterLoading: boolean;
   onChange: (sort: InstanceSearchSort) => void;
 }) {
-  const selectClass = "h-8 rounded-md border border-border/70 bg-background px-2 text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-60";
   const current = options.find((option) => option.field === sort.field);
   const currentUnlocked = current ? sortTierUnlocked(current.minimum_tier, supporterTier, supporterLoading) : true;
+  const direction = sort.direction ?? current?.default_direction ?? defaultSortDirection(sort.field);
+  const bossOptions = useMemo(() => bosses.map((boss) => ({ value: boss.value, label: boss.label ?? boss.value, group: boss.group })), [bosses]);
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 py-2">
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
         <ArrowUpDown className="h-3.5 w-3.5" /> Sort
       </span>
-      <select
-        aria-label="Sort property"
-        className={selectClass}
+      <SelectCombo
+        className="w-40"
         value={sort.field}
+        options={sortComboOptions(options, bosses.length > 0, supporterTier, supporterLoading)}
         disabled={options.length === 0}
-        onChange={(event) => {
-          const option = options.find((candidate) => candidate.field === event.target.value);
+        placeholder="Search sorts…"
+        onChange={(field) => {
+          const option = options.find((candidate) => candidate.field === field);
           if (!option) return;
           onChange({
             field: option.field,
@@ -670,17 +711,11 @@ function SortControls({
             ...(option.boss && bosses[0] ? { boss: bosses[0].value } : {}),
           });
         }}
-      >
-        {options.map((option) => {
-          const unlocked = sortTierUnlocked(option.minimum_tier, supporterTier, supporterLoading);
-          const suffix = option.minimum_tier === "free" ? "" : ` · ${option.minimum_tier[0].toUpperCase()}${option.minimum_tier.slice(1)}`;
-          return <option key={option.field} value={option.field} disabled={!unlocked || (option.boss && bosses.length === 0)}>{option.label}{suffix}</option>;
-        })}
-      </select>
+      />
       {current?.parse_scope && (
         <select
           aria-label="Clear parse scope"
-          className={selectClass}
+          className={NATIVE_SELECT}
           value={sort.parse_scope ?? "server"}
           disabled={!currentUnlocked}
           onChange={(event) => onChange({ ...sort, parse_scope: event.target.value as InstanceSearchParseScope })}
@@ -691,30 +726,29 @@ function SortControls({
         </select>
       )}
       {current?.boss && (
-        <select
-          aria-label="Boss kill time"
-          className={selectClass}
+        <SelectCombo
+          className="w-44"
           value={sort.boss ?? bosses[0]?.value ?? ""}
+          options={bossOptions}
           disabled={!currentUnlocked || bosses.length === 0}
-          onChange={(event) => onChange({ ...sort, boss: event.target.value })}
-        >
-          {bosses.map((boss) => <option key={boss.value} value={boss.value}>{boss.label ?? boss.value}{boss.group ? ` · ${boss.group}` : ""}</option>)}
-        </select>
+          placeholder="Search bosses…"
+          onChange={(boss) => onChange({ ...sort, boss })}
+        />
       )}
-      <select
-        aria-label="Sort direction"
-        className={selectClass}
-        value={sort.direction ?? current?.default_direction ?? defaultSortDirection(sort.field)}
+      <button
+        type="button"
+        aria-label={direction === "asc" ? "Ascending, switch to descending" : "Descending, switch to ascending"}
+        title={direction === "asc" ? "Ascending" : "Descending"}
         disabled={!currentUnlocked}
-        onChange={(event) => onChange({ ...sort, direction: event.target.value as InstanceSearchSortDirection })}
+        onClick={() => onChange({ ...sort, direction: direction === "asc" ? "desc" : "asc" })}
+        className="inline-flex h-7 items-center gap-1 rounded-md border border-input bg-background px-2 text-xs text-foreground hover:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <option value="asc">Ascending</option>
-        <option value="desc">Descending</option>
-      </select>
-      {current && current.cost > 0 && <span className="text-2xs text-muted-foreground">+{current.cost} search cost</span>}
+        {direction === "asc" ? <ArrowUpNarrowWide className="h-3.5 w-3.5" /> : <ArrowDownWideNarrow className="h-3.5 w-3.5" />}
+        {direction === "asc" ? "Asc" : "Desc"}
+      </button>
       {current && !currentUnlocked && current.minimum_tier !== "free" && (
-        <Link to="/supporter" className="ml-auto inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: TIER_COLOR[current.minimum_tier] }}>
-          <Lock className="h-3.5 w-3.5" /> {current.minimum_tier[0].toUpperCase()}{current.minimum_tier.slice(1)} perk
+        <Link to="/supporter" className="inline-flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: TIER_COLOR[current.minimum_tier] }}>
+          <Lock className="h-3.5 w-3.5" /> {tierName(current.minimum_tier)} perk
         </Link>
       )}
     </div>

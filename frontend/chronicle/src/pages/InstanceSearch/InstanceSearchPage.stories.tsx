@@ -131,7 +131,8 @@ function handlers({
       if (search === "empty") return HttpResponse.json({ results: [] }, { headers: rlHeaders(cost, runtimeCost) });
       const start = body.cursor ? allRows.findIndex((r) => r.id === body.cursor!.id) + 1 : 0;
       const pageSize = body.limit ?? 25;
-      const page = allRows.slice(start, start + pageSize);
+      const sortField = body.sort?.field;
+      const page = allRows.slice(start, start + pageSize).map((r, i) => (sortField ? { ...r, sort_value: mockSortValue(sortField, start + i) } : r));
       const last = page[page.length - 1];
       const hasMore = start + pageSize < allRows.length;
       return HttpResponse.json(
@@ -140,6 +141,24 @@ function handlers({
       );
     }),
   ];
+}
+
+/** A plausible sort_value per row for the sorts the table shows in their own column. */
+function mockSortValue(field: string, i: number): string | undefined {
+  switch (field) {
+    case "instance.kill_time_ms":
+      return i % 9 === 8 ? undefined : String(95_000 + i * 4_300);
+    case "instance.clear_parse":
+      return String(99.4 - i * 0.7);
+    case "instance.idle_time_ms":
+    case "instance.boss_time_ms":
+      return String((12 + i) * 60_000);
+    case "instance.deaths":
+    case "instance.wipes":
+      return String(i);
+    default:
+      return undefined;
+  }
 }
 
 function url(tree: Node | undefined, mode?: "blocks") {
@@ -299,6 +318,14 @@ export const Ranges: Story = {
 };
 
 /** History from earlier searches in this browser, under the Recent menu. */
+/** Sorted by one boss's kill time: the table adds a column for the sorted value. */
+export const SortedByKillTime: Story = {
+  parameters: {
+    msw: { handlers: handlers({ loggedIn: true, tier: "honored" }) },
+    initialEntry: `${url(formTree)}&sort=instance.kill_time_ms&order=asc&sort_boss=Ragnaros`,
+  },
+};
+
 export const RecentSearches: Story = {
   beforeEach: () => {
     const now = Date.now();

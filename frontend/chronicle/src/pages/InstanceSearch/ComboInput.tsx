@@ -142,15 +142,20 @@ export function ComboInput({
                 onClick={() => pick(o)}
                 className={cn(
                   "flex items-center gap-2 rounded px-2 py-1 text-xs",
-                  o.disabled ? "cursor-not-allowed opacity-50" : cn("cursor-pointer", i === active ? "bg-accent text-accent-foreground" : "hover:bg-accent/60"),
+                  o.disabled ? "cursor-not-allowed" : cn("cursor-pointer", i === active ? "bg-accent text-accent-foreground" : "hover:bg-accent/60"),
                 )}
               >
                 {selected !== undefined && (
                   <span className="flex size-3.5 shrink-0 items-center justify-center">{o.value === selected && <Check className="h-3.5 w-3.5 text-sky-400" />}</span>
                 )}
                 {o.icon}
-                <span className="truncate">{o.label ?? o.value}</span>
-                {o.hint && <span className="ml-auto pl-3 shrink-0 text-2xs text-muted-foreground">{o.hint}</span>}
+                {/* Dim only the label on locked options so a coloured hint (the tier) stays readable. */}
+                <span className={cn("truncate", o.disabled && "opacity-50")}>{o.label ?? o.value}</span>
+                {o.hint && (
+                  <span className={cn("ml-auto pl-3 shrink-0 text-2xs", o.hintColor ? "font-semibold" : "text-muted-foreground", o.disabled && !o.hintColor && "opacity-50")} style={o.hintColor ? { color: o.hintColor } : undefined}>
+                    {o.hint}
+                  </span>
+                )}
               </div>
             </Fragment>
           ))}

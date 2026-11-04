@@ -72,13 +72,12 @@ func Search(ctx context.Context, db database.Store, compiled Compiled, opts Sear
 			}
 			r.Slug = slug.String
 			r.GuildName = guildName.String
-			results = append(results, r)
 			if cursorValue.Valid {
 				value := cursorValue.String
-				cursorValues = append(cursorValues, &value)
-			} else {
-				cursorValues = append(cursorValues, nil)
+				r.SortValue = &value
 			}
+			results = append(results, r)
+			cursorValues = append(cursorValues, r.SortValue)
 		}
 		return rows.Err()
 	}, &pgx.TxOptions{AccessMode: pgx.ReadOnly})

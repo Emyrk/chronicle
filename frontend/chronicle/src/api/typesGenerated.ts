@@ -3268,6 +3268,11 @@ export interface InstanceSearchResult {
      * a full clear.
      */
     readonly clear_time_ms?: number;
+    /**
+     * SortValue is the value of the requested sort property as text (dates
+     * in RFC 3339, durations in milliseconds); absent when the run has none.
+     */
+    readonly sort_value?: string;
 }
 
 // From chroniclesdk/instance_search.go

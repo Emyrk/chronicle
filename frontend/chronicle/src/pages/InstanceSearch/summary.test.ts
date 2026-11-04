@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EXAMPLES } from "./examples";
-import { formatDuration, formatEvidence, formatMinutes, summarize } from "./summary";
+import { formatDuration, formatEvidence, formatMinutes, formatSortValue, summarize } from "./summary";
 import type { Node } from "./queryModel";
 
 describe("summarize", () => {
@@ -60,5 +60,15 @@ describe("ranges and evidence values", () => {
     expect(formatEvidence("player.sub_spec", "Cat")).toBe("Cat");
     expect(formatEvidence("player.sub_spec", "")).toBe("none");
     expect(formatEvidence("instance.started_at", "2026-10-15T19:00:00+00:00")).toBe("2026-10-15");
+  });
+});
+
+describe("formatSortValue", () => {
+  it("formats each sort's value for the results column", () => {
+    expect(formatSortValue("instance.kill_time_ms", "107000")).toBe("1:47");
+    expect(formatSortValue("instance.idle_time_ms", "4500000")).toBe("1h 15m");
+    expect(formatSortValue("instance.clear_parse", "97.536")).toBe("97.5");
+    expect(formatSortValue("instance.wipes", "3")).toBe("3");
+    expect(formatSortValue("instance.deaths", undefined)).toBeNull();
   });
 });

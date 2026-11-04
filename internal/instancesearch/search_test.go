@@ -537,6 +537,10 @@ func TestSearch(t *testing.T) {
 		q := instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortClearTime, Direction: instancesearch.SortAsc}}
 		page := f.search(t, f.tenantA, q)
 		require.Equal(t, []string{"Alpha", "Beta"}, []string{page.Results[0].GuildName, page.Results[1].GuildName})
+		// Results carry the sorted value so the UI can show it; mc2 has no clear.
+		require.NotNil(t, page.Results[0].SortValue)
+		require.Equal(t, "1500000", *page.Results[0].SortValue)
+		require.Nil(t, page.Results[1].SortValue)
 
 		q.Sort = &instancesearch.Sort{Field: instancesearch.SortClearParse, ParseScope: instancesearch.ParseScopeServer}
 		page = f.search(t, f.tenantA, q)

@@ -1,4 +1,4 @@
-import type { InstanceSearchCount } from "@/api/typesGenerated";
+import type { InstanceSearchCount, InstanceSearchSortField } from "@/api/typesGenerated";
 import { OP_LABELS, enumLabel, fieldLabel } from "./fieldLabels";
 import type { Node } from "./queryModel";
 
@@ -11,6 +11,25 @@ export function formatMinutes(ms: number): string {
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
   return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+/** Formats a result's sort_value (sent as text) for the extra sort column. */
+export function formatSortValue(field: InstanceSearchSortField, value: string | undefined): string | null {
+  if (value == null) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return value;
+  switch (field) {
+    case "instance.kill_time_ms":
+      return formatDuration(n);
+    case "instance.idle_time_ms":
+    case "instance.boss_time_ms":
+    case "instance.clear_time_ms":
+      return formatMinutes(n);
+    case "instance.clear_parse":
+      return n.toLocaleString(undefined, { maximumFractionDigits: 1 });
+    default:
+      return n.toLocaleString();
+  }
 }
 
 export function formatValue(field: string, value: unknown): string {

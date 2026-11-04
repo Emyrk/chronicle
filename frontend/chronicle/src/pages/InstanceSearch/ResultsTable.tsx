@@ -1,13 +1,13 @@
 import { Fragment, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, ChevronRight, Loader2, SearchX } from "lucide-react";
-import type { InstanceSearchResult } from "@/api/typesGenerated";
+import { ArrowDown, ArrowUp, CheckCircle2, ChevronRight, Loader2, SearchX } from "lucide-react";
+import type { InstanceSearchResult, InstanceSearchSort, InstanceSearchSortField } from "@/api/typesGenerated";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { cn } from "@/lib/utils";
 import { EvidencePanel } from "./EvidencePanel";
 import type { Node } from "./queryModel";
 import type { SearchBudget } from "./searchApi";
-import { formatMinutes } from "./summary";
+import { formatMinutes, formatSortValue } from "./summary";
 
 function relativeDate(iso: string): string {
   const d = new Date(iso);
@@ -17,6 +17,19 @@ function relativeDate(iso: string): string {
   if (days < 7) return `${days} days ago`;
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
 }
+
+/** Sorts whose value already has a column (or sits in the Run subtitle). */
+const SORT_COLUMN: Partial<Record<InstanceSearchSortField, string>> = {
+  "instance.name": "run",
+  "instance.realm": "run",
+  "instance.difficulty": "run",
+  "instance.max_players": "run",
+  "instance.guild": "guild",
+  "instance.bosses_killed": "bosses",
+  "instance.player_count": "players",
+  "instance.clear_time_ms": "clear",
+  "instance.started_at": "date",
+};
 
 function instanceHref(r: InstanceSearchResult): string {
   return `/instances/${r.slug || r.id}`;
@@ -32,6 +45,8 @@ export function ResultsTable({
   loading,
   bossCounts,
   tree,
+  sort,
+  sortLabel,
   onBudget,
 }: {
   rows: InstanceSearchResult[];
@@ -40,8 +55,16 @@ export function ResultsTable({
   bossCounts: Map<string, number>;
   /** The submitted search, explained per row on expand. */
   tree: Node | undefined;
+  /** The submitted order: its column gets an arrow, or its own column when the table doesn't show it. */
+  sort: InstanceSearchSort;
+  /** Header for the extra sort column, e.g. "Boss kill time · Ragnaros". */
+  sortLabel: string;
   onBudget?: (budget: SearchBudget) => void;
 }) {
+  const sortedColumn = SORT_COLUMN[sort.field];
+  const extraColumn = sortedColumn === undefined;
+  const SortArrow = sort.direction === "asc" ? ArrowUp : ArrowDown;
+  const arrow = (column: string) => (sortedColumn === column ? <SortArrow className="inline h-3 w-3 ml-0.5 -mt-px text-sky-400" aria-label={`Sorted ${sort.direction === "asc" ? "ascending" : "descending"}`} /> : null);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const toggle = (id: string) =>
     setExpanded((prev) => {
@@ -72,12 +95,18 @@ export function ResultsTable({
         <thead>
           <tr className="bg-primary-darker text-muted-foreground text-2xs uppercase tracking-wider">
             <th className="w-8 pl-2 py-2"><span className="sr-only">Why it matched</span></th>
-            <th className="text-left px-3 py-2 font-medium">Run</th>
-            <th className="text-left px-3 py-2 font-medium hidden sm:table-cell">Guild</th>
-            <th className="text-left px-3 py-2 font-medium">Bosses</th>
-            <th className="text-right px-3 py-2 font-medium hidden md:table-cell">Players</th>
-            <th className="text-right px-3 py-2 font-medium hidden md:table-cell min-w-[6rem] whitespace-nowrap">Clear</th>
-            <th className="text-right px-3 py-2 font-medium hidden sm:table-cell">Date</th>
+            <th className="text-left px-3 py-2 font-medium">Run{arrow("run")}</th>
+            <th className="text-left px-3 py-2 font-medium hidden sm:table-cell">Guild{arrow("guild")}</th>
+            <th className="text-left px-3 py-2 font-medium">Bosses{arrow("bosses")}</th>
+            <th className="text-right px-3 py-2 font-medium hidden md:table-cell">Players{arrow("players")}</th>
+            <th className="text-right px-3 py-2 font-medium hidden md:table-cell min-w-[6rem] whitespace-nowrap">Clear{arrow("clear")}</th>
+            {extraColumn && (
+              <th className="text-right px-3 py-2 font-medium whitespace-nowrap text-sky-300" title={sortLabel}>
+                <span className="inline-block max-w-[9rem] truncate align-bottom">{sortLabel}</span>
+                <SortArrow className="inline h-3 w-3 ml-0.5 -mt-px text-sky-400" aria-label={`Sorted ${sort.direction === "asc" ? "ascending" : "descending"}`} />
+              </th>
+            )}
+            <th className="text-right px-3 py-2 font-medium hidden sm:table-cell">Date{arrow("date")}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border/70">
@@ -158,6 +187,11 @@ export function ResultsTable({
                 <td className="px-3 py-2 text-right tabular-nums text-xs hidden md:table-cell whitespace-nowrap">
                   {r.clear_time_ms != null ? <span className="text-foreground/90">{formatMinutes(r.clear_time_ms)}</span> : <span className="text-muted-foreground/50">—</span>}
                 </td>
+                {extraColumn && (
+                  <td className="px-3 py-2 text-right tabular-nums text-xs whitespace-nowrap">
+                    {formatSortValue(sort.field, r.sort_value) ?? <span className="text-muted-foreground/50">—</span>}
+                  </td>
+                )}
                 <td className="px-3 py-2 text-right whitespace-nowrap hidden sm:table-cell" title={new Date(r.started_at).toLocaleString()}>
                   <div className="text-xs text-foreground/90">{relativeDate(r.started_at)}</div>
                   <div className="text-2xs text-muted-foreground tabular-nums">
@@ -168,7 +202,7 @@ export function ResultsTable({
               {open && (
                 <tr className="bg-primary-darker/20">
                   <td />
-                  <td colSpan={6} className="px-3 pt-1 pb-3">
+                  <td colSpan={extraColumn ? 7 : 6} className="px-3 pt-1 pb-3">
                     <p className="text-2xs uppercase tracking-wider text-muted-foreground mb-1.5">Why it matched</p>
                     <EvidencePanel tree={tree} instanceId={r.id} realmName={r.realm_name} onBudget={onBudget} />
                   </td>
