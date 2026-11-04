@@ -4,9 +4,15 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/services/serviceinstancesearch"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,6 +35,24 @@ func TestDiscordSearchTenantRequiresValidatedSlug(t *testing.T) {
 		_, err = service.resolveSearchTenant(invalid)
 		require.Error(t, err, invalid)
 	}
+}
+
+func TestDiscordSearchUsesSharedAdmission(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	db, _ := dbtestutil.NewDB(t)
+	tenant := database.Tenant{ID: uuid.New(), Name: "Turtle", Slug: pgtype.Text{String: "turtle", Valid: true}}
+	search := serviceinstancesearch.New(testutil.Logger(t), db, prometheus.NewRegistry(), nil)
+	service := &Service{tenant: servicetenant.NewTestWithTenants(url.URL{}, "chronicle.example", tenant), instanceSearch: search}
+	user := uuid.New()
+	_, first := search.Search(ctx, serviceinstancesearch.Caller{UserID: user, TenantID: tenant.ID}, chroniclesdk.InstanceSearchQuery{})
+	require.NoError(t, first.Err)
+	output, err := service.searchInstances(ctx, toolContext{userID: user, tenantSlug: "turtle"}, `{}`)
+	require.NoError(t, err)
+	require.Contains(t, output, `"cost":1`)
+	status, _, err := search.Peek(ctx, serviceinstancesearch.Caller{UserID: user, TenantID: tenant.ID})
+	require.NoError(t, err)
+	require.InDelta(t, 98, status.Remaining, 1)
 }
 
 func TestDiscordAnswerOnlyCollectsAssistantText(t *testing.T) {

@@ -10,10 +10,8 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/instancesearch"
-	"github.com/Emyrk/chronicle/internal/ratelimit"
-	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/Emyrk/chronicle/internal/services/serviceinstancesearch"
 	"github.com/google/uuid"
 )
 
@@ -68,31 +66,6 @@ func (s *Service) tenantInstanceURL(tenant database.Tenant, result chroniclesdk.
 	return base.String()
 }
 
-func (s *Service) instanceSearchUserLimit(ctx context.Context, userID uuid.UUID) (ratelimit.Limit, error) {
-	actor := policy.New().User(userID)
-	chronicle := policy.New().GlobalChronicle()
-	permissions, err := s.zed.Check(ctx, nil,
-		chronicle.CanHas_exalted_User(actor),
-		chronicle.CanHas_revered_User(actor),
-		chronicle.CanHas_honored_User(actor),
-	)
-	if err != nil {
-		return ratelimit.Limit{}, err
-	}
-	if len(permissions) != 3 {
-		return ratelimit.Limit{}, errors.New("check instance search supporter tier: expected 3 permission results")
-	}
-	burst := float64(100)
-	if permissions[0] {
-		burst = 2000
-	} else if permissions[1] {
-		burst = 800
-	} else if permissions[2] {
-		burst = 300
-	}
-	return ratelimit.PerMinute(60, burst), nil
-}
-
 func (s *Service) searchInstances(ctx context.Context, tc toolContext, args string) (string, error) {
 	var in struct {
 		Where *chroniclesdk.InstanceSearchNode `json:"where"`
@@ -114,37 +87,27 @@ func (s *Service) searchInstances(ctx context.Context, tc toolContext, args stri
 	if err != nil {
 		return "", err
 	}
-	searchCtx := servicetenant.WithTenant(ctx, tenant)
-	query := chroniclesdk.InstanceSearchQuery{Where: in.Where, Limit: in.Limit}
-	compiled, err := instancesearch.CompileForContext(searchCtx, query, instancesearch.Options{})
-	if err != nil {
-		return "", fmt.Errorf("invalid instance search: %w", err)
+	if s.instanceSearch == nil {
+		return "", errors.New("instance search is unavailable")
 	}
-	limiter := ratelimit.New(s.db, "instance_search", ratelimit.PerMinute(60, 100))
-	userLimit, err := s.instanceSearchUserLimit(searchCtx, tc.userID)
-	if err != nil {
-		return "", fmt.Errorf("resolve instance search rate limit: %w", err)
-	}
-	limitResult, err := limiter.TakeWithLimit(searchCtx, ratelimit.UserSubject(tc.userID.String()), float64(compiled.Cost), userLimit)
-	if err != nil {
-		return "", fmt.Errorf("instance search rate limit: %w", err)
-	}
-	if !limitResult.Allowed {
-		if float64(compiled.Cost) > userLimit.Burst {
-			return "", errors.New("instance search is too complex; remove some filters")
-		}
-		seconds := int64(math.Ceil(limitResult.RetryAfter.Seconds()))
+	page, search := s.instanceSearch.Search(ctx, serviceinstancesearch.Caller{UserID: tc.userID, TenantID: tenant.ID}, chroniclesdk.InstanceSearchQuery{Where: in.Where, Limit: in.Limit})
+	switch {
+	case errors.Is(search.Err, serviceinstancesearch.ErrInvalid):
+		return "", fmt.Errorf("invalid instance search: %w", search.Err)
+	case errors.Is(search.Err, serviceinstancesearch.ErrTooComplex):
+		return "", errors.New("instance search is too complex; remove some filters")
+	case errors.Is(search.Err, serviceinstancesearch.ErrRateLimited):
+		seconds := int64(math.Ceil(search.RetryAfter.Seconds()))
 		if seconds < 1 {
 			seconds = 1
 		}
 		return "", fmt.Errorf("instance search rate limited; retry in %d seconds", seconds)
-	}
-	page, err := instancesearch.Search(searchCtx, s.db, compiled, instancesearch.SearchOptions{})
-	if errors.Is(err, instancesearch.ErrTimeout) {
+	case errors.Is(search.Err, serviceinstancesearch.ErrBusy):
+		return "", errors.New("instance search is busy; retry shortly")
+	case errors.Is(search.Err, instancesearch.ErrTimeout):
 		return "", errors.New("instance search timed out; narrow it with a zone, realm, guild, or date")
-	}
-	if err != nil {
-		return "", err
+	case search.Err != nil:
+		return "", errors.New("instance search is unavailable")
 	}
 	type result struct {
 		chroniclesdk.InstanceSearchResult
@@ -158,5 +121,5 @@ func (s *Service) searchInstances(ctx context.Context, tc toolContext, args stri
 		Tenant  discordSearchTenant `json:"tenant"`
 		Cost    int                 `json:"cost"`
 		Results []result            `json:"results"`
-	}{Tenant: discordSearchTenant{Slug: tenant.Slug.String, Name: tenant.Name}, Cost: compiled.Cost, Results: results})
+	}{Tenant: discordSearchTenant{Slug: tenant.Slug.String, Name: tenant.Name}, Cost: search.Cost, Results: results})
 }
