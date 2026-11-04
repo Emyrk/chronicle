@@ -42,9 +42,12 @@ type Tracker struct {
 	ByName         map[string]guid.GUID
 	PendingTalents map[guid.GUID]pendingTalent
 	// InvalidatedTalents tracks players who have respecced but haven't yet
-	// received a fresh COMBATANT_INFO. Their Talents field is set to nil
-	// so downstream consumers (DPS rankings) see "Unknown" spec.
+	// received a fresh talent update. Their Talents field is set to nil so
+	// downstream consumers (DPS rankings) see "Unknown" spec.
 	InvalidatedTalents map[guid.GUID]struct{}
+	// observedRespecAura prevents a persistent UNIT_INFO aura snapshot from
+	// repeatedly invalidating talents after a fresh talent update repairs them.
+	observedRespecAura map[guid.GUID]struct{}
 
 	PlayerLevel map[guid.GUID]int32
 }
@@ -58,6 +61,7 @@ func New(units *unitdb.Units) *Tracker {
 		ByName:             make(map[string]guid.GUID),
 		PendingTalents:     make(map[guid.GUID]pendingTalent),
 		InvalidatedTalents: make(map[guid.GUID]struct{}),
+		observedRespecAura: make(map[guid.GUID]struct{}),
 		PlayerLevel:        make(map[guid.GUID]int32),
 	}
 }
@@ -372,6 +376,12 @@ func (g *Tracker) ProcessMessage(active bool, encounterID uuid.UUID, msg message
 		}
 	case *messages.Unit:
 		g.Unit(ty)
+		if ty.Guid.IsPlayer() && hasUnitAura(ty, respecAuraSpellID) {
+			if _, observed := g.observedRespecAura[ty.Guid]; !observed {
+				g.observedRespecAura[ty.Guid] = struct{}{}
+				g.invalidateTalents(ty.Guid)
+			}
+		}
 	case *messages.Combatant:
 		g.Guild(ty)
 		g.Player(ty)
@@ -387,18 +397,32 @@ func (g *Tracker) ProcessMessage(active bool, encounterID uuid.UUID, msg message
 		// The goblin respec is only logged as a debuff application. Invalidate
 		// the affected player's talents until the next talent update.
 		if ty.State == types.AuraStateAdded && ty.SpellData != nil && int(ty.SpellData.ID) == respecAuraSpellID && ty.Target.IsPlayer() {
-			g.InvalidatedTalents[ty.Target] = struct{}{}
-			if p, ok := g.Players[ty.Target]; ok {
-				p.Talents = nil
-				g.Players[ty.Target] = p
-			}
-			g.units.InvalidatePlayerTalents(ty.Target)
+			g.observedRespecAura[ty.Target] = struct{}{}
+			g.invalidateTalents(ty.Target)
 		}
 	case *messages.Transmog:
 		g.Transmog(ty)
 	}
 
 	return nil
+}
+
+func hasUnitAura(unit *messages.Unit, spellID int) bool {
+	for _, aura := range unit.Buffs {
+		if aura.ID == spellID {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *Tracker) invalidateTalents(player guid.GUID) {
+	g.InvalidatedTalents[player] = struct{}{}
+	if p, ok := g.Players[player]; ok {
+		p.Talents = nil
+		g.Players[player] = p
+	}
+	g.units.InvalidatePlayerTalents(player)
 }
 
 func (g *Tracker) Guild(msg *messages.Combatant) {

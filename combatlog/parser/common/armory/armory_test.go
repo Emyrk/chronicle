@@ -99,6 +99,53 @@ func TestPersistedPlayerLevel(t *testing.T) {
 	}, units))
 }
 
+func TestUnitRespecAuraInvalidatesOnlyFirstObservation(t *testing.T) {
+	t.Parallel()
+
+	player, err := guid.FromString("0x0000000000000001")
+	require.NoError(t, err)
+
+	units := unitdb.New()
+	tracker := New(units)
+	initial := combatant.Combatant{
+		Name: "Mage",
+		Guid: player,
+		Talents: &combatant.Talents{
+			Summary: [3]uint8{10, 41, 0},
+		},
+	}
+	units.UpdatePlayer(initial)
+	tracker.Players[player] = initial
+
+	unitSnapshot := &messages.Unit{Info: unitinfo.Info{
+		Guid:  player,
+		Level: 60,
+		Buffs: []unitinfo.Buff{{ID: respecAuraSpellID, Applications: 1}},
+	}}
+	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, unitSnapshot))
+	assert.Nil(t, tracker.Players[player].Talents)
+	assert.Nil(t, units.Players[player].Talents)
+
+	freshTalents := &messages.CombatantTalents{
+		Guid:       player,
+		PlayerName: "Mage",
+		Tabs: [3]messages.CombatantTalentTab{
+			{TabName: "Arcane", RankDigits: "510"},
+			{TabName: "Fire", RankDigits: "000"},
+			{TabName: "Frost", RankDigits: "000"},
+		},
+	}
+	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, freshTalents))
+	require.NotNil(t, tracker.Players[player].Talents)
+	require.NotNil(t, units.Players[player].Talents)
+
+	// The persistent aura remains in UNIT_INFO snapshots. Seeing it again must
+	// not invalidate the fresh talent data.
+	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, unitSnapshot))
+	require.NotNil(t, tracker.Players[player].Talents)
+	require.NotNil(t, units.Players[player].Talents)
+}
+
 func TestRespecInvalidatesRankingTalentsUntilFreshUpdate(t *testing.T) {
 	t.Parallel()
 
