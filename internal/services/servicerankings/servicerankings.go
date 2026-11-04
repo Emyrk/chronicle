@@ -74,19 +74,21 @@ type Service struct {
 	// RatingDispatchWorker fans daily rating rebuilds out to tenants with realms.
 	RatingDispatchWorker *WorkerDispatchRatingScores
 	// RatingTenantWorker builds and publishes one tenant's rating generation.
-	RatingTenantWorker               *WorkerRebuildTenantRatings
-	RenownRepairWorker               *WorkerRepairRenownFacts
-	RenownDispatchWorker             *WorkerDispatchRenownRepair
-	IncrementalRenownWorker          *WorkerRefreshTenantRenown
-	IncrementalRenownDispatchWorker  *WorkerDispatchIncrementalRenown
-	RenownExpiryWorker               *WorkerExpireTenantRenown
-	RenownExpiryDispatchWorker       *WorkerDispatchRenownExpiry
-	RatingObservationWorker          *WorkerReconcileTenantRatingObservations
-	RatingObservationDispatchWorker  *WorkerDispatchRatingObservations
-	IncrementalMasteryWorker         *WorkerRefreshTenantMastery
-	IncrementalMasteryDispatchWorker *WorkerDispatchIncrementalMastery
-	MasteryExpiryWorker              *WorkerExpireTenantMastery
-	MasteryExpiryDispatchWorker      *WorkerDispatchMasteryExpiry
+	RatingTenantWorker                  *WorkerRebuildTenantRatings
+	RenownRepairWorker                  *WorkerRepairRenownFacts
+	RenownDispatchWorker                *WorkerDispatchRenownRepair
+	IncrementalRenownWorker             *WorkerRefreshTenantRenown
+	IncrementalRenownDispatchWorker     *WorkerDispatchIncrementalRenown
+	RenownExpiryWorker                  *WorkerExpireTenantRenown
+	RenownExpiryDispatchWorker          *WorkerDispatchRenownExpiry
+	RatingObservationWorker             *WorkerReconcileTenantRatingObservations
+	RatingObservationDispatchWorker     *WorkerDispatchRatingObservations
+	IncrementalMasteryWorker            *WorkerRefreshTenantMastery
+	IncrementalMasteryDispatchWorker    *WorkerDispatchIncrementalMastery
+	MasteryExpiryWorker                 *WorkerExpireTenantMastery
+	MasteryExpiryDispatchWorker         *WorkerDispatchMasteryExpiry
+	LiveEvidenceBootstrapWorker         *WorkerBootstrapTenantLiveEvidence
+	LiveEvidenceBootstrapDispatchWorker *WorkerDispatchLiveEvidenceBootstrap
 }
 
 func New(broker *services.Services) *Service {
@@ -176,6 +178,8 @@ func (s *Service) Start(_ context.Context) error {
 	s.IncrementalMasteryDispatchWorker = &WorkerDispatchIncrementalMastery{Store: store}
 	s.MasteryExpiryWorker = &WorkerExpireTenantMastery{Store: store}
 	s.MasteryExpiryDispatchWorker = &WorkerDispatchMasteryExpiry{Store: store}
+	s.LiveEvidenceBootstrapWorker = &WorkerBootstrapTenantLiveEvidence{Store: store}
+	s.LiveEvidenceBootstrapDispatchWorker = &WorkerDispatchLiveEvidenceBootstrap{Store: store}
 
 	s.router = chi.NewRouter()
 	s.setupRoutes()

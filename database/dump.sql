@@ -2656,6 +2656,16 @@ CREATE TABLE rating_group_raid_policies (
 
 ALTER TABLE ONLY rating_group_raid_policies FORCE ROW LEVEL SECURITY;
 
+CREATE TABLE rating_live_evidence_bootstraps (
+    tenant_id uuid NOT NULL,
+    after_run_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    source_cutoff timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone,
+    started_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY rating_live_evidence_bootstraps FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE rating_live_guild_observations (
     tenant_id uuid NOT NULL,
     realm_id uuid NOT NULL,
@@ -2749,6 +2759,31 @@ CREATE TABLE rating_mastery_accumulators (
 );
 
 ALTER TABLE ONLY rating_mastery_accumulators FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE rating_peak_cohort_denominators (
+    generation_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    subject_kind text NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    player_class text DEFAULT ''::text NOT NULL,
+    player_spec text DEFAULT ''::text NOT NULL,
+    player_sub_spec text DEFAULT ''::text NOT NULL,
+    performance_metric text NOT NULL,
+    window_kind text NOT NULL,
+    window_start timestamp with time zone,
+    window_end timestamp with time zone,
+    rank_one_raw double precision NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT rating_peak_cohort_denominators_check CHECK ((((window_kind = 'period'::text) AND (window_start IS NOT NULL) AND (window_end IS NOT NULL) AND (window_start < window_end)) OR ((window_kind = 'all_time'::text) AND (window_start IS NULL) AND (window_end IS NULL)))),
+    CONSTRAINT rating_peak_cohort_denominators_rank_one_raw_check CHECK ((rank_one_raw > (0)::double precision)),
+    CONSTRAINT rating_peak_cohort_denominators_subject_kind_check CHECK ((subject_kind = ANY (ARRAY['player'::text, 'guild'::text]))),
+    CONSTRAINT rating_peak_cohort_denominators_window_kind_check CHECK ((window_kind = ANY (ARRAY['all_time'::text, 'period'::text])))
+);
+
+ALTER TABLE ONLY rating_peak_cohort_denominators FORCE ROW LEVEL SECURITY;
 
 CREATE TABLE rating_realm_group_memberships (
     realm_id uuid NOT NULL,
@@ -4158,6 +4193,9 @@ ALTER TABLE ONLY rating_group_policies
 ALTER TABLE ONLY rating_group_raid_policies
     ADD CONSTRAINT rating_group_raid_policies_pkey PRIMARY KEY (group_id, instance_name);
 
+ALTER TABLE ONLY rating_live_evidence_bootstraps
+    ADD CONSTRAINT rating_live_evidence_bootstraps_pkey PRIMARY KEY (tenant_id);
+
 ALTER TABLE ONLY rating_live_guild_observations
     ADD CONSTRAINT rating_live_guild_observations_pkey PRIMARY KEY (tenant_id, run_id, encounter_name);
 
@@ -4166,6 +4204,9 @@ ALTER TABLE ONLY rating_live_player_observations
 
 ALTER TABLE ONLY rating_mastery_accumulators
     ADD CONSTRAINT rating_mastery_accumulators_pkey PRIMARY KEY (generation_id, subject_kind, realm_id, subject_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, window_kind);
+
+ALTER TABLE ONLY rating_peak_cohort_denominators
+    ADD CONSTRAINT rating_peak_cohort_denominators_pkey PRIMARY KEY (generation_id, tenant_id, subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, window_kind);
 
 ALTER TABLE ONLY rating_realm_group_memberships
     ADD CONSTRAINT rating_realm_group_memberships_pkey PRIMARY KEY (realm_id);
@@ -4774,6 +4815,8 @@ CREATE INDEX rating_live_guild_subject_idx ON rating_live_guild_observations USI
 CREATE INDEX rating_live_player_cohort_idx ON rating_live_player_observations USING btree (tenant_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, killed_at);
 
 CREATE INDEX rating_live_player_subject_idx ON rating_live_player_observations USING btree (tenant_id, realm_id, player_guid, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, killed_at);
+
+CREATE INDEX rating_peak_cohort_denominators_tenant_idx ON rating_peak_cohort_denominators USING btree (tenant_id, subject_kind, window_kind);
 
 CREATE INDEX rating_realm_group_memberships_group_idx ON rating_realm_group_memberships USING btree (group_id, realm_id);
 
@@ -5395,6 +5438,9 @@ ALTER TABLE ONLY rating_live_player_observations
 ALTER TABLE ONLY rating_mastery_accumulators
     ADD CONSTRAINT rating_mastery_accumulators_generation_id_tenant_id_fkey FOREIGN KEY (generation_id, tenant_id) REFERENCES rating_rebuild_checkpoints(generation_id, tenant_id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY rating_peak_cohort_denominators
+    ADD CONSTRAINT rating_peak_cohort_denominators_generation_id_tenant_id_fkey FOREIGN KEY (generation_id, tenant_id) REFERENCES rating_score_generations(id, tenant_id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY rating_realm_group_memberships
     ADD CONSTRAINT rating_realm_group_memberships_group_id_server_id_fkey FOREIGN KEY (group_id, server_id) REFERENCES rating_realm_groups(id, server_id);
 
@@ -5690,11 +5736,15 @@ ALTER TABLE rating_group_policies ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_group_raid_policies ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE rating_live_evidence_bootstraps ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE rating_live_guild_observations ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_live_player_observations ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_mastery_accumulators ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE rating_peak_cohort_denominators ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_realm_group_memberships ENABLE ROW LEVEL SECURITY;
 
@@ -5746,11 +5796,15 @@ CREATE POLICY tenant_admin_bypass ON rating_group_policies USING ((current_setti
 
 CREATE POLICY tenant_admin_bypass ON rating_group_raid_policies USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
+CREATE POLICY tenant_admin_bypass ON rating_live_evidence_bootstraps USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
 CREATE POLICY tenant_admin_bypass ON rating_live_guild_observations USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_live_player_observations USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_mastery_accumulators USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_peak_cohort_denominators USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_realm_group_memberships USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -5827,12 +5881,16 @@ CREATE POLICY tenant_isolation ON rating_group_policies USING ((group_id IN ( SE
 CREATE POLICY tenant_isolation ON rating_group_raid_policies USING ((group_id IN ( SELECT rating_realm_groups.id
    FROM rating_realm_groups)));
 
+CREATE POLICY tenant_isolation ON rating_live_evidence_bootstraps USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
 CREATE POLICY tenant_isolation ON rating_live_guild_observations USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON rating_live_player_observations USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON rating_mastery_accumulators USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON rating_peak_cohort_denominators USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON rating_realm_group_memberships USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));

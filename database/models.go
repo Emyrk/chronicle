@@ -2530,6 +2530,14 @@ type RatingGroupRaidPolicy struct {
 	MasteryWeight float64   `db:"mastery_weight" json:"mastery_weight"`
 }
 
+type RatingLiveEvidenceBootstrap struct {
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	AfterRunID   uuid.UUID          `db:"after_run_id" json:"after_run_id"`
+	SourceCutoff pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	CompletedAt  pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	StartedAt    pgtype.Timestamptz `db:"started_at" json:"started_at"`
+}
+
 type RatingLiveGuildObservation struct {
 	TenantID                 uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 	RealmID                  uuid.UUID          `db:"realm_id" json:"realm_id"`
@@ -2595,6 +2603,25 @@ type RatingMasteryAccumulator struct {
 	FloorScore        pgtype.Float8      `db:"floor_score" json:"floor_score"`
 	FormScore         pgtype.Float8      `db:"form_score" json:"form_score"`
 	LastRetainedScore pgtype.Float8      `db:"last_retained_score" json:"last_retained_score"`
+}
+
+type RatingPeakCohortDenominator struct {
+	GenerationID      uuid.UUID          `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string             `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	WindowKind        string             `db:"window_kind" json:"window_kind"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	RankOneRaw        float64            `db:"rank_one_raw" json:"rank_one_raw"`
+	UpdatedAt         pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type RatingRealmGroup struct {

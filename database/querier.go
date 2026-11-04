@@ -32,6 +32,7 @@ type sqlcQuerier interface {
 	// The most recent tenant rating rebuild jobs with their timing and the
 	// worker's last progress snapshot (metadata.output), for the admin page.
 	AdminListRatingRebuildJobs(ctx context.Context, limitCount int32) ([]AdminListRatingRebuildJobsRow, error)
+	AdvanceRatingLiveEvidenceBootstrap(ctx context.Context, arg AdvanceRatingLiveEvidenceBootstrapParams) (int64, error)
 	// All page fields are supplied together in a short transaction. The version
 	// and pass CAS reject stale/replayed pages. On pass transition clear cursor,
 	// set position=0; preserve completed pass aggregates. Caller verifies exactly
@@ -93,6 +94,7 @@ type sqlcQuerier interface {
 	CompleteDiscordMembershipGrantCheckNonMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckNonMemberParams) (DiscordMembershipGrantCheck, error)
 	CompleteInferenceClientToolRequest(ctx context.Context, arg CompleteInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
 	CompleteProofEvidenceCleanup(ctx context.Context, arg CompleteProofEvidenceCleanupParams) error
+	CompleteRatingLiveEvidenceBootstrap(ctx context.Context, arg CompleteRatingLiveEvidenceBootstrapParams) (int64, error)
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	ConsumeInferenceOAuthTransaction(ctx context.Context, arg ConsumeInferenceOAuthTransactionParams) (InferenceOauthTransaction, error)
 	ConsumeLuaProjectUpload(ctx context.Context, objectKey string) (string, error)
@@ -1008,6 +1010,7 @@ type sqlcQuerier interface {
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error)
 	ListRatingBossPolicies(ctx context.Context, arg ListRatingBossPoliciesParams) ([]RatingGroupBossPolicy, error)
 	ListRatingGuildRenownSourcePage(ctx context.Context, arg ListRatingGuildRenownSourcePageParams) ([]GuildRenownKillFact, error)
+	ListRatingLiveBootstrapRunPage(ctx context.Context, arg ListRatingLiveBootstrapRunPageParams) ([]uuid.UUID, error)
 	ListRatingMasteryGuildKeys(ctx context.Context, arg ListRatingMasteryGuildKeysParams) ([]ListRatingMasteryGuildKeysRow, error)
 	ListRatingMasteryGuildPage(ctx context.Context, arg ListRatingMasteryGuildPageParams) ([]ListRatingMasteryGuildPageRow, error)
 	// Frozen staged subject keys with eligible locked parses. Membership and boss eligibility
@@ -1159,6 +1162,7 @@ type sqlcQuerier interface {
 	// Serialize submissions by the same account across all tenants. Locking the
 	// applicant, not a proof row, also works for their first request.
 	LockProofApplicant(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	LockRatingLiveEvidenceBootstrap(ctx context.Context, tenantID uuid.UUID) (LockRatingLiveEvidenceBootstrapRow, error)
 	// Serialize incremental publication with full rebuild start/publish, both of
 	// which lock this tenant revision row. A later rebuild snapshots our writes.
 	// An earlier rebuilding generation keeps dirty keys queued until it publishes.
@@ -1416,6 +1420,10 @@ type sqlcQuerier interface {
 	// original evidence if a page is replayed after a crash.
 	StageRatingPlayerRuns(ctx context.Context, arg StageRatingPlayerRunsParams) (int64, error)
 	StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error
+	// Existing tenants must establish complete canonical history before any
+	// incremental Mastery or Peak projection writes. Pages and cursor commit in
+	// one transaction; concurrent source mutations carry their own dirty run.
+	StartRatingLiveEvidenceBootstrap(ctx context.Context, arg StartRatingLiveEvidenceBootstrapParams) error
 	// The start function atomically locks the tenant revision, snapshots all config,
 	// creates a building generation and checkpoint, or returns the unfinished one.
 	StartRatingRebuild(ctx context.Context, arg StartRatingRebuildParams) (uuid.UUID, error)
@@ -1437,6 +1445,7 @@ type sqlcQuerier interface {
 	// Returns instance and unique player counts per discoverable tenant within a
 	// time window. Used by the discovery endpoint to surface activity metrics.
 	TenantDiscoveryStats(ctx context.Context, since pgtype.Timestamptz) ([]TenantDiscoveryStatsRow, error)
+	TenantLiveEvidenceReady(ctx context.Context, tenantID uuid.UUID) (bool, error)
 	// Do not discard dirty keys while a frozen full rebuild may replace the active
 	// projection with a snapshot older than these fact changes.
 	TenantRatingGenerationBuilding(ctx context.Context, tenantID uuid.UUID) (bool, error)

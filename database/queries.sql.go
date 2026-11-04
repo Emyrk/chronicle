@@ -24403,6 +24403,144 @@ func (q *sqlQuerier) HubSummaryRealms(ctx context.Context, tenantID uuid.UUID) (
 	return items, nil
 }
 
+const advanceRatingLiveEvidenceBootstrap = `-- name: AdvanceRatingLiveEvidenceBootstrap :execrows
+UPDATE rating_live_evidence_bootstraps SET after_run_id = $1
+WHERE tenant_id = $2 AND completed_at IS NULL AND after_run_id = $3
+`
+
+type AdvanceRatingLiveEvidenceBootstrapParams struct {
+	AfterRunID    uuid.UUID `db:"after_run_id" json:"after_run_id"`
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	ExpectedRunID uuid.UUID `db:"expected_run_id" json:"expected_run_id"`
+}
+
+func (q *sqlQuerier) AdvanceRatingLiveEvidenceBootstrap(ctx context.Context, arg AdvanceRatingLiveEvidenceBootstrapParams) (int64, error) {
+	result, err := q.db.Exec(ctx, advanceRatingLiveEvidenceBootstrap, arg.AfterRunID, arg.TenantID, arg.ExpectedRunID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const completeRatingLiveEvidenceBootstrap = `-- name: CompleteRatingLiveEvidenceBootstrap :execrows
+UPDATE rating_live_evidence_bootstraps AS bootstrap SET completed_at = now()
+WHERE bootstrap.tenant_id = $1 AND bootstrap.completed_at IS NULL
+  AND bootstrap.after_run_id = $2
+  AND NOT EXISTS (SELECT 1 FROM rating_dirty_observation_runs dirty
+                  WHERE dirty.tenant_id = bootstrap.tenant_id)
+`
+
+type CompleteRatingLiveEvidenceBootstrapParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	ExpectedRunID uuid.UUID `db:"expected_run_id" json:"expected_run_id"`
+}
+
+func (q *sqlQuerier) CompleteRatingLiveEvidenceBootstrap(ctx context.Context, arg CompleteRatingLiveEvidenceBootstrapParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeRatingLiveEvidenceBootstrap, arg.TenantID, arg.ExpectedRunID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listRatingLiveBootstrapRunPage = `-- name: ListRatingLiveBootstrapRunPage :many
+SELECT rr.run_id FROM ranking_runs rr
+JOIN wow_server_realms realm ON realm.id = rr.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND rr.run_id > $2 AND rr.updated_at <= $3::timestamptz
+  AND rr.source_updated_at <= $3::timestamptz
+ORDER BY rr.run_id LIMIT LEAST(GREATEST($4::int, 0), 200)
+`
+
+type ListRatingLiveBootstrapRunPageParams struct {
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	AfterRunID   uuid.UUID          `db:"after_run_id" json:"after_run_id"`
+	SourceCutoff pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	BatchSize    int32              `db:"batch_size" json:"batch_size"`
+}
+
+func (q *sqlQuerier) ListRatingLiveBootstrapRunPage(ctx context.Context, arg ListRatingLiveBootstrapRunPageParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRatingLiveBootstrapRunPage,
+		arg.TenantID,
+		arg.AfterRunID,
+		arg.SourceCutoff,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var run_id uuid.UUID
+		if err := rows.Scan(&run_id); err != nil {
+			return nil, err
+		}
+		items = append(items, run_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockRatingLiveEvidenceBootstrap = `-- name: LockRatingLiveEvidenceBootstrap :one
+SELECT tenant_id, after_run_id, source_cutoff, completed_at
+FROM rating_live_evidence_bootstraps
+WHERE tenant_id = $1 FOR UPDATE
+`
+
+type LockRatingLiveEvidenceBootstrapRow struct {
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	AfterRunID   uuid.UUID          `db:"after_run_id" json:"after_run_id"`
+	SourceCutoff pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	CompletedAt  pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+}
+
+func (q *sqlQuerier) LockRatingLiveEvidenceBootstrap(ctx context.Context, tenantID uuid.UUID) (LockRatingLiveEvidenceBootstrapRow, error) {
+	row := q.db.QueryRow(ctx, lockRatingLiveEvidenceBootstrap, tenantID)
+	var i LockRatingLiveEvidenceBootstrapRow
+	err := row.Scan(
+		&i.TenantID,
+		&i.AfterRunID,
+		&i.SourceCutoff,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const startRatingLiveEvidenceBootstrap = `-- name: StartRatingLiveEvidenceBootstrap :exec
+INSERT INTO rating_live_evidence_bootstraps (tenant_id, source_cutoff)
+VALUES ($1, $2::timestamptz)
+ON CONFLICT (tenant_id) DO NOTHING
+`
+
+type StartRatingLiveEvidenceBootstrapParams struct {
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SourceCutoff pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+}
+
+// Existing tenants must establish complete canonical history before any
+// incremental Mastery or Peak projection writes. Pages and cursor commit in
+// one transaction; concurrent source mutations carry their own dirty run.
+func (q *sqlQuerier) StartRatingLiveEvidenceBootstrap(ctx context.Context, arg StartRatingLiveEvidenceBootstrapParams) error {
+	_, err := q.db.Exec(ctx, startRatingLiveEvidenceBootstrap, arg.TenantID, arg.SourceCutoff)
+	return err
+}
+
+const tenantLiveEvidenceReady = `-- name: TenantLiveEvidenceReady :one
+SELECT EXISTS (SELECT 1 FROM rating_live_evidence_bootstraps
+               WHERE tenant_id = $1 AND completed_at IS NOT NULL)
+`
+
+func (q *sqlQuerier) TenantLiveEvidenceReady(ctx context.Context, tenantID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, tenantLiveEvidenceReady, tenantID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const calculateLiveMasterySubject = `-- name: CalculateLiveMasterySubject :many
 WITH evidence AS MATERIALIZED (
     SELECT player.locked_parse::double precision AS score, player.killed_at, player.run_id

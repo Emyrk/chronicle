@@ -18,6 +18,8 @@ func TestRefreshDirtyTenantMasteryMatchesFullSetBasedReplay(t *testing.T) {
 	store := database.New(pool)
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	realm, guild, generation := setupActiveRenownProjection(t, ctx, pool, store, now)
+	_, err := pool.Exec(ctx, "INSERT INTO rating_live_evidence_bootstraps (tenant_id,completed_at) VALUES ($1,now())", uuid.Nil)
+	require.NoError(t, err)
 	var runs []uuid.UUID
 	for index, score := range []float64{10, 20, 30, 40, 50} {
 		run := uuid.New()
@@ -153,7 +155,9 @@ func TestRefreshDirtyTenantMasteryDefersDuringFullRebuild(t *testing.T) {
 	store := database.New(pool)
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	realm, _, _ := setupActiveRenownProjection(t, ctx, pool, store, now)
-	_, err := pool.Exec(ctx, `INSERT INTO rating_live_player_observations
+	_, err := pool.Exec(ctx, "INSERT INTO rating_live_evidence_bootstraps (tenant_id,completed_at) VALUES ($1,now())", uuid.Nil)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO rating_live_player_observations
 		(tenant_id,realm_id,run_id,representative_instance_id,player_guid,instance_name,
 		 encounter_name,difficulty_name,max_players,player_class,player_spec,player_sub_spec,
 		 performance_metric,killed_at,raw_value,duration_secs,locked_parse)
@@ -176,4 +180,28 @@ func TestRefreshDirtyTenantMasteryDefersDuringFullRebuild(t *testing.T) {
 	processed, err = RefreshDirtyTenantMastery(ctx, store, uuid.Nil, now)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
+}
+
+func TestRefreshDirtyTenantMasteryRequiresCompleteEvidence(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	realm, _, generation := setupActiveRenownProjection(t, ctx, pool, store, now)
+	_, err := pool.Exec(ctx, `INSERT INTO rating_live_player_observations
+		(tenant_id,realm_id,run_id,representative_instance_id,player_guid,instance_name,
+		 encounter_name,difficulty_name,max_players,player_class,player_spec,player_sub_spec,
+		 performance_metric,killed_at,raw_value,duration_secs,locked_parse)
+		VALUES ($1,$2,$3,$3,'player','Raid','Boss','Normal',40,'MAGE','','','dps',$4,100,10,50)`,
+		uuid.Nil, realm, uuid.New(), now.Add(-time.Hour))
+	require.NoError(t, err)
+	processed, err := RefreshDirtyTenantMastery(ctx, store, uuid.Nil, now)
+	require.NoError(t, err)
+	require.Zero(t, processed)
+	var dirty, scores int
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM rating_dirty_mastery_subjects WHERE tenant_id=$1", uuid.Nil).Scan(&dirty))
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM player_tenant_rating_boss_scores WHERE generation_id=$1 AND rating_metric='mastery'", generation).Scan(&scores))
+	require.Equal(t, 1, dirty)
+	require.Zero(t, scores, "partial history must not publish a Mastery projection")
 }

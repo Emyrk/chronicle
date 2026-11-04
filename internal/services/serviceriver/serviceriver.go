@@ -318,6 +318,9 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.MasteryExpiryDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.MasteryExpiryWorker)
 	riverqueue.AddWorker(q, rank.MasteryExpiryDispatchWorker)
+	rank.LiveEvidenceBootstrapDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.LiveEvidenceBootstrapDispatchWorker)
+	riverqueue.AddWorker(q, rank.LiveEvidenceBootstrapWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
 		MaxWorkers: 1,
 	})
@@ -411,6 +414,15 @@ func (s *Service) Start(ctx context.Context) error {
 			return servicerankings.ArgsDispatchMasteryExpiry{}, nil
 		},
 		&river.PeriodicJobOpts{ID: "daily-mastery-expiry", RunOnStart: false},
+	))
+	// Seed historical canonical runs in bounded pages before incremental
+	// Mastery or Peak reads live evidence. Periodic dispatch repairs missed jobs.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(time.Hour),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchLiveEvidenceBootstrap{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "tenant-live-evidence-bootstrap", RunOnStart: true},
 	))
 	// Daily rating reconciliation for tenants with configured group policies.
 	q.AddPeriodicJob(

@@ -32,6 +32,13 @@ func RefreshDirtyTenantMastery(ctx context.Context, store database.Store, tenant
 		if building {
 			return nil
 		}
+		ready, err := tx.TenantLiveEvidenceReady(ctx, tenant)
+		if err != nil {
+			return err
+		}
+		if !ready {
+			return nil // A partial historical corpus must never replace full-rebuild scores.
+		}
 		generation, err := tx.LockActiveTenantRatingGeneration(ctx, tenant)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
