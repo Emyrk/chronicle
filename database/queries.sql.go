@@ -26771,6 +26771,68 @@ func (q *sqlQuerier) DeleteLivePeakPlayerScores(ctx context.Context, arg DeleteL
 	return err
 }
 
+const getLivePeakCohortDenominators = `-- name: GetLivePeakCohortDenominators :one
+SELECT COALESCE(MAX(rank_one_raw) FILTER (WHERE window_kind = 'all_time'), 0)::double precision AS all_time_raw,
+       COALESCE(MAX(rank_one_raw) FILTER (WHERE window_kind = 'period'), 0)::double precision AS period_raw,
+       (MAX(window_start) FILTER (WHERE window_kind = 'period'))::timestamptz AS period_start,
+       (MAX(window_end) FILTER (WHERE window_kind = 'period'))::timestamptz AS as_of
+FROM rating_peak_cohort_denominators
+WHERE generation_id = $1 AND tenant_id = $2
+  AND subject_kind = $3 AND instance_name = $4
+  AND encounter_name = $5 AND difficulty_name = $6
+  AND max_players = $7 AND player_class = $8
+  AND player_spec = $9 AND player_sub_spec = $10
+  AND performance_metric = $11
+`
+
+type GetLivePeakCohortDenominatorsParams struct {
+	GenerationID      uuid.UUID `db:"generation_id" json:"generation_id"`
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string    `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+}
+
+type GetLivePeakCohortDenominatorsRow struct {
+	AllTimeRaw  float64            `db:"all_time_raw" json:"all_time_raw"`
+	PeriodRaw   float64            `db:"period_raw" json:"period_raw"`
+	PeriodStart pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	AsOf        pgtype.Timestamptz `db:"as_of" json:"as_of"`
+}
+
+// Reuse a denominator for later pages of the same revision and generation;
+// avoid rescanning a large tenant-wide cohort once per 16 subjects. Missing
+// rows (including an empty period) fall back to fresh aggregation.
+func (q *sqlQuerier) GetLivePeakCohortDenominators(ctx context.Context, arg GetLivePeakCohortDenominatorsParams) (GetLivePeakCohortDenominatorsRow, error) {
+	row := q.db.QueryRow(ctx, getLivePeakCohortDenominators,
+		arg.GenerationID,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+	)
+	var i GetLivePeakCohortDenominatorsRow
+	err := row.Scan(
+		&i.AllTimeRaw,
+		&i.PeriodRaw,
+		&i.PeriodStart,
+		&i.AsOf,
+	)
+	return i, err
+}
+
 const getLivePeakCohortPage = `-- name: GetLivePeakCohortPage :one
 SELECT revision, generation_id, after_realm_id, after_subject_id FROM rating_peak_cohort_pages
 WHERE tenant_id = $1 AND subject_kind = $2

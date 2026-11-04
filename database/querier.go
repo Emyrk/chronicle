@@ -494,6 +494,10 @@ type sqlcQuerier interface {
 	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
 	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
+	// Reuse a denominator for later pages of the same revision and generation;
+	// avoid rescanning a large tenant-wide cohort once per 16 subjects. Missing
+	// rows (including an empty period) fall back to fresh aggregation.
+	GetLivePeakCohortDenominators(ctx context.Context, arg GetLivePeakCohortDenominatorsParams) (GetLivePeakCohortDenominatorsRow, error)
 	// A previous partial pass can be reused only while its dirty revision matches.
 	GetLivePeakCohortPage(ctx context.Context, arg GetLivePeakCohortPageParams) (GetLivePeakCohortPageRow, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)

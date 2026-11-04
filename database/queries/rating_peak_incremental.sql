@@ -47,6 +47,22 @@ SELECT player.all_time AS player_all_time, player.period AS player_period,
        guild.all_time AS guild_all_time, guild.period AS guild_period
 FROM player CROSS JOIN guild;
 
+-- Reuse a denominator for later pages of the same revision and generation;
+-- avoid rescanning a large tenant-wide cohort once per 16 subjects. Missing
+-- rows (including an empty period) fall back to fresh aggregation.
+-- name: GetLivePeakCohortDenominators :one
+SELECT COALESCE(MAX(rank_one_raw) FILTER (WHERE window_kind = 'all_time'), 0)::double precision AS all_time_raw,
+       COALESCE(MAX(rank_one_raw) FILTER (WHERE window_kind = 'period'), 0)::double precision AS period_raw,
+       (MAX(window_start) FILTER (WHERE window_kind = 'period'))::timestamptz AS period_start,
+       (MAX(window_end) FILTER (WHERE window_kind = 'period'))::timestamptz AS as_of
+FROM rating_peak_cohort_denominators
+WHERE generation_id = @generation_id AND tenant_id = @tenant_id
+  AND subject_kind = @subject_kind AND instance_name = @instance_name
+  AND encounter_name = @encounter_name AND difficulty_name = @difficulty_name
+  AND max_players = @max_players AND player_class = @player_class
+  AND player_spec = @player_spec AND player_sub_spec = @player_sub_spec
+  AND performance_metric = @performance_metric;
+
 -- name: UpsertLivePeakCohortDenominator :execrows
 INSERT INTO rating_peak_cohort_denominators
     (generation_id, tenant_id, subject_kind, instance_name, encounter_name,

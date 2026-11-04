@@ -122,62 +122,86 @@ func refreshLivePeakCohortPage(ctx context.Context, tx database.Store, generatio
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
-	if err == nil && progress.Revision == key.Revision && progress.GenerationID.Valid && progress.GenerationID.UUID == generation {
+	samePage := err == nil && progress.Revision == key.Revision && progress.GenerationID.Valid && progress.GenerationID.UUID == generation
+	if samePage {
 		afterRealm, afterSubject = progress.AfterRealmID, progress.AfterSubjectID
 	}
 	periodStart := now.AddDate(0, 0, -180)
-	ranks, err := tx.CalculateLivePeakCohortDenominators(ctx, database.CalculateLivePeakCohortDenominatorsParams{
-		TenantID: key.TenantID, SubjectKind: key.SubjectKind,
-		InstanceName: key.InstanceName, EncounterName: key.EncounterName,
-		DifficultyName: key.DifficultyName, MaxPlayers: key.MaxPlayers,
-		PlayerClass: key.PlayerClass, PlayerSpec: key.PlayerSpec,
-		PlayerSubSpec: key.PlayerSubSpec, PerformanceMetric: key.PerformanceMetric,
-		PeriodStart: database.Timestamptz(periodStart), AsOf: database.Timestamptz(now),
-	})
-	if err != nil {
-		return err
-	}
 	var allTime, period float64
-	if key.SubjectKind == "player" {
-		allTime, period = ranks.PlayerAllTime, ranks.PlayerPeriod
-	} else {
-		allTime, period = ranks.GuildAllTime, ranks.GuildPeriod
-	}
-	for _, window := range []struct {
-		name       string
-		raw        float64
-		start, end pgtype.Timestamptz
-	}{
-		{"all_time", allTime, pgtype.Timestamptz{}, pgtype.Timestamptz{}},
-		{"period", period, database.Timestamptz(periodStart), database.Timestamptz(now)},
-	} {
-		if window.raw == 0 {
-			if err := tx.DeleteLivePeakCohortDenominator(ctx, database.DeleteLivePeakCohortDenominatorParams{
-				GenerationID: generation, TenantID: key.TenantID, SubjectKind: key.SubjectKind,
-				InstanceName: key.InstanceName, EncounterName: key.EncounterName,
-				DifficultyName: key.DifficultyName, MaxPlayers: key.MaxPlayers,
-				PlayerClass: key.PlayerClass, PlayerSpec: key.PlayerSpec,
-				PlayerSubSpec: key.PlayerSubSpec, PerformanceMetric: key.PerformanceMetric,
-				WindowKind: window.name,
-			}); err != nil {
-				return err
-			}
-			continue
-		}
-		n, err := tx.UpsertLivePeakCohortDenominator(ctx, database.UpsertLivePeakCohortDenominatorParams{
+	cached := false
+	if samePage {
+		denominators, err := tx.GetLivePeakCohortDenominators(ctx, database.GetLivePeakCohortDenominatorsParams{
 			GenerationID: generation, TenantID: key.TenantID, SubjectKind: key.SubjectKind,
 			InstanceName: key.InstanceName, EncounterName: key.EncounterName,
 			DifficultyName: key.DifficultyName, MaxPlayers: key.MaxPlayers,
 			PlayerClass: key.PlayerClass, PlayerSpec: key.PlayerSpec,
 			PlayerSubSpec: key.PlayerSubSpec, PerformanceMetric: key.PerformanceMetric,
-			WindowKind: window.name, WindowStart: window.start, WindowEnd: window.end,
-			RankOneRaw: window.raw,
 		})
 		if err != nil {
 			return err
 		}
-		if n != 1 {
-			return errors.New("active peak cohort denominator rejected")
+		if denominators.AllTimeRaw > 0 && denominators.PeriodRaw > 0 &&
+			denominators.PeriodStart.Valid && denominators.AsOf.Valid {
+			allTime, period = denominators.AllTimeRaw, denominators.PeriodRaw
+			periodStart, now = denominators.PeriodStart.Time, denominators.AsOf.Time
+			cached = true
+		}
+	}
+	if !cached {
+		ranks, err := tx.CalculateLivePeakCohortDenominators(ctx, database.CalculateLivePeakCohortDenominatorsParams{
+			TenantID: key.TenantID, SubjectKind: key.SubjectKind,
+			InstanceName: key.InstanceName, EncounterName: key.EncounterName,
+			DifficultyName: key.DifficultyName, MaxPlayers: key.MaxPlayers,
+			PlayerClass: key.PlayerClass, PlayerSpec: key.PlayerSpec,
+			PlayerSubSpec: key.PlayerSubSpec, PerformanceMetric: key.PerformanceMetric,
+			PeriodStart: database.Timestamptz(periodStart), AsOf: database.Timestamptz(now),
+		})
+		if err != nil {
+			return err
+		}
+		if key.SubjectKind == "player" {
+			allTime, period = ranks.PlayerAllTime, ranks.PlayerPeriod
+		} else {
+			allTime, period = ranks.GuildAllTime, ranks.GuildPeriod
+		}
+	}
+	if !cached {
+		for _, window := range []struct {
+			name       string
+			raw        float64
+			start, end pgtype.Timestamptz
+		}{
+			{"all_time", allTime, pgtype.Timestamptz{}, pgtype.Timestamptz{}},
+			{"period", period, database.Timestamptz(periodStart), database.Timestamptz(now)},
+		} {
+			if window.raw == 0 {
+				if err := tx.DeleteLivePeakCohortDenominator(ctx, database.DeleteLivePeakCohortDenominatorParams{
+					GenerationID: generation, TenantID: key.TenantID, SubjectKind: key.SubjectKind,
+					InstanceName: key.InstanceName, EncounterName: key.EncounterName,
+					DifficultyName: key.DifficultyName, MaxPlayers: key.MaxPlayers,
+					PlayerClass: key.PlayerClass, PlayerSpec: key.PlayerSpec,
+					PlayerSubSpec: key.PlayerSubSpec, PerformanceMetric: key.PerformanceMetric,
+					WindowKind: window.name,
+				}); err != nil {
+					return err
+				}
+				continue
+			}
+			n, err := tx.UpsertLivePeakCohortDenominator(ctx, database.UpsertLivePeakCohortDenominatorParams{
+				GenerationID: generation, TenantID: key.TenantID, SubjectKind: key.SubjectKind,
+				InstanceName: key.InstanceName, EncounterName: key.EncounterName,
+				DifficultyName: key.DifficultyName, MaxPlayers: key.MaxPlayers,
+				PlayerClass: key.PlayerClass, PlayerSpec: key.PlayerSpec,
+				PlayerSubSpec: key.PlayerSubSpec, PerformanceMetric: key.PerformanceMetric,
+				WindowKind: window.name, WindowStart: window.start, WindowEnd: window.end,
+				RankOneRaw: window.raw,
+			})
+			if err != nil {
+				return err
+			}
+			if n != 1 {
+				return errors.New("active peak cohort denominator rejected")
+			}
 		}
 	}
 	var count int
