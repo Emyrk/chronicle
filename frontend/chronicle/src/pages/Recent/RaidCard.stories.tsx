@@ -67,6 +67,19 @@ export const FullClear: Story = {
 };
 
 /**
+ * A raid with unit positions available for 3D playback.
+ */
+export const Has3DPositions: Story = {
+  args: {
+    instance: {
+      ...baseInstance,
+      has_positions: true,
+      has_youtube_video: true,
+    },
+  },
+};
+
+/**
  * Partial clear with some wipes.
  */
 export const PartialClear: Story = {
