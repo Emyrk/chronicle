@@ -48,6 +48,11 @@ function matchesRule(
     && rule.entries.has(entry);
 }
 
+/** Fixture-authored absolute expiry for static objects that turn into units. */
+export function isMapUnitDespawned(despawnAtMs: number | undefined, cursorMs: number): boolean {
+  return despawnAtMs !== undefined && cursorMs >= despawnAtMs;
+}
+
 export function shouldShowMapUnit(
   instanceName: string,
   flavor: readonly string[],

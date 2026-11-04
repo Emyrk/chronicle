@@ -17,7 +17,7 @@ import { POWER_COLORS } from "../RaidFrames/raidFrameShared";
 import { activeDebuffsAt, type MapDebuff, type MapEncounterPositions, type MapPositionSample, type MapResult } from "./map.processor";
 import { inferRoles } from "../Roles/roles.processor";
 import { deriveRecentHealGain, isDeadAt, type EncounterEffects } from "./replayEffects";
-import { isMapUnitPositionExpired, shouldShowMapUnit } from "./mapUnitVisibility";
+import { isMapUnitDespawned, isMapUnitPositionExpired, shouldShowMapUnit } from "./mapUnitVisibility";
 import {
   AUTO_FIT_MIN_SPAN_YARDS,
   autoFitViewport,
@@ -341,6 +341,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     return Array.from(encounter.positionsByUnit.entries()).flatMap(([guid, positions]) => {
       const player = props.context.instance.players?.[guid];
       const metadata = props.context.instance.units?.[guid];
+      if (isMapUnitDespawned(metadata?.despawnAtMs, cursorMs)) return [];
       if (!player && !shouldShowMapUnit(
         props.context.instance.name,
         props.context.instance.flavor ?? [],

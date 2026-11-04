@@ -55,11 +55,21 @@ describe("loadMapFixture", () => {
 
     expect(endMs - startMs).toBe(86_000);
     expect(Object.keys(props.context.instance.players ?? {})).toHaveLength(13);
-    // Every unhatched egg and every whelp stands on the map from the pull.
+    // Every egg is present at the pull; whelps join as they hatch.
     const eggs = unitsNamed("Rookery Egg");
     const whelps = unitsNamed("Rookery Whelp");
-    expect(eggs.length + whelps.length).toBe(198);
-    for (const guid of [...eggs, ...whelps]) expect(encounter?.positionsByUnit.get(guid)?.[0]?.timestampMs).toBe(startMs);
+    expect(eggs).toHaveLength(198);
+    expect(whelps.length).toBeGreaterThan(0);
+    for (const guid of eggs) expect(encounter?.positionsByUnit.get(guid)?.[0]?.timestampMs).toBe(startMs);
+    for (const guid of whelps) expect(encounter?.positionsByUnit.get(guid)?.[0]?.timestampMs).toBeGreaterThan(startMs);
+    // Eggs exist before the fight and expire precisely when they hatch.
+    const hatched = eggs.filter((guid) => leeroyRookery.units[guid].despawnAtMs !== undefined);
+    expect(hatched).toHaveLength(whelps.length);
+    for (const guid of hatched) {
+      const expires = leeroyRookery.units[guid].despawnAtMs!;
+      expect(expires).toBeGreaterThanOrEqual(startMs);
+      expect(expires).toBeLessThan(endMs);
+    }
     // Internet Historian's map draws Basphemy dead at video 2:10.5 (46.5 s into the clip).
     const basphemy = encounter?.healthByUnit.get(guidOf("Basphemy")!);
     expect(basphemy?.at(-1)).toMatchObject({ timestampMs: startMs + 46_500, current: 0 });

@@ -29,7 +29,7 @@ export interface MapFixture {
   firstTimestamp: string;
   manifest: WowMapManifest;
   players: Record<string, { name: string; class: string }>;
-  units: Record<string, { name: string; entry: number; owner?: string }>;
+  units: Record<string, { name: string; entry: number; owner?: string; despawnAtMs?: number }>;
   guids: string[];
   events: (string | number | null)[][];
 }

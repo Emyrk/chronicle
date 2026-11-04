@@ -107,6 +107,16 @@ of him (1:38). After his illustrative Divine Protection at 1:33, his simulated
 health is about 93% by the first raid hatch; the exact health values are not
 measured from the footage.
 
+The egg gameobject uses client display ID 3891
+(`World\\Goober\\G_DragonEggFreeze.m2`). Its original Turtle client GLB is
+published in the shared miniature manifest's `game_models` collection for
+Rookery Egg entry 175124. The replay places all 198 eggs from the real spawns
+and hides each egg at its simulated hatch time as the whelp appears; eggs that
+do not hatch remain visible. The GLB and manifest are CDN assets, not bundled
+in Git. Rookery Whelps (creature entry 10161) use their original black-skinned
+game model and its looping Stand animation to flap continuously while alive,
+even when the replay is paused.
+
 ## Levels
 
 The footage shows the fight on the checkered egg floor (1:36–2:24), and the

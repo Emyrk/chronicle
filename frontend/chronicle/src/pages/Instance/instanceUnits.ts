@@ -7,6 +7,8 @@ type WireInstanceUnit = Omit<InstanceUnit, "owner"> & {
 export type ResolvedInstanceUnit = Omit<InstanceUnit, "name" | "owner"> & {
   name: string;
   owner?: string;
+  /** Fixture-only expiry for static objects (e.g. an egg that hatches). */
+  despawnAtMs?: number;
 };
 
 export function resolveInstanceUnits(

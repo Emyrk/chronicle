@@ -4,6 +4,7 @@ import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { MeshBVH } from "three-mesh-bvh";
+import { loopingWhelpStand } from "./whelpAnimation";
 import { mapAssetUrl, type WowMapFloorBounds, type WowMapLayer, type WowMapMeshLiquid } from "@/pages/Technical/mapGallery";
 import type { MapCameraPose } from "./cameraPath";
 import type { DroneProbe } from "./droneCamera";
@@ -415,6 +416,8 @@ export interface MapScene3DUnit {
   miniatureUrl: string | undefined;
   /** The published model is an original game model. */
   gameModel?: boolean;
+  /** Replay the original Rookery Whelp's Stand clip for continuous wing flaps. */
+  flapWings?: boolean;
   /** Manual size multiplier configured in the Miniature Foundry. */
   mapScale?: number;
   /** Client-derived standing height in world yards. */
@@ -494,6 +497,13 @@ interface BossMini {
   deadLift: number;
 }
 
+interface FlappingWhelp {
+  mixer: THREE.AnimationMixer;
+  root: THREE.Object3D;
+  clipDuration: number;
+  phaseSeconds: number;
+}
+
 interface UnitObject {
   group: THREE.Group;
   body: THREE.Mesh;
@@ -537,6 +547,8 @@ interface UnitObject {
   /** Published miniature or original-model URL; the primitive shows until it loads. */
   miniatureUrl: string | undefined;
   gameModel: boolean;
+  flapWings: boolean;
+  flappingWhelp: FlappingWhelp | null;
   mapScale: number;
   /** Client-derived standing height in world yards. */
   worldHeight: number | undefined;
@@ -746,6 +758,19 @@ function loadWalkAvatar(url: string): Promise<WalkAvatarTemplate> {
     });
     template.catch(() => walkAvatarTemplates.delete(url));
     walkAvatarTemplates.set(url, template);
+  }
+  return template;
+}
+
+// Keep the skinned source separate from the flattened static model cache. All
+// visible Rookery Whelps share these assets but need their own skeleton pose.
+const flappingWhelpTemplates = new Map<string, Promise<WalkAvatarTemplate>>();
+function loadFlappingWhelp(url: string): Promise<WalkAvatarTemplate> {
+  let template = flappingWhelpTemplates.get(url);
+  if (!template) {
+    template = gltfLoader().then((loader) => loader.loadAsync(url)).then((gltf) => ({ scene: gltf.scene, clips: gltf.animations }));
+    template.catch(() => flappingWhelpTemplates.delete(url));
+    flappingWhelpTemplates.set(url, template);
   }
   return template;
 }
@@ -1363,7 +1388,7 @@ export class MapScene3D {
       seen.add(unit.guid);
       let object = this.units.get(unit.guid);
       const calloutKey = unit.callout ? `${unit.callout.title}|${unit.callout.subtitle}|${unit.callout.marker}` : "";
-      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl || object.gameModel !== Boolean(unit.gameModel) || object.mapScale !== (unit.mapScale ?? 1) || object.worldHeight !== unit.worldHeight || object.calloutKey !== calloutKey)) {
+      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl || object.gameModel !== Boolean(unit.gameModel) || object.mapScale !== (unit.mapScale ?? 1) || object.worldHeight !== unit.worldHeight || object.calloutKey !== calloutKey || object.flapWings !== Boolean(unit.flapWings))) {
         this.removeUnit(unit.guid);
         object = undefined;
       }
@@ -2467,6 +2492,8 @@ export class MapScene3D {
       health: unit.health,
       miniatureUrl: unit.miniatureUrl,
       gameModel: Boolean(unit.gameModel),
+      flapWings: Boolean(unit.flapWings),
+      flappingWhelp: null,
       mapScale: unit.mapScale ?? 1,
       worldHeight: unit.worldHeight,
       barHeight: BAR_HEIGHT,
@@ -2640,6 +2667,49 @@ export class MapScene3D {
     }
   }
 
+  private requestFlappingWhelp(object: UnitObject) {
+    if (!object.flapWings || !object.miniatureUrl || object.flappingWhelp) return;
+    const guid = object.group.userData.guid as string;
+    const url = object.miniatureUrl;
+    void loadFlappingWhelp(url).then((template) => {
+      if (this.disposed || this.units.get(guid) !== object || object.miniatureUrl !== url) return;
+      const stand = template.clips.find((clip) => clip.name === "Stand");
+      if (!stand || stand.duration <= 0) return; // Keep the static model if the clip is absent.
+      const wingLoop = loopingWhelpStand(stand);
+      const root = cloneSkinned(template.scene);
+      const box = new THREE.Box3().setFromObject(template.scene);
+      const height = Math.max(1e-3, box.max.y - box.min.y);
+      const scale = publishedModelGeometryScale(true, height, object.mapScale, object.worldHeight);
+      root.scale.setScalar(scale);
+      root.position.y = -box.min.y * scale;
+      root.rotation.y = BOSS_MINI_YAW;
+      const materials: (THREE.MeshLambertMaterial | THREE.MeshStandardMaterial)[] = [];
+      root.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const clone = (source: THREE.Material) => {
+          const material = source.clone() as THREE.MeshStandardMaterial;
+          material.transparent = true;
+          materials.push(material);
+          return material;
+        };
+        mesh.material = Array.isArray(mesh.material) ? mesh.material.map(clone) : clone(mesh.material);
+      });
+      for (const material of object.bodyMaterials) material.dispose();
+      const hidden = new THREE.MeshLambertMaterial({ visible: false });
+      object.body.material = hidden;
+      object.bodyMaterial = materials[0] ?? hidden;
+      object.bodyMaterials = [hidden, ...materials];
+      object.textured = true;
+      object.body.add(root);
+      const mixer = new THREE.AnimationMixer(root);
+      mixer.clipAction(wingLoop).play();
+      object.flappingWhelp = { root, mixer, clipDuration: wingLoop.duration, phaseSeconds: parseInt(guid.slice(-4), 16) * 0.071 };
+      setBodyColor(object);
+      this.requestRender();
+    }).catch((error) => console.error("Failed to animate Rookery Whelp", url, error));
+  }
+
   private applyUnitModelMaterials(object: UnitObject, mini: BossMini) {
     const opacity = object.bodyMaterial.opacity;
     if (!mini.materials) {
@@ -2713,6 +2783,7 @@ export class MapScene3D {
     object.deadLift = mini.deadLift;
     object.modelBase = 0;
     if (object.dead) object.body.position.y = mini.deadLift;
+    this.requestFlappingWhelp(object);
   }
 
   // A guardian's model (a totem, a pet) keeps the guardian's disc as a chip
@@ -2753,6 +2824,10 @@ export class MapScene3D {
       this.scene.remove(object.calloutMarker);
       object.calloutMarker.material.map?.dispose();
       object.calloutMarker.material.dispose();
+    }
+    if (object.flappingWhelp) {
+      object.flappingWhelp.mixer.stopAllAction();
+      object.flappingWhelp.mixer.uncacheRoot(object.flappingWhelp.root);
     }
     for (const material of object.bodyMaterials) material.dispose();
     object.coneMaterial.dispose();
@@ -2850,6 +2925,19 @@ export class MapScene3D {
     this.deepBreathAreas.visible = true;
     this.deepBreathLine.visible = true;
     this.deepBreathPoints.visible = true;
+  }
+
+  // The whelps' Stand clip flaps even if the replay/video is paused. Their
+  // skeletons are independent; the source geometry and textures are shared.
+  private updateWhelpAnimations(now: number): boolean {
+    let active = false;
+    for (const object of this.units.values()) {
+      const wing = object.flappingWhelp;
+      if (!wing || object.dead || !object.group.visible) continue;
+      wing.mixer.setTime((now / 1000 + wing.phaseSeconds) % wing.clipDuration);
+      active = true;
+    }
+    return active;
   }
 
   // Applies the effects at the effect clock's current time. Returns whether
@@ -4712,7 +4800,9 @@ export class MapScene3D {
     // A camera pulled in by a wall eases back out once the wall is gone.
     const uncolliding = !walking && this.constrainCamera(collisionDt);
     if (!uncolliding && !damping) this.collisionLastMs = 0;
-    const animating = this.updateEffects(now) || reframing || moving || directing || keyMoving || (!this.walkCaptureActive && walking) || presencesMoving || damping || uncolliding;
+    const effectsAnimating = this.updateEffects(now);
+    const whelpsAnimating = this.updateWhelpAnimations(now);
+    const animating = effectsAnimating || whelpsAnimating || reframing || moving || directing || keyMoving || (!this.walkCaptureActive && walking) || presencesMoving || damping || uncolliding;
     this.updateTokens(now);
     this.updateBars();
     this.updateEffectHover();

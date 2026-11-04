@@ -9,6 +9,7 @@ import type { MapPresenceListener } from "../../LiveSessionContext";
 import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
 import { replayModel, type PublishedUnitModelUrls } from "./bossMinis";
+import { shouldFlapWings } from "./whelpAnimation";
 import type { MapPositionSample } from "./map.processor";
 import { cameraPoseAt, type MapCameraMark, type MapCameraPose } from "./cameraPath";
 import { DISPEL_KINDS, DISPEL_ORDER, type DispelKind } from "./unitTokenArt";
@@ -362,6 +363,7 @@ export default function MapView3D({
         health: showBars ? marker.health : null,
         miniatureUrl: model?.url,
         gameModel: model?.kind === "game",
+        flapWings: shouldFlapWings(marker.entry, model?.kind),
         mapScale: model?.mapScale ?? 1,
         worldHeight: model?.worldHeight,
         z: sample.z,

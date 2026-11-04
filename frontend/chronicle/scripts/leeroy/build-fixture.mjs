@@ -519,7 +519,10 @@ for (const [guid, t] of deathMs) {
   const [type, maxResource] = PLAYER_RESOURCE[players[guid].class]
   push(["r", t, g(guid), health.get(guid), PLAYER_HEALTH[players[guid].class], 0, resources.get(guid), maxResource, RESOURCE_NAME[type]])
 }
-for (const egg of eggs) if (egg.hatchMs === null) units[egg.guid] = { name: EGG.name, entry: EGG.entry }
+for (const egg of eggs) units[egg.guid] = {
+  name: EGG.name, entry: EGG.entry,
+  ...(egg.hatchMs !== null ? { despawnAtMs: logStartMs + egg.hatchMs } : {}),
+}
 
 // --- Position rows: the tracked trajectories are unchanged, except that a
 // defeated whelp stops moving instead of attacking from beyond its death. ---
@@ -540,9 +543,9 @@ for (let t = 0; t <= durationMs; t += SAMPLE_MS) {
     lastZ.set(guid, z)
     positionRow(guid, t, { ...now, z }, heading)
   }
-  for (const egg of eggs) if (t === 0 && egg.hatchMs === null) positionRow(egg.guid, t, egg, egg.o)
+  for (const egg of eggs) if (t === 0) positionRow(egg.guid, t, egg, egg.o)
   for (const whelp of whelpList) {
-    if (t < whelp.egg.hatchMs && t > 0 || t > (whelpDeaths.get(whelp.guid) ?? Infinity)) continue
+    if (t < whelp.egg.hatchMs || t > (whelpDeaths.get(whelp.guid) ?? Infinity)) continue
     const now = whelpAt(whelp, t)
     positionRow(whelp.guid, t, now, facingTo(now, playerAt(whelp.target, t)))
   }

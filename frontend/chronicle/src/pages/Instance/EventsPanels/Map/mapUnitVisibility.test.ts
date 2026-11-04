@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMapUnitPositionExpired, mapUnitMaxPositionAgeMs, shouldShowMapUnit } from "./mapUnitVisibility";
+import { isMapUnitDespawned, isMapUnitPositionExpired, mapUnitMaxPositionAgeMs, shouldShowMapUnit } from "./mapUnitVisibility";
 
 describe("map unit visibility", () => {
   it.each([25121, 25132])("hides V+ Scarlet Monastery entry %s", (entry) => {
@@ -21,6 +21,12 @@ describe("map unit visibility", () => {
 
   it("reveals suppressed entries when hidden units are enabled", () => {
     expect(shouldShowMapUnit("Scarlet Monastery", ["vanillaplus"], 25121, true)).toBe(true);
+  });
+
+  it("keeps an egg until its hatch timestamp and never expires unhatched eggs", () => {
+    expect(isMapUnitDespawned(9_000, 8_999)).toBe(false);
+    expect(isMapUnitDespawned(9_000, 9_000)).toBe(true);
+    expect(isMapUnitDespawned(undefined, 30_000)).toBe(false);
   });
 
   it("expires Nightmare of Ursol Shadowflame Sparks after their position telemetry stops", () => {
