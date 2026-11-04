@@ -336,6 +336,9 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.TenantRatingDrainDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.TenantRatingDrainDispatchWorker)
 	riverqueue.AddWorker(q, rank.TenantRatingDrainWorker)
+	rank.TenantRatingCopyDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.TenantRatingCopyDispatchWorker)
+	riverqueue.AddWorker(q, rank.TenantRatingCopyWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
 		MaxWorkers: 1,
 	})
@@ -355,6 +358,13 @@ func (s *Service) Start(ctx context.Context) error {
 			return servicerankings.ArgsDispatchTenantRatingDrain{}, nil
 		},
 		&river.PeriodicJobOpts{ID: "tenant-rating-drain", RunOnStart: true},
+	))
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(5*time.Minute),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchTenantRatingCopy{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "tenant-rating-copy", RunOnStart: true},
 	))
 	// Daily bounded repair fan-out for root and every parse-enabled tenant.
 	q.AddPeriodicJob(
