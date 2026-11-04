@@ -2624,6 +2624,22 @@ type RatingPeakCohortDenominator struct {
 	UpdatedAt         pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
+type RatingPeakCohortPage struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind       string    `db:"subject_kind" json:"subject_kind"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	Revision          int64     `db:"revision" json:"revision"`
+	AfterRealmID      uuid.UUID `db:"after_realm_id" json:"after_realm_id"`
+	AfterSubjectID    string    `db:"after_subject_id" json:"after_subject_id"`
+}
+
 type RatingRealmGroup struct {
 	ID       uuid.UUID `db:"id" json:"id"`
 	ServerID uuid.UUID `db:"server_id" json:"server_id"`

@@ -321,6 +321,13 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.LiveEvidenceBootstrapDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.LiveEvidenceBootstrapDispatchWorker)
 	riverqueue.AddWorker(q, rank.LiveEvidenceBootstrapWorker)
+	rank.IncrementalPeakDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.IncrementalPeakDispatchWorker)
+	riverqueue.AddWorker(q, rank.IncrementalPeakWorker)
+	rank.PeakExpiryWorker.Queue = q
+	rank.PeakExpiryDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.PeakExpiryWorker)
+	riverqueue.AddWorker(q, rank.PeakExpiryDispatchWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
 		MaxWorkers: 1,
 	})
@@ -423,6 +430,22 @@ func (s *Service) Start(ctx context.Context) error {
 			return servicerankings.ArgsDispatchLiveEvidenceBootstrap{}, nil
 		},
 		&river.PeriodicJobOpts{ID: "tenant-live-evidence-bootstrap", RunOnStart: true},
+	))
+	// Refresh raw Peak bests and one tenant-wide denominator per dirty cohort.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(time.Minute),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchIncrementalPeak{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "incremental-tenant-peak", RunOnStart: true},
+	))
+	// Rank-one can change when even a guildless period observation expires.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(24*time.Hour),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchPeakExpiry{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "daily-peak-expiry", RunOnStart: false},
 	))
 	// Daily rating reconciliation for tenants with configured group policies.
 	q.AddPeriodicJob(

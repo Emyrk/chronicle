@@ -2785,6 +2785,24 @@ CREATE TABLE rating_peak_cohort_denominators (
 
 ALTER TABLE ONLY rating_peak_cohort_denominators FORCE ROW LEVEL SECURITY;
 
+CREATE TABLE rating_peak_cohort_pages (
+    tenant_id uuid NOT NULL,
+    subject_kind text NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    player_class text NOT NULL,
+    player_spec text NOT NULL,
+    player_sub_spec text NOT NULL,
+    performance_metric text NOT NULL,
+    revision bigint NOT NULL,
+    after_realm_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    after_subject_id text DEFAULT ''::text NOT NULL
+);
+
+ALTER TABLE ONLY rating_peak_cohort_pages FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE rating_realm_group_memberships (
     realm_id uuid NOT NULL,
     server_id uuid NOT NULL,
@@ -4208,6 +4226,9 @@ ALTER TABLE ONLY rating_mastery_accumulators
 ALTER TABLE ONLY rating_peak_cohort_denominators
     ADD CONSTRAINT rating_peak_cohort_denominators_pkey PRIMARY KEY (generation_id, tenant_id, subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, window_kind);
 
+ALTER TABLE ONLY rating_peak_cohort_pages
+    ADD CONSTRAINT rating_peak_cohort_pages_pkey PRIMARY KEY (tenant_id, subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric);
+
 ALTER TABLE ONLY rating_realm_group_memberships
     ADD CONSTRAINT rating_realm_group_memberships_pkey PRIMARY KEY (realm_id);
 
@@ -5441,6 +5462,9 @@ ALTER TABLE ONLY rating_mastery_accumulators
 ALTER TABLE ONLY rating_peak_cohort_denominators
     ADD CONSTRAINT rating_peak_cohort_denominators_generation_id_tenant_id_fkey FOREIGN KEY (generation_id, tenant_id) REFERENCES rating_score_generations(id, tenant_id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY rating_peak_cohort_pages
+    ADD CONSTRAINT rating_peak_cohort_pages_tenant_id_subject_kind_instance_n_fkey FOREIGN KEY (tenant_id, subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric) REFERENCES rating_dirty_peak_cohorts(tenant_id, subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric) ON DELETE CASCADE;
+
 ALTER TABLE ONLY rating_realm_group_memberships
     ADD CONSTRAINT rating_realm_group_memberships_group_id_server_id_fkey FOREIGN KEY (group_id, server_id) REFERENCES rating_realm_groups(id, server_id);
 
@@ -5746,6 +5770,8 @@ ALTER TABLE rating_mastery_accumulators ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_peak_cohort_denominators ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE rating_peak_cohort_pages ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE rating_realm_group_memberships ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_realm_groups ENABLE ROW LEVEL SECURITY;
@@ -5805,6 +5831,8 @@ CREATE POLICY tenant_admin_bypass ON rating_live_player_observations USING ((cur
 CREATE POLICY tenant_admin_bypass ON rating_mastery_accumulators USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_peak_cohort_denominators USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_peak_cohort_pages USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_realm_group_memberships USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -5891,6 +5919,8 @@ CREATE POLICY tenant_isolation ON rating_mastery_accumulators USING ((realm_id I
    FROM wow_server_realms)));
 
 CREATE POLICY tenant_isolation ON rating_peak_cohort_denominators USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON rating_peak_cohort_pages USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON rating_realm_group_memberships USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));

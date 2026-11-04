@@ -66,6 +66,10 @@ type sqlcQuerier interface {
 	// Guildless observations count toward guild rank one. The player and guild
 	// cohorts are tenant-wide (not partitioned by realm or visible UI filters).
 	CalculateLivePeakCohortDenominators(ctx context.Context, arg CalculateLivePeakCohortDenominatorsParams) (CalculateLivePeakCohortDenominatorsRow, error)
+	CalculateLivePeakGuildBest(ctx context.Context, arg CalculateLivePeakGuildBestParams) (CalculateLivePeakGuildBestRow, error)
+	// These are the same best/tie-break semantics as RatingStagePlayerPeak and
+	// RatingStageGuildPeak, applied only to one exact live subject.
+	CalculateLivePeakPlayerBest(ctx context.Context, arg CalculateLivePeakPlayerBestParams) (CalculateLivePeakPlayerBestRow, error)
 	CalculateTenantGuildMasteryPage(ctx context.Context, arg CalculateTenantGuildMasteryPageParams) ([]CalculateTenantGuildMasteryPageRow, error)
 	// Set-based tenant Mastery calculation. Each query computes both all-time and
 	// period windows for a bounded subject page. The caller writes the returned
@@ -203,6 +207,10 @@ type sqlcQuerier interface {
 	DeleteInferenceConnectionByOwner(ctx context.Context, arg DeleteInferenceConnectionByOwnerParams) error
 	DeleteLiveGuildObservationsForRun(ctx context.Context, arg DeleteLiveGuildObservationsForRunParams) (int64, error)
 	DeleteLivePeakCohortDenominator(ctx context.Context, arg DeleteLivePeakCohortDenominatorParams) error
+	DeleteLivePeakGuildScope(ctx context.Context, arg DeleteLivePeakGuildScopeParams) error
+	DeleteLivePeakGuildScores(ctx context.Context, arg DeleteLivePeakGuildScoresParams) error
+	DeleteLivePeakPlayerScope(ctx context.Context, arg DeleteLivePeakPlayerScopeParams) error
+	DeleteLivePeakPlayerScores(ctx context.Context, arg DeleteLivePeakPlayerScoresParams) error
 	// Replace a single logical run atomically. DELETE triggers record old subjects
 	// and cohorts; INSERT triggers record new subjects and cohorts, including a
 	// guildless clean kill's contribution to the tenant Peak denominator.
@@ -486,6 +494,8 @@ type sqlcQuerier interface {
 	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
 	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
+	// A previous partial pass can be reused only while its dirty revision matches.
+	GetLivePeakCohortPage(ctx context.Context, arg GetLivePeakCohortPageParams) (GetLivePeakCohortPageRow, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
 	GetLogFilePart(ctx context.Context, id uuid.UUID) (LogFilePart, error)
 	GetLogGroupArtifact(ctx context.Context, arg GetLogGroupArtifactParams) (LogGroupArtifact, error)
@@ -769,6 +779,12 @@ type sqlcQuerier interface {
 	// Match StageRatingGuildRuns: choose the fastest clean boss kill per run,
 	// including guildless observations used to calculate rank one.
 	InsertLiveGuildObservationsForRun(ctx context.Context, arg InsertLiveGuildObservationsForRunParams) (int64, error)
+	InsertLivePeakGuildScope(ctx context.Context, arg InsertLivePeakGuildScopeParams) (int64, error)
+	InsertLivePeakGuildScore(ctx context.Context, arg InsertLivePeakGuildScoreParams) (int64, error)
+	InsertLivePeakPlayerScope(ctx context.Context, arg InsertLivePeakPlayerScopeParams) (int64, error)
+	// Raw best is retained alongside the display score so readers can use the
+	// current cohort denominator even if that denominator changes later.
+	InsertLivePeakPlayerScore(ctx context.Context, arg InsertLivePeakPlayerScoreParams) (int64, error)
 	// Match StageRatingPlayerRuns, except live evidence has no generation cutoff.
 	// The latest eligible locked parse is picked again if score results change.
 	InsertLivePlayerObservationsForRun(ctx context.Context, arg InsertLivePlayerObservationsForRunParams) (int64, error)
@@ -962,6 +978,10 @@ type sqlcQuerier interface {
 	ListItemPricingRealms(ctx context.Context) ([]ListItemPricingRealmsRow, error)
 	ListLatestRenownTemplateBosses(ctx context.Context, flavors []string) ([]ListLatestRenownTemplateBossesRow, error)
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
+	ListLivePeakGuildSubjectPage(ctx context.Context, arg ListLivePeakGuildSubjectPageParams) ([]ListLivePeakGuildSubjectPageRow, error)
+	// Include stale old-score subjects so deleting their last observation removes
+	// their displayed Peak rather than leaving an orphan. Union removes duplicates.
+	ListLivePeakPlayerSubjectPage(ctx context.Context, arg ListLivePeakPlayerSubjectPageParams) ([]ListLivePeakPlayerSubjectPageRow, error)
 	ListLogFilePartsForDeletion(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
 	ListLogGroupArtifactsForParse(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
@@ -990,6 +1010,9 @@ type sqlcQuerier interface {
 	// tenant rules, or an array built in SQL, leaves the planner scanning every
 	// membership row instead of seeking by encounter.
 	ListParseScoreSpreadValues(ctx context.Context, arg ListParseScoreSpreadValuesParams) ([]ListParseScoreSpreadValuesRow, error)
+	// Expiring even a guildless observation can change the guild denominator.
+	// Keyset by cohort, not by subject; historical observations remain durable.
+	ListPeakCohortExpiryPage(ctx context.Context, arg ListPeakCohortExpiryPageParams) ([]ListPeakCohortExpiryPageRow, error)
 	// Receipt-less results are authoritative historical data. Read them without
 	// joining snapshot tables or score memberships so they can never be recomputed.
 	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg ListPersistedParseScoreResultsForInstanceParams) ([]ParseScoreResult, error)
@@ -1188,6 +1211,7 @@ type sqlcQuerier interface {
 	// the new mapping after reconciliation. Calls share the source transaction.
 	// Repeated markings coalesce under one key without dropping a concurrent edit.
 	MarkDirtyObservationRunsByIDs(ctx context.Context, runIds []uuid.UUID) error
+	MarkDirtyPeakCohort(ctx context.Context, arg MarkDirtyPeakCohortParams) error
 	MarkDirtyRenownSubject(ctx context.Context, arg MarkDirtyRenownSubjectParams) error
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	MarkLogFilePartFailed(ctx context.Context, arg MarkLogFilePartFailedParams) error
@@ -1547,6 +1571,7 @@ type sqlcQuerier interface {
 	UpsertItemDailyPrice(ctx context.Context, arg []UpsertItemDailyPriceParams) *UpsertItemDailyPriceBatchResults
 	UpsertLeaderboardVersionRequirements(ctx context.Context, arg UpsertLeaderboardVersionRequirementsParams) (LeaderboardVersionRequirement, error)
 	UpsertLivePeakCohortDenominator(ctx context.Context, arg UpsertLivePeakCohortDenominatorParams) (int64, error)
+	UpsertLivePeakCohortPage(ctx context.Context, arg UpsertLivePeakCohortPageParams) error
 	UpsertLuaProjectContributor(ctx context.Context, arg UpsertLuaProjectContributorParams) (LuaProjectContributor, error)
 	UpsertPendingModificationRequest(ctx context.Context, arg UpsertPendingModificationRequestParams) (ApplicationModificationRequest, error)
 	UpsertPlayerGearHistory(ctx context.Context, arg []UpsertPlayerGearHistoryParams) *UpsertPlayerGearHistoryBatchResults
