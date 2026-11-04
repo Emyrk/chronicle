@@ -74,15 +74,19 @@ type Service struct {
 	// RatingDispatchWorker fans daily rating rebuilds out to tenants with realms.
 	RatingDispatchWorker *WorkerDispatchRatingScores
 	// RatingTenantWorker builds and publishes one tenant's rating generation.
-	RatingTenantWorker              *WorkerRebuildTenantRatings
-	RenownRepairWorker              *WorkerRepairRenownFacts
-	RenownDispatchWorker            *WorkerDispatchRenownRepair
-	IncrementalRenownWorker         *WorkerRefreshTenantRenown
-	IncrementalRenownDispatchWorker *WorkerDispatchIncrementalRenown
-	RenownExpiryWorker              *WorkerExpireTenantRenown
-	RenownExpiryDispatchWorker      *WorkerDispatchRenownExpiry
-	RatingObservationWorker         *WorkerReconcileTenantRatingObservations
-	RatingObservationDispatchWorker *WorkerDispatchRatingObservations
+	RatingTenantWorker               *WorkerRebuildTenantRatings
+	RenownRepairWorker               *WorkerRepairRenownFacts
+	RenownDispatchWorker             *WorkerDispatchRenownRepair
+	IncrementalRenownWorker          *WorkerRefreshTenantRenown
+	IncrementalRenownDispatchWorker  *WorkerDispatchIncrementalRenown
+	RenownExpiryWorker               *WorkerExpireTenantRenown
+	RenownExpiryDispatchWorker       *WorkerDispatchRenownExpiry
+	RatingObservationWorker          *WorkerReconcileTenantRatingObservations
+	RatingObservationDispatchWorker  *WorkerDispatchRatingObservations
+	IncrementalMasteryWorker         *WorkerRefreshTenantMastery
+	IncrementalMasteryDispatchWorker *WorkerDispatchIncrementalMastery
+	MasteryExpiryWorker              *WorkerExpireTenantMastery
+	MasteryExpiryDispatchWorker      *WorkerDispatchMasteryExpiry
 }
 
 func New(broker *services.Services) *Service {
@@ -168,6 +172,10 @@ func (s *Service) Start(_ context.Context) error {
 	s.RenownExpiryDispatchWorker = &WorkerDispatchRenownExpiry{Store: store}
 	s.RatingObservationWorker = &WorkerReconcileTenantRatingObservations{Store: store}
 	s.RatingObservationDispatchWorker = &WorkerDispatchRatingObservations{Store: store}
+	s.IncrementalMasteryWorker = &WorkerRefreshTenantMastery{Store: store}
+	s.IncrementalMasteryDispatchWorker = &WorkerDispatchIncrementalMastery{Store: store}
+	s.MasteryExpiryWorker = &WorkerExpireTenantMastery{Store: store}
+	s.MasteryExpiryDispatchWorker = &WorkerDispatchMasteryExpiry{Store: store}
 
 	s.router = chi.NewRouter()
 	s.setupRoutes()

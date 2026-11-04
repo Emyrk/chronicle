@@ -311,6 +311,13 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.RatingObservationDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.RatingObservationDispatchWorker)
 	riverqueue.AddWorker(q, rank.RatingObservationWorker)
+	rank.IncrementalMasteryDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.IncrementalMasteryDispatchWorker)
+	riverqueue.AddWorker(q, rank.IncrementalMasteryWorker)
+	rank.MasteryExpiryWorker.Queue = q
+	rank.MasteryExpiryDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.MasteryExpiryWorker)
+	riverqueue.AddWorker(q, rank.MasteryExpiryDispatchWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
 		MaxWorkers: 1,
 	})
@@ -388,6 +395,22 @@ func (s *Service) Start(ctx context.Context) error {
 			return servicerankings.ArgsDispatchRatingObservations{}, nil
 		},
 		&river.PeriodicJobOpts{ID: "incremental-rating-observations", RunOnStart: true},
+	))
+	// Drain exact dirty Mastery subjects after canonical evidence reconciliation.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(time.Minute),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchIncrementalMastery{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "incremental-tenant-mastery", RunOnStart: true},
+	))
+	// Revisit only active Mastery period subjects whose observations expired.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(24*time.Hour),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchMasteryExpiry{}, nil
+		},
+		&river.PeriodicJobOpts{ID: "daily-mastery-expiry", RunOnStart: false},
 	))
 	// Daily rating reconciliation for tenants with configured group policies.
 	q.AddPeriodicJob(
