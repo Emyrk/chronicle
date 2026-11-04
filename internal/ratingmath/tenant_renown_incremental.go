@@ -62,7 +62,7 @@ func RefreshDirtyTenantRenown(ctx context.Context, store database.Store, tenant 
 		if err := json.Unmarshal(checkpoint.Manifest, &manifest); err != nil {
 			return fmt.Errorf("invalid active Renown manifest: %w", err)
 		}
-		if manifest.Writer != "tenant" || manifest.RulesVersion != 2 || manifest.Policy == nil ||
+		if manifest.Writer != "tenant" || manifest.RulesVersion != 3 || manifest.Policy == nil ||
 			manifest.Policy.TenantID != tenant || manifest.Policy.PeriodDays != 180 {
 			return errors.New("active Renown projection is not fixed-rules tenant ratings")
 		}

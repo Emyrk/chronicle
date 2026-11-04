@@ -28,7 +28,7 @@ func setupActiveRenownProjection(t *testing.T, ctx context.Context, pool *pgxpoo
 	})
 	require.NoError(t, err)
 	manifest, err := json.Marshal(map[string]any{
-		"writer": "tenant", "rules_version": 2,
+		"writer": "tenant", "rules_version": 3,
 		"tenant_policy": TenantRatingPolicy{TenantID: uuid.Nil, Version: 2, PeriodDays: 180,
 			BestWeight: .35, FormWeight: .50, FloorWeight: .15, RankOneWeight: .5, FullRankKills: 5},
 		"renown_bosses": []map[string]any{{"realm_id": realm, "instance_name": "Raid", "encounter_name": "Boss", "renown_points": 7}},

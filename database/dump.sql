@@ -129,6 +129,8 @@ DECLARE
     selected_flavors TEXT[];
 BEGIN
     SELECT CASE
+        WHEN 'wrath' = ANY(COALESCE(dataset.default_flavor, '{}'::text[]))
+            THEN ARRAY['wrath']::text[]
         WHEN server.id = '10ac9e23-ff74-43ed-83ad-96c123017097'::uuid
             OR 'nightmare-of-ursol' = ANY(dataset.default_flavor)
             THEN ARRAY['vanilla', 'nightmare-of-ursol']::text[]
@@ -566,7 +568,7 @@ BEGIN
         IF existing_manifest->>'writer' IS DISTINCT FROM 'tenant' THEN
             RAISE EXCEPTION 'cannot resume group rating checkpoint as tenant writer';
         END IF;
-        IF existing_manifest->>'rules_version' = '2' THEN RETURN existing_id; END IF;
+        IF existing_manifest->>'rules_version' = '3' THEN RETURN existing_id; END IF;
         -- Older checkpoints use mutable tenant policy / time-decayed Mastery.
         -- Retire them at the next rebuild, not in a startup-wide backfill.
         UPDATE rating_rebuild_checkpoints SET phase = 'aborted', heartbeat_at = now()
@@ -578,7 +580,9 @@ BEGIN
     -- per realm, never a tenant-wide union which would award cross-flavor kills.
     WITH realm_flavors AS (
         SELECT realm.id AS realm_id,
-            CASE WHEN server.id = '10ac9e23-ff74-43ed-83ad-96c123017097'::uuid
+            CASE WHEN 'wrath' = ANY(COALESCE(dataset.default_flavor, '{}'::text[]))
+                    THEN ARRAY['wrath']::text[]
+                 WHEN server.id = '10ac9e23-ff74-43ed-83ad-96c123017097'::uuid
                       OR 'nightmare-of-ursol' = ANY(dataset.default_flavor)
                     THEN ARRAY['vanilla', 'nightmare-of-ursol']::text[]
                  WHEN 'vanillaplus' = ANY(dataset.default_flavor)
@@ -599,7 +603,7 @@ BEGIN
                    AND 'nightmare-of-ursol' = ANY(rf.flavors))
     )
     SELECT jsonb_build_object(
-        'writer', 'tenant', 'rules_version', 2,
+        'writer', 'tenant', 'rules_version', 3,
         'tenant_policy', jsonb_build_object(
             'tenant_id', p_tenant_id, 'version', 2, 'period_days', 180,
             'best_weight', 0.35, 'form_weight', 0.50, 'floor_weight', 0.15,

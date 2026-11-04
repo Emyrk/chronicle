@@ -142,7 +142,7 @@ func tenantMasteryPolicy(cp database.RatingRebuildCheckpoint, tenant uuid.UUID) 
 	if err := json.Unmarshal(cp.Manifest, &manifest); err != nil {
 		return database.RatingGroupPolicy{}, fmt.Errorf("invalid tenant mastery manifest: %w", err)
 	}
-	if manifest.Writer != "tenant" || manifest.RulesVersion != 2 || manifest.Policy == nil ||
+	if manifest.Writer != "tenant" || manifest.RulesVersion != 3 || manifest.Policy == nil ||
 		manifest.Policy.TenantID != tenant || manifest.Policy.Version != 2 || manifest.Policy.PeriodDays != 180 {
 		return database.RatingGroupPolicy{}, errors.New("tenant mastery requires a frozen fixed-rules checkpoint")
 	}

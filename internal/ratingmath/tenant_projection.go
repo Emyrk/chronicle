@@ -33,7 +33,7 @@ func TenantProjectionPage(ctx context.Context, store database.Store, tenant, gen
 		if err := json.Unmarshal(cp.Manifest, &manifest); err != nil {
 			return err
 		}
-		if manifest.Writer != "tenant" || manifest.RulesVersion != 2 {
+		if manifest.Writer != "tenant" || manifest.RulesVersion != 3 {
 			return fmt.Errorf("not a fixed-rules tenant rating checkpoint")
 		}
 		revision, err := tx.GetRatingConfigRevision(ctx, tenant)
