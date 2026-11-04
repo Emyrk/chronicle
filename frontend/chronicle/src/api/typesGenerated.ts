@@ -3279,6 +3279,10 @@ export interface InstanceSearchSort {
     readonly field: InstanceSearchSortField;
     readonly direction?: InstanceSearchSortDirection;
     readonly parse_scope?: InstanceSearchParseScope;
+    /**
+     * Boss is required when sorting by one boss's kill time.
+     */
+    readonly boss?: string;
 }
 
 // From chroniclesdk/instance_search.go
@@ -3287,9 +3291,9 @@ export type InstanceSearchSortDirection = "asc" | "desc";
 export const InstanceSearchSortDirections: InstanceSearchSortDirection[] = ["asc", "desc"];
 
 // From chroniclesdk/instance_search.go
-export type InstanceSearchSortField = "instance.bosses_killed" | "instance.clear_parse" | "instance.clear_time_ms" | "instance.difficulty" | "instance.guild" | "instance.max_players" | "instance.name" | "instance.player_count" | "instance.realm" | "instance.started_at";
+export type InstanceSearchSortField = "instance.boss_time_ms" | "instance.bosses_killed" | "instance.clear_parse" | "instance.clear_time_ms" | "instance.deaths" | "instance.difficulty" | "instance.guild" | "instance.idle_time_ms" | "instance.kill_time_ms" | "instance.max_players" | "instance.name" | "instance.player_count" | "instance.realm" | "instance.started_at" | "instance.wipes";
 
-export const InstanceSearchSortFields: InstanceSearchSortField[] = ["instance.bosses_killed", "instance.clear_parse", "instance.clear_time_ms", "instance.difficulty", "instance.guild", "instance.max_players", "instance.name", "instance.player_count", "instance.realm", "instance.started_at"];
+export const InstanceSearchSortFields: InstanceSearchSortField[] = ["instance.boss_time_ms", "instance.bosses_killed", "instance.clear_parse", "instance.clear_time_ms", "instance.deaths", "instance.difficulty", "instance.guild", "instance.idle_time_ms", "instance.kill_time_ms", "instance.max_players", "instance.name", "instance.player_count", "instance.realm", "instance.started_at", "instance.wipes"];
 
 // From chroniclesdk/instance_search.go
 /**
@@ -3300,6 +3304,7 @@ export interface InstanceSearchSortOption {
     readonly label: string;
     readonly default_direction: InstanceSearchSortDirection;
     readonly parse_scope: boolean;
+    readonly boss: boolean;
     readonly minimum_tier: InstanceSearchSortTier;
     readonly cost: number;
 }

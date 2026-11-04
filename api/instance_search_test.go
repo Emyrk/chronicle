@@ -84,14 +84,18 @@ func TestInstanceSearch(t *testing.T) {
 			user      uuid.UUID
 			tier      string
 			field     string
+			boss      string
 			status    int
 			wantError string
 		}{
 			{name: "AnonymousFree", field: "instance.name", status: http.StatusOK},
 			{name: "Free", user: uuid.New(), tier: "free", field: "instance.name", status: http.StatusOK},
-			{name: "FreeNeedsHonored", user: uuid.New(), tier: "free", field: "instance.player_count", status: http.StatusForbidden, wantError: "Honored"},
-			{name: "Honored", user: uuid.New(), tier: "honored", field: "instance.player_count", status: http.StatusOK},
-			{name: "HonoredNeedsRevered", user: uuid.New(), tier: "honored", field: "instance.clear_parse", status: http.StatusForbidden, wantError: "Revered"},
+			{name: "FreeNeedsHonored", user: uuid.New(), tier: "free", field: "instance.clear_time_ms", status: http.StatusForbidden, wantError: "Honored supporter perk"},
+			{name: "HonoredIdleTime", user: uuid.New(), tier: "honored", field: "instance.idle_time_ms", status: http.StatusOK},
+			{name: "HonoredKillTime", user: uuid.New(), tier: "honored", field: "instance.kill_time_ms", boss: "Ragnaros", status: http.StatusOK},
+			{name: "HonoredNeedsReveredDeaths", user: uuid.New(), tier: "honored", field: "instance.deaths", status: http.StatusForbidden, wantError: "Revered supporter perk"},
+			{name: "Honored", user: uuid.New(), tier: "honored", field: "instance.clear_time_ms", status: http.StatusOK},
+			{name: "HonoredNeedsRevered", user: uuid.New(), tier: "honored", field: "instance.clear_parse", status: http.StatusForbidden, wantError: "Revered supporter perk"},
 			{name: "Revered", user: uuid.New(), tier: "revered", field: "instance.clear_parse", status: http.StatusOK},
 			{name: "Exalted", user: uuid.New(), tier: "exalted", field: "instance.clear_parse", status: http.StatusOK},
 		} {
@@ -101,7 +105,11 @@ func TestInstanceSearch(t *testing.T) {
 				api.instanceSearch.SetUserAccessResolver(func(context.Context, uuid.UUID) (serviceinstancesearch.UserAccess, error) {
 					return serviceinstancesearch.AccessForTier(tc.tier), nil
 				})
-				body := `{"sort": {"field": "` + tc.field + `"}}`
+				body := `{"sort": {"field": "` + tc.field + `"`
+				if tc.boss != "" {
+					body += `, "boss": "` + tc.boss + `"`
+				}
+				body += `}}`
 				rec := doSearch(t, api, tc.user, "10.0.0.1", body)
 				require.Equal(t, tc.status, rec.Code, rec.Body.String())
 				if tc.wantError != "" {

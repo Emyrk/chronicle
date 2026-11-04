@@ -955,6 +955,7 @@
       "label": "Date",
       "default_direction": "desc",
       "parse_scope": false,
+      "boss": false,
       "minimum_tier": "free",
       "cost": 0
     },
@@ -963,6 +964,7 @@
       "label": "Run",
       "default_direction": "asc",
       "parse_scope": false,
+      "boss": false,
       "minimum_tier": "free",
       "cost": 0
     },
@@ -971,6 +973,7 @@
       "label": "Realm",
       "default_direction": "asc",
       "parse_scope": false,
+      "boss": false,
       "minimum_tier": "free",
       "cost": 0
     },
@@ -979,6 +982,7 @@
       "label": "Guild",
       "default_direction": "asc",
       "parse_scope": false,
+      "boss": false,
       "minimum_tier": "free",
       "cost": 0
     },
@@ -987,6 +991,7 @@
       "label": "Difficulty",
       "default_direction": "asc",
       "parse_scope": false,
+      "boss": false,
       "minimum_tier": "free",
       "cost": 0
     },
@@ -995,6 +1000,7 @@
       "label": "Maximum players",
       "default_direction": "desc",
       "parse_scope": false,
+      "boss": false,
       "minimum_tier": "free",
       "cost": 0
     },
@@ -1003,6 +1009,7 @@
       "label": "Players",
       "default_direction": "desc",
       "parse_scope": false,
+      "boss": false,
       "minimum_tier": "honored",
       "cost": 8
     },
@@ -1011,7 +1018,26 @@
       "label": "Bosses killed",
       "default_direction": "desc",
       "parse_scope": false,
+      "boss": false,
       "minimum_tier": "honored",
+      "cost": 4
+    },
+    {
+      "field": "instance.deaths",
+      "label": "Player deaths",
+      "default_direction": "asc",
+      "parse_scope": false,
+      "boss": false,
+      "minimum_tier": "revered",
+      "cost": 4
+    },
+    {
+      "field": "instance.wipes",
+      "label": "Wipes",
+      "default_direction": "asc",
+      "parse_scope": false,
+      "boss": false,
+      "minimum_tier": "revered",
       "cost": 4
     },
     {
@@ -1019,14 +1045,43 @@
       "label": "Clear time",
       "default_direction": "asc",
       "parse_scope": false,
+      "boss": false,
       "minimum_tier": "honored",
       "cost": 4
+    },
+    {
+      "field": "instance.idle_time_ms",
+      "label": "Idle time",
+      "default_direction": "asc",
+      "parse_scope": false,
+      "boss": false,
+      "minimum_tier": "honored",
+      "cost": 20
+    },
+    {
+      "field": "instance.boss_time_ms",
+      "label": "Boss time",
+      "default_direction": "asc",
+      "parse_scope": false,
+      "boss": false,
+      "minimum_tier": "honored",
+      "cost": 20
+    },
+    {
+      "field": "instance.kill_time_ms",
+      "label": "Boss kill time",
+      "default_direction": "asc",
+      "parse_scope": false,
+      "boss": true,
+      "minimum_tier": "honored",
+      "cost": 6
     },
     {
       "field": "instance.clear_parse",
       "label": "Clear parse",
       "default_direction": "desc",
       "parse_scope": true,
+      "boss": false,
       "minimum_tier": "revered",
       "cost": 6
     }

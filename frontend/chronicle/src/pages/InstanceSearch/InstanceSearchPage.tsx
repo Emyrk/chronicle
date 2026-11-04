@@ -66,6 +66,11 @@ function defaultSortDirection(field: InstanceSearchSortField): InstanceSearchSor
     case "instance.realm":
     case "instance.guild":
     case "instance.difficulty":
+    case "instance.deaths":
+    case "instance.wipes":
+    case "instance.idle_time_ms":
+    case "instance.boss_time_ms":
+    case "instance.kill_time_ms":
     case "instance.clear_time_ms":
       return "asc";
     default:
@@ -73,13 +78,18 @@ function defaultSortDirection(field: InstanceSearchSortField): InstanceSearchSor
   }
 }
 
-function readSort(field: string | null, direction: string | null, parseScope: string | null): InstanceSearchSort | undefined {
+function readSort(field: string | null, direction: string | null, parseScope: string | null, boss: string | null): InstanceSearchSort | undefined {
   if (!InstanceSearchSortFields.some((option) => option === field)) return undefined;
   const typedField = field as InstanceSearchSortField;
   const typedDirection: InstanceSearchSortDirection = direction === "asc" || direction === "desc" ? direction : defaultSortDirection(typedField);
-  if (typedField !== "instance.clear_parse") return { field: typedField, direction: typedDirection };
-  const typedScope: InstanceSearchParseScope = parseScope === "realm" || parseScope === "guild" ? parseScope : "server";
-  return { field: typedField, direction: typedDirection, parse_scope: typedScope };
+  if (typedField === "instance.clear_parse") {
+    const typedScope: InstanceSearchParseScope = parseScope === "realm" || parseScope === "guild" ? parseScope : "server";
+    return { field: typedField, direction: typedDirection, parse_scope: typedScope };
+  }
+  if (typedField === "instance.kill_time_ms") {
+    return boss ? { field: typedField, direction: typedDirection, boss } : undefined;
+  }
+  return { field: typedField, direction: typedDirection };
 }
 
 export function InstanceSearchPage() {
@@ -104,9 +114,10 @@ export function InstanceSearchPage() {
   const sortFieldParam = params.get("sort");
   const sortDirectionParam = params.get("order");
   const sortScopeParam = params.get("sort_scope");
+  const sortBossParam = params.get("sort_boss");
   const submittedSort = useMemo(
-    () => readSort(sortFieldParam, sortDirectionParam, sortScopeParam),
-    [sortFieldParam, sortDirectionParam, sortScopeParam],
+    () => readSort(sortFieldParam, sortDirectionParam, sortScopeParam, sortBossParam),
+    [sortFieldParam, sortDirectionParam, sortScopeParam, sortBossParam],
   );
   const selectedSort: InstanceSearchSort = submittedSort ?? { field: "instance.started_at", direction: "desc" };
   // Logged-out users can view a shared block / code search read-only.
@@ -254,6 +265,7 @@ export function InstanceSearchPage() {
     next.delete("sort");
     next.delete("order");
     next.delete("sort_scope");
+    next.delete("sort_boss");
     setParams(next);
     setCollapsed(false);
   };
@@ -286,11 +298,14 @@ export function InstanceSearchPage() {
       next.delete("sort");
       next.delete("order");
       next.delete("sort_scope");
+      next.delete("sort_boss");
     } else {
       next.set("sort", sort.field);
       next.set("order", sort.direction ?? defaultSortDirection(sort.field));
       if (sort.field === "instance.clear_parse") next.set("sort_scope", sort.parse_scope ?? "server");
       else next.delete("sort_scope");
+      if (sort.field === "instance.kill_time_ms" && sort.boss) next.set("sort_boss", sort.boss);
+      else next.delete("sort_boss");
     }
     setParams(next);
   };
@@ -578,6 +593,7 @@ export function InstanceSearchPage() {
         <SortControls
           sort={selectedSort}
           options={fields.data?.sorts ?? []}
+          bosses={allBosses}
           supporterTier={supporter.tier}
           supporterLoading={supporter.isLoading}
           onChange={updateSort}
@@ -615,12 +631,14 @@ function sortTierUnlocked(minimum: InstanceSearchSortTier, supporterTier: string
 function SortControls({
   sort,
   options,
+  bosses,
   supporterTier,
   supporterLoading,
   onChange,
 }: {
   sort: InstanceSearchSort;
   options: readonly InstanceSearchSortOption[];
+  bosses: readonly { value: string; label?: string; group?: string }[];
   supporterTier: string | null;
   supporterLoading: boolean;
   onChange: (sort: InstanceSearchSort) => void;
@@ -645,13 +663,14 @@ function SortControls({
             field: option.field,
             direction: option.default_direction,
             ...(option.parse_scope ? { parse_scope: "server" as const } : {}),
+            ...(option.boss && bosses[0] ? { boss: bosses[0].value } : {}),
           });
         }}
       >
         {options.map((option) => {
           const unlocked = sortTierUnlocked(option.minimum_tier, supporterTier, supporterLoading);
           const suffix = option.minimum_tier === "free" ? "" : ` · ${option.minimum_tier[0].toUpperCase()}${option.minimum_tier.slice(1)}`;
-          return <option key={option.field} value={option.field} disabled={!unlocked}>{option.label}{suffix}</option>;
+          return <option key={option.field} value={option.field} disabled={!unlocked || (option.boss && bosses.length === 0)}>{option.label}{suffix}</option>;
         })}
       </select>
       {current?.parse_scope && (
@@ -665,6 +684,17 @@ function SortControls({
           <option value="server">Server</option>
           <option value="realm">Realm</option>
           <option value="guild">Guild</option>
+        </select>
+      )}
+      {current?.boss && (
+        <select
+          aria-label="Boss kill time"
+          className={selectClass}
+          value={sort.boss ?? bosses[0]?.value ?? ""}
+          disabled={!currentUnlocked || bosses.length === 0}
+          onChange={(event) => onChange({ ...sort, boss: event.target.value })}
+        >
+          {bosses.map((boss) => <option key={boss.value} value={boss.value}>{boss.label ?? boss.value}{boss.group ? ` · ${boss.group}` : ""}</option>)}
         </select>
       )}
       <select

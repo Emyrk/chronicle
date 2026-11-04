@@ -98,9 +98,14 @@ UIs can show the cost before running: `GET /api/v1/raidlogs/search/fields` retur
 | `instance.player_count` | desc | Honored | 8 |
 | `instance.bosses_killed` | desc | Honored | 4 |
 | `instance.clear_time_ms` | asc | Honored | 4 |
+| `instance.idle_time_ms` | asc | Honored | 20 |
+| `instance.boss_time_ms` | asc | Honored | 20 |
+| `instance.kill_time_ms` | asc | Honored | 6 |
+| `instance.deaths` | asc | Revered | 4 |
+| `instance.wipes` | asc | Revered | 4 |
 | `instance.clear_parse` | desc | Revered | 6 |
 
-`instance.clear_parse` accepts `parse_scope: "server" | "realm" | "guild"`. Directions are `asc` and `desc`; missing values always sort last. Free sorts are also available to anonymous callers whose query otherwise fits the anonymous subset. Pass the returned `next` object back unchanged as `cursor`; it pins the normalized sort and keyset value.
+`instance.clear_parse` accepts `parse_scope: "server" | "realm" | "guild"`. `instance.kill_time_ms` requires one `boss` name and sorts by that boss's fastest clean/partial kill in each run. Directions are `asc` and `desc`; missing values always sort last. Free sorts are also available to anonymous callers whose query otherwise fits the anonymous subset. Pass the returned `next` object back unchanged as `cursor`; it pins the normalized sort and keyset value.
 
 A **node** sets exactly one of:
 

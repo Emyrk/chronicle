@@ -26,6 +26,8 @@ type InstanceSearchSort struct {
 	Field      InstanceSearchSortField     `json:"field"`
 	Direction  InstanceSearchSortDirection `json:"direction,omitempty"`
 	ParseScope InstanceSearchParseScope    `json:"parse_scope,omitempty"`
+	// Boss is required when sorting by one boss's kill time.
+	Boss string `json:"boss,omitempty"`
 }
 
 type InstanceSearchSortField string
@@ -39,7 +41,12 @@ const (
 	InstanceSearchSortMaxPlayers   InstanceSearchSortField = "instance.max_players"
 	InstanceSearchSortPlayerCount  InstanceSearchSortField = "instance.player_count"
 	InstanceSearchSortBossesKilled InstanceSearchSortField = "instance.bosses_killed"
+	InstanceSearchSortDeaths       InstanceSearchSortField = "instance.deaths"
+	InstanceSearchSortWipes        InstanceSearchSortField = "instance.wipes"
 	InstanceSearchSortClearTime    InstanceSearchSortField = "instance.clear_time_ms"
+	InstanceSearchSortIdleTime     InstanceSearchSortField = "instance.idle_time_ms"
+	InstanceSearchSortBossTime     InstanceSearchSortField = "instance.boss_time_ms"
+	InstanceSearchSortKillTime     InstanceSearchSortField = "instance.kill_time_ms"
 	InstanceSearchSortClearParse   InstanceSearchSortField = "instance.clear_parse"
 )
 
@@ -64,6 +71,7 @@ type InstanceSearchSortOption struct {
 	Label            string                      `json:"label"`
 	DefaultDirection InstanceSearchSortDirection `json:"default_direction"`
 	ParseScope       bool                        `json:"parse_scope"`
+	Boss             bool                        `json:"boss"`
 	MinimumTier      InstanceSearchSortTier      `json:"minimum_tier"`
 	Cost             int                         `json:"cost"`
 }

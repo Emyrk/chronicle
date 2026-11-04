@@ -167,13 +167,18 @@ func TestDescribe(t *testing.T) {
 	require.True(t, role.On)
 	require.True(t, role.Bosses)
 
-	require.Len(t, d.Sorts, 10)
+	require.Len(t, d.Sorts, 15)
 	sorts := map[chroniclesdk.InstanceSearchSortField]chroniclesdk.InstanceSearchSortOption{}
 	for _, sort := range d.Sorts {
 		sorts[sort.Field] = sort
 	}
 	require.Equal(t, chroniclesdk.InstanceSearchSortTierFree, sorts[instancesearch.SortName].MinimumTier)
 	require.Equal(t, chroniclesdk.InstanceSearchSortTierHonored, sorts[instancesearch.SortPlayerCount].MinimumTier)
+	require.Equal(t, chroniclesdk.InstanceSearchSortTierRevered, sorts[instancesearch.SortDeaths].MinimumTier)
+	require.Equal(t, chroniclesdk.InstanceSearchSortTierRevered, sorts[instancesearch.SortWipes].MinimumTier)
+	require.Equal(t, chroniclesdk.InstanceSearchSortTierHonored, sorts[instancesearch.SortIdleTime].MinimumTier)
+	require.Equal(t, chroniclesdk.InstanceSearchSortTierHonored, sorts[instancesearch.SortBossTime].MinimumTier)
+	require.True(t, sorts[instancesearch.SortKillTime].Boss)
 	require.Equal(t, chroniclesdk.InstanceSearchSortTierRevered, sorts[instancesearch.SortClearParse].MinimumTier)
 	require.True(t, sorts[instancesearch.SortClearParse].ParseScope)
 
@@ -206,7 +211,11 @@ func TestCompileSort(t *testing.T) {
 	for _, option := range instancesearch.DescribeSorts() {
 		t.Run(string(option.Field), func(t *testing.T) {
 			t.Parallel()
-			compiled, err := instancesearch.Compile(instancesearch.Query{Sort: &instancesearch.Sort{Field: option.Field}}, instancesearch.Options{})
+			sort := &instancesearch.Sort{Field: option.Field}
+			if option.Boss {
+				sort.Boss = "Ragnaros"
+			}
+			compiled, err := instancesearch.Compile(instancesearch.Query{Sort: sort}, instancesearch.Options{})
 			require.NoError(t, err)
 			require.Equal(t, option.DefaultDirection, compiled.Sort.Direction)
 			require.Equal(t, 1+option.Cost, compiled.Cost)
@@ -247,6 +256,8 @@ func TestCompileSortErrors(t *testing.T) {
 		{name: "UnknownField", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: "instance.secret"}}, want: "sort.field"},
 		{name: "BadDirection", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortStartedAt, Direction: "sideways"}}, want: "sort.direction"},
 		{name: "ScopeOnDate", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortStartedAt, ParseScope: instancesearch.ParseScopeRealm}}, want: "sort.parse_scope"},
+		{name: "KillTimeNeedsBoss", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortKillTime}}, want: "sort.boss"},
+		{name: "BossOnDate", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortStartedAt, Boss: "Ragnaros"}}, want: "sort.boss"},
 		{name: "CursorSortMismatch", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortClearTime}, Cursor: &instancesearch.Cursor{ID: id, Sort: instancesearch.Sort{Field: instancesearch.SortStartedAt}}}, want: "cursor.sort"},
 		{name: "BadCursorValue", q: instancesearch.Query{Cursor: &instancesearch.Cursor{Value: &value, ID: id, Sort: instancesearch.Sort{Field: instancesearch.SortStartedAt}}}, want: "cursor.value"},
 	} {

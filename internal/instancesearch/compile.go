@@ -127,7 +127,7 @@ func Compile(q Query, opts Options) (Compiled, error) {
 		}
 	}
 
-	sort, err := c.compileSort(q.Sort, true)
+	sort, err := c.compileSort(q.Sort, true, true)
 	if err != nil {
 		return Compiled{}, err
 	}
@@ -176,7 +176,7 @@ func (s compiledSort) cursorValue(alias string) string {
 	return alias + ".sort_value::text"
 }
 
-func (c *compiler) compileSort(requested *Sort, chargeCost bool) (compiledSort, error) {
+func (c *compiler) compileSort(requested *Sort, chargeCost, buildExpr bool) (compiledSort, error) {
 	wire := Sort{Field: SortStartedAt, Direction: SortDesc}
 	if requested != nil {
 		wire = *requested
@@ -204,12 +204,25 @@ func (c *compiler) compileSort(requested *Sort, chargeCost bool) (compiledSort, 
 		return compiledSort{}, &Error{Path: "sort.parse_scope", Message: "only instance.clear_parse takes parse_scope"}
 	}
 
+	wire.Boss = strings.TrimSpace(wire.Boss)
+	if definition.Option.Boss {
+		if wire.Boss == "" {
+			return compiledSort{}, &Error{Path: "sort.boss", Message: "is required"}
+		}
+	} else if wire.Boss != "" {
+		return compiledSort{}, &Error{Path: "sort.boss", Message: "only instance.kill_time_ms takes boss"}
+	}
+
 	if chargeCost {
 		c.cost += definition.Option.Cost
 	}
+	expr := ""
+	if buildExpr {
+		expr = definition.Expr(c, wire)
+	}
 	return compiledSort{
 		wire:      wire,
-		expr:      definition.Expr(c, wire),
+		expr:      expr,
 		sqlType:   definition.Type.sqlType(),
 		direction: wire.Direction,
 	}, nil
@@ -222,7 +235,7 @@ func (c *compiler) compileCursor(cursor *Cursor, sort compiledSort) (string, err
 	if cursor.ID == uuid.Nil {
 		return "", &Error{Path: "cursor.id", Message: "is required"}
 	}
-	cursorSort, err := c.compileSort(&cursor.Sort, false)
+	cursorSort, err := c.compileSort(&cursor.Sort, false, false)
 	if err != nil {
 		return "", &Error{Path: "cursor." + strings.TrimPrefix(err.(*Error).Path, "sort."), Message: err.(*Error).Message}
 	}

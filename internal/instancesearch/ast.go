@@ -70,7 +70,12 @@ const (
 	SortMaxPlayers   = chroniclesdk.InstanceSearchSortMaxPlayers
 	SortPlayerCount  = chroniclesdk.InstanceSearchSortPlayerCount
 	SortBossesKilled = chroniclesdk.InstanceSearchSortBossesKilled
+	SortDeaths       = chroniclesdk.InstanceSearchSortDeaths
+	SortWipes        = chroniclesdk.InstanceSearchSortWipes
 	SortClearTime    = chroniclesdk.InstanceSearchSortClearTime
+	SortIdleTime     = chroniclesdk.InstanceSearchSortIdleTime
+	SortBossTime     = chroniclesdk.InstanceSearchSortBossTime
+	SortKillTime     = chroniclesdk.InstanceSearchSortKillTime
 	SortClearParse   = chroniclesdk.InstanceSearchSortClearParse
 
 	SortAsc  = chroniclesdk.InstanceSearchSortAsc

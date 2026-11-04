@@ -526,7 +526,11 @@ func TestSearch(t *testing.T) {
 		t.Parallel()
 
 		for _, option := range instancesearch.DescribeSorts() {
-			page := f.search(t, f.tenantA, instancesearch.Query{Sort: &instancesearch.Sort{Field: option.Field}})
+			sort := &instancesearch.Sort{Field: option.Field}
+			if option.Boss {
+				sort.Boss = "Ragnaros"
+			}
+			page := f.search(t, f.tenantA, instancesearch.Query{Sort: sort})
 			require.Len(t, page.Results, 2, option.Field)
 		}
 

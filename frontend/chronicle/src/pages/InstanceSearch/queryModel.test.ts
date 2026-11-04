@@ -165,6 +165,12 @@ describe("prune", () => {
     });
   });
 
+  it("includes the selected boss for kill-time sorting", () => {
+    expect(buildQuery(undefined, undefined, { field: "instance.kill_time_ms", direction: "asc", boss: "Ragnaros" })).toEqual({
+      sort: { field: "instance.kill_time_ms", direction: "asc", boss: "Ragnaros" },
+    });
+  });
+
   it("drops incomplete parts and empty groups", () => {
     const tree: Node = {
       and: [
