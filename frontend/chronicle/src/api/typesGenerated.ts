@@ -2905,12 +2905,13 @@ export interface InstanceSearchCount {
 
 // From chroniclesdk/instance_search.go
 /**
- * InstanceSearchCursor is a keyset pagination position. Results are ordered
- * by (started_at DESC, id DESC).
+ * InstanceSearchCursor is a keyset pagination position. Value is the selected
+ * sort property's canonical string value, or null when that value is missing.
  */
 export interface InstanceSearchCursor {
-    readonly started_at: string;
+    readonly value: string | null;
     readonly id: string;
+    readonly sort: InstanceSearchSort;
 }
 
 // From chroniclesdk/instance_search.go
@@ -3061,6 +3062,7 @@ export const InstanceSearchFieldScopes: InstanceSearchFieldScope[] = ["encounter
  */
 export interface InstanceSearchFieldsResponse {
     readonly fields: readonly InstanceSearchField[];
+    readonly sorts: readonly InstanceSearchSortOption[];
     /**
      * MaxNodes and MaxDepth bound the size of a query tree.
      */
@@ -3212,6 +3214,11 @@ export interface InstanceSearchQuery {
      */
     readonly where?: InstanceSearchNode;
     /**
+     * Sort changes the result order. Omit it for newest first. Each allowlisted
+     * property declares its minimum supporter tier in GET /search/fields.
+     */
+    readonly sort?: InstanceSearchSort;
+    /**
      * Limit is the page size. Zero uses the default (25).
      */
     readonly limit?: number;
@@ -3261,7 +3268,56 @@ export interface InstanceSearchResult {
      * a full clear.
      */
     readonly clear_time_ms?: number;
+    /**
+     * SortValue is the value of the requested sort property as text (dates
+     * in RFC 3339, durations in milliseconds); absent when the run has none.
+     */
+    readonly sort_value?: string;
 }
+
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchSort selects an allowlisted result property and direction.
+ * ParseScope only applies to instance.clear_parse.
+ */
+export interface InstanceSearchSort {
+    readonly field: InstanceSearchSortField;
+    readonly direction?: InstanceSearchSortDirection;
+    readonly parse_scope?: InstanceSearchParseScope;
+    /**
+     * Boss is required when sorting by one boss's kill time.
+     */
+    readonly boss?: string;
+}
+
+// From chroniclesdk/instance_search.go
+export type InstanceSearchSortDirection = "asc" | "desc";
+
+export const InstanceSearchSortDirections: InstanceSearchSortDirection[] = ["asc", "desc"];
+
+// From chroniclesdk/instance_search.go
+export type InstanceSearchSortField = "instance.boss_time_ms" | "instance.bosses_killed" | "instance.clear_parse" | "instance.clear_time_ms" | "instance.deaths" | "instance.difficulty" | "instance.guild" | "instance.idle_time_ms" | "instance.kill_time_ms" | "instance.max_players" | "instance.name" | "instance.player_count" | "instance.realm" | "instance.started_at" | "instance.wipes";
+
+export const InstanceSearchSortFields: InstanceSearchSortField[] = ["instance.boss_time_ms", "instance.bosses_killed", "instance.clear_parse", "instance.clear_time_ms", "instance.deaths", "instance.difficulty", "instance.guild", "instance.idle_time_ms", "instance.kill_time_ms", "instance.max_players", "instance.name", "instance.player_count", "instance.realm", "instance.started_at", "instance.wipes"];
+
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchSortOption describes one fixed result order for search UIs.
+ */
+export interface InstanceSearchSortOption {
+    readonly field: InstanceSearchSortField;
+    readonly label: string;
+    readonly default_direction: InstanceSearchSortDirection;
+    readonly parse_scope: boolean;
+    readonly boss: boolean;
+    readonly minimum_tier: InstanceSearchSortTier;
+    readonly cost: number;
+}
+
+// From chroniclesdk/instance_search.go
+export type InstanceSearchSortTier = "free" | "honored" | "revered";
+
+export const InstanceSearchSortTiers: InstanceSearchSortTier[] = ["free", "honored", "revered"];
 
 // From chroniclesdk/instance_search.go
 /**

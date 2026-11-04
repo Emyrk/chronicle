@@ -167,6 +167,21 @@ func TestDescribe(t *testing.T) {
 	require.True(t, role.On)
 	require.True(t, role.Bosses)
 
+	require.Len(t, d.Sorts, 15)
+	sorts := map[chroniclesdk.InstanceSearchSortField]chroniclesdk.InstanceSearchSortOption{}
+	for _, sort := range d.Sorts {
+		sorts[sort.Field] = sort
+	}
+	require.Equal(t, chroniclesdk.InstanceSearchSortTierFree, sorts[instancesearch.SortName].MinimumTier)
+	require.Equal(t, chroniclesdk.InstanceSearchSortTierHonored, sorts[instancesearch.SortPlayerCount].MinimumTier)
+	require.Equal(t, chroniclesdk.InstanceSearchSortTierRevered, sorts[instancesearch.SortDeaths].MinimumTier)
+	require.Equal(t, chroniclesdk.InstanceSearchSortTierRevered, sorts[instancesearch.SortWipes].MinimumTier)
+	require.Equal(t, chroniclesdk.InstanceSearchSortTierHonored, sorts[instancesearch.SortIdleTime].MinimumTier)
+	require.Equal(t, chroniclesdk.InstanceSearchSortTierHonored, sorts[instancesearch.SortBossTime].MinimumTier)
+	require.True(t, sorts[instancesearch.SortKillTime].Boss)
+	require.Equal(t, chroniclesdk.InstanceSearchSortTierRevered, sorts[instancesearch.SortClearParse].MinimumTier)
+	require.True(t, sorts[instancesearch.SortClearParse].ParseScope)
+
 	require.Equal(t, 21, byName["player.parse"].Cost)
 	require.Equal(t, chroniclesdk.InstanceSearchFieldScopeEncounter, byName["encounter.outcome"].Scope)
 }
@@ -188,6 +203,70 @@ func TestDescribeFixture(t *testing.T) {
 	want, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, string(want), string(got), "run go test ./internal/instancesearch -run TestDescribeFixture -update")
+}
+
+func TestCompileSort(t *testing.T) {
+	t.Parallel()
+
+	for _, option := range instancesearch.DescribeSorts() {
+		t.Run(string(option.Field), func(t *testing.T) {
+			t.Parallel()
+			sort := &instancesearch.Sort{Field: option.Field}
+			if option.Boss {
+				sort.Boss = "Ragnaros"
+			}
+			compiled, err := instancesearch.Compile(instancesearch.Query{Sort: sort}, instancesearch.Options{})
+			require.NoError(t, err)
+			require.Equal(t, option.DefaultDirection, compiled.Sort.Direction)
+			require.Equal(t, 1+option.Cost, compiled.Cost)
+			require.Contains(t, compiled.SQL, "AS sort_value")
+		})
+	}
+
+	compiled, err := instancesearch.Compile(instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortClearParse, ParseScope: instancesearch.ParseScopeRealm}}, instancesearch.Options{})
+	require.NoError(t, err)
+	require.Equal(t, instancesearch.Sort{Field: instancesearch.SortClearParse, Direction: instancesearch.SortDesc, ParseScope: instancesearch.ParseScopeRealm}, compiled.Sort)
+	require.Contains(t, compiled.SQL, "clear_realm_display_score")
+	require.Contains(t, compiled.SQL, "ORDER BY m.sort_value DESC NULLS LAST, m.id DESC")
+
+	value := "96"
+	compiled, err = instancesearch.Compile(instancesearch.Query{
+		Sort: &instancesearch.Sort{Field: instancesearch.SortClearParse, Direction: instancesearch.SortDesc, ParseScope: instancesearch.ParseScopeRealm},
+		Cursor: &instancesearch.Cursor{
+			Value: &value,
+			ID:    uuid.New(),
+			Sort:  instancesearch.Sort{Field: instancesearch.SortClearParse, Direction: instancesearch.SortDesc, ParseScope: instancesearch.ParseScopeRealm},
+		},
+	}, instancesearch.Options{})
+	require.NoError(t, err)
+	require.Contains(t, compiled.SQL, "m.sort_value <")
+	require.Contains(t, compiled.SQL, "m.sort_value IS NULL")
+}
+
+func TestCompileSortErrors(t *testing.T) {
+	t.Parallel()
+
+	value := "not-a-time"
+	id := uuid.New()
+	for _, tc := range []struct {
+		name string
+		q    instancesearch.Query
+		want string
+	}{
+		{name: "UnknownField", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: "instance.secret"}}, want: "sort.field"},
+		{name: "BadDirection", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortStartedAt, Direction: "sideways"}}, want: "sort.direction"},
+		{name: "ScopeOnDate", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortStartedAt, ParseScope: instancesearch.ParseScopeRealm}}, want: "sort.parse_scope"},
+		{name: "KillTimeNeedsBoss", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortKillTime}}, want: "sort.boss"},
+		{name: "BossOnDate", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortStartedAt, Boss: "Ragnaros"}}, want: "sort.boss"},
+		{name: "CursorSortMismatch", q: instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortClearTime}, Cursor: &instancesearch.Cursor{ID: id, Sort: instancesearch.Sort{Field: instancesearch.SortStartedAt}}}, want: "cursor.sort"},
+		{name: "BadCursorValue", q: instancesearch.Query{Cursor: &instancesearch.Cursor{Value: &value, ID: id, Sort: instancesearch.Sort{Field: instancesearch.SortStartedAt}}}, want: "cursor.value"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := instancesearch.Compile(tc.q, instancesearch.Options{})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
 }
 
 func TestCompileEnumsAreCanonicalized(t *testing.T) {

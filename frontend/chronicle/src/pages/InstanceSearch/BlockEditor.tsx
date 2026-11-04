@@ -511,7 +511,7 @@ function fieldOptions(fields: readonly InstanceSearchField[], ctx: BlockContext)
       group,
       // Spec also covers sub-specs (Bear / Cat, Tank / DPS, Fury Prot).
       keywords: `${f.name} ${f.doc}${f.name === SPEC_FIELD ? " sub-spec bear cat tank dps fury prot" : ""}`,
-      ...(lockOf(f, ctx) ? { disabled: true, hint: lockOf(f, ctx) === "honored" ? "Honored" : "Log in" } : {}),
+      ...(lockOf(f, ctx) ? { disabled: true, ...(lockOf(f, ctx) === "honored" ? { hint: "Honored", hintColor: TIER_COLOR.honored } : { hint: "Log in" }) } : {}),
     }));
 }
 

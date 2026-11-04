@@ -2,7 +2,9 @@ package instancesearch
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -70,6 +72,8 @@ type Compiled struct {
 	SQL   string
 	Args  []any
 	Limit int
+	// Sort is the normalized result order used by SQL and pagination cursors.
+	Sort Sort
 	// Cost is a rough estimate of how expensive the query is to run: the
 	// sum of per-field and per-quantifier weights. Rate limiters charge it as
 	// tokens, so heavy queries drain a bucket faster.
@@ -123,23 +127,162 @@ func Compile(q Query, opts Options) (Compiled, error) {
 		}
 	}
 
-	cursor := "TRUE"
-	if q.Cursor != nil {
-		if q.Cursor.ID == uuid.Nil || q.Cursor.StartedAt.IsZero() {
-			return Compiled{}, &Error{Path: "cursor", Message: "started_at and id are required"}
-		}
-		cursor = fmt.Sprintf("(m.started_at, m.id) < (%s::timestamptz, %s::uuid)",
-			c.arg(q.Cursor.StartedAt), c.arg(q.Cursor.ID.String()))
+	sort, err := c.compileSort(q.Sort, true, true)
+	if err != nil {
+		return Compiled{}, err
+	}
+	cursor, err := c.compileCursor(q.Cursor, sort)
+	if err != nil {
+		return Compiled{}, err
 	}
 	// Fetch one extra row so the caller knows whether another page exists.
 	limitArg := c.arg(int64(limit + 1))
 
 	sql := strings.NewReplacer(
 		"{{WHERE}}", where,
+		"{{SORT_EXPR}}", sort.expr,
 		"{{CURSOR}}", cursor,
+		"{{INNER_ORDER}}", sort.order("m"),
+		"{{OUTER_ORDER}}", sort.order("p"),
+		"{{CURSOR_VALUE}}", sort.cursorValue("p"),
 		"{{LIMIT}}", limitArg,
 	).Replace(frameSQL)
-	return Compiled{SQL: sql, Args: c.args, Limit: limit, Cost: baseCost + c.cost, Fields: c.fields}, nil
+	return Compiled{SQL: sql, Args: c.args, Limit: limit, Sort: sort.wire, Cost: baseCost + c.cost, Fields: c.fields}, nil
+}
+
+type compiledSort struct {
+	wire      Sort
+	expr      string
+	sqlType   string
+	direction SortDirection
+}
+
+func (s compiledSort) operator() string {
+	if s.direction == SortAsc {
+		return ">"
+	}
+	return "<"
+}
+
+func (s compiledSort) order(alias string) string {
+	direction := strings.ToUpper(string(s.direction))
+	return fmt.Sprintf("%s.sort_value %s NULLS LAST, %s.id %s", alias, direction, alias, direction)
+}
+
+func (s compiledSort) cursorValue(alias string) string {
+	if s.wire.Field == SortStartedAt {
+		return fmt.Sprintf("to_char(%s.sort_value AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"')", alias)
+	}
+	return alias + ".sort_value::text"
+}
+
+func (c *compiler) compileSort(requested *Sort, chargeCost, buildExpr bool) (compiledSort, error) {
+	wire := Sort{Field: SortStartedAt, Direction: SortDesc}
+	if requested != nil {
+		wire = *requested
+	}
+
+	definition := sortDefinitionsByField[wire.Field]
+	if definition == nil {
+		return compiledSort{}, &Error{Path: "sort.field", Message: sortFieldsMessage()}
+	}
+	if wire.Direction == "" {
+		wire.Direction = definition.Option.DefaultDirection
+	}
+	if wire.Direction != SortAsc && wire.Direction != SortDesc {
+		return compiledSort{}, &Error{Path: "sort.direction", Message: "must be asc or desc"}
+	}
+
+	if definition.Option.ParseScope {
+		if wire.ParseScope == "" {
+			wire.ParseScope = ParseScopeServer
+		}
+		if wire.ParseScope != ParseScopeServer && wire.ParseScope != ParseScopeRealm && wire.ParseScope != ParseScopeGuild {
+			return compiledSort{}, &Error{Path: "sort.parse_scope", Message: "must be server, realm or guild"}
+		}
+	} else if wire.ParseScope != "" {
+		return compiledSort{}, &Error{Path: "sort.parse_scope", Message: "only instance.clear_parse takes parse_scope"}
+	}
+
+	wire.Boss = strings.TrimSpace(wire.Boss)
+	if definition.Option.Boss {
+		if wire.Boss == "" {
+			return compiledSort{}, &Error{Path: "sort.boss", Message: "is required"}
+		}
+	} else if wire.Boss != "" {
+		return compiledSort{}, &Error{Path: "sort.boss", Message: "only instance.kill_time_ms takes boss"}
+	}
+
+	if chargeCost {
+		c.cost += definition.Option.Cost
+	}
+	expr := ""
+	if buildExpr {
+		expr = definition.Expr(c, wire)
+	}
+	return compiledSort{
+		wire:      wire,
+		expr:      expr,
+		sqlType:   definition.Type.sqlType(),
+		direction: wire.Direction,
+	}, nil
+}
+
+func (c *compiler) compileCursor(cursor *Cursor, sort compiledSort) (string, error) {
+	if cursor == nil {
+		return "TRUE", nil
+	}
+	if cursor.ID == uuid.Nil {
+		return "", &Error{Path: "cursor.id", Message: "is required"}
+	}
+	cursorSort, err := c.compileSort(&cursor.Sort, false, false)
+	if err != nil {
+		return "", &Error{Path: "cursor." + strings.TrimPrefix(err.(*Error).Path, "sort."), Message: err.(*Error).Message}
+	}
+	if cursorSort.wire != sort.wire {
+		return "", &Error{Path: "cursor.sort", Message: "must match sort"}
+	}
+
+	op := sort.operator()
+	idArg := c.arg(cursor.ID.String())
+	if cursor.Value == nil {
+		return fmt.Sprintf("m.sort_value IS NULL AND m.id %s %s::uuid", op, idArg), nil
+	}
+	value, err := parseCursorValue(*cursor.Value, sort)
+	if err != nil {
+		return "", &Error{Path: "cursor.value", Message: err.Error()}
+	}
+	valueArg := c.arg(value)
+	return fmt.Sprintf("(m.sort_value %s %s::%s OR m.sort_value IS NULL OR (m.sort_value = %s::%s AND m.id %s %s::uuid))",
+		op, valueArg, sort.sqlType, valueArg, sort.sqlType, op, idArg), nil
+}
+
+func parseCursorValue(value string, sort compiledSort) (any, error) {
+	definition := sortDefinitionsByField[sort.wire.Field]
+	switch definition.Type {
+	case typeTime:
+		parsed, err := time.Parse(time.RFC3339Nano, value)
+		if err != nil {
+			return nil, fmt.Errorf("must be an RFC 3339 timestamp")
+		}
+		return parsed, nil
+	case typeInt:
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("must be an integer")
+		}
+		return parsed, nil
+	case typeFloat:
+		parsed, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return nil, fmt.Errorf("must be a number")
+		}
+		return parsed, nil
+	case typeString:
+		return value, nil
+	default:
+		panic("validated sort type")
+	}
 }
 
 // frameSQL is the fixed outer query. Only {{WHERE}} carries the compiled
@@ -161,7 +304,8 @@ const frameSQL = `WITH matched AS (
     g.name AS guild_name,
     li.difficulty_name,
     li.max_players,
-    COALESCE(li.start_time, wlg.created_at) AS started_at
+    COALESCE(li.start_time, wlg.created_at) AS started_at,
+    {{SORT_EXPR}} AS sort_value
 ` + frameFrom + `
     AND ({{WHERE}})
   ORDER BY COALESCE(li.duplicate_group_id, li.id), li.id
@@ -174,15 +318,16 @@ SELECT p.id, p.hashed_slug, p.name, p.realm_id, p.realm_name, p.guild_id, p.guil
   (SELECT count(DISTINCT be.name) FROM log_instance_encounters be
     WHERE be.instance_id = p.id AND be.boss AND be.kill_type IN ('clean', 'partial')) AS bosses_killed,
   (SELECT sr.ranked_duration_ms FROM instance_speedruns sr
-    WHERE sr.instance_id = p.id AND sr.ranked_duration_ms > 0) AS clear_time_ms
+    WHERE sr.instance_id = p.id AND sr.ranked_duration_ms > 0) AS clear_time_ms,
+  {{CURSOR_VALUE}} AS cursor_value
 FROM (
   SELECT m.*
   FROM matched m
   WHERE {{CURSOR}}
-  ORDER BY m.started_at DESC, m.id DESC
+  ORDER BY {{INNER_ORDER}}
   LIMIT {{LIMIT}}
 ) p
-ORDER BY p.started_at DESC, p.id DESC`
+ORDER BY {{OUTER_ORDER}}`
 
 // frameFrom is the visibility frame shared by search and explain: tenant
 // RLS through wow_server_realms, finalized + listed + valid logs. Fields may
@@ -260,13 +405,17 @@ func (c *compiler) tenant() string {
 // timeParseContract returns SQL that pins a time_parse_scores alias to the
 // current scoring contract and tenant.
 func (c *compiler) timeParseContract(tps string) string {
+	return c.timeParseContractFor(tps, "li.id")
+}
+
+func (c *compiler) timeParseContractFor(tps, instanceID string) string {
 	if c.contractArg[0] == "" {
 		c.contractArg[0] = c.arg(c.opts.TimeParseLookbackDays) + "::smallint"
 		c.contractArg[1] = c.arg(c.opts.TimeParsePolicyVersion) + "::smallint"
 		c.contractArg[2] = c.arg(c.opts.TimeParseQueryVersion) + "::smallint"
 	}
-	return fmt.Sprintf("%[1]s.tenant_id = %[2]s AND %[1]s.instance_id = li.id AND %[1]s.lookback_days = %[3]s AND %[1]s.policy_version = %[4]s AND %[1]s.query_version = %[5]s",
-		tps, c.tenant(), c.contractArg[0], c.contractArg[1], c.contractArg[2])
+	return fmt.Sprintf("%[1]s.tenant_id = %[2]s AND %[1]s.instance_id = %[3]s AND %[1]s.lookback_days = %[4]s AND %[1]s.policy_version = %[5]s AND %[1]s.query_version = %[6]s",
+		tps, c.tenant(), instanceID, c.contractArg[0], c.contractArg[1], c.contractArg[2])
 }
 
 func (c *compiler) node(n *Node, path string, s scope, depth int) (string, error) {

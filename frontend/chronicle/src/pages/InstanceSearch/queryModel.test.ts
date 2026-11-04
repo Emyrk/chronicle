@@ -158,6 +158,19 @@ describe("formToTree / treeToForm", () => {
 });
 
 describe("prune", () => {
+  it("includes an optional sort in the wire query", () => {
+    expect(buildQuery(undefined, 25, { field: "instance.clear_time_ms", direction: "asc" })).toEqual({
+      sort: { field: "instance.clear_time_ms", direction: "asc" },
+      limit: 25,
+    });
+  });
+
+  it("includes the selected boss for kill-time sorting", () => {
+    expect(buildQuery(undefined, undefined, { field: "instance.kill_time_ms", direction: "asc", boss: "Ragnaros" })).toEqual({
+      sort: { field: "instance.kill_time_ms", direction: "asc", boss: "Ragnaros" },
+    });
+  });
+
   it("drops incomplete parts and empty groups", () => {
     const tree: Node = {
       and: [

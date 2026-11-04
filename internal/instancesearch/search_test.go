@@ -142,6 +142,9 @@ func newFixture(t *testing.T) *fixture {
 	exec(`INSERT INTO instance_speedruns (instance_id, instance_name, realm_id, qualified, start_time, completion_time, duration_ms, proof,
 			ranked_start_time, ranked_completion_time, ranked_duration_ms)
 		VALUES ($1, 'Molten Core', $2, true, $3, $4, 1500000, '{}', $3, $4, 1500000)`, f.mc1, realmA, t0, t0.Add(1500*time.Second))
+	exec(`INSERT INTO instance_speedruns (instance_id, instance_name, realm_id, qualified, start_time, completion_time, duration_ms, proof,
+			ranked_start_time, ranked_completion_time, ranked_duration_ms)
+			VALUES ($1, 'Molten Core', $2, true, $3, $4, 1500000, '{}', $3, $4, 1500000)`, f.mc1dup, realmA, t0, t0.Add(1500*time.Second))
 	exec(`INSERT INTO parse_score_results (tenant_id, instance_id, run_id, encounter_name, player_guid, metric, metric_value,
 			precise_score, display_score, rank, sample_size, status)
 		VALUES ($1, $2, $3, 'Ragnaros', $4, 'dps', 1000, 97, 97, 1, 20, 'ok')`, f.tenantA, f.mc1, uuid.New(), thrall)
@@ -152,6 +155,12 @@ func newFixture(t *testing.T) *fixture {
 			cutoff, window_start, lookback_days, policy_version, query_version)
 		VALUES ($1, $2, $3, $4, $5, 1500000, 96, 96, 1, 20, 'ok', 96, 96, 1, 20, 'ok', now(), now(), $6, $7, $8)`,
 		tps, f.tenantA, f.mc1, uuid.New(), realmA, instancesearch.DefaultTimeParseLookbackDays, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.QueryVersion)
+	exec(`INSERT INTO time_parse_scores (id, tenant_id, instance_id, run_id, realm_id, clear_duration_ms,
+			clear_server_precise_score, clear_server_display_score, clear_server_rank, clear_server_sample_size, clear_server_status,
+			clear_realm_precise_score, clear_realm_display_score, clear_realm_rank, clear_realm_sample_size, clear_realm_status,
+			cutoff, window_start, lookback_days, policy_version, query_version)
+			VALUES ($1, $2, $3, $4, $5, 1500000, 96, 96, 1, 20, 'ok', 96, 96, 1, 20, 'ok', now(), now(), $6, $7, $8)`,
+		uuid.New(), f.tenantA, f.mc1dup, uuid.New(), realmA, instancesearch.DefaultTimeParseLookbackDays, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.QueryVersion)
 	bossScore := func(enc uuid.UUID, name string, score int) {
 		exec(`INSERT INTO time_parse_boss_scores (time_parse_score_id, encounter_id, encounter_name, duration_ms,
 				server_precise_score, server_display_score, server_rank, server_sample_size, server_status,
@@ -513,6 +522,38 @@ func TestSearch(t *testing.T) {
 		require.Empty(t, f.search(t, f.tenantB, q).Results)
 	})
 
+	t.Run("Sorting", func(t *testing.T) {
+		t.Parallel()
+
+		for _, option := range instancesearch.DescribeSorts() {
+			sort := &instancesearch.Sort{Field: option.Field}
+			if option.Boss {
+				sort.Boss = "Ragnaros"
+			}
+			page := f.search(t, f.tenantA, instancesearch.Query{Sort: sort})
+			require.Len(t, page.Results, 2, option.Field)
+		}
+
+		q := instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortClearTime, Direction: instancesearch.SortAsc}}
+		page := f.search(t, f.tenantA, q)
+		require.Equal(t, []string{"Alpha", "Beta"}, []string{page.Results[0].GuildName, page.Results[1].GuildName})
+		// Results carry the sorted value so the UI can show it; mc2 has no clear.
+		require.NotNil(t, page.Results[0].SortValue)
+		require.Equal(t, "1500000", *page.Results[0].SortValue)
+		require.Nil(t, page.Results[1].SortValue)
+
+		q.Sort = &instancesearch.Sort{Field: instancesearch.SortClearParse, ParseScope: instancesearch.ParseScopeServer}
+		page = f.search(t, f.tenantA, q)
+		require.Equal(t, []string{"Alpha", "Beta"}, []string{page.Results[0].GuildName, page.Results[1].GuildName})
+
+		q.Sort = &instancesearch.Sort{Field: instancesearch.SortStartedAt, Direction: instancesearch.SortAsc}
+		ascending := f.search(t, f.tenantA, q)
+		q.Sort.Direction = instancesearch.SortDesc
+		descending := f.search(t, f.tenantA, q)
+		require.Equal(t, ascending.Results[0].ID, descending.Results[1].ID)
+		require.Equal(t, ascending.Results[1].ID, descending.Results[0].ID)
+	})
+
 	t.Run("Pagination", func(t *testing.T) {
 		t.Parallel()
 		q := where(t, `{"any_encounter": {"field": "encounter.name", "op": "=", "value": "Ragnaros"}}`)
@@ -520,6 +561,8 @@ func TestSearch(t *testing.T) {
 		first := f.search(t, f.tenantA, q)
 		require.Len(t, first.Results, 1)
 		require.NotNil(t, first.Next)
+		require.NotNil(t, first.Next.Value)
+		require.Equal(t, instancesearch.Sort{Field: instancesearch.SortStartedAt, Direction: instancesearch.SortDesc}, first.Next.Sort)
 
 		q.Cursor = first.Next
 		second := f.search(t, f.tenantA, q)

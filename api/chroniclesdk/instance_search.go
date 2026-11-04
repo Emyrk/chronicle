@@ -11,17 +11,77 @@ import (
 type InstanceSearchQuery struct {
 	// Where is the search tree. Omit it to match every visible run.
 	Where *InstanceSearchNode `json:"where,omitempty"`
+	// Sort changes the result order. Omit it for newest first. Each allowlisted
+	// property declares its minimum supporter tier in GET /search/fields.
+	Sort *InstanceSearchSort `json:"sort,omitempty"`
 	// Limit is the page size. Zero uses the default (25).
 	Limit int `json:"limit,omitempty"`
 	// Cursor continues from a previous page's Next.
 	Cursor *InstanceSearchCursor `json:"cursor,omitempty"`
 }
 
-// InstanceSearchCursor is a keyset pagination position. Results are ordered
-// by (started_at DESC, id DESC).
+// InstanceSearchSort selects an allowlisted result property and direction.
+// ParseScope only applies to instance.clear_parse.
+type InstanceSearchSort struct {
+	Field      InstanceSearchSortField     `json:"field"`
+	Direction  InstanceSearchSortDirection `json:"direction,omitempty"`
+	ParseScope InstanceSearchParseScope    `json:"parse_scope,omitempty"`
+	// Boss is required when sorting by one boss's kill time.
+	Boss string `json:"boss,omitempty"`
+}
+
+type InstanceSearchSortField string
+
+const (
+	InstanceSearchSortStartedAt    InstanceSearchSortField = "instance.started_at"
+	InstanceSearchSortName         InstanceSearchSortField = "instance.name"
+	InstanceSearchSortRealm        InstanceSearchSortField = "instance.realm"
+	InstanceSearchSortGuild        InstanceSearchSortField = "instance.guild"
+	InstanceSearchSortDifficulty   InstanceSearchSortField = "instance.difficulty"
+	InstanceSearchSortMaxPlayers   InstanceSearchSortField = "instance.max_players"
+	InstanceSearchSortPlayerCount  InstanceSearchSortField = "instance.player_count"
+	InstanceSearchSortBossesKilled InstanceSearchSortField = "instance.bosses_killed"
+	InstanceSearchSortDeaths       InstanceSearchSortField = "instance.deaths"
+	InstanceSearchSortWipes        InstanceSearchSortField = "instance.wipes"
+	InstanceSearchSortClearTime    InstanceSearchSortField = "instance.clear_time_ms"
+	InstanceSearchSortIdleTime     InstanceSearchSortField = "instance.idle_time_ms"
+	InstanceSearchSortBossTime     InstanceSearchSortField = "instance.boss_time_ms"
+	InstanceSearchSortKillTime     InstanceSearchSortField = "instance.kill_time_ms"
+	InstanceSearchSortClearParse   InstanceSearchSortField = "instance.clear_parse"
+)
+
+type InstanceSearchSortDirection string
+
+const (
+	InstanceSearchSortAsc  InstanceSearchSortDirection = "asc"
+	InstanceSearchSortDesc InstanceSearchSortDirection = "desc"
+)
+
+type InstanceSearchSortTier string
+
+const (
+	InstanceSearchSortTierFree    InstanceSearchSortTier = "free"
+	InstanceSearchSortTierHonored InstanceSearchSortTier = "honored"
+	InstanceSearchSortTierRevered InstanceSearchSortTier = "revered"
+)
+
+// InstanceSearchSortOption describes one fixed result order for search UIs.
+type InstanceSearchSortOption struct {
+	Field            InstanceSearchSortField     `json:"field"`
+	Label            string                      `json:"label"`
+	DefaultDirection InstanceSearchSortDirection `json:"default_direction"`
+	ParseScope       bool                        `json:"parse_scope"`
+	Boss             bool                        `json:"boss"`
+	MinimumTier      InstanceSearchSortTier      `json:"minimum_tier"`
+	Cost             int                         `json:"cost"`
+}
+
+// InstanceSearchCursor is a keyset pagination position. Value is the selected
+// sort property's canonical string value, or null when that value is missing.
 type InstanceSearchCursor struct {
-	StartedAt time.Time `json:"started_at" format:"date-time"`
-	ID        uuid.UUID `json:"id" format:"uuid"`
+	Value *string            `json:"value"`
+	ID    uuid.UUID          `json:"id" format:"uuid"`
+	Sort  InstanceSearchSort `json:"sort"`
 }
 
 // InstanceSearchNode is one node of the search tree. Exactly one of And, Or,
@@ -142,6 +202,9 @@ type InstanceSearchResult struct {
 	// ClearTimeMS is the ranked full-clear time; absent when the run is not
 	// a full clear.
 	ClearTimeMS *int64 `json:"clear_time_ms,omitempty"`
+	// SortValue is the value of the requested sort property as text (dates
+	// in RFC 3339, durations in milliseconds); absent when the run has none.
+	SortValue *string `json:"sort_value,omitempty"`
 }
 
 // InstanceSearchLimitResponse is the caller's instance search rate-limit
@@ -201,7 +264,8 @@ type InstanceSearchField struct {
 
 // InstanceSearchFieldsResponse is GET /api/v1/raidlogs/search/fields.
 type InstanceSearchFieldsResponse struct {
-	Fields []InstanceSearchField `json:"fields"`
+	Fields []InstanceSearchField      `json:"fields"`
+	Sorts  []InstanceSearchSortOption `json:"sorts"`
 	// MaxNodes and MaxDepth bound the size of a query tree.
 	MaxNodes int `json:"max_nodes"`
 	MaxDepth int `json:"max_depth"`
@@ -279,7 +343,7 @@ type InstanceSearchEvidence struct {
 	Count *int64 `json:"count,omitempty"`
 	// Witnesses are up to five of the players or pulls that satisfy a
 	// quantifier's subtree.
-	Witnesses []InstanceSearchWitness `json:"witnesses,omitempty"`
+	Witnesses []InstanceSearchWitness  `json:"witnesses,omitempty"`
 	Children  []InstanceSearchEvidence `json:"children,omitempty"`
 }
 

@@ -2,8 +2,18 @@ import { useCallback, useEffect, useMemo, useReducer, useState, type ReactNode }
 import { useInferenceCapability } from "@/features/chat";
 import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { Blocks, BookOpen, ChevronDown, ChevronUp, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
-import type { InstanceSearchCursor, InstanceSearchLimitResponse } from "@/api/typesGenerated";
+import { ArrowDownWideNarrow, ArrowUpDown, ArrowUpNarrowWide, Blocks, BookOpen, ChevronDown, ChevronUp, Code2, Lightbulb, ListFilter, Loader2, Lock, Search, X } from "lucide-react";
+import { InstanceSearchSortFields } from "@/api/typesGenerated";
+import type {
+  InstanceSearchCursor,
+  InstanceSearchLimitResponse,
+  InstanceSearchParseScope,
+  InstanceSearchSort,
+  InstanceSearchSortDirection,
+  InstanceSearchSortField,
+  InstanceSearchSortOption,
+  InstanceSearchSortTier,
+} from "@/api/typesGenerated";
 import { useRealms, useSiteConfig, useSupportedInstances } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation";
@@ -13,6 +23,9 @@ import { Button } from "@/components/ui/button";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { BlockEditor } from "./BlockEditor";
+import { SelectCombo } from "./ComboInput";
+import type { ComboOption } from "./comboOptions";
+import { NATIVE_SELECT } from "./controls";
 import { ResultsTable } from "./ResultsTable";
 import { SearchSummary } from "./SearchSummary";
 import { CelCode } from "./CelCode";
@@ -50,6 +63,56 @@ type Mode = "form" | "blocks" | "code";
 /** What Blocks / Code show non-Honored users first: or, count and not in one search. */
 const PREVIEW_EXAMPLE = EXAMPLES.find((e) => e.id === "23_complex_speed_comp") ?? EXAMPLES[0];
 
+function defaultSortDirection(field: InstanceSearchSortField): InstanceSearchSortDirection {
+  switch (field) {
+    case "instance.name":
+    case "instance.realm":
+    case "instance.guild":
+    case "instance.difficulty":
+    case "instance.deaths":
+    case "instance.wipes":
+    case "instance.idle_time_ms":
+    case "instance.boss_time_ms":
+    case "instance.kill_time_ms":
+    case "instance.clear_time_ms":
+      return "asc";
+    default:
+      return "desc";
+  }
+}
+
+function readSort(field: string | null, direction: string | null, parseScope: string | null, boss: string | null): InstanceSearchSort | undefined {
+  if (!InstanceSearchSortFields.some((option) => option === field)) return undefined;
+  const typedField = field as InstanceSearchSortField;
+  const typedDirection: InstanceSearchSortDirection = direction === "asc" || direction === "desc" ? direction : defaultSortDirection(typedField);
+  if (typedField === "instance.clear_parse") {
+    const typedScope: InstanceSearchParseScope = parseScope === "realm" || parseScope === "guild" ? parseScope : "server";
+    return { field: typedField, direction: typedDirection, parse_scope: typedScope };
+  }
+  if (typedField === "instance.kill_time_ms") {
+    return boss ? { field: typedField, direction: typedDirection, boss } : undefined;
+  }
+  return { field: typedField, direction: typedDirection };
+}
+
+const DEFAULT_SORT: InstanceSearchSort = { field: "instance.started_at", direction: "desc" };
+
+function writeSortParams(params: URLSearchParams, sort: InstanceSearchSort) {
+  if (sort.field === DEFAULT_SORT.field && sort.direction === DEFAULT_SORT.direction) {
+    params.delete("sort");
+    params.delete("order");
+    params.delete("sort_scope");
+    params.delete("sort_boss");
+    return;
+  }
+  params.set("sort", sort.field);
+  params.set("order", sort.direction ?? defaultSortDirection(sort.field));
+  if (sort.field === "instance.clear_parse") params.set("sort_scope", sort.parse_scope ?? "server");
+  else params.delete("sort_scope");
+  if (sort.field === "instance.kill_time_ms" && sort.boss) params.set("sort_boss", sort.boss);
+  else params.delete("sort_boss");
+}
+
 export function InstanceSearchPage() {
   const [params, writeParams] = useSearchParams();
   const [draftRevision, bumpDraftRevision] = useReducer((revision: number) => revision + 1, 0);
@@ -69,6 +132,17 @@ export function InstanceSearchPage() {
   // The submitted search lives in the URL so it can be shared.
   const submittedParam = params.get("q");
   const submittedTree = useMemo(() => decodeQuery(submittedParam), [submittedParam]);
+  const sortFieldParam = params.get("sort");
+  const sortDirectionParam = params.get("order");
+  const sortScopeParam = params.get("sort_scope");
+  const sortBossParam = params.get("sort_boss");
+  const submittedSort = useMemo(
+    () => readSort(sortFieldParam, sortDirectionParam, sortScopeParam, sortBossParam),
+    [sortFieldParam, sortDirectionParam, sortScopeParam, sortBossParam],
+  );
+  const selectedSort: InstanceSearchSort = submittedSort ?? DEFAULT_SORT;
+  const [draftSort, writeDraftSort] = useState<InstanceSearchSort>(() => selectedSort);
+  const setDraftSort = (sort: InstanceSearchSort) => { bumpDraftRevision(); writeDraftSort(sort); };
   // Logged-out users can view a shared block / code search read-only.
   const modeParam = params.get("mode");
   const urlMode: Mode = modeParam === "blocks" || modeParam === "code" ? modeParam : "form";
@@ -169,6 +243,8 @@ export function InstanceSearchPage() {
   const anonBlocked = !isAuthenticated && mode === "form" && !formIsBasic(form);
   // Honored-only fields (UI-only lock, like Code).
   const honoredBlocked = !advancedUnlocked && !preview && treeNeedsHonored(draftTree);
+  const draftSortOption = fields.data?.sorts.find((option) => option.field === draftSort.field);
+  const sortBlocked = draftSortOption ? !sortTierUnlocked(draftSortOption.minimum_tier, supporter.tier, supporter.isLoading) : false;
 
   const leavePreview = () => {
     setPreview(false);
@@ -208,9 +284,14 @@ export function InstanceSearchPage() {
     setBlocks(undefined);
     setCode("");
     setExample(null);
+    setDraftSort(DEFAULT_SORT);
     const next = new URLSearchParams(params);
     next.delete("q");
     next.delete("mode");
+    next.delete("sort");
+    next.delete("order");
+    next.delete("sort_scope");
+    next.delete("sort_boss");
     setParams(next);
     setCollapsed(false);
   };
@@ -233,6 +314,7 @@ export function InstanceSearchPage() {
     next.set("q", q);
     if (m === "form") next.delete("mode");
     else next.set("mode", m);
+    writeSortParams(next, draftSort);
     setParams(next);
     rememberSearch(q, m);
   };
@@ -256,8 +338,8 @@ export function InstanceSearchPage() {
   };
 
   const results = useInfiniteQuery({
-    queryKey: ["instance-search", "results", submittedParam, isAuthenticated],
-    queryFn: ({ pageParam }) => runSearch(buildQuery(submittedTree, isAuthenticated ? undefined : 25), pageParam),
+    queryKey: ["instance-search", "results", submittedParam, submittedSort, isAuthenticated],
+    queryFn: ({ pageParam }) => runSearch(buildQuery(submittedTree, isAuthenticated ? undefined : 25, submittedSort), pageParam),
     initialPageParam: undefined as InstanceSearchCursor | undefined,
     getNextPageParam: (last) => last.page.next ?? undefined,
     // Wait for the session: searching before it loads would run (and spend)
@@ -295,7 +377,7 @@ export function InstanceSearchPage() {
   const lastCost = lastPage?.cost ?? error?.cost ?? null;
   const lastRuntimeCost = lastPage?.runtimeCost ?? error?.runtimeCost ?? null;
   // The cost the server will charge for the current draft, live as it's edited.
-  const liveCost = useMemo(() => (fields.data && !codeInvalid ? queryCost(draftTree, fields.data) : null), [fields.data, codeInvalid, draftTree]);
+  const liveCost = useMemo(() => (fields.data && !codeInvalid ? queryCost(draftTree, fields.data, draftSort) : null), [fields.data, codeInvalid, draftTree, draftSort]);
   const tooComplex = liveCost != null && budget != null && liveCost.total > budget.limit;
   const rows = results.data?.pages.flatMap((p) => p.page.results) ?? [];
   // Ask before leaving while results are on screen: in-app links via the
@@ -378,6 +460,7 @@ export function InstanceSearchPage() {
       )}
 
       <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="inline-flex items-center gap-0.5 bg-muted/50 rounded-md p-0.5">
           <ModeButton
             active={mode === "form"}
@@ -410,6 +493,15 @@ export function InstanceSearchPage() {
           >
             <Code2 className="h-3.5 w-3.5" /> Code
           </ModeButton>
+        </div>
+        <SortControls
+          sort={draftSort}
+          options={fields.data?.sorts ?? []}
+          bosses={allBosses}
+          supporterTier={supporter.tier}
+          supporterLoading={supporter.isLoading}
+          onChange={setDraftSort}
+        />
         </div>
         <div className="flex items-center gap-2">
           <ExamplesMenu onPick={loadExample} />
@@ -476,8 +568,8 @@ export function InstanceSearchPage() {
         <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
         <Button
           onClick={submit}
-          disabled={preview || anonBlocked || honoredBlocked || codeInvalid || tooComplex || results.isFetching}
-          title={preview ? "Honored supporters can run code searches" : honoredBlocked ? "This search uses conditions for Honored supporters" : undefined}
+          disabled={preview || anonBlocked || honoredBlocked || sortBlocked || codeInvalid || tooComplex || results.isFetching}
+          title={preview ? "Honored supporters can run code searches" : honoredBlocked ? "This search uses conditions for Honored supporters" : sortBlocked ? `This sort requires ${draftSortOption?.minimum_tier}` : undefined}
           className="gap-1.5"
         >
           {results.isFetching && !results.isFetchingNextPage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
@@ -522,6 +614,8 @@ export function InstanceSearchPage() {
           loading={results.isLoading}
           bossCounts={bossCounts}
           tree={submittedTree}
+          sort={selectedSort}
+          sortLabel={sortColumnLabel(selectedSort, fields.data?.sorts ?? [])}
           onBudget={recordBudget}
         />
       )}
@@ -534,6 +628,129 @@ export function InstanceSearchPage() {
       )}
     </main>
       <AdRailStack primaryPlacement="instance-search-right-rail" secondaryPlacement="instance-search-right-rail-lower" railLayout="paired-wide" />
+    </div>
+  );
+}
+
+/** Header for the results' sort column: the sort's label, plus its boss or parse scope. */
+function sortColumnLabel(sort: InstanceSearchSort, options: readonly InstanceSearchSortOption[]): string {
+  const label = options.find((option) => option.field === sort.field)?.label ?? "Sort";
+  if (sort.boss) return `${sort.boss} kill`;
+  if (sort.parse_scope) return `${label} (${sort.parse_scope})`;
+  return label;
+}
+
+function sortTierUnlocked(minimum: InstanceSearchSortTier, supporterTier: string | null, loading: boolean): boolean {
+  if (minimum === "free" || loading) return true;
+  const order = ["honored", "revered", "exalted"];
+  return supporterTier !== null && order.indexOf(supporterTier) >= order.indexOf(minimum);
+}
+
+function tierName(tier: InstanceSearchSortTier): string {
+  return tier[0].toUpperCase() + tier.slice(1);
+}
+
+/** Sort options for the picker: locked ones show their tier in its colour and can't be picked. */
+function sortComboOptions(
+  options: readonly InstanceSearchSortOption[],
+  hasBosses: boolean,
+  supporterTier: string | null,
+  supporterLoading: boolean,
+): ComboOption[] {
+  return options.map((option) => {
+    if (!sortTierUnlocked(option.minimum_tier, supporterTier, supporterLoading) && option.minimum_tier !== "free") {
+      return { value: option.field, label: option.label, disabled: true, hint: tierName(option.minimum_tier), hintColor: TIER_COLOR[option.minimum_tier] };
+    }
+    return {
+      value: option.field,
+      label: option.label,
+      disabled: option.boss && !hasBosses,
+      hint: option.cost > 0 ? `+${option.cost} cost` : undefined,
+    };
+  });
+}
+
+/** Sort picker for the toolbar: a searchable property, its scope or boss, and a direction toggle. */
+function SortControls({
+  sort,
+  options,
+  bosses,
+  supporterTier,
+  supporterLoading,
+  onChange,
+}: {
+  sort: InstanceSearchSort;
+  options: readonly InstanceSearchSortOption[];
+  bosses: readonly { value: string; label?: string; group?: string }[];
+  supporterTier: string | null;
+  supporterLoading: boolean;
+  onChange: (sort: InstanceSearchSort) => void;
+}) {
+  const current = options.find((option) => option.field === sort.field);
+  const currentUnlocked = current ? sortTierUnlocked(current.minimum_tier, supporterTier, supporterLoading) : true;
+  const direction = sort.direction ?? current?.default_direction ?? defaultSortDirection(sort.field);
+  const bossOptions = useMemo(() => bosses.map((boss) => ({ value: boss.value, label: boss.label ?? boss.value, group: boss.group })), [bosses]);
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
+        <ArrowUpDown className="h-3.5 w-3.5" /> Sort
+      </span>
+      <SelectCombo
+        className="w-40"
+        value={sort.field}
+        options={sortComboOptions(options, bosses.length > 0, supporterTier, supporterLoading)}
+        disabled={options.length === 0}
+        placeholder="Search sorts…"
+        onChange={(field) => {
+          const option = options.find((candidate) => candidate.field === field);
+          if (!option) return;
+          onChange({
+            field: option.field,
+            direction: option.default_direction,
+            ...(option.parse_scope ? { parse_scope: "server" as const } : {}),
+            ...(option.boss && bosses[0] ? { boss: bosses[0].value } : {}),
+          });
+        }}
+      />
+      {current?.parse_scope && (
+        <select
+          aria-label="Clear parse scope"
+          className={NATIVE_SELECT}
+          value={sort.parse_scope ?? "server"}
+          disabled={!currentUnlocked}
+          onChange={(event) => onChange({ ...sort, parse_scope: event.target.value as InstanceSearchParseScope })}
+        >
+          <option value="server">Server</option>
+          <option value="realm">Realm</option>
+          <option value="guild">Guild</option>
+        </select>
+      )}
+      {current?.boss && (
+        <SelectCombo
+          className="w-44"
+          value={sort.boss ?? bosses[0]?.value ?? ""}
+          options={bossOptions}
+          disabled={!currentUnlocked || bosses.length === 0}
+          placeholder="Search bosses…"
+          onChange={(boss) => onChange({ ...sort, boss })}
+        />
+      )}
+      <button
+        type="button"
+        aria-label={direction === "asc" ? "Ascending, switch to descending" : "Descending, switch to ascending"}
+        title={direction === "asc" ? "Ascending" : "Descending"}
+        disabled={!currentUnlocked}
+        onClick={() => onChange({ ...sort, direction: direction === "asc" ? "desc" : "asc" })}
+        className="inline-flex h-7 items-center gap-1 rounded-md border border-input bg-background px-2 text-xs text-foreground hover:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {direction === "asc" ? <ArrowUpNarrowWide className="h-3.5 w-3.5" /> : <ArrowDownWideNarrow className="h-3.5 w-3.5" />}
+        {direction === "asc" ? "Asc" : "Desc"}
+      </button>
+      {current && !currentUnlocked && current.minimum_tier !== "free" && (
+        <Link to="/supporter" className="inline-flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: TIER_COLOR[current.minimum_tier] }}>
+          <Lock className="h-3.5 w-3.5" /> {tierName(current.minimum_tier)} perk
+        </Link>
+      )}
     </div>
   );
 }
@@ -655,6 +872,9 @@ function ErrorBox({ error }: { error: SearchError }) {
       {error.callToAction && <p className="text-muted-foreground">{error.callToAction}</p>}
       {error.detail && <p className="text-muted-foreground font-mono">{error.detail}</p>}
       {error.retryAfterSeconds != null && error.status === 429 && <p className="text-muted-foreground">Try again in {error.retryAfterSeconds}s.</p>}
+      {error.link && (
+        <p><Link to={error.link} className="underline text-amber-300">{error.linkText ?? "Learn more"}</Link></p>
+      )}
       {error.loginRequired && (
         <p><Link to="/login" className="underline text-amber-300">Log in</Link> to run this search.</p>
       )}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"net"
@@ -30,18 +31,18 @@ const (
 )
 const instanceSearchMaxBody = 64 << 10
 
-func newInstanceSearchUserLimitResolver(zed *authz.Authz) serviceinstancesearch.UserLimitResolver {
-	return func(ctx context.Context, user uuid.UUID) (ratelimit.Limit, error) {
+func newInstanceSearchUserLimitResolver(zed *authz.Authz) serviceinstancesearch.UserAccessResolver {
+	return func(ctx context.Context, user uuid.UUID) (serviceinstancesearch.UserAccess, error) {
 		actor := policy.New().User(user)
 		chronicle := policy.New().GlobalChronicle()
 		permissions, err := zed.Check(ctx, nil, chronicle.CanHas_exalted_User(actor), chronicle.CanHas_revered_User(actor), chronicle.CanHas_honored_User(actor))
 		if err != nil {
-			return ratelimit.Limit{}, err
+			return serviceinstancesearch.UserAccess{}, err
 		}
 		if len(permissions) != 3 {
-			return ratelimit.Limit{}, errors.New("check instance search supporter tier: expected 3 permission results")
+			return serviceinstancesearch.UserAccess{}, errors.New("check instance search supporter tier: expected 3 permission results")
 		}
-		return serviceinstancesearch.LimitForTier(highestSupporterTier(permissions[0], permissions[1], permissions[2])), nil
+		return serviceinstancesearch.AccessForTier(highestSupporterTier(permissions[0], permissions[1], permissions[2])), nil
 	}
 }
 func instanceSearchCaller(r *http.Request) serviceinstancesearch.Caller {
@@ -68,6 +69,18 @@ func writeSearchResult(w http.ResponseWriter, r *http.Request, result serviceins
 	switch {
 	case errors.Is(result.Err, serviceinstancesearch.ErrInvalid):
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid search.", Detail: strings.TrimPrefix(result.Err.Error(), serviceinstancesearch.ErrInvalid.Error()+"\n")})
+	case errors.Is(result.Err, serviceinstancesearch.ErrSupporterRequired):
+		tierName := strings.ToUpper(result.RequiredTier[:1]) + result.RequiredTier[1:]
+		article := "a"
+		if result.RequiredTier == "honored" {
+			article = "an"
+		}
+		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
+			Message:      fmt.Sprintf("Sorting by this property is %s %s supporter perk.", article, tierName),
+			CallToAction: fmt.Sprintf("Become %s %s supporter to use this sort order.", article, tierName),
+			Link:         "/supporter",
+			LinkText:     "View supporter perks",
+		})
 	case errors.Is(result.Err, serviceinstancesearch.ErrLoginRequired):
 		response := chroniclesdk.Response{Message: "Log in to use advanced search.", Detail: strings.TrimPrefix(result.Err.Error(), serviceinstancesearch.ErrLoginRequired.Error()+"\n")}
 		if !explain {

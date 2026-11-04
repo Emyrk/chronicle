@@ -1,4 +1,4 @@
-import type { InstanceSearchFieldsResponse } from "@/api/typesGenerated";
+import type { InstanceSearchFieldsResponse, InstanceSearchSort } from "@/api/typesGenerated";
 import { fieldLabel } from "./fieldLabels";
 import type { Node } from "./queryModel";
 
@@ -20,10 +20,11 @@ export interface QueryCost {
  * The rate-limit cost the server will charge for a search, worked out the
  * same way the compiler does (instancesearch.Compile): a base, each field's
  * cost, and a weight per or group, not, player / pull block and count block;
- * and groups are free. The weights come from GET /search/fields, so they always match
- * the backend. Pass the tree that will be sent (already pruned).
+ * and groups are free. A selected sort adds its registry cost. The weights come
+ * from GET /search/fields, so they always match the backend. Pass the tree that
+ * will be sent (already pruned).
  */
-export function queryCost(tree: Node | undefined, desc: InstanceSearchFieldsResponse): QueryCost {
+export function queryCost(tree: Node | undefined, desc: InstanceSearchFieldsResponse, sort?: InstanceSearchSort): QueryCost {
   const fieldCost = new Map(desc.fields.map((f) => [f.name, f.cost]));
   const parts = new Map<string, CostPart>();
   const add = (label: string, cost: number) => {
@@ -53,6 +54,10 @@ export function queryCost(tree: Node | undefined, desc: InstanceSearchFieldsResp
     }
   };
   walk(tree);
+  if (sort) {
+    const option = desc.sorts.find((candidate) => candidate.field === sort.field);
+    if (option && option.cost > 0) add(`Sort: ${option.label}`, option.cost);
+  }
 
   const sorted = [...parts.values()].sort((a, b) => b.cost - a.cost || a.label.localeCompare(b.label));
   const total = desc.cost_base + sorted.reduce((sum, p) => sum + p.cost, 0);

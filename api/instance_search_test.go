@@ -18,7 +18,6 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
-	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/Emyrk/chronicle/internal/services/serviceinstancesearch"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
@@ -76,6 +75,48 @@ func TestInstanceSearch(t *testing.T) {
 		api, _ := newInstanceSearchAPI(t)
 		rec := doSearch(t, api, uuid.New(), "10.0.0.1", advancedSearch)
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	})
+
+	t.Run("SortTierRequirements", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			name      string
+			user      uuid.UUID
+			tier      string
+			field     string
+			boss      string
+			status    int
+			wantError string
+		}{
+			{name: "AnonymousFree", field: "instance.name", status: http.StatusOK},
+			{name: "Free", user: uuid.New(), tier: "free", field: "instance.name", status: http.StatusOK},
+			{name: "FreeNeedsHonored", user: uuid.New(), tier: "free", field: "instance.clear_time_ms", status: http.StatusForbidden, wantError: "Honored supporter perk"},
+			{name: "HonoredIdleTime", user: uuid.New(), tier: "honored", field: "instance.idle_time_ms", status: http.StatusOK},
+			{name: "HonoredKillTime", user: uuid.New(), tier: "honored", field: "instance.kill_time_ms", boss: "Ragnaros", status: http.StatusOK},
+			{name: "HonoredNeedsReveredDeaths", user: uuid.New(), tier: "honored", field: "instance.deaths", status: http.StatusForbidden, wantError: "Revered supporter perk"},
+			{name: "Honored", user: uuid.New(), tier: "honored", field: "instance.clear_time_ms", status: http.StatusOK},
+			{name: "HonoredNeedsRevered", user: uuid.New(), tier: "honored", field: "instance.clear_parse", status: http.StatusForbidden, wantError: "Revered supporter perk"},
+			{name: "Revered", user: uuid.New(), tier: "revered", field: "instance.clear_parse", status: http.StatusOK},
+			{name: "Exalted", user: uuid.New(), tier: "exalted", field: "instance.clear_parse", status: http.StatusOK},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				api, _ := newInstanceSearchAPI(t)
+				api.instanceSearch.SetUserAccessResolver(func(context.Context, uuid.UUID) (serviceinstancesearch.UserAccess, error) {
+					return serviceinstancesearch.AccessForTier(tc.tier), nil
+				})
+				body := `{"sort": {"field": "` + tc.field + `"`
+				if tc.boss != "" {
+					body += `, "boss": "` + tc.boss + `"`
+				}
+				body += `}}`
+				rec := doSearch(t, api, tc.user, "10.0.0.1", body)
+				require.Equal(t, tc.status, rec.Code, rec.Body.String())
+				if tc.wantError != "" {
+					require.Contains(t, rec.Body.String(), tc.wantError)
+				}
+			})
+		}
 	})
 
 	t.Run("Invalid", func(t *testing.T) {
@@ -260,8 +301,8 @@ func TestInstanceSearchSupporterLimits(t *testing.T) {
 			require.InDelta(t, 60, limit.PerSecond*60, 0.001)
 
 			api, _ := newInstanceSearchAPI(t)
-			api.instanceSearch.SetUserLimitResolver(func(context.Context, uuid.UUID) (ratelimit.Limit, error) {
-				return limit, nil
+			api.instanceSearch.SetUserAccessResolver(func(context.Context, uuid.UUID) (serviceinstancesearch.UserAccess, error) {
+				return serviceinstancesearch.UserAccess{Limit: limit, Tier: tc.tier}, nil
 			})
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/raidlogs/search/limit", nil)
 			ctx := chronauth.WithClaims(testutil.Context(t, testutil.WaitShort), &claims.Claims{Subject: uuid.New()})
@@ -291,8 +332,8 @@ func TestInstanceSearchMalformedBodyTierFailure(t *testing.T) {
 		t.Run(strconv.FormatBool(explain), func(t *testing.T) {
 			t.Parallel()
 			api, _ := newInstanceSearchAPI(t)
-			api.instanceSearch.SetUserLimitResolver(func(context.Context, uuid.UUID) (ratelimit.Limit, error) {
-				return ratelimit.Limit{}, errors.New("supporter authorization unavailable")
+			api.instanceSearch.SetUserAccessResolver(func(context.Context, uuid.UUID) (serviceinstancesearch.UserAccess, error) {
+				return serviceinstancesearch.UserAccess{}, errors.New("supporter authorization unavailable")
 			})
 			user := uuid.New()
 			var rec *httptest.ResponseRecorder

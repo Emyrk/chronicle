@@ -6,7 +6,6 @@ import (
 
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/billing"
-	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
@@ -38,17 +37,17 @@ func (*Runtime) DependsOn() []string {
 }
 func (r *Runtime) Start(context.Context) error {
 	zed := serviceauthz.Authz(r.broker)
-	resolver := func(ctx context.Context, user uuid.UUID) (ratelimit.Limit, error) {
+	resolver := func(ctx context.Context, user uuid.UUID) (UserAccess, error) {
 		actor := policy.New().User(user)
 		chronicle := policy.New().GlobalChronicle()
 		permissions, err := zed.Check(ctx, nil, chronicle.CanHas_exalted_User(actor), chronicle.CanHas_revered_User(actor), chronicle.CanHas_honored_User(actor))
 		if err != nil {
-			return ratelimit.Limit{}, err
+			return UserAccess{}, err
 		}
 		if len(permissions) != 3 {
-			return ratelimit.Limit{}, errors.New("check instance search supporter tier: expected 3 permission results")
+			return UserAccess{}, errors.New("check instance search supporter tier: expected 3 permission results")
 		}
-		tier := ""
+		tier := "free"
 		switch {
 		case permissions[0]:
 			tier = billing.TierExalted
@@ -57,7 +56,7 @@ func (r *Runtime) Start(context.Context) error {
 		case permissions[2]:
 			tier = billing.TierHonored
 		}
-		return LimitForTier(tier), nil
+		return AccessForTier(tier), nil
 	}
 	r.search = New(servicelogger.Logger(r.broker), servicedbstore.DatabaseStore(r.broker), serviceprometheus.Registry(r.broker), resolver)
 	return nil

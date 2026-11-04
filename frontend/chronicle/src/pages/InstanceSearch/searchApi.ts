@@ -31,6 +31,8 @@ export class SearchError extends Error {
   readonly status: number;
   readonly detail?: string;
   readonly callToAction?: string;
+  readonly link?: string;
+  readonly linkText?: string;
   readonly cost: number | null;
   readonly runtimeCost: number | null;
   readonly budget: SearchBudget | null;
@@ -41,6 +43,8 @@ export class SearchError extends Error {
     status: number,
     detail?: string,
     callToAction?: string,
+    link?: string,
+    linkText?: string,
     cost: number | null = null,
     runtimeCost: number | null = null,
     budget: SearchBudget | null = null,
@@ -50,6 +54,8 @@ export class SearchError extends Error {
     this.status = status;
     this.detail = detail;
     this.callToAction = callToAction;
+    this.link = link;
+    this.linkText = linkText;
     this.cost = cost;
     this.runtimeCost = runtimeCost;
     this.budget = budget;
@@ -58,7 +64,7 @@ export class SearchError extends Error {
 
   /** The server wants the user to log in for this query. */
   get loginRequired(): boolean {
-    return this.status === 403;
+    return this.status === 403 && !this.link;
   }
 }
 
@@ -95,7 +101,7 @@ async function searchError(
   budget: SearchBudget | null,
   fallback: string,
 ): Promise<SearchError> {
-  let body: { message?: string; detail?: string; call_to_action?: string } = {};
+  let body: { message?: string; detail?: string; call_to_action?: string; link?: string; link_text?: string } = {};
   try {
     body = await response.json();
   } catch {
@@ -106,6 +112,8 @@ async function searchError(
     response.status,
     body.detail,
     body.call_to_action,
+    body.link,
+    body.link_text,
     cost,
     runtimeCost,
     budget,

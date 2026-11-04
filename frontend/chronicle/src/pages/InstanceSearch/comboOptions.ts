@@ -6,6 +6,8 @@ export interface ComboOption {
   label?: string;
   /** Muted text after the label, e.g. "10 bosses". */
   hint?: string;
+  /** CSS colour for the hint, e.g. a supporter tier's colour on a locked option. */
+  hintColor?: string;
   icon?: ReactNode;
   /** Options with the same group are listed together under a header. */
   group?: string;

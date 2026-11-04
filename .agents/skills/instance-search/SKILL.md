@@ -79,12 +79,33 @@ UIs can show the cost before running: `GET /api/v1/raidlogs/search/fields` retur
 ```json
 {
   "where": <node>,
+  "sort": {"field": "instance.clear_time_ms", "direction": "asc"},
   "limit": 25,
-  "cursor": {"started_at": "...", "id": "..."}
+  "cursor": <the previous response's next>
 }
 ```
 
-`where` is optional (omit = every visible run). `limit` defaults to 25, max 100. Results are newest first; pass the returned `next` as `cursor` for the next page.
+`where` is optional (omit = every visible run). `limit` defaults to 25, max 100. Without `sort`, results are newest first. Sorting uses a fixed allowlist returned by `GET /search/fields` as `sorts`:
+
+| Property | Default | Minimum tier | Added cost |
+|---|---:|---:|---:|
+| `instance.started_at` | desc | free | 0 |
+| `instance.name` | asc | free | 0 |
+| `instance.realm` | asc | free | 0 |
+| `instance.guild` | asc | free | 0 |
+| `instance.difficulty` | asc | free | 0 |
+| `instance.max_players` | desc | free | 0 |
+| `instance.player_count` | desc | Honored | 8 |
+| `instance.bosses_killed` | desc | Honored | 4 |
+| `instance.clear_time_ms` | asc | Honored | 4 |
+| `instance.idle_time_ms` | asc | Honored | 20 |
+| `instance.boss_time_ms` | asc | Honored | 20 |
+| `instance.kill_time_ms` | asc | Honored | 6 |
+| `instance.deaths` | asc | Revered | 4 |
+| `instance.wipes` | asc | Revered | 4 |
+| `instance.clear_parse` | desc | Revered | 6 |
+
+`instance.clear_parse` accepts `parse_scope: "server" | "realm" | "guild"`. `instance.kill_time_ms` requires one `boss` name and sorts by that boss's fastest clean/partial kill in each run. Directions are `asc` and `desc`; missing values always sort last. Free sorts are also available to anonymous callers whose query otherwise fits the anonymous subset. Pass the returned `next` object back unchanged as `cursor`; it pins the normalized sort and keyset value.
 
 A **node** sets exactly one of:
 

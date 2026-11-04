@@ -14,7 +14,8 @@ WITH matched AS (
     g.name AS guild_name,
     li.difficulty_name,
     li.max_players,
-    COALESCE(li.start_time, wlg.created_at) AS started_at
+    COALESCE(li.start_time, wlg.created_at) AS started_at,
+    COALESCE(li.start_time, wlg.created_at) AS sort_value
   FROM log_instances li
   JOIN wow_server_realms wsr ON wsr.id = li.realm_id
   JOIN parsed_log_group plg ON plg.id = li.log_group_id
@@ -36,15 +37,16 @@ SELECT p.id, p.hashed_slug, p.name, p.realm_id, p.realm_name, p.guild_id, p.guil
   (SELECT count(DISTINCT be.name) FROM log_instance_encounters be
     WHERE be.instance_id = p.id AND be.boss AND be.kill_type IN ('clean', 'partial')) AS bosses_killed,
   (SELECT sr.ranked_duration_ms FROM instance_speedruns sr
-    WHERE sr.instance_id = p.id AND sr.ranked_duration_ms > 0) AS clear_time_ms
+    WHERE sr.instance_id = p.id AND sr.ranked_duration_ms > 0) AS clear_time_ms,
+  to_char(p.sort_value AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_value
 FROM (
   SELECT m.*
   FROM matched m
   WHERE TRUE
-  ORDER BY m.started_at DESC, m.id DESC
+  ORDER BY m.sort_value DESC NULLS LAST, m.id DESC
   LIMIT $7
 ) p
-ORDER BY p.started_at DESC, p.id DESC
+ORDER BY p.sort_value DESC NULLS LAST, p.id DESC
 
 -- args:
 [
