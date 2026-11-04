@@ -33,6 +33,7 @@ import {
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, planarStep, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, wheelZoomDistance, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { unwrapCompassRadians } from "./mapCompassModel";
+import { createShotHold, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SLICE_MS, startFollowTrackBuild, type FollowTrackBuild, FOLLOW_SMOOTH_SECONDS, followKeyAt, glideDurationMs, glidePoseAt, holdShot, isReplayJump, type FollowKey, type FollowTrack, type GlidePose } from "./followCamera";
 import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanMarkerIcon, PlanPoint } from "./plan/mapPlan";
@@ -322,6 +323,13 @@ const DOUBLE_CLICK_OUT_FACTOR = 2;
 const DIRECTOR_SETTLED = 1e-3;
 // The longest step the Director's springs take, so a stalled tab does not jump.
 const DIRECTOR_MAX_STEP_SECONDS = 0.1;
+// With even the highest elevation blocked, the shot comes this much closer.
+const CLEAR_SHOT_SHORTEN = 0.75;
+// A wall pulls the Director's camera in over about this long (seconds) instead
+// of in one frame; it eases back out at the distance spring's pace.
+const DIRECTOR_COLLISION_IN_SECONDS = 0.25;
+// A user's jump (cutDirector) cuts when the replay jumps within this long of it.
+const DIRECTOR_CUT_WINDOW_MS = 1_000;
 
 export type DungeonMeshState = "loading" | "ready" | "failed";
 
@@ -359,6 +367,39 @@ export interface MapSceneDroneInput {
 export interface MapSceneDirector {
   /** The hostile units that count as the fight's boss. */
   bossGuids: ReadonlySet<string>;
+}
+
+/** A unit as the follow track reads it at one replay time: an artwork point and what it is. */
+export interface MapSceneFollowUnit {
+  guid: string;
+  point: MapPoint;
+  player: boolean;
+  boss: boolean;
+  dead: boolean;
+}
+
+/**
+ * The recorded replay the Director looks ahead in: the units (players and
+ * bosses) at any replay time. Keep the object stable while the data is the
+ * same; a new one rebuilds the track.
+ */
+export interface MapSceneFollowSource {
+  /** What the data is, apart from how far it has streamed: a new key rebuilds the track; growth alone does not. */
+  key: string;
+  startMs: number;
+  /** How far the data reaches now; it may grow while the result streams in. */
+  readonly endMs: number;
+  unitsAt: (ms: number) => readonly MapSceneFollowUnit[];
+}
+
+/** What a follow track was built for. */
+interface FollowTrackInputs {
+  key: string;
+  subject: string | null;
+  aspect: number;
+  scale: number;
+  speed: number;
+  endMs: number;
 }
 
 /** The fight the mesh camera is locked to: its centre (artwork point) and Fit zoom. */
@@ -933,6 +974,41 @@ export class MapScene3D {
   private collisionLastMs = 0;
   // Who the last frame held, for the straggler hysteresis.
   private readonly directorInFrame = new Set<string>();
+  // The look-ahead (chronicle-1579): the recorded replay, the framing track
+  // built from it off the frame loop, and what that track was built for.
+  private followSource: MapSceneFollowSource | null = null;
+  // The last finished build and what it was for; its track is null when
+  // nobody (or the followed unit) was ever there to frame, which is cached
+  // too, so an empty floor is not rebuilt every frame.
+  private followTrack: FollowTrack | null = null;
+  private followTrackFor: FollowTrackInputs | null = null;
+  // The build in flight, a slice per timer tick so a long run never blocks a frame.
+  private followBuild: { build: FollowTrackBuild; inputs: FollowTrackInputs; timer: ReturnType<typeof setTimeout> } | null = null;
+  // How far past the pan radius the Director left the camera: the user's
+  // pan limit grows by this on handover (and only shrinks), so grabbing the
+  // camera never snaps it back toward the focus in one step.
+  private panSlack = 0;
+  // Whether the replay was playing at the Director's last frame: a pause or
+  // resume re-anchors the jump check rather than reading as a jump.
+  private directorReplayPlaying = false;
+  private readonly followKey: FollowKey = { x: 0, z: 0, radius: 0 };
+  // The replay time the Director last framed, and when, to spot a jump.
+  private directorReplayMs: number | null = null;
+  private directorReplayAt = 0;
+  // Until when a replay jump cuts instead of gliding (a jump the user asked for).
+  private directorCutUntil = 0;
+  // Line-of-sight hysteresis, so the shot cannot flip frame to frame.
+  private readonly shotHold = createShotHold();
+  // The glide across a replay jump, from the pose the camera had.
+  private directorGlide: { start: number; duration: number } | null = null;
+  private readonly glideFrom: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
+  private readonly glideTo: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
+  private readonly glidePose: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
+  // The Director's collision: the distance it wants (the collision ray's
+  // length), what the last ray allowed, and the eased reach between them.
+  private directorWant: number | null = null;
+  private directorAllowed: number | null = null;
+  private readonly directorReach: DampedValue = { value: 0, velocity: 0 };
   // Refilled per frame so the Director allocates nothing while it runs.
   private readonly directorUnits: DirectorUnit[] = [];
   // A double-click easing the camera to the point (and distance) clicked.
@@ -1596,6 +1672,8 @@ export class MapScene3D {
   /** Cuts the Director straight to its next shot (the replay jumped), instead of springing there from the old one. */
   cutDirector() {
     if (!this.director) return;
+    // A replay jump that lands a frame or two later still cuts, not glides.
+    this.directorCutUntil = performance.now() + DIRECTOR_CUT_WINDOW_MS;
     this.directorGoal.seeded = false;
     this.directorInFrame.clear();
     this.engageDirector(true);
@@ -1623,6 +1701,88 @@ export class MapScene3D {
     this.directorDistance.velocity = 0;
     this.directorElevation.value = this.cameraElevationDeg();
     this.directorElevation.velocity = 0;
+    this.directorReach.value = this.directorDistance.value;
+    this.directorReach.velocity = 0;
+    this.directorWant = null;
+    this.directorAllowed = null;
+    this.directorReplayMs = null;
+    this.directorGlide = null;
+    Object.assign(this.shotHold, createShotHold());
+  }
+
+  /**
+   * The recorded replay the Director looks ahead in (null: it frames each
+   * frame as it comes). The framing track is built from it off the frame loop.
+   */
+  setFollowSource(source: MapSceneFollowSource | null) {
+    if (source === this.followSource) return;
+    this.followSource = source;
+    this.requestRender();
+  }
+
+  // The replay time the effects show at `now` (the effect clock, run ahead while playing).
+  private replayNow(now: number): number {
+    const { clock } = this;
+    return clock.playing ? clock.ms + Math.min(now - clock.at, MAX_EXTRAPOLATE_MS) * clock.speed : clock.ms;
+  }
+
+  // The framing track for the current source and followed unit, or null
+  // while none fits (or the last build found nobody to frame: the per-frame
+  // path then frames). A missing track is built in slices off the frame loop;
+  // one for another speed, or one the data has grown past, still serves until
+  // its replacement is ready. Growth only rebuilds once the replay nears the
+  // old track's end, so a streaming result does not rebuild on every chunk.
+  private currentFollowTrack(replayMs: number): FollowTrack | null {
+    const mesh = this.dungeonMesh;
+    const source = this.followSource;
+    if (!mesh || !source) return null;
+    const subject = this.directorSubject;
+    const speed = Math.max(1, this.clock.speed);
+    const built = this.followTrackFor;
+    const fits = this.followInputsMatch(built, source.key, subject, mesh.scale);
+    const stale = !fits
+      || built!.speed !== speed
+      || (source.endMs > built!.endMs && replayMs > built!.endMs - FOLLOW_CENTRE_WINDOW_MS * speed);
+    const pending = this.followBuild?.inputs ?? null;
+    if (stale && !(this.followInputsMatch(pending, source.key, subject, mesh.scale) && pending!.speed === speed)) {
+      this.startFollowBuild(source, { key: source.key, subject, aspect: this.aspect, scale: mesh.scale, speed, endMs: source.endMs });
+    }
+    return fits ? this.followTrack : null;
+  }
+
+  // Whether `inputs` is a build of the same data, followed unit and placement.
+  private followInputsMatch(inputs: FollowTrackInputs | null, key: string, subject: string | null, scale: number): boolean {
+    return inputs !== null && inputs.key === key && inputs.subject === subject && inputs.aspect === this.aspect && inputs.scale === scale;
+  }
+
+  // Starts (or restarts) the sliced follow-track build for `inputs`.
+  private startFollowBuild(source: MapSceneFollowSource, inputs: FollowTrackInputs) {
+    if (this.followBuild) clearTimeout(this.followBuild.timer);
+    const { aspect } = inputs;
+    const build = startFollowTrackBuild({
+      startMs: source.startMs,
+      endMs: inputs.endMs,
+      scale: inputs.scale,
+      subjectGuid: inputs.subject,
+      speed: inputs.speed,
+      unitsAt: (ms) => source.unitsAt(ms).map((unit): DirectorUnit => {
+        const { x, z } = mapPointToScene(unit.point, aspect, GROUND_WIDTH);
+        return { guid: unit.guid, x, z, player: unit.player, boss: unit.boss, dead: unit.dead };
+      }),
+    });
+    const slice = () => {
+      const current = this.followBuild;
+      if (this.disposed || !current || current.build !== build) return;
+      if (!build.step(FOLLOW_SLICE_MS)) {
+        current.timer = setTimeout(slice, 0);
+        return;
+      }
+      this.followBuild = null;
+      this.followTrack = build.result;
+      this.followTrackFor = inputs;
+      this.requestRender();
+    };
+    this.followBuild = { build, inputs, timer: setTimeout(slice, 0) };
   }
 
   /** Whether the Director is the one moving the camera right now. */
@@ -1998,14 +2158,27 @@ export class MapScene3D {
     // made (a zoom, a new shot) counts as a new distance to come back out to.
     const arrived = position.distanceTo(target);
     let moved = false;
+    // The pan limit is for the user's camera: the Director's shot follows the
+    // recorded group, and clamping it to the (grid-snapped, per-tick) follow
+    // centre would step it.
+    // Handing over, the limit is re-based to where the Director left the
+    // camera (panSlack), so grabbing it never snaps it back in one step.
     if (this.focusCentre) {
-      const clamped = clampToRadius(target, this.focusCentre, MESH_PAN_RADIUS_YARDS * mesh.scale);
-      if (clamped !== target) {
-        position.x += clamped.x - target.x;
-        position.z += clamped.z - target.z;
-        target.x = clamped.x;
-        target.z = clamped.z;
-        moved = true;
+      const panRadius = MESH_PAN_RADIUS_YARDS * mesh.scale;
+      const beyond = () => Math.max(0, Math.hypot(target.x - this.focusCentre!.x, target.z - this.focusCentre!.z) - panRadius);
+      if (this.directing()) {
+        this.panSlack = beyond();
+      } else {
+        const clamped = clampToRadius(target, this.focusCentre, panRadius + this.panSlack);
+        if (clamped !== target) {
+          position.x += clamped.x - target.x;
+          position.z += clamped.z - target.z;
+          target.x = clamped.x;
+          target.z = clamped.z;
+          moved = true;
+        }
+        // Only shrinks: panning back toward the focus gives the slack up.
+        this.panSlack = Math.min(this.panSlack, beyond());
       }
     }
     const floor = this.pivotFloor(target.x, target.z) + this.pivotLift;
@@ -2106,14 +2279,23 @@ export class MapScene3D {
     const shown = position.distanceTo(target);
     const mesh = this.dungeonMesh;
     if (!mesh || shown <= 1e-6) return false;
-    const last = this.orbitShownDistance;
-    if (last === null || this.orbitWantDistance === null || Math.abs(arrived - last) > 1e-4 * Math.max(1, arrived)) this.orbitWantDistance = arrived;
-    const want = this.orbitWantDistance;
     // From the fight's height, as clearShot does: the target sits on the
     // floor, which a ray from it would graze at once.
     const from = this.collisionFrom.copy(target);
     from.y += MESH_PLAYER_HEIGHT_YARDS * mesh.scale;
     const direction = this.collisionDirection.copy(position).sub(target).divideScalar(shown);
+    // The Director eases its own camera in from a wall (updateDirector reads
+    // what this ray allows), so a cave wall is not a one-frame pull-in.
+    if (this.directing() && this.directorWant !== null) {
+      const want = this.directorWant;
+      const hit = want > 0 ? this.meshHitDistance(from, this.collisionEye.copy(direction).multiplyScalar(want).add(from)) : null;
+      this.directorAllowed = hit === null ? null : Math.max(Math.min(want, this.controls.minDistance), hit - ORBIT_COLLISION_PADDING);
+      this.orbitWantDistance = shown;
+      return false;
+    }
+    const last = this.orbitShownDistance;
+    if (last === null || this.orbitWantDistance === null || Math.abs(arrived - last) > 1e-4 * Math.max(1, arrived)) this.orbitWantDistance = arrived;
+    const want = this.orbitWantDistance;
     const { distance: next, easing } = this.collideCamera(from, direction, shown, want, ORBIT_COLLISION_PADDING, Math.min(want, this.controls.minDistance), dt);
     if (next !== shown) position.sub(target).multiplyScalar(next / shown).add(target);
     return easing;
@@ -2148,10 +2330,14 @@ export class MapScene3D {
       if (!this.meshBlocks(from, to)) return { elevation: capped, distance };
       if (capped >= MAX_CINEMATIC_ELEVATION_DEG) {
         // Still blocked overhead: come in closer instead.
-        const shortened = Math.max(MIN_DOUBLE_CLICK_DISTANCE_YARDS * (mesh?.scale ?? 1), distance * 0.75);
-        return { elevation: capped, distance: shortened };
+        return { elevation: capped, distance: this.shortenedShot(distance) };
       }
     }
+  }
+
+  // How close a shot blocked even from overhead comes in.
+  private shortenedShot(distance: number): number {
+    return Math.max(MIN_DOUBLE_CLICK_DISTANCE_YARDS * (this.dungeonMesh?.scale ?? 1), distance * CLEAR_SHOT_SHORTEN);
   }
 
   // Re-fills the pooled unit list the framing rule reads.
@@ -2173,9 +2359,12 @@ export class MapScene3D {
   }
 
   /**
-   * One Director step: works out the shot that holds the boss and the group,
-   * moves the goal only when the fit leaves the dead zone, and springs the
-   * camera toward it. Returns whether the springs still need another frame.
+   * One Director step: works out the shot that holds the boss and the group
+   * and springs the camera toward it. With a follow source the shot comes
+   * from the look-ahead track at the replay time (continuous, so the springs
+   * only smooth what is left); without one, from this frame's framing, moved
+   * only when it leaves the dead zones. A replay jump glides (or cuts, when
+   * the user asked for it). Returns whether the camera needs another frame.
    */
   private updateDirector(now: number): boolean {
     const mesh = this.dungeonMesh;
@@ -2189,25 +2378,42 @@ export class MapScene3D {
     });
     const dt = this.directorAt === 0 ? 1 / 60 : Math.min(DIRECTOR_MAX_STEP_SECONDS, (now - this.directorAt) / 1000);
     this.directorAt = now;
-    if (!frame) return false;
     this.directorInFrame.clear();
-    for (const guid of frame.guids) this.directorInFrame.add(guid);
+    if (frame) for (const guid of frame.guids) this.directorInFrame.add(guid);
+    const replayMs = this.replayNow(now);
+    const track = this.currentFollowTrack(replayMs);
+    if (!frame && !track) return false;
 
-    const radius = Math.max(frame.radius, MIN_FRAME_RADIUS_YARDS * mesh.scale);
+    // A replay jump: the clock moved by more than playback explains. A pause
+    // or resume since the last frame re-anchors instead (the paused time is
+    // not playback it missed).
+    const previousMs = this.clock.playing === this.directorReplayPlaying ? this.directorReplayMs : null;
+    const expectedMs = this.clock.playing ? (now - this.directorReplayAt) * this.clock.speed : 0;
+    const jumped = previousMs !== null && isReplayJump(previousMs, replayMs, expectedMs, this.clock.speed);
+    this.directorReplayMs = replayMs;
+    this.directorReplayAt = now;
+    this.directorReplayPlaying = this.clock.playing;
+
+    const key = track ? followKeyAt(track, replayMs, this.followKey) : null;
+    const centreX = key ? key.x : frame!.x;
+    const centreZ = key ? key.z : frame!.z;
+    const frameRadius = key ? key.radius : frame!.radius;
+    const radius = Math.max(frameRadius, MIN_FRAME_RADIUS_YARDS * mesh.scale);
     const yaw = this.cameraYaw();
     // The aim point sits past the fight, away from the camera, so the fight
     // reads below the centre line with the room above it.
     const ahead = AIM_AHEAD_FRACTION * radius;
-    const aimX = frame.x - Math.sin(yaw) * ahead;
-    const aimZ = frame.z - Math.cos(yaw) * ahead;
-    const fitted = frameDistance(frame.radius, {
+    const aimX = centreX - Math.sin(yaw) * ahead;
+    const aimZ = centreZ - Math.cos(yaw) * ahead;
+    const fitted = frameDistance(frameRadius, {
       verticalFov: (this.camera.fov * Math.PI) / 180,
       aspect: this.camera.aspect,
       elevationDeg: this.directorElevation.value,
       scale: mesh.scale,
     });
     const goal = this.directorGoal;
-    if (!goal.seeded) {
+    if (!goal.seeded || key) {
+      // The track is already smooth: the goal follows it exactly.
       goal.x = aimX;
       goal.z = aimZ;
       goal.distance = fitted;
@@ -2220,27 +2426,90 @@ export class MapScene3D {
       }
       if (exceedsDeadZone(goal.distance, fitted, DISTANCE_DEAD_ZONE)) goal.distance = fitted;
     }
-    const shot = this.clearShot(goal.x, goal.z, goal.distance, yaw);
+    const raw = this.clearShot(goal.x, goal.z, goal.distance, yaw);
+    const hold = holdShot(this.shotHold, raw.elevation, raw.distance < goal.distance, now);
+    const shotElevation = hold.elevationDeg;
+    const shotDistance = hold.shortened ? this.shortenedShot(goal.distance) : goal.distance;
+
+    if (jumped) {
+      if (now < this.directorCutUntil) {
+        this.directorCutUntil = 0;
+        this.directorSnapPending = true;
+      } else if (!this.directorSnapPending) {
+        const from = this.glideFrom;
+        from.x = this.directorX.value;
+        from.z = this.directorZ.value;
+        from.distance = this.directorDistance.value;
+        from.elevationDeg = this.directorElevation.value;
+        from.vx = this.directorX.velocity;
+        from.vz = this.directorZ.velocity;
+        // Started a frame back, so this frame already moves (no one-frame stall).
+        this.directorGlide = { start: now - dt * 1000, duration: glideDurationMs(Math.hypot(goal.x - from.x, goal.z - from.z), mesh.scale) };
+      }
+    }
 
     if (this.directorSnapPending) {
       this.directorSnapPending = false;
+      this.directorGlide = null;
       const x = snapDampedValue(this.directorX, goal.x);
       const z = snapDampedValue(this.directorZ, goal.z);
-      const distance = snapDampedValue(this.directorDistance, shot.distance);
-      const elevation = snapDampedValue(this.directorElevation, shot.elevation);
-      this.placeDirectorCamera(x, z, distance, elevation, yaw);
+      const distance = snapDampedValue(this.directorDistance, shotDistance);
+      const elevation = snapDampedValue(this.directorElevation, shotElevation);
+      this.placeDirectorCamera(x, z, this.directorReachFor(distance, dt, true), elevation, yaw);
       return false;
     }
 
-    const x = smoothDamp(this.directorX, goal.x, TARGET_SMOOTH_SECONDS, dt);
-    const z = smoothDamp(this.directorZ, goal.z, TARGET_SMOOTH_SECONDS, dt);
-    const distance = smoothDamp(this.directorDistance, shot.distance, DISTANCE_SMOOTH_SECONDS, dt);
-    const elevation = smoothDamp(this.directorElevation, shot.elevation, TARGET_SMOOTH_SECONDS, dt);
-    this.placeDirectorCamera(x, z, distance, elevation, yaw);
+    const glide = this.directorGlide;
+    if (glide) {
+      const to = this.glideTo;
+      to.x = goal.x;
+      to.z = goal.z;
+      to.distance = shotDistance;
+      to.elevationDeg = shotElevation;
+      const t = Math.min(1, (now - glide.start) / glide.duration);
+      const lastX = this.directorX.value;
+      const lastZ = this.directorZ.value;
+      const pose = glidePoseAt(this.glideFrom, to, t, this.glidePose, glide.duration);
+      // The springs ride along (velocity too), so the springs, or another
+      // jump's glide, carry on from here without a corner.
+      snapDampedValue(this.directorX, pose.x);
+      snapDampedValue(this.directorZ, pose.z);
+      this.directorX.velocity = (pose.x - lastX) / dt;
+      this.directorZ.velocity = (pose.z - lastZ) / dt;
+      snapDampedValue(this.directorDistance, pose.distance);
+      snapDampedValue(this.directorElevation, pose.elevationDeg);
+      if (t >= 1) this.directorGlide = null;
+      this.placeDirectorCamera(pose.x, pose.z, this.directorReachFor(pose.distance, dt, false), pose.elevationDeg, yaw);
+      return true;
+    }
+
+    const smooth = key ? FOLLOW_SMOOTH_SECONDS : TARGET_SMOOTH_SECONDS;
+    const x = smoothDamp(this.directorX, goal.x, smooth, dt);
+    const z = smoothDamp(this.directorZ, goal.z, smooth, dt);
+    const distance = smoothDamp(this.directorDistance, shotDistance, DISTANCE_SMOOTH_SECONDS, dt);
+    const elevation = smoothDamp(this.directorElevation, shotElevation, TARGET_SMOOTH_SECONDS, dt);
+    const reach = this.directorReachFor(distance, dt, false);
+    this.placeDirectorCamera(x, z, reach, elevation, yaw);
     const settled = Math.hypot(x - goal.x, z - goal.z) <= DIRECTOR_SETTLED * mesh.scale
-      && Math.abs(distance - shot.distance) <= DIRECTOR_SETTLED * mesh.scale
-      && Math.abs(elevation - shot.elevation) <= DIRECTOR_SETTLED;
-    return !settled;
+      && Math.abs(distance - shotDistance) <= DIRECTOR_SETTLED * mesh.scale
+      && Math.abs(reach - Math.min(distance, this.directorAllowed ?? distance)) <= DIRECTOR_SETTLED * mesh.scale
+      && Math.abs(elevation - shotElevation) <= DIRECTOR_SETTLED;
+    // Playing, the track keeps moving; paused, the line-of-sight hold may still release.
+    return !settled || (key !== null && this.clock.playing) || this.shotHold.lowerSinceMs !== null;
+  }
+
+  // The distance the Director's camera sits at: `distance`, or nearer while
+  // the last collision ray found a wall, easing in over
+  // DIRECTOR_COLLISION_IN_SECONDS rather than in one frame.
+  private directorReachFor(distance: number, dt: number, snap: boolean): number {
+    const previous = this.directorWant;
+    // Not held in by a wall last frame: the reach is just the distance.
+    const free = previous === null || this.directorReach.value >= previous - 1e-4 * Math.max(1, previous);
+    this.directorWant = distance;
+    const allowed = Math.min(distance, this.directorAllowed ?? distance);
+    if (snap || (free && allowed >= distance)) return snapDampedValue(this.directorReach, allowed);
+    const smooth = allowed < this.directorReach.value ? DIRECTOR_COLLISION_IN_SECONDS : DISTANCE_SMOOTH_SECONDS;
+    return Math.min(distance, smoothDamp(this.directorReach, allowed, smooth, dt));
   }
 
   // Steps a double-click move; returns whether it needs another frame.
@@ -2332,6 +2601,7 @@ export class MapScene3D {
 
   dispose() {
     this.disposed = true;
+    if (this.followBuild) clearTimeout(this.followBuild.timer);
     this.unlockPointer();
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
