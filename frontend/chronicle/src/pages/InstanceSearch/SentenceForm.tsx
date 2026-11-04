@@ -544,32 +544,37 @@ function NameToken({ value, onChange, disabled }: { value: string; onChange: (v:
 /** "Molten Core" / "any raid": raid art tiles, plus free text for anything else. */
 function ZoneToken({ value, match, zones, onChange }: { value: string; match: TextMatch; zones: readonly Suggestion[]; onChange: (zone: string, match: TextMatch) => void }) {
   const options = toOptions(zones);
-  const raids = options.filter((o) => o.group === "Raids");
-  const others = options.filter((o) => o.group !== "Raids");
+  const isRaid = (option: (typeof options)[number]) => option.group?.toLowerCase().endsWith("raids") ?? false;
+  const raids = options.filter(isRaid);
+  const raidGroups = [...new Set(raids.map((option) => option.group ?? "Raids"))];
+  const others = options.filter((option) => !isRaid(option));
   const picked = (name: string) => value.toLowerCase() === name.toLowerCase();
   const label = match === "contains" && !options.some((o) => o.value.toLowerCase() === value.toLowerCase()) ? `“${value}”` : value;
   return (
     <Token label={label} filled={value.trim() !== ""} empty="any raid" width="w-[26rem]">
-      {raids.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-          {raids.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => onChange(picked(o.value) ? "" : o.value, "exact")}
-              className={cn(
-                "relative h-14 overflow-hidden rounded-md bg-cover bg-center text-left ring-1 transition",
-                picked(o.value) ? "ring-2 ring-primary" : "ring-white/10 hover:ring-white/30",
-              )}
-              style={{ backgroundImage: `url(${getInstanceBackground(o.value)})` }}
-            >
-              <span className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
-              <span className="absolute bottom-1 left-1.5 right-1.5 text-2xs font-semibold leading-tight text-white drop-shadow">{o.value}</span>
-              {picked(o.value) && <Check className="absolute top-1 right-1 h-3.5 w-3.5 text-primary drop-shadow" />}
-            </button>
-          ))}
+      {raidGroups.map((group, groupIndex) => (
+        <div key={group} className={groupIndex > 0 ? "mt-3" : undefined}>
+          <p className="mb-1.5 text-2xs font-medium uppercase tracking-wider text-muted-foreground">{group}</p>
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+            {raids.filter((option) => (option.group ?? "Raids") === group).map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => onChange(picked(o.value) ? "" : o.value, "exact")}
+                className={cn(
+                  "relative h-14 overflow-hidden rounded-md bg-cover bg-center text-left ring-1 transition",
+                  picked(o.value) ? "ring-2 ring-primary" : "ring-white/10 hover:ring-white/30",
+                )}
+                style={{ backgroundImage: `url(${getInstanceBackground(o.value)})` }}
+              >
+                <span className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
+                <span className="absolute bottom-1 left-1.5 right-1.5 text-2xs font-semibold leading-tight text-white drop-shadow">{o.value}</span>
+                {picked(o.value) && <Check className="absolute top-1 right-1 h-3.5 w-3.5 text-primary drop-shadow" />}
+              </button>
+            ))}
+          </div>
         </div>
-      )}
+      ))}
       <p className="text-2xs text-muted-foreground mt-3 mb-1.5">{raids.length ? "Or a dungeon / any name" : "Zone name"}</p>
       <div className="flex items-center gap-1.5">
         <SuggestInput className="flex-1" value={value} onChange={(v) => onChange(v, match)} suggestions={others} placeholder="e.g. Scholomance" />
