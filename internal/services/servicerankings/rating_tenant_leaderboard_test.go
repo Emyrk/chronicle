@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
@@ -20,6 +21,8 @@ import (
 type tenantLeaderboardStub struct {
 	tenantRatingReader
 	tenant, generation uuid.UUID
+	evolving           bool
+	noActiveGeneration bool
 	calls              int
 	changeAt           int
 	guildBoss          []database.ListActiveGuildTenantBossScoresRow
@@ -29,10 +32,33 @@ type tenantLeaderboardStub struct {
 	params             []any
 }
 
+func (s *tenantLeaderboardStub) GetTenantRatingReadState(context.Context, uuid.UUID) (string, error) {
+	if s.evolving {
+		return "evolving", nil
+	}
+	return "legacy", nil
+}
+
+func (s *tenantLeaderboardStub) ListEvolvingGuildTenantBossScores(context.Context, database.ListEvolvingGuildTenantBossScoresParams) ([]database.ListEvolvingGuildTenantBossScoresRow, error) {
+	return nil, nil
+}
+func (s *tenantLeaderboardStub) ListEvolvingGuildTenantScopeScores(context.Context, database.ListEvolvingGuildTenantScopeScoresParams) ([]database.ListEvolvingGuildTenantScopeScoresRow, error) {
+	return nil, nil
+}
+func (s *tenantLeaderboardStub) ListEvolvingPlayerTenantBossScores(context.Context, database.ListEvolvingPlayerTenantBossScoresParams) ([]database.ListEvolvingPlayerTenantBossScoresRow, error) {
+	return nil, nil
+}
+func (s *tenantLeaderboardStub) ListEvolvingPlayerTenantScopeScores(context.Context, database.ListEvolvingPlayerTenantScopeScoresParams) ([]database.ListEvolvingPlayerTenantScopeScoresRow, error) {
+	return nil, nil
+}
+
 func (s *tenantLeaderboardStub) GetActiveTenantRatingGeneration(_ context.Context, tenant uuid.UUID) (uuid.UUID, error) {
 	s.calls++
 	if tenant != s.tenant {
 		return uuid.Nil, nil
+	}
+	if s.noActiveGeneration {
+		return uuid.Nil, pgx.ErrNoRows
 	}
 	if s.changeAt > 0 && s.calls >= s.changeAt {
 		return uuid.New(), nil
@@ -197,6 +223,17 @@ func TestTenantRatingLeaderboardTraversal(t *testing.T) {
 		})
 	}
 }
+func TestEvolvingTenantLeaderboardWithoutActiveGeneration(t *testing.T) {
+	t.Parallel()
+	tenant := uuid.New()
+	for _, tc := range []struct{ guild, boss bool }{{false, true}, {false, false}, {true, true}, {true, false}} {
+		stub := &tenantLeaderboardStub{tenant: tenant, evolving: true, noActiveGeneration: true}
+		rec := tenantRequest(tenantBase(tc.guild, tc.boss), tenant, stub, tc.guild, tc.boss)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		require.Equal(t, 1, stub.calls, "evolving readers need no final generation check")
+	}
+}
+
 func TestTenantScopeRequiresRaid(t *testing.T) {
 	t.Parallel()
 	tenant, generation := uuid.New(), uuid.New()

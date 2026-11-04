@@ -42,7 +42,8 @@ type tenantRatingReader interface {
 	ListEvolvingGuildTenantScopeScores(context.Context, database.ListEvolvingGuildTenantScopeScoresParams) ([]database.ListEvolvingGuildTenantScopeScoresRow, error)
 }
 
-// Tenant leaderboard handlers read only published tenant generations.
+// Tenant leaderboard handlers read the active generation until tenant cutover,
+// then read the evolving projection without requiring a generation.
 func (s *Service) handleTenantPlayerBossLeaderboard(w http.ResponseWriter, r *http.Request) {
 	handleTenantRatingLeaderboardWithStore(s.store, w, r, false, true)
 }
@@ -495,15 +496,31 @@ func handleTenantRatingLeaderboardWithStore(store tenantRatingReader, w http.Res
 		}
 		payload = chroniclesdk.TenantPlayerScopeLeaderboardResponse{Scope: "raid", Entries: entries, NextCursor: next}
 	}
-	// An activation between queries invalidates the entire response, including the lookahead.
-	active, e := store.GetActiveTenantRatingGeneration(ctx, tenant)
-	if e != nil || active != generation {
-		if e == nil || errors.Is(e, pgx.ErrNoRows) || errors.Is(e, sql.ErrNoRows) {
-			tenantRatingStale(w, r)
-		} else {
+	if evolving {
+		// Evolving readers have no generation to recheck. A cutover during
+		// this request still invalidates the response, but a fresh tenant with
+		// no active generation must remain readable.
+		stillEvolving, e := ratingEvolvingReader(ctx, store, tenant)
+		if e != nil {
 			httpapi.InternalServerError(w, e)
+			return
 		}
-		return
+		if !stillEvolving {
+			tenantRatingStale(w, r)
+			return
+		}
+	} else {
+		// An activation between queries invalidates the entire legacy response,
+		// including the lookahead.
+		active, e := store.GetActiveTenantRatingGeneration(ctx, tenant)
+		if e != nil || active != generation {
+			if e == nil || errors.Is(e, pgx.ErrNoRows) || errors.Is(e, sql.ErrNoRows) {
+				tenantRatingStale(w, r)
+			} else {
+				httpapi.InternalServerError(w, e)
+			}
+			return
+		}
 	}
 	httpapi.Write(ctx, w, http.StatusOK, payload)
 }

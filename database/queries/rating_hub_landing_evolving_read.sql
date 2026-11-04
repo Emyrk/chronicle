@@ -55,4 +55,3 @@ SELECT instance_name, difficulty_name, max_players, subject, rating_metric, real
 FROM ranked WHERE position <= 3
 
 ORDER BY instance_name, difficulty_name, max_players, subject, rating_metric, position;
-
