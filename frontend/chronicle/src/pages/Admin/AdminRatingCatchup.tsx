@@ -77,7 +77,8 @@ function TenantCatchup({ row }: { row: AdminTenantRatingCatchup }) {
   return (
     <div className="grid gap-3 border-t border-zinc-800 py-4 first:border-0 md:grid-cols-[minmax(9rem,1fr)_minmax(15rem,2fr)]">
       <div>
-        <div className="break-all font-mono text-xs">{row.tenant_id === "00000000-0000-0000-0000-000000000000" ? "Root" : row.tenant_id}</div>
+        <div className="break-all text-sm font-medium">{row.tenant_id === "00000000-0000-0000-0000-000000000000" ? "Root" : row.tenant_slug || row.tenant_id}</div>
+        {row.tenant_slug && <div className="break-all font-mono text-xs text-muted-foreground">{row.tenant_id}</div>}
         <div className="mt-1 text-xs text-muted-foreground">{row.status.replaceAll("_", " ")} · {dirty.toLocaleString()} dirty · oldest {oldestAge(row)}</div>
         <div className="mt-1 text-xs text-muted-foreground">{row.peak_pages} Peak pages · {row.active_drain_jobs} active drain jobs</div>
         <div className="mt-1 text-xs text-muted-foreground">Projection: {row.read_state} · {row.job_kind ?? "Job"}: {row.job_state ?? "not queued"}{row.last_succeeded_at ? ` · last finished ${new Date(row.last_succeeded_at).toLocaleString()}` : ""}</div>

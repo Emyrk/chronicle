@@ -18,7 +18,7 @@ func TestRatingCatchupSnapshot(t *testing.T) {
 	tenant := uuid.New()
 	rows := []database.ListTenantRatingCatchupStatusRow{
 		{TenantID: uuid.New()},
-		{TenantID: tenant, ReadState: "evolving", SourceCutoff: pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true},
+		{TenantID: tenant, TenantSlug: "rating-demo", ReadState: "evolving", SourceCutoff: pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true},
 			CompletedAt:  pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true},
 			DirtyMastery: 2, OldestMastery: pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true},
 			PolicyScanStages: 6, UnfinishedPolicyScanStages: 4, PolicyScanStageNumber: 3},
@@ -30,6 +30,7 @@ func TestRatingCatchupSnapshot(t *testing.T) {
 	require.Len(t, result.Tenants, 3)
 	require.Equal(t, "not_started", result.Tenants[0].Status)
 	require.Equal(t, "catching_up", result.Tenants[1].Status)
+	require.Equal(t, "rating-demo", result.Tenants[1].TenantSlug)
 	require.Equal(t, int64(2), result.Tenants[1].DirtyMastery)
 	require.Equal(t, int64(6), result.Tenants[1].PolicyScanStages)
 	require.Equal(t, int64(4), result.Tenants[1].UnfinishedPolicyScanStages)
@@ -92,5 +93,20 @@ func TestListTenantRatingCatchupStatus(t *testing.T) {
 	require.Equal(t, int64(6), rows[0].PolicyScanStages)
 	require.Equal(t, int64(4), rows[0].UnfinishedPolicyScanStages)
 	require.Equal(t, int32(3), rows[0].PolicyScanStageNumber)
+	require.Empty(t, rows[0].TenantSlug)
+	tenantID := uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO tenants (id, slug, name) VALUES ($1, 'rating-demo', 'Rating demo')`, tenantID)
+	require.NoError(t, err)
+	tenantServer, err := store.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: uuid.New(), Name: "Tenant rating status " + uuid.NewString()})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE wow_servers SET tenant_id = $1 WHERE id = $2`, tenantID, tenantServer.ID)
+	require.NoError(t, err)
+	_, err = store.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: uuid.New(), ServerID: tenantServer.ID, Name: "Tenant status realm"})
+	require.NoError(t, err)
+	rows, err = store.ListTenantRatingCatchupStatus(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, tenantID, rows[1].TenantID)
+	require.Equal(t, "rating-demo", rows[1].TenantSlug)
 	require.False(t, rows[0].CompletedAt.Valid)
 }

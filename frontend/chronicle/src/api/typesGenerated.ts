@@ -528,6 +528,7 @@ export interface AdminSetUserRetentionRequest {
 // From chroniclesdk/rating_catchup.go
 export interface AdminTenantRatingCatchup {
     readonly tenant_id: string;
+    readonly tenant_slug: string;
     readonly status: string;
     readonly read_state: string;
     readonly dirty_runs: number;

@@ -5,6 +5,7 @@ import { AdminRatingCatchup } from "./AdminRatingCatchup";
 
 const root: AdminTenantRatingCatchup = {
   tenant_id: "00000000-0000-0000-0000-000000000000",
+  tenant_slug: "",
   status: "catching_up",
   read_state: "evolving",
   dirty_runs: 12000,
@@ -26,6 +27,7 @@ const root: AdminTenantRatingCatchup = {
 const tenant: AdminTenantRatingCatchup = {
   ...root,
   tenant_id: "849ddcae-9960-431d-a540-05d2b4c43f6e",
+  tenant_slug: "turtle-wow",
   status: "caught_up",
   dirty_runs: 0,
   dirty_renown: 0,

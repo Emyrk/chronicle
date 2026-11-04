@@ -22047,6 +22047,7 @@ WITH tenants AS (
     GROUP BY args->>'tenant_id'
 )
 SELECT tenants.tenant_id::uuid AS tenant_id,
+       COALESCE(tenant.slug, '')::text AS tenant_slug,
        COALESCE(dirty_runs.total, 0)::bigint AS dirty_runs,
        dirty_runs.oldest::timestamptz AS oldest_run,
        COALESCE(dirty_renown.total, 0)::bigint AS dirty_renown,
@@ -22066,6 +22067,7 @@ SELECT tenants.tenant_id::uuid AS tenant_id,
            WHERE g.tenant_id = tenants.tenant_id AND g.status = 'active'
        ) THEN 'legacy' ELSE 'evolving' END)::text AS read_state
 FROM tenants
+LEFT JOIN public.tenants tenant ON tenant.id = tenants.tenant_id
 LEFT JOIN dirty_runs USING (tenant_id)
 LEFT JOIN dirty_renown USING (tenant_id)
 LEFT JOIN dirty_mastery USING (tenant_id)
@@ -22080,6 +22082,7 @@ ORDER BY tenants.tenant_id
 
 type ListTenantRatingCatchupStatusRow struct {
 	TenantID                   uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	TenantSlug                 string             `db:"tenant_slug" json:"tenant_slug"`
 	DirtyRuns                  int64              `db:"dirty_runs" json:"dirty_runs"`
 	OldestRun                  pgtype.Timestamptz `db:"oldest_run" json:"oldest_run"`
 	DirtyRenown                int64              `db:"dirty_renown" json:"dirty_renown"`
@@ -22112,6 +22115,7 @@ func (q *sqlQuerier) ListTenantRatingCatchupStatus(ctx context.Context) ([]ListT
 		var i ListTenantRatingCatchupStatusRow
 		if err := rows.Scan(
 			&i.TenantID,
+			&i.TenantSlug,
 			&i.DirtyRuns,
 			&i.OldestRun,
 			&i.DirtyRenown,
