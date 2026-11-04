@@ -16,9 +16,15 @@ SELECT (COALESCE((SELECT state FROM tenant_rating_read_states WHERE tenant_id = 
   AND NOT EXISTS (SELECT 1 FROM rating_dirty_mastery_subjects WHERE tenant_id = @tenant_id::uuid)
   AND NOT EXISTS (SELECT 1 FROM rating_dirty_peak_cohorts WHERE tenant_id = @tenant_id::uuid)
   AND NOT EXISTS (SELECT 1 FROM rating_peak_cohort_pages_evolving WHERE tenant_id = @tenant_id::uuid)
+  AND NOT EXISTS (SELECT 1 FROM rating_policy_scan_progress WHERE tenant_id = @tenant_id::uuid AND NOT completed)
   AND NOT EXISTS (SELECT 1 FROM river_job WHERE kind = 'drain-tenant-ratings'
                   AND state IN ('available', 'pending', 'retryable', 'running', 'scheduled')
                   AND args @> jsonb_build_object('tenant_id', @tenant_id::text))) AS caught_up;
+
+-- name: AcquireTenantRatingProjectionLock :exec
+-- Serialize policy scope cleanup with score writers for the same tenant.
+-- Use a distinct hash seed from other application advisory lock families.
+SELECT pg_advisory_xact_lock(hashtextextended((@tenant_id::uuid)::text, 7119));
 
 -- name: EnsureTenantRatingReadStateForWriter :exec
 -- Materialize a lockable row before the page begins. A concurrent copier's

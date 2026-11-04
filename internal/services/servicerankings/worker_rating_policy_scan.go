@@ -88,6 +88,11 @@ func (w *WorkerRatingPolicyScan) Work(ctx context.Context, job *river.Job[ArgsRa
 func ScanRatingPolicyPage(ctx context.Context, store database.Store, tenant uuid.UUID) (bool, error) {
 	done := false
 	err := store.InTx(ctx, func(tx database.Store) error {
+		// A policy scope sweep must not delete a row committed by a concurrent
+		// writer after the sweep's existence check but before its DELETE.
+		if err := tx.AcquireTenantRatingProjectionLock(ctx, tenant); err != nil {
+			return err
+		}
 		progress, err := tx.LockRatingPolicyScanProgress(ctx, tenant)
 		if errors.Is(err, pgx.ErrNoRows) {
 			done = true

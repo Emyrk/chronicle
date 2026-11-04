@@ -42,13 +42,15 @@ func TestRatingCatchupJobState(t *testing.T) {
 	rows := []database.ListTenantRatingCatchupStatusRow{{TenantID: tenant, ReadState: "evolving",
 		SourceCutoff: pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true},
 		CompletedAt:  pgtype.Timestamptz{Time: now, Valid: true}}}
-	jobs := []database.ListRecentTenantRatingDrainJobsRow{
-		{TenantID: tenant.String(), State: "retryable", LastError: "repair failed", AttemptedAt: pgtype.Timestamptz{Time: now, Valid: true}},
+	jobs := []database.ListRecentTenantRatingJobsRow{
+		{Kind: "rating-policy-scan", TenantID: tenant.String(), State: "retryable", LastError: "repair failed", AttemptedAt: pgtype.Timestamptz{Time: now, Valid: true}},
 		{TenantID: tenant.String(), State: "completed", FinalizedAt: pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true}},
 	}
 	rows[0].ActiveDrainJobs = 1
+	rows[0].UnfinishedPolicyScanStages = 1
 	result := ratingCatchupSnapshot(rows, jobs, now)
 	require.Equal(t, "stalled_error", result.Tenants[0].Status)
+	require.Equal(t, "rating-policy-scan", result.Tenants[0].JobKind)
 	require.Equal(t, "repair failed", result.Tenants[0].JobLastError)
 	require.NotNil(t, result.Tenants[0].LastSucceededAt)
 }

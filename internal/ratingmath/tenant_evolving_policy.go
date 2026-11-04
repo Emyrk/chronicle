@@ -29,7 +29,13 @@ func shouldRefreshEvolvingTenantRating(ctx context.Context, tx database.Store, t
 		return false, err
 	}
 	state, err := tx.LockTenantRatingReadStateForEvolvingPage(ctx, tenant)
-	return state == "evolving", err
+	if err != nil || state != "evolving" {
+		return false, err
+	}
+	if err := tx.AcquireTenantRatingProjectionLock(ctx, tenant); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // Lock the tenant's config revision before resolving its current policy. A

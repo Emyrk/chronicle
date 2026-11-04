@@ -2859,6 +2859,14 @@ type RatingPeakCohortPagesEvolving struct {
 	AfterSubjectID    string    `db:"after_subject_id" json:"after_subject_id"`
 }
 
+type RatingPolicyScanProgress struct {
+	TenantID  uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Stage     string             `db:"stage" json:"stage"`
+	AfterKey  []byte             `db:"after_key" json:"after_key"`
+	Completed bool               `db:"completed" json:"completed"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type RatingRealmGroup struct {
 	ID       uuid.UUID `db:"id" json:"id"`
 	ServerID uuid.UUID `db:"server_id" json:"server_id"`

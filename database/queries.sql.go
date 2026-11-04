@@ -21963,18 +21963,19 @@ func (q *sqlQuerier) TakeRateLimitTokens(ctx context.Context, arg TakeRateLimitT
 	return i, err
 }
 
-const listRecentTenantRatingDrainJobs = `-- name: ListRecentTenantRatingDrainJobs :many
-SELECT id, COALESCE(args->>'tenant_id', '')::text AS tenant_id, state::text AS state,
+const listRecentTenantRatingJobs = `-- name: ListRecentTenantRatingJobs :many
+SELECT id, kind::text AS kind, COALESCE(args->>'tenant_id', '')::text AS tenant_id, state::text AS state,
        created_at, attempted_at, finalized_at,
        COALESCE(errors[array_length(errors, 1)]->>'error', '')::text AS last_error
 FROM river_job
-WHERE kind = 'drain-tenant-ratings'
+WHERE kind IN ('drain-tenant-ratings', 'copy-tenant-ratings', 'rating-policy-scan')
 ORDER BY id DESC
 LIMIT 2000
 `
 
-type ListRecentTenantRatingDrainJobsRow struct {
+type ListRecentTenantRatingJobsRow struct {
 	ID          int64              `db:"id" json:"id"`
+	Kind        string             `db:"kind" json:"kind"`
 	TenantID    string             `db:"tenant_id" json:"tenant_id"`
 	State       string             `db:"state" json:"state"`
 	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
@@ -21983,19 +21984,20 @@ type ListRecentTenantRatingDrainJobsRow struct {
 	LastError   string             `db:"last_error" json:"last_error"`
 }
 
-// A bounded view of recent drain attempts for the admin catch-up board. Dirty
-// keys remain authoritative even when an older completed job ages out here.
-func (q *sqlQuerier) ListRecentTenantRatingDrainJobs(ctx context.Context) ([]ListRecentTenantRatingDrainJobsRow, error) {
-	rows, err := q.db.Query(ctx, listRecentTenantRatingDrainJobs)
+// A bounded view of recent repair, copy, and scan attempts for the admin board.
+// Dirty keys and cursors remain authoritative when older jobs age out here.
+func (q *sqlQuerier) ListRecentTenantRatingJobs(ctx context.Context) ([]ListRecentTenantRatingJobsRow, error) {
+	rows, err := q.db.Query(ctx, listRecentTenantRatingJobs)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListRecentTenantRatingDrainJobsRow
+	var items []ListRecentTenantRatingJobsRow
 	for rows.Next() {
-		var i ListRecentTenantRatingDrainJobsRow
+		var i ListRecentTenantRatingJobsRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.Kind,
 			&i.TenantID,
 			&i.State,
 			&i.CreatedAt,
@@ -22032,6 +22034,9 @@ WITH tenants AS (
 ), peak_pages AS (
     SELECT tenant_id, count(*)::bigint AS total
     FROM rating_peak_cohort_pages_evolving GROUP BY tenant_id
+), policy_scan AS (
+    SELECT tenant_id, count(*)::bigint AS unfinished_stages
+    FROM rating_policy_scan_progress WHERE NOT completed GROUP BY tenant_id
 ), active_jobs AS (
     SELECT (args->>'tenant_id')::uuid AS tenant_id, count(*)::bigint AS total
     FROM river_job
@@ -22049,6 +22054,7 @@ SELECT tenants.tenant_id::uuid AS tenant_id,
        dirty_peak.oldest::timestamptz AS oldest_peak,
        COALESCE(peak_pages.total, 0)::bigint AS peak_pages,
        COALESCE(active_jobs.total, 0)::bigint AS active_drain_jobs,
+       COALESCE(policy_scan.unfinished_stages, 0)::bigint AS unfinished_policy_scan_stages,
        bootstrap.after_run_id, bootstrap.source_cutoff, bootstrap.completed_at,
        COALESCE(read_state.state, CASE WHEN EXISTS (
            SELECT 1 FROM rating_score_generations g
@@ -22061,27 +22067,29 @@ LEFT JOIN dirty_mastery USING (tenant_id)
 LEFT JOIN dirty_peak USING (tenant_id)
 LEFT JOIN peak_pages USING (tenant_id)
 LEFT JOIN rating_live_evidence_bootstraps bootstrap USING (tenant_id)
+LEFT JOIN policy_scan USING (tenant_id)
 LEFT JOIN active_jobs USING (tenant_id)
 LEFT JOIN tenant_rating_read_states read_state USING (tenant_id)
 ORDER BY tenants.tenant_id
 `
 
 type ListTenantRatingCatchupStatusRow struct {
-	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	DirtyRuns       int64              `db:"dirty_runs" json:"dirty_runs"`
-	OldestRun       pgtype.Timestamptz `db:"oldest_run" json:"oldest_run"`
-	DirtyRenown     int64              `db:"dirty_renown" json:"dirty_renown"`
-	OldestRenown    pgtype.Timestamptz `db:"oldest_renown" json:"oldest_renown"`
-	DirtyMastery    int64              `db:"dirty_mastery" json:"dirty_mastery"`
-	OldestMastery   pgtype.Timestamptz `db:"oldest_mastery" json:"oldest_mastery"`
-	DirtyPeak       int64              `db:"dirty_peak" json:"dirty_peak"`
-	OldestPeak      pgtype.Timestamptz `db:"oldest_peak" json:"oldest_peak"`
-	PeakPages       int64              `db:"peak_pages" json:"peak_pages"`
-	ActiveDrainJobs int64              `db:"active_drain_jobs" json:"active_drain_jobs"`
-	AfterRunID      uuid.NullUUID      `db:"after_run_id" json:"after_run_id"`
-	SourceCutoff    pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
-	CompletedAt     pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
-	ReadState       string             `db:"read_state" json:"read_state"`
+	TenantID                   uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	DirtyRuns                  int64              `db:"dirty_runs" json:"dirty_runs"`
+	OldestRun                  pgtype.Timestamptz `db:"oldest_run" json:"oldest_run"`
+	DirtyRenown                int64              `db:"dirty_renown" json:"dirty_renown"`
+	OldestRenown               pgtype.Timestamptz `db:"oldest_renown" json:"oldest_renown"`
+	DirtyMastery               int64              `db:"dirty_mastery" json:"dirty_mastery"`
+	OldestMastery              pgtype.Timestamptz `db:"oldest_mastery" json:"oldest_mastery"`
+	DirtyPeak                  int64              `db:"dirty_peak" json:"dirty_peak"`
+	OldestPeak                 pgtype.Timestamptz `db:"oldest_peak" json:"oldest_peak"`
+	PeakPages                  int64              `db:"peak_pages" json:"peak_pages"`
+	ActiveDrainJobs            int64              `db:"active_drain_jobs" json:"active_drain_jobs"`
+	UnfinishedPolicyScanStages int64              `db:"unfinished_policy_scan_stages" json:"unfinished_policy_scan_stages"`
+	AfterRunID                 uuid.NullUUID      `db:"after_run_id" json:"after_run_id"`
+	SourceCutoff               pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	CompletedAt                pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	ReadState                  string             `db:"read_state" json:"read_state"`
 }
 
 // One bounded row per tenant with realms. Aggregate each dirty table once rather
@@ -22107,6 +22115,7 @@ func (q *sqlQuerier) ListTenantRatingCatchupStatus(ctx context.Context) ([]ListT
 			&i.OldestPeak,
 			&i.PeakPages,
 			&i.ActiveDrainJobs,
+			&i.UnfinishedPolicyScanStages,
 			&i.AfterRunID,
 			&i.SourceCutoff,
 			&i.CompletedAt,
@@ -27055,9 +27064,9 @@ type StartRatingLiveEvidenceBootstrapParams struct {
 	SourceCutoff pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
 }
 
-// Existing tenants must establish complete canonical history before any
-// incremental Mastery or Peak projection writes. Pages and cursor commit in
-// one transaction; concurrent source mutations carry their own dirty run.
+// Discover canonical history into durable dirty keys before claiming caught
+// up. Evolving projections can show partial scores while this scan runs.
+// Pages and cursor commit together; concurrent source mutations mark dirt.
 func (q *sqlQuerier) StartRatingLiveEvidenceBootstrap(ctx context.Context, arg StartRatingLiveEvidenceBootstrapParams) error {
 	_, err := q.db.Exec(ctx, startRatingLiveEvidenceBootstrap, arg.TenantID, arg.SourceCutoff)
 	return err
@@ -30411,6 +30420,359 @@ func (q *sqlQuerier) PutRatingGroupPolicy(ctx context.Context, arg PutRatingGrou
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const advanceRatingPolicyScanStage = `-- name: AdvanceRatingPolicyScanStage :execrows
+UPDATE rating_policy_scan_progress SET after_key = $1::jsonb, updated_at = now()
+WHERE tenant_id = $2 AND stage = $3 AND NOT completed
+`
+
+type AdvanceRatingPolicyScanStageParams struct {
+	AfterKey []byte    `db:"after_key" json:"after_key"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Stage    string    `db:"stage" json:"stage"`
+}
+
+func (q *sqlQuerier) AdvanceRatingPolicyScanStage(ctx context.Context, arg AdvanceRatingPolicyScanStageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, advanceRatingPolicyScanStage, arg.AfterKey, arg.TenantID, arg.Stage)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const cleanPolicyScanGuildScopePage = `-- name: CleanPolicyScanGuildScopePage :one
+WITH page AS MATERIALIZED (
+ SELECT realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind FROM guild_tenant_rating_scope_scores_evolving
+ WHERE guild_tenant_rating_scope_scores_evolving.tenant_id = $1 AND ($2::jsonb IS NULL OR (realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind) > (($2::jsonb->>0)::uuid, ($2::jsonb->>1)::uuid, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::smallint, ($2::jsonb->>5)::text, ($2::jsonb->>6)::text))
+ ORDER BY realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind LIMIT 100
+), removed AS (
+ DELETE FROM guild_tenant_rating_scope_scores_evolving scope USING page
+ WHERE scope.tenant_id = $1 AND scope.realm_id = page.realm_id AND scope.guild_id = page.guild_id AND scope.instance_name = page.instance_name AND scope.difficulty_name = page.difficulty_name AND scope.max_players = page.max_players AND scope.rating_metric = page.rating_metric AND scope.window_kind = page.window_kind
+ AND NOT EXISTS (SELECT 1 FROM guild_tenant_rating_boss_scores_evolving boss WHERE boss.tenant_id = scope.tenant_id AND boss.realm_id = scope.realm_id AND boss.guild_id = scope.guild_id AND boss.instance_name = scope.instance_name AND boss.difficulty_name = scope.difficulty_name AND boss.max_players = scope.max_players AND boss.rating_metric = scope.rating_metric AND boss.window_kind = scope.window_kind)
+ RETURNING 1
+)
+SELECT (SELECT jsonb_build_array(realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind) FROM page ORDER BY realm_id DESC, guild_id DESC, instance_name DESC, difficulty_name DESC, max_players DESC, rating_metric DESC, window_kind DESC LIMIT 1) AS next_key,
+ (SELECT count(*)::int FROM page) AS page_size, (SELECT count(*)::int FROM removed) AS removed
+`
+
+type CleanPolicyScanGuildScopePageParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	AfterKey []byte    `db:"after_key" json:"after_key"`
+}
+
+type CleanPolicyScanGuildScopePageRow struct {
+	NextKey  []byte `db:"next_key" json:"next_key"`
+	PageSize int32  `db:"page_size" json:"page_size"`
+	Removed  int32  `db:"removed" json:"removed"`
+}
+
+// Scan scope-only historical projection rows, including removed raids.
+// A scope has no source boss identity; remove it only when no boss score
+// can contribute to that exact subject/metric/window scope.
+func (q *sqlQuerier) CleanPolicyScanGuildScopePage(ctx context.Context, arg CleanPolicyScanGuildScopePageParams) (CleanPolicyScanGuildScopePageRow, error) {
+	row := q.db.QueryRow(ctx, cleanPolicyScanGuildScopePage, arg.TenantID, arg.AfterKey)
+	var i CleanPolicyScanGuildScopePageRow
+	err := row.Scan(&i.NextKey, &i.PageSize, &i.Removed)
+	return i, err
+}
+
+const cleanPolicyScanPlayerScopePage = `-- name: CleanPolicyScanPlayerScopePage :one
+WITH page AS MATERIALIZED (
+ SELECT realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind FROM player_tenant_rating_scope_scores_evolving
+ WHERE player_tenant_rating_scope_scores_evolving.tenant_id = $1 AND ($2::jsonb IS NULL OR (realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind) > (($2::jsonb->>0)::uuid, ($2::jsonb->>1)::text, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::smallint, ($2::jsonb->>5)::text, ($2::jsonb->>6)::text, ($2::jsonb->>7)::text, ($2::jsonb->>8)::text, ($2::jsonb->>9)::text, ($2::jsonb->>10)::text))
+ ORDER BY realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind LIMIT 100
+), removed AS (
+ DELETE FROM player_tenant_rating_scope_scores_evolving scope USING page
+ WHERE scope.tenant_id = $1 AND scope.realm_id = page.realm_id AND scope.player_guid = page.player_guid AND scope.instance_name = page.instance_name AND scope.difficulty_name = page.difficulty_name AND scope.max_players = page.max_players AND scope.player_class = page.player_class AND scope.player_spec = page.player_spec AND scope.player_sub_spec = page.player_sub_spec AND scope.performance_metric = page.performance_metric AND scope.rating_metric = page.rating_metric AND scope.window_kind = page.window_kind
+ AND NOT EXISTS (SELECT 1 FROM player_tenant_rating_boss_scores_evolving boss WHERE boss.tenant_id = scope.tenant_id AND boss.realm_id = scope.realm_id AND boss.player_guid = scope.player_guid AND boss.instance_name = scope.instance_name AND boss.difficulty_name = scope.difficulty_name AND boss.max_players = scope.max_players AND boss.player_class = scope.player_class AND boss.player_spec = scope.player_spec AND boss.player_sub_spec = scope.player_sub_spec AND boss.performance_metric = scope.performance_metric AND boss.rating_metric = scope.rating_metric AND boss.window_kind = scope.window_kind)
+ RETURNING 1
+)
+SELECT (SELECT jsonb_build_array(realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind) FROM page ORDER BY realm_id DESC, player_guid DESC, instance_name DESC, difficulty_name DESC, max_players DESC, player_class DESC, player_spec DESC, player_sub_spec DESC, performance_metric DESC, rating_metric DESC, window_kind DESC LIMIT 1) AS next_key,
+ (SELECT count(*)::int FROM page) AS page_size, (SELECT count(*)::int FROM removed) AS removed
+`
+
+type CleanPolicyScanPlayerScopePageParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	AfterKey []byte    `db:"after_key" json:"after_key"`
+}
+
+type CleanPolicyScanPlayerScopePageRow struct {
+	NextKey  []byte `db:"next_key" json:"next_key"`
+	PageSize int32  `db:"page_size" json:"page_size"`
+	Removed  int32  `db:"removed" json:"removed"`
+}
+
+// Scan scope-only historical projection rows, including removed raids.
+// A scope has no source boss identity; remove it only when no boss score
+// can contribute to that exact subject/metric/window scope.
+func (q *sqlQuerier) CleanPolicyScanPlayerScopePage(ctx context.Context, arg CleanPolicyScanPlayerScopePageParams) (CleanPolicyScanPlayerScopePageRow, error) {
+	row := q.db.QueryRow(ctx, cleanPolicyScanPlayerScopePage, arg.TenantID, arg.AfterKey)
+	var i CleanPolicyScanPlayerScopePageRow
+	err := row.Scan(&i.NextKey, &i.PageSize, &i.Removed)
+	return i, err
+}
+
+const completeRatingPolicyScanStage = `-- name: CompleteRatingPolicyScanStage :execrows
+UPDATE rating_policy_scan_progress SET completed = true, updated_at = now()
+WHERE tenant_id = $1 AND stage = $2 AND NOT completed
+`
+
+type CompleteRatingPolicyScanStageParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Stage    string    `db:"stage" json:"stage"`
+}
+
+func (q *sqlQuerier) CompleteRatingPolicyScanStage(ctx context.Context, arg CompleteRatingPolicyScanStageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeRatingPolicyScanStage, arg.TenantID, arg.Stage)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listRatingPolicyScanTenants = `-- name: ListRatingPolicyScanTenants :many
+SELECT DISTINCT tenant_id FROM rating_policy_scan_progress WHERE NOT completed ORDER BY tenant_id
+`
+
+func (q *sqlQuerier) ListRatingPolicyScanTenants(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRatingPolicyScanTenants)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var tenant_id uuid.UUID
+		if err := rows.Scan(&tenant_id); err != nil {
+			return nil, err
+		}
+		items = append(items, tenant_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockRatingPolicyScanProgress = `-- name: LockRatingPolicyScanProgress :one
+SELECT stage, after_key, completed FROM rating_policy_scan_progress
+WHERE tenant_id = $1 AND NOT completed
+ORDER BY array_position(ARRAY['runs','renown','mastery','peak','player_scope','guild_scope']::text[], stage)
+LIMIT 1 FOR UPDATE
+`
+
+type LockRatingPolicyScanProgressRow struct {
+	Stage     string `db:"stage" json:"stage"`
+	AfterKey  []byte `db:"after_key" json:"after_key"`
+	Completed bool   `db:"completed" json:"completed"`
+}
+
+func (q *sqlQuerier) LockRatingPolicyScanProgress(ctx context.Context, tenantID uuid.UUID) (LockRatingPolicyScanProgressRow, error) {
+	row := q.db.QueryRow(ctx, lockRatingPolicyScanProgress, tenantID)
+	var i LockRatingPolicyScanProgressRow
+	err := row.Scan(&i.Stage, &i.AfterKey, &i.Completed)
+	return i, err
+}
+
+const markPolicyScanMasteryPage = `-- name: MarkPolicyScanMasteryPage :one
+WITH sources AS (
+ (SELECT candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric FROM (SELECT 'player' AS subject_kind, realm_id, player_guid AS subject_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric FROM rating_live_player_observations WHERE rating_live_player_observations.tenant_id = $1) candidate
+ WHERE $2::jsonb IS NULL OR (candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::uuid, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::text, ($2::jsonb->>5)::text, ($2::jsonb->>6)::smallint, ($2::jsonb->>7)::text, ($2::jsonb->>8)::text, ($2::jsonb->>9)::text, ($2::jsonb->>10)::text)
+ ORDER BY candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric LIMIT 100)
+ UNION ALL
+ (SELECT candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric FROM (SELECT 'guild' AS subject_kind, realm_id, guild_id::text AS subject_id, instance_name, encounter_name, difficulty_name, max_players, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, 'none'::text AS performance_metric FROM rating_live_guild_observations WHERE rating_live_guild_observations.tenant_id = $1 AND guild_id IS NOT NULL) candidate
+ WHERE $2::jsonb IS NULL OR (candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::uuid, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::text, ($2::jsonb->>5)::text, ($2::jsonb->>6)::smallint, ($2::jsonb->>7)::text, ($2::jsonb->>8)::text, ($2::jsonb->>9)::text, ($2::jsonb->>10)::text)
+ ORDER BY candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric LIMIT 100)
+ UNION ALL
+ (SELECT candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric FROM (SELECT 'player' AS subject_kind, realm_id, player_guid AS subject_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric FROM player_tenant_rating_boss_scores_evolving WHERE player_tenant_rating_boss_scores_evolving.tenant_id = $1 AND rating_metric IN ('mastery','ranked_mastery')) candidate
+ WHERE $2::jsonb IS NULL OR (candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::uuid, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::text, ($2::jsonb->>5)::text, ($2::jsonb->>6)::smallint, ($2::jsonb->>7)::text, ($2::jsonb->>8)::text, ($2::jsonb->>9)::text, ($2::jsonb->>10)::text)
+ ORDER BY candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric LIMIT 100)
+ UNION ALL
+ (SELECT candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric FROM (SELECT 'guild' AS subject_kind, realm_id, guild_id::text AS subject_id, instance_name, encounter_name, difficulty_name, max_players, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, 'none'::text AS performance_metric FROM guild_tenant_rating_boss_scores_evolving WHERE guild_tenant_rating_boss_scores_evolving.tenant_id = $1 AND rating_metric IN ('mastery','ranked_mastery')) candidate
+ WHERE $2::jsonb IS NULL OR (candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::uuid, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::text, ($2::jsonb->>5)::text, ($2::jsonb->>6)::smallint, ($2::jsonb->>7)::text, ($2::jsonb->>8)::text, ($2::jsonb->>9)::text, ($2::jsonb->>10)::text)
+ ORDER BY candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric LIMIT 100)
+), page AS MATERIALIZED (
+ SELECT DISTINCT subject_kind, realm_id, subject_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric FROM sources
+ WHERE $2::jsonb IS NULL OR (subject_kind, realm_id, subject_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::uuid, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::text, ($2::jsonb->>5)::text, ($2::jsonb->>6)::smallint, ($2::jsonb->>7)::text, ($2::jsonb->>8)::text, ($2::jsonb->>9)::text, ($2::jsonb->>10)::text)
+ ORDER BY subject_kind, realm_id, subject_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric LIMIT 100
+), dirty AS (
+ INSERT INTO rating_dirty_mastery_subjects (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric)
+ SELECT $1::uuid, subject_kind, realm_id, subject_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric FROM page
+ ON CONFLICT (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric) DO UPDATE SET revision = rating_dirty_mastery_subjects.revision + 1, changed_at = now()
+ RETURNING 1
+)
+SELECT (SELECT jsonb_build_array(subject_kind, realm_id, subject_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric) FROM page ORDER BY subject_kind DESC, realm_id DESC, subject_id DESC, instance_name DESC, encounter_name DESC, difficulty_name DESC, max_players DESC, player_class DESC, player_spec DESC, player_sub_spec DESC, performance_metric DESC LIMIT 1) AS next_key,
+ (SELECT count(*)::int FROM page) AS page_size, (SELECT count(*)::int FROM dirty) AS marked
+`
+
+type MarkPolicyScanMasteryPageParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	AfterKey []byte    `db:"after_key" json:"after_key"`
+}
+
+type MarkPolicyScanMasteryPageRow struct {
+	NextKey  []byte `db:"next_key" json:"next_key"`
+	PageSize int32  `db:"page_size" json:"page_size"`
+	Marked   int32  `db:"marked" json:"marked"`
+}
+
+func (q *sqlQuerier) MarkPolicyScanMasteryPage(ctx context.Context, arg MarkPolicyScanMasteryPageParams) (MarkPolicyScanMasteryPageRow, error) {
+	row := q.db.QueryRow(ctx, markPolicyScanMasteryPage, arg.TenantID, arg.AfterKey)
+	var i MarkPolicyScanMasteryPageRow
+	err := row.Scan(&i.NextKey, &i.PageSize, &i.Marked)
+	return i, err
+}
+
+const markPolicyScanPeakPage = `-- name: MarkPolicyScanPeakPage :one
+WITH sources AS (
+ (SELECT candidate.subject_kind, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric FROM (SELECT subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric FROM (SELECT 'player' AS subject_kind, realm_id, player_guid AS subject_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric FROM rating_live_player_observations WHERE rating_live_player_observations.tenant_id = $1) source) candidate
+ WHERE $2::jsonb IS NULL OR (candidate.subject_kind, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::text, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::smallint, ($2::jsonb->>5)::text, ($2::jsonb->>6)::text, ($2::jsonb->>7)::text, ($2::jsonb->>8)::text)
+ ORDER BY candidate.subject_kind, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric LIMIT 100)
+ UNION ALL
+ (SELECT candidate.subject_kind, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric FROM (SELECT subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric FROM (SELECT 'guild' AS subject_kind, realm_id, guild_id::text AS subject_id, instance_name, encounter_name, difficulty_name, max_players, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, 'none'::text AS performance_metric FROM rating_live_guild_observations WHERE rating_live_guild_observations.tenant_id = $1) source) candidate
+ WHERE $2::jsonb IS NULL OR (candidate.subject_kind, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::text, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::smallint, ($2::jsonb->>5)::text, ($2::jsonb->>6)::text, ($2::jsonb->>7)::text, ($2::jsonb->>8)::text)
+ ORDER BY candidate.subject_kind, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric LIMIT 100)
+ UNION ALL
+ (SELECT candidate.subject_kind, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric FROM (SELECT subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric FROM (SELECT 'player' AS subject_kind, realm_id, player_guid AS subject_id, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric FROM player_tenant_rating_boss_scores_evolving WHERE player_tenant_rating_boss_scores_evolving.tenant_id = $1 AND rating_metric = 'peak') source) candidate
+ WHERE $2::jsonb IS NULL OR (candidate.subject_kind, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::text, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::smallint, ($2::jsonb->>5)::text, ($2::jsonb->>6)::text, ($2::jsonb->>7)::text, ($2::jsonb->>8)::text)
+ ORDER BY candidate.subject_kind, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric LIMIT 100)
+ UNION ALL
+ (SELECT candidate.subject_kind, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric FROM (SELECT subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric FROM (SELECT 'guild' AS subject_kind, realm_id, guild_id::text AS subject_id, instance_name, encounter_name, difficulty_name, max_players, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, 'none'::text AS performance_metric FROM guild_tenant_rating_boss_scores_evolving WHERE guild_tenant_rating_boss_scores_evolving.tenant_id = $1 AND rating_metric = 'peak') source) candidate
+ WHERE $2::jsonb IS NULL OR (candidate.subject_kind, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::text, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::smallint, ($2::jsonb->>5)::text, ($2::jsonb->>6)::text, ($2::jsonb->>7)::text, ($2::jsonb->>8)::text)
+ ORDER BY candidate.subject_kind, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric LIMIT 100)
+ UNION ALL
+ (SELECT candidate.subject_kind, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric FROM (SELECT subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric FROM rating_peak_cohort_denominators_evolving WHERE rating_peak_cohort_denominators_evolving.tenant_id = $1) candidate
+ WHERE $2::jsonb IS NULL OR (candidate.subject_kind, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::text, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::smallint, ($2::jsonb->>5)::text, ($2::jsonb->>6)::text, ($2::jsonb->>7)::text, ($2::jsonb->>8)::text)
+ ORDER BY candidate.subject_kind, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.performance_metric LIMIT 100)
+), page AS MATERIALIZED (
+ SELECT DISTINCT subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric FROM sources
+ WHERE $2::jsonb IS NULL OR (subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::text, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::smallint, ($2::jsonb->>5)::text, ($2::jsonb->>6)::text, ($2::jsonb->>7)::text, ($2::jsonb->>8)::text)
+ ORDER BY subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric LIMIT 100
+), dirty AS (
+ INSERT INTO rating_dirty_peak_cohorts (tenant_id, subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric)
+ SELECT $1::uuid, subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric FROM page
+ ON CONFLICT (tenant_id, subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric) DO UPDATE SET revision = rating_dirty_peak_cohorts.revision + 1, changed_at = now()
+ RETURNING 1
+)
+SELECT (SELECT jsonb_build_array(subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric) FROM page ORDER BY subject_kind DESC, instance_name DESC, encounter_name DESC, difficulty_name DESC, max_players DESC, player_class DESC, player_spec DESC, player_sub_spec DESC, performance_metric DESC LIMIT 1) AS next_key,
+ (SELECT count(*)::int FROM page) AS page_size, (SELECT count(*)::int FROM dirty) AS marked
+`
+
+type MarkPolicyScanPeakPageParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	AfterKey []byte    `db:"after_key" json:"after_key"`
+}
+
+type MarkPolicyScanPeakPageRow struct {
+	NextKey  []byte `db:"next_key" json:"next_key"`
+	PageSize int32  `db:"page_size" json:"page_size"`
+	Marked   int32  `db:"marked" json:"marked"`
+}
+
+func (q *sqlQuerier) MarkPolicyScanPeakPage(ctx context.Context, arg MarkPolicyScanPeakPageParams) (MarkPolicyScanPeakPageRow, error) {
+	row := q.db.QueryRow(ctx, markPolicyScanPeakPage, arg.TenantID, arg.AfterKey)
+	var i MarkPolicyScanPeakPageRow
+	err := row.Scan(&i.NextKey, &i.PageSize, &i.Marked)
+	return i, err
+}
+
+const markPolicyScanRenownPage = `-- name: MarkPolicyScanRenownPage :one
+WITH sources AS (
+ (SELECT candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name FROM (SELECT 'player' AS subject_kind, realm_id, player_guid AS subject_id, instance_name, encounter_name FROM renown_kill_facts WHERE realm_id IN (SELECT realm.id FROM wow_server_realms realm JOIN wow_servers server ON server.id = realm.server_id WHERE server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) candidate
+ WHERE $2::jsonb IS NULL OR (candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::uuid, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::text)
+ ORDER BY candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name LIMIT 100)
+ UNION ALL
+ (SELECT candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name FROM (SELECT 'guild' AS subject_kind, realm_id, guild_id::text AS subject_id, instance_name, encounter_name FROM guild_renown_kill_facts WHERE guild_renown_kill_facts.tenant_id = $1 AND tenant_id = $1) candidate
+ WHERE $2::jsonb IS NULL OR (candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::uuid, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::text)
+ ORDER BY candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name LIMIT 100)
+ UNION ALL
+ (SELECT candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name FROM (SELECT 'player' AS subject_kind, realm_id, player_guid AS subject_id, instance_name, encounter_name FROM player_tenant_rating_boss_scores_evolving WHERE player_tenant_rating_boss_scores_evolving.tenant_id = $1 AND rating_metric = 'renown') candidate
+ WHERE $2::jsonb IS NULL OR (candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::uuid, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::text)
+ ORDER BY candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name LIMIT 100)
+ UNION ALL
+ (SELECT candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name FROM (SELECT 'guild' AS subject_kind, realm_id, guild_id::text AS subject_id, instance_name, encounter_name FROM guild_tenant_rating_boss_scores_evolving WHERE guild_tenant_rating_boss_scores_evolving.tenant_id = $1 AND rating_metric = 'renown') candidate
+ WHERE $2::jsonb IS NULL OR (candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::uuid, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::text)
+ ORDER BY candidate.subject_kind, candidate.realm_id, candidate.subject_id, candidate.instance_name, candidate.encounter_name LIMIT 100)
+), page AS MATERIALIZED (
+ SELECT DISTINCT subject_kind, realm_id, subject_id, instance_name, encounter_name FROM sources
+ WHERE $2::jsonb IS NULL OR (subject_kind, realm_id, subject_id, instance_name, encounter_name) > (($2::jsonb->>0)::text, ($2::jsonb->>1)::uuid, ($2::jsonb->>2)::text, ($2::jsonb->>3)::text, ($2::jsonb->>4)::text)
+ ORDER BY subject_kind, realm_id, subject_id, instance_name, encounter_name LIMIT 100
+), dirty AS (
+ INSERT INTO rating_dirty_renown_subjects (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name)
+ SELECT $1::uuid, subject_kind, realm_id, subject_id, instance_name, encounter_name FROM page
+ ON CONFLICT (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name) DO UPDATE SET revision = rating_dirty_renown_subjects.revision + 1, changed_at = now()
+ RETURNING 1
+)
+SELECT (SELECT jsonb_build_array(subject_kind, realm_id, subject_id, instance_name, encounter_name) FROM page ORDER BY subject_kind DESC, realm_id DESC, subject_id DESC, instance_name DESC, encounter_name DESC LIMIT 1) AS next_key,
+ (SELECT count(*)::int FROM page) AS page_size, (SELECT count(*)::int FROM dirty) AS marked
+`
+
+type MarkPolicyScanRenownPageParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	AfterKey []byte    `db:"after_key" json:"after_key"`
+}
+
+type MarkPolicyScanRenownPageRow struct {
+	NextKey  []byte `db:"next_key" json:"next_key"`
+	PageSize int32  `db:"page_size" json:"page_size"`
+	Marked   int32  `db:"marked" json:"marked"`
+}
+
+func (q *sqlQuerier) MarkPolicyScanRenownPage(ctx context.Context, arg MarkPolicyScanRenownPageParams) (MarkPolicyScanRenownPageRow, error) {
+	row := q.db.QueryRow(ctx, markPolicyScanRenownPage, arg.TenantID, arg.AfterKey)
+	var i MarkPolicyScanRenownPageRow
+	err := row.Scan(&i.NextKey, &i.PageSize, &i.Marked)
+	return i, err
+}
+
+const markPolicyScanRunPage = `-- name: MarkPolicyScanRunPage :one
+WITH page AS MATERIALIZED (
+ SELECT rr.run_id FROM ranking_runs rr
+ JOIN wow_server_realms realm ON realm.id = rr.realm_id
+ JOIN wow_servers server ON server.id = realm.server_id
+ WHERE server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+ AND ($2::jsonb IS NULL OR rr.run_id > ($2::jsonb->>0)::uuid)
+ ORDER BY rr.run_id LIMIT 100
+), dirty AS (
+ INSERT INTO rating_dirty_observation_runs (tenant_id, run_id)
+ SELECT $1::uuid, run_id FROM page
+ ON CONFLICT (tenant_id, run_id) DO UPDATE SET revision = rating_dirty_observation_runs.revision + 1, changed_at = now()
+ RETURNING 1
+)
+SELECT (SELECT jsonb_build_array(run_id) FROM page ORDER BY run_id DESC LIMIT 1) AS next_key,
+ (SELECT count(*)::int FROM page) AS page_size, (SELECT count(*)::int FROM dirty) AS marked
+`
+
+type MarkPolicyScanRunPageParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	AfterKey []byte    `db:"after_key" json:"after_key"`
+}
+
+type MarkPolicyScanRunPageRow struct {
+	NextKey  []byte `db:"next_key" json:"next_key"`
+	PageSize int32  `db:"page_size" json:"page_size"`
+	Marked   int32  `db:"marked" json:"marked"`
+}
+
+// The run pass replays canonical history after a boss becomes newly eligible.
+func (q *sqlQuerier) MarkPolicyScanRunPage(ctx context.Context, arg MarkPolicyScanRunPageParams) (MarkPolicyScanRunPageRow, error) {
+	row := q.db.QueryRow(ctx, markPolicyScanRunPage, arg.TenantID, arg.AfterKey)
+	var i MarkPolicyScanRunPageRow
+	err := row.Scan(&i.NextKey, &i.PageSize, &i.Marked)
+	return i, err
+}
+
+const resetRatingPolicyScan = `-- name: ResetRatingPolicyScan :exec
+INSERT INTO rating_policy_scan_progress (tenant_id, stage)
+SELECT $1::uuid, stage FROM unnest(ARRAY['runs','renown','mastery','peak','player_scope','guild_scope']::text[]) stage
+ON CONFLICT (tenant_id, stage) DO UPDATE SET after_key = NULL, completed = false, updated_at = now()
+`
+
+// Operator explicitly resets progress after a policy migration; never run this at startup.
+func (q *sqlQuerier) ResetRatingPolicyScan(ctx context.Context, tenantID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, resetRatingPolicyScan, tenantID)
+	return err
 }
 
 const listRatingProjectionGuildBosses = `-- name: ListRatingProjectionGuildBosses :many
@@ -37270,6 +37632,17 @@ func (q *sqlQuerier) ListActivePlayerTenantScopeScores(ctx context.Context, arg 
 	return items, nil
 }
 
+const acquireTenantRatingProjectionLock = `-- name: AcquireTenantRatingProjectionLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended(($1::uuid)::text, 7119))
+`
+
+// Serialize policy scope cleanup with score writers for the same tenant.
+// Use a distinct hash seed from other application advisory lock families.
+func (q *sqlQuerier) AcquireTenantRatingProjectionLock(ctx context.Context, tenantID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, acquireTenantRatingProjectionLock, tenantID)
+	return err
+}
+
 const ensureTenantRatingReadStateForWriter = `-- name: EnsureTenantRatingReadStateForWriter :exec
 INSERT INTO tenant_rating_read_states (tenant_id, state)
 SELECT $1::uuid,
@@ -37296,6 +37669,7 @@ SELECT (COALESCE((SELECT state FROM tenant_rating_read_states WHERE tenant_id = 
   AND NOT EXISTS (SELECT 1 FROM rating_dirty_mastery_subjects WHERE tenant_id = $1::uuid)
   AND NOT EXISTS (SELECT 1 FROM rating_dirty_peak_cohorts WHERE tenant_id = $1::uuid)
   AND NOT EXISTS (SELECT 1 FROM rating_peak_cohort_pages_evolving WHERE tenant_id = $1::uuid)
+  AND NOT EXISTS (SELECT 1 FROM rating_policy_scan_progress WHERE tenant_id = $1::uuid AND NOT completed)
   AND NOT EXISTS (SELECT 1 FROM river_job WHERE kind = 'drain-tenant-ratings'
                   AND state IN ('available', 'pending', 'retryable', 'running', 'scheduled')
                   AND args @> jsonb_build_object('tenant_id', $1::text))) AS caught_up

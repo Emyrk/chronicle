@@ -19,6 +19,9 @@ WITH tenants AS (
 ), peak_pages AS (
     SELECT tenant_id, count(*)::bigint AS total
     FROM rating_peak_cohort_pages_evolving GROUP BY tenant_id
+), policy_scan AS (
+    SELECT tenant_id, count(*)::bigint AS unfinished_stages
+    FROM rating_policy_scan_progress WHERE NOT completed GROUP BY tenant_id
 ), active_jobs AS (
     SELECT (args->>'tenant_id')::uuid AS tenant_id, count(*)::bigint AS total
     FROM river_job
@@ -36,6 +39,7 @@ SELECT tenants.tenant_id::uuid AS tenant_id,
        dirty_peak.oldest::timestamptz AS oldest_peak,
        COALESCE(peak_pages.total, 0)::bigint AS peak_pages,
        COALESCE(active_jobs.total, 0)::bigint AS active_drain_jobs,
+       COALESCE(policy_scan.unfinished_stages, 0)::bigint AS unfinished_policy_scan_stages,
        bootstrap.after_run_id, bootstrap.source_cutoff, bootstrap.completed_at,
        COALESCE(read_state.state, CASE WHEN EXISTS (
            SELECT 1 FROM rating_score_generations g
@@ -48,17 +52,18 @@ LEFT JOIN dirty_mastery USING (tenant_id)
 LEFT JOIN dirty_peak USING (tenant_id)
 LEFT JOIN peak_pages USING (tenant_id)
 LEFT JOIN rating_live_evidence_bootstraps bootstrap USING (tenant_id)
+LEFT JOIN policy_scan USING (tenant_id)
 LEFT JOIN active_jobs USING (tenant_id)
 LEFT JOIN tenant_rating_read_states read_state USING (tenant_id)
 ORDER BY tenants.tenant_id;
 
--- A bounded view of recent drain attempts for the admin catch-up board. Dirty
--- keys remain authoritative even when an older completed job ages out here.
--- name: ListRecentTenantRatingDrainJobs :many
-SELECT id, COALESCE(args->>'tenant_id', '')::text AS tenant_id, state::text AS state,
+-- A bounded view of recent repair, copy, and scan attempts for the admin board.
+-- Dirty keys and cursors remain authoritative when older jobs age out here.
+-- name: ListRecentTenantRatingJobs :many
+SELECT id, kind::text AS kind, COALESCE(args->>'tenant_id', '')::text AS tenant_id, state::text AS state,
        created_at, attempted_at, finalized_at,
        COALESCE(errors[array_length(errors, 1)]->>'error', '')::text AS last_error
 FROM river_job
-WHERE kind = 'drain-tenant-ratings'
+WHERE kind IN ('drain-tenant-ratings', 'copy-tenant-ratings', 'rating-policy-scan')
 ORDER BY id DESC
 LIMIT 2000;

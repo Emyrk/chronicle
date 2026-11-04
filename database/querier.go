@@ -19,6 +19,9 @@ type sqlcQuerier interface {
 	// Serialize refresh snapshots and commits across logical-run identity changes.
 	AcquireRankingRunRefreshLock(ctx context.Context) error
 	AcquireRatingRebuildConfigLock(ctx context.Context) error
+	// Serialize policy scope cleanup with score writers for the same tenant.
+	// Use a distinct hash seed from other application advisory lock families.
+	AcquireTenantRatingProjectionLock(ctx context.Context, tenantID uuid.UUID) error
 	AcquireTimeParseScoreLock(ctx context.Context, instanceID string) error
 	ActivateDiscordMembershipGrantCheckOnLogin(ctx context.Context, arg ActivateDiscordMembershipGrantCheckOnLoginParams) (ActivateDiscordMembershipGrantCheckOnLoginRow, error)
 	ActivateRatingScoreGeneration(ctx context.Context, arg ActivateRatingScoreGenerationParams) (int64, error)
@@ -39,6 +42,7 @@ type sqlcQuerier interface {
 	// one updated row and advances the rebuild checkpoint in this SAME transaction.
 	// Never commit an accumulator update if the checkpoint CAS returned zero.
 	AdvanceRatingMasteryAccumulator(ctx context.Context, arg AdvanceRatingMasteryAccumulatorParams) (int64, error)
+	AdvanceRatingPolicyScanStage(ctx context.Context, arg AdvanceRatingPolicyScanStageParams) (int64, error)
 	// Caller owns phase-specific JSON cursor keys. CAS prevents stale workers from
 	// overwriting another worker's progress. Do not advance before staging writes
 	// commit; use the same transaction for inserts and this checkpoint update.
@@ -83,6 +87,14 @@ type sqlcQuerier interface {
 	ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
 	ClaimDueDiscordMembershipGrantChecks(ctx context.Context, arg ClaimDueDiscordMembershipGrantChecksParams) ([]ClaimDueDiscordMembershipGrantChecksRow, error)
 	ClaimLuaProjectArtifactGarbage(ctx context.Context, asOf pgtype.Timestamptz) ([]string, error)
+	// Scan scope-only historical projection rows, including removed raids.
+	// A scope has no source boss identity; remove it only when no boss score
+	// can contribute to that exact subject/metric/window scope.
+	CleanPolicyScanGuildScopePage(ctx context.Context, arg CleanPolicyScanGuildScopePageParams) (CleanPolicyScanGuildScopePageRow, error)
+	// Scan scope-only historical projection rows, including removed raids.
+	// A scope has no source boss identity; remove it only when no boss score
+	// can contribute to that exact subject/metric/window scope.
+	CleanPolicyScanPlayerScopePage(ctx context.Context, arg CleanPolicyScanPlayerScopePageParams) (CleanPolicyScanPlayerScopePageRow, error)
 	ClearApplicationReviewsByReviewer(ctx context.Context, userID uuid.NullUUID) error
 	ClearDiscordMembershipGrantCheckClaim(ctx context.Context, arg ClearDiscordMembershipGrantCheckClaimParams) (int64, error)
 	ClearInferenceThreadByOwner(ctx context.Context, arg ClearInferenceThreadByOwnerParams) (InferenceThread, error)
@@ -104,6 +116,7 @@ type sqlcQuerier interface {
 	CompleteInferenceClientToolRequest(ctx context.Context, arg CompleteInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
 	CompleteProofEvidenceCleanup(ctx context.Context, arg CompleteProofEvidenceCleanupParams) error
 	CompleteRatingLiveEvidenceBootstrap(ctx context.Context, arg CompleteRatingLiveEvidenceBootstrapParams) (int64, error)
+	CompleteRatingPolicyScanStage(ctx context.Context, arg CompleteRatingPolicyScanStageParams) (int64, error)
 	CompleteTenantRatingCopyProgress(ctx context.Context, arg CompleteTenantRatingCopyProgressParams) (int64, error)
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	ConsumeInferenceOAuthTransaction(ctx context.Context, arg ConsumeInferenceOAuthTransactionParams) (InferenceOauthTransaction, error)
@@ -1177,6 +1190,7 @@ type sqlcQuerier interface {
 	// uses first_page=true; subsequent pages use the previous row's complete key.
 	ListRatingMasteryPlayerPage(ctx context.Context, arg ListRatingMasteryPlayerPageParams) ([]ListRatingMasteryPlayerPageRow, error)
 	ListRatingPlayerRenownSourcePage(ctx context.Context, arg ListRatingPlayerRenownSourcePageParams) ([]RenownKillFact, error)
+	ListRatingPolicyScanTenants(ctx context.Context) ([]uuid.UUID, error)
 	ListRatingProjectionGuildBosses(ctx context.Context, arg ListRatingProjectionGuildBossesParams) ([]ListRatingProjectionGuildBossesRow, error)
 	ListRatingProjectionGuildScopes(ctx context.Context, arg ListRatingProjectionGuildScopesParams) ([]ListRatingProjectionGuildScopesRow, error)
 	ListRatingProjectionPlayerBosses(ctx context.Context, arg ListRatingProjectionPlayerBossesParams) ([]ListRatingProjectionPlayerBossesRow, error)
@@ -1219,9 +1233,9 @@ type sqlcQuerier interface {
 	ListRecentInstanceGroups(ctx context.Context, arg ListRecentInstanceGroupsParams) ([]ListRecentInstanceGroupsRow, error)
 	ListRecentInstances(ctx context.Context, arg ListRecentInstancesParams) ([]ListRecentInstancesRow, error)
 	ListRecentInstancesByPlayer(ctx context.Context, arg ListRecentInstancesByPlayerParams) ([]ListRecentInstancesByPlayerRow, error)
-	// A bounded view of recent drain attempts for the admin catch-up board. Dirty
-	// keys remain authoritative even when an older completed job ages out here.
-	ListRecentTenantRatingDrainJobs(ctx context.Context) ([]ListRecentTenantRatingDrainJobsRow, error)
+	// A bounded view of recent repair, copy, and scan attempts for the admin board.
+	// Dirty keys and cursors remain authoritative when older jobs age out here.
+	ListRecentTenantRatingJobs(ctx context.Context) ([]ListRecentTenantRatingJobsRow, error)
 	ListRegressionFixtures(ctx context.Context) ([]ListRegressionFixturesRow, error)
 	ListRegressionSnapshots(ctx context.Context, arg ListRegressionSnapshotsParams) ([]ListRegressionSnapshotsRow, error)
 	// Bounded, deterministic keyset scan for an operator-initiated historical
@@ -1332,6 +1346,7 @@ type sqlcQuerier interface {
 	// applicant, not a proof row, also works for their first request.
 	LockProofApplicant(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	LockRatingLiveEvidenceBootstrap(ctx context.Context, tenantID uuid.UUID) (LockRatingLiveEvidenceBootstrapRow, error)
+	LockRatingPolicyScanProgress(ctx context.Context, tenantID uuid.UUID) (LockRatingPolicyScanProgressRow, error)
 	LockTenantRatingCopyGeneration(ctx context.Context, tenantID uuid.UUID) (uuid.UUID, error)
 	LockTenantRatingCopyState(ctx context.Context, tenantID uuid.UUID) (string, error)
 	// Held inside each evolving writer transaction. A copier's legacy→copying
@@ -1361,6 +1376,11 @@ type sqlcQuerier interface {
 	MarkLogGroupArtifactsStorageDeleted(ctx context.Context, arg MarkLogGroupArtifactsStorageDeletedParams) ([]LogGroupArtifact, error)
 	// Do not bump a dirty revision on every audit retry; existing intent is enough.
 	MarkMissingLiveEvidenceRevision(ctx context.Context, arg MarkMissingLiveEvidenceRevisionParams) error
+	MarkPolicyScanMasteryPage(ctx context.Context, arg MarkPolicyScanMasteryPageParams) (MarkPolicyScanMasteryPageRow, error)
+	MarkPolicyScanPeakPage(ctx context.Context, arg MarkPolicyScanPeakPageParams) (MarkPolicyScanPeakPageRow, error)
+	MarkPolicyScanRenownPage(ctx context.Context, arg MarkPolicyScanRenownPageParams) (MarkPolicyScanRenownPageRow, error)
+	// The run pass replays canonical history after a boss becomes newly eligible.
+	MarkPolicyScanRunPage(ctx context.Context, arg MarkPolicyScanRunPageParams) (MarkPolicyScanRunPageRow, error)
 	MarkWhatsNewRead(ctx context.Context, arg MarkWhatsNewReadParams) (UserWhatsNewState, error)
 	MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
@@ -1504,6 +1524,8 @@ type sqlcQuerier interface {
 	RenameSidekickInstallation(ctx context.Context, arg RenameSidekickInstallationParams) (SidekickInstallation, error)
 	RepairDiscordMembershipGrantChecks(ctx context.Context, arg RepairDiscordMembershipGrantChecksParams) ([]DiscordMembershipGrantCheck, error)
 	ReserveLogFilePart(ctx context.Context, arg ReserveLogFilePartParams) (LogFilePart, error)
+	// Operator explicitly resets progress after a policy migration; never run this at startup.
+	ResetRatingPolicyScan(ctx context.Context, tenantID uuid.UUID) error
 	// Resolves the dataset for a realm. Precedence:
 	//   server.default_dataset_id > tenant.default_dataset_id.
 	// The result is NULL when neither is set (and when the realm is unknown the
@@ -1601,9 +1623,9 @@ type sqlcQuerier interface {
 	// original evidence if a page is replayed after a crash.
 	StageRatingPlayerRuns(ctx context.Context, arg StageRatingPlayerRunsParams) (int64, error)
 	StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error
-	// Existing tenants must establish complete canonical history before any
-	// incremental Mastery or Peak projection writes. Pages and cursor commit in
-	// one transaction; concurrent source mutations carry their own dirty run.
+	// Discover canonical history into durable dirty keys before claiming caught
+	// up. Evolving projections can show partial scores while this scan runs.
+	// Pages and cursor commit together; concurrent source mutations mark dirt.
 	StartRatingLiveEvidenceBootstrap(ctx context.Context, arg StartRatingLiveEvidenceBootstrapParams) error
 	// The start function atomically locks the tenant revision, snapshots all config,
 	// creates a building generation and checkpoint, or returns the unfinished one.

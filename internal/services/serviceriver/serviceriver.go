@@ -354,10 +354,11 @@ func (s *Service) Start(ctx context.Context) error {
 			&river.PeriodicJobOpts{RunOnStart: true},
 		),
 	)
-	// One periodic recovery dispatch covers all four durable rating intents.
+	// Separate recovery dispatches for operator-triggered policy scans and
+	// ordinary four-key tenant repair. Neither starts a full generation.
 	q.AddPeriodicJob(river.NewPeriodicJob(river.PeriodicInterval(5*time.Minute),
 		func() (river.JobArgs, *river.InsertOpts) { return servicerankings.ArgsDispatchRatingPolicyScan{}, nil },
-		&river.PeriodicJobOpts{RunOnStart: true}))
+		&river.PeriodicJobOpts{ID: "tenant-rating-policy-scan", RunOnStart: true}))
 	q.AddPeriodicJob(river.NewPeriodicJob(
 		river.PeriodicInterval(5*time.Minute),
 		func() (river.JobArgs, *river.InsertOpts) {

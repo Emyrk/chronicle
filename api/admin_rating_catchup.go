@@ -21,7 +21,7 @@ func (api *API) AdminListRatingCatchup(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	jobs, err := api.Opts.Zed.ListRecentTenantRatingDrainJobs(ctx)
+	jobs, err := api.Opts.Zed.ListRecentTenantRatingJobs(ctx)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -36,8 +36,8 @@ func ratingCatchupTimestamp(t pgtype.Timestamptz) *time.Time {
 	return &t.Time
 }
 
-func ratingCatchupSnapshot(rows []database.ListTenantRatingCatchupStatusRow, jobs []database.ListRecentTenantRatingDrainJobsRow, now time.Time) chroniclesdk.AdminRatingCatchupStatusResponse {
-	latest := make(map[string]database.ListRecentTenantRatingDrainJobsRow)
+func ratingCatchupSnapshot(rows []database.ListTenantRatingCatchupStatusRow, jobs []database.ListRecentTenantRatingJobsRow, now time.Time) chroniclesdk.AdminRatingCatchupStatusResponse {
+	latest := make(map[string]database.ListRecentTenantRatingJobsRow)
 	succeeded := make(map[string]*time.Time)
 	for _, job := range jobs { // newest first
 		if _, exists := latest[job.TenantID]; !exists {
@@ -55,14 +55,15 @@ func ratingCatchupSnapshot(rows []database.ListTenantRatingCatchupStatusRow, job
 		status := "catching_up"
 		if !row.SourceCutoff.Valid {
 			status = "not_started"
-		} else if row.ReadState == "evolving" && row.CompletedAt.Valid && row.DirtyRuns+row.DirtyRenown+row.DirtyMastery+row.DirtyPeak+row.PeakPages+row.ActiveDrainJobs == 0 {
+		} else if row.ReadState == "evolving" && row.CompletedAt.Valid && row.DirtyRuns+row.DirtyRenown+row.DirtyMastery+row.DirtyPeak+row.PeakPages+row.ActiveDrainJobs+row.UnfinishedPolicyScanStages == 0 {
 			status = "caught_up"
 		}
 		item := chroniclesdk.AdminTenantRatingCatchup{
 			TenantID: row.TenantID, Status: status, ReadState: row.ReadState,
 			DirtyRuns: row.DirtyRuns, DirtyRenown: row.DirtyRenown,
 			DirtyMastery: row.DirtyMastery, DirtyPeak: row.DirtyPeak,
-			PeakPages: row.PeakPages, ActiveDrainJobs: row.ActiveDrainJobs, OldestRun: ratingCatchupTimestamp(row.OldestRun),
+			PeakPages: row.PeakPages, ActiveDrainJobs: row.ActiveDrainJobs,
+			UnfinishedPolicyScanStages: row.UnfinishedPolicyScanStages, OldestRun: ratingCatchupTimestamp(row.OldestRun),
 			OldestRenown:     ratingCatchupTimestamp(row.OldestRenown),
 			OldestMastery:    ratingCatchupTimestamp(row.OldestMastery),
 			OldestPeak:       ratingCatchupTimestamp(row.OldestPeak),
@@ -74,6 +75,7 @@ func ratingCatchupSnapshot(rows []database.ListTenantRatingCatchupStatusRow, job
 			item.ScanAfterRunID = &id
 		}
 		if job, ok := latest[row.TenantID.String()]; ok {
+			item.JobKind = job.Kind
 			item.JobState = job.State
 			item.JobLastError = job.LastError
 			item.JobAttemptedAt = ratingCatchupTimestamp(job.AttemptedAt)

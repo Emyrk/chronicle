@@ -88,7 +88,7 @@ func aggregateRatingCatchupMetrics(rows []database.ListTenantRatingCatchupStatus
 		add("mastery", row.DirtyMastery, row.OldestMastery)
 		add("peak", row.DirtyPeak, row.OldestPeak)
 		pages += row.PeakPages
-		if !row.CompletedAt.Valid {
+		if !row.CompletedAt.Valid || row.UnfinishedPolicyScanStages > 0 {
 			unfinished++
 		}
 	}

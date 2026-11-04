@@ -28,7 +28,7 @@ type ChildKind = "boss" | "class" | "spec"
  * Ratings tab renders this.
  */
 function LiveRatingCatchup() {
-  const { data } = useQuery({
+  const { data, isError } = useQuery({
     queryKey: ["ratings", "catchup"],
     queryFn: async (): Promise<TenantRatingCatchupResponse> => {
       const response = await fetch("/api/v1/rankings/ratings/catchup")
@@ -37,7 +37,7 @@ function LiveRatingCatchup() {
     },
     refetchInterval: 15_000,
   })
-  return <p role="status" className="px-1 text-xs text-muted-foreground">{data?.caught_up ? "Caught up" : "Catching up"} · Ratings can change as historical results are repaired.</p>
+  return <p role="status" className="px-1 text-xs text-muted-foreground">{isError ? "Catch-up status unavailable" : data?.caught_up ? "Caught up" : "Catching up"} · Ratings can change as historical results are repaired.</p>
 }
 
 export function RatingBoards({

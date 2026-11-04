@@ -3102,6 +3102,17 @@ CREATE TABLE rating_peak_cohort_pages_evolving (
 
 ALTER TABLE ONLY rating_peak_cohort_pages_evolving FORCE ROW LEVEL SECURITY;
 
+CREATE TABLE rating_policy_scan_progress (
+    tenant_id uuid NOT NULL,
+    stage text NOT NULL,
+    after_key jsonb,
+    completed boolean DEFAULT false NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT rating_policy_scan_progress_stage_check CHECK ((stage = ANY (ARRAY['runs'::text, 'renown'::text, 'mastery'::text, 'peak'::text, 'player_scope'::text, 'guild_scope'::text])))
+);
+
+ALTER TABLE ONLY rating_policy_scan_progress FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE rating_realm_group_memberships (
     realm_id uuid NOT NULL,
     server_id uuid NOT NULL,
@@ -4568,6 +4579,9 @@ ALTER TABLE ONLY rating_peak_cohort_pages_evolving
 
 ALTER TABLE ONLY rating_peak_cohort_pages
     ADD CONSTRAINT rating_peak_cohort_pages_pkey PRIMARY KEY (tenant_id, subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric);
+
+ALTER TABLE ONLY rating_policy_scan_progress
+    ADD CONSTRAINT rating_policy_scan_progress_pkey PRIMARY KEY (tenant_id, stage);
 
 ALTER TABLE ONLY rating_realm_group_memberships
     ADD CONSTRAINT rating_realm_group_memberships_pkey PRIMARY KEY (realm_id);
@@ -6178,6 +6192,8 @@ ALTER TABLE rating_peak_cohort_pages ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_peak_cohort_pages_evolving ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE rating_policy_scan_progress ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE rating_realm_group_memberships ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE rating_realm_groups ENABLE ROW LEVEL SECURITY;
@@ -6253,6 +6269,8 @@ CREATE POLICY tenant_admin_bypass ON rating_peak_cohort_denominators_evolving US
 CREATE POLICY tenant_admin_bypass ON rating_peak_cohort_pages USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_peak_cohort_pages_evolving USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON rating_policy_scan_progress USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON rating_realm_group_memberships USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -6359,6 +6377,8 @@ CREATE POLICY tenant_isolation ON rating_peak_cohort_denominators_evolving USING
 CREATE POLICY tenant_isolation ON rating_peak_cohort_pages USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON rating_peak_cohort_pages_evolving USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON rating_policy_scan_progress USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON rating_realm_group_memberships USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
