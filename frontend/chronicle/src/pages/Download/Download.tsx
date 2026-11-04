@@ -11,7 +11,6 @@ import s from "./Download.module.css";
 const FONTS_URL =
   "https://fonts.googleapis.com/css2?family=Young+Serif&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap";
 
-const SIDEKICK_LOGO = "/c/chronicle/SidekickLogo.webp";
 const CHRONICLE_ICON = "/c/chronicle/ChronicleIconSquare.webp";
 
 // Sidekick's tray state colors (chronicle-sidekick icons.go).
@@ -31,11 +30,31 @@ const NIGHT = [
   { time: "23:10", color: "#3b82f6", text: "Last boss down. Click Upload now and it sends the night." },
 ];
 
+function SidekickLogo({ animated = false, label }: { animated?: boolean; label?: string }) {
+  return (
+    <svg
+      viewBox="0 0 512 512"
+      className={`${s.sidekickLogo} ${animated ? s.sidekickLogoAnimated : ""}`}
+      role={label ? "img" : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+    >
+      <circle cx="256" cy="256" r="252" fill="#292826" />
+      <image href="/c/chronicle-sidekick/SidekickC.webp" width="512" height="512" />
+      <g className={s.sidekickDots} fill="#d5b46e">
+        <circle className={`${s.sidekickDot} ${s.sidekickDotTop}`} cx="256" cy="210" r="30" />
+        <circle className={`${s.sidekickDot} ${s.sidekickDotLeft}`} cx="211" cy="292" r="30" />
+        <circle className={`${s.sidekickDot} ${s.sidekickDotRight}`} cx="301" cy="292" r="30" />
+      </g>
+    </svg>
+  );
+}
+
 /** The Sidekick icon with its tray state dot. */
 function Mark({ color, size = 18 }: { color: string; size?: number }) {
   return (
     <span className={s.mark} style={{ width: size, height: size }}>
-      <img src={SIDEKICK_LOGO} alt="" />
+      <SidekickLogo />
       <span className={s.state} style={{ background: color }} />
     </span>
   );
@@ -228,7 +247,9 @@ export function DownloadView({ os, clients }: { os: OS; clients: ClientOption[] 
 
       <section className={`${s.wrap} ${s.hero}`}>
         <div className={`${s.rise} ${s.d1} ${s.logo}`}>
-          <MagicLogo src={SIDEKICK_LOGO} alt="Chronicle Sidekick" className={s.logoImg} />
+          <MagicLogo className={s.logoImg}>
+            <SidekickLogo animated label="Chronicle Sidekick" />
+          </MagicLogo>
         </div>
         <div className={s.heroText}>
           <p className={`${s.rise} ${s.d2} ${s.eyebrow}`}>Chronicle Sidekick</p>

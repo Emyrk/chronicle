@@ -2,9 +2,10 @@ import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 
 interface MagicLogoProps {
-  src: string;
-  alt: string;
+  src?: string;
+  alt?: string;
   className?: string;
+  children?: React.ReactNode;
 }
 
 // Generate stable particle configurations outside render
@@ -19,7 +20,7 @@ function generateParticles(count: number) {
   }));
 }
 
-export function MagicLogo({ src, alt, className }: MagicLogoProps) {
+export function MagicLogo({ src, alt = "", className, children }: MagicLogoProps) {
   // Memoize particle configs so they don't change on re-render
   const particles = useMemo(() => generateParticles(16), []);
 
@@ -53,7 +54,11 @@ export function MagicLogo({ src, alt, className }: MagicLogoProps) {
       </div>
 
       {/* Logo */}
-      <img src={src} alt={alt} className={cn("relative z-10", className)} />
+      {children ? (
+        <div className={cn("relative z-10", className)}>{children}</div>
+      ) : (
+        <img src={src} alt={alt} className={cn("relative z-10", className)} />
+      )}
     </div>
   );
 }
