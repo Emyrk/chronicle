@@ -71,13 +71,15 @@ function useTicker(
  * One fixed height, held while the featured runs load (`bosses` undefined), so the sections below never shift.
  * `ticker`: when the chips overflow they drift past like a news ticker (looping), pausing under the pointer, focus or touch.
  */
-export function BossRail({ bosses, selectedId, onPick, label = true, ticker = false }: {
+export function BossRail({ bosses, selectedId, onPick, label = true, ticker = false, overlay = false }: {
   bosses: readonly LandingFeaturedBoss[] | undefined;
   selectedId: string | null;
   onPick: (encounterId: string) => void;
   /** The "Bosses" caption before the chips. */
   label?: boolean;
   ticker?: boolean;
+  /** Inside the hero, over the replay: no band of its own (background, border, page gutter). */
+  overlay?: boolean;
 }) {
   const railRef = useRef<HTMLDivElement>(null);
   const groupRef = useRef<HTMLDivElement>(null);
@@ -111,7 +113,7 @@ export function BossRail({ bosses, selectedId, onPick, label = true, ticker = fa
   });
 
   return (
-    <section aria-label="Bosses of this run" className="border-b bg-background">
+    <section aria-label="Bosses of this run" className={overlay ? undefined : "border-b bg-background"}>
       <div
         ref={railRef}
         onPointerEnter={() => setHovered(true)}
@@ -120,7 +122,7 @@ export function BossRail({ bosses, selectedId, onPick, label = true, ticker = fa
         onBlur={() => setFocused(false)}
         onTouchStart={() => setTouched(true)}
         onTouchEnd={() => setTouched(false)}
-        className={`mx-auto flex h-16 max-w-[1180px] items-center gap-2 overflow-x-auto px-4 lg:px-8 ${
+        className={`flex h-16 items-center gap-2 overflow-x-auto ${overlay ? "" : "mx-auto max-w-[1180px] px-4 lg:px-8"} ${
           ticker ? "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "styled-scrollbar"
         } ${ticking ? "[mask-image:linear-gradient(to_right,transparent,black_48px,black_calc(100%-48px),transparent)]" : ""}`}
       >

@@ -4,8 +4,8 @@ import { MeterWindows } from "@/pages/Instance/EventsPanels/Map/MeterWindows";
 import type { MeterWindow } from "@/pages/Instance/EventsPanels/Map/meterWindowsState";
 import type { PanelContext } from "@/pages/Instance/EventsPanels/types";
 
-/** Over the stats column's old spot: above the scrubber, at the content's right edge; tall enough for a 5-player group. */
-const HERO_METER: MeterWindow = { id: "hero-meter", meter: "damage_done", right: 32, bottom: 112, width: 300, height: 136, perSecond: true };
+/** Above the scrubber (and the boss rail under it), at the content's right edge; tall enough for a 5-player group. */
+const HERO_METER: MeterWindow = { id: "hero-meter", meter: "damage_done", right: 32, bottom: 176, width: 300, height: 136, perSecond: true };
 
 /** Drives sync mode from the hero's clock, as the run page's Map panel does, so the meter reads at the replay's cursor. */
 function HeroSyncCursor({ cursorMs, startMs, endMs }: { cursorMs: number; startMs: number; endMs: number }) {

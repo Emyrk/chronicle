@@ -297,13 +297,30 @@ export function Start2Page() {
           siteName={siteName}
           headline={
             <div className="flex flex-col gap-2 lg:gap-3">
-              <h1 className="m-0 max-w-[700px] text-[32px] font-bold leading-[1.08] tracking-tight text-foreground lg:text-[44px] lg:leading-[1.06]">
+              {/* Phones: one line each, and only the headline and the button (the lines below hide). */}
+              <h1 className="m-0 max-w-[700px] text-[24px] font-bold leading-[1.15] tracking-tight text-foreground sm:text-[32px] sm:leading-[1.08] lg:text-[44px] lg:leading-[1.06]">
                 {productName} Combat Logs
                 <br />
                 <span className="text-(--tertiary)">Raid analysis by Chronicle.</span>
               </h1>
-              <p className="m-0 text-lg font-semibold text-muted-foreground lg:text-xl">Every dungeon you run, saved in detail.</p>
+              <p className="m-0 hidden text-lg font-semibold text-muted-foreground sm:block lg:text-xl">Every dungeon you run, saved in detail.</p>
             </div>
+          }
+          blurb={
+            <p className="m-0 hidden max-w-[540px] text-[15px] leading-normal text-foreground/85 sm:block lg:text-lg">
+              Sidekick sits in your tray and uploads each fight{siteName ? ` to ${siteName}` : ""} in the background while you play.
+            </p>
+          }
+          footer={
+            // The boss rail over the replay's bottom edge, under the scrubber.
+            <BossRail
+              bosses={landing || landingFailed ? runs[current]?.bosses ?? [] : undefined}
+              selectedId={hero?.window?.encounterId ?? null}
+              onPick={pickBoss}
+              label={false}
+              ticker
+              overlay
+            />
           }
           meter={
             // From 900 px up the live replay draws the 3D map's own meter window (Damage Done) here.
@@ -333,13 +350,6 @@ export function Start2Page() {
             <HeroMeter data={meter} sourceKey={meterKey} pane={pane} onPaneChange={changePane} rows={PHONE_METER_ROWS} onDrill={requestLive} placement="strip" run={meterRun} />
           </div>
         )}
-        <BossRail
-          bosses={landing || landingFailed ? runs[current]?.bosses ?? [] : undefined}
-          selectedId={hero?.window?.encounterId ?? null}
-          onPick={pickBoss}
-          label={false}
-          ticker
-        />
       </div>
       <SendLinkSection />
       <HowItWorks />

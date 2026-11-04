@@ -38,6 +38,10 @@ interface LandingHeroProps {
   siteName?: string;
   /** Replaces the default headline (the h1). */
   headline?: ReactNode;
+  /** Replaces the default line under the headline (the Sidekick blurb). */
+  blurb?: ReactNode;
+  /** Drawn under the scrubber, over the replay (the hero grows to hold it): e.g. the boss rail. */
+  footer?: ReactNode;
   /** The glass meter, docked over the replay from 900 px up. */
   meter?: ReactNode;
   /** The featured run (scoped to the boss pull the hero plays). Without one the hero shows the poster and copy only. */
@@ -431,6 +435,8 @@ export function LandingHero({
   onRequestLive,
   siteName,
   headline,
+  blurb,
+  footer,
   meter,
   featured,
   currentMs = 0,
@@ -480,7 +486,7 @@ export function LandingHero({
   }, [live]);
 
   return (
-    <section id="top" className="relative h-[520px] overflow-hidden border-b bg-card lg:h-[580px]">
+    <section id="top" className={`relative overflow-hidden border-b bg-card ${footer ? "h-[584px] lg:h-[644px]" : "h-[520px] lg:h-[580px]"}`}>
       <picture>
         {posterPortrait ? <source media="(max-width: 1023px)" srcSet={posterPortrait} /> : null}
         <img
@@ -530,9 +536,11 @@ export function LandingHero({
             Every dungeon you run, saved in detail.
           </h1>
         )}
-        <p className="m-0 max-w-[540px] text-[15px] leading-normal text-foreground/85 lg:text-lg">
-          Sidekick sits in your tray and uploads each fight{siteName ? ` to ${siteName}` : ""} in the background while you play.
-        </p>
+        {blurb ?? (
+          <p className="m-0 max-w-[540px] text-[15px] leading-normal text-foreground/85 lg:text-lg">
+            Sidekick sits in your tray and uploads each fight{siteName ? ` to ${siteName}` : ""} in the background while you play.
+          </p>
+        )}
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <Button asChild variant="button-bright" size="lg" className="h-11 text-[15px] font-semibold lg:h-12 lg:text-base">
             <a href={getSidekickHref} onClick={() => trackFunnel("cta_sidekick", { placement: "hero" })} className="no-underline">
@@ -542,7 +550,7 @@ export function LandingHero({
           <span className="text-xs text-muted-foreground lg:text-[13px]">Mac &amp; Windows · no account to watch</span>
         </div>
         {featured && (
-          <div className="mt-1 lg:mt-auto lg:pb-[22px]">
+          <div className={footer ? "mt-1 lg:mt-auto" : "mt-1 lg:mt-auto lg:pb-[22px]"}>
             <HeroScrubber
               run={featured}
               currentMs={currentMs}
@@ -552,6 +560,7 @@ export function LandingHero({
             />
           </div>
         )}
+        {footer}
       </div>
       {meter}
     </section>
