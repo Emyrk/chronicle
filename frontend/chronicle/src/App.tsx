@@ -4,6 +4,7 @@ import { Home } from "./pages/Home"
 import { NitroPayRuntime } from "./components/Ads/NitroPayRuntime"
 import { Layout } from "./components/Layout/Layout"
 import { RouteLoadingFallback } from "./components/Layout/RouteLoadingFallback"
+import { useSiteConfig } from "./api/siteConfigQuery"
 
 const Login = lazy(() => import("./pages/Login/Login").then(({ Login }) => ({ default: Login })))
 const Contact = lazy(() => import("./pages/Contact").then(({ Contact }) => ({ default: Contact })))
@@ -14,6 +15,7 @@ const Disclaimer = lazy(() => import("./pages/Disclaimer").then(({ Disclaimer })
 const SupportedInstances = lazy(() => import("./pages/SupportedInstances").then(({ SupportedInstances }) => ({ default: SupportedInstances })))
 const Terms = lazy(() => import("./pages/Terms").then(({ Terms }) => ({ default: Terms })))
 const ParsingPage = lazy(() => import("./pages/Parsing/ParsingPage").then(({ ParsingPage }) => ({ default: ParsingPage })))
+const Start2Page = lazy(() => import("./pages/Landing/Start2Page").then(({ Start2Page }) => ({ default: Start2Page })))
 const CohortViewerPage = lazy(() => import("./pages/Parsing/CohortViewerPage").then(({ CohortViewerPage }) => ({ default: CohortViewerPage })))
 const Empty = lazy(() => import("./pages/Empty").then(({ Empty }) => ({ default: Empty })))
 const DownloadPage = lazy(() => import("./pages/Download/Download").then(({ DownloadPage }) => ({ default: DownloadPage })))
@@ -164,6 +166,24 @@ function CatchAllRoute() {
   return <Navigate to="/login" replace />
 }
 
+/**
+ * "/": WoW Forever serves the replay landing (Start2Page) while the admin toggle (site config
+ * forever_landing_enabled) is on; off, or any other flavor, gets the standard Home.
+ */
+function HomeRoute() {
+  const { data: siteConfig, isPending } = useSiteConfig()
+  if (isPending) return null
+  const foreverLanding = (siteConfig?.dataset_flavor?.includes("wow-forever") ?? false) && (siteConfig?.forever_landing_enabled ?? false)
+  return foreverLanding ? <Start2Page /> : <Home />
+}
+
+/** /start2: the landing inside the site Layout, WoW Forever only like /start. */
+function Start2Route() {
+  const { data: siteConfig, isPending } = useSiteConfig()
+  if (isPending) return null
+  return siteConfig?.dataset_flavor?.includes("wow-forever") ? <Start2Page /> : <CatchAllRoute />
+}
+
 function App() {
   return (
     <>
@@ -171,13 +191,16 @@ function App() {
       <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
       <Route path="/login" element={<Login />} />
+      {/* The old ad landing: its links now land on the home page (the replay landing on WoW Forever). */}
+      <Route path="/start" element={<Navigate to="/" replace />} />
       <Route path="/youtube-sync" element={<LegacyYouTubeSyncRedirect />} />
       <Route path="/youtube-sync-v2" element={<LegacyYouTubeSyncRedirect />} />
       <Route path="/youtube-sync-v3" element={<YouTubeSyncV3Page />} />
       {/* Pop-out window opened from a chat's Prompt inspector; no site chrome. */}
       <Route path="/debug/assistant" element={<AssistantDebugPage />} />
       <Route element={<Layout />}>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<HomeRoute />} />
+        <Route path="/start2" element={<Start2Route />} />
         <Route path="/recent" element={<RecentRaids />} />
         <Route path="/search" element={<InstanceSearchPage />} />
         <Route path="/search/guide" element={<SearchGuidePage />} />

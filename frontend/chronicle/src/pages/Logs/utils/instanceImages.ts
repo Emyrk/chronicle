@@ -54,6 +54,18 @@ export function getInstanceBackground(name: string): string {
   return canonical ? INSTANCE_CONFIG[canonical].background : DEFAULT_BACKGROUND;
 }
 
+const LOADING_SCREEN_PREFIX = "/c/images/loadingscreens/";
+
+/**
+ * A small crop of the instance's loading screen: the server's 512x341 JPG
+ * (the OG image) instead of the full-size webp.
+ */
+export function getInstanceArtCrop(name: string): string {
+  const background = getInstanceBackground(name);
+  if (!background.startsWith(LOADING_SCREEN_PREFIX) || !background.endsWith(".webp")) return background;
+  return `/c/images/og/loadingscreens/${background.slice(LOADING_SCREEN_PREFIX.length, -".webp".length)}.jpg`;
+}
+
 export function getInstanceAccentColor(name: string): string {
   return getInstanceConfig(name)?.accentColor ?? DEFAULT_INSTANCE_ACCENT;
 }

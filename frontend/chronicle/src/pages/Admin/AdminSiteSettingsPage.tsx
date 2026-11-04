@@ -26,11 +26,14 @@ export function AdminSiteSettingsPage() {
   const [defaultFormat, setDefaultFormat] = useState("");
   const [availableFormats, setAvailableFormats] = useState<string[]>([]);
 
+  const [featuredInstanceID, setFeaturedInstanceID] = useState("");
+
   // Sync all server-derived state when config loads.
   useEffect(() => {
     if (!config) return;
     setDefaultFormat(config.default_format ?? "");
     setAvailableFormats([...(config.available_formats ?? [])]);
+    setFeaturedInstanceID(config.landing_featured_instance_id ?? "");
     if (config.branding) {
       setSquareLogo(config.branding.square_logo ?? "");
       setLogoWide(config.branding.logo_wide ?? "");
@@ -233,6 +236,72 @@ export function AdminSiteSettingsPage() {
                 Enabled
               </>
             )}
+          </Button>
+        </div>
+      </Card>
+
+      {/* Site config spans every tenant, so this shows on all of them; only WoW Forever's landing reads it. */}
+      <Card className="p-6 space-y-4">
+        <h2 className="text-lg font-semibold">Landing (WoW Forever)</h2>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="font-medium">Replay landing on the home page</p>
+            <p className="text-sm text-muted-foreground">
+              WoW Forever's home page (/) shows the 3D replay landing. Disable to switch back to the standard home
+              page right away. /start2 shows the landing either way. No effect on other flavors.
+            </p>
+          </div>
+          <Button
+            variant={config?.forever_landing_enabled ? "default" : "outline"}
+            size="sm"
+            disabled={updateConfig.isPending}
+            onClick={() => {
+              updateConfig.mutate({ forever_landing_enabled: !config?.forever_landing_enabled });
+            }}
+          >
+            {updateConfig.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : config?.forever_landing_enabled ? (
+              <>
+                <Check className="h-4 w-4 mr-1" />
+                Enabled
+              </>
+            ) : (
+              <>
+                <X className="h-4 w-4 mr-1" />
+                Disabled
+              </>
+            )}
+          </Button>
+        </div>
+        <p className="font-medium">Featured run</p>
+        <p className="text-sm text-muted-foreground">
+          Public instance replayed first in the WoW Forever landing hero, ahead of the montage of the community's best
+          replayed runs. Only WoW Forever tenants have that landing, so this has no effect elsewhere; pick a WoW
+          Forever run. Empty uses the deployment default (VITE_LANDING_FEATURED_INSTANCE), if any.
+        </p>
+        <input
+          className={`${inputClass} font-mono`}
+          placeholder="Featured instance ID"
+          value={featuredInstanceID}
+          onChange={(e) => setFeaturedInstanceID(e.target.value)}
+        />
+        {updateConfig.error && <p className="text-sm text-destructive">{updateConfig.error.message}</p>}
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            disabled={updateConfig.isPending}
+            onClick={() => updateConfig.mutate({ landing_featured_instance_id: featuredInstanceID.trim() })}
+          >
+            {updateConfig.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save Featured Run"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={updateConfig.isPending || !config?.landing_featured_instance_id}
+            onClick={() => updateConfig.mutate({ landing_featured_instance_id: "" })}
+          >
+            Clear
           </Button>
         </div>
       </Card>

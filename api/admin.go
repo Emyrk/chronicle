@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -22,6 +23,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -852,12 +854,16 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	resp.Branding = unmarshalBranding(config.Branding)
 	resp.Discoverable = config.Discoverable
 	resp.RootDomainDiscovery = config.RootDomainDiscovery
+	resp.ForeverLandingEnabled = config.ForeverLandingEnabled
 	if config.DefaultFormat.Valid {
 		s := string(config.DefaultFormat.LogFormat)
 		resp.DefaultFormat = &s
 	}
 	if len(config.AvailableFormats) > 0 {
 		resp.AvailableFormats = config.AvailableFormats
+	}
+	if config.LandingFeaturedInstanceID.Valid {
+		resp.LandingFeaturedInstanceID = config.LandingFeaturedInstanceID.UUID.String()
 	}
 
 	// The zug-zug sync card requires both tenant opt-in and a configured
@@ -915,12 +921,45 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 	if req.DisableClientUpload != nil {
 		params.ClientUploadsDisabled = pgtype.Bool{Bool: *req.DisableClientUpload, Valid: true}
 	}
+	if req.ForeverLandingEnabled != nil {
+		params.ForeverLandingEnabled = pgtype.Bool{Bool: *req.ForeverLandingEnabled, Valid: true}
+	}
+	var featured uuid.NullUUID
+	if req.LandingFeaturedInstanceID != nil && *req.LandingFeaturedInstanceID != "" {
+		id, err := uuid.Parse(*req.LandingFeaturedInstanceID)
+		if err != nil {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "landing_featured_instance_id must be an instance UUID"})
+			return
+		}
+		inst, err := a.Opts.Zed.InstanceWithUnlisted(ctx, id)
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Featured instance not found"})
+			return
+		}
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		if inst.Unlisted {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Featured instance must be public, not unlisted"})
+			return
+		}
+		featured = uuid.NullUUID{UUID: id, Valid: true}
+	}
 	t := servicetenant.TenantFromContext(ctx)
 
 	config, err := a.Opts.Zed.UpdateSiteConfig(ctx, params)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
+	}
+	if req.LandingFeaturedInstanceID != nil {
+		config, err = a.Opts.Zed.UpdateSiteConfigLandingFeaturedInstance(ctx, featured)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		a.landing.invalidate()
 	}
 	adsEnabled := siteAdsEnabled(a.adsDeploymentEnabled(), config.AdsEnabled, t)
 	resp := chroniclesdk.SiteConfig{
@@ -933,6 +972,10 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 		Branding:              unmarshalBranding(config.Branding),
 		Discoverable:          config.Discoverable,
 		RootDomainDiscovery:   config.RootDomainDiscovery,
+		ForeverLandingEnabled: config.ForeverLandingEnabled,
+	}
+	if config.LandingFeaturedInstanceID.Valid {
+		resp.LandingFeaturedInstanceID = config.LandingFeaturedInstanceID.UUID.String()
 	}
 	if t != nil {
 		resp.DisabledAds = t.DisabledAds

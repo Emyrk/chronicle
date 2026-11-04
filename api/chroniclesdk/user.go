@@ -267,6 +267,13 @@ type SiteConfig struct {
 	// ExternalVerification advertises the tenant's external character
 	// verification provider (never includes the URL or secret).
 	ExternalVerification *ExternalVerificationPublic `json:"external_verification,omitempty"`
+	// LandingFeaturedInstanceID is the admin-chosen instance replayed on the
+	// /start landing hero. Empty when unset (the server may still fall back to
+	// its deployment default).
+	LandingFeaturedInstanceID string `json:"landing_featured_instance_id,omitempty"`
+	// ForeverLandingEnabled makes WoW Forever's "/" serve the replay landing
+	// (/start2). Off reverts "/" to the standard home page. Other flavors ignore it.
+	ForeverLandingEnabled bool `json:"forever_landing_enabled"`
 }
 
 // UpdateSiteConfigRequest allows partial updates to site configuration.
@@ -280,6 +287,11 @@ type UpdateSiteConfigRequest struct {
 	RootDomainDiscovery *bool     `json:"root_domain_discovery,omitempty"`
 	DefaultFormat       *string   `json:"default_format,omitempty"`
 	AvailableFormats    []string  `json:"available_formats,omitempty"`
+	// LandingFeaturedInstanceID sets the landing hero's featured instance.
+	// An empty string clears it.
+	LandingFeaturedInstanceID *string `json:"landing_featured_instance_id,omitempty"`
+	// ForeverLandingEnabled toggles WoW Forever's "/" between the replay landing and the standard home page.
+	ForeverLandingEnabled *bool `json:"forever_landing_enabled,omitempty"`
 }
 
 // SetUserRolesRequest is the request body for setting a user's Chronicle roles.

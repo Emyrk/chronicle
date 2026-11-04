@@ -4,7 +4,7 @@ import { focusPlayerActions, instanceEntityAttributes, instanceRowEntity } from 
 import { EntityActionScope } from "@/components/EntityMenu/EntityMenu";
 import { AbilityBreakout, type AbilityData } from "@/components/ui/AbilityBreakout";
 import { GenericPanel } from "../GenericPanel";
-import type { EntitySelection, PanelRenderProps } from "../types";
+import type { PanelRenderProps } from "../types";
 import {
   EXCLUDE_UNRANKED_DAMAGE_OPTION,
   type DamageDoneResult,
@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { useParsePills } from "../parsePills";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { parseMetricPanelLiveState, updateMetricPanelLiveState } from "../metricPanelLiveState";
+import { aggregateForEncounters } from "./aggregateDamageDone";
 
 /** Update a single token prefix in panelOption, preserving all other tokens. */
 function updatePanelOptionToken(
@@ -41,69 +42,6 @@ function togglePanelOptionFlag(
   const next = tokens.filter((token) => token !== flag);
   if (enabled) next.push(flag);
   return next.length > 0 ? next.join(",") : null;
-}
-
-/**
- * Aggregate damage data across selected encounters.
- * Merges per-encounter data into a single map by player.
- * 
- * - If selected.enemyIds is non-empty, only sum damage dealt to those targets
- * - If selected.playerIds is non-empty, dim players not in selection
- */
-function aggregateForEncounters(
-  sourceType: DamageSourceType,
-  result: DamageDoneResult,
-  selectedEncounterIds: string[],
-  selected: EntitySelection,
-  disableSubjectSelection = false,
-): PlayerMetricChartData[] {
-  const aggregated = new Map<string, PlayerMetricChartData>();
-  
-  // Determine which entity set controls the "dimmed" highlight.
-  // Target filtering is handled by panel defaultFilters at the processor level.
-  let subjects = selected.playerIds;
-  if (sourceType === "enemies") {
-    subjects = selected.enemyIds;
-  }
-  const hasSubjectSelection = !disableSubjectSelection && subjects.size > 0;
-  
-  for (const encounterId of selectedEncounterIds) {
-    const encounterDamage = result.EncounterDamage.get(encounterId);
-    const encounterExcluded = result.EncounterExcludedDamage?.get(encounterId);
-    const playerIds = new Set([
-      ...(encounterDamage?.keys() ?? []),
-      ...(encounterExcluded?.keys() ?? []),
-    ]);
-
-    for (const playerId of playerIds) {
-      const data = encounterDamage?.get(playerId) ?? encounterExcluded?.get(playerId);
-      if (!data) continue;
-
-      const damageValue = Array.from(encounterDamage?.get(playerId)?.target.values() ?? [])
-        .reduce((sum, amount) => sum + amount, 0);
-      const excludedValue = Array.from(encounterExcluded?.get(playerId)?.target.values() ?? [])
-        .reduce((sum, amount) => sum + amount, 0);
-      if (damageValue === 0 && excludedValue === 0) continue;
-
-      const existing = aggregated.get(playerId);
-      if (existing) {
-        existing.value += damageValue;
-        existing.stackedValue = (existing.stackedValue ?? 0) + excludedValue;
-      } else {
-        aggregated.set(playerId, {
-          playerID: data.playerID,
-          playerName: data.playerName,
-          className: data.className,
-          specialization: data.specialization,
-          value: damageValue,
-          stackedValue: excludedValue || undefined,
-          dimmed: hasSubjectSelection && !subjects.has(playerId),
-        });
-      }
-    }
-  }
-  
-  return Array.from(aggregated.values());
 }
 
 interface DamageDoneContentProps extends PanelRenderProps<DamageDoneResult> {
