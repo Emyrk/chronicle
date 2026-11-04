@@ -37,9 +37,11 @@ players.filter(p, p.class == "PRIEST").size() >= 3
 
 **Response headers.**
 - Every response carries the caller's bucket: `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (seconds until full).
-- Every response for a query that compiled also carries `Chronicle-Search-Cost`, the tokens the query costs. That includes 403, 429 and 503. Only a 400 for an invalid query has no cost.
+- Every response for a query that compiled also carries `Chronicle-Search-Cost`, the query's static compiled cost. That includes 403, 429 and 503. Only a 400 for an invalid query has no cost.
+- After a query runs and its runtime charge is recorded, the response also carries `Chronicle-Search-Runtime-Cost`; the UI shows the static + runtime total and breakdown.
 - Refused, invalid and login-required requests spend nothing.
-- A 503 (busy) refunds the tokens, so only searches that actually ran or timed out are charged.
+- A 503 (busy) refunds the static cost because the query never ran.
+- Once execution starts, cancellation, timeout and query errors retain the static cost and add a runtime charge of 10 tokens per second, rounded up to whole tokens. The post-query charge may make `RateLimit-Remaining` negative; normal searches stay blocked until refill clears the debt.
 
 **Why a run matched:** `POST /api/v1/raidlogs/search/explain` with `{"query": {...}, "instance_id": "..."}` returns `{matched, evidence}`.
 - `evidence` mirrors the query tree node for node: `children` line up with `and`/`or`/`not`, and each witness's `evidence` lines up with its quantifier's subtree.
@@ -58,7 +60,7 @@ players.filter(p, p.class == "PRIEST").size() >= 3
 
 They have a per-IP bucket. Everything else returns 403 "Log in to use advanced search."
 
-**Cost.** `Compiled.Cost` adds up per-field weights (`field.Cost`, default 2), plus 2 per `or`, 1 per `not`, 4 per `any_*` and 10 per `count_*`, plus a base of 1. The rate limiter charges that many tokens:
+**Cost.** `Compiled.Cost` adds up per-field weights (`field.Cost`, default 2), plus 2 per `or`, 1 per `not`, 4 per `any_*` and 10 per `count_*`, plus a base of 1. The rate limiter charges that static cost before execution, then 10 additional tokens per second of execution (rounded up):
 - logged-in users: 60 tokens a minute, with burst 100 for free users, 300 for Honored, 800 for Revered and 2000 for Exalted
 - anonymous: 20 tokens a minute, burst 40 per IP
 

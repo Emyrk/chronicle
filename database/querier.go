@@ -318,6 +318,11 @@ type sqlcQuerier interface {
 	// instance_id, instance_name, and realm_id.
 	FindMatchingServerUpload(ctx context.Context, arg FindMatchingServerUploadParams) (WoWLogGroup, error)
 	FinishAccountPurge(ctx context.Context, arg FinishAccountPurgeParams) error
+	// Atomically refills a leaky bucket and always takes cost tokens, even when
+	// that makes the balance negative. This is for work whose final cost is only
+	// known after it has completed. The row lock taken by the upsert serializes
+	// concurrent charges on the same key.
+	ForceTakeRateLimitTokens(ctx context.Context, arg ForceTakeRateLimitTokensParams) (float64, error)
 	GearTrendsSlotEnchants(ctx context.Context, arg GearTrendsSlotEnchantsParams) ([]GearTrendsSlotEnchantsRow, error)
 	// Observed gear trends: the gear worn by the top leaderboard performances
 	// of a class/spec, aggregated per equipment slot.

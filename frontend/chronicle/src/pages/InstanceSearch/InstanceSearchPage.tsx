@@ -293,6 +293,7 @@ export function InstanceSearchPage() {
     ? { limit: limit.data.limit, remaining: limit.data.remaining, resetSeconds: limit.data.reset_seconds }
     : searchBudget;
   const lastCost = lastPage?.cost ?? error?.cost ?? null;
+  const lastRuntimeCost = lastPage?.runtimeCost ?? error?.runtimeCost ?? null;
   // The cost the server will charge for the current draft, live as it's edited.
   const liveCost = useMemo(() => (fields.data && !codeInvalid ? queryCost(draftTree, fields.data) : null), [fields.data, codeInvalid, draftTree]);
   const tooComplex = liveCost != null && budget != null && liveCost.total > budget.limit;
@@ -359,7 +360,7 @@ export function InstanceSearchPage() {
             </Link>
           </p>
         </div>
-        <BudgetLine budget={budget} lastCost={lastCost} pending={collapsed ? null : (liveCost?.total ?? null)} />
+        <BudgetLine budget={budget} lastCost={lastCost} lastRuntimeCost={lastRuntimeCost} pending={collapsed ? null : (liveCost?.total ?? null)} />
       </div>
 
       {collapsed ? (
@@ -601,7 +602,17 @@ function parseCode(code: string): { tree: Node | undefined; error: { message: st
  * the bar it would spend is highlighted and its cost shown, amber when it's
  * more than what's left and red when it's more than the whole budget.
  */
-function BudgetLine({ budget, lastCost, pending }: { budget: SearchBudget | null; lastCost: number | null; pending: number | null }) {
+function BudgetLine({
+  budget,
+  lastCost,
+  lastRuntimeCost,
+  pending,
+}: {
+  budget: SearchBudget | null;
+  lastCost: number | null;
+  lastRuntimeCost: number | null;
+  pending: number | null;
+}) {
   if (!budget) return null;
   const frac = (n: number) => (budget.limit > 0 ? Math.max(0, Math.min(1, n / budget.limit)) : 0);
   const left = frac(budget.remaining);
@@ -626,7 +637,12 @@ function BudgetLine({ budget, lastCost, pending }: { budget: SearchBudget | null
           · this search costs {pending}
         </span>
       ) : (
-        lastCost != null && <span className="tabular-nums">· last search cost {lastCost}</span>
+        lastCost != null && (
+          <span className="tabular-nums">
+            · last search cost {lastCost + (lastRuntimeCost ?? 0)}
+            {lastRuntimeCost != null && <span className="text-muted-foreground"> ({lastCost} query + {lastRuntimeCost} runtime)</span>}
+          </span>
+        )
       )}
     </div>
   );

@@ -47,12 +47,13 @@ func TestDiscordSearchUsesSharedAdmission(t *testing.T) {
 	user := uuid.New()
 	_, first := search.Search(ctx, serviceinstancesearch.Caller{UserID: user, TenantID: tenant.ID}, chroniclesdk.InstanceSearchQuery{})
 	require.NoError(t, first.Err)
+	require.Positive(t, first.RuntimeCost)
 	output, err := service.searchInstances(ctx, toolContext{userID: user, tenantSlug: "turtle"}, `{}`)
 	require.NoError(t, err)
 	require.Contains(t, output, `"cost":1`)
 	status, _, err := search.Peek(ctx, serviceinstancesearch.Caller{UserID: user, TenantID: tenant.ID})
 	require.NoError(t, err)
-	require.InDelta(t, 98, status.Remaining, 1)
+	require.InDelta(t, 96, status.Remaining, 1)
 }
 
 func TestDiscordAnswerOnlyCollectsAssistantText(t *testing.T) {

@@ -37,6 +37,7 @@ func PerMinute(n, burst float64) Limit {
 // Store is the database subset the limiter needs.
 type Store interface {
 	TakeRateLimitTokens(ctx context.Context, arg database.TakeRateLimitTokensParams) (database.TakeRateLimitTokensRow, error)
+	ForceTakeRateLimitTokens(ctx context.Context, arg database.ForceTakeRateLimitTokensParams) (float64, error)
 	PeekRateLimitTokens(ctx context.Context, arg database.PeekRateLimitTokensParams) (float64, error)
 }
 
@@ -89,6 +90,30 @@ func (l *Limiter) TakeWithLimit(ctx context.Context, subject string, cost float6
 		return Result{}, xerrors.Errorf("rate limit cost must not be negative, got %v", cost)
 	}
 	return l.take(ctx, subject, cost, limit)
+}
+
+// ForceTake takes cost tokens from subject's bucket even when that makes its
+// balance negative. Use it for work whose final cost is only known after the
+// work has completed.
+func (l *Limiter) ForceTake(ctx context.Context, subject string, cost float64) (Status, error) {
+	return l.ForceTakeWithLimit(ctx, subject, cost, l.limit)
+}
+
+// ForceTakeWithLimit is ForceTake with a per-request limit.
+func (l *Limiter) ForceTakeWithLimit(ctx context.Context, subject string, cost float64, limit Limit) (Status, error) {
+	if cost < 0 {
+		return Status{}, xerrors.Errorf("forced rate limit cost must not be negative, got %v", cost)
+	}
+	tokens, err := l.store.ForceTakeRateLimitTokens(ctx, database.ForceTakeRateLimitTokensParams{
+		Key:           l.key(subject),
+		Burst:         limit.Burst,
+		Cost:          cost,
+		RatePerSecond: limit.PerSecond,
+	})
+	if err != nil {
+		return Status{}, xerrors.Errorf("force take rate limit tokens: %w", err)
+	}
+	return status(tokens, limit), nil
 }
 
 // Refund returns tokens to subject's bucket, capped at the burst. Use it

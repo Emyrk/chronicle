@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { http, HttpResponse, delay } from "msw";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { InstanceSearchFieldsResponse, InstanceSearchQuery, InstanceSearchResult, SupportedInstance } from "@/api/typesGenerated";
+import { InferenceRuntimeProvider } from "@/features/chat/runtime";
 import { InstanceSearchPage } from "./InstanceSearchPage";
 import { SearchGuidePage } from "./SearchGuidePage";
 import { encodeQuery, type Node } from "./queryModel";
@@ -81,11 +82,12 @@ function handlers({
   const supporterLimit = tier === "exalted" ? 2000 : tier === "revered" ? 800 : tier === "honored" ? 300 : 100;
   const limit = loggedIn ? supporterLimit : 40;
   let remaining = budgetLeft ?? limit;
-  const rlHeaders = (cost?: number) => ({
+  const rlHeaders = (cost?: number, runtimeCost?: number) => ({
     "RateLimit-Limit": String(limit),
     "RateLimit-Remaining": String(Math.floor(remaining)),
     "RateLimit-Reset": String(Math.ceil(((limit - remaining) / (loggedIn ? 60 : 20)) * 60)),
     ...(cost != null ? { "Chronicle-Search-Cost": String(cost) } : {}),
+    ...(runtimeCost != null ? { "Chronicle-Search-Runtime-Cost": String(runtimeCost) } : {}),
   });
   return [
     http.get("/api/v1/whoami", () => (loggedIn ? HttpResponse.json({ ...session, supporter_tier: tier }) : new HttpResponse(null, { status: 204 }))),
@@ -100,9 +102,9 @@ function handlers({
     http.post("/api/v1/raidlogs/search/explain", async ({ request }) => {
       await delay(300);
       const body = (await request.json()) as { query: InstanceSearchQuery };
-      remaining = Math.max(0, remaining - 2);
+      remaining = Math.max(0, remaining - 3);
       const where = body.query.where;
-      return HttpResponse.json({ matched: true, ...(where ? { evidence: mockEvidence(where) } : {}) }, { headers: rlHeaders(2) });
+      return HttpResponse.json({ matched: true, ...(where ? { evidence: mockEvidence(where) } : {}) }, { headers: rlHeaders(2, 1) });
     }),
     http.post("/api/v1/raidlogs/search", async ({ request }) => {
       await delay(350);
@@ -120,11 +122,13 @@ function handlers({
         return HttpResponse.json({ message: "You are searching too quickly. Try again shortly." }, { status: 429, headers: { ...rlHeaders(cost), "Retry-After": "12" } });
       }
       if (search === "timeout") {
-        remaining -= cost;
-        return HttpResponse.json({ message: "This search took too long.", call_to_action: "Narrow it with a zone, realm or date range." }, { status: 422, headers: rlHeaders(cost) });
+        const runtimeCost = 50;
+        remaining -= cost + runtimeCost;
+        return HttpResponse.json({ message: "This search took too long.", call_to_action: "Narrow it with a zone, realm or date range." }, { status: 422, headers: rlHeaders(cost, runtimeCost) });
       }
-      if (budgetLeft === undefined) remaining = Math.max(0, remaining - cost);
-      if (search === "empty") return HttpResponse.json({ results: [] }, { headers: rlHeaders(cost) });
+      const runtimeCost = 4;
+      if (budgetLeft === undefined) remaining = Math.max(0, remaining - cost - runtimeCost);
+      if (search === "empty") return HttpResponse.json({ results: [] }, { headers: rlHeaders(cost, runtimeCost) });
       const start = body.cursor ? allRows.findIndex((r) => r.id === body.cursor!.id) + 1 : 0;
       const pageSize = body.limit ?? 25;
       const page = allRows.slice(start, start + pageSize);
@@ -132,7 +136,7 @@ function handlers({
       const hasMore = start + pageSize < allRows.length;
       return HttpResponse.json(
         { results: page, ...(hasMore && last ? { next: { started_at: last.started_at, id: last.id } } : {}) },
-        { headers: rlHeaders(cost) },
+        { headers: rlHeaders(cost, runtimeCost) },
       );
     }),
   ];
@@ -201,13 +205,15 @@ const meta: Meta<typeof InstanceSearchPage> = {
   component: InstanceSearchPage,
   decorators: [
     (Story, context) => (
-      <MemoryRouter initialEntries={[context.parameters.initialEntry ?? "/search"]}>
-        <div className="min-h-screen bg-background">
-          <Routes>
-            <Route path="/search" element={<Story />} />
-          </Routes>
-        </div>
-      </MemoryRouter>
+      <InferenceRuntimeProvider>
+        <MemoryRouter initialEntries={[context.parameters.initialEntry ?? "/search"]}>
+          <div className="min-h-screen bg-background">
+            <Routes>
+              <Route path="/search" element={<Story />} />
+            </Routes>
+          </div>
+        </MemoryRouter>
+      </InferenceRuntimeProvider>
     ),
   ],
   parameters: {
