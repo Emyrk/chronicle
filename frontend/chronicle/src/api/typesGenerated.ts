@@ -534,6 +534,7 @@ export interface AdminTenantRatingCatchup {
     readonly dirty_renown: number;
     readonly dirty_mastery: number;
     readonly dirty_peak: number;
+    readonly active_drain_jobs: number;
     readonly peak_pages: number;
     readonly oldest_run?: string;
     readonly oldest_renown?: string;

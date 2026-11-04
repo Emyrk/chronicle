@@ -55,14 +55,14 @@ func ratingCatchupSnapshot(rows []database.ListTenantRatingCatchupStatusRow, job
 		status := "catching_up"
 		if !row.SourceCutoff.Valid {
 			status = "not_started"
-		} else if row.ReadState == "evolving" && row.CompletedAt.Valid && row.DirtyRuns+row.DirtyRenown+row.DirtyMastery+row.DirtyPeak+row.PeakPages == 0 {
+		} else if row.ReadState == "evolving" && row.CompletedAt.Valid && row.DirtyRuns+row.DirtyRenown+row.DirtyMastery+row.DirtyPeak+row.PeakPages+row.ActiveDrainJobs == 0 {
 			status = "caught_up"
 		}
 		item := chroniclesdk.AdminTenantRatingCatchup{
 			TenantID: row.TenantID, Status: status, ReadState: row.ReadState,
 			DirtyRuns: row.DirtyRuns, DirtyRenown: row.DirtyRenown,
 			DirtyMastery: row.DirtyMastery, DirtyPeak: row.DirtyPeak,
-			PeakPages: row.PeakPages, OldestRun: ratingCatchupTimestamp(row.OldestRun),
+			PeakPages: row.PeakPages, ActiveDrainJobs: row.ActiveDrainJobs, OldestRun: ratingCatchupTimestamp(row.OldestRun),
 			OldestRenown:     ratingCatchupTimestamp(row.OldestRenown),
 			OldestMastery:    ratingCatchupTimestamp(row.OldestMastery),
 			OldestPeak:       ratingCatchupTimestamp(row.OldestPeak),

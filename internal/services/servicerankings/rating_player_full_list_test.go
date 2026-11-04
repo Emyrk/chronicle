@@ -16,7 +16,6 @@ import (
 )
 
 type publishedListStub struct {
-	publishedPlayerFullListReader
 	tenant, generation uuid.UUID
 	evolving           bool
 	evolvingRows       []any

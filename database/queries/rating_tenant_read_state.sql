@@ -15,7 +15,20 @@ SELECT (COALESCE((SELECT state FROM tenant_rating_read_states WHERE tenant_id = 
   AND NOT EXISTS (SELECT 1 FROM rating_dirty_renown_subjects WHERE tenant_id = @tenant_id::uuid)
   AND NOT EXISTS (SELECT 1 FROM rating_dirty_mastery_subjects WHERE tenant_id = @tenant_id::uuid)
   AND NOT EXISTS (SELECT 1 FROM rating_dirty_peak_cohorts WHERE tenant_id = @tenant_id::uuid)
-  AND NOT EXISTS (SELECT 1 FROM rating_peak_cohort_pages_evolving WHERE tenant_id = @tenant_id::uuid)) AS caught_up;
+  AND NOT EXISTS (SELECT 1 FROM rating_peak_cohort_pages_evolving WHERE tenant_id = @tenant_id::uuid)
+  AND NOT EXISTS (SELECT 1 FROM river_job WHERE kind = 'drain-tenant-ratings'
+                  AND state IN ('available', 'pending', 'retryable', 'running', 'scheduled')
+                  AND args @> jsonb_build_object('tenant_id', @tenant_id::text))) AS caught_up;
+
+-- name: EnsureTenantRatingReadStateForWriter :exec
+-- Materialize a lockable row before the page begins. A concurrent copier's
+-- legacy→copying transition cannot slip past the writer's state check.
+INSERT INTO tenant_rating_read_states (tenant_id, state)
+SELECT @tenant_id::uuid,
+  CASE WHEN EXISTS (SELECT 1 FROM rating_score_generations
+                    WHERE tenant_id = @tenant_id::uuid AND status = 'active')
+       THEN 'legacy' ELSE 'evolving' END
+ON CONFLICT (tenant_id) DO NOTHING;
 
 -- Held inside each evolving writer transaction. A copier's legacy→copying
 -- update waits for in-flight pages, and pages beginning afterward cannot

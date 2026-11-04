@@ -387,18 +387,8 @@ func (s *Service) Start(ctx context.Context) error {
 		),
 	)
 
-	q.AddPeriodicJob(
-		river.NewPeriodicJob(
-			river.PeriodicInterval(24*time.Hour),
-			func() (river.JobArgs, *river.InsertOpts) {
-				return servicerankings.ArgsRatingStageGC{}, nil
-			},
-			&river.PeriodicJobOpts{ID: "daily-rating-stage-gc", RunOnStart: false},
-		),
-	)
 	// Repair historical missing Renown facts in bounded pages each day.
-	// Fact changes mark incremental Renown subjects, including repaired facts;
-	// full rebuild remains available manually for recovery.
+	// Fact changes mark Renown subjects dirty for the tenant drain.
 	q.AddPeriodicJob(
 		river.NewPeriodicJob(
 			river.PeriodicInterval(24*time.Hour),

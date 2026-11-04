@@ -46,6 +46,7 @@ func TestRatingCatchupJobState(t *testing.T) {
 		{TenantID: tenant.String(), State: "retryable", LastError: "repair failed", AttemptedAt: pgtype.Timestamptz{Time: now, Valid: true}},
 		{TenantID: tenant.String(), State: "completed", FinalizedAt: pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true}},
 	}
+	rows[0].ActiveDrainJobs = 1
 	result := ratingCatchupSnapshot(rows, jobs, now)
 	require.Equal(t, "stalled_error", result.Tenants[0].Status)
 	require.Equal(t, "repair failed", result.Tenants[0].JobLastError)

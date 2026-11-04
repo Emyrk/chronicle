@@ -122,11 +122,12 @@ func TestTenantRatingProjectionsDownAndUp(t *testing.T) {
 	_, err = conn.Exec(ctx, "RESET ROLE")
 	require.NoError(t, err)
 	defer func() { _, _ = conn.Exec(context.Background(), "SET ROLE chronicle") }()
-	// The Peak denominator has a foreign key to the generation/tenant index
-	// created by 000317; roll it back first, then restore it after 000317.
+	// The Peak denominator and the copy cursor have foreign keys to the
+	// generation/tenant index created by 000317. Roll them back before 000317.
 	for _, migration := range []string{
-		"000327_rating_peak_denominators.down", "000317_tenant_rating_projections.down",
-		"000317_tenant_rating_projections.up", "000327_rating_peak_denominators.up",
+		"000334_tenant_rating_copy_progress.down", "000327_rating_peak_denominators.down",
+		"000317_tenant_rating_projections.down", "000317_tenant_rating_projections.up",
+		"000327_rating_peak_denominators.up", "000334_tenant_rating_copy_progress.up",
 	} {
 		sql, err := os.ReadFile("migrations/" + migration + ".sql")
 		require.NoError(t, err)

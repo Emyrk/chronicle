@@ -64,7 +64,7 @@ function TenantCatchup({ row, samples }: { row: AdminTenantRatingCatchup; sample
       <div>
         <div className="break-all font-mono text-xs">{row.tenant_id === "00000000-0000-0000-0000-000000000000" ? "Root" : row.tenant_id}</div>
         <div className="mt-1 text-xs text-muted-foreground">{row.status.replaceAll("_", " ")} · {dirty.toLocaleString()} dirty · oldest {oldestAge(row)}</div>
-        <div className="mt-1 text-xs text-muted-foreground">{row.scan_completed_at ? "Historical scan complete" : row.scan_source_cutoff ? "Historical scan running" : "Historical scan not started"} · {row.peak_pages} Peak pages</div>
+        <div className="mt-1 text-xs text-muted-foreground">{row.scan_completed_at ? "Historical scan complete" : row.scan_source_cutoff ? "Historical scan running" : "Historical scan not started"} · {row.peak_pages} Peak pages · {row.active_drain_jobs} active drain jobs</div>
         <div className="mt-1 text-xs text-muted-foreground">Projection: {row.read_state} · Drain: {row.job_state ?? "not queued"}{row.last_succeeded_at ? ` · last finished ${new Date(row.last_succeeded_at).toLocaleString()}` : ""}</div>
         {row.job_last_error && <p role="alert" className="mt-1 break-words text-xs text-destructive">{row.job_last_error}</p>}
       </div>

@@ -25,6 +25,9 @@ type evolvingTenantRatingManifest struct {
 // legacy→copying transition with in-flight acknowledgements, so mutations
 // committed during the active-row copy remain dirty for replay afterward.
 func shouldRefreshEvolvingTenantRating(ctx context.Context, tx database.Store, tenant uuid.UUID) (bool, error) {
+	if err := tx.EnsureTenantRatingReadStateForWriter(ctx, tenant); err != nil {
+		return false, err
+	}
 	state, err := tx.LockTenantRatingReadStateForEvolvingPage(ctx, tenant)
 	return state == "evolving", err
 }

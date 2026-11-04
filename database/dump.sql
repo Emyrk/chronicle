@@ -3532,6 +3532,17 @@ CREATE TABLE telemetry_notices (
     CONSTRAINT telemetry_notices_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'critical'::text])))
 );
 
+CREATE TABLE tenant_rating_copy_progress (
+    tenant_id uuid NOT NULL,
+    generation_id uuid NOT NULL,
+    table_name text NOT NULL,
+    after_key jsonb,
+    completed boolean DEFAULT false NOT NULL,
+    CONSTRAINT tenant_rating_copy_progress_table_name_check CHECK ((table_name = ANY (ARRAY['player_boss'::text, 'player_scope'::text, 'guild_boss'::text, 'guild_scope'::text, 'peak'::text])))
+);
+
+ALTER TABLE ONLY tenant_rating_copy_progress FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE tenant_rating_read_states (
     tenant_id uuid NOT NULL,
     state text NOT NULL,
@@ -4689,6 +4700,9 @@ ALTER TABLE ONLY talent_builds
 
 ALTER TABLE ONLY telemetry_notices
     ADD CONSTRAINT telemetry_notices_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY tenant_rating_copy_progress
+    ADD CONSTRAINT tenant_rating_copy_progress_pkey PRIMARY KEY (tenant_id, table_name);
 
 ALTER TABLE ONLY tenant_rating_read_states
     ADD CONSTRAINT tenant_rating_read_states_pkey PRIMARY KEY (tenant_id);
@@ -5936,6 +5950,9 @@ ALTER TABLE ONLY sidekick_wow_directories
 ALTER TABLE ONLY talent_builds
     ADD CONSTRAINT talent_builds_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id);
 
+ALTER TABLE ONLY tenant_rating_copy_progress
+    ADD CONSTRAINT tenant_rating_copy_progress_generation_id_tenant_id_fkey FOREIGN KEY (generation_id, tenant_id) REFERENCES rating_score_generations(id, tenant_id);
+
 ALTER TABLE ONLY tenants
     ADD CONSTRAINT tenants_default_dataset_id_fkey FOREIGN KEY (default_dataset_id) REFERENCES datasets(id);
 
@@ -6253,6 +6270,8 @@ CREATE POLICY tenant_admin_bypass ON rating_stage_player_renown USING ((current_
 
 CREATE POLICY tenant_admin_bypass ON renown_kill_facts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
+CREATE POLICY tenant_admin_bypass ON tenant_rating_copy_progress USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
 CREATE POLICY tenant_admin_bypass ON tenant_rating_read_states USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON wow_server_realms USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
@@ -6365,6 +6384,8 @@ CREATE POLICY tenant_isolation ON rating_stage_player_renown USING ((realm_id IN
 CREATE POLICY tenant_isolation ON renown_kill_facts USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
 
+CREATE POLICY tenant_isolation ON tenant_rating_copy_progress USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
 CREATE POLICY tenant_isolation ON tenant_rating_read_states USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON wow_servers USING (
@@ -6377,6 +6398,8 @@ END);
 
 CREATE POLICY tenant_item_price_isolation ON item_daily_prices USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
+
+ALTER TABLE tenant_rating_copy_progress ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE tenant_rating_read_states ENABLE ROW LEVEL SECURITY;
 

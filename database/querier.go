@@ -43,6 +43,7 @@ type sqlcQuerier interface {
 	// overwriting another worker's progress. Do not advance before staging writes
 	// commit; use the same transaction for inserts and this checkpoint update.
 	AdvanceRatingRebuildCheckpoint(ctx context.Context, arg AdvanceRatingRebuildCheckpointParams) (int64, error)
+	AdvanceTenantRatingCopyProgress(ctx context.Context, arg AdvanceTenantRatingCopyProgressParams) (int64, error)
 	AdvanceWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	AssignRatingRealmToGroup(ctx context.Context, arg AssignRatingRealmToGroupParams) (int64, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
@@ -57,6 +58,7 @@ type sqlcQuerier interface {
 	// Preserve canonical attendance even when a log is deleted before the
 	// asynchronous ranking_runs refresh has persisted its representative.
 	BackfillRenownFactsForSource(ctx context.Context, arg BackfillRenownFactsForSourceParams) (int64, error)
+	BeginTenantRatingCopy(ctx context.Context, tenantID uuid.UUID) error
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	// Invalidate checkpoints staged before a canonical run's facts were removed.
 	// Caller supplies the affected realms in the same transaction as deletion.
@@ -102,12 +104,18 @@ type sqlcQuerier interface {
 	CompleteInferenceClientToolRequest(ctx context.Context, arg CompleteInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
 	CompleteProofEvidenceCleanup(ctx context.Context, arg CompleteProofEvidenceCleanupParams) error
 	CompleteRatingLiveEvidenceBootstrap(ctx context.Context, arg CompleteRatingLiveEvidenceBootstrapParams) (int64, error)
+	CompleteTenantRatingCopyProgress(ctx context.Context, arg CompleteTenantRatingCopyProgressParams) (int64, error)
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	ConsumeInferenceOAuthTransaction(ctx context.Context, arg ConsumeInferenceOAuthTransactionParams) (InferenceOauthTransaction, error)
 	ConsumeLuaProjectUpload(ctx context.Context, objectKey string) (string, error)
 	CopyLegacySpellEffects(ctx context.Context, arg []CopyLegacySpellEffectsParams) *CopyLegacySpellEffectsBatchResults
 	CopyLegacySpellPowers(ctx context.Context, arg []CopyLegacySpellPowersParams) *CopyLegacySpellPowersBatchResults
 	CopyLegacySpellVariants(ctx context.Context, arg []CopyLegacySpellVariantsParams) *CopyLegacySpellVariantsBatchResults
+	CopyTenantRatingGuildBossPage(ctx context.Context, arg CopyTenantRatingGuildBossPageParams) (CopyTenantRatingGuildBossPageRow, error)
+	CopyTenantRatingGuildScopePage(ctx context.Context, arg CopyTenantRatingGuildScopePageParams) (CopyTenantRatingGuildScopePageRow, error)
+	CopyTenantRatingPeakPage(ctx context.Context, arg CopyTenantRatingPeakPageParams) (CopyTenantRatingPeakPageRow, error)
+	CopyTenantRatingPlayerBossPage(ctx context.Context, arg CopyTenantRatingPlayerBossPageParams) (CopyTenantRatingPlayerBossPageRow, error)
+	CopyTenantRatingPlayerScopePage(ctx context.Context, arg CopyTenantRatingPlayerScopePageParams) (CopyTenantRatingPlayerScopePageRow, error)
 	CountActiveRegressionJobs(ctx context.Context) (int64, error)
 	CountAllWoWLogGroups(ctx context.Context, arg CountAllWoWLogGroupsParams) (int32, error)
 	CountCompletedTenantMasteryWindows(ctx context.Context, arg CountCompletedTenantMasteryWindowsParams) (int64, error)
@@ -309,6 +317,9 @@ type sqlcQuerier interface {
 	DisconnectSidekickInstallation(ctx context.Context, arg DisconnectSidekickInstallationParams) (SidekickInstallation, error)
 	EncountersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
 	EnsureDeploymentToken(ctx context.Context, deploymentToken pgtype.Text) (pgtype.Text, error)
+	// Materialize a lockable row before the page begins. A concurrent copier's
+	// legacy→copying transition cannot slip past the writer's state check.
+	EnsureTenantRatingReadStateForWriter(ctx context.Context, tenantID uuid.UUID) error
 	EvolvingDeleteGuildLiveMasteryScope(ctx context.Context, arg EvolvingDeleteGuildLiveMasteryScopeParams) error
 	EvolvingDeleteGuildLiveMasteryScores(ctx context.Context, arg EvolvingDeleteGuildLiveMasteryScoresParams) error
 	EvolvingDeleteGuildTenantRenownBoss(ctx context.Context, arg EvolvingDeleteGuildTenantRenownBossParams) error
@@ -384,6 +395,7 @@ type sqlcQuerier interface {
 	// instance_id, instance_name, and realm_id.
 	FindMatchingServerUpload(ctx context.Context, arg FindMatchingServerUploadParams) (WoWLogGroup, error)
 	FinishAccountPurge(ctx context.Context, arg FinishAccountPurgeParams) error
+	FinishTenantRatingCopy(ctx context.Context, arg FinishTenantRatingCopyParams) (int64, error)
 	// Atomically refills a leaky bucket and always takes cost tokens, even when
 	// that makes the balance negative. This is for work whose final cost is only
 	// known after it has completed. The row lock taken by the upsert serializes
@@ -1250,9 +1262,11 @@ type sqlcQuerier interface {
 	// One bounded row per tenant with realms. Aggregate each dirty table once rather
 	// than running four correlated count(*) scans per tenant on every admin poll.
 	ListTenantRatingCatchupStatus(ctx context.Context) ([]ListTenantRatingCatchupStatusRow, error)
+	ListTenantRatingCopyProgress(ctx context.Context, tenantID uuid.UUID) ([]ListTenantRatingCopyProgressRow, error)
 	// Group configuration is explicit: no group has score eligibility until both
 	// a policy and eligible boss rows have been configured by an operator.
 	ListTenantRatingPolicies(ctx context.Context, tenantID uuid.UUID) ([]RatingGroupPolicy, error)
+	ListTenantRatingsNeedingCopy(ctx context.Context) ([]uuid.UUID, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)
 	// Tenants that use this dataset, either directly (tenant.default_dataset_id)
 	// or via a server they own (wow_servers.default_dataset_id).
@@ -1318,6 +1332,8 @@ type sqlcQuerier interface {
 	// applicant, not a proof row, also works for their first request.
 	LockProofApplicant(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	LockRatingLiveEvidenceBootstrap(ctx context.Context, tenantID uuid.UUID) (LockRatingLiveEvidenceBootstrapRow, error)
+	LockTenantRatingCopyGeneration(ctx context.Context, tenantID uuid.UUID) (uuid.UUID, error)
+	LockTenantRatingCopyState(ctx context.Context, tenantID uuid.UUID) (string, error)
 	// Held inside each evolving writer transaction. A copier's legacy→copying
 	// update waits for in-flight pages, and pages beginning afterward cannot
 	// acknowledge keys until the final copying→evolving commit.
@@ -1592,6 +1608,7 @@ type sqlcQuerier interface {
 	// The start function atomically locks the tenant revision, snapshots all config,
 	// creates a building generation and checkpoint, or returns the unfinished one.
 	StartRatingRebuild(ctx context.Context, arg StartRatingRebuildParams) (uuid.UUID, error)
+	StartTenantRatingCopyProgress(ctx context.Context, arg StartTenantRatingCopyProgressParams) error
 	// The fixed rules and per-realm flavor awards are frozen by the start function.
 	StartTenantRatingRebuild(ctx context.Context, arg StartTenantRatingRebuildParams) (uuid.UUID, error)
 	// Atomically refills a leaky bucket by the time since its last update

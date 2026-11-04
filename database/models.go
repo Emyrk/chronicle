@@ -3231,6 +3231,14 @@ type Tenant struct {
 	DisabledAds         []string           `db:"disabled_ads" json:"disabled_ads"`
 }
 
+type TenantRatingCopyProgress struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+	TableName    string    `db:"table_name" json:"table_name"`
+	AfterKey     []byte    `db:"after_key" json:"after_key"`
+	Completed    bool      `db:"completed" json:"completed"`
+}
+
 type TenantRatingReadState struct {
 	TenantID  uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 	State     string             `db:"state" json:"state"`

@@ -119,8 +119,8 @@ type ratingDrainStage struct {
 }
 
 // Each stage commits one bounded page before moving to the next. A zero-count
-// cycle means no stage made progress (including when generation gates prevent
-// writes), so leave remaining dirty intent for the next periodic dispatch.
+// cycle means no stage made progress; any newly committed dirt is picked up
+// by the next periodic dispatch.
 func drainTenantRatingPages(ctx context.Context, stages []ratingDrainStage, deadline time.Time, now func() time.Time, metrics *WorkerDrainTenantRatings) error {
 	firstPage := true
 	for {

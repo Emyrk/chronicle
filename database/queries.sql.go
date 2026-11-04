@@ -22032,6 +22032,11 @@ WITH tenants AS (
 ), peak_pages AS (
     SELECT tenant_id, count(*)::bigint AS total
     FROM rating_peak_cohort_pages_evolving GROUP BY tenant_id
+), active_jobs AS (
+    SELECT (args->>'tenant_id')::uuid AS tenant_id, count(*)::bigint AS total
+    FROM river_job
+    WHERE kind = 'drain-tenant-ratings' AND state IN ('available', 'pending', 'retryable', 'running', 'scheduled')
+    GROUP BY args->>'tenant_id'
 )
 SELECT tenants.tenant_id::uuid AS tenant_id,
        COALESCE(dirty_runs.total, 0)::bigint AS dirty_runs,
@@ -22043,6 +22048,7 @@ SELECT tenants.tenant_id::uuid AS tenant_id,
        COALESCE(dirty_peak.total, 0)::bigint AS dirty_peak,
        dirty_peak.oldest::timestamptz AS oldest_peak,
        COALESCE(peak_pages.total, 0)::bigint AS peak_pages,
+       COALESCE(active_jobs.total, 0)::bigint AS active_drain_jobs,
        bootstrap.after_run_id, bootstrap.source_cutoff, bootstrap.completed_at,
        COALESCE(read_state.state, CASE WHEN EXISTS (
            SELECT 1 FROM rating_score_generations g
@@ -22055,25 +22061,27 @@ LEFT JOIN dirty_mastery USING (tenant_id)
 LEFT JOIN dirty_peak USING (tenant_id)
 LEFT JOIN peak_pages USING (tenant_id)
 LEFT JOIN rating_live_evidence_bootstraps bootstrap USING (tenant_id)
+LEFT JOIN active_jobs USING (tenant_id)
 LEFT JOIN tenant_rating_read_states read_state USING (tenant_id)
 ORDER BY tenants.tenant_id
 `
 
 type ListTenantRatingCatchupStatusRow struct {
-	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	DirtyRuns     int64              `db:"dirty_runs" json:"dirty_runs"`
-	OldestRun     pgtype.Timestamptz `db:"oldest_run" json:"oldest_run"`
-	DirtyRenown   int64              `db:"dirty_renown" json:"dirty_renown"`
-	OldestRenown  pgtype.Timestamptz `db:"oldest_renown" json:"oldest_renown"`
-	DirtyMastery  int64              `db:"dirty_mastery" json:"dirty_mastery"`
-	OldestMastery pgtype.Timestamptz `db:"oldest_mastery" json:"oldest_mastery"`
-	DirtyPeak     int64              `db:"dirty_peak" json:"dirty_peak"`
-	OldestPeak    pgtype.Timestamptz `db:"oldest_peak" json:"oldest_peak"`
-	PeakPages     int64              `db:"peak_pages" json:"peak_pages"`
-	AfterRunID    uuid.NullUUID      `db:"after_run_id" json:"after_run_id"`
-	SourceCutoff  pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
-	CompletedAt   pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
-	ReadState     string             `db:"read_state" json:"read_state"`
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	DirtyRuns       int64              `db:"dirty_runs" json:"dirty_runs"`
+	OldestRun       pgtype.Timestamptz `db:"oldest_run" json:"oldest_run"`
+	DirtyRenown     int64              `db:"dirty_renown" json:"dirty_renown"`
+	OldestRenown    pgtype.Timestamptz `db:"oldest_renown" json:"oldest_renown"`
+	DirtyMastery    int64              `db:"dirty_mastery" json:"dirty_mastery"`
+	OldestMastery   pgtype.Timestamptz `db:"oldest_mastery" json:"oldest_mastery"`
+	DirtyPeak       int64              `db:"dirty_peak" json:"dirty_peak"`
+	OldestPeak      pgtype.Timestamptz `db:"oldest_peak" json:"oldest_peak"`
+	PeakPages       int64              `db:"peak_pages" json:"peak_pages"`
+	ActiveDrainJobs int64              `db:"active_drain_jobs" json:"active_drain_jobs"`
+	AfterRunID      uuid.NullUUID      `db:"after_run_id" json:"after_run_id"`
+	SourceCutoff    pgtype.Timestamptz `db:"source_cutoff" json:"source_cutoff"`
+	CompletedAt     pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	ReadState       string             `db:"read_state" json:"read_state"`
 }
 
 // One bounded row per tenant with realms. Aggregate each dirty table once rather
@@ -22098,6 +22106,7 @@ func (q *sqlQuerier) ListTenantRatingCatchupStatus(ctx context.Context) ([]ListT
 			&i.DirtyPeak,
 			&i.OldestPeak,
 			&i.PeakPages,
+			&i.ActiveDrainJobs,
 			&i.AfterRunID,
 			&i.SourceCutoff,
 			&i.CompletedAt,
@@ -33317,6 +33326,357 @@ func (q *sqlQuerier) StartTenantRatingRebuild(ctx context.Context, arg StartTena
 	return column_1, err
 }
 
+const advanceTenantRatingCopyProgress = `-- name: AdvanceTenantRatingCopyProgress :execrows
+UPDATE tenant_rating_copy_progress SET after_key = $1::jsonb
+WHERE tenant_id = $2 AND generation_id = $3 AND table_name = $4 AND NOT completed
+`
+
+type AdvanceTenantRatingCopyProgressParams struct {
+	AfterKey     []byte    `db:"after_key" json:"after_key"`
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+	TableName    string    `db:"table_name" json:"table_name"`
+}
+
+func (q *sqlQuerier) AdvanceTenantRatingCopyProgress(ctx context.Context, arg AdvanceTenantRatingCopyProgressParams) (int64, error) {
+	result, err := q.db.Exec(ctx, advanceTenantRatingCopyProgress,
+		arg.AfterKey,
+		arg.TenantID,
+		arg.GenerationID,
+		arg.TableName,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const beginTenantRatingCopy = `-- name: BeginTenantRatingCopy :exec
+INSERT INTO tenant_rating_read_states (tenant_id, state)
+SELECT g.tenant_id, 'copying' FROM rating_score_generations g
+WHERE g.tenant_id = $1 AND g.status = 'active'
+ON CONFLICT (tenant_id) DO UPDATE SET state = 'copying', updated_at = now()
+WHERE tenant_rating_read_states.state = 'legacy'
+`
+
+func (q *sqlQuerier) BeginTenantRatingCopy(ctx context.Context, tenantID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, beginTenantRatingCopy, tenantID)
+	return err
+}
+
+const completeTenantRatingCopyProgress = `-- name: CompleteTenantRatingCopyProgress :execrows
+UPDATE tenant_rating_copy_progress SET completed = true
+WHERE tenant_id = $1 AND generation_id = $2 AND table_name = $3 AND NOT completed
+`
+
+type CompleteTenantRatingCopyProgressParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+	TableName    string    `db:"table_name" json:"table_name"`
+}
+
+func (q *sqlQuerier) CompleteTenantRatingCopyProgress(ctx context.Context, arg CompleteTenantRatingCopyProgressParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeTenantRatingCopyProgress, arg.TenantID, arg.GenerationID, arg.TableName)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const copyTenantRatingGuildBossPage = `-- name: CopyTenantRatingGuildBossPage :one
+WITH page AS MATERIALIZED (
+    SELECT s.generation_id, s.tenant_id, s.realm_id, s.guild_id, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.rating_metric, s.window_kind, s.window_start, s.window_end, s.score, s.best_raw, s.rank_one_raw, s.best_locked_parse, s.form, s.floor_score, s.eligible_kills, s.computed_at FROM guild_tenant_rating_boss_scores s
+    WHERE s.tenant_id = $1 AND s.generation_id = $2
+      AND ($3::jsonb IS NULL OR (s.realm_id, s.guild_id, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.rating_metric, s.window_kind) > (($3::jsonb->>0)::uuid, ($3::jsonb->>1)::uuid, ($3::jsonb->>2)::text, ($3::jsonb->>3)::text, ($3::jsonb->>4)::text, ($3::jsonb->>5)::smallint, ($3::jsonb->>6)::text, ($3::jsonb->>7)::text))
+    ORDER BY s.realm_id, s.guild_id, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.rating_metric, s.window_kind LIMIT 200
+), copied AS (
+    INSERT INTO guild_tenant_rating_boss_scores_evolving (tenant_id, realm_id, guild_id, instance_name, encounter_name, difficulty_name, max_players, rating_metric, window_kind, window_start, window_end, score, best_raw, rank_one_raw, best_locked_parse, form, floor_score, eligible_kills, computed_at)
+    SELECT tenant_id, realm_id, guild_id, instance_name, encounter_name, difficulty_name, max_players, rating_metric, window_kind, window_start, window_end, score, best_raw, rank_one_raw, best_locked_parse, form, floor_score, eligible_kills, computed_at FROM page WHERE true
+    ON CONFLICT DO NOTHING
+    RETURNING 1
+)
+SELECT (SELECT jsonb_build_array(s.realm_id, s.guild_id, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.rating_metric, s.window_kind) FROM page s ORDER BY s.realm_id DESC, s.guild_id DESC, s.instance_name DESC, s.encounter_name DESC, s.difficulty_name DESC, s.max_players DESC, s.rating_metric DESC, s.window_kind DESC LIMIT 1) AS next_key,
+       (SELECT count(*) FROM page)::int AS page_size
+`
+
+type CopyTenantRatingGuildBossPageParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+	AfterKey     []byte    `db:"after_key" json:"after_key"`
+}
+
+type CopyTenantRatingGuildBossPageRow struct {
+	NextKey  []byte `db:"next_key" json:"next_key"`
+	PageSize int32  `db:"page_size" json:"page_size"`
+}
+
+func (q *sqlQuerier) CopyTenantRatingGuildBossPage(ctx context.Context, arg CopyTenantRatingGuildBossPageParams) (CopyTenantRatingGuildBossPageRow, error) {
+	row := q.db.QueryRow(ctx, copyTenantRatingGuildBossPage, arg.TenantID, arg.GenerationID, arg.AfterKey)
+	var i CopyTenantRatingGuildBossPageRow
+	err := row.Scan(&i.NextKey, &i.PageSize)
+	return i, err
+}
+
+const copyTenantRatingGuildScopePage = `-- name: CopyTenantRatingGuildScopePage :one
+WITH page AS MATERIALIZED (
+    SELECT s.generation_id, s.tenant_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.rating_metric, s.window_kind, s.window_start, s.window_end, s.score, s.computed_at FROM guild_tenant_rating_scope_scores s
+    WHERE s.tenant_id = $1 AND s.generation_id = $2
+      AND ($3::jsonb IS NULL OR (s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.rating_metric, s.window_kind) > (($3::jsonb->>0)::uuid, ($3::jsonb->>1)::uuid, ($3::jsonb->>2)::text, ($3::jsonb->>3)::text, ($3::jsonb->>4)::smallint, ($3::jsonb->>5)::text, ($3::jsonb->>6)::text))
+    ORDER BY s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.rating_metric, s.window_kind LIMIT 200
+), copied AS (
+    INSERT INTO guild_tenant_rating_scope_scores_evolving (tenant_id, realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind, window_start, window_end, score, computed_at)
+    SELECT tenant_id, realm_id, guild_id, instance_name, difficulty_name, max_players, rating_metric, window_kind, window_start, window_end, score, computed_at FROM page WHERE true
+    ON CONFLICT DO NOTHING
+    RETURNING 1
+)
+SELECT (SELECT jsonb_build_array(s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.rating_metric, s.window_kind) FROM page s ORDER BY s.realm_id DESC, s.guild_id DESC, s.instance_name DESC, s.difficulty_name DESC, s.max_players DESC, s.rating_metric DESC, s.window_kind DESC LIMIT 1) AS next_key,
+       (SELECT count(*) FROM page)::int AS page_size
+`
+
+type CopyTenantRatingGuildScopePageParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+	AfterKey     []byte    `db:"after_key" json:"after_key"`
+}
+
+type CopyTenantRatingGuildScopePageRow struct {
+	NextKey  []byte `db:"next_key" json:"next_key"`
+	PageSize int32  `db:"page_size" json:"page_size"`
+}
+
+func (q *sqlQuerier) CopyTenantRatingGuildScopePage(ctx context.Context, arg CopyTenantRatingGuildScopePageParams) (CopyTenantRatingGuildScopePageRow, error) {
+	row := q.db.QueryRow(ctx, copyTenantRatingGuildScopePage, arg.TenantID, arg.GenerationID, arg.AfterKey)
+	var i CopyTenantRatingGuildScopePageRow
+	err := row.Scan(&i.NextKey, &i.PageSize)
+	return i, err
+}
+
+const copyTenantRatingPeakPage = `-- name: CopyTenantRatingPeakPage :one
+WITH page AS MATERIALIZED (
+    SELECT s.generation_id, s.tenant_id, s.subject_kind, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.window_kind, s.window_start, s.window_end, s.rank_one_raw, s.updated_at FROM rating_peak_cohort_denominators s
+    WHERE s.tenant_id = $1 AND s.generation_id = $2
+      AND ($3::jsonb IS NULL OR (s.subject_kind, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.window_kind) > (($3::jsonb->>0)::text, ($3::jsonb->>1)::text, ($3::jsonb->>2)::text, ($3::jsonb->>3)::text, ($3::jsonb->>4)::smallint, ($3::jsonb->>5)::text, ($3::jsonb->>6)::text, ($3::jsonb->>7)::text, ($3::jsonb->>8)::text, ($3::jsonb->>9)::text))
+    ORDER BY s.subject_kind, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.window_kind LIMIT 200
+), copied AS (
+    INSERT INTO rating_peak_cohort_denominators_evolving (tenant_id, subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, window_kind, window_start, window_end, rank_one_raw, updated_at)
+    SELECT tenant_id, subject_kind, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, window_kind, window_start, window_end, rank_one_raw, updated_at FROM page WHERE true
+    ON CONFLICT DO NOTHING
+    RETURNING 1
+)
+SELECT (SELECT jsonb_build_array(s.subject_kind, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.window_kind) FROM page s ORDER BY s.subject_kind DESC, s.instance_name DESC, s.encounter_name DESC, s.difficulty_name DESC, s.max_players DESC, s.player_class DESC, s.player_spec DESC, s.player_sub_spec DESC, s.performance_metric DESC, s.window_kind DESC LIMIT 1) AS next_key,
+       (SELECT count(*) FROM page)::int AS page_size
+`
+
+type CopyTenantRatingPeakPageParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+	AfterKey     []byte    `db:"after_key" json:"after_key"`
+}
+
+type CopyTenantRatingPeakPageRow struct {
+	NextKey  []byte `db:"next_key" json:"next_key"`
+	PageSize int32  `db:"page_size" json:"page_size"`
+}
+
+func (q *sqlQuerier) CopyTenantRatingPeakPage(ctx context.Context, arg CopyTenantRatingPeakPageParams) (CopyTenantRatingPeakPageRow, error) {
+	row := q.db.QueryRow(ctx, copyTenantRatingPeakPage, arg.TenantID, arg.GenerationID, arg.AfterKey)
+	var i CopyTenantRatingPeakPageRow
+	err := row.Scan(&i.NextKey, &i.PageSize)
+	return i, err
+}
+
+const copyTenantRatingPlayerBossPage = `-- name: CopyTenantRatingPlayerBossPage :one
+WITH page AS MATERIALIZED (
+    SELECT s.generation_id, s.tenant_id, s.realm_id, s.player_guid, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.rating_metric, s.window_kind, s.window_start, s.window_end, s.score, s.best_raw, s.rank_one_raw, s.best_locked_parse, s.form, s.floor_score, s.eligible_kills, s.computed_at, s.best_duration_secs FROM player_tenant_rating_boss_scores s
+    WHERE s.tenant_id = $1 AND s.generation_id = $2
+      AND ($3::jsonb IS NULL OR (s.realm_id, s.player_guid, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.rating_metric, s.window_kind) > (($3::jsonb->>0)::uuid, ($3::jsonb->>1)::text, ($3::jsonb->>2)::text, ($3::jsonb->>3)::text, ($3::jsonb->>4)::text, ($3::jsonb->>5)::smallint, ($3::jsonb->>6)::text, ($3::jsonb->>7)::text, ($3::jsonb->>8)::text, ($3::jsonb->>9)::text, ($3::jsonb->>10)::text, ($3::jsonb->>11)::text))
+    ORDER BY s.realm_id, s.player_guid, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.rating_metric, s.window_kind LIMIT 200
+), copied AS (
+    INSERT INTO player_tenant_rating_boss_scores_evolving (tenant_id, realm_id, player_guid, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind, window_start, window_end, score, best_raw, rank_one_raw, best_locked_parse, form, floor_score, eligible_kills, computed_at, best_duration_secs)
+    SELECT tenant_id, realm_id, player_guid, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind, window_start, window_end, score, best_raw, rank_one_raw, best_locked_parse, form, floor_score, eligible_kills, computed_at, best_duration_secs FROM page WHERE true
+    ON CONFLICT DO NOTHING
+    RETURNING 1
+)
+SELECT (SELECT jsonb_build_array(s.realm_id, s.player_guid, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.rating_metric, s.window_kind) FROM page s ORDER BY s.realm_id DESC, s.player_guid DESC, s.instance_name DESC, s.encounter_name DESC, s.difficulty_name DESC, s.max_players DESC, s.player_class DESC, s.player_spec DESC, s.player_sub_spec DESC, s.performance_metric DESC, s.rating_metric DESC, s.window_kind DESC LIMIT 1) AS next_key,
+       (SELECT count(*) FROM page)::int AS page_size
+`
+
+type CopyTenantRatingPlayerBossPageParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+	AfterKey     []byte    `db:"after_key" json:"after_key"`
+}
+
+type CopyTenantRatingPlayerBossPageRow struct {
+	NextKey  []byte `db:"next_key" json:"next_key"`
+	PageSize int32  `db:"page_size" json:"page_size"`
+}
+
+func (q *sqlQuerier) CopyTenantRatingPlayerBossPage(ctx context.Context, arg CopyTenantRatingPlayerBossPageParams) (CopyTenantRatingPlayerBossPageRow, error) {
+	row := q.db.QueryRow(ctx, copyTenantRatingPlayerBossPage, arg.TenantID, arg.GenerationID, arg.AfterKey)
+	var i CopyTenantRatingPlayerBossPageRow
+	err := row.Scan(&i.NextKey, &i.PageSize)
+	return i, err
+}
+
+const copyTenantRatingPlayerScopePage = `-- name: CopyTenantRatingPlayerScopePage :one
+WITH page AS MATERIALIZED (
+    SELECT s.generation_id, s.tenant_id, s.realm_id, s.player_guid, s.instance_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.rating_metric, s.window_kind, s.window_start, s.window_end, s.score, s.computed_at, s.best_raw, s.best_duration_secs FROM player_tenant_rating_scope_scores s
+    WHERE s.tenant_id = $1 AND s.generation_id = $2
+      AND ($3::jsonb IS NULL OR (s.realm_id, s.player_guid, s.instance_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.rating_metric, s.window_kind) > (($3::jsonb->>0)::uuid, ($3::jsonb->>1)::text, ($3::jsonb->>2)::text, ($3::jsonb->>3)::text, ($3::jsonb->>4)::smallint, ($3::jsonb->>5)::text, ($3::jsonb->>6)::text, ($3::jsonb->>7)::text, ($3::jsonb->>8)::text, ($3::jsonb->>9)::text, ($3::jsonb->>10)::text))
+    ORDER BY s.realm_id, s.player_guid, s.instance_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.rating_metric, s.window_kind LIMIT 200
+), copied AS (
+    INSERT INTO player_tenant_rating_scope_scores_evolving (tenant_id, realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind, window_start, window_end, score, computed_at, best_raw, best_duration_secs)
+    SELECT tenant_id, realm_id, player_guid, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind, window_start, window_end, score, computed_at, best_raw, best_duration_secs FROM page WHERE true
+    ON CONFLICT DO NOTHING
+    RETURNING 1
+)
+SELECT (SELECT jsonb_build_array(s.realm_id, s.player_guid, s.instance_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.rating_metric, s.window_kind) FROM page s ORDER BY s.realm_id DESC, s.player_guid DESC, s.instance_name DESC, s.difficulty_name DESC, s.max_players DESC, s.player_class DESC, s.player_spec DESC, s.player_sub_spec DESC, s.performance_metric DESC, s.rating_metric DESC, s.window_kind DESC LIMIT 1) AS next_key,
+       (SELECT count(*) FROM page)::int AS page_size
+`
+
+type CopyTenantRatingPlayerScopePageParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+	AfterKey     []byte    `db:"after_key" json:"after_key"`
+}
+
+type CopyTenantRatingPlayerScopePageRow struct {
+	NextKey  []byte `db:"next_key" json:"next_key"`
+	PageSize int32  `db:"page_size" json:"page_size"`
+}
+
+func (q *sqlQuerier) CopyTenantRatingPlayerScopePage(ctx context.Context, arg CopyTenantRatingPlayerScopePageParams) (CopyTenantRatingPlayerScopePageRow, error) {
+	row := q.db.QueryRow(ctx, copyTenantRatingPlayerScopePage, arg.TenantID, arg.GenerationID, arg.AfterKey)
+	var i CopyTenantRatingPlayerScopePageRow
+	err := row.Scan(&i.NextKey, &i.PageSize)
+	return i, err
+}
+
+const finishTenantRatingCopy = `-- name: FinishTenantRatingCopy :execrows
+UPDATE tenant_rating_read_states AS rs SET state = 'evolving', updated_at = now()
+WHERE rs.tenant_id = $1 AND rs.state = 'copying'
+AND (SELECT count(*) FROM tenant_rating_copy_progress p
+     WHERE p.tenant_id = rs.tenant_id AND p.generation_id = $2 AND p.completed) = 5
+AND (SELECT g.id FROM rating_score_generations g WHERE g.tenant_id = rs.tenant_id AND g.status = 'active') = $2
+`
+
+type FinishTenantRatingCopyParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+}
+
+func (q *sqlQuerier) FinishTenantRatingCopy(ctx context.Context, arg FinishTenantRatingCopyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finishTenantRatingCopy, arg.TenantID, arg.GenerationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listTenantRatingCopyProgress = `-- name: ListTenantRatingCopyProgress :many
+SELECT generation_id, table_name, after_key, completed
+FROM tenant_rating_copy_progress WHERE tenant_id = $1
+ORDER BY array_position(ARRAY['player_boss','player_scope','guild_boss','guild_scope','peak']::text[], table_name)
+`
+
+type ListTenantRatingCopyProgressRow struct {
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+	TableName    string    `db:"table_name" json:"table_name"`
+	AfterKey     []byte    `db:"after_key" json:"after_key"`
+	Completed    bool      `db:"completed" json:"completed"`
+}
+
+func (q *sqlQuerier) ListTenantRatingCopyProgress(ctx context.Context, tenantID uuid.UUID) ([]ListTenantRatingCopyProgressRow, error) {
+	rows, err := q.db.Query(ctx, listTenantRatingCopyProgress, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTenantRatingCopyProgressRow
+	for rows.Next() {
+		var i ListTenantRatingCopyProgressRow
+		if err := rows.Scan(
+			&i.GenerationID,
+			&i.TableName,
+			&i.AfterKey,
+			&i.Completed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTenantRatingsNeedingCopy = `-- name: ListTenantRatingsNeedingCopy :many
+SELECT g.tenant_id FROM rating_score_generations g
+LEFT JOIN tenant_rating_read_states rs ON rs.tenant_id = g.tenant_id
+WHERE g.status = 'active' AND (rs.state IS NULL OR rs.state IN ('legacy', 'copying'))
+ORDER BY g.tenant_id
+`
+
+func (q *sqlQuerier) ListTenantRatingsNeedingCopy(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listTenantRatingsNeedingCopy)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var tenant_id uuid.UUID
+		if err := rows.Scan(&tenant_id); err != nil {
+			return nil, err
+		}
+		items = append(items, tenant_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockTenantRatingCopyGeneration = `-- name: LockTenantRatingCopyGeneration :one
+SELECT id FROM rating_score_generations WHERE tenant_id = $1 AND status = 'active' FOR SHARE
+`
+
+func (q *sqlQuerier) LockTenantRatingCopyGeneration(ctx context.Context, tenantID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockTenantRatingCopyGeneration, tenantID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockTenantRatingCopyState = `-- name: LockTenantRatingCopyState :one
+SELECT state FROM tenant_rating_read_states WHERE tenant_id = $1 FOR UPDATE
+`
+
+func (q *sqlQuerier) LockTenantRatingCopyState(ctx context.Context, tenantID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, lockTenantRatingCopyState, tenantID)
+	var state string
+	err := row.Scan(&state)
+	return state, err
+}
+
+const startTenantRatingCopyProgress = `-- name: StartTenantRatingCopyProgress :exec
+INSERT INTO tenant_rating_copy_progress (tenant_id, generation_id, table_name)
+SELECT $1::uuid, $2::uuid, stage FROM unnest(ARRAY['player_boss','player_scope','guild_boss','guild_scope','peak']::text[]) AS stage
+ON CONFLICT DO NOTHING
+`
+
+type StartTenantRatingCopyProgressParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	GenerationID uuid.UUID `db:"generation_id" json:"generation_id"`
+}
+
+func (q *sqlQuerier) StartTenantRatingCopyProgress(ctx context.Context, arg StartTenantRatingCopyProgressParams) error {
+	_, err := q.db.Exec(ctx, startTenantRatingCopyProgress, arg.TenantID, arg.GenerationID)
+	return err
+}
+
 const listDirtyTenantRatings = `-- name: ListDirtyTenantRatings :many
 SELECT tenant_id FROM rating_dirty_observation_runs
 UNION
@@ -36910,6 +37270,22 @@ func (q *sqlQuerier) ListActivePlayerTenantScopeScores(ctx context.Context, arg 
 	return items, nil
 }
 
+const ensureTenantRatingReadStateForWriter = `-- name: EnsureTenantRatingReadStateForWriter :exec
+INSERT INTO tenant_rating_read_states (tenant_id, state)
+SELECT $1::uuid,
+  CASE WHEN EXISTS (SELECT 1 FROM rating_score_generations
+                    WHERE tenant_id = $1::uuid AND status = 'active')
+       THEN 'legacy' ELSE 'evolving' END
+ON CONFLICT (tenant_id) DO NOTHING
+`
+
+// Materialize a lockable row before the page begins. A concurrent copier's
+// legacy→copying transition cannot slip past the writer's state check.
+func (q *sqlQuerier) EnsureTenantRatingReadStateForWriter(ctx context.Context, tenantID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, ensureTenantRatingReadStateForWriter, tenantID)
+	return err
+}
+
 const getTenantRatingCatchupSummary = `-- name: GetTenantRatingCatchupSummary :one
 SELECT (COALESCE((SELECT state FROM tenant_rating_read_states WHERE tenant_id = $1::uuid),
     CASE WHEN EXISTS (SELECT 1 FROM rating_score_generations WHERE tenant_id = $1::uuid AND status = 'active')
@@ -36919,7 +37295,10 @@ SELECT (COALESCE((SELECT state FROM tenant_rating_read_states WHERE tenant_id = 
   AND NOT EXISTS (SELECT 1 FROM rating_dirty_renown_subjects WHERE tenant_id = $1::uuid)
   AND NOT EXISTS (SELECT 1 FROM rating_dirty_mastery_subjects WHERE tenant_id = $1::uuid)
   AND NOT EXISTS (SELECT 1 FROM rating_dirty_peak_cohorts WHERE tenant_id = $1::uuid)
-  AND NOT EXISTS (SELECT 1 FROM rating_peak_cohort_pages_evolving WHERE tenant_id = $1::uuid)) AS caught_up
+  AND NOT EXISTS (SELECT 1 FROM rating_peak_cohort_pages_evolving WHERE tenant_id = $1::uuid)
+  AND NOT EXISTS (SELECT 1 FROM river_job WHERE kind = 'drain-tenant-ratings'
+                  AND state IN ('available', 'pending', 'retryable', 'running', 'scheduled')
+                  AND args @> jsonb_build_object('tenant_id', $1::text))) AS caught_up
 `
 
 // EXISTS uses the tenant indexes and avoids counting large dirty queues.

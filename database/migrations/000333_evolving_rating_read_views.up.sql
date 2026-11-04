@@ -1,6 +1,9 @@
 BEGIN;
 -- Compatibility projections keep the published row shape and represent the absence
 -- of a generation with the nil UUID. They do not manufacture a generation row.
+-- Explicit tenant predicates are necessary: view ownership can bypass the
+-- underlying table's RLS, and test databases also run PostgreSQL 13 (without
+-- security_invoker views).
 CREATE VIEW player_tenant_rating_boss_scores_evolving_read AS
 SELECT '00000000-0000-0000-0000-000000000000'::uuid AS generation_id,
        tenant_id, realm_id, player_guid, instance_name, encounter_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric, rating_metric, window_kind, window_start, window_end, score, best_raw, rank_one_raw, best_locked_parse, form, floor_score, eligible_kills, computed_at, COALESCE(best_duration_secs, 0)::float8 AS best_duration_secs

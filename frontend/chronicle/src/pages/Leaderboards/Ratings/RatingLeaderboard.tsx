@@ -27,6 +27,19 @@ type ChildKind = "boss" | "class" | "spec"
  * around it, and the full ranked table underneath. The leaderboard hub's
  * Ratings tab renders this.
  */
+function LiveRatingCatchup() {
+  const { data } = useQuery({
+    queryKey: ["ratings", "catchup"],
+    queryFn: async (): Promise<TenantRatingCatchupResponse> => {
+      const response = await fetch("/api/v1/rankings/ratings/catchup")
+      if (!response.ok) throw new Error(`Rating status failed (${response.status})`)
+      return response.json() as Promise<TenantRatingCatchupResponse>
+    },
+    refetchInterval: 15_000,
+  })
+  return <p role="status" className="px-1 text-xs text-muted-foreground">{data?.caught_up ? "Caught up" : "Catching up"} · Ratings can change as historical results are repaired.</p>
+}
+
 export function RatingBoards({
   instanceName,
   scope,
@@ -52,16 +65,6 @@ export function RatingBoards({
   toolbar?: ReactNode
   live?: RatingLiveData
 }) {
-  const { data: catchup } = useQuery({
-    queryKey: ["ratings", "catchup"],
-    queryFn: async (): Promise<TenantRatingCatchupResponse> => {
-      const response = await fetch("/api/v1/rankings/ratings/catchup")
-      if (!response.ok) throw new Error(`Rating status failed (${response.status})`)
-      return response.json() as Promise<TenantRatingCatchupResponse>
-    },
-    enabled: !!live,
-    refetchInterval: 15_000,
-  })
   const theme = METRIC_THEMES[view]
   const title = titleOverride ?? scopeTitle(scope, instanceName)
   // "All N ranked" swaps the boards for the full table in place. It stays open across metrics and
@@ -108,7 +111,7 @@ export function RatingBoards({
 
   return (
     <div className="space-y-5" style={{ "--metric": theme.accent } as CSSProperties} data-metric={view}>
-      {live && <p role="status" className="px-1 text-xs text-muted-foreground">{catchup?.caught_up ? "Caught up" : "Catching up"} · Ratings can change as historical results are repaired.</p>}
+      {live && <LiveRatingCatchup />}
       {/* Metric taglines (METRIC_THEMES[*].tagline) are hidden for now to save vertical space; they come back later. */}
       {/* The top: the board, or (opened, searched, or a spec, which has no smaller boards) the full table. */}
       {pending?.status === "error" ? (
