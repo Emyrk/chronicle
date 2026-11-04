@@ -79,6 +79,13 @@ function ClosingBand() {
             Sidekick is a tray app. It never opens a window, never asks you to upload anything, and the stone
             tells you it is working.
           </p>
+          <p className="m-0 text-sm leading-normal text-muted-foreground">
+            Rather not install anything?{" "}
+            <Link to="/upload" className="text-link hover:underline">
+              Upload a combat log manually
+            </Link>
+            .
+          </p>
         </div>
         <div className="flex flex-wrap gap-2.5">
           {[
