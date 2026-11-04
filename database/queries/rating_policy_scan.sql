@@ -1,3 +1,13 @@
+-- Caller holds the tenant projection advisory lock before checking and resetting.
+-- A finished cursor can still have a live River job, so check both sources.
+-- name: RatingPolicyScanInFlight :one
+SELECT EXISTS (SELECT 1 FROM rating_policy_scan_progress
+               WHERE tenant_id = @tenant_id::uuid AND NOT completed)
+    OR EXISTS (SELECT 1 FROM river_job
+               WHERE kind = 'rating-policy-scan'
+                 AND args->>'tenant_id' = (@tenant_id::uuid)::text
+                 AND state IN ('available', 'pending', 'retryable', 'running', 'scheduled')) AS in_flight;
+
 -- Operator explicitly resets progress after a policy migration; never run this at startup.
 -- name: ResetRatingPolicyScan :exec
 INSERT INTO rating_policy_scan_progress (tenant_id, stage)

@@ -1489,6 +1489,9 @@ type sqlcQuerier interface {
 	RatingObservationsForRun(ctx context.Context, arg RatingObservationsForRunParams) ([]RatingObservationsForRunRow, error)
 	// Set-based source extraction for one bounded page of canonical runs.
 	RatingObservationsForRuns(ctx context.Context, arg RatingObservationsForRunsParams) ([]RatingObservationsForRunsRow, error)
+	// Caller holds the tenant projection advisory lock before checking and resetting.
+	// A finished cursor can still have a live River job, so check both sources.
+	RatingPolicyScanInFlight(ctx context.Context, tenantID uuid.UUID) (pgtype.Bool, error)
 	RatingProjectionGuildRankOne(ctx context.Context, arg RatingProjectionGuildRankOneParams) (RatingProjectionGuildRankOneRow, error)
 	RatingProjectionPlayerRankOne(ctx context.Context, arg RatingProjectionPlayerRankOneParams) (RatingProjectionPlayerRankOneRow, error)
 	// Capture affected tenants before deleting instances, including invalidated

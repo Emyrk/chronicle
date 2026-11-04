@@ -48,6 +48,9 @@ function response(tenants: AdminTenantRatingCatchup[]): AdminRatingCatchupStatus
   return { observed_at: new Date().toISOString(), tenants };
 }
 
+const scanHandler = http.post("/api/v1/admin/ratings/policy/scan/:tenantID", () =>
+  HttpResponse.json({ job_id: 71, job_state: "available" }, { status: 202 }));
+
 const meta = {
   title: "Pages/Admin/Rating catch-up",
   component: AdminRatingCatchup,
@@ -60,7 +63,7 @@ type Story = StoryObj<typeof meta>;
 /** A policy scan and drain are still working through the root tenant's historical backlog. */
 export const CatchingUp: Story = {
   parameters: {
-    msw: { handlers: [http.get("/api/v1/admin/ratings/catchup", () => HttpResponse.json(response([root, tenant])))] },
+    msw: { handlers: [http.get("/api/v1/admin/ratings/catchup", () => HttpResponse.json(response([tenant, root]))), scanHandler] },
   },
 };
 

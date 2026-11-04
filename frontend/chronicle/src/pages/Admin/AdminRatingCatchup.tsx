@@ -1,4 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
 import type { AdminRatingCatchupStatusResponse, AdminTenantRatingCatchup } from "@/api/typesGenerated";
 import { Card } from "@/components/ui/Card/Card";
 
@@ -8,6 +10,10 @@ const SERIES = [
   { key: "dirty_mastery", label: "Mastery", stroke: "#a78bfa" },
   { key: "dirty_peak", label: "Peak", stroke: "#34d399" },
 ] as const;
+
+function dirtyCount(row: AdminTenantRatingCatchup): number {
+  return row.dirty_runs + row.dirty_renown + row.dirty_mastery + row.dirty_peak;
+}
 
 function oldestAge(row: AdminTenantRatingCatchup): string {
   const oldest = [row.oldest_run, row.oldest_renown, row.oldest_mastery, row.oldest_peak]
@@ -72,8 +78,14 @@ function ScanProgress({ row }: { row: AdminTenantRatingCatchup }) {
   );
 }
 
-function TenantCatchup({ row }: { row: AdminTenantRatingCatchup }) {
-  const dirty = row.dirty_runs + row.dirty_renown + row.dirty_mastery + row.dirty_peak;
+function TenantCatchup({ row, scanning, onScan, scanError, scanResult }: {
+  row: AdminTenantRatingCatchup;
+  scanning: boolean;
+  onScan: (tenantID: string) => void;
+  scanError?: string;
+  scanResult?: string;
+}) {
+  const dirty = dirtyCount(row);
   return (
     <div className="grid gap-3 border-t border-zinc-800 py-4 first:border-0 md:grid-cols-[minmax(9rem,1fr)_minmax(15rem,2fr)]">
       <div>
@@ -83,6 +95,11 @@ function TenantCatchup({ row }: { row: AdminTenantRatingCatchup }) {
         <div className="mt-1 text-xs text-muted-foreground">{row.peak_pages} Peak pages · {row.active_drain_jobs} active drain jobs</div>
         <div className="mt-1 text-xs text-muted-foreground">Projection: {row.read_state} · {row.job_kind ?? "Job"}: {row.job_state ?? "not queued"}{row.last_succeeded_at ? ` · last finished ${new Date(row.last_succeeded_at).toLocaleString()}` : ""}</div>
         <div className="mt-3"><ScanProgress row={row} /></div>
+        <Button size="sm" variant="outline" className="mt-3" disabled={scanning || row.unfinished_policy_scan_stages > 0} onClick={() => onScan(row.tenant_id)}>
+          {scanning ? "Queuing scan…" : row.unfinished_policy_scan_stages > 0 ? "Scan in progress" : "Start policy scan"}
+        </Button>
+        {scanError && <p role="alert" className="mt-1 text-xs text-destructive">{scanError}</p>}
+        {scanResult && <p role="status" className="mt-1 text-xs text-muted-foreground">{scanResult}</p>}
         {row.job_last_error && <p role="alert" className="mt-1 break-words text-xs text-destructive">{row.job_last_error}</p>}
       </div>
       <DirtyBars row={row} />
@@ -92,6 +109,10 @@ function TenantCatchup({ row }: { row: AdminTenantRatingCatchup }) {
 
 /** Current dirty work by tenant; Prometheus owns historical trends. */
 export function AdminRatingCatchup() {
+  const queryClient = useQueryClient();
+  const [pendingTenant, setPendingTenant] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<{ tenantID: string; message: string } | null>(null);
+  const [scanResult, setScanResult] = useState<{ tenantID: string; message: string } | null>(null);
   const { data, isLoading, isError } = useQuery({
     queryKey: ["admin", "rating-catchup"],
     queryFn: async () => {
@@ -102,15 +123,39 @@ export function AdminRatingCatchup() {
     refetchInterval: 15_000,
     retry: false,
   });
+  const startScan = async (tenantID: string) => {
+    setPendingTenant(tenantID);
+    setScanError(null);
+    setScanResult(null);
+    try {
+      const res = await fetch(`/api/v1/admin/ratings/policy/scan/${encodeURIComponent(tenantID)}`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { message?: string } | null;
+        throw new Error(body?.message || `Could not start policy scan (${res.status})`);
+      }
+      const job = await res.json() as { job_id: number };
+      setScanResult({ tenantID, message: `Policy scan queued (job #${job.job_id}).` });
+    } catch (error) {
+      setScanError({ tenantID, message: error instanceof Error ? error.message : "Could not start policy scan" });
+    } finally {
+      setPendingTenant(null);
+      void queryClient.invalidateQueries({ queryKey: ["admin", "rating-catchup"] });
+    }
+  };
+  const tenants = [...(data?.tenants ?? [])].sort((a, b) =>
+    dirtyCount(b) - dirtyCount(a) || (a.tenant_slug || a.tenant_id).localeCompare(b.tenant_slug || b.tenant_id));
   return (
     <Card className="space-y-3 p-4">
       <div>
         <h3 className="font-semibold">Rating catch-up</h3>
-        <p className="mt-1 text-xs text-muted-foreground">Current dirty work by tenant. Bars refresh every 15 seconds; longer-term trends live in Prometheus.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Tenants sorted by dirty queue size, largest first. Bars refresh every 15 seconds; longer-term trends live in Prometheus. Starting a policy scan re-dirties historical ratings for that tenant.</p>
       </div>
       {isLoading ? <p className="text-sm text-muted-foreground">Loading dirty queues…</p>
         : isError ? <p role="alert" className="text-sm text-destructive">Could not load rating catch-up.</p>
-          : data?.tenants.length ? data.tenants.map((row) => <TenantCatchup key={row.tenant_id} row={row} />)
+          : tenants.length ? tenants.map((row) => <TenantCatchup key={row.tenant_id} row={row}
+            scanning={pendingTenant === row.tenant_id} onScan={(id) => void startScan(id)}
+            scanError={scanError?.tenantID === row.tenant_id ? scanError.message : undefined}
+            scanResult={scanResult?.tenantID === row.tenant_id ? scanResult.message : undefined} />)
             : <p className="text-sm text-muted-foreground">No rating tenants found.</p>}
     </Card>
   );

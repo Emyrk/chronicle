@@ -30776,6 +30776,24 @@ func (q *sqlQuerier) MarkPolicyScanRunPage(ctx context.Context, arg MarkPolicySc
 	return i, err
 }
 
+const ratingPolicyScanInFlight = `-- name: RatingPolicyScanInFlight :one
+SELECT EXISTS (SELECT 1 FROM rating_policy_scan_progress
+               WHERE tenant_id = $1::uuid AND NOT completed)
+    OR EXISTS (SELECT 1 FROM river_job
+               WHERE kind = 'rating-policy-scan'
+                 AND args->>'tenant_id' = ($1::uuid)::text
+                 AND state IN ('available', 'pending', 'retryable', 'running', 'scheduled')) AS in_flight
+`
+
+// Caller holds the tenant projection advisory lock before checking and resetting.
+// A finished cursor can still have a live River job, so check both sources.
+func (q *sqlQuerier) RatingPolicyScanInFlight(ctx context.Context, tenantID uuid.UUID) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, ratingPolicyScanInFlight, tenantID)
+	var in_flight pgtype.Bool
+	err := row.Scan(&in_flight)
+	return in_flight, err
+}
+
 const resetRatingPolicyScan = `-- name: ResetRatingPolicyScan :exec
 INSERT INTO rating_policy_scan_progress (tenant_id, stage)
 SELECT $1::uuid, stage FROM unnest(ARRAY['runs','renown','mastery','peak','player_scope','guild_scope']::text[]) stage
