@@ -381,6 +381,7 @@ export default function MapView3D({
         mapScale: model?.mapScale ?? 1,
         worldHeight: model?.worldHeight,
         z: sample.z,
+        atMs: sample.timestampMs,
         icon: specializations.get(marker.guid)?.iconUrl ?? marker.icon,
         boss: bossGuids?.has(marker.guid) ?? false,
         healthFraction: marker.healthFraction,
