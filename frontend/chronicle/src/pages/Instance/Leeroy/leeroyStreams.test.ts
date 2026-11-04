@@ -66,6 +66,25 @@ describe("buildLeeroyStreams", () => {
     }
   });
 
+  it("publishes mage AoE and Leeroy's protection through normal cast and damage streams", () => {
+    const streams = buildLeeroyStreams(leeroyRookery);
+    const casts = decodeAllPayloads(CastSchema, streams.get("cast")!.data)[0].messages;
+    const damage = decodeAllPayloads(DamageSchema, streams.get("damage")!.data)[0].messages;
+    const leeroy = Object.entries(leeroyRookery.players).find(([, player]) => player.name === "Leeroy")![0];
+    expect(casts).toContainEqual(expect.objectContaining({
+      caster: leeroy, target: leeroy, action: CastAction.ActionCasts,
+      spell: expect.objectContaining({ id: 5573, name: "Divine Protection" }),
+      meta: expect.objectContaining({ offsetMilli: 9000n }),
+    }));
+    for (const [mage, player] of Object.entries(leeroyRookery.players)) {
+      if (player.class !== "MAGE") continue;
+      for (const [spellId, name] of [[122, "Frost Nova"], [1449, "Arcane Explosion"]] as const) {
+        expect(casts.some((cast) => cast.caster === mage && cast.action === CastAction.ActionCasts && cast.spell?.id === spellId)).toBe(true);
+        expect(damage.some((hit) => hit.caster === mage && hit.spellData?.id === spellId && hit.sourceName === name)).toBe(true);
+      }
+    }
+  });
+
   it("writes production headers and preserves fixture-wide indexes across all eleven streams", () => {
     const streams = buildLeeroyStreams(fixture);
     expect(streams.size).toBe(11);

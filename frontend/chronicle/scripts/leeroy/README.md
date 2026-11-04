@@ -50,6 +50,12 @@ instance.
 | Which eggs hatch | An egg hatches when any living player on the egg floor comes within its trigger radius, and the whelp attacks that player. The radius is real: 1.5 yd, from the egg trap's diameter of 3 in classic-db, halved by the mangos-classic core. A tuned 1.5 yd margin is added for his map's placement error (see below). |
 | Player attacks, heals, whelp swings, health and power | Deterministic cinematic simulation. Health changes follow the authored damage and healing events, and power follows resource costs and recovery. The video does not provide a full combat log. |
 
+The simulated mage rotation adds Frost Nova and close-range Arcane Explosion
+bursts against whelps during the pile-in. Leeroy casts Divine Protection at
+clip offset 9 s (video 1:33); the simulation ignores incoming whelp damage for
+its eight-second duration. These casts and effects are authored, not observed
+combat-log events. Frost Nova does not alter the fan-tracked movement paths.
+
 Rookery Guardians, Hatchers and Solakar are summoned by the Father Flame event,
 so the spawn tables have no rows for them (and none appear in this clip).
 
@@ -95,8 +101,9 @@ nameplates at 1:40. That margin is tuned, not sourced.
 
 With it, Leeroy hatches 7 whelps before anyone else hatches one. They hit him
 from 1:32.5, alone, about 5.5 s before the first raid member is within 8 yd
-of him (1:38). His simulated health is about 80% by then; the exact
-health values are illustrative, not measured from the footage.
+of him (1:38). After his illustrative Divine Protection at 1:33, his simulated
+health is about 93% by the first raid hatch; the exact health values are not
+measured from the footage.
 
 ## Levels
 
