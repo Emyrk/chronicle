@@ -339,6 +339,9 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.TenantRatingCopyDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.TenantRatingCopyDispatchWorker)
 	riverqueue.AddWorker(q, rank.TenantRatingCopyWorker)
+	rank.RatingPolicyScanDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.RatingPolicyScanDispatchWorker)
+	riverqueue.AddWorker(q, rank.RatingPolicyScanWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
 		MaxWorkers: 1,
 	})
@@ -352,6 +355,9 @@ func (s *Service) Start(ctx context.Context) error {
 		),
 	)
 	// One periodic recovery dispatch covers all four durable rating intents.
+	q.AddPeriodicJob(river.NewPeriodicJob(river.PeriodicInterval(5*time.Minute),
+		func() (river.JobArgs, *river.InsertOpts) { return servicerankings.ArgsDispatchRatingPolicyScan{}, nil },
+		&river.PeriodicJobOpts{RunOnStart: true}))
 	q.AddPeriodicJob(river.NewPeriodicJob(
 		river.PeriodicInterval(5*time.Minute),
 		func() (river.JobArgs, *river.InsertOpts) {

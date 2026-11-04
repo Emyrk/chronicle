@@ -97,6 +97,8 @@ type Service struct {
 	TenantRatingDrainWorker             *WorkerDrainTenantRatings
 	TenantRatingCopyDispatchWorker      *WorkerDispatchTenantRatingCopy
 	TenantRatingCopyWorker              *WorkerCopyTenantRatings
+	RatingPolicyScanWorker              *WorkerRatingPolicyScan
+	RatingPolicyScanDispatchWorker      *WorkerDispatchRatingPolicyScan
 	PeakExpiryWorker                    *WorkerExpireTenantPeak
 	PeakExpiryDispatchWorker            *WorkerDispatchPeakExpiry
 }
@@ -198,6 +200,8 @@ func (s *Service) Start(_ context.Context) error {
 	s.TenantRatingDrainWorker = &WorkerDrainTenantRatings{Store: store}
 	s.TenantRatingCopyDispatchWorker = &WorkerDispatchTenantRatingCopy{Store: store}
 	s.TenantRatingCopyWorker = &WorkerCopyTenantRatings{Store: store}
+	s.RatingPolicyScanWorker = &WorkerRatingPolicyScan{Store: store}
+	s.RatingPolicyScanDispatchWorker = &WorkerDispatchRatingPolicyScan{Store: store}
 	s.PeakExpiryWorker = &WorkerExpireTenantPeak{Store: store}
 	s.PeakExpiryDispatchWorker = &WorkerDispatchPeakExpiry{Store: store}
 

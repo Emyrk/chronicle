@@ -78,7 +78,28 @@ func (api *API) ratingAdminRebuild(r *http.Request) error {
 func (api *API) adminRatingRoutes(r chi.Router) {
 	r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
 	r.Get("/catchup", api.AdminListRatingCatchup)
+	r.Post("/policy/scan", api.AdminStartRatingPolicyScan)
 	r.Post("/renown/repair", api.AdminDispatchRenownRepair)
+}
+
+// AdminStartRatingPolicyScan resets the tenant cursor after a migration-owned
+// policy change, then schedules bounded re-dirty pages. Repeating it restarts
+// the pass; the recovery dispatcher handles a failed or duplicate enqueue.
+func (api *API) AdminStartRatingPolicyScan(w http.ResponseWriter, r *http.Request) {
+	tenant := servicetenant.TenantIDFromContext(r.Context())
+	if api.Queues == nil || api.Queues.Client == nil {
+		ratingAdminError(w, r, http.StatusServiceUnavailable, "Ranking queue is unavailable")
+		return
+	}
+	ctx := r.Context()
+	if tenant == uuid.Nil {
+		ctx = servicetenant.AdminBypass(ctx)
+	}
+	if err := api.Opts.Zed.ResetRatingPolicyScan(ctx, tenant); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	api.adminEnqueueRatingJob(w, r, servicerankings.ArgsRatingPolicyScan{TenantID: tenant})
 }
 
 // AdminDispatchRenownRepair starts a bounded historical repair pass across all
