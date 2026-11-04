@@ -130,7 +130,8 @@ export function droneYawAt(track: Pick<DroneTrack, "startYaw">, ms: number): num
 }
 
 // Each value replaced by the mean / max / min of those within `half` samples.
-function windowed(values: readonly number[], half: number, reduce: "mean" | "max" | "min"): number[] {
+// Shared with the live follow track (followCamera.ts).
+export function windowed(values: readonly number[], half: number, reduce: "mean" | "max" | "min"): number[] {
   const out = new Array<number>(values.length);
   for (let i = 0; i < values.length; i++) {
     const from = Math.max(0, i - half);
@@ -149,7 +150,7 @@ function windowed(values: readonly number[], half: number, reduce: "mean" | "max
 
 // A window of maxima, then a mean of the same width: smooth, and never below
 // the raw value (each mean only averages maxima that already cover it).
-function smoothCeiling(values: readonly number[], half: number): number[] {
+export function smoothCeiling(values: readonly number[], half: number): number[] {
   return windowed(windowed(values, half, "max"), half, "mean");
 }
 

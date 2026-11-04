@@ -17,6 +17,7 @@ import { POWER_COLORS } from "../RaidFrames/raidFrameShared";
 import { activeDebuffsAt, type MapDebuff, type MapEncounterPositions, type MapPositionSample, type MapResult } from "./map.processor";
 import { inferRoles } from "../Roles/roles.processor";
 import { deriveRecentHealGain, isDeadAt, type EncounterEffects } from "./replayEffects";
+import type { MapSceneFollowSource, MapSceneFollowUnit } from "./MapScene3D";
 import { isMapUnitDespawned, isMapUnitPositionExpired, shouldShowMapUnit } from "./mapUnitVisibility";
 import {
   AUTO_FIT_MIN_SPAN_YARDS,
@@ -70,6 +71,24 @@ function cachedFocusBounds(
   }
   if (!byKey.has(key)) byKey.set(key, compute());
   return byKey.get(key) ?? null;
+}
+
+// The Director's look-ahead source (chronicle-1579): the players' and bosses'
+// recorded tracks, kept stable per encounter, projection and effects so the
+// scene builds its framing track once instead of on every replay tick.
+const followSourceCache = new WeakMap<Map<string, MapPositionSample[]>, { key: string; effects: EncounterEffects; source: MapSceneFollowSource }>();
+
+function cachedFollowSource(
+  positionsByUnit: Map<string, MapPositionSample[]>,
+  effects: EncounterEffects,
+  key: string,
+  create: () => MapSceneFollowSource,
+): MapSceneFollowSource {
+  const cached = followSourceCache.get(positionsByUnit);
+  if (cached && cached.key === key && cached.effects === effects) return cached.source;
+  const source = create();
+  followSourceCache.set(positionsByUnit, { key, effects, source });
+  return source;
 }
 
 // The merged run is rebuilt only when more of the result has streamed in.
@@ -264,6 +283,8 @@ export type MapScene =
     runEndMs: number | null;
     /** Combat events for the replay effects layer. */
     effects: EncounterEffects;
+    /** The players' and bosses' recorded tracks, for the cinematic camera's look-ahead; stable across replay ticks. */
+    followSource: MapSceneFollowSource;
     bossGuids: ReadonlySet<string>;
     /** Players inferRoles takes for tanks; their heals get priority and numbers. */
     tankGuids: ReadonlySet<string>;
@@ -576,6 +597,32 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   }
 
   const tankGuids = cachedTankGuids(encounter.effects, props.context.instance.players ?? {});
+  // The same units the markers show (players and bosses on this map and
+  // floor), at any replay time, for the Director to look ahead in.
+  const followSource = cachedFollowSource(
+    encounter.positionsByUnit,
+    encounter.effects,
+    `${encounter.startMs}|${encounter.endMs}|${mapId}|${selectedFloorNumber}|${projectionKey}|${wholeRun}|${[...bossGuids].join(",")}`,
+    () => {
+      const players = props.context.instance.players ?? {};
+      const tracked = [...encounter.positionsByUnit.entries()].filter(([guid]) => Boolean(players[guid]) || bossGuids.has(guid));
+      const { effects } = encounter;
+      return {
+        startMs: encounter.startMs,
+        endMs: encounter.endMs,
+        unitsAt: (ms) => tracked.flatMap(([guid, positions]): MapSceneFollowUnit[] => {
+          const player = Boolean(players[guid]);
+          const sample = replayPositionAt(positions, ms, player, wholeRun ? RUN_UNIT_STALE_MS : undefined);
+          if (!sample || (wholeRun && isStaleRunSample(sample, ms))) return [];
+          if (sample.mapId !== mapId) return [];
+          if (sample.floor !== undefined && selectedFloorNumber !== null && sample.floor !== selectedFloorNumber) return [];
+          const point = projectSample(sample);
+          if (!point) return [];
+          return [{ guid, point, player, boss: bossGuids.has(guid), dead: isDeadAt(effects, guid, ms) }];
+        }),
+      };
+    },
+  );
 
   return {
     status: "ready",
@@ -618,6 +665,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     runStartMs: wholeRun ? encounter.startMs : null,
     runEndMs: wholeRun ? encounter.endMs : null,
     effects: encounter.effects,
+    followSource,
     bossGuids,
     tankGuids,
   };

@@ -22,6 +22,7 @@ import {
   type MapScene3DEffectHover,
   type MapScene3DUnit,
   type MapSceneDirector,
+  type MapSceneFollowSource,
   type MapSceneFocus,
   type MapUnitCallout,
   type MapUnitRoles,
@@ -72,8 +73,10 @@ export interface MapView3DProps {
    * a zoom); Follow turns it back on.
    */
   cinematic?: boolean;
-  /** Each new key (after the first) cuts the cinematic camera straight to its shot instead of springing there. */
+  /** Each new key (after the first) cuts the cinematic camera straight to its shot instead of springing (or gliding) there. */
   cutKey?: number;
+  /** The recorded replay the cinematic camera looks ahead in, so it glides instead of reacting frame by frame. */
+  followSource?: MapSceneFollowSource | null;
   /** Called with a unit's guid when it is clicked on the map. */
   onUnitClick?: (guid: string) => void;
   /** Display settings (effects, bars); the defaults when left out. */
@@ -202,6 +205,7 @@ export default function MapView3D({
   focus = null,
   cinematic = false,
   cutKey = 0,
+  followSource = null,
   onUnitClick,
   effectSettings: effectSettingsProp,
   topDownKey = 0,
@@ -331,6 +335,10 @@ export default function MapView3D({
   useEffect(() => {
     sceneRef.current?.setDirector(director);
   }, [director]);
+
+  useEffect(() => {
+    if (!frozen) sceneRef.current?.setFollowSource(followSource);
+  }, [followSource, frozen]);
 
   // The first request frames instantly; later ones (a new key) ease there.
   const appliedViewKeyRef = useRef<string | null>(null);

@@ -647,6 +647,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   const targetsTarget = targetOfTarget && targetEncounter ? lastTargetAt(targetEncounter, targetOfTarget, targetAtMs) : null;
   const unitRoles = useMemo((): MapUnitRoles => ({ selected: target, target: targetOfTarget, targetsTarget, pinned: new Set(pinned) }), [pinned, target, targetOfTarget, targetsTarget]);
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
+  // Bumped by a jump the user asks for, so the cinematic camera cuts to it.
+  const [cutKey, setCutKey] = useState(0);
   // A new selection or replay moving into another encounter re-frames;
   // loading states (e.g. reprocessing after a filter change) keep the framing.
   const framing = ready
@@ -729,7 +731,10 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   const jumps = ready.wholeRun && ready.runStartMs !== null && ready.runEndMs !== null
     ? encounterJumps(props.context.instance.encounters, props.result.encounters, ready.runStartMs, ready.runEndMs)
     : [];
-  const jumpTo = (timestampMs: number) => sync?.setTimestamp(new Date(timestampMs));
+  const jumpTo = (timestampMs: number) => {
+    setCutKey((key) => key + 1);
+    sync?.setTimestamp(new Date(timestampMs));
+  };
   const toggleMesh = () => {
     const next = !meshOn;
     setStoredMesh(next);
@@ -900,6 +905,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               cameraPathStartMs={new Date(props.context.instance.startTime).getTime()}
               focus={focus}
               cinematic={cinematic}
+              followSource={ready.followSource}
+              cutKey={cutKey}
               onUnitClick={setTarget}
               effectSettings={effectSettings}
               topDownKey={topDownKey}
