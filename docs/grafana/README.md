@@ -13,8 +13,12 @@ The operations dashboard includes rows for:
 - River queue depth, job age, saturation, retries, and durations
 - Cache effectiveness and capacity
 - Billing reconciliation and Stripe entitlement synchronization
-- UI panel views, explicit panel choices, and preset popularity
-- Authentication activity and leader election
+- Authentication and account activity, filterable by tenant
+- UI panel views, explicit panel choices, and preset popularity, filterable by tenant
+- Instance-search outcomes, latency, estimated cost, and predicate-field usage
+- Sidekick heartbeat health, online installations, uploads, and configuration updates
+- Tenant rating rebuild duration and the Lua artifact garbage-collection backlog
+- Leader election
 
 Both dashboards target Grafana 10 or newer and use only built-in panels.
 
@@ -85,6 +89,7 @@ The current HTTP metrics do not include response status, client IP, user ID, or 
 | `datasource` | Prometheus datasource containing Chronicle metrics |
 | `job` | One Prometheus scrape job, usually one Chronicle deployment or environment |
 | `instance` | Chronicle replicas used by process-local panels |
+| `tenant` | Root or tenant-slug activity for UI and authentication panels |
 | `method` | HTTP methods on the traffic dashboard |
 | `queue` | River queues |
 | `route` | API route templates |
@@ -113,6 +118,6 @@ Dashboard panels that summarize counters over a time range use Prometheus `incre
 
 ## Metric availability
 
-Panels can show **No data** until the corresponding subsystem has emitted a sample. Examples include parser histograms before the first upload, leader-election metrics when the Discord bot is disabled, and dataset cache metrics before game data is requested.
+Panels can show **No data** until the corresponding subsystem has emitted a sample. Examples include parser histograms before the first upload, search histograms before the first compiled search, Sidekick panels before an installation checks in, leader-election metrics when the Discord bot is disabled, and dataset cache metrics before game data is requested.
 
 Chronicle does not currently expose HTTP status-code, Go runtime, process, PostgreSQL pool, object-storage, SpiceDB, or pubsub metrics through its dedicated registry. The dashboard intentionally does not reference those metrics.

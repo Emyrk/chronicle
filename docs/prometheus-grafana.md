@@ -1,6 +1,6 @@
 # Prometheus metrics and Grafana dashboards
 
-Chronicle exposes application, parser, queue, cache, billing, authentication, and leader-election metrics for Prometheus. This guide is written for operators building Grafana dashboards and alerts.
+Chronicle exposes application, instance-search, Sidekick, parser, queue, cache, billing, authentication, maintenance, and leader-election metrics for Prometheus. This guide is written for operators building Grafana dashboards and alerts.
 
 ## Enable the metrics listener
 
@@ -54,7 +54,7 @@ The River queue depth and oldest-job-age gauges are database-global values colle
 
 Chronicle includes two importable dashboards:
 
-- [`docs/grafana/chronicle-operations.json`](grafana/chronicle-operations.json) covers service health, parser outcomes and bottlenecks, River queues, cache behavior, authentication, and leader election.
+- [`docs/grafana/chronicle-operations.json`](grafana/chronicle-operations.json) covers service health, instance search, Sidekick, parser outcomes and bottlenecks, River queues, cache behavior, authentication, UI usage, maintenance, and leader election.
 - [`docs/grafana/chronicle-http-traffic.json`](grafana/chronicle-http-traffic.json) investigates HTTP request volume, rate, and latency by route template and method.
 
 See [`docs/grafana/README.md`](grafana/README.md) for import and file-provisioning instructions.
@@ -66,6 +66,7 @@ Useful Grafana variables include:
 | Variable | Query |
 | --- | --- |
 | `$instance` | `label_values(chronicle_api_concurrent_requests, instance)` |
+| `$tenant` | `label_values({__name__=~"chronicle_(ui_panel_(views\|choices)_total\|api_auth_(signups\|logins\|refreshes)_total)"}, tenant)` |
 | `$queue` | `label_values(chronicle_river_configured_workers, queue)` |
 | `$kind` | `label_values(chronicle_river_jobs_total{queue=~"$queue"}, kind)` |
 | `$route` | `label_values(chronicle_api_requests_processed_total, path)` |
@@ -112,7 +113,75 @@ topk(10, sum by (preset) (
 
 The included operations dashboard uses `increase(...[$__range])` for these counters. Prometheus adjusts `increase()` for counter resets, so Chronicle restarts and deployments do not produce negative usage or discard the activity recorded before the reset.
 
-These counters are local to each Chronicle process. Sum across replicas for service-wide usage.
+These counters are local to each Chronicle process. Sum across replicas for service-wide usage. Panel views and choices also carry a bounded `tenant` label: `root` for the primary site or the tenant slug for a tenant site. Use the dashboard's `$tenant` variable to filter them without changing the panel ranking.
+
+## Instance search
+
+Chronicle records compiled search activity without user IDs, raw queries, guilds, or instance IDs:
+
+- `chronicle_instance_search_duration_seconds{outcome="ok",caller="user"}` measures request duration and supplies request counts through its `_count` series.
+- `chronicle_instance_search_cost{caller="user"}` records the compiler's estimated query cost.
+- `chronicle_instance_search_field_uses_total{field="zone_id"}` counts predicate-field usage.
+
+`caller` is `user` or `anon`. Search outcomes include `invalid`, `login_required`, `timeout`, `error`, and `ok`. Explain requests use the same values with an `explain_` prefix.
+
+Request rate by caller and outcome:
+
+```promql
+sum by (caller, outcome) (
+  rate(chronicle_instance_search_duration_seconds_count[$__rate_interval])
+)
+```
+
+p95 duration:
+
+```promql
+histogram_quantile(0.95, sum by (le, caller, outcome) (
+  rate(chronicle_instance_search_duration_seconds_bucket[$__rate_interval])
+))
+```
+
+p95 estimated cost and the most-used predicate fields:
+
+```promql
+histogram_quantile(0.95, sum by (le, caller) (
+  rate(chronicle_instance_search_cost_bucket[$__rate_interval])
+))
+```
+
+```promql
+topk(20, sum by (field) (
+  increase(chronicle_instance_search_field_uses_total[$__range])
+))
+```
+
+Search metrics are process-local. Sum histogram buckets or counters across replicas before calculating service-wide results.
+
+## Sidekick
+
+Sidekick exposes heartbeat health, recent installation presence, successful uploads, and configuration delivery:
+
+```promql
+sum by (result) (
+  rate(chronicle_sidekick_heartbeats_total[$__rate_interval])
+)
+```
+
+```promql
+histogram_quantile(0.95, sum by (le, result) (
+  rate(chronicle_sidekick_heartbeat_duration_seconds_bucket[$__rate_interval])
+))
+```
+
+```promql
+sum by (kind) (
+  increase(chronicle_sidekick_uploads_total[$__range])
+)
+```
+
+Heartbeat results are `success`, `bad_request`, `not_found`, and `internal_error`. Upload kinds are `new` and `append`. `chronicle_sidekick_config_updates_total` increments when a heartbeat response returns a configuration update.
+
+`chronicle_sidekick_online_installations` is a process-local three-minute window keyed by installation ID. Summing across replicas is a useful fleet estimate only while each installation heartbeats to one replica; load balancing across replicas can double count an installation.
 
 ## Recommended dashboard layout
 
@@ -120,13 +189,17 @@ A useful top-level dashboard answers these questions:
 
 1. Is Chronicle reachable and serving traffic?
 2. Are API latency or concurrency increasing?
-3. Are parsing jobs succeeding, and how long do they take?
-4. Is a River queue building a backlog?
-5. Are workers saturated, waiting on PostgreSQL, or spending time in application code?
-6. Which parser stage or consumer is the bottleneck?
-7. Are caches effective and within capacity?
-8. Is billing reconciliation current and successfully synchronizing entitlements?
-9. Does the expected replica hold each leader-election lock?
+3. Are instance searches succeeding, fast, and within expected complexity?
+4. Is Sidekick healthy and actively uploading?
+5. Are parsing jobs succeeding, and how long do they take?
+6. Is a River queue building a backlog?
+7. Are workers saturated, waiting on PostgreSQL, or spending time in application code?
+8. Which parser stage or consumer is the bottleneck?
+9. Are caches effective and within capacity?
+10. Is billing reconciliation current and successfully synchronizing entitlements?
+11. Are authentication, UI, and account lifecycle trends healthy for each tenant?
+12. Are rating rebuilds and Lua artifact cleanup keeping up?
+13. Does the expected replica hold each leader-election lock?
 
 The sections below provide panels and alert candidates for each area.
 
@@ -669,6 +742,16 @@ Cache hit ratio is usually better as a dashboard and regression signal than a pa
 
 Aggregate by `cache` for alerts to avoid one alert per dataset.
 
+## Lua artifact maintenance
+
+`chronicle_lua_projects_artifact_gc_backlog` is the number of eligible, unreferenced Lua ZIP files waiting for object-storage deletion. Every API replica queries the same database-global backlog, so use `max`, not `sum`, across replicas:
+
+```promql
+max(chronicle_lua_projects_artifact_gc_backlog)
+```
+
+A sustained increase indicates that the bounded garbage-collection drain is not keeping up or that object-storage deletion is failing. Correlate it with application logs and the River retention queue.
+
 ## Billing reconciliation
 
 Billing reconciliation runs once at startup and every 15 minutes. It preserves the last successfully synchronized entitlement snapshot when Stripe is unavailable, so these metrics are operational signals rather than an authorization expiry mechanism.
@@ -722,7 +805,31 @@ The metrics intentionally omit Stripe customer, subscription, and Chronicle user
 - **Entitlement synchronization failing:** `increase(chronicle_billing_entitlement_syncs_total{result="error"}[30m]) > 0`.
 - **Partial customer coverage:** the latest run synchronized fewer entitlement customers than it found.
 
-## Authentication activity
+## Authentication and account activity
+
+Successful signups and logins carry bounded `method` and `tenant` labels. The tenant is `root` or a configured tenant slug:
+
+```promql
+sum by (method) (
+  increase(chronicle_api_auth_signups_total{tenant=~"$tenant"}[$__range])
+)
+```
+
+```promql
+sum by (method) (
+  increase(chronicle_api_auth_logins_total{tenant=~"$tenant"}[$__range])
+)
+```
+
+OAuth refresh attempts also include `result="success|error"`:
+
+```promql
+sum by (method, result) (
+  rate(chronicle_api_auth_refreshes_total{tenant=~"$tenant"}[$__rate_interval])
+)
+```
+
+`chronicle_accounts_deleted_total` counts successful account deletions without a tenant label.
 
 Session creation activity:
 
@@ -872,6 +979,14 @@ For low-traffic deployments, count-based alerts are often more reliable than rat
 | `chronicle_api_concurrent_requests` | Gauge | none | API requests currently executing |
 | `chronicle_api_request_latencies_seconds` | Histogram | `method`, `path` | End-to-end API handler latency |
 
+### Instance search
+
+| Metric | Type | Labels | Meaning |
+| --- | --- | --- | --- |
+| `chronicle_instance_search_duration_seconds` | Histogram | `outcome`, `caller` | Search and explain request duration and count |
+| `chronicle_instance_search_cost` | Histogram | `caller` | Estimated compiled-query cost |
+| `chronicle_instance_search_field_uses_total` | Counter | `field` | Predicate fields used by compiled queries |
+
 ### Billing
 
 | Metric | Type | Labels | Meaning |
@@ -891,6 +1006,28 @@ For low-traffic deployments, count-based alerts are often more reliable than rat
 | --- | --- | --- | --- |
 | `chronicle_api_auth_create_session_count` | Gauge | none | Sessions created since process start |
 | `chronicle_api_auth_validate_session_count` | Gauge | `valid` | Session validation attempts since process start |
+| `chronicle_api_auth_signups_total` | Counter | `method`, `tenant` | Successful user signups |
+| `chronicle_api_auth_logins_total` | Counter | `method`, `tenant` | Successful user logins |
+| `chronicle_api_auth_refreshes_total` | Counter | `method`, `result`, `tenant` | OAuth session refresh attempts |
+| `chronicle_accounts_deleted_total` | Counter | none | Successful account deletions |
+
+### UI usage
+
+| Metric | Type | Labels | Meaning |
+| --- | --- | --- | --- |
+| `chronicle_ui_panel_views_total` | Counter | `panel`, `tenant` | Panels present in stable layouts |
+| `chronicle_ui_panel_choices_total` | Counter | `panel`, `tenant` | Explicit panel selections |
+| `chronicle_ui_preset_views_total` | Counter | `preset` | Active preset reports |
+
+### Sidekick
+
+| Metric | Type | Labels | Meaning |
+| --- | --- | --- | --- |
+| `chronicle_sidekick_heartbeats_total` | Counter | `result` | Heartbeat attempts |
+| `chronicle_sidekick_heartbeat_duration_seconds` | Histogram | `result` | Heartbeat processing duration |
+| `chronicle_sidekick_config_updates_total` | Counter | none | Heartbeat responses carrying configuration updates |
+| `chronicle_sidekick_uploads_total` | Counter | `kind` | Successful new and append uploads |
+| `chronicle_sidekick_online_installations` | Gauge | none | Installations observed by this process in the last three minutes |
 
 ### Log parsing
 
@@ -930,6 +1067,12 @@ For low-traffic deployments, count-based alerts are often more reliable than rat
 | --- | --- | --- | --- |
 | `chronicle_rating_rebuild_duration_seconds` | Histogram | none | Generation start through successful publication (all worker invocations) |
 
+### Lua projects
+
+| Metric | Type | Labels | Meaning |
+| --- | --- | --- | --- |
+| `chronicle_lua_projects_artifact_gc_backlog` | Gauge | none | Eligible unreferenced Lua ZIPs awaiting deletion |
+
 ### Caches
 
 | Metric | Type | Labels | Meaning |
@@ -966,5 +1109,7 @@ The labels most likely to grow are:
 - `kind`, as River job types are added.
 - `consumer`, as parser stages are added.
 - `dataset`, because game-data cache metrics use dataset UUIDs.
+- `tenant`, because tenant slugs are intentionally visible for operational filtering.
+- `field`, as the bounded instance-search grammar adds predicate fields.
 
-Do not copy these labels into new recording rules unnecessarily. For service-level alerts, aggregate away `path`, `kind`, `consumer`, and `dataset` unless the alert specifically needs that dimension.
+Do not copy these labels into new recording rules unnecessarily. For service-level alerts, aggregate away `path`, `kind`, `consumer`, `dataset`, `tenant`, and `field` unless the alert specifically needs that dimension.
