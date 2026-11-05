@@ -1660,6 +1660,7 @@ type sqlcQuerier interface {
 	// Do not discard dirty keys while a frozen full rebuild may replace the active
 	// projection with a snapshot older than these fact changes.
 	TenantRatingGenerationBuilding(ctx context.Context, tenantID uuid.UUID) (bool, error)
+	TenantRatingsEnabled(ctx context.Context, tenantID uuid.UUID) (bool, error)
 	TouchLogInstanceRankingSource(ctx context.Context, instanceID uuid.UUID) error
 	TouchSidekickUpload(ctx context.Context, arg TouchSidekickUploadParams) (int64, error)
 	TouchUploadKeyLastUsed(ctx context.Context, id uuid.UUID) error

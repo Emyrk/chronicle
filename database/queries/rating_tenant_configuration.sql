@@ -4,6 +4,7 @@
 SELECT DISTINCT COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id
 FROM wow_servers server
 JOIN wow_server_realms realm ON realm.server_id = server.id
+WHERE tenant_ratings_enabled(COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid))
 ORDER BY tenant_id;
 
 -- The fixed rules and per-realm flavor awards are frozen by the start function.

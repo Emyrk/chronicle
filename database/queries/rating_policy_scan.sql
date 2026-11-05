@@ -21,7 +21,8 @@ ORDER BY array_position(ARRAY['runs','renown','mastery','peak','player_scope','g
 LIMIT 1 FOR UPDATE;
 
 -- name: ListRatingPolicyScanTenants :many
-SELECT DISTINCT tenant_id FROM rating_policy_scan_progress WHERE NOT completed ORDER BY tenant_id;
+SELECT DISTINCT tenant_id FROM rating_policy_scan_progress
+WHERE NOT completed AND tenant_ratings_enabled(tenant_id) ORDER BY tenant_id;
 
 -- name: CompleteRatingPolicyScanStage :execrows
 UPDATE rating_policy_scan_progress SET completed = true, updated_at = now()

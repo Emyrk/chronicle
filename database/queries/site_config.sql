@@ -12,6 +12,7 @@ UPDATE site_config SET
     client_uploads_disabled = COALESCE(sqlc.narg('client_uploads_disabled'), client_uploads_disabled),
     ads_enabled = COALESCE(sqlc.narg('ads_enabled'), ads_enabled),
     forever_landing_enabled = COALESCE(sqlc.narg('forever_landing_enabled'), forever_landing_enabled),
+    root_tenant_ratings_disabled = COALESCE(sqlc.narg('root_tenant_ratings_disabled'), root_tenant_ratings_disabled),
     updated_at = now()
 WHERE id = TRUE
 RETURNING *;
@@ -23,3 +24,6 @@ UPDATE site_config SET
     updated_at = now()
 WHERE id = TRUE
 RETURNING *;
+
+-- name: TenantRatingsEnabled :one
+SELECT tenant_ratings_enabled(@tenant_id::uuid);

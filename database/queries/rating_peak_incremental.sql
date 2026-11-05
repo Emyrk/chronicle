@@ -10,7 +10,8 @@ LIMIT LEAST(GREATEST(@batch_size::int, 0), 16)
 FOR UPDATE SKIP LOCKED;
 
 -- name: ListDirtyPeakTenants :many
-SELECT DISTINCT tenant_id FROM rating_dirty_peak_cohorts ORDER BY tenant_id;
+SELECT DISTINCT tenant_id FROM rating_dirty_peak_cohorts
+WHERE tenant_ratings_enabled(tenant_id) ORDER BY tenant_id;
 
 -- name: DeleteDirtyPeakCohortIfRevision :execrows
 DELETE FROM rating_dirty_peak_cohorts

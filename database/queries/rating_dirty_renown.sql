@@ -1,6 +1,7 @@
 -- Periodic dispatch only visits tenants with pending fact changes.
 -- name: ListDirtyRenownTenants :many
-SELECT DISTINCT tenant_id FROM rating_dirty_renown_subjects ORDER BY tenant_id;
+SELECT DISTINCT tenant_id FROM rating_dirty_renown_subjects
+WHERE tenant_ratings_enabled(tenant_id) ORDER BY tenant_id;
 
 -- Workers lock a bounded batch inside their score-write transaction. Concurrent
 -- updates to the same key wait, then increment its revision. The CAS delete
@@ -193,6 +194,7 @@ LIMIT LEAST(GREATEST(@batch_size::int, 0), 200);
 -- name: MarkDirtyRenownSubject :exec
 INSERT INTO rating_dirty_renown_subjects
     (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name)
-VALUES (@tenant_id, @subject_kind, @realm_id, @subject_id, @instance_name, @encounter_name)
+SELECT @tenant_id, @subject_kind, @realm_id, @subject_id, @instance_name, @encounter_name
+WHERE tenant_ratings_enabled(@tenant_id::uuid)
 ON CONFLICT (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name)
 DO UPDATE SET revision = rating_dirty_renown_subjects.revision + 1, changed_at = now();

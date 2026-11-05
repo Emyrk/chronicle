@@ -22,7 +22,8 @@ WHERE tenant_id = @tenant_id AND subject_kind = @subject_kind AND realm_id = @re
   AND revision = @revision;
 
 -- name: ListDirtyMasteryTenants :many
-SELECT DISTINCT tenant_id FROM rating_dirty_mastery_subjects ORDER BY tenant_id;
+SELECT DISTINCT tenant_id FROM rating_dirty_mastery_subjects
+WHERE tenant_ratings_enabled(tenant_id) ORDER BY tenant_id;
 
 -- name: CalculateLiveMasterySubject :many
 WITH evidence AS MATERIALIZED (

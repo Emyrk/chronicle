@@ -249,6 +249,13 @@ func TestTenantRatingCheckpointFreezesMixedFlavorManifest(t *testing.T) {
 	q := database.NewQueries(conn)
 	asOf := time.Now().UTC()
 	args := database.StartTenantRatingRebuildParams{TenantID: uuid.Nil, AsOf: database.Timestamptz(asOf), SourceCutoff: database.Timestamptz(asOf)}
+	_, err = conn.Exec(ctx, "UPDATE site_config SET root_tenant_ratings_disabled = true WHERE id = true")
+	require.NoError(t, err)
+	disabledTenants, err := q.ListRatingTenants(ctx)
+	require.NoError(t, err)
+	require.NotContains(t, disabledTenants, uuid.NullUUID{UUID: uuid.Nil, Valid: true})
+	_, err = conn.Exec(ctx, "UPDATE site_config SET root_tenant_ratings_disabled = false WHERE id = true")
+	require.NoError(t, err)
 	tenants, err := q.ListRatingTenants(ctx)
 	require.NoError(t, err)
 	require.Contains(t, tenants, uuid.NullUUID{UUID: uuid.Nil, Valid: true}, "root servers must be scheduled without policy rows")

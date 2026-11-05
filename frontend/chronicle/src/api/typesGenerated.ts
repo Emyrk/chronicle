@@ -5642,6 +5642,10 @@ export interface SiteConfig {
      * (/start2). Off reverts "/" to the standard home page. Other flavors ignore it.
      */
     readonly forever_landing_enabled: boolean;
+    /**
+     * RootTenantRatingsDisabled prevents rating production and display for the legacy root tenant.
+     */
+    readonly root_tenant_ratings_disabled: boolean;
 }
 
 // From chroniclesdk/stats.go
@@ -6589,6 +6593,10 @@ export interface UpdateSiteConfigRequest {
      * ForeverLandingEnabled toggles WoW Forever's "/" between the replay landing and the standard home page.
      */
     readonly forever_landing_enabled?: boolean;
+    /**
+     * RootTenantRatingsDisabled disables rating production and display for the legacy root tenant.
+     */
+    readonly root_tenant_ratings_disabled?: boolean;
 }
 
 // From chroniclesdk/guild_page.go

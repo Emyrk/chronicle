@@ -21,6 +21,7 @@ import { FULL_CLEAR, defaultSpeedrunsView, type EncounterSelection, type Speedru
 import { liveHubBosses } from "./Hub/liveBosses"
 import { hubParams, hubPath, hubTab, v2Selection } from "./v2Selection"
 import { legacyLeaderboardsTarget } from "./leaderboardsState"
+import { useSiteConfig } from "@/api/queries"
 
 const ALL_REALMS = "All realms"
 
@@ -29,6 +30,8 @@ export function LeaderboardsLiveHub() {
   const [params, setParams] = useSearchParams()
   const { tab: pathTab } = useParams()
   const navigate = useNavigate()
+  const { data: siteConfig } = useSiteConfig()
+  const rootRatingsDisabled = siteConfig?.tenant == null && siteConfig?.root_tenant_ratings_disabled === true
   const { tab, instance, realmIDs, encounters } = v2Selection(params, pathTab)
   const requestedSize = params.get("size")
   const parsedSize = requestedSize === null ? NaN : Number(requestedSize)
@@ -37,7 +40,7 @@ export function LeaderboardsLiveHub() {
   // The page's summary is instance metadata (cohorts, realms, roster); it does not depend on the
   // selected bosses, so picking a boss never reloads the page. Content fetches its own selection.
   const summary = useHubSummary({ instanceName: instance ?? undefined, tab: instance ? undefined : tab, realmIDs, performance: "dps",
-    cohort: requestedCohort })
+    cohort: requestedCohort }, siteConfig !== undefined && !rootRatingsDisabled)
   const available = summary.data?.realms ?? []
   const activeRealm = realmIDs.length === 1 ? available.find((row) => row.id === realmIDs[0]) : undefined
   const selectedRealmIDs = activeRealm ? [activeRealm.id] : realmIDs.length > 1 ? realmIDs : []
@@ -60,6 +63,7 @@ export function LeaderboardsLiveHub() {
   // Older links put the tab in the query; an unknown or "overview" path segment is the Overview.
   if (params.has("tab")) return <Navigate to={hubPath(hubTab(params.get("tab")) ?? tab, params)} replace />
   if (pathTab !== undefined && (hubTab(pathTab) === undefined || pathTab === "overview")) return <Navigate to={hubPath("overview", params)} replace />
+  if (rootRatingsDisabled) return <p className="p-8 text-center text-muted-foreground">Visit a specific server to see ratings</p>
   // Only the first load (nothing on screen yet) replaces the page.
   if (!summary.data && summary.isError) return <p role="alert" className="mx-auto max-w-[1920px] p-8 text-muted-foreground">Could not load leaderboard summary.</p>
   // Until then the page renders its frame with skeleton rows. A new request (another instance,

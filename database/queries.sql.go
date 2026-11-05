@@ -22399,7 +22399,8 @@ func (q *sqlQuerier) DeleteDirtyObservationRunIfRevision(ctx context.Context, ar
 }
 
 const listDirtyObservationRunTenants = `-- name: ListDirtyObservationRunTenants :many
-SELECT DISTINCT tenant_id FROM rating_dirty_observation_runs ORDER BY tenant_id
+SELECT DISTINCT tenant_id FROM rating_dirty_observation_runs
+WHERE tenant_ratings_enabled(tenant_id) ORDER BY tenant_id
 `
 
 func (q *sqlQuerier) ListDirtyObservationRunTenants(ctx context.Context) ([]uuid.UUID, error) {
@@ -22470,6 +22471,7 @@ JOIN wow_server_realms realm ON realm.id = rr.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
 WHERE instance.id = $2
   AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND tenant_ratings_enabled($1::uuid)
 ON CONFLICT (tenant_id, run_id) DO UPDATE
 SET revision = rating_dirty_observation_runs.revision + 1, changed_at = now()
 `
@@ -22493,6 +22495,7 @@ FROM ranking_runs rr
 JOIN wow_server_realms realm ON realm.id = rr.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
 WHERE rr.run_id = ANY($1::uuid[]) AND cardinality($1::uuid[]) <= 200
+  AND tenant_ratings_enabled(COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid))
 ON CONFLICT (tenant_id, run_id) DO UPDATE
 SET revision = rating_dirty_observation_runs.revision + 1, changed_at = now()
 `
@@ -22817,7 +22820,8 @@ func (q *sqlQuerier) InsertPlayerTenantRenownScopes(ctx context.Context, arg Ins
 }
 
 const listDirtyRenownTenants = `-- name: ListDirtyRenownTenants :many
-SELECT DISTINCT tenant_id FROM rating_dirty_renown_subjects ORDER BY tenant_id
+SELECT DISTINCT tenant_id FROM rating_dirty_renown_subjects
+WHERE tenant_ratings_enabled(tenant_id) ORDER BY tenant_id
 `
 
 // Periodic dispatch only visits tenants with pending fact changes.
@@ -23071,7 +23075,8 @@ func (q *sqlQuerier) LockTenantRatingRevision(ctx context.Context, tenantID uuid
 const markDirtyRenownSubject = `-- name: MarkDirtyRenownSubject :exec
 INSERT INTO rating_dirty_renown_subjects
     (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name)
-VALUES ($1, $2, $3, $4, $5, $6)
+SELECT $1, $2, $3, $4, $5, $6
+WHERE tenant_ratings_enabled($1::uuid)
 ON CONFLICT (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name)
 DO UPDATE SET revision = rating_dirty_renown_subjects.revision + 1, changed_at = now()
 `
@@ -27696,7 +27701,8 @@ func (q *sqlQuerier) InsertPlayerLiveMasteryScore(ctx context.Context, arg Inser
 }
 
 const listDirtyMasteryTenants = `-- name: ListDirtyMasteryTenants :many
-SELECT DISTINCT tenant_id FROM rating_dirty_mastery_subjects ORDER BY tenant_id
+SELECT DISTINCT tenant_id FROM rating_dirty_mastery_subjects
+WHERE tenant_ratings_enabled(tenant_id) ORDER BY tenant_id
 `
 
 func (q *sqlQuerier) ListDirtyMasteryTenants(ctx context.Context) ([]uuid.UUID, error) {
@@ -29697,7 +29703,8 @@ func (q *sqlQuerier) InsertLivePeakPlayerScore(ctx context.Context, arg InsertLi
 }
 
 const listDirtyPeakTenants = `-- name: ListDirtyPeakTenants :many
-SELECT DISTINCT tenant_id FROM rating_dirty_peak_cohorts ORDER BY tenant_id
+SELECT DISTINCT tenant_id FROM rating_dirty_peak_cohorts
+WHERE tenant_ratings_enabled(tenant_id) ORDER BY tenant_id
 `
 
 func (q *sqlQuerier) ListDirtyPeakTenants(ctx context.Context) ([]uuid.UUID, error) {
@@ -30558,7 +30565,8 @@ func (q *sqlQuerier) CompleteRatingPolicyScanStage(ctx context.Context, arg Comp
 }
 
 const listRatingPolicyScanTenants = `-- name: ListRatingPolicyScanTenants :many
-SELECT DISTINCT tenant_id FROM rating_policy_scan_progress WHERE NOT completed ORDER BY tenant_id
+SELECT DISTINCT tenant_id FROM rating_policy_scan_progress
+WHERE NOT completed AND tenant_ratings_enabled(tenant_id) ORDER BY tenant_id
 `
 
 func (q *sqlQuerier) ListRatingPolicyScanTenants(ctx context.Context) ([]uuid.UUID, error) {
@@ -33688,6 +33696,7 @@ const listRatingTenants = `-- name: ListRatingTenants :many
 SELECT DISTINCT COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id
 FROM wow_servers server
 JOIN wow_server_realms realm ON realm.server_id = server.id
+WHERE tenant_ratings_enabled(COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid))
 ORDER BY tenant_id
 `
 
@@ -34021,7 +34030,8 @@ func (q *sqlQuerier) ListTenantRatingCopyProgress(ctx context.Context, tenantID 
 const listTenantRatingsNeedingCopy = `-- name: ListTenantRatingsNeedingCopy :many
 SELECT g.tenant_id FROM rating_score_generations g
 LEFT JOIN tenant_rating_read_states rs ON rs.tenant_id = g.tenant_id
-WHERE g.status = 'active' AND (rs.state IS NULL OR rs.state IN ('legacy', 'copying'))
+WHERE g.status = 'active' AND tenant_ratings_enabled(g.tenant_id)
+  AND (rs.state IS NULL OR rs.state IN ('legacy', 'copying'))
 ORDER BY g.tenant_id
 `
 
@@ -34084,6 +34094,7 @@ func (q *sqlQuerier) StartTenantRatingCopyProgress(ctx context.Context, arg Star
 }
 
 const listDirtyTenantRatings = `-- name: ListDirtyTenantRatings :many
+SELECT tenant_id FROM (
 SELECT tenant_id FROM rating_dirty_observation_runs
 UNION
 SELECT tenant_id FROM rating_dirty_renown_subjects
@@ -34091,6 +34102,8 @@ UNION
 SELECT tenant_id FROM rating_dirty_mastery_subjects
 UNION
 SELECT tenant_id FROM rating_dirty_peak_cohorts
+) dirty
+WHERE tenant_ratings_enabled(tenant_id)
 ORDER BY tenant_id
 `
 
@@ -39872,7 +39885,7 @@ func (q *sqlQuerier) UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertS
 }
 
 const getSiteConfig = `-- name: GetSiteConfig :one
-SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled FROM site_config WHERE id = TRUE
+SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled, root_tenant_ratings_disabled FROM site_config WHERE id = TRUE
 `
 
 func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
@@ -39892,8 +39905,20 @@ func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
 		&i.RootDomainDiscovery,
 		&i.LandingFeaturedInstanceID,
 		&i.ForeverLandingEnabled,
+		&i.RootTenantRatingsDisabled,
 	)
 	return i, err
+}
+
+const tenantRatingsEnabled = `-- name: TenantRatingsEnabled :one
+SELECT tenant_ratings_enabled($1::uuid)
+`
+
+func (q *sqlQuerier) TenantRatingsEnabled(ctx context.Context, tenantID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, tenantRatingsEnabled, tenantID)
+	var tenant_ratings_enabled bool
+	err := row.Scan(&tenant_ratings_enabled)
+	return tenant_ratings_enabled, err
 }
 
 const updateSiteConfig = `-- name: UpdateSiteConfig :one
@@ -39907,21 +39932,23 @@ UPDATE site_config SET
     client_uploads_disabled = COALESCE($7, client_uploads_disabled),
     ads_enabled = COALESCE($8, ads_enabled),
     forever_landing_enabled = COALESCE($9, forever_landing_enabled),
+    root_tenant_ratings_disabled = COALESCE($10, root_tenant_ratings_disabled),
     updated_at = now()
 WHERE id = TRUE
-RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled, root_tenant_ratings_disabled
 `
 
 type UpdateSiteConfigParams struct {
-	SignupsEnabled        pgtype.Bool   `db:"signups_enabled" json:"signups_enabled"`
-	Branding              []byte        `db:"branding" json:"branding"`
-	Discoverable          pgtype.Bool   `db:"discoverable" json:"discoverable"`
-	RootDomainDiscovery   pgtype.Bool   `db:"root_domain_discovery" json:"root_domain_discovery"`
-	DefaultFormat         NullLogFormat `db:"default_format" json:"default_format"`
-	AvailableFormats      []string      `db:"available_formats" json:"available_formats"`
-	ClientUploadsDisabled pgtype.Bool   `db:"client_uploads_disabled" json:"client_uploads_disabled"`
-	AdsEnabled            pgtype.Bool   `db:"ads_enabled" json:"ads_enabled"`
-	ForeverLandingEnabled pgtype.Bool   `db:"forever_landing_enabled" json:"forever_landing_enabled"`
+	SignupsEnabled            pgtype.Bool   `db:"signups_enabled" json:"signups_enabled"`
+	Branding                  []byte        `db:"branding" json:"branding"`
+	Discoverable              pgtype.Bool   `db:"discoverable" json:"discoverable"`
+	RootDomainDiscovery       pgtype.Bool   `db:"root_domain_discovery" json:"root_domain_discovery"`
+	DefaultFormat             NullLogFormat `db:"default_format" json:"default_format"`
+	AvailableFormats          []string      `db:"available_formats" json:"available_formats"`
+	ClientUploadsDisabled     pgtype.Bool   `db:"client_uploads_disabled" json:"client_uploads_disabled"`
+	AdsEnabled                pgtype.Bool   `db:"ads_enabled" json:"ads_enabled"`
+	ForeverLandingEnabled     pgtype.Bool   `db:"forever_landing_enabled" json:"forever_landing_enabled"`
+	RootTenantRatingsDisabled pgtype.Bool   `db:"root_tenant_ratings_disabled" json:"root_tenant_ratings_disabled"`
 }
 
 func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigParams) (SiteConfig, error) {
@@ -39935,6 +39962,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		arg.ClientUploadsDisabled,
 		arg.AdsEnabled,
 		arg.ForeverLandingEnabled,
+		arg.RootTenantRatingsDisabled,
 	)
 	var i SiteConfig
 	err := row.Scan(
@@ -39951,6 +39979,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		&i.RootDomainDiscovery,
 		&i.LandingFeaturedInstanceID,
 		&i.ForeverLandingEnabled,
+		&i.RootTenantRatingsDisabled,
 	)
 	return i, err
 }
@@ -39960,7 +39989,7 @@ UPDATE site_config SET
     landing_featured_instance_id = $1::uuid,
     updated_at = now()
 WHERE id = TRUE
-RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled, root_tenant_ratings_disabled
 `
 
 // NULL clears the setting, so this cannot share UpdateSiteConfig's COALESCE pattern.
@@ -39981,6 +40010,7 @@ func (q *sqlQuerier) UpdateSiteConfigLandingFeaturedInstance(ctx context.Context
 		&i.RootDomainDiscovery,
 		&i.LandingFeaturedInstanceID,
 		&i.ForeverLandingEnabled,
+		&i.RootTenantRatingsDisabled,
 	)
 	return i, err
 }

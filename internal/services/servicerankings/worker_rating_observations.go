@@ -63,6 +63,9 @@ type WorkerReconcileTenantRatingObservations struct {
 }
 
 func (w *WorkerReconcileTenantRatingObservations) Work(ctx context.Context, job *river.Job[ArgsReconcileTenantRatingObservations]) error {
+	if skip, err := skipDisabledRootRatings(ctx, w.Store, job.Args.TenantID); err != nil || skip {
+		return err
+	}
 	if job.Args.TenantID == uuid.Nil {
 		ctx = servicetenant.AdminBypass(ctx)
 	} else {

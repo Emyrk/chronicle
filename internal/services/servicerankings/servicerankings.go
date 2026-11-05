@@ -264,15 +264,18 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/time-parse-cohorts/spreads", s.handleTimeParseSpreads)
 
 	// Published tenant-wide rating leaderboards. Realm IDs filter rows only.
-	s.router.Get("/ratings/catchup", s.handleRatingCatchup)
-	s.router.Get("/ratings/hub-summary", s.handleHubSummary)
-	s.router.Get("/ratings/set-board", s.handleHubSetBoard)
-	s.router.Get("/ratings/guild-full-list", s.handlePublishedGuildFullList)
-	s.router.Get("/ratings/player-full-list", s.handlePublishedPlayerFullList)
-	s.router.Get("/ratings/scope-leaderboard", s.handleTenantPlayerScopeLeaderboard)
-	s.router.Get("/ratings/boss-leaderboard", s.handleTenantPlayerBossLeaderboard)
-	s.router.Get("/ratings/guild-boss-leaderboard", s.handleTenantGuildBossLeaderboard)
-	s.router.Get("/ratings/guild-scope-leaderboard", s.handleTenantGuildScopeLeaderboard)
+	s.router.Route("/ratings", func(r chi.Router) {
+		r.Use(s.requireRatingTenant)
+		r.Get("/catchup", s.handleRatingCatchup)
+		r.Get("/hub-summary", s.handleHubSummary)
+		r.Get("/set-board", s.handleHubSetBoard)
+		r.Get("/guild-full-list", s.handlePublishedGuildFullList)
+		r.Get("/player-full-list", s.handlePublishedPlayerFullList)
+		r.Get("/scope-leaderboard", s.handleTenantPlayerScopeLeaderboard)
+		r.Get("/boss-leaderboard", s.handleTenantPlayerBossLeaderboard)
+		r.Get("/guild-boss-leaderboard", s.handleTenantGuildBossLeaderboard)
+		r.Get("/guild-scope-leaderboard", s.handleTenantGuildScopeLeaderboard)
+	})
 
 	// Speedrun leaderboard
 	s.router.Get("/speedrun", s.handleSpeedrunLeaderboard)
@@ -281,6 +284,22 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/speedrun/difficulties", s.handleSpeedrunDifficulties)
 	s.router.Get("/speedrun/rules", s.handleSpeedrunRules)
 	s.router.Get("/speedrun/guild-clears", s.handleSpeedrunGuildClears)
+}
+
+func (s *Service) requireRatingTenant(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tenantID := servicetenant.TenantIDFromContext(r.Context())
+		enabled, err := s.store.TenantRatingsEnabled(r.Context(), tenantID)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		if !enabled {
+			httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Visit a specific server to see ratings"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // handleInstances returns per-instance summaries with top 3 players.

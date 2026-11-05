@@ -42,6 +42,9 @@ type WorkerExpireTenantRenown struct {
 }
 
 func (w *WorkerExpireTenantRenown) Work(ctx context.Context, job *river.Job[ArgsExpireTenantRenown]) error {
+	if skip, err := skipDisabledRootRatings(ctx, w.Store, job.Args.TenantID); err != nil || skip {
+		return err
+	}
 	args := job.Args
 	if args.AsOf.IsZero() {
 		return fmt.Errorf("renown expiry requires a fixed cutoff")

@@ -208,6 +208,38 @@ export function AdminSiteSettingsPage() {
             </Button>
           </div>
         )}
+        {!config?.tenant && (
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium">Disable Root Tenant Ratings</p>
+              <p className="text-sm text-muted-foreground">
+                Stop producing and displaying ratings for the legacy root tenant. Specific server tenants are unchanged.
+              </p>
+            </div>
+            <Button
+              variant={config?.root_tenant_ratings_disabled ? "destructive" : "outline"}
+              size="sm"
+              disabled={updateConfig.isPending}
+              onClick={() => {
+                updateConfig.mutate({ root_tenant_ratings_disabled: !config?.root_tenant_ratings_disabled });
+              }}
+            >
+              {updateConfig.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : config?.root_tenant_ratings_disabled ? (
+                <>
+                  <X className="h-4 w-4 mr-1" />
+                  Disabled
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4 mr-1" />
+                  Enabled
+                </>
+              )}
+            </Button>
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <div>
             <p className="font-medium">Client Uploads</p>

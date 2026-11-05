@@ -1,7 +1,8 @@
 -- name: ListTenantRatingsNeedingCopy :many
 SELECT g.tenant_id FROM rating_score_generations g
 LEFT JOIN tenant_rating_read_states rs ON rs.tenant_id = g.tenant_id
-WHERE g.status = 'active' AND (rs.state IS NULL OR rs.state IN ('legacy', 'copying'))
+WHERE g.status = 'active' AND tenant_ratings_enabled(g.tenant_id)
+  AND (rs.state IS NULL OR rs.state IN ('legacy', 'copying'))
 ORDER BY g.tenant_id;
 
 -- name: BeginTenantRatingCopy :exec
