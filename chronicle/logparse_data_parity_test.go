@@ -82,7 +82,7 @@ func TestAddonDataOnlyParseMatchesWorkerProjection(t *testing.T) {
 			Finalized: fin, Events: inst.Events(), Units: parsed.encountersState.Units, IdentifyUnit: inst.IdentifyUnit,
 			Category: string(inst.Category), DifficultyName: inst.CurrentZone.DifficultyName,
 			MaxPlayers: int32(inst.CurrentZone.MaxPlayers), DynamicDifficulty: int32(inst.CurrentZone.DynamicDifficulty),
-			Capabilities: parsed.logCapabilities,
+			Capabilities: parsed.logCapabilities, Armory: fin.Guilds,
 		})
 		if err != nil {
 			t.Fatalf("legacy projection %q: %v", inst.Name(), err)
@@ -104,7 +104,7 @@ func TestAddonDataOnlyParseMatchesWorkerProjection(t *testing.T) {
 	// Also anchor key core fields directly to the live legacy writer inputs.
 	live := parsed.encountersState.Instances[0]
 	liveEncounter := legacyFinal.Encounters[0]
-	if fresh[0].SchemaVersion != 2 || fresh[0].Core.Category != string(live.Category) ||
+	if fresh[0].SchemaVersion != 3 || fresh[0].Core.Category != string(live.Category) ||
 		fresh[0].Core.DifficultyName != live.CurrentZone.DifficultyName ||
 		fresh[0].Core.Start != liveEncounter.Combat.Start || fresh[0].Core.End != liveEncounter.Combat.End ||
 		fresh[0].Overview.WipeCount != legacyFinal.Overview.WipeCount ||
