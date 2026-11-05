@@ -180,6 +180,8 @@ function tenantHost(baseURL?: string): string {
 
 function logFormatLabel(format?: SidekickLogFormat): string {
   switch (format) {
+    case "1.12a-superwow-addon":
+      return "Vanilla 1.12a with SuperWoW";
     case "1.12a-cc-addon":
       return "Vanilla 1.12a";
     case "hermesproxy_1_14_2_cc":
@@ -188,6 +190,10 @@ function logFormatLabel(format?: SidekickLogFormat): string {
       return "TBC 2.4.3";
     case "3.3.5a-cc-addon":
       return "Wrath 3.3.5a";
+    case "azerothcore-mod":
+      return "AzerothCore";
+    case "v9-cleu":
+      return "TBC Anniversary";
     case "v22-cleu":
       return "WoW Forever";
     default:

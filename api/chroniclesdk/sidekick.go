@@ -22,9 +22,12 @@ const (
 )
 
 const (
+	SidekickLogFormat112aSuperwowAddon SidekickLogFormat = "1.12a-superwow-addon"
 	SidekickLogFormat112aCcAddon       SidekickLogFormat = "1.12a-cc-addon"
 	SidekickLogFormat335aCcAddon       SidekickLogFormat = "3.3.5a-cc-addon"
+	SidekickLogFormatAzerothcoreMod    SidekickLogFormat = "azerothcore-mod"
 	SidekickLogFormat243CcAddon        SidekickLogFormat = "2.4.3-cc-addon"
+	SidekickLogFormatV9Cleu            SidekickLogFormat = "v9-cleu"
 	SidekickLogFormatHermesproxy1142Cc SidekickLogFormat = "hermesproxy_1_14_2_cc"
 	SidekickLogFormatV22Cleu           SidekickLogFormat = "v22-cleu"
 
@@ -42,9 +45,12 @@ type SidekickLogFormat string
 
 func (f SidekickLogFormat) Valid() bool {
 	switch f {
-	case SidekickLogFormat112aCcAddon,
+	case SidekickLogFormat112aSuperwowAddon,
+		SidekickLogFormat112aCcAddon,
 		SidekickLogFormat335aCcAddon,
+		SidekickLogFormatAzerothcoreMod,
 		SidekickLogFormat243CcAddon,
+		SidekickLogFormatV9Cleu,
 		SidekickLogFormatHermesproxy1142Cc,
 		SidekickLogFormatV22Cleu:
 		return true

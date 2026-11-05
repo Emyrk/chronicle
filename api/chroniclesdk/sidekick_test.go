@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,16 +39,9 @@ func TestSidekickConfigCanonicalJSONSortsDirectories(t *testing.T) {
 
 func TestSidekickLogFormatValid(t *testing.T) {
 	t.Parallel()
-	for _, format := range []SidekickLogFormat{
-		SidekickLogFormat112aCcAddon,
-		SidekickLogFormat335aCcAddon,
-		SidekickLogFormat243CcAddon,
-		SidekickLogFormatHermesproxy1142Cc,
-		SidekickLogFormatV22Cleu,
-	} {
-		require.True(t, format.Valid())
+	for _, format := range database.AllLogFormatValues() {
+		require.Truef(t, SidekickLogFormat(format).Valid(), "database log format %q must be accepted by Sidekick", format)
 	}
-	require.True(t, SidekickLogFormat("v22-cleu").Valid())
 	require.False(t, SidekickLogFormat("future").Valid())
 }
 
