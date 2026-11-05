@@ -2,7 +2,9 @@ package servicerankings
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
@@ -69,12 +71,20 @@ type WorkerDrainTenantRatings struct {
 	ActiveJobs     prometheus.Gauge
 }
 
-func (w *WorkerDrainTenantRatings) Work(ctx context.Context, job *river.Job[ArgsDrainTenantRatings]) error {
+func (w *WorkerDrainTenantRatings) Work(ctx context.Context, job *river.Job[ArgsDrainTenantRatings]) (workErr error) {
+	started := time.Now()
+	tenant := job.Args.TenantID
+	defer func() {
+		riverqueue.PersistedJobLogger(ctx).InfoContext(ctx, "tenant rating drain invocation",
+			slog.String("tenant_id", tenant.String()),
+			slog.String("outcome", tenantRatingDrainOutcome(workErr)),
+			slog.Int64("duration_ms", time.Since(started).Milliseconds()),
+		)
+	}()
 	if w.ActiveJobs != nil {
 		w.ActiveJobs.Inc()
 		defer w.ActiveJobs.Dec()
 	}
-	tenant := job.Args.TenantID
 	if tenant == uuid.Nil {
 		ctx = servicetenant.AdminBypass(ctx)
 	} else {
@@ -94,6 +104,17 @@ func (w *WorkerDrainTenantRatings) Work(ctx context.Context, job *river.Job[Args
 	// River is configured with a 30-minute job timeout; the one-minute budget
 	// is deliberately soft, allowing a page already started to finish.
 	return drainTenantRatingPages(ctx, stages, time.Now().Add(time.Minute), time.Now, w)
+}
+
+func tenantRatingDrainOutcome(err error) string {
+	if err == nil {
+		return "completed"
+	}
+	var snooze *river.JobSnoozeError
+	if errors.As(err, &snooze) {
+		return "snoozed"
+	}
+	return "failed"
 }
 
 func evolvingRatingDrainStages(store database.Store, tenant uuid.UUID) []ratingDrainStage {

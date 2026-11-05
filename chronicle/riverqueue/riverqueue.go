@@ -3,6 +3,7 @@ package riverqueue
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -17,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/riverqueue/river/riverlog"
 	"github.com/riverqueue/river/rivertype"
 	"riverqueue.com/riverui"
 )
@@ -88,11 +90,30 @@ func (q *Queues) AddPeriodicJob(job *river.PeriodicJob) *Queues {
 	return q
 }
 
+type persistedJobLoggerContextKey struct{}
+
+var discardJobLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+// PersistedJobLogger returns the logger whose output River stores with the
+// current job attempt. It discards output outside a configured River worker so
+// workers remain safe to invoke directly in tests.
+func PersistedJobLogger(ctx context.Context) *slog.Logger {
+	logger, ok := ctx.Value(persistedJobLoggerContextKey{}).(*slog.Logger)
+	if !ok {
+		return discardJobLogger
+	}
+	return logger
+}
+
 // WorkerMiddleware returns the middleware shared by every Chronicle River
 // worker client, including isolated CLI clients.
 func WorkerMiddleware(logger *slog.Logger) []rivertype.Middleware {
 	return []rivertype.Middleware{
 		NewWorkerPanicMW(logger),
+		riverlog.NewMiddlewareCustomContext(func(ctx context.Context, writer io.Writer) context.Context {
+			jobLogger := slog.New(slog.NewJSONHandler(writer, nil))
+			return context.WithValue(ctx, persistedJobLoggerContextKey{}, jobLogger)
+		}, nil),
 	}
 }
 

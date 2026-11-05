@@ -18,6 +18,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestTenantRatingDrainOutcome(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "completed", tenantRatingDrainOutcome(nil))
+	require.Equal(t, "snoozed", tenantRatingDrainOutcome(river.JobSnooze(time.Second)))
+	require.Equal(t, "failed", tenantRatingDrainOutcome(errors.New("failed")))
+}
+
 func TestDrainTenantRatingPagesInterleavesAndStopsWhenEmpty(t *testing.T) {
 	t.Parallel()
 	var calls []string
