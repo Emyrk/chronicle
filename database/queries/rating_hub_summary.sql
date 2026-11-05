@@ -365,7 +365,8 @@ SELECT p.rank::bigint AS rank, p.total::bigint AS total, p.realm_id, p.realm_nam
        COALESCE(other.peak_raw, 0)::float8 AS peak_raw,
        -- Ranked Mastery's parts over the chosen bosses (a missed boss as 0), kills summed.
        COALESCE(other.mastery_peak, 0)::float8 AS mastery_peak, COALESCE(other.mastery_form, 0)::float8 AS mastery_form,
-       COALESCE(other.mastery_floor, 0)::float8 AS mastery_floor, COALESCE(other.eligible_kills, 0)::bigint AS eligible_kills
+       COALESCE(other.mastery_floor, 0)::float8 AS mastery_floor, COALESCE(other.eligible_kills, 0)::bigint AS eligible_kills,
+       COALESCE(peak_components.scores, '[]'::jsonb) AS peak_components
 FROM paged p
 LEFT JOIN LATERAL (
   -- The row's three scores over the same bosses. A class/spec-ranked row keeps its
@@ -412,4 +413,18 @@ LEFT JOIN LATERAL (
     GROUP BY x.cohort
   ) c
 ) other ON true
+LEFT JOIN LATERAL (
+  -- One indexed score lookup per chosen boss for each displayed Peak row.
+  -- Match the winning class/spec cohort from player_cohorts; absent bosses count as zero.
+  SELECT jsonb_agg(jsonb_build_object('encounter_name', chosen.encounter_name,
+           'score', COALESCE(s.score, 0)) ORDER BY chosen.encounter_name) AS scores
+  FROM chosen
+  LEFT JOIN player_tenant_rating_boss_scores s ON s.tenant_id = @tenant_id AND s.generation_id = @generation_id
+    AND s.realm_id = p.realm_id AND s.player_guid = p.subject_id AND s.instance_name = @instance_name
+    AND s.encounter_name = chosen.encounter_name AND s.rating_metric = 'peak'
+    AND s.window_kind = @window_kind AND s.difficulty_name = @difficulty_name AND s.max_players = @max_players
+    AND s.performance_metric = sqlc.arg(performance_metric)::text
+    AND s.player_class = p.player_class AND s.player_spec = p.player_spec AND s.player_sub_spec = p.player_sub_spec
+  WHERE @subject::text = 'player' AND @rating_metric::text = 'peak'
+) peak_components ON true
 ORDER BY p.rank;

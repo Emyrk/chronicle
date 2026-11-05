@@ -1,6 +1,7 @@
 package database_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/Emyrk/chronicle/database"
@@ -98,6 +99,25 @@ func TestEvolvingHubSummaryBossPreviewDisplay(t *testing.T) {
 			require.Equal(t, 110.0, row.Score)
 		}
 	}
+	page, err := q.EvolvingHubSetBoardPage(ctx, database.EvolvingHubSetBoardPageParams{
+		TenantID: tenant, GenerationID: uuid.Nil, InstanceName: "Molten Core", EncounterNames: []string{"Lucifron", "Ragnaros"},
+		Subject: "player", RatingMetric: "peak", PerformanceMetric: "dps", WindowKind: "period", RenownWindow: "period", LimitCount: 10,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, page)
+	require.Equal(t, known, page[0].SubjectID)
+	require.Equal(t, "Warrior", page[0].PlayerClass)
+	require.Equal(t, 55.0, page[0].Score)
+	var components []struct {
+		EncounterName string  `json:"encounter_name"`
+		Score         float64 `json:"score"`
+	}
+	require.NoError(t, json.Unmarshal(page[0].PeakComponents, &components))
+	require.Len(t, components, 2)
+	require.Equal(t, "Lucifron", components[0].EncounterName)
+	require.Zero(t, components[0].Score)
+	require.Equal(t, "Ragnaros", components[1].EncounterName)
+	require.Equal(t, 110.0, components[1].Score)
 	// The handler's read-only wrapper must preserve the generated query result.
 	store := database.New(pool)
 	err = store.InTx(ctx, func(tx database.Store) error {

@@ -88,11 +88,11 @@ export function Emblem({ size, children, accent }: { size: "lg" | "sm"; children
 }
 
 /** Boss face icon when available, otherwise initials. */
-export function BossPortrait({ boss, size }: { boss: string; size: "lg" | "md" | "sm" }) {
+export function BossPortrait({ boss, size, className }: { boss: string; size: "lg" | "md" | "sm"; className?: string }) {
   const src = getBossPortrait(boss)
   const box = size === "lg" ? "size-16" : size === "md" ? "size-11" : "size-7"
   if (src) {
-    return <img src={src} alt={boss} className={cn("rounded-full border border-white/15 object-cover", box)} />
+    return <img src={src} alt={boss} className={cn("rounded-full border border-white/15 object-cover", box, className)} />
   }
   return (
     <span
@@ -100,6 +100,7 @@ export function BossPortrait({ boss, size }: { boss: string; size: "lg" | "md" |
         "flex items-center justify-center rounded-full border border-white/10 bg-black/30 font-wow text-muted-foreground",
         box,
         size === "lg" ? "text-xl" : size === "md" ? "text-sm" : "text-[11px]",
+        className,
       )}
       aria-label={boss}
     >

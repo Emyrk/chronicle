@@ -2,6 +2,7 @@ package servicerankings
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -181,6 +182,12 @@ func (s *Service) handleHubSetBoard(w http.ResponseWriter, r *http.Request) {
 			SubjectID: v.SubjectID, Name: v.SubjectName, GuildName: v.GuildName, PlayerClass: normalizeClassName(v.PlayerClass),
 			PlayerSpec: v.PlayerSpec, PlayerSubSpec: v.PlayerSubSpec, Score: v.Score, Peak: v.Peak, Mastery: v.Mastery,
 			Renown: v.Renown, PeakRaw: hubPeakRaw(v.PeakRaw)}
+		if in.params.Subject == "player" && in.params.RatingMetric == "peak" {
+			if err := json.Unmarshal(v.PeakComponents, &row.PeakComponents); err != nil {
+				httpapi.InternalServerError(w, err)
+				return
+			}
+		}
 		if v.EligibleKills > 0 {
 			row.MasteryParts = &chroniclesdk.HubSetBoardMastery{Peak: v.MasteryPeak, Form: v.MasteryForm, Floor: v.MasteryFloor, EligibleKills: v.EligibleKills}
 		}

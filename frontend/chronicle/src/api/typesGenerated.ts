@@ -2402,6 +2402,16 @@ export interface HubSetBoardMastery {
 
 // From chroniclesdk/rating_hub_summary.go
 /**
+ * HubSetBoardPeakComponent is one chosen boss's Peak score in the average.
+ * A missed boss has score zero.
+ */
+export interface HubSetBoardPeakComponent {
+    readonly encounter_name: string;
+    readonly score: number;
+}
+
+// From chroniclesdk/rating_hub_summary.go
+/**
  * HubSetBoardResponse is a page of a chosen-boss board. Ranks cover the whole
  * cohort; realm and search filters only narrow the displayed rows.
  */
@@ -2438,6 +2448,10 @@ export interface HubSetBoardRow {
      * PeakRaw is the Peak's duration-weighted DPS/HPS; unset when unknown.
      */
     readonly peak_raw?: number;
+    /**
+     * PeakComponents lists the chosen boss scores behind a player Peak average.
+     */
+    readonly peak_components?: readonly HubSetBoardPeakComponent[];
     /**
      * Mastery is Ranked Mastery's parts over the chosen bosses (a missed boss
      * counts as 0) and the eligible kills behind it; unset without a Mastery score.
