@@ -27,6 +27,8 @@ type AuraCleanupDefeatConfig struct {
 	DistinctAuras int
 	BurstWindow   time.Duration
 	DamageWindow  time.Duration
+	// NoKnownParticipantsAlive rejects cleanup when the fight has no known survivors.
+	NoKnownParticipantsAlive func() bool
 }
 
 // ScriptedDefeatConfig selects the defeat signals recognized by a detector.
@@ -147,7 +149,14 @@ func (d *ScriptedDefeatDetector) observeAuraCleanup(aura *messages.Aura) bool {
 		d.cleanupBurstStart = aura.Date()
 	}
 	d.cleanupAuras[auraIdentity(aura)] = struct{}{}
-	return len(d.cleanupAuras) >= config.DistinctAuras
+	if len(d.cleanupAuras) < config.DistinctAuras {
+		return false
+	}
+	if config.NoKnownParticipantsAlive != nil && config.NoKnownParticipantsAlive() {
+		d.resetCleanupBurst()
+		return false
+	}
+	return true
 }
 
 func (d *ScriptedDefeatDetector) resetCleanupBurst() {

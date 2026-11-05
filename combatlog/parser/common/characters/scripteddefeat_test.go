@@ -180,6 +180,41 @@ func TestScriptedDefeatDetectorAuraCleanup(t *testing.T) {
 	}
 }
 
+func TestScriptedDefeatDetectorAuraCleanupRejectsWhenNoKnownParticipantsAlive(t *testing.T) {
+	t.Parallel()
+
+	boss := guid.GUID(10)
+	player := guid.GUID(1)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+	detector := NewScriptedDefeatDetector(boss, ScriptedDefeatConfig{
+		AuraCleanup: AuraCleanupDefeatConfig{
+			DistinctAuras:            3,
+			BurstWindow:              100 * time.Millisecond,
+			DamageWindow:             500 * time.Millisecond,
+			NoKnownParticipantsAlive: func() bool { return true },
+		},
+	})
+
+	_, defeated := detector.Observe(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &player,
+		Target:      boss,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}, true)
+	require.False(t, defeated)
+
+	for i := range 3 {
+		_, defeated = detector.Observe(&messages.Aura{
+			MessageBase: messages.Base(start.Add(50*time.Millisecond + time.Duration(i)*time.Millisecond)),
+			Target:      boss,
+			SpellName:   fmt.Sprintf("Debuff %d", i),
+			State:       types.AuraStateRemoved,
+		}, true)
+		require.False(t, defeated)
+	}
+}
+
 func TestScriptedDefeatDetectorAuraCleanupGuards(t *testing.T) {
 	t.Parallel()
 

@@ -13,12 +13,14 @@ func NewMalGanis(id guid.GUID, all *characters.Characters) (characters.Character
 	}
 
 	c := characters.NewCommonCharacter(id, all)
-	return characters.NewScriptedDefeatCharacter(id, c, characters.ScriptedDefeatConfig{
+	config := characters.ScriptedDefeatConfig{
 		PositiveOverkill: true,
 		AuraCleanup: characters.AuraCleanupDefeatConfig{
-			DistinctAuras: 5,
-			BurstWindow:   100 * time.Millisecond,
-			DamageWindow:  500 * time.Millisecond,
+			DistinctAuras:            5,
+			BurstWindow:              100 * time.Millisecond,
+			DamageWindow:             500 * time.Millisecond,
+			NoKnownParticipantsAlive: all.NoKnownParticipantsAlive,
 		},
-	}), true
+	}
+	return characters.NewScriptedDefeatCharacter(id, c, config), true
 }

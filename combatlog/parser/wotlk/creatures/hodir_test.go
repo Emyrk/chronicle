@@ -223,6 +223,40 @@ func TestHodirAuraCleanupIgnoresEarlierPlayerDeaths(t *testing.T) {
 	require.Equal(t, period.EndStateSlain, hodir.LastEndState())
 }
 
+func TestHodirAuraCleanupWithNoKnownParticipantsAliveDoesNotMarkSurrender(t *testing.T) {
+	t.Parallel()
+
+	all := newHodirTestCharacters()
+	all.SetNoKnownParticipantsAliveProvider(func() bool { return true })
+	player := guid.GUID(1)
+	hodirID := creatureGUID(hodirEntry)
+	start := time.Date(2026, time.November, 5, 12, 0, 0, 0, time.UTC)
+
+	_, err := all.Process(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &player,
+		Target:      hodirID,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	})
+	require.NoError(t, err)
+
+	for i := range scriptedKeeperAuraCleanupThreshold {
+		_, err = all.Process(&messages.Aura{
+			MessageBase: messages.Base(start.Add(50*time.Millisecond + time.Duration(i)*time.Millisecond)),
+			Target:      hodirID,
+			SpellName:   fmt.Sprintf("Removed debuff %d", i),
+			State:       types.AuraStateRemoved,
+		})
+		require.NoError(t, err)
+	}
+
+	hodir, ok := all.Get(hodirID)
+	require.True(t, ok)
+	require.True(t, hodir.IsActive())
+	require.NotEqual(t, period.EndStateSlain, hodir.LastEndState())
+}
+
 func TestHodirAuraCleanupRequiresRecentDamageAndBurst(t *testing.T) {
 	t.Parallel()
 

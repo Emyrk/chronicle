@@ -38,6 +38,7 @@ func NewHodirEncounterCharacter(id guid.GUID, all *characters.Characters) (chara
 
 	config := scriptedSurrenderWithAuraCleanupConfig(scriptedKeeperAuraCleanupThreshold)
 	config.AuraCleanup.DamageWindow = hodirAuraCleanupDamageWindow
+	config.AuraCleanup.NoKnownParticipantsAlive = all.NoKnownParticipantsAlive
 	return &hodirCharacter{
 		Common: characters.NewCommonCharacter(id, all),
 		defeat: characters.NewScriptedDefeatDetector(id, config),

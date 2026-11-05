@@ -44,10 +44,12 @@ func NewAlgalon(id guid.GUID, all *characters.Characters) (characters.Character,
 		return nil, false
 	}
 
+	config := algalonDefeatConfig()
+	config.AuraCleanup.NoKnownParticipantsAlive = all.NoKnownParticipantsAlive
 	return &algalonCharacter{
 		Common:      characters.NewCommonCharacter(id, all),
 		all:         all,
-		defeat:      characters.NewScriptedDefeatDetector(id, algalonDefeatConfig()),
+		defeat:      characters.NewScriptedDefeatDetector(id, config),
 		seenPlayers: make(map[guid.GUID]struct{}),
 		deadPlayers: make(map[guid.GUID]struct{}),
 	}, true
