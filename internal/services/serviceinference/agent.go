@@ -249,6 +249,20 @@ func boundedJSON(v any) (string, error) {
 	return string(b), nil
 }
 
+func boundedJSONWithoutHTMLEscaping(v any) (string, error) {
+	var b bytes.Buffer
+	encoder := json.NewEncoder(&b)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(v); err != nil {
+		return "", err
+	}
+	output := strings.TrimSuffix(b.String(), "\n")
+	if len(output) > maxToolOutput {
+		return "", errors.New("tool output too large")
+	}
+	return output, nil
+}
+
 func (s *Service) executeTool(ctx context.Context, tc toolContext, name, args string) (string, error) {
 	switch name {
 	case "describe_instance_search":
@@ -259,6 +273,8 @@ func (s *Service) executeTool(ctx context.Context, tc toolContext, name, args st
 		return s.describeInstanceSearch(tc, args)
 	case "search_instances":
 		return s.searchInstances(ctx, tc, args)
+	case "explain_instance_search":
+		return s.explainInstanceSearch(ctx, tc, args)
 	case "list_pages":
 		var in struct{}
 		if err := decodeStrict(args, &in); err != nil {

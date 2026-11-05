@@ -42,7 +42,17 @@ func buildInstanceSearchLink(args string) (string, error) {
 	if _, err := instancesearch.Compile(instancesearch.Query{Where: in.Where}, instancesearch.Options{}); err != nil {
 		return "", err
 	}
-	raw, err := json.Marshal(in.Where)
+	searchPath, err := instanceSearchPath(in.Where)
+	if err != nil {
+		return "", err
+	}
+	return boundedJSON(struct {
+		URL string `json:"url"`
+	}{URL: searchPath})
+}
+
+func instanceSearchPath(where *instancesearch.Node) (string, error) {
+	raw, err := json.Marshal(where)
 	if err != nil {
 		return "", err
 	}
@@ -52,7 +62,5 @@ func buildInstanceSearchLink(args string) (string, error) {
 	if url.Len() > maxSearchLinkLength {
 		return "", errors.New("search link is too long")
 	}
-	return boundedJSON(struct {
-		URL string `json:"url"`
-	}{URL: url.String()})
+	return url.String(), nil
 }

@@ -25,6 +25,16 @@ func TestDiscordAssistantComposesConceptsWithoutBrowserTools(t *testing.T) {
 	require.False(t, assistantAllowsTool(composed, "set_search_draft"))
 }
 
+func TestDiscordSearchAssistantRunsAndExplainsMatches(t *testing.T) {
+	t.Parallel()
+	composed, err := withRuntimeSkills(discordSearchAssistant)
+	require.NoError(t, err)
+	require.True(t, assistantAllowsTool(composed, "search_instances"))
+	require.True(t, assistantAllowsTool(composed, "explain_instance_search"))
+	require.Contains(t, composed.System, "Always include the returned search_url exactly once")
+	require.Contains(t, composed.System, "For every returned result")
+}
+
 func TestDiscordSearchTenantRequiresValidatedSlug(t *testing.T) {
 	t.Parallel()
 	service := &Service{tenant: servicetenant.NewTestWithTenants(url.URL{}, "chronicle.example", database.Tenant{Name: "Turtle", Slug: pgtype.Text{String: "turtle", Valid: true}})}
@@ -35,6 +45,25 @@ func TestDiscordSearchTenantRequiresValidatedSlug(t *testing.T) {
 		_, err = service.resolveSearchTenant(invalid)
 		require.Error(t, err, invalid)
 	}
+}
+
+func TestDiscordSearchWrapsInstanceURLsToSuppressEmbeds(t *testing.T) {
+	t.Parallel()
+	accessURL, err := url.Parse("https://chronicle.example?ignored=true#ignored")
+	require.NoError(t, err)
+	service := &Service{
+		accessURL: accessURL,
+		tenant:    servicetenant.NewTestWithTenants(url.URL{}, "chronicle.example", database.Tenant{}),
+	}
+	tenant := database.Tenant{Slug: pgtype.Text{String: "turtle", Valid: true}}
+
+	instanceURL := service.tenantInstanceURL(tenant, chroniclesdk.InstanceSearchResult{Slug: "raid-night"})
+	searchURL, err := service.tenantInstanceSearchURL(tenant, &chroniclesdk.InstanceSearchNode{Field: "instance.name", Op: chroniclesdk.InstanceSearchOpEq, Value: "Naxxramas"})
+	require.NoError(t, err)
+
+	require.Equal(t, "<https://turtle.chronicle.example/instances/raid-night>", instanceURL)
+	require.Contains(t, searchURL, "<https://turtle.chronicle.example/search?q=")
+	require.Equal(t, '>', []rune(searchURL)[len([]rune(searchURL))-1])
 }
 
 func TestDiscordSearchUsesSharedAdmission(t *testing.T) {
@@ -50,6 +79,7 @@ func TestDiscordSearchUsesSharedAdmission(t *testing.T) {
 	require.Positive(t, first.RuntimeCost)
 	output, err := service.searchInstances(ctx, toolContext{userID: user, tenantSlug: "turtle"}, `{}`)
 	require.NoError(t, err)
+	require.Contains(t, output, `"search_url":"<https://turtle.chronicle.example/search>"`)
 	require.Contains(t, output, `"cost":1`)
 	status, _, err := search.Peek(ctx, serviceinstancesearch.Caller{UserID: user, TenantID: tenant.ID})
 	require.NoError(t, err)

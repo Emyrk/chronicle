@@ -33,6 +33,17 @@ var discordAssistant = assistant{
 	},
 }
 
+var discordSearchAssistant = assistant{
+	ID: "discord-search", Name: "Search Chronicle",
+	Skills: []string{chronicleConceptsSkillID},
+	System: "You are Chronicle's Discord search assistant. Translate the user's request into one validated instance-search query and run it with search_instances. Use discord_describe_instance_search when field details are needed. Search at most five results. For every returned result, call explain_instance_search with the exact same where tree and that result's instance ID, then briefly state the evidence that made it match. Never invent results or evidence. Always include the returned search_url exactly once so the user can open the reusable query. Returned URLs are already wrapped in angle brackets to suppress Discord embeds. Avoid tables and keep the answer concise enough for Discord.",
+	Tools: []ToolDefinition{
+		{Name: "discord_describe_instance_search", Description: "Describe valid Chronicle search filters for the saved tenant.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
+		{Name: "search_instances", Description: "Search up to five Chronicle logs on the saved tenant and return a reusable search_url. Use discord_describe_instance_search for supported fields.", Parameters: json.RawMessage(`{"type":"object","properties":{"where":` + strings.ReplaceAll(searchWhereParameterSchema, "describe_instance_search", "discord_describe_instance_search") + `,"limit":{"type":"integer","minimum":1,"maximum":5}},"required":["where"],"additionalProperties":false}`)},
+		{Name: "explain_instance_search", Description: "Explain why one returned Chronicle log matched the exact search query. Pass the same where tree used for search_instances and the returned instance ID.", Parameters: json.RawMessage(`{"type":"object","properties":{"where":` + strings.ReplaceAll(searchWhereParameterSchema, "describe_instance_search", "discord_describe_instance_search") + `,"instance_id":{"type":"string","format":"uuid"}},"required":["where","instance_id"],"additionalProperties":false}`)},
+	},
+}
+
 // SetDiscordTenant validates and saves a linked user's tenant slug.
 func (s *Service) SetDiscordTenant(ctx context.Context, userID uuid.UUID, discordID, slug string) (string, error) {
 	if err := s.checkDiscordUse(ctx, userID, discordID); err != nil {
@@ -87,6 +98,16 @@ func (s *Service) checkDiscordLink(ctx context.Context, userID uuid.UUID, discor
 // AskDiscord executes a bounded personal-key run. The caller must supply the linked Chronicle user;
 // this method independently checks the link and permission on every invocation.
 func (s *Service) AskDiscord(ctx context.Context, userID uuid.UUID, discordID, interactionID, question string) (string, error) {
+	return s.runDiscord(ctx, userID, discordID, interactionID, question, discordAssistant, "discord:")
+}
+
+// SearchDiscord translates a natural-language request into a tenant-scoped search,
+// runs it, explains the matches, and returns a reusable search link.
+func (s *Service) SearchDiscord(ctx context.Context, userID uuid.UUID, discordID, interactionID, query string) (string, error) {
+	return s.runDiscord(ctx, userID, discordID, interactionID, query, discordSearchAssistant, "discord-search:")
+}
+
+func (s *Service) runDiscord(ctx context.Context, userID uuid.UUID, discordID, interactionID, question string, selectedAssistant assistant, idempotencyPrefix string) (string, error) {
 	if !s.enabled {
 		return "", &DiscordUserError{"AI is not configured on Chronicle."}
 	}
@@ -149,7 +170,7 @@ func (s *Service) AskDiscord(ctx context.Context, userID uuid.UUID, discordID, i
 	if !valid {
 		return "", &DiscordUserError{"Your Ask Chronicle default model is unavailable or does not support tools. Choose another in AI settings."}
 	}
-	composedAssistant, err := withRuntimeSkills(discordAssistant)
+	composedAssistant, err := withRuntimeSkills(selectedAssistant)
 	if err != nil {
 		return "", fmt.Errorf("compose Discord assistant: %w", err)
 	}
@@ -157,8 +178,8 @@ func (s *Service) AskDiscord(ctx context.Context, userID uuid.UUID, discordID, i
 		return "", &DiscordUserError{"Invalid Discord interaction."}
 	}
 	run, err := s.createRun(ctx, database.InsertInferenceRunParams{
-		UserID: userID, ConnectionID: connection.ID, AssistantID: discordAssistant.ID, Model: model,
-		Status: "running", IdempotencyKey: "discord:" + interactionID,
+		UserID: userID, ConnectionID: connection.ID, AssistantID: selectedAssistant.ID, Model: model,
+		Status: "running", IdempotencyKey: idempotencyPrefix + interactionID,
 		LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(runLease), Valid: true},
 	}, nil)
 	if err != nil {

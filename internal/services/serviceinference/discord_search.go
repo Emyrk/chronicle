@@ -63,7 +63,36 @@ func (s *Service) tenantInstanceURL(tenant database.Tenant, result chroniclesdk.
 	}
 	base.RawQuery = ""
 	base.Fragment = ""
-	return base.String()
+	return "<" + base.String() + ">"
+}
+
+func (s *Service) tenantInstanceSearchURL(tenant database.Tenant, where *chroniclesdk.InstanceSearchNode) (string, error) {
+	searchPath := "/search"
+	if where != nil {
+		var err error
+		searchPath, err = instanceSearchPath(where)
+		if err != nil {
+			return "", err
+		}
+	}
+	relative, err := url.Parse(searchPath)
+	if err != nil {
+		return "", err
+	}
+	base := &url.URL{}
+	if s.accessURL != nil {
+		*base = *s.accessURL
+	}
+	if base.Scheme == "" {
+		base.Scheme = "https"
+	}
+	if s.tenant != nil && s.tenant.PrimaryDomain() != "" && tenant.Slug.Valid {
+		base.Host = tenant.Slug.String + "." + s.tenant.PrimaryDomain()
+	}
+	base.Path = relative.Path
+	base.RawQuery = relative.RawQuery
+	base.Fragment = ""
+	return "<" + base.String() + ">", nil
 }
 
 func (s *Service) searchInstances(ctx context.Context, tc toolContext, args string) (string, error) {
@@ -109,6 +138,10 @@ func (s *Service) searchInstances(ctx context.Context, tc toolContext, args stri
 	case search.Err != nil:
 		return "", errors.New("instance search is unavailable")
 	}
+	searchURL, err := s.tenantInstanceSearchURL(tenant, in.Where)
+	if err != nil {
+		return "", err
+	}
 	type result struct {
 		chroniclesdk.InstanceSearchResult
 		URL string `json:"url"`
@@ -117,9 +150,61 @@ func (s *Service) searchInstances(ctx context.Context, tc toolContext, args stri
 	for _, row := range page.Results {
 		results = append(results, result{InstanceSearchResult: row, URL: s.tenantInstanceURL(tenant, row)})
 	}
+	return boundedJSONWithoutHTMLEscaping(struct {
+		Tenant    discordSearchTenant `json:"tenant"`
+		Cost      int                 `json:"cost"`
+		SearchURL string              `json:"search_url"`
+		Results   []result            `json:"results"`
+	}{Tenant: discordSearchTenant{Slug: tenant.Slug.String, Name: tenant.Name}, Cost: search.Cost, SearchURL: searchURL, Results: results})
+}
+
+func (s *Service) explainInstanceSearch(ctx context.Context, tc toolContext, args string) (string, error) {
+	var in struct {
+		Where      *chroniclesdk.InstanceSearchNode `json:"where"`
+		InstanceID uuid.UUID                        `json:"instance_id"`
+	}
+	if err := decodeStrict(args, &in); err != nil {
+		return "", err
+	}
+	if tc.userID == uuid.Nil {
+		return "", errors.New("authenticated user context required")
+	}
+	if in.Where == nil {
+		return "", errors.New("where is required")
+	}
+	if in.InstanceID == uuid.Nil {
+		return "", errors.New("instance_id is required")
+	}
+	tenant, err := s.resolveSearchTenant(tc.tenantSlug)
+	if err != nil {
+		return "", err
+	}
+	if s.instanceSearch == nil {
+		return "", errors.New("instance search is unavailable")
+	}
+	explanation, search := s.instanceSearch.Explain(ctx, serviceinstancesearch.Caller{UserID: tc.userID, TenantID: tenant.ID}, chroniclesdk.InstanceSearchQuery{Where: in.Where}, in.InstanceID)
+	switch {
+	case errors.Is(search.Err, serviceinstancesearch.ErrInvalid):
+		return "", fmt.Errorf("invalid instance search: %w", search.Err)
+	case errors.Is(search.Err, serviceinstancesearch.ErrTooComplex):
+		return "", errors.New("instance search is too complex; remove some filters")
+	case errors.Is(search.Err, serviceinstancesearch.ErrRateLimited):
+		seconds := int64(math.Ceil(search.RetryAfter.Seconds()))
+		if seconds < 1 {
+			seconds = 1
+		}
+		return "", fmt.Errorf("instance search explanation rate limited; retry in %d seconds", seconds)
+	case errors.Is(search.Err, serviceinstancesearch.ErrBusy):
+		return "", errors.New("instance search explanation is busy; retry shortly")
+	case errors.Is(search.Err, instancesearch.ErrTimeout):
+		return "", errors.New("instance search explanation timed out; narrow the search")
+	case errors.Is(search.Err, instancesearch.ErrNotFound):
+		return "", errors.New("instance is unavailable")
+	case search.Err != nil:
+		return "", errors.New("instance search explanation is unavailable")
+	}
 	return boundedJSON(struct {
-		Tenant  discordSearchTenant `json:"tenant"`
-		Cost    int                 `json:"cost"`
-		Results []result            `json:"results"`
-	}{Tenant: discordSearchTenant{Slug: tenant.Slug.String, Name: tenant.Name}, Cost: search.Cost, Results: results})
+		Cost        int                                        `json:"cost"`
+		Explanation chroniclesdk.InstanceSearchExplainResponse `json:"explanation"`
+	}{Cost: search.Cost, Explanation: explanation})
 }

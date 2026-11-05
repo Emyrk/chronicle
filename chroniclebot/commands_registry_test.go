@@ -17,13 +17,18 @@ func TestDefaultCommandsAreGuildScoped(t *testing.T) {
 	}
 	commands := DefaultCommands(bot)
 
-	require.Len(t, commands, 3)
+	require.Len(t, commands, 4)
 	require.Equal(t, "ask", commands[0].Definition.Name)
 	require.True(t, commands[0].Global)
-	require.Equal(t, "chronicle", commands[1].Definition.Name)
+	require.Equal(t, "search", commands[1].Definition.Name)
+	require.Len(t, commands[1].Definition.Options, 1)
+	require.Equal(t, "query", commands[1].Definition.Options[0].Name)
+	require.True(t, commands[1].Definition.Options[0].Required)
 	require.True(t, commands[1].Global)
-	require.Equal(t, "ping", commands[2].Definition.Name)
-	require.False(t, commands[2].Global)
+	require.Equal(t, "chronicle", commands[2].Definition.Name)
+	require.True(t, commands[2].Global)
+	require.Equal(t, "ping", commands[3].Definition.Name)
+	require.False(t, commands[3].Global)
 	for _, command := range commands {
 		require.NotNil(t, command.Handler)
 	}
@@ -40,7 +45,8 @@ func TestDefaultCommandsDisabledWithoutGuild(t *testing.T) {
 
 	bot := &Bot{config: Config{}}
 	commands := DefaultCommands(bot)
-	require.Len(t, commands, 2)
+	require.Len(t, commands, 3)
 	require.Equal(t, "ask", commands[0].Definition.Name)
-	require.Equal(t, "chronicle", commands[1].Definition.Name)
+	require.Equal(t, "search", commands[1].Definition.Name)
+	require.Equal(t, "chronicle", commands[2].Definition.Name)
 }

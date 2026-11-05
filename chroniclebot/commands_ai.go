@@ -21,6 +21,7 @@ func (e aiSetupError) UserMessage() string { return string(e) }
 
 type DiscordAI interface {
 	AskDiscord(context.Context, uuid.UUID, string, string, string) (string, error)
+	SearchDiscord(context.Context, uuid.UUID, string, string, string) (string, error)
 	SetDiscordTenant(context.Context, uuid.UUID, string, string) (string, error)
 	GetDiscordTenant(context.Context, uuid.UUID, string) (string, error)
 }
@@ -30,6 +31,11 @@ func aiCommands(bot *Bot) []Command {
 	ask := Command{Global: true, Definition: &discordgo.ApplicationCommand{Name: "ask", Description: "Ask Chronicle a question", Options: []*discordgo.ApplicationCommandOption{question}}}
 	ask.Handler = func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		bot.handleAsk(s, i, i.ApplicationCommandData().Options)
+	}
+	query := &discordgo.ApplicationCommandOption{Type: discordgo.ApplicationCommandOptionString, Name: "query", Description: "Describe the Chronicle logs to find", Required: true}
+	search := Command{Global: true, Definition: &discordgo.ApplicationCommand{Name: "search", Description: "Search Chronicle logs and explain the matches", Options: []*discordgo.ApplicationCommandOption{query}}}
+	search.Handler = func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		bot.handleSearch(s, i, i.ApplicationCommandData().Options)
 	}
 	chronicle := Command{Global: true, Definition: &discordgo.ApplicationCommand{Name: "chronicle", Description: "Chronicle AI and tenant settings", Options: []*discordgo.ApplicationCommandOption{
 		{Type: discordgo.ApplicationCommandOptionSubCommand, Name: "ask", Description: "Ask Chronicle a question", Options: []*discordgo.ApplicationCommandOption{question}},
@@ -55,7 +61,7 @@ func aiCommands(bot *Bot) []Command {
 			_ = RespondEphemeral(s, i, "Unknown Chronicle command.")
 		}
 	}
-	return []Command{ask, chronicle}
+	return []Command{ask, search, chronicle}
 }
 
 func (b *Bot) linkedAIUser(ctx context.Context, i *discordgo.InteractionCreate) (uuid.UUID, string, error) {
@@ -106,6 +112,37 @@ func (b *Bot) handleAsk(s *discordgo.Session, i *discordgo.InteractionCreate, op
 	var answer string
 	if err == nil {
 		answer, err = b.config.DiscordAI.AskDiscord(ctx, user, discordID, i.ID, question)
+	}
+	if err != nil {
+		answer = b.safeAIError(err)
+	}
+	b.aiFollowup(s, i, answer)
+}
+
+func (b *Bot) handleSearch(s *discordgo.Session, i *discordgo.InteractionCreate, options []*discordgo.ApplicationCommandInteractionDataOption) {
+	if b.config.DiscordAI == nil {
+		_ = RespondEphemeral(s, i, "Chronicle AI is unavailable.")
+		return
+	}
+	if len(options) != 1 || options[0].Name != "query" {
+		_ = RespondEphemeral(s, i, "Provide a search query.")
+		return
+	}
+	query := strings.TrimSpace(options[0].StringValue())
+	if query == "" || len(query) > 32<<10 {
+		_ = RespondEphemeral(s, i, "Describe a search in at most 32768 characters.")
+		return
+	}
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, Data: &discordgo.InteractionResponseData{Flags: discordgo.MessageFlagsEphemeral}}); err != nil {
+		b.logger.Error("defer Discord search response", slog.String("error", err.Error()))
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	user, discordID, err := b.linkedAIUser(ctx, i)
+	var answer string
+	if err == nil {
+		answer, err = b.config.DiscordAI.SearchDiscord(ctx, user, discordID, i.ID, query)
 	}
 	if err != nil {
 		answer = b.safeAIError(err)
