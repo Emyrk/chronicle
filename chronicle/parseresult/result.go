@@ -36,8 +36,9 @@ type Input struct {
 // encounter fight/phase, raid snapshot and observed-unit fields. It still omits
 // full player class/race and guild-participant rows, guild/armory/loot writes,
 // rankings, realm resolution, DB-assigned IDs, and write-time decisions.
-// Version 0 is the original unversioned projection; version 1 adds core fields.
-// Neither version is a complete persistence payload or full DB parity proof.
+// Version 0 is the original unversioned projection, version 1 adds core fields,
+// and version 2 adds finalized loot observations. None is a complete
+// persistence payload or full DB parity proof.
 type Result struct {
 	Format       database.LogFormat `json:"format"`
 	Name         string             `json:"name"`
@@ -48,11 +49,12 @@ type Result struct {
 	Encounters   []Encounter        `json:"encounters"`
 	Events       EventStreams       `json:"events"`
 	// SchemaVersion identifies the transport DTO shape, not the parser version.
-	SchemaVersion int            `json:"schema_version"`
-	Core          CoreInstance   `json:"core"`
-	Overview      Overview       `json:"overview"`
-	RaidSnapshots []RaidSnapshot `json:"raid_snapshots"`
-	Units         []UnitMetadata `json:"units"`
+	SchemaVersion int               `json:"schema_version"`
+	Core          CoreInstance      `json:"core"`
+	Overview      Overview          `json:"overview"`
+	RaidSnapshots []RaidSnapshot    `json:"raid_snapshots"`
+	Units         []UnitMetadata    `json:"units"`
+	Loot          []LootObservation `json:"loot"`
 }
 
 type Encounter struct {
@@ -87,7 +89,7 @@ func Build(in Input) (*Result, error) {
 	fin := in.Finalized
 	out := &Result{
 		Format:        in.Format,
-		SchemaVersion: 1,
+		SchemaVersion: 2,
 		Name:          in.Name,
 		Versions:      make(map[string]string, len(fin.Versions)),
 		Encounters:    make([]Encounter, 0, len(fin.Encounters)),
@@ -133,6 +135,7 @@ func Build(in Input) (*Result, error) {
 	if err := buildCore(in, out); err != nil {
 		return nil, err
 	}
+	out.Loot = buildLoot(fin.Loot)
 	for _, enc := range fin.Encounters {
 		if len(enc.Combat.Hostiles) > 0 && in.IdentifyUnit == nil {
 			return nil, fmt.Errorf("identify unit callback required for encounter fights")
