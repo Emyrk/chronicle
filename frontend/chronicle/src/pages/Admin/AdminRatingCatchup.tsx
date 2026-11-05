@@ -42,10 +42,33 @@ function DirtyBars({ row }: { row: AdminTenantRatingCatchup }) {
   );
 }
 
-const POLICY_STAGES = ["Runs", "Renown", "Mastery", "Peak", "Player scopes", "Guild scopes"];
+const POLICY_STAGES = [
+  { key: "runs", label: "Runs" },
+  { key: "renown", label: "Renown" },
+  { key: "mastery", label: "Mastery" },
+  { key: "peak", label: "Peak" },
+  { key: "player_scope", label: "Player scopes" },
+  { key: "guild_scope", label: "Guild scopes" },
+] as const;
 
-function ScanProgress({ row }: { row: AdminTenantRatingCatchup }) {
+function elapsed(start?: string, end?: string): string | null {
+  if (!start || !end) return null;
+  const seconds = Math.round((Date.parse(end) - Date.parse(start)) / 1000);
+  if (!Number.isFinite(seconds) || seconds < 0) return null;
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ${minutes % 60}m`;
+  return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+}
+
+function ScanProgress({ row, observedAt }: { row: AdminTenantRatingCatchup; observedAt: string }) {
   const completedStages = row.policy_scan_stages - row.unfinished_policy_scan_stages;
+  const finished = new Map((row.policy_scan_stage_times ?? []).map(({ stage, completed_at }) => [stage, completed_at]));
+  const lastFinished = [...POLICY_STAGES].reverse().map(({ key }) => finished.get(key)).find(Boolean);
+  const total = elapsed(row.policy_scan_started_at,
+    row.unfinished_policy_scan_stages === 0 ? lastFinished : observedAt);
   return (
     <div className="space-y-2 text-xs text-muted-foreground">
       <div>
@@ -60,26 +83,34 @@ function ScanProgress({ row }: { row: AdminTenantRatingCatchup }) {
           <span className="font-medium text-foreground">Policy scan: </span>
           {row.unfinished_policy_scan_stages === 0 ? "Complete"
             : `${completedStages} of ${row.policy_scan_stages} stages complete`}
+          {total ? <div className="mt-1 text-foreground">{row.unfinished_policy_scan_stages === 0 ? "Total scan time" : "Elapsed scan time"}: ≈ {total}</div>
+            : row.unfinished_policy_scan_stages === 0 && <div className="mt-1">Total scan time unavailable (start timestamp missing).</div>}
           <div className="mt-1 flex flex-wrap gap-1" aria-label="Policy scan stages">
-            {POLICY_STAGES.map((stage, index) => {
-              const state = index < completedStages ? "done"
+            {POLICY_STAGES.map(({ key, label }, index) => {
+              const completedAt = finished.get(key);
+              const state = completedAt ? "done"
                 : index + 1 === row.policy_scan_stage_number ? "current" : "pending";
+              const previous = POLICY_STAGES.slice(0, index).reverse().map(({ key: prior }) => finished.get(prior)).find(Boolean)
+                ?? row.policy_scan_started_at;
+              const duration = state === "done" ? elapsed(previous, completedAt)
+                : state === "current" ? elapsed(previous, observedAt) : null;
               return (
-                <span key={stage} className={`rounded border px-1.5 py-0.5 ${state === "done" ? "border-emerald-700 text-emerald-400" : state === "current" ? "border-amber-600 text-amber-400" : "border-zinc-700"}`}>
-                  {stage} · {state}
+                <span key={key} className={`rounded border px-1.5 py-0.5 ${state === "done" ? "border-emerald-700 text-emerald-400" : state === "current" ? "border-amber-600 text-amber-400" : "border-zinc-700"}`}>
+                  {label} · {state}{duration ? ` · ≈ ${duration}` : ""}
                 </span>
               );
             })}
           </div>
-          {row.unfinished_policy_scan_stages > 0 && <span className="mt-1 block">Stage progress is not measured by run count.</span>}
+          {row.unfinished_policy_scan_stages > 0 && <span className="mt-1 block">Times include waiting and retries. Stage progress is not measured by run count.</span>}
         </div>
       )}
     </div>
   );
 }
 
-function TenantCatchup({ row, scanning, onScan, scanError, scanResult }: {
+function TenantCatchup({ row, observedAt, scanning, onScan, scanError, scanResult }: {
   row: AdminTenantRatingCatchup;
+  observedAt: string;
   scanning: boolean;
   onScan: (tenantID: string) => void;
   scanError?: string;
@@ -94,7 +125,7 @@ function TenantCatchup({ row, scanning, onScan, scanError, scanResult }: {
         <div className="mt-1 text-xs text-muted-foreground">{row.status.replaceAll("_", " ")} · {dirty.toLocaleString()} dirty · oldest {oldestAge(row)}</div>
         <div className="mt-1 text-xs text-muted-foreground">{row.peak_pages} Peak pages · {row.active_drain_jobs} active drain jobs</div>
         <div className="mt-1 text-xs text-muted-foreground">Projection: {row.read_state} · {row.job_kind ?? "Job"}: {row.job_state ?? "not queued"}{row.last_succeeded_at ? ` · last finished ${new Date(row.last_succeeded_at).toLocaleString()}` : ""}</div>
-        <div className="mt-3"><ScanProgress row={row} /></div>
+        <div className="mt-3"><ScanProgress row={row} observedAt={observedAt} /></div>
         <Button size="sm" variant="outline" className="mt-3" disabled={scanning || row.unfinished_policy_scan_stages > 0} onClick={() => onScan(row.tenant_id)}>
           {scanning ? "Queuing scan…" : row.unfinished_policy_scan_stages > 0 ? "Scan in progress" : "Start policy scan"}
         </Button>
@@ -152,7 +183,7 @@ export function AdminRatingCatchup() {
       </div>
       {isLoading ? <p className="text-sm text-muted-foreground">Loading dirty queues…</p>
         : isError ? <p role="alert" className="text-sm text-destructive">Could not load rating catch-up.</p>
-          : tenants.length ? tenants.map((row) => <TenantCatchup key={row.tenant_id} row={row}
+          : tenants.length ? tenants.map((row) => <TenantCatchup key={row.tenant_id} row={row} observedAt={data?.observed_at ?? ""}
             scanning={pendingTenant === row.tenant_id} onScan={(id) => void startScan(id)}
             scanError={scanError?.tenantID === row.tenant_id ? scanError.message : undefined}
             scanResult={scanResult?.tenantID === row.tenant_id ? scanResult.message : undefined} />)

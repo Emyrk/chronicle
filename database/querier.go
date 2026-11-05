@@ -1190,6 +1190,9 @@ type sqlcQuerier interface {
 	// uses first_page=true; subsequent pages use the previous row's complete key.
 	ListRatingMasteryPlayerPage(ctx context.Context, arg ListRatingMasteryPlayerPageParams) ([]ListRatingMasteryPlayerPageRow, error)
 	ListRatingPlayerRenownSourcePage(ctx context.Context, arg ListRatingPlayerRenownSourcePageParams) ([]RenownKillFact, error)
+	// Completed stage updated_at approximates its finish time. Incomplete rows
+	// update on every page, so their updated_at is not a stage start time.
+	ListRatingPolicyScanStageTimes(ctx context.Context) ([]ListRatingPolicyScanStageTimesRow, error)
 	ListRatingPolicyScanTenants(ctx context.Context) ([]uuid.UUID, error)
 	ListRatingProjectionGuildBosses(ctx context.Context, arg ListRatingProjectionGuildBossesParams) ([]ListRatingProjectionGuildBossesRow, error)
 	ListRatingProjectionGuildScopes(ctx context.Context, arg ListRatingProjectionGuildScopesParams) ([]ListRatingProjectionGuildScopesRow, error)

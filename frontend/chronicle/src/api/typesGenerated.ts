@@ -432,6 +432,15 @@ export interface AdminRatingPoliciesResponse {
     readonly policies: readonly AdminRatingGroupPolicy[];
 }
 
+// From chroniclesdk/rating_catchup.go
+/**
+ * A completed policy stage's last update is its approximate finish time.
+ */
+export interface AdminRatingPolicyStageTime {
+    readonly stage: string;
+    readonly completed_at: string;
+}
+
 // From chroniclesdk/admin_ratings.go
 export interface AdminRatingRaidPoliciesResponse {
     readonly raids: readonly AdminRatingRaidPolicy[];
@@ -537,6 +546,8 @@ export interface AdminTenantRatingCatchup {
     readonly dirty_peak: number;
     readonly policy_scan_stages: number;
     readonly unfinished_policy_scan_stages: number;
+    readonly policy_scan_started_at?: string;
+    readonly policy_scan_stage_times: readonly AdminRatingPolicyStageTime[];
     readonly policy_scan_stage_number: number;
     readonly active_drain_jobs: number;
     readonly peak_pages: number;

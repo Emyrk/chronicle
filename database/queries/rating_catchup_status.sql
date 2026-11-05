@@ -64,6 +64,13 @@ LEFT JOIN active_jobs USING (tenant_id)
 LEFT JOIN tenant_rating_read_states read_state USING (tenant_id)
 ORDER BY tenants.tenant_id;
 
+-- Completed stage updated_at approximates its finish time. Incomplete rows
+-- update on every page, so their updated_at is not a stage start time.
+-- name: ListRatingPolicyScanStageTimes :many
+SELECT tenant_id, stage, updated_at
+FROM rating_policy_scan_progress WHERE completed
+ORDER BY tenant_id, array_position(ARRAY['runs','renown','mastery','peak','player_scope','guild_scope']::text[], stage);
+
 -- A bounded view of recent repair, copy, and scan attempts for the admin board.
 -- Dirty keys and cursors remain authoritative when older jobs age out here.
 -- name: ListRecentTenantRatingJobs :many

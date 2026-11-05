@@ -21963,6 +21963,40 @@ func (q *sqlQuerier) TakeRateLimitTokens(ctx context.Context, arg TakeRateLimitT
 	return i, err
 }
 
+const listRatingPolicyScanStageTimes = `-- name: ListRatingPolicyScanStageTimes :many
+SELECT tenant_id, stage, updated_at
+FROM rating_policy_scan_progress WHERE completed
+ORDER BY tenant_id, array_position(ARRAY['runs','renown','mastery','peak','player_scope','guild_scope']::text[], stage)
+`
+
+type ListRatingPolicyScanStageTimesRow struct {
+	TenantID  uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Stage     string             `db:"stage" json:"stage"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+// Completed stage updated_at approximates its finish time. Incomplete rows
+// update on every page, so their updated_at is not a stage start time.
+func (q *sqlQuerier) ListRatingPolicyScanStageTimes(ctx context.Context) ([]ListRatingPolicyScanStageTimesRow, error) {
+	rows, err := q.db.Query(ctx, listRatingPolicyScanStageTimes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRatingPolicyScanStageTimesRow
+	for rows.Next() {
+		var i ListRatingPolicyScanStageTimesRow
+		if err := rows.Scan(&i.TenantID, &i.Stage, &i.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecentTenantRatingJobs = `-- name: ListRecentTenantRatingJobs :many
 SELECT id, kind::text AS kind, COALESCE(args->>'tenant_id', '')::text AS tenant_id, state::text AS state,
        created_at, attempted_at, finalized_at,

@@ -15,6 +15,11 @@ const root: AdminTenantRatingCatchup = {
   policy_scan_stages: 6,
   unfinished_policy_scan_stages: 4,
   policy_scan_stage_number: 3,
+  policy_scan_started_at: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
+  policy_scan_stage_times: [
+    { stage: "runs", completed_at: new Date(Date.now() - 50 * 60_000).toISOString() },
+    { stage: "renown", completed_at: new Date(Date.now() - 40 * 60_000).toISOString() },
+  ],
   active_drain_jobs: 1,
   peak_pages: 12,
   oldest_run: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
@@ -35,6 +40,10 @@ const tenant: AdminTenantRatingCatchup = {
   dirty_peak: 0,
   unfinished_policy_scan_stages: 0,
   policy_scan_stage_number: 0,
+  policy_scan_started_at: new Date(Date.now() - 4 * 60 * 60_000).toISOString(),
+  policy_scan_stage_times: ["runs", "renown", "mastery", "peak", "player_scope", "guild_scope"].map((stage, index) => ({
+    stage, completed_at: new Date(Date.now() - (3 * 60 - index * 10) * 60_000).toISOString(),
+  })),
   active_drain_jobs: 0,
   peak_pages: 0,
   oldest_run: undefined,

@@ -21,12 +21,17 @@ func (api *API) AdminListRatingCatchup(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	stages, err := api.Opts.Zed.ListRatingPolicyScanStageTimes(ctx)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
 	jobs, err := api.Opts.Zed.ListRecentTenantRatingJobs(ctx)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	httpapi.Write(ctx, w, http.StatusOK, ratingCatchupSnapshot(rows, jobs, time.Now().UTC()))
+	httpapi.Write(ctx, w, http.StatusOK, ratingCatchupSnapshot(rows, stages, jobs, time.Now().UTC()))
 }
 
 func ratingCatchupTimestamp(t pgtype.Timestamptz) *time.Time {
@@ -36,10 +41,24 @@ func ratingCatchupTimestamp(t pgtype.Timestamptz) *time.Time {
 	return &t.Time
 }
 
-func ratingCatchupSnapshot(rows []database.ListTenantRatingCatchupStatusRow, jobs []database.ListRecentTenantRatingJobsRow, now time.Time) chroniclesdk.AdminRatingCatchupStatusResponse {
+func ratingCatchupSnapshot(rows []database.ListTenantRatingCatchupStatusRow, stages []database.ListRatingPolicyScanStageTimesRow, jobs []database.ListRecentTenantRatingJobsRow, now time.Time) chroniclesdk.AdminRatingCatchupStatusResponse {
 	latest := make(map[string]database.ListRecentTenantRatingJobsRow)
+	latestScan := make(map[uuid.UUID]database.ListRecentTenantRatingJobsRow)
+	stageTimes := make(map[uuid.UUID][]chroniclesdk.AdminRatingPolicyStageTime)
+	for _, stage := range stages {
+		stageTimes[stage.TenantID] = append(stageTimes[stage.TenantID], chroniclesdk.AdminRatingPolicyStageTime{
+			Stage: stage.Stage, CompletedAt: stage.UpdatedAt.Time,
+		})
+	}
 	succeeded := make(map[string]*time.Time)
 	for _, job := range jobs { // newest first
+		if job.Kind == "rating-policy-scan" {
+			if tenant, err := uuid.Parse(job.TenantID); err == nil {
+				if _, exists := latestScan[tenant]; !exists {
+					latestScan[tenant] = job
+				}
+			}
+		}
 		if _, exists := latest[job.TenantID]; !exists {
 			latest[job.TenantID] = job
 		}
@@ -64,12 +83,23 @@ func ratingCatchupSnapshot(rows []database.ListTenantRatingCatchupStatusRow, job
 			DirtyMastery: row.DirtyMastery, DirtyPeak: row.DirtyPeak,
 			PeakPages: row.PeakPages, ActiveDrainJobs: row.ActiveDrainJobs,
 			PolicyScanStages: row.PolicyScanStages, UnfinishedPolicyScanStages: row.UnfinishedPolicyScanStages,
-			PolicyScanStageNumber: row.PolicyScanStageNumber, OldestRun: ratingCatchupTimestamp(row.OldestRun),
-			OldestRenown:     ratingCatchupTimestamp(row.OldestRenown),
-			OldestMastery:    ratingCatchupTimestamp(row.OldestMastery),
-			OldestPeak:       ratingCatchupTimestamp(row.OldestPeak),
-			ScanSourceCutoff: ratingCatchupTimestamp(row.SourceCutoff),
-			ScanCompletedAt:  ratingCatchupTimestamp(row.CompletedAt),
+			PolicyScanStageNumber: row.PolicyScanStageNumber,
+			PolicyScanStageTimes:  append([]chroniclesdk.AdminRatingPolicyStageTime{}, stageTimes[row.TenantID]...),
+			OldestRun:             ratingCatchupTimestamp(row.OldestRun),
+			OldestRenown:          ratingCatchupTimestamp(row.OldestRenown),
+			OldestMastery:         ratingCatchupTimestamp(row.OldestMastery),
+			OldestPeak:            ratingCatchupTimestamp(row.OldestPeak),
+			ScanSourceCutoff:      ratingCatchupTimestamp(row.SourceCutoff),
+			ScanCompletedAt:       ratingCatchupTimestamp(row.CompletedAt),
+		}
+		if scanJob, ok := latestScan[row.TenantID]; ok && scanJob.CreatedAt.Valid {
+			// A just-reset cursor may still have an older completed job. Do not
+			// use it as the start of a new pass before its new job is queued.
+			active := scanJob.State == "available" || scanJob.State == "pending" || scanJob.State == "retryable" || scanJob.State == "running" || scanJob.State == "scheduled"
+			if (row.UnfinishedPolicyScanStages == 0 || active) &&
+				(len(item.PolicyScanStageTimes) == 0 || !scanJob.CreatedAt.Time.After(item.PolicyScanStageTimes[0].CompletedAt)) {
+				item.PolicyScanStartedAt = ratingCatchupTimestamp(scanJob.CreatedAt)
+			}
 		}
 		if row.AfterRunID.Valid {
 			id := uuid.UUID(row.AfterRunID.UUID)

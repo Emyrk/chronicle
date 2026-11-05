@@ -25,9 +25,10 @@ func TestRatingCatchupSnapshot(t *testing.T) {
 		{TenantID: uuid.New(), ReadState: "evolving", SourceCutoff: pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true},
 			CompletedAt: pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true}},
 	}
-	result := ratingCatchupSnapshot(rows, nil, now)
+	result := ratingCatchupSnapshot(rows, nil, nil, now)
 	require.Equal(t, now, result.ObservedAt)
 	require.Len(t, result.Tenants, 3)
+	require.NotNil(t, result.Tenants[0].PolicyScanStageTimes)
 	require.Equal(t, "not_started", result.Tenants[0].Status)
 	require.Equal(t, "catching_up", result.Tenants[1].Status)
 	require.Equal(t, "rating-demo", result.Tenants[1].TenantSlug)
@@ -39,8 +40,33 @@ func TestRatingCatchupSnapshot(t *testing.T) {
 	require.Nil(t, result.Tenants[1].OldestRun)
 	rows[0].PolicyScanStages = 6
 	rows[0].UnfinishedPolicyScanStages = 6
-	require.Equal(t, "catching_up", ratingCatchupSnapshot(rows, nil, now).Tenants[0].Status)
+	require.Equal(t, "catching_up", ratingCatchupSnapshot(rows, nil, nil, now).Tenants[0].Status)
 	require.Equal(t, "caught_up", result.Tenants[2].Status)
+}
+
+func TestRatingCatchupPolicyScanTiming(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+	tenant := uuid.New()
+	rows := []database.ListTenantRatingCatchupStatusRow{{TenantID: tenant, PolicyScanStages: 6, UnfinishedPolicyScanStages: 4}}
+	stages := []database.ListRatingPolicyScanStageTimesRow{
+		{TenantID: tenant, Stage: "runs", UpdatedAt: pgtype.Timestamptz{Time: now.Add(-20 * time.Minute), Valid: true}},
+		{TenantID: tenant, Stage: "renown", UpdatedAt: pgtype.Timestamptz{Time: now.Add(-10 * time.Minute), Valid: true}},
+	}
+	jobs := []database.ListRecentTenantRatingJobsRow{{Kind: "rating-policy-scan", TenantID: tenant.String(), State: "running",
+		CreatedAt: pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true}}}
+	item := ratingCatchupSnapshot(rows, stages, jobs, now).Tenants[0]
+	require.Equal(t, now.Add(-time.Hour), *item.PolicyScanStartedAt)
+	require.Equal(t, "runs", item.PolicyScanStageTimes[0].Stage)
+	require.Equal(t, now.Add(-20*time.Minute), item.PolicyScanStageTimes[0].CompletedAt)
+	require.Equal(t, "renown", item.PolicyScanStageTimes[1].Stage)
+	require.Equal(t, now.Add(-10*time.Minute), item.PolicyScanStageTimes[1].CompletedAt)
+
+	jobs[0].State = "completed" // Old job just before a new scan was seeded.
+	require.Nil(t, ratingCatchupSnapshot(rows, nil, jobs, now).Tenants[0].PolicyScanStartedAt)
+	jobs[0].State = "running"
+	jobs[0].CreatedAt.Time = now.Add(-5 * time.Minute) // Recovery job started after the first stage.
+	require.Nil(t, ratingCatchupSnapshot(rows, stages, jobs, now).Tenants[0].PolicyScanStartedAt)
 }
 
 func TestRatingCatchupJobState(t *testing.T) {
@@ -56,7 +82,7 @@ func TestRatingCatchupJobState(t *testing.T) {
 	}
 	rows[0].ActiveDrainJobs = 1
 	rows[0].UnfinishedPolicyScanStages = 1
-	result := ratingCatchupSnapshot(rows, jobs, now)
+	result := ratingCatchupSnapshot(rows, nil, jobs, now)
 	require.Equal(t, "stalled_error", result.Tenants[0].Status)
 	require.Equal(t, "rating-policy-scan", result.Tenants[0].JobKind)
 	require.Equal(t, "repair failed", result.Tenants[0].JobLastError)
@@ -90,6 +116,12 @@ func TestListTenantRatingCatchupStatus(t *testing.T) {
 	rows, err = store.ListTenantRatingCatchupStatus(ctx)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
+	stageTimes, err := store.ListRatingPolicyScanStageTimes(ctx)
+	require.NoError(t, err)
+	require.Len(t, stageTimes, 2)
+	require.Equal(t, "runs", stageTimes[0].Stage)
+	require.Equal(t, "renown", stageTimes[1].Stage)
+	require.True(t, stageTimes[0].UpdatedAt.Valid)
 	require.Equal(t, int64(6), rows[0].PolicyScanStages)
 	require.Equal(t, int64(4), rows[0].UnfinishedPolicyScanStages)
 	require.Equal(t, int32(3), rows[0].PolicyScanStageNumber)
