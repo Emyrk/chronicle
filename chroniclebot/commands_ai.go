@@ -116,7 +116,7 @@ func (b *Bot) handleAsk(s *discordgo.Session, i *discordgo.InteractionCreate, op
 	if err != nil {
 		answer = b.safeAIError(err)
 	}
-	b.aiFollowup(s, i, answer)
+	b.aiFollowup(s, i, answer, publishOwner(i, discordID, err))
 }
 
 func (b *Bot) handleSearch(s *discordgo.Session, i *discordgo.InteractionCreate, options []*discordgo.ApplicationCommandInteractionDataOption) {
@@ -147,7 +147,7 @@ func (b *Bot) handleSearch(s *discordgo.Session, i *discordgo.InteractionCreate,
 	if err != nil {
 		answer = b.safeAIError(err)
 	}
-	b.aiFollowup(s, i, answer)
+	b.aiFollowup(s, i, answer, publishOwner(i, discordID, err))
 }
 
 func (b *Bot) handleTenant(s *discordgo.Session, i *discordgo.InteractionCreate, action string, options []*discordgo.ApplicationCommandInteractionDataOption) {
@@ -197,7 +197,18 @@ func (b *Bot) safeAIError(err error) string {
 	return "Chronicle could not complete that request. Please try again later."
 }
 
-func (b *Bot) aiFollowup(s *discordgo.Session, i *discordgo.InteractionCreate, text string) {
+const publishButtonPrefix = "chronicle:publish:"
+
+// A result can be shared only after a successful run in a guild channel.
+// Errors, setup prompts, and DM responses remain private without a button.
+func publishOwner(i *discordgo.InteractionCreate, discordID string, err error) string {
+	if err != nil || i.GuildID == "" || discordID == "" {
+		return ""
+	}
+	return discordID
+}
+
+func aiFollowupParams(text, owner string) *discordgo.WebhookParams {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		text = "Chronicle returned no answer."
@@ -205,7 +216,15 @@ func (b *Bot) aiFollowup(s *discordgo.Session, i *discordgo.InteractionCreate, t
 	if utf8.RuneCountInString(text) > 1900 {
 		text = string([]rune(text)[:1900]) + "…"
 	}
-	if _, err := s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{Content: text, Flags: discordgo.MessageFlagsEphemeral, AllowedMentions: &discordgo.MessageAllowedMentions{Parse: []discordgo.AllowedMentionType{}}}); err != nil {
+	params := &discordgo.WebhookParams{Content: text, Flags: discordgo.MessageFlagsEphemeral, AllowedMentions: &discordgo.MessageAllowedMentions{Parse: []discordgo.AllowedMentionType{}}}
+	if owner != "" {
+		params.Components = []discordgo.MessageComponent{discordgo.ActionsRow{Components: []discordgo.MessageComponent{discordgo.Button{Label: "Publish to channel", Style: discordgo.SecondaryButton, CustomID: publishButtonPrefix + owner}}}}
+	}
+	return params
+}
+
+func (b *Bot) aiFollowup(s *discordgo.Session, i *discordgo.InteractionCreate, text, owner string) {
+	if _, err := s.FollowupMessageCreate(i.Interaction, true, aiFollowupParams(text, owner)); err != nil {
 		b.logger.Error("send Discord AI followup", slog.String("error", err.Error()))
 	}
 }

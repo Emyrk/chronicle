@@ -56,6 +56,7 @@ type Bot struct {
 	commandHandlers   map[string]func(*discordgo.Session, *discordgo.InteractionCreate)
 	gatewayRunning    bool
 	queue             JobInserter
+	publishing        sync.Map // ephemeral result message ID -> in-flight or published
 
 	roles    []*discordgo.Role
 	disabled bool
@@ -157,6 +158,12 @@ func (b *Bot) installHandlers() {
 		b.session.AddHandler(b.onGuildMemberUpdate),
 		b.session.AddHandler(b.onGuildMemberRemove),
 		b.session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+			if i.Type == discordgo.InteractionMessageComponent {
+				if strings.HasPrefix(i.MessageComponentData().CustomID, publishButtonPrefix) {
+					b.handlePublish(s, i)
+				}
+				return
+			}
 			if i.Type != discordgo.InteractionApplicationCommand {
 				return
 			}
