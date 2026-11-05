@@ -104,3 +104,18 @@ func BenchmarkForEachAwake(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkForEachAwakeInactive(b *testing.B) {
+	set := New[*testCharacter]()
+	base := time.Date(2026, time.October, 23, 0, 0, 0, 0, time.UTC)
+	for id := guid.GUID(1); id <= 500; id++ {
+		set.Add(&testCharacter{id: id}, base)
+	}
+
+	b.ResetTimer()
+	for range b.N {
+		if err := set.ForEachAwake(base.Add(time.Minute), func(*testCharacter) error { return nil }); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

@@ -28,7 +28,8 @@ type IsActive interface {
 type awakeEntry[T IsActive] struct {
 	character T
 	touchedAt time.Time
-	dormancy  time.Duration
+	// dormantAfter is a combat-log wall-clock timestamp in Unix nanoseconds.
+	dormantAfter int64
 }
 
 type Set[T IsActive] struct {
@@ -62,6 +63,7 @@ func (s *Set[T]) ForEach(f func(T) error) error {
 // ForEachAwake iterates only non-dormant characters.
 func (s *Set[T]) ForEachAwake(now time.Time, f func(T) error) error {
 	var remove []guid.GUID
+	nowUnixNano := now.UnixNano()
 	for pair := s.awake.Oldest(); pair != nil; pair = pair.Next() {
 		entry := &pair.Value
 		if err := f(entry.character); err != nil {
@@ -70,15 +72,16 @@ func (s *Set[T]) ForEachAwake(now time.Time, f func(T) error) error {
 
 		if entry.character.IsActive() {
 			entry.touchedAt = now
-			entry.dormancy = 0
+			entry.dormantAfter = 0
 		} else {
-			if entry.dormancy == 0 {
-				entry.dormancy = Dormancy
+			if entry.dormantAfter == 0 {
+				dormancy := Dormancy
 				if entry.character.LastEndState() == period.EndStateSlain {
-					entry.dormancy = SlainDormancy
+					dormancy = SlainDormancy
 				}
+				entry.dormantAfter = entry.touchedAt.Add(dormancy).UnixNano()
 			}
-			if now.Sub(entry.touchedAt) > entry.dormancy {
+			if nowUnixNano > entry.dormantAfter {
 				remove = append(remove, pair.Key)
 			}
 		}
@@ -106,7 +109,7 @@ func (s *Set[T]) Touch(id guid.GUID, now time.Time) {
 	}
 	if pair := s.awake.GetPair(id); pair != nil {
 		pair.Value.touchedAt = now
-		pair.Value.dormancy = 0
+		pair.Value.dormantAfter = 0
 		return
 	}
 	s.awake.Set(id, awakeEntry[T]{character: char, touchedAt: now})

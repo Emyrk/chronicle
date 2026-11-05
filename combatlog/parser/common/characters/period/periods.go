@@ -45,11 +45,10 @@ func (pc *PeriodCollector[M]) Current() (M, bool) {
 }
 
 func (pc *PeriodCollector[M]) IsActive() bool {
-	cur, ok := pc.Current()
-	if !ok {
+	if len(pc.History) == 0 {
 		return false
 	}
-	return cur.IsActive()
+	return pc.History[len(pc.History)-1].IsActive()
 }
 
 // Start appends a new period. Returns false if a period is already active.
