@@ -344,6 +344,7 @@ func (h *Hookable) ProcessRaidGroupMetadata(msg *messages.RaidGroup) error {
 // into encounter event streams on the first real message after FightStarted,
 // manages synthetic expiry, and forwards death notifications.
 func (h *Hookable) AttachAuraProjection(tracker *auras.Tracking) {
+	tracker.AddObserver(h.g.ObserveAura)
 	proj := auras.NewProjection(tracker)
 	proj.SetEmit(func(evt *messages.Aura) {
 		if h.currentFight != nil && h.currentFight.active() {

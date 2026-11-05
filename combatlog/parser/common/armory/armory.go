@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/api/db2sdk"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/auras"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
@@ -362,6 +363,18 @@ func (g *Tracker) Finalize(ctx context.Context) error {
 	return nil
 }
 
+// ObserveAura clears respec invalidation when the parse-wide aura tracker has
+// authoritative evidence that Scrambled Brain ended, including forced expiry.
+func (g *Tracker) ObserveAura(notification auras.Notification) {
+	if notification.SpellID != respecAuraSpellID {
+		return
+	}
+	switch notification.Type {
+	case auras.NotifyRemoved, auras.NotifyExpired, auras.NotifyRemovedOnDeath:
+		g.finishRespecAura(notification.Unit)
+	}
+}
+
 func (g *Tracker) ProcessMessage(active bool, encounterID uuid.UUID, msg messages.Message) error {
 	switch ty := msg.(type) {
 	case *messages.Damage:
@@ -380,10 +393,18 @@ func (g *Tracker) ProcessMessage(active bool, encounterID uuid.UUID, msg message
 		}
 	case *messages.Unit:
 		g.Unit(ty)
-		if ty.Guid.IsPlayer() && hasUnitAura(ty, respecAuraSpellID) {
-			if _, observed := g.observedRespecAura[ty.Guid]; !observed {
-				g.observedRespecAura[ty.Guid] = struct{}{}
-				g.invalidateTalents(ty.Guid)
+		if ty.Guid.IsPlayer() {
+			_, observed := g.observedRespecAura[ty.Guid]
+			if hasUnitAura(ty, respecAuraSpellID) {
+				if !observed {
+					g.observedRespecAura[ty.Guid] = struct{}{}
+					g.invalidateTalents(ty.Guid)
+				}
+			} else if observed && len(ty.Buffs) > 0 {
+				// Non-empty UNIT_INFO buff lists are authoritative snapshots. Empty
+				// lists may mean the addon could not read buffs, so do not treat them
+				// as proof that the respec aura expired.
+				g.finishRespecAura(ty.Guid)
 			}
 		}
 	case *messages.Combatant:
@@ -407,9 +428,14 @@ func (g *Tracker) ProcessMessage(active bool, encounterID uuid.UUID, msg message
 	case *messages.Aura:
 		// The goblin respec is only logged as a debuff application. Invalidate
 		// the affected player's talents until the next talent update.
-		if ty.State == types.AuraStateAdded && ty.SpellData != nil && int(ty.SpellData.ID) == respecAuraSpellID && ty.Target.IsPlayer() {
-			g.observedRespecAura[ty.Target] = struct{}{}
-			g.invalidateTalents(ty.Target)
+		if ty.SpellData != nil && int(ty.SpellData.ID) == respecAuraSpellID && ty.Target.IsPlayer() {
+			switch ty.State {
+			case types.AuraStateAdded:
+				g.observedRespecAura[ty.Target] = struct{}{}
+				g.invalidateTalents(ty.Target)
+			case types.AuraStateRemoved:
+				g.finishRespecAura(ty.Target)
+			}
 		}
 	case *messages.Transmog:
 		g.Transmog(ty)
@@ -444,6 +470,14 @@ func (g *Tracker) invalidateTalents(player guid.GUID) {
 		g.Players[player] = p
 	}
 	g.units.InvalidatePlayerTalents(player)
+}
+
+// finishRespecAura allows the next COMBATANT_INFO snapshot to repair an
+// invalidated build, even when the player selected the same talent layout.
+// Keep the talents nil until that snapshot arrives so stale data is not ranked.
+func (g *Tracker) finishRespecAura(player guid.GUID) {
+	delete(g.observedRespecAura, player)
+	delete(g.invalidatedTalentBuild, player)
 }
 
 func (g *Tracker) repairTalents(player guid.GUID) {

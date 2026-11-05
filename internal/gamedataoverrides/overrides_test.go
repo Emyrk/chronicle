@@ -39,6 +39,26 @@ func TestApplySpell(t *testing.T) {
 	require.Equal(t, int32(20_000), otherSpell.Duration.MaxDuration)
 }
 
+func TestApplySpellScrambledBrainDuration(t *testing.T) {
+	t.Parallel()
+
+	const tenMinutesMillis = int32(10 * 60 * 1000)
+
+	for _, flavor := range []database.WoWFlavor{
+		{database.FlavorVanilla, database.FlavorNightmareOfUrsol, database.FlavorTurtle},
+		{database.FlavorVanilla, database.FlavorNightmareOfUrsol, database.FlavorOctoWoW},
+	} {
+		spell := &chrondbc.Spell{ID: 57734}
+		ApplySpell(flavor, spell)
+		require.Equal(t, tenMinutesMillis, spell.Duration.Duration)
+		require.Equal(t, tenMinutesMillis, spell.Duration.MaxDuration)
+	}
+
+	vanilla := &chrondbc.Spell{ID: 57734}
+	ApplySpell(database.WoWFlavor{database.FlavorVanilla}, vanilla)
+	require.Zero(t, vanilla.Duration.MaxDuration)
+}
+
 func TestApplySpellsNightmareConsumableDeathPersistence(t *testing.T) {
 	t.Parallel()
 
