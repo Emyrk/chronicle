@@ -5447,9 +5447,9 @@ export interface SidekickIssueReport {
 }
 
 // From chroniclesdk/sidekick.go
-export type SidekickLogFormat = "1.12a-cc-addon" | "2.4.3-cc-addon" | "3.3.5a-cc-addon" | "hermesproxy_1_14_2_cc";
+export type SidekickLogFormat = "1.12a-cc-addon" | "1.12a-superwow-addon" | "2.4.3-cc-addon" | "3.3.5a-cc-addon" | "azerothcore-mod" | "hermesproxy_1_14_2_cc" | "v22-cleu" | "v9-cleu";
 
-export const SidekickLogFormats: SidekickLogFormat[] = ["1.12a-cc-addon", "2.4.3-cc-addon", "3.3.5a-cc-addon", "hermesproxy_1_14_2_cc"];
+export const SidekickLogFormats: SidekickLogFormat[] = ["1.12a-cc-addon", "1.12a-superwow-addon", "2.4.3-cc-addon", "3.3.5a-cc-addon", "azerothcore-mod", "hermesproxy_1_14_2_cc", "v22-cleu", "v9-cleu"];
 
 // From chroniclesdk/sidekick.go
 export interface SidekickStatusRequest {
