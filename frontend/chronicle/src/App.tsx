@@ -45,6 +45,7 @@ const AdminCacheStatsPage = lazy(() => import("./pages/Admin/AdminCacheStatsPage
 const AdminParsingPage = lazy(() => import("./pages/Admin/AdminParsingPage").then(({ AdminParsingPage }) => ({ default: AdminParsingPage })))
 const AdminCustomPanelsPage = lazy(() => import("./pages/Admin/AdminCustomPanelsPage").then(({ AdminCustomPanelsPage }) => ({ default: AdminCustomPanelsPage })))
 const AdminBillingPage = lazy(() => import("./pages/Admin/AdminBillingPage").then(({ AdminBillingPage }) => ({ default: AdminBillingPage })))
+const AdminInfrastructureCostsPage = lazy(() => import("./pages/Admin/AdminInfrastructureCostsPage").then(({ AdminInfrastructureCostsPage }) => ({ default: AdminInfrastructureCostsPage })))
 const GearLayout = lazy(() => import("./pages/Gear/GearLayout").then(({ GearLayout }) => ({ default: GearLayout })))
 const GearListPage = lazy(() => import("./pages/Gear/builder/GearListPage").then(({ GearListPage }) => ({ default: GearListPage })))
 const GearTrendsPage = lazy(() => import("./pages/Gear/trends/GearTrendsPage").then(({ GearTrendsPage }) => ({ default: GearTrendsPage })))
@@ -266,6 +267,7 @@ function App() {
           <Route path="cache-stats" element={<AdminCacheStatsPage />} />
           <Route path="custom-panels" element={<AdminCustomPanelsPage />} />
           <Route path="billing" element={<AdminBillingPage />} />
+          <Route path="infrastructure-costs" element={<AdminInfrastructureCostsPage />} />
           <Route path="parsing" element={<AdminParsingPage />} />
         </Route>
         <Route path="/servers" element={<ServersLayout />}>
