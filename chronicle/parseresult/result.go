@@ -87,10 +87,12 @@ type Encounter struct {
 // Keep these fields in sync with encounterevents.Events.
 type EventStreams encounterevents.Events
 
-// Build does not finalize, query, write, or mutate parser state. Only the
-// 1.12a CC-addon format is currently covered by this explicitly bounded seam.
+// Build does not finalize, query, write, or mutate parser state. It accepts
+// the supported CC-addon formats; format-specific parsing happens in Parse.
 func Build(in Input) (*Result, error) {
-	if in.Format != database.LogFormat112aCcAddon {
+	switch in.Format {
+	case database.LogFormat112aCcAddon, database.LogFormat243CcAddon, database.LogFormat335aCcAddon:
+	default:
 		return nil, fmt.Errorf("unsupported parse-result format %q", in.Format)
 	}
 	if in.Finalized == nil || in.Events == nil {

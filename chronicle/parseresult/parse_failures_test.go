@@ -57,9 +57,9 @@ func TestCollectInstancesPartialAndLegacySemantics(t *testing.T) {
 func TestParseWithFailuresRejectsIncompatibleContext(t *testing.T) {
 	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	ctx := parsectx.With(context.Background(), parsectx.Context{Format: database.LogFormat335aCcAddon})
+	ctx := parsectx.With(context.Background(), parsectx.Context{Format: database.LogFormatAzerothcoreMod})
 	_, err := ParseWithFailures(ctx, strings.NewReader(""), fixtureGameDB{}, registry.RegistryForFlavor(logger, nil), logger)
-	if err == nil || !strings.Contains(err.Error(), "parse context format") {
+	if err == nil || !strings.Contains(err.Error(), "unsupported parse-result format") {
 		t.Fatalf("mismatched context accepted: %v", err)
 	}
 }

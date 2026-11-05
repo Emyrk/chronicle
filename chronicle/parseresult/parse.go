@@ -1,6 +1,7 @@
 package parseresult
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
+	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -42,7 +44,7 @@ func Parse(ctx context.Context, reader io.Reader, gameDB gamedb.GameDB, reg *reg
 	return outcome.Results, nil
 }
 
-// ParseWithFailures consumes a 1.12a CC-addon log without persistence. It
+// ParseWithFailures consumes a supported CC-addon log without persistence. It
 // continues after a nonempty instance fails finalization or projection, as the
 // legacy worker does. A fatal setup/consume/context error aborts the entire
 // parse. Empty or nil finalized instances are skipped, including when their
@@ -58,14 +60,18 @@ func parse(ctx context.Context, reader io.Reader, gameDB gamedb.GameDB, reg *reg
 	// Preserve a caller-supplied resolved context (including dataset talents).
 	// For standalone callers, stamp the known transport and registry flavor;
 	// dataset identity and talent trees remain unavailable until configured.
+	format := database.LogFormat112aCcAddon
 	if configured, ok := parsectx.FromContext(ctx); ok {
-		if configured.Format != database.LogFormat112aCcAddon {
-			return ParseOutcome{}, fmt.Errorf("parse context format %q is not 1.12a CC-addon", configured.Format)
-		}
+		format = configured.Format
 	} else {
 		ctx = parsectx.With(ctx, parsectx.Context{
-			Type: database.LogTypeV2, Format: database.LogFormat112aCcAddon, Flavor: reg.Flavor(),
+			Type: database.LogTypeV2, Format: format, Flavor: reg.Flavor(),
 		})
+	}
+	switch format {
+	case database.LogFormat112aCcAddon, database.LogFormat243CcAddon, database.LogFormat335aCcAddon:
+	default:
+		return ParseOutcome{}, fmt.Errorf("unsupported parse-result format %q", format)
 	}
 	state := encounters.New(ctx, logger, reg)
 	modifiers, err := gameDB.DurationModifiers(ctx)
@@ -86,24 +92,49 @@ func parse(ctx context.Context, reader io.Reader, gameDB gamedb.GameDB, reg *reg
 		state.ConsumeTracker.SetCatalog(catalog)
 	}
 	consumer := consumers.New(logger, state)
-	parser, err := parserv2.New(ctx, logger, reader, gameDB, gameDB)
-	if err != nil {
-		return ParseOutcome{}, fmt.Errorf("create v2 parser: %w", err)
-	}
-	consumer.Advancer = parser
-	if err := consumer.ConsumeAll(ctx, parser); err != nil && !errors.Is(err, io.EOF) {
-		return ParseOutcome{}, fmt.Errorf("consume v2 log: %w", err)
-	}
-
 	capabilities := []string{"overheal", "absorb"}
-	if parser.SawRaidGroup() {
-		capabilities = append(capabilities, "raidgroup")
-	}
-	if parser.SawUnitResources() {
-		capabilities = append(capabilities, "unit-resources")
-	}
-	if parser.SawUnitPosition() {
-		capabilities = append(capabilities, "unit-position")
+	switch format {
+	case database.LogFormat112aCcAddon:
+		parser, err := parserv2.New(ctx, logger, reader, gameDB, gameDB)
+		if err != nil {
+			return ParseOutcome{}, fmt.Errorf("create v2 parser: %w", err)
+		}
+		consumer.Advancer = parser
+		if err := consumer.ConsumeAll(ctx, parser); err != nil && !errors.Is(err, io.EOF) {
+			return ParseOutcome{}, fmt.Errorf("consume v2 log: %w", err)
+		}
+		if parser.SawRaidGroup() {
+			capabilities = append(capabilities, "raidgroup")
+		}
+		if parser.SawUnitResources() {
+			capabilities = append(capabilities, "unit-resources")
+		}
+		if parser.SawUnitPosition() {
+			capabilities = append(capabilities, "unit-position")
+		}
+	case database.LogFormat243CcAddon, database.LogFormat335aCcAddon:
+		capabilities = append(capabilities, "interrupt")
+		data, err := io.ReadAll(reader)
+		if err != nil {
+			return ParseOutcome{}, fmt.Errorf("read CLEU log: %w", err)
+		}
+		var parser *wotlk.Parser
+		if format == database.LogFormat243CcAddon {
+			parser, err = wotlk.NewTBC(ctx, logger, bytes.NewReader(data), gameDB, gameDB, reg)
+		} else {
+			parser, err = wotlk.New(ctx, logger, bytes.NewReader(data), gameDB, gameDB, reg)
+		}
+		if err != nil {
+			return ParseOutcome{}, fmt.Errorf("create CLEU parser: %w", err)
+		}
+		parser.SetRealmClockInfo(scanCompanionClock(data))
+		consumer.Advancer = parser
+		if err := consumer.ConsumeAll(ctx, parser); err != nil && !errors.Is(err, io.EOF) {
+			return ParseOutcome{}, fmt.Errorf("consume CLEU log: %w", err)
+		}
+		if parser.SawRaidGroup() {
+			capabilities = append(capabilities, "raidgroup")
+		}
 	}
 	tasks := make([]instanceTask, 0, len(state.Instances))
 	for _, inst := range state.Instances {
@@ -116,7 +147,7 @@ func parse(ctx context.Context, reader io.Reader, gameDB gamedb.GameDB, reg *reg
 				return Result{}, true, "finalize", err
 			}
 			result, err := Build(Input{
-				Format: database.LogFormat112aCcAddon, Name: inst.Name(), Finalized: fin, Events: inst.Events(),
+				Format: format, Name: inst.Name(), Finalized: fin, Events: inst.Events(),
 				Category: string(inst.Category), DifficultyName: inst.CurrentZone.DifficultyName,
 				MaxPlayers: int32(inst.CurrentZone.MaxPlayers), DynamicDifficulty: int32(inst.CurrentZone.DynamicDifficulty),
 				Capabilities: capabilities, Units: state.Units, IdentifyUnit: inst.IdentifyUnit, Armory: fin.Guilds,

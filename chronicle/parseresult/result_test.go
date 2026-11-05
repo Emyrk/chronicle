@@ -74,7 +74,7 @@ func TestBuildJSONRoundTrip(t *testing.T) {
 
 func TestBuildRejectsUnsupportedInput(t *testing.T) {
 	t.Parallel()
-	if _, err := Build(Input{Format: database.LogFormat335aCcAddon, Finalized: &instances.FinalizedInstance{}, Events: encounterevents.NewEvents()}); err == nil {
+	if _, err := Build(Input{Format: database.LogFormatAzerothcoreMod, Finalized: &instances.FinalizedInstance{}, Events: encounterevents.NewEvents()}); err == nil {
 		t.Fatal("unsupported format accepted")
 	}
 	if _, err := Build(Input{Format: database.LogFormat112aCcAddon}); err == nil {
