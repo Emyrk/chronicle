@@ -35,6 +35,16 @@ type legacyWorkerFixture struct {
 
 func newLegacyWorkerFixture(t *testing.T, ctx context.Context, runWorker ...bool) legacyWorkerFixture {
 	t.Helper()
+	// Two swings separated by three seconds create one encounter with damage.
+	rawLog := []byte("1771564196000|ZONE_INFO|Zul'Gurub||1|raid|0|309\n" +
+		"1771564197000|SWING|0x000000000001C7AC|0xF1300039F2000001|194|2|1|1|0|0|0\n" +
+		"1771564200000|SWING|0x000000000001C7AC|0xF1300039F2000001|194|2|1|1|0|0|0\n" +
+		"1771564205000|ZONE_INFO|Stranglethorn Vale||0|none|0\n")
+	return newLegacyWorkerFixtureWithLog(t, ctx, rawLog, runWorker...)
+}
+
+func newLegacyWorkerFixtureWithLog(t *testing.T, ctx context.Context, rawLog []byte, runWorker ...bool) legacyWorkerFixture {
+	t.Helper()
 	pool, _ := dbtestutil.NewPGXPool(t)
 	store := database.New(pool)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -73,11 +83,6 @@ func newLegacyWorkerFixture(t *testing.T, ctx context.Context, runWorker ...bool
 		ID: logID, Owner: ownerID, LogType: database.LogTypeV2, CreatedAt: at, UpdatedAt: at,
 	})
 	require.NoError(t, err)
-	// Two swings separated by three seconds create one encounter with damage.
-	rawLog := []byte("1771564196000|ZONE_INFO|Zul'Gurub||1|raid|0|309\n" +
-		"1771564197000|SWING|0x000000000001C7AC|0xF1300039F2000001|194|2|1|1|0|0|0\n" +
-		"1771564200000|SWING|0x000000000001C7AC|0xF1300039F2000001|194|2|1|1|0|0|0\n" +
-		"1771564205000|ZONE_INFO|Stranglethorn Vale||0|none|0\n")
 	_, err = store.InsertLogFile(ctx, database.InsertLogFileParams{
 		ID: fileID, Owner: ownerID, Hash: uuid.NewString(), WowLogID: logID,
 		SizeBytes: int64(len(rawLog)), MimeType: "text/plain;charset=UTF-8", CreatedAt: at, UpdatedAt: at,
