@@ -18,7 +18,7 @@ The operations dashboard includes rows for:
 - UI panel views, explicit panel choices, and preset popularity, filterable by tenant
 - Instance-search outcomes, latency, estimated cost, and predicate-field usage
 - Sidekick heartbeat health, online installations, uploads, and configuration updates
-- Tenant rating rebuild duration and the Lua artifact garbage-collection backlog
+- Tenant rating rebuild duration, leaderboard v2 dirty queues and repair processing, and the Lua artifact garbage-collection backlog
 - Leader election
 
 All dashboards target Grafana 10 or newer and use only built-in panels.

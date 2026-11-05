@@ -1062,11 +1062,23 @@ For low-traffic deployments, count-based alerts are often more reliable than rat
 | `chronicle_river_queue_oldest_job_age_seconds` | Gauge | `queue`, `state` | Age of the oldest job in each active state |
 | `chronicle_river_queue_metrics_collection_failures_total` | Counter | none | Queue-state collector failures |
 
-### Rating rebuilds
+### Rating maintenance
 
 | Metric | Type | Labels | Meaning |
 | --- | --- | --- | --- |
 | `chronicle_rating_rebuild_duration_seconds` | Histogram | none | Generation start through successful publication (all worker invocations) |
+| `chronicle_rating_dirty_keys` | Gauge | `stage` | Global pending leaderboard v2 rating keys |
+| `chronicle_rating_oldest_dirty_age_seconds` | Gauge | `stage` | Age of the oldest pending rating key |
+| `chronicle_rating_unfinished_scans` | Gauge | none | Tenants with an incomplete historical evidence scan |
+| `chronicle_rating_peak_pages` | Gauge | none | Global resumable Peak cohort pages |
+| `chronicle_rating_catchup_snapshot_success` | Gauge | none | Whether the latest database-backed catch-up snapshot succeeded |
+| `chronicle_rating_repair_page_duration_seconds` | Histogram | `stage` | Rating repair page duration, including failed attempts |
+| `chronicle_rating_repair_pages_total` | Counter | `stage` | Successful nonempty repair pages |
+| `chronicle_rating_repair_keys_total` | Counter | `stage` | Successful repair keys or Peak cohort pages |
+| `chronicle_rating_repair_errors_total` | Counter | `stage` | Failed repair page attempts |
+| `chronicle_rating_drain_active_jobs` | Gauge | none | Active rating drain jobs in this replica |
+
+The catch-up gauges are identical database-global snapshots emitted by every Chronicle replica. Use `max`, not `sum`, when querying them. Repair counters, histograms, and active jobs are process-local and should be summed across selected replicas.
 
 ### Lua projects
 
