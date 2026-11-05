@@ -104,7 +104,7 @@ func (f *tenantProjectionFake) RatingStageGuildRenownTotals(_ context.Context, p
 func TestTenantProjectionPeakAndCuratedRenown(t *testing.T) {
 	t.Parallel()
 	asOf := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
-	f := &tenantProjectionFake{revision: 3, checkpoint: database.RatingRebuildCheckpoint{TenantID: uuid.New(), GenerationID: uuid.New(), ConfigRevision: 3, Phase: "players", AsOf: database.Timestamptz(asOf), Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"tenant","rules_version":2,"renown_bosses":[{"realm_id":"00000000-0000-0000-0000-000000000001","instance_name":"Zul'Gurub","encounter_name":"Gri'lek","renown_points":3},{"realm_id":"00000000-0000-0000-0000-000000000002","instance_name":"Zul'Gurub","encounter_name":"Gri'lek","renown_points":5}]}`)}}
+	f := &tenantProjectionFake{revision: 3, checkpoint: database.RatingRebuildCheckpoint{TenantID: uuid.New(), GenerationID: uuid.New(), ConfigRevision: 3, Phase: "players", AsOf: database.Timestamptz(asOf), Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"tenant","rules_version":3,"renown_bosses":[{"realm_id":"00000000-0000-0000-0000-000000000001","instance_name":"Zul'Gurub","encounter_name":"Gri'lek","renown_points":3},{"realm_id":"00000000-0000-0000-0000-000000000002","instance_name":"Zul'Gurub","encounter_name":"Gri'lek","renown_points":5}]}`)}}
 	for i := 0; i < 10; i++ {
 		done, err := TenantProjectionPage(t.Context(), f, f.checkpoint.TenantID, f.checkpoint.GenerationID)
 		require.NoError(t, err)
@@ -142,7 +142,7 @@ func TestTenantProjectionPeakAndCuratedRenown(t *testing.T) {
 
 func TestTenantProjectionRejectsStaleRevision(t *testing.T) {
 	t.Parallel()
-	f := &tenantProjectionFake{revision: 4, checkpoint: database.RatingRebuildCheckpoint{TenantID: uuid.New(), GenerationID: uuid.New(), ConfigRevision: 3, Phase: "players", Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"tenant","rules_version":2}`)}}
+	f := &tenantProjectionFake{revision: 4, checkpoint: database.RatingRebuildCheckpoint{TenantID: uuid.New(), GenerationID: uuid.New(), ConfigRevision: 3, Phase: "players", Cursor: []byte(`{}`), Manifest: []byte(`{"writer":"tenant","rules_version":3}`)}}
 	_, err := TenantProjectionPage(t.Context(), f, f.checkpoint.TenantID, f.checkpoint.GenerationID)
 	require.ErrorIs(t, err, ErrRatingConfigStale)
 	require.Empty(t, f.player)

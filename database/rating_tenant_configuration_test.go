@@ -36,7 +36,7 @@ func TestTenantRatingRebuildRetiresOldPolicyCheckpoint(t *testing.T) {
 	require.Equal(t, "retired", oldStatus)
 	newCP, err := q.GetRatingRebuildCheckpoint(ctx, database.GetRatingRebuildCheckpointParams{TenantID: tenant, GenerationID: newID})
 	require.NoError(t, err)
-	require.Contains(t, string(newCP.Manifest), `"rules_version": 2`)
+	require.Contains(t, string(newCP.Manifest), `"rules_version": 3`)
 }
 
 func TestTenantRatingFixedPolicyWithoutConfigurationTables(t *testing.T) {

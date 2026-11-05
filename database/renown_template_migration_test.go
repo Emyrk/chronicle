@@ -153,6 +153,43 @@ func TestRenownTemplateAppliesOnlyToNewGroupPolicies(t *testing.T) {
 	require.Equal(t, 2.0, points)
 }
 
+func TestWrathRenownDoesNotInheritLowerExpansionTemplates(t *testing.T) {
+	t.Parallel()
+	pool, _ := dbtestutil.NewPGXPool(t)
+	ctx := t.Context()
+
+	tenantID, datasetID, serverID, realmID, groupID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `INSERT INTO tenants (id, name) VALUES ($1, 'Wrath Renown Tenant')`, tenantID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO datasets (id, name, slug, wow_version, default_flavor)
+		VALUES ($1, 'Wrath progression', $2, '3.3.5', ARRAY['vanilla', 'tbc', 'wrath']::text[])`, datasetID, "wrath-renown-"+uuid.NewString())
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO wow_servers (id, name, tenant_id, default_dataset_id)
+		VALUES ($1, 'Wrath progression', $2, $3)`, serverID, tenantID, datasetID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO wow_server_realms (id, server_id, name)
+		VALUES ($1, $2, 'Wrath progression')`, realmID, serverID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO rating_realm_groups (id, server_id, name)
+		VALUES ($1, $2, 'Wrath progression')`, groupID, serverID)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(ctx, createRenownGroupPolicy, groupID)
+	require.NoError(t, err)
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM rating_group_boss_policies WHERE group_id = $1`, groupID).Scan(&count))
+	require.Zero(t, count, "Wrath groups must not inherit Vanilla or TBC Renown bosses")
+
+	var generationID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `SELECT start_tenant_rating_rebuild($1, now(), now())`, tenantID).Scan(&generationID))
+	var rulesVersion int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT (manifest->>'rules_version')::int,
+		jsonb_array_length(manifest->'renown_bosses')
+		FROM rating_rebuild_checkpoints WHERE generation_id = $1`, generationID).Scan(&rulesVersion, &count))
+	require.Equal(t, 3, rulesVersion)
+	require.Zero(t, count, "Wrath tenant manifests must not award lower-expansion raid Renown")
+}
+
 func TestVanillaPlusRenownDefaults(t *testing.T) {
 	t.Parallel()
 	pool, _ := dbtestutil.NewPGXPool(t)
