@@ -173,6 +173,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	}
 
 	chrs := characters.NewCharacters(db, cres, ip.Idf)
+	chrs.SetNoKnownParticipantsAliveProvider(p.NoKnownParticipantsAlive)
 	chrs.RegisterHook(p)
 
 	// ClassificationEmitter needs a forward reference to the hookable for the emit callback.
@@ -215,6 +216,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	lootTracking := loot.New(db)
 
 	hooks := append(ip.ExtraHooks, []instancehook.Hook{
+		p,
 		g,
 		ce,
 		cie,
