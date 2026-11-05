@@ -46,11 +46,23 @@ func TestParseWithReadOnlyPostgres(t *testing.T) {
 		format database.LogFormat
 		flavor database.WoWFlavor
 		log    string
+		rich   bool
 	}{
 		{name: "vanilla", format: database.LogFormat112aCcAddon, log: strings.Join([]string{
 			"1771564196000|ZONE_INFO|Zul'Gurub||1|raid|0|309",
 			"1771564197000|SWING|0x000000000001C7AC|0xF1300039F2000001|194|2|1|1|0|0|0",
 			"1771564200000|SWING|0x000000000001C7AC|0xF1300039F2000001|194|2|1|1|0|0|0",
+			"1771564205000|ZONE_INFO|Stranglethorn Vale||0|none|0",
+		}, "\n")},
+		{name: "vanilla-rich", format: database.LogFormat112aCcAddon, rich: true, log: strings.Join([]string{
+			"1771564196000|ZONE_INFO|Zul'Gurub||1|raid|0|309",
+			"1771564196050|UNIT_INFO|0xF1300039F2000001|0|Hakkar|0|||0||100000",
+			"1771564196100|UNIT_INFO|0x000000000001C80A|1|PriestOne|1|||60||3117",
+			"1771564196200|COMBATANT_INFO|0x000000000001C80A|PriestOne|PRIEST|Human|3|Test Guild|Member|1|123456:0:0:0||nil|nil",
+			"1771564197000|SWING|0x000000000001C80A|0xF1300039F2000001|194|2|1|1|0|0|0",
+			"1771564200000|SWING|0x000000000001C80A|0xF1300039F2000001|194|2|1|1|0|0|0",
+			"1771564200100|DEATH|0xF1300039F2000001",
+			"1771564200200|LOOT|PriestOne||cffffffff|Hitem:14047:0:0:0|h[Runecloth]|h|r",
 			"1771564205000|ZONE_INFO|Stranglethorn Vale||0|none|0",
 		}, "\n")},
 		{name: "tbc", format: database.LogFormat243CcAddon, flavor: database.WoWFlavor{database.FlavorTBC},
@@ -66,6 +78,13 @@ func TestParseWithReadOnlyPostgres(t *testing.T) {
 			require.Len(t, results, 1)
 			require.Equal(t, tc.format, results[0].Format)
 			require.NotEmpty(t, results[0].Events.Damage)
+			if tc.rich {
+				require.NotEmpty(t, results[0].Armory.Players)
+				require.NotEmpty(t, results[0].Armory.Players[0].Gear)
+				require.NotEmpty(t, results[0].Loot)
+				require.NotEmpty(t, results[0].BossRankings.Encounters)
+				require.NotEmpty(t, results[0].BossRankings.Encounters[0].Units)
+			}
 		})
 	}
 }
