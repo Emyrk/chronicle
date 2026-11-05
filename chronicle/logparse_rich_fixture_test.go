@@ -19,9 +19,9 @@ import (
 )
 
 // Keep a nonempty fixture separate from the minimal test. This compares
-// persisted core, event, guild, player, gear-history and loot rows from real
-// initial and replacement worker parses with independent adapters. Ranking,
-// parse-report and job side effects remain outside this comparison.
+// persisted core, event, guild, player, gear-history, loot, speedrun, and
+// boss-DPS rows from real initial and replacement worker parses. Trash ranks,
+// ranking side effects, parse reports, and jobs remain outside this comparison.
 func TestLegacyAndDataOnlyParseProjectPlayerGuildAndLoot(t *testing.T) {
 	for _, replacement := range []bool{false, true} {
 		name := "initial"
@@ -38,11 +38,13 @@ func compareRichLegacyAndDataOnlyParse(t *testing.T, replacement bool) {
 	t.Helper()
 	ctx := testutil.Context(t, testutil.WaitLong)
 	raw := []byte("1771564196000|ZONE_INFO|Zul'Gurub||1|raid|0|309\n" +
+		"1771564196050|UNIT_INFO|0xF1300039F2000001|0|Hakkar|0|||0||100000\n" +
 		"1771564196100|UNIT_INFO|0x000000000001C80A|1|PriestOne|1|||60||3117\n" +
 		"1771564196200|COMBATANT_INFO|0x000000000001C80A|PriestOne|PRIEST|Human|3|Test Guild|Member|1|123456:0:0:0||nil|nil\n" +
 		"1771564197000|SWING|0x000000000001C80A|0xF1300039F2000001|194|2|1|1|0|0|0\n" +
 		"1771564200000|SWING|0x000000000001C80A|0xF1300039F2000001|194|2|1|1|0|0|0\n" +
-		"1771564200100|LOOT|PriestOne||cffffffff|Hitem:14047:0:0:0|h[Runecloth]|h|r\n" +
+		"1771564200100|DEATH|0xF1300039F2000001\n" +
+		"1771564200200|LOOT|PriestOne||cffffffff|Hitem:14047:0:0:0|h[Runecloth]|h|r\n" +
 		"1771564205000|ZONE_INFO|Stranglethorn Vale||0|none|0\n")
 	legacy := newLegacyWorkerFixtureWithLog(t, ctx, raw)
 	fresh := newLegacyWorkerFixtureWithLog(t, ctx, raw, replacement)
@@ -99,6 +101,7 @@ func compareRichLegacyAndDataOnlyParse(t *testing.T, replacement bool) {
 	// still a subset comparison, not whole-DB parity.
 	require.NoError(t, fresh.store.InsertStagedParsedLogGroup(ctx, database.InsertStagedParsedLogGroupParams{ID: fresh.logID, ParseGeneration: generation}))
 	newID := uuid.New()
+	var rankedInstance database.LogInstance
 	require.NoError(t, fresh.store.InTx(ctx, func(tx database.Store) error {
 		majority, err := InsertParsedArmory(ctx, tx, decoded.Armory, ParsedArmoryWrite{
 			RealmID: fresh.realmID, RealmName: "Legacy Worker Realm", DatasetID: chron.defaultDatasetID,
@@ -111,7 +114,7 @@ func compareRichLegacyAndDataOnlyParse(t *testing.T, replacement bool) {
 		if majority != nil {
 			guildID = uuid.NullUUID{UUID: majority.ID, Valid: true}
 		}
-		_, err = InsertParsedCore(ctx, tx, decoded, ParsedCoreWrite{
+		rankedInstance, err = InsertParsedCore(ctx, tx, decoded, ParsedCoreWrite{
 			InstanceID: newID, RealmID: fresh.realmID, LogGroupID: fresh.logID,
 			GuildID: guildID, ParserVersion: version.ExactParserVersion(),
 		})
@@ -121,7 +124,20 @@ func compareRichLegacyAndDataOnlyParse(t *testing.T, replacement bool) {
 		if err := InsertParsedEventStreams(ctx, tx, newID, decoded.Events); err != nil {
 			return err
 		}
-		return InsertParsedLoot(ctx, tx, newID, fresh.realmID, decoded.Loot)
+		if err := InsertParsedLoot(ctx, tx, newID, fresh.realmID, decoded.Loot); err != nil {
+			return err
+		}
+		return InsertParsedSpeedrun(ctx, tx, decoded, ParsedSpeedrunWrite{
+			InstanceID: newID, RealmID: fresh.realmID, GuildID: guildID, Rankable: true,
+		})
+	}, nil))
+	require.NotEmpty(t, decoded.BossRankings.Encounters)
+	require.NotEmpty(t, decoded.BossRankings.Encounters[0].Units)
+	require.NoError(t, fresh.store.InTx(ctx, func(tx database.Store) error {
+		return InsertParsedBossRankings(ctx, tx, decoded, ParsedBossRankingWrite{
+			Instance: rankedInstance, RealmName: "Legacy Worker Realm",
+			DatasetID: chron.defaultDatasetID, Rankable: true,
+		})
 	}, nil))
 	oldInstance, err := legacy.store.GetLogInstanceForDiscordAnnouncement(ctx, rows[0].ID)
 	require.NoError(t, err)
@@ -138,6 +154,39 @@ func compareRichLegacyAndDataOnlyParse(t *testing.T, replacement bool) {
 	oldGuild.RealmID, newGuild.RealmID = uuid.Nil, uuid.Nil
 	oldGuild.CreatedAt, newGuild.CreatedAt = pgtype.Timestamptz{}, pgtype.Timestamptz{}
 	assertPersistedParity(t, "armory guild", oldGuild, newGuild)
+	require.NotNil(t, decoded.Speedrun)
+	require.True(t, decoded.Speedrun.HasBossKill)
+	oldSpeedrun, err := legacy.store.GetInstanceSpeedrun(ctx, rows[0].ID)
+	require.NoError(t, err)
+	newSpeedrun, err := fresh.store.GetInstanceSpeedrun(ctx, newID)
+	require.NoError(t, err)
+	require.False(t, oldSpeedrun.Qualified, "one Hakkar kill does not satisfy ZG speedrun rules")
+	ranked, err := legacy.store.HasInstanceDpsRankings(ctx, rows[0].ID)
+	require.NoError(t, err)
+	require.True(t, ranked, "boss kill with player damage should produce a DPS ranking: %+v", decoded.BossRankings)
+	oldRankings, err := legacy.store.InstanceRankingRecords(ctx, rows[0].ID)
+	require.NoError(t, err)
+	newRankings, err := fresh.store.InstanceRankingRecords(ctx, newID)
+	require.NoError(t, err)
+	require.Len(t, oldRankings, 1)
+	require.Len(t, newRankings, len(oldRankings))
+	require.True(t, oldRankings[0].EncounterID.Valid)
+	require.True(t, newRankings[0].EncounterID.Valid)
+	oldRankingEncounterID, newRankingEncounterID := oldRankings[0].EncounterID.UUID, newRankings[0].EncounterID.UUID
+	oldRankings[0].ID, newRankings[0].ID = uuid.Nil, uuid.Nil
+	oldRankings[0].EncounterID, newRankings[0].EncounterID = uuid.NullUUID{}, uuid.NullUUID{}
+	oldRankings[0].InstanceID, newRankings[0].InstanceID = uuid.Nil, uuid.Nil
+	oldRankings[0].RealmID, newRankings[0].RealmID = uuid.Nil, uuid.Nil
+	oldRankings[0].LogHashedSlug, newRankings[0].LogHashedSlug = "", ""
+	oldRankings[0].CreatedAt, newRankings[0].CreatedAt = pgtype.Timestamptz{}, pgtype.Timestamptz{}
+	assertPersistedParity(t, "boss DPS ranking", oldRankings, newRankings)
+	require.Equal(t, oldGuildID, oldSpeedrun.GuildID.UUID)
+	require.Equal(t, newGuildID, newSpeedrun.GuildID.UUID)
+	oldSpeedrun.InstanceID, newSpeedrun.InstanceID = uuid.Nil, uuid.Nil
+	oldSpeedrun.RealmID, newSpeedrun.RealmID = uuid.Nil, uuid.Nil
+	oldSpeedrun.GuildID, newSpeedrun.GuildID = uuid.NullUUID{}, uuid.NullUUID{}
+	oldSpeedrun.CreatedAt, newSpeedrun.CreatedAt = pgtype.Timestamptz{}, pgtype.Timestamptz{}
+	assertPersistedParity(t, "speedrun boss kill", oldSpeedrun, newSpeedrun)
 
 	oldInstance.ID, newInstance.ID = uuid.Nil, uuid.Nil
 	oldInstance.RealmID, newInstance.RealmID = uuid.Nil, uuid.Nil
@@ -163,6 +212,8 @@ func compareRichLegacyAndDataOnlyParse(t *testing.T, replacement bool) {
 	require.Len(t, oldEncounters, 1)
 	require.Len(t, newEncounters, 1)
 	oldEncID, newEncID := oldEncounters[0].ID.String(), newEncounters[0].ID.String()
+	require.Equal(t, oldEncounters[0].ID, oldRankingEncounterID)
+	require.Equal(t, newEncounters[0].ID, newRankingEncounterID)
 	oldEncounters[0].ID, newEncounters[0].ID = uuid.Nil, uuid.Nil
 	oldEncounters[0].InstanceID, newEncounters[0].InstanceID = uuid.Nil, uuid.Nil
 	assertPersistedParity(t, "rich encounter", oldEncounters, newEncounters)
