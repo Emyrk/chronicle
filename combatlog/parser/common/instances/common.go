@@ -95,6 +95,10 @@ type CommonFactory struct {
 	// ProgressionBosses is used as the default set.
 	RankingEncounterSets func(flavor database.WoWFlavor) []RankingEncounterSet
 	ZoneNames            []string
+	// InstanceTypes restricts matching when the zone message includes explicit
+	// instance metadata. Empty instance types preserve compatibility with older
+	// log formats that only reported the zone name.
+	InstanceTypes []string
 	// MapIDs match localized or unexpected zone names. When exactly one is
 	// known, it also fills a missing zone map ID for encounter persistence.
 	MapIDs           []uint32
@@ -107,6 +111,22 @@ type CommonFactory struct {
 // MatchZone returns true if z matches any of the factory's zone names
 // (case-insensitive) or, when present, one of the instance map IDs.
 func (f *CommonFactory) MatchZone(z zone.Zone) bool {
+	if len(f.InstanceTypes) > 0 && z.InstanceType != "" {
+		if !z.IsInstance {
+			return false
+		}
+		matched := false
+		for _, instanceType := range f.InstanceTypes {
+			if strings.EqualFold(z.InstanceType, instanceType) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+
 	for _, name := range f.ZoneNames {
 		if strings.EqualFold(z.Name, name) {
 			return true

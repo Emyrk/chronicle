@@ -1,13 +1,60 @@
 package registry
 
 import (
+	"context"
+	"log/slog"
 	"slices"
 	"testing"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNightmareOfUrsolRegistryResolvesRockOfDesolation(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}
+	reg := RegistryForFlavor(slog.Default(), flavor)
+	instance := reg.GetInstance(
+		context.Background(),
+		false,
+		zone.Zone{Name: "荒芜巨岩", IsInstance: true, InstanceType: "raid"},
+		unitdb.New(),
+		flavor,
+	)
+
+	require.NotNil(t, instance)
+	require.Equal(t, "Tower of Karazhan", instance.Name())
+}
+
+func TestNightmareOfUrsolRegistryResolvesChineseTimbermawHoldOnlyAsRaid(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}
+	reg := RegistryForFlavor(slog.Default(), flavor)
+
+	overworld := reg.GetInstance(
+		context.Background(),
+		false,
+		zone.Zone{Name: "木喉要塞", IsInstance: false, InstanceType: "none"},
+		unitdb.New(),
+		flavor,
+	)
+	require.Nil(t, overworld)
+
+	raid := reg.GetInstance(
+		context.Background(),
+		false,
+		zone.Zone{Name: "木喉要塞", IsInstance: true, InstanceType: "raid"},
+		unitdb.New(),
+		flavor,
+	)
+	require.NotNil(t, raid)
+	require.Equal(t, "Timbermaw Hold", raid.Name())
+}
 
 func TestWrathRegistryReplacesClassicOnyxia(t *testing.T) {
 	t.Parallel()
