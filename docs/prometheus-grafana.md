@@ -1068,6 +1068,7 @@ For low-traffic deployments, count-based alerts are often more reliable than rat
 | --- | --- | --- | --- |
 | `chronicle_rating_rebuild_duration_seconds` | Histogram | none | Generation start through successful publication (all worker invocations) |
 | `chronicle_rating_dirty_keys` | Gauge | `stage` | Global pending leaderboard v2 rating keys |
+| `chronicle_rating_tenant_dirty_keys` | Gauge | `tenant`, `stage` | Pending leaderboard v2 rating keys per tenant slug (`root` for the primary site) |
 | `chronicle_rating_oldest_dirty_age_seconds` | Gauge | `stage` | Age of the oldest pending rating key |
 | `chronicle_rating_unfinished_scans` | Gauge | none | Tenants with an incomplete historical evidence scan |
 | `chronicle_rating_peak_pages` | Gauge | none | Global resumable Peak cohort pages |

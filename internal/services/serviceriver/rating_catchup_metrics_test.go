@@ -28,3 +28,16 @@ func TestAggregateRatingCatchupMetrics(t *testing.T) {
 	require.Equal(t, int64(1), unfinished)
 	require.Equal(t, int64(4), pages)
 }
+
+func TestRatingDirtyCountsByTenant(t *testing.T) {
+	t.Parallel()
+	rows := []database.ListTenantRatingCatchupStatusRow{
+		{TenantSlug: "epoch", DirtyRuns: 2, DirtyRenown: 3, DirtyMastery: 4, DirtyPeak: 5},
+		{DirtyRuns: 7, DirtyPeak: 1},
+	}
+
+	require.Equal(t, map[string]map[string]int64{
+		"epoch": {"runs": 2, "renown": 3, "mastery": 4, "peak": 5},
+		"root":  {"runs": 7, "renown": 0, "mastery": 0, "peak": 1},
+	}, ratingDirtyCountsByTenant(rows))
+}

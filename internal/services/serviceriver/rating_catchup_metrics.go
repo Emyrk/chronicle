@@ -22,6 +22,10 @@ func runRatingCatchupMetrics(ctx context.Context, db database.Store, registry pr
 		Namespace: "chronicle", Subsystem: "rating", Name: "dirty_keys",
 		Help: "Global pending rating keys by stage (identical on each daemon)",
 	}, []string{"stage"})
+	tenantDirty := promauto.With(registry).NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "chronicle", Subsystem: "rating", Name: "tenant_dirty_keys",
+		Help: "Pending rating keys by tenant slug and stage (identical on each daemon)",
+	}, []string{"tenant", "stage"})
 	oldest := promauto.With(registry).NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "chronicle", Subsystem: "rating", Name: "oldest_dirty_age_seconds",
 		Help: "Age of the oldest global pending rating key by stage",
@@ -58,6 +62,12 @@ func runRatingCatchupMetrics(ctx context.Context, db database.Store, registry pr
 					dirty.WithLabelValues(stage).Set(float64(count))
 					oldest.WithLabelValues(stage).Set(ages[stage])
 				}
+				tenantDirty.Reset()
+				for tenant, stageCounts := range ratingDirtyCountsByTenant(rows) {
+					for stage, count := range stageCounts {
+						tenantDirty.WithLabelValues(tenant, stage).Set(float64(count))
+					}
+				}
 				unfinished.Set(float64(scans))
 				peakPages.Set(float64(pages))
 			}
@@ -93,4 +103,21 @@ func aggregateRatingCatchupMetrics(rows []database.ListTenantRatingCatchupStatus
 		}
 	}
 	return counts, ages, unfinished, pages
+}
+
+func ratingDirtyCountsByTenant(rows []database.ListTenantRatingCatchupStatusRow) map[string]map[string]int64 {
+	counts := make(map[string]map[string]int64, len(rows))
+	for _, row := range rows {
+		tenant := row.TenantSlug
+		if tenant == "" {
+			tenant = "root"
+		}
+		counts[tenant] = map[string]int64{
+			"runs":    row.DirtyRuns,
+			"renown":  row.DirtyRenown,
+			"mastery": row.DirtyMastery,
+			"peak":    row.DirtyPeak,
+		}
+	}
+	return counts
 }

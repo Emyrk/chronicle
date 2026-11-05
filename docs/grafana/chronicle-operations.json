@@ -5687,6 +5687,72 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Current pending leaderboard v2 rating keys summed across stages for each tenant. Tenant labels use the tenant slug; the primary site is labeled root. The database-backed gauges are identical on every Chronicle replica, so the query takes max across replicas before summing stages.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 184
+      },
+      "id": 84,
+      "options": {
+        "displayMode": "gradient",
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sort_desc(sum by (tenant) (max by (tenant, stage) (chronicle_rating_tenant_dirty_keys{job=~\"$job\"})))",
+          "legendFormat": "{{tenant}}",
+          "range": false,
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "title": "Dirty rating keys by tenant",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Successful leaderboard v2 rating keys processed per second by stage, summed across selected Chronicle replicas.",
       "fieldConfig": {
         "defaults": {
@@ -5741,7 +5807,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 184
+        "y": 191
       },
       "id": 81,
       "options": {
@@ -5834,7 +5900,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 184
+        "y": 191
       },
       "id": 82,
       "options": {
@@ -5927,7 +5993,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 184
+        "y": 191
       },
       "id": 83,
       "options": {
@@ -6210,6 +6276,6 @@
   "timezone": "browser",
   "title": "Chronicle Operations",
   "uid": "chronicle-operations",
-  "version": 6,
+  "version": 7,
   "weekStart": ""
 }
