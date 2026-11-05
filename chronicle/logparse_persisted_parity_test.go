@@ -22,13 +22,38 @@ import (
 // a whole-DB parse. Guild/armory, ranking, parse-report and job side effects
 // belong to the worker and are deliberately absent on the adapter side.
 func TestLegacyWorkerPersistedCoreMatchesDataOnlyParse(t *testing.T) {
-	t.Parallel()
+	for _, replacement := range []bool{false, true} {
+		name := "initial"
+		if replacement {
+			name = "replacement"
+		}
+		t.Run(name, func(t *testing.T) {
+			compareLegacyPersistedCoreWithDataOnly(t, replacement)
+		})
+	}
+}
+
+func compareLegacyPersistedCoreWithDataOnly(t *testing.T, replacement bool) {
+	t.Helper()
 	ctx := testutil.Context(t, testutil.WaitLong)
 	legacy := newLegacyWorkerFixture(t, ctx)
-	fresh := newLegacyWorkerFixture(t, ctx, false) // separate DB, same fixture input and empty game-data catalog
+	fresh := newLegacyWorkerFixture(t, ctx, replacement) // replacement starts from successful worker output in both databases
 	require.Equal(t, legacy.rawLog, fresh.rawLog)
+	generation := int64(1)
+	if replacement {
+		for _, fixture := range []legacyWorkerFixture{legacy, fresh} {
+			require.NoError(t, fixture.worker.Work(ctx, &river.Job[ArgsLogParse]{
+				Args:   ArgsLogParse{LogID: fixture.logID, RealmID: fixture.realmID, ParseGeneration: 1},
+				JobRow: &rivertype.JobRow{Attempt: 1, MaxAttempts: 2},
+			}))
+			advanced, err := advanceParseGeneration(ctx, fixture.store, fixture.logID, true)
+			require.NoError(t, err)
+			require.Equal(t, int64(2), advanced)
+		}
+		generation = 2
+	}
 	require.NoError(t, legacy.worker.Work(ctx, &river.Job[ArgsLogParse]{
-		Args:   ArgsLogParse{LogID: legacy.logID, RealmID: legacy.realmID, ParseGeneration: 1},
+		Args:   ArgsLogParse{LogID: legacy.logID, RealmID: legacy.realmID, ParseGeneration: generation, Replacement: replacement},
 		JobRow: &rivertype.JobRow{Attempt: 1, MaxAttempts: 2},
 	}))
 	oldRows, err := legacy.store.GetInstancesByLogGroupID(ctx, legacy.logID)
@@ -49,7 +74,7 @@ func TestLegacyWorkerPersistedCoreMatchesDataOnlyParse(t *testing.T) {
 
 	// The FK from log_instances points to the staged parsed group, not the raw
 	// log group. Leave it unfinalized so the adapter's omitted finalization is visible.
-	require.NoError(t, fresh.store.InsertStagedParsedLogGroup(ctx, database.InsertStagedParsedLogGroupParams{ID: fresh.logID, ParseGeneration: 1}))
+	require.NoError(t, fresh.store.InsertStagedParsedLogGroup(ctx, database.InsertStagedParsedLogGroupParams{ID: fresh.logID, ParseGeneration: generation}))
 	newID := uuid.New()
 	var newRow database.LogInstance
 	require.NoError(t, fresh.store.InTx(ctx, func(tx database.Store) error {
