@@ -59,14 +59,17 @@ type Projection struct {
 	// projectedAuras tracks auras that were projected at encounter start and
 	// may need synthetic expiry. Keyed by target+spell.
 	projectedAuras map[projectedAuraKey]*projectedAura
+	// nextExpiry is the earliest MaxExistsUntil in projectedAuras. It avoids
+	// scanning every projected aura for every combat-log message.
+	nextExpiry time.Time
 }
 
 // NewProjection creates a new instance-level projection adapter that references
 // the shared parse-wide tracker.
 func NewProjection(tracker *Tracking) *Projection {
-	return &Projection{
-		tracker: tracker,
-	}
+	p := &Projection{tracker: tracker}
+	tracker.AddObserver(p.handleTrackingNotification)
+	return p
 }
 
 // SetEmit sets the callback used to inject synthetic aura messages into the
@@ -93,7 +96,6 @@ func (p *Projection) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 	// before checking timestamps so a late refresh/removal never receives a
 	// synthetic fade immediately ahead of its real event.
 	p.cancelOnRealEvidence(m)
-	p.cancelAbsentCanonicalAuras()
 
 	// Emit synthetic expiry only for projected auras that remain untouched by
 	// real in-combat aura evidence.
@@ -171,6 +173,7 @@ func (p *Projection) emitProjection(firstReal messages.Message) {
 	}
 
 	p.projectedAuras = make(map[projectedAuraKey]*projectedAura)
+	p.nextExpiry = time.Time{}
 
 	if combatantInfo, ok := firstReal.(*messages.Combatant); ok && combatantInfo.PullAurasKnown {
 		// Modern COMBATANT_INFO carries an authoritative pull-time aura list.
@@ -213,6 +216,9 @@ func (p *Projection) emitProjection(firstReal messages.Message) {
 					Buff:           aura.Buff,
 					MaxExistsUntil: aura.MaxExistsUntil,
 				}
+				if p.nextExpiry.IsZero() || aura.MaxExistsUntil.Before(p.nextExpiry) {
+					p.nextExpiry = aura.MaxExistsUntil
+				}
 			}
 		}
 	}
@@ -224,15 +230,25 @@ func (p *Projection) emitProjection(firstReal messages.Message) {
 // whose MaxExistsUntil is <= the current message timestamp.
 func (p *Projection) emitSyntheticExpiries(m messages.Message) {
 	if p.emit == nil || len(p.projectedAuras) == 0 {
+		p.nextExpiry = time.Time{}
 		return
 	}
 
 	now := m.Date()
-	// Collect expired keys in deterministic order.
+	if !p.nextExpiry.IsZero() && now.Before(p.nextExpiry) {
+		return
+	}
+
+	// Collect expired keys in deterministic order and find the next deadline.
+	p.nextExpiry = time.Time{}
 	var expired []projectedAuraKey
 	for key, pa := range p.projectedAuras {
 		if !pa.MaxExistsUntil.After(now) {
 			expired = append(expired, key)
+			continue
+		}
+		if p.nextExpiry.IsZero() || pa.MaxExistsUntil.Before(p.nextExpiry) {
+			p.nextExpiry = pa.MaxExistsUntil
 		}
 	}
 	slices.SortFunc(expired, func(a, b projectedAuraKey) int {
@@ -290,15 +306,11 @@ func (p *Projection) cancelOnRealEvidence(m messages.Message) {
 	delete(p.projectedAuras, key)
 }
 
-// cancelAbsentCanonicalAuras drops synthetic-expiry ownership when another
-// authoritative source, such as UNIT_INFO reconciliation, already removed the
-// aura from the parse-wide tracker.
-func (p *Projection) cancelAbsentCanonicalAuras() {
-	for key := range p.projectedAuras {
-		if !p.tracker.HasAura(key.Unit, key.SpellID) {
-			delete(p.projectedAuras, key)
-		}
-	}
+// handleTrackingNotification relinquishes synthetic-expiry ownership as soon as
+// canonical tracking receives authoritative evidence. This avoids checking every
+// projected aura against the tracker for every combat-log message.
+func (p *Projection) handleTrackingNotification(n Notification) {
+	delete(p.projectedAuras, projectedAuraKey{Unit: n.Unit, SpellID: n.SpellID})
 }
 
 // clearEncounterState resets all per-encounter projection state.
@@ -306,6 +318,7 @@ func (p *Projection) clearEncounterState() {
 	p.pendingProjection = false
 	p.snapshot = nil
 	p.projectedAuras = nil
+	p.nextExpiry = time.Time{}
 }
 
 // sortedGUIDs returns sorted keys from a snapshot map.
