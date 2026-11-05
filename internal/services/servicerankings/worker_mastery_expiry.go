@@ -45,6 +45,9 @@ type WorkerExpireTenantMastery struct {
 }
 
 func (w *WorkerExpireTenantMastery) Work(ctx context.Context, job *river.Job[ArgsExpireTenantMastery]) error {
+	if skip, err := skipDisabledRootRatings(ctx, w.Store, job.Args.TenantID); err != nil || skip {
+		return err
+	}
 	args := job.Args
 	if args.AsOf.IsZero() {
 		return fmt.Errorf("mastery expiry requires a fixed cutoff")

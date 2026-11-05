@@ -8,6 +8,7 @@ FROM ranking_runs rr
 JOIN wow_server_realms realm ON realm.id = rr.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
 WHERE rr.run_id = ANY(@run_ids::uuid[]) AND cardinality(@run_ids::uuid[]) <= 200
+  AND tenant_ratings_enabled(COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid))
 ON CONFLICT (tenant_id, run_id) DO UPDATE
 SET revision = rating_dirty_observation_runs.revision + 1, changed_at = now();
 
@@ -22,11 +23,13 @@ JOIN wow_server_realms realm ON realm.id = rr.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
 WHERE instance.id = @instance_id
   AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND tenant_ratings_enabled(@tenant_id::uuid)
 ON CONFLICT (tenant_id, run_id) DO UPDATE
 SET revision = rating_dirty_observation_runs.revision + 1, changed_at = now();
 
 -- name: ListDirtyObservationRunTenants :many
-SELECT DISTINCT tenant_id FROM rating_dirty_observation_runs ORDER BY tenant_id;
+SELECT DISTINCT tenant_id FROM rating_dirty_observation_runs
+WHERE tenant_ratings_enabled(tenant_id) ORDER BY tenant_id;
 
 -- name: LockDirtyObservationRuns :many
 SELECT tenant_id, run_id, revision FROM rating_dirty_observation_runs

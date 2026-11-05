@@ -63,6 +63,9 @@ type WorkerRatingPolicyScan struct {
 }
 
 func (w *WorkerRatingPolicyScan) Work(ctx context.Context, job *river.Job[ArgsRatingPolicyScan]) error {
+	if skip, err := skipDisabledRootRatings(ctx, w.Store, job.Args.TenantID); err != nil || skip {
+		return err
+	}
 	tenant := job.Args.TenantID
 	if tenant == uuid.Nil {
 		ctx = servicetenant.AdminBypass(ctx)

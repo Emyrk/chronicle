@@ -42,6 +42,9 @@ type WorkerExpireTenantPeak struct {
 }
 
 func (w *WorkerExpireTenantPeak) Work(ctx context.Context, job *river.Job[ArgsExpireTenantPeak]) error {
+	if skip, err := skipDisabledRootRatings(ctx, w.Store, job.Args.TenantID); err != nil || skip {
+		return err
+	}
 	args := job.Args
 	if args.AsOf.IsZero() {
 		return fmt.Errorf("peak expiry requires a fixed cutoff")

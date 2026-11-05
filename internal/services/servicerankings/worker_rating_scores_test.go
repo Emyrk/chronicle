@@ -25,6 +25,10 @@ type startFailureRatingStore struct {
 	called bool
 }
 
+func (s *startFailureRatingStore) TenantRatingsEnabled(context.Context, uuid.UUID) (bool, error) {
+	return true, nil
+}
+
 func (s *startFailureRatingStore) InTx(ctx context.Context, f func(database.Store) error, opts *pgx.TxOptions) error {
 	s.t.Helper()
 	require.Nil(s.t, opts)
@@ -87,6 +91,10 @@ type checkpointRatingStore struct {
 	cp                 database.RatingRebuildCheckpoint
 	revision           int64
 	published, aborted bool
+}
+
+func (s *checkpointRatingStore) TenantRatingsEnabled(context.Context, uuid.UUID) (bool, error) {
+	return true, nil
 }
 
 func (s *checkpointRatingStore) InTx(_ context.Context, fn func(database.Store) error, _ *pgx.TxOptions) error {

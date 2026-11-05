@@ -71,6 +71,9 @@ type WorkerBootstrapTenantLiveEvidence struct {
 }
 
 func (w *WorkerBootstrapTenantLiveEvidence) Work(ctx context.Context, job *river.Job[ArgsBootstrapTenantLiveEvidence]) error {
+	if skip, err := skipDisabledRootRatings(ctx, w.Store, job.Args.TenantID); err != nil || skip {
+		return err
+	}
 	if job.Args.TenantID == uuid.Nil {
 		ctx = servicetenant.AdminBypass(ctx)
 	} else {

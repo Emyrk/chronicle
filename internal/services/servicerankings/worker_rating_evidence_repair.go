@@ -76,6 +76,9 @@ type WorkerRepairLiveEvidence struct {
 }
 
 func (w *WorkerRepairLiveEvidence) Work(ctx context.Context, job *river.Job[ArgsRepairLiveEvidence]) error {
+	if skip, err := skipDisabledRootRatings(ctx, w.Store, job.Args.TenantID); err != nil || skip {
+		return err
+	}
 	args := job.Args
 	if args.Cutoff.IsZero() {
 		return fmt.Errorf("live evidence repair requires fixed cutoff")

@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useRankingsLeaderboard } from "@/api/rankingsQueries"
 import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
+import { useSiteConfig } from "@/api/queries"
 import { LeaderboardsLiveHub } from "./LeaderboardsLiveHub"
 
 const summary = { landing_previews: [], instances: [{ instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40, category: "raid", total_kills: 12, top_players: [] }],
@@ -29,6 +30,7 @@ vi.mock("@/api/rankingsQueries", () => ({
   useTimeParseSpreads: () => ({ data: { spreads: [] }, isPending: false, isError: false }),
 }))
 vi.mock("@/api/queries", () => ({
+  useSiteConfig: vi.fn(() => ({ data: { root_tenant_ratings_disabled: false }, isPending: false, isError: false })),
   useRealms: () => ({ data: [{ id: "realm-id", name: "Nordanaar" }], isPending: false, isError: false }),
   useSupportedInstanceProgressionBosses: () => ({ data: new Map([["Molten Core", new Set(["Ragnaros"])]]), isPending: false, isError: false }),
   useSupportedInstanceRankingEncounterSets: () => ({ data: new Map([["Molten Core", [{ id: "", label: "Default", encounters: ["Ragnaros"] }]]]), isPending: false, isError: false }),
@@ -54,7 +56,26 @@ function hub(url: string) {
 }
 
 describe("live Storybook Hub", () => {
-  beforeEach(() => { vi.clearAllMocks(); setSummary(summary) })
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(useSiteConfig).mockReturnValue({ data: { root_tenant_ratings_disabled: false }, isPending: false, isError: false } as ReturnType<typeof useSiteConfig>)
+    setSummary(summary)
+  })
+  it("shows the legacy root message and skips rating queries when root ratings are disabled", () => {
+    vi.mocked(useSiteConfig).mockReturnValue({ data: { root_tenant_ratings_disabled: true }, isPending: false, isError: false } as ReturnType<typeof useSiteConfig>)
+    const html = hub("/leaderboard-v2/ratings")
+    expect(html).toContain("Visit a specific server to see ratings")
+    expect(vi.mocked(useHubSummary).mock.calls.at(-1)?.[1]).toBe(false)
+  })
+
+  it("keeps ratings available for a specific tenant when root ratings are disabled", () => {
+    vi.mocked(useSiteConfig).mockReturnValue({ data: { tenant: {}, root_tenant_ratings_disabled: true }, isPending: false, isError: false } as ReturnType<typeof useSiteConfig>)
+    const html = hub("/leaderboard-v2/ratings?instance=Molten+Core")
+    expect(html).toContain("Live ratings")
+    expect(html).not.toContain("Visit a specific server to see ratings")
+    expect(vi.mocked(useHubSummary).mock.calls.at(-1)?.[1]).toBe(true)
+  })
+
   it("renders the original instance banner, realm/title, scope bar, encounters, and tabs with live names", () => {
     const html = hub("/leaderboard-v2?instance=Molten+Core&realm_ids=realm-id")
     expect(html).toContain('aria-label="Breadcrumb"')

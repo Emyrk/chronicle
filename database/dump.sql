@@ -382,6 +382,7 @@ CREATE FUNCTION mark_live_guild_rating_dirty() RETURNS trigger
 DECLARE fact rating_live_guild_observations%ROWTYPE;
 BEGIN
     IF TG_OP = 'DELETE' THEN fact := OLD; ELSE fact := NEW; END IF;
+    IF NOT tenant_ratings_enabled(fact.tenant_id) THEN RETURN NULL; END IF;
     IF fact.guild_id IS NOT NULL THEN
         INSERT INTO rating_dirty_mastery_subjects
             (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name,
@@ -410,6 +411,7 @@ CREATE FUNCTION mark_live_player_rating_dirty() RETURNS trigger
 DECLARE fact rating_live_player_observations%ROWTYPE;
 BEGIN
     IF TG_OP = 'DELETE' THEN fact := OLD; ELSE fact := NEW; END IF;
+    IF NOT tenant_ratings_enabled(fact.tenant_id) THEN RETURN NULL; END IF;
     INSERT INTO rating_dirty_mastery_subjects
         (tenant_id, subject_kind, realm_id, subject_id, instance_name, encounter_name,
          difficulty_name, max_players, player_class, player_spec, player_sub_spec, performance_metric)
@@ -452,6 +454,7 @@ BEGIN
         FROM wow_server_realms realm
         JOIN wow_servers server ON server.id = realm.server_id
         WHERE realm.id = (fact.payload->>'realm_id')::uuid;
+        CONTINUE WHEN NOT tenant_ratings_enabled(owner_tenant);
         owner_kind := CASE WHEN TG_TABLE_NAME = 'renown_kill_facts' THEN 'player' ELSE 'guild' END;
         owner_id := CASE WHEN owner_kind = 'player' THEN fact.payload->>'player_guid'
                          ELSE fact.payload->>'guild_id' END;
@@ -660,6 +663,15 @@ BEGIN
     VALUES (new_id, p_tenant_id, revision_now, p_as_of, p_source_cutoff, frozen);
     RETURN new_id;
 END;
+$$;
+
+CREATE FUNCTION tenant_ratings_enabled(p_tenant_id uuid) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+    SELECT p_tenant_id <> '00000000-0000-0000-0000-000000000000'::uuid
+        OR NOT root_tenant_ratings_disabled
+    FROM site_config
+    WHERE id = TRUE
 $$;
 
 CREATE TABLE account_purges (
@@ -3508,6 +3520,7 @@ CREATE TABLE site_config (
     root_domain_discovery boolean DEFAULT false NOT NULL,
     landing_featured_instance_id uuid,
     forever_landing_enabled boolean DEFAULT true NOT NULL,
+    root_tenant_ratings_disabled boolean DEFAULT false NOT NULL,
     CONSTRAINT site_config_id_check CHECK (id)
 );
 

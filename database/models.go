@@ -3181,6 +3181,7 @@ type SiteConfig struct {
 	RootDomainDiscovery       bool               `db:"root_domain_discovery" json:"root_domain_discovery"`
 	LandingFeaturedInstanceID uuid.NullUUID      `db:"landing_featured_instance_id" json:"landing_featured_instance_id"`
 	ForeverLandingEnabled     bool               `db:"forever_landing_enabled" json:"forever_landing_enabled"`
+	RootTenantRatingsDisabled bool               `db:"root_tenant_ratings_disabled" json:"root_tenant_ratings_disabled"`
 }
 
 type TalentBuild struct {

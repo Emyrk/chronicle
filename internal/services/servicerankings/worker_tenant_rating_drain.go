@@ -70,6 +70,9 @@ type WorkerDrainTenantRatings struct {
 }
 
 func (w *WorkerDrainTenantRatings) Work(ctx context.Context, job *river.Job[ArgsDrainTenantRatings]) error {
+	if skip, err := skipDisabledRootRatings(ctx, w.Store, job.Args.TenantID); err != nil || skip {
+		return err
+	}
 	if w.ActiveJobs != nil {
 		w.ActiveJobs.Inc()
 		defer w.ActiveJobs.Dec()
