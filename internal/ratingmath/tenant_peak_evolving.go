@@ -2,6 +2,7 @@ package ratingmath
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -168,13 +169,10 @@ func evolvingRefreshLivePeakCohortPage(ctx context.Context, tx database.Store,
 			return err
 		}
 		count = len(rows)
-		for _, row := range rows {
-			if err := evolvingRefreshLivePeakPlayer(ctx, tx, key, row.RealmID, row.SubjectID,
-				allTime, period, rosters[livePeakRosterKey{row.RealmID, key.InstanceName}], now); err != nil {
+		if count > 0 {
+			if err := evolvingRefreshLivePeakPlayerPage(ctx, tx, key, rows, allTime, period, rosters, periodStart, now); err != nil {
 				return err
 			}
-		}
-		if count > 0 {
 			afterRealm, afterSubject = rows[count-1].RealmID, rows[count-1].SubjectID
 		}
 	} else {
@@ -231,65 +229,56 @@ func evolvingRefreshLivePeakCohortPage(ctx context.Context, tx database.Store,
 	})
 }
 
-func evolvingRefreshLivePeakPlayer(ctx context.Context, tx database.Store,
-	key database.LockDirtyPeakCohortsRow, realm uuid.UUID, subject string,
-	allRank, periodRank float64, roster []string, now time.Time) error {
-	best, err := tx.CalculateLivePeakPlayerBest(ctx, database.CalculateLivePeakPlayerBestParams{
-		TenantID: key.TenantID, RealmID: realm, SubjectID: subject,
-		InstanceName: key.InstanceName, EncounterName: key.EncounterName,
-		DifficultyName: key.DifficultyName, MaxPlayers: key.MaxPlayers,
-		PlayerClass: key.PlayerClass, PlayerSpec: key.PlayerSpec,
-		PlayerSubSpec: key.PlayerSubSpec, PerformanceMetric: key.PerformanceMetric,
-		PeriodStart: database.Timestamptz(now.AddDate(0, 0, -180)), AsOf: database.Timestamptz(now),
-	})
-	if err != nil {
-		return err
+func evolvingRefreshLivePeakPlayerPage(ctx context.Context, tx database.Store,
+	key database.LockDirtyPeakCohortsRow, rows []database.EvolvingListLivePeakPlayerSubjectPageRow,
+	allRank, periodRank float64, rosters map[livePeakRosterKey][]string, periodStart, now time.Time) error {
+	subjects := make([]struct {
+		RealmID   uuid.UUID `json:"realm_id"`
+		SubjectID string    `json:"subject_id"`
+	}, 0, len(rows))
+	pageRosters := make(map[string][]string)
+	for _, row := range rows {
+		subjects = append(subjects, struct {
+			RealmID   uuid.UUID `json:"realm_id"`
+			SubjectID string    `json:"subject_id"`
+		}{RealmID: row.RealmID, SubjectID: row.SubjectID})
+		pageRosters[row.RealmID.String()] = append([]string{}, rosters[livePeakRosterKey{row.RealmID, key.InstanceName}]...)
 	}
-	if err := tx.EvolvingDeleteLivePeakPlayerScores(ctx, database.EvolvingDeleteLivePeakPlayerScoresParams{
-		TenantID: key.TenantID, RealmID: realm, SubjectID: subject,
-		InstanceName: key.InstanceName, EncounterName: key.EncounterName,
+	subjectJSON, err := json.Marshal(subjects)
+	if err != nil {
+		return fmt.Errorf("marshal player peak page subjects: %w", err)
+	}
+	rosterJSON, err := json.Marshal(pageRosters)
+	if err != nil {
+		return fmt.Errorf("marshal player peak page rosters: %w", err)
+	}
+	if err := tx.EvolvingDeleteLivePeakPlayerPage(ctx, database.EvolvingDeleteLivePeakPlayerPageParams{
+		TenantID: key.TenantID, InstanceName: key.InstanceName, EncounterName: key.EncounterName,
 		DifficultyName: key.DifficultyName, MaxPlayers: key.MaxPlayers,
 		PlayerClass: key.PlayerClass, PlayerSpec: key.PlayerSpec,
 		PlayerSubSpec: key.PlayerSubSpec, PerformanceMetric: key.PerformanceMetric,
+		Subjects: subjectJSON,
 	}); err != nil {
 		return err
 	}
-	for _, window := range []struct {
-		kind                string
-		raw, rank, duration float64
-		start, end          pgtype.Timestamptz
-	}{
-		{"all_time", best.AllTimeRaw, allRank, best.AllTimeDurationSecs, pgtype.Timestamptz{}, pgtype.Timestamptz{}},
-		{"period", best.PeriodRaw, periodRank, best.PeriodDurationSecs, database.Timestamptz(now.AddDate(0, 0, -180)), database.Timestamptz(now)},
-	} {
-		if window.raw > 0 {
-			score, err := Peak(window.raw, window.rank)
-			if err != nil {
-				return err
-			}
-			n, err := tx.EvolvingInsertLivePeakPlayerScore(ctx, database.EvolvingInsertLivePeakPlayerScoreParams{
-				TenantID: key.TenantID, RealmID: realm,
-				SubjectID: subject, InstanceName: key.InstanceName, EncounterName: key.EncounterName,
-				DifficultyName: key.DifficultyName, MaxPlayers: key.MaxPlayers,
-				PlayerClass: key.PlayerClass, PlayerSpec: key.PlayerSpec,
-				PlayerSubSpec: key.PlayerSubSpec, PerformanceMetric: key.PerformanceMetric,
-				WindowKind: window.kind, WindowStart: window.start, WindowEnd: window.end,
-				Score: score, BestRaw: window.raw, RankOneRaw: window.rank,
-				BestDurationSecs: window.duration,
-			})
-			if err != nil {
-				return err
-			}
-			if n != 1 {
-				return errors.New("active player peak score rejected")
-			}
-		}
-		if err := evolvingRefreshLivePeakPlayerScope(ctx, tx, key, realm, subject,
-			window.kind, window.start, window.end, roster); err != nil {
-			return err
-		}
+	if err := tx.EvolvingInsertLivePeakPlayerPageScores(ctx, database.EvolvingInsertLivePeakPlayerPageScoresParams{
+		TenantID: key.TenantID, InstanceName: key.InstanceName, EncounterName: key.EncounterName,
+		DifficultyName: key.DifficultyName, MaxPlayers: key.MaxPlayers,
+		PlayerClass: key.PlayerClass, PlayerSpec: key.PlayerSpec,
+		PlayerSubSpec: key.PlayerSubSpec, PerformanceMetric: key.PerformanceMetric,
+		Subjects: subjectJSON, AllTimeRank: allRank, PeriodRank: periodRank,
+		PeriodStart: database.Timestamptz(periodStart), AsOf: database.Timestamptz(now),
+	}); err != nil {
+		return err
 	}
-	return nil
+	return tx.EvolvingInsertLivePeakPlayerPageScopes(ctx, database.EvolvingInsertLivePeakPlayerPageScopesParams{
+		TenantID: key.TenantID, InstanceName: key.InstanceName,
+		DifficultyName: key.DifficultyName, MaxPlayers: key.MaxPlayers,
+		PlayerClass: key.PlayerClass, PlayerSpec: key.PlayerSpec,
+		PlayerSubSpec: key.PlayerSubSpec, PerformanceMetric: key.PerformanceMetric,
+		PeriodStart: database.Timestamptz(periodStart), AsOf: database.Timestamptz(now),
+		Subjects: subjectJSON, Rosters: rosterJSON,
+	})
 }
 
 func evolvingRefreshLivePeakGuild(ctx context.Context, tx database.Store,
@@ -342,73 +331,6 @@ func evolvingRefreshLivePeakGuild(ctx context.Context, tx database.Store,
 			window.kind, window.start, window.end, roster); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func evolvingRefreshLivePeakPlayerScope(ctx context.Context, tx database.Store,
-	key database.LockDirtyPeakCohortsRow, realm uuid.UUID, subject, window string,
-	start, end pgtype.Timestamptz, roster []string) error {
-	if err := tx.EvolvingDeleteLivePeakPlayerScope(ctx, database.EvolvingDeleteLivePeakPlayerScopeParams{
-		TenantID: key.TenantID, RealmID: realm,
-		SubjectID: subject, InstanceName: key.InstanceName,
-		DifficultyName: key.DifficultyName, MaxPlayers: key.MaxPlayers,
-		PlayerClass: key.PlayerClass, PlayerSpec: key.PlayerSpec,
-		PlayerSubSpec: key.PlayerSubSpec, PerformanceMetric: key.PerformanceMetric,
-		WindowKind: window,
-	}); err != nil {
-		return err
-	}
-	rows, err := tx.EvolvingListTenantPlayerRaidBosses(ctx, database.EvolvingListTenantPlayerRaidBossesParams{
-		TenantID: key.TenantID, RealmID: realm,
-		PlayerGuid: subject, InstanceName: key.InstanceName,
-		DifficultyName: key.DifficultyName, MaxPlayers: key.MaxPlayers,
-		PlayerClass: key.PlayerClass, PlayerSpec: key.PlayerSpec,
-		PlayerSubSpec: key.PlayerSubSpec, PerformanceMetric: key.PerformanceMetric,
-		RatingMetric: "peak", WindowKind: window,
-	})
-	if err != nil {
-		return err
-	}
-	if len(rows) > 200 {
-		return errors.New("too many player peak raid bosses")
-	}
-	if len(rows) == 0 {
-		return nil
-	}
-	bosses := make([]tenantScopeBoss, 0, len(rows))
-	for _, row := range rows {
-		bosses = append(bosses, tenantScopeBoss{
-			instance: key.InstanceName, encounter: row.EncounterName,
-			score: row.Score, raw: row.BestRaw.Float64, duration: row.BestDurationSecs.Float64,
-		})
-	}
-	scopes, err := tenantScopeScores("peak", bosses)
-	if err != nil {
-		return err
-	}
-	score := scopes[key.InstanceName]
-	if rosterScore, ok := tenantRaidPeak(bosses, roster); ok {
-		score = rosterScore
-	}
-	raw, duration, ok := tenantScopeThroughput(bosses)
-	if !ok {
-		raw, duration = 0, 0
-	}
-	n, err := tx.EvolvingInsertLivePeakPlayerScope(ctx, database.EvolvingInsertLivePeakPlayerScopeParams{
-		TenantID: key.TenantID, RealmID: realm,
-		SubjectID: subject, InstanceName: key.InstanceName,
-		DifficultyName: key.DifficultyName, MaxPlayers: key.MaxPlayers,
-		PlayerClass: key.PlayerClass, PlayerSpec: key.PlayerSpec,
-		PlayerSubSpec: key.PlayerSubSpec, PerformanceMetric: key.PerformanceMetric,
-		WindowKind: window, WindowStart: start, WindowEnd: end,
-		Score: score, BestRaw: raw, BestDurationSecs: duration,
-	})
-	if err != nil {
-		return err
-	}
-	if n != 1 {
-		return errors.New("active player peak raid score rejected")
 	}
 	return nil
 }

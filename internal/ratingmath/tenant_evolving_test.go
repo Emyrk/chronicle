@@ -111,3 +111,89 @@ func TestEvolvingTenantRatingsWithoutGeneration(t *testing.T) {
 		require.Zero(t, n, table)
 	}
 }
+
+func TestEvolvingPlayerPeakPageSetProjection(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	serverID, realm := uuid.New(), uuid.New()
+	_, err := store.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: serverID, Name: uuid.NewString()})
+	require.NoError(t, err)
+	_, err = store.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: realm, ServerID: serverID, Name: uuid.NewString()})
+	require.NoError(t, err)
+
+	players := []database.EvolvingListLivePeakPlayerSubjectPageRow{
+		{RealmID: realm, SubjectID: "player-one"},
+		{RealmID: realm, SubjectID: "player-two"},
+	}
+	insertObservation := func(player, encounter string, raw, duration float64, killedAt time.Time) {
+		t.Helper()
+		run := uuid.New()
+		_, err := pool.Exec(ctx, `INSERT INTO rating_live_player_observations
+			(tenant_id,realm_id,run_id,representative_instance_id,player_guid,instance_name,
+			 encounter_name,difficulty_name,max_players,player_class,player_spec,player_sub_spec,
+			 performance_metric,killed_at,raw_value,duration_secs)
+			VALUES ($1,$2,$3,$3,$4,'Zul''Gurub',$5,'Normal',20,'MAGE','Fire','','dps',$6,$7,$8)`,
+			uuid.Nil, realm, run, player, encounter, killedAt, raw, duration)
+		require.NoError(t, err)
+	}
+	insertObservation("player-one", "Gri'lek", 70, 100, now.Add(-time.Hour))
+	insertObservation("player-one", "Hazza'rah", 90, 55, now.Add(-2*time.Hour))
+	insertObservation("player-one", "Hazza'rah", 90, 50, now.Add(-time.Hour))
+	insertObservation("player-one", "Hakkar", 50, 150, now.Add(-time.Hour))
+	insertObservation("player-two", "Gri'lek", 80, 100, now.Add(-time.Hour))
+	insertObservation("player-two", "Hazza'rah", 60, 50, now.Add(-time.Hour))
+	insertObservation("player-two", "Hakkar", 100, 150, now.Add(-time.Hour))
+
+	roster := []string{"High Priestess Jeklik", "Hakkar", "Bloodlord Mandokir", "Gri'lek", "Hazza'rah"}
+	rosters := map[livePeakRosterKey][]string{{realm: realm, raid: "Zul'Gurub"}: roster}
+	key := database.LockDirtyPeakCohortsRow{
+		TenantID: uuid.Nil, SubjectKind: "player", InstanceName: "Zul'Gurub",
+		DifficultyName: "Normal", MaxPlayers: 20, PlayerClass: "MAGE",
+		PlayerSpec: "Fire", PerformanceMetric: "dps",
+	}
+	for _, encounter := range []struct {
+		name        string
+		denominator float64
+	}{{name: "Gri'lek", denominator: 80}, {name: "Hazza'rah", denominator: 90}, {name: "Hakkar", denominator: 100}} {
+		key.EncounterName = encounter.name
+		err = evolvingRefreshLivePeakPlayerPage(ctx, store, key, players,
+			encounter.denominator, encounter.denominator, rosters, now.AddDate(0, 0, -180), now)
+		require.NoError(t, err)
+	}
+
+	assertScope := func(player string, wantScore, wantRaw, wantDuration float64) {
+		t.Helper()
+		var score, raw, duration float64
+		err := pool.QueryRow(ctx, `SELECT score,best_raw,best_duration_secs
+			FROM player_tenant_rating_scope_scores_evolving
+			WHERE tenant_id=$1 AND realm_id=$2 AND player_guid=$3 AND instance_name='Zul''Gurub'
+			  AND rating_metric='peak' AND window_kind='all_time'`, uuid.Nil, realm, player).
+			Scan(&score, &raw, &duration)
+		require.NoError(t, err)
+		require.InDelta(t, wantScore, score, 1e-9)
+		require.InDelta(t, wantRaw, raw, 1e-9)
+		require.InDelta(t, wantDuration, duration, 1e-9)
+	}
+	assertScope("player-one", 37.5, 12450.0/205, 205)
+	assertScope("player-two", 50, 92, 250)
+	var tiedDuration float64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT best_duration_secs
+		FROM player_tenant_rating_boss_scores_evolving
+		WHERE player_guid='player-one' AND encounter_name='Hazza''rah' AND window_kind='all_time'`).Scan(&tiedDuration))
+	require.Equal(t, 55.0, tiedDuration, "equal raw values keep the earlier kill duration")
+
+	_, err = pool.Exec(ctx, `DELETE FROM rating_live_player_observations
+		WHERE tenant_id=$1 AND realm_id=$2 AND player_guid='player-two' AND encounter_name='Gri''lek'`, uuid.Nil, realm)
+	require.NoError(t, err)
+	key.EncounterName = "Gri'lek"
+	err = evolvingRefreshLivePeakPlayerPage(ctx, store, key, players, 70, 70, rosters, now.AddDate(0, 0, -180), now)
+	require.NoError(t, err)
+	var stale int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM player_tenant_rating_boss_scores_evolving
+		WHERE player_guid='player-two' AND encounter_name='Gri''lek'`).Scan(&stale))
+	require.Zero(t, stale)
+	assertScope("player-two", (100+100*60.0/90)/4, (100*150+60*50)/200, 200)
+}

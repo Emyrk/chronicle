@@ -340,6 +340,9 @@ type sqlcQuerier interface {
 	EvolvingDeleteLivePeakCohortDenominator(ctx context.Context, arg EvolvingDeleteLivePeakCohortDenominatorParams) error
 	EvolvingDeleteLivePeakGuildScope(ctx context.Context, arg EvolvingDeleteLivePeakGuildScopeParams) error
 	EvolvingDeleteLivePeakGuildScores(ctx context.Context, arg EvolvingDeleteLivePeakGuildScoresParams) error
+	// Apply one player page with a bounded set of statements. The page subjects and
+	// realm rosters are passed as JSONB so every delete/insert is set-based.
+	EvolvingDeleteLivePeakPlayerPage(ctx context.Context, arg EvolvingDeleteLivePeakPlayerPageParams) error
 	EvolvingDeleteLivePeakPlayerScope(ctx context.Context, arg EvolvingDeleteLivePeakPlayerScopeParams) error
 	// These are the same best/tie-break semantics as RatingStagePlayerPeak and
 	// RatingStageGuildPeak, applied only to one exact live subject.
@@ -379,6 +382,8 @@ type sqlcQuerier interface {
 	EvolvingInsertGuildTenantRenownScopes(ctx context.Context, arg EvolvingInsertGuildTenantRenownScopesParams) error
 	EvolvingInsertLivePeakGuildScope(ctx context.Context, arg EvolvingInsertLivePeakGuildScopeParams) (int64, error)
 	EvolvingInsertLivePeakGuildScore(ctx context.Context, arg EvolvingInsertLivePeakGuildScoreParams) (int64, error)
+	EvolvingInsertLivePeakPlayerPageScopes(ctx context.Context, arg EvolvingInsertLivePeakPlayerPageScopesParams) error
+	EvolvingInsertLivePeakPlayerPageScores(ctx context.Context, arg EvolvingInsertLivePeakPlayerPageScoresParams) error
 	EvolvingInsertLivePeakPlayerScope(ctx context.Context, arg EvolvingInsertLivePeakPlayerScopeParams) (int64, error)
 	// Raw best is retained alongside the display score so readers can use the
 	// current cohort denominator even if that denominator changes later.

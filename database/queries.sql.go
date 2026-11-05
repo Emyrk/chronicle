@@ -23540,6 +23540,63 @@ func (q *sqlQuerier) EvolvingDeleteLivePeakGuildScores(ctx context.Context, arg 
 	return err
 }
 
+const evolvingDeleteLivePeakPlayerPage = `-- name: EvolvingDeleteLivePeakPlayerPage :exec
+
+WITH subjects AS (
+  SELECT (item->>'realm_id')::uuid AS realm_id, item->>'subject_id' AS subject_id
+  FROM jsonb_array_elements($10::jsonb) AS subject(item)
+), deleted_scopes AS (
+  DELETE FROM player_tenant_rating_scope_scores_evolving scope
+  USING subjects subject
+  WHERE scope.tenant_id = $1
+    AND scope.realm_id = subject.realm_id AND scope.player_guid = subject.subject_id
+    AND scope.instance_name = $2 AND scope.difficulty_name = $4
+    AND scope.max_players = $5 AND scope.player_class = $6
+    AND scope.player_spec = $7 AND scope.player_sub_spec = $8
+    AND scope.performance_metric = $9 AND scope.rating_metric = 'peak'
+)
+DELETE FROM player_tenant_rating_boss_scores_evolving score
+USING subjects subject
+WHERE score.tenant_id = $1
+  AND score.realm_id = subject.realm_id AND score.player_guid = subject.subject_id
+  AND score.instance_name = $2 AND score.encounter_name = $3
+  AND score.difficulty_name = $4 AND score.max_players = $5
+  AND score.player_class = $6 AND score.player_spec = $7
+  AND score.player_sub_spec = $8 AND score.performance_metric = $9
+  AND score.rating_metric = 'peak'
+`
+
+type EvolvingDeleteLivePeakPlayerPageParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string    `db:"performance_metric" json:"performance_metric"`
+	Subjects          []byte    `db:"subjects" json:"subjects"`
+}
+
+// Apply one player page with a bounded set of statements. The page subjects and
+// realm rosters are passed as JSONB so every delete/insert is set-based.
+func (q *sqlQuerier) EvolvingDeleteLivePeakPlayerPage(ctx context.Context, arg EvolvingDeleteLivePeakPlayerPageParams) error {
+	_, err := q.db.Exec(ctx, evolvingDeleteLivePeakPlayerPage,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.Subjects,
+	)
+	return err
+}
+
 const evolvingDeleteLivePeakPlayerScope = `-- name: EvolvingDeleteLivePeakPlayerScope :exec
 DELETE FROM player_tenant_rating_scope_scores_evolving
 WHERE tenant_id = $1
@@ -24122,6 +24179,198 @@ func (q *sqlQuerier) EvolvingInsertLivePeakGuildScore(ctx context.Context, arg E
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const evolvingInsertLivePeakPlayerPageScopes = `-- name: EvolvingInsertLivePeakPlayerPageScopes :exec
+WITH subjects AS (
+  SELECT (item->>'realm_id')::uuid AS realm_id, item->>'subject_id' AS subject_id
+  FROM jsonb_array_elements($11::jsonb) AS subject(item)
+), roster_slots AS (
+  SELECT DISTINCT subject.realm_id,
+         CASE WHEN $2 = 'Zul''Gurub'
+                    AND encounter_name IN ('Gri''lek', 'Hazza''rah', 'Renataki', 'Wushoolay')
+              THEN 'Edge of Madness' ELSE encounter_name END AS slot
+  FROM (SELECT DISTINCT realm_id FROM subjects) subject
+  CROSS JOIN LATERAL jsonb_array_elements_text(
+    COALESCE(NULLIF($12::jsonb -> subject.realm_id::text, 'null'::jsonb), '[]'::jsonb)
+  ) roster(encounter_name)
+), slotted_bosses AS (
+  SELECT score.realm_id, score.player_guid AS subject_id, score.window_kind,
+         CASE WHEN score.instance_name = 'Zul''Gurub'
+                    AND score.encounter_name IN ('Gri''lek', 'Hazza''rah', 'Renataki', 'Wushoolay')
+              THEN 'Edge of Madness' ELSE score.encounter_name END AS slot,
+         score.encounter_name, score.score, score.best_raw, score.best_duration_secs
+  FROM player_tenant_rating_boss_scores_evolving score
+  JOIN subjects subject ON subject.realm_id = score.realm_id AND subject.subject_id = score.player_guid
+  WHERE score.tenant_id = $1 AND score.instance_name = $2
+    AND score.difficulty_name = $3 AND score.max_players = $4
+    AND score.player_class = $5 AND score.player_spec = $6
+    AND score.player_sub_spec = $7 AND score.performance_metric = $8
+    AND score.rating_metric = 'peak'
+), chosen AS (
+  SELECT DISTINCT ON (realm_id, subject_id, window_kind, slot)
+         realm_id, subject_id, window_kind, slot, score, best_raw, best_duration_secs
+  FROM slotted_bosses
+  ORDER BY realm_id, subject_id, window_kind, slot, score DESC, best_raw DESC, encounter_name
+), observed AS (
+  SELECT realm_id, subject_id, window_kind,
+         avg(score)::double precision AS observed_score,
+         CASE WHEN bool_and(COALESCE(best_raw > 0 AND best_duration_secs > 0, false))
+              THEN (sum(best_raw * best_duration_secs) / sum(best_duration_secs))::double precision
+              ELSE 0::double precision END AS throughput,
+         CASE WHEN bool_and(COALESCE(best_raw > 0 AND best_duration_secs > 0, false))
+              THEN sum(best_duration_secs)::double precision
+              ELSE 0::double precision END AS throughput_duration
+  FROM chosen
+  GROUP BY realm_id, subject_id, window_kind
+), scope_windows AS (
+  SELECT 'all_time'::text AS window_kind
+  UNION ALL SELECT 'period'::text
+), roster_scores AS (
+  SELECT subject.realm_id, subject.subject_id, peak_window.window_kind,
+         (sum(COALESCE(chosen.score, 0)) / count(*))::double precision AS roster_score
+  FROM subjects subject
+  CROSS JOIN scope_windows peak_window
+  JOIN roster_slots roster ON roster.realm_id = subject.realm_id
+  LEFT JOIN chosen ON chosen.realm_id = subject.realm_id
+                  AND chosen.subject_id = subject.subject_id
+                  AND chosen.window_kind = peak_window.window_kind
+                  AND chosen.slot = roster.slot
+  GROUP BY subject.realm_id, subject.subject_id, peak_window.window_kind
+)
+INSERT INTO player_tenant_rating_scope_scores_evolving
+    (tenant_id, realm_id, player_guid, instance_name, difficulty_name,
+     max_players, player_class, player_spec, player_sub_spec, performance_metric,
+     rating_metric, window_kind, window_start, window_end, score, best_raw, best_duration_secs)
+SELECT $1, observed.realm_id, observed.subject_id, $2, $3,
+       $4, $5, $6, $7, $8,
+       'peak', observed.window_kind,
+       CASE WHEN observed.window_kind = 'period' THEN $9::timestamptz END,
+       CASE WHEN observed.window_kind = 'period' THEN $10::timestamptz END,
+       COALESCE(roster_scores.roster_score, observed.observed_score),
+       observed.throughput, observed.throughput_duration
+FROM observed
+LEFT JOIN roster_scores
+  ON roster_scores.realm_id = observed.realm_id
+ AND roster_scores.subject_id = observed.subject_id
+ AND roster_scores.window_kind = observed.window_kind
+`
+
+type EvolvingInsertLivePeakPlayerPageScopesParams struct {
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	PeriodStart       pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	AsOf              pgtype.Timestamptz `db:"as_of" json:"as_of"`
+	Subjects          []byte             `db:"subjects" json:"subjects"`
+	Rosters           []byte             `db:"rosters" json:"rosters"`
+}
+
+func (q *sqlQuerier) EvolvingInsertLivePeakPlayerPageScopes(ctx context.Context, arg EvolvingInsertLivePeakPlayerPageScopesParams) error {
+	_, err := q.db.Exec(ctx, evolvingInsertLivePeakPlayerPageScopes,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.PeriodStart,
+		arg.AsOf,
+		arg.Subjects,
+		arg.Rosters,
+	)
+	return err
+}
+
+const evolvingInsertLivePeakPlayerPageScores = `-- name: EvolvingInsertLivePeakPlayerPageScores :exec
+WITH subjects AS (
+  SELECT (item->>'realm_id')::uuid AS realm_id, item->>'subject_id' AS subject_id
+  FROM jsonb_array_elements($10::jsonb) AS subject(item)
+), windows AS (
+  SELECT 'all_time'::text AS window_kind, NULL::timestamptz AS window_start,
+         NULL::timestamptz AS window_end, $11::double precision AS rank_one_raw
+  UNION ALL
+  SELECT 'period'::text, $12::timestamptz,
+         $13::timestamptz, $14::double precision
+), best AS (
+  SELECT DISTINCT ON (subject.realm_id, subject.subject_id, peak_window.window_kind)
+         subject.realm_id, subject.subject_id, peak_window.window_kind,
+         peak_window.window_start, peak_window.window_end, peak_window.rank_one_raw,
+         live.raw_value::double precision AS best_raw,
+         live.duration_secs::double precision AS best_duration_secs
+  FROM subjects subject
+  JOIN rating_live_player_observations live
+    ON live.tenant_id = $1 AND live.realm_id = subject.realm_id
+   AND live.player_guid = subject.subject_id
+   AND live.instance_name = $2 AND live.encounter_name = $3
+   AND live.difficulty_name = $4 AND live.max_players = $5
+   AND live.player_class = $6 AND live.player_spec = $7
+   AND live.player_sub_spec = $8 AND live.performance_metric = $9
+  CROSS JOIN windows peak_window
+  WHERE live.killed_at < $13::timestamptz
+    AND (peak_window.window_kind = 'all_time' OR live.killed_at >= $12::timestamptz)
+  ORDER BY subject.realm_id, subject.subject_id, peak_window.window_kind,
+           live.raw_value DESC, live.killed_at
+)
+INSERT INTO player_tenant_rating_boss_scores_evolving
+    (tenant_id, realm_id, player_guid, instance_name, encounter_name,
+     difficulty_name, max_players, player_class, player_spec, player_sub_spec,
+     performance_metric, rating_metric, window_kind, window_start, window_end,
+     score, best_raw, rank_one_raw, best_duration_secs)
+SELECT $1, best.realm_id, best.subject_id, $2, $3,
+       $4, $5, $6, $7, $8,
+       $9, 'peak', best.window_kind, best.window_start, best.window_end,
+       (100 * best.best_raw / best.rank_one_raw)::double precision,
+       best.best_raw, best.rank_one_raw, best.best_duration_secs
+FROM best
+JOIN wow_server_realms realm ON realm.id = best.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE best.best_raw > 0 AND best.rank_one_raw > 0 AND best.best_raw <= best.rank_one_raw
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+`
+
+type EvolvingInsertLivePeakPlayerPageScoresParams struct {
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string             `db:"instance_name" json:"instance_name"`
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PerformanceMetric string             `db:"performance_metric" json:"performance_metric"`
+	Subjects          []byte             `db:"subjects" json:"subjects"`
+	AllTimeRank       float64            `db:"all_time_rank" json:"all_time_rank"`
+	PeriodStart       pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	AsOf              pgtype.Timestamptz `db:"as_of" json:"as_of"`
+	PeriodRank        float64            `db:"period_rank" json:"period_rank"`
+}
+
+func (q *sqlQuerier) EvolvingInsertLivePeakPlayerPageScores(ctx context.Context, arg EvolvingInsertLivePeakPlayerPageScoresParams) error {
+	_, err := q.db.Exec(ctx, evolvingInsertLivePeakPlayerPageScores,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PerformanceMetric,
+		arg.Subjects,
+		arg.AllTimeRank,
+		arg.PeriodStart,
+		arg.AsOf,
+		arg.PeriodRank,
+	)
+	return err
 }
 
 const evolvingInsertLivePeakPlayerScope = `-- name: EvolvingInsertLivePeakPlayerScope :execrows

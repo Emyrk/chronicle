@@ -290,6 +290,153 @@ WITH subjects AS (
 SELECT realm_id, subject_id FROM subjects
 ORDER BY realm_id, subject_id LIMIT LEAST(GREATEST(@batch_size::int, 0), 100);
 
+-- Apply one player page with a bounded set of statements. The page subjects and
+-- realm rosters are passed as JSONB so every delete/insert is set-based.
+
+-- name: EvolvingDeleteLivePeakPlayerPage :exec
+WITH subjects AS (
+  SELECT (item->>'realm_id')::uuid AS realm_id, item->>'subject_id' AS subject_id
+  FROM jsonb_array_elements(@subjects::jsonb) AS subject(item)
+), deleted_scopes AS (
+  DELETE FROM player_tenant_rating_scope_scores_evolving scope
+  USING subjects subject
+  WHERE scope.tenant_id = @tenant_id
+    AND scope.realm_id = subject.realm_id AND scope.player_guid = subject.subject_id
+    AND scope.instance_name = @instance_name AND scope.difficulty_name = @difficulty_name
+    AND scope.max_players = @max_players AND scope.player_class = @player_class
+    AND scope.player_spec = @player_spec AND scope.player_sub_spec = @player_sub_spec
+    AND scope.performance_metric = @performance_metric AND scope.rating_metric = 'peak'
+)
+DELETE FROM player_tenant_rating_boss_scores_evolving score
+USING subjects subject
+WHERE score.tenant_id = @tenant_id
+  AND score.realm_id = subject.realm_id AND score.player_guid = subject.subject_id
+  AND score.instance_name = @instance_name AND score.encounter_name = @encounter_name
+  AND score.difficulty_name = @difficulty_name AND score.max_players = @max_players
+  AND score.player_class = @player_class AND score.player_spec = @player_spec
+  AND score.player_sub_spec = @player_sub_spec AND score.performance_metric = @performance_metric
+  AND score.rating_metric = 'peak';
+
+-- name: EvolvingInsertLivePeakPlayerPageScores :exec
+WITH subjects AS (
+  SELECT (item->>'realm_id')::uuid AS realm_id, item->>'subject_id' AS subject_id
+  FROM jsonb_array_elements(@subjects::jsonb) AS subject(item)
+), windows AS (
+  SELECT 'all_time'::text AS window_kind, NULL::timestamptz AS window_start,
+         NULL::timestamptz AS window_end, @all_time_rank::double precision AS rank_one_raw
+  UNION ALL
+  SELECT 'period'::text, @period_start::timestamptz,
+         @as_of::timestamptz, @period_rank::double precision
+), best AS (
+  SELECT DISTINCT ON (subject.realm_id, subject.subject_id, peak_window.window_kind)
+         subject.realm_id, subject.subject_id, peak_window.window_kind,
+         peak_window.window_start, peak_window.window_end, peak_window.rank_one_raw,
+         live.raw_value::double precision AS best_raw,
+         live.duration_secs::double precision AS best_duration_secs
+  FROM subjects subject
+  JOIN rating_live_player_observations live
+    ON live.tenant_id = @tenant_id AND live.realm_id = subject.realm_id
+   AND live.player_guid = subject.subject_id
+   AND live.instance_name = @instance_name AND live.encounter_name = @encounter_name
+   AND live.difficulty_name = @difficulty_name AND live.max_players = @max_players
+   AND live.player_class = @player_class AND live.player_spec = @player_spec
+   AND live.player_sub_spec = @player_sub_spec AND live.performance_metric = @performance_metric
+  CROSS JOIN windows peak_window
+  WHERE live.killed_at < @as_of::timestamptz
+    AND (peak_window.window_kind = 'all_time' OR live.killed_at >= @period_start::timestamptz)
+  ORDER BY subject.realm_id, subject.subject_id, peak_window.window_kind,
+           live.raw_value DESC, live.killed_at
+)
+INSERT INTO player_tenant_rating_boss_scores_evolving
+    (tenant_id, realm_id, player_guid, instance_name, encounter_name,
+     difficulty_name, max_players, player_class, player_spec, player_sub_spec,
+     performance_metric, rating_metric, window_kind, window_start, window_end,
+     score, best_raw, rank_one_raw, best_duration_secs)
+SELECT @tenant_id, best.realm_id, best.subject_id, @instance_name, @encounter_name,
+       @difficulty_name, @max_players, @player_class, @player_spec, @player_sub_spec,
+       @performance_metric, 'peak', best.window_kind, best.window_start, best.window_end,
+       (100 * best.best_raw / best.rank_one_raw)::double precision,
+       best.best_raw, best.rank_one_raw, best.best_duration_secs
+FROM best
+JOIN wow_server_realms realm ON realm.id = best.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE best.best_raw > 0 AND best.rank_one_raw > 0 AND best.best_raw <= best.rank_one_raw
+  AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid);
+
+-- name: EvolvingInsertLivePeakPlayerPageScopes :exec
+WITH subjects AS (
+  SELECT (item->>'realm_id')::uuid AS realm_id, item->>'subject_id' AS subject_id
+  FROM jsonb_array_elements(@subjects::jsonb) AS subject(item)
+), roster_slots AS (
+  SELECT DISTINCT subject.realm_id,
+         CASE WHEN @instance_name = 'Zul''Gurub'
+                    AND encounter_name IN ('Gri''lek', 'Hazza''rah', 'Renataki', 'Wushoolay')
+              THEN 'Edge of Madness' ELSE encounter_name END AS slot
+  FROM (SELECT DISTINCT realm_id FROM subjects) subject
+  CROSS JOIN LATERAL jsonb_array_elements_text(
+    COALESCE(NULLIF(@rosters::jsonb -> subject.realm_id::text, 'null'::jsonb), '[]'::jsonb)
+  ) roster(encounter_name)
+), slotted_bosses AS (
+  SELECT score.realm_id, score.player_guid AS subject_id, score.window_kind,
+         CASE WHEN score.instance_name = 'Zul''Gurub'
+                    AND score.encounter_name IN ('Gri''lek', 'Hazza''rah', 'Renataki', 'Wushoolay')
+              THEN 'Edge of Madness' ELSE score.encounter_name END AS slot,
+         score.encounter_name, score.score, score.best_raw, score.best_duration_secs
+  FROM player_tenant_rating_boss_scores_evolving score
+  JOIN subjects subject ON subject.realm_id = score.realm_id AND subject.subject_id = score.player_guid
+  WHERE score.tenant_id = @tenant_id AND score.instance_name = @instance_name
+    AND score.difficulty_name = @difficulty_name AND score.max_players = @max_players
+    AND score.player_class = @player_class AND score.player_spec = @player_spec
+    AND score.player_sub_spec = @player_sub_spec AND score.performance_metric = @performance_metric
+    AND score.rating_metric = 'peak'
+), chosen AS (
+  SELECT DISTINCT ON (realm_id, subject_id, window_kind, slot)
+         realm_id, subject_id, window_kind, slot, score, best_raw, best_duration_secs
+  FROM slotted_bosses
+  ORDER BY realm_id, subject_id, window_kind, slot, score DESC, best_raw DESC, encounter_name
+), observed AS (
+  SELECT realm_id, subject_id, window_kind,
+         avg(score)::double precision AS observed_score,
+         CASE WHEN bool_and(COALESCE(best_raw > 0 AND best_duration_secs > 0, false))
+              THEN (sum(best_raw * best_duration_secs) / sum(best_duration_secs))::double precision
+              ELSE 0::double precision END AS throughput,
+         CASE WHEN bool_and(COALESCE(best_raw > 0 AND best_duration_secs > 0, false))
+              THEN sum(best_duration_secs)::double precision
+              ELSE 0::double precision END AS throughput_duration
+  FROM chosen
+  GROUP BY realm_id, subject_id, window_kind
+), scope_windows AS (
+  SELECT 'all_time'::text AS window_kind
+  UNION ALL SELECT 'period'::text
+), roster_scores AS (
+  SELECT subject.realm_id, subject.subject_id, peak_window.window_kind,
+         (sum(COALESCE(chosen.score, 0)) / count(*))::double precision AS roster_score
+  FROM subjects subject
+  CROSS JOIN scope_windows peak_window
+  JOIN roster_slots roster ON roster.realm_id = subject.realm_id
+  LEFT JOIN chosen ON chosen.realm_id = subject.realm_id
+                  AND chosen.subject_id = subject.subject_id
+                  AND chosen.window_kind = peak_window.window_kind
+                  AND chosen.slot = roster.slot
+  GROUP BY subject.realm_id, subject.subject_id, peak_window.window_kind
+)
+INSERT INTO player_tenant_rating_scope_scores_evolving
+    (tenant_id, realm_id, player_guid, instance_name, difficulty_name,
+     max_players, player_class, player_spec, player_sub_spec, performance_metric,
+     rating_metric, window_kind, window_start, window_end, score, best_raw, best_duration_secs)
+SELECT @tenant_id, observed.realm_id, observed.subject_id, @instance_name, @difficulty_name,
+       @max_players, @player_class, @player_spec, @player_sub_spec, @performance_metric,
+       'peak', observed.window_kind,
+       CASE WHEN observed.window_kind = 'period' THEN @period_start::timestamptz END,
+       CASE WHEN observed.window_kind = 'period' THEN @as_of::timestamptz END,
+       COALESCE(roster_scores.roster_score, observed.observed_score),
+       observed.throughput, observed.throughput_duration
+FROM observed
+LEFT JOIN roster_scores
+  ON roster_scores.realm_id = observed.realm_id
+ AND roster_scores.subject_id = observed.subject_id
+ AND roster_scores.window_kind = observed.window_kind;
+
 -- name: EvolvingListLivePeakGuildSubjectPage :many
 WITH subjects AS (
   SELECT live.realm_id, live.guild_id AS subject_id
