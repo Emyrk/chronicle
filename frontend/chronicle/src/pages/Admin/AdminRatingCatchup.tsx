@@ -63,12 +63,31 @@ function elapsed(start?: string, end?: string): string | null {
   return `${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
 
+function stageFinishTimes(row: AdminTenantRatingCatchup): Map<string, string> {
+  return new Map((row.policy_scan_stage_times ?? []).map(({ stage, completed_at }) => [stage, completed_at]));
+}
+
+function scanTotal(row: AdminTenantRatingCatchup, observedAt: string): string | null {
+  const finished = stageFinishTimes(row);
+  const lastFinished = [...POLICY_STAGES].reverse().map(({ key }) => finished.get(key)).find(Boolean);
+  return elapsed(row.policy_scan_started_at,
+    row.unfinished_policy_scan_stages === 0 ? lastFinished : observedAt);
+}
+
+/** A tenant with nothing queued, running, or failing can be collapsed. */
+function isQuiet(row: AdminTenantRatingCatchup): boolean {
+  return dirtyCount(row) === 0 && row.unfinished_policy_scan_stages === 0 && row.active_drain_jobs === 0
+    && row.peak_pages === 0 && !row.job_last_error && row.status !== "stalled_error" && row.status !== "catching_up";
+}
+
+function tenantName(row: AdminTenantRatingCatchup): string {
+  return row.tenant_id === "00000000-0000-0000-0000-000000000000" ? "Root" : row.tenant_slug || row.tenant_id;
+}
+
 function ScanProgress({ row, observedAt }: { row: AdminTenantRatingCatchup; observedAt: string }) {
   const completedStages = row.policy_scan_stages - row.unfinished_policy_scan_stages;
-  const finished = new Map((row.policy_scan_stage_times ?? []).map(({ stage, completed_at }) => [stage, completed_at]));
-  const lastFinished = [...POLICY_STAGES].reverse().map(({ key }) => finished.get(key)).find(Boolean);
-  const total = elapsed(row.policy_scan_started_at,
-    row.unfinished_policy_scan_stages === 0 ? lastFinished : observedAt);
+  const finished = stageFinishTimes(row);
+  const total = scanTotal(row, observedAt);
   return (
     <div className="space-y-2 text-xs text-muted-foreground">
       <div>
@@ -120,7 +139,7 @@ function TenantCatchup({ row, observedAt, scanning, onScan, scanError, scanResul
   return (
     <div className="grid gap-3 border-t border-zinc-800 py-4 first:border-0 md:grid-cols-[minmax(9rem,1fr)_minmax(15rem,2fr)]">
       <div>
-        <div className="break-all text-sm font-medium">{row.tenant_id === "00000000-0000-0000-0000-000000000000" ? "Root" : row.tenant_slug || row.tenant_id}</div>
+        <div className="break-all text-sm font-medium">{tenantName(row)}</div>
         {row.tenant_slug && <div className="break-all font-mono text-xs text-muted-foreground">{row.tenant_id}</div>}
         <div className="mt-1 text-xs text-muted-foreground">{row.status.replaceAll("_", " ")} · {dirty.toLocaleString()} dirty · oldest {oldestAge(row)}</div>
         <div className="mt-1 text-xs text-muted-foreground">{row.peak_pages} Peak pages · {row.active_drain_jobs} active drain jobs</div>
@@ -134,6 +153,31 @@ function TenantCatchup({ row, observedAt, scanning, onScan, scanError, scanResul
         {row.job_last_error && <p role="alert" className="mt-1 break-words text-xs text-destructive">{row.job_last_error}</p>}
       </div>
       <DirtyBars row={row} />
+    </div>
+  );
+}
+
+function QuietTenant({ row, observedAt, scanning, onScan, scanError, scanResult }: {
+  row: AdminTenantRatingCatchup;
+  observedAt: string;
+  scanning: boolean;
+  onScan: (tenantID: string) => void;
+  scanError?: string;
+  scanResult?: string;
+}) {
+  const total = row.policy_scan_stages > 0 ? scanTotal(row, observedAt) : null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-zinc-800 py-2 text-xs first:border-0">
+      <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+      <span className="min-w-[8rem] break-all text-sm font-medium" title={row.tenant_id}>{tenantName(row)}</span>
+      <span className="text-muted-foreground">{row.status.replaceAll("_", " ")}</span>
+      <span className="text-muted-foreground">{total ? `last scan ≈ ${total}` : "no scan timing"}</span>
+      {row.last_succeeded_at && <span className="text-muted-foreground">finished {new Date(row.last_succeeded_at).toLocaleString()}</span>}
+      <Button size="sm" variant="ghost" className="ml-auto h-7 px-2 text-xs" disabled={scanning} onClick={() => onScan(row.tenant_id)}>
+        {scanning ? "Queuing…" : "Start policy scan"}
+      </Button>
+      {scanError && <p role="alert" className="w-full text-destructive">{scanError}</p>}
+      {scanResult && <p role="status" className="w-full text-muted-foreground">{scanResult}</p>}
     </div>
   );
 }
@@ -174,20 +218,39 @@ export function AdminRatingCatchup() {
     }
   };
   const tenants = [...(data?.tenants ?? [])].sort((a, b) =>
-    dirtyCount(b) - dirtyCount(a) || (a.tenant_slug || a.tenant_id).localeCompare(b.tenant_slug || b.tenant_id));
+    dirtyCount(b) - dirtyCount(a) || tenantName(a).localeCompare(tenantName(b)));
+  const active = tenants.filter((row) => !isQuiet(row));
+  const quiet = tenants.filter(isQuiet);
+  const rowProps = (row: AdminTenantRatingCatchup) => ({
+    row,
+    observedAt: data?.observed_at ?? "",
+    scanning: pendingTenant === row.tenant_id,
+    onScan: (id: string) => void startScan(id),
+    scanError: scanError?.tenantID === row.tenant_id ? scanError.message : undefined,
+    scanResult: scanResult?.tenantID === row.tenant_id ? scanResult.message : undefined,
+  });
   return (
     <Card className="space-y-3 p-4">
       <div>
         <h3 className="font-semibold">Rating catch-up</h3>
-        <p className="mt-1 text-xs text-muted-foreground">Tenants sorted by dirty queue size, largest first. Bars refresh every 15 seconds; longer-term trends live in Prometheus. Starting a policy scan re-dirties historical ratings for that tenant.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Tenants with dirty queues, running scans, or errors are shown first, largest queue first. Idle tenants are collapsed. Refreshes every 15 seconds; longer-term trends live in Prometheus. Starting a policy scan re-dirties historical ratings for that tenant.</p>
+        {!!tenants.length && <p className="mt-2 text-xs"><span className={active.length ? "text-amber-400" : "text-emerald-400"}>{active.length} need attention</span><span className="text-muted-foreground"> · {quiet.length} idle</span></p>}
       </div>
       {isLoading ? <p className="text-sm text-muted-foreground">Loading dirty queues…</p>
         : isError ? <p role="alert" className="text-sm text-destructive">Could not load rating catch-up.</p>
-          : tenants.length ? tenants.map((row) => <TenantCatchup key={row.tenant_id} row={row} observedAt={data?.observed_at ?? ""}
-            scanning={pendingTenant === row.tenant_id} onScan={(id) => void startScan(id)}
-            scanError={scanError?.tenantID === row.tenant_id ? scanError.message : undefined}
-            scanResult={scanResult?.tenantID === row.tenant_id ? scanResult.message : undefined} />)
-            : <p className="text-sm text-muted-foreground">No rating tenants found.</p>}
+          : !tenants.length ? <p className="text-sm text-muted-foreground">No rating tenants found.</p>
+            : <>
+              {active.length ? <div>{active.map((row) => <TenantCatchup key={row.tenant_id} {...rowProps(row)} />)}</div>
+                : <p className="text-sm text-emerald-400">All tenants are caught up.</p>}
+              {!!quiet.length && (
+                <details className="rounded border border-zinc-800 px-3 py-2">
+                  <summary className="cursor-pointer text-sm text-muted-foreground">{quiet.length} idle {quiet.length === 1 ? "tenant" : "tenants"}</summary>
+                  <div className="mt-2 max-h-96 overflow-y-auto styled-scrollbar">
+                    {quiet.map((row) => <QuietTenant key={row.tenant_id} {...rowProps(row)} />)}
+                  </div>
+                </details>
+              )}
+            </>}
     </Card>
   );
 }

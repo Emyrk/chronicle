@@ -76,6 +76,26 @@ export const CatchingUp: Story = {
   },
 };
 
+/** Most tenants are idle and collapse; only the root tenant's backlog stays expanded. */
+export const ManyTenants: Story = {
+  parameters: {
+    msw: { handlers: [http.get("/api/v1/admin/ratings/catchup", () => HttpResponse.json(response([
+      root,
+      ...Array.from({ length: 40 }, (_, index) => ({
+        ...tenant,
+        tenant_id: `849ddcae-9960-431d-a540-${String(index).padStart(12, "0")}`,
+        tenant_slug: `guild-${index + 1}`,
+      })),
+    ]))), scanHandler] },
+  },
+};
+
+export const AllCaughtUp: Story = {
+  parameters: {
+    msw: { handlers: [http.get("/api/v1/admin/ratings/catchup", () => HttpResponse.json(response([tenant]))), scanHandler] },
+  },
+};
+
 export const JobFailed: Story = {
   parameters: {
     msw: { handlers: [http.get("/api/v1/admin/ratings/catchup", () => HttpResponse.json(response([{

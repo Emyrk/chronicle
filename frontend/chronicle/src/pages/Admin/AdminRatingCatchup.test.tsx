@@ -51,7 +51,7 @@ it("shows approximate elapsed and completed stage times without counting the dra
     ],
   });
   const completed = renderToStaticMarkup(<QueryClientProvider client={client}><AdminRatingCatchup /></QueryClientProvider>);
-  expect(completed).toContain("Total scan time: ≈ 1h 15m");
+  expect(completed).toContain("last scan ≈ 1h 15m");
   client.clear();
 });
 
@@ -68,5 +68,27 @@ it("sorts tenants by total dirty work and disables an in-flight policy scan", ()
   expect(markup.indexOf("high")).toBeLessThan(markup.indexOf("low"));
   expect(markup).toMatch(/disabled=""[^>]*>Scan in progress<\/button>/);
   expect(markup).toContain("Start policy scan");
+  client.clear();
+});
+
+it("collapses idle tenants and keeps tenants with work expanded", () => {
+  const client = new QueryClient();
+  client.setQueryData<AdminRatingCatchupStatusResponse>(["admin", "rating-catchup"], {
+    observed_at: "2026-11-04T00:00:00Z",
+    tenants: [
+      { ...empty, tenant_id: "00000000-0000-0000-0000-000000000001", tenant_slug: "idle-a" },
+      { ...empty, tenant_id: "00000000-0000-0000-0000-000000000002", tenant_slug: "idle-b", status: "not_started" },
+      { ...empty, tenant_id: "00000000-0000-0000-0000-000000000003", tenant_slug: "busy", status: "catching_up", dirty_peak: 5 },
+      { ...empty, tenant_id: "00000000-0000-0000-0000-000000000004", tenant_slug: "broken", status: "stalled_error", job_last_error: "boom" },
+    ],
+  });
+  const markup = renderToStaticMarkup(<QueryClientProvider client={client}><AdminRatingCatchup /></QueryClientProvider>);
+  expect(markup).toContain("2 need attention");
+  expect(markup).toContain("2 idle tenants</summary>");
+  const details = markup.slice(markup.indexOf("<details"));
+  expect(details).toContain("idle-a");
+  expect(details).toContain("idle-b");
+  expect(details).not.toContain("busy");
+  expect(details).not.toContain("broken");
   client.clear();
 });
