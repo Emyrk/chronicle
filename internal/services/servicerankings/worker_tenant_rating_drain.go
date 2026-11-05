@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverlog"
+	"github.com/riverqueue/river/rivertype"
 )
 
 // Periodic dispatch recovers missed enqueues from the four durable dirty tables.
@@ -71,15 +74,33 @@ type WorkerDrainTenantRatings struct {
 	ActiveJobs     prometheus.Gauge
 }
 
+const (
+	tenantRatingDrainLogMaxEntryBytes = 4 * 1024
+	tenantRatingDrainLogMaxTotalBytes = 64 * 1024
+)
+
+func (*WorkerDrainTenantRatings) Middleware(*rivertype.JobRow) []rivertype.WorkerMiddleware {
+	return []rivertype.WorkerMiddleware{
+		riverlog.NewMiddleware(func(writer io.Writer) slog.Handler {
+			return slog.NewJSONHandler(writer, nil)
+		}, &riverlog.MiddlewareConfig{
+			MaxSizeBytes:  tenantRatingDrainLogMaxEntryBytes,
+			MaxTotalBytes: tenantRatingDrainLogMaxTotalBytes,
+		}),
+	}
+}
+
 func (w *WorkerDrainTenantRatings) Work(ctx context.Context, job *river.Job[ArgsDrainTenantRatings]) (workErr error) {
 	started := time.Now()
 	tenant := job.Args.TenantID
 	defer func() {
-		riverqueue.PersistedJobLogger(ctx).InfoContext(ctx, "tenant rating drain invocation",
-			slog.String("tenant_id", tenant.String()),
-			slog.String("outcome", tenantRatingDrainOutcome(workErr)),
-			slog.Int64("duration_ms", time.Since(started).Milliseconds()),
-		)
+		if logger, ok := riverlog.LoggerSafely(ctx); ok {
+			logger.InfoContext(ctx, "tenant rating drain invocation",
+				slog.String("tenant_id", tenant.String()),
+				slog.String("outcome", tenantRatingDrainOutcome(workErr)),
+				slog.Int64("duration_ms", time.Since(started).Milliseconds()),
+			)
+		}
 	}()
 	if w.ActiveJobs != nil {
 		w.ActiveJobs.Inc()
