@@ -19,15 +19,15 @@ import (
 )
 
 // Keep a nonempty fixture separate from the minimal initial/replacement test.
-// This compares the persisted core, event, guild, player and loot rows from a
-// real initial worker parse with independent data-only adapters. It does not
+// This compares persisted core, event, guild, player, gear-history and loot
+// rows from a real initial worker parse with independent adapters. It does not
 // establish whole-DB or rich replacement-parse parity.
 func TestLegacyAndDataOnlyParseProjectPlayerGuildAndLoot(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)
 	raw := []byte("1771564196000|ZONE_INFO|Zul'Gurub||1|raid|0|309\n" +
 		"1771564196100|UNIT_INFO|0x000000000001C80A|1|PriestOne|1|||60||3117\n" +
-		"1771564196200|COMBATANT_INFO|0x000000000001C80A|PriestOne|PRIEST|Human|3|Test Guild|Member|1|||nil|nil\n" +
+		"1771564196200|COMBATANT_INFO|0x000000000001C80A|PriestOne|PRIEST|Human|3|Test Guild|Member|1|123456:0:0:0||nil|nil\n" +
 		"1771564197000|SWING|0x000000000001C80A|0xF1300039F2000001|194|2|1|1|0|0|0\n" +
 		"1771564200000|SWING|0x000000000001C80A|0xF1300039F2000001|194|2|1|1|0|0|0\n" +
 		"1771564200100|LOOT|PriestOne||cffffffff|Hitem:14047:0:0:0|h[Runecloth]|h|r\n" +
@@ -225,6 +225,22 @@ func TestLegacyAndDataOnlyParseProjectPlayerGuildAndLoot(t *testing.T) {
 	oldPlayer.CreatedAt, newPlayer.CreatedAt = pgtype.Timestamptz{}, pgtype.Timestamptz{}
 	oldPlayer.UpdatedFromInstance, newPlayer.UpdatedFromInstance = uuid.NullUUID{}, uuid.NullUUID{}
 	assertPersistedParity(t, "armory player", oldPlayer, newPlayer)
+	oldHistory, err := legacy.store.GetPlayerGearHistory(ctx, database.GetPlayerGearHistoryParams{
+		RealmID: legacy.realmID, PlayerID: players[0].UnitGuid, ResultLimit: 10,
+	})
+	require.NoError(t, err)
+	newHistory, err := fresh.store.GetPlayerGearHistory(ctx, database.GetPlayerGearHistoryParams{
+		RealmID: fresh.realmID, PlayerID: newPlayers[0].UnitGuid, ResultLimit: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, oldHistory, 1)
+	require.Len(t, newHistory, 1)
+	require.Equal(t, int32(123456), oldHistory[0].Gear[0].ItemID)
+	require.Equal(t, rows[0].ID, oldHistory[0].InstanceID)
+	require.Equal(t, newID, newHistory[0].InstanceID)
+	oldHistory[0].InstanceID, newHistory[0].InstanceID = uuid.Nil, uuid.Nil
+	oldHistory[0].InstanceSlug, newHistory[0].InstanceSlug = pgtype.Text{}, pgtype.Text{}
+	assertPersistedParity(t, "armory gear history", oldHistory, newHistory)
 
 	for _, kind := range database.AllLogInstanceEventTypeValues() {
 		oldEvent, err := legacy.store.InstanceEvent(ctx, database.InstanceEventParams{InstanceID: rows[0].ID, Type: string(kind)})
