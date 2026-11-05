@@ -15,6 +15,7 @@ var critters = map[uint32]string{
 	10441: "Plagued Rat",
 	13321: "Frog",
 	3680:  "Serpentbloom Snake",
+	15010: "Jungle Toad", // ZG
 
 	// V+
 	25254: "Cockroach",
