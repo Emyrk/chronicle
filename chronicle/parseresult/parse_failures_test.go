@@ -2,6 +2,7 @@ package parseresult
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -38,6 +39,17 @@ func TestCollectInstancesPartialAndLegacySemantics(t *testing.T) {
 	if partial.Failures[0] != (InstanceFailure{Key: "raid_2", Stage: "finalize", Message: "bad finalize"}) ||
 		partial.Failures[1] != (InstanceFailure{Key: "raid_3", Stage: "project", Message: "bad projection"}) {
 		t.Fatalf("wrong failure keys or diagnostics: %+v", partial.Failures)
+	}
+	encoded, err := json.Marshal(partial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded ParseOutcome
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(partial, decoded) {
+		t.Fatalf("successful results or failures changed in transit: %+v", decoded)
 	}
 	strict, err := collectInstances(context.Background(), makeTasks(), false)
 	if err == nil || !strings.Contains(err.Error(), "finalize instance \"raid\": bad finalize") || len(strict.Results) != 0 {
