@@ -33,7 +33,7 @@ func DefaultClientPath(server string) string {
 	case "tbc":
 		return "/mnt/windows-z/ChronicleGames/World of Warcraft 2.4.3"
 	case "forever":
-		return "/home/steven/.steam/steam/steamapps/compatdata/3492500670/pfx/drive_c/Program Files (x86)/World of Warcraft"
+		return "/home/steven/.steam/steam/steamapps/compatdata/3492500670/pfx/drive_c/Program Files (x86)/World of Warcraft/_forever_"
 	default:
 		return ""
 	}
