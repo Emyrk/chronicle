@@ -30,7 +30,7 @@ func TestBuildFinalizedLootRoundTrip(t *testing.T) {
 		Finalized: &instances.FinalizedInstance{Loot: tracker}, Events: encounterevents.NewEvents(),
 	})
 	require.NoError(t, err)
-	require.Equal(t, 4, result.SchemaVersion)
+	require.Equal(t, 5, result.SchemaVersion)
 	require.Equal(t, []LootObservation{{
 		SourceGUID: "0x0000000000000000", ReceivedGUID: "0x0000000000000000",
 		SourceTS: at, ReceivedTS: at, ItemName: "Test item",

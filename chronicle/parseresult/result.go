@@ -36,12 +36,13 @@ type Input struct {
 
 // Result covers event streams and parser-derived core instance, overview,
 // encounter fight/phase, raid snapshot and observed-unit fields. It still omits
-// guild-participant rows, guild/armory writes,
-// rankings, realm resolution, DB-assigned IDs, and write-time decisions.
+// guild-participant rows, guild/armory writes, DPS rankings, realm resolution,
+// DB-assigned IDs, and write-time decisions.
 // Version 0 is the original unversioned projection, version 1 adds core fields,
 // version 2 adds finalized loot observations, version 3 adds armory
-// observations, and version 4 adds participating player metadata. None is
-// a complete persistence payload or full DB parity proof.
+// observations, version 4 adds participating player metadata, and version 5
+// adds speedrun inputs. No version is a complete persistence payload or full
+// DB parity proof.
 type Result struct {
 	Format       database.LogFormat `json:"format"`
 	Name         string             `json:"name"`
@@ -59,6 +60,7 @@ type Result struct {
 	Units         []UnitMetadata    `json:"units"`
 	Loot          []LootObservation `json:"loot"`
 	Armory        ArmoryObservation `json:"armory"`
+	Speedrun      *Speedrun         `json:"speedrun,omitempty"`
 }
 
 type Encounter struct {
@@ -93,7 +95,7 @@ func Build(in Input) (*Result, error) {
 	fin := in.Finalized
 	out := &Result{
 		Format:        in.Format,
-		SchemaVersion: 4,
+		SchemaVersion: 5,
 		Name:          in.Name,
 		Versions:      make(map[string]string, len(fin.Versions)),
 		Encounters:    make([]Encounter, 0, len(fin.Encounters)),
@@ -136,6 +138,7 @@ func Build(in Input) (*Result, error) {
 	for key, value := range fin.Versions {
 		out.Versions[key] = value
 	}
+	out.Speedrun = buildSpeedrun(fin, in.Capabilities)
 	if err := buildCore(in, out); err != nil {
 		return nil, err
 	}

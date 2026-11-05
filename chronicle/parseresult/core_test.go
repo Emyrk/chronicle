@@ -59,7 +59,7 @@ func TestCoreFieldsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.SchemaVersion != 4 || result.Core.Start != start || result.Core.End != start.Add(5*time.Second) ||
+	if result.SchemaVersion != 5 || result.Core.Start != start || result.Core.End != start.Add(5*time.Second) ||
 		result.Core.MaxPlayers != 40 || result.Overview.TopIncomingDamageAbilities[0].Damage != 42 ||
 		result.Encounters[0].Fights[0].Periods[0].Start.MessageType == "" ||
 		result.Encounters[0].Phases[0].ID != phaseID.String() || result.RaidSnapshots[0].EncounterID == nil ||
