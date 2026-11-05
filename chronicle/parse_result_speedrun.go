@@ -22,7 +22,7 @@ type ParsedSpeedrunWrite struct {
 // InsertParsedSpeedrun writes only the speedrun slice for an existing instance.
 // A nil speedrun, trash-only run, or invalidated (unrankable) log has no row.
 func InsertParsedSpeedrun(ctx context.Context, store database.Store, result parseresult.Result, write ParsedSpeedrunWrite) error {
-	if result.SchemaVersion != 6 || result.Format != database.LogFormat112aCcAddon {
+	if result.SchemaVersion != 7 || result.Format != database.LogFormat112aCcAddon {
 		return fmt.Errorf("unsupported speedrun parse result schema %d format %q", result.SchemaVersion, result.Format)
 	}
 	sr := result.Speedrun

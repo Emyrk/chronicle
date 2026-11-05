@@ -29,7 +29,7 @@ type ParsedBossRankingWrite struct {
 
 // InsertParsedBossRankings writes only boss DPS rows, not aggregated trash.
 func InsertParsedBossRankings(ctx context.Context, store database.Store, result parseresult.Result, write ParsedBossRankingWrite) error {
-	if result.SchemaVersion != 6 || result.Format != database.LogFormat112aCcAddon {
+	if result.SchemaVersion != 7 || result.Format != database.LogFormat112aCcAddon {
 		return fmt.Errorf("unsupported boss ranking parse result schema %d format %q", result.SchemaVersion, result.Format)
 	}
 	data := result.BossRankings
