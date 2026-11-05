@@ -40,9 +40,11 @@ func NewKologarnEncounterCharacter(id guid.GUID, all *characters.Characters) (ch
 	for _, stalker := range all.ByEntry[kologarnArmsweepStalkerEntry] {
 		all.DB().UpdateOwner(stalker.ID(), id)
 	}
+	config := kologarnDefeatConfig()
+	config.AuraCleanup.NoKnownParticipantsAlive = all.NoKnownParticipantsAlive
 	return &kologarnCharacter{
 		Common: characters.NewCommonCharacter(id, all),
-		defeat: characters.NewScriptedDefeatDetector(id, kologarnDefeatConfig()),
+		defeat: characters.NewScriptedDefeatDetector(id, config),
 	}, true
 }
 

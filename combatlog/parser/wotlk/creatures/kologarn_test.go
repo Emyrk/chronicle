@@ -74,6 +74,40 @@ func TestKologarnObservedAuraCleanupMarksDefeatAsSlain(t *testing.T) {
 	require.Equal(t, cleanupAt, kologarn.Periods()[0].End.Timestamp.Date())
 }
 
+func TestKologarnAuraCleanupWithNoKnownParticipantsAliveDoesNotMarkDefeat(t *testing.T) {
+	t.Parallel()
+
+	all := newKologarnTestCharacters()
+	all.SetNoKnownParticipantsAliveProvider(func() bool { return true })
+	player := guid.GUID(1)
+	kologarnID := kologarnVehicleGUID(32930)
+	start := time.Date(2026, time.November, 5, 12, 0, 0, 0, time.UTC)
+
+	_, err := all.Process(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &player,
+		Target:      kologarnID,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	})
+	require.NoError(t, err)
+
+	for i := range kologarnAuraCleanupThreshold {
+		_, err = all.Process(&messages.Aura{
+			MessageBase: messages.Base(start.Add(50*time.Millisecond + time.Duration(i)*time.Millisecond)),
+			Target:      kologarnID,
+			SpellName:   fmt.Sprintf("Removed debuff %d", i),
+			State:       types.AuraStateRemoved,
+		})
+		require.NoError(t, err)
+	}
+
+	kologarn, ok := all.Get(kologarnID)
+	require.True(t, ok)
+	require.True(t, kologarn.IsActive())
+	require.NotEqual(t, period.EndStateSlain, kologarn.LastEndState())
+}
+
 func TestKologarnArmsweepStalkerIsNamedPersistentGuardian(t *testing.T) {
 	t.Parallel()
 

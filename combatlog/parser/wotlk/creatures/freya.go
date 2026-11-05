@@ -24,9 +24,11 @@ func NewFreyaEncounterCharacter(id guid.GUID, all *characters.Characters) (chara
 	c := characters.NewCommonCharacter(id, all)
 	c.SetRecentlySlainDuration(time.Second * 30)
 
+	config := freyaDefeatConfig()
+	config.AuraCleanup.NoKnownParticipantsAlive = all.NoKnownParticipantsAlive
 	return &freyaCharacter{
 		Common: c,
-		defeat: characters.NewScriptedDefeatDetector(id, freyaDefeatConfig()),
+		defeat: characters.NewScriptedDefeatDetector(id, config),
 	}, true
 }
 
@@ -36,9 +38,6 @@ func (c *freyaCharacter) Process(m messages.Message) error {
 	}
 
 	if signal, defeated := c.defeat.Observe(m, c.IsActive()); defeated {
-		if signal == characters.ScriptedDefeatAuraCleanup && c.Lookup().NoKnownParticipantsAlive() {
-			return nil
-		}
 		c.Died("freya_defeated_"+string(signal), m)
 	}
 	return nil

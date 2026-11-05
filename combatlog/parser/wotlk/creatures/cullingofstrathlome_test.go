@@ -55,3 +55,41 @@ func TestMalGanisFiveAuraCleanupMarksDefeat(t *testing.T) {
 	require.Equal(t, period.EndStateSlain, malGanis.LastEndState())
 	require.Equal(t, cleanupAt, malGanis.Periods()[0].End.Timestamp.Date())
 }
+
+func TestMalGanisAuraCleanupWithNoKnownParticipantsAliveDoesNotMarkDefeat(t *testing.T) {
+	t.Parallel()
+
+	all := characters.NewCharacters(
+		unitdb.New(),
+		NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+	)
+	all.SetNoKnownParticipantsAliveProvider(func() bool { return true })
+	player := guid.GUID(1)
+	malGanisID := creatureGUID(26533)
+	start := time.Date(2026, time.November, 5, 12, 0, 0, 0, time.UTC)
+
+	_, err := all.Process(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &player,
+		Target:      malGanisID,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	})
+	require.NoError(t, err)
+
+	for i := range 5 {
+		_, err = all.Process(&messages.Aura{
+			MessageBase: messages.Base(start.Add(50 * time.Millisecond)),
+			Target:      malGanisID,
+			SpellName:   fmt.Sprintf("Removed aura %d", i),
+			State:       types.AuraStateRemoved,
+		})
+		require.NoError(t, err)
+	}
+
+	malGanis, ok := all.Get(malGanisID)
+	require.True(t, ok)
+	require.True(t, malGanis.IsActive())
+	require.NotEqual(t, period.EndStateSlain, malGanis.LastEndState())
+}
