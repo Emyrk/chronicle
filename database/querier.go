@@ -327,6 +327,10 @@ type sqlcQuerier interface {
 	DeleteWorld(ctx context.Context, id uuid.UUID) error
 	DeleteYoutubeVideoByInstanceOrSlug(ctx context.Context, arg DeleteYoutubeVideoByInstanceOrSlugParams) error
 	DisableJITForTransaction(ctx context.Context) error
+	// The evolving hub preview ranks many subjects across all bosses. With its
+	// tenant/instance filters, nested loops cause repeated random score-table reads.
+	// Applied only inside a read-only transaction for that one query.
+	DisableNestedLoopForTransaction(ctx context.Context) error
 	DisconnectSidekickInstallation(ctx context.Context, arg DisconnectSidekickInstallationParams) (SidekickInstallation, error)
 	EncountersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
 	EnsureDeploymentToken(ctx context.Context, deploymentToken pgtype.Text) (pgtype.Text, error)
@@ -371,6 +375,8 @@ type sqlcQuerier interface {
 	// Generation-free readers against the evolving projection compatibility views.
 	// All boards share the caller-pinned active generation. Bound boss names and
 	// truncate each board in SQL, not in the HTTP handler.
+	// The (tenant, instance, encounter) index can seek to the next boss name.
+	// DISTINCT over all score rows instead scans every score just to find ~12 names.
 	// The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss;
 	// the overview shows six (its Guild Renown card lists six).
 	EvolvingHubSummaryRatingRows(ctx context.Context, arg EvolvingHubSummaryRatingRowsParams) ([]EvolvingHubSummaryRatingRowsRow, error)

@@ -1270,6 +1270,12 @@ GROUP BY d.encounter_name
 ORDER BY (d.encounter_name = 'Trash'), d.encounter_name;
 
 
+-- name: DisableNestedLoopForTransaction :exec
+-- The evolving hub preview ranks many subjects across all bosses. With its
+-- tenant/instance filters, nested loops cause repeated random score-table reads.
+-- Applied only inside a read-only transaction for that one query.
+SET LOCAL enable_nestloop = off;
+
 -- name: RankingsRealmNames :many
 -- Distinct realm names that have DPS ranking data, for the realm filter dropdown.
 -- Rows with an empty realm name are excluded: they cannot be filtered on, and

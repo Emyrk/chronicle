@@ -28,6 +28,7 @@ type Store interface {
 	sqlcQuerier
 	DBTX
 
+	EvolvingHubSummaryRatingRowsWithoutNestedLoops(ctx context.Context, arg EvolvingHubSummaryRatingRowsParams) ([]EvolvingHubSummaryRatingRowsRow, error)
 	RankingsLeaderboardNoJIT(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error)
 	RankingsBoxPlotStatsNoJIT(ctx context.Context, arg RankingsBoxPlotStatsParams) ([]RankingsBoxPlotStatsRow, error)
 

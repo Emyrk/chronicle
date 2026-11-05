@@ -589,7 +589,7 @@ func (s *Service) handleHubSummary(w http.ResponseWriter, r *http.Request) {
 		var e error
 		if evolving {
 			var selected []database.EvolvingHubSummaryRatingRowsRow
-			selected, e = s.store.EvolvingHubSummaryRatingRows(ctx, database.EvolvingHubSummaryRatingRowsParams(params))
+			selected, e = s.store.EvolvingHubSummaryRatingRowsWithoutNestedLoops(ctx, database.EvolvingHubSummaryRatingRowsParams(params))
 			for _, row := range selected {
 				rows = append(rows, database.HubSummaryRatingRowsRow(row))
 			}

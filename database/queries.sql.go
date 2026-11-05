@@ -19515,6 +19515,18 @@ func (q *sqlQuerier) DisableJITForTransaction(ctx context.Context) error {
 	return err
 }
 
+const disableNestedLoopForTransaction = `-- name: DisableNestedLoopForTransaction :exec
+SET LOCAL enable_nestloop = off
+`
+
+// The evolving hub preview ranks many subjects across all bosses. With its
+// tenant/instance filters, nested loops cause repeated random score-table reads.
+// Applied only inside a read-only transaction for that one query.
+func (q *sqlQuerier) DisableNestedLoopForTransaction(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, disableNestedLoopForTransaction)
+	return err
+}
+
 const getCharacterEncounterStats = `-- name: GetCharacterEncounterStats :many
 SELECT
   edr.instance_name,
@@ -25897,13 +25909,27 @@ func (q *sqlQuerier) EvolvingHubSetRatingRows(ctx context.Context, arg EvolvingH
 
 const evolvingHubSummaryRatingRows = `-- name: EvolvingHubSummaryRatingRows :many
 
-WITH selected_bosses AS (
+WITH RECURSIVE player_boss_names(encounter_name) AS (
+  SELECT (SELECT min(p.encounter_name) FROM player_tenant_rating_boss_scores_evolving_read p
+          WHERE p.tenant_id = $3 AND p.generation_id = $4 AND p.instance_name = $5)
+  UNION ALL
+  SELECT (SELECT min(p.encounter_name) FROM player_tenant_rating_boss_scores_evolving_read p
+          WHERE p.tenant_id = $3 AND p.generation_id = $4 AND p.instance_name = $5
+            AND p.encounter_name > prev.encounter_name)
+  FROM player_boss_names prev WHERE prev.encounter_name IS NOT NULL
+), guild_boss_names(encounter_name) AS (
+  SELECT (SELECT min(g.encounter_name) FROM guild_tenant_rating_boss_scores_evolving_read g
+          WHERE g.tenant_id = $3 AND g.generation_id = $4 AND g.instance_name = $5)
+  UNION ALL
+  SELECT (SELECT min(g.encounter_name) FROM guild_tenant_rating_boss_scores_evolving_read g
+          WHERE g.tenant_id = $3 AND g.generation_id = $4 AND g.instance_name = $5
+            AND g.encounter_name > prev.encounter_name)
+  FROM guild_boss_names prev WHERE prev.encounter_name IS NOT NULL
+), selected_bosses AS (
   SELECT names.encounter_name FROM (
-    SELECT p.encounter_name FROM player_tenant_rating_boss_scores_evolving_read p
-    WHERE p.tenant_id = $3 AND p.generation_id = $4 AND p.instance_name = $5
+    SELECT encounter_name FROM player_boss_names WHERE encounter_name IS NOT NULL
     UNION
-    SELECT g.encounter_name FROM guild_tenant_rating_boss_scores_evolving_read g
-    WHERE g.tenant_id = $3 AND g.generation_id = $4 AND g.instance_name = $5
+    SELECT encounter_name FROM guild_boss_names WHERE encounter_name IS NOT NULL
   ) names ORDER BY (names.encounter_name <> $1::text), names.encounter_name LIMIT 30
 ), boards AS (
   SELECT 'player'::text AS subject, 'scope'::text AS board, b.rating_metric, ''::text AS encounter_name,
@@ -25911,7 +25937,9 @@ WITH selected_bosses AS (
          COALESCE(gp.name, '')::text AS subject_name, realm.name::text AS realm_name,
          row_number() OVER (PARTITION BY b.rating_metric ORDER BY b.score DESC, (CASE WHEN b.rating_metric = 'peak' THEN COALESCE(b.best_raw, 0) ELSE 0 END) DESC, b.realm_id, b.player_guid) AS position
   FROM (
-    SELECT DISTINCT ON (s.rating_metric, s.realm_id, s.player_guid) s.generation_id, s.tenant_id, s.realm_id, s.player_guid, s.instance_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.rating_metric, s.window_kind, s.window_start, s.window_end, s.score, s.computed_at, s.best_raw, s.best_duration_secs
+    SELECT DISTINCT ON (s.rating_metric, s.realm_id, s.player_guid)
+           s.rating_metric, s.realm_id, s.player_guid, s.score, s.best_raw,
+           s.player_class, s.player_spec, s.player_sub_spec
     FROM player_tenant_rating_scope_scores_evolving_read s
 
     JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
@@ -25930,10 +25958,12 @@ WITH selected_bosses AS (
   UNION ALL
   SELECT 'player'::text AS subject, 'boss'::text AS board, b.rating_metric, b.encounter_name AS encounter_name,
          b.realm_id, b.player_guid::text AS subject_id, b.score, b.best_raw, b.player_class, b.player_spec, b.player_sub_spec,
-         COALESCE(gp.name, '')::text AS subject_name, realm.name::text AS realm_name,
+         ''::text AS subject_name, realm.name::text AS realm_name,
          row_number() OVER (PARTITION BY b.encounter_name, b.rating_metric ORDER BY b.score DESC, (CASE WHEN b.rating_metric = 'peak' THEN COALESCE(b.best_raw, 0) ELSE 0 END) DESC, b.realm_id, b.player_guid) AS position
   FROM (
-    SELECT DISTINCT ON (s.encounter_name, s.rating_metric, s.realm_id, s.player_guid) s.generation_id, s.tenant_id, s.realm_id, s.player_guid, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.player_class, s.player_spec, s.player_sub_spec, s.performance_metric, s.rating_metric, s.window_kind, s.window_start, s.window_end, s.score, s.best_raw, s.rank_one_raw, s.best_locked_parse, s.form, s.floor_score, s.eligible_kills, s.computed_at, s.best_duration_secs
+    SELECT DISTINCT ON (s.encounter_name, s.rating_metric, s.realm_id, s.player_guid)
+           s.encounter_name, s.rating_metric, s.realm_id, s.player_guid, s.score, s.best_raw,
+           s.player_class, s.player_spec, s.player_sub_spec
     FROM player_tenant_rating_boss_scores_evolving_read s
 
     JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
@@ -25947,15 +25977,15 @@ WITH selected_bosses AS (
     ORDER BY s.encounter_name, s.rating_metric, s.realm_id, s.player_guid, s.score DESC, COALESCE(s.best_raw, 0) DESC, s.player_class, s.player_spec, s.player_sub_spec
   ) b
   JOIN wow_server_realms realm ON realm.id = b.realm_id
-  LEFT JOIN game_players gp ON gp.realm_id = b.realm_id AND gp.id = (CASE WHEN b.player_guid ~ '^0x[0-9A-Fa-f]{16}$' THEN b.player_guid::wow_guid ELSE NULL::wow_guid END)
-  LEFT JOIN guilds guild ON guild.id = gp.guild_id AND guild.realm_id = b.realm_id
+  -- Player display names are needed only for the top rows, after the window rank.
   UNION ALL
   SELECT 'guild'::text AS subject, 'scope'::text AS board, b.rating_metric, ''::text AS encounter_name,
          b.realm_id, b.guild_id::text AS subject_id, b.score, NULL::float8 AS best_raw, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec,
          COALESCE(guild.name, '')::text AS subject_name, realm.name::text AS realm_name,
          row_number() OVER (PARTITION BY b.rating_metric ORDER BY b.score DESC, b.realm_id, b.guild_id) AS position
   FROM (
-    SELECT DISTINCT ON (s.rating_metric, s.realm_id, s.guild_id) s.generation_id, s.tenant_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.rating_metric, s.window_kind, s.window_start, s.window_end, s.score, s.computed_at
+    SELECT DISTINCT ON (s.rating_metric, s.realm_id, s.guild_id)
+           s.rating_metric, s.realm_id, s.guild_id, s.score
     FROM guild_tenant_rating_scope_scores_evolving_read s
 
     JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
@@ -25975,7 +26005,8 @@ WITH selected_bosses AS (
          COALESCE(guild.name, '')::text AS subject_name, realm.name::text AS realm_name,
          row_number() OVER (PARTITION BY b.encounter_name, b.rating_metric ORDER BY b.score DESC, b.realm_id, b.guild_id) AS position
   FROM (
-    SELECT DISTINCT ON (s.encounter_name, s.rating_metric, s.realm_id, s.guild_id) s.generation_id, s.tenant_id, s.realm_id, s.guild_id, s.instance_name, s.encounter_name, s.difficulty_name, s.max_players, s.rating_metric, s.window_kind, s.window_start, s.window_end, s.score, s.best_raw, s.rank_one_raw, s.best_locked_parse, s.form, s.floor_score, s.eligible_kills, s.computed_at
+    SELECT DISTINCT ON (s.encounter_name, s.rating_metric, s.realm_id, s.guild_id)
+           s.encounter_name, s.rating_metric, s.realm_id, s.guild_id, s.score
     FROM guild_tenant_rating_boss_scores_evolving_read s
 
     JOIN wow_server_realms source_realm ON source_realm.id = s.realm_id
@@ -25991,14 +26022,19 @@ WITH selected_bosses AS (
 
   LEFT JOIN guilds guild ON guild.id = b.guild_id AND guild.realm_id = b.realm_id
 )
-SELECT subject, board, rating_metric, encounter_name, realm_id, subject_id, score,
+SELECT b.subject, b.board, b.rating_metric, b.encounter_name, b.realm_id, b.subject_id, b.score,
        -- Peak's throughput (0 when unknown): the kill's on a boss, and on the raid
        -- total output over total fight time across the bosses it counts.
-       COALESCE(CASE WHEN subject = 'player' AND rating_metric = 'peak' THEN best_raw END, 0)::float8 AS peak_raw,
-       player_class, player_spec, player_sub_spec, subject_name, realm_name
-FROM boards
-WHERE position <= CASE WHEN board = 'scope' OR encounter_name = $1::text THEN CASE WHEN $2::int >= 3 THEN 10 ELSE 6 END ELSE GREATEST(LEAST($2::int, 3), 1) END
-ORDER BY board, encounter_name, subject, rating_metric, position
+       COALESCE(CASE WHEN b.subject = 'player' AND b.rating_metric = 'peak' THEN b.best_raw END, 0)::float8 AS peak_raw,
+       b.player_class,
+       b.player_spec, b.player_sub_spec,
+       (CASE WHEN b.subject = 'player' AND b.board = 'boss' THEN COALESCE(gp.name, '') ELSE b.subject_name END)::text AS subject_name,
+       b.realm_name
+FROM boards b
+LEFT JOIN game_players gp ON b.subject = 'player' AND b.board = 'boss' AND gp.realm_id = b.realm_id
+  AND gp.id = (CASE WHEN b.subject_id ~ '^0x[0-9A-Fa-f]{16}$' THEN b.subject_id::wow_guid ELSE NULL::wow_guid END)
+WHERE b.position <= CASE WHEN b.board = 'scope' OR b.encounter_name = $1::text THEN CASE WHEN $2::int >= 3 THEN 10 ELSE 6 END ELSE GREATEST(LEAST($2::int, 3), 1) END
+ORDER BY b.board, b.encounter_name, b.subject, b.rating_metric, b.position
 `
 
 type EvolvingHubSummaryRatingRowsParams struct {
@@ -26038,6 +26074,8 @@ type EvolvingHubSummaryRatingRowsRow struct {
 // Generation-free readers against the evolving projection compatibility views.
 // All boards share the caller-pinned active generation. Bound boss names and
 // truncate each board in SQL, not in the HTTP handler.
+// The (tenant, instance, encounter) index can seek to the next boss name.
+// DISTINCT over all score rows instead scans every score just to find ~12 names.
 // The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss;
 // the overview shows six (its Guild Renown card lists six).
 func (q *sqlQuerier) EvolvingHubSummaryRatingRows(ctx context.Context, arg EvolvingHubSummaryRatingRowsParams) ([]EvolvingHubSummaryRatingRowsRow, error) {
