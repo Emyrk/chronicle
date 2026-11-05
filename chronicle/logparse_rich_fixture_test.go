@@ -9,11 +9,13 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/Emyrk/chronicle/internal/version"
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 // Keep a second, nonempty fixture separate from the minimal persisted-row
@@ -90,6 +92,9 @@ func TestLegacyAndDataOnlyParseProjectPlayerGuildAndLoot(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		if err := InsertParsedEventStreams(ctx, tx, newID, decoded.Events); err != nil {
+			return err
+		}
 		return InsertParsedLoot(ctx, tx, newID, fresh.realmID, decoded.Loot)
 	}, nil))
 	newPlayers, err := fresh.store.InstancePlayersByInstanceID(ctx, newID)
@@ -114,4 +119,29 @@ func TestLegacyAndDataOnlyParseProjectPlayerGuildAndLoot(t *testing.T) {
 	oldPlayer.CreatedAt, newPlayer.CreatedAt = pgtype.Timestamptz{}, pgtype.Timestamptz{}
 	oldPlayer.UpdatedFromInstance, newPlayer.UpdatedFromInstance = uuid.NullUUID{}, uuid.NullUUID{}
 	assertPersistedParity(t, "armory player", oldPlayer, newPlayer)
+
+	oldEncounters, err := legacy.store.EncountersByInstanceID(ctx, rows[0].ID)
+	require.NoError(t, err)
+	newEncounters, err := fresh.store.EncountersByInstanceID(ctx, newID)
+	require.NoError(t, err)
+	require.Len(t, oldEncounters, 1)
+	require.Len(t, newEncounters, 1)
+	oldEncID, newEncID := oldEncounters[0].ID.String(), newEncounters[0].ID.String()
+	for _, kind := range database.AllLogInstanceEventTypeValues() {
+		oldEvent, err := legacy.store.InstanceEvent(ctx, database.InstanceEventParams{InstanceID: rows[0].ID, Type: string(kind)})
+		require.NoError(t, err, "legacy %s", kind)
+		newEvent, err := fresh.store.InstanceEvent(ctx, database.InstanceEventParams{InstanceID: newID, Type: string(kind)})
+		require.NoError(t, err, "data-only %s", kind)
+		left := bytes.Replace(unzipEventRow(t, oldEvent.Events), []byte("$"+oldEncID), []byte("$"+uuid.Nil.String()), 1)
+		right := bytes.Replace(unzipEventRow(t, newEvent.Events), []byte("$"+newEncID), []byte("$"+uuid.Nil.String()), 1)
+		if kind == database.LogInstanceEventTypeUnitClassification {
+			oldRecords, err := classificationEvents(left)
+			require.NoError(t, err)
+			newRecords, err := classificationEvents(right)
+			require.NoError(t, err)
+			assertPersistedParity(t, "player event "+string(kind), oldRecords, newRecords, cmp.Comparer(proto.Equal))
+			continue
+		}
+		assertPersistedParity(t, "player event "+string(kind), left, right)
+	}
 }
