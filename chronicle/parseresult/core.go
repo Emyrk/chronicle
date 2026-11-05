@@ -84,8 +84,8 @@ type RaidSnapshot struct {
 }
 
 // UnitMetadata is limited to IDs the writer marks seen or participating.
-// Player class/race are projected separately in armory observations; guild
-// participation rows are not projected yet.
+// HasPlayerData distinguishes a guild participant with combatant metadata
+// from one the legacy writer would omit from instance_players.
 type UnitMetadata struct {
 	GUID          string  `json:"guid"`
 	Name          string  `json:"name"`
@@ -93,6 +93,11 @@ type UnitMetadata struct {
 	OwnerGUID     *string `json:"owner_guid"`
 	Player        bool    `json:"player"`
 	Participating bool    `json:"participating"`
+	HasPlayerData bool    `json:"has_player_data"`
+	PlayerName    string  `json:"player_name"`
+	PlayerLevel   int32   `json:"player_level"`
+	PlayerClass   string  `json:"player_class"`
+	PlayerRace    string  `json:"player_race"`
 }
 
 func buildCore(in Input, out *Result) error {
@@ -231,8 +236,20 @@ func buildUnits(in Input, out *Result) error {
 				item.OwnerGUID = &owner
 			}
 		}
-		if player, ok := in.Units.GetPlayer(id); ok && player.Name != "" {
-			item.Name = player.Name
+		if player, ok := in.Units.GetPlayer(id); ok {
+			if player.Name != "" {
+				item.Name = player.Name
+			}
+			item.HasPlayerData = true
+			item.PlayerName = player.Name
+			item.PlayerClass = string(player.HeroClass)
+			item.PlayerRace = string(player.Race)
+			if info, ok := in.Units.Get(id); ok {
+				item.PlayerLevel = info.Level
+			}
+			if player.Level != nil && *player.Level > 0 {
+				item.PlayerLevel = *player.Level
+			}
 		}
 		out.Units = append(out.Units, item)
 	}

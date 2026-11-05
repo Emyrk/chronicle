@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/chronicle/parseresult"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/raidgroups"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -26,12 +28,12 @@ type ParsedCoreWrite struct {
 }
 
 // InsertParsedCore persists only the core instance, overview, encounters,
-// hostiles, phases, raid snapshots and non-player observed units. It does NOT
-// write events, loot, players (class/race/level are absent), guilds, armory,
-// rankings or other parser side effects. Use a transactional store: a write
+// hostiles, phases, raid snapshots, non-player units and guild-participating
+// players with combatant metadata. It does NOT write events, loot, guilds,
+// armory, rankings or other parser side effects. Use a transactional store: a write
 // failure after the instance insert must roll back the entire operation.
 func InsertParsedCore(ctx context.Context, store database.Store, result parseresult.Result, write ParsedCoreWrite) (database.LogInstance, error) {
-	if result.SchemaVersion != 3 || result.Format != database.LogFormat112aCcAddon {
+	if result.SchemaVersion != 4 || result.Format != database.LogFormat112aCcAddon {
 		return database.LogInstance{}, fmt.Errorf("unsupported core parse result schema %d format %q", result.SchemaVersion, result.Format)
 	}
 	if write.InstanceID == uuid.Nil || write.RealmID == uuid.Nil || write.LogGroupID == uuid.Nil || write.ParserVersion == "" || result.Name == "" || result.Core.Start.IsZero() || result.Core.End.IsZero() {
@@ -113,6 +115,7 @@ func InsertParsedCore(ctx context.Context, store database.Store, result parseres
 		snapshots = append(snapshots, row)
 	}
 	units := make([]database.InsertInstanceUnitsParams, 0, len(result.Units))
+	players := make([]database.InsertInstancePlayersParams, 0)
 	for i, unit := range result.Units {
 		id, err := parseGUID(unit.GUID)
 		if err != nil {
@@ -125,8 +128,14 @@ func InsertParsedCore(ctx context.Context, store database.Store, result parseres
 			return database.LogInstance{}, fmt.Errorf("unit %d player flag conflicts with GUID", i)
 		}
 		if unit.Player {
-			if unit.Participating {
-				return database.LogInstance{}, fmt.Errorf("unit %d participating player requires class/race/level data", i)
+			// The legacy writer calls participate only for guild participants,
+			// and silently omits participants without combatant metadata.
+			if unit.Participating && unit.HasPlayerData {
+				players = append(players, database.InsertInstancePlayersParams{
+					InstanceID: write.InstanceID, UnitGuid: id, Name: unit.PlayerName,
+					Level: unit.PlayerLevel, Class: db2sdk.HeroClassToDB(types.HeroClasses(unit.PlayerClass)),
+					Race: validRaceOrUnknown(types.HeroRaces(unit.PlayerRace)),
+				})
 			}
 			continue
 		}
@@ -203,6 +212,9 @@ func InsertParsedCore(ctx context.Context, store database.Store, result parseres
 	}
 	if err := store.InsertInstanceUnits(ctx, units).Close(); err != nil {
 		return database.LogInstance{}, fmt.Errorf("insert parsed units: %w", err)
+	}
+	if err := store.InsertInstancePlayers(ctx, players).Close(); err != nil {
+		return database.LogInstance{}, fmt.Errorf("insert parsed participating players: %w", err)
 	}
 	return instance, nil
 }

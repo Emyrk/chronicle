@@ -45,7 +45,7 @@ func TestArmoryObservationRoundTripAndCopy(t *testing.T) {
 		return got
 	}
 	got := build()
-	if got.SchemaVersion != 3 || got.Armory.ParticipantCount != 1 || got.Armory.Guilds[0].Name != "A" || got.Armory.Players[0].GUID != b.String() || got.Armory.Players[0].Level != 58 {
+	if got.SchemaVersion != 4 || got.Armory.ParticipantCount != 1 || got.Armory.Guilds[0].Name != "A" || got.Armory.Players[0].GUID != b.String() || got.Armory.Players[0].Level != 58 {
 		t.Fatalf("ordering or counts: %+v", got.Armory)
 	}
 	player := got.Armory.Players[1]

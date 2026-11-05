@@ -39,9 +39,9 @@ type Input struct {
 // guild-participant rows, guild/armory writes,
 // rankings, realm resolution, DB-assigned IDs, and write-time decisions.
 // Version 0 is the original unversioned projection, version 1 adds core fields,
-// version 2 adds finalized loot observations, and version 3 adds armory
-// observations. None is a complete
-// persistence payload or full DB parity proof.
+// version 2 adds finalized loot observations, version 3 adds armory
+// observations, and version 4 adds participating player metadata. None is
+// a complete persistence payload or full DB parity proof.
 type Result struct {
 	Format       database.LogFormat `json:"format"`
 	Name         string             `json:"name"`
@@ -93,7 +93,7 @@ func Build(in Input) (*Result, error) {
 	fin := in.Finalized
 	out := &Result{
 		Format:        in.Format,
-		SchemaVersion: 3,
+		SchemaVersion: 4,
 		Name:          in.Name,
 		Versions:      make(map[string]string, len(fin.Versions)),
 		Encounters:    make([]Encounter, 0, len(fin.Encounters)),

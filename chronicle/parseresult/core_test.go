@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/armory"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounterevents"
@@ -17,6 +18,8 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/raidgroups"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
@@ -56,7 +59,7 @@ func TestCoreFieldsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.SchemaVersion != 3 || result.Core.Start != start || result.Core.End != start.Add(5*time.Second) ||
+	if result.SchemaVersion != 4 || result.Core.Start != start || result.Core.End != start.Add(5*time.Second) ||
 		result.Core.MaxPlayers != 40 || result.Overview.TopIncomingDamageAbilities[0].Damage != 42 ||
 		result.Encounters[0].Fights[0].Periods[0].Start.MessageType == "" ||
 		result.Encounters[0].Phases[0].ID != phaseID.String() || result.RaidSnapshots[0].EncounterID == nil ||
@@ -78,6 +81,41 @@ func TestCoreFieldsRoundTrip(t *testing.T) {
 	units.Info[id] = unitinfo.Info{Guid: id, Name: "changed"}
 	if result.Overview.TopIncomingDamageAbilities[0].Damage != 42 || result.Units[0].Name != "Hakkar" {
 		t.Fatal("transport result aliases source state")
+	}
+}
+
+func TestCorePlayerMetadataUsesLegacyParticipationLevelRules(t *testing.T) {
+	t.Parallel()
+	units := unitdb.New()
+	guilds := armory.New(units)
+	preferred, fallback, missing := guid.GUID(1), guid.GUID(2), guid.GUID(3)
+	guilds.Participant[preferred] = struct{}{}
+	guilds.Participant[fallback] = struct{}{}
+	guilds.Participant[missing] = struct{}{}
+	units.Info[preferred] = unitinfo.Info{Name: "unit name", Level: 52}
+	units.Info[fallback] = unitinfo.Info{Level: 53}
+	level := int32(60)
+	units.Players[preferred] = combatant.Combatant{Name: "combatant name", Level: &level, HeroClass: types.HeroClassesMAGE, Race: types.HeroRacesHuman}
+	units.Players[fallback] = combatant.Combatant{Name: "fallback", HeroClass: types.HeroClassesWARRIOR}
+	result, err := Build(Input{Format: database.LogFormat112aCcAddon, Finalized: &instances.FinalizedInstance{Guilds: guilds}, Events: encounterevents.NewEvents(), Units: units})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Units) != 3 || !result.Units[0].HasPlayerData || result.Units[0].PlayerLevel != 60 ||
+		result.Units[0].PlayerName != "combatant name" || result.Units[0].PlayerClass != "MAGE" || result.Units[0].PlayerRace != "Human" ||
+		!result.Units[1].HasPlayerData || result.Units[1].PlayerLevel != 53 || result.Units[2].HasPlayerData {
+		t.Fatalf("player projection changed: %+v", result.Units)
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded Result
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(result.Units, decoded.Units) {
+		t.Fatalf("player metadata changed in JSON roundtrip: %+v", decoded.Units)
 	}
 }
 

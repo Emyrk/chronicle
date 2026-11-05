@@ -2,6 +2,7 @@ package chronicle
 
 import (
 	"encoding/json"
+	"sort"
 	"testing"
 	"time"
 
@@ -36,11 +37,19 @@ func TestParsedCoreRowsMatchDirectWriterAfterJSONRoundTrip(t *testing.T) {
 	phases := [2]uuid.UUID{uuid.New(), uuid.New()}
 	hostile, err := guid.FromString("0xF130000001000001")
 	require.NoError(t, err)
+	player := guid.GUID(1)
+	missingPlayer := guid.GUID(2)
+	fallbackPlayer := guid.GUID(3)
 	complete := true
-	result := parseresult.Result{SchemaVersion: 3, Format: database.LogFormat112aCcAddon, Name: "Core Test", Versions: map[string]string{"addon": "1.0"},
+	result := parseresult.Result{SchemaVersion: 4, Format: database.LogFormat112aCcAddon, Name: "Core Test", Versions: map[string]string{"addon": "1.0"},
 		Core:     parseresult.CoreInstance{Category: "raid", DifficultyName: "Normal", MaxPlayers: 40, Start: at, End: at.Add(time.Minute), Capabilities: []string{"events"}},
 		Overview: parseresult.Overview{RequirementsComplete: &complete, PlayerDeaths: 2, WipeCount: 1, MetricsVersion: 1, TopIncomingDamageAbilities: []parseresult.IncomingDamageAbility{{Name: "Fire", Damage: 8, Hits: 2}}},
-		Units:    []parseresult.UnitMetadata{{GUID: hostile.String(), Name: "Hostile", Entry: 1}},
+		Units: []parseresult.UnitMetadata{
+			{GUID: hostile.String(), Name: "Hostile", Entry: 1},
+			{GUID: player.String(), Player: true, Participating: true, HasPlayerData: true, PlayerName: "Mage", PlayerLevel: 58, PlayerClass: "MAGE", PlayerRace: "Human"},
+			{GUID: fallbackPlayer.String(), Player: true, Participating: true, HasPlayerData: true, PlayerName: "Fallback", PlayerLevel: 53, PlayerClass: "WARRIOR"}, // Unknown race fallback.
+			{GUID: missingPlayer.String(), Player: true, Participating: true},                                                                                        // Legacy skips absent playerData.
+		},
 	}
 	result.Encounters = []parseresult.Encounter{{ID: encounters[1].String(), Name: "Boss", MapID: 1, KillType: "clean", Boss: true, Start: at, End: at.Add(time.Minute), Fights: []parseresult.Fight{{GUID: hostile.String(), Boss: true, Periods: []parseresult.FightPeriod{{Start: &parseresult.FightMoment{Timestamp: at, Reason: "engage", MessageType: "event", Message: json.RawMessage(`{"id":1}`)}, EndState: "slain"}}}}, Phases: []parseresult.Phase{{ID: phases[1].String(), Key: "one", Name: "Phase One", Order: 1, StartOffsetMs: 0, EndOffsetMs: 5000, KillType: "clean"}}}}
 	result.RaidSnapshots = []parseresult.RaidSnapshot{{ObservedAt: at}}
@@ -60,6 +69,10 @@ func TestParsedCoreRowsMatchDirectWriterAfterJSONRoundTrip(t *testing.T) {
 	// Direct snapshot composition is the all-zero GUID matrix, as in the DTO.
 	require.NoError(t, store.InsertInstanceRaidGroupSnapshot(ctx, database.InsertInstanceRaidGroupSnapshotParams{InstanceID: ids[0], SnapshotType: database.RaidGroupSnapshotTypeFinal, ObservedAt: database.Timestamptz(at)}))
 	require.NoError(t, store.InsertInstanceUnits(ctx, []database.InsertInstanceUnitsParams{{InstanceID: ids[0], UnitGuid: hostile, Name: "Hostile", Entry: 1}}).Close())
+	require.NoError(t, store.InsertInstancePlayers(ctx, []database.InsertInstancePlayersParams{
+		{InstanceID: ids[0], UnitGuid: player, Name: "Mage", Level: 58, Class: database.WowPlayableClassMAGE, Race: database.WowPlayableRaceHuman},
+		{InstanceID: ids[0], UnitGuid: fallbackPlayer, Name: "Fallback", Level: 53, Class: database.WowPlayableClassWARRIOR, Race: database.WowPlayableRaceUnknown},
+	}).Close())
 	encoded, err := json.Marshal(result)
 	require.NoError(t, err)
 	var decoded parseresult.Result
@@ -104,6 +117,20 @@ func TestParsedCoreRowsMatchDirectWriterAfterJSONRoundTrip(t *testing.T) {
 	if diff := cmp.Diff(oldUnits, newUnits); diff != "" {
 		t.Fatalf("unit rows (-direct +adapter):\n%s", diff)
 	}
+	oldPlayers, err := store.InstancePlayersByInstanceID(ctx, ids[0])
+	require.NoError(t, err)
+	newPlayers, err := store.InstancePlayersByInstanceID(ctx, ids[1])
+	require.NoError(t, err)
+	require.Len(t, oldPlayers, 2) // Missing combatant metadata is omitted, as by the legacy writer.
+	require.Len(t, newPlayers, 2)
+	sort.Slice(oldPlayers, func(i, j int) bool { return oldPlayers[i].UnitGuid < oldPlayers[j].UnitGuid })
+	sort.Slice(newPlayers, func(i, j int) bool { return newPlayers[i].UnitGuid < newPlayers[j].UnitGuid })
+	for i := range oldPlayers {
+		oldPlayers[i].InstanceID, newPlayers[i].InstanceID = uuid.Nil, uuid.Nil
+	}
+	if diff := cmp.Diff(oldPlayers, newPlayers); diff != "" {
+		t.Fatalf("player rows (-direct +adapter):\n%s", diff)
+	}
 	oldSnapshots, err := store.InstanceRaidGroupSnapshots(ctx, ids[0])
 	require.NoError(t, err)
 	newSnapshots, err := store.InstanceRaidGroupSnapshots(ctx, ids[1])
@@ -142,12 +169,8 @@ func TestParsedCoreRejectsUnsupportedTransport(t *testing.T) {
 	require.ErrorContains(t, err, "unsupported core parse result")
 }
 
-func TestParsedCoreRejectsMissingPlayerFieldsBeforeWrites(t *testing.T) {
+func TestParsedCoreRejectsPreviousSchemaBeforeWrites(t *testing.T) {
 	t.Parallel()
-	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	player, err := guid.FromString("0x0000000000000001")
-	require.NoError(t, err)
-	result := parseresult.Result{SchemaVersion: 3, Format: database.LogFormat112aCcAddon, Name: "test", Core: parseresult.CoreInstance{Start: at, End: at.Add(time.Minute)}, Units: []parseresult.UnitMetadata{{GUID: player.String(), Player: true, Participating: true}}}
-	_, err = InsertParsedCore(t.Context(), nil, result, ParsedCoreWrite{InstanceID: uuid.New(), RealmID: uuid.New(), LogGroupID: uuid.New(), ParserVersion: "test"})
-	require.ErrorContains(t, err, "participating player requires class/race/level")
+	_, err := InsertParsedCore(t.Context(), nil, parseresult.Result{SchemaVersion: 3, Format: database.LogFormat112aCcAddon}, ParsedCoreWrite{})
+	require.ErrorContains(t, err, "unsupported core parse result schema 3")
 }
