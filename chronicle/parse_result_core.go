@@ -31,7 +31,7 @@ type ParsedCoreWrite struct {
 // rankings or other parser side effects. Use a transactional store: a write
 // failure after the instance insert must roll back the entire operation.
 func InsertParsedCore(ctx context.Context, store database.Store, result parseresult.Result, write ParsedCoreWrite) (database.LogInstance, error) {
-	if result.SchemaVersion != 2 || result.Format != database.LogFormat112aCcAddon {
+	if result.SchemaVersion != 3 || result.Format != database.LogFormat112aCcAddon {
 		return database.LogInstance{}, fmt.Errorf("unsupported core parse result schema %d format %q", result.SchemaVersion, result.Format)
 	}
 	if write.InstanceID == uuid.Nil || write.RealmID == uuid.Nil || write.LogGroupID == uuid.Nil || write.ParserVersion == "" || result.Name == "" || result.Core.Start.IsZero() || result.Core.End.IsZero() {

@@ -37,7 +37,7 @@ func TestParsedCoreRowsMatchDirectWriterAfterJSONRoundTrip(t *testing.T) {
 	hostile, err := guid.FromString("0xF130000001000001")
 	require.NoError(t, err)
 	complete := true
-	result := parseresult.Result{SchemaVersion: 2, Format: database.LogFormat112aCcAddon, Name: "Core Test", Versions: map[string]string{"addon": "1.0"},
+	result := parseresult.Result{SchemaVersion: 3, Format: database.LogFormat112aCcAddon, Name: "Core Test", Versions: map[string]string{"addon": "1.0"},
 		Core:     parseresult.CoreInstance{Category: "raid", DifficultyName: "Normal", MaxPlayers: 40, Start: at, End: at.Add(time.Minute), Capabilities: []string{"events"}},
 		Overview: parseresult.Overview{RequirementsComplete: &complete, PlayerDeaths: 2, WipeCount: 1, MetricsVersion: 1, TopIncomingDamageAbilities: []parseresult.IncomingDamageAbility{{Name: "Fire", Damage: 8, Hits: 2}}},
 		Units:    []parseresult.UnitMetadata{{GUID: hostile.String(), Name: "Hostile", Entry: 1}},
@@ -147,7 +147,7 @@ func TestParsedCoreRejectsMissingPlayerFieldsBeforeWrites(t *testing.T) {
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	player, err := guid.FromString("0x0000000000000001")
 	require.NoError(t, err)
-	result := parseresult.Result{SchemaVersion: 2, Format: database.LogFormat112aCcAddon, Name: "test", Core: parseresult.CoreInstance{Start: at, End: at.Add(time.Minute)}, Units: []parseresult.UnitMetadata{{GUID: player.String(), Player: true, Participating: true}}}
+	result := parseresult.Result{SchemaVersion: 3, Format: database.LogFormat112aCcAddon, Name: "test", Core: parseresult.CoreInstance{Start: at, End: at.Add(time.Minute)}, Units: []parseresult.UnitMetadata{{GUID: player.String(), Player: true, Participating: true}}}
 	_, err = InsertParsedCore(t.Context(), nil, result, ParsedCoreWrite{InstanceID: uuid.New(), RealmID: uuid.New(), LogGroupID: uuid.New(), ParserVersion: "test"})
 	require.ErrorContains(t, err, "participating player requires class/race/level")
 }
