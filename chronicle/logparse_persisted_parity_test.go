@@ -18,9 +18,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// This compares the persisted subset supported by the data-only adapters, not
-// a whole-DB parse. Guild/armory, ranking, parse-report and job side effects
-// belong to the worker and are deliberately absent on the adapter side.
+// This compares the core and event rows for both initial and replacement
+// parses, not a whole-DB parse. Guild/armory, ranking, parse-report, and job
+// side effects are deliberately not compared here.
 func TestLegacyWorkerPersistedCoreMatchesDataOnlyParse(t *testing.T) {
 	for _, replacement := range []bool{false, true} {
 		name := "initial"
