@@ -62,14 +62,17 @@ export function LeaderboardsLiveHub() {
   if (pathTab !== undefined && (hubTab(pathTab) === undefined || pathTab === "overview")) return <Navigate to={hubPath("overview", params)} replace />
   // Only the first load (nothing on screen yet) replaces the page.
   if (!summary.data && summary.isError) return <p role="alert" className="mx-auto max-w-[1920px] p-8 text-muted-foreground">Could not load leaderboard summary.</p>
-  // Until then the page renders its frame with skeleton rows.
+  // Until then the page renders its frame with skeleton rows. A new request (another instance,
+  // cohort, or realm) keeps the last summary as placeholder data; that is loading too, not this
+  // page's (empty) boards.
   const loading = !summary.data
+  const stale = !loading && summary.isPlaceholderData
   return <div className="flex min-w-0 gap-6">
     <div className="min-w-0 flex-1">
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={(name) => choose("instance", name)}
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
         realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data?.instances ?? []} landingPreviews={summary.data?.landing_previews}
-        loading={loading}
+        loading={loading || stale}
         onOpenCohort={(name, cohort) => {
           // A card is one difficulty/size: open the instance on it.
           const next = hubParams(params, "instance", name)
@@ -77,7 +80,7 @@ export function LeaderboardsLiveHub() {
           next.set("size", String(cohort.maxPlayers))
           setParams(next)
         }}
-        renderInstance={(name) => loading ? <LoadingInstanceHub instanceName={name} tab={tab} onTab={chooseTab} realm={realm} onInstance={() => choose("instance")} /> : <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} realm={realm}
+        renderInstance={(name) => loading ? <LoadingInstanceHub instanceName={name} tab={tab} onTab={chooseTab} realm={realm} onInstance={() => choose("instance")} /> : <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} stale={stale} realm={realm}
           realmIDs={selectedRealmIDs} encounters={encounters} tab={tab}
           onInstance={(next) => choose("instance", next)} onTab={chooseTab}
           onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
@@ -96,17 +99,22 @@ function LoadingInstanceHub({ instanceName, tab, onTab, realm, onInstance }: {
 }) {
   const live = {
     bosses: [], realms: [realm], specsFor: () => [], subSpecsFor: () => [],
-    renderOverview: (context: HubLiveTabContext) => <Overview {...context.overview} data={{ pending: true }} instanceName={instanceName}
-      scope={context.scope} role={context.role} subject={context.subject} onScope={context.onScope} onTab={context.onTab}
-      onRatings={context.onRatings} onStatistics={context.onStatistics} onRole={context.onRole} />,
-    renderTab: (context: HubLiveTabContext) => context.tab === "ratings" ? <BoardSkeleton />
-      : <div className="overflow-hidden rounded-xl border bg-card"><SkeletonRows rows={10} /></div>,
+    renderOverview: (context: HubLiveTabContext) => <LoadingContent context={context} overview />,
+    renderTab: (context: HubLiveTabContext) => <LoadingContent context={context} />,
   }
   return <LeaderboardHub live={live} instanceName={instanceName} onAllInstances={onInstance} tab={tab} onTab={onTab} realm={realm} onRealm={() => {}} />
 }
 
-function LiveInstanceHub({ instanceName, names, summary, realm, realmIDs, encounters, tab, difficulty, size, onInstance, onTab, onRealm, onCohort, onEncounters }: {
-  instanceName: string; names: string[]; summary: HubSummary; realm: string; realmIDs: string[]; encounters: readonly string[]
+/** A tab's or the Overview's skeleton rows while the page summary loads. */
+function LoadingContent({ context, overview = false }: { context: HubLiveTabContext; overview?: boolean }) {
+  if (overview) return <Overview {...context.overview} data={{ pending: true }} instanceName={context.instanceName}
+    scope={context.scope} role={context.role} subject={context.subject} onScope={context.onScope} onTab={context.onTab}
+    onRatings={context.onRatings} onStatistics={context.onStatistics} onRole={context.onRole} />
+  return context.tab === "ratings" ? <BoardSkeleton /> : <div className="overflow-hidden rounded-xl border bg-card"><SkeletonRows rows={10} /></div>
+}
+
+function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs, encounters, tab, difficulty, size, onInstance, onTab, onRealm, onCohort, onEncounters }: {
+  instanceName: string; names: string[]; summary: HubSummary; stale: boolean; realm: string; realmIDs: string[]; encounters: readonly string[]
   tab: ReturnType<typeof v2Selection>["tab"]; difficulty: string | null; size: string | null
   onInstance: (name?: string) => void; onTab: (tab: ReturnType<typeof v2Selection>["tab"]) => void
   onRealm: (name: string) => void; onCohort: (difficulty: string, size: string) => void; onEncounters: (bosses: readonly string[]) => void
@@ -142,16 +150,16 @@ function LiveInstanceHub({ instanceName, names, summary, realm, realmIDs, encoun
         </button>
       })}
     </div> : undefined,
-    renderOverview: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} overview />,
-    renderTab: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} />,
+    renderOverview: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} stale={stale} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} overview />,
+    renderTab: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} stale={stale} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} />,
   }
   return <LeaderboardHub live={live} instanceName={instanceName} instances={names} onAllInstances={() => onInstance()}
     onSwitchInstance={(next) => onInstance(next)} tab={tab} onTab={onTab} realm={realm} onRealm={onRealm}
     initialBosses={chosen.length ? chosen : undefined} />
 }
 
-function LiveHubContent({ context, summary, requestedEncounters = [], realmName, realmIDs, cohort, bosses, overview = false }: {
-  context: HubLiveTabContext; summary: HubSummary; requestedEncounters?: readonly string[]; realmName?: string; realmIDs: readonly string[]
+function LiveHubContent({ context, summary, stale = false, requestedEncounters = [], realmName, realmIDs, cohort, bosses, overview = false }: {
+  context: HubLiveTabContext; summary: HubSummary; stale?: boolean; requestedEncounters?: readonly string[]; realmName?: string; realmIDs: readonly string[]
   cohort?: { difficulty_name: string; max_players: number }; bosses: readonly string[]; overview?: boolean
 }) {
   const { instanceName, scope, role, subject, selection, onTab } = context
@@ -203,6 +211,8 @@ function LiveHubContent({ context, summary, requestedEncounters = [], realmName,
     !overview && context.tab === "parsing" && !!chosen && !realmName)
   const timeSpreads = useTimeParseSpreads(instanceName, !overview && context.tab === "parsing" && !!chosen && !realmName)
   const queryState = <T,>(query: { data?: T; isPending: boolean; isError: boolean }) => query.isError ? { status: "error" as const } : query.isPending ? { status: "loading" as const } : { status: "ready" as const, data: query.data! }
+  // The summary belongs to the previous request; its boards would read as empty ones.
+  if (stale) return <LoadingContent context={context} overview={overview} />
   if (!overview && realmIDs.length > 1) return <p role="status" className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">Choose one realm or All realms in the Hub selector. This view cannot apply multiple realms.</p>
   if (overview) return <LiveHubOverview context={context} summary={summary} requestedEncounters={requestedEncounters} realmName={realmName} realmIDs={realmIDs} bosses={bosses} />
   if (context.tab === "ratings") return <LiveHubRatings instanceName={instanceName} bosses={bosses.filter((name) => name !== "Trash")}
