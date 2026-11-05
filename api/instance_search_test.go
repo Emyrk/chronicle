@@ -242,9 +242,11 @@ func TestInstanceSearch(t *testing.T) {
 		require.InDelta(t, 60, fresh.RefillPerMinute, 0.001)
 		require.EqualValues(t, 0, fresh.ResetSeconds)
 
-		require.Equal(t, http.StatusOK, doSearch(t, api, user, "10.0.0.8", advancedSearch).Code)
+		searchRec := doSearch(t, api, user, "10.0.0.8", advancedSearch)
+		require.Equal(t, http.StatusOK, searchRec.Code)
+		runtimeCost := mustAtoi(t, searchRec.Header().Get(InstanceSearchRuntimeCostHeader))
 		after := get(user)
-		require.InDelta(t, 86, after.Remaining, 0.5) // 13 static plus runtime
+		require.InDelta(t, 100-13-runtimeCost, after.Remaining, 0.5)
 		require.Positive(t, after.ResetSeconds)
 		// Peeking does not spend.
 		require.InDelta(t, after.Remaining, get(user).Remaining, 0.5)
