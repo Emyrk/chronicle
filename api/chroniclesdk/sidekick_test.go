@@ -43,9 +43,11 @@ func TestSidekickLogFormatValid(t *testing.T) {
 		SidekickLogFormat335aCcAddon,
 		SidekickLogFormat243CcAddon,
 		SidekickLogFormatHermesproxy1142Cc,
+		SidekickLogFormatV22Cleu,
 	} {
 		require.True(t, format.Valid())
 	}
+	require.True(t, SidekickLogFormat("v22-cleu").Valid())
 	require.False(t, SidekickLogFormat("future").Valid())
 }
 

@@ -188,6 +188,8 @@ function logFormatLabel(format?: SidekickLogFormat): string {
       return "TBC 2.4.3";
     case "3.3.5a-cc-addon":
       return "Wrath 3.3.5a";
+    case "v22-cleu":
+      return "WoW Forever";
     default:
       return "Unknown";
   }

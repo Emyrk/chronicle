@@ -26,6 +26,7 @@ const (
 	SidekickLogFormat335aCcAddon       SidekickLogFormat = "3.3.5a-cc-addon"
 	SidekickLogFormat243CcAddon        SidekickLogFormat = "2.4.3-cc-addon"
 	SidekickLogFormatHermesproxy1142Cc SidekickLogFormat = "hermesproxy_1_14_2_cc"
+	SidekickLogFormatV22Cleu           SidekickLogFormat = "v22-cleu"
 
 	SidekickAutoUploadDisabled   SidekickAutoUploadMode = "disabled"
 	SidekickAutoUploadOnGameExit SidekickAutoUploadMode = "on_game_exit"
@@ -44,7 +45,8 @@ func (f SidekickLogFormat) Valid() bool {
 	case SidekickLogFormat112aCcAddon,
 		SidekickLogFormat335aCcAddon,
 		SidekickLogFormat243CcAddon,
-		SidekickLogFormatHermesproxy1142Cc:
+		SidekickLogFormatHermesproxy1142Cc,
+		SidekickLogFormatV22Cleu:
 		return true
 	default:
 		return false
