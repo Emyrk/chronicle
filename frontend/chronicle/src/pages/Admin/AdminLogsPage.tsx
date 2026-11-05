@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
 import { formatBytes } from "@/lib/format";
 import { toast } from "sonner";
+import { UserFilterCombobox } from "./UserFilterCombobox";
 
 interface LogRowProps {
   log: AdminLog;
@@ -398,18 +399,11 @@ export function AdminLogsPage() {
           <span className="text-sm text-muted-foreground">Filters:</span>
         </div>
         
-        <select
+        <UserFilterCombobox
+          users={users}
           value={filterUserId}
-          onChange={(e) => handleFilterChange("user", e.target.value)}
-          className="h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="">All users</option>
-          {users.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.username}
-            </option>
-          ))}
-        </select>
+          onChange={(userId) => handleFilterChange("user", userId)}
+        />
 
         <select
           value={filterInstanceName}
