@@ -35,9 +35,22 @@ const QueryVersion = parsepolicy.QueryVersion
 type WorkerComputeParseScores struct {
 	river.WorkerDefaults[parseargs.ArgsComputeParseScores]
 
-	Store  database.Store
-	Queue  *riverqueue.Queues
-	Logger *slog.Logger
+	Store        database.Store
+	Queue        *riverqueue.Queues
+	Logger       *slog.Logger
+	RecordOutput func(context.Context, any) error
+}
+
+type computeParseScoresOutput struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
+func (w *WorkerComputeParseScores) recordOutput(ctx context.Context, output any) error {
+	if w.RecordOutput != nil {
+		return w.RecordOutput(ctx, output)
+	}
+	return river.RecordOutput(ctx, output)
 }
 
 func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[parseargs.ArgsComputeParseScores]) error {
@@ -107,7 +120,14 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 			}
 		}
 		if cohortMode == parsepolicy.CohortModeDisabled {
-			return river.JobCancel(fmt.Errorf("parse scoring disabled for tenant %s", tenantID))
+			message := fmt.Sprintf("parse scoring disabled for tenant %s", tenantID)
+			if err := w.recordOutput(ctx, computeParseScoresOutput{
+				Status:  "skipped",
+				Message: message,
+			}); err != nil {
+				logger.Warn("failed to record disabled parse scoring output", slog.Any("error", err))
+			}
+			return nil
 		}
 
 		cutoff := inst.StartTime.Time.UTC()

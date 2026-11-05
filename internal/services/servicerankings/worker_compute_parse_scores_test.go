@@ -2,6 +2,7 @@ package servicerankings_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -85,6 +86,52 @@ func TestWorkerComputeParseScores_EmptyCohort(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, receipts, 1)
 	assert.False(t, receipts[0].SnapshotID.Valid)
+}
+
+func TestWorkerComputeParseScores_DisabledTenantCompletesWithOutput(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	f := setupScoringFixture(t, pool, store)
+
+	tenantID := uuid.New()
+	_, err := store.InsertTenant(ctx, database.InsertTenantParams{
+		ID:               tenantID,
+		Name:             "disabled-tenant-" + tenantID.String()[:8],
+		ParseConfig:      []byte(`{"cohort_mode":"disabled"}`),
+		IncludeInAll:     true,
+		AvailableFormats: []string{},
+	})
+	require.NoError(t, err)
+
+	var output any
+	worker := &servicerankings.WorkerComputeParseScores{
+		Store:  store,
+		Logger: slog.Default(),
+		RecordOutput: func(_ context.Context, value any) error {
+			output = value
+			return nil
+		},
+	}
+
+	err = worker.Work(ctx, &river.Job[parseargs.ArgsComputeParseScores]{
+		Args: parseargs.ArgsComputeParseScores{
+			InstanceID: f.instanceID,
+			TenantID:   tenantID,
+		},
+	})
+	require.NoError(t, err)
+
+	encoded, err := json.Marshal(output)
+	require.NoError(t, err)
+	require.JSONEq(t, fmt.Sprintf(`{"status":"skipped","message":"parse scoring disabled for tenant %s"}`, tenantID), string(encoded))
+
+	_, err = store.GetAnyParseScoreReceiptForTenantInstance(ctx, database.GetAnyParseScoreReceiptForTenantInstanceParams{
+		TenantID: tenantID, InstanceID: f.instanceID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestWorkerComputeParseScores_DoesNotScheduleLegacyRetries(t *testing.T) {
