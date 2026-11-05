@@ -6,8 +6,10 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"path"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -147,6 +149,32 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, result)
 }
 
+func eventStreamRedirectURL(baseURL string, event database.LogInstanceEvent) (string, bool) {
+	if event.Storage != database.LogEventStorageR2 || !event.ObjectKey.Valid || baseURL == "" {
+		return "", false
+	}
+	return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(event.ObjectKey.String, "/"), true
+}
+
+func writeInstanceEvent(w http.ResponseWriter, r *http.Request, event database.LogInstanceEvent, publicURL string, byID bool) {
+	if target, ok := eventStreamRedirectURL(publicURL, event); ok {
+		http.Redirect(w, r, target, http.StatusTemporaryRedirect)
+		return
+	} else if event.Storage == database.LogEventStorageR2 {
+		httpapi.InternalServerError(w, errors.New("R2 event stream URL is not configured"))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	if byID {
+		w.Header().Set("Cache-Control", "public, max-age=604800")
+	} else {
+		w.Header().Set("Cache-Control", "no-store")
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(event.Events)
+}
+
 func (api *API) InstanceEvents(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	inst := httpmw.Instance(ctx)
@@ -167,18 +195,7 @@ func (api *API) InstanceEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The conversion to another type is pretty expensive, just use the type as is.
-	w.Header().Set("Content-Type", "application/octet-stream")
-	if httpmw.InstanceByID(ctx) {
-		// UUID event URLs are immutable, unlisted cache keys. Their response is
-		// intentionally public even when the containing log is unlisted.
-		w.Header().Set("Cache-Control", "public, max-age=604800") // 7 days
-	} else {
-		// Slugs are not stable cache keys.
-		w.Header().Set("Cache-Control", "no-store")
-	}
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(evts.Events)
+	writeInstanceEvent(w, r, evts, api.Opts.EventStreamPublicURL, httpmw.InstanceByID(ctx))
 }
 
 func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
@@ -212,6 +229,10 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 	setDataset := func(out *chroniclesdk.WoWInstance) {
 		out.OwnerAdsFree = ownerAdsFree
 		out.Unlisted = httpmw.InstanceUnlisted(ctx)
+		if inst.EventStorage == database.LogEventStorageR2 {
+			out.EventStreamBaseURL = strings.TrimRight(api.Opts.EventStreamPublicURL, "/")
+			out.EventStreamPath = path.Join("events", inst.LogGroupID.String(), inst.ID.String())
+		}
 		datasetID, ok := api.Opts.Dataset.LookupDatasetForRealm(ctx, inst.RealmID)
 		if !ok {
 			return

@@ -112,6 +112,16 @@ func (s *Service) Start(ctx context.Context) error {
 		MaxWorkers: 1,
 	})
 
+	riverqueue.AddWorker(q, chron.NewWorkerEventObjectDeletion())
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			river.PeriodicInterval(time.Minute),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return chronicle.ArgsEventObjectDeletion{}, nil
+			},
+			&river.PeriodicJobOpts{ID: "event-object-deletion-outbox", RunOnStart: true},
+		),
+	)
 	riverqueue.AddWorker(q, chron.NewWorkerLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerReLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerRegressionSnapshot())

@@ -143,6 +143,64 @@ func AllKillTypeValues() []KillType {
 	}
 }
 
+type LogEventStorage string
+
+const (
+	LogEventStorageDatabase LogEventStorage = "database"
+	LogEventStorageR2       LogEventStorage = "r2"
+)
+
+func (e *LogEventStorage) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = LogEventStorage(s)
+	case string:
+		*e = LogEventStorage(s)
+	default:
+		return fmt.Errorf("unsupported scan type for LogEventStorage: %T", src)
+	}
+	return nil
+}
+
+type NullLogEventStorage struct {
+	LogEventStorage LogEventStorage `json:"log_event_storage"`
+	Valid           bool            `json:"valid"` // Valid is true if LogEventStorage is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullLogEventStorage) Scan(value interface{}) error {
+	if value == nil {
+		ns.LogEventStorage, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.LogEventStorage.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullLogEventStorage) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.LogEventStorage), nil
+}
+
+func (e LogEventStorage) Valid() bool {
+	switch e {
+	case LogEventStorageDatabase,
+		LogEventStorageR2:
+		return true
+	}
+	return false
+}
+
+func AllLogEventStorageValues() []LogEventStorage {
+	return []LogEventStorage{
+		LogEventStorageDatabase,
+		LogEventStorageR2,
+	}
+}
+
 type LogFormat string
 
 const (
@@ -1456,6 +1514,16 @@ type EncounterDpsRanking struct {
 	UnrankedDamageDone int64              `db:"unranked_damage_done" json:"unranked_damage_done"`
 }
 
+// Durable outbox of event-stream object keys awaiting idempotent object-storage deletion.
+type EventObjectDeletionOutbox struct {
+	ID        uuid.UUID          `db:"id" json:"id"`
+	ObjectKey string             `db:"object_key" json:"object_key"`
+	Attempts  int32              `db:"attempts" json:"attempts"`
+	LastError pgtype.Text        `db:"last_error" json:"last_error"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type ExternalCharacterLinkSync struct {
 	UserID       uuid.UUID          `db:"user_id" json:"user_id"`
 	Source       string             `db:"source" json:"source"`
@@ -2067,6 +2135,7 @@ type LogInstance struct {
 	UpdatedAt               pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	InvalidatedAt           pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
 	InvalidReason           string             `db:"invalid_reason" json:"invalid_reason"`
+	EventStorage            LogEventStorage    `db:"event_storage" json:"event_storage"`
 }
 
 type LogInstanceEncounter struct {
@@ -2117,7 +2186,10 @@ type LogInstanceEvent struct {
 	InstanceID uuid.UUID            `db:"instance_id" json:"instance_id"`
 	Type       LogInstanceEventType `db:"type" json:"type"`
 	// Gzipped protobuf-encoded events
-	Events []byte `db:"events" json:"events"`
+	Events    []byte          `db:"events" json:"events"`
+	Storage   LogEventStorage `db:"storage" json:"storage"`
+	ObjectKey pgtype.Text     `db:"object_key" json:"object_key"`
+	SizeBytes int64           `db:"size_bytes" json:"size_bytes"`
 }
 
 type LogInstancePlayer struct {
@@ -2178,6 +2250,7 @@ type LogInstancesGuild struct {
 	VehicleControlIntervals vehicles.Metadata  `db:"vehicle_control_intervals" json:"vehicle_control_intervals"`
 	InvalidatedAt           pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
 	InvalidReason           string             `db:"invalid_reason" json:"invalid_reason"`
+	EventStorage            LogEventStorage    `db:"event_storage" json:"event_storage"`
 	RealmName               string             `db:"realm_name" json:"realm_name"`
 	GuildName               pgtype.Text        `db:"guild_name" json:"guild_name"`
 	GuildRealmID            uuid.NullUUID      `db:"guild_realm_id" json:"guild_realm_id"`

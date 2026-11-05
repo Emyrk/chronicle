@@ -53,7 +53,7 @@ type WoWLogGroup struct {
 	Artifacts        []WoWLogArtifact `json:"artifacts,omitempty"`
 	ProcessingOutput json.RawMessage  `json:"processing_output,omitempty"`
 	// ParsedBytes is the total size, in bytes, of the parsed combat-log event
-	// streams (log_instance_events.events) for this log group. It does not
+	// streams (log_instance_events.size_bytes) for this log group. It does not
 	// count against the owner's raw storage allowance.
 	ParsedBytes int64 `json:"parsed_bytes"`
 }
@@ -167,6 +167,9 @@ type WoWInstance struct {
 	OwnerAdsFree            bool                    `json:"owner_ads_free"`
 	LogGroupID              uuid.UUID               `json:"log_group_id"`
 	Unlisted                bool                    `json:"unlisted"`
+	EventStorage            string                  `json:"event_storage"`
+	EventStreamBaseURL      string                  `json:"event_stream_base_url,omitempty"`
+	EventStreamPath         string                  `json:"event_stream_path,omitempty"`
 	Name                    string                  `json:"name"`
 	Slug                    string                  `json:"slug"`
 	StartTime               *time.Time              `json:"start_time,omitempty"`

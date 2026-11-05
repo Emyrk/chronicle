@@ -61,6 +61,15 @@ ORDER BY li.end_time ASC, li.id ASC
 LIMIT @page_size;
 
 -- name: DeleteLogInstancesByIDs :execrows
+WITH enqueued AS (
+  INSERT INTO event_object_deletion_outbox (object_key)
+  SELECT object_key
+  FROM log_instance_events
+  WHERE instance_id = ANY(@ids::uuid[])
+    AND storage = 'r2'
+    AND object_key IS NOT NULL
+  ON CONFLICT (object_key) DO NOTHING
+)
 DELETE FROM log_instances
 WHERE id = ANY(@ids::uuid[]);
 

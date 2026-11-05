@@ -142,6 +142,10 @@ type Options struct {
 	LiveSignalingPublicURL   *url.URL
 	LiveSignalingSecret      string
 
+	// EventStreamPublicURL is the runtime-configured public origin for R2 event objects.
+	// It is intentionally not persisted in PostgreSQL.
+	EventStreamPublicURL string
+
 	// Tenant is the multi-tenant service for subdomain → tenant resolution.
 	// If nil, tenant middleware is a no-op.
 	Tenant *servicetenant.Service

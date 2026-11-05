@@ -73,6 +73,7 @@ const (
 type Chronicle struct {
 	AppContext         context.Context
 	Storage            storage.ObjectStorage
+	EventStreams       *EventStreamStore
 	logger             *slog.Logger
 	TemporaryDirectory string
 	queue              *riverqueue.Queues
@@ -98,6 +99,7 @@ type Chronicle struct {
 
 type Options struct {
 	Storage         storage.ObjectStorage
+	EventStreams    *EventStreamStore
 	Zed             *authz.Authz
 	Ps              pubsub.Pubsub
 	WoWDB           *gamedb.WoWDB
@@ -120,8 +122,16 @@ type Options struct {
 }
 
 func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, error) {
+	if opts.EventStreams == nil {
+		var err error
+		opts.EventStreams, err = NewEventStreamStore(database.LogEventStorageDatabase, nil, logger)
+		if err != nil {
+			return nil, err
+		}
+	}
 	c := &Chronicle{
 		AppContext:         ctx,
+		EventStreams:       opts.EventStreams,
 		primaryDomain:      opts.PrimaryDomain,
 		defaultFlavor:      opts.DefaultFlavor,
 		defaultDatasetID:   opts.DefaultDatasetID,

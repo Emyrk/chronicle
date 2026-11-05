@@ -530,6 +530,14 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			})
 		}
 
+		eventParams, cleanupEventUploads, err := w.parent.EventStreams.Prepare(ctx, job.Args.LogID, instanceID, inst.Events())
+		if err != nil {
+			jobOut.InstanceFailures[fmt.Sprintf("%s_%d", inst.Name(), i)] = err.Error()
+			metrics.instanceFailures.Inc()
+			report.Instances = append(report.Instances, instReport)
+			continue
+		}
+
 		// Time DB insert
 		dbInsertStart := time.Now()
 		// Only 1 instance should be inserted at a time. This will break if we go
@@ -604,6 +612,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				VehicleControlIntervals: finalized.VehicleMetadata,
 				InvalidatedAt:           lg.InvalidatedAt,
 				InvalidReason:           lg.InvalidReason,
+				EventStorage:            string(w.parent.EventStreams.Backend()),
 			}
 
 			// Preserve the original stable slug when possible. If another instance
@@ -665,9 +674,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			// Reattach of shared_views and youtube rows is handled by
 			// the reattach_by_slug trigger on log_instances INSERT.
 
-			evts := inst.Events()
-			err = evts.Insert(ctx, tx, dbinstance.ID)
-			if err != nil {
+			if err := tx.InsertLogInstanceEvents(ctx, eventParams).Close(); err != nil {
 				return fmt.Errorf("insert events: %w", err)
 			}
 
@@ -870,6 +877,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		report.Instances = append(report.Instances, instReport)
 
 		if err != nil {
+			cleanupEventUploads()
 			w.parent.insertParsedInstanceMu.Unlock()
 			insertLockHeld = false
 			jobResult = "cancelled"

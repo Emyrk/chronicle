@@ -293,6 +293,7 @@ func (s *Service) Start(ctx context.Context) error {
 		DevOAuth:                 s.devAuth,
 		Discord:                  s.discordAuth,
 		SecretPEM:                decodedSecret,
+		EventStreamPublicURL:     servicechronicle.EventStreamPublicURL(s.broker),
 		LiveSignalingInternalURL: liveInternalURL,
 		LiveSignalingPublicURL:   livePublicURL,
 		LiveSignalingSecret:      s.liveSignalingSecret,

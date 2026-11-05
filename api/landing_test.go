@@ -415,7 +415,7 @@ func seedLandingInstance(t *testing.T, store database.Store, start, end time.Tim
 	require.NoError(t, err)
 	require.NoError(t, zw.Close())
 	store.InsertLogInstanceEvents(ctx, []database.InsertLogInstanceEventsParams{
-		{InstanceID: instanceID, Type: database.LogInstanceEventTypeSlain, Events: gz.Bytes()},
+		{InstanceID: instanceID, Type: database.LogInstanceEventTypeSlain, Storage: database.LogEventStorageDatabase, Events: gz.Bytes(), SizeBytes: int64(gz.Len())},
 	}).Exec(func(_ int, err error) { require.NoError(t, err) })
 
 	return instanceID

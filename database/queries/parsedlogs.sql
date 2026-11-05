@@ -1,18 +1,32 @@
 -- name: DeleteAllParsedLogsByGroupID :exec
-DELETE FROM
-  parsed_log_group
-WHERE
-  id = $1
+WITH enqueued AS (
+  INSERT INTO event_object_deletion_outbox (object_key)
+  SELECT lie.object_key
+  FROM log_instance_events lie
+  JOIN log_instances li ON li.id = lie.instance_id
+  WHERE li.log_group_id = $1
+    AND lie.storage = 'r2'
+    AND lie.object_key IS NOT NULL
+  ON CONFLICT (object_key) DO NOTHING
+)
+DELETE FROM parsed_log_group plg
+WHERE plg.id = $1
 ;
 
 -- name: DeleteLogInstanceByIDAndGroup :one
-DELETE FROM
-  log_instances
-WHERE
-  id = $1
-  AND log_group_id = $2
-RETURNING
-  id
+WITH enqueued AS (
+  INSERT INTO event_object_deletion_outbox (object_key)
+  SELECT object_key
+  FROM log_instance_events
+  WHERE instance_id = $1
+    AND storage = 'r2'
+    AND object_key IS NOT NULL
+  ON CONFLICT (object_key) DO NOTHING
+)
+DELETE FROM log_instances li
+WHERE li.id = $1
+  AND li.log_group_id = $2
+RETURNING li.id
 ;
 
 -- name: PruneParsedInstanceFromLogOutput :exec
@@ -101,9 +115,9 @@ WHERE id = $1
 
 -- name: InsertInstance :one
 INSERT INTO
-  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, invalidated_at, invalid_reason)
+  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, invalidated_at, invalid_reason, event_storage)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, COALESCE(NULLIF(sqlc.arg('event_storage')::text, '')::log_event_storage, 'database'::log_event_storage))
 ON CONFLICT (hashed_slug) WHERE hashed_slug IS NOT NULL DO NOTHING
 RETURNING *
 ;

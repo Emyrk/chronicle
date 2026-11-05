@@ -98,10 +98,18 @@ WHERE
 ;
 
 -- name: DeleteWoWLogGroup :exec
-DELETE FROM
-  wow_log_groups
-WHERE
-  id = $1
+WITH enqueued AS (
+  INSERT INTO event_object_deletion_outbox (object_key)
+  SELECT lie.object_key
+  FROM log_instance_events lie
+  JOIN log_instances li ON li.id = lie.instance_id
+  WHERE li.log_group_id = $1
+    AND lie.storage = 'r2'
+    AND lie.object_key IS NOT NULL
+  ON CONFLICT (object_key) DO NOTHING
+)
+DELETE FROM wow_log_groups wlg
+WHERE wlg.id = $1
 ;
 
 -- name: DeleteWoWLogGroupFiles :many
@@ -520,7 +528,7 @@ FROM
     ) instances_output ON true
 
     LEFT JOIN LATERAL (
-    SELECT COALESCE(SUM(octet_length(lie.events)), 0)::bigint AS parsed_bytes
+    SELECT COALESCE(SUM(lie.size_bytes), 0)::bigint AS parsed_bytes
     FROM log_instance_events lie
     JOIN log_instances li ON li.id = lie.instance_id
     WHERE li.log_group_id = wow_log_groups.id

@@ -17,6 +17,11 @@ CREATE TYPE kill_type AS ENUM (
     'reset'
 );
 
+CREATE TYPE log_event_storage AS ENUM (
+    'database',
+    'r2'
+);
+
 CREATE TYPE log_format AS ENUM (
     '1.12a-superwow-addon',
     '1.12a-cc-addon',
@@ -1465,6 +1470,17 @@ CREATE TABLE encounter_dps_rankings (
 
 ALTER TABLE ONLY encounter_dps_rankings FORCE ROW LEVEL SECURITY;
 
+CREATE TABLE event_object_deletion_outbox (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    object_key text NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    last_error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+COMMENT ON TABLE event_object_deletion_outbox IS 'Durable outbox of event-stream object keys awaiting idempotent object-storage deletion.';
+
 CREATE TABLE external_character_link_syncs (
     user_id uuid NOT NULL,
     source text NOT NULL,
@@ -2130,7 +2146,12 @@ CREATE TABLE log_instance_encounters (
 CREATE TABLE log_instance_events (
     instance_id uuid NOT NULL,
     type log_instance_event_type NOT NULL,
-    events bytea NOT NULL
+    events bytea,
+    storage log_event_storage DEFAULT 'database'::log_event_storage NOT NULL,
+    object_key text,
+    size_bytes bigint NOT NULL,
+    CONSTRAINT log_instance_events_size_bytes_check CHECK ((size_bytes >= 0)),
+    CONSTRAINT log_instance_events_storage_payload_check CHECK ((((storage = 'database'::log_event_storage) AND (events IS NOT NULL) AND (object_key IS NULL)) OR ((storage = 'r2'::log_event_storage) AND (events IS NULL) AND (object_key IS NOT NULL))))
 );
 
 COMMENT ON COLUMN log_instance_events.events IS 'Gzipped protobuf-encoded events';
@@ -2198,6 +2219,7 @@ CREATE TABLE log_instances (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     invalidated_at timestamp with time zone,
     invalid_reason text DEFAULT ''::text NOT NULL,
+    event_storage log_event_storage DEFAULT 'database'::log_event_storage NOT NULL,
     CONSTRAINT log_instances_category_check CHECK ((category = ANY (ARRAY['raid'::text, 'dungeon'::text])))
 );
 
@@ -2282,6 +2304,7 @@ CREATE VIEW log_instances_guild AS
     li.vehicle_control_intervals,
     li.invalidated_at,
     li.invalid_reason,
+    li.event_storage,
     COALESCE(wsr.name, 'Unknown'::text) AS realm_name,
     g.name AS guild_name,
     g.realm_id AS guild_realm_id,
@@ -4246,6 +4269,12 @@ ALTER TABLE ONLY encounter_dps_rankings
 ALTER TABLE ONLY encounter_dps_rankings
     ADD CONSTRAINT encounter_dps_rankings_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY event_object_deletion_outbox
+    ADD CONSTRAINT event_object_deletion_outbox_object_key_key UNIQUE (object_key);
+
+ALTER TABLE ONLY event_object_deletion_outbox
+    ADD CONSTRAINT event_object_deletion_outbox_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY external_character_link_syncs
     ADD CONSTRAINT external_character_link_syncs_pkey PRIMARY KEY (user_id, source);
 
@@ -4422,6 +4451,9 @@ ALTER TABLE ONLY log_instance_encounter_phases
 
 ALTER TABLE ONLY log_instance_encounters
     ADD CONSTRAINT log_instance_encounters_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY log_instance_events
+    ADD CONSTRAINT log_instance_events_instance_type_key UNIQUE (instance_id, type);
 
 ALTER TABLE ONLY log_instance_raid_group_snapshots
     ADD CONSTRAINT log_instance_raid_group_snapshots_pkey PRIMARY KEY (id);

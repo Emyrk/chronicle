@@ -11,7 +11,7 @@ SELECT COUNT(*)::bigint FROM users;
 SELECT COUNT(*)::bigint FROM log_file;
 
 -- name: TelemetryGetTotalParsedBytes :one
-SELECT COALESCE(SUM(octet_length(events)), 0)::bigint FROM log_instance_events;
+SELECT COALESCE(SUM(size_bytes), 0)::bigint FROM log_instance_events;
 
 -- name: TelemetryGetActiveFileBytes :one
 SELECT COALESCE(SUM(size_bytes), 0)::bigint FROM log_file

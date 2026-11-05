@@ -204,6 +204,7 @@ type sqlcQuerier interface {
 	DeleteDiscordAnnouncementSource(ctx context.Context, arg DeleteDiscordAnnouncementSourceParams) error
 	DeleteDiscordMembershipGrantCheck(ctx context.Context, userID uuid.UUID) error
 	DeleteEmptyCooldownOverrides(ctx context.Context, datasetID uuid.UUID) error
+	DeleteEventObjectDeletionOutbox(ctx context.Context, id uuid.UUID) error
 	DeleteExpiredGuildResourceVisitors(ctx context.Context) error
 	DeleteExpiredOAuthDeviceSessions(ctx context.Context) (int64, error)
 	DeleteExpiredOAuthRelayCodes(ctx context.Context) (int64, error)
@@ -1064,6 +1065,7 @@ type sqlcQuerier interface {
 	ListDiscordAnnouncementEncounters(ctx context.Context, instanceID uuid.UUID) ([]ListDiscordAnnouncementEncountersRow, error)
 	ListDiscordAnnouncementSources(ctx context.Context, announcementID uuid.UUID) ([]GuildDiscordLogAnnouncementSource, error)
 	ListDistinctInstanceNames(ctx context.Context) ([]string, error)
+	ListEventObjectDeletionOutbox(ctx context.Context, limit int32) ([]EventObjectDeletionOutbox, error)
 	ListEvolvingAllClassPlayerTenantBossScores(ctx context.Context, arg ListEvolvingAllClassPlayerTenantBossScoresParams) ([]ListEvolvingAllClassPlayerTenantBossScoresRow, error)
 	ListEvolvingAllClassPlayerTenantScopeScores(ctx context.Context, arg ListEvolvingAllClassPlayerTenantScopeScoresParams) ([]ListEvolvingAllClassPlayerTenantScopeScoresRow, error)
 	ListEvolvingGuildTenantBossScores(ctx context.Context, arg ListEvolvingGuildTenantBossScoresParams) ([]ListEvolvingGuildTenantBossScoresRow, error)
@@ -1521,6 +1523,7 @@ type sqlcQuerier interface {
 	// Files the user appended to someone else's log group belong to that raid.
 	ReassignAppendedLogFilesToGroupOwner(ctx context.Context, userID uuid.UUID) error
 	RecordAuthzMigration(ctx context.Context, version int32) error
+	RecordEventObjectDeletionFailure(ctx context.Context, arg RecordEventObjectDeletionFailureParams) error
 	RecordGuildInstanceView(ctx context.Context, arg RecordGuildInstanceViewParams) error
 	RecordGuildResourceView(ctx context.Context, arg RecordGuildResourceViewParams) error
 	RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) (RedeemOAuthRelayCodeRow, error)

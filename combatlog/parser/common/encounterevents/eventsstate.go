@@ -62,251 +62,71 @@ func NewEvents() *Events {
 	}
 }
 
+type Stream struct {
+	Type database.LogInstanceEventType
+	Data []byte
+}
+
+func (e *Events) Compressed() ([]Stream, error) {
+	streams := []struct {
+		typ  database.LogInstanceEventType
+		name string
+		data *[]byte
+	}{
+		{database.LogInstanceEventTypeDamage, "damage", &e.Damage},
+		{database.LogInstanceEventTypeHeal, "healing", &e.Healing},
+		{database.LogInstanceEventTypeUnitPosition, "unit position", &e.UnitPosition},
+		{database.LogInstanceEventTypeUnitResources, "unit resources", &e.UnitResources},
+		{database.LogInstanceEventTypeResourceChange, "resource change", &e.ResourceChange},
+		{database.LogInstanceEventTypeExtraAttack, "extra attack", &e.ExtraAttack},
+		{database.LogInstanceEventTypeSlain, "slain", &e.Slain},
+		{database.LogInstanceEventTypeRessurection, "resurrection", &e.Resurrection},
+		{database.LogInstanceEventTypeCast, "cast", &e.Cast},
+		{database.LogInstanceEventTypeAura, "aura", &e.Aura},
+		{database.LogInstanceEventTypeSpellGo, "spell go", &e.SpellGo},
+		{database.LogInstanceEventTypeAuraCast, "aura cast", &e.AuraCasts},
+		{database.LogInstanceEventTypeSpellStart, "spell start", &e.SpellStart},
+		{database.LogInstanceEventTypeSpellFail, "spell fail", &e.SpellFail},
+		{database.LogInstanceEventTypeUnitClassification, "unit classification", &e.UnitClassification},
+		{database.LogInstanceEventTypeCombatantInfo, "combatant info", &e.CombatantInfo},
+		{database.LogInstanceEventTypeDispel, "dispel", &e.Dispel},
+		{database.LogInstanceEventTypeInterrupt, "interrupt", &e.Interrupt},
+		{database.LogInstanceEventTypeAbsorbed, "absorbed", &e.Absorbed},
+		{database.LogInstanceEventTypeCompanionStats, "companion stats", &e.CompanionStats},
+		{database.LogInstanceEventTypeConsume, "consume", &e.Consume},
+		{database.LogInstanceEventTypeRaidGroup, "raid group", &e.RaidGroup},
+	}
+
+	compressed := make([]Stream, 0, len(streams))
+	for _, stream := range streams {
+		payload, err := gzipData(*stream.data)
+		if err != nil {
+			return nil, fmt.Errorf("gzip %s events: %w", stream.name, err)
+		}
+		*stream.data = nil
+		compressed = append(compressed, Stream{Type: stream.typ, Data: payload})
+	}
+	return compressed, nil
+}
+
 func (e *Events) Insert(ctx context.Context, db database.Store, instanceID uuid.UUID) error {
-	damagePayload, err := gzipData(e.Damage)
+	streams, err := e.Compressed()
 	if err != nil {
-		return fmt.Errorf("gzip damage events: %w", err)
+		return err
 	}
-
-	healingPayload, err := gzipData(e.Healing)
-	if err != nil {
-		return fmt.Errorf("gzip healing events: %w", err)
-	}
-	e.Healing = nil
-
-	unitPositionPayload, err := gzipData(e.UnitPosition)
-	if err != nil {
-		return fmt.Errorf("gzip unit position events: %w", err)
-	}
-	e.UnitPosition = nil
-
-	unitResourcesPayload, err := gzipData(e.UnitResources)
-	if err != nil {
-		return fmt.Errorf("gzip unit resources events: %w", err)
-	}
-	e.UnitResources = nil
-
-	resourceChangePayload, err := gzipData(e.ResourceChange)
-	if err != nil {
-		return fmt.Errorf("gzip resource change events: %w", err)
-	}
-	e.ResourceChange = nil
-
-	extraAttack, err := gzipData(e.ExtraAttack)
-	if err != nil {
-		return fmt.Errorf("gzip resource change events: %w", err)
-	}
-	e.ExtraAttack = nil
-
-	slain, err := gzipData(e.Slain)
-	if err != nil {
-		return fmt.Errorf("gzip resource change events: %w", err)
-	}
-	e.Slain = nil
-
-	resurrection, err := gzipData(e.Resurrection)
-	if err != nil {
-		return fmt.Errorf("gzip resurrection events: %w", err)
-	}
-	e.Resurrection = nil
-
-	casts, err := gzipData(e.Cast)
-	if err != nil {
-		return fmt.Errorf("gzip cast events: %w", err)
-	}
-	e.Cast = nil
-
-	auras, err := gzipData(e.Aura)
-	if err != nil {
-		return fmt.Errorf("gzip cast events: %w", err)
-	}
-	e.Aura = nil
-
-	spellGo, err := gzipData(e.SpellGo)
-	if err != nil {
-		return fmt.Errorf("gzip spell go events: %w", err)
-	}
-	e.SpellGo = nil
-
-	spellStart, err := gzipData(e.SpellStart)
-	if err != nil {
-		return fmt.Errorf("gzip spell start events: %w", err)
-	}
-
-	auraCasts, err := gzipData(e.AuraCasts)
-	if err != nil {
-		return fmt.Errorf("gzip aura cast events: %w", err)
-	}
-	e.AuraCasts = nil
-
-	spellFails, err := gzipData(e.SpellFail)
-	if err != nil {
-		return fmt.Errorf("gzip spell fail events: %w", err)
-	}
-
-	unitClassification, err := gzipData(e.UnitClassification)
-	if err != nil {
-		return fmt.Errorf("gzip unit classification events: %w", err)
-	}
-
-	combatantInfo, err := gzipData(e.CombatantInfo)
-	if err != nil {
-		return fmt.Errorf("gzip combatant info events: %w", err)
-	}
-	e.CombatantInfo = nil
-
-	dispelPayload, err := gzipData(e.Dispel)
-	if err != nil {
-		return fmt.Errorf("gzip dispel events: %w", err)
-	}
-	e.Dispel = nil
-
-	interruptPayload, err := gzipData(e.Interrupt)
-	if err != nil {
-		return fmt.Errorf("gzip interrupt events: %w", err)
-	}
-	e.Interrupt = nil
-
-	absorbedPayload, err := gzipData(e.Absorbed)
-	if err != nil {
-		return fmt.Errorf("gzip absorbed events: %w", err)
-	}
-	e.Absorbed = nil
-
-	companionStatsPayload, err := gzipData(e.CompanionStats)
-	if err != nil {
-		return fmt.Errorf("gzip companion stats events: %w", err)
-	}
-	e.CompanionStats = nil
-
-	raidGroupPayload, err := gzipData(e.RaidGroup)
-	if err != nil {
-		return fmt.Errorf("gzip raid group events: %w", err)
-	}
-	e.RaidGroup = nil
-
-	consumePayload, err := gzipData(e.Consume)
-	if err != nil {
-		return fmt.Errorf("gzip consume events: %w", err)
-	}
-	e.Consume = nil
-
-	res := db.InsertLogInstanceEvents(ctx, []database.InsertLogInstanceEventsParams{
-		{
+	params := make([]database.InsertLogInstanceEventsParams, 0, len(streams))
+	for _, stream := range streams {
+		params = append(params, database.InsertLogInstanceEventsParams{
 			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeDamage,
-			Events:     damagePayload,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeHeal,
-			Events:     healingPayload,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeUnitPosition,
-			Events:     unitPositionPayload,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeUnitResources,
-			Events:     unitResourcesPayload,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeResourceChange,
-			Events:     resourceChangePayload,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeExtraAttack,
-			Events:     extraAttack,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeSlain,
-			Events:     slain,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeRessurection,
-			Events:     resurrection,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeCast,
-			Events:     casts,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeAura,
-			Events:     auras,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeSpellGo,
-			Events:     spellGo,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeAuraCast,
-			Events:     auraCasts,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeSpellStart,
-			Events:     spellStart,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeSpellFail,
-			Events:     spellFails,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeUnitClassification,
-			Events:     unitClassification,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeCombatantInfo,
-			Events:     combatantInfo,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeDispel,
-			Events:     dispelPayload,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeInterrupt,
-			Events:     interruptPayload,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeAbsorbed,
-			Events:     absorbedPayload,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeCompanionStats,
-			Events:     companionStatsPayload,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeConsume,
-			Events:     consumePayload,
-		},
-		{
-			InstanceID: instanceID,
-			Type:       database.LogInstanceEventTypeRaidGroup,
-			Events:     raidGroupPayload,
-		},
-	})
-	if err := res.Close(); err != nil {
-		return fmt.Errorf("damage: %w", err)
+			Type:       stream.Type,
+			Storage:    database.LogEventStorageDatabase,
+			Events:     stream.Data,
+			SizeBytes:  int64(len(stream.Data)),
+		})
 	}
-
+	if err := db.InsertLogInstanceEvents(ctx, params).Close(); err != nil {
+		return fmt.Errorf("insert events: %w", err)
+	}
 	return nil
 }
 
