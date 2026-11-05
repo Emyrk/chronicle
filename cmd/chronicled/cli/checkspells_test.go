@@ -37,3 +37,11 @@ func TestCheckSpellDatasetsCmdRootRegistration(t *testing.T) {
 	}
 	t.Fatal("check-spell-datasets subcommand not registered")
 }
+
+func TestRootCmdDoesNotRegisterResync(t *testing.T) {
+	t.Parallel()
+
+	for _, child := range cli.RootCmd().Children {
+		require.NotEqual(t, "resync", child.Use)
+	}
+}

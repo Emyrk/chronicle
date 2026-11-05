@@ -492,24 +492,6 @@ func (w *WoWDB) Close() error {
 	return nil
 }
 
-// DatasetHasDBSpells reports whether the given dataset has imported spells in
-// the dbc_spells table. Used by resync to validate that DB-only spell mode
-// will work before deleting parsed data.
-func (w *WoWDB) DatasetHasDBSpells(ctx context.Context, datasetID uuid.UUID) (bool, error) {
-	if w.pool == nil {
-		return false, fmt.Errorf("no database pool configured")
-	}
-	var has bool
-	err := w.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM dbc_spells WHERE dataset_id = $1)`,
-		datasetID,
-	).Scan(&has)
-	if err != nil {
-		return false, fmt.Errorf("check dataset spells: %w", err)
-	}
-	return has, nil
-}
-
 // ScopedGameDB routes item/creature lookups to a specific dataset while sharing
 // the parent WoWDB's caches. Created via [WoWDB.ForDataset].
 type ScopedGameDB struct {

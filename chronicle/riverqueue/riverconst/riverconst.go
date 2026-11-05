@@ -8,7 +8,6 @@ const (
 	QueueDiscordAnnouncements = "discord-announcements"
 	QueueRetention            = "retention"
 	QueueRankings             = "rankings"
-	QueueResync               = "resync"
 )
 
 const (

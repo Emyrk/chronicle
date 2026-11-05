@@ -28,7 +28,6 @@ const (
 	QueueDiscordAnnouncements = riverconst.QueueDiscordAnnouncements
 	QueueRetention            = riverconst.QueueRetention
 	QueueRankings             = riverconst.QueueRankings
-	QueueResync               = riverconst.QueueResync
 	PriorityHighest           = riverconst.PriorityHighest
 	PriorityHigh              = riverconst.PriorityHigh
 	PriorityDefault           = riverconst.PriorityDefault
@@ -89,7 +88,7 @@ func (q *Queues) AddPeriodicJob(job *river.PeriodicJob) *Queues {
 }
 
 // WorkerMiddleware returns the middleware shared by every Chronicle River
-// worker client, including isolated CLI clients.
+// worker client.
 func WorkerMiddleware(logger *slog.Logger) []rivertype.Middleware {
 	return []rivertype.Middleware{
 		NewWorkerPanicMW(logger),

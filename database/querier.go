@@ -1546,11 +1546,6 @@ type sqlcQuerier interface {
 	ResolveExternalAPIServer(ctx context.Context, server string) (ResolveExternalAPIServerRow, error)
 	ResolveSidekickIssuesExcept(ctx context.Context, arg ResolveSidekickIssuesExceptParams) (int64, error)
 	ResumeInferenceRun(ctx context.Context, arg ResumeInferenceRunParams) (InferenceRun, error)
-	// Returns log groups that have been parsed and still have raw files on storage.
-	// Filtering by parser version is done in Go using semverenc for full
-	// major.minor.patch comparison. The caller deduplicates rows by log group and
-	// applies its own distinct log-group limit.
-	ResyncCandidateLogGroups(ctx context.Context) ([]ResyncCandidateLogGroupsRow, error)
 	RetireActiveRatingScoreGeneration(ctx context.Context, tenantID uuid.UUID) error
 	RevokeActiveSidekickOAuthGrants(ctx context.Context, sidekickID uuid.UUID) ([]string, error)
 	RevokeOAuthTokenSessions(ctx context.Context, arg RevokeOAuthTokenSessionsParams) (int64, error)

@@ -26,7 +26,6 @@ func RootCmd() *serpent.Command {
 		ServerCmd(),
 		GenerateSecretKey(),
 		CheckSpellDatasetsCmd(),
-		ResyncCmd(),
 	)
 
 	return cmd
