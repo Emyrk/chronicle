@@ -110,7 +110,10 @@ func TestCancellationStillChargesRuntime(t *testing.T) {
 func TestSearchGoCaller(t *testing.T) {
 	t.Parallel()
 	db, _ := dbtestutil.NewDB(t)
-	s := New(testutil.Logger(t), db, prometheus.NewRegistry(), nil)
+	limit := ratelimit.Limit{PerSecond: 0, Burst: 100}
+	s := New(testutil.Logger(t), db, prometheus.NewRegistry(), func(context.Context, uuid.UUID) (UserAccess, error) {
+		return UserAccess{Limit: limit, Tier: "free"}, nil
+	})
 	s.runtimeCost = func(time.Duration) int { return 1 }
 	ctx := testutil.Context(t, testutil.WaitMedium)
 	caller := Caller{UserID: uuid.New(), TenantID: uuid.New()}
@@ -120,17 +123,17 @@ func TestSearchGoCaller(t *testing.T) {
 	require.NotNil(t, page.Results)
 	require.Equal(t, 1, result.Cost)
 	require.Equal(t, 1, result.RuntimeCost)
-	require.InDelta(t, 98, result.Status.Remaining, 0.1)
+	require.Equal(t, 98.0, result.Status.Remaining)
 	status, _, err := s.Peek(ctx, caller)
 	require.NoError(t, err)
-	require.InDelta(t, 98, status.Remaining, 1)
+	require.Equal(t, 98.0, status.Remaining)
 	_, result = s.Search(servicetenant.AdminBypass(ctx), caller, q)
 	require.Error(t, result.Err)
 	require.Equal(t, 0, result.Cost)
 	// The rejected bypass must not charge the shared bucket.
 	status, _, err = s.Peek(ctx, caller)
 	require.NoError(t, err)
-	require.InDelta(t, 98, status.Remaining, 1)
+	require.Equal(t, 98.0, status.Remaining)
 	_, result = s.Explain(ctx, caller, q, uuid.New())
 	require.ErrorIs(t, result.Err, instancesearch.ErrNotFound)
 	require.Equal(t, 1, result.Cost)
