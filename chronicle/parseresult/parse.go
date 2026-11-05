@@ -53,6 +53,16 @@ func Parse(ctx context.Context, reader io.Reader, gameDB gamedb.GameDB, reg *reg
 		return nil, fmt.Errorf("consume v2 log: %w", err)
 	}
 
+	capabilities := []string{"overheal", "absorb"}
+	if parser.SawRaidGroup() {
+		capabilities = append(capabilities, "raidgroup")
+	}
+	if parser.SawUnitResources() {
+		capabilities = append(capabilities, "unit-resources")
+	}
+	if parser.SawUnitPosition() {
+		capabilities = append(capabilities, "unit-position")
+	}
 	results := make([]Result, 0, len(state.Instances))
 	for _, inst := range state.Instances {
 		if err := ctx.Err(); err != nil {
@@ -65,7 +75,12 @@ func Parse(ctx context.Context, reader io.Reader, gameDB gamedb.GameDB, reg *reg
 		if fin == nil || len(fin.Encounters) == 0 {
 			continue
 		}
-		result, err := Build(Input{Format: database.LogFormat112aCcAddon, Name: inst.Name(), Finalized: fin, Events: inst.Events()})
+		result, err := Build(Input{
+			Format: database.LogFormat112aCcAddon, Name: inst.Name(), Finalized: fin, Events: inst.Events(),
+			Category: string(inst.Category), DifficultyName: inst.CurrentZone.DifficultyName,
+			MaxPlayers: int32(inst.CurrentZone.MaxPlayers), DynamicDifficulty: int32(inst.CurrentZone.DynamicDifficulty),
+			Capabilities: capabilities, Units: state.Units, IdentifyUnit: inst.IdentifyUnit,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("project instance %q: %w", inst.Name(), err)
 		}

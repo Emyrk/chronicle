@@ -5,35 +5,54 @@ package parseresult
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounterevents"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 )
 
 // Input is a read-only view of a finalized 1.12a CC-addon instance. The caller
 // owns Finalized and Events; Build copies every value it emits.
 type Input struct {
-	Format    database.LogFormat
-	Name      string
-	Finalized *instances.FinalizedInstance
-	Events    *encounterevents.Events
+	Format            database.LogFormat
+	Name              string
+	Finalized         *instances.FinalizedInstance
+	Events            *encounterevents.Events
+	Category          string
+	DifficultyName    string
+	MaxPlayers        int32
+	DynamicDifficulty int32
+	Capabilities      []string
+	Units             *unitdb.Units
+	IdentifyUnit      func(guid.GUID) identifier.Identity
 }
 
-// Result covers only event streams and selected instance/encounter metadata.
-// It omits units, encounter fights/phases, guilds, loot, participants, rankings,
-// overview metrics, raid groups, vehicle metadata, realm resolution, and all
-// DB-assigned IDs and write-time decisions. It cannot be used for persistence
-// or DB parity without those additional projections.
+// Result covers event streams and parser-derived core instance, overview,
+// encounter fight/phase, raid snapshot and observed-unit fields. It still omits
+// full player class/race and guild-participant rows, guild/armory/loot writes,
+// rankings, realm resolution, DB-assigned IDs, and write-time decisions.
+// Version 0 is the original unversioned projection; version 1 adds core fields.
+// Neither version is a complete persistence payload or full DB parity proof.
 type Result struct {
 	Format       database.LogFormat `json:"format"`
 	Name         string             `json:"name"`
 	RealmName    string             `json:"realm_name"`
 	Versions     map[string]string  `json:"versions"`
 	RecorderGUID string             `json:"recorder_guid"`
+	RecorderName string             `json:"recorder_name"`
 	Encounters   []Encounter        `json:"encounters"`
 	Events       EventStreams       `json:"events"`
+	// SchemaVersion identifies the transport DTO shape, not the parser version.
+	SchemaVersion int            `json:"schema_version"`
+	Core          CoreInstance   `json:"core"`
+	Overview      Overview       `json:"overview"`
+	RaidSnapshots []RaidSnapshot `json:"raid_snapshots"`
+	Units         []UnitMetadata `json:"units"`
 }
 
 type Encounter struct {
@@ -46,6 +65,9 @@ type Encounter struct {
 	End                  time.Time `json:"end"`
 	RankingStartOffsetMs *int64    `json:"ranking_start_offset_ms"`
 	RankingEndOffsetMs   *int64    `json:"ranking_end_offset_ms"`
+	Remaining            []string  `json:"remaining"`
+	Fights               []Fight   `json:"fights"`
+	Phases               []Phase   `json:"phases"`
 }
 
 // EventStreams is the raw, uncompressed event data that Events.Insert writes.
@@ -64,10 +86,11 @@ func Build(in Input) (*Result, error) {
 	}
 	fin := in.Finalized
 	out := &Result{
-		Format:     in.Format,
-		Name:       in.Name,
-		Versions:   make(map[string]string, len(fin.Versions)),
-		Encounters: make([]Encounter, 0, len(fin.Encounters)),
+		Format:        in.Format,
+		SchemaVersion: 1,
+		Name:          in.Name,
+		Versions:      make(map[string]string, len(fin.Versions)),
+		Encounters:    make([]Encounter, 0, len(fin.Encounters)),
 		Events: EventStreams{
 			Damage:             bytes.Clone(in.Events.Damage),
 			Healing:            bytes.Clone(in.Events.Healing),
@@ -98,11 +121,22 @@ func Build(in Input) (*Result, error) {
 	}
 	if fin.RecorderGUID != nil {
 		out.RecorderGUID = fin.RecorderGUID.String()
+		if in.Units != nil {
+			if unit, ok := in.Units.Get(*fin.RecorderGUID); ok {
+				out.RecorderName = unit.Name
+			}
+		}
 	}
 	for key, value := range fin.Versions {
 		out.Versions[key] = value
 	}
+	if err := buildCore(in, out); err != nil {
+		return nil, err
+	}
 	for _, enc := range fin.Encounters {
+		if len(enc.Combat.Hostiles) > 0 && in.IdentifyUnit == nil {
+			return nil, fmt.Errorf("identify unit callback required for encounter fights")
+		}
 		item := Encounter{
 			ID: enc.Combat.EncounterID.String(), Name: enc.Name,
 			MapID: enc.Combat.MapID, KillType: string(enc.KillType), Boss: enc.Boss,
@@ -113,6 +147,27 @@ func Build(in Input) (*Result, error) {
 			end := enc.RankingWindow.End.Sub(enc.Combat.Start).Milliseconds()
 			item.RankingStartOffsetMs = &start
 			item.RankingEndOffsetMs = &end
+		}
+		item.Remaining = make([]string, 0, len(enc.Remaining))
+		for _, id := range enc.Remaining {
+			item.Remaining = append(item.Remaining, id.String())
+		}
+		item.Fights = make([]Fight, 0, len(enc.Combat.Hostiles))
+		for id, hostile := range enc.Combat.Hostiles {
+			fight := Fight{GUID: id.String(), Boss: in.IdentifyUnit(id).Boss, Periods: make([]FightPeriod, 0, len(hostile.Activity))}
+			for _, p := range hostile.Activity {
+				entry, err := buildFightPeriod(p)
+				if err != nil {
+					return nil, fmt.Errorf("encounter %q fight %s: %w", enc.Name, id, err)
+				}
+				fight.Periods = append(fight.Periods, entry)
+			}
+			item.Fights = append(item.Fights, fight)
+		}
+		sort.Slice(item.Fights, func(i, j int) bool { return item.Fights[i].GUID < item.Fights[j].GUID })
+		item.Phases = make([]Phase, 0, len(enc.Phases))
+		for _, phase := range enc.Phases {
+			item.Phases = append(item.Phases, Phase{ID: phase.ID.String(), Key: phase.Key, Name: phase.Name, Order: int32(phase.Order), StartOffsetMs: phase.StartOffsetMs, EndOffsetMs: phase.EndOffsetMs, KillType: string(phase.KillType)})
 		}
 		out.Encounters = append(out.Encounters, item)
 	}

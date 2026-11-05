@@ -12,6 +12,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chronicleproto"
 	"github.com/Emyrk/chronicle/chronicle/parseresult"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/database"
@@ -66,6 +67,7 @@ func TestAddonDataOnlyParseMatchesWorkerProjection(t *testing.T) {
 		t.Fatalf("legacy parse: %v", err)
 	}
 	legacy := make([]parseresult.Result, 0, len(parsed.encountersState.Instances))
+	var legacyFinal *instances.FinalizedInstance
 	for _, inst := range parsed.encountersState.Instances {
 		fin, err := inst.Finalize(ctx)
 		if err != nil {
@@ -74,9 +76,13 @@ func TestAddonDataOnlyParseMatchesWorkerProjection(t *testing.T) {
 		if fin == nil || len(fin.Encounters) == 0 {
 			continue
 		}
+		legacyFinal = fin
 		result, err := parseresult.Build(parseresult.Input{
 			Format: database.LogFormat112aCcAddon, Name: inst.Name(),
-			Finalized: fin, Events: inst.Events(),
+			Finalized: fin, Events: inst.Events(), Units: parsed.encountersState.Units, IdentifyUnit: inst.IdentifyUnit,
+			Category: string(inst.Category), DifficultyName: inst.CurrentZone.DifficultyName,
+			MaxPlayers: int32(inst.CurrentZone.MaxPlayers), DynamicDifficulty: int32(inst.CurrentZone.DynamicDifficulty),
+			Capabilities: parsed.logCapabilities,
 		})
 		if err != nil {
 			t.Fatalf("legacy projection %q: %v", inst.Name(), err)
@@ -93,6 +99,19 @@ func TestAddonDataOnlyParseMatchesWorkerProjection(t *testing.T) {
 	}
 	if legacy[0].Encounters[0].ID == uuid.Nil.String() || fresh[0].Encounters[0].ID == uuid.Nil.String() || len(legacy[0].Events.Damage) == 0 {
 		t.Fatal("parses must produce identified encounters and nonempty damage events")
+	}
+	// The comparison below uses the same DTO builder on two independent parses.
+	// Also anchor key core fields directly to the live legacy writer inputs.
+	live := parsed.encountersState.Instances[0]
+	liveEncounter := legacyFinal.Encounters[0]
+	if fresh[0].SchemaVersion != 1 || fresh[0].Core.Category != string(live.Category) ||
+		fresh[0].Core.DifficultyName != live.CurrentZone.DifficultyName ||
+		fresh[0].Core.Start != liveEncounter.Combat.Start || fresh[0].Core.End != liveEncounter.Combat.End ||
+		fresh[0].Overview.WipeCount != legacyFinal.Overview.WipeCount ||
+		fresh[0].Overview.MetricsVersion != legacyFinal.Overview.MetricsVersion ||
+		len(fresh[0].Encounters[0].Fights) != len(liveEncounter.Combat.Hostiles) ||
+		len(fresh[0].Units) == 0 {
+		t.Fatalf("core fields diverged from live writer inputs: %+v", fresh[0])
 	}
 	if err := normalizeGeneratedEncounterIDs(legacy); err != nil {
 		t.Fatal(err)
