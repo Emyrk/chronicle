@@ -45,6 +45,11 @@ func newLegacyWorkerFixture(t *testing.T, ctx context.Context, runWorker ...bool
 
 func newLegacyWorkerFixtureWithLog(t *testing.T, ctx context.Context, rawLog []byte, runWorker ...bool) legacyWorkerFixture {
 	t.Helper()
+	return newLegacyWorkerFixtureForFormat(t, ctx, rawLog, database.LogTypeV2, database.LogFormat112aCcAddon, database.WoWFlavor{database.FlavorVanilla}, runWorker...)
+}
+
+func newLegacyWorkerFixtureForFormat(t *testing.T, ctx context.Context, rawLog []byte, logType database.LogType, format database.LogFormat, flavor database.WoWFlavor, runWorker ...bool) legacyWorkerFixture {
+	t.Helper()
 	pool, _ := dbtestutil.NewPGXPool(t)
 	store := database.New(pool)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -65,7 +70,7 @@ func newLegacyWorkerFixtureWithLog(t *testing.T, ctx context.Context, rawLog []b
 	}
 	chron, err := New(ctx, logger, Options{
 		Storage: objects, Zed: zed, WoWDB: wowDB,
-		DefaultDatasetID: datasetID, DefaultFlavor: database.WoWFlavor{database.FlavorVanilla},
+		DefaultDatasetID: datasetID, DefaultFlavor: flavor,
 	})
 	require.NoError(t, err)
 
@@ -80,7 +85,7 @@ func newLegacyWorkerFixtureWithLog(t *testing.T, ctx context.Context, rawLog []b
 	require.NoError(t, err)
 	at := database.Timestamptz(time.Date(2026, 2, 20, 0, 0, 0, 0, time.UTC))
 	_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
-		ID: logID, Owner: ownerID, LogType: database.LogTypeV2, CreatedAt: at, UpdatedAt: at,
+		ID: logID, Owner: ownerID, LogType: logType, Format: database.NullLogFormat{LogFormat: format, Valid: true}, Flavor: flavor.Strings(), CreatedAt: at, UpdatedAt: at,
 	})
 	require.NoError(t, err)
 	_, err = store.InsertLogFile(ctx, database.InsertLogFileParams{
