@@ -22,8 +22,13 @@ func InsertParsedGuilds(ctx context.Context, store database.Store, realmID uuid.
 	if len(observation.Players) != 0 {
 		return nil, fmt.Errorf("guild-only ingest cannot persist %d player observations", len(observation.Players))
 	}
+	_, majority, err := insertParsedGuildsWithIDs(ctx, store, realmID, realmName, instanceStart, observation)
+	return majority, err
+}
+
+func insertParsedGuildsWithIDs(ctx context.Context, store database.Store, realmID uuid.UUID, realmName string, instanceStart time.Time, observation parseresult.ArmoryObservation) (map[string]uuid.UUID, *database.Guild, error) {
 	if observation.ParticipantCount < 0 {
-		return nil, fmt.Errorf("negative participant count")
+		return nil, nil, fmt.Errorf("negative participant count")
 	}
 
 	// Validate and merge before writing: RenameGuilds merges member sets when
@@ -42,10 +47,10 @@ func InsertParsedGuilds(ctx context.Context, store database.Store, realmID uuid.
 		for _, member := range guild.Members {
 			id, err := guid.FromString(member)
 			if err != nil {
-				return nil, fmt.Errorf("guild %q member %q: %w", guild.Name, member, err)
+				return nil, nil, fmt.Errorf("guild %q member %q: %w", guild.Name, member, err)
 			}
 			if id.IsZero() || !id.IsPlayer() {
-				return nil, fmt.Errorf("guild %q has non-player member %s", guild.Name, member)
+				return nil, nil, fmt.Errorf("guild %q has non-player member %s", guild.Name, member)
 			}
 			set[id] = struct{}{}
 		}
@@ -57,13 +62,17 @@ func InsertParsedGuilds(ctx context.Context, store database.Store, realmID uuid.
 	slices.Sort(names)
 
 	var majority *database.Guild
+	guildIDs := make(map[string]uuid.UUID, len(names))
 	mostGuildPlayers := 0
 	for _, name := range names {
 		inserted, err := store.UpsertGuild(ctx, database.UpsertGuildParams{
 			RealmID: realmID, Name: name, CreatedAt: database.Timestamptz(time.Now()),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("upsert guild: %w", err)
+			return nil, nil, fmt.Errorf("upsert guild: %w", err)
+		}
+		if inserted.RealmID == realmID {
+			guildIDs[name] = inserted.ID
 		}
 		if len(members[name]) > mostGuildPlayers {
 			mostGuildPlayers = len(members[name])
@@ -73,5 +82,5 @@ func InsertParsedGuilds(ctx context.Context, store database.Store, realmID uuid.
 	if mostGuildPlayers <= observation.ParticipantCount/2 {
 		majority = nil
 	}
-	return majority, nil
+	return guildIDs, majority, nil
 }
