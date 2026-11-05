@@ -17,8 +17,8 @@ import (
 	"github.com/Emyrk/chronicle/database"
 )
 
-// Input is a read-only view of a finalized 1.12a CC-addon instance. The caller
-// owns Finalized and Events; Build copies every value it emits.
+// Input is a read-only view of a finalized CC-addon instance. The caller owns
+// Finalized and Events; Build copies every value it emits.
 type Input struct {
 	Format            database.LogFormat
 	Name              string
