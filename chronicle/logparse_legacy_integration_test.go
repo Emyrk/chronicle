@@ -33,7 +33,7 @@ type legacyWorkerFixture struct {
 	rawLog  []byte
 }
 
-func newLegacyWorkerFixture(t *testing.T, ctx context.Context) legacyWorkerFixture {
+func newLegacyWorkerFixture(t *testing.T, ctx context.Context, runWorker ...bool) legacyWorkerFixture {
 	t.Helper()
 	pool, _ := dbtestutil.NewPGXPool(t)
 	store := database.New(pool)
@@ -45,10 +45,14 @@ func newLegacyWorkerFixture(t *testing.T, ctx context.Context) legacyWorkerFixtu
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, wowDB.Close()) })
 	// The worker writes armory relationships through AuthzTX.Write, which needs
-	// a real SpiceDB client even when the relationship set is empty.
-	grpcURL, key := authztest.NewSpiceDBWithAddress(t)
-	zed, err := authz.New(ctx, authz.Options{GRPCURL: grpcURL, PreSharedKey: key, Logger: logger, DB: store})
-	require.NoError(t, err)
+	// a real SpiceDB client even when the relationship set is empty. The
+	// data-only fixture does not need that external service.
+	zed := authz.NewDatabaseOnly(logger, store)
+	if len(runWorker) == 0 || runWorker[0] {
+		grpcURL, key := authztest.NewSpiceDBWithAddress(t)
+		zed, err = authz.New(ctx, authz.Options{GRPCURL: grpcURL, PreSharedKey: key, Logger: logger, DB: store})
+		require.NoError(t, err)
+	}
 	chron, err := New(ctx, logger, Options{
 		Storage: objects, Zed: zed, WoWDB: wowDB,
 		DefaultDatasetID: datasetID, DefaultFlavor: database.WoWFlavor{database.FlavorVanilla},
