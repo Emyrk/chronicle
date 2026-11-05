@@ -18,12 +18,24 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Keep a nonempty fixture separate from the minimal initial/replacement test.
-// This compares persisted core, event, guild, player, gear-history and loot
-// rows from a real initial worker parse with independent adapters. It does not
-// establish whole-DB or rich replacement-parse parity.
+// Keep a nonempty fixture separate from the minimal test. This compares
+// persisted core, event, guild, player, gear-history and loot rows from real
+// initial and replacement worker parses with independent adapters. Ranking,
+// parse-report and job side effects remain outside this comparison.
 func TestLegacyAndDataOnlyParseProjectPlayerGuildAndLoot(t *testing.T) {
-	t.Parallel()
+	for _, replacement := range []bool{false, true} {
+		name := "initial"
+		if replacement {
+			name = "replacement"
+		}
+		t.Run(name, func(t *testing.T) {
+			compareRichLegacyAndDataOnlyParse(t, replacement)
+		})
+	}
+}
+
+func compareRichLegacyAndDataOnlyParse(t *testing.T, replacement bool) {
+	t.Helper()
 	ctx := testutil.Context(t, testutil.WaitLong)
 	raw := []byte("1771564196000|ZONE_INFO|Zul'Gurub||1|raid|0|309\n" +
 		"1771564196100|UNIT_INFO|0x000000000001C80A|1|PriestOne|1|||60||3117\n" +
@@ -33,9 +45,22 @@ func TestLegacyAndDataOnlyParseProjectPlayerGuildAndLoot(t *testing.T) {
 		"1771564200100|LOOT|PriestOne||cffffffff|Hitem:14047:0:0:0|h[Runecloth]|h|r\n" +
 		"1771564205000|ZONE_INFO|Stranglethorn Vale||0|none|0\n")
 	legacy := newLegacyWorkerFixtureWithLog(t, ctx, raw)
-	fresh := newLegacyWorkerFixtureWithLog(t, ctx, raw, false)
+	fresh := newLegacyWorkerFixtureWithLog(t, ctx, raw, replacement)
+	generation := int64(1)
+	if replacement {
+		for _, fixture := range []legacyWorkerFixture{legacy, fresh} {
+			require.NoError(t, fixture.worker.Work(ctx, &river.Job[ArgsLogParse]{
+				Args:   ArgsLogParse{LogID: fixture.logID, RealmID: fixture.realmID, ParseGeneration: 1},
+				JobRow: &rivertype.JobRow{Attempt: 1, MaxAttempts: 2},
+			}))
+			advanced, err := advanceParseGeneration(ctx, fixture.store, fixture.logID, true)
+			require.NoError(t, err)
+			require.Equal(t, int64(2), advanced)
+		}
+		generation = 2
+	}
 	require.NoError(t, legacy.worker.Work(ctx, &river.Job[ArgsLogParse]{
-		Args:   ArgsLogParse{LogID: legacy.logID, RealmID: legacy.realmID, ParseGeneration: 1},
+		Args:   ArgsLogParse{LogID: legacy.logID, RealmID: legacy.realmID, ParseGeneration: generation, Replacement: replacement},
 		JobRow: &rivertype.JobRow{Attempt: 1, MaxAttempts: 2},
 	}))
 	rows, err := legacy.store.GetInstancesByLogGroupID(ctx, legacy.logID)
@@ -68,10 +93,11 @@ func TestLegacyAndDataOnlyParseProjectPlayerGuildAndLoot(t *testing.T) {
 	require.Len(t, decoded.Loot, 1)
 	require.Equal(t, loot[0].ItemID, decoded.Loot[0].ItemID)
 
-	// Persist the transported observations in a separate database. This
-	// comparison covers player and loot rows with actual nonempty inputs; it
-	// does not imply complete replacement-parse or whole-DB parity.
-	require.NoError(t, fresh.store.InsertStagedParsedLogGroup(ctx, database.InsertStagedParsedLogGroupParams{ID: fresh.logID, ParseGeneration: 1}))
+	// Persist the transported observations in a separate database. The
+	// replacement case starts from two successful worker outputs, then advances
+	// both parse generations before executing either replacement path. This is
+	// still a subset comparison, not whole-DB parity.
+	require.NoError(t, fresh.store.InsertStagedParsedLogGroup(ctx, database.InsertStagedParsedLogGroupParams{ID: fresh.logID, ParseGeneration: generation}))
 	newID := uuid.New()
 	require.NoError(t, fresh.store.InTx(ctx, func(tx database.Store) error {
 		majority, err := InsertParsedArmory(ctx, tx, decoded.Armory, ParsedArmoryWrite{
