@@ -78,6 +78,27 @@ func TestParsedSpeedrunRowsMatchLegacyDirectWriter(t *testing.T) {
 		t.Fatalf("speedrun rows differ (-legacy +new):\n%s", diff)
 	}
 
+	for _, format := range []database.LogFormat{database.LogFormat243CcAddon, database.LogFormat335aCcAddon} {
+		t.Run(string(format), func(t *testing.T) {
+			id := uuid.New()
+			_, err := store.InsertInstance(ctx, database.InsertInstanceParams{ID: id, RealmID: realm, LogGroupID: group, Name: "Speedrun Test",
+				StartTime: database.Timestamptz(at), EndTime: database.Timestamptz(at.Add(time.Minute)), Capabilities: []string{}, DifficultyName: "Normal", MaxPlayers: 40})
+			require.NoError(t, err)
+			copyResult := result
+			copyResult.Format = format
+			writeCopy := write
+			writeCopy.InstanceID = id
+			require.NoError(t, InsertParsedSpeedrun(ctx, store, copyResult, writeCopy))
+			row, err := store.GetInstanceSpeedrun(ctx, id)
+			require.NoError(t, err)
+			row.InstanceID = uuid.Nil
+			row.CreatedAt = pgtype.Timestamptz{}
+			if diff := cmp.Diff(legacy, row); diff != "" {
+				t.Fatalf("speedrun rows differ (-direct +%s):\n%s", format, diff)
+			}
+		})
+	}
+
 	// Ineligibility is an insert gate; missing addon/server-side affects only qualification.
 	for _, tc := range []struct {
 		name      string
