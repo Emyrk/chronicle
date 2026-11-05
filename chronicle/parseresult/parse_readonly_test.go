@@ -17,8 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The independent parser must be able to fetch its spell/creature catalog
-// through PostgreSQL without obtaining database write privileges.
+// A read-only PostgreSQL session must support all parse-time game-data reads.
+// This tests statement-level read-only enforcement, not a separately granted
+// least-privilege database role.
 func TestParseWithReadOnlyPostgres(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)
