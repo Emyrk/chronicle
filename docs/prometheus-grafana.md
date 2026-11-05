@@ -52,10 +52,11 @@ The River queue depth and oldest-job-age gauges are database-global values colle
 
 ## Included Grafana dashboards
 
-Chronicle includes two importable dashboards:
+Chronicle includes three importable dashboards:
 
 - [`docs/grafana/chronicle-operations.json`](grafana/chronicle-operations.json) covers service health, instance search, Sidekick, parser outcomes and bottlenecks, River queues, cache behavior, authentication, UI usage, maintenance, and leader election.
 - [`docs/grafana/chronicle-http-traffic.json`](grafana/chronicle-http-traffic.json) investigates HTTP request volume, rate, and latency by route template and method.
+- [`docs/grafana/chronicle-external-api.json`](grafana/chronicle-external-api.json) measures external developer API request volume, rate, endpoint popularity, and latency while excluding health checks by default.
 
 See [`docs/grafana/README.md`](grafana/README.md) for import and file-provisioning instructions.
 
