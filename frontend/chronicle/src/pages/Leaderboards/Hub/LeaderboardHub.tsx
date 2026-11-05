@@ -597,8 +597,8 @@ export interface OverviewData {
 }
 
 /** A card body for a slot without rows: skeleton rows while loading, else why it is empty. */
-function Empty({ pending, text = "Not published for this selection yet" }: { pending?: boolean; text?: string }) {
-  if (pending) return <SkeletonRows />
+function Empty({ pending, rows, text = "Not published for this selection yet" }: { pending?: boolean; rows?: number; text?: string }) {
+  if (pending) return <SkeletonRows rows={rows} />
   return <p className="px-4 py-6 text-center text-xs text-muted-foreground">{text}</p>
 }
 
@@ -631,9 +631,15 @@ function BossGridSkeleton() {
   )
 }
 
-function filled<T>(rows: readonly T[] | undefined, pending: boolean | undefined, render: (rows: readonly T[]) => ReactNode) {
-  return rows?.length ? render(rows) : <Empty pending={pending} text={rows ? "No entries yet" : undefined} />
+/** Each card lists a fixed number of rows; its skeleton shows that many while loading. */
+function filled<T>(rows: readonly T[] | undefined, pending: boolean | undefined, render: (rows: readonly T[]) => ReactNode, skeletonRows?: number) {
+  return rows?.length ? render(rows) : <Empty pending={pending} rows={skeletonRows} text={rows ? "No entries yet" : undefined} />
 }
+
+/** Rows on the overview cards whose lists have a fixed length. */
+export const GUILD_RENOWN_ROWS = 6
+const PERFORMANCE_ROWS = 8
+const SPEC_SPREAD_ROWS = 8
 
 export interface OverviewProps {
   data: OverviewData
@@ -660,7 +666,7 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
   const { pending } = data
   const spreadCard = (
     <Card title={`Typical ${roleLabel} parse by spec`} action={{ label: "Box plot", onClick: () => onStatistics("specs") }}>
-      {filled(data.specSpreads, pending, (rows) => <SpecSpreads rows={rows.slice(0, 8)} />)}
+      {filled(data.specSpreads, pending, (rows) => <SpecSpreads rows={rows.slice(0, SPEC_SPREAD_ROWS)} />, SPEC_SPREAD_ROWS)}
     </Card>
   )
 
@@ -694,11 +700,13 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
           <Card title={`${guilds ? "Guild Ratings" : "Ratings"} · ${where}`} action={{ label: "Ratings", onClick: () => onRatings("overview") }}>
             {guilds ? (
               // A guild run is rated like a player's parse: its time against the fastest.
-              data.guildRatings ? <GuildRatingLeaders ratings={data.guildRatings} onOpen={onRatings} /> : <Empty pending={pending} />
+              data.guildRatings ? <GuildRatingLeaders ratings={data.guildRatings} onOpen={onRatings} /> : pending ? <MetricColumns onOpen={onRatings} /> : <Empty />
             ) : data.ratings ? (
               <RatingLeaders leaders={data.ratings} role={role} onOpen={onRatings} />
+            ) : pending ? (
+              <MetricColumns onOpen={onRatings} />
             ) : (
-              <Empty pending={pending} />
+              <Empty />
             )}
           </Card>
           {cohort ? (
@@ -709,7 +717,7 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
             >
               {filled(data.specSpreads, pending, (rows) => (
                 <SpecStandingList rows={rows} scope={scope} onPick={(cls, spec, subSpec) => onScope({ boss: scope.boss, cls, spec, subSpec })} />
-              ))}
+              ), SPEC_SPREAD_ROWS)}
             </Card>
           ) : guilds ? (
             // Renown is already a column of Guild Ratings; this slot counts clears instead.
@@ -722,8 +730,17 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
           ) : (
             <Card title={`Guild Renown · ${where}`} metric="renown" action={{ label: "Renown", onClick: () => onRatings("renown") }}>
               {filled(data.guildRenown, pending, (rows) => (
-                <GuildList rows={rows} format={(v) => v.toLocaleString()} bars showDetail accent={METRIC_THEMES.renown.accent} />
-              ))}
+                <GuildList rows={rows.slice(0, GUILD_RENOWN_ROWS)} format={(v) => v.toLocaleString()} bars showDetail accent={METRIC_THEMES.renown.accent} />
+              ), GUILD_RENOWN_ROWS)}
+              <button
+                type="button"
+                onClick={() => onRatings("renown")}
+                className="mt-auto flex cursor-pointer items-center gap-1 border-t border-white/5 px-4 py-2.5 text-xs font-medium transition-colors hover:bg-white/[.04] hover:underline"
+                style={{ color: METRIC_THEMES.renown.accent }}
+              >
+                Full {METRIC_THEMES.renown.label} board
+                <ArrowRight className="size-3" />
+              </button>
             </Card>
           )}
           {guilds ? (
@@ -732,11 +749,11 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
               title={`Best Performances (${set ? "Total kill time" : scope.boss ? "Kill time" : "Clear time"}) · ${where}`}
               action={{ label: "Speedruns", onClick: () => onTab("speedruns") }}
             >
-              {filled(data.speedruns, pending, (runs) => <RunList runs={runs} />)}
+              {filled(data.speedruns, pending, (runs) => <RunList runs={runs} />, PERFORMANCE_ROWS)}
             </Card>
           ) : (
             <Card title={`Best Performances (${roleLabel}) · ${where}`} action={{ label: "Performances", onClick: () => onTab("performances") }}>
-              {filled(data.performances, pending, (rows) => <ThroughputList rows={rows} />)}
+              {filled(data.performances, pending, (rows) => <ThroughputList rows={rows.slice(0, PERFORMANCE_ROWS)} />, PERFORMANCE_ROWS)}
             </Card>
           )}
           {guilds ? (

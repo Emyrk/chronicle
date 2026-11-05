@@ -27,14 +27,18 @@ export interface MetricRow {
   raw?: string
 }
 
+/** Leaders per column on the overview's rating cards. */
+export const METRIC_COLUMN_ROWS = 5
+
 /**
  * Peak, Ranked Mastery, and Renown side by side, each column its own board
  * whose header (and footer link) opens the full one. Shared by the player and
- * guild rating cards so both read the same.
+ * guild rating cards so both read the same. Without columns, each column shows
+ * its fixed number of skeleton rows while loading.
  */
-export function MetricColumns({ columns, onOpen, ranksKnown = true }: { columns: Record<RatingMetric, MetricRow[]>; onOpen: (metric: RatingMetric) => void; ranksKnown?: boolean }) {
+export function MetricColumns({ columns, onOpen, ranksKnown = true }: { columns?: Record<RatingMetric, MetricRow[]>; onOpen: (metric: RatingMetric) => void; ranksKnown?: boolean }) {
   return (
-    <div className="grid flex-1 max-sm:divide-y sm:grid-cols-3 sm:divide-x">
+    <div role={columns ? undefined : "status"} aria-label={columns ? undefined : "Loading"} className="grid flex-1 max-sm:divide-y sm:grid-cols-3 sm:divide-x">
       {RATING_METRICS.map((m) => {
         const t = METRIC_THEMES[m]
         return (
@@ -51,7 +55,14 @@ export function MetricColumns({ columns, onOpen, ranksKnown = true }: { columns:
               <ChevronRight className="ml-auto size-3.5 text-muted-foreground transition-colors group-hover/metric:text-foreground" />
             </button>
             <ol>
-              {columns[m].map((r, i) => (
+              {!columns && Array.from({ length: METRIC_COLUMN_ROWS }, (_, i) => (
+                <li key={i} className="flex items-center gap-2 border-b border-white/5 px-3 py-2.5 last:border-b-0">
+                  <span className="size-5 shrink-0 animate-pulse rounded-sm bg-white/[.06]" />
+                  <span className="h-3 animate-pulse rounded bg-white/[.06]" style={{ width: `${60 - i * 7}%` }} />
+                  <span className="ml-auto h-3 w-8 animate-pulse rounded bg-white/[.06]" />
+                </li>
+              ))}
+              {columns?.[m].map((r, i) => (
                 <li key={r.id} className="flex items-center gap-2 border-b border-white/5 px-3 py-2.5 last:border-b-0">
                   <span className="w-3 font-mono text-xs text-muted-foreground">{ranksKnown ? i + 1 : ""}</span>
                   <span className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">{r.name}</span>

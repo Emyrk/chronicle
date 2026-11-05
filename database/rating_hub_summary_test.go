@@ -190,7 +190,7 @@ func TestHubSummaryRatingPreviewLimitsAndRealm(t *testing.T) {
 			require.Equal(t, 150.0, row.Score)
 		}
 	}
-	require.Equal(t, 5, counts["Ragnaros"])
+	require.Equal(t, 6, counts["Ragnaros"])
 	require.Equal(t, 1, counts["Lucifron"])
 	guildCounts := map[string]int{}
 	for _, row := range rows {
@@ -199,8 +199,8 @@ func TestHubSummaryRatingPreviewLimitsAndRealm(t *testing.T) {
 		}
 	}
 	for _, metric := range []string{"peak", "ranked_mastery"} {
-		require.Equal(t, 5, guildCounts["scope::"+metric])
-		require.Equal(t, 5, guildCounts["boss:Ragnaros:"+metric])
+		require.Equal(t, 6, guildCounts["scope::"+metric])
+		require.Equal(t, 6, guildCounts["boss:Ragnaros:"+metric])
 		require.Equal(t, 1, guildCounts["boss:Lucifron:"+metric])
 	}
 	args.RealmIds = []uuid.UUID{realms[1]}

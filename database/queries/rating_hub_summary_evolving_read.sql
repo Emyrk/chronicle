@@ -103,8 +103,9 @@ SELECT subject, board, rating_metric, encounter_name, realm_id, subject_id, scor
        COALESCE(CASE WHEN subject = 'player' AND rating_metric = 'peak' THEN best_raw END, 0)::float8 AS peak_raw,
        player_class, player_spec, player_sub_spec, subject_name, realm_name
 FROM boards
--- The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss.
-WHERE position <= CASE WHEN board = 'scope' OR encounter_name = @featured_encounter::text THEN CASE WHEN @boss_depth::int >= 3 THEN 10 ELSE 5 END ELSE GREATEST(LEAST(@boss_depth::int, 3), 1) END
+-- The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss;
+-- the overview shows six (its Guild Renown card lists six).
+WHERE position <= CASE WHEN board = 'scope' OR encounter_name = @featured_encounter::text THEN CASE WHEN @boss_depth::int >= 3 THEN 10 ELSE 6 END ELSE GREATEST(LEAST(@boss_depth::int, 3), 1) END
 ORDER BY board, encounter_name, subject, rating_metric, position;
 
 

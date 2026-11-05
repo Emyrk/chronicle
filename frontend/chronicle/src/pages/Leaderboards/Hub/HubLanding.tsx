@@ -42,6 +42,8 @@ export interface LeaderboardsHubAppProps extends Omit<LeaderboardHubProps, "inst
   renderInstance?: (instance: string) => ReactNode
   /** Open an instance on one difficulty/size: live cards are one per published combination. */
   onOpenCohort?: (instance: string, cohort: { difficulty: string; maxPlayers: number }) => void
+  /** The live summary is still loading: the grid shows skeleton cards. */
+  loading?: boolean
 }
 
 export function LeaderboardsHubApp({
@@ -58,6 +60,7 @@ export function LeaderboardsHubApp({
   landingPreviews,
   renderInstance,
   onOpenCohort,
+  loading,
   ...hub
 }: LeaderboardsHubAppProps) {
   const live = instances !== undefined
@@ -125,6 +128,7 @@ export function LeaderboardsHubApp({
           onOpen={(name, cohort) => (cohort && onOpenCohort ? onOpenCohort(name, cohort) : setInstance(name))}
           instances={instances}
           landingPreviews={landingPreviews}
+          loading={loading}
         />
       )}
     </div>
@@ -136,11 +140,13 @@ function HubLanding({
   onOpen,
   instances,
   landingPreviews,
+  loading,
 }: {
   tab: HubTab
   onOpen: (instance: string, cohort?: { difficulty: string; maxPlayers: number }) => void
   instances?: readonly RankingsInstanceSummary[]
   landingPreviews?: readonly HubLandingPreview[]
+  loading?: boolean
 }) {
   if (tab === "rulesets") {
     // Today's rulesets grid as-is; its cards link to ?instance=<name>, opened in place.
@@ -159,6 +165,7 @@ function HubLanding({
       </div>
     )
   }
+  if (loading) return <LandingSkeleton />
   if (instances !== undefined) {
     // One card per published difficulty/size, so each combination has its own headline.
     const grid = (items: readonly RankingsInstanceSummary[]) => (
@@ -237,6 +244,32 @@ function HubLanding({
         {grid(all.filter((i) => i.kind === "dungeon"))}
       </section>
       <p className="px-1 text-xs text-muted-foreground/70">Mock data for design review. Names, guilds, and numbers are generated.</p>
+    </div>
+  )
+}
+
+/** The raid grid while the summary loads: instance cards with their four highlight rows. */
+function LandingSkeleton() {
+  return (
+    <div role="status" aria-label="Loading" className="mx-auto w-full max-w-[1920px] space-y-6 px-3 py-4 sm:px-4 sm:py-8">
+      <section className="space-y-5">
+        <h2 className="text-lg font-semibold text-muted-foreground">Raids</h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }, (_, i) => (
+            <div key={i} className="flex aspect-[16/7] flex-col justify-end gap-2 rounded-xl border bg-card p-4">
+              <span className="h-2.5 w-10 animate-pulse rounded bg-white/[.06]" />
+              <span className="mb-1 h-5 w-44 animate-pulse rounded bg-white/[.06]" />
+              {Array.from({ length: 4 }, (_, row) => (
+                <span key={row} className="flex items-center gap-2">
+                  <span className="h-3 animate-pulse rounded bg-white/[.06]" style={{ width: `${40 - row * 5}%` }} />
+                  <span className="ml-auto h-3 w-16 animate-pulse rounded bg-white/[.06]" />
+                </span>
+              ))}
+              <span className="mt-1 h-2.5 w-28 animate-pulse rounded bg-white/[.06]" />
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   )
 }

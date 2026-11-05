@@ -103,12 +103,13 @@ func hubPresetBosses(sets []chroniclesdk.RankingEncounterSet, progression []stri
 	return out
 }
 
-// hubRaidDepth is the raid board's length: ten on the Ratings tab (boss_depth 3), else five.
+// hubRaidDepth is the raid board's length: ten on the Ratings tab (boss_depth 3), else six
+// (the overview's Guild Renown card lists six).
 func hubRaidDepth(bossDepth int32) int32 {
 	if bossDepth >= 3 {
 		return 10
 	}
-	return 5
+	return 6
 }
 
 // hubFillCategories gives every cohort of an instance the instance's category.

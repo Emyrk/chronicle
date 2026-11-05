@@ -26092,7 +26092,7 @@ SELECT subject, board, rating_metric, encounter_name, realm_id, subject_id, scor
        COALESCE(CASE WHEN subject = 'player' AND rating_metric = 'peak' THEN best_raw END, 0)::float8 AS peak_raw,
        player_class, player_spec, player_sub_spec, subject_name, realm_name
 FROM boards
-WHERE position <= CASE WHEN board = 'scope' OR encounter_name = $1::text THEN CASE WHEN $2::int >= 3 THEN 10 ELSE 5 END ELSE GREATEST(LEAST($2::int, 3), 1) END
+WHERE position <= CASE WHEN board = 'scope' OR encounter_name = $1::text THEN CASE WHEN $2::int >= 3 THEN 10 ELSE 6 END ELSE GREATEST(LEAST($2::int, 3), 1) END
 ORDER BY board, encounter_name, subject, rating_metric, position
 `
 
@@ -26133,7 +26133,8 @@ type EvolvingHubSummaryRatingRowsRow struct {
 // Generation-free readers against the evolving projection compatibility views.
 // All boards share the caller-pinned active generation. Bound boss names and
 // truncate each board in SQL, not in the HTTP handler.
-// The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss.
+// The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss;
+// the overview shows six (its Guild Renown card lists six).
 func (q *sqlQuerier) EvolvingHubSummaryRatingRows(ctx context.Context, arg EvolvingHubSummaryRatingRowsParams) ([]EvolvingHubSummaryRatingRowsRow, error) {
 	rows, err := q.db.Query(ctx, evolvingHubSummaryRatingRows,
 		arg.FeaturedEncounter,
@@ -26870,7 +26871,7 @@ SELECT subject, board, rating_metric, encounter_name, realm_id, subject_id, scor
        COALESCE(CASE WHEN subject = 'player' AND rating_metric = 'peak' THEN best_raw END, 0)::float8 AS peak_raw,
        player_class, player_spec, player_sub_spec, subject_name, realm_name
 FROM boards
-WHERE position <= CASE WHEN board = 'scope' OR encounter_name = $1::text THEN CASE WHEN $2::int >= 3 THEN 10 ELSE 5 END ELSE GREATEST(LEAST($2::int, 3), 1) END
+WHERE position <= CASE WHEN board = 'scope' OR encounter_name = $1::text THEN CASE WHEN $2::int >= 3 THEN 10 ELSE 6 END ELSE GREATEST(LEAST($2::int, 3), 1) END
 ORDER BY board, encounter_name, subject, rating_metric, position
 `
 
@@ -26910,7 +26911,8 @@ type HubSummaryRatingRowsRow struct {
 
 // All boards share the caller-pinned active generation. Bound boss names and
 // truncate each board in SQL, not in the HTTP handler.
-// The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss.
+// The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss;
+// the overview shows six (its Guild Renown card lists six).
 func (q *sqlQuerier) HubSummaryRatingRows(ctx context.Context, arg HubSummaryRatingRowsParams) ([]HubSummaryRatingRowsRow, error) {
 	rows, err := q.db.Query(ctx, hubSummaryRatingRows,
 		arg.FeaturedEncounter,

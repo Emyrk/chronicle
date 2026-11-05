@@ -371,7 +371,8 @@ type sqlcQuerier interface {
 	// Generation-free readers against the evolving projection compatibility views.
 	// All boards share the caller-pinned active generation. Bound boss names and
 	// truncate each board in SQL, not in the HTTP handler.
-	// The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss.
+	// The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss;
+	// the overview shows six (its Guild Renown card lists six).
 	EvolvingHubSummaryRatingRows(ctx context.Context, arg EvolvingHubSummaryRatingRowsParams) ([]EvolvingHubSummaryRatingRowsRow, error)
 	EvolvingInsertGuildLiveMasteryScope(ctx context.Context, arg EvolvingInsertGuildLiveMasteryScopeParams) (int64, error)
 	EvolvingInsertGuildLiveMasteryScore(ctx context.Context, arg EvolvingInsertGuildLiveMasteryScoreParams) (int64, error)
@@ -844,7 +845,8 @@ type sqlcQuerier interface {
 	HubSummaryInstances(ctx context.Context, tenantID uuid.UUID) ([]HubSummaryInstancesRow, error)
 	// All boards share the caller-pinned active generation. Bound boss names and
 	// truncate each board in SQL, not in the HTTP handler.
-	// The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss.
+	// The Ratings tab (boss_depth 3) shows ten on the raid board and three per boss;
+	// the overview shows six (its Guild Renown card lists six).
 	HubSummaryRatingRows(ctx context.Context, arg HubSummaryRatingRowsParams) ([]HubSummaryRatingRowsRow, error)
 	HubSummaryRealms(ctx context.Context, tenantID uuid.UUID) ([]HubSummaryRealmsRow, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)

@@ -15,7 +15,7 @@ import type {
   HubPlayerRatingEntry,
   HubSummary,
 } from "./hubSummaryAdapter";
-import type { LiveBossSummary, OverviewData } from "./LeaderboardHub";
+import { GUILD_RENOWN_ROWS, type LiveBossSummary, type OverviewData } from "./LeaderboardHub";
 import type {
   Cohort,
   GuildRating,
@@ -270,7 +270,7 @@ export function liveOverviewData(src: LiveOverviewSources): OverviewData {
     guildRatings:
       board && subject === "guilds" ? guildLeaders(board.guild) : undefined,
     guildRenown: board?.guild.renown
-      .slice(0, LEADERS)
+      .slice(0, GUILD_RENOWN_ROWS)
       .map(
         (e): GuildRow => ({
           guild: e.guild_name || "Unknown guild",

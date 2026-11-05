@@ -8,10 +8,10 @@ import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
 import { cohortLabel } from "./Hub/cohortLabel"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
 import { LeaderboardsHubApp } from "./Hub/HubLanding"
-import { LeaderboardHub, type HubLiveTabContext } from "./Hub/LeaderboardHub"
+import { LeaderboardHub, Overview, SkeletonRows, type HubLiveTabContext } from "./Hub/LeaderboardHub"
 import { LiveHubOverview } from "./Hub/LiveHubOverview"
 import { LiveHubRatings } from "./Hub/LiveHubRatings"
-import { MetricTabs, PeriodToggle } from "./Ratings/RatingLeaderboard"
+import { BoardSkeleton, MetricTabs, PeriodToggle } from "./Ratings/RatingLeaderboard"
 import { RulesetInstanceView } from "./RulesetInstanceView"
 import { PerformancesTab } from "./Hub/PerformancesTab"
 import { SpeedrunsTab } from "./Hub/SpeedrunsTab"
@@ -62,12 +62,14 @@ export function LeaderboardsLiveHub() {
   if (pathTab !== undefined && (hubTab(pathTab) === undefined || pathTab === "overview")) return <Navigate to={hubPath("overview", params)} replace />
   // Only the first load (nothing on screen yet) replaces the page.
   if (!summary.data && summary.isError) return <p role="alert" className="mx-auto max-w-[1920px] p-8 text-muted-foreground">Could not load leaderboard summary.</p>
-  if (!summary.data) return <p role="status" className="mx-auto max-w-[1920px] p-8 text-muted-foreground">Loading leaderboards…</p>
+  // Until then the page renders its frame with skeleton rows.
+  const loading = !summary.data
   return <div className="flex min-w-0 gap-6">
     <div className="min-w-0 flex-1">
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={(name) => choose("instance", name)}
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
-        realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data!.instances} landingPreviews={summary.data!.landing_previews}
+        realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data?.instances ?? []} landingPreviews={summary.data?.landing_previews}
+        loading={loading}
         onOpenCohort={(name, cohort) => {
           // A card is one difficulty/size: open the instance on it.
           const next = hubParams(params, "instance", name)
@@ -75,7 +77,7 @@ export function LeaderboardsLiveHub() {
           next.set("size", String(cohort.maxPlayers))
           setParams(next)
         }}
-        renderInstance={(name) => <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} realm={realm}
+        renderInstance={(name) => loading ? <LoadingInstanceHub instanceName={name} tab={tab} onTab={chooseTab} realm={realm} onInstance={() => choose("instance")} /> : <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} realm={realm}
           realmIDs={selectedRealmIDs} encounters={encounters} tab={tab}
           onInstance={(next) => choose("instance", next)} onTab={chooseTab}
           onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
@@ -85,6 +87,22 @@ export function LeaderboardsLiveHub() {
     </div>
     <AdRailStack primaryPlacement="leaderboards-right-rail" secondaryPlacement="leaderboards-right-rail-lower" />
   </div>
+}
+
+/** The instance page's frame while its summary loads: every summary card shows its skeleton rows. */
+function LoadingInstanceHub({ instanceName, tab, onTab, realm, onInstance }: {
+  instanceName: string; tab: ReturnType<typeof v2Selection>["tab"]; onTab: (tab: ReturnType<typeof v2Selection>["tab"]) => void
+  realm: string; onInstance: () => void
+}) {
+  const live = {
+    bosses: [], realms: [realm], specsFor: () => [], subSpecsFor: () => [],
+    renderOverview: (context: HubLiveTabContext) => <Overview {...context.overview} data={{ pending: true }} instanceName={instanceName}
+      scope={context.scope} role={context.role} subject={context.subject} onScope={context.onScope} onTab={context.onTab}
+      onRatings={context.onRatings} onStatistics={context.onStatistics} onRole={context.onRole} />,
+    renderTab: (context: HubLiveTabContext) => context.tab === "ratings" ? <BoardSkeleton />
+      : <div className="overflow-hidden rounded-xl border bg-card"><SkeletonRows rows={10} /></div>,
+  }
+  return <LeaderboardHub live={live} instanceName={instanceName} onAllInstances={onInstance} tab={tab} onTab={onTab} realm={realm} onRealm={() => {}} />
 }
 
 function LiveInstanceHub({ instanceName, names, summary, realm, realmIDs, encounters, tab, difficulty, size, onInstance, onTab, onRealm, onCohort, onEncounters }: {
