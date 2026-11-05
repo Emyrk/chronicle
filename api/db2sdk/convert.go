@@ -720,15 +720,6 @@ func SpeedrunGuildClearsEntry(row database.SpeedrunGuildClearsRow) chroniclesdk.
 	}
 }
 
-// LeaderboardVersionRequirements converts a database row to SDK type.
-func LeaderboardVersionRequirements(row database.LeaderboardVersionRequirement) chroniclesdk.LeaderboardVersionRequirements {
-	return chroniclesdk.LeaderboardVersionRequirements{
-		InstanceName:     row.InstanceName,
-		MinParserVersion: row.MinParserVersion,
-		MinAddonVersion:  row.MinAddonVersion,
-	}
-}
-
 func init() {
 	for _, class := range database.AllWowPlayableClassValues() {
 		dbClassLookup[strings.ToLower(string(class))] = class

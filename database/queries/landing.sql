@@ -49,10 +49,7 @@ WITH board AS (
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
-    LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE sr.qualified = true
-      AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
-      AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
     ORDER BY COALESCE(li.duplicate_group_id, li.id), COALESCE(sr.ranked_duration_ms, sr.duration_ms) ASC
 ),
 guild_best AS (

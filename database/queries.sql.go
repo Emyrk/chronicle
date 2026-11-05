@@ -12208,10 +12208,7 @@ WITH board AS (
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
-    LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE sr.qualified = true
-      AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
-      AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
     ORDER BY COALESCE(li.duplicate_group_id, li.id), COALESCE(sr.ranked_duration_ms, sr.duration_ms) ASC
 ),
 guild_best AS (
@@ -12350,95 +12347,6 @@ func (q *sqlQuerier) LandingPositionalInstances(ctx context.Context, limitCount 
 		return nil, err
 	}
 	return items, nil
-}
-
-const getLeaderboardVersionRequirements = `-- name: GetLeaderboardVersionRequirements :one
-SELECT instance_name, min_parser_version, min_parser_version_num, min_addon_version, min_addon_version_num, updated_at FROM leaderboard_version_requirements WHERE instance_name = $1
-`
-
-func (q *sqlQuerier) GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error) {
-	row := q.db.QueryRow(ctx, getLeaderboardVersionRequirements, instanceName)
-	var i LeaderboardVersionRequirement
-	err := row.Scan(
-		&i.InstanceName,
-		&i.MinParserVersion,
-		&i.MinParserVersionNum,
-		&i.MinAddonVersion,
-		&i.MinAddonVersionNum,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const listLeaderboardVersionRequirements = `-- name: ListLeaderboardVersionRequirements :many
-SELECT instance_name, min_parser_version, min_parser_version_num, min_addon_version, min_addon_version_num, updated_at FROM leaderboard_version_requirements ORDER BY instance_name
-`
-
-func (q *sqlQuerier) ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error) {
-	rows, err := q.db.Query(ctx, listLeaderboardVersionRequirements)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []LeaderboardVersionRequirement
-	for rows.Next() {
-		var i LeaderboardVersionRequirement
-		if err := rows.Scan(
-			&i.InstanceName,
-			&i.MinParserVersion,
-			&i.MinParserVersionNum,
-			&i.MinAddonVersion,
-			&i.MinAddonVersionNum,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const upsertLeaderboardVersionRequirements = `-- name: UpsertLeaderboardVersionRequirements :one
-INSERT INTO leaderboard_version_requirements (
-    instance_name, min_parser_version, min_parser_version_num,
-    min_addon_version, min_addon_version_num, updated_at
-) VALUES ($1, $2, $3, $4, $5, now())
-ON CONFLICT (instance_name) DO UPDATE SET
-    min_parser_version = $2, min_parser_version_num = $3,
-    min_addon_version = $4, min_addon_version_num = $5,
-    updated_at = now()
-RETURNING instance_name, min_parser_version, min_parser_version_num, min_addon_version, min_addon_version_num, updated_at
-`
-
-type UpsertLeaderboardVersionRequirementsParams struct {
-	InstanceName        string `db:"instance_name" json:"instance_name"`
-	MinParserVersion    string `db:"min_parser_version" json:"min_parser_version"`
-	MinParserVersionNum int64  `db:"min_parser_version_num" json:"min_parser_version_num"`
-	MinAddonVersion     string `db:"min_addon_version" json:"min_addon_version"`
-	MinAddonVersionNum  int64  `db:"min_addon_version_num" json:"min_addon_version_num"`
-}
-
-func (q *sqlQuerier) UpsertLeaderboardVersionRequirements(ctx context.Context, arg UpsertLeaderboardVersionRequirementsParams) (LeaderboardVersionRequirement, error) {
-	row := q.db.QueryRow(ctx, upsertLeaderboardVersionRequirements,
-		arg.InstanceName,
-		arg.MinParserVersion,
-		arg.MinParserVersionNum,
-		arg.MinAddonVersion,
-		arg.MinAddonVersionNum,
-	)
-	var i LeaderboardVersionRequirement
-	err := row.Scan(
-		&i.InstanceName,
-		&i.MinParserVersion,
-		&i.MinParserVersionNum,
-		&i.MinAddonVersion,
-		&i.MinAddonVersionNum,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const releaseAdvisoryLock = `-- name: ReleaseAdvisoryLock :one
@@ -25525,9 +25433,6 @@ WITH cohorts AS (
     AND server.tenant_id IS NOT DISTINCT FROM NULLIF($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
   JOIN guilds g ON g.id = sr.guild_id AND g.realm_id = sr.realm_id
   LEFT JOIN guild_pages gp ON gp.guild_id = sr.guild_id
-  LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
-  WHERE sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
-    AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
 ), deduped AS (
   SELECT instance_name, difficulty_name, max_players, instance_id, guild_id, addon_version, hashed_slug, duplicate_group_id, parser_version, duration_ms, start_time, completion_time, guild_name, realm_name, guild_logo_url, row_number() OVER (PARTITION BY instance_name, difficulty_name, max_players, COALESCE(duplicate_group_id, instance_id)
     ORDER BY duration_ms, instance_id) AS duplicate_position FROM eligible
@@ -25570,8 +25475,8 @@ type HubLandingSpeedrunsRow struct {
 	PlayerCount      int64              `db:"player_count" json:"player_count"`
 }
 
-// Mirrors the full-clear leaderboard: version gates, duplicate groups, best
-// per guild, ranked duration with legacy raw fallback. Do not load video proof.
+// Mirrors the full-clear leaderboard: duplicate groups, best per guild, and
+// ranked duration with legacy raw fallback. Do not load video proof.
 func (q *sqlQuerier) HubLandingSpeedruns(ctx context.Context, arg HubLandingSpeedrunsParams) ([]HubLandingSpeedrunsRow, error) {
 	rows, err := q.db.Query(ctx, hubLandingSpeedruns, arg.TenantID, arg.RealmIds)
 	if err != nil {
@@ -40200,7 +40105,7 @@ func (q *sqlQuerier) GetInstanceEncounterKillTimes(ctx context.Context, instance
 }
 
 const getInstanceSpeedrun = `-- name: GetInstanceSpeedrun :one
-SELECT sr.instance_id, sr.instance_name, sr.realm_id, sr.guild_id, sr.qualified, sr.start_time, sr.completion_time, sr.duration_ms, sr.proof, sr.created_at, sr.addon_version, sr.parser_version_num, sr.addon_version_num, sr.ranked_start_time, sr.ranked_completion_time, sr.ranked_duration_ms, sr.boss_to_boss_start_time, sr.boss_to_boss_completion_time, sr.boss_to_boss_duration_ms, li.capabilities
+SELECT sr.instance_id, sr.instance_name, sr.realm_id, sr.guild_id, sr.qualified, sr.start_time, sr.completion_time, sr.duration_ms, sr.proof, sr.created_at, sr.addon_version, sr.ranked_start_time, sr.ranked_completion_time, sr.ranked_duration_ms, sr.boss_to_boss_start_time, sr.boss_to_boss_completion_time, sr.boss_to_boss_duration_ms, li.capabilities
 FROM instance_speedruns sr
 JOIN log_instances li ON li.id = sr.instance_id
 WHERE sr.instance_id = $1
@@ -40218,8 +40123,6 @@ type GetInstanceSpeedrunRow struct {
 	Proof                    []byte             `db:"proof" json:"proof"`
 	CreatedAt                pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	AddonVersion             string             `db:"addon_version" json:"addon_version"`
-	ParserVersionNum         int64              `db:"parser_version_num" json:"parser_version_num"`
-	AddonVersionNum          int64              `db:"addon_version_num" json:"addon_version_num"`
 	RankedStartTime          pgtype.Timestamptz `db:"ranked_start_time" json:"ranked_start_time"`
 	RankedCompletionTime     pgtype.Timestamptz `db:"ranked_completion_time" json:"ranked_completion_time"`
 	RankedDurationMs         pgtype.Int8        `db:"ranked_duration_ms" json:"ranked_duration_ms"`
@@ -40244,8 +40147,6 @@ func (q *sqlQuerier) GetInstanceSpeedrun(ctx context.Context, instanceID uuid.UU
 		&i.Proof,
 		&i.CreatedAt,
 		&i.AddonVersion,
-		&i.ParserVersionNum,
-		&i.AddonVersionNum,
 		&i.RankedStartTime,
 		&i.RankedCompletionTime,
 		&i.RankedDurationMs,
@@ -40634,14 +40535,14 @@ INSERT INTO instance_speedruns (
     qualified, start_time, completion_time, duration_ms,
     ranked_start_time, ranked_completion_time, ranked_duration_ms,
     boss_to_boss_start_time, boss_to_boss_completion_time, boss_to_boss_duration_ms,
-    proof, addon_version, parser_version_num, addon_version_num
+    proof, addon_version
 )
 VALUES (
     $1, $2, $3, $4,
     $5, $6, $7, $8,
     $9, $10, $11,
     $12, $13, $14,
-    $15, $16, $17, $18
+    $15, $16
 )
 `
 
@@ -40662,8 +40563,6 @@ type InsertInstanceSpeedrunParams struct {
 	BossToBossDurationMs     pgtype.Int8        `db:"boss_to_boss_duration_ms" json:"boss_to_boss_duration_ms"`
 	Proof                    []byte             `db:"proof" json:"proof"`
 	AddonVersion             string             `db:"addon_version" json:"addon_version"`
-	ParserVersionNum         int64              `db:"parser_version_num" json:"parser_version_num"`
-	AddonVersionNum          int64              `db:"addon_version_num" json:"addon_version_num"`
 }
 
 func (q *sqlQuerier) InsertInstanceSpeedrun(ctx context.Context, arg InsertInstanceSpeedrunParams) error {
@@ -40684,8 +40583,6 @@ func (q *sqlQuerier) InsertInstanceSpeedrun(ctx context.Context, arg InsertInsta
 		arg.BossToBossDurationMs,
 		arg.Proof,
 		arg.AddonVersion,
-		arg.ParserVersionNum,
-		arg.AddonVersionNum,
 	)
 	return err
 }
@@ -40745,13 +40642,10 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     LEFT JOIN instance_overview_metrics iom
       ON iom.instance_id = sr.instance_id
      AND iom.metrics_version = $2
-    LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE li.difficulty_name = a.difficulty_name
       AND li.max_players = a.max_players
       AND sr.start_time >= a.start_time - make_interval(days => $3::int)
       AND sr.start_time <= a.start_time
-      AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
-      AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
       AND CASE
           WHEN $4 :: text = 'guild' THEN a.guild_id IS NOT NULL AND sr.guild_id = a.guild_id
           WHEN $4 :: text = 'realm' THEN sr.realm_id = a.realm_id
@@ -40983,12 +40877,9 @@ LEFT JOIN LATERAL (
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN guilds g ON sr.guild_id = g.id
     JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
-    LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE sr.instance_name = boards.instance_name
       AND li.difficulty_name = boards.difficulty_name
       AND sr.qualified = true
-      AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
-      AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
     ORDER BY COALESCE(sr.ranked_duration_ms, sr.duration_ms) ASC
     LIMIT 1
 ) record ON true
@@ -41081,13 +40972,10 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
         WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
         LIMIT 1
     ) youtube ON true
-    LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE sr.instance_name = $6
       AND sr.qualified = true
       AND (NOT $5::boolean OR sr.boss_to_boss_duration_ms IS NOT NULL)
       AND sr.guild_id IS NOT NULL
-      AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
-      AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
       AND CASE
           WHEN cardinality($7 :: text[]) > 0 THEN
               COALESCE(wsr.name, '') = ANY($7 :: text[])

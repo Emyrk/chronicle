@@ -127,7 +127,6 @@ from the normal selector while it is under development.
 - View speedrun and clear-time leaderboards.
 - Filter leaderboards by realm, instance, encounter, class, and other supported
   dimensions.
-- Enforce log/parser version requirements for competitive rankings.
 - Show ranking and parse information inside raid reports, character profiles,
   and guild pages.
 

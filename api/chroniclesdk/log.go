@@ -445,7 +445,6 @@ type SpeedrunResult struct {
 	BossToBossCompletionTime *time.Time                `json:"boss_to_boss_completion_time,omitempty"`
 	BossToBossDurationMs     *int64                    `json:"boss_to_boss_duration_ms,omitempty"`
 	Proof                    []SpeedrunProof           `json:"proof"`
-	VersionStatus            *SpeedrunVersionStatus    `json:"version_status,omitempty"`
 	LevelRange               *SpeedrunLevelRangeResult `json:"level_range,omitempty"`
 	DataSourceStatus         *SpeedrunDataSourceStatus `json:"data_source,omitempty"`
 	DpsRankingsStatus        *DpsRankingsStatus        `json:"dps_rankings,omitempty"`
@@ -560,17 +559,6 @@ type SpeedrunDataSourceStatus struct {
 	Eligible        bool `json:"eligible"`
 }
 
-// SpeedrunVersionStatus reports whether the instance's tooling versions
-// meet the leaderboard minimum requirements.
-type SpeedrunVersionStatus struct {
-	ParserVersion    string `json:"parser_version"`
-	MinParserVersion string `json:"min_parser_version"`
-	ParserQualified  bool   `json:"parser_qualified"`
-	AddonVersion     string `json:"addon_version"`
-	MinAddonVersion  string `json:"min_addon_version"`
-	AddonQualified   bool   `json:"addon_qualified"`
-}
-
 // SpeedrunInstanceBoard identifies one leaderboard: each (instance,
 // difficulty) combination has its own board. DifficultyName may be empty for
 // runs whose logs recorded no difficulty.
@@ -625,14 +613,6 @@ type SpeedrunRulesResponse struct {
 	InstanceName string                         `json:"instance_name"`
 	Requirements []SpeedrunRequirement          `json:"requirements"`
 	LevelRange   *SpeedrunLevelRangeRequirement `json:"level_range,omitempty"`
-}
-
-// LeaderboardVersionRequirements holds admin-configured minimum version
-// thresholds for leaderboard filtering.
-type LeaderboardVersionRequirements struct {
-	InstanceName     string `json:"instance_name"`
-	MinParserVersion string `json:"min_parser_version"`
-	MinAddonVersion  string `json:"min_addon_version"`
 }
 
 // RecentInstancesResponse is the response for listing recently uploaded instances.

@@ -4,14 +4,14 @@ INSERT INTO instance_speedruns (
     qualified, start_time, completion_time, duration_ms,
     ranked_start_time, ranked_completion_time, ranked_duration_ms,
     boss_to_boss_start_time, boss_to_boss_completion_time, boss_to_boss_duration_ms,
-    proof, addon_version, parser_version_num, addon_version_num
+    proof, addon_version
 )
 VALUES (
     @instance_id, @instance_name, @realm_id, @guild_id,
     @qualified, @start_time, @completion_time, @duration_ms,
     @ranked_start_time, @ranked_completion_time, @ranked_duration_ms,
     @boss_to_boss_start_time, @boss_to_boss_completion_time, @boss_to_boss_duration_ms,
-    @proof, @addon_version, @parser_version_num, @addon_version_num
+    @proof, @addon_version
 );
 
 -- name: GetInstanceSpeedrun :one
@@ -105,13 +105,10 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     LEFT JOIN instance_overview_metrics iom
       ON iom.instance_id = sr.instance_id
      AND iom.metrics_version = @metrics_version
-    LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE li.difficulty_name = a.difficulty_name
       AND li.max_players = a.max_players
       AND sr.start_time >= a.start_time - make_interval(days => @lookback_days::int)
       AND sr.start_time <= a.start_time
-      AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
-      AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
       AND CASE
           WHEN @scope :: text = 'guild' THEN a.guild_id IS NOT NULL AND sr.guild_id = a.guild_id
           WHEN @scope :: text = 'realm' THEN sr.realm_id = a.realm_id
@@ -177,13 +174,10 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
         WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug
         LIMIT 1
     ) youtube ON true
-    LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE sr.instance_name = @instance_name
       AND sr.qualified = true
       AND (NOT @use_ranked_timing::boolean OR sr.boss_to_boss_duration_ms IS NOT NULL)
       AND sr.guild_id IS NOT NULL
-      AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
-      AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
       AND CASE
           WHEN cardinality(@realm_names :: text[]) > 0 THEN
               COALESCE(wsr.name, '') = ANY(@realm_names :: text[])
@@ -267,12 +261,9 @@ LEFT JOIN LATERAL (
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN guilds g ON sr.guild_id = g.id
     JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
-    LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE sr.instance_name = boards.instance_name
       AND li.difficulty_name = boards.difficulty_name
       AND sr.qualified = true
-      AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
-      AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
     ORDER BY COALESCE(sr.ranked_duration_ms, sr.duration_ms) ASC
     LIMIT 1
 ) record ON true

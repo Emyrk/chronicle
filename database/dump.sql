@@ -1733,8 +1733,6 @@ CREATE TABLE instance_speedruns (
     proof jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     addon_version text DEFAULT ''::text NOT NULL,
-    parser_version_num bigint DEFAULT 0 NOT NULL,
-    addon_version_num bigint DEFAULT 0 NOT NULL,
     ranked_start_time timestamp with time zone,
     ranked_completion_time timestamp with time zone,
     ranked_duration_ms bigint,
@@ -2081,15 +2079,6 @@ CREATE TABLE item_daily_prices (
 );
 
 ALTER TABLE ONLY item_daily_prices FORCE ROW LEVEL SECURITY;
-
-CREATE TABLE leaderboard_version_requirements (
-    instance_name text NOT NULL,
-    min_parser_version text DEFAULT ''::text NOT NULL,
-    min_parser_version_num bigint DEFAULT 0 NOT NULL,
-    min_addon_version text DEFAULT ''::text NOT NULL,
-    min_addon_version_num bigint DEFAULT 0 NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
 
 CREATE TABLE log_instance_encounter_damage_unit_summary (
     encounter_id uuid NOT NULL,
@@ -4394,9 +4383,6 @@ ALTER TABLE ONLY instance_speedruns
 
 ALTER TABLE ONLY item_daily_prices
     ADD CONSTRAINT item_daily_prices_pkey PRIMARY KEY (realm_id, auction_house_faction, item_id, price_date);
-
-ALTER TABLE ONLY leaderboard_version_requirements
-    ADD CONSTRAINT leaderboard_version_requirements_pkey PRIMARY KEY (instance_name);
 
 ALTER TABLE ONLY log_file_parts
     ADD CONSTRAINT log_file_parts_log_file_id_sequence_key UNIQUE (log_file_id, sequence);

@@ -604,7 +604,6 @@ type sqlcQuerier interface {
 	GetItemTemplatesByEntries(ctx context.Context, arg GetItemTemplatesByEntriesParams) ([]WorldItemTemplate, error)
 	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
-	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
 	// Reuse a denominator for later pages of the same revision and generation;
 	// avoid rescanning a large tenant-wide cohort once per 16 subjects. Missing
 	// rows (including an empty period) fall back to fresh aggregation.
@@ -824,8 +823,8 @@ type sqlcQuerier interface {
 	// Only the same 64 published cohorts returned by HubSummaryInstances are eligible.
 	// Renown is instance-wide; its published period score is repeated for each cohort.
 	HubLandingRatingRows(ctx context.Context, arg HubLandingRatingRowsParams) ([]HubLandingRatingRowsRow, error)
-	// Mirrors the full-clear leaderboard: version gates, duplicate groups, best
-	// per guild, ranked duration with legacy raw fallback. Do not load video proof.
+	// Mirrors the full-clear leaderboard: duplicate groups, best per guild, and
+	// ranked duration with legacy raw fallback. Do not load video proof.
 	HubLandingSpeedruns(ctx context.Context, arg HubLandingSpeedrunsParams) ([]HubLandingSpeedrunsRow, error)
 	// One ranked page of a chosen-boss board (any number of bosses, one included):
 	// Peak and Ranked Mastery average over every chosen boss (a missed one is 0),
@@ -1114,7 +1113,6 @@ type sqlcQuerier interface {
 	ListInstancesMissingTimeParseScores(ctx context.Context, arg ListInstancesMissingTimeParseScoresParams) ([]ListInstancesMissingTimeParseScoresRow, error)
 	ListItemPricingRealms(ctx context.Context) ([]ListItemPricingRealmsRow, error)
 	ListLatestRenownTemplateBosses(ctx context.Context, flavors []string) ([]ListLatestRenownTemplateBossesRow, error)
-	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	// A fixed cutoff and ordered keyset make each daily audit resumable across
 	// retries. Bound each input before UNION so a tenant never materializes its
 	// entire history for one page; include stamps for deleted canonical runs.
@@ -1748,7 +1746,6 @@ type sqlcQuerier interface {
 	UpsertGuildTenantRenownBoss(ctx context.Context, arg UpsertGuildTenantRenownBossParams) (int64, error)
 	UpsertInstanceOverviewMetrics(ctx context.Context, arg UpsertInstanceOverviewMetricsParams) error
 	UpsertItemDailyPrice(ctx context.Context, arg []UpsertItemDailyPriceParams) *UpsertItemDailyPriceBatchResults
-	UpsertLeaderboardVersionRequirements(ctx context.Context, arg UpsertLeaderboardVersionRequirementsParams) (LeaderboardVersionRequirement, error)
 	UpsertLivePeakCohortDenominator(ctx context.Context, arg UpsertLivePeakCohortDenominatorParams) (int64, error)
 	UpsertLivePeakCohortPage(ctx context.Context, arg UpsertLivePeakCohortPageParams) error
 	UpsertLuaProjectContributor(ctx context.Context, arg UpsertLuaProjectContributorParams) (LuaProjectContributor, error)
