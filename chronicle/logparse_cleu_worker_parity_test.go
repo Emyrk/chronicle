@@ -9,16 +9,19 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
 
-// The primary core adapter only accepts v2; these two real-worker fixtures
-// anchor persistence while comparing the independent data-only CLEU projection
-// to the legacy parse entrypoint. They are not persisted adapter parity tests.
+// These two real-worker fixtures compare bounded persisted core and event
+// rows against an independently decoded CLEU result, plus the complete
+// in-memory legacy projection. They do not establish whole-DB parse parity.
 func TestLegacyWorkerCLEUProjectionMatchesDataOnlyParse(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -86,6 +89,22 @@ func TestLegacyWorkerCLEUProjectionMatchesDataOnlyParse(t *testing.T) {
 			require.NoError(t, json.Unmarshal(encoded, &decoded))
 			assertPersistedParity(t, "CLEU JSON result", freshResults, decoded)
 
+			// Persist the decoded result independently, in its own DB. Only
+			// primary core and event adapters are exercised here.
+			require.NoError(t, fresh.store.InsertStagedParsedLogGroup(ctx, database.InsertStagedParsedLogGroupParams{ID: fresh.logID, ParseGeneration: 1}))
+			newID := uuid.New()
+			require.NoError(t, fresh.store.InTx(ctx, func(tx database.Store) error {
+				_, err := InsertParsedCore(ctx, tx, decoded[0], ParsedCoreWrite{
+					InstanceID: newID, RealmID: fresh.realmID, LogGroupID: fresh.logID,
+					ParserVersion: version.ExactParserVersion(),
+				})
+				if err != nil {
+					return err
+				}
+				return InsertParsedEventStreams(ctx, tx, newID, decoded[0].Events)
+			}, nil))
+			compareCLEUPersistedRows(t, legacy.store, fresh.store, instances[0].ID, newID, decoded[0].Overview.MetricsVersion)
+
 			legacyContext := parsectx.With(ctx, parsectx.Context{Type: logType, Format: tc.format, Flavor: tc.flavor, DatasetID: legacyChron.defaultDatasetID})
 			parsed, err := legacy.worker.parseCombatLog(legacyContext, tc.format, []database.LogFile{{}}, nil,
 				legacyChron.WoWDB.ForDataset(legacyChron.defaultDatasetID), legacyChron.Registry(), false, legacy.rawLog, "")
@@ -114,5 +133,61 @@ func TestLegacyWorkerCLEUProjectionMatchesDataOnlyParse(t *testing.T) {
 			old[0].Events.UnitClassification, decoded[0].Events.UnitClassification = nil, nil
 			assertPersistedParity(t, "CLEU projection", old, decoded)
 		})
+	}
+}
+
+func compareCLEUPersistedRows(t *testing.T, oldStore, freshStore database.Store, oldID, freshID uuid.UUID, metricsVersion int32) {
+	t.Helper()
+	ctx := t.Context()
+	old, err := oldStore.GetLogInstanceForDiscordAnnouncement(ctx, oldID)
+	require.NoError(t, err)
+	fresh, err := freshStore.GetLogInstanceForDiscordAnnouncement(ctx, freshID)
+	require.NoError(t, err)
+	old.ID, fresh.ID = uuid.Nil, uuid.Nil
+	old.RealmID, fresh.RealmID = uuid.Nil, uuid.Nil
+	old.LogGroupID, fresh.LogGroupID = uuid.Nil, uuid.Nil
+	old.HashedSlug, fresh.HashedSlug = pgtype.Text{}, pgtype.Text{}
+	old.UpdatedAt, fresh.UpdatedAt = pgtype.Timestamptz{}, pgtype.Timestamptz{}
+	assertPersistedParity(t, "CLEU persisted instance", old, fresh)
+
+	oldOverview, err := oldStore.GetInstanceOverviewMetrics(ctx, database.GetInstanceOverviewMetricsParams{InstanceID: oldID, MetricsVersion: metricsVersion})
+	require.NoError(t, err)
+	freshOverview, err := freshStore.GetInstanceOverviewMetrics(ctx, database.GetInstanceOverviewMetricsParams{InstanceID: freshID, MetricsVersion: metricsVersion})
+	require.NoError(t, err)
+	oldOverview.InstanceID, freshOverview.InstanceID = uuid.Nil, uuid.Nil
+	oldOverview.CreatedAt, freshOverview.CreatedAt = pgtype.Timestamptz{}, pgtype.Timestamptz{}
+	oldOverview.UpdatedAt, freshOverview.UpdatedAt = pgtype.Timestamptz{}, pgtype.Timestamptz{}
+	assertPersistedParity(t, "CLEU persisted overview", oldOverview, freshOverview)
+
+	oldEncounters, err := oldStore.EncountersByInstanceID(ctx, oldID)
+	require.NoError(t, err)
+	freshEncounters, err := freshStore.EncountersByInstanceID(ctx, freshID)
+	require.NoError(t, err)
+	require.Len(t, oldEncounters, 1)
+	require.Len(t, freshEncounters, 1)
+	oldEncounterID, freshEncounterID := oldEncounters[0].ID, freshEncounters[0].ID
+	oldEncounters[0].ID, freshEncounters[0].ID = uuid.Nil, uuid.Nil
+	oldEncounters[0].InstanceID, freshEncounters[0].InstanceID = uuid.Nil, uuid.Nil
+	assertPersistedParity(t, "CLEU persisted encounter", oldEncounters, freshEncounters)
+
+	for _, kind := range database.AllLogInstanceEventTypeValues() {
+		oldEvent, err := oldStore.InstanceEvent(ctx, database.InstanceEventParams{InstanceID: oldID, Type: string(kind)})
+		require.NoError(t, err, "legacy %s", kind)
+		freshEvent, err := freshStore.InstanceEvent(ctx, database.InstanceEventParams{InstanceID: freshID, Type: string(kind)})
+		require.NoError(t, err, "adapter %s", kind)
+		oldBytes, freshBytes := unzipEventRow(t, oldEvent.Events), unzipEventRow(t, freshEvent.Events)
+		require.True(t, bytes.Contains(oldBytes, []byte("$"+oldEncounterID.String())), "legacy %s header", kind)
+		require.True(t, bytes.Contains(freshBytes, []byte("$"+freshEncounterID.String())), "adapter %s header", kind)
+		oldBytes = bytes.Replace(oldBytes, []byte("$"+oldEncounterID.String()), []byte("$"+uuid.Nil.String()), 1)
+		freshBytes = bytes.Replace(freshBytes, []byte("$"+freshEncounterID.String()), []byte("$"+uuid.Nil.String()), 1)
+		if kind == database.LogInstanceEventTypeUnitClassification {
+			oldRecords, err := classificationEvents(oldBytes)
+			require.NoError(t, err)
+			freshRecords, err := classificationEvents(freshBytes)
+			require.NoError(t, err)
+			assertPersistedParity(t, "CLEU persisted event "+string(kind), oldRecords, freshRecords, cmp.Comparer(proto.Equal))
+			continue
+		}
+		assertPersistedParity(t, "CLEU persisted event "+string(kind), oldBytes, freshBytes)
 	}
 }
