@@ -22,7 +22,7 @@ func TestRenownFactDirtySubjectsUseRealmTenant(t *testing.T) {
 	require.NoError(t, err)
 	q := database.NewQueries(conn)
 	tenant := uuid.New()
-	_, err = q.InsertTenant(ctx, database.InsertTenantParams{ID: tenant, Name: uuid.NewString(), AvailableFormats: []string{}})
+	_, err = q.InsertTenant(ctx, database.InsertTenantParams{ID: tenant, Name: uuid.NewString(), IncludeInAll: true, AvailableFormats: []string{}})
 	require.NoError(t, err)
 	server, err := q.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: uuid.New(), Name: uuid.NewString()})
 	require.NoError(t, err)
@@ -34,9 +34,10 @@ func TestRenownFactDirtySubjectsUseRealmTenant(t *testing.T) {
 	require.NoError(t, err)
 	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'false'")
 	require.NoError(t, err)
-	_, err = conn.Exec(ctx, `INSERT INTO renown_kill_facts
+	var factID uuid.UUID
+	err = conn.QueryRow(ctx, `INSERT INTO renown_kill_facts
 		(realm_id, player_guid, run_id, instance_name, encounter_name, killed_at)
-		VALUES ($1,'player',$2,'Raid','Boss',$3)`, realm, uuid.New(), time.Now().UTC())
+		VALUES ($1,'player',$2,'Raid','Boss',$3) RETURNING id`, realm, uuid.New(), time.Now().UTC()).Scan(&factID)
 	require.NoError(t, err)
 	dirtyTenants, err := q.ListDirtyRenownTenants(ctx)
 	require.NoError(t, err)
@@ -45,6 +46,19 @@ func TestRenownFactDirtySubjectsUseRealmTenant(t *testing.T) {
 	require.NoError(t, conn.QueryRow(ctx, `SELECT tenant_id FROM rating_dirty_renown_subjects
 		WHERE realm_id=$1 AND subject_kind='player'`, realm).Scan(&markedTenant))
 	require.Equal(t, tenant, markedTenant)
+
+	// Reparses may delete global fact evidence from the root domain. The trigger
+	// must still enqueue work for the realm owner, not the caller's RLS scope.
+	_, err = conn.Exec(ctx, "RESET app.tenant_id")
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "DELETE FROM renown_kill_facts WHERE id=$1", factID)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "SELECT set_config('app.tenant_id', $1, false)", tenant.String())
+	require.NoError(t, err)
+	var revision int64
+	require.NoError(t, conn.QueryRow(ctx, `SELECT revision FROM rating_dirty_renown_subjects
+		WHERE realm_id=$1 AND subject_kind='player'`, realm).Scan(&revision))
+	require.Equal(t, int64(2), revision)
 }
 
 func TestRenownFactChangesMarkBothOldAndNewSubjects(t *testing.T) {
