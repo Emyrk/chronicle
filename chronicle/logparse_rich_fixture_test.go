@@ -8,6 +8,9 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/parseresult"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/Emyrk/chronicle/internal/version"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/require"
@@ -62,4 +65,53 @@ func TestLegacyAndDataOnlyParseProjectPlayerGuildAndLoot(t *testing.T) {
 	require.NotEmpty(t, decoded.Units)
 	require.Len(t, decoded.Loot, 1)
 	require.Equal(t, loot[0].ItemID, decoded.Loot[0].ItemID)
+
+	// Persist the transported observations in a separate database. This
+	// comparison covers player and loot rows with actual nonempty inputs; it
+	// does not imply complete replacement-parse or whole-DB parity.
+	require.NoError(t, fresh.store.InsertStagedParsedLogGroup(ctx, database.InsertStagedParsedLogGroupParams{ID: fresh.logID, ParseGeneration: 1}))
+	newID := uuid.New()
+	require.NoError(t, fresh.store.InTx(ctx, func(tx database.Store) error {
+		majority, err := InsertParsedArmory(ctx, tx, decoded.Armory, ParsedArmoryWrite{
+			RealmID: fresh.realmID, RealmName: "Legacy Worker Realm", DatasetID: chron.defaultDatasetID,
+			InstanceID: newID, InstanceStart: decoded.Core.Start,
+		})
+		if err != nil {
+			return err
+		}
+		var guildID uuid.NullUUID
+		if majority != nil {
+			guildID = uuid.NullUUID{UUID: majority.ID, Valid: true}
+		}
+		_, err = InsertParsedCore(ctx, tx, decoded, ParsedCoreWrite{
+			InstanceID: newID, RealmID: fresh.realmID, LogGroupID: fresh.logID,
+			GuildID: guildID, ParserVersion: version.ExactParserVersion(),
+		})
+		if err != nil {
+			return err
+		}
+		return InsertParsedLoot(ctx, tx, newID, fresh.realmID, decoded.Loot)
+	}, nil))
+	newPlayers, err := fresh.store.InstancePlayersByInstanceID(ctx, newID)
+	require.NoError(t, err)
+	require.Len(t, newPlayers, len(players))
+	players[0].InstanceID, newPlayers[0].InstanceID = uuid.Nil, uuid.Nil
+	players[0].GuildID, newPlayers[0].GuildID = uuid.NullUUID{}, uuid.NullUUID{}
+	assertPersistedParity(t, "player with guild and combatant", players, newPlayers)
+	newLoot, err := fresh.store.GetInstanceLoot(ctx, database.GetInstanceLootParams{InstanceID: newID})
+	require.NoError(t, err)
+	require.Len(t, newLoot, len(loot))
+	loot[0].ID, newLoot[0].ID = uuid.Nil, uuid.Nil
+	loot[0].InstanceID, newLoot[0].InstanceID = uuid.Nil, uuid.Nil
+	loot[0].RealmID, newLoot[0].RealmID = uuid.Nil, uuid.Nil
+	assertPersistedParity(t, "loot with known player", loot, newLoot)
+	oldPlayer, err := legacy.store.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{RealmID: legacy.realmID, Identifier: players[0].UnitGuid})
+	require.NoError(t, err)
+	newPlayer, err := fresh.store.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{RealmID: fresh.realmID, Identifier: newPlayers[0].UnitGuid})
+	require.NoError(t, err)
+	oldPlayer.RealmID, newPlayer.RealmID = uuid.Nil, uuid.Nil
+	oldPlayer.GuildID, newPlayer.GuildID = uuid.NullUUID{}, uuid.NullUUID{}
+	oldPlayer.CreatedAt, newPlayer.CreatedAt = pgtype.Timestamptz{}, pgtype.Timestamptz{}
+	oldPlayer.UpdatedFromInstance, newPlayer.UpdatedFromInstance = uuid.NullUUID{}, uuid.NullUUID{}
+	assertPersistedParity(t, "armory player", oldPlayer, newPlayer)
 }
