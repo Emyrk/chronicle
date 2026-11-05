@@ -19,7 +19,7 @@ func (noopAuthorizer) Delete(_ context.Context, _ *rel.PreconditionedFilter) err
 
 // NewDatabaseOnly returns an *Authz that delegates all queries to the
 // underlying database.Store without requiring a SpiceDB connection. This is
-// useful for offline CLI tools (e.g. resync) that run administrative queries
+// useful for tests and offline tools that run administrative queries
 // but never need authorization checks.
 func NewDatabaseOnly(logger *slog.Logger, db database.Store) *Authz {
 	z := &Authz{

@@ -108,7 +108,6 @@ ignoredlogs
 ignoredlogsv2
 ignoredlogsforever
 importdata
-.resync-completed.log
 *.pprof
 
 research/.other
