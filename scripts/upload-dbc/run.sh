@@ -5,7 +5,7 @@
 # to run only entries whose first field exactly matches that target name.
 #
 # TARGETS format: server|api-url|dataset-id
-# WOWDATA_TARGETS format: label|client-path|api-url|dataset-id|product|build|source
+# WOWDATA_TARGETS format: label|client-path|api-url|dataset-id|product|build|source|dbcache-path
 #
 # Shows the selected targets upfront, asks once, then runs them all.
 
@@ -112,10 +112,13 @@ if ((legacy_count > 0)); then
 fi
 if ((wowdata_count > 0)); then
   for entry in "${WOWDATA_TARGETS[@]}"; do
-    IFS='|' read -r label client api_url dataset_id product build source <<< "$entry"
+    IFS='|' read -r label client api_url dataset_id product build source dbcache <<< "$entry"
     source="${source:-local}"
     echo "  • wowdata target=${label}  url=${api_url}  dataset=${dataset_id}"
     echo "      client=${client}  product=${product}  build=${build}  source=${source}"
+    if [[ -n "$dbcache" ]]; then
+      echo "      dbcache=${dbcache}"
+    fi
   done
 fi
 echo
@@ -150,17 +153,21 @@ fi
 
 if ((wowdata_count > 0)); then
   for entry in "${WOWDATA_TARGETS[@]}"; do
-    IFS='|' read -r label client api_url dataset_id product build source <<< "$entry"
+    IFS='|' read -r label client api_url dataset_id product build source dbcache <<< "$entry"
     source="${source:-local}"
+    wowdata_args=(
+      --client "$client"
+      --product "$product"
+      --build "$build"
+      --source "$source"
+      --api-url "$api_url"
+      --dataset-id "$dataset_id"
+    )
+    if [[ -n "$dbcache" ]]; then
+      wowdata_args+=(--dbcache "$dbcache")
+    fi
     echo "==> Extracting and uploading wowdata to ${api_url} (target=${label}, dataset=${dataset_id})"
-    if go run ./scripts/dbcdata import-wowdata \
-      --client "$client" \
-      --product "$product" \
-      --build "$build" \
-      --source "$source" \
-      --api-url "$api_url" \
-      --dataset-id "$dataset_id" \
-      "$@"; then
+    if go run ./scripts/dbcdata import-wowdata "${wowdata_args[@]}" "$@"; then
       echo "    ✓ Success"
     else
       echo "    ✗ FAILED (exit $?)"
