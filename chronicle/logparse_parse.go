@@ -16,6 +16,7 @@ import (
 	blizzardmodern "github.com/Emyrk/chronicle/combatlog/parser/blizzard/modern"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/messagesource"
 	"github.com/Emyrk/chronicle/combatlog/parser/reorder"
@@ -25,7 +26,38 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/internal/gamedataoverrides"
 )
+
+type overrideGameDB struct {
+	gamedb.GameDB
+	spells gamedb.SpellFetcher
+	flavor database.WoWFlavor
+}
+
+func (f overrideGameDB) Spell(ctx context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error) {
+	spell, err := f.spells.Spell(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	clone := *spell
+	gamedataoverrides.ApplySpell(f.flavor, &clone)
+	return &clone, nil
+}
+
+func (f overrideGameDB) SpellsByName(ctx context.Context, name string) ([]*chrondbc.Spell, error) {
+	spells, err := f.spells.SpellsByName(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	clones := make([]*chrondbc.Spell, 0, len(spells))
+	for _, spell := range spells {
+		clone := *spell
+		clones = append(clones, &clone)
+	}
+	gamedataoverrides.ApplySpells(f.flavor, clones)
+	return clones, nil
+}
 
 // parseResult holds everything produced by the parse phase that the
 // finalization phase needs.
@@ -87,7 +119,9 @@ func (w *WorkerLogParse) parseCombatLog(
 		return nil, fmt.Errorf("load aura duration modifiers: %w", err)
 	}
 	encountersState.Auras.SetDurationModifiers(durationModifiers)
-	encountersState.SetSpellFetcher(gameDB)
+	flavor, _ := parsectx.Flavor(ctx)
+	overriddenGameDB := overrideGameDB{GameDB: gameDB, spells: gameDB, flavor: flavor}
+	encountersState.SetSpellFetcher(overriddenGameDB)
 
 	type consumableCatalogFetcher interface {
 		Consumables(context.Context) (*chrondbc.ConsumableCatalog, error)
@@ -138,7 +172,7 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		loadFileDuration = time.Since(loadStart)
 
-		p, err := parserv2.New(ctx, logLogger, rdr, gameDB, gameDB)
+		p, err := parserv2.New(ctx, logLogger, rdr, overriddenGameDB, gameDB)
 		if err != nil {
 			return nil, fmt.Errorf("create v2 parser: %w", err)
 		}
@@ -176,9 +210,9 @@ func (w *WorkerLogParse) parseCombatLog(
 		var p *wotlk.Parser
 		var err error
 		if logFormat == database.LogFormat243CcAddon {
-			p, err = wotlk.NewTBC(ctx, logLogger, bytes.NewReader(data), gameDB, gameDB, reg)
+			p, err = wotlk.NewTBC(ctx, logLogger, bytes.NewReader(data), overriddenGameDB, gameDB, reg)
 		} else {
-			p, err = wotlk.New(ctx, logLogger, bytes.NewReader(data), gameDB, gameDB, reg)
+			p, err = wotlk.New(ctx, logLogger, bytes.NewReader(data), overriddenGameDB, gameDB, reg)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("create CLEU parser: %w", err)
@@ -236,12 +270,12 @@ func (w *WorkerLogParse) parseCombatLog(
 		var p *blizzardmodern.Parser
 		var err error
 		if logFormat == database.LogFormatHermesproxy1142Cc {
-			p, err = blizzardmodern.NewHermesProxy(ctx, logLogger, bytes.NewReader(data), gameDB, gameDB, reg)
+			p, err = blizzardmodern.NewHermesProxy(ctx, logLogger, bytes.NewReader(data), overriddenGameDB, gameDB, reg)
 			if err == nil {
 				p.SetRealmClockInfo(scanCompanionHeaderClock(data))
 			}
 		} else {
-			p, err = blizzardmodern.New(ctx, logLogger, bytes.NewReader(data), gameDB, gameDB, reg, logFormat)
+			p, err = blizzardmodern.New(ctx, logLogger, bytes.NewReader(data), overriddenGameDB, gameDB, reg, logFormat)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("create modern Blizzard CLEU parser: %w", err)
@@ -269,7 +303,7 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		loadFileDuration = time.Since(loadStart)
 
-		p, err := azerothcore.New(ctx, logLogger, rdr, gameDB, gameDB)
+		p, err := azerothcore.New(ctx, logLogger, rdr, overriddenGameDB, gameDB)
 		if err != nil {
 			return nil, fmt.Errorf("create azerothcore parser: %w", err)
 		}

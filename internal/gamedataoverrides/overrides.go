@@ -56,6 +56,17 @@ var spellOverrides = []spellOverride{
 		},
 	},
 	{
+		flavor:  database.FlavorNightmareOfUrsol,
+		spellID: 57734,
+		mutate: func(spell *chrondbc.Spell, _ map[chrondbc.SpellID]*chrondbc.Spell) {
+			// Scrambled Brain is the Goblin Brainwashing Device lockout. Turtle
+			// and OctoWoW enforce a 10-minute duration server-side, but their
+			// client Spell.dbc rows report no duration.
+			spell.Duration.Duration = 10 * 60 * 1000
+			spell.Duration.MaxDuration = 10 * 60 * 1000
+		},
+	},
+	{
 		flavor:  database.FlavorVanilla,
 		spellID: 31818,
 		mutate: func(spell *chrondbc.Spell, spells map[chrondbc.SpellID]*chrondbc.Spell) {
