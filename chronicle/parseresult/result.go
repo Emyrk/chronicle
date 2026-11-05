@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/armory"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounterevents"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
@@ -29,15 +30,17 @@ type Input struct {
 	DynamicDifficulty int32
 	Capabilities      []string
 	Units             *unitdb.Units
+	Armory            *armory.Tracker
 	IdentifyUnit      func(guid.GUID) identifier.Identity
 }
 
 // Result covers event streams and parser-derived core instance, overview,
 // encounter fight/phase, raid snapshot and observed-unit fields. It still omits
-// full player class/race and guild-participant rows, guild/armory/loot writes,
+// guild-participant rows, guild/armory writes,
 // rankings, realm resolution, DB-assigned IDs, and write-time decisions.
 // Version 0 is the original unversioned projection, version 1 adds core fields,
-// and version 2 adds finalized loot observations. None is a complete
+// version 2 adds finalized loot observations, and version 3 adds armory
+// observations. None is a complete
 // persistence payload or full DB parity proof.
 type Result struct {
 	Format       database.LogFormat `json:"format"`
@@ -55,6 +58,7 @@ type Result struct {
 	RaidSnapshots []RaidSnapshot    `json:"raid_snapshots"`
 	Units         []UnitMetadata    `json:"units"`
 	Loot          []LootObservation `json:"loot"`
+	Armory        ArmoryObservation `json:"armory"`
 }
 
 type Encounter struct {
@@ -89,7 +93,7 @@ func Build(in Input) (*Result, error) {
 	fin := in.Finalized
 	out := &Result{
 		Format:        in.Format,
-		SchemaVersion: 2,
+		SchemaVersion: 3,
 		Name:          in.Name,
 		Versions:      make(map[string]string, len(fin.Versions)),
 		Encounters:    make([]Encounter, 0, len(fin.Encounters)),
@@ -136,6 +140,16 @@ func Build(in Input) (*Result, error) {
 		return nil, err
 	}
 	out.Loot = buildLoot(fin.Loot)
+	if in.Armory != nil {
+		if in.Units == nil {
+			return nil, fmt.Errorf("units required for armory level fallback")
+		}
+		var err error
+		out.Armory, err = buildArmory(in.Armory.Snapshot(in.Units))
+		if err != nil {
+			return nil, fmt.Errorf("project armory: %w", err)
+		}
+	}
 	for _, enc := range fin.Encounters {
 		if len(enc.Combat.Hostiles) > 0 && in.IdentifyUnit == nil {
 			return nil, fmt.Errorf("identify unit callback required for encounter fights")

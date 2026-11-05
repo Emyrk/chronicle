@@ -84,7 +84,8 @@ type RaidSnapshot struct {
 }
 
 // UnitMetadata is limited to IDs the writer marks seen or participating.
-// Player class/race and guild participation are not projected yet.
+// Player class/race are projected separately in armory observations; guild
+// participation rows are not projected yet.
 type UnitMetadata struct {
 	GUID          string  `json:"guid"`
 	Name          string  `json:"name"`

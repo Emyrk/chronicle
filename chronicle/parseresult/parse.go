@@ -79,7 +79,7 @@ func Parse(ctx context.Context, reader io.Reader, gameDB gamedb.GameDB, reg *reg
 			Format: database.LogFormat112aCcAddon, Name: inst.Name(), Finalized: fin, Events: inst.Events(),
 			Category: string(inst.Category), DifficultyName: inst.CurrentZone.DifficultyName,
 			MaxPlayers: int32(inst.CurrentZone.MaxPlayers), DynamicDifficulty: int32(inst.CurrentZone.DynamicDifficulty),
-			Capabilities: capabilities, Units: state.Units, IdentifyUnit: inst.IdentifyUnit,
+			Capabilities: capabilities, Units: state.Units, IdentifyUnit: inst.IdentifyUnit, Armory: fin.Guilds,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("project instance %q: %w", inst.Name(), err)
