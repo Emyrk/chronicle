@@ -524,6 +524,14 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION reject_infrastructure_cost_report_mutation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'infrastructure cost report revisions are immutable';
+END;
+$$;
+
 CREATE FUNCTION river_job_state_in_bitmask(bitmask bit, state river_job_state) RETURNS boolean
     LANGUAGE sql IMMUTABLE
     AS $$
@@ -2041,6 +2049,52 @@ CREATE TABLE inference_user_config (
     config jsonb DEFAULT '{}'::jsonb NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT inference_user_config_object CHECK ((jsonb_typeof(config) = 'object'::text))
+);
+
+CREATE TABLE infrastructure_cost_report_users (
+    report_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    username_snapshot text NOT NULL,
+    active_uploader boolean NOT NULL,
+    uploaded_files bigint NOT NULL,
+    monthly_parsed_bytes bigint NOT NULL,
+    current_parsed_bytes bigint NOT NULL,
+    shared_cost_microdollars bigint NOT NULL,
+    activity_cost_microdollars bigint NOT NULL,
+    storage_cost_microdollars bigint NOT NULL,
+    total_cost_microdollars bigint NOT NULL,
+    CONSTRAINT infrastructure_cost_report_use_activity_cost_microdollars_check CHECK ((activity_cost_microdollars >= 0)),
+    CONSTRAINT infrastructure_cost_report_user_storage_cost_microdollars_check CHECK ((storage_cost_microdollars >= 0)),
+    CONSTRAINT infrastructure_cost_report_users_current_parsed_bytes_check CHECK ((current_parsed_bytes >= 0)),
+    CONSTRAINT infrastructure_cost_report_users_monthly_parsed_bytes_check CHECK ((monthly_parsed_bytes >= 0)),
+    CONSTRAINT infrastructure_cost_report_users_shared_cost_microdollars_check CHECK ((shared_cost_microdollars >= 0)),
+    CONSTRAINT infrastructure_cost_report_users_total_cost_microdollars_check CHECK ((total_cost_microdollars >= 0)),
+    CONSTRAINT infrastructure_cost_report_users_uploaded_files_check CHECK ((uploaded_files >= 0))
+);
+
+CREATE TABLE infrastructure_cost_reports (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    period_start timestamp with time zone NOT NULL,
+    period_end timestamp with time zone NOT NULL,
+    revision integer NOT NULL,
+    status text NOT NULL,
+    storage_as_of timestamp with time zone NOT NULL,
+    provider text NOT NULL,
+    provider_payload jsonb NOT NULL,
+    provider_payload_sha256 text NOT NULL,
+    total_cost_microdollars bigint NOT NULL,
+    active_uploader_count bigint NOT NULL,
+    storage_owner_count bigint NOT NULL,
+    warning_count bigint NOT NULL,
+    report jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT infrastructure_cost_reports_active_uploader_count_check CHECK ((active_uploader_count >= 0)),
+    CONSTRAINT infrastructure_cost_reports_check CHECK ((period_start < period_end)),
+    CONSTRAINT infrastructure_cost_reports_revision_check CHECK ((revision > 0)),
+    CONSTRAINT infrastructure_cost_reports_status_check CHECK ((status = 'published'::text)),
+    CONSTRAINT infrastructure_cost_reports_storage_owner_count_check CHECK ((storage_owner_count >= 0)),
+    CONSTRAINT infrastructure_cost_reports_total_cost_microdollars_check CHECK ((total_cost_microdollars >= 0)),
+    CONSTRAINT infrastructure_cost_reports_warning_count_check CHECK ((warning_count >= 0))
 );
 
 CREATE TABLE instance_loot (
@@ -4385,6 +4439,15 @@ ALTER TABLE ONLY inference_usage
 ALTER TABLE ONLY inference_user_config
     ADD CONSTRAINT inference_user_config_pkey PRIMARY KEY (user_id);
 
+ALTER TABLE ONLY infrastructure_cost_report_users
+    ADD CONSTRAINT infrastructure_cost_report_users_pkey PRIMARY KEY (report_id, user_id);
+
+ALTER TABLE ONLY infrastructure_cost_reports
+    ADD CONSTRAINT infrastructure_cost_reports_period_start_period_end_revisio_key UNIQUE (period_start, period_end, revision);
+
+ALTER TABLE ONLY infrastructure_cost_reports
+    ADD CONSTRAINT infrastructure_cost_reports_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY instance_loot
     ADD CONSTRAINT instance_loot_pkey PRIMARY KEY (id);
 
@@ -5117,6 +5180,10 @@ CREATE INDEX inference_usage_thread_created_idx ON inference_usage USING btree (
 
 CREATE INDEX inference_usage_user_context_idx ON inference_usage USING btree (user_id, context_type, context_id);
 
+CREATE INDEX infrastructure_cost_report_users_total_idx ON infrastructure_cost_report_users USING btree (report_id, total_cost_microdollars DESC, user_id);
+
+CREATE INDEX infrastructure_cost_reports_period_idx ON infrastructure_cost_reports USING btree (period_start DESC, period_end DESC, revision DESC);
+
 CREATE INDEX instance_loot_received ON instance_loot USING btree (realm_id, received_guid, received_ts DESC);
 
 CREATE INDEX instance_speedruns_cohort_lookup_idx ON instance_speedruns USING btree (instance_name, start_time);
@@ -5310,6 +5377,10 @@ CREATE TRIGGER fixed_rating_template_boss_revision AFTER INSERT OR DELETE OR UPD
 CREATE TRIGGER fixed_rating_template_revision AFTER INSERT OR DELETE OR UPDATE ON rating_renown_templates FOR EACH ROW EXECUTE FUNCTION bump_fixed_rating_flavor_revision();
 
 CREATE TRIGGER fixed_rating_tenant_revision AFTER UPDATE OF default_dataset_id ON tenants FOR EACH ROW EXECUTE FUNCTION bump_fixed_rating_flavor_revision();
+
+CREATE TRIGGER infrastructure_cost_report_users_immutable BEFORE DELETE OR UPDATE ON infrastructure_cost_report_users FOR EACH ROW EXECUTE FUNCTION reject_infrastructure_cost_report_mutation();
+
+CREATE TRIGGER infrastructure_cost_reports_immutable BEFORE DELETE OR UPDATE ON infrastructure_cost_reports FOR EACH ROW EXECUTE FUNCTION reject_infrastructure_cost_report_mutation();
 
 CREATE TRIGGER mark_guild_renown_dirty AFTER INSERT OR DELETE OR UPDATE ON guild_renown_kill_facts FOR EACH ROW EXECUTE FUNCTION mark_rating_renown_fact_dirty();
 
@@ -5663,6 +5734,9 @@ ALTER TABLE ONLY inference_usage
 
 ALTER TABLE ONLY inference_user_config
     ADD CONSTRAINT inference_user_config_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY infrastructure_cost_report_users
+    ADD CONSTRAINT infrastructure_cost_report_users_report_id_fkey FOREIGN KEY (report_id) REFERENCES infrastructure_cost_reports(id);
 
 ALTER TABLE ONLY instance_loot
     ADD CONSTRAINT instance_loot_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;

@@ -1863,6 +1863,22 @@ export interface GearTrendsSlot {
     readonly enchants?: readonly GearTrendsEnchant[];
 }
 
+// From chroniclesdk/infrastructure_costs.go
+export interface GenerateInfrastructureCostReportRequest {
+    readonly periodStart?: string;
+    readonly periodEnd?: string;
+    readonly force: boolean;
+}
+
+// From chroniclesdk/infrastructure_costs.go
+export interface GenerateInfrastructureCostReportResponse {
+    readonly jobId: number;
+    readonly periodStart: string;
+    readonly periodEnd: string;
+    readonly force: boolean;
+    readonly duplicate: boolean;
+}
+
 // From chroniclesdk/log.go
 export interface Guild {
     readonly id: string;
@@ -2715,6 +2731,151 @@ export interface InferenceUsage {
      */
     readonly cost_usd?: number;
     readonly calls: number;
+}
+
+// From chroniclesdk/infrastructure_costs.go
+export interface InfrastructureCostAllocationPolicy {
+    readonly currency: string;
+    readonly precision: string;
+    readonly shared: string;
+    readonly activity: string;
+    readonly storage: string;
+    readonly rounding: string;
+}
+
+// From chroniclesdk/infrastructure_costs.go
+export interface InfrastructureCostCategoryCosts {
+    readonly memoryMicrodollars: number;
+    readonly cpuMicrodollars: number;
+    readonly egressMicrodollars: number;
+    readonly volumeMicrodollars: number;
+    readonly backupMicrodollars: number;
+    readonly unclassifiedMicrodollars: number;
+}
+
+// From chroniclesdk/infrastructure_costs.go
+export interface InfrastructureCostConcentration {
+    readonly top1: number;
+    readonly top5: number;
+    readonly top10: number;
+}
+
+// From chroniclesdk/infrastructure_costs.go
+export interface InfrastructureCostDistribution {
+    readonly mean: number;
+    readonly median: number;
+    readonly p75: number;
+    readonly p95: number;
+    readonly p99: number;
+    readonly max: number;
+}
+
+// From chroniclesdk/infrastructure_costs.go
+export interface InfrastructureCostPools {
+    readonly sharedMicrodollars: number;
+    readonly activityMicrodollars: number;
+    readonly storageMicrodollars: number;
+    readonly unattributedMicrodollars: number;
+    readonly inactiveStorageMicrodollars: number;
+}
+
+// From chroniclesdk/infrastructure_costs.go
+export interface InfrastructureCostReport {
+    readonly id: string;
+    readonly periodStart: string;
+    readonly periodEnd: string;
+    readonly revision: number;
+    readonly status: string;
+    readonly generatedAt: string;
+    readonly storageAsOf: string;
+    readonly scope: InfrastructureCostScope;
+    readonly costs: InfrastructureCostCategoryCosts;
+    readonly pools: InfrastructureCostPools;
+    readonly services: readonly InfrastructureCostService[];
+    readonly usage: InfrastructureCostUsage;
+    readonly unitEconomics: InfrastructureCostUnitEconomics;
+    readonly allocationPolicy: InfrastructureCostAllocationPolicy;
+    readonly warnings: readonly string[];
+    readonly totalCostMicrodollars: number;
+    readonly previousTotalCostMicrodollars?: number;
+    readonly provider: string;
+    readonly providerPayloadSHA256: string;
+}
+
+// From chroniclesdk/infrastructure_costs.go
+export interface InfrastructureCostReportListItem {
+    readonly id: string;
+    readonly periodStart: string;
+    readonly periodEnd: string;
+    readonly revision: number;
+    readonly status: string;
+    readonly generatedAt: string;
+    readonly storageAsOf: string;
+    readonly totalCostMicrodollars: number;
+    readonly previousTotalCostMicrodollars?: number;
+    readonly activeUploaderCount: number;
+    readonly storageOwnerCount: number;
+    readonly warningCount: number;
+}
+
+// From chroniclesdk/infrastructure_costs.go
+export interface InfrastructureCostReportUser {
+    readonly userId: string;
+    readonly usernameSnapshot: string;
+    readonly activeUploader: boolean;
+    readonly uploadedFiles: number;
+    readonly monthlyParsedBytes: number;
+    readonly currentParsedBytes: number;
+    readonly sharedCostMicrodollars: number;
+    readonly activityCostMicrodollars: number;
+    readonly storageCostMicrodollars: number;
+    readonly totalCostMicrodollars: number;
+}
+
+// From chroniclesdk/infrastructure_costs.go
+export interface InfrastructureCostScope {
+    readonly projectName: string;
+    readonly serverType: string;
+    readonly coverage: string;
+}
+
+// From chroniclesdk/infrastructure_costs.go
+export interface InfrastructureCostService {
+    readonly serviceId: string;
+    readonly serviceName: string;
+    readonly cpuUsageVCpuMinutes: number;
+    readonly memoryUsageGBMinutes: number;
+    readonly networkTxGB: number;
+    readonly diskUsageGBMinutes: number;
+    readonly backupUsageGBMinutes: number;
+    readonly costs: InfrastructureCostCategoryCosts;
+    readonly totalCostMicrodollars: number;
+}
+
+// From chroniclesdk/infrastructure_costs.go
+export interface InfrastructureCostUnitEconomics {
+    readonly costPerLogMicrodollars: number;
+    readonly costPerParsedInstanceMicrodollars: number;
+    readonly activeDistribution: InfrastructureCostDistribution;
+    readonly concentration: InfrastructureCostConcentration;
+}
+
+// From chroniclesdk/infrastructure_costs.go
+export interface InfrastructureCostUsage {
+    readonly registeredUsersAtEnd: number;
+    readonly newUsers: number;
+    readonly activeUploaders: number;
+    readonly uploadedFiles: number;
+    readonly uploadCount: number;
+    readonly uploadedLogGroups: number;
+    readonly uploadedRawBytes: number;
+    readonly uploadedStoredBytes: number;
+    readonly parsedInstances: number;
+    readonly monthlyParsedBytes: number;
+    readonly currentParsedBytes: number;
+    readonly currentStorageOwners: number;
+    readonly inactiveStorageOwners: number;
+    readonly inactiveStorageBytes: number;
 }
 
 // From chroniclesdk/characters.go
@@ -3885,6 +4046,22 @@ export interface LinkedCharacter {
 export interface ListGuildsResponse {
     readonly guilds: readonly GuildInfo[];
     readonly total: number;
+}
+
+// From chroniclesdk/infrastructure_costs.go
+export interface ListInfrastructureCostReportUsersResponse {
+    readonly users: readonly InfrastructureCostReportUser[];
+    readonly total: number;
+    readonly limit: number;
+    readonly offset: number;
+}
+
+// From chroniclesdk/infrastructure_costs.go
+export interface ListInfrastructureCostReportsResponse {
+    readonly reports: readonly InfrastructureCostReportListItem[];
+    readonly total: number;
+    readonly limit: number;
+    readonly offset: number;
 }
 
 // From chroniclesdk/raid_compositions.go

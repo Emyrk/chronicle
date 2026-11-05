@@ -12011,6 +12011,450 @@ func (q *sqlQuerier) UpdateInferenceThreadTitleByOwner(ctx context.Context, arg 
 	return i, err
 }
 
+const acquireInfrastructureCostReportLock = `-- name: AcquireInfrastructureCostReportLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text || '/' || $2::text, 339))
+`
+
+type AcquireInfrastructureCostReportLockParams struct {
+	PeriodStart string `db:"period_start" json:"period_start"`
+	PeriodEnd   string `db:"period_end" json:"period_end"`
+}
+
+func (q *sqlQuerier) AcquireInfrastructureCostReportLock(ctx context.Context, arg AcquireInfrastructureCostReportLockParams) error {
+	_, err := q.db.Exec(ctx, acquireInfrastructureCostReportLock, arg.PeriodStart, arg.PeriodEnd)
+	return err
+}
+
+const countInfrastructureCostReportUsers = `-- name: CountInfrastructureCostReportUsers :one
+SELECT COUNT(*)::bigint FROM infrastructure_cost_report_users WHERE report_id = $1
+`
+
+func (q *sqlQuerier) CountInfrastructureCostReportUsers(ctx context.Context, reportID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countInfrastructureCostReportUsers, reportID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countInfrastructureCostReports = `-- name: CountInfrastructureCostReports :one
+SELECT COUNT(*)::bigint FROM infrastructure_cost_reports
+`
+
+func (q *sqlQuerier) CountInfrastructureCostReports(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countInfrastructureCostReports)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const getInfrastructureCostReport = `-- name: GetInfrastructureCostReport :one
+SELECT id, period_start, period_end, revision, status, storage_as_of, provider, provider_payload, provider_payload_sha256, total_cost_microdollars, active_uploader_count, storage_owner_count, warning_count, report, created_at FROM infrastructure_cost_reports WHERE id = $1
+`
+
+func (q *sqlQuerier) GetInfrastructureCostReport(ctx context.Context, id uuid.UUID) (InfrastructureCostReport, error) {
+	row := q.db.QueryRow(ctx, getInfrastructureCostReport, id)
+	var i InfrastructureCostReport
+	err := row.Scan(
+		&i.ID,
+		&i.PeriodStart,
+		&i.PeriodEnd,
+		&i.Revision,
+		&i.Status,
+		&i.StorageAsOf,
+		&i.Provider,
+		&i.ProviderPayload,
+		&i.ProviderPayloadSha256,
+		&i.TotalCostMicrodollars,
+		&i.ActiveUploaderCount,
+		&i.StorageOwnerCount,
+		&i.WarningCount,
+		&i.Report,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getLatestInfrastructureCostReportForPeriod = `-- name: GetLatestInfrastructureCostReportForPeriod :one
+SELECT id, period_start, period_end, revision, status, storage_as_of, provider, provider_payload, provider_payload_sha256, total_cost_microdollars, active_uploader_count, storage_owner_count, warning_count, report, created_at FROM infrastructure_cost_reports
+WHERE period_start = $1 AND period_end = $2
+ORDER BY revision DESC
+LIMIT 1
+`
+
+type GetLatestInfrastructureCostReportForPeriodParams struct {
+	PeriodStart pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `db:"period_end" json:"period_end"`
+}
+
+func (q *sqlQuerier) GetLatestInfrastructureCostReportForPeriod(ctx context.Context, arg GetLatestInfrastructureCostReportForPeriodParams) (InfrastructureCostReport, error) {
+	row := q.db.QueryRow(ctx, getLatestInfrastructureCostReportForPeriod, arg.PeriodStart, arg.PeriodEnd)
+	var i InfrastructureCostReport
+	err := row.Scan(
+		&i.ID,
+		&i.PeriodStart,
+		&i.PeriodEnd,
+		&i.Revision,
+		&i.Status,
+		&i.StorageAsOf,
+		&i.Provider,
+		&i.ProviderPayload,
+		&i.ProviderPayloadSha256,
+		&i.TotalCostMicrodollars,
+		&i.ActiveUploaderCount,
+		&i.StorageOwnerCount,
+		&i.WarningCount,
+		&i.Report,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const infrastructureCostPeriodUserCounts = `-- name: InfrastructureCostPeriodUserCounts :one
+SELECT
+  COUNT(*) FILTER (WHERE created_at < $1)::bigint AS registered_users_at_end,
+  COUNT(*) FILTER (WHERE created_at >= $2 AND created_at < $1)::bigint AS new_users
+FROM users
+`
+
+type InfrastructureCostPeriodUserCountsParams struct {
+	PeriodEnd   pgtype.Timestamptz `db:"period_end" json:"period_end"`
+	PeriodStart pgtype.Timestamptz `db:"period_start" json:"period_start"`
+}
+
+type InfrastructureCostPeriodUserCountsRow struct {
+	RegisteredUsersAtEnd int64 `db:"registered_users_at_end" json:"registered_users_at_end"`
+	NewUsers             int64 `db:"new_users" json:"new_users"`
+}
+
+func (q *sqlQuerier) InfrastructureCostPeriodUserCounts(ctx context.Context, arg InfrastructureCostPeriodUserCountsParams) (InfrastructureCostPeriodUserCountsRow, error) {
+	row := q.db.QueryRow(ctx, infrastructureCostPeriodUserCounts, arg.PeriodEnd, arg.PeriodStart)
+	var i InfrastructureCostPeriodUserCountsRow
+	err := row.Scan(&i.RegisteredUsersAtEnd, &i.NewUsers)
+	return i, err
+}
+
+const infrastructureCostUserActivity = `-- name: InfrastructureCostUserActivity :many
+WITH period_files AS (
+  SELECT
+    lf.owner AS user_id,
+    COUNT(*)::bigint AS uploaded_files,
+    COUNT(DISTINCT lf.wow_log_id) FILTER (WHERE lf.wow_log_id IS NOT NULL)::bigint AS uploaded_log_groups,
+    COALESCE(SUM(lf.size_bytes), 0)::bigint AS uploaded_raw_bytes,
+    COALESCE(SUM(COALESCE(lf.compressed_size_bytes, lf.size_bytes)), 0)::bigint AS uploaded_stored_bytes
+  FROM log_file lf
+  WHERE lf.created_at >= $1 AND lf.created_at < $2
+  GROUP BY lf.owner
+), period_groups AS (
+  SELECT wlg.owner AS user_id, wlg.id AS log_group_id
+  FROM wow_log_groups wlg
+  WHERE wlg.created_at >= $1 AND wlg.created_at < $2
+), period_instances AS (
+  SELECT
+    pg.user_id,
+    COUNT(DISTINCT li.id)::bigint AS parsed_instances,
+    COALESCE(SUM(octet_length(lie.events)), 0)::bigint AS monthly_parsed_bytes
+  FROM period_groups pg
+  JOIN log_instances li ON li.log_group_id = pg.log_group_id
+  LEFT JOIN log_instance_events lie ON lie.instance_id = li.id
+  GROUP BY pg.user_id
+), current_parsed AS (
+  SELECT
+    wlg.owner AS user_id,
+    COALESCE(SUM(octet_length(lie.events)), 0)::bigint AS current_parsed_bytes
+  FROM wow_log_groups wlg
+  JOIN log_instances li ON li.log_group_id = wlg.id
+  JOIN log_instance_events lie ON lie.instance_id = li.id
+  GROUP BY wlg.owner
+), relevant AS (
+  SELECT user_id FROM period_files
+  UNION
+  SELECT user_id FROM current_parsed WHERE current_parsed_bytes > 0
+)
+SELECT
+  u.id AS user_id,
+  u.username AS username_snapshot,
+  (COALESCE(pf.uploaded_files, 0) > 0)::boolean AS active_uploader,
+  COALESCE(pf.uploaded_files, 0)::bigint AS uploaded_files,
+  COALESCE(pf.uploaded_log_groups, 0)::bigint AS uploaded_log_groups,
+  COALESCE(pf.uploaded_raw_bytes, 0)::bigint AS uploaded_raw_bytes,
+  COALESCE(pf.uploaded_stored_bytes, 0)::bigint AS uploaded_stored_bytes,
+  COALESCE(pi.parsed_instances, 0)::bigint AS parsed_instances,
+  COALESCE(pi.monthly_parsed_bytes, 0)::bigint AS monthly_parsed_bytes,
+  COALESCE(cp.current_parsed_bytes, 0)::bigint AS current_parsed_bytes
+FROM relevant r
+JOIN users u ON u.id = r.user_id
+LEFT JOIN period_files pf ON pf.user_id = r.user_id
+LEFT JOIN period_instances pi ON pi.user_id = r.user_id
+LEFT JOIN current_parsed cp ON cp.user_id = r.user_id
+ORDER BY u.id
+`
+
+type InfrastructureCostUserActivityParams struct {
+	PeriodStart pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `db:"period_end" json:"period_end"`
+}
+
+type InfrastructureCostUserActivityRow struct {
+	UserID              uuid.UUID `db:"user_id" json:"user_id"`
+	UsernameSnapshot    string    `db:"username_snapshot" json:"username_snapshot"`
+	ActiveUploader      bool      `db:"active_uploader" json:"active_uploader"`
+	UploadedFiles       int64     `db:"uploaded_files" json:"uploaded_files"`
+	UploadedLogGroups   int64     `db:"uploaded_log_groups" json:"uploaded_log_groups"`
+	UploadedRawBytes    int64     `db:"uploaded_raw_bytes" json:"uploaded_raw_bytes"`
+	UploadedStoredBytes int64     `db:"uploaded_stored_bytes" json:"uploaded_stored_bytes"`
+	ParsedInstances     int64     `db:"parsed_instances" json:"parsed_instances"`
+	MonthlyParsedBytes  int64     `db:"monthly_parsed_bytes" json:"monthly_parsed_bytes"`
+	CurrentParsedBytes  int64     `db:"current_parsed_bytes" json:"current_parsed_bytes"`
+}
+
+func (q *sqlQuerier) InfrastructureCostUserActivity(ctx context.Context, arg InfrastructureCostUserActivityParams) ([]InfrastructureCostUserActivityRow, error) {
+	rows, err := q.db.Query(ctx, infrastructureCostUserActivity, arg.PeriodStart, arg.PeriodEnd)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InfrastructureCostUserActivityRow
+	for rows.Next() {
+		var i InfrastructureCostUserActivityRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.UsernameSnapshot,
+			&i.ActiveUploader,
+			&i.UploadedFiles,
+			&i.UploadedLogGroups,
+			&i.UploadedRawBytes,
+			&i.UploadedStoredBytes,
+			&i.ParsedInstances,
+			&i.MonthlyParsedBytes,
+			&i.CurrentParsedBytes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertInfrastructureCostReport = `-- name: InsertInfrastructureCostReport :one
+INSERT INTO infrastructure_cost_reports (
+  id, period_start, period_end, revision, status, storage_as_of, provider,
+  provider_payload, provider_payload_sha256, total_cost_microdollars,
+  active_uploader_count, storage_owner_count, warning_count, report
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7,
+  $8, $9, $10,
+  $11, $12, $13, $14
+)
+RETURNING id, period_start, period_end, revision, status, storage_as_of, provider, provider_payload, provider_payload_sha256, total_cost_microdollars, active_uploader_count, storage_owner_count, warning_count, report, created_at
+`
+
+type InsertInfrastructureCostReportParams struct {
+	ID                    uuid.UUID          `db:"id" json:"id"`
+	PeriodStart           pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	PeriodEnd             pgtype.Timestamptz `db:"period_end" json:"period_end"`
+	Revision              int32              `db:"revision" json:"revision"`
+	Status                string             `db:"status" json:"status"`
+	StorageAsOf           pgtype.Timestamptz `db:"storage_as_of" json:"storage_as_of"`
+	Provider              string             `db:"provider" json:"provider"`
+	ProviderPayload       []byte             `db:"provider_payload" json:"provider_payload"`
+	ProviderPayloadSha256 string             `db:"provider_payload_sha256" json:"provider_payload_sha256"`
+	TotalCostMicrodollars int64              `db:"total_cost_microdollars" json:"total_cost_microdollars"`
+	ActiveUploaderCount   int64              `db:"active_uploader_count" json:"active_uploader_count"`
+	StorageOwnerCount     int64              `db:"storage_owner_count" json:"storage_owner_count"`
+	WarningCount          int64              `db:"warning_count" json:"warning_count"`
+	Report                []byte             `db:"report" json:"report"`
+}
+
+func (q *sqlQuerier) InsertInfrastructureCostReport(ctx context.Context, arg InsertInfrastructureCostReportParams) (InfrastructureCostReport, error) {
+	row := q.db.QueryRow(ctx, insertInfrastructureCostReport,
+		arg.ID,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.Revision,
+		arg.Status,
+		arg.StorageAsOf,
+		arg.Provider,
+		arg.ProviderPayload,
+		arg.ProviderPayloadSha256,
+		arg.TotalCostMicrodollars,
+		arg.ActiveUploaderCount,
+		arg.StorageOwnerCount,
+		arg.WarningCount,
+		arg.Report,
+	)
+	var i InfrastructureCostReport
+	err := row.Scan(
+		&i.ID,
+		&i.PeriodStart,
+		&i.PeriodEnd,
+		&i.Revision,
+		&i.Status,
+		&i.StorageAsOf,
+		&i.Provider,
+		&i.ProviderPayload,
+		&i.ProviderPayloadSha256,
+		&i.TotalCostMicrodollars,
+		&i.ActiveUploaderCount,
+		&i.StorageOwnerCount,
+		&i.WarningCount,
+		&i.Report,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertInfrastructureCostReportUser = `-- name: InsertInfrastructureCostReportUser :exec
+INSERT INTO infrastructure_cost_report_users (
+  report_id, user_id, username_snapshot, active_uploader, uploaded_files,
+  monthly_parsed_bytes, current_parsed_bytes, shared_cost_microdollars,
+  activity_cost_microdollars, storage_cost_microdollars, total_cost_microdollars
+) VALUES (
+  $1, $2, $3, $4, $5,
+  $6, $7, $8,
+  $9, $10, $11
+)
+`
+
+type InsertInfrastructureCostReportUserParams struct {
+	ReportID                 uuid.UUID `db:"report_id" json:"report_id"`
+	UserID                   uuid.UUID `db:"user_id" json:"user_id"`
+	UsernameSnapshot         string    `db:"username_snapshot" json:"username_snapshot"`
+	ActiveUploader           bool      `db:"active_uploader" json:"active_uploader"`
+	UploadedFiles            int64     `db:"uploaded_files" json:"uploaded_files"`
+	MonthlyParsedBytes       int64     `db:"monthly_parsed_bytes" json:"monthly_parsed_bytes"`
+	CurrentParsedBytes       int64     `db:"current_parsed_bytes" json:"current_parsed_bytes"`
+	SharedCostMicrodollars   int64     `db:"shared_cost_microdollars" json:"shared_cost_microdollars"`
+	ActivityCostMicrodollars int64     `db:"activity_cost_microdollars" json:"activity_cost_microdollars"`
+	StorageCostMicrodollars  int64     `db:"storage_cost_microdollars" json:"storage_cost_microdollars"`
+	TotalCostMicrodollars    int64     `db:"total_cost_microdollars" json:"total_cost_microdollars"`
+}
+
+func (q *sqlQuerier) InsertInfrastructureCostReportUser(ctx context.Context, arg InsertInfrastructureCostReportUserParams) error {
+	_, err := q.db.Exec(ctx, insertInfrastructureCostReportUser,
+		arg.ReportID,
+		arg.UserID,
+		arg.UsernameSnapshot,
+		arg.ActiveUploader,
+		arg.UploadedFiles,
+		arg.MonthlyParsedBytes,
+		arg.CurrentParsedBytes,
+		arg.SharedCostMicrodollars,
+		arg.ActivityCostMicrodollars,
+		arg.StorageCostMicrodollars,
+		arg.TotalCostMicrodollars,
+	)
+	return err
+}
+
+const listInfrastructureCostReportUsers = `-- name: ListInfrastructureCostReportUsers :many
+SELECT report_id, user_id, username_snapshot, active_uploader, uploaded_files, monthly_parsed_bytes, current_parsed_bytes, shared_cost_microdollars, activity_cost_microdollars, storage_cost_microdollars, total_cost_microdollars FROM infrastructure_cost_report_users
+WHERE report_id = $1
+ORDER BY total_cost_microdollars DESC, user_id
+LIMIT $3 OFFSET $2
+`
+
+type ListInfrastructureCostReportUsersParams struct {
+	ReportID    uuid.UUID `db:"report_id" json:"report_id"`
+	OffsetCount int32     `db:"offset_count" json:"offset_count"`
+	LimitCount  int32     `db:"limit_count" json:"limit_count"`
+}
+
+func (q *sqlQuerier) ListInfrastructureCostReportUsers(ctx context.Context, arg ListInfrastructureCostReportUsersParams) ([]InfrastructureCostReportUser, error) {
+	rows, err := q.db.Query(ctx, listInfrastructureCostReportUsers, arg.ReportID, arg.OffsetCount, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InfrastructureCostReportUser
+	for rows.Next() {
+		var i InfrastructureCostReportUser
+		if err := rows.Scan(
+			&i.ReportID,
+			&i.UserID,
+			&i.UsernameSnapshot,
+			&i.ActiveUploader,
+			&i.UploadedFiles,
+			&i.MonthlyParsedBytes,
+			&i.CurrentParsedBytes,
+			&i.SharedCostMicrodollars,
+			&i.ActivityCostMicrodollars,
+			&i.StorageCostMicrodollars,
+			&i.TotalCostMicrodollars,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInfrastructureCostReports = `-- name: ListInfrastructureCostReports :many
+SELECT id, period_start, period_end, revision, status, storage_as_of, provider, provider_payload, provider_payload_sha256, total_cost_microdollars, active_uploader_count, storage_owner_count, warning_count, report, created_at FROM infrastructure_cost_reports
+ORDER BY period_start DESC, revision DESC
+LIMIT $2 OFFSET $1
+`
+
+type ListInfrastructureCostReportsParams struct {
+	OffsetCount int32 `db:"offset_count" json:"offset_count"`
+	LimitCount  int32 `db:"limit_count" json:"limit_count"`
+}
+
+func (q *sqlQuerier) ListInfrastructureCostReports(ctx context.Context, arg ListInfrastructureCostReportsParams) ([]InfrastructureCostReport, error) {
+	rows, err := q.db.Query(ctx, listInfrastructureCostReports, arg.OffsetCount, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InfrastructureCostReport
+	for rows.Next() {
+		var i InfrastructureCostReport
+		if err := rows.Scan(
+			&i.ID,
+			&i.PeriodStart,
+			&i.PeriodEnd,
+			&i.Revision,
+			&i.Status,
+			&i.StorageAsOf,
+			&i.Provider,
+			&i.ProviderPayload,
+			&i.ProviderPayloadSha256,
+			&i.TotalCostMicrodollars,
+			&i.ActiveUploaderCount,
+			&i.StorageOwnerCount,
+			&i.WarningCount,
+			&i.Report,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const previousInfrastructureCostReportTotal = `-- name: PreviousInfrastructureCostReportTotal :one
+SELECT total_cost_microdollars FROM infrastructure_cost_reports
+WHERE period_end <= $1
+ORDER BY period_end DESC, revision DESC
+LIMIT 1
+`
+
+func (q *sqlQuerier) PreviousInfrastructureCostReportTotal(ctx context.Context, periodStart pgtype.Timestamptz) (int64, error) {
+	row := q.db.QueryRow(ctx, previousInfrastructureCostReportTotal, periodStart)
+	var total_cost_microdollars int64
+	err := row.Scan(&total_cost_microdollars)
+	return total_cost_microdollars, err
+}
+
 const getItemPricingConfigByRealm = `-- name: GetItemPricingConfigByRealm :one
 SELECT
     ws.pricing_provider,

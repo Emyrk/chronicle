@@ -15,6 +15,7 @@ import (
 type sqlcQuerier interface {
 	AbandonAwaitingInferenceRun(ctx context.Context, arg AbandonAwaitingInferenceRunParams) (InferenceRun, error)
 	AbortRatingRebuild(ctx context.Context, arg AbortRatingRebuildParams) (int64, error)
+	AcquireInfrastructureCostReportLock(ctx context.Context, arg AcquireInfrastructureCostReportLockParams) error
 	AcquireParseScoreLock(ctx context.Context, lockKey string) error
 	// Serialize refresh snapshots and commits across logical-run identity changes.
 	AcquireRankingRunRefreshLock(ctx context.Context) error
@@ -135,6 +136,8 @@ type sqlcQuerier interface {
 	CountGuildDiscordInstallationsByDiscordGuildID(ctx context.Context, discordGuildID string) (int64, error)
 	CountGuildRenownFactsForSubject(ctx context.Context, arg CountGuildRenownFactsForSubjectParams) (CountGuildRenownFactsForSubjectRow, error)
 	CountGuilds(ctx context.Context, arg CountGuildsParams) (int64, error)
+	CountInfrastructureCostReportUsers(ctx context.Context, reportID uuid.UUID) (int64, error)
+	CountInfrastructureCostReports(ctx context.Context) (int64, error)
 	CountLuaProjectStars(ctx context.Context, projectIds []uuid.UUID) ([]CountLuaProjectStarsRow, error)
 	CountLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	CountPlayerRenownFactsForSubject(ctx context.Context, arg CountPlayerRenownFactsForSubjectParams) (CountPlayerRenownFactsForSubjectRow, error)
@@ -576,6 +579,7 @@ type sqlcQuerier interface {
 	GetInferenceThreadByOwner(ctx context.Context, arg GetInferenceThreadByOwnerParams) (InferenceThread, error)
 	GetInferenceThreadUsage(ctx context.Context, arg GetInferenceThreadUsageParams) (GetInferenceThreadUsageRow, error)
 	GetInferenceUserConfig(ctx context.Context, userID uuid.UUID) ([]byte, error)
+	GetInfrastructureCostReport(ctx context.Context, id uuid.UUID) (InfrastructureCostReport, error)
 	// Returns only clean boss kills for an instance, excluding partial kills.
 	// Used by the time-parse handler so the primary instance is scored against
 	// the clean-only snapshot cohort consistently.
@@ -609,6 +613,7 @@ type sqlcQuerier interface {
 	GetItemTemplateMetadataBatch(ctx context.Context, arg GetItemTemplateMetadataBatchParams) ([]GetItemTemplateMetadataBatchRow, error)
 	GetItemTemplatesByEntries(ctx context.Context, arg GetItemTemplatesByEntriesParams) ([]WorldItemTemplate, error)
 	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
+	GetLatestInfrastructureCostReportForPeriod(ctx context.Context, arg GetLatestInfrastructureCostReportForPeriodParams) (InfrastructureCostReport, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
 	// Reuse a denominator for later pages of the same revision and generation;
 	// avoid rescanning a large tenant-wide cohort once per 16 subjects. Missing
@@ -855,6 +860,8 @@ type sqlcQuerier interface {
 	HubSummaryRatingRows(ctx context.Context, arg HubSummaryRatingRowsParams) ([]HubSummaryRatingRowsRow, error)
 	HubSummaryRealms(ctx context.Context, tenantID uuid.UUID) ([]HubSummaryRealmsRow, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
+	InfrastructureCostPeriodUserCounts(ctx context.Context, arg InfrastructureCostPeriodUserCountsParams) (InfrastructureCostPeriodUserCountsRow, error)
+	InfrastructureCostUserActivity(ctx context.Context, arg InfrastructureCostUserActivityParams) ([]InfrastructureCostUserActivityRow, error)
 	// Persist one constant-size state per subject/window. The caller must use the
 	// frozen manifest to select the window and rank weight. Replays do
 	// not modify staging. Insert and update may share the checkpoint CAS transaction.
@@ -895,6 +902,8 @@ type sqlcQuerier interface {
 	InsertInferenceRun(ctx context.Context, arg InsertInferenceRunParams) (InferenceRun, error)
 	InsertInferenceThread(ctx context.Context, arg InsertInferenceThreadParams) (InferenceThread, error)
 	InsertInferenceUsage(ctx context.Context, arg InsertInferenceUsageParams) error
+	InsertInfrastructureCostReport(ctx context.Context, arg InsertInfrastructureCostReportParams) (InfrastructureCostReport, error)
+	InsertInfrastructureCostReportUser(ctx context.Context, arg InsertInfrastructureCostReportUserParams) error
 	InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error)
 	InsertInstanceLoot(ctx context.Context, arg []InsertInstanceLootParams) *InsertInstanceLootBatchResults
 	InsertInstancePlayers(ctx context.Context, arg []InsertInstancePlayersParams) *InsertInstancePlayersBatchResults
@@ -1108,6 +1117,8 @@ type sqlcQuerier interface {
 	ListInferenceInstancePlayers(ctx context.Context, instanceID uuid.UUID) ([]LogInstancePlayer, error)
 	ListInferenceThreadsByOwner(ctx context.Context, userID uuid.UUID) ([]InferenceThread, error)
 	ListInferenceUsageByMessageKeys(ctx context.Context, arg ListInferenceUsageByMessageKeysParams) ([]ListInferenceUsageByMessageKeysRow, error)
+	ListInfrastructureCostReportUsers(ctx context.Context, arg ListInfrastructureCostReportUsersParams) ([]InfrastructureCostReportUser, error)
+	ListInfrastructureCostReports(ctx context.Context, arg ListInfrastructureCostReportsParams) ([]InfrastructureCostReport, error)
 	ListInstancesByDuplicateGroup(ctx context.Context, duplicateGroupID uuid.NullUUID) ([]ListInstancesByDuplicateGroupRow, error)
 	ListInstancesByParserVersion(ctx context.Context, parserVersion string) ([]ListInstancesByParserVersionRow, error)
 	ListInstancesByTimeRange(ctx context.Context, arg ListInstancesByTimeRangeParams) ([]ListInstancesByTimeRangeRow, error)
@@ -1401,6 +1412,7 @@ type sqlcQuerier interface {
 	// Returns a bucket's current (refilled) token level without changing it. A
 	// bucket that does not exist yet is full.
 	PeekRateLimitTokens(ctx context.Context, arg PeekRateLimitTokensParams) (float64, error)
+	PreviousInfrastructureCostReportTotal(ctx context.Context, periodStart pgtype.Timestamptz) (int64, error)
 	PruneLuaProjectArtifacts(ctx context.Context, id uuid.UUID) error
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error
 	// Removes summary cards whose instance/difficulty/player-count combination no

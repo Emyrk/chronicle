@@ -23,6 +23,7 @@ import {
   Camera,
   PanelsTopLeft,
   CreditCard,
+  ChartNoAxesCombined,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -46,6 +47,7 @@ const tabs: Tab[] = [
   { path: "/admin/custom-panels", label: "Developer Panels", icon: PanelsTopLeft },
   { path: "/admin/cache-stats", label: "Cache Stats", icon: Database },
   { path: "/admin/billing", label: "Billing", icon: CreditCard },
+  { path: "/admin/infrastructure-costs", label: "Infrastructure Costs", icon: ChartNoAxesCombined },
   { path: "/admin/parsing", label: "Parsing", icon: Camera },
 ];
 
