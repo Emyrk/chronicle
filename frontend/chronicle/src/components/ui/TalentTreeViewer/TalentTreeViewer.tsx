@@ -23,7 +23,7 @@ import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import type { WoWSpell } from "@emyrk/wow-tooltip-renderer";
-import { resolveSpellDescription, getEnglishText, extractReferencedSpellIds } from "@emyrk/wow-tooltip-renderer";
+import { getEnglishText, extractReferencedSpellIds } from "@emyrk/wow-tooltip-renderer";
 import {
   type ClassTalentData,
   type TalentDiff,
@@ -58,11 +58,11 @@ import {
   prerequisiteArrows,
   populatedTalentTabs,
   rankDescriptionsForTooltip,
+  resolveTalentSpellDescription,
   resetTalentTabRanks,
   restrictTalentRanksToFirstPopulatedTab,
   searchParamsWithTalentBuild,
   searchParamsWithTalentLock,
-  spellForTalentRank,
   talentBuildExportName,
   talentDescription,
   talentGridHeight,
@@ -283,7 +283,7 @@ function TalentPrereqArrows({ arrows, ranks, height, talents, buttonSize }: { ar
 
 // ─── Talent button ────────────────────────────────────────────────
 
-function TalentButton({ talent, rank, locked, lockedReason, pointsExhausted, pointsPerRow, talents, ranks, onChange, readOnly, debug, mobile, quickActive, onActivate, popularity, diff, datasetId }: {
+function TalentButton({ talent, rank, locked, lockedReason, pointsExhausted, pointsPerRow, talents, ranks, onChange, readOnly, debug, mobile, quickActive, onActivate, popularity, diff, datasetId, playerLevel }: {
   talent: TalentEntry;
   rank: number;
   locked: boolean;
@@ -308,6 +308,7 @@ function TalentButton({ talent, rank, locked, lockedReason, pointsExhausted, poi
   /** Diff badge for the compare overlay. */
   diff?: TalentDiff;
   datasetId?: string;
+  playerLevel: number;
 }) {
   const iconBaseUrl = useIconBaseUrl();
   const maxed = rank >= talent.maxRank;
@@ -366,10 +367,24 @@ function TalentButton({ talent, rank, locked, lockedReason, pointsExhausted, poi
   const refsReady = referencedIds.length === 0 || refQueries.every((q) => !q.isPending);
   const fetchedRankTexts = rankSpellQueries.map((q, rankIndex) => {
     if (!q.data || !refsReady) return "";
-    const rankSpell = spellForTalentRank(talent, q.data, rankIndex + 1);
-    const desc = resolveSpellDescription(rankSpell, getEnglishText(rankSpell.description), referencedSpells);
+    const talentRank = rankIndex + 1;
+    const desc = resolveTalentSpellDescription(
+      talent,
+      q.data,
+      talentRank,
+      getEnglishText(q.data.description),
+      referencedSpells,
+      playerLevel,
+    );
     if (desc) return desc;
-    return resolveSpellDescription(rankSpell, getEnglishText(rankSpell.aura_description), referencedSpells) ?? "";
+    return resolveTalentSpellDescription(
+      talent,
+      q.data,
+      talentRank,
+      getEnglishText(q.data.aura_description),
+      referencedSpells,
+      playerLevel,
+    );
   });
 
   // Determine which spell IDs to query
@@ -380,12 +395,22 @@ function TalentButton({ talent, rank, locked, lockedReason, pointsExhausted, poi
     ? rankSpellQueries[rank - 1]?.data
     : rankSpellQueries[rank]?.data ?? rankSpellQueries[0]?.data;
   const primarySpellRank = rank > 0 ? rank : 1;
-  const primarySpell = primarySpellData
-    ? spellForTalentRank(talent, primarySpellData, primarySpellRank)
-    : undefined;
-  const description = (primarySpell
-    ? resolveSpellDescription(primarySpell, getEnglishText(primarySpell.description), referencedSpells)
-      || resolveSpellDescription(primarySpell, getEnglishText(primarySpell.aura_description), referencedSpells)
+  const description = (primarySpellData
+    ? resolveTalentSpellDescription(
+      talent,
+      primarySpellData,
+      primarySpellRank,
+      getEnglishText(primarySpellData.description),
+      referencedSpells,
+      playerLevel,
+    ) || resolveTalentSpellDescription(
+      talent,
+      primarySpellData,
+      primarySpellRank,
+      getEnglishText(primarySpellData.aura_description),
+      referencedSpells,
+      playerLevel,
+    )
     : undefined) ?? talentDescription(talent);
 
   // Override current/next rank text from fetched data
@@ -676,6 +701,7 @@ function TalentTab({
   popularity,
   diff,
   datasetId,
+  playerLevel,
 }: {
   classID: number;
   tab: TalentTabData;
@@ -703,6 +729,7 @@ function TalentTab({
   /** Per-talent diff badges (compare overlay). */
   diff?: Record<number, TalentDiff> | null;
   datasetId?: string;
+  playerLevel: number;
 }) {
   const iconBaseUrl = useIconBaseUrl();
   const points = useMemo(() => talentTabPoints(tab, ranks), [tab, ranks]);
@@ -866,6 +893,7 @@ function TalentTab({
                           popularity={popularity?.[t.id]}
                           diff={diff?.[t.id]}
                           datasetId={datasetId}
+                          playerLevel={playerLevel}
                           onChange={(rank) => onRankChange(t, rank)}
                         />
                       )}
@@ -1277,6 +1305,8 @@ export function TalentTreeViewer({
               onQuickActivate={setQuickActiveTalentId}
               popularity={popularity}
               diff={diff}
+              datasetId={datasetId}
+              playerLevel={maxLevel}
               onRankChange={(talent, rank) => {
                 if (manuallyLocked) {
                   notifyBuildLocked();
@@ -1418,6 +1448,7 @@ export function TalentTreeViewer({
             popularity={popularity}
             diff={diff}
             datasetId={datasetId}
+            playerLevel={maxLevel}
             // A locked build is frozen: no points may be added or removed.
             onRankChange={(talent, rank) => {
               if (manuallyLocked) {

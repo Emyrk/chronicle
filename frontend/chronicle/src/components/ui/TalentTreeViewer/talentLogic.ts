@@ -1,7 +1,7 @@
 // Pure talent tree logic and types, ported from chronicle-wiki.
 // No React imports — safe for use in tests, workers, and components.
 
-import type { WoWSpell } from "@emyrk/wow-tooltip-renderer";
+import { resolveSpellDescription, type WoWSpell } from "@emyrk/wow-tooltip-renderer";
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -756,6 +756,23 @@ export function spellForTalentRank(talent: TalentEntry, spell: WoWSpell, rank: n
     effect_base_points_f: spell.effect_base_points_f?.map((value) => scaleValue(value) ?? value),
     effect_real_points_per_level: spell.effect_real_points_per_level.map((value) => scaleValue(value) ?? value),
   };
+}
+
+/** Resolve a talent spell at the calculator's player level. */
+export function resolveTalentSpellDescription(
+  talent: TalentEntry,
+  spell: WoWSpell,
+  rank: number,
+  template: string,
+  referencedSpells: Map<number, WoWSpell>,
+  playerLevel: number,
+): string {
+  return resolveSpellDescription(
+    spellForTalentRank(talent, spell, rank),
+    template,
+    referencedSpells,
+    { playerLevel },
+  );
 }
 
 // ─── Tooltip text helpers ─────────────────────────────────────────

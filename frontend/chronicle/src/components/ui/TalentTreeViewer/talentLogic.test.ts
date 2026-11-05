@@ -24,6 +24,7 @@ import {
   populatedTalentTabs,
   rankDescriptionsForTooltip,
   rankingsLayoutToBuild,
+  resolveTalentSpellDescription,
   resetTalentTabRanks,
   restrictTalentRanksToFirstPopulatedTab,
   rowPointRequirement,
@@ -127,6 +128,43 @@ describe("modern Trait rank spell scaling", () => {
     );
     expect(rankFive).toBe(spell);
     expect(spell.effects?.map((effect) => effect.effect_base_points_f)).toEqual([10, 20, 10]);
+  });
+
+  it("resolves level-scaled Forever talents at the calculator level", () => {
+    const wildGrowth = talent({
+      id: 104910,
+      tierID: 6,
+      columnIndex: 1,
+      maxRank: 1,
+      spellRanks: [408120],
+    });
+    const spell = {
+      spell_level: 40,
+      base_level: 40,
+      max_level: 48,
+      duration: { Duration: 7000 },
+      effects: [
+        {
+          effect_index: 0,
+          effect_base_points: 0,
+          effect_base_points_f: 40,
+          effect_real_points_per_level: 1,
+          effect_aura_period: 1000,
+        },
+      ],
+      effect_base_points: [0, 0, 0],
+      effect_base_points_f: [40, 0, 0],
+      effect_real_points_per_level: [1, 0, 0],
+    } as Parameters<typeof resolveTalentSpellDescription>[1];
+
+    expect(resolveTalentSpellDescription(
+      wildGrowth,
+      spell,
+      1,
+      "Heals the target and their party for $o1 over $d.",
+      new Map(),
+      60,
+    )).toBe("Heals the target and their party for 336 over 7 sec.");
   });
 
   it("does not scale classic talents with distinct rank spell IDs", () => {
