@@ -90,7 +90,7 @@ To export, generate `icon-list.json`, and upload through the existing R2 pipelin
 SERVER=forever make icons
 ```
 
-This uses the configured default Forever client path, provisions the pinned `wowdata` binary when needed, creates a temporary snapshot, exports the referenced icons, and uploads them through the existing R2 pipeline. Set `WOW_CLIENT_PATH` to override the client location.
+This uses the configured default Forever client path and the current `wowf` product, resolves `latest` to the client's exact build for the run, provisions the pinned `wowdata` binary when needed, creates a temporary hotfixed snapshot, exports the referenced icons, and uploads them through the existing R2 pipeline. Set `WOW_CLIENT_PATH`, `WOW_PRODUCT`, `WOW_BUILD`, or `WOW_DBCACHE` to override discovery.
 
 The Forever dataset should use its own icon base URL, for example `https://icons.chronicleclassic.com/forever`, in the dataset settings.
 

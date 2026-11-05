@@ -12,7 +12,8 @@ import (
 func ExtractWowdataIconsCmd() *serpent.Command {
 	var dbcPath, server, outDir string
 	var wowdataBin, extractor, iconExtractor string
-	var product, build, region, locale, cache string
+	var product, build, region, locale, cache, dbcache string
+	var noHotfix bool
 
 	return &serpent.Command{
 		Use:   "extract-wowdata-icons",
@@ -24,13 +25,18 @@ func ExtractWowdataIconsCmd() *serpent.Command {
 			{Name: "wowdata", Description: "Wowdata executable. A pinned build is provisioned when omitted.", Flag: "wowdata", Env: "WOWDATA_BIN", Default: wowdataDefaultBinary, Value: serpent.StringOf(&wowdataBin)},
 			{Name: "extractor", Description: "Path to Chronicle's wowdata snapshot extraction script.", Flag: "extractor", Default: "scripts/dbcdata/extract-wowdata.sh", Value: serpent.StringOf(&extractor)},
 			{Name: "icon-extractor", Description: "Path to Chronicle's wowdata icon export script.", Flag: "icon-extractor", Default: "scripts/dbcdata/extract-wowdata-icons.sh", Value: serpent.StringOf(&iconExtractor)},
-			{Name: "product", Description: "CASC product to extract.", Flag: "product", Default: "wow_classic_beta", Value: serpent.StringOf(&product)},
-			{Name: "build", Description: "WoW build to extract; empty uses the extractor default.", Flag: "build", Value: serpent.StringOf(&build)},
+			{Name: "product", Description: "CASC product to extract.", Flag: "product", Env: "WOW_PRODUCT", Default: "wowf", Value: serpent.StringOf(&product)},
+			{Name: "build", Description: "WoW build to extract; latest is resolved and pinned for the run.", Flag: "build", Env: "WOW_BUILD", Default: "latest", Value: serpent.StringOf(&build)},
 			{Name: "region", Description: "Blizzard region.", Flag: "region", Env: "WOW_REGION", Default: "us", Value: serpent.StringOf(&region)},
 			{Name: "locale", Description: "Data locale.", Flag: "locale", Env: "WOW_LOCALE", Default: "enUS", Value: serpent.StringOf(&locale)},
 			{Name: "cache", Description: "Optional wowdata cache directory.", Flag: "cache", Env: "WOWDATA_CACHE", Value: serpent.StringOf(&cache)},
+			{Name: "dbcache", Description: "Explicit locale DBCache.bin; default selects the active Forever cache below the client.", Flag: "dbcache", Env: "WOW_DBCACHE", Value: serpent.StringOf(&dbcache)},
+			{Name: "no-hotfix", Description: "Explicitly disable DBCache overlay application.", Flag: "no-hotfix", Value: serpent.BoolOf(&noHotfix)},
 		},
 		Handler: func(inv *serpent.Invocation) error {
+			if noHotfix && dbcache != "" {
+				return fmt.Errorf("--dbcache and --no-hotfix cannot be used together")
+			}
 			if outDir == "" {
 				return fmt.Errorf("--out is required")
 			}
@@ -45,6 +51,7 @@ func ExtractWowdataIconsCmd() *serpent.Command {
 			snapshot, cleanup, err := extractWowdata(inv, wowdataExtractOptions{
 				Client: client, WowdataBin: resolvedWowdata, Extractor: extractor,
 				Product: product, Build: build, Source: "local", Region: region, Locale: locale, Cache: cache,
+				DBCache: dbcache, NoHotfix: noHotfix,
 			})
 			if err != nil {
 				return err

@@ -176,19 +176,23 @@ OPTIONAL_TABLES=(
   ItemRandomProperties
 )
 
-COMMON_ARGS=(
-  --source "$SOURCE"
-  --region "$REGION"
-  --product "$PRODUCT"
-  --build "$BUILD"
-  --locale "$LOCALE"
-)
-if [[ "$SOURCE" == "local" ]]; then
-  COMMON_ARGS+=(--path "$CLIENT_PATH")
-fi
-if [[ -n "$CACHE_DIR" ]]; then
-  COMMON_ARGS+=(--cache "$CACHE_DIR")
-fi
+build_common_args() {
+  COMMON_ARGS=(
+    --source "$SOURCE"
+    --region "$REGION"
+    --product "$PRODUCT"
+    --build "$BUILD"
+    --locale "$LOCALE"
+  )
+  if [[ "$SOURCE" == "local" ]]; then
+    COMMON_ARGS+=(--path "$CLIENT_PATH")
+  fi
+  if [[ -n "$CACHE_DIR" ]]; then
+    COMMON_ARGS+=(--cache "$CACHE_DIR")
+  fi
+}
+
+build_common_args
 
 unwrap_data() {
   python3 -c '
@@ -288,6 +292,15 @@ info_tmp="$OUT_DIR/.target.json.tmp"
   2>"$OUT_DIR/logs/casc-info.log" | unwrap_data >"$info_tmp"
 mv "$info_tmp" "$OUT_DIR/target.json"
 
+resolved_build="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["buildName"])' "$OUT_DIR/target.json")"
+if [[ "$BUILD" == "latest" ]]; then
+  BUILD="$resolved_build"
+  build_common_args
+elif [[ "$BUILD" != "$resolved_build" ]]; then
+  echo "Requested build $BUILD resolved to unexpected build $resolved_build" >&2
+  exit 2
+fi
+
 for table in "${REQUIRED_TABLES[@]}"; do
   extract_table "$table" required
 done
@@ -360,13 +373,22 @@ PY
 echo
 if ((NO_HOTFIX == 0)); then
   if [[ -z "$DBCACHE_PATH" ]]; then
-    mapfile -t discovered_caches < <(find "$CLIENT_PATH" -maxdepth 5 -type f \
-      -path "*/Cache/ADB/$LOCALE/DBCache.bin" -print | sort)
-    if ((${#discovered_caches[@]} != 1)); then
-      echo "Expected exactly one $LOCALE DBCache.bin under $CLIENT_PATH, found ${#discovered_caches[@]}. Use --dbcache or --no-hotfix." >&2
-      exit 2
+    case "$PRODUCT" in
+      wowf) preferred_cache="$CLIENT_PATH/_forever_/Cache/ADB/$LOCALE/DBCache.bin" ;;
+      wow_classic_beta) preferred_cache="$CLIENT_PATH/_classic_beta_/Cache/ADB/$LOCALE/DBCache.bin" ;;
+      *) preferred_cache="" ;;
+    esac
+    if [[ -n "$preferred_cache" && -f "$preferred_cache" ]]; then
+      DBCACHE_PATH="$preferred_cache"
+    else
+      mapfile -t discovered_caches < <(find "$CLIENT_PATH" -maxdepth 5 -type f \
+        -path "*/Cache/ADB/$LOCALE/DBCache.bin" -print | sort)
+      if ((${#discovered_caches[@]} != 1)); then
+        echo "Expected exactly one $LOCALE DBCache.bin under $CLIENT_PATH, found ${#discovered_caches[@]}. Use --dbcache or --no-hotfix." >&2
+        exit 2
+      fi
+      DBCACHE_PATH="${discovered_caches[0]}"
     fi
-    DBCACHE_PATH="${discovered_caches[0]}"
   fi
   if [[ ! -f "$DBCACHE_PATH" ]]; then
     echo "DBCache not found: $DBCACHE_PATH" >&2

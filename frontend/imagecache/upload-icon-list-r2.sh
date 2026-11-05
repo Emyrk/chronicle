@@ -24,23 +24,25 @@ if [[ ! -f "$ICON_LIST_FILE" ]]; then
   exit 1
 fi
 
-# Check rclone is available
-if ! command -v rclone &> /dev/null; then
-  echo "Error: rclone not found. Install it first."
-  exit 1
-fi
-
-if ! rclone listremotes | grep -qx "${R2_REMOTE}:"; then
-  echo "Error: rclone remote '${R2_REMOTE}' not found."
-  echo "Available remotes:"
-  rclone listremotes || true
-  exit 1
-fi
-
 if [[ -z "$R2_BUCKET" ]]; then
   echo "Error: R2_BUCKET is empty."
   echo "For S3/R2 remotes, destination must include a bucket (e.g. 'icons')."
   echo "Try: R2_BUCKET=icons ./upload-icon-list-r2.sh"
+  exit 1
+fi
+
+WRANGLER_DIR="${SCRIPT_DIR}/../telemetry"
+UPLOAD_TOOL="${UPLOAD_TOOL:-}"
+if [[ -z "$UPLOAD_TOOL" ]] && command -v rclone >/dev/null 2>&1 \
+    && rclone listremotes | grep -qx "${R2_REMOTE}:" \
+    && [[ "$(rclone config show "$R2_REMOTE" | awk -F' = ' '$1 == "type" {print $2; exit}')" == "s3" ]]; then
+  UPLOAD_TOOL="rclone"
+elif [[ -z "$UPLOAD_TOOL" ]] && command -v pnpm >/dev/null 2>&1 \
+    && [[ -x "$WRANGLER_DIR/node_modules/.bin/wrangler" ]]; then
+  UPLOAD_TOOL="wrangler"
+fi
+if [[ "$UPLOAD_TOOL" != "rclone" && "$UPLOAD_TOOL" != "wrangler" ]]; then
+  echo "Error: publishing requires an S3-backed rclone remote '${R2_REMOTE}:' or frontend/telemetry's Wrangler install." >&2
   exit 1
 fi
 
@@ -61,16 +63,20 @@ else
   DEST="${DEST}/${R2_FILENAME}"
 fi
 
-echo "Uploading ${ICON_LIST_FILE} to ${DEST}"
+echo "Uploading ${ICON_LIST_FILE} to ${R2_BUCKET}/${R2_PATH}/${R2_FILENAME} with $UPLOAD_TOOL"
 
-# Upload with:
-# - Cache-Control: public, max-age=604800 (1 week)
-# - Content-Type: application/json
-rclone copyto "$ICON_LIST_FILE" "$DEST" \
-  --header-upload "Cache-Control: public, max-age=604800" \
-  --header-upload "Content-Type: application/json" \
-  --progress \
-  --verbose
+# Upload with one-week caching and the JSON content type.
+if [[ "$UPLOAD_TOOL" == "rclone" ]]; then
+  rclone copyto "$ICON_LIST_FILE" "$DEST" \
+    --header-upload "Cache-Control: public, max-age=604800" \
+    --header-upload "Content-Type: application/json" \
+    --progress \
+    --verbose
+else
+  pnpm -C "$WRANGLER_DIR" exec wrangler r2 object put \
+    "${R2_BUCKET%/}/${R2_PATH#/}/${R2_FILENAME}" --file "$ICON_LIST_FILE" \
+    --content-type application/json --cache-control "public, max-age=604800" --remote
+fi
 
 PUBLIC_BASE="${R2_PUBLIC_BASE_URL%/}"
 if [[ -n "$R2_PATH" ]]; then
@@ -79,5 +85,5 @@ fi
 PUBLIC_URL="${PUBLIC_BASE}/${R2_FILENAME}"
 
 echo ""
-echo "Done! Uploaded to ${DEST}"
+echo "Done! Uploaded to ${R2_BUCKET}/${R2_PATH}/${R2_FILENAME} with $UPLOAD_TOOL"
 echo "Public URL: ${PUBLIC_URL}"
