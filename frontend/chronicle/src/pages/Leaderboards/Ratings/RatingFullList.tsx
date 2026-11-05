@@ -1,6 +1,7 @@
-import { useMemo, useState, type ReactNode } from "react"
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { ArrowDown, Check, ChevronLeft, ChevronRight, Search } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay"
 import {
@@ -12,7 +13,7 @@ import {
   type RatingPeriod,
   type RatingScope,
 } from "./ratingBoards.fixtures"
-import { Emblem, RankMark, RawTag, ScopeMark, SpecIcon } from "./RatingParts"
+import { BossPortrait, Emblem, RankMark, RawTag, ScopeMark, SpecIcon } from "./RatingParts"
 import { ratingEntryAttributes } from "./ratingEntities"
 import { METRIC_THEMES, type RatingView } from "./ratingThemes"
 import type { RatingLiveData } from "./ratingLiveData"
@@ -24,6 +25,7 @@ interface FullRow {
   rank: number
   entry: RatingEntry
   scores: Partial<Record<RatingMetric, RatingEntry>>
+  peakComponents?: readonly { encounter_name: string; score: number }[]
   peakRun?: { ms: number; date: string }
 }
 
@@ -41,9 +43,11 @@ export function RatingFullList({
   onCollapse,
   toolbar,
   live,
+  encounterCount = scope.boss ? 1 : 0,
 }: {
   scope: RatingScope
   title: string
+  encounterCount?: number
   period: RatingPeriod
   view: RatingView
   /** The search text, shared with the board header's search box. */
@@ -58,6 +62,8 @@ export function RatingFullList({
   const [sortBy, setSortBy] = useState<RatingMetric>(view === "overview" ? "peak" : view)
   const [page, setPage] = useState(0)
   const metric = view === "overview" ? sortBy : view
+  const showPeakComponents = view === "peak" && !!live && encounterCount > 1
+  const showPeakRun = view === "peak" && !live && encounterCount <= 1
   const theme = METRIC_THEMES[view]
 
   const fixtureRows = useMemo<FullRow[]>(() => {
@@ -172,9 +178,14 @@ export function RatingFullList({
                 <>
                   <th className="w-32 px-3 py-2.5 text-left font-medium">{theme.label}</th>
                   {view === "mastery" && (live ? ["Peak", "Form", "Floor", "Eligible kills"].map((label) => <th key={label} className="px-3 py-2.5 text-right font-medium">{label}</th>) : <MasteryPartHeaders />)}
-                  {view === "peak" && (
+                  {showPeakComponents && (
+                    <th className="px-3 py-2.5 text-left font-medium" title="Peak is the mean of every boss's best score; a boss without a kill counts as 0.">
+                      Boss peaks <span className="ml-1 hidden tracking-normal normal-case opacity-70 md:inline">· mean of {encounterCount}, misses count 0</span>
+                    </th>
+                  )}
+                  {showPeakRun && (
                     <>
-                      <th className="px-3 py-2.5 text-right font-medium">{scope.boss ? "Kill time" : "Total kill time"}</th>
+                      <th className="px-3 py-2.5 text-right font-medium">Kill time</th>
                       <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Date</th>
                     </>
                   )}
@@ -191,7 +202,7 @@ export function RatingFullList({
                 {state.status === "error" ? state.error : "Loading published ratings…"}
               </td></tr>
             )}
-            {visible.map(({ rank, entry, scores, peakRun: liveRun }) => (
+            {visible.map(({ rank, entry, scores, peakComponents, peakRun: liveRun }) => (
               <tr key={entry.id} className="border-b border-white/5 transition-colors last:border-b-0 hover:bg-white/[.025]">
                 <td className="px-4 py-2 sm:px-5">
                   <RankMark rank={rank} size="sm" />
@@ -243,16 +254,14 @@ export function RatingFullList({
                       </div>
                     </td>
                     {view === "mastery" && (live ? <PublishedMasteryCells entry={entry} /> : <MasteryPartCells parts={entry.mastery} />)}
-                    {view === "peak" &&
-                      (() => {
-                        const run = live ? liveRun : peakRun(entry.id, scope.boss)
-                        return (
-                          <>
-                            <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{run ? formatClock(run.ms) : "—"}</td>
-                            <td className="hidden px-3 py-2 text-xs text-muted-foreground sm:table-cell">{run?.date ?? "—"}</td>
-                          </>
-                        )
-                      })()}
+                    {showPeakComponents && <td className="w-full px-3 py-2"><PeakComponents entry={entry} scores={peakComponents} /></td>}
+                    {showPeakRun && (() => {
+                      const run = liveRun ?? peakRun(entry.id, scope.boss)
+                      return <>
+                        <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{formatClock(run.ms)}</td>
+                        <td className="hidden px-3 py-2 text-xs text-muted-foreground sm:table-cell">{run.date}</td>
+                      </>
+                    })()}
                     <td className="hidden px-3 py-2 text-xs text-muted-foreground lg:table-cell">{entry.detail}</td>
                   </>
                 )}
@@ -290,6 +299,76 @@ export function RatingFullList({
         </div>
       </div>
     </section>
+  )
+}
+
+type BossPeak = { encounter_name: string; score: number }
+
+/**
+ * Every boss's best score as one bar each; the row's Peak is their mean, misses counted as 0.
+ * Clicking opens the full per-boss breakdown in a dialog.
+ */
+function PeakComponents({ entry, scores }: { entry: RatingEntry; scores?: readonly BossPeak[] }) {
+  if (!scores?.length) return <span className="text-muted-foreground">—</span>
+  const missed = scores.filter((boss) => boss.score <= 0).length
+  return (
+    <>
+      <Dialog>
+        <DialogTrigger asChild>
+          <button
+            type="button"
+            aria-label={`Boss peaks for ${entry.name}`}
+            className="flex cursor-pointer items-center gap-2 rounded-md border border-white/[.07] bg-black/20 px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-white/15 hover:text-foreground md:gap-3 md:px-2.5 md:py-1.5"
+          >
+            {/* One bar per boss: a glance at the shape before opening the breakdown. */}
+            <span aria-hidden className="flex h-4 items-end gap-px md:h-6 md:gap-0.5">
+              {scores.map((boss) => (
+                <span
+                  key={boss.encounter_name}
+                  title={`${boss.encounter_name}: ${boss.score > 0 ? METRIC_THEMES.peak.format(boss.score) : "no kill"}`}
+                  className={cn("w-1 rounded-[1px] md:w-2", boss.score > 0 ? "bg-[color:var(--metric)]" : "h-px bg-white/20")}
+                  style={boss.score > 0 ? { height: `${Math.max(12, Math.min(100, boss.score))}%`, opacity: boss.score >= 100 ? 0.9 : 0.55 } : undefined}
+                />
+              ))}
+            </span>
+            <span className="whitespace-nowrap">{scores.length} bosses{missed ? ` · ${missed} missed` : ""}</span>
+            <ChevronRight className="size-3.5" />
+          </button>
+        </DialogTrigger>
+        <DialogContent className="max-h-[85vh] w-[calc(100vw-2rem)] gap-0 overflow-hidden p-0" style={{ "--metric": METRIC_THEMES.peak.accent } as CSSProperties}>
+          <DialogHeader className="border-b px-5 py-4 pr-12 text-left">
+            <DialogTitle className="flex items-baseline gap-2">
+              <span style={{ color: CLASS_CSS_VAR[entry.cls] }}>{entry.name}</span>
+              <span className="font-mono text-[color:var(--metric)] tabular-nums">{METRIC_THEMES.peak.format(entry.score)}</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Peak is the mean of all {scores.length} bosses' best scores; a boss without a kill counts as 0.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="styled-scrollbar grid gap-1.5 overflow-y-auto px-5 py-4">
+            {scores.map((boss) => {
+              const miss = boss.score <= 0
+              return (
+                <li key={boss.encounter_name} className={cn("flex items-center gap-3", miss && "text-muted-foreground/60")}>
+                  <BossPortrait boss={boss.encounter_name} size="sm" className={cn("shrink-0", miss && "opacity-50")} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="truncate">{boss.encounter_name}</span>
+                      <span className={cn("font-mono text-xs tabular-nums", boss.score >= 100 && "text-[color:var(--metric)]")}>
+                        {miss ? "no kill" : METRIC_THEMES.peak.format(boss.score)}
+                      </span>
+                    </div>
+                    <span className="mt-1 block h-1 overflow-hidden rounded-full bg-white/5">
+                      <span className="block h-full rounded-full bg-[color:var(--metric)] opacity-60" style={{ width: `${Math.min(100, boss.score)}%` }} />
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

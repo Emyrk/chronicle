@@ -78,6 +78,7 @@ export function setBoardPage(result: HubSetBoardResponse, metric: RatingMetric):
       return {
         rank: row.rank,
         entry,
+        peakComponents: row.peak_components,
         scores: {
           peak: { ...entry, score: row.peak, raw: row.peak_raw },
           mastery: { ...entry, score: row.mastery, raw: undefined },

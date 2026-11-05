@@ -123,6 +123,7 @@ export function RatingBoards({
           key={`${boardKey}|${view}|${period}`}
           scope={scope}
           title={title}
+          encounterCount={scope.boss ? 1 : bosses?.length}
           period={period}
           view={view}
           query={query}

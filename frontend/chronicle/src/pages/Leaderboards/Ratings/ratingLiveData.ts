@@ -24,6 +24,8 @@ export type RatingLivePage = {
     rank: number
     entry: RatingEntry
     scores?: Partial<Record<RatingMetric, RatingEntry>>
+    /** Chosen boss Peak scores, including zeros for missed bosses. */
+    peakComponents?: readonly { encounter_name: string; score: number }[]
     /** Real kill metadata, when published. No synthetic timestamps on live pages. */
     peakRun?: { ms: number; date: string }
   }[]

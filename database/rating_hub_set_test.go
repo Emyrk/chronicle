@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -94,6 +95,17 @@ func TestHubSetRatingRows(t *testing.T) {
 	require.InDelta(t, 8, board[0].Renown, 1e-9)
 	require.InDelta(t, 1800, board[0].PeakRaw, 1e-9)
 	require.InDelta(t, 50, board[1].Score, 1e-9)
+	var components []struct {
+		EncounterName string  `json:"encounter_name"`
+		Score         float64 `json:"score"`
+	}
+	require.NoError(t, json.Unmarshal(board[1].PeakComponents, &components))
+	require.Len(t, components, 2)
+	require.Equal(t, "Lucifron", components[0].EncounterName)
+	require.Zero(t, components[0].Score, "a missed boss appears as zero")
+	require.Equal(t, "Ragnaros", components[1].EncounterName)
+	require.Equal(t, 100.0, components[1].Score)
+	require.InDelta(t, board[1].Score, (components[0].Score+components[1].Score)/2, 1e-9)
 	second := page("peak", "", 1, 1)
 	require.Len(t, second, 1)
 	require.Equal(t, "spike", second[0].SubjectID)

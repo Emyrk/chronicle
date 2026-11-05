@@ -25528,11 +25528,11 @@ func (q *sqlQuerier) HubLandingSpeedruns(ctx context.Context, arg HubLandingSpee
 
 const evolvingHubSetBoardPage = `-- name: EvolvingHubSetBoardPage :many
 WITH chosen AS (
-  SELECT DISTINCT unnest($13::text[]) AS encounter_name LIMIT 64
+  SELECT DISTINCT unnest($14::text[]) AS encounter_name LIMIT 64
 ), n AS (SELECT count(*)::float8 AS bosses FROM chosen),
 player_cohorts AS (
   SELECT s.realm_id, s.player_guid::text AS subject_id, s.player_class, s.player_spec, s.player_sub_spec,
-         CASE WHEN $14::text = 'renown' THEN sum(s.score) ELSE sum(s.score) / (SELECT bosses FROM n) END AS score,
+         CASE WHEN $13::text = 'renown' THEN sum(s.score) ELSE sum(s.score) / (SELECT bosses FROM n) END AS score,
          COALESCE(sum(s.best_raw * s.best_duration_secs) FILTER (WHERE s.best_raw > 0 AND s.best_duration_secs > 0)
            / NULLIF(sum(s.best_duration_secs) FILTER (WHERE s.best_raw > 0 AND s.best_duration_secs > 0), 0), 0) AS raw
   FROM player_tenant_rating_boss_scores_evolving_read s
@@ -25542,9 +25542,9 @@ player_cohorts AS (
   WHERE $1::text = 'player' AND s.tenant_id = $2 AND s.generation_id = $3 AND s.instance_name = $4
     AND s.encounter_name IN (SELECT encounter_name FROM chosen)
     AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-    AND s.rating_metric = $14::text
-    AND (($14::text = 'renown' AND s.window_kind = $5::text AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none')
-      OR ($14::text <> 'renown' AND s.window_kind = $6::text AND s.difficulty_name = $7 AND s.max_players = $8
+    AND s.rating_metric = $13::text
+    AND (($13::text = 'renown' AND s.window_kind = $5::text AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none')
+      OR ($13::text <> 'renown' AND s.window_kind = $6::text AND s.difficulty_name = $7 AND s.max_players = $8
           AND s.performance_metric = $9::text
           AND ($10::text = '' OR s.player_class = $10)
           AND ($11::text = '' OR s.player_spec = $11)
@@ -25556,7 +25556,7 @@ player_cohorts AS (
   ORDER BY realm_id, subject_id, score DESC, raw DESC, player_class, player_spec, player_sub_spec
 ), guilds_scored AS (
   SELECT s.realm_id, s.guild_id::text AS subject_id, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec,
-         CASE WHEN $14::text = 'renown' THEN sum(s.score) ELSE sum(s.score) / (SELECT bosses FROM n) END AS score,
+         CASE WHEN $13::text = 'renown' THEN sum(s.score) ELSE sum(s.score) / (SELECT bosses FROM n) END AS score,
          0::float8 AS raw
   FROM guild_tenant_rating_boss_scores_evolving_read s
 
@@ -25565,12 +25565,12 @@ player_cohorts AS (
   WHERE $1::text = 'guild' AND s.tenant_id = $2 AND s.generation_id = $3 AND s.instance_name = $4
     AND s.encounter_name IN (SELECT encounter_name FROM chosen)
     AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-    AND s.rating_metric = $14::text
-    AND (($14::text = 'renown' AND s.window_kind = $5::text AND s.difficulty_name = '' AND s.max_players = 0)
-      OR ($14::text <> 'renown' AND s.window_kind = $6::text AND s.difficulty_name = $7 AND s.max_players = $8))
+    AND s.rating_metric = $13::text
+    AND (($13::text = 'renown' AND s.window_kind = $5::text AND s.difficulty_name = '' AND s.max_players = 0)
+      OR ($13::text <> 'renown' AND s.window_kind = $6::text AND s.difficulty_name = $7 AND s.max_players = $8))
   GROUP BY s.realm_id, s.guild_id
 ), ranked AS (
-  SELECT b.realm_id, b.subject_id, b.player_class, b.player_spec, b.player_sub_spec, b.score, b.raw, row_number() OVER (ORDER BY b.score DESC, CASE WHEN $14::text = 'peak' THEN b.raw ELSE 0 END DESC, b.realm_id, b.subject_id) AS rank
+  SELECT b.realm_id, b.subject_id, b.player_class, b.player_spec, b.player_sub_spec, b.score, b.raw, row_number() OVER (ORDER BY b.score DESC, CASE WHEN $13::text = 'peak' THEN b.raw ELSE 0 END DESC, b.realm_id, b.subject_id) AS rank
   FROM (SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec, score, raw FROM players UNION ALL SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec, score, raw FROM guilds_scored) b
 ), displayed AS (
   SELECT r.realm_id, r.subject_id, r.player_class, r.player_spec, r.player_sub_spec, r.score, r.raw, r.rank, realm.name::text AS realm_name,
@@ -25598,7 +25598,8 @@ SELECT p.rank::bigint AS rank, p.total::bigint AS total, p.realm_id, p.realm_nam
        COALESCE(other.peak_raw, 0)::float8 AS peak_raw,
        -- Ranked Mastery's parts over the chosen bosses (a missed boss as 0), kills summed.
        COALESCE(other.mastery_peak, 0)::float8 AS mastery_peak, COALESCE(other.mastery_form, 0)::float8 AS mastery_form,
-       COALESCE(other.mastery_floor, 0)::float8 AS mastery_floor, COALESCE(other.eligible_kills, 0)::bigint AS eligible_kills
+       COALESCE(other.mastery_floor, 0)::float8 AS mastery_floor, COALESCE(other.eligible_kills, 0)::bigint AS eligible_kills,
+       COALESCE(peak_components.scores, '[]'::jsonb) AS peak_components
 FROM paged p
 LEFT JOIN LATERAL (
   -- The row's three scores over the same bosses. A class/spec-ranked row keeps its
@@ -25645,6 +25646,20 @@ LEFT JOIN LATERAL (
     GROUP BY x.cohort
   ) c
 ) other ON true
+LEFT JOIN LATERAL (
+  -- One indexed score lookup per chosen boss for each displayed Peak row.
+  -- Match the winning class/spec cohort from player_cohorts; absent bosses count as zero.
+  SELECT jsonb_agg(jsonb_build_object('encounter_name', chosen.encounter_name,
+           'score', COALESCE(s.score, 0)) ORDER BY chosen.encounter_name) AS scores
+  FROM chosen
+  LEFT JOIN player_tenant_rating_boss_scores_evolving_read s ON s.tenant_id = $2 AND s.generation_id = $3
+    AND s.realm_id = p.realm_id AND s.player_guid = p.subject_id AND s.instance_name = $4
+    AND s.encounter_name = chosen.encounter_name AND s.rating_metric = 'peak'
+    AND s.window_kind = $6 AND s.difficulty_name = $7 AND s.max_players = $8
+    AND s.performance_metric = $9::text
+    AND s.player_class = p.player_class AND s.player_spec = p.player_spec AND s.player_sub_spec = p.player_sub_spec
+  WHERE $1::text = 'player' AND $13::text = 'peak'
+) peak_components ON true
 ORDER BY p.rank
 `
 
@@ -25661,8 +25676,8 @@ type EvolvingHubSetBoardPageParams struct {
 	PlayerClass       string      `db:"player_class" json:"player_class"`
 	PlayerSpec        string      `db:"player_spec" json:"player_spec"`
 	PlayerSubSpec     string      `db:"player_sub_spec" json:"player_sub_spec"`
-	EncounterNames    []string    `db:"encounter_names" json:"encounter_names"`
 	RatingMetric      string      `db:"rating_metric" json:"rating_metric"`
+	EncounterNames    []string    `db:"encounter_names" json:"encounter_names"`
 	RealmIds          []uuid.UUID `db:"realm_ids" json:"realm_ids"`
 	SearchQuery       string      `db:"search_query" json:"search_query"`
 	OffsetCount       int32       `db:"offset_count" json:"offset_count"`
@@ -25670,25 +25685,26 @@ type EvolvingHubSetBoardPageParams struct {
 }
 
 type EvolvingHubSetBoardPageRow struct {
-	Rank          int64     `db:"rank" json:"rank"`
-	Total         int64     `db:"total" json:"total"`
-	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
-	RealmName     string    `db:"realm_name" json:"realm_name"`
-	SubjectID     string    `db:"subject_id" json:"subject_id"`
-	SubjectName   string    `db:"subject_name" json:"subject_name"`
-	GuildName     string    `db:"guild_name" json:"guild_name"`
-	PlayerClass   string    `db:"player_class" json:"player_class"`
-	PlayerSpec    string    `db:"player_spec" json:"player_spec"`
-	PlayerSubSpec string    `db:"player_sub_spec" json:"player_sub_spec"`
-	Score         float64   `db:"score" json:"score"`
-	Peak          float64   `db:"peak" json:"peak"`
-	Mastery       float64   `db:"mastery" json:"mastery"`
-	Renown        float64   `db:"renown" json:"renown"`
-	PeakRaw       float64   `db:"peak_raw" json:"peak_raw"`
-	MasteryPeak   float64   `db:"mastery_peak" json:"mastery_peak"`
-	MasteryForm   float64   `db:"mastery_form" json:"mastery_form"`
-	MasteryFloor  float64   `db:"mastery_floor" json:"mastery_floor"`
-	EligibleKills int64     `db:"eligible_kills" json:"eligible_kills"`
+	Rank           int64     `db:"rank" json:"rank"`
+	Total          int64     `db:"total" json:"total"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	RealmName      string    `db:"realm_name" json:"realm_name"`
+	SubjectID      string    `db:"subject_id" json:"subject_id"`
+	SubjectName    string    `db:"subject_name" json:"subject_name"`
+	GuildName      string    `db:"guild_name" json:"guild_name"`
+	PlayerClass    string    `db:"player_class" json:"player_class"`
+	PlayerSpec     string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Score          float64   `db:"score" json:"score"`
+	Peak           float64   `db:"peak" json:"peak"`
+	Mastery        float64   `db:"mastery" json:"mastery"`
+	Renown         float64   `db:"renown" json:"renown"`
+	PeakRaw        float64   `db:"peak_raw" json:"peak_raw"`
+	MasteryPeak    float64   `db:"mastery_peak" json:"mastery_peak"`
+	MasteryForm    float64   `db:"mastery_form" json:"mastery_form"`
+	MasteryFloor   float64   `db:"mastery_floor" json:"mastery_floor"`
+	EligibleKills  int64     `db:"eligible_kills" json:"eligible_kills"`
+	PeakComponents []byte    `db:"peak_components" json:"peak_components"`
 }
 
 // One ranked page of a chosen-boss board (any number of bosses, one included):
@@ -25710,8 +25726,8 @@ func (q *sqlQuerier) EvolvingHubSetBoardPage(ctx context.Context, arg EvolvingHu
 		arg.PlayerClass,
 		arg.PlayerSpec,
 		arg.PlayerSubSpec,
-		arg.EncounterNames,
 		arg.RatingMetric,
+		arg.EncounterNames,
 		arg.RealmIds,
 		arg.SearchQuery,
 		arg.OffsetCount,
@@ -25744,6 +25760,7 @@ func (q *sqlQuerier) EvolvingHubSetBoardPage(ctx context.Context, arg EvolvingHu
 			&i.MasteryForm,
 			&i.MasteryFloor,
 			&i.EligibleKills,
+			&i.PeakComponents,
 		); err != nil {
 			return nil, err
 		}
@@ -26130,11 +26147,11 @@ func (q *sqlQuerier) EvolvingHubSummaryRatingRows(ctx context.Context, arg Evolv
 
 const hubSetBoardPage = `-- name: HubSetBoardPage :many
 WITH chosen AS (
-  SELECT DISTINCT unnest($13::text[]) AS encounter_name LIMIT 64
+  SELECT DISTINCT unnest($14::text[]) AS encounter_name LIMIT 64
 ), n AS (SELECT count(*)::float8 AS bosses FROM chosen),
 player_cohorts AS (
   SELECT s.realm_id, s.player_guid::text AS subject_id, s.player_class, s.player_spec, s.player_sub_spec,
-         CASE WHEN $14::text = 'renown' THEN sum(s.score) ELSE sum(s.score) / (SELECT bosses FROM n) END AS score,
+         CASE WHEN $13::text = 'renown' THEN sum(s.score) ELSE sum(s.score) / (SELECT bosses FROM n) END AS score,
          COALESCE(sum(s.best_raw * s.best_duration_secs) FILTER (WHERE s.best_raw > 0 AND s.best_duration_secs > 0)
            / NULLIF(sum(s.best_duration_secs) FILTER (WHERE s.best_raw > 0 AND s.best_duration_secs > 0), 0), 0) AS raw
   FROM player_tenant_rating_boss_scores s
@@ -26144,9 +26161,9 @@ player_cohorts AS (
   WHERE $1::text = 'player' AND s.tenant_id = $2 AND s.generation_id = $3 AND s.instance_name = $4
     AND s.encounter_name IN (SELECT encounter_name FROM chosen)
     AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-    AND s.rating_metric = $14::text
-    AND (($14::text = 'renown' AND s.window_kind = $5::text AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none')
-      OR ($14::text <> 'renown' AND s.window_kind = $6::text AND s.difficulty_name = $7 AND s.max_players = $8
+    AND s.rating_metric = $13::text
+    AND (($13::text = 'renown' AND s.window_kind = $5::text AND s.difficulty_name = '' AND s.max_players = 0 AND s.performance_metric = 'none')
+      OR ($13::text <> 'renown' AND s.window_kind = $6::text AND s.difficulty_name = $7 AND s.max_players = $8
           AND s.performance_metric = $9::text
           AND ($10::text = '' OR s.player_class = $10)
           AND ($11::text = '' OR s.player_spec = $11)
@@ -26158,7 +26175,7 @@ player_cohorts AS (
   ORDER BY realm_id, subject_id, score DESC, raw DESC, player_class, player_spec, player_sub_spec
 ), guilds_scored AS (
   SELECT s.realm_id, s.guild_id::text AS subject_id, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec,
-         CASE WHEN $14::text = 'renown' THEN sum(s.score) ELSE sum(s.score) / (SELECT bosses FROM n) END AS score,
+         CASE WHEN $13::text = 'renown' THEN sum(s.score) ELSE sum(s.score) / (SELECT bosses FROM n) END AS score,
          0::float8 AS raw
   FROM guild_tenant_rating_boss_scores s
   JOIN rating_score_generations generation ON generation.id = s.generation_id AND generation.tenant_id = s.tenant_id AND generation.status = 'active'
@@ -26167,12 +26184,12 @@ player_cohorts AS (
   WHERE $1::text = 'guild' AND s.tenant_id = $2 AND s.generation_id = $3 AND s.instance_name = $4
     AND s.encounter_name IN (SELECT encounter_name FROM chosen)
     AND server.tenant_id IS NOT DISTINCT FROM NULLIF($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-    AND s.rating_metric = $14::text
-    AND (($14::text = 'renown' AND s.window_kind = $5::text AND s.difficulty_name = '' AND s.max_players = 0)
-      OR ($14::text <> 'renown' AND s.window_kind = $6::text AND s.difficulty_name = $7 AND s.max_players = $8))
+    AND s.rating_metric = $13::text
+    AND (($13::text = 'renown' AND s.window_kind = $5::text AND s.difficulty_name = '' AND s.max_players = 0)
+      OR ($13::text <> 'renown' AND s.window_kind = $6::text AND s.difficulty_name = $7 AND s.max_players = $8))
   GROUP BY s.realm_id, s.guild_id
 ), ranked AS (
-  SELECT b.realm_id, b.subject_id, b.player_class, b.player_spec, b.player_sub_spec, b.score, b.raw, row_number() OVER (ORDER BY b.score DESC, CASE WHEN $14::text = 'peak' THEN b.raw ELSE 0 END DESC, b.realm_id, b.subject_id) AS rank
+  SELECT b.realm_id, b.subject_id, b.player_class, b.player_spec, b.player_sub_spec, b.score, b.raw, row_number() OVER (ORDER BY b.score DESC, CASE WHEN $13::text = 'peak' THEN b.raw ELSE 0 END DESC, b.realm_id, b.subject_id) AS rank
   FROM (SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec, score, raw FROM players UNION ALL SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec, score, raw FROM guilds_scored) b
 ), displayed AS (
   SELECT r.realm_id, r.subject_id, r.player_class, r.player_spec, r.player_sub_spec, r.score, r.raw, r.rank, realm.name::text AS realm_name,
@@ -26202,7 +26219,8 @@ SELECT p.rank::bigint AS rank, p.total::bigint AS total, p.realm_id, p.realm_nam
        COALESCE(other.peak_raw, 0)::float8 AS peak_raw,
        -- Ranked Mastery's parts over the chosen bosses (a missed boss as 0), kills summed.
        COALESCE(other.mastery_peak, 0)::float8 AS mastery_peak, COALESCE(other.mastery_form, 0)::float8 AS mastery_form,
-       COALESCE(other.mastery_floor, 0)::float8 AS mastery_floor, COALESCE(other.eligible_kills, 0)::bigint AS eligible_kills
+       COALESCE(other.mastery_floor, 0)::float8 AS mastery_floor, COALESCE(other.eligible_kills, 0)::bigint AS eligible_kills,
+       COALESCE(peak_components.scores, '[]'::jsonb) AS peak_components
 FROM paged p
 LEFT JOIN LATERAL (
   -- The row's three scores over the same bosses. A class/spec-ranked row keeps its
@@ -26249,6 +26267,20 @@ LEFT JOIN LATERAL (
     GROUP BY x.cohort
   ) c
 ) other ON true
+LEFT JOIN LATERAL (
+  -- One indexed score lookup per chosen boss for each displayed Peak row.
+  -- Match the winning class/spec cohort from player_cohorts; absent bosses count as zero.
+  SELECT jsonb_agg(jsonb_build_object('encounter_name', chosen.encounter_name,
+           'score', COALESCE(s.score, 0)) ORDER BY chosen.encounter_name) AS scores
+  FROM chosen
+  LEFT JOIN player_tenant_rating_boss_scores s ON s.tenant_id = $2 AND s.generation_id = $3
+    AND s.realm_id = p.realm_id AND s.player_guid = p.subject_id AND s.instance_name = $4
+    AND s.encounter_name = chosen.encounter_name AND s.rating_metric = 'peak'
+    AND s.window_kind = $6 AND s.difficulty_name = $7 AND s.max_players = $8
+    AND s.performance_metric = $9::text
+    AND s.player_class = p.player_class AND s.player_spec = p.player_spec AND s.player_sub_spec = p.player_sub_spec
+  WHERE $1::text = 'player' AND $13::text = 'peak'
+) peak_components ON true
 ORDER BY p.rank
 `
 
@@ -26265,8 +26297,8 @@ type HubSetBoardPageParams struct {
 	PlayerClass       string      `db:"player_class" json:"player_class"`
 	PlayerSpec        string      `db:"player_spec" json:"player_spec"`
 	PlayerSubSpec     string      `db:"player_sub_spec" json:"player_sub_spec"`
-	EncounterNames    []string    `db:"encounter_names" json:"encounter_names"`
 	RatingMetric      string      `db:"rating_metric" json:"rating_metric"`
+	EncounterNames    []string    `db:"encounter_names" json:"encounter_names"`
 	RealmIds          []uuid.UUID `db:"realm_ids" json:"realm_ids"`
 	SearchQuery       string      `db:"search_query" json:"search_query"`
 	OffsetCount       int32       `db:"offset_count" json:"offset_count"`
@@ -26274,25 +26306,26 @@ type HubSetBoardPageParams struct {
 }
 
 type HubSetBoardPageRow struct {
-	Rank          int64     `db:"rank" json:"rank"`
-	Total         int64     `db:"total" json:"total"`
-	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
-	RealmName     string    `db:"realm_name" json:"realm_name"`
-	SubjectID     string    `db:"subject_id" json:"subject_id"`
-	SubjectName   string    `db:"subject_name" json:"subject_name"`
-	GuildName     string    `db:"guild_name" json:"guild_name"`
-	PlayerClass   string    `db:"player_class" json:"player_class"`
-	PlayerSpec    string    `db:"player_spec" json:"player_spec"`
-	PlayerSubSpec string    `db:"player_sub_spec" json:"player_sub_spec"`
-	Score         float64   `db:"score" json:"score"`
-	Peak          float64   `db:"peak" json:"peak"`
-	Mastery       float64   `db:"mastery" json:"mastery"`
-	Renown        float64   `db:"renown" json:"renown"`
-	PeakRaw       float64   `db:"peak_raw" json:"peak_raw"`
-	MasteryPeak   float64   `db:"mastery_peak" json:"mastery_peak"`
-	MasteryForm   float64   `db:"mastery_form" json:"mastery_form"`
-	MasteryFloor  float64   `db:"mastery_floor" json:"mastery_floor"`
-	EligibleKills int64     `db:"eligible_kills" json:"eligible_kills"`
+	Rank           int64     `db:"rank" json:"rank"`
+	Total          int64     `db:"total" json:"total"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	RealmName      string    `db:"realm_name" json:"realm_name"`
+	SubjectID      string    `db:"subject_id" json:"subject_id"`
+	SubjectName    string    `db:"subject_name" json:"subject_name"`
+	GuildName      string    `db:"guild_name" json:"guild_name"`
+	PlayerClass    string    `db:"player_class" json:"player_class"`
+	PlayerSpec     string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Score          float64   `db:"score" json:"score"`
+	Peak           float64   `db:"peak" json:"peak"`
+	Mastery        float64   `db:"mastery" json:"mastery"`
+	Renown         float64   `db:"renown" json:"renown"`
+	PeakRaw        float64   `db:"peak_raw" json:"peak_raw"`
+	MasteryPeak    float64   `db:"mastery_peak" json:"mastery_peak"`
+	MasteryForm    float64   `db:"mastery_form" json:"mastery_form"`
+	MasteryFloor   float64   `db:"mastery_floor" json:"mastery_floor"`
+	EligibleKills  int64     `db:"eligible_kills" json:"eligible_kills"`
+	PeakComponents []byte    `db:"peak_components" json:"peak_components"`
 }
 
 // One ranked page of a chosen-boss board (any number of bosses, one included):
@@ -26314,8 +26347,8 @@ func (q *sqlQuerier) HubSetBoardPage(ctx context.Context, arg HubSetBoardPagePar
 		arg.PlayerClass,
 		arg.PlayerSpec,
 		arg.PlayerSubSpec,
-		arg.EncounterNames,
 		arg.RatingMetric,
+		arg.EncounterNames,
 		arg.RealmIds,
 		arg.SearchQuery,
 		arg.OffsetCount,
@@ -26348,6 +26381,7 @@ func (q *sqlQuerier) HubSetBoardPage(ctx context.Context, arg HubSetBoardPagePar
 			&i.MasteryForm,
 			&i.MasteryFloor,
 			&i.EligibleKills,
+			&i.PeakComponents,
 		); err != nil {
 			return nil, err
 		}
