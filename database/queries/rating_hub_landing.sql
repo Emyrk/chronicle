@@ -57,8 +57,8 @@ FROM ranked WHERE position <= 3
 ORDER BY instance_name, difficulty_name, max_players, subject, rating_metric, position;
 
 -- name: HubLandingSpeedruns :many
--- Mirrors the full-clear leaderboard: version gates, duplicate groups, best
--- per guild, ranked duration with legacy raw fallback. Do not load video proof.
+-- Mirrors the full-clear leaderboard: duplicate groups, best per guild, and
+-- ranked duration with legacy raw fallback. Do not load video proof.
 WITH cohorts AS (
   SELECT instance_name, difficulty_name, max_players
   FROM rankings_instance_summaries ris WHERE ris.tenant_id = @tenant_id
@@ -81,9 +81,6 @@ WITH cohorts AS (
     AND server.tenant_id IS NOT DISTINCT FROM NULLIF(@tenant_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
   JOIN guilds g ON g.id = sr.guild_id AND g.realm_id = sr.realm_id
   LEFT JOIN guild_pages gp ON gp.guild_id = sr.guild_id
-  LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
-  WHERE sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
-    AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
 ), deduped AS (
   SELECT *, row_number() OVER (PARTITION BY instance_name, difficulty_name, max_players, COALESCE(duplicate_group_id, instance_id)
     ORDER BY duration_ms, instance_id) AS duplicate_position FROM eligible

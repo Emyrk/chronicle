@@ -40,7 +40,6 @@ import (
 	"github.com/Emyrk/chronicle/internal/guildrenames"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/ptr"
-	"github.com/Emyrk/chronicle/internal/semverenc"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
@@ -802,7 +801,6 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				if finalized.Versions != nil {
 					addonVersion = finalized.Versions["addon"]
 				}
-				parserVer := version.ExactParserVersion()
 
 				// Data source rule: require server-side capability or addon version
 				// for a speedrun to be eligible.
@@ -848,8 +846,6 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 					BossToBossDurationMs:     bossToBossDurationMs,
 					Proof:                    proofJSON,
 					AddonVersion:             addonVersion,
-					ParserVersionNum:         semverenc.Encode(parserVer),
-					AddonVersionNum:          semverenc.Encode(addonVersion),
 				})
 				if err != nil {
 					return fmt.Errorf("insert speedrun: %w", err)

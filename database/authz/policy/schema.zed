@@ -80,7 +80,6 @@ definition chronicle {
   permission download_raw_logs = administer + moderate_logs + stripe_download_raw_logs + has_revered
   permission unlisted_logs = stripe_unlisted_logs + has_revered
   permission admin_regressions = technical_admin + is_admin_raid_requirements
-  permission admin_speedrun_requirements = technical_admin + is_admin_raid_requirements
 
   permission upload_log = upload_capable + administer + supporter + chronicle_guild_member + chronicle_member
   permission append_log = chronicle_guild_member + chronicle_member

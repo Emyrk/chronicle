@@ -34,14 +34,13 @@ const eligibilityChecks: LeaderboardLesson = {
   group: "essentials",
   description: (caps) =>
     caps.hasEligibilityChecks
-      ? "Confirm the tooling, data source, and ranking checks for this log."
+      ? "Confirm the data source and ranking checks for this log."
       : "Eligibility details are unavailable for this log, so the example fills them in.",
   deriveState: (caps) =>
     caps.hasEligibilityChecks ? "available" : "example-required",
   instruction:
-    "Check each eligibility row below the proof. Current parser and addon versions are compared with the minimums, while data source and DPS ranking rows confirm the log can support a leaderboard entry.",
+    "Check each eligibility row below the proof. Data source and DPS ranking rows confirm the log can support a leaderboard entry.",
   bullets: [
-    "Parser and addon versions must meet their configured minimums",
     "The data source must be eligible for trusted speedrun timing",
     "DPS rankings show whether player ranking data was recorded",
   ],
@@ -70,7 +69,7 @@ const findBlockers: LeaderboardLesson = {
     return "example-required";
   },
   instruction:
-    "Start with the Incomplete counter, then scan for crosses. A failed boss, tooling version, data source, or player level requirement can keep an otherwise fast clear off the leaderboard.",
+    "Start with the Incomplete counter, then scan for crosses. A failed boss, data source, or player level requirement can keep an otherwise fast clear off the leaderboard.",
   bullets: [
     "The header summarizes how many proof requirements passed",
     "Crosses identify the exact failed checks",

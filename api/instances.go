@@ -360,20 +360,6 @@ func (api *API) InstanceSpeedrun(w http.ResponseWriter, r *http.Request) {
 	}
 	result.EncounterKillTimes = db2sdk.EncounterKillTimes(killTimes)
 
-	// Attach version qualification status if requirements exist.
-	req, err := api.Opts.Zed.GetLeaderboardVersionRequirements(ctx, sr.InstanceName)
-	if err == nil {
-		parserVersion := inst.Versions["chronicle"]
-		result.VersionStatus = &chroniclesdk.SpeedrunVersionStatus{
-			ParserVersion:    parserVersion,
-			MinParserVersion: req.MinParserVersion,
-			ParserQualified:  sr.ParserVersionNum >= req.MinParserVersionNum,
-			AddonVersion:     sr.AddonVersion,
-			MinAddonVersion:  req.MinAddonVersion,
-			AddonQualified:   sr.AddonVersionNum >= req.MinAddonVersionNum,
-		}
-	}
-
 	// Attach data source eligibility status.
 	hasServerSide := slices.Contains(sr.Capabilities, "server-side")
 	hasAddonVersion := sr.AddonVersion != ""

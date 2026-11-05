@@ -1973,8 +1973,6 @@ type InstanceSpeedrun struct {
 	Proof                    []byte             `db:"proof" json:"proof"`
 	CreatedAt                pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	AddonVersion             string             `db:"addon_version" json:"addon_version"`
-	ParserVersionNum         int64              `db:"parser_version_num" json:"parser_version_num"`
-	AddonVersionNum          int64              `db:"addon_version_num" json:"addon_version_num"`
 	RankedStartTime          pgtype.Timestamptz `db:"ranked_start_time" json:"ranked_start_time"`
 	RankedCompletionTime     pgtype.Timestamptz `db:"ranked_completion_time" json:"ranked_completion_time"`
 	RankedDurationMs         pgtype.Int8        `db:"ranked_duration_ms" json:"ranked_duration_ms"`
@@ -1990,15 +1988,6 @@ type ItemDailyPrice struct {
 	PriceDate           pgtype.Date        `db:"price_date" json:"price_date"`
 	PriceCopper         pgtype.Int8        `db:"price_copper" json:"price_copper"`
 	FetchedAt           pgtype.Timestamptz `db:"fetched_at" json:"fetched_at"`
-}
-
-type LeaderboardVersionRequirement struct {
-	InstanceName        string             `db:"instance_name" json:"instance_name"`
-	MinParserVersion    string             `db:"min_parser_version" json:"min_parser_version"`
-	MinParserVersionNum int64              `db:"min_parser_version_num" json:"min_parser_version_num"`
-	MinAddonVersion     string             `db:"min_addon_version" json:"min_addon_version"`
-	MinAddonVersionNum  int64              `db:"min_addon_version_num" json:"min_addon_version_num"`
-	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type LogFile struct {

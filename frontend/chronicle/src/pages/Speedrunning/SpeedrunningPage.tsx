@@ -205,9 +205,8 @@ export function SpeedrunningPage() {
         </ul>
         <p className="mt-3 text-muted-foreground">
           The Speedrun panel on an uploaded raid shows the proof Chronicle
-          recorded for each boss and trash requirement. Qualified runs must also
-          meet the leaderboard&apos;s supported parser and addon versions to appear
-          in the rankings.
+          recorded for each boss and trash requirement, along with the remaining
+          eligibility checks used to determine whether the run appears in the rankings.
         </p>
       </section>
 

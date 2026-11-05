@@ -3833,17 +3833,6 @@ export interface LayoutDefaultsResponse {
     readonly default_mobile_layout_id: string | null;
 }
 
-// From chroniclesdk/log.go
-/**
- * LeaderboardVersionRequirements holds admin-configured minimum version
- * thresholds for leaderboard filtering.
- */
-export interface LeaderboardVersionRequirements {
-    readonly instance_name: string;
-    readonly min_parser_version: string;
-    readonly min_addon_version: string;
-}
-
 // From chroniclesdk/characters.go
 /**
  * LinkCharacterRequest links a character to a user account (admin only).
@@ -5906,7 +5895,6 @@ export interface SpeedrunResult {
     readonly boss_to_boss_completion_time?: string;
     readonly boss_to_boss_duration_ms?: number;
     readonly proof: readonly SpeedrunProof[];
-    readonly version_status?: SpeedrunVersionStatus;
     readonly level_range?: SpeedrunLevelRangeResult;
     readonly data_source?: SpeedrunDataSourceStatus;
     readonly dps_rankings?: DpsRankingsStatus;
@@ -5921,20 +5909,6 @@ export interface SpeedrunRulesResponse {
     readonly instance_name: string;
     readonly requirements: readonly SpeedrunRequirement[];
     readonly level_range?: SpeedrunLevelRangeRequirement;
-}
-
-// From chroniclesdk/log.go
-/**
- * SpeedrunVersionStatus reports whether the instance's tooling versions
- * meet the leaderboard minimum requirements.
- */
-export interface SpeedrunVersionStatus {
-    readonly parser_version: string;
-    readonly min_parser_version: string;
-    readonly parser_qualified: boolean;
-    readonly addon_version: string;
-    readonly min_addon_version: string;
-    readonly addon_qualified: boolean;
 }
 
 // From chroniclesdk/account.go

@@ -543,15 +543,8 @@ func (api *API) Routes() chi.Router {
 					).Post("/invalidate", api.AdminInvalidateLogs)
 				})
 
-				r.Group(func(r chi.Router) {
-					r.Route("/leaderboard", func(r chi.Router) {
-						r.Get("/version-requirements", api.AdminListLeaderboardVersionRequirements)
-						r.Get("/rating-rebuilds", api.AdminListRatingRebuilds)
-						r.Group(func(r chi.Router) {
-							r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_speedrun_requirements_User))
-							r.Put("/version-requirements", api.AdminUpsertLeaderboardVersionRequirements)
-						})
-					})
+				r.Route("/leaderboard", func(r chi.Router) {
+					r.Get("/rating-rebuilds", api.AdminListRatingRebuilds)
 				})
 
 				r.Route("/ratings", api.adminRatingRoutes)

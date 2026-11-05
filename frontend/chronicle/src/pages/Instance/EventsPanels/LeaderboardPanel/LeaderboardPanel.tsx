@@ -224,60 +224,6 @@ export function LeaderboardDetails({
         </div>
       ))}
 
-      {speedrun.version_status && (
-        <div
-          className="mt-3 pt-3 border-t border-zinc-800"
-          data-lesson-target="eligibility-checks"
-          data-leaderboard-region="versions"
-        >
-          <div className="text-xs font-medium text-zinc-500 mb-1">
-            Version Requirements
-          </div>
-          <div className="grid grid-cols-2 gap-1">
-            <div className="flex items-center gap-1.5 text-xs px-1.5 py-0.5 rounded">
-              {speedrun.version_status.parser_qualified ? (
-                <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
-              ) : (
-                <XCircle className="h-3 w-3 text-red-500 shrink-0" />
-              )}
-              <span
-                className={
-                  speedrun.version_status.parser_qualified
-                    ? "text-zinc-300"
-                    : "text-red-400"
-                }
-              >
-                Parser: {speedrun.version_status.parser_version || "unknown"}
-                <span className="text-zinc-500">
-                  {" "}
-                  (min {speedrun.version_status.min_parser_version || "none"})
-                </span>
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 text-xs px-1.5 py-0.5 rounded">
-              {speedrun.version_status.addon_qualified ? (
-                <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
-              ) : (
-                <XCircle className="h-3 w-3 text-red-500 shrink-0" />
-              )}
-              <span
-                className={
-                  speedrun.version_status.addon_qualified
-                    ? "text-zinc-300"
-                    : "text-red-400"
-                }
-              >
-                Addon: {speedrun.version_status.addon_version || "unknown"}
-                <span className="text-zinc-500">
-                  {" "}
-                  (min {speedrun.version_status.min_addon_version || "none"})
-                </span>
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
       {speedrun.data_source && (
         <div
           className="mt-3 pt-3 border-t border-zinc-800"

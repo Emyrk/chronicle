@@ -18,18 +18,13 @@ const STEPS: Array<{
 }> = [
   {
     from: 20,
-    caption: "Compare current parser and addon versions with the minimums",
-    regions: [{ left: 85, top: 368, width: 1110, height: 53, color: BLUE }],
-  },
-  {
-    from: 115,
     caption: "The data source must support trusted speedrun timing",
-    regions: [{ left: 85, top: 433, width: 1110, height: 29, color: BLUE }],
+    regions: [{ left: 85, top: 368, width: 1110, height: 29, color: BLUE }],
   },
   {
-    from: 210,
+    from: 150,
     caption: "DPS Rankings confirms whether player ranking data was recorded",
-    regions: [{ left: 85, top: 474, width: 1110, height: 29, color: BLUE }],
+    regions: [{ left: 85, top: 409, width: 1110, height: 29, color: BLUE }],
   },
 ];
 
@@ -42,7 +37,6 @@ export default function EligibilityChecksVideo() {
       <LessonIntro
         title="Check leaderboard eligibility"
         bullets={[
-          "Tooling versions meet their minimums",
           "The log has an eligible data source",
           "DPS rankings were recorded",
         ]}

@@ -67,14 +67,6 @@ export const QUALIFIED_FIXTURE_SPEEDRUN: SpeedrunResult = {
   boss_to_boss_completion_time: "2026-07-18T22:20:24Z",
   boss_to_boss_duration_ms: FIXTURE_BOSS_TO_BOSS_DURATION_MS,
   proof: QUALIFIED_PROOF,
-  version_status: {
-    parser_version: "v0.0.424",
-    min_parser_version: "v0.0.420",
-    parser_qualified: true,
-    addon_version: "0.25",
-    min_addon_version: "0.25",
-    addon_qualified: true,
-  },
   data_source: {
     has_server_side: false,
     has_addon_version: true,
@@ -109,11 +101,6 @@ export const BLOCKED_FIXTURE_SPEEDRUN: SpeedrunResult = {
     proof("Flamewaker Protectors", "Trash", true, 4),
     proof("Core Hounds", "Trash", false, 5),
   ],
-  version_status: {
-    ...QUALIFIED_FIXTURE_SPEEDRUN.version_status!,
-    addon_version: "0.24",
-    addon_qualified: false,
-  },
   level_range: {
     requirement: { min_level: 60, max_level: 60 },
     satisfied: false,

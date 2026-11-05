@@ -24,16 +24,10 @@ export function capabilitiesFromSpeedrun(
   return {
     hasSpeedrun: true,
     hasProof: speedrun.proof.length > 0,
-    hasEligibilityChecks: !!(
-      speedrun.version_status ||
-      speedrun.data_source ||
-      speedrun.dps_rankings
-    ),
+    hasEligibilityChecks: !!(speedrun.data_source || speedrun.dps_rankings),
     hasBlockers:
       !speedrun.qualified ||
       speedrun.proof.some((item) => !item.satisfied) ||
-      speedrun.version_status?.parser_qualified === false ||
-      speedrun.version_status?.addon_qualified === false ||
       speedrun.data_source?.eligible === false ||
       speedrun.level_range?.satisfied === false,
   };
