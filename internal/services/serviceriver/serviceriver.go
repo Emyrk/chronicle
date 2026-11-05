@@ -52,6 +52,7 @@ type Service struct {
 
 	*riverqueue.Queues
 	logParsingWorkers    int64
+	rankingWorkers       int64
 	catchupMetricsCancel context.CancelFunc
 	catchupMetricsDone   <-chan struct{}
 }
@@ -343,7 +344,7 @@ func (s *Service) Start(ctx context.Context) error {
 	riverqueue.AddWorker(q, rank.RatingPolicyScanDispatchWorker)
 	riverqueue.AddWorker(q, rank.RatingPolicyScanWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
-		MaxWorkers: 1,
+		MaxWorkers: int(s.rankingWorkers),
 	})
 	q.AddPeriodicJob(
 		river.NewPeriodicJob(
@@ -476,6 +477,15 @@ func (s *Service) Close(ctx context.Context) error {
 
 func (s *Service) Options() serpent.OptionSet {
 	return serpent.OptionSet{
+		{
+			Name:        "Ranking Worker Count",
+			Description: "Number of workers to use for ranking and tenant rating maintenance jobs.",
+			Required:    false,
+			Flag:        "ranking-worker-count",
+			Env:         "CHRONICLE_RANKING_WORKERS",
+			Default:     "1",
+			Value:       serpent.Int64Of(&s.rankingWorkers),
+		},
 		{
 			Name:        "Log Parsing Worker Count",
 			Description: "Number of workers to use for parsing raid log files.",

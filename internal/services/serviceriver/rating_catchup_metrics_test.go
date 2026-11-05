@@ -41,3 +41,18 @@ func TestRatingDirtyCountsByTenant(t *testing.T) {
 		"root":  {"runs": 7, "renown": 0, "mastery": 0, "peak": 1},
 	}, ratingDirtyCountsByTenant(rows))
 }
+
+func TestRankingWorkerCountOption(t *testing.T) {
+	t.Parallel()
+
+	service := &Service{}
+	for _, option := range service.Options() {
+		if option.Env == "CHRONICLE_RANKING_WORKERS" {
+			require.Equal(t, "1", option.Default)
+			require.NoError(t, option.Value.Set("7"))
+			require.Equal(t, int64(7), service.rankingWorkers)
+			return
+		}
+	}
+	t.Fatal("missing CHRONICLE_RANKING_WORKERS option")
+}
