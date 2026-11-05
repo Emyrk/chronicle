@@ -36,6 +36,9 @@ func (c *freyaCharacter) Process(m messages.Message) error {
 	}
 
 	if signal, defeated := c.defeat.Observe(m, c.IsActive()); defeated {
+		if signal == characters.ScriptedDefeatAuraCleanup && c.Lookup().NoKnownParticipantsAlive() {
+			return nil
+		}
 		c.Died("freya_defeated_"+string(signal), m)
 	}
 	return nil

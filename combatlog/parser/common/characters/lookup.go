@@ -53,6 +53,8 @@ type Characters struct {
 
 	sharedState map[string]any
 
+	noKnownParticipantsAlive func() bool
+
 	// TODO: unroll hooks?
 	hooks           []SetHook
 	activityChanged map[Character]struct{}
@@ -81,6 +83,16 @@ func NewCharacters(db *unitdb.Units, factories []CharacterFactory, id *identifie
 		ByEntry:     make(map[uint32][]Character),
 		sharedState: make(map[string]any),
 	}
+}
+
+// SetNoKnownParticipantsAliveProvider installs the current fight's player-life signal.
+func (c *Characters) SetNoKnownParticipantsAliveProvider(provider func() bool) {
+	c.noKnownParticipantsAlive = provider
+}
+
+// NoKnownParticipantsAlive reports whether no player observed in the current fight is known alive.
+func (c *Characters) NoKnownParticipantsAlive() bool {
+	return c.noKnownParticipantsAlive != nil && c.noKnownParticipantsAlive()
 }
 
 func (c *Characters) RegisterHook(hook SetHook) {

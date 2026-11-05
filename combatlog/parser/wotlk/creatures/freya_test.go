@@ -5,12 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/participants"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
@@ -251,6 +253,75 @@ func TestFreyaObservedWipeCleanupDoesNotMarkSurrender(t *testing.T) {
 			State:       types.AuraStateRemoved,
 		})
 		require.NoError(t, err)
+	}
+
+	freya, ok := all.Get(freyaID)
+	require.True(t, ok)
+	require.True(t, freya.IsActive())
+	require.Equal(t, period.EndStateNone, freya.LastEndState())
+}
+
+func TestFreyaBerserkWipeCleanupDoesNotMarkSurrender(t *testing.T) {
+	t.Parallel()
+
+	all := newFreyaTestCharacters()
+	tracker := participants.New()
+	all.SetNoKnownParticipantsAliveProvider(tracker.NoKnownParticipantsAlive)
+	fightID := uuid.New()
+	playerOne := guid.GUID(1)
+	playerTwo := guid.GUID(2)
+	freyaID := creatureGUID(freyaEntry)
+	lastIncomingDamage := time.Date(2026, time.November, 5, 3, 17, 23, 500000000, time.UTC)
+
+	process := func(m messages.Message) {
+		_, err := all.Process(m)
+		require.NoError(t, err)
+		require.NoError(t, tracker.ProcessMessage(true, fightID, m))
+	}
+
+	pull := &messages.Damage{
+		MessageBase: messages.Base(lastIncomingDamage),
+		Caster:      &playerOne,
+		Target:      freyaID,
+		Amount:      168,
+		HitType:     types.HitTypeHit,
+	}
+	_, err := all.Process(pull)
+	require.NoError(t, err)
+	tracker.FightStarted(fightID, pull)
+	require.NoError(t, tracker.ProcessMessage(true, fightID, pull))
+
+	process(&messages.Damage{
+		MessageBase: messages.Base(lastIncomingDamage.Add(10 * time.Millisecond)),
+		Caster:      &playerTwo,
+		Target:      freyaID,
+		Amount:      168,
+		HitType:     types.HitTypeHit,
+	})
+	process(&messages.Slain{
+		MessageBase: messages.Base(lastIncomingDamage.Add(50 * time.Millisecond)),
+		Victim:      playerOne,
+	})
+
+	// Observed wipe 2Z1UHGyIL3GcuCL7: Freya's Berserk Ground Tremor killed the
+	// remaining players immediately before the reset removed eight distinct auras.
+	process(&messages.Damage{
+		MessageBase: messages.Base(lastIncomingDamage.Add(83 * time.Millisecond)),
+		Caster:      &freyaID,
+		Target:      playerTwo,
+		Amount:      44937,
+		Overkill:    27783,
+		HitType:     types.HitTypeHit,
+	})
+	require.True(t, tracker.NoKnownParticipantsAlive())
+
+	for i := range scriptedKeeperAuraCleanupThreshold {
+		process(&messages.Aura{
+			MessageBase: messages.Base(lastIncomingDamage.Add(275*time.Millisecond + time.Duration(i)*time.Millisecond)),
+			Target:      freyaID,
+			SpellName:   fmt.Sprintf("Reset aura %d", i),
+			State:       types.AuraStateRemoved,
+		})
 	}
 
 	freya, ok := all.Get(freyaID)
