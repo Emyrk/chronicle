@@ -3,11 +3,12 @@ package infrastructurecosts
 import (
 	"context"
 	"encoding/json"
-	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestRailwayClientVerifiedProjectUsageQuery(t *testing.T) {

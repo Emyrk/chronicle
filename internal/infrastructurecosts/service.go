@@ -98,7 +98,14 @@ func unitEconomics(total int64, usage UsageSummary, allocations []UserAllocation
 		}
 		u.ActiveDistribution = Distribution{sum / int64(len(vals)), percentile(vals, .5), percentile(vals, .75), percentile(vals, .95), percentile(vals, .99), vals[len(vals)-1]}
 		slices.Reverse(vals)
-		u.Concentration = Concentration{ratioTop(vals, 1, total), ratioTop(vals, 5, total), ratioTop(vals, 10, total)}
+		topCount := func(percent float64) int {
+			return max(1, int(math.Ceil(float64(len(vals))*percent)))
+		}
+		u.Concentration = Concentration{
+			ratioTop(vals, topCount(.01), sum),
+			ratioTop(vals, topCount(.05), sum),
+			ratioTop(vals, topCount(.10), sum),
+		}
 	}
 	return u
 }
@@ -180,10 +187,11 @@ func (s *Service) Generate(ctx context.Context, opts GenerateOptions) (database.
 			return e
 		}
 		warnings := append([]string{}, providerUsage.Warnings...)
+		warnings = append(warnings, "Railway project spend is allocated using usage from this Chronicle deployment only.")
 		if pools.UnattributedMicrodollars > 0 {
 			warnings = append(warnings, "Some cost could not be attributed because an allocation pool had no eligible usage weight.")
 		}
-		report := Report{ID: id, PeriodStart: start, PeriodEnd: end, Revision: rev, Status: "published", GeneratedAt: now, StorageAsOf: now, Scope: Scope{providerUsage.ProjectName, s.ServerType, "Railway project usage and Chronicle uploader activity"}, Costs: providerUsage.Costs, Pools: pools, Services: providerUsage.Services, Usage: usage, AllocationPolicy: AllocationPolicy{"USD", "integer microdollars", "memory + egress + unclassified equally across active uploaders", "CPU weighted by monthly parsed event bytes", "volume + backup weighted by current parsed event bytes", "deterministic largest remainder, user ID tie-break"}, Warnings: warnings, TotalCostMicrodollars: providerUsage.Costs.Total(), PreviousTotalCostMicrodollars: previous, Provider: "railway", ProviderPayloadSHA256: hashHex}
+		report := Report{ID: id, PeriodStart: start, PeriodEnd: end, Revision: rev, Status: "published", GeneratedAt: now, StorageAsOf: now, Scope: Scope{providerUsage.ProjectName, s.ServerType, "partial"}, Costs: providerUsage.Costs, Pools: pools, Services: providerUsage.Services, Usage: usage, AllocationPolicy: AllocationPolicy{"USD", "integer microdollars", "memory + egress + unclassified equally across active uploaders", "CPU weighted by monthly parsed event bytes", "volume + backup weighted by current parsed event bytes", "deterministic largest remainder, user ID tie-break"}, Warnings: warnings, TotalCostMicrodollars: providerUsage.Costs.Total(), PreviousTotalCostMicrodollars: previous, Provider: "railway", ProviderPayloadSHA256: hashHex}
 		report.UnitEconomics = unitEconomics(report.TotalCostMicrodollars, usage, allocations)
 		reportJSON, e := json.Marshal(report)
 		if e != nil {

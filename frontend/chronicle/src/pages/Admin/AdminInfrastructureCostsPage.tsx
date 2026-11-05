@@ -2,6 +2,12 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, BarChart3, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import type {
+  InfrastructureCostReport as APIReport,
+  InfrastructureCostReportUser as APIUser,
+  ListInfrastructureCostReportUsersResponse as UsersResponse,
+  ListInfrastructureCostReportsResponse as ReportListResponse,
+} from "@/api/typesGenerated";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
 import {
@@ -11,105 +17,6 @@ import {
 } from "./AdminInfrastructureCosts";
 
 const reportsQueryKey = ["admin", "infrastructure-costs"] as const;
-
-type ReportListItem = {
-  id: string;
-  periodStart: string;
-  periodEnd: string;
-  revision: number;
-  generatedAt: string;
-  totalCostMicrodollars: number;
-};
-
-type ReportListResponse = {
-  reports: ReportListItem[];
-  limit: number;
-  offset: number;
-};
-
-type APIService = {
-  serviceId: string;
-  serviceName: string;
-  totalCostMicrodollars: number;
-  cpuCostMicrodollars: number;
-  memoryCostMicrodollars: number;
-  networkCostMicrodollars: number;
-  diskCostMicrodollars: number;
-  backupCostMicrodollars: number;
-};
-
-type APIUser = {
-  userId: string;
-  usernameSnapshot?: string;
-  activeUploader: boolean;
-  uploadCount: number;
-  monthlyParsedEventBytes: number;
-  currentParsedStorageBytes: number;
-  sharedCostMicrodollars: number;
-  activityCostMicrodollars: number;
-  storageCostMicrodollars: number;
-  totalCostMicrodollars: number;
-};
-
-type UsersResponse = {
-  users: APIUser[];
-  limit: number;
-  offset: number;
-  total: number;
-};
-
-type APIReport = {
-  id: string;
-  status?: "published" | "building" | "failed";
-  generatedAt: string;
-  storageAsOf?: string;
-  periodStart: string;
-  periodEnd: string;
-  provider: string;
-  projectName?: string;
-  serverType?: string;
-  coverage?: "complete" | "partial";
-  previousTotalCostMicrodollars?: number;
-  totalCostMicrodollars: number;
-  memoryCostMicrodollars: number;
-  cpuCostMicrodollars: number;
-  networkCostMicrodollars: number;
-  diskCostMicrodollars: number;
-  backupCostMicrodollars: number;
-  sharedCostMicrodollars: number;
-  activityCostMicrodollars: number;
-  storageCostMicrodollars: number;
-  inactiveStorageCostMicrodollars?: number;
-  services: APIService[];
-  usage: {
-    registeredUsersAtEnd: number;
-    newUsers: number;
-    activeUploaderCount: number;
-    uploadCount: number;
-    uploadedLogGroupCount?: number;
-    uploadedRawBytes: number;
-    uploadedStoredBytes: number;
-    parsedInstanceCount: number;
-    monthlyParsedEventBytes: number;
-    currentParsedStorageBytes: number;
-    storageOwnerCount: number;
-    inactiveStorageOwnerCount: number;
-  };
-  unitEconomics: {
-    costPerActiveUploaderMicrodollars: number;
-    costPerUploadedLogMicrodollars: number;
-    costPerParsedInstanceMicrodollars: number;
-    medianCostMicrodollars: number;
-    p75CostMicrodollars: number;
-    p95CostMicrodollars: number;
-    p99CostMicrodollars: number;
-    maximumCostMicrodollars: number;
-    topOnePercentBasisPoints: number;
-    topFivePercentBasisPoints: number;
-    topTenPercentBasisPoints: number;
-  };
-  warnings: Array<string | { code: string; message: string }>;
-};
 
 async function readJSON<T>(response: Response, fallback: string): Promise<T> {
   if (!response.ok) {
@@ -124,9 +31,9 @@ function normalizeUser(user: APIUser): CostReportUser {
     id: user.userId,
     username: user.usernameSnapshot || user.userId,
     activeUploader: user.activeUploader,
-    uploadedFiles: user.uploadCount,
-    monthlyParsedBytes: user.monthlyParsedEventBytes,
-    currentParsedBytes: user.currentParsedStorageBytes,
+    uploadedFiles: user.uploadedFiles,
+    monthlyParsedBytes: user.monthlyParsedBytes,
+    currentParsedBytes: user.currentParsedBytes,
     sharedCostMicros: user.sharedCostMicrodollars,
     activityCostMicros: user.activityCostMicrodollars,
     storageCostMicros: user.storageCostMicrodollars,
@@ -134,71 +41,71 @@ function normalizeUser(user: APIUser): CostReportUser {
   };
 }
 
-function normalizeReport(report: APIReport, users: APIUser[]): InfrastructureCostReport {
+function normalizeReport(report: APIReport, users: readonly APIUser[]): InfrastructureCostReport {
   return {
     id: report.id,
-    status: report.status ?? "published",
+    status: report.status === "building" ? "building" : report.status === "failed" ? "failed" : "published",
     generatedAt: report.generatedAt,
-    storageAsOf: report.storageAsOf ?? report.generatedAt,
+    storageAsOf: report.storageAsOf,
     period: { start: report.periodStart, end: report.periodEnd },
     scope: {
       provider: report.provider,
-      projectName: report.projectName ?? "Chronicle",
-      serverType: report.serverType ?? "configured deployment",
-      coverage: report.coverage ?? "partial",
+      projectName: report.scope.projectName,
+      serverType: report.scope.serverType,
+      coverage: report.scope.coverage === "complete" ? "complete" : "partial",
     },
     costs: {
       totalCostMicros: report.totalCostMicrodollars,
       previousTotalCostMicros: report.previousTotalCostMicrodollars,
-      memoryCostMicros: report.memoryCostMicrodollars,
-      cpuCostMicros: report.cpuCostMicrodollars,
-      egressCostMicros: report.networkCostMicrodollars,
-      volumeCostMicros: report.diskCostMicrodollars,
-      backupCostMicros: report.backupCostMicrodollars,
-      sharedCostMicros: report.sharedCostMicrodollars,
-      activityCostMicros: report.activityCostMicrodollars,
-      storageCostMicros: report.storageCostMicrodollars,
-      inactiveStorageCostMicros: report.inactiveStorageCostMicrodollars ?? 0,
+      memoryCostMicros: report.costs.memoryMicrodollars,
+      cpuCostMicros: report.costs.cpuMicrodollars,
+      egressCostMicros: report.costs.egressMicrodollars,
+      volumeCostMicros: report.costs.volumeMicrodollars,
+      backupCostMicros: report.costs.backupMicrodollars,
+      sharedCostMicros: report.pools.sharedMicrodollars,
+      activityCostMicros: report.pools.activityMicrodollars,
+      storageCostMicros: report.pools.storageMicrodollars,
+      inactiveStorageCostMicros: report.pools.inactiveStorageMicrodollars,
       services: report.services.map((service) => ({
         id: service.serviceId,
         name: service.serviceName,
         totalCostMicros: service.totalCostMicrodollars,
-        cpuCostMicros: service.cpuCostMicrodollars,
-        memoryCostMicros: service.memoryCostMicrodollars,
-        egressCostMicros: service.networkCostMicrodollars,
-        volumeCostMicros: service.diskCostMicrodollars,
-        backupCostMicros: service.backupCostMicrodollars,
+        cpuCostMicros: service.costs.cpuMicrodollars,
+        memoryCostMicros: service.costs.memoryMicrodollars,
+        egressCostMicros: service.costs.egressMicrodollars,
+        volumeCostMicros: service.costs.volumeMicrodollars,
+        backupCostMicros: service.costs.backupMicrodollars,
       })),
     },
     usage: {
       registeredUsers: report.usage.registeredUsersAtEnd,
       newUsers: report.usage.newUsers,
-      activeUploaders: report.usage.activeUploaderCount,
-      uploadedFiles: report.usage.uploadCount,
-      parsedInstances: report.usage.parsedInstanceCount,
+      activeUploaders: report.usage.activeUploaders,
+      uploadedFiles: report.usage.uploadedFiles,
+      parsedInstances: report.usage.parsedInstances,
       uploadedRawBytes: report.usage.uploadedRawBytes,
       uploadedStoredBytes: report.usage.uploadedStoredBytes,
-      monthlyParsedBytes: report.usage.monthlyParsedEventBytes,
-      currentParsedBytes: report.usage.currentParsedStorageBytes,
-      inactiveStorageOwners: report.usage.inactiveStorageOwnerCount,
+      monthlyParsedBytes: report.usage.monthlyParsedBytes,
+      currentParsedBytes: report.usage.currentParsedBytes,
+      inactiveStorageOwners: report.usage.inactiveStorageOwners,
     },
     unitEconomics: {
-      costPerActiveUploaderMicros: report.unitEconomics.costPerActiveUploaderMicrodollars,
-      costPerUploadedLogMicros: report.unitEconomics.costPerUploadedLogMicrodollars,
+      costPerActiveUploaderMicros: report.usage.activeUploaders > 0
+        ? Math.round(report.totalCostMicrodollars / report.usage.activeUploaders)
+        : 0,
+      costPerUploadedLogMicros: report.unitEconomics.costPerLogMicrodollars,
       costPerParsedInstanceMicros: report.unitEconomics.costPerParsedInstanceMicrodollars,
-      medianCostMicros: report.unitEconomics.medianCostMicrodollars,
-      p75CostMicros: report.unitEconomics.p75CostMicrodollars,
-      p95CostMicros: report.unitEconomics.p95CostMicrodollars,
-      p99CostMicros: report.unitEconomics.p99CostMicrodollars,
-      maximumCostMicros: report.unitEconomics.maximumCostMicrodollars,
-      topOnePercentBasisPoints: report.unitEconomics.topOnePercentBasisPoints,
-      topFivePercentBasisPoints: report.unitEconomics.topFivePercentBasisPoints,
-      topTenPercentBasisPoints: report.unitEconomics.topTenPercentBasisPoints,
+      medianCostMicros: report.unitEconomics.activeDistribution.median,
+      p75CostMicros: report.unitEconomics.activeDistribution.p75,
+      p95CostMicros: report.unitEconomics.activeDistribution.p95,
+      p99CostMicros: report.unitEconomics.activeDistribution.p99,
+      maximumCostMicros: report.unitEconomics.activeDistribution.max,
+      topOnePercentBasisPoints: Math.round(report.unitEconomics.concentration.top1 * 10_000),
+      topFivePercentBasisPoints: Math.round(report.unitEconomics.concentration.top5 * 10_000),
+      topTenPercentBasisPoints: Math.round(report.unitEconomics.concentration.top10 * 10_000),
     },
     users: users.map(normalizeUser),
-    warnings: report.warnings.map((warning) => typeof warning === "string"
-      ? { code: "REPORT_WARNING", message: warning }
-      : warning),
+    warnings: report.warnings.map((warning) => ({ code: "REPORT_WARNING", message: warning })),
   };
 }
 
@@ -252,6 +159,7 @@ export function AdminInfrastructureCostsPage() {
       "Failed to load infrastructure reports",
     ),
     retry: false,
+    refetchInterval: 10_000,
   });
   const selected = reports.data?.reports.find((report) => report.id === selectedReportID)
     ?? reports.data?.reports[0];
