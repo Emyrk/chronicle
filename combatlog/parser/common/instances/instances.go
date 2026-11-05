@@ -387,10 +387,11 @@ var (
 	}
 
 	TimbermawHoldFactory = &CommonFactory{
-		Name:      "Timbermaw Hold",
-		Category:  InstanceCategoryRaid,
-		ZoneNames: []string{"timbermaw hold", "荒芜巨岩"},
-		Hostiles:  FromMap(TimbermawHoldHostiles()),
+		Name:          "Timbermaw Hold",
+		Category:      InstanceCategoryRaid,
+		ZoneNames:     []string{"timbermaw hold", "木喉要塞"},
+		InstanceTypes: []string{"raid"},
+		Hostiles:      FromMap(TimbermawHoldHostiles()),
 		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
 			return &rankings.Rankings{
 				Speedrun: &rankings.SpeedrunRules{

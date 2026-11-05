@@ -85,11 +85,35 @@ func TestTempleOfAhnQirajFactoryMatchZoneAliases(t *testing.T) {
 	require.False(t, TempleOfAhnQirajFactory.MatchZone(zone.Zone{Name: "ruins of ahn'qiraj"}))
 }
 
+func TestTowerOfKarazhanFactoryMatchZoneAliases(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, TowerOfKarazhanFactory.MatchZone(zone.Zone{Name: "tower of karazhan"}))
+	require.True(t, TowerOfKarazhanFactory.MatchZone(zone.Zone{Name: "荒芜巨岩"}))
+}
+
 func TestTimbermawHoldFactoryMatchZoneAliases(t *testing.T) {
 	t.Parallel()
 
 	require.True(t, TimbermawHoldFactory.MatchZone(zone.Zone{Name: "timbermaw hold"}))
-	require.True(t, TimbermawHoldFactory.MatchZone(zone.Zone{Name: "荒芜巨岩"}))
+	// Older log formats only reported the zone name, so keep name-only matching.
+	require.True(t, TimbermawHoldFactory.MatchZone(zone.Zone{Name: "木喉要塞"}))
+	require.True(t, TimbermawHoldFactory.MatchZone(zone.Zone{
+		Name:         "木喉要塞",
+		IsInstance:   true,
+		InstanceType: "raid",
+	}))
+	require.False(t, TimbermawHoldFactory.MatchZone(zone.Zone{
+		Name:         "木喉要塞",
+		IsInstance:   false,
+		InstanceType: "none",
+	}))
+	require.False(t, TimbermawHoldFactory.MatchZone(zone.Zone{
+		Name:         "木喉要塞",
+		IsInstance:   true,
+		InstanceType: "party",
+	}))
+	require.False(t, TimbermawHoldFactory.MatchZone(zone.Zone{Name: "荒芜巨岩"}))
 }
 
 func TestHeadlessHorsemanIsWrathOnly(t *testing.T) {
