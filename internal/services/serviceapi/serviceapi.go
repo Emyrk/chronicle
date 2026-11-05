@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth/authkeys"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpmw"
+	"github.com/Emyrk/chronicle/internal/infrastructurecosts"
 	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
@@ -32,6 +33,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicegamedata"
 	"github.com/Emyrk/chronicle/internal/services/servicegithub"
 	"github.com/Emyrk/chronicle/internal/services/serviceinference"
+	"github.com/Emyrk/chronicle/internal/services/serviceinfrastructurecosts"
 	"github.com/Emyrk/chronicle/internal/services/serviceinstancesearch"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicemail"
@@ -147,6 +149,7 @@ func (s *Service) DependsOn() []string {
 		serviceexternalapi.OnExternalAPI(),
 		serviceoauth.OnOAuth(),
 		serviceinference.OnInference(),
+		serviceinfrastructurecosts.OnInfrastructureCosts(),
 		serviceinstancesearch.OnSearch(),
 		servicesidekick.OnSidekick(),
 	}
@@ -256,6 +259,11 @@ func (s *Service) Start(ctx context.Context) error {
 
 	billingService := servicebilling.Billing(s.broker)
 	billingService.SetAccessURL(au)
+	costReports := serviceinfrastructurecosts.Get(s.broker)
+	var infrastructureCosts *infrastructurecosts.Service
+	if costReports.Enabled() {
+		infrastructureCosts = costReports.Reports
+	}
 
 	handler, err := api.New(ctx, api.Options{
 		Logger:                logger,
@@ -281,6 +289,7 @@ func (s *Service) Start(ctx context.Context) error {
 		ItemPricing:           itempricing.New(zed, s.itemPricingAPIKey, s.itemPricingBaseURL),
 
 		Billing:                  billingService,
+		InfrastructureCosts:      infrastructureCosts,
 		AccessURL:                au,
 		AdsTxtURL:                adsTxtURL,
 		NitroPaySiteID:           s.nitroPaySiteID,

@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/cosmetics"
+	"github.com/Emyrk/chronicle/internal/infrastructurecosts"
 	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
@@ -22,6 +23,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
+	"github.com/Emyrk/chronicle/internal/services/serviceinfrastructurecosts"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
@@ -74,6 +76,7 @@ func (s *Service) DependsOn() []string {
 		servicepgxpool.OnPGXPool(),
 		serviceprometheus.OnPrometheus(),
 		servicebilling.OnBilling(),
+		serviceinfrastructurecosts.OnInfrastructureCosts(),
 		serviceauthz.OnAuthz(),
 		servicedbstore.OnDatabaseStore(),
 		servicechronicle.OnChronicle(),
@@ -164,6 +167,17 @@ func (s *Service) Start(ctx context.Context) error {
 	})
 
 	billingService.Billing.SetDiscordRoleSyncEnqueuer(bot.EnqueueEntitlementRoleSync)
+
+	// Cost reports are opt-in because they require Railway credentials.
+	costReports := serviceinfrastructurecosts.Get(s.broker)
+	if costReports.Enabled() {
+		riverqueue.AddWorker(q, costReports.Worker)
+		q.AddPeriodicJob(river.NewPeriodicJob(
+			infrastructurecosts.DailyUTCSchedule{},
+			func() (river.JobArgs, *river.InsertOpts) { return infrastructurecosts.ArgsGenerate{}, nil },
+			&river.PeriodicJobOpts{ID: "infrastructure-cost-reports-daily-utc", RunOnStart: false},
+		))
+	}
 
 	// Register character cosmetic audits. The daily dispatcher repairs missed
 	// event-driven audits without producing a deployment-time burst.

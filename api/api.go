@@ -35,6 +35,7 @@ import (
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/billing"
+	"github.com/Emyrk/chronicle/internal/infrastructurecosts"
 	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
@@ -107,7 +108,8 @@ type Options struct {
 	ItemPricing           *itempricing.Service
 	CustomPanelHTTPClient *http.Client
 
-	Billing *billing.Service
+	Billing             *billing.Service
+	InfrastructureCosts *infrastructurecosts.Service
 
 	Registry  *prometheus.Registry
 	AccessURL *url.URL
@@ -510,6 +512,15 @@ func (api *API) Routes() chi.Router {
 					r.With(
 						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
 					).Post("/billing/resync", api.AdminResyncBilling)
+				}
+				if api.Opts.InfrastructureCosts != nil {
+					r.Route("/infrastructure-costs", func(r chi.Router) {
+						r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
+						r.Get("", api.AdminListInfrastructureCosts)
+						r.Post("/generate", api.AdminGenerateInfrastructureCost)
+						r.Get("/{reportID}", api.AdminGetInfrastructureCost)
+						r.Get("/{reportID}/users", api.AdminListInfrastructureCostUsers)
+					})
 				}
 				r.Route("/users", func(r chi.Router) {
 					r.Use(

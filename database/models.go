@@ -1933,6 +1933,38 @@ type InferenceUserConfig struct {
 	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
+type InfrastructureCostReport struct {
+	ID                    uuid.UUID          `db:"id" json:"id"`
+	PeriodStart           pgtype.Timestamptz `db:"period_start" json:"period_start"`
+	PeriodEnd             pgtype.Timestamptz `db:"period_end" json:"period_end"`
+	Revision              int32              `db:"revision" json:"revision"`
+	Status                string             `db:"status" json:"status"`
+	StorageAsOf           pgtype.Timestamptz `db:"storage_as_of" json:"storage_as_of"`
+	Provider              string             `db:"provider" json:"provider"`
+	ProviderPayload       []byte             `db:"provider_payload" json:"provider_payload"`
+	ProviderPayloadSha256 string             `db:"provider_payload_sha256" json:"provider_payload_sha256"`
+	TotalCostMicrodollars int64              `db:"total_cost_microdollars" json:"total_cost_microdollars"`
+	ActiveUploaderCount   int64              `db:"active_uploader_count" json:"active_uploader_count"`
+	StorageOwnerCount     int64              `db:"storage_owner_count" json:"storage_owner_count"`
+	WarningCount          int64              `db:"warning_count" json:"warning_count"`
+	Report                []byte             `db:"report" json:"report"`
+	CreatedAt             pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type InfrastructureCostReportUser struct {
+	ReportID                 uuid.UUID `db:"report_id" json:"report_id"`
+	UserID                   uuid.UUID `db:"user_id" json:"user_id"`
+	UsernameSnapshot         string    `db:"username_snapshot" json:"username_snapshot"`
+	ActiveUploader           bool      `db:"active_uploader" json:"active_uploader"`
+	UploadedFiles            int64     `db:"uploaded_files" json:"uploaded_files"`
+	MonthlyParsedBytes       int64     `db:"monthly_parsed_bytes" json:"monthly_parsed_bytes"`
+	CurrentParsedBytes       int64     `db:"current_parsed_bytes" json:"current_parsed_bytes"`
+	SharedCostMicrodollars   int64     `db:"shared_cost_microdollars" json:"shared_cost_microdollars"`
+	ActivityCostMicrodollars int64     `db:"activity_cost_microdollars" json:"activity_cost_microdollars"`
+	StorageCostMicrodollars  int64     `db:"storage_cost_microdollars" json:"storage_cost_microdollars"`
+	TotalCostMicrodollars    int64     `db:"total_cost_microdollars" json:"total_cost_microdollars"`
+}
+
 type InstanceLoot struct {
 	ID           uuid.UUID          `db:"id" json:"id"`
 	InstanceID   uuid.UUID          `db:"instance_id" json:"instance_id"`
