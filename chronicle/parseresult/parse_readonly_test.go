@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
@@ -40,15 +41,38 @@ func TestParseWithReadOnlyPostgres(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, gameDB.Close()) })
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	reg := registry.RegistryForFlavor(logger, database.WoWFlavor{})
-	log := strings.Join([]string{
-		"1771564196000|ZONE_INFO|Zul'Gurub||1|raid|0|309",
-		"1771564197000|SWING|0x000000000001C7AC|0xF1300039F2000001|194|2|1|1|0|0|0",
-		"1771564200000|SWING|0x000000000001C7AC|0xF1300039F2000001|194|2|1|1|0|0|0",
-		"1771564205000|ZONE_INFO|Stranglethorn Vale||0|none|0",
+	for _, tc := range []struct {
+		name   string
+		format database.LogFormat
+		flavor database.WoWFlavor
+		log    string
+	}{
+		{name: "vanilla", format: database.LogFormat112aCcAddon, log: strings.Join([]string{
+			"1771564196000|ZONE_INFO|Zul'Gurub||1|raid|0|309",
+			"1771564197000|SWING|0x000000000001C7AC|0xF1300039F2000001|194|2|1|1|0|0|0",
+			"1771564200000|SWING|0x000000000001C7AC|0xF1300039F2000001|194|2|1|1|0|0|0",
+			"1771564205000|ZONE_INFO|Stranglethorn Vale||0|none|0",
+		}, "\n")},
+		{name: "tbc", format: database.LogFormat243CcAddon, flavor: database.WoWFlavor{database.FlavorTBC},
+			log: cleuNightbaneLog("250,1,5,0,10,1,nil,nil")},
+		{name: "wrath", format: database.LogFormat335aCcAddon, flavor: database.WoWFlavor{database.FlavorWrath},
+			log: cleuNightbaneLog("250,0,1,0,0,0,nil,nil,nil")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := registry.RegistryForFlavor(logger, tc.flavor)
+			parseCtx := parsectx.With(ctx, parsectx.Context{Format: tc.format, Flavor: tc.flavor, DatasetID: datasetID})
+			results, err := Parse(parseCtx, strings.NewReader(tc.log), gameDB.ForDataset(datasetID), reg, logger)
+			require.NoError(t, err)
+			require.Len(t, results, 1)
+			require.Equal(t, tc.format, results[0].Format)
+			require.NotEmpty(t, results[0].Events.Damage)
+		})
+	}
+}
+
+func cleuNightbaneLog(suffix string) string {
+	return strings.Join([]string{
+		`8/8 18:43:42.478  SWING_DAMAGE,0x0000000000000001,"Raider",0x511,0xF1300043490001E0,"Nightbane",0x10a48,` + suffix,
+		`8/8 18:43:44.478  SWING_DAMAGE,0x0000000000000001,"Raider",0x511,0xF1300043490001E0,"Nightbane",0x10a48,` + suffix,
 	}, "\n")
-	results, err := Parse(ctx, strings.NewReader(log), gameDB.ForDataset(datasetID), reg, logger)
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-	require.NotEmpty(t, results[0].Events.Damage)
 }
