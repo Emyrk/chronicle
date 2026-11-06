@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
+  ArrowDown,
   ArrowLeft,
   EyeOff,
   Globe,
@@ -212,13 +213,23 @@ export function ConfigurationView({
   const instances = data.rows
     .filter((row) => row.kind === "instance")
     .map((row) => row.instance_name);
-  const selected = params.get("instance") ?? instances[0];
   const tenant = params.get("tenant");
-  const filtered = instances.filter((name) =>
-    name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const [sort, setSort] = useState<"renown" | "name">("renown");
   const rowsFor = (name: string) =>
     data.rows.filter((row) => row.instance_name === name);
+  const totals = new Map(
+    instances.map((name) => [name, renownTotal(rowsFor(name), "")]),
+  );
+  const sorted = [...instances].sort(
+    (a, b) =>
+      (sort === "renown"
+        ? (totals.get(b)?.total ?? 0) - (totals.get(a)?.total ?? 0)
+        : 0) || a.localeCompare(b),
+  );
+  const filtered = sorted.filter((name) =>
+    name.toLowerCase().includes(search.toLowerCase()),
+  );
+  const selected = params.get("instance") ?? sorted[0];
   return (
     <main className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-8">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -323,15 +334,33 @@ export function ConfigurationView({
               />
             </label>
             <div className="flex justify-between px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <span>Instance</span>
-              <span>Renown</span>
+              {(
+                [
+                  ["name", "Instance"],
+                  ["renown", "Renown"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  aria-pressed={sort === key}
+                  title={`Sort by ${label.toLowerCase()}`}
+                  onClick={() => setSort(key)}
+                  className={`inline-flex items-center gap-0.5 uppercase tracking-wider hover:text-foreground ${sort === key ? "text-foreground" : ""}`}
+                >
+                  {label}
+                  {sort === key && <ArrowDown size={10} />}
+                </button>
+              ))}
             </div>
             <nav
               aria-label="Configured instances"
               className="styled-scrollbar max-h-[70vh] overflow-y-auto pb-1"
             >
               {filtered.map((name) => {
-                const { total, missing } = renownTotal(rowsFor(name), "");
+                const { total, missing } = totals.get(name) ?? {
+                  total: 0,
+                  missing: 0,
+                };
                 const active = selected === name;
                 return (
                   <button
