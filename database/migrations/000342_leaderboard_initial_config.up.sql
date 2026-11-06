@@ -789,6 +789,7 @@ INSERT INTO leaderboard_boss_renown (layer_key, instance_name, encounter_name, p
     ('vanilla', 'Zul''Gurub', 'Renataki', 1),
     ('vanilla', 'Zul''Gurub', 'Wushoolay', 1),
     ('vanillaplus', 'Blackwing Lair', 'Elementium Decapitator Mk III', 2),
+    ('vanillaplus', 'Blackwing Lair', 'Flamegor & Ebonroc', 4),
     ('vanillaplus', 'Blackwing Lair', 'Master Elemental Shaper Krixix', 2),
     ('vanillaplus', 'Scarlet Monastery', 'Brigitte Abbendis', 1),
     ('vanillaplus', 'Scarlet Monastery', 'Brother Michael', 1),
@@ -797,6 +798,8 @@ INSERT INTO leaderboard_boss_renown (layer_key, instance_name, encounter_name, p
     ('vanillaplus', 'Scarlet Monastery', 'Herod', 1),
     ('vanillaplus', 'Scarlet Monastery', 'Loksey', 1),
     ('vanillaplus', 'Scarlet Monastery', 'Mograine & Whitemane', 3),
-    ('vanillaplus', 'Scarlet Monastery', 'Vishas', 1);
+    ('vanillaplus', 'Scarlet Monastery', 'Vishas', 1),
+    ('vanillaplus', 'Zul''Gurub', 'Azus the Bloodseeker', 1),
+    ('vanillaplus', 'Zul''Gurub', 'The Nameless Hermit', 1);
 
 COMMIT;

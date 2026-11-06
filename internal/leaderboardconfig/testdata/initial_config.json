@@ -1197,6 +1197,24 @@
       "instance": "Scarlet Monastery",
       "boss": "Mograine & Whitemane",
       "points": 3
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Blackwing Lair",
+      "boss": "Flamegor & Ebonroc",
+      "points": 4
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Zul'Gurub",
+      "boss": "Azus the Bloodseeker",
+      "points": 1
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Zul'Gurub",
+      "boss": "The Nameless Hermit",
+      "points": 1
     }
   ]
 }
