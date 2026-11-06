@@ -1,6 +1,6 @@
 # Leaderboard v2
 
-Status: four-PR configuration foundation; later tenant-scoped rating pipeline
+Status: configuration complete; next PR is all-time raw-statistics schema
 
 This directory defines Chronicle's replacement rating and leaderboard system.
 The [LaTeX specification](spec.tex) is the authoritative mathematical and
@@ -12,7 +12,7 @@ gates.
 The replacement is a clean implementation. Prior ratings are removed; merged PR
 1625 preserves parse scoring. Retired rating tables are neither migration or
 seed inputs nor a rollback target. Existing UI behavior stays unchanged until a
-later cutover. Amend specification PR 1622 before continuing the stack.
+later cutover. The next PR adds schema only, not runtime behavior.
 
 ## Authority
 
@@ -63,38 +63,35 @@ leaderboard v2.
   `time_parse_scores.clear_duration_ms` as canonical source values. Persisted
   parse scores are not rating inputs.
 - Preserve the Peak/Form/Floor/Mastery formulas and metric-erasing Renown facts.
-  Later scoped benchmarks and boss/clear results support read-time exact-set
-  aggregation and ordered cursors without exact ranks.
+  Store count and raw player band statistics or guild reciprocal-duration band
+  statistics; normalize all scores from shared current benchmarks at reads.
+  Benchmark-only changes never fan out dirty subject statistics. Renown stores
+  metric-independent kill counts, with points derived from current awards.
 - Keep parser mechanics in Go; the database is the intended configuration
   source. Later rating derivation and maintenance use bounded PostgreSQL
   functions.
 
-## Deferred policy and delivery order
+## Current delivery and exclusions
 
-Realm/season isolation is only a deferred career/cross-instance portfolio
-concern. Its exact identity, lifecycle, and temporal boundaries remain
-unresolved. Do not add season columns or block current observation, benchmark,
-subject, or queue implementation on that future policy. Boss/clear cohorts
-remain tenant scoped and use all eligible observations; realm remains part of
-player and guild identity.
+Configuration PRs 1622, 1624, 1633, and 1634 are complete, together with
+inspector PR 1636 and Wrath migration 343. The next PR adds evidence, raw
+sufficient statistics, kill counts, and dirty-work tables, constraints, indexes,
+and tests only. Workers, serving, historical backfill, and UI cutover come
+later.
 
-DPS and HPS may produce separate observations today. Mutually exclusive damage
-versus healing eligibility per player/boss is future observation policy, not a
-current constraint. Career/portfolio schema, seeds, and read aggregation remain
-deferred. Renown temporal scope and layered provenance/invalidation are separate
-open decisions, not a season gate on boss/clear work.
+All rating scopes, including Renown, are all-time. There are no rolling180day or
+season dimensions, expiry jobs, or finalized-season retention exceptions. Source
+deletion/invalidation retracts evidence and dirties old/new affected scopes.
+Career/cross-instance portfolios remain out of scope.
 
-The current delivery consists of exactly four PRs:
+Boss/clear cohorts separate difficulty and raid size within one tenant; realm
+qualifies subject identity, not benchmarks. DPS/HPS remain separately permitted.
+Raw projection algorithm compatibility is separate from composed current read
+policy; this work does not invent a new provenance scheme.
 
-1. Amend specification PR 1622.
-2. Schema-only PR 1624: structural catalog and flavor vocabulary.
-3. Subset/override resolution queries and tests.
-4. Reviewed initial configuration seeds and parity tests.
-
-Policy reads, observations and the rating pipeline, and UI cutover are later
-work. No season contract blocks later boss/clear work. Cutover needs a reviewed
-disable/revert strategy, not legacy-rating rollback. See the [implementation
-plan](implementation-plan.md) for the deferred backlog.
+See the [implementation plan](implementation-plan.md) for the schema-only
+boundary and later maintenance/read validation. Cutover needs a disable/revert
+strategy, not rollback to removed legacy ratings.
 
 ## Documentation validation
 
