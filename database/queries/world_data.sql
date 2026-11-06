@@ -99,6 +99,12 @@ FROM combined c
 -- name: GetItemTemplatesByEntries :many
 SELECT * FROM world_item_template WHERE dataset_id = @dataset_id AND entry = ANY(@entries::int[]);
 
+-- name: GetItemTemplatesByNames :many
+SELECT * FROM world_item_template WHERE dataset_id = @dataset_id AND name = ANY(@names::text[]);
+
+-- name: DeleteItemTemplatesByEntries :exec
+DELETE FROM world_item_template WHERE dataset_id = @dataset_id AND entry = ANY(@entries::int[]);
+
 -- name: GetCreatureTemplatesByEntries :many
 SELECT * FROM world_creature_template WHERE dataset_id = @dataset_id AND entry = ANY(@entries::int[]);
 

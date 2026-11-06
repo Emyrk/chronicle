@@ -17,7 +17,7 @@ interface FieldDiff {
 interface EntryDiff {
   entry: number;
   name: string;
-  status: "new" | "changed" | "unchanged";
+  status: "new" | "changed" | "unchanged" | "tmog";
   fields?: FieldDiff[];
 }
 
@@ -29,6 +29,7 @@ interface UploadResult {
   new_items: number;
   changed: number;
   unchanged: number;
+  tmog: number;
   diffs: EntryDiff[] | null;
 }
 
@@ -248,7 +249,8 @@ export function WDBUpload({ title, description, fileHint, showUnreliableFilter, 
               <span className="block mt-1">
                 <strong>{result.new_items}</strong> new,{" "}
                 <strong>{result.changed}</strong> changed,{" "}
-                <strong>{result.unchanged}</strong> unchanged
+                <strong>{result.unchanged}</strong> unchanged,{" "}
+                <strong>{result.tmog}</strong> tmog
               </span>
             </AlertDescription>
           </Alert>
@@ -324,7 +326,9 @@ function DiffRow({ diff, hideUnreliable }: { diff: EntryDiff; hideUnreliable: bo
                 ? "bg-purple-500/20 text-purple-400"
                 : diff.status === "unchanged"
                   ? "bg-emerald-500/20 text-emerald-400"
-                  : "bg-yellow-500/20 text-yellow-400"
+                  : diff.status === "tmog"
+                    ? "bg-red-500/20 text-red-400"
+                    : "bg-yellow-500/20 text-yellow-400"
             }`}
           >
             {diff.status}

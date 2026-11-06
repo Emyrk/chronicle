@@ -6882,6 +6882,7 @@ export interface WDBUploadResponse {
     readonly new_items: number;
     readonly changed: number;
     readonly unchanged: number;
+    readonly tmog: number;
     readonly diffs: readonly WDBItemDiff[];
 }
 
