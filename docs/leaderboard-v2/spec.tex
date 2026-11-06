@@ -433,7 +433,7 @@ The structural catalog contains instances, instance variants (difficulty and rai
 
 Boss, instance, set, and member overrides support explicit exclusion. An absent override inherits; it does not mean disabled or zero. Disabled bosses leave effective sets, aggregate denominators, and Renown eligibility. Excluded instances, sets, or members remove their affected selection; set membership alone does not determine Renown eligibility. Parsed history is unchanged by configuration exclusion.
 
-Renown has boss defaults and instance-variant overrides. Explicit zero is a real award override, distinct from absence. Awards are independent of encounter-set membership. Vanilla awards are not automatically zeroed for TBC or Wrath. Seed values must be explicit reviewed data, not runtime reads or seed extraction from migration 313 or retired rating tables. Do not invent new awards or difficulty variants.
+Renown has boss defaults and instance-variant overrides. Explicit zero is a real award override, distinct from absence. Awards are independent of encounter-set membership. Vanilla awards are not automatically zeroed for TBC or Wrath. Seed values must be explicit reviewed data from historical calibration. Known values in migration 313 may be an authoring reference, but deployment must not execute or read old migrations or retired rating tables. Do not invent new awards or difficulty variants.
 
 \subsection{Deferred physical schema and provenance}
 PR 1624 supplies structural catalog and vocabulary only. A following PR implements subset resolution and overrides with tests; a separate following PR supplies reviewed initial seeds and parity fixtures. Physical catalog naming and constraints are reviewed in those PRs, without coupling them to observation keys.

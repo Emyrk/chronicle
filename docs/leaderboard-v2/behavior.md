@@ -1,8 +1,8 @@
 # Leaderboard v2 behavior
 
 This document states externally observable and testable behavior. Formula
-definitions and design gates live in [`spec.tex`](spec.tex). Physical rating
-DDL is deferred until the season and provenance contracts are settled.
+definitions and design gates live in [`spec.tex`](spec.tex). Physical rating DDL
+is deferred until the season and provenance contracts are settled.
 
 ## Delivery boundary and unresolved gates
 
@@ -10,9 +10,8 @@ Peak and Mastery are realm (season) based. Exact season identity, lifecycle, and
 temporal boundaries are unresolved. Do not equate all-time within a chosen
 realm/season with all-time across seasons. Do not invent a season table or time
 windows. Observation, benchmark, subject, and queue-key implementation is
-blocked
-until this contract is settled; park the existing observation-schema draft.
-Renown temporal scope is a separate open decision. Layered configuration
+blocked until this contract is settled; park the existing observation-schema
+draft. Renown temporal scope is a separate open decision. Layered configuration
 provenance and invalidation also require design review before result schema.
 
 Career and cross-instance portfolios are deferred, including schema, seeds, and
@@ -107,26 +106,23 @@ Mastery = 0.30 * Peak + 0.50 * Form + 0.20 * Floor
 
 The materialized result stores observation count, raw peak metric, Form, Floor,
 Mastery, effective-configuration provenance, and computation time. The layered
-provenance representation remains unresolved. Normalized Peak is not
-duplicated on every subject row.
+provenance representation remains unresolved. Normalized Peak is not duplicated
+on every subject row.
 
 When no observations remain for a dirty subject, its result row is deleted.
 
 ## Boss-group aggregation
 
-A later request may select one exact boss, a named instance encounter set, or
-an arbitrary group of eligible bosses within the chosen realm/season. Aggregate
-Peak and Mastery are calculated
-at read time from boss subject results and current benchmarks.
+A later request may select one exact boss, a named instance encounter set, or an
+arbitrary group of eligible bosses within the chosen realm/season. Aggregate
+Peak and Mastery are calculated at read time from boss subject results and
+current benchmarks.
 
 Missing evidence for an included boss contributes zero. Bosses have equal
 weight. Excluded bosses are removed from the effective selection and
-denominator,
-not counted as zero. Never divide by zero for an empty effective selection; its
-API presentation is
-a later read-contract decision.
-Instance encounter-set and arbitrary-group results are not initially
-materialized.
+denominator, not counted as zero. Never divide by zero for an empty effective
+selection; its API presentation is a later read-contract decision. Instance
+encounter-set and arbitrary-group results are not initially materialized.
 Career/cross-instance portfolio aggregation is not part of this delivery.
 
 Leaderboard results use deterministic ordered cursors. Peak boards order by
@@ -135,13 +131,11 @@ Renown boards use the same tie breakers after their descending score. Aggregate
 boss-group boards order by the derived aggregate followed by realm and subject.
 The cursor contains the ordered score, realm ID, subject ID, and a fingerprint
 of the selected exact bosses and encounter set, realm/season scope, cohort
-dimensions,
-metric, and filters.
+dimensions, metric, and filters.
 
 Realm/season scope and search filters apply before aggregation and ordering.
-There is no
-ordinal rank to preserve outside the filtered result. A cursor used with a
-different fingerprint is rejected. A ruleset revision or ordinary result
+There is no ordinal rank to preserve outside the filtered result. A cursor used
+with a different fingerprint is rejected. A ruleset revision or ordinary result
 mutation does not by itself invalidate a cursor; normal keyset pagination
 semantics apply while eventual updates converge. Pages are expected to contain
 at most about 50 rows. The product does not require exact ordinal ranks or
@@ -155,8 +149,7 @@ player Renown fact.
 
 Renown is the sum of the effective nonnegative award for each eligible canonical
 kill fact in its scope, whose temporal contract remains unresolved. It does not
-depend on raw metric value, benchmark, Peak, Mastery, or clear
-completion.
+depend on raw metric value, benchmark, Peak, Mastery, or clear completion.
 
 ## Shared catalog and layered configuration
 
@@ -179,8 +172,8 @@ more specific     = strict superset of another layer's required flavors
 
 Normalize and deduplicate these unordered sets. Specificity is set inclusion,
 not cardinality. Conflicting incomparable matches are rejected, not ordered by
-size, insertion order, or server tag. Compatible assignments may compose.
-Global configuration is shared; tenant evidence and results are not.
+size, insertion order, or server tag. Compatible assignments may compose. Global
+configuration is shared; tenant evidence and results are not.
 
 Boss, instance, set, and member overrides support explicit exclusion. Absence
 inherits. Disabled bosses leave effective sets, aggregate denominators, and
@@ -189,11 +182,12 @@ exclusions remove their affected selection. Set membership itself does not
 control Renown awards or eligibility.
 
 Renown uses boss defaults with instance-variant overrides. Explicit zero
-overrides
-a default; absence inherits it. Awards are independent of set membership.
-Vanilla awards are not automatically zeroed for TBC or Wrath. Values must be
-explicit reviewed seed data, not reads or extraction from migration 313 or
-retired rating tables. No speculative awards or difficulty variants are added.
+overrides a default; absence inherits it. Awards are independent of set
+membership. Vanilla awards are not automatically zeroed for TBC or Wrath. Use
+explicit reviewed seed values from historical calibration. Known values in
+migration 313 may be an authoring reference, but deployment must not execute or
+read old migrations or retired rating tables. No speculative awards or
+difficulty variants are added.
 
 Results need computation time and effective-configuration provenance. A single
 ruleset ID/revision is not an established representation for composed layers.
@@ -227,8 +221,8 @@ when `process_after <= now()`; future rows do not cause scheduler dispatch.
 Refresh functions claim bounded due pages with `FOR UPDATE SKIP LOCKED` and
 acknowledge only the revision they processed. A newer revision therefore
 survives a racing refresh. Flavor or configuration changes require persisted,
-bounded expansion into
-affected downstream scope keys. Its layered invalidation contract is unresolved.
+bounded expansion into affected downstream scope keys. Its layered invalidation
+contract is unresolved.
 
 PostgreSQL functions perform all derivation, replacement, fan-out, and
 acknowledgement. They do not loop row by row. Go may invoke bounded functions
@@ -272,7 +266,8 @@ integration scenarios in addition to foundation tests:
 4. Explicit zero Renown overrides a boss default. Set membership changes do not
    alter awards; Vanilla awards remain unless explicitly overridden.
 5. A default Sartharion 0D set never substitutes 1D, 2D, or 3D evidence.
-6. Reviewed explicit seeds match approved source fixtures, without migration 313
-   or retired-table dependencies, invented awards, or difficulty variants.
+6. Reviewed explicit seeds match historical calibration fixtures, with no
+   deployment dependency on executing or reading old migrations or retired
+   tables, and no invented awards or difficulty variants.
 7. Shared configuration never merges tenant data. Later pipeline tests must also
    prove realm and agreed season isolation for benchmarks, subjects, and queues.
