@@ -2,6 +2,58 @@
 
 import type { GUID } from "@/lib/guid/guid";
 
+// From chroniclesdk/leaderboard_configuration.go
+/**
+ * LeaderboardConfiguration is a read-only view of shared policy for the request tenant.
+ * Matching layers are not per-field provenance. Rows are empty on conflict.
+ */
+export interface LeaderboardConfiguration {
+    readonly tenant_id: string | null;
+    readonly tenant_name: string;
+    readonly dataset_id: string;
+    readonly dataset_name: string;
+    readonly dataset_flavor: readonly string[];
+    readonly additional_flavor: readonly string[];
+    readonly effective_flavor: readonly string[];
+    readonly leaderboard_flavor: readonly string[];
+    readonly layers: readonly LeaderboardConfigurationLayer[];
+    readonly rows: readonly LeaderboardConfigurationRow[];
+    readonly conflict: string;
+    /**
+     * Tenants lists the tenants the root site may inspect. Empty on tenant sites.
+     */
+    readonly tenants: readonly LeaderboardConfigurationTenant[];
+}
+
+// From chroniclesdk/leaderboard_configuration.go
+export interface LeaderboardConfigurationLayer {
+    readonly key: string;
+    readonly required_flavors: readonly string[];
+}
+
+// From chroniclesdk/leaderboard_configuration.go
+export interface LeaderboardConfigurationRow {
+    readonly kind: string;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly set_key: string;
+    readonly set_name: string;
+    readonly position: number;
+    readonly points: number;
+    readonly has_points: boolean;
+}
+
+// From chroniclesdk/leaderboard_configuration.go
+export interface LeaderboardConfigurationTenant {
+    readonly id: string;
+    readonly slug: string | null;
+    readonly name: string;
+    readonly square_logo: string;
+    readonly discoverable: boolean;
+}
+
 // From chroniclesdk/account.go
 export interface AccountDataCount {
     readonly group_key: string;
