@@ -7,6 +7,7 @@ import {
   Layers,
   Search,
   ShieldCheck,
+  TriangleAlert,
 } from "lucide-react";
 import { useLeaderboardConfiguration } from "@/api/leaderboardConfiguration";
 import type {
@@ -14,12 +15,6 @@ import type {
   LeaderboardConfigurationRow,
   LeaderboardConfigurationTenant,
 } from "@/api/typesGenerated";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 
 export function ConfigurationPage() {
@@ -106,7 +101,7 @@ export function TenantPicker({
   );
 }
 
-function Flavors({
+function FlavorChips({
   label,
   values,
 }: {
@@ -114,26 +109,97 @@ function Flavors({
   values: readonly string[];
 }) {
   return (
-    <div>
-      <dt className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="flex flex-wrap gap-1.5">
-        {values.length ? (
-          values.map((value) => (
-            <span
-              key={value}
-              className="rounded border bg-muted/40 px-2 py-1 font-mono text-xs"
-            >
-              {value}
-            </span>
-          ))
-        ) : (
-          <span className="text-sm text-muted-foreground">None</span>
-        )}
-      </dd>
-    </div>
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <span className="text-muted-foreground">{label}</span>
+      {values.length ? (
+        values.map((value) => (
+          <code
+            key={value}
+            className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-foreground"
+          >
+            {value}
+          </code>
+        ))
+      ) : (
+        <span className="italic text-muted-foreground">none</span>
+      )}
+    </span>
   );
+}
+
+type Row = LeaderboardConfigurationRow;
+
+/** "" is the default (non-variant) award column. */
+function variantKey(row: Pick<Row, "difficulty_name" | "max_players">) {
+  return `${row.difficulty_name}/${row.max_players}`;
+}
+
+function awardFor(rows: readonly Row[], boss: string, variant: string) {
+  if (!variant)
+    return rows.find((r) => r.kind === "boss" && r.encounter_name === boss);
+  return rows.find(
+    (r) =>
+      r.kind === "boss_variant" &&
+      r.encounter_name === boss &&
+      variantKey(r) === variant,
+  );
+}
+
+/** Sum of configured awards; missing awards are counted, never treated as 0. */
+function renownTotal(rows: readonly Row[], variant: string) {
+  let total = 0;
+  let missing = 0;
+  for (const boss of rows) {
+    if (boss.kind !== "boss") continue;
+    const award = awardFor(rows, boss.encounter_name, variant);
+    if (award?.has_points) total += award.points;
+    else missing++;
+  }
+  return { total, missing };
+}
+
+/** Bosses grouped by encounter set, plus bosses outside every set. */
+function groupBosses(rows: readonly Row[]) {
+  const sets = rows.filter((r) => r.kind === "set");
+  const inSet = new Set<string>();
+  const groups = sets.map((set) => {
+    const members = rows
+      .filter((r) => r.kind === "member" && r.set_key === set.set_key)
+      .sort(
+        (a, b) =>
+          a.position - b.position ||
+          a.encounter_name.localeCompare(b.encounter_name),
+      );
+    members.forEach((m) => inSet.add(m.encounter_name));
+    return {
+      key: set.set_key,
+      name: set.set_name || set.set_key,
+      members,
+    };
+  });
+  const loose = rows.filter(
+    (r) => r.kind === "boss" && !inSet.has(r.encounter_name),
+  );
+  if (loose.length)
+    groups.push({ key: "", name: "Not in an encounter set", members: loose });
+  // Big sets span the row in two columns; small sets pack side by side, and a
+  // small set left alone in its row spans it so the grid has no hole.
+  let column = 0;
+  return groups.map((group, i) => {
+    const wide = group.members.length > 4;
+    const next = groups[i + 1];
+    const span = wide || (column === 0 && (!next || next.members.length > 4));
+    column = span ? 0 : 1 - column;
+    return { ...group, wide, span };
+  });
+}
+
+function plural(n: number, one: string, many = `${one}s`) {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+function formatRenown(points: number) {
+  return points.toLocaleString();
 }
 
 export function ConfigurationView({
@@ -151,172 +217,190 @@ export function ConfigurationView({
   const filtered = instances.filter((name) =>
     name.toLowerCase().includes(search.toLowerCase()),
   );
+  const rowsFor = (name: string) =>
+    data.rows.filter((row) => row.instance_name === name);
   return (
-    <main className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-8">
-      <Link
-        to="/leaderboards/statistics"
-        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft size={16} /> Leaderboards
-      </Link>
-      <header className="flex flex-wrap items-start justify-between gap-4 border-b pb-6">
+    <main className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-8">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-primary">
-            Shared policy / tenant view
-          </p>
-          <h1 className="text-3xl font-bold tracking-tight">
+          <Link
+            to="/leaderboards/statistics"
+            className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft size={12} /> Leaderboards
+          </Link>
+          <h1 className="text-2xl font-bold tracking-tight">
             Leaderboard configuration
           </h1>
-          <p className="mt-2 text-muted-foreground">{data.tenant_name}</p>
-          {data.tenant_id && (
-            <p className="mt-1 font-mono text-xs text-muted-foreground">
-              {data.tenant_id}
-            </p>
-          )}
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {data.tenant_name}
+            </span>{" "}
+            · {data.dataset_name} dataset
+          </p>
         </div>
-        <span className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs">
-          <ShieldCheck size={14} /> Read only
+        <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs text-muted-foreground">
+          <ShieldCheck size={12} /> Read only
         </span>
       </header>
-      {/* Older backends omit tenants; treat that as no picker. */}
       {data.tenants?.length > 0 && (
         <TenantPicker tenants={data.tenants} selected={tenant} />
       )}
-      <Card>
-        <CardHeader>
-          <CardTitle>Flavor selection</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Dataset: {data.dataset_name}{" "}
-            <span className="font-mono text-xs">({data.dataset_id})</span>
-          </p>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid gap-6 sm:grid-cols-2">
-            <Flavors label="Dataset flavors" values={data.dataset_flavor} />
-            <Flavors label="Tenant additions" values={data.additional_flavor} />
-            <Flavors label="Effective union" values={data.effective_flavor} />
-            <Flavors
-              label="Leaderboard projection"
-              values={data.leaderboard_flavor}
-            />
-          </dl>
-        </CardContent>
-      </Card>
-      <details className="rounded-xl border bg-card p-5">
-        <summary className="cursor-pointer font-semibold">
-          <Layers className="mr-2 inline" size={16} />
-          {data.layers.length} applicable layers
+      <details className="group rounded-lg border bg-card text-xs">
+        <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2">
+          <FlavorChips label="Dataset" values={data.dataset_flavor} />
+          <FlavorChips label="+ Tenant" values={data.additional_flavor} />
+          <FlavorChips
+            label="→ Leaderboard projection"
+            values={data.leaderboard_flavor}
+          />
+          <span className="ml-auto inline-flex items-center gap-1 text-muted-foreground group-open:text-foreground">
+            <Layers size={12} /> {data.layers.length} layers
+          </span>
         </summary>
-        <p className="my-3 text-sm text-muted-foreground">
-          Required flavors are subsets of the leaderboard projection. This
-          overview is not per-field provenance. More specific layers override
-          less specific assignments.
-        </p>
-        {data.layers.length ? (
-          <ul className="space-y-2">
-            {data.layers.map((layer) => (
-              <li
-                key={layer.key}
-                className="flex flex-wrap justify-between gap-2 border-t pt-2 text-sm"
-              >
-                <code>{layer.key}</code>
-                <span className="text-muted-foreground">
-                  {layer.required_flavors.join(" + ") ||
-                    "All flavors (empty requirement)"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p>No matching layers.</p>
-        )}
+        <div className="space-y-2 border-t px-3 py-2">
+          <FlavorChips label="Effective union" values={data.effective_flavor} />
+          {data.layers.length ? (
+            <ul className="flex flex-wrap gap-1.5">
+              {data.layers.map((layer) => (
+                <li
+                  key={layer.key}
+                  className="rounded border px-2 py-1"
+                  title={
+                    layer.required_flavors.join(" + ") ||
+                    "All flavors (empty requirement)"
+                  }
+                >
+                  <code>{layer.key}</code>
+                  <span className="ml-1.5 text-muted-foreground">
+                    {layer.required_flavors.join(" + ") || "all"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted-foreground">No matching layers.</p>
+          )}
+          <p className="text-muted-foreground">
+            Layers whose required flavors are all in the projection apply; more
+            specific layers override less specific ones. Not per-field
+            provenance.
+          </p>
+        </div>
       </details>
       {data.conflict ? (
         <section
           role="alert"
-          className="rounded-xl border border-destructive p-6"
+          className="rounded-lg border border-destructive/60 bg-destructive/5 p-4"
         >
-          <h2 className="text-lg font-semibold">Configuration conflict</h2>
-          <p className="mt-2 break-words">{data.conflict}</p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            No resolved configuration is displayed. Incompatible assignments
-            must be corrected before this configuration can be used.
+          <h2 className="flex items-center gap-2 font-semibold text-destructive">
+            <TriangleAlert size={16} /> Configuration conflict
+          </h2>
+          <p className="mt-1 break-words text-sm">{data.conflict}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            No resolved configuration is displayed until incompatible
+            assignments are corrected.
           </p>
         </section>
       ) : instances.length === 0 ? (
-        <section className="rounded-xl border border-dashed p-10 text-center">
-          <h2 className="text-lg font-semibold">No configured instances</h2>
-          <p className="mt-2 text-muted-foreground">
+        <section className="rounded-lg border border-dashed p-8 text-center">
+          <h2 className="font-semibold">No configured instances</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
             No instances are enabled for this flavor selection.
           </p>
         </section>
       ) : (
-        <div className="grid items-start gap-6 md:grid-cols-[260px_minmax(0,1fr)]">
-          <aside className="rounded-xl border bg-card p-3">
-            <label className="flex items-center gap-2 rounded-md border px-3 py-2">
-              <Search size={16} className="shrink-0 text-muted-foreground" />
+        <div className="grid items-start gap-4 md:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="overflow-hidden rounded-lg border bg-card md:sticky md:top-4">
+            <label className="flex items-center gap-2 border-b px-3 py-2">
+              <Search size={14} className="shrink-0 text-muted-foreground" />
               <input
                 aria-label="Search instances"
-                placeholder="Search instances"
+                placeholder={`Search ${instances.length} instances`}
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                className="min-w-0 w-full bg-transparent text-sm outline-none"
+                className="w-full min-w-0 bg-transparent text-sm outline-none"
               />
             </label>
+            <div className="flex justify-between px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span>Instance</span>
+              <span>Renown</span>
+            </div>
             <nav
               aria-label="Configured instances"
-              className="styled-scrollbar mt-3 max-h-96 space-y-1 overflow-y-auto"
+              className="styled-scrollbar max-h-[70vh] overflow-y-auto pb-1"
             >
-              {filtered.map((name) => (
-                <button
-                  key={name}
-                  aria-current={selected === name ? "page" : undefined}
-                  onClick={() =>
-                    setParams(
-                      tenant ? { tenant, instance: name } : { instance: name },
-                    )
-                  }
-                  className={`w-full rounded-md px-3 py-2.5 text-left text-sm transition-colors ${selected === name ? "bg-primary/10 font-semibold text-primary" : "hover:bg-muted"}`}
-                >
-                  {name}
-                </button>
-              ))}
+              {filtered.map((name) => {
+                const { total, missing } = renownTotal(rowsFor(name), "");
+                const active = selected === name;
+                return (
+                  <button
+                    key={name}
+                    aria-current={active ? "page" : undefined}
+                    onClick={() =>
+                      setParams(
+                        tenant
+                          ? { tenant, instance: name }
+                          : { instance: name },
+                      )
+                    }
+                    className={`flex w-full items-center justify-between gap-2 border-l-2 px-3 py-1.5 text-left text-sm transition-colors ${active ? "border-primary bg-primary/10 font-medium text-primary" : "border-transparent hover:bg-muted"}`}
+                  >
+                    <span className="truncate">{name}</span>
+                    <span
+                      className={`shrink-0 tabular-nums text-xs ${active ? "" : "text-muted-foreground"}`}
+                      title={
+                        missing
+                          ? `${missing} bosses without an award`
+                          : undefined
+                      }
+                    >
+                      {formatRenown(total)}
+                      {missing > 0 && <span className="text-amber-500">*</span>}
+                    </span>
+                  </button>
+                );
+              })}
               {!filtered.length && (
-                <p className="p-3 text-sm text-muted-foreground">
+                <p className="px-3 py-2 text-sm text-muted-foreground">
                   No matching instances.
                 </p>
               )}
             </nav>
-            <p className="px-3 pt-3 text-xs text-muted-foreground">
-              {instances.length} configured instances
-            </p>
           </aside>
           {instances.includes(selected) ? (
             <InstanceConfiguration
+              key={selected}
               name={selected}
-              rows={data.rows.filter((row) => row.instance_name === selected)}
+              rows={rowsFor(selected)}
             />
           ) : (
-            <p role="status">
+            <p role="status" className="text-sm text-muted-foreground">
               This instance is not enabled in the current configuration. Choose
               an instance from the list.
             </p>
           )}
         </div>
       )}
-      <p className="text-xs text-muted-foreground">
-        Configuration preview only. These definitions do not change existing
-        parser or leaderboard behavior. Variant awards shown below are resolved
-        values, including default fallback, not override provenance.
-      </p>
     </main>
   );
 }
 
-function award(row: LeaderboardConfigurationRow | undefined) {
-  return row?.has_points
-    ? `${row.points.toLocaleString()} points`
-    : "No award configured";
+function Award({ row }: { row: Row | undefined }) {
+  if (!row?.has_points)
+    return (
+      <span
+        className="text-muted-foreground/60"
+        title="No award configured (not zero)"
+      >
+        —
+      </span>
+    );
+  return (
+    <span className={row.points === 0 ? "text-muted-foreground" : ""}>
+      {formatRenown(row.points)}
+    </span>
+  );
 }
 
 export function InstanceConfiguration({
@@ -324,148 +408,120 @@ export function InstanceConfiguration({
   rows,
 }: {
   name: string;
-  rows: readonly LeaderboardConfigurationRow[];
+  rows: readonly Row[];
 }) {
   const variants = rows.filter((row) => row.kind === "variant");
   const bosses = rows.filter((row) => row.kind === "boss");
-  const sets = rows.filter((row) => row.kind === "set");
+  const groups = groupBosses(rows);
+  const [variant, setVariant] = useState("");
+  const { total, missing } = renownTotal(rows, variant);
+  const showPositions = rows.some((r) => r.kind === "member" && r.position);
   return (
-    <section className="min-w-0 space-y-5">
-      <div>
-        <h2 className="text-2xl font-semibold">{name}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {bosses.length} bosses · {variants.length} variants · {sets.length}{" "}
-          encounter sets
-        </p>
-      </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Instance variants</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {variants.length ? (
-            <ul className="flex flex-wrap gap-2">
-              {variants.map((row) => (
-                <li
-                  key={`${row.difficulty_name}/${row.max_players}`}
-                  className="rounded-md border px-3 py-2 text-sm"
-                >
-                  {row.difficulty_name} · {row.max_players} players
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No variants configured. Boss definitions and default awards can
-              still be present.
-            </p>
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Bosses &amp; Renown</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Explicit zero is an award of 0 points. An unconfigured award is not
-            zero.
+    <section className="min-w-0 rounded-lg border bg-card">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b px-4 py-3">
+        <div>
+          <h2 className="text-lg font-semibold">{name}</h2>
+          <p className="text-xs text-muted-foreground">
+            {plural(bosses.length, "boss", "bosses")} ·{" "}
+            {plural(groups.filter((g) => g.key).length, "encounter set")}
+            {!variants.length && " · no variants"}
           </p>
-        </CardHeader>
-        <CardContent>
-          {!bosses.length ? (
-            <p className="text-muted-foreground">No bosses configured.</p>
-          ) : (
-            <div className="styled-scrollbar overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="py-3 pr-4">Boss</th>
-                    <th className="px-3 py-3">Default award</th>
-                    {variants.map((v) => (
-                      <th
-                        key={`${v.difficulty_name}/${v.max_players}`}
-                        className="px-3 py-3"
-                      >
-                        {v.difficulty_name}
-                        <span className="block text-xs font-normal text-muted-foreground">
-                          {v.max_players} players
-                        </span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {bosses.map((boss) => (
-                    <tr
-                      key={boss.encounter_name}
-                      className="border-b last:border-0"
-                    >
-                      <th className="py-3 pr-4 font-medium">
-                        {boss.encounter_name}
-                      </th>
-                      <td className="whitespace-nowrap px-3 py-3 tabular-nums">
-                        {award(boss)}
-                      </td>
-                      {variants.map((v) => (
-                        <td
-                          key={`${v.difficulty_name}/${v.max_players}`}
-                          className="whitespace-nowrap px-3 py-3 tabular-nums"
-                        >
-                          {award(
-                            rows.find(
-                              (row) =>
-                                row.kind === "boss_variant" &&
-                                row.encounter_name === boss.encounter_name &&
-                                row.difficulty_name === v.difficulty_name &&
-                                row.max_players === v.max_players,
-                            ),
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Ordered encounter sets</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {!sets.length && (
-            <p className="text-sm text-muted-foreground">
-              No encounter sets configured.
-            </p>
-          )}
-          {sets.map((set) => {
-            const members = rows
-              .filter(
-                (row) => row.kind === "member" && row.set_key === set.set_key,
-              )
-              .sort(
-                (a, b) =>
-                  a.position - b.position ||
-                  a.encounter_name.localeCompare(b.encounter_name),
-              );
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-bold tabular-nums leading-none">
+            {formatRenown(total)}
+          </div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Renown total
+            {missing > 0 && (
+              <span className="normal-case tracking-normal text-amber-500">
+                {" "}
+                · {missing} unset
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      {variants.length > 0 && (
+        <div
+          role="radiogroup"
+          aria-label="Award variant"
+          className="flex flex-wrap gap-1 border-b px-4 py-2"
+        >
+          {[{ key: "", label: "Default" }]
+            .concat(
+              variants.map((v) => ({
+                key: variantKey(v),
+                label: v.difficulty_name.includes(String(v.max_players))
+                  ? v.difficulty_name
+                  : `${v.difficulty_name} · ${v.max_players}p`,
+              })),
+            )
+            .map((option) => (
+              <button
+                key={option.key}
+                role="radio"
+                aria-checked={variant === option.key}
+                onClick={() => setVariant(option.key)}
+                className={`rounded-md px-2.5 py-1 text-xs transition-colors ${variant === option.key ? "bg-primary/15 font-semibold text-primary" : "text-muted-foreground hover:bg-muted"}`}
+              >
+                {option.label}
+                <span className="ml-1.5 tabular-nums opacity-70">
+                  {formatRenown(renownTotal(rows, option.key).total)}
+                </span>
+              </button>
+            ))}
+        </div>
+      )}
+      {!bosses.length && !groups.length ? (
+        <p className="px-4 py-6 text-sm text-muted-foreground">
+          No bosses configured.
+        </p>
+      ) : (
+        <div className="grid gap-px bg-border sm:grid-cols-2">
+          {groups.map((group) => {
+            const groupTotal = group.members.reduce((sum, m) => {
+              const award = awardFor(rows, m.encounter_name, variant);
+              return award?.has_points ? sum + award.points : sum;
+            }, 0);
             return (
-              <section key={set.set_key}>
-                <h3 className="font-semibold">{set.set_name || set.set_key}</h3>
-                <p className="mb-3 font-mono text-xs text-muted-foreground">
-                  {set.set_key}
-                </p>
-                {members.length ? (
-                  <ol className="space-y-2">
-                    {members.map((member) => (
+              <section
+                key={group.key || "loose"}
+                className={`bg-card px-4 py-3 ${group.span ? "sm:col-span-2" : ""}`}
+              >
+                <h3 className="mb-2 flex items-baseline gap-2 text-sm">
+                  <span className="font-semibold">{group.name}</span>
+                  {group.key && (
+                    <code className="text-[11px] text-muted-foreground">
+                      {group.key}
+                    </code>
+                  )}
+                  <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+                    {group.members.length} · {formatRenown(groupTotal)} Renown
+                  </span>
+                </h3>
+                {group.members.length ? (
+                  <ol
+                    className={`grid gap-x-6 ${group.wide ? "sm:grid-cols-2" : ""}`}
+                  >
+                    {group.members.map((member) => (
                       <li
                         key={member.encounter_name}
-                        className="flex items-center gap-3 rounded-md bg-muted/40 px-3 py-2 text-sm"
+                        className="flex items-baseline gap-2 border-b border-dashed border-border/50 py-1 text-sm"
                       >
-                        <span className="font-mono text-xs text-muted-foreground">
-                          {member.position}
+                        {showPositions && (
+                          <span className="w-4 shrink-0 text-right font-mono text-[11px] text-muted-foreground">
+                            {member.position || ""}
+                          </span>
+                        )}
+                        <span className="min-w-0 flex-1 truncate">
+                          {member.encounter_name}
                         </span>
-                        {member.encounter_name}
+                        <span className="shrink-0 tabular-nums">
+                          <Award
+                            row={awardFor(rows, member.encounter_name, variant)}
+                          />
+                        </span>
                       </li>
                     ))}
                   </ol>
@@ -477,8 +533,12 @@ export function InstanceConfiguration({
               </section>
             );
           })}
-        </CardContent>
-      </Card>
+        </div>
+      )}
+      <p className="border-t px-4 py-2 text-[11px] text-muted-foreground">
+        — no award configured · 0 explicit zero award
+        {variant && " · variant awards include default fallback"}
+      </p>
     </section>
   );
 }

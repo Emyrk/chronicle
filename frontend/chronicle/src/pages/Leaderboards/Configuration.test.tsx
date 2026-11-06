@@ -59,9 +59,10 @@ describe("configuration inspector", () => {
         ]}
       />,
     );
-    expect(html).toContain("0 points");
-    expect(html).toContain("No award configured");
-    expect(html).toContain("No variants configured");
+    expect(html).toMatch(/text-muted-foreground">0<\/span>/);
+    expect(html).toContain("No award configured (not zero)");
+    expect(html).toContain("no variants");
+    expect(html).toContain("1 unset");
     expect(html).not.toContain("No bosses configured.");
     expect(
       renderToStaticMarkup(<InstanceConfiguration name="Empty" rows={[]} />),
@@ -97,9 +98,10 @@ describe("configuration inspector", () => {
         ]}
       />,
     );
-    expect(html).toContain("10 points");
-    expect(html).toContain("0 points");
+    expect(html).toContain("Heroic · 25p");
+    expect(html).toContain("Renown total");
     expect(html).toContain("Full clear");
+    expect(html).toContain("Not in an encounter set");
     expect(html.indexOf("First boss")).toBeLessThan(
       html.indexOf("Second boss"),
     );
