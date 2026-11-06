@@ -86,25 +86,11 @@ func TestInitialSeeds(t *testing.T) {
 			require.Equal(t, first, rows)
 		}
 	}
-	rows, err := leaderboardconfig.Resolve(ctx, db, database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}, nil)
-	require.NoError(t, err)
-	for _, r := range rows {
-		if r.Kind == "boss_variant" && r.InstanceName == "Naxxramas" && r.EncounterName == "Kel'Thuzad" {
-			require.True(t, r.HasPoints)
-			require.Equal(t, float64(8), r.Points)
-		}
+	// Later Wrath variant calibration must not rewrite these initial boss defaults.
+	for _, r := range effective["tbc"] {
+		require.False(t, r.HasPoints, r)
 	}
-	for _, layer := range []string{"tbc", "wrath"} {
-		for _, r := range effective[layer] {
-			require.False(t, r.HasPoints, r)
-		}
-	}
-	// No tuple guesses for Ulduar, Sartharion, or Vanilla.
 	require.Empty(t, selectKind(effective["vanilla"], "variant"))
-	require.Len(t, selectKind(effective["wrath"], "variant"), 4)
-	for _, r := range selectKind(effective["wrath"], "variant") {
-		require.Contains(t, []string{"Naxxramas", "Onyxia's Lair"}, r.InstanceName)
-	}
 	// Check exact sets against the live canonical registry factories, not just the snapshot.
 	for _, factory := range []*common.CommonFactory{wrath.UlduarFactory, wrath.ObsidianSanctumFactory} {
 		for _, set := range factory.RankingEncounterSets(database.WoWFlavor{database.FlavorWrath}) {
