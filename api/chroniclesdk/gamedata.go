@@ -9,6 +9,7 @@ type WDBUploadResponse struct {
 	NewItems    int           `json:"new_items"`
 	Changed     int           `json:"changed"`
 	Unchanged   int           `json:"unchanged"`
+	Tmog        int           `json:"tmog"`
 	Diffs       []WDBItemDiff `json:"diffs"`
 }
 
@@ -16,7 +17,7 @@ type WDBUploadResponse struct {
 type WDBItemDiff struct {
 	Entry  int32          `json:"entry"`
 	Name   string         `json:"name"`
-	Status string         `json:"status"` // "new", "changed", "unchanged"
+	Status string         `json:"status"` // "new", "changed", "unchanged", "tmog"
 	Fields []WDBFieldDiff `json:"fields,omitempty"`
 }
 

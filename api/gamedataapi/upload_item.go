@@ -48,17 +48,52 @@ func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, m
 		existingByEntry[row.Entry] = row
 	}
 
+	var transmogCandidatesByName map[string][]database.WorldItemTemplate
+	flavor, err := h.flavorForDataset(ctx, datasetID)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: "Failed to fetch dataset flavor",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	if flavor.Has(database.FlavorNightmareOfUrsol) {
+		transmogCandidatesByName, err = h.transmogCandidates(ctx, datasetID, items)
+		if err != nil {
+			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+				Message: "Failed to fetch transmog candidates",
+				Detail:  err.Error(),
+			})
+			return
+		}
+	}
+
 	// Compare each WDB item against DB.
 	var (
 		diffs     []chroniclesdk.WDBItemDiff
 		newCount  int
 		changed   int
 		unchanged int
+		tmogCount int
 	)
-	var toUpsert []database.WorldItemTemplate
+	var (
+		toUpsert []database.WorldItemTemplate
+		toDelete []int32
+	)
 
 	for _, item := range items {
 		wdbRow := wdb.ItemToWorldTemplate(item)
+		if isSyntheticTransmog(wdbRow, transmogCandidatesByName[item.Name]) {
+			tmogCount++
+			toDelete = append(toDelete, wdbRow.Entry)
+			diffs = append(diffs, chroniclesdk.WDBItemDiff{
+				Entry:  wdbRow.Entry,
+				Name:   item.Name,
+				Status: "tmog",
+			})
+			continue
+		}
+
 		dbRow, exists := existingByEntry[int32(item.Entry)]
 
 		if !exists {
@@ -120,12 +155,12 @@ func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, m
 	// Perform upserts and durable publication in one transaction. Applying the
 	// committed generation before derivation ensures a later derivation failure
 	// cannot leave committed item data without invalidation.
-	if (mode == "upsert" || mode == "insert") && len(toUpsert) > 0 {
+	if (mode == "upsert" || mode == "insert") && (len(toUpsert) > 0 || len(toDelete) > 0) {
 		if err := h.mutateDataset(ctx, datasetID, []servicecache.Namespace{servicecache.NamespaceItems}, func(tx database.Store) error {
-			return upsertItems(ctx, tx, datasetID, toUpsert)
+			return applyItemImport(ctx, tx, datasetID, toUpsert, toDelete)
 		}); err != nil {
 			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to upsert items",
+				Message: "Failed to apply item import",
 				Detail:  err.Error(),
 			})
 			return
@@ -150,8 +185,56 @@ func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, m
 		NewItems:    newCount,
 		Changed:     changed,
 		Unchanged:   unchanged,
+		Tmog:        tmogCount,
 		Diffs:       diffs,
 	})
+}
+
+func (h *Handler) transmogCandidates(ctx context.Context, datasetID uuid.UUID, items []wdb.Item) (map[string][]database.WorldItemTemplate, error) {
+	const syntheticEntryFloor = 100000
+
+	candidatesByName := make(map[string][]database.WorldItemTemplate)
+	namesSet := make(map[string]struct{})
+	for _, item := range items {
+		row := wdb.ItemToWorldTemplate(item)
+		if row.Entry < syntheticEntryFloor {
+			candidatesByName[row.Name] = append(candidatesByName[row.Name], row)
+			continue
+		}
+		if row.Name != "" {
+			namesSet[row.Name] = struct{}{}
+		}
+	}
+	if len(namesSet) == 0 {
+		return candidatesByName, nil
+	}
+
+	names := make([]string, 0, len(namesSet))
+	for name := range namesSet {
+		names = append(names, name)
+	}
+	rows, err := h.zed.GetItemTemplatesByNames(ctx, database.GetItemTemplatesByNamesParams{
+		DatasetID: datasetID,
+		Names:     names,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		if row.Entry < syntheticEntryFloor {
+			candidatesByName[row.Name] = append(candidatesByName[row.Name], row)
+		}
+	}
+	return candidatesByName, nil
+}
+
+func isSyntheticTransmog(item database.WorldItemTemplate, candidates []database.WorldItemTemplate) bool {
+	for _, candidate := range candidates {
+		if wdb.IsLikelySyntheticTransmog(item, candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 // wdbUpsertColumns are the columns set from WDB data during upsert.
@@ -246,6 +329,18 @@ func itemRowArgs(datasetID uuid.UUID, r database.WorldItemTemplate) []any {
 		r.ScalingStatDistribution, r.ScalingStatValue,
 		r.ItemLimitCategory, r.HolidayID, r.RandomSuffix,
 	}
+}
+
+func applyItemImport(ctx context.Context, tx database.Store, datasetID uuid.UUID, toUpsert []database.WorldItemTemplate, toDelete []int32) error {
+	if len(toDelete) > 0 {
+		if err := tx.DeleteItemTemplatesByEntries(ctx, database.DeleteItemTemplatesByEntriesParams{
+			DatasetID: datasetID,
+			Entries:   toDelete,
+		}); err != nil {
+			return fmt.Errorf("delete synthetic transmog items: %w", err)
+		}
+	}
+	return upsertItems(ctx, tx, datasetID, toUpsert)
 }
 
 // upsertItems batch-upserts WorldItemTemplate rows using pgx batch.
