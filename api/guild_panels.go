@@ -152,6 +152,21 @@ func (api *API) GuildTopParses(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func guildBestRunsWindow(rawSinceDays string) (int64, int32) {
+	var sinceDays int64
+	if rawSinceDays != "" {
+		sinceDays, _ = strconv.ParseInt(rawSinceDays, 10, 64)
+	}
+
+	lookbackDays := int32(sinceDays)
+	if lookbackDays <= 0 {
+		lookbackDays = int32(parsepolicy.DefaultLookbackDays)
+	}
+
+	// Keep the run filter and parse cohort on the same normalized window.
+	return int64(lookbackDays), lookbackDays
+}
+
 // GuildBestRuns returns the guild's best full clear of each instance within
 // the window. Used by the guild page "Best Performance" panel.
 //
@@ -160,15 +175,7 @@ func (api *API) GuildBestRuns(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	guild := httpmw.Guild(ctx)
 
-	var sinceDays int64
-	if v := r.URL.Query().Get("since_days"); v != "" {
-		sinceDays, _ = strconv.ParseInt(v, 10, 64)
-	}
-
-	lookbackDays := int32(sinceDays)
-	if lookbackDays <= 0 {
-		lookbackDays = int32(parsepolicy.DefaultLookbackDays)
-	}
+	sinceDays, lookbackDays := guildBestRunsWindow(r.URL.Query().Get("since_days"))
 
 	rows, err := api.Opts.Zed.GuildBestRuns(ctx, database.GuildBestRunsParams{
 		TenantID:       servicetenant.TenantIDFromContext(ctx),
