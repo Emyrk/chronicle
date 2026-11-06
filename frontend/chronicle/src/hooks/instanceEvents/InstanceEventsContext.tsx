@@ -1,15 +1,9 @@
 import { createContext, useContext, useCallback, useRef, useState, useMemo, type ReactNode } from "react";
 import { decompressGzip, isGzipped, readVarint, readVarint64, type PayloadHeader } from "@/api/protodecode/decode";
+import { getStreamEndpoint, type EventStreamLocation } from "./eventStreamLocation";
 import type { StreamType, CachedStream, InstanceEventsContextValue } from "./types";
 
 export const InstanceEventsContext = createContext<InstanceEventsContextValue | null>(null);
-
-/**
- * Get the API endpoint for a stream type
- */
-function getStreamEndpoint(instanceId: string, type: StreamType): string {
-  return `/api/v1/raidlogs/instances/${instanceId}/events/${type}`;
-}
 
 /**
  * Parse all encounter headers from stream data without fully decoding messages.
@@ -53,12 +47,12 @@ function parseAllHeaders(data: Uint8Array): PayloadHeader[] {
   return headers;
 }
 
-interface InstanceEventsProviderProps {
+interface InstanceEventsProviderProps extends EventStreamLocation {
   instanceId: string;
   children: ReactNode;
 }
 
-export function InstanceEventsProvider({ instanceId, children }: InstanceEventsProviderProps) {
+export function InstanceEventsProvider({ instanceId, storage, baseUrl, path, children }: InstanceEventsProviderProps) {
   // Cache of fetched streams - persists for lifetime of provider
   const cacheRef = useRef<Map<StreamType, CachedStream>>(new Map());
   
@@ -98,9 +92,9 @@ export function InstanceEventsProvider({ instanceId, children }: InstanceEventsP
       setFetchingTypes(prev => new Set(prev).add(type));
       
       try {
-        const response = await fetch(getStreamEndpoint(instanceId, type));
+        const response = await fetch(getStreamEndpoint(instanceId, type, { storage, baseUrl, path }));
         
-        if (response.status === 404) {
+        if (response.status === 404 && storage !== "r2") {
           // Stream type doesn't exist for this instance (e.g., older instances
           // parsed before unit_classification was added). Treat as empty.
           const emptyStream: CachedStream = { data: new Uint8Array(0), headers: [] };
@@ -145,7 +139,7 @@ export function InstanceEventsProvider({ instanceId, children }: InstanceEventsP
 
     fetchingRef.current.set(type, fetchPromise);
     return fetchPromise;
-  }, [instanceId]);
+  }, [instanceId, storage, baseUrl, path]);
 
   // Memoize context value to prevent re-renders from causing useEffect re-runs
   const value = useMemo<InstanceEventsContextValue>(() => ({

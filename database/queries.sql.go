@@ -5429,7 +5429,13 @@ func (q *sqlQuerier) DeleteEventObjectDeletionOutbox(ctx context.Context, id uui
 
 const getParsedBytesByOwner = `-- name: GetParsedBytesByOwner :one
 SELECT
-  COALESCE(SUM(lie.size_bytes), 0)::bigint AS parsed_bytes,
+  COALESCE(SUM(
+    CASE
+      WHEN lie.storage = 'database' AND lie.size_bytes = 0
+        THEN octet_length(lie.events)
+      ELSE lie.size_bytes
+    END
+  ), 0)::bigint AS parsed_bytes,
   COUNT(DISTINCT lie.instance_id)::bigint AS parsed_instance_count
 FROM log_instance_events lie
 JOIN log_instances li ON li.id = lie.instance_id
@@ -6575,7 +6581,13 @@ FROM
     ) instances_output ON true
 
     LEFT JOIN LATERAL (
-    SELECT COALESCE(SUM(lie.size_bytes), 0)::bigint AS parsed_bytes
+    SELECT COALESCE(SUM(
+      CASE
+        WHEN lie.storage = 'database' AND lie.size_bytes = 0
+          THEN octet_length(lie.events)
+        ELSE lie.size_bytes
+      END
+    ), 0)::bigint AS parsed_bytes
     FROM log_instance_events lie
     JOIN log_instances li ON li.id = lie.instance_id
     WHERE li.log_group_id = wow_log_groups.id
@@ -42139,7 +42151,13 @@ func (q *sqlQuerier) TelemetryGetLogFileCount(ctx context.Context) (int64, error
 }
 
 const telemetryGetTotalParsedBytes = `-- name: TelemetryGetTotalParsedBytes :one
-SELECT COALESCE(SUM(size_bytes), 0)::bigint FROM log_instance_events
+SELECT COALESCE(SUM(
+    CASE
+      WHEN storage = 'database' AND size_bytes = 0 THEN octet_length(events)
+      ELSE size_bytes
+    END
+  ), 0)::bigint
+FROM log_instance_events
 `
 
 func (q *sqlQuerier) TelemetryGetTotalParsedBytes(ctx context.Context) (int64, error) {

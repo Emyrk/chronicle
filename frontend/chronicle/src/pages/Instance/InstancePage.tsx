@@ -130,6 +130,9 @@ export interface Instance {
   tenantName?: string;
   tenantSlug?: string;
   tenantIncludeInAll?: boolean;
+  eventStorage?: string;
+  eventStreamBaseUrl?: string;
+  eventStreamPath?: string;
 }
 
 /**
@@ -444,7 +447,12 @@ export function InstancePage() {
     <SyncModeProvider>
       <LiveSessionProvider>
       <TimeRangeProvider totalDurationMs={totalEncounterDurationMs}>
-        <InstanceEventsProvider instanceId={instance.id}>
+        <InstanceEventsProvider
+          instanceId={instance.id}
+          storage={instance.eventStorage}
+          baseUrl={instance.eventStreamBaseUrl}
+          path={instance.eventStreamPath}
+        >
           <PlayerCosmeticsProvider instanceId={instance.id}>
           <PlayerSpecializationProvider
             datasetId={instance.datasetId}

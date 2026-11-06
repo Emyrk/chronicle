@@ -528,7 +528,13 @@ FROM
     ) instances_output ON true
 
     LEFT JOIN LATERAL (
-    SELECT COALESCE(SUM(lie.size_bytes), 0)::bigint AS parsed_bytes
+    SELECT COALESCE(SUM(
+      CASE
+        WHEN lie.storage = 'database' AND lie.size_bytes = 0
+          THEN octet_length(lie.events)
+        ELSE lie.size_bytes
+      END
+    ), 0)::bigint AS parsed_bytes
     FROM log_instance_events lie
     JOIN log_instances li ON li.id = lie.instance_id
     WHERE li.log_group_id = wow_log_groups.id

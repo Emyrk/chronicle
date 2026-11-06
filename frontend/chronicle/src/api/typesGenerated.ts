@@ -7031,6 +7031,9 @@ export interface WoWInstance {
     readonly owner_ads_free: boolean;
     readonly log_group_id: string;
     readonly unlisted: boolean;
+    readonly event_storage: string;
+    readonly event_stream_base_url?: string;
+    readonly event_stream_path?: string;
     readonly name: string;
     readonly slug: string;
     readonly start_time?: string;
@@ -7115,7 +7118,7 @@ export interface WoWLogGroup {
     readonly processing_output?: Record<string, string>;
     /**
      * ParsedBytes is the total size, in bytes, of the parsed combat-log event
-     * streams (log_instance_events.events) for this log group. It does not
+     * streams (log_instance_events.size_bytes) for this log group. It does not
      * count against the owner's raw storage allowance.
      */
     readonly parsed_bytes: number;

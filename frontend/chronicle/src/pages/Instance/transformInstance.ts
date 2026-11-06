@@ -58,6 +58,9 @@ export function transformToInstance(
     tenant_name?: string;
     tenant_slug?: string;
     tenant_include_in_all?: boolean;
+    event_storage?: string;
+    event_stream_base_url?: string;
+    event_stream_path?: string;
   },
 ): Instance {
   const players = normalizeRecord(apiInstance.players);
@@ -154,5 +157,8 @@ export function transformToInstance(
     tenantName: apiInstance.tenant_name,
     tenantSlug: apiInstance.tenant_slug,
     tenantIncludeInAll: apiInstance.tenant_include_in_all,
+    eventStorage: apiInstance.event_storage,
+    eventStreamBaseUrl: apiInstance.event_stream_base_url,
+    eventStreamPath: apiInstance.event_stream_path,
   };
 }

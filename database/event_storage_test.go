@@ -65,12 +65,19 @@ func TestDatabaseEventRowsRemainReadable(t *testing.T) {
 	t.Parallel()
 	_, store, realmID := setupParsesTest(t)
 	ctx := testutil.Context(t, testutil.WaitShort)
-	_, _, instanceID := insertEventStorageFixture(t, store, realmID, database.LogEventStorageDatabase)
+	ownerID, _, instanceID := insertEventStorageFixture(t, store, realmID, database.LogEventStorageDatabase)
 	payload := []byte("legacy-inline-bytes")
 	require.NoError(t, store.InsertLogInstanceEvents(ctx, []database.InsertLogInstanceEventsParams{{
 		InstanceID: instanceID, Type: database.LogInstanceEventTypeDamage,
-		Storage: database.LogEventStorageDatabase, Events: payload, SizeBytes: int64(len(payload)),
+		Storage: database.LogEventStorageDatabase, Events: payload,
+		// Existing rows receive the migration's zero sentinel instead of a costly
+		// startup backfill. Accounting must continue to measure their BYTEA value.
+		SizeBytes: 0,
 	}}).Close())
+
+	usage, err := store.GetParsedBytesByOwner(ctx, ownerID)
+	require.NoError(t, err)
+	require.Equal(t, int64(len(payload)), usage.ParsedBytes)
 
 	event, err := store.InstanceEvent(ctx, database.InstanceEventParams{InstanceID: instanceID, Type: "damage"})
 	require.NoError(t, err)

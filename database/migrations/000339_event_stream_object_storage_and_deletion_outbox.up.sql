@@ -10,15 +10,13 @@ ALTER TABLE log_instances
 ALTER TABLE log_instance_events
   ADD COLUMN storage log_event_storage NOT NULL DEFAULT 'database',
   ADD COLUMN object_key TEXT,
-  ADD COLUMN size_bytes BIGINT;
-
-UPDATE log_instance_events
-SET size_bytes = octet_length(events)
-WHERE size_bytes IS NULL;
+  -- Zero marks a legacy inline row whose size has not been backfilled. Keeping
+  -- this metadata-only default avoids reading and rewriting the large TOAST
+  -- table during the startup migration. New writers always store the real size.
+  ADD COLUMN size_bytes BIGINT NOT NULL DEFAULT 0;
 
 ALTER TABLE log_instance_events
   ALTER COLUMN events DROP NOT NULL,
-  ALTER COLUMN size_bytes SET NOT NULL,
   ADD CONSTRAINT log_instance_events_storage_payload_check CHECK (
     (storage = 'database' AND events IS NOT NULL AND object_key IS NULL)
     OR

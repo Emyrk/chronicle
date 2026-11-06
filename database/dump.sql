@@ -2149,7 +2149,7 @@ CREATE TABLE log_instance_events (
     events bytea,
     storage log_event_storage DEFAULT 'database'::log_event_storage NOT NULL,
     object_key text,
-    size_bytes bigint NOT NULL,
+    size_bytes bigint DEFAULT 0 NOT NULL,
     CONSTRAINT log_instance_events_size_bytes_check CHECK ((size_bytes >= 0)),
     CONSTRAINT log_instance_events_storage_payload_check CHECK ((((storage = 'database'::log_event_storage) AND (events IS NOT NULL) AND (object_key IS NULL)) OR ((storage = 'r2'::log_event_storage) AND (events IS NULL) AND (object_key IS NOT NULL))))
 );

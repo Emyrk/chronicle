@@ -1461,6 +1461,9 @@ function transformToInstance(
     units: Record<string, InstanceUnit>;
     names_by_entry?: Record<number, string>;
     summons_by_owner?: Record<string, readonly string[]>;
+    event_storage?: string;
+    event_stream_base_url?: string;
+    event_stream_path?: string;
   },
 ): Instance {
   const players = apiInstance.players;
@@ -1504,6 +1507,9 @@ function transformToInstance(
     players,
     units,
     capabilities: [],
+    eventStorage: apiInstance.event_storage,
+    eventStreamBaseUrl: apiInstance.event_stream_base_url,
+    eventStreamPath: apiInstance.event_stream_path,
   };
 }
 
@@ -2219,7 +2225,12 @@ function LayoutLabSettingsContent() {
             </Button>
           </div>
         ) : (
-          <InstanceEventsProvider instanceId={instance.id}>
+          <InstanceEventsProvider
+            instanceId={instance.id}
+            storage={instance.eventStorage}
+            baseUrl={instance.eventStreamBaseUrl}
+            path={instance.eventStreamPath}
+          >
             <PanelTimingProvider panelCount={items.filter((item) => item.kind !== "group").length}>
             <ChartDataRegistryProvider>
               <LayoutEditorCanvas
