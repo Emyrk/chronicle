@@ -1,38 +1,42 @@
 # Leaderboard v2 phased implementation plan
 
-This replaces the old 11-PR roadmap. Roadmap numbers below are sequence labels,
-not fabricated GitHub PR numbers. Each PR must be independently reviewable,
-buildable, and deployable. Use red-green-refactor within each implementation PR.
+The current delivery is exactly four PRs: specification PR 1622, schema-only PR
+1624, subset/override resolution, and reviewed initial seeds. Later rating work
+is a backlog, not additional PRs in this delivery. Each implementation PR must
+be independently reviewable, buildable, and deployable, using
+red-green-refactor.
 
-## Cross-phase rules and gates
+## Cross-phase rules
 
 - Treat [`spec.tex`](spec.tex) and [`behavior.md`](behavior.md) as the contract.
-- Prior ratings are removed. Merged **PR 1625** preserves parse scoring. Retired
-  rating tables are neither seed inputs nor a rollback target.
-- Shared global configuration does not share tenant data. Peak/Mastery
-  additionally require realm (season) isolation. Exact season identity,
-  lifecycle, and temporal boundaries are unresolved; do not invent a season
-  table or time windows.
-- Park the existing observation-schema draft. Observation, benchmark, subject,
-  and queue-key implementation is blocked until the season contract is settled.
-  Renown scope and layered provenance/invalidation require separate decisions.
-- No career or cross-instance portfolio schema, seeds, or read aggregation now.
-- Keep parser mechanics in Go. The database is the intended source of
-  leaderboard configuration. Existing UI behavior stays unchanged until a later
+- Prior ratings are removed. Merged PR 1625 preserves parse scoring. Retired
+  rating tables are not deployment seed inputs or a rollback target.
+- Shared global configuration does not share tenant data. Boss/clear benchmark
+  cohorts remain tenant scoped. Realm qualifies player and guild subject
+  identity.
+- Realm/season isolation is only a deferred career/cross-instance portfolio
+  concern. Do not block observation, benchmark, subject, or queue implementation
+  on season policy or add season columns to those current contracts.
+- No career/portfolio schema, seeds, or read aggregation now.
+- DPS and HPS may produce separate observations today. Mutually exclusive damage
+  versus healing eligibility per player/boss is future observation policy.
+- Layered provenance/invalidation needs review; Renown temporal scope remains a
+  separate open decision, not a gate on boss/clear implementation.
+- Keep parser mechanics in Go. The database is the intended leaderboard
+  configuration source. Existing UI behavior stays unchanged until later
   cutover.
-- All database queries go through sqlc. Rating derivation remains set-based SQL
-  in bounded PostgreSQL functions; Go orchestrates rather than calculates
-  ratings.
-- Migrations do not scan or rewrite historical production data during startup.
-  Review production-scale impact before any data migration.
-- Test before implementation; measure representative SQL with `EXPLAIN (ANALYZE,
-  BUFFERS, WAL)` safely before serving cutover.
+- Use sqlc queries and bounded set-based PostgreSQL rating derivation. Go
+  orchestrates rather than calculates ratings.
+- Migrations must not scan or rewrite historical production data during startup.
+  Review production-scale impact before data migrations. Test first and measure
+  representative SQL with `EXPLAIN (ANALYZE, BUFFERS, WAL)` safely before
+  cutover.
 
 ## Roadmap 1: amend specification (existing PR 1622)
 
-Replace superseded exact-full-set ruleset, career, tenant-only cohort, and
-legacy rollback assumptions consistently across all four documents. Clearly
-separate approved configuration work from gated physical rating work.
+Replace superseded exact-full-set ruleset, career, and legacy rollback
+assumptions consistently. Preserve tenant-scoped boss/clear cohorts and separate
+the four configuration PRs from later rating work.
 
 Validation: compile LaTeX, validate Markdown and repository links. No runtime
 behavior changes.
@@ -60,8 +64,8 @@ Green:
   including explicit zero, without seeding speculative values.
 
 Refactor: review names and constraints without adding runtime readers, service
-initialization, seed data, portfolios, or parked observation keys. Validate
-migrations and generated bindings. This PR is structural and deployable alone.
+initialization, seed data, portfolios, or observation keys. Validate migrations
+and generated bindings. This PR is structural and deployable alone.
 
 ## Roadmap 3: subset and override resolution (next PR, number unassigned)
 
@@ -94,111 +98,85 @@ not seed portfolios.
 Refactor: review the seed diff separately from schema and resolver mechanics.
 Run migrations, resolver tests, and seed parity tests without changing UI reads.
 
-## Roadmap 5: policy reads and runtime contract review (later)
+## Later backlog, outside the current four PRs
 
-Red: test effective catalog reads, exclusions, exact boss selections, and shared
-configuration with isolated tenant data.
+### Policy reads and provenance
 
-Green: introduce policy read APIs only after catalog, resolver, and seed review.
-Keep existing UI behavior unchanged. Before proceeding to rating storage,
-settle:
+Test effective catalog reads, exclusions, exact boss selection, and shared
+configuration with isolated tenant data. Add policy read APIs after
+configuration review without switching existing UI behavior. Review layered
+provenance encoding and invalidation before implementing result provenance. Do
+not assume one ruleset ID/revision describes composed layers.
 
-1. Realm/season identity, lifecycle, temporal boundaries, and source assignment.
-2. Renown scope independently of Peak/Mastery if needed.
-3. Layered provenance representation and configuration invalidation/repair.
-4. Empty/missing scope behavior and tests for isolation across realms and
-   seasons.
+### Observation, fact, and dirty schema
 
-Refactor: update the specification first with approved answers. No implicit
-all-seasons interpretation of all-time. These are design gates, not
-implementation details to fill in while writing migrations.
+The observation draft is not parked or blocked by season policy. Review it
+against the restored tenant-scoped cohort contract. Player boss benchmarks use
+tenant, boss, class, specialization, sub-specialization, and metric. Guild boss
+and clear benchmarks use tenant and boss or clear. Subject keys add the
+realm-qualified player or guild; dirty keys mirror the corresponding refreshed
+value.
 
-## Roadmap 6: observation, fact, and dirty schema (parked draft)
+Test canonical representatives, tenant ownership, source deletion, subject
+identity, DPS/HPS separation, deduplication, dirty coalescing, and revision-safe
+acknowledgement. Do not implement damage/healing mutual exclusion now. Renown
+scope needs a separate decision, without blocking boss/clear work. Upload-driven
+dirty runs use a sliding 30-minute debounce; repair and downstream work are due
+immediately.
 
-**Blocked by Roadmap 5.** Replace the old tenant-only keys with reviewed scoped
-identities before reviving the draft. Test canonical representatives, source
-ownership/deletion, realm and season isolation, deduplication, dirty coalescing,
-and revision-safe acknowledgement. Renown fact/result/work keys require its own
-scope agreement. Do not implement career portfolios.
+### Projection refresh and player ratings
 
-Once approved, add schema and enqueue queries only. Upload-driven dirty runs use
-a sliding 30-minute debounce; repair and downstream work are due immediately.
-Refactor by proving each queue key exactly mirrors the scoped value refreshed.
+Test canonical projection, retraction, deletion, old/new key union,
+specialization and guild movement, idempotence, and racing revisions. Implement
+bounded run refresh with set-based replacement and downstream fan-out. Test
+maximum benchmarks, record removal, empty cohorts, Mastery bands, zero
+benchmarks, subject deletion, and concurrency. Prove tenant isolation without
+treating realm as a benchmark partition. Measure plans and demonstrate a player
+vertical slice before guild work.
 
-## Roadmap 7: dirty-run projection refresh
+### Guild ratings and Renown
 
-After the schema gate, test visible canonical projection, retraction, deletion,
-old/new key union, specialization and guild movement, idempotence, and racing
-revisions. Implement bounded `leaderboard_refresh_dirty_runs` with set-based
-replacement and downstream fan-out. Inspect plans and remove per-run SQL loops.
-
-## Roadmap 8: player boss benchmarks and subjects
-
-Test maximum benchmarks, unchanged benchmarks, record removal, empty cohorts,
-Mastery bands, zero benchmarks, subject deletion, scoped fan-out, and
-concurrency. Implement bounded benchmark and subject refresh functions with SQL
-windows. Measure representative plans. This is the first end-to-end rating slice
-before guild work; prove no cross-realm or cross-season benchmark contamination.
-
-## Roadmap 9: guild boss and clear ratings
-
-Repeat duration normalization, deletion, Mastery, isolation, and concurrency
-cases for boss kills and clears. Lower positive duration is better. Implement
-bounded guild benchmark and subject refresh functions. Share SQL only where it
-is clearer than explicit parallel functions.
-
-## Roadmap 10: Renown
-
-After its scope gate, test metric deduplication, boss defaults, explicit zero
-and variant overrides, exclusion, award changes, source retraction, empty facts,
-and player/guild isolation. Implement bounded refresh and reviewed
-layered-change fan-out. Verify Renown never depends on metric value, Mastery, or
+Test positive duration normalization, Mastery, deletion, tenant isolation, and
+concurrency for guild boss and clear results. Implement bounded refresh
+functions. After its separate scope decision, test Renown metric deduplication,
+boss defaults, explicit zero and variant overrides, exclusions, award changes,
+and retraction. Verify that Renown does not depend on metric value, Mastery, or
 set membership.
 
-## Roadmap 11: read service and cursor queries
+### Serving and scheduling
 
-Test boss Peak derivation, current benchmarks, Mastery, exact named encounter
-sets, arbitrary eligible boss groups, missing-evidence zero fill, exclusion from
-denominators, deterministic cursors, and scope/filter fingerprint rejection.
-Implement sqlc reads and `serviceratings` orchestration. No
-career/cross-instance portfolio aggregation. Apply realm/season scope and search
-before aggregation and ordering. Return approximately 50 rows, not exact ranks
-or offset pages. Measure before adding aggregate projections. Layered provenance
-behavior must follow the reviewed contract, not an assumed single ruleset
-revision.
+Test current-benchmark Peak, Mastery, exact named encounter sets, arbitrary
+eligible boss groups, missing-evidence zero fill, exclusions from denominators,
+and deterministic cursor fingerprints. Apply realm/search filters before
+aggregation and ordering, without changing tenant-scoped benchmark definitions.
+No career/cross-instance portfolio aggregation. Measure before adding
+projections.
 
-## Roadmap 12: scheduling and historical bootstrap
+Test bounded draining, retries, debounce, tenant fairness, and resumable
+historical discovery with a fixed source cutoff. Persist progress; observe queue
+depth, oldest work, throughput, WAL, and failures. Tune from measured
+transaction time and locks.
 
-Test bounded draining, retry, debounce, tenant fairness, and resumable discovery
-within the agreed scopes. Implement thin scheduling and a resumable scan with a
-fixed source cutoff. Normal mutations continue through dirty-run work. Persist
-progress and observe queue depth, oldest work, throughput, WAL, and failures.
-Tune from measured transaction time and lock waits.
+### UI cutover and operational verification
 
-## Roadmap 13: UI cutover and operational verification
-
-Add API/frontend tests for supported selections and cursor behavior, plus known
-player/guild history fixtures. Switch leaderboard/profile reads only after
-complete historical discovery and drain, hand-calculated parity, measured plans,
-and observability. Expose freshness without blocking on dirty work.
-
-Review and exercise a disable/revert strategy for the new feature. Do not
-promise rollback to removed legacy ratings. Parse scoring must remain intact.
-Remove only temporary adapters or obsolete references still present; do not plan
-a second removal of already removed ratings.
+Add API/frontend and known-history parity fixtures. Cut over only after complete
+historical discovery and drain, hand-calculated parity, measured plans, and
+observability. Expose freshness without blocking on dirty work. Review and
+exercise a disable/revert strategy, not rollback to removed ratings. Preserve
+parse scoring.
 
 ## Mapping from the old 11-PR roadmap
 
-| Old phase | Revised roadmap |
+| Old phase | Revised placement |
 | --- | --- |
-| 1 specification | 1, amend PR 1622 |
-| 2 foundation | 2 PR 1624; 3 resolver; 4 seeds; 5 reads/gates |
-| 3 observations/dirty schema | 6, parked until season contract |
-| 4 projection refresh | 7 |
-| 5 player ratings | 8 |
-| 6 guild ratings | 9 |
-| 7 Renown | 10, separately scope-gated |
-| 8 serving | 11, no portfolios |
-| 9 scheduler/bootstrap | 12 |
-| 10 UI cutover | 13 |
+| 1 specification | Current PR 1, amend PR 1622 |
+| 2 foundation/rulesets | Current PRs 2 (#1624), 3 (resolver), 4 (seeds) |
+| 3 observations/dirty schema | Later backlog, no season gate |
+| 4 projection refresh | Later backlog |
+| 5 player ratings | Later backlog, tenant-scoped cohorts |
+| 6 guild ratings | Later backlog, tenant-scoped cohorts |
+| 7 Renown | Later backlog, separate scope decision |
+| 8 serving | Later backlog, no portfolios |
+| 9 scheduler/bootstrap | Later backlog |
+| 10 UI cutover | Later backlog |
 | 11 legacy removal | Superseded; PR 1625 preserves parse scoring |
