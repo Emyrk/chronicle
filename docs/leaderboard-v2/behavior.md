@@ -1,24 +1,30 @@
 # Leaderboard v2 behavior
 
 This document states externally observable and testable behavior. Formula
-definitions and design gates live in [`spec.tex`](spec.tex). Physical rating DDL
-is deferred until the season and provenance contracts are settled.
+definitions and configuration decisions live in [`spec.tex`](spec.tex).
 
-## Delivery boundary and unresolved gates
+## Delivery boundary and deferred policy
 
-Peak and Mastery are realm (season) based. Exact season identity, lifecycle, and
-temporal boundaries are unresolved. Do not equate all-time within a chosen
-realm/season with all-time across seasons. Do not invent a season table or time
-windows. Observation, benchmark, subject, and queue-key implementation is
-blocked until this contract is settled; park the existing observation-schema
-draft. Renown temporal scope is a separate open decision. Layered configuration
-provenance and invalidation also require design review before result schema.
+The current delivery is four PRs: specification PR 1622, schema-only PR 1624,
+subset/override resolution and tests, and reviewed initial seeds with parity
+tests. Later observation, benchmark, subject, and queue implementation is not
+blocked by season policy. Boss/clear cohorts remain tenant scoped.
 
-Career and cross-instance portfolios are deferred, including schema, seeds, and
-read aggregation. Foundation work changes no existing UI behavior. Parser
-mechanics remain in Go; the database is the intended leaderboard configuration
-source. Prior ratings are removed; merged PR 1625 preserves parse scoring. No
-legacy-rating rollback is promised.
+Realm/season isolation is only a deferred career/cross-instance portfolio
+concern. Its identity, lifecycle, and temporal boundaries remain unresolved. Do
+not add season columns or windows to current boss/clear cohorts.
+Career/portfolio schema, seeds, and read aggregation remain deferred. Layered
+configuration provenance and invalidation still require design review; Renown
+temporal scope is separately open.
+
+DPS and HPS may produce separate observations today. Mutually exclusive damage
+versus healing eligibility per player/boss is future observation policy, not a
+current constraint.
+
+Foundation work changes no existing UI behavior. Parser mechanics remain in Go;
+the database is the intended leaderboard configuration source. Prior ratings are
+removed; merged PR 1625 preserves parse scoring. No legacy-rating rollback is
+promised.
 
 ## Source eligibility
 
@@ -55,12 +61,12 @@ observations are unique by canonical run, clear, and guild.
 
 ## Cohorts and benchmarks
 
-Within one tenant, realm, and chosen season, a player boss cohort is identified
-by boss, class, specialization, sub-specialization, and metric. A guild boss
-cohort selects one boss; a guild clear cohort selects one clear. Realm isolation
-is mandatory, not merely a read filter. The physical season identity is
-unresolved. Benchmarks, subjects, and dirty keys must share that eventual scope;
-tenant-only cohort keys must not be implemented.
+A player boss cohort is identified by tenant, boss, class, specialization,
+sub-specialization, and metric. A guild boss cohort is identified by tenant and
+boss; a guild clear cohort by tenant and clear. Realm qualifies player and guild
+subject identity but does not partition the benchmark cohort. Current boss/clear
+results use all eligible observations, without a season dimension. Benchmark and
+subject dirty keys mirror these identities.
 
 The current player benchmark is the maximum raw DPS or HPS in the complete
 cohort. The current guild benchmark is the minimum positive duration in the
@@ -114,9 +120,8 @@ When no observations remain for a dirty subject, its result row is deleted.
 ## Boss-group aggregation
 
 A later request may select one exact boss, a named instance encounter set, or an
-arbitrary group of eligible bosses within the chosen realm/season. Aggregate
-Peak and Mastery are calculated at read time from boss subject results and
-current benchmarks.
+arbitrary group of eligible bosses within the tenant. Aggregate Peak and Mastery
+are calculated at read time from boss subject results and current benchmarks.
 
 Missing evidence for an included boss contributes zero. Bosses have equal
 weight. Excluded bosses are removed from the effective selection and
@@ -130,12 +135,12 @@ derived Peak descending, then realm ID and subject ID ascending. Mastery and
 Renown boards use the same tie breakers after their descending score. Aggregate
 boss-group boards order by the derived aggregate followed by realm and subject.
 The cursor contains the ordered score, realm ID, subject ID, and a fingerprint
-of the selected exact bosses and encounter set, realm/season scope, cohort
-dimensions, metric, and filters.
+of the selected exact bosses and encounter set, tenant scope, cohort dimensions,
+metric, and filters.
 
-Realm/season scope and search filters apply before aggregation and ordering.
-There is no ordinal rank to preserve outside the filtered result. A cursor used
-with a different fingerprint is rejected. A ruleset revision or ordinary result
+Realm and search filters apply before aggregation and ordering. There is no
+ordinal rank to preserve outside the filtered result. A cursor used with a
+different fingerprint is rejected. A ruleset revision or ordinary result
 mutation does not by itself invalidate a cursor; normal keyset pagination
 semantics apply while eventual updates converge. Pages are expected to contain
 at most about 50 rows. The product does not require exact ordinal ranks or
@@ -195,11 +200,12 @@ Choose the provenance representation and layered invalidation/repair contract
 before implementing result schema. Continued reads during rolling repair remain
 the intent, not a reason to ignore current explicit exclusions.
 
-## Dirty work (later pipeline, gated)
+## Dirty work (later pipeline)
 
-These are intended processing behaviors, not approval of physical keys. All
-observation, benchmark, subject, and queue implementation waits for the season
-contract; Renown keys also wait for its scope decision.
+These processing behaviors belong to later implementation, after the four
+configuration PRs. Observation, benchmark, subject, and queue work is not
+blocked by season policy. Renown scope is a separate decision and does not gate
+boss/clear work.
 
 Source mutations upsert a dirty canonical-run key. A dirty-run refresh compares
 the old and new projection and dirties the union of their benchmark, subject,
@@ -230,8 +236,8 @@ repeatedly, but it does not fetch evidence or calculate results.
 
 ## Required acceptance scenarios
 
-After the design gates close, the rating pipeline must cover these database
-integration scenarios in addition to foundation tests:
+The later rating pipeline must cover these database integration scenarios in
+addition to foundation tests:
 
 1. A canonical visible run projects player and guild observations and Renown
    facts.
@@ -270,4 +276,5 @@ integration scenarios in addition to foundation tests:
    deployment dependency on executing or reading old migrations or retired
    tables, and no invented awards or difficulty variants.
 7. Shared configuration never merges tenant data. Later pipeline tests must also
-   prove realm and agreed season isolation for benchmarks, subjects, and queues.
+   prove tenant-scoped benchmarks and realm-qualified subject identities, with
+   matching dirty keys and no season prerequisite.

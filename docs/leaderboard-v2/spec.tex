@@ -32,14 +32,14 @@
 \maketitle
 
 \section{Purpose}
-This document defines the leaderboard model from its source data upward. Configuration foundation work is approved; the physical rating schema is not yet an implementation contract.
+This document defines the leaderboard model from its source data upward. The current delivery is four configuration PRs; later rating work retains tenant-scoped boss and clear cohorts.
 
-\subsection{Design gates and delivery status}
-Peak and Mastery are realm (season) based. Exact season identity, lifecycle, and temporal boundaries remain unresolved. No season table or time windows are prescribed here. Realm isolation is mandatory in addition to tenant ownership. Observation, benchmark, subject-result, and queue-key implementation is blocked until that contract is settled; the existing observation-schema draft is parked, not ready to stack or deploy.
+\subsection{Delivery status and deferred policy}
+The current delivery is four PRs: amend specification PR 1622, schema-only catalog and flavor vocabulary PR 1624, subset/override resolution with tests, and reviewed initial seeds with parity tests. Policy reads and UI cutover come later. Prior ratings have been removed; merged PR 1625 preserves parse scoring. There is no promised legacy-rating rollback. Existing UI behavior stays unchanged during foundation work.
 
-Renown's temporal scope is a separate unresolved decision. Layered configuration also needs a reviewed provenance and invalidation contract; a single ruleset ID/revision cannot be assumed to describe the effective configuration. Career and cross-instance portfolios, including schema, seeds, and read aggregation, are deferred.
+Boss and clear cohorts are tenant scoped. Realm remains part of player and guild identity, not a mandatory benchmark-cohort partition. Realm/season isolation is only a concern for deferred career/cross-instance portfolios, whose identity, lifecycle, and temporal boundaries remain unresolved. Do not add season columns or block observation, benchmark, subject, or queue implementation on that future contract.
 
-Amend specification PR 1622 first. PR 1624 contains only structural configuration catalog and flavor vocabulary. Follow with separate resolver/tests and reviewed seed/parity PRs, then policy reads and UI cutover later. Prior ratings have been removed; merged PR 1625 preserves parse scoring. There is no promised legacy-rating rollback. Existing UI behavior stays unchanged during foundation work.
+Layered configuration still needs a reviewed provenance and invalidation contract; a single ruleset ID/revision cannot be assumed to describe composed configuration. DPS and HPS may produce separate observations today. Mutually exclusive damage-versus-healing eligibility per player/boss is a future observation policy, not a current constraint.
 
 \section{Core observations}
 The model has player observations and guild observations.
@@ -168,12 +168,12 @@ Guild clear & $H_{GC}=(C,m)$ & $\{O\in\mathcal{O}_{GC}\mid O.C=C\land O.m=m\}$ \
 \end{tabularx}
 \end{center}
 
-Here $c$ is player class. Each displayed cohort is evaluated within exactly one tenant, realm, and chosen season. These scope dimensions are implicit in the mathematical notation, not optional filters. The physical identity of a season remains unresolved; tenant-only benchmark cohorts are invalid.
+Here $c$ is player class. Each displayed cohort is evaluated within exactly one tenant. Realm identifies the player or guild subject but does not partition the boss or clear benchmark cohort. The current contract has no season dimension.
 
 \section{Derived rankings}
 
 \subsection{Scope and selected observations}
-Let $W(O)$ denote membership in the chosen realm/season scope. The exact membership rule awaits the season contract; it is not an all-seasons or career predicate. ``All-time'' may only mean all eligible evidence within that chosen realm/season, not evidence across seasons. No rolling or bounded window implementation is specified. Renown uses its separately unresolved scope selector.
+For current boss and clear results, $W(O)=\mathrm{true}$ selects all eligible observations in the tenant-scoped cohort. No season or rolling-window dimension is required. This all-time boss/clear contract does not define career or cross-instance portfolio aggregation. Renown retains its separately unresolved temporal scope selector; that decision does not block boss/clear observation, benchmark, subject, or queue work.
 
 For player $P$ and player cohort $H_P$:
 \[
@@ -337,7 +337,7 @@ Instance Peak and Mastery are equal-weight averages over every eligible boss:
 \]
 
 \section{Deferred portfolios}
-Career and cross-instance portfolios are out of current scope. Do not create portfolio schema, seed memberships or weights, or implement portfolio read aggregation. No cross-season Peak or Mastery is promised.
+Career and cross-instance portfolios are out of current scope. Do not create portfolio schema, seed memberships or weights, or implement portfolio read aggregation. Realm/season isolation and temporal boundaries for those deferred aggregates remain unresolved; they do not restrict current boss/clear cohorts.
 
 \section{Logical invariants}
 \begin{enumerate}
@@ -364,7 +364,7 @@ Career and cross-instance portfolios are out of current scope. Do not create por
   \item Renown is independent of metric value, Peak, Mastery, and clear completion.
   \item A run belongs to exactly one non-null rating tenant. Its observations, Renown facts, cohorts, and results are projected only within that tenant.
   \item Matching global configuration layers compose by required-flavor subset and strict-superset precedence. Conflicting incomparable matches are rejected; rating data is never shared or copied between tenants.
-  \item Peak and Mastery require realm/season isolation. Physical keys await the season contract; Renown scope and layered provenance remain open gates.
+  \item Boss/clear benchmarks are tenant scoped; subjects additionally carry realm identity. Season policy belongs only to deferred career/portfolio work. DPS and HPS remain separate permitted observations.
 \end{enumerate}
 
 \section{Database schema}
@@ -380,9 +380,9 @@ The owning \field{tenant\_\allowbreak id} must be non-null. If the source server
 
 Every proposed rating-data relation is tenant scoped and every rating-data primary key contains \field{tenant\_\allowbreak id}. Global flavor sets and rulesets are shared configuration, not rating data. Source rows retain their existing global identities. All source-to-projection operations require exact equality between the requested tenant and the run's derived owning tenant. Tenant relations use forced RLS with exact equality to \field{app.\allowbreak tenant\_\allowbreak id}; no fallback tenant is substituted when the setting is absent. The administrative bypass may perform maintenance across tenants, but it may not change a row's derived ownership or copy evidence between tenants.
 
-Realm identity remains \field{wow\_\allowbreak server\_\allowbreak realms.\allowbreak id}; guild identity is the pair $(\field{realm\_\allowbreak id},\field{guild\_\allowbreak id})$ even though \field{guilds.\allowbreak id} is globally unique. Physical rating DDL is intentionally withheld until the design gates close.
+Realm identity remains \field{wow\_\allowbreak server\_\allowbreak realms.\allowbreak id}; guild identity is the pair $(\field{realm\_\allowbreak id},\field{guild\_\allowbreak id})$ even though \field{guilds.\allowbreak id} is globally unique. Detailed rating DDL belongs to later implementation PRs, not the current four-PR configuration delivery.
 
-The prior tenant-only physical draft is parked. Stable-key replacement remains the intended maintenance approach, but observations, benchmarks, result keys, indexes, and dirty keys must be designed together after realm/season identity and boundaries are agreed. This document does not prescribe missing season columns or a season table. Layered provenance representation and its repair triggers must also be decided before result schema is implemented.
+Stable-key replacement remains the intended maintenance approach. Boss/clear observation, benchmark, subject, and dirty keys retain the tenant-scoped cohort contract, with realm in subject identity. They do not require season columns or a season gate. Layered provenance representation and its repair triggers still need review before result provenance is implemented.
 
 Supporting constraints make tuple and tenant identity enforceable without redesigning source facts:
 \begin{verbatim}
@@ -435,22 +435,22 @@ Boss, instance, set, and member overrides support explicit exclusion. An absent 
 
 Renown has boss defaults and instance-variant overrides. Explicit zero is a real award override, distinct from absence. Awards are independent of encounter-set membership. Vanilla awards are not automatically zeroed for TBC or Wrath. Seed values must be explicit reviewed data from historical calibration. Known values in migration 313 may be an authoring reference, but deployment must not execute or read old migrations or retired rating tables. Do not invent new awards or difficulty variants.
 
-\subsection{Deferred physical schema and provenance}
+\subsection{Later rating schema and provenance}
 PR 1624 supplies structural catalog and vocabulary only. A following PR implements subset resolution and overrides with tests; a separate following PR supplies reviewed initial seeds and parity fixtures. Physical catalog naming and constraints are reviewed in those PRs, without coupling them to observation keys.
 
-Do not implement the parked observation, fact, benchmark, subject, or queue schema until the realm/season contract is settled. Tenant ownership alone is insufficient: benchmark queries, subject identities, fan-out, and queue keys must all preserve realm isolation and the agreed season scope. Renown's scope needs a separate decision before its physical result and work keys are approved.
+Later observation, benchmark, subject, and queue implementation is not blocked by realm/season policy. Player boss cohorts use tenant, boss, class, specialization, sub-specialization, and metric; guild boss and clear cohorts use tenant and the respective boss or clear. Subject keys add the realm-qualified player or guild. Dirty benchmark and subject keys mirror those identities. Renown scope remains a separate decision, not a gate on boss/clear work.
 
 Results should retain computation time and effective-configuration provenance, but layered resolution does not imply one ruleset ID/revision. How contributing layers and revisions are represented, and how changes identify affected scopes for repair, is unresolved. Rolling maintenance and continued reads are intended; this does not settle provenance encoding or allow excluded bosses into current selections.
 
-\subsection{Deferred processing contract}
-The following processing behavior is retained as the intended later pipeline, not authorization to implement the parked schema. Every named function and queue requires keys and fan-out consistent with the eventual season and provenance contracts. Dirty keys must exactly mirror the scoped values they refresh. Source deletion must remain processable without a foreign key from dirty-run work to the deleted source.
+\subsection{Later processing contract}
+The following processing behavior describes the later rating pipeline, outside the current four configuration PRs. Dirty keys must exactly mirror the tenant-scoped values they refresh, including realm-qualified subject identity where applicable. Source deletion must remain processable without a foreign key from dirty-run work to the deleted source. No season contract is required to implement this pipeline.
 
 Each dirty marker carries a monotonically increasing revision, a dirtied timestamp, and a due timestamp. Upload-driven run dirt uses a sliding 30-minute debounce. Repair, downstream, and configuration dirt is due immediately. Configuration changes require bounded, persisted expansion to affected scopes; the exact layered invalidation design is an open gate.
 
 \subsubsection{Database-resident processing}
 Rating maintenance does not fetch observations, facts, benchmarks, subjects, or result inputs into application code. PostgreSQL functions perform all claiming, derivation, diffing, aggregation, fan-out, replacement, deletion, and acknowledgement with set-based SQL. Application code or an external scheduler only invokes a bounded function and receives optional row counts for observability.
 
-The intended function boundary is one function per work stage. These historical signatures illustrate bounded tenant-local dispatch, not settled scope keys or authorization to omit realm/season isolation:
+The intended function boundary is one function per work stage, with bounded tenant-local dispatch:
 \begin{verbatim}
 leaderboard_refresh_dirty_runs(tenant_id, batch_size)
 leaderboard_refresh_player_boss_benchmarks(tenant_id, batch_size)
@@ -502,10 +502,10 @@ Direct stable-key replacement has the following consequences:
   \item A configuration revision should not create a second serving row. Existing rows remain valid and readable until maintenance overwrites them. Serving reads do not compare revisions.
   \item Dirty state is operational work state, not history. Source changes enqueue affected run, benchmark, subject, and Renown keys. Effective-flavor and ruleset changes enqueue the affected tenant.
   \item Dirty markers coalesce repeated invalidations. A PostgreSQL refresh function acknowledges a marker only after its projection, fan-out, and result writes succeed and only if no newer revision arrived.
-  \item Peak and Mastery are confined to the chosen realm/season. Season identity, lifecycle, and boundaries must be agreed before physical key implementation; no cross-season all-time result is defined.
+  \item Boss/clear results use all eligible observations in tenant-scoped cohorts. Realm/season policy remains deferred with career/cross-instance portfolios and does not block these physical keys.
   \item The replacement projections and results require a fresh derivation from preserved source relations before frontend cutover. Prior ratings are already removed. Cutover needs a separately reviewed disable/revert plan, not a promise to restore legacy rating reads.
 \end{enumerate}
 
-The application service owns scheduling, query endpoints, and observability. PostgreSQL owns rating derivation and dirty maintenance. Season scope, layered provenance, and invalidation are design gates, not implementation details. Once resolved, exact SQL function bodies, batch tuning, and query plans are validated during development.
+The application service owns scheduling, query endpoints, and observability. PostgreSQL owns rating derivation and dirty maintenance. Layered provenance and invalidation require design review; season policy is only a deferred career/portfolio concern. Separately, exact SQL function bodies, batch tuning, and query plans are validated during development.
 
 \end{document}
