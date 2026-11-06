@@ -5,7 +5,7 @@
 -- and assess locks/traffic. DROP TABLE takes ACCESS EXCLUSIVE locks and may block
 -- service startup while waiting for long-running queries or transactions.
 -- Preview: SELECT relname, n_live_tup FROM pg_stat_user_tables
---          WHERE relname ~ '(rating|ranking|parse_score|time_parse)'
+--          WHERE relname ~ '(rating|ranking|parse_score)'
 --            AND relname NOT IN ('encounter_dps_rankings', 'ranking_runs', 'rankings_instance_summaries');
 BEGIN;
 
@@ -63,14 +63,10 @@ DROP TABLE IF EXISTS rating_stage_player_observations;
 DROP TABLE IF EXISTS rating_stage_player_renown;
 DROP TABLE IF EXISTS tenant_rating_copy_progress;
 DROP TABLE IF EXISTS tenant_rating_read_states;
-DROP TABLE IF EXISTS time_parse_boss_kill_memberships;
-DROP TABLE IF EXISTS time_parse_boss_scores;
-DROP TABLE IF EXISTS time_parse_clear_time_memberships;
 DROP TABLE IF EXISTS rating_dirty_peak_cohorts;
 DROP TABLE IF EXISTS rating_group_policies;
 DROP TABLE IF EXISTS rating_rebuild_checkpoints;
 DROP TABLE IF EXISTS rating_renown_templates;
-DROP TABLE IF EXISTS time_parse_scores;
 DROP TABLE IF EXISTS rating_realm_groups;
 DROP TABLE IF EXISTS rating_score_generations;
 

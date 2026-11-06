@@ -50,10 +50,11 @@ type Service struct {
 	registry  *registry.Registry
 	dataset   *servicedataset.Service
 
-	SummaryDispatchWorker   *WorkerRefreshRankingsSummaries
-	SummaryTenantWorker     *WorkerRefreshRankingsSummaryTenant
-	RankingRunRefreshWorker *WorkerRefreshRankingRuns
-	RankingRunRepairWorker  *WorkerRepairRankingRuns
+	SummaryDispatchWorker        *WorkerRefreshRankingsSummaries
+	SummaryTenantWorker          *WorkerRefreshRankingsSummaryTenant
+	ComputeTimeParseScoresWorker *WorkerComputeTimeParseScores
+	RankingRunRefreshWorker      *WorkerRefreshRankingRuns
+	RankingRunRepairWorker       *WorkerRepairRankingRuns
 }
 
 func New(broker *services.Services) *Service { return &Service{broker: broker} }
@@ -79,6 +80,7 @@ func (s *Service) Start(_ context.Context) error {
 	logger := services.NamedLogger(s.logger, s.Name())
 	s.SummaryDispatchWorker = &WorkerRefreshRankingsSummaries{Store: store, Logger: logger}
 	s.SummaryTenantWorker = &WorkerRefreshRankingsSummaryTenant{Store: store, Logger: logger}
+	s.ComputeTimeParseScoresWorker = &WorkerComputeTimeParseScores{Store: store, Logger: logger}
 	s.RankingRunRefreshWorker = &WorkerRefreshRankingRuns{Store: store, Logger: logger}
 	s.RankingRunRepairWorker = &WorkerRepairRankingRuns{Store: store, Logger: logger}
 	s.router = chi.NewRouter()

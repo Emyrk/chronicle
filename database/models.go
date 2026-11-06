@@ -2461,6 +2461,91 @@ type Tenant struct {
 	DisabledAds         []string           `db:"disabled_ads" json:"disabled_ads"`
 }
 
+type TimeParseBossKillMembership struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion  int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	LogGroupID     uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	DurationMs     int64              `db:"duration_ms" json:"duration_ms"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+}
+
+type TimeParseBossScore struct {
+	TimeParseScoreID   uuid.UUID     `db:"time_parse_score_id" json:"time_parse_score_id"`
+	EncounterID        uuid.UUID     `db:"encounter_id" json:"encounter_id"`
+	EncounterName      string        `db:"encounter_name" json:"encounter_name"`
+	DurationMs         int64         `db:"duration_ms" json:"duration_ms"`
+	ServerPreciseScore float64       `db:"server_precise_score" json:"server_precise_score"`
+	ServerDisplayScore int16         `db:"server_display_score" json:"server_display_score"`
+	ServerRank         int32         `db:"server_rank" json:"server_rank"`
+	ServerSampleSize   int32         `db:"server_sample_size" json:"server_sample_size"`
+	ServerStatus       string        `db:"server_status" json:"server_status"`
+	RealmPreciseScore  float64       `db:"realm_precise_score" json:"realm_precise_score"`
+	RealmDisplayScore  int16         `db:"realm_display_score" json:"realm_display_score"`
+	RealmRank          int32         `db:"realm_rank" json:"realm_rank"`
+	RealmSampleSize    int32         `db:"realm_sample_size" json:"realm_sample_size"`
+	RealmStatus        string        `db:"realm_status" json:"realm_status"`
+	GuildPreciseScore  pgtype.Float8 `db:"guild_precise_score" json:"guild_precise_score"`
+	GuildDisplayScore  pgtype.Int2   `db:"guild_display_score" json:"guild_display_score"`
+	GuildRank          pgtype.Int4   `db:"guild_rank" json:"guild_rank"`
+	GuildSampleSize    pgtype.Int4   `db:"guild_sample_size" json:"guild_sample_size"`
+	GuildStatus        pgtype.Text   `db:"guild_status" json:"guild_status"`
+}
+
+type TimeParseClearTimeMembership struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion  int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	LogGroupID     uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	DurationMs     int64              `db:"duration_ms" json:"duration_ms"`
+	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
+}
+
+type TimeParseScore struct {
+	ID                      uuid.UUID          `db:"id" json:"id"`
+	TenantID                uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceID              uuid.UUID          `db:"instance_id" json:"instance_id"`
+	RunID                   uuid.UUID          `db:"run_id" json:"run_id"`
+	LogGroupID              uuid.NullUUID      `db:"log_group_id" json:"log_group_id"`
+	RealmID                 uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID                 uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	ClearDurationMs         pgtype.Int8        `db:"clear_duration_ms" json:"clear_duration_ms"`
+	ClearServerPreciseScore pgtype.Float8      `db:"clear_server_precise_score" json:"clear_server_precise_score"`
+	ClearServerDisplayScore pgtype.Int2        `db:"clear_server_display_score" json:"clear_server_display_score"`
+	ClearServerRank         pgtype.Int4        `db:"clear_server_rank" json:"clear_server_rank"`
+	ClearServerSampleSize   pgtype.Int4        `db:"clear_server_sample_size" json:"clear_server_sample_size"`
+	ClearServerStatus       pgtype.Text        `db:"clear_server_status" json:"clear_server_status"`
+	ClearRealmPreciseScore  pgtype.Float8      `db:"clear_realm_precise_score" json:"clear_realm_precise_score"`
+	ClearRealmDisplayScore  pgtype.Int2        `db:"clear_realm_display_score" json:"clear_realm_display_score"`
+	ClearRealmRank          pgtype.Int4        `db:"clear_realm_rank" json:"clear_realm_rank"`
+	ClearRealmSampleSize    pgtype.Int4        `db:"clear_realm_sample_size" json:"clear_realm_sample_size"`
+	ClearRealmStatus        pgtype.Text        `db:"clear_realm_status" json:"clear_realm_status"`
+	ClearGuildPreciseScore  pgtype.Float8      `db:"clear_guild_precise_score" json:"clear_guild_precise_score"`
+	ClearGuildDisplayScore  pgtype.Int2        `db:"clear_guild_display_score" json:"clear_guild_display_score"`
+	ClearGuildRank          pgtype.Int4        `db:"clear_guild_rank" json:"clear_guild_rank"`
+	ClearGuildSampleSize    pgtype.Int4        `db:"clear_guild_sample_size" json:"clear_guild_sample_size"`
+	ClearGuildStatus        pgtype.Text        `db:"clear_guild_status" json:"clear_guild_status"`
+	Cutoff                  pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart             pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	LookbackDays            int16              `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion           int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion            int16              `db:"query_version" json:"query_version"`
+	ComputedAt              pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+}
+
 type User struct {
 	ID                     uuid.UUID          `db:"id" json:"id"`
 	Username               string             `db:"username" json:"username"`

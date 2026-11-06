@@ -268,6 +268,7 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.SummaryDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.SummaryDispatchWorker)
 	riverqueue.AddWorker(q, rank.SummaryTenantWorker)
+	riverqueue.AddWorker(q, rank.ComputeTimeParseScoresWorker)
 	riverqueue.AddWorker(q, rank.RankingRunRefreshWorker)
 	riverqueue.AddWorker(q, rank.RankingRunRepairWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{MaxWorkers: int(s.rankingWorkers)})
