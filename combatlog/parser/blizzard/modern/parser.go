@@ -808,12 +808,23 @@ func parseGearTuple(raw string) []int {
 }
 
 func stripRealm(name string) string {
+	// Forever encodes character-name components and realm components with the
+	// same separator. Regional realms end in a region code, while beta realms
+	// use a trailing separator, for example First-Last-Roleplay-US and
+	// Character-ClassicBetaPvE-.
 	name = strings.TrimSuffix(name, "-")
-	characterName, _, found := strings.Cut(name, "-")
-	if found {
-		return characterName
+	parts := strings.Split(name, "-")
+	realmParts := 1
+	if len(parts) > 0 {
+		switch parts[len(parts)-1] {
+		case "US", "EU", "KR", "TW", "CN":
+			realmParts = 2
+		}
 	}
-	return name
+	if len(parts) <= realmParts {
+		return name
+	}
+	return strings.Join(parts[:len(parts)-realmParts], " ")
 }
 
 var _ interface {
