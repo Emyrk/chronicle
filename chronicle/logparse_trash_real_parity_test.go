@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/chronicle/parseresult"
 	"github.com/Emyrk/chronicle/database"
@@ -48,7 +49,12 @@ func TestLegacyAndDataOnlyParsePersistSameTrashRankings(t *testing.T) {
 	require.NoError(t, err)
 	var decoded parseresult.Result
 	require.NoError(t, json.Unmarshal(encoded, &decoded))
-	require.Equal(t, projected[0].TrashRankings, decoded.TrashRankings, "trash DTO changed in transport")
+	// JSON loses time.Location identity, not the instant. Compare exact instants
+	// and all other DTO fields rather than accepting a time-zone-dependent diff.
+	if diff := cmp.Diff(projected[0].TrashRankings, decoded.TrashRankings,
+		cmp.Comparer(func(a, b time.Time) bool { return a.Equal(b) })); diff != "" {
+		t.Fatalf("trash DTO changed in transport (-parsed +decoded):\n%s", diff)
+	}
 	require.True(t, decoded.BossRankings.HasRules, "fixture must have ranking rules")
 	require.True(t, decoded.BossRankings.HasDPS, "fixture must have DPS tracking")
 	require.True(t, decoded.BossRankings.LevelEligible, "fixture must pass level eligibility")
