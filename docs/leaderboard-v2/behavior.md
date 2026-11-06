@@ -220,41 +220,57 @@ represents all matched layers. Benchmark and award values are current read
 inputs, not frozen subject payload or causes for unrelated raw-statistic/count
 rewrites.
 
-## Dirty projection and result scopes
+## Direct evidence writes, D1 repair, and D2 summaries
 
-Source mutations coalesce canonical projection work. Projection refresh retains
-old keys, derives new evidence, retracts stale observations and kill facts, and
-dirties the union of old and new affected benchmark, subject, and count scopes.
-This includes deletions, invalidation, unlisting, canonical replacement, and
-specialization/guild/subject movement. Deletion work must survive its source
-row. Future finalized-season retention is unapproved and cannot suppress
-retraction.
+The data flow is source data -> canonical evidence -> summaries. Normal
+ingestion and actions directly write canonical observations and independent kill
+facts, enqueuing D2 for affected old/new scopes atomically with those evidence
+writes. D1 is not a mandatory upload path, and no mandatory 30-minute D1
+debounce delays every upload.
 
-Result-scope work refreshes the affected benchmark, raw sufficient statistics,
-or kill counts. A benchmark-only change does not fan out to all subjects. An
-award-only change does not dirty counts. Evidence or projection-semantic changes
-still refresh the directly affected scopes. Eligibility changes that alter
-projected evidence require corresponding repair, unlike mere value changes.
+D1 is rare, coarse canonical-run repair for historical data, corrections, and
+source deletion. It may be less efficient than the normal path. A source
+deletion action enqueues D1 and leaves evidence intact. The reconciler
+reconstructs canonical evidence from authoritative remaining sources, using an
+empty projection when the source is gone or ineligible. It captures old evidence
+keys and enqueues D2 for the old/new scope union before replacing or removing
+the projection, all in one transaction. Stale evidence removal and summary
+repair work cannot commit independently. Pending deletion repair is not a
+finalized-season retention rule.
 
-Markers carry a monotonically increasing revision, dirtied time, and due time.
-Upload-driven projection work uses the existing sliding 30-minute debounce;
-repair and downstream scope work are due immediately. Later workers claim
-bounded due pages and acknowledge only the complete key and revision processed.
-Newer revisions survive racing refreshes, and failed work remains retryable. The
-next PR supplies schema and tests for this contract, not workers.
+D2 is normal, frequent work for exact shared benchmark, subject raw-statistic,
+and subject/boss/variant kill-count scopes. It consumes canonical evidence. A
+benchmark-only change does not fan out subject work; an award-only change does
+not dirty counts. Evidence changes refresh directly affected old/new scopes even
+when the benchmark stays unchanged.
+
+D1 and D2 jobs coalesce and use revision-safe acknowledgement. Newer revisions
+survive racing refreshes; failures remain retryable. Due-work metadata supports
+bounded scheduling, but this contract adds no fixed delay requirement. Optional
+repair pacing and worker scheduling are later implementation work.
+
+There are no integrity triggers. Local database constraints are structural only.
+Tenant/source agreement, canonical choice, visibility, and cross-relation
+identity correctness are enforced by writers and reconcilers. Source deletion
+neither cascades into evidence nor is blocked by an evidence FK. Evidence and D1
+work survive deletion so the old keys remain available to enqueue D2. The
+schema-only PR adds no workers or action wiring.
 
 ## Required acceptance scenarios
 
-Schema tests must cover identities, canonical uniqueness, tenant ownership,
+Schema tests must cover structural identities, uniqueness, tenant dimensions,
 realm-qualified subjects, separate difficulty and raid size, valid finite raw
 values and positive durations, metric-free kill uniqueness, summary constraints,
 and dirty-scope uniqueness/revisions/due indexes. New physical table names
-belong to the schema implementation, not this behavior document.
+belong to the schema implementation, not this behavior document. Verify the
+absence of integrity triggers and source FKs that cascade evidence deletion or
+block source deletion. Writer/reconciler correctness tests belong to their later
+PRs.
 
 Later projection, algorithm, and read tests must prove:
 
-1. Duplicate uploads add no evidence; replacement or deletion retracts old
-   facts.
+1. Duplicate uploads add no evidence; direct writes enqueue D2 atomically with
+   canonical evidence changes.
 2. Moving evidence dirties old and new scopes, including metric-free count
    scopes.
 3. Raw player means and guild reciprocal means reproduce normalized band
@@ -267,8 +283,10 @@ Later projection, algorithm, and read tests must prove:
 7. Independent canonical kills count once, with no DPS/HPS double credit.
 8. Award-only changes update Renown reads without count rebuilds or frozen
    points.
-9. Source invalidation/deletion retracts evidence regardless of age; no season
-   retention exception applies.
+9. Source deletion enqueues D1 while leaving evidence intact. D1 enqueues D2
+   using old/new keys before atomically removing stale evidence, regardless of
+   age. Direct actions and repairs enforce canonical/source/tenant correctness
+   without triggers; invalidation cannot leave unrepairable stale summaries.
 10. Racing dirty revisions cannot be lost; failed work remains retryable.
 11. No runtime refresh, backfill, serving, or UI cutover is introduced by the
     schema-only PR.

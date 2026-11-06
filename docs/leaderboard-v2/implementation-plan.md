@@ -39,12 +39,20 @@ wiring, or UI cutover belong in this PR.
 - Independent metric-free canonical kill facts prevent DPS/HPS double credit.
   Renown summaries count kills per subject and exact boss plus instance variant.
   Current points are count times current effective award, not frozen points.
-- Source deletion, invalidation, and replacement retract evidence and dirty the
-  union of old/new affected scopes. Age never exempts source evidence from
-  repair.
-- Dirty projection work precedes result-scope work. Both coalesce by logical
-  scope and retain revision-safe acknowledgement metadata. Keep sliding
-  30-minute upload debounce and immediate repair/downstream work.
+- Source data -> canonical evidence -> summaries. Normal ingestion/actions write
+  evidence and enqueue D2 for old/new affected scopes atomically; D1 is not a
+  mandatory upload path.
+- D1 is rare coarse canonical-run repair for historical data, corrections, and
+  deletion; less efficient repair is acceptable. Source deletion enqueues D1 and
+  leaves evidence intact. D1 reconstructs authoritative evidence, enqueues D2
+  for the old/new scope union before replacing/removing evidence, and commits
+  both changes atomically.
+- D2 is normal frequent exact-scope benchmark, raw-statistic, and kill-count
+  work. D1 and D2 coalesce with revision-safe acknowledgement. No mandatory
+  per-upload 30-minute D1 debounce or new fixed scheduling delay is specified.
+- No integrity triggers. Local constraints are structural only; writers and
+  reconcilers enforce tenant/source/canonical correctness. No source cascades
+  into evidence or evidence FKs that block source deletion.
 - Benchmark-only changes do not fan out dirty subject statistics. Award-only
   changes do not rebuild counts. Evidence/eligibility/projection changes still
   repair directly affected scopes.
@@ -53,12 +61,15 @@ wiring, or UI cutover belong in this PR.
 
 ### Red: schema and constraint tests
 
-Test canonical uniqueness, exact tenant ownership, realm-qualified subjects,
+Test structural uniqueness, tenant dimensions, realm-qualified subjects,
 difficulty and raid-size separation, metric dimension, finite nonnegative player
 values, positive durations, count/statistic validity, and independent kill-fact
 uniqueness. Verify dirty-scope uniqueness, revision/due metadata, and deletion
-work that survives source removal. Inspect indexes for canonical replacement,
-subject/cohort access, kill-count aggregation, and bounded due-work claims.
+work and evidence that survive source removal. Verify no integrity triggers or
+source-deletion cascades/blocking evidence FKs. Cross-relation tenant/source and
+canonical correctness will be tested with writers/reconcilers later. Inspect
+indexes for canonical replacement, subject/cohort access, kill-count
+aggregation, and bounded due-work claims.
 
 These are schema tests, not a hidden implementation of workers or serving. Test
 fixtures must not depend on retired rating tables or modify deployed migrations.
@@ -66,11 +77,12 @@ fixtures must not depend on retired rating tables or modify deployed migrations.
 ### Green: schema implementation
 
 Create the required evidence, benchmark, raw-statistic, kill-fact,
-count-summary, and dirty-work structures with tenant ownership constraints and
-appropriate RLS. Use the project's SQL generation workflow. Migrations must not
-scan or rewrite historical production evidence during startup. Review
-production-scale impact before any data migration. No backfill or runtime
-cutover is authorized here.
+count-summary, D1 repair, and D2 exact-scope work structures with local
+structural constraints and appropriate tenant RLS. Do not use integrity triggers
+or source FKs to enforce writer/reconciler responsibilities. Use the project's
+SQL generation workflow. Migrations must not scan or rewrite historical
+production evidence during startup. Review production-scale impact before any
+data migration. No backfill or runtime cutover is authorized here.
 
 ### Refactor and validation
 
@@ -80,18 +92,31 @@ partitioning benchmarks. Confirm no normalized Mastery/band values or frozen
 Renown points are stored. Run migration/constraint tests and generation checks.
 Validate the LaTeX and Markdown contract with the schema diff.
 
-## Later PR: projection and result-scope maintenance
+## Later PR: direct evidence writes, D1 repair, and D2 maintenance
 
-Implement bounded set-based PostgreSQL refresh with Go orchestration. Parser
-mechanics stay in Go. Preserve old/new scopes before replacing canonical
-evidence and retract both observations and independent kill facts. Refresh
-directly changed benchmarks, subject statistics, and kill counts. Do not enqueue
-a whole cohort of subjects merely because its benchmark changed.
+Implement canonical evidence writes in normal ingestion/actions with atomic D2
+enqueue for old/new scope unions. Keep parser mechanics in Go. Test writer
+checks for tenant/source agreement, visibility, and canonical identity without
+triggers.
 
-Add numerical equivalence tests for raw player and reciprocal-duration bands,
+Implement rare coarse D1 repair separately. Source deletion must enqueue D1 and
+leave evidence intact, without a cascade or blocking FK. D1 captures old keys,
+reconstructs evidence from authoritative remaining sources, enqueues D2 for the
+old/new union before replacement/removal, and commits both atomically. Test
+empty replacement after deletion/invalidation and failures at transaction
+boundaries. No source correction may lose its summary repair obligation.
+
+Implement frequent exact-scope D2 refresh from evidence for benchmarks, raw
+subject statistics, and kill counts. Never dirty an entire subject cohort merely
+because its benchmark changed. Test coalescing, revision races, retries, and
+normal direct writes that do not enter D1 or wait for a mandatory D1 upload
+debounce. Worker scheduling and any optional repair pacing are later decisions,
+not a new schema-imposed delay requirement.
+
+Retain numerical equivalence tests for raw player and reciprocal-duration bands,
 including nonuniform durations, empty bands, ties, zero player benchmark, and
-small-sample ceilings. Test canonical duplicates, source retraction, movement,
-retries, coalescing, revision races, upload debounce, and immediate repair.
+small-sample ceilings. Test canonical duplicates, source retraction, and
+movement.
 
 ## Later PRs: serving, bootstrap, and cutover
 
