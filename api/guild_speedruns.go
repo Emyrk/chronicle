@@ -10,9 +10,6 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/internal/services/servicerankings"
-	"github.com/Emyrk/chronicle/internal/services/servicetenant"
-	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/google/uuid"
 )
 
@@ -110,12 +107,7 @@ func (api *API) GuildSpeedrunHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenantID := servicetenant.TenantIDFromContext(ctx)
 	rows, err := api.Opts.Zed.GuildSpeedrunHistory(ctx, database.GuildSpeedrunHistoryParams{
-		TenantID:                tenantID,
-		LookbackDays:            servicerankings.TimeParseScoreLookbackDays,
-		PolicyVersion:           int16(timeparsepolicy.PolicyVersion),
-		QueryVersion:            timeparsepolicy.QueryVersion,
 		GuildID:                 guild.ID,
 		InstanceName:            instanceName,
 		FilterDifficulty:        filterDifficulty,
@@ -140,13 +132,7 @@ func (api *API) GuildSpeedrunHistory(w http.ResponseWriter, r *http.Request) {
 	for i, row := range rows {
 		instanceIDs[i] = row.InstanceID
 	}
-	kills, err := api.Opts.Zed.GuildSpeedrunBossKills(ctx, database.GuildSpeedrunBossKillsParams{
-		TenantID:      tenantID,
-		LookbackDays:  servicerankings.TimeParseScoreLookbackDays,
-		PolicyVersion: int16(timeparsepolicy.PolicyVersion),
-		QueryVersion:  timeparsepolicy.QueryVersion,
-		InstanceIds:   instanceIDs,
-	})
+	kills, err := api.Opts.Zed.GuildSpeedrunBossKills(ctx, instanceIDs)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -162,7 +148,7 @@ func (api *API) GuildSpeedrunHistory(w http.ResponseWriter, r *http.Request) {
 			EncounterName: kill.EncounterName,
 			KilledAt:      kill.KilledAt.Time,
 			DurationMs:    kill.DurationMs,
-			Parse:         storedParse(kill.Parse),
+			Parse:         storedParse(float64(kill.Parse)),
 		})
 	}
 
@@ -182,7 +168,7 @@ func (api *API) GuildSpeedrunHistory(w http.ResponseWriter, r *http.Request) {
 			DurationMs:           row.DurationMs,
 			BossToBossDurationMs: row.BossToBossDurationMs,
 			TrashDurationMs:      row.TrashDurationMs,
-			ClearParse:           storedParse(row.ClearParse),
+			ClearParse:           storedParse(float64(row.ClearParse)),
 			Bosses:               bosses,
 		}
 	}

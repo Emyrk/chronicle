@@ -373,8 +373,7 @@ LIMIT NULLIF(@result_limit :: bigint, 0);
 -- merged length of all fights minus the merged length of boss fights. Merging
 -- uses window functions (gaps and islands) rather than multiranges, which need
 -- PostgreSQL 14.
--- clear_parse is the stored server-scope clear-time parse for the scoring
--- contract given, or -1 when it is not computed or its sample was too small.
+-- Clear-time parse scoring was retired; clear_parse remains -1 for API compatibility.
 -- JOINs wow_server_realms so RLS tenant filtering cascades.
 WITH deduped AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
@@ -482,38 +481,21 @@ SELECT
     d.boss_to_boss_duration_ms,
     (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = d.instance_id)::bigint AS player_count,
     GREATEST(COALESCE(c.trash_ms, 0), 0)::bigint AS trash_duration_ms,
-    COALESCE(CASE WHEN tps.clear_server_status IN ('ok', 'low_confidence') THEN tps.clear_server_precise_score END, -1)::float8 AS clear_parse
+    -1::float8 AS clear_parse
 FROM deduped d
 LEFT JOIN covered c ON c.instance_id = d.instance_id
-LEFT JOIN time_parse_scores tps
-    ON tps.tenant_id = @tenant_id
-   AND tps.instance_id = d.instance_id
-   AND tps.lookback_days = @lookback_days::smallint
-   AND tps.policy_version = @policy_version::smallint
-   AND tps.query_version = @query_version::smallint
 ORDER BY d.completion_time ASC;
 
 -- name: GuildSpeedrunBossKills :many
 -- Returns the boss kills of the given instances in kill order, for the guild
--- history page's per-boss splits. parse is the stored server-scope kill-time
--- parse for the scoring contract given, or -1 when it is not computed or its
--- sample was too small.
+-- history page's per-boss splits. Kill-time scoring was retired, so parse is -1.
 SELECT
     lie.instance_id,
     lie.name AS encounter_name,
     lie.end_time AS killed_at,
     (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms,
-    COALESCE(CASE WHEN tpbs.server_status IN ('ok', 'low_confidence') THEN tpbs.server_precise_score END, -1)::float8 AS parse
+    -1::float8 AS parse
 FROM log_instance_encounters lie
-LEFT JOIN time_parse_scores tps
-    ON tps.tenant_id = @tenant_id
-   AND tps.instance_id = lie.instance_id
-   AND tps.lookback_days = @lookback_days::smallint
-   AND tps.policy_version = @policy_version::smallint
-   AND tps.query_version = @query_version::smallint
-LEFT JOIN time_parse_boss_scores tpbs
-    ON tpbs.time_parse_score_id = tps.id
-   AND tpbs.encounter_id = lie.id
 WHERE lie.instance_id = ANY(@instance_ids :: uuid[])
   AND lie.boss = true
   AND lie.kill_type IN ('clean', 'partial')

@@ -47,20 +47,6 @@ func supportedSpeedrunRules(rules *rankings.SpeedrunRules) *chroniclesdk.Support
 	return result
 }
 
-func supportedRenownRules(rows []database.ListLatestRenownTemplateBossesRow, flavor database.WoWFlavor) map[string][]chroniclesdk.SupportedInstanceRenownRule {
-	rules := make(map[string][]chroniclesdk.SupportedInstanceRenownRule)
-	for _, row := range rows {
-		if flavor.Has(database.FlavorNightmareOfUrsol) && row.InstanceName == "Molten Core" && row.EncounterName == "Gehennas" {
-			continue
-		}
-		rules[row.InstanceName] = append(rules[row.InstanceName], chroniclesdk.SupportedInstanceRenownRule{
-			EncounterName: row.EncounterName,
-			Points:        row.RenownPoints,
-		})
-	}
-	return rules
-}
-
 func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -69,15 +55,6 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 	flavor := api.resolvedSiteFlavor(ctx)
 	reg := api.Chronicle.RegistryForFlavor(flavor)
 	details := reg.AllInstanceDetails()
-
-	renownRows, err := database.New(api.Opts.Pool).ListLatestRenownTemplateBosses(ctx, flavor.Strings())
-	if err != nil {
-		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
-			Response: chroniclesdk.Response{Message: "Failed to fetch Renown rules", Detail: err.Error()},
-		})
-		return
-	}
-	renownByInstance := supportedRenownRules(renownRows, flavor)
 
 	result := make([]chroniclesdk.SupportedInstance, len(details))
 	for i, d := range details {
@@ -113,15 +90,6 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		var derivedRenownRules map[string][]chroniclesdk.SupportedInstanceRenownRule
-		for _, name := range d.DerivedNames {
-			if rules := renownByInstance[name]; len(rules) > 0 {
-				if derivedRenownRules == nil {
-					derivedRenownRules = make(map[string][]chroniclesdk.SupportedInstanceRenownRule)
-				}
-				derivedRenownRules[name] = rules
-			}
-		}
 		result[i] = chroniclesdk.SupportedInstance{
 			Name:                         d.Name,
 			Comment:                      d.Comment,
@@ -135,8 +103,6 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 			DamageByEncounter:            damageByEncounter,
 			SpeedrunRules:                supportedSpeedrunRules(d.SpeedrunRules),
 			DerivedSpeedrunRules:         derivedSpeedrunRules,
-			RenownRules:                  renownByInstance[d.Name],
-			DerivedRenownRules:           derivedRenownRules,
 			RaidProgressionOrder:         d.RaidProgressionOrder,
 			DerivedRaidProgressionOrders: d.DerivedRaidProgressionOrders,
 			RankedStartAfterRequirement:  d.RankedStartAfterRequirement,

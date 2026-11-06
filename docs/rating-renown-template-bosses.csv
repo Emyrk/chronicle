@@ -1,0 +1,128 @@
+flavor,version,instance_name,encounter_name,renown_points
+nightmare-of-ursol,1,Blackwing Lair,Ezzel Darkbrewer,2
+nightmare-of-ursol,1,Emerald Sanctum,Erennius,2
+nightmare-of-ursol,1,Emerald Sanctum,Solnius,3
+nightmare-of-ursol,1,Emerald Sanctum,Solnius (Hard Mode),5
+nightmare-of-ursol,1,Lower Tower of Karazhan,Brood Queen Araxxna,1
+nightmare-of-ursol,1,Lower Tower of Karazhan,Clawlord Howlfang,1
+nightmare-of-ursol,1,Lower Tower of Karazhan,Grizikil,1
+nightmare-of-ursol,1,Lower Tower of Karazhan,Lord Blackwald II,1
+nightmare-of-ursol,1,Lower Tower of Karazhan,Moroes,2
+nightmare-of-ursol,1,Molten Core,Basalthar & Smoldaris,1
+nightmare-of-ursol,1,Molten Core,Incindis,1
+nightmare-of-ursol,1,Molten Core,Sorcerer-Thane Thaurissan,1
+nightmare-of-ursol,1,Onyxia's Lair,Broodcommander Axelus,1
+nightmare-of-ursol,1,Timbermaw Hold,Archdruid Kronn,3
+nightmare-of-ursol,1,Timbermaw Hold,Chieftain Partath,3
+nightmare-of-ursol,1,Timbermaw Hold,Karrsh the Sentinel,3
+nightmare-of-ursol,1,Timbermaw Hold,Kodiak & Rotgrowl,3
+nightmare-of-ursol,1,Timbermaw Hold,Loktanag the Vile,3
+nightmare-of-ursol,1,Timbermaw Hold,Ormanos the Cracked,3
+nightmare-of-ursol,1,Timbermaw Hold,Peroth'arn,8
+nightmare-of-ursol,1,Timbermaw Hold,Selenaxx Foulheart,3
+nightmare-of-ursol,1,Timbermaw Hold,Trioch the Devourer,3
+nightmare-of-ursol,1,Timbermaw Hold,Ursol,3
+nightmare-of-ursol,1,Upper Tower of Karazhan,Anomalus,6
+nightmare-of-ursol,1,Upper Tower of Karazhan,Echo of Medivh,6
+nightmare-of-ursol,1,Upper Tower of Karazhan,Keeper Gnarlmoon,6
+nightmare-of-ursol,1,Upper Tower of Karazhan,King,6
+nightmare-of-ursol,1,Upper Tower of Karazhan,Kruul,7
+nightmare-of-ursol,1,Upper Tower of Karazhan,Ley-Watcher Incantagos,6
+nightmare-of-ursol,1,Upper Tower of Karazhan,Mephistroth,6
+nightmare-of-ursol,1,Upper Tower of Karazhan,Rupturan the Broken,6
+nightmare-of-ursol,1,Upper Tower of Karazhan,Sanv Tas'dal,6
+vanilla,1,Blackwing Lair,Broodlord Lashlayer,2
+vanilla,1,Blackwing Lair,Chromaggus,2
+vanilla,1,Blackwing Lair,Ebonroc,2
+vanilla,1,Blackwing Lair,Firemaw,2
+vanilla,1,Blackwing Lair,Flamegor,2
+vanilla,1,Blackwing Lair,Nefarian,9
+vanilla,1,Blackwing Lair,Razorgore the Untamed,2
+vanilla,1,Blackwing Lair,Vaelastrasz the Corrupt,2
+vanilla,1,Molten Core,Baron Geddon,1
+vanilla,1,Molten Core,Garr,1
+vanilla,1,Molten Core,Gehennas,1
+vanilla,1,Molten Core,Golemagg the Incinerator,1
+vanilla,1,Molten Core,Lucifron,1
+vanilla,1,Molten Core,Magmadar,1
+vanilla,1,Molten Core,Majordomo Executus,2
+vanilla,1,Molten Core,Ragnaros,5
+vanilla,1,Molten Core,Shazzrah,1
+vanilla,1,Molten Core,Sulfuron Harbinger,1
+vanilla,1,Naxxramas,Anub'Rekhan,3
+vanilla,1,Naxxramas,Four Horsemen,3
+vanilla,1,Naxxramas,Gluth,3
+vanilla,1,Naxxramas,Gothik the Harvester,3
+vanilla,1,Naxxramas,Grand Widow Faerlina,3
+vanilla,1,Naxxramas,Grobbulus,3
+vanilla,1,Naxxramas,Heigan the Unclean,3
+vanilla,1,Naxxramas,Instructor Razuvious,3
+vanilla,1,Naxxramas,Kel'Thuzad,8
+vanilla,1,Naxxramas,Loatheb,3
+vanilla,1,Naxxramas,Maexxna,3
+vanilla,1,Naxxramas,Noth the Plaguebringer,3
+vanilla,1,Naxxramas,Patchwerk,3
+vanilla,1,Naxxramas,Sapphiron,3
+vanilla,1,Naxxramas,Thaddius,3
+vanilla,1,Onyxia's Lair,Onyxia,2
+vanilla,1,Ruins of Ahn'Qiraj,Ayamiss the Hunter,1
+vanilla,1,Ruins of Ahn'Qiraj,Buru the Gorger,1
+vanilla,1,Ruins of Ahn'Qiraj,General Rajaxx,1
+vanilla,1,Ruins of Ahn'Qiraj,Kurinnaxx,1
+vanilla,1,Ruins of Ahn'Qiraj,Moam,1
+vanilla,1,Ruins of Ahn'Qiraj,Ossirian the Unscarred,3
+vanilla,1,Temple of Ahn'Qiraj,Battleguard Sartura,3
+vanilla,1,Temple of Ahn'Qiraj,Bug Family,3
+vanilla,1,Temple of Ahn'Qiraj,C'Thun,11
+vanilla,1,Temple of Ahn'Qiraj,Fankriss the Unyielding,3
+vanilla,1,Temple of Ahn'Qiraj,Ouro,3
+vanilla,1,Temple of Ahn'Qiraj,Princess Huhuran,3
+vanilla,1,Temple of Ahn'Qiraj,The Prophet Skeram,3
+vanilla,1,Temple of Ahn'Qiraj,Twin Emperors,3
+vanilla,1,Temple of Ahn'Qiraj,Viscidus,3
+vanilla,1,Zul'Gurub,Bloodlord Mandokir,1
+vanilla,1,Zul'Gurub,Gahz'ranka,1
+vanilla,1,Zul'Gurub,Gri'lek,1
+vanilla,1,Zul'Gurub,Hakkar,3
+vanilla,1,Zul'Gurub,Hazza'rah,1
+vanilla,1,Zul'Gurub,High Priest Thekal,0
+vanilla,1,Zul'Gurub,High Priest Venoxis,0
+vanilla,1,Zul'Gurub,High Priestess Arlokk,0
+vanilla,1,Zul'Gurub,High Priestess Jeklik,0
+vanilla,1,Zul'Gurub,High Priestess Mar'li,0
+vanilla,1,Zul'Gurub,Jin'do the Hexxer,1
+vanilla,1,Zul'Gurub,Renataki,1
+vanilla,1,Zul'Gurub,Wushoolay,1
+vanillaplus,1,Blackwing Lair,Elementium Decapitator Mk III,2
+vanillaplus,1,Blackwing Lair,Master Elemental Shaper Krixix,2
+vanillaplus,1,Scarlet Monastery,Brigitte Abbendis,1
+vanillaplus,1,Scarlet Monastery,Brother Michael,1
+vanillaplus,1,Scarlet Monastery,Doan,1
+vanillaplus,1,Scarlet Monastery,Fairbanks,1
+vanillaplus,1,Scarlet Monastery,Herod,1
+vanillaplus,1,Scarlet Monastery,Loksey,1
+vanillaplus,1,Scarlet Monastery,Mograine & Whitemane,3
+vanillaplus,1,Scarlet Monastery,Vishas,1
+vanillaplus,2,Blackwing Lair,Elementium Decapitator Mk III,2
+vanillaplus,2,Blackwing Lair,Master Elemental Shaper Krixix,2
+vanillaplus,2,Scarlet Monastery,Brigitte Abbendis,1
+vanillaplus,2,Scarlet Monastery,Brother Michael,1
+vanillaplus,2,Scarlet Monastery,Doan,1
+vanillaplus,2,Scarlet Monastery,Fairbanks,1
+vanillaplus,2,Scarlet Monastery,Herod,1
+vanillaplus,2,Scarlet Monastery,Loksey,1
+vanillaplus,2,Scarlet Monastery,Mograine & Whitemane,3
+vanillaplus,2,Scarlet Monastery,Vishas,1
+vanillaplus,2,Zul'Gurub,The Nameless Hermit,1
+vanillaplus,3,Blackwing Lair,Elementium Decapitator Mk III,2
+vanillaplus,3,Blackwing Lair,Master Elemental Shaper Krixix,2
+vanillaplus,3,Scarlet Monastery,Brigitte Abbendis,1
+vanillaplus,3,Scarlet Monastery,Brother Michael,1
+vanillaplus,3,Scarlet Monastery,Doan,1
+vanillaplus,3,Scarlet Monastery,Fairbanks,1
+vanillaplus,3,Scarlet Monastery,Herod,1
+vanillaplus,3,Scarlet Monastery,Loksey,1
+vanillaplus,3,Scarlet Monastery,Mograine & Whitemane,3
+vanillaplus,3,Scarlet Monastery,Vishas,1
+vanillaplus,3,Zul'Gurub,Azus the Bloodseeker,1
+vanillaplus,3,Zul'Gurub,The Nameless Hermit,1

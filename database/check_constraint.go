@@ -6,6 +6,7 @@ type CheckConstraint string
 
 // CheckConstraint enums.
 const (
+	CheckAccountPurgesStatusCheck                               CheckConstraint = "account_purges_status_check"                                   // account_purges
 	CheckAddonAuthorsNameCheck                                  CheckConstraint = "addon_authors_name_check"                                      // addon_authors
 	CheckCacheGenerationsGenerationCheck                        CheckConstraint = "cache_generations_generation_check"                            // cache_generations
 	CheckCacheGenerationsScopeCheck                             CheckConstraint = "cache_generations_scope_check"                                 // cache_generations
@@ -83,7 +84,6 @@ const (
 	CheckOauthRelayCodesCodeHashLength                          CheckConstraint = "oauth_relay_codes_code_hash_length"                            // oauth_relay_codes
 	CheckOauthServerSecretsIDCheck                              CheckConstraint = "oauth_server_secrets_id_check"                                 // oauth_server_secrets
 	CheckOauthTokenSessionsTokenTypeCheck                       CheckConstraint = "oauth_token_sessions_token_type_check"                         // oauth_token_sessions
-	CheckParseScoreResultsMetricCheck                           CheckConstraint = "parse_score_results_metric_check"                              // parse_score_results
 	CheckProofRequestSubjectsCheck                              CheckConstraint = "proof_request_subjects_check"                                  // proof_request_subjects
 	CheckProofRequestSubjectsGuildIdentity                      CheckConstraint = "proof_request_subjects_guild_identity"                         // proof_request_subjects
 	CheckProofRequestSubjectsStatusCheck                        CheckConstraint = "proof_request_subjects_status_check"                           // proof_request_subjects
@@ -106,12 +106,15 @@ const (
 	CheckSharedViewsPayloadMax10Kb                              CheckConstraint = "shared_views_payload_max_10kb"                                 // shared_views
 	CheckSidekickAccountConfigsConfigObject                     CheckConstraint = "sidekick_account_configs_config_object"                        // sidekick_account_configs
 	CheckSidekickConfigOverridesConfigObject                    CheckConstraint = "sidekick_config_overrides_config_object"                       // sidekick_config_overrides
+	CheckSidekickInstallationsAutoUploadCapabilitiesObject      CheckConstraint = "sidekick_installations_auto_upload_capabilities_object"        // sidekick_installations
 	CheckSidekickInstallationsNameCheck                         CheckConstraint = "sidekick_installations_name_check"                             // sidekick_installations
 	CheckSidekickInstallationsPlatformCheck                     CheckConstraint = "sidekick_installations_platform_check"                         // sidekick_installations
 	CheckSidekickInstallationsVersionCheck                      CheckConstraint = "sidekick_installations_version_check"                          // sidekick_installations
 	CheckSidekickIssuesCodeCheck                                CheckConstraint = "sidekick_issues_code_check"                                    // sidekick_issues
 	CheckSidekickIssuesDetailsCheck                             CheckConstraint = "sidekick_issues_details_check"                                 // sidekick_issues
 	CheckSidekickIssuesMessageCheck                             CheckConstraint = "sidekick_issues_message_check"                                 // sidekick_issues
+	CheckSidekickWowDirectoriesIDLength                         CheckConstraint = "sidekick_wow_directories_id_length"                            // sidekick_wow_directories
+	CheckSidekickWowDirectoriesInspectionObject                 CheckConstraint = "sidekick_wow_directories_inspection_object"                    // sidekick_wow_directories
 	CheckSidekickWowDirectoriesPathCheck                        CheckConstraint = "sidekick_wow_directories_path_check"                           // sidekick_wow_directories
 	CheckSidekickWowDirectoriesRealmlistCheck                   CheckConstraint = "sidekick_wow_directories_realmlist_check"                      // sidekick_wow_directories
 	CheckSidekickWowDirectoriesTenantBaseUrlCheck               CheckConstraint = "sidekick_wow_directories_tenant_base_url_check"                // sidekick_wow_directories
@@ -120,10 +123,10 @@ const (
 	CheckTelemetryNoticesAudienceCheck                          CheckConstraint = "telemetry_notices_audience_check"                              // telemetry_notices
 	CheckTelemetryNoticesCategoryCheck                          CheckConstraint = "telemetry_notices_category_check"                              // telemetry_notices
 	CheckTelemetryNoticesSeverityCheck                          CheckConstraint = "telemetry_notices_severity_check"                              // telemetry_notices
-	CheckTimeParseBossScoresCheck                               CheckConstraint = "time_parse_boss_scores_check"                                  // time_parse_boss_scores
-	CheckTimeParseScoresCheck                                   CheckConstraint = "time_parse_scores_check"                                       // time_parse_scores
 	CheckUserCustomPanelInstallationsRepositoryFormat           CheckConstraint = "user_custom_panel_installations_repository_format"             // user_custom_panel_installations
 	CheckUserFavoriteGuildsSlotCheck                            CheckConstraint = "user_favorite_guilds_slot_check"                               // user_favorite_guilds
+	CheckUserNotificationSettingsChannelCheck                   CheckConstraint = "user_notification_settings_channel_check"                      // user_notification_settings
+	CheckUserNotificationSettingsEventCheck                     CheckConstraint = "user_notification_settings_event_check"                        // user_notification_settings
 	CheckUserPanelLayoutsPayloadSizeChk                         CheckConstraint = "user_panel_layouts_payload_size_chk"                           // user_panel_layouts
 	CheckUserPanelLayoutsTitleFormatChk                         CheckConstraint = "user_panel_layouts_title_format_chk"                           // user_panel_layouts
 	CheckUserTalentBuildsBuildLengthChk                         CheckConstraint = "user_talent_builds_build_length_chk"                           // user_talent_builds

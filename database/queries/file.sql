@@ -226,7 +226,7 @@ FROM
     LEFT JOIN users u ON u.id = wow_log_groups.owner
     -- Files aggregate with total size
     LEFT JOIN LATERAL (
-      SELECT 
+      SELECT
         COALESCE(
           jsonb_agg(
             jsonb_build_object(
@@ -291,7 +291,7 @@ FROM
     ) instances_output ON true
     -- Instance names aggregate
     LEFT JOIN LATERAL (
-      SELECT 
+      SELECT
         COALESCE(array_agg(inst_names.name ORDER BY inst_names.name), ARRAY[]::text[]) AS instance_names,
         MIN(inst_names.name) AS first_instance_name
       FROM (
@@ -316,8 +316,8 @@ FROM
     ) instances_agg ON true
 WHERE
   -- Filter by user ID (skip if nil UUID)
-  CASE WHEN @filter_user_id::uuid != '00000000-0000-0000-0000-000000000000'::uuid 
-       THEN wow_log_groups.owner = @filter_user_id 
+  CASE WHEN @filter_user_id::uuid != '00000000-0000-0000-0000-000000000000'::uuid
+       THEN wow_log_groups.owner = @filter_user_id
        ELSE true END
   AND
   -- Filter to logs without an instance, or by instance name when provided
@@ -363,9 +363,9 @@ LEFT JOIN LATERAL (
       )
   ) inst_names
 ) instances_agg ON true
-WHERE 
-  CASE WHEN @filter_user_id::uuid != '00000000-0000-0000-0000-000000000000'::uuid 
-       THEN wow_log_groups.owner = @filter_user_id 
+WHERE
+  CASE WHEN @filter_user_id::uuid != '00000000-0000-0000-0000-000000000000'::uuid
+       THEN wow_log_groups.owner = @filter_user_id
        ELSE true END
   AND
   CASE WHEN @filter_without_instance::boolean
@@ -385,18 +385,6 @@ WITH invalidated_instances AS (
 ),
 deleted_rankings AS (
   DELETE FROM encounter_dps_rankings
-  WHERE instance_id IN (SELECT id FROM invalidated_instances)
-),
-deleted_parse_results AS (
-  DELETE FROM parse_score_results
-  WHERE instance_id IN (SELECT id FROM invalidated_instances)
-),
-deleted_parse_receipts AS (
-  DELETE FROM parse_score_receipts
-  WHERE instance_id IN (SELECT id FROM invalidated_instances)
-),
-deleted_time_parse_scores AS (
-  DELETE FROM time_parse_scores
   WHERE instance_id IN (SELECT id FROM invalidated_instances)
 ),
 deleted_speedruns AS (

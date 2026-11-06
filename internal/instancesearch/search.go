@@ -105,6 +105,5 @@ func Search(ctx context.Context, db database.Store, compiled Compiled, opts Sear
 // CompileForContext compiles q with the tenant taken from ctx, matching the
 // app.tenant_id the connection will carry.
 func CompileForContext(ctx context.Context, q Query, opts Options) (Compiled, error) {
-	opts.TenantID = servicetenant.TenantIDFromContext(ctx)
 	return Compile(q, opts)
 }

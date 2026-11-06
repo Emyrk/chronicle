@@ -80,7 +80,6 @@ func CompileExplain(q Query, instanceID uuid.UUID, opts Options) (CompiledExplai
 
 // CompileExplainForContext is CompileExplain with the tenant taken from ctx.
 func CompileExplainForContext(ctx context.Context, q Query, instanceID uuid.UUID, opts Options) (CompiledExplain, error) {
-	opts.TenantID = servicetenant.TenantIDFromContext(ctx)
 	return CompileExplain(q, instanceID, opts)
 }
 

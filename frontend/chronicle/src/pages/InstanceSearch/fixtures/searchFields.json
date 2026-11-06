@@ -432,50 +432,6 @@
       "cost": 20
     },
     {
-      "name": "instance.clear_parse",
-      "scope": "instance",
-      "type": "int",
-      "ops": [
-        "=",
-        "!=",
-        "\u003c",
-        "\u003c=",
-        "\u003e",
-        "\u003e=",
-        "between"
-      ],
-      "unit": "0-100",
-      "doc": "Clear-time parse (higher is faster).",
-      "bosses": false,
-      "parse_scope": true,
-      "metric": false,
-      "on": false,
-      "anonymous": false,
-      "cost": 6
-    },
-    {
-      "name": "instance.kill_time_parse",
-      "scope": "instance",
-      "type": "int",
-      "ops": [
-        "=",
-        "!=",
-        "\u003c",
-        "\u003c=",
-        "\u003e",
-        "\u003e=",
-        "between"
-      ],
-      "unit": "0-100",
-      "doc": "Boss kill-time parse (higher is faster) on any / each of the bosses.",
-      "bosses": true,
-      "parse_scope": true,
-      "metric": false,
-      "on": false,
-      "anonymous": false,
-      "cost": 8
-    },
-    {
       "name": "instance.kill_time_ms",
       "scope": "instance",
       "type": "int",
@@ -594,28 +550,6 @@
       "on": false,
       "anonymous": false,
       "cost": 2
-    },
-    {
-      "name": "encounter.kill_time_parse",
-      "scope": "encounter",
-      "type": "int",
-      "ops": [
-        "=",
-        "!=",
-        "\u003c",
-        "\u003c=",
-        "\u003e",
-        "\u003e=",
-        "between"
-      ],
-      "unit": "0-100",
-      "doc": "Kill-time parse for this kill.",
-      "bosses": false,
-      "parse_scope": true,
-      "metric": false,
-      "on": false,
-      "anonymous": false,
-      "cost": 8
     },
     {
       "name": "player.name",
@@ -925,28 +859,6 @@
       "on": true,
       "anonymous": false,
       "cost": 6
-    },
-    {
-      "name": "player.parse",
-      "scope": "player",
-      "type": "int",
-      "ops": [
-        "=",
-        "!=",
-        "\u003c",
-        "\u003c=",
-        "\u003e",
-        "\u003e=",
-        "between"
-      ],
-      "unit": "0-100",
-      "doc": "Player parse on a boss kill (latest stored score per boss).",
-      "bosses": true,
-      "parse_scope": false,
-      "metric": true,
-      "on": false,
-      "anonymous": false,
-      "cost": 21
     }
   ],
   "sorts": [
@@ -1074,15 +986,6 @@
       "parse_scope": false,
       "boss": true,
       "minimum_tier": "honored",
-      "cost": 6
-    },
-    {
-      "field": "instance.clear_parse",
-      "label": "Clear parse",
-      "default_direction": "desc",
-      "parse_scope": true,
-      "boss": false,
-      "minimum_tier": "revered",
       "cost": 6
     }
   ],

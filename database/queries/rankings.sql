@@ -847,9 +847,9 @@ ORDER BY edr.instance_name, edr.encounter_name;
 
 -- name: GetCharacterPerformanceRuns :many
 -- Return complete canonical runs for one character and a selected boss set.
--- Raw DPS/HPS is aggregated from the persisted representative upload. Cached
--- per-boss parses are averaged when every selected encounter has a usable
--- score. parse_count tells the caller whether the cached average is complete.
+-- Raw DPS/HPS is aggregated from the persisted representative upload.
+-- Parse scoring is retired; parse_count and average_parse remain zero for
+-- compatibility with the performance-run API.
 WITH selected_encounters AS MATERIALIZED (
     SELECT DISTINCT unnest(@encounter_names::text[]) AS encounter_name
 ),
@@ -887,21 +887,6 @@ raw_rows AS MATERIALIZED (
     ORDER BY rr.run_id, edr.encounter_name,
         (CASE WHEN @metric::text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
-parse_rows AS MATERIALIZED (
-    SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
-        psr.run_id,
-        psr.encounter_name,
-        psr.precise_score
-    FROM parse_score_results psr
-    JOIN log_instances psr_instance ON psr_instance.id = psr.instance_id
-    JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.unlisted
-    JOIN selected_encounters selected ON selected.encounter_name = psr.encounter_name
-    WHERE psr.tenant_id = @tenant_id
-      AND psr.player_guid = @player_guid
-      AND psr.metric = @metric
-      AND psr.status IN ('ok', 'low_confidence')
-    ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
-),
 per_run AS (
     SELECT
         raw.run_id,
@@ -935,12 +920,9 @@ per_run AS (
         (SUM(raw.damage_done)::double precision / NULLIF(SUM(raw.duration_secs), 0))::double precision AS dps,
         (SUM(raw.healing_done + raw.absorbed_done)::double precision / NULLIF(SUM(raw.duration_secs), 0))::double precision AS hps,
         ((array_agg(raw.log_hashed_slug ORDER BY raw.killed_at DESC))[1])::text AS log_hashed_slug,
-        COUNT(parse.precise_score)::integer AS parse_count,
-        COALESCE(AVG(parse.precise_score), 0)::double precision AS average_parse
+        0::integer AS parse_count,
+        0::double precision AS average_parse
     FROM raw_rows raw
-    LEFT JOIN parse_rows parse
-      ON parse.run_id = raw.run_id
-     AND parse.encounter_name = raw.encounter_name
     GROUP BY raw.run_id, raw.representative_instance_id
 )
 SELECT *

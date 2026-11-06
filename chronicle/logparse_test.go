@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 
+	"slices"
+	"testing"
+
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
@@ -15,8 +18,6 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/require"
-	"slices"
-	"testing"
 )
 
 func TestArmoryProvenanceInstanceID(t *testing.T) {

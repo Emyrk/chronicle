@@ -55,33 +55,6 @@ type InstanceHostilePeriod struct {
 	EndState   chroniclesdk.EndState `json:"end_state,omitempty"`
 }
 
-type InstanceRankingRecord struct {
-	chroniclesdk.InstanceRankingRecord
-	DPSParse *InstanceRankingParse `json:"dps_parse,omitempty"`
-	HPSParse *InstanceRankingParse `json:"hps_parse,omitempty"`
-}
-
-type InstanceRankingParse struct {
-	SnapshotID   *uuid.UUID `json:"snapshot_id,omitempty"`
-	MetricValue  float64    `json:"metric_value"`
-	PreciseScore float64    `json:"precise_score"`
-	DisplayScore int        `json:"display_score"`
-	Rank         int        `json:"rank"`
-	SampleSize   int        `json:"sample_size"`
-	Status       string     `json:"status"`
-}
-
-type instanceRankingParseKey struct {
-	EncounterName string
-	PlayerGUID    string
-	Metric        string
-}
-
-type instanceRankingParseValue struct {
-	parse     InstanceRankingParse
-	createdAt time.Time
-}
-
 func (s *Service) instanceByIdentifier(r *http.Request) (database.LogInstancesGuild, error) {
 	identifier := chi.URLParam(r, "instance_id")
 	if instanceID, err := uuid.Parse(identifier); err == nil {
@@ -173,89 +146,6 @@ func (s *Service) lookupDatasetForRealm(ctx context.Context, realmID uuid.UUID) 
 		return resolved.TenantDatasetID.UUID, true
 	}
 	return uuid.Nil, false
-}
-
-func (s *Service) getInstanceRankingRecordsBySlug(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	instance, err := s.instanceByIdentifier(r)
-	if errors.Is(err, pgx.ErrNoRows) {
-		writeNotFound(w, r, "Instance not found")
-		return
-	}
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-
-	records, err := s.db.InstanceRankingRecords(ctx, instance.ID)
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-	parseScores, err := s.db.GetParseScoreResultsForInstance(ctx, instance.ID)
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-
-	httpapi.Write(ctx, w, http.StatusOK, instanceRankingRecords(records, parseScores))
-}
-
-func instanceRankingRecords(records []database.EncounterDpsRanking, parseScores []database.ParseScoreResult) []InstanceRankingRecord {
-	parses := make(map[instanceRankingParseKey]instanceRankingParseValue, len(parseScores))
-	for _, score := range parseScores {
-		key := instanceRankingParseKey{
-			EncounterName: score.EncounterName,
-			PlayerGUID:    score.PlayerGuid,
-			Metric:        score.Metric,
-		}
-		createdAt := score.CreatedAt.Time
-		if existing, ok := parses[key]; ok && !createdAt.After(existing.createdAt) {
-			continue
-		}
-
-		var snapshotID *uuid.UUID
-		if score.SnapshotID.Valid {
-			id := score.SnapshotID.UUID
-			snapshotID = &id
-		}
-		parses[key] = instanceRankingParseValue{
-			parse: InstanceRankingParse{
-				SnapshotID:   snapshotID,
-				MetricValue:  score.MetricValue,
-				PreciseScore: score.PreciseScore,
-				DisplayScore: int(score.DisplayScore),
-				Rank:         int(score.Rank),
-				SampleSize:   int(score.SampleSize),
-				Status:       score.Status,
-			},
-			createdAt: createdAt,
-		}
-	}
-
-	baseRecords := db2sdk.InstanceRankingRecords(records)
-	result := make([]InstanceRankingRecord, 0, len(baseRecords))
-	for _, record := range baseRecords {
-		out := InstanceRankingRecord{InstanceRankingRecord: record}
-		if score, ok := parses[instanceRankingParseKey{
-			EncounterName: record.EncounterName,
-			PlayerGUID:    record.PlayerGUID,
-			Metric:        "dps",
-		}]; ok {
-			parse := score.parse
-			out.DPSParse = &parse
-		}
-		if score, ok := parses[instanceRankingParseKey{
-			EncounterName: record.EncounterName,
-			PlayerGUID:    record.PlayerGUID,
-			Metric:        "hps",
-		}]; ok {
-			parse := score.parse
-			out.HPSParse = &parse
-		}
-		result = append(result, out)
-	}
-	return result
 }
 
 func compactInstanceEncounters(encounters []chroniclesdk.WoWEncounterWithHostiles) []InstanceEncounter {

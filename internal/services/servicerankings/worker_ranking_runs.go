@@ -83,11 +83,6 @@ func refreshRankingRunsTx(ctx context.Context, tx database.Store, ids []uuid.UUI
 		return output, nil
 	}
 
-	// Capture the old tenant/run identity before obsolete or conflicting rows
-	// disappear. Reconciliation repeats this after the new sources are upserted.
-	if err := markDirtyObservationRuns(ctx, tx, affectedIDs); err != nil {
-		return output, fmt.Errorf("mark old rating observation runs: %w", err)
-	}
 	sources, err := tx.RankingRunSources(ctx, affectedIDs)
 	if err != nil {
 		return output, fmt.Errorf("resolve ranking run sources: %w", err)
@@ -127,31 +122,9 @@ func refreshRankingRunsTx(ctx context.Context, tx database.Store, ids []uuid.UUI
 		default:
 			output.UpdatedCount++
 		}
-		// Record qualifying attendance in the same transaction as the canonical
-		// representative, before a source log can be deleted. The unique fact key
-		// makes retries and representative changes idempotent.
-		if _, err := tx.BackfillRenownFactsForRun(ctx, source.RunID); err != nil {
-			return output, fmt.Errorf("record Renown kill facts for run %s: %w", source.RunID, err)
-		}
-		if _, err := tx.BackfillGuildRenownFactsForRun(ctx, database.BackfillGuildRenownFactsForRunParams{
-			TenantID: uuid.Nil, RunID: source.RunID,
-		}); err != nil {
-			return output, fmt.Errorf("record guild Renown kill facts for run %s: %w", source.RunID, err)
-		}
-	}
-	if err := markDirtyObservationRuns(ctx, tx, resolvedRunIDs); err != nil {
-		return output, fmt.Errorf("mark current rating observation runs: %w", err)
+
 	}
 	return output, nil
-}
-
-func markDirtyObservationRuns(ctx context.Context, tx database.Store, ids []uuid.UUID) error {
-	for start := 0; start < len(ids); start += 200 {
-		if err := tx.MarkDirtyObservationRunsByIDs(ctx, ids[start:min(start+200, len(ids))]); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 type WorkerRepairRankingRuns struct {

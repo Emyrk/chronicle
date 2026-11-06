@@ -25,17 +25,17 @@ describe("queryCost", () => {
     const cost = queryCost(
       {
         and: [
-          { any_player: { field: "player.parse", op: ">=", value: 95 } },
-          { any_player: { field: "player.parse", op: ">=", value: 90 } },
+          { any_player: { field: "player.dps", op: ">=", value: 95 } },
+          { any_player: { field: "player.dps", op: ">=", value: 90 } },
           { field: "instance.name", op: "=", value: "Molten Core" },
         ],
       },
       desc,
     );
-    const parse = 2 * fieldCost("player.parse");
+    const dps = 2 * fieldCost("player.dps");
     const blocks = 2 * desc.cost_any;
-    expect(cost.total).toBe(desc.cost_base + parse + blocks + fieldCost("instance.name"));
-    expect(cost.parts.find((p) => p.label === "Parse")).toEqual({ label: "Parse", cost: parse, count: 2 });
+    expect(cost.total).toBe(desc.cost_base + dps + blocks + fieldCost("instance.name"));
+    expect(cost.parts.find((p) => p.label === "DPS")).toEqual({ label: "DPS", cost: dps, count: 2 });
     expect(cost.parts.find((p) => p.label === "A player block")).toEqual({ label: "A player block", cost: blocks, count: 2 });
     // Most expensive first, with the base always last.
     const own = cost.parts.slice(0, -1).map((p) => p.cost);
@@ -60,12 +60,12 @@ describe("queryCost", () => {
 
 describe("nodeCost", () => {
   it("is a block's own share, nested blocks included", () => {
-    const parse = { field: "player.parse", op: ">=" as const, value: 95 };
-    const block = desc.cost_any + desc.fields.find((f) => f.name === "player.parse")!.cost;
-    expect(nodeCost({ any_player: parse }, desc)).toBe(block);
-    expect(nodeCost({ not: { any_player: parse } }, desc)).toBe(desc.cost_not + block);
+    const dps = { field: "player.dps", op: ">=" as const, value: 95 };
+    const block = desc.cost_any + desc.fields.find((f) => f.name === "player.dps")!.cost;
+    expect(nodeCost({ any_player: dps }, desc)).toBe(block);
+    expect(nodeCost({ not: { any_player: dps } }, desc)).toBe(desc.cost_not + block);
     // Top-level blocks add up to the total, minus the base.
-    const tree = { and: [{ any_player: parse }, { field: "instance.name", op: "=" as const, value: "Molten Core" }] };
+    const tree = { and: [{ any_player: dps }, { field: "instance.name", op: "=" as const, value: "Molten Core" }] };
     expect(tree.and.reduce((sum, n) => sum + nodeCost(n, desc), 0)).toBe(queryCost(tree, desc).total - desc.cost_base);
   });
 });

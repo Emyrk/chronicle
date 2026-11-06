@@ -8,9 +8,8 @@ import type { Node } from "./queryModel";
  * accepts these from anyone logged in), like the Code editor's.
  */
 
-/** The costly fields: player parses and stats, and boss / trash / idle time. */
+/** The costly fields: player stats and boss / trash / idle time. */
 export const HONORED_FIELDS: ReadonlySet<string> = new Set([
-  "player.parse",
   "player.dps",
   "player.hps",
   "player.avg_ilvl",

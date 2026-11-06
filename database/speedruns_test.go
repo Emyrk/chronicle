@@ -468,8 +468,8 @@ func TestGuildSpeedrunHistory(t *testing.T) {
 	insertFight(first, "Trash A", false, firstStart.Add(10*time.Minute), 5*time.Minute)
 	insertFight(first, "Trash B", false, firstStart.Add(12*time.Minute), 6*time.Minute)
 	insertFight(first, "Trash C", false, firstStart.Add(28*time.Minute), 4*time.Minute)
-	lucifron := insertFight(first, "Lucifron", true, firstStart.Add(30*time.Minute), 2*time.Minute)
-	ragnaros := insertFight(first, "Ragnaros", true, firstStart.Add(55*time.Minute), 5*time.Minute)
+	insertFight(first, "Lucifron", true, firstStart.Add(30*time.Minute), 2*time.Minute)
+	insertFight(first, "Ragnaros", true, firstStart.Add(55*time.Minute), 5*time.Minute)
 	insertFight(first, "Late Trash", false, firstStart.Add(70*time.Minute), 5*time.Minute)
 
 	// A re-upload of the first clear: unqualified and slower, so the qualified copy wins.
@@ -501,32 +501,7 @@ func TestGuildSpeedrunHistory(t *testing.T) {
 	require.Equal(t, int64(1), clearCounts["Molten Core\x00Heroic\x0040\x001"])
 	require.Equal(t, int64(1), clearCounts["Molten Core\x00Normal\x0020\x000"])
 
-	// Stored time parses for the first clear: a clear parse, a scored Lucifron kill, and a
-	// Ragnaros kill whose sample was too small, which reads as no parse.
-	const lookbackDays, policyVersion, queryVersion = 60, 1, 1
-	scoreID := uuid.New()
-	_, err = pool.Exec(ctx, `INSERT INTO time_parse_scores (
-		id, tenant_id, instance_id, run_id, realm_id, clear_duration_ms,
-		clear_server_precise_score, clear_server_display_score, clear_server_rank, clear_server_sample_size, clear_server_status,
-		clear_realm_precise_score, clear_realm_display_score, clear_realm_rank, clear_realm_sample_size, clear_realm_status,
-		cutoff, window_start, lookback_days, policy_version, query_version
-	) VALUES ($1, $2, $3, $3, $4, 3600000, 87.5, 87, 3, 20, 'ok', 90, 90, 2, 20, 'ok', now(), now(), $5, $6, $7)`,
-		scoreID, uuid.Nil, first, realmID, lookbackDays, policyVersion, queryVersion)
-	require.NoError(t, err)
-	insertBossScore := func(encounterID uuid.UUID, name string, score float64, status string) {
-		t.Helper()
-		_, err := pool.Exec(ctx, `INSERT INTO time_parse_boss_scores (
-			time_parse_score_id, encounter_id, encounter_name, duration_ms,
-			server_precise_score, server_display_score, server_rank, server_sample_size, server_status,
-			realm_precise_score, realm_display_score, realm_rank, realm_sample_size, realm_status
-		) VALUES ($1, $2, $3, 1, $4, 0, 1, 1, $5, 0, 0, 1, 1, $5)`, scoreID, encounterID, name, score, status)
-		require.NoError(t, err)
-	}
-	insertBossScore(lucifron, "Lucifron", 64.25, "ok")
-	insertBossScore(ragnaros, "Ragnaros", 12, "sample_too_small")
-
 	rows, err := store.GuildSpeedrunHistory(ctx, database.GuildSpeedrunHistoryParams{
-		TenantID: uuid.Nil, LookbackDays: lookbackDays, PolicyVersion: policyVersion, QueryVersion: queryVersion,
 		GuildID: guildID, InstanceName: "Molten Core",
 		FilterDifficulty: true, DifficultyName: "Normal",
 		FilterMaxPlayers: true, MaxPlayers: 40,
@@ -540,7 +515,7 @@ func TestGuildSpeedrunHistory(t *testing.T) {
 	require.True(t, rows[0].Qualified)
 	require.EqualValues(t, time.Hour/time.Millisecond, rows[0].DurationMs)
 	require.EqualValues(t, 10*time.Minute/time.Millisecond, rows[0].TrashDurationMs)
-	require.InDelta(t, 87.5, rows[0].ClearParse, 0.001)
+	require.EqualValues(t, -1, rows[0].ClearParse)
 
 	require.Equal(t, second, rows[1].InstanceID)
 	require.False(t, rows[1].Qualified)
@@ -552,15 +527,12 @@ func TestGuildSpeedrunHistory(t *testing.T) {
 	require.False(t, rows[2].Qualified)
 	require.False(t, rows[2].Complete)
 
-	kills, err := store.GuildSpeedrunBossKills(ctx, database.GuildSpeedrunBossKillsParams{
-		TenantID: uuid.Nil, LookbackDays: lookbackDays, PolicyVersion: policyVersion, QueryVersion: queryVersion,
-		InstanceIds: []uuid.UUID{first, second},
-	})
+	kills, err := store.GuildSpeedrunBossKills(ctx, []uuid.UUID{first, second})
 	require.NoError(t, err)
 	require.Len(t, kills, 2)
 	require.Equal(t, "Lucifron", kills[0].EncounterName)
 	require.EqualValues(t, 2*time.Minute/time.Millisecond, kills[0].DurationMs)
-	require.InDelta(t, 64.25, kills[0].Parse, 0.001)
+	require.EqualValues(t, -1, kills[0].Parse)
 	require.Equal(t, "Ragnaros", kills[1].EncounterName)
 	require.EqualValues(t, -1, kills[1].Parse)
 }

@@ -274,8 +274,6 @@ type SiteConfig struct {
 	// ForeverLandingEnabled makes WoW Forever's "/" serve the replay landing
 	// (/start2). Off reverts "/" to the standard home page. Other flavors ignore it.
 	ForeverLandingEnabled bool `json:"forever_landing_enabled"`
-	// RootTenantRatingsDisabled prevents rating production and display for the legacy root tenant.
-	RootTenantRatingsDisabled bool `json:"root_tenant_ratings_disabled"`
 }
 
 // UpdateSiteConfigRequest allows partial updates to site configuration.
@@ -294,8 +292,6 @@ type UpdateSiteConfigRequest struct {
 	LandingFeaturedInstanceID *string `json:"landing_featured_instance_id,omitempty"`
 	// ForeverLandingEnabled toggles WoW Forever's "/" between the replay landing and the standard home page.
 	ForeverLandingEnabled *bool `json:"forever_landing_enabled,omitempty"`
-	// RootTenantRatingsDisabled disables rating production and display for the legacy root tenant.
-	RootTenantRatingsDisabled *bool `json:"root_tenant_ratings_disabled,omitempty"`
 }
 
 // SetUserRolesRequest is the request body for setting a user's Chronicle roles.
