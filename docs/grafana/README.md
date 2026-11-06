@@ -4,7 +4,7 @@ Chronicle includes three ready-to-import dashboards for its Prometheus metrics:
 
 - `chronicle-operations.json` covers service health and background processing.
 - `chronicle-http-traffic.json` investigates HTTP request volume, rate, and latency by route template and method.
-- `chronicle-external-api.json` measures external developer API usage, endpoint popularity, request rate, and latency.
+- `chronicle-external-api.json` measures external developer API usage, call volume over time, endpoint popularity, request rate, and latency.
 
 The operations dashboard includes rows for:
 
@@ -89,7 +89,7 @@ The current HTTP metrics do not include response status, client IP, user ID, or 
 
 `chronicle-external-api.json` focuses the shared HTTP metrics on routes mounted under `/api/external/v1`. Its default **All** route selection includes developer-facing data and OpenAPI endpoints, but excludes `/health` so uptime probes do not inflate usage totals. Select the health route explicitly when investigating probe traffic.
 
-The dashboard reports completed origin requests observed by Chronicle. CDN-served responses do not reach Chronicle and are not counted. The current metrics also cannot identify callers or separate responses by status code.
+The dashboard reports completed origin requests observed by Chronicle and labels each request with the tenant slug that received it (`root` for the primary site). CDN-served responses do not reach Chronicle and are not counted. The current metrics cannot identify individual callers or separate responses by status code.
 
 ## Variables
 
@@ -98,7 +98,7 @@ The dashboard reports completed origin requests observed by Chronicle. CDN-serve
 | `datasource` | Prometheus datasource containing Chronicle metrics |
 | `job` | One Prometheus scrape job, usually one Chronicle deployment or environment |
 | `instance` | Chronicle replicas used by process-local panels |
-| `tenant` | Root or tenant-slug activity for UI and authentication panels |
+| `tenant` | Root or tenant-slug activity for HTTP, UI, and authentication panels |
 | `method` | HTTP methods on the traffic dashboard |
 | `queue` | River queues |
 | `route` | API route templates |

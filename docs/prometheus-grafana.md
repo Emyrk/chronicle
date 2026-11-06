@@ -56,7 +56,7 @@ Chronicle includes three importable dashboards:
 
 - [`docs/grafana/chronicle-operations.json`](grafana/chronicle-operations.json) covers service health, instance search, Sidekick, parser outcomes and bottlenecks, River queues, cache behavior, authentication, UI usage, maintenance, and leader election.
 - [`docs/grafana/chronicle-http-traffic.json`](grafana/chronicle-http-traffic.json) investigates HTTP request volume, rate, and latency by route template and method.
-- [`docs/grafana/chronicle-external-api.json`](grafana/chronicle-external-api.json) measures external developer API request volume, rate, endpoint popularity, and latency while excluding health checks by default.
+- [`docs/grafana/chronicle-external-api.json`](grafana/chronicle-external-api.json) measures external developer API call volume over time, request rate, endpoint popularity, and latency while excluding health checks by default.
 
 See [`docs/grafana/README.md`](grafana/README.md) for import and file-provisioning instructions.
 
@@ -67,7 +67,7 @@ Useful Grafana variables include:
 | Variable | Query |
 | --- | --- |
 | `$instance` | `label_values(chronicle_api_concurrent_requests, instance)` |
-| `$tenant` | `label_values({__name__=~"chronicle_(ui_panel_(views\|choices)_total\|api_auth_(signups\|logins\|refreshes)_total)"}, tenant)` |
+| `$tenant` | `label_values({__name__=~"chronicle_(api_requests_processed_total\|ui_panel_(views\|choices)_total\|api_auth_(signups\|logins\|refreshes)_total)"}, tenant)` |
 | `$queue` | `label_values(chronicle_river_configured_workers, queue)` |
 | `$kind` | `label_values(chronicle_river_jobs_total{queue=~"$queue"}, kind)` |
 | `$route` | `label_values(chronicle_api_requests_processed_total, path)` |
@@ -232,7 +232,7 @@ sum by (method, path) (
 )
 ```
 
-The `path` label is the chi route pattern, such as `/api/v1/.../{id}`, rather than the raw request URL. This keeps route cardinality bounded.
+The `path` label is the chi route pattern, such as `/api/v1/.../{id}`, rather than the raw request URL. This keeps route cardinality bounded. The `tenant` label is the cached tenant slug, `root` for the primary site, or `unknown` for an unrecognized tenant host.
 
 ### Current concurrent requests
 
@@ -976,9 +976,9 @@ For low-traffic deployments, count-based alerts are often more reliable than rat
 
 | Metric | Type | Labels | Meaning |
 | --- | --- | --- | --- |
-| `chronicle_api_requests_processed_total` | Counter | `method`, `path` | API requests whose handler returned |
+| `chronicle_api_requests_processed_total` | Counter | `method`, `path`, `tenant` | API requests whose handler returned |
 | `chronicle_api_concurrent_requests` | Gauge | none | API requests currently executing |
-| `chronicle_api_request_latencies_seconds` | Histogram | `method`, `path` | End-to-end API handler latency |
+| `chronicle_api_request_latencies_seconds` | Histogram | `method`, `path`, `tenant` | End-to-end API handler latency |
 
 ### Instance search
 

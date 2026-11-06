@@ -47,7 +47,7 @@
       }
     ]
   },
-  "description": "Measure Chronicle external developer API usage by route template and method, including request volume, request rate, and latency. The default route selection excludes health checks.",
+  "description": "Measure Chronicle external developer API usage by tenant, route template, and method, including call volume over time, request rate, and latency. The default route selection excludes health checks.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -135,7 +135,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"$route\"}[$__range]))",
+          "expr": "sum(increase(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__range]))",
           "legendFormat": "",
           "range": false,
           "refId": "A",
@@ -200,7 +200,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"$route\"}[$__rate_interval]))",
+          "expr": "sum(rate(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__rate_interval]))",
           "legendFormat": "",
           "range": false,
           "refId": "A",
@@ -264,7 +264,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "count(sum by (method, path) (increase(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"$route\"}[$__range])) > 0)",
+          "expr": "count(sum by (method, path) (increase(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__range])) > 0)",
           "legendFormat": "",
           "range": false,
           "refId": "A",
@@ -329,7 +329,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le) (increase(chronicle_api_request_latencies_seconds_bucket{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"$route\"}[$__range])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (increase(chronicle_api_request_latencies_seconds_bucket{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__range])))",
           "legendFormat": "",
           "range": false,
           "refId": "A",
@@ -357,7 +357,290 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Route and method combinations with the most completed requests during the selected time range. Use this to find routes receiving disproportionate traffic.",
+      "description": "Completed origin requests in each rolling Grafana rate interval. Bars make traffic spikes visible; the interval adapts to the dashboard range and Prometheus scrape interval.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 6
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "calcs": [
+            "max",
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__rate_interval]))",
+          "legendFormat": "All selected calls",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Total external API calls over time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Completed origin requests in each rolling Grafana rate interval, split and stacked by the tenant domain that received the request. Root is the primary Chronicle domain.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 16,
+        "x": 8,
+        "y": 6
+      },
+      "id": 17,
+      "options": {
+        "legend": {
+          "calcs": [
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tenant) (increase(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__rate_interval]))",
+          "legendFormat": "{{tenant}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "External API calls by tenant over time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Completed origin requests in each rolling Grafana rate interval, split and stacked by tenant, route template, and HTTP method. Use this to identify which tenant and download caused a traffic spike.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "calcs": [
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tenant, method, path) (increase(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__rate_interval]))",
+          "legendFormat": "{{tenant}} \u00b7 {{method}} {{path}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "External API calls by endpoint over time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Tenant, route, and method combinations with the most completed requests during the selected time range. Use this to find tenants or routes receiving disproportionate traffic.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -380,7 +663,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 6
+        "y": 24
       },
       "id": 7,
       "options": {
@@ -408,8 +691,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(20, sum by (method, path) (increase(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"$route\"}[$__range])))",
-          "legendFormat": "{{method}} {{path}}",
+          "expr": "topk(20, sum by (tenant, method, path) (increase(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__range])))",
+          "legendFormat": "{{tenant}} \u00b7 {{method}} {{path}}",
           "range": false,
           "refId": "A",
           "instant": true
@@ -423,7 +706,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Route and method combinations with the highest current completion rate over Grafana's rate interval.",
+      "description": "Tenant, route, and method combinations with the highest current completion rate over Grafana's rate interval.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -447,7 +730,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 6
+        "y": 24
       },
       "id": 8,
       "options": {
@@ -475,8 +758,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(20, sum by (method, path) (rate(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"$route\"}[$__rate_interval])))",
-          "legendFormat": "{{method}} {{path}}",
+          "expr": "topk(20, sum by (tenant, method, path) (rate(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__rate_interval])))",
+          "legendFormat": "{{tenant}} \u00b7 {{method}} {{path}}",
           "range": false,
           "refId": "A",
           "instant": true
@@ -490,7 +773,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Completed requests per second by route template and HTTP method. URL parameters are represented by chi route placeholders, which keeps cardinality bounded.",
+      "description": "Completed requests per second by tenant, route template, and HTTP method. URL parameters are represented by chi route placeholders, which keeps cardinality bounded.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -544,7 +827,7 @@
         "h": 9,
         "w": 16,
         "x": 0,
-        "y": 15
+        "y": 33
       },
       "id": 9,
       "options": {
@@ -570,8 +853,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (method, path) (rate(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"$route\"}[$__rate_interval]))",
-          "legendFormat": "{{method}} {{path}}",
+          "expr": "sum by (tenant, method, path) (rate(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__rate_interval]))",
+          "legendFormat": "{{tenant}} \u00b7 {{method}} {{path}}",
           "range": true,
           "refId": "A"
         }
@@ -584,7 +867,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Aggregate completed request rate by HTTP method.",
+      "description": "Aggregate completed request rate by tenant and HTTP method.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -638,7 +921,7 @@
         "h": 9,
         "w": 8,
         "x": 16,
-        "y": 15
+        "y": 33
       },
       "id": 10,
       "options": {
@@ -664,8 +947,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (method) (rate(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"$route\"}[$__rate_interval]))",
-          "legendFormat": "{{method}}",
+          "expr": "sum by (tenant, method) (rate(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__rate_interval]))",
+          "legendFormat": "{{tenant}} \u00b7 {{method}}",
           "range": true,
           "refId": "A"
         }
@@ -679,7 +962,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 42
       },
       "id": 11,
       "panels": [],
@@ -691,7 +974,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Route and method combinations with the highest p95 latency over the selected time range. Low-volume routes may have coarse histogram estimates.",
+      "description": "Tenant, route, and method combinations with the highest p95 latency over the selected time range. Low-volume routes may have coarse histogram estimates.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -715,7 +998,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 25
+        "y": 43
       },
       "id": 12,
       "options": {
@@ -743,8 +1026,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(20, histogram_quantile(0.95, sum by (le, method, path) (increase(chronicle_api_request_latencies_seconds_bucket{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"$route\"}[$__range]))))",
-          "legendFormat": "{{method}} {{path}}",
+          "expr": "topk(20, histogram_quantile(0.95, sum by (le, tenant, method, path) (increase(chronicle_api_request_latencies_seconds_bucket{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__range]))))",
+          "legendFormat": "{{tenant}} \u00b7 {{method}} {{path}}",
           "range": false,
           "refId": "A",
           "instant": true
@@ -758,7 +1041,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Route and method combinations with the highest mean latency over the selected time range.",
+      "description": "Tenant, route, and method combinations with the highest mean latency over the selected time range.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -782,7 +1065,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 25
+        "y": 43
       },
       "id": 13,
       "options": {
@@ -810,8 +1093,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(20, sum by (method, path) (increase(chronicle_api_request_latencies_seconds_sum{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"$route\"}[$__range])) / clamp_min(sum by (method, path) (increase(chronicle_api_request_latencies_seconds_count{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"$route\"}[$__range])), 1))",
-          "legendFormat": "{{method}} {{path}}",
+          "expr": "topk(20, sum by (tenant, method, path) (increase(chronicle_api_request_latencies_seconds_sum{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__range])) / clamp_min(sum by (tenant, method, path) (increase(chronicle_api_request_latencies_seconds_count{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__range])), 1))",
+          "legendFormat": "{{tenant}} \u00b7 {{method}} {{path}}",
           "range": false,
           "refId": "A",
           "instant": true
@@ -880,7 +1163,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 34
+        "y": 52
       },
       "id": 14,
       "options": {
@@ -906,7 +1189,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(chronicle_api_request_latencies_seconds_bucket{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"$route\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(chronicle_api_request_latencies_seconds_bucket{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__rate_interval])))",
           "legendFormat": "p50",
           "range": true,
           "refId": "A"
@@ -917,7 +1200,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(chronicle_api_request_latencies_seconds_bucket{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"$route\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(chronicle_api_request_latencies_seconds_bucket{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__rate_interval])))",
           "legendFormat": "p95",
           "range": true,
           "refId": "B"
@@ -928,7 +1211,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(chronicle_api_request_latencies_seconds_bucket{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"$route\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(chronicle_api_request_latencies_seconds_bucket{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"$route\"}[$__rate_interval])))",
           "legendFormat": "p99",
           "range": true,
           "refId": "C"
@@ -1031,7 +1314,39 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", path=~\"/api/external/v1/.*\"}, method)",
+        "definition": "label_values(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", path=~\"/api/external/v1/.*\"}, tenant)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Tenant",
+        "multi": true,
+        "name": "tenant",
+        "options": [],
+        "query": {
+          "query": "label_values(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", path=~\"/api/external/v1/.*\"}, tenant)",
+          "refId": "PrometheusVariableQueryEditor-Tenant"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query",
+        "allValue": ".*"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", path=~\"/api/external/v1/.*\"}, method)",
         "hide": 0,
         "includeAll": true,
         "label": "HTTP method",
@@ -1039,7 +1354,7 @@
         "name": "method",
         "options": [],
         "query": {
-          "query": "label_values(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", path=~\"/api/external/v1/.*\"}, method)",
+          "query": "label_values(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", path=~\"/api/external/v1/.*\"}, method)",
           "refId": "PrometheusVariableQueryEditor-Method"
         },
         "refresh": 1,
@@ -1063,7 +1378,7 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"/api/external/v1/.*\"}, path)",
+        "definition": "label_values(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"/api/external/v1/.*\"}, path)",
         "hide": 0,
         "includeAll": true,
         "label": "External API route",
@@ -1071,7 +1386,7 @@
         "name": "route",
         "options": [],
         "query": {
-          "query": "label_values(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", method=~\"$method\", path=~\"/api/external/v1/.*\"}, path)",
+          "query": "label_values(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", method=~\"$method\", path=~\"/api/external/v1/.*\"}, path)",
           "refId": "PrometheusVariableQueryEditor-Route"
         },
         "refresh": 1,
@@ -1079,7 +1394,7 @@
         "skipUrlSync": false,
         "sort": 1,
         "type": "query",
-        "allValue": "/api/external/v1/(explore/.*|characters/.*|raidlogs/.*|leaderboards.*|openapi\\.json)"
+        "allValue": "/api/external/v1/(explore/.*|characters/.*|raidlogs/.*|leaderboards.*|openapi[.]json)"
       }
     ]
   },
