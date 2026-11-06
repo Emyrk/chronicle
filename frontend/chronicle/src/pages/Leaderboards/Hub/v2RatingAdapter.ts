@@ -47,23 +47,13 @@ export function v2RatingParams(
   );
   const selected = scope.boss ? [scope.boss] : context.selected;
   if (selected.length === 1) p.set("boss", selected[0]);
-  else {
-    const sets = rows.filter((row) => row.kind === "set");
-    const set = selected.length
-      ? sets.find((s) => {
-          const members = rows
-            .filter((m) => m.kind === "member" && m.set_key === s.set_key)
-            .map((m) => m.encounter_name);
-          return (
-            members.length === new Set(selected).size &&
-            members.every((name) => selected.includes(name))
-          );
-        })
-      : sets.find((s) => s.set_key === "default");
-    if (!set)
-      throw new Error(
-        "Choose one boss or the exact membership of a configured encounter set.",
-      );
+  else if (selected.length > 1) {
+    for (const name of [...new Set(selected)].sort()) p.append("bosses", name);
+  } else {
+    const set = rows.find(
+      (row) => row.kind === "set" && row.set_key === "default",
+    );
+    if (!set) throw new Error("No default encounter set is configured.");
     p.set("set", set.set_key);
   }
   if (context.subject === "player") {

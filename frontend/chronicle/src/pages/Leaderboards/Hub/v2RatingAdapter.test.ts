@@ -81,9 +81,13 @@ describe("existing Hub adapter", () => {
         "peak",
       ),
     ).toThrow("exact performance cohort");
-    expect(() =>
-      v2RatingParams({ ...context, selected: ["A", "B"] }, {}, "peak"),
-    ).toThrow("configured encounter set");
+    expect(
+      v2RatingParams(
+        { ...context, selected: ["B", "A", "A"] },
+        {},
+        "peak",
+      ).getAll("bosses"),
+    ).toEqual(["A", "B"]);
   });
   it("Renown ignores boss/class selections while retaining selected variant and realm", () => {
     const p = v2RatingParams(

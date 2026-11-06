@@ -23,6 +23,7 @@ type Request struct {
 	MaxPlayers                   int16
 	Subject, Kind, Score         string
 	Boss, Set                    string
+	Bosses                       []string
 	Class, Spec, SubSpec, Metric string
 	Realm                        uuid.UUID
 	Search                       string
@@ -58,8 +59,11 @@ func Select(rows []database.ResolveLeaderboardConfigurationRow, r Request) (Sele
 	} else if r.Class == "" || r.Spec == "" || (r.Metric != "dps" && r.Metric != "hps") {
 		return out, errors.New("select an exact player class, spec, subspec, and DPS/HPS cohort")
 	}
-	if r.Kind != "boss" && (r.Boss != "" || r.Set != "") {
-		return out, errors.New("renown and clear boards do not accept boss or set filters")
+	if r.Kind == "clear" && (r.Boss != "" || r.Set != "" || len(r.Bosses) > 0) {
+		return out, errors.New("clear boards do not accept boss selections")
+	}
+	if r.Kind == "renown" && (r.Set != "" || len(r.Bosses) > 0) {
+		return out, errors.New("renown accepts only an optional exact boss, never performance sets")
 	}
 	if r.Kind == "clear" && r.Subject != "guild" {
 		return out, errors.New("clear boards are guild-only")
@@ -106,14 +110,41 @@ func Select(rows []database.ResolveLeaderboardConfigurationRow, r Request) (Sele
 	case "clear":
 		return out, nil
 	case "renown":
-		for name := range bosses {
-			selected[name] = true
+		if r.Boss != "" {
+			if _, ok := bosses[r.Boss]; !ok {
+				return out, errors.New("boss is not enabled")
+			}
+			selected[r.Boss] = true
+		} else {
+			for name := range bosses {
+				selected[name] = true
+			}
 		}
 	case "boss":
-		if (r.Boss == "") == (r.Set == "") {
-			return out, errors.New("select exactly one boss or named encounter set")
-		}
+		modes := 0
 		if r.Boss != "" {
+			modes++
+		}
+		if r.Set != "" {
+			modes++
+		}
+		if len(r.Bosses) > 0 {
+			modes++
+		}
+		if modes != 1 {
+			return out, errors.New("select exactly one boss, named set, or explicit boss group")
+		}
+		if len(r.Bosses) > 0 {
+			if len(r.Bosses) > 256 {
+				return out, errors.New("boss group exceeds 256 entries")
+			}
+			for _, name := range r.Bosses {
+				if _, ok := bosses[name]; !ok {
+					return out, errors.New("boss group contains a boss that is not enabled")
+				}
+				selected[name] = true
+			}
+		} else if r.Boss != "" {
 			if _, ok := bosses[r.Boss]; !ok {
 				return out, errors.New("boss is not enabled")
 			}
@@ -165,6 +196,10 @@ type Cursor struct {
 }
 
 func Fingerprint(tenant uuid.UUID, r Request, selection Selection) string {
+	// An explicit group is an unordered set; duplicate/order changes are not a different cursor scope.
+	if len(r.Bosses) > 0 {
+		r.Bosses = slices.Clone(selection.Bosses)
+	}
 	// Award values and ordinary result changes do not invalidate a cursor.
 	b, _ := json.Marshal(struct {
 		Tenant  uuid.UUID
