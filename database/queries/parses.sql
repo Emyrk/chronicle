@@ -40,4 +40,3 @@ JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_grou
 WHERE edr.instance_id = @instance_id
   AND edr.encounter_id IS NOT NULL  -- boss kills only
 ORDER BY edr.encounter_name, edr.dps DESC;
-

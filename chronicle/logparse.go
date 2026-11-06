@@ -15,7 +15,6 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
-	"github.com/Emyrk/chronicle/chronicle/riverqueue/parseargs"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/combatlog/parseoptions"
@@ -38,11 +37,9 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/database/jsontransform"
 	"github.com/Emyrk/chronicle/internal/guildrenames"
-	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/slice"
-	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/Emyrk/chronicle/internal/wowspec"
 	"github.com/google/uuid"
@@ -56,9 +53,6 @@ const (
 	KindLogParse                 = "log-parse"
 	MinimumCombatTimeForRankings = 3
 )
-
-// parseScoreArgs is imported from the shared parseargs package, eliminating
-// the previous circular mirror that had divergent InsertOpts/UniqueOpts.
 
 type OutputLogParse struct {
 	InstanceFailures map[string]string
@@ -896,14 +890,6 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				if err != nil {
 					return err
 				}
-				// Capture pre-refresh canonical rows before a duplicate merge can
-				// delete or replace their representatives. The ranking transaction
-				// later marks the newly resolved run as well.
-				for start := 0; start < len(rankingRunAffectedIDs); start += 200 {
-					if err := tx.MarkDirtyObservationRunsByIDs(ctx, rankingRunAffectedIDs[start:min(start+200, len(rankingRunAffectedIDs))]); err != nil {
-						return err
-					}
-				}
 				return nil
 			}, nil)
 			if errors.Is(dupErr, errStaleParseGeneration) {
@@ -922,16 +908,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		// Rankings are supplementary. Persist them atomically in a separate
 		// transaction so a ranking error cannot roll back the parsed instance.
 		playerRankings := rankableLog && finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil
-		// Guild credit (and guild-less competition evidence) does not require
-		// a DPS ranking; clean boss kills alone are sufficient.
-		cleanBossKill := false
-		for _, enc := range finalized.Encounters {
-			if enc.Boss && enc.KillType == encounter.KillTypeClean {
-				cleanBossKill = true
-				break
-			}
-		}
-		if playerRankings || (rankableLog && publicLog && cleanBossKill) {
+		if playerRankings {
 			rankErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
 				// Acquire the refresh lock before the parse-generation row lock,
 				// matching deletion and reparse, to avoid a lock-order cycle.
@@ -950,29 +927,6 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				}
 				if err := tx.TouchLogInstanceRankingSource(ctx, dbinstance.ID); err != nil {
 					return err
-				}
-				if !publicLog {
-					return nil
-				}
-				// Record earned credit at parse time. Async ranking-run refresh
-				// remains an idempotent repair; deletion holds the same lock.
-				sources, err := tx.RankingRunSources(ctx, rankingRunAffectedIDs)
-				if err != nil {
-					return err
-				}
-				for _, source := range sources {
-					if _, err := tx.BackfillRenownFactsForSource(ctx, database.BackfillRenownFactsForSourceParams{
-						RealmID: source.RealmID, RunID: source.RunID,
-						RepresentativeInstanceID: source.RepresentativeInstanceID,
-					}); err != nil {
-						return err
-					}
-					if _, err := tx.BackfillGuildRenownFactsForSource(ctx, database.BackfillGuildRenownFactsForSourceParams{
-						TenantID: uuid.Nil, RunID: source.RunID,
-						RepresentativeInstanceID: source.RepresentativeInstanceID,
-					}); err != nil {
-						return err
-					}
 				}
 				return nil
 			}, nil)
@@ -1002,46 +956,6 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		metrics.encountersParsed.Add(float64(len(finalized.Encounters)))
 	}
 
-	// Keep compact current-known cohorts synchronized after every successful
-	// parse so live windows immediately include late historical uploads.
-	membershipErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
-		if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
-			return err
-		}
-		if result, err := tx.RefreshParseScoreMembershipsForLogGroup(ctx, database.RefreshParseScoreMembershipsForLogGroupParams{
-			LogGroupID: job.Args.LogID, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
-		}); err != nil {
-			return fmt.Errorf("refresh DPS/HPS parse memberships after parse: %w", err)
-		} else {
-			w.parent.logger.InfoContext(ctx, "refreshed DPS/HPS parse memberships after parse",
-				slog.Int64("upserted", result.UpsertedCount), slog.Int64("deleted", result.DeletedCount))
-		}
-		if result, err := tx.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
-			LogGroupID: job.Args.LogID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
-		}); err != nil {
-			return fmt.Errorf("refresh clear-time memberships after parse: %w", err)
-		} else {
-			w.parent.logger.InfoContext(ctx, "refreshed clear-time memberships after parse",
-				slog.Int64("upserted", result.UpsertedCount), slog.Int64("deleted", result.DeletedCount))
-		}
-		if result, err := tx.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
-			LogGroupID: job.Args.LogID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
-		}); err != nil {
-			return fmt.Errorf("refresh boss-kill memberships after parse: %w", err)
-		} else {
-			w.parent.logger.InfoContext(ctx, "refreshed boss-kill memberships after parse",
-				slog.Int64("upserted", result.UpsertedCount), slog.Int64("deleted", result.DeletedCount))
-		}
-		return nil
-	}, nil)
-	if errors.Is(membershipErr, errStaleParseGeneration) {
-		jobResult = "cancelled"
-		return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "refresh_memberships", membershipErr)
-	}
-	if membershipErr != nil {
-		return fmt.Errorf("fence parse membership refresh: %w", membershipErr)
-	}
-
 	if err := w.parent.finalizeParseGeneration(ctx, job.Args.LogID, parseGeneration); err != nil {
 		if errors.Is(err, errStaleParseGeneration) {
 			jobResult = "cancelled"
@@ -1054,34 +968,6 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	if refreshIDs := rankingRunRefresh.Complete(); len(refreshIDs) > 0 {
 		if err := w.parent.EnqueueRankingRunRefresh(ctx, refreshIDs...); err != nil {
 			w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run refresh after replacement parse", slog.Any("error", err))
-		}
-	}
-
-	// Enqueue parse score computation for each successfully parsed instance.
-	// Fire-and-forget: scoring failure doesn't fail the parse, but log errors.
-	if rankableLog && publicLog && w.parent.queue != nil {
-		for _, inst := range jobOut.Instances {
-			_, enqErr := w.parent.queue.Insert(ctx, parseargs.ArgsComputeParseScores{
-				InstanceID: inst.ID,
-				TenantID:   job.Args.TenantID,
-			}, nil)
-			if enqErr != nil {
-				w.parent.logger.Error("failed to enqueue parse score computation",
-					slog.String("instance_id", inst.ID.String()),
-					slog.Any("error", enqErr),
-				)
-			}
-			_, timeEnqErr := w.parent.queue.Insert(ctx, parseargs.ArgsComputeTimeParseScores{
-				InstanceID: inst.ID,
-				TenantID:   job.Args.TenantID,
-				Force:      true,
-			}, nil)
-			if timeEnqErr != nil {
-				w.parent.logger.Error("failed to enqueue time parse score computation",
-					slog.String("instance_id", inst.ID.String()),
-					slog.Any("error", timeEnqErr),
-				)
-			}
 		}
 	}
 

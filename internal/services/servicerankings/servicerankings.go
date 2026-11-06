@@ -11,219 +11,86 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
-	"github.com/Emyrk/chronicle/chronicle"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	types "github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
+	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/google/uuid"
+
+	"github.com/Emyrk/chronicle/chronicle"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
-	"github.com/Emyrk/chronicle/internal/services/servicedataset"
-	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
-	"github.com/Emyrk/chronicle/internal/services/servicetenant"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-
 	"github.com/coder/serpent"
+	"github.com/go-chi/chi/v5"
 )
 
 var _ services.Servicer = (*Service)(nil)
 
-// Rankings returns the rankings service from the broker.
+// Rankings returns the speedrun leaderboard service from the broker.
 func Rankings(broker *services.Services) *Service {
 	return services.MustGet[*Service](broker)
 }
 
-// OnRankings returns the service name for dependency declarations.
 func OnRankings() string {
 	return (&Service{}).Name()
 }
 
-// Service provides DPS rankings, speedrun leaderboard, and related queries.
+// Service serves public speedrun leaderboards and rules.
 type Service struct {
 	broker    *services.Services
 	router    chi.Router
 	logger    *slog.Logger
 	store     *authz.Authz
 	chronicle *chronicle.Chronicle
-	dataset   *servicedataset.Service
 	registry  *registry.Registry
+	dataset   *servicedataset.Service
 
-	// SummaryDispatchWorker fans out per-tenant refresh jobs.
-	SummaryDispatchWorker *WorkerRefreshRankingsSummaries
-	// SummaryTenantWorker refreshes summaries for a single tenant.
-	SummaryTenantWorker *WorkerRefreshRankingsSummaryTenant
-
-	// ComputeParseScoresWorker computes and persists per-instance parse scores.
-	ComputeParseScoresWorker *WorkerComputeParseScores
-	// ComputeTimeParseScoresWorker computes locked clear/boss duration parses.
-	ComputeTimeParseScoresWorker *WorkerComputeTimeParseScores
-	// BackfillTimeParseScoresWorker manually dispatches bounded historical repairs.
-	BackfillTimeParseScoresWorker *WorkerBackfillTimeParseScores
-	// RepairDispatchWorker fans daily repairs out across root and tenant scopes.
-	RepairDispatchWorker *WorkerDispatchParseScoreRepairs
-	// RepairParseScoresWorker dispatches bounded repair jobs for one tenant.
-	RepairParseScoresWorker *WorkerRepairParseScores
-
-	// RankingRunRefreshWorker rebuilds persisted logical-run representatives.
+	SummaryDispatchWorker   *WorkerRefreshRankingsSummaries
+	SummaryTenantWorker     *WorkerRefreshRankingsSummaryTenant
 	RankingRunRefreshWorker *WorkerRefreshRankingRuns
-	// RankingRunRepairWorker discovers missed or stale representative rows.
-	RankingRunRepairWorker *WorkerRepairRankingRuns
-	// RatingDispatchWorker fans daily rating rebuilds out to tenants with realms.
-	RatingDispatchWorker *WorkerDispatchRatingScores
-	// RatingTenantWorker builds and publishes one tenant's rating generation.
-	RatingTenantWorker                  *WorkerRebuildTenantRatings
-	RenownRepairWorker                  *WorkerRepairRenownFacts
-	RenownDispatchWorker                *WorkerDispatchRenownRepair
-	IncrementalRenownWorker             *WorkerRefreshTenantRenown
-	IncrementalRenownDispatchWorker     *WorkerDispatchIncrementalRenown
-	RenownExpiryWorker                  *WorkerExpireTenantRenown
-	RenownExpiryDispatchWorker          *WorkerDispatchRenownExpiry
-	RatingObservationWorker             *WorkerReconcileTenantRatingObservations
-	RatingObservationDispatchWorker     *WorkerDispatchRatingObservations
-	IncrementalMasteryWorker            *WorkerRefreshTenantMastery
-	IncrementalMasteryDispatchWorker    *WorkerDispatchIncrementalMastery
-	MasteryExpiryWorker                 *WorkerExpireTenantMastery
-	MasteryExpiryDispatchWorker         *WorkerDispatchMasteryExpiry
-	LiveEvidenceBootstrapWorker         *WorkerBootstrapTenantLiveEvidence
-	LiveEvidenceBootstrapDispatchWorker *WorkerDispatchLiveEvidenceBootstrap
-	LiveEvidenceRepairWorker            *WorkerRepairLiveEvidence
-	LiveEvidenceRepairDispatchWorker    *WorkerDispatchLiveEvidenceRepair
-	IncrementalPeakWorker               *WorkerRefreshTenantPeak
-	IncrementalPeakDispatchWorker       *WorkerDispatchIncrementalPeak
-	TenantRatingDrainDispatchWorker     *WorkerDispatchTenantRatingDrain
-	TenantRatingDrainWorker             *WorkerDrainTenantRatings
-	TenantRatingCopyDispatchWorker      *WorkerDispatchTenantRatingCopy
-	TenantRatingCopyWorker              *WorkerCopyTenantRatings
-	RatingPolicyScanWorker              *WorkerRatingPolicyScan
-	RatingPolicyScanDispatchWorker      *WorkerDispatchRatingPolicyScan
-	PeakExpiryWorker                    *WorkerExpireTenantPeak
-	PeakExpiryDispatchWorker            *WorkerDispatchPeakExpiry
+	RankingRunRepairWorker  *WorkerRepairRankingRuns
 }
 
-func New(broker *services.Services) *Service {
-	return &Service{
-		broker: broker,
-	}
-}
-
-func (s *Service) Name() string {
-	return services.ServiceRankings
-}
-
+func New(broker *services.Services) *Service { return &Service{broker: broker} }
+func (s *Service) Name() string              { return services.ServiceRankings }
 func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
 		serviceauthz.OnAuthz(),
-		servicedbstore.OnDatabaseStore(),
 		servicechronicle.OnChronicle(),
+		servicedbstore.OnDatabaseStore(),
 		servicedataset.OnDataset(),
 	}
 }
-
-func (s *Service) Configures() []string { return []string{} }
-func (s *Service) Options() serpent.OptionSet {
-	return serpent.OptionSet{}
-}
-
+func (s *Service) Configures() []string       { return []string{} }
+func (s *Service) Options() serpent.OptionSet { return serpent.OptionSet{} }
 func (s *Service) Start(_ context.Context) error {
 	s.logger = servicelogger.Logger(s.broker)
 	s.store = serviceauthz.Authz(s.broker)
 	s.chronicle = servicechronicle.Chronicle(s.broker)
-	s.dataset = servicedataset.Dataset(s.broker)
 	s.registry = s.chronicle.Registry()
-
-	namedLogger := services.NamedLogger(s.logger, s.Name())
+	s.dataset = servicedataset.Dataset(s.broker)
 	store := servicedbstore.DatabaseStore(s.broker)
-	s.SummaryDispatchWorker = &WorkerRefreshRankingsSummaries{
-		Store:  store,
-		Logger: namedLogger,
-		// Queue is set by serviceriver after queue creation.
-	}
-	s.SummaryTenantWorker = &WorkerRefreshRankingsSummaryTenant{
-		Store:  store,
-		Logger: namedLogger,
-	}
-	s.ComputeParseScoresWorker = &WorkerComputeParseScores{
-		Store:  store,
-		Logger: namedLogger,
-		// Queue is set by serviceriver after queue creation.
-	}
-	s.ComputeTimeParseScoresWorker = &WorkerComputeTimeParseScores{
-		Store: store, Logger: namedLogger,
-	}
-	s.BackfillTimeParseScoresWorker = &WorkerBackfillTimeParseScores{
-		Store: store, Logger: namedLogger,
-		// Queue is set by serviceriver after queue creation.
-	}
-	s.RepairDispatchWorker = &WorkerDispatchParseScoreRepairs{
-		Store:  store,
-		Logger: namedLogger,
-		// Queue is set by serviceriver after queue creation.
-	}
-	s.RepairParseScoresWorker = &WorkerRepairParseScores{
-		Store:  store,
-		Logger: namedLogger,
-		// Queue is set by serviceriver after queue creation.
-	}
-	s.RankingRunRefreshWorker = &WorkerRefreshRankingRuns{
-		Store:  store,
-		Logger: namedLogger,
-	}
-	s.RankingRunRepairWorker = &WorkerRepairRankingRuns{
-		Store:  store,
-		Logger: namedLogger,
-	}
-	s.RatingDispatchWorker = &WorkerDispatchRatingScores{Store: store, Logger: namedLogger}
-	s.RatingTenantWorker = &WorkerRebuildTenantRatings{Store: store, Logger: namedLogger}
-	s.RenownRepairWorker = &WorkerRepairRenownFacts{Store: store}
-	s.RenownDispatchWorker = &WorkerDispatchRenownRepair{Store: store}
-	s.IncrementalRenownWorker = &WorkerRefreshTenantRenown{Store: store}
-	s.IncrementalRenownDispatchWorker = &WorkerDispatchIncrementalRenown{Store: store}
-	s.RenownExpiryWorker = &WorkerExpireTenantRenown{Store: store}
-	s.RenownExpiryDispatchWorker = &WorkerDispatchRenownExpiry{Store: store}
-	s.RatingObservationWorker = &WorkerReconcileTenantRatingObservations{Store: store}
-	s.RatingObservationDispatchWorker = &WorkerDispatchRatingObservations{Store: store}
-	s.IncrementalMasteryWorker = &WorkerRefreshTenantMastery{Store: store}
-	s.IncrementalMasteryDispatchWorker = &WorkerDispatchIncrementalMastery{Store: store}
-	s.MasteryExpiryWorker = &WorkerExpireTenantMastery{Store: store}
-	s.MasteryExpiryDispatchWorker = &WorkerDispatchMasteryExpiry{Store: store}
-	s.LiveEvidenceBootstrapWorker = &WorkerBootstrapTenantLiveEvidence{Store: store}
-	s.LiveEvidenceBootstrapDispatchWorker = &WorkerDispatchLiveEvidenceBootstrap{Store: store}
-	s.LiveEvidenceRepairWorker = &WorkerRepairLiveEvidence{Store: store}
-	s.LiveEvidenceRepairDispatchWorker = &WorkerDispatchLiveEvidenceRepair{Store: store}
-	s.IncrementalPeakWorker = &WorkerRefreshTenantPeak{Store: store}
-	s.IncrementalPeakDispatchWorker = &WorkerDispatchIncrementalPeak{Store: store}
-	s.TenantRatingDrainDispatchWorker = &WorkerDispatchTenantRatingDrain{Store: store}
-	s.TenantRatingDrainWorker = &WorkerDrainTenantRatings{Store: store}
-	s.TenantRatingCopyDispatchWorker = &WorkerDispatchTenantRatingCopy{Store: store}
-	s.TenantRatingCopyWorker = &WorkerCopyTenantRatings{Store: store}
-	s.RatingPolicyScanWorker = &WorkerRatingPolicyScan{Store: store}
-	s.RatingPolicyScanDispatchWorker = &WorkerDispatchRatingPolicyScan{Store: store}
-	s.PeakExpiryWorker = &WorkerExpireTenantPeak{Store: store}
-	s.PeakExpiryDispatchWorker = &WorkerDispatchPeakExpiry{Store: store}
-
+	logger := services.NamedLogger(s.logger, s.Name())
+	s.SummaryDispatchWorker = &WorkerRefreshRankingsSummaries{Store: store, Logger: logger}
+	s.SummaryTenantWorker = &WorkerRefreshRankingsSummaryTenant{Store: store, Logger: logger}
+	s.RankingRunRefreshWorker = &WorkerRefreshRankingRuns{Store: store, Logger: logger}
+	s.RankingRunRepairWorker = &WorkerRepairRankingRuns{Store: store, Logger: logger}
 	s.router = chi.NewRouter()
 	s.setupRoutes()
-
-	s.logger.Info("rankings service started")
+	s.logger.Info("speedrun leaderboard service started")
 	return nil
 }
-
-func (s *Service) Close(_ context.Context) error {
-	return nil
-}
-
+func (s *Service) Close(_ context.Context) error { return nil }
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.router.ServeHTTP(w, r)
 }
-
 func (s *Service) setupRoutes() {
-	// All rankings/leaderboard data is public and changes infrequently. Browsers
-	// may reuse responses for 5 minutes, while Cloudflare can share common URLs
-	// across visitors for 15 minutes and serve stale data during revalidation.
 	s.router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodGet {
@@ -233,7 +100,6 @@ func (s *Service) setupRoutes() {
 			next.ServeHTTP(w, r)
 		})
 	})
-
 	// DPS rankings
 	s.router.Get("/instances", s.handleInstances)
 	s.router.Get("/encounters", s.handleEncounters)
@@ -246,60 +112,15 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/kill-time-leaderboard", s.handleKillTimeLeaderboard)
 	s.router.Get("/success-rates", s.handleSuccessRates)
 
-	// Instance parses
-	s.router.Get("/instances/{instanceID}/parses", s.handleInstanceParses)
-	s.router.Get("/instances/{instanceID}/time-parses", s.handleInstanceTimeParses)
-
-	// Character performance and parse history
 	s.router.Get("/characters/{playerGUID}/performance", s.handleCharacterPerformance)
-	s.router.Get("/characters/{playerGUID}/parses", s.handleCharacterParseHistory)
 	s.router.Get("/characters/{playerGUID}/encounters", s.handleCharacterEncounterStats)
 
-	// Cohort viewer (debugging/transparency)
-	s.router.Get("/parse-score-cohorts/buckets", s.handleParseScoreCohortBuckets)
-	s.router.Get("/parse-score-cohorts/cohort", s.handleParseScoreCohort)
-	s.router.Get("/parse-score-cohorts/spreads", s.handleParseScoreSpreads)
-	s.router.Get("/time-parse-cohorts/buckets", s.handleTimeParseCohortBuckets)
-	s.router.Get("/time-parse-cohorts/cohort", s.handleTimeParseCohort)
-	s.router.Get("/time-parse-cohorts/spreads", s.handleTimeParseSpreads)
-
-	// Published tenant-wide rating leaderboards. Realm IDs filter rows only.
-	s.router.Route("/ratings", func(r chi.Router) {
-		r.Use(s.requireRatingTenant)
-		r.Get("/catchup", s.handleRatingCatchup)
-		r.Get("/hub-summary", s.handleHubSummary)
-		r.Get("/set-board", s.handleHubSetBoard)
-		r.Get("/guild-full-list", s.handlePublishedGuildFullList)
-		r.Get("/player-full-list", s.handlePublishedPlayerFullList)
-		r.Get("/scope-leaderboard", s.handleTenantPlayerScopeLeaderboard)
-		r.Get("/boss-leaderboard", s.handleTenantPlayerBossLeaderboard)
-		r.Get("/guild-boss-leaderboard", s.handleTenantGuildBossLeaderboard)
-		r.Get("/guild-scope-leaderboard", s.handleTenantGuildScopeLeaderboard)
-	})
-
-	// Speedrun leaderboard
 	s.router.Get("/speedrun", s.handleSpeedrunLeaderboard)
 	s.router.Get("/speedrun/instances", s.handleSpeedrunInstances)
 	s.router.Get("/speedrun/realms", s.handleSpeedrunRealms)
 	s.router.Get("/speedrun/difficulties", s.handleSpeedrunDifficulties)
 	s.router.Get("/speedrun/rules", s.handleSpeedrunRules)
 	s.router.Get("/speedrun/guild-clears", s.handleSpeedrunGuildClears)
-}
-
-func (s *Service) requireRatingTenant(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tenantID := servicetenant.TenantIDFromContext(r.Context())
-		enabled, err := s.store.TenantRatingsEnabled(r.Context(), tenantID)
-		if err != nil {
-			httpapi.InternalServerError(w, err)
-			return
-		}
-		if !enabled {
-			httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Visit a specific server to see ratings"})
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 // handleInstances returns per-instance summaries with top 3 players.

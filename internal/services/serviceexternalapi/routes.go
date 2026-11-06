@@ -59,7 +59,7 @@ func (s *Service) registerRoutes() {
 	s.register(http.MethodGet, "/characters/{server}/{realm}/{character}/instances", OpenAPIOperation{
 		Tags:        []string{"Characters"},
 		Summary:     "List a character's instances",
-		Description: "Returns deduplicated raid instances the character participated in, newest first. Performance fields use already-computed ranking and parse data when available.",
+		Description: "Returns deduplicated raid instances the character participated in, newest first.",
 		Parameters: append(characterParameters,
 			queryParameter("page", "Page number, starting at 1", false, "integer", 1),
 			queryParameter("page_size", "Results per page, from 1 to 50", false, "integer", 50),
@@ -68,7 +68,6 @@ func (s *Service) registerRoutes() {
 			Character: Character{Name: "Example", Server: Server{Name: "Example Server"}, Realm: Realm{Name: "Example Realm"}},
 			Logs: []CharacterLog{{
 				Name: "Molten Core", Difficulty: "Normal", MaxPlayers: 40, BossKills: 10,
-				Performance: []CharacterEncounterPerformance{{EncounterName: "Ragnaros", DPSParse: int32Pointer(92)}},
 			}},
 			Pagination: Pagination{Page: 1, PageSize: 50},
 		}),
@@ -114,44 +113,6 @@ func (s *Service) registerRoutes() {
 			}},
 		}),
 	}, s.getInstanceBySlug)
-
-	s.register(http.MethodGet, "/raidlogs/instances/{instance_id}/ranking-records", OpenAPIOperation{
-		Tags:        []string{"Raid Instance"},
-		Summary:     "Get raid-instance DPS and HPS metrics",
-		Description: "Returns every per-player encounter ranking record stored for an instance ID, including raw damage, healing, absorption, duration, DPS, HPS, and persisted parse scores when available. Zero-value metrics are retained.",
-		Parameters: []OpenAPIParameter{
-			pathParameter("instance_id", "Instance UUID", "11111111-1111-1111-1111-111111111111"),
-		},
-		Responses: okResponse([]InstanceRankingRecord{{
-			InstanceRankingRecord: chroniclesdk.InstanceRankingRecord{
-				ID:            uuid.MustParse("33333333-3333-3333-3333-333333333333"),
-				EncounterID:   uuidPointer(uuid.MustParse("44444444-4444-4444-4444-444444444444")),
-				EncounterName: "Ragnaros",
-				PlayerGUID:    "Player-00000001",
-				PlayerName:    "Example",
-				PlayerClass:   "Warrior",
-				PlayerSpec:    "Fury",
-				PlayerRole:    "dps",
-				PlayerLevel:   60,
-				DamageDone:    123456,
-				HealingDone:   789,
-				AbsorbedDone:  100,
-				DurationSecs:  120.5,
-				DPS:           1024.53,
-				HPS:           6.55,
-				LogHashedSlug: "example-log",
-				KilledAt:      time.Date(2026, time.August, 30, 12, 0, 0, 0, time.UTC),
-			},
-			DPSParse: &InstanceRankingParse{
-				MetricValue: 1024.53, PreciseScore: 91.72, DisplayScore: 92,
-				Rank: 18, SampleSize: 842, Status: "ok",
-			},
-			HPSParse: &InstanceRankingParse{
-				MetricValue: 6.55, PreciseScore: 24.11, DisplayScore: 24,
-				Rank: 638, SampleSize: 842, Status: "low_confidence",
-			},
-		}}),
-	}, s.getInstanceRankingRecordsBySlug)
 
 	s.registerWithRateLimitCost(http.MethodGet, "/raidlogs/instances/{instance_id}/events/{type}", externalEventsRequestCost, OpenAPIOperation{
 		Tags:        []string{"Raid Instance"},
@@ -275,14 +236,6 @@ func queryParameter(name, description string, required bool, kind string, exampl
 		Name: name, In: "query", Description: description, Required: required,
 		Schema: OpenAPISchema{Type: kind}, Example: example,
 	}
-}
-
-func uuidPointer(value uuid.UUID) *uuid.UUID {
-	return &value
-}
-
-func int32Pointer(value int32) *int32 {
-	return &value
 }
 
 func int64Pointer(value int64) *int64 {

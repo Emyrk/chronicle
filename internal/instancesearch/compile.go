@@ -2,13 +2,10 @@ package instancesearch
 
 import (
 	"fmt"
+	"github.com/google/uuid"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
-
-	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 )
 
 const (
@@ -17,29 +14,14 @@ const (
 	DefaultMaxNodes      = 64
 	DefaultMaxDepth      = 8
 	DefaultMaxListValues = 50
-	// DefaultTimeParseLookbackDays matches the lookback the instance page
-	// reads (servicerankings.TimeParseScoreLookbackDays).
-	DefaultTimeParseLookbackDays int16 = 60
 )
 
 // Options configures compilation. The zero value uses defaults.
 type Options struct {
-	// TenantID scopes tables that carry their own tenant_id and are not
-	// protected by row-level security (parse_score_results,
-	// time_parse_scores). uuid.Nil is the main site. Search fills this from
-	// the request context; Compile callers must pass the same tenant the
-	// connection's app.tenant_id is set to.
-	TenantID uuid.UUID
-
 	MaxLimit      int
 	MaxNodes      int
 	MaxDepth      int
 	MaxListValues int
-
-	// Time-parse scoring contract. Zero values use the current policy.
-	TimeParseLookbackDays  int16
-	TimeParsePolicyVersion int16
-	TimeParseQueryVersion  int16
 }
 
 func (o Options) withDefaults() Options {
@@ -54,15 +36,6 @@ func (o Options) withDefaults() Options {
 	}
 	if o.MaxListValues <= 0 {
 		o.MaxListValues = DefaultMaxListValues
-	}
-	if o.TimeParseLookbackDays == 0 {
-		o.TimeParseLookbackDays = DefaultTimeParseLookbackDays
-	}
-	if o.TimeParsePolicyVersion == 0 {
-		o.TimeParsePolicyVersion = timeparsepolicy.PolicyVersion
-	}
-	if o.TimeParseQueryVersion == 0 {
-		o.TimeParseQueryVersion = timeparsepolicy.QueryVersion
 	}
 	return o
 }
@@ -377,9 +350,6 @@ type compiler struct {
 	aliases int
 	cost    int
 	fields  []string
-
-	tenantArg   string
-	contractArg [3]string
 }
 
 // arg binds v as the next positional parameter.
@@ -395,29 +365,6 @@ func (c *compiler) alias(prefix string) string {
 }
 
 // tenant returns the bound tenant parameter, shared by every predicate.
-func (c *compiler) tenant() string {
-	if c.tenantArg == "" {
-		c.tenantArg = c.arg(c.opts.TenantID.String()) + "::uuid"
-	}
-	return c.tenantArg
-}
-
-// timeParseContract returns SQL that pins a time_parse_scores alias to the
-// current scoring contract and tenant.
-func (c *compiler) timeParseContract(tps string) string {
-	return c.timeParseContractFor(tps, "li.id")
-}
-
-func (c *compiler) timeParseContractFor(tps, instanceID string) string {
-	if c.contractArg[0] == "" {
-		c.contractArg[0] = c.arg(c.opts.TimeParseLookbackDays) + "::smallint"
-		c.contractArg[1] = c.arg(c.opts.TimeParsePolicyVersion) + "::smallint"
-		c.contractArg[2] = c.arg(c.opts.TimeParseQueryVersion) + "::smallint"
-	}
-	return fmt.Sprintf("%[1]s.tenant_id = %[2]s AND %[1]s.instance_id = %[3]s AND %[1]s.lookback_days = %[4]s AND %[1]s.policy_version = %[5]s AND %[1]s.query_version = %[6]s",
-		tps, c.tenant(), instanceID, c.contractArg[0], c.contractArg[1], c.contractArg[2])
-}
-
 func (c *compiler) node(n *Node, path string, s scope, depth int) (string, error) {
 	c.nodes++
 	if c.nodes > c.opts.MaxNodes {

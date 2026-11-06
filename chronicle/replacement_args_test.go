@@ -1,10 +1,11 @@
 package chronicle
 
 import (
+	"testing"
+
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestNewArgsLogParseMatchesTenantReparse(t *testing.T) {

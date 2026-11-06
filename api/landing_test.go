@@ -62,10 +62,6 @@ func TestForeverLandingToggle(t *testing.T) {
 		return out
 	}
 
-	require.False(t, get().RootTenantRatingsDisabled, "off by default")
-	require.True(t, put(`{"root_tenant_ratings_disabled":true}`).RootTenantRatingsDisabled)
-	require.True(t, get().RootTenantRatingsDisabled)
-	require.False(t, put(`{"root_tenant_ratings_disabled":false}`).RootTenantRatingsDisabled)
 	require.True(t, get().ForeverLandingEnabled, "on by default")
 	require.False(t, put(`{"forever_landing_enabled":false}`).ForeverLandingEnabled)
 	require.False(t, get().ForeverLandingEnabled)

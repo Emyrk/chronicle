@@ -73,7 +73,7 @@ DELETE FROM guild_page_panels WHERE tab_id = $1;
 
 -- name: BulkUpsertGuildPagePanels :exec
 INSERT INTO guild_page_panels (id, tab_id, panel_type, config, position)
-SELECT 
+SELECT
     COALESCE(d.id, gen_random_uuid()),
     d.tab_id,
     d.panel_type,
@@ -89,7 +89,7 @@ ON CONFLICT (id) DO UPDATE SET
 -- Full page fetch with all tabs and panels
 
 -- name: GetFullGuildPage :one
-SELECT 
+SELECT
     gp.*,
     g.name as guild_name,
     g.realm_id,
@@ -105,7 +105,7 @@ WHERE (@search::text = '' OR g.name ILIKE '%' || @search || '%')
   AND (@realm_id::uuid = '00000000-0000-0000-0000-000000000000' OR g.realm_id = @realm_id);
 
 -- name: ListGuildsWithPages :many
-SELECT 
+SELECT
     g.*,
     gp.id as page_id,
     r.name as realm_name,

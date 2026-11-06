@@ -30,11 +30,8 @@ import (
 	"github.com/Emyrk/chronicle/database/pubsub"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/internal/cleanup"
-	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/ptr"
-	"github.com/Emyrk/chronicle/internal/ratingfacts"
 	"github.com/Emyrk/chronicle/internal/slice"
-	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/dustin/go-humanize"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -1016,71 +1013,19 @@ func (c *Chronicle) WoWLogGroup(ctx context.Context, groupID uuid.UUID) (*chroni
 
 func (c *Chronicle) InvalidateWoWLogGroup(ctx context.Context, logID uuid.UUID, reason string) error {
 	var identities []database.RankingRunIdentitiesByLogGroupIDRow
-	// Share the representative lock with ranking reconciliation. Persist dirty
-	// intent before the source becomes ineligible, even if enqueue later fails.
-	err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+	if err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
 			return err
-		}
-		if _, err := tx.GetWoWLogGroupByID(ctx, logID); err != nil {
-			return fmt.Errorf("load log group: %w", err)
 		}
 		var err error
 		identities, err = tx.RankingRunIdentitiesByLogGroupID(ctx, logID)
 		if err != nil {
 			return fmt.Errorf("load ranking run identities: %w", err)
 		}
-		runIDs := make([]uuid.UUID, 0, len(identities))
-		for _, identity := range identities {
-			runIDs = append(runIDs, identity.RunID)
-		}
-		for start := 0; start < len(runIDs); start += 200 {
-			if err := tx.MarkDirtyObservationRunsByIDs(ctx, runIDs[start:min(start+200, len(runIDs))]); err != nil {
-				return fmt.Errorf("mark invalidated rating runs: %w", err)
-			}
-		}
 		return tx.InvalidateWoWLogGroup(ctx, database.InvalidateWoWLogGroupParams{LogGroupID: logID, Reason: reason})
-	}, nil)
-	if err != nil {
+	}, nil); err != nil {
 		return fmt.Errorf("invalidate log group: %w", err)
 	}
-
-	if err := c.Zed.DeleteParseScoreMembershipsByLogGroup(ctx, logID); err != nil {
-		return fmt.Errorf("delete invalidated DPS/HPS parse memberships: %w", err)
-	}
-	if err := c.Zed.DeleteTimeParseClearTimeMembershipsByLogGroup(ctx, logID); err != nil {
-		return fmt.Errorf("delete invalidated clear-time memberships: %w", err)
-	}
-	if err := c.Zed.DeleteTimeParseBossKillMembershipsByLogGroup(ctx, logID); err != nil {
-		return fmt.Errorf("delete invalidated boss-kill memberships: %w", err)
-	}
-
-	runIDs := make([]uuid.UUID, 0, len(identities))
-	for _, identity := range identities {
-		runIDs = append(runIDs, identity.RunID)
-	}
-	replacementLogGroups, err := c.Zed.ListTimeParseReplacementLogGroupsForDeletedLogGroup(ctx, database.ListTimeParseReplacementLogGroupsForDeletedLogGroupParams{
-		RunIds: runIDs, LogGroupID: logID,
-	})
-	if err != nil {
-		return fmt.Errorf("load time-parse replacement log groups: %w", err)
-	}
-	for _, replacementLogGroup := range replacementLogGroups {
-		if refreshErr := c.refreshParseScoreMemberships(ctx, replacementLogGroup); refreshErr != nil {
-			return fmt.Errorf("refresh DPS/HPS parse memberships for replacement log group: %w", refreshErr)
-		}
-		if _, refreshErr := c.Zed.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
-			LogGroupID: replacementLogGroup, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
-		}); refreshErr != nil {
-			return fmt.Errorf("refresh clear-time memberships after log invalidation: %w", refreshErr)
-		}
-		if _, refreshErr := c.Zed.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
-			LogGroupID: replacementLogGroup, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
-		}); refreshErr != nil {
-			return fmt.Errorf("refresh boss-kill memberships after log invalidation: %w", refreshErr)
-		}
-	}
-
 	if err := c.EnqueueRankingRunRefresh(ctx, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
 		slog.WarnContext(ctx, "failed to enqueue ranking run refresh after log invalidation", slog.Any("error", err))
 	}
@@ -1089,47 +1034,19 @@ func (c *Chronicle) InvalidateWoWLogGroup(ctx context.Context, logID uuid.UUID, 
 
 func (c *Chronicle) ClearWoWLogGroupInvalidation(ctx context.Context, logID uuid.UUID) error {
 	var identities []database.RankingRunIdentitiesByLogGroupIDRow
-	err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+	if err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
 			return err
-		}
-		if _, err := tx.GetWoWLogGroupByID(ctx, logID); err != nil {
-			return fmt.Errorf("load log group: %w", err)
 		}
 		var err error
 		identities, err = tx.RankingRunIdentitiesByLogGroupID(ctx, logID)
 		if err != nil {
 			return fmt.Errorf("load ranking run identities: %w", err)
 		}
-		runIDs := make([]uuid.UUID, 0, len(identities))
-		for _, identity := range identities {
-			runIDs = append(runIDs, identity.RunID)
-		}
-		for start := 0; start < len(runIDs); start += 200 {
-			if err := tx.MarkDirtyObservationRunsByIDs(ctx, runIDs[start:min(start+200, len(runIDs))]); err != nil {
-				return fmt.Errorf("mark restored rating runs: %w", err)
-			}
-		}
 		return tx.ClearWoWLogGroupInvalidation(ctx, logID)
-	}, nil)
-	if err != nil {
+	}, nil); err != nil {
 		return fmt.Errorf("clear log group invalidation: %w", err)
 	}
-
-	if err := c.refreshParseScoreMemberships(ctx, logID); err != nil {
-		return fmt.Errorf("restore DPS/HPS parse memberships after clearing invalidation: %w", err)
-	}
-	if _, err := c.Zed.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
-		LogGroupID: logID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
-	}); err != nil {
-		return fmt.Errorf("restore clear-time memberships after clearing invalidation: %w", err)
-	}
-	if _, err := c.Zed.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
-		LogGroupID: logID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
-	}); err != nil {
-		return fmt.Errorf("restore boss-kill memberships after clearing invalidation: %w", err)
-	}
-
 	if err := c.EnqueueRankingRunRefresh(ctx, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
 		slog.WarnContext(ctx, "failed to enqueue ranking run refresh after clearing log invalidation", slog.Any("error", err))
 	}
@@ -1137,93 +1054,41 @@ func (c *Chronicle) ClearWoWLogGroupInvalidation(ctx context.Context, logID uuid
 }
 
 func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) error {
-	identities, err := c.Zed.RankingRunIdentitiesByLogGroupID(ctx, logID)
-	if err != nil {
-		return fmt.Errorf("load ranking run identities: %w", err)
-	}
-	runIDs := make([]uuid.UUID, 0, len(identities))
-	for _, identity := range identities {
-		runIDs = append(runIDs, identity.RunID)
-	}
-	replacementLogGroups, err := c.Zed.ListTimeParseReplacementLogGroupsForDeletedLogGroup(ctx, database.ListTimeParseReplacementLogGroupsForDeletedLogGroupParams{
-		RunIds: runIDs, LogGroupID: logID,
-	})
-	if err != nil {
-		return fmt.Errorf("load time-parse replacement log groups: %w", err)
-	}
-
-	err = c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+	var identities []database.RankingRunIdentitiesByLogGroupIDRow
+	if err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		_, err := advanceParseGeneration(ctx, tx, logID, false)
 		return err
-	}, nil)
-	if err != nil {
+	}, nil); err != nil {
 		return fmt.Errorf("fence log group deletion: %w", err)
 	}
-
-	err = c.RemoveWoWLogFilesFromStorage(ctx, logID)
-	if err != nil {
+	if err := c.RemoveWoWLogFilesFromStorage(ctx, logID); err != nil {
 		return fmt.Errorf("remove log files from storage: %w", err)
 	}
-
 	if err := c.RemoveLogGroupArtifactsFromStorage(ctx, logID); err != nil {
 		return fmt.Errorf("remove log group artifacts from storage: %w", err)
 	}
-
 	if err := c.RemoveParseCPUProfile(ctx, logID); err != nil {
 		return err
 	}
-
-	// Reconcile earned credit in the same transaction as source deletion.
-	// Remaining duplicate uploads may still back the logical run.
-	err = c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+	if err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
-			return fmt.Errorf("lock ranking representatives before log deletion: %w", err)
+			return err
 		}
 		current, err := tx.RankingRunIdentitiesByLogGroupID(ctx, logID)
 		if err != nil {
 			return fmt.Errorf("load current ranking identities: %w", err)
 		}
-		instanceIDs := make([]uuid.UUID, 0, len(current))
-		runIDs := make([]uuid.UUID, 0, len(current))
-		for _, identity := range current {
-			instanceIDs = append(instanceIDs, identity.InstanceID)
-			runIDs = append(runIDs, identity.RunID)
-		}
-		realms, err := tx.RatingRealmsByInstanceIDs(ctx, instanceIDs)
-		if err != nil {
-			return err
-		}
 		if err := tx.DeleteWoWLogGroup(ctx, logID); err != nil {
-			return err
-		}
-		if err := ratingfacts.ReconcileDeletedRuns(ctx, tx, runIDs, realms); err != nil {
 			return err
 		}
 		identities = current
 		return nil
-	}, nil)
-	if err != nil {
+	}, nil); err != nil {
 		return fmt.Errorf("delete log group: %w", err)
-	}
-	for _, replacementLogGroup := range replacementLogGroups {
-		if refreshErr := c.refreshParseScoreMemberships(ctx, replacementLogGroup); refreshErr != nil {
-			return fmt.Errorf("refresh DPS/HPS parse memberships for replacement log group: %w", refreshErr)
-		}
-		if _, refreshErr := c.Zed.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
-			LogGroupID: replacementLogGroup, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
-		}); refreshErr != nil {
-			return fmt.Errorf("refresh clear-time memberships after log group deletion: %w", refreshErr)
-		}
-		if _, refreshErr := c.Zed.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
-			LogGroupID: replacementLogGroup, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
-		}); refreshErr != nil {
-			return fmt.Errorf("refresh boss-kill memberships after log group deletion: %w", refreshErr)
-		}
 	}
 	if err := c.EnqueueRankingRunRefresh(ctx, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
 		slog.WarnContext(ctx, "failed to enqueue ranking run refresh after log group deletion", slog.Any("error", err))
 	}
-
 	return nil
 }
 
@@ -1264,23 +1129,8 @@ func (c *Chronicle) DeleteWoWLogGroupFiles(ctx context.Context, logID uuid.UUID)
 }
 
 func (c *Chronicle) DeleteWoWLogInstance(ctx context.Context, logID, instanceID uuid.UUID) error {
-	identities, err := c.Zed.RankingRunIdentitiesByInstanceIDs(ctx, []uuid.UUID{instanceID})
-	if err != nil {
-		return fmt.Errorf("load ranking run identity: %w", err)
-	}
-	replacementLogGroups := make([]uuid.UUID, 0)
-	for _, identity := range identities {
-		groups, groupErr := c.Zed.ListTimeParseReplacementLogGroups(ctx, database.ListTimeParseReplacementLogGroupsParams{
-			RunID: uuid.NullUUID{UUID: identity.RunID, Valid: true}, InstanceID: instanceID,
-		})
-		if groupErr != nil {
-			return fmt.Errorf("load time-parse replacement log groups: %w", groupErr)
-		}
-		replacementLogGroups = append(replacementLogGroups, groups...)
-	}
-	// Remove credit from deleted evidence, retaining only credit reproduced
-	// from other copies of the logical run under the refresh lock.
-	err = c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+	var identities []database.RankingRunIdentitiesByInstanceIDsRow
+	err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
 			return err
 		}
@@ -1288,21 +1138,7 @@ func (c *Chronicle) DeleteWoWLogInstance(ctx context.Context, logID, instanceID 
 		if err != nil {
 			return err
 		}
-		realms, err := tx.RatingRealmsByInstanceIDs(ctx, []uuid.UUID{instanceID})
-		if err != nil {
-			return err
-		}
-		_, err = tx.DeleteLogInstanceByIDAndGroup(ctx, database.DeleteLogInstanceByIDAndGroupParams{
-			ID: instanceID, LogGroupID: logID,
-		})
-		if err != nil {
-			return err
-		}
-		runIDs := make([]uuid.UUID, 0, len(current))
-		for _, identity := range current {
-			runIDs = append(runIDs, identity.RunID)
-		}
-		if err := ratingfacts.ReconcileDeletedRuns(ctx, tx, runIDs, realms); err != nil {
+		if _, err := tx.DeleteLogInstanceByIDAndGroup(ctx, database.DeleteLogInstanceByIDAndGroupParams{ID: instanceID, LogGroupID: logID}); err != nil {
 			return err
 		}
 		identities = current
@@ -1312,51 +1148,17 @@ func (c *Chronicle) DeleteWoWLogInstance(ctx context.Context, logID, instanceID 
 		if errors.Is(err, pgx.ErrNoRows) {
 			return sql.ErrNoRows
 		}
-		return fmt.Errorf("preserve Renown and delete log instance: %w", err)
+		return fmt.Errorf("delete log instance: %w", err)
 	}
-
-	if err := c.Zed.DeleteTimeParseClearTimeMembershipsByInstance(ctx, instanceID); err != nil {
-		return fmt.Errorf("delete clear-time memberships for instance: %w", err)
-	}
-	if err := c.Zed.DeleteTimeParseBossKillMembershipsByInstance(ctx, instanceID); err != nil {
-		return fmt.Errorf("delete boss-kill memberships for instance: %w", err)
-	}
-
-	for _, replacementLogGroup := range replacementLogGroups {
-		if refreshErr := c.refreshParseScoreMemberships(ctx, replacementLogGroup); refreshErr != nil {
-			return fmt.Errorf("refresh DPS/HPS parse memberships for replacement log group: %w", refreshErr)
-		}
-		if _, refreshErr := c.Zed.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
-			LogGroupID: replacementLogGroup, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
-		}); refreshErr != nil {
-			return fmt.Errorf("refresh clear-time memberships after instance deletion: %w", refreshErr)
-		}
-		if _, refreshErr := c.Zed.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
-			LogGroupID: replacementLogGroup, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
-		}); refreshErr != nil {
-			return fmt.Errorf("refresh boss-kill memberships after instance deletion: %w", refreshErr)
-		}
-	}
-
-	err = c.Zed.PruneParsedInstanceFromLogOutput(ctx, database.PruneParsedInstanceFromLogOutputParams{
-		InstanceID: instanceID.String(),
-		LogGroupID: logID.String(),
-	})
-	if err != nil {
+	if err := c.Zed.PruneParsedInstanceFromLogOutput(ctx, database.PruneParsedInstanceFromLogOutputParams{
+		InstanceID: instanceID.String(), LogGroupID: logID.String(),
+	}); err != nil {
 		return fmt.Errorf("prune deleted instance from output: %w", err)
 	}
 	if err := c.EnqueueRankingRunRefresh(ctx, rankingRunIdentitySeeds(identities)...); err != nil {
 		slog.WarnContext(ctx, "failed to enqueue ranking run refresh after instance deletion", slog.Any("error", err))
 	}
-
 	return nil
-}
-
-func (c *Chronicle) refreshParseScoreMemberships(ctx context.Context, logGroupID uuid.UUID) error {
-	_, err := c.Zed.RefreshParseScoreMembershipsForLogGroup(ctx, database.RefreshParseScoreMembershipsForLogGroupParams{
-		LogGroupID: logGroupID, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
-	})
-	return err
 }
 
 // DownloadLogicalLogFile returns the base object plus all finalized append parts

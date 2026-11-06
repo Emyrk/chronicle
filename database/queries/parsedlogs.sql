@@ -249,7 +249,7 @@ WHERE
 ;
 
 -- name: ListRecentInstances :many
-SELECT 
+SELECT
     li.id,
     li.hashed_slug as slug,
   COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) as name,
@@ -265,7 +265,7 @@ SELECT
     (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id) as player_count,
     (SELECT COUNT(*) FROM log_instance_encounters lie WHERE lie.instance_id = li.id AND lie.boss = true) as boss_count,
     (SELECT COUNT(*) FROM log_instance_encounters lie WHERE lie.instance_id = li.id AND lie.boss = true AND lie.kill_type IN ('clean', 'partial')) as boss_kills,
-    COALESCE((SELECT EXTRACT(EPOCH FROM (MAX(lie.end_time) - MIN(lie.start_time))) * 1000 
+    COALESCE((SELECT EXTRACT(EPOCH FROM (MAX(lie.end_time) - MIN(lie.start_time))) * 1000
      FROM log_instance_encounters lie WHERE lie.instance_id = li.id), 0)::float8 as duration_ms,
     iom.total_combat_duration_ms as combat_duration_ms,
     g.id as guild_id,
@@ -317,7 +317,7 @@ WHERE true
     -- Cursor pagination (first_encounter_time, id) - pass '0001-01-01' to skip
     AND CASE
         WHEN @cursor_time :: timestamptz != '0001-01-01'::timestamptz THEN
-            (COALESCE((SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id), wlg.created_at) < @cursor_time 
+            (COALESCE((SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id), wlg.created_at) < @cursor_time
              OR (COALESCE((SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id), wlg.created_at) = @cursor_time AND li.id < @cursor_id :: uuid))
         ELSE true
     END
@@ -325,7 +325,7 @@ ORDER BY first_encounter_time DESC, li.id DESC
 LIMIT @limit_count;
 
 -- name: ListInstancesByTimeRange :many
-SELECT 
+SELECT
     li.id,
     li.hashed_slug as slug,
   COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) as name,
@@ -341,7 +341,7 @@ SELECT
     (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id) as player_count,
     (SELECT COUNT(*) FROM log_instance_encounters lie WHERE lie.instance_id = li.id AND lie.boss = true) as boss_count,
     (SELECT COUNT(*) FROM log_instance_encounters lie WHERE lie.instance_id = li.id AND lie.boss = true AND lie.kill_type IN ('clean', 'partial')) as boss_kills,
-    COALESCE((SELECT EXTRACT(EPOCH FROM (MAX(lie.end_time) - MIN(lie.start_time))) * 1000 
+    COALESCE((SELECT EXTRACT(EPOCH FROM (MAX(lie.end_time) - MIN(lie.start_time))) * 1000
      FROM log_instance_encounters lie WHERE lie.instance_id = li.id), 0)::float8 as duration_ms,
     iom.total_combat_duration_ms as combat_duration_ms,
     g.id as guild_id,
@@ -625,7 +625,7 @@ SELECT DISTINCT ON (
     (SELECT COUNT(*) FROM log_instance_players lip2 WHERE lip2.instance_id = li.id) as player_count,
     (SELECT COUNT(*) FROM log_instance_encounters lie WHERE lie.instance_id = li.id AND lie.boss = true) as boss_count,
     (SELECT COUNT(*) FROM log_instance_encounters lie WHERE lie.instance_id = li.id AND lie.boss = true AND lie.kill_type IN ('clean', 'partial')) as boss_kills,
-    COALESCE((SELECT EXTRACT(EPOCH FROM (MAX(lie.end_time) - MIN(lie.start_time))) * 1000 
+    COALESCE((SELECT EXTRACT(EPOCH FROM (MAX(lie.end_time) - MIN(lie.start_time))) * 1000
      FROM log_instance_encounters lie WHERE lie.instance_id = li.id), 0)::float8 as duration_ms,
     g.id as guild_id,
     g.name as guild_name,
@@ -676,7 +676,7 @@ WHERE lip.name ILIKE @player_name
     -- Cursor pagination
     AND CASE
         WHEN @cursor_time :: timestamptz != '0001-01-01'::timestamptz THEN
-            (COALESCE((SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id), wlg.created_at) < @cursor_time 
+            (COALESCE((SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id), wlg.created_at) < @cursor_time
              OR (COALESCE((SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id), wlg.created_at) = @cursor_time AND li.id < @cursor_id :: uuid))
         ELSE true
     END
@@ -799,14 +799,6 @@ ORDER BY li.id;
 
 
 
--- name: InstancePlayerSpecs :many
-SELECT encounter_id, player_guid, player_spec, killed_at
-FROM encounter_dps_rankings
-WHERE instance_id = $1
-  AND encounter_id IS NOT NULL
-  AND player_spec NOT IN ('', 'Unknown')
-ORDER BY killed_at ASC, id ASC;
-
 -- name: InsertInstanceRaidGroupSnapshot :exec
 INSERT INTO log_instance_raid_group_snapshots (
   instance_id, encounter_id, snapshot_type, observed_at, composition
@@ -824,3 +816,11 @@ ORDER BY
   CASE WHEN snapshots.snapshot_type = 'clean_kill' THEN 0 ELSE 1 END,
   encounters.end_time ASC NULLS LAST,
   snapshots.observed_at ASC;
+
+-- name: InstancePlayerSpecs :many
+SELECT encounter_id, player_guid, player_spec, killed_at
+FROM encounter_dps_rankings
+WHERE instance_id = $1
+  AND encounter_id IS NOT NULL
+  AND player_spec NOT IN ('', 'Unknown')
+ORDER BY killed_at ASC, id ASC;

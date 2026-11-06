@@ -6,7 +6,6 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -51,7 +50,6 @@ func (s *Service) handleCharacterPerformance(w http.ResponseWriter, r *http.Requ
 		InstanceName:   instanceName,
 		DifficultyName: q.Get("difficulty_name"),
 		MaxPlayers:     parseMaxPlayers(q.Get("max_players")),
-		TenantID:       servicetenant.TenantIDFromContext(ctx),
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{

@@ -29,8 +29,6 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceretention"
 	"github.com/Emyrk/chronicle/internal/services/servicetelemetry"
 	"github.com/google/uuid"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/riverqueue/river"
 
 	"github.com/coder/serpent"
@@ -51,10 +49,8 @@ type Service struct {
 	broker *services.Services
 
 	*riverqueue.Queues
-	logParsingWorkers    int64
-	rankingWorkers       int64
-	catchupMetricsCancel context.CancelFunc
-	catchupMetricsDone   <-chan struct{}
+	logParsingWorkers int64
+	rankingWorkers    int64
 }
 
 func New(broker *services.Services) *Service {
@@ -267,189 +263,28 @@ func (s *Service) Start(ctx context.Context) error {
 		)
 	}
 
-	// Register rankings summary refresh workers and periodic job (hourly).
+	// Keep legacy Performances rankings summaries and logical-run representatives current.
 	rank := servicerankings.Rankings(s.broker)
 	rank.SummaryDispatchWorker.Queue = q
-	// Drain snapshot publication jobs queued by pre-removal deployments. These
-	// compatibility workers are no-ops and can be removed after old jobs expire.
-	riverqueue.AddWorker(q, &servicerankings.WorkerRetiredPublishParseSnapshots{})
-	riverqueue.AddWorker(q, &servicerankings.WorkerRetiredPublishParseSnapshotTenant{})
 	riverqueue.AddWorker(q, rank.SummaryDispatchWorker)
 	riverqueue.AddWorker(q, rank.SummaryTenantWorker)
-	riverqueue.AddWorker(q, rank.ComputeTimeParseScoresWorker)
-	rank.BackfillTimeParseScoresWorker.Queue = q
-	riverqueue.AddWorker(q, rank.BackfillTimeParseScoresWorker)
-	rank.ComputeParseScoresWorker.Queue = q
-	riverqueue.AddWorker(q, rank.ComputeParseScoresWorker)
-	rank.RepairDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.RepairDispatchWorker)
-	rank.RepairParseScoresWorker.Queue = q
-	riverqueue.AddWorker(q, rank.RepairParseScoresWorker)
 	riverqueue.AddWorker(q, rank.RankingRunRefreshWorker)
 	riverqueue.AddWorker(q, rank.RankingRunRepairWorker)
-	// Legacy full-generation workers are deliberately not registered. Operators
-	// cancel any queued rebuilds before rolling out the evolving projection.
-	rank.RenownRepairWorker.Queue = q
-	rank.RenownDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.RenownRepairWorker)
-	riverqueue.AddWorker(q, rank.RenownDispatchWorker)
-	rank.RenownExpiryWorker.Queue = q
-	rank.RenownExpiryDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.RenownExpiryWorker)
-	riverqueue.AddWorker(q, rank.RenownExpiryDispatchWorker)
-	rank.MasteryExpiryWorker.Queue = q
-	rank.MasteryExpiryDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.MasteryExpiryWorker)
-	riverqueue.AddWorker(q, rank.MasteryExpiryDispatchWorker)
-	rank.LiveEvidenceBootstrapDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.LiveEvidenceBootstrapDispatchWorker)
-	riverqueue.AddWorker(q, rank.LiveEvidenceBootstrapWorker)
-	rank.LiveEvidenceRepairDispatchWorker.Queue = q
-	rank.LiveEvidenceRepairWorker.Queue = q
-	riverqueue.AddWorker(q, rank.LiveEvidenceRepairDispatchWorker)
-	riverqueue.AddWorker(q, rank.LiveEvidenceRepairWorker)
-	rank.PeakExpiryWorker.Queue = q
-	rank.PeakExpiryDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.PeakExpiryWorker)
-	riverqueue.AddWorker(q, rank.PeakExpiryDispatchWorker)
-	ratingRegistry := promauto.With(serviceprometheus.Registry(s.broker))
-	rank.TenantRatingDrainWorker.PageDuration = ratingRegistry.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: "chronicle", Subsystem: "rating", Name: "repair_page_duration_seconds",
-		Help:    "Duration of a rating repair page by stage, including failures",
-		Buckets: []float64{0.005, 0.02, 0.1, 0.5, 1, 5, 15, 60},
-	}, []string{"stage"})
-	rank.TenantRatingDrainWorker.PagesProcessed = ratingRegistry.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "chronicle", Subsystem: "rating", Name: "repair_pages_total",
-		Help: "Successful nonempty rating repair pages by stage",
-	}, []string{"stage"})
-	rank.TenantRatingDrainWorker.KeysProcessed = ratingRegistry.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "chronicle", Subsystem: "rating", Name: "repair_keys_total",
-		Help: "Successful rating repair keys or Peak cohort pages by stage",
-	}, []string{"stage"})
-	rank.TenantRatingDrainWorker.PageErrors = ratingRegistry.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "chronicle", Subsystem: "rating", Name: "repair_errors_total",
-		Help: "Failed rating repair page attempts by stage",
-	}, []string{"stage"})
-	rank.TenantRatingDrainWorker.ActiveJobs = ratingRegistry.NewGauge(prometheus.GaugeOpts{
-		Namespace: "chronicle", Subsystem: "rating", Name: "drain_active_jobs",
-		Help: "Active drain jobs in this daemon (sum across replicas for total concurrency)",
-	})
-	rank.TenantRatingDrainDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.TenantRatingDrainDispatchWorker)
-	riverqueue.AddWorker(q, rank.TenantRatingDrainWorker)
-	rank.TenantRatingCopyDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.TenantRatingCopyDispatchWorker)
-	riverqueue.AddWorker(q, rank.TenantRatingCopyWorker)
-	rank.RatingPolicyScanDispatchWorker.Queue = q
-	riverqueue.AddWorker(q, rank.RatingPolicyScanDispatchWorker)
-	riverqueue.AddWorker(q, rank.RatingPolicyScanWorker)
-	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
-		MaxWorkers: int(s.rankingWorkers),
-	})
-	q.AddPeriodicJob(
-		river.NewPeriodicJob(
-			river.PeriodicInterval(1*time.Hour),
-			func() (river.JobArgs, *river.InsertOpts) {
-				return servicerankings.ArgsRefreshRankingsSummaries{}, nil
-			},
-			&river.PeriodicJobOpts{RunOnStart: true},
-		),
-	)
-	// Separate recovery dispatches for operator-triggered policy scans and
-	// ordinary four-key tenant repair. Neither starts a full generation.
-	q.AddPeriodicJob(river.NewPeriodicJob(river.PeriodicInterval(5*time.Minute),
-		func() (river.JobArgs, *river.InsertOpts) { return servicerankings.ArgsDispatchRatingPolicyScan{}, nil },
-		&river.PeriodicJobOpts{ID: "tenant-rating-policy-scan", RunOnStart: true}))
-	q.AddPeriodicJob(river.NewPeriodicJob(
-		river.PeriodicInterval(5*time.Minute),
-		func() (river.JobArgs, *river.InsertOpts) {
-			return servicerankings.ArgsDispatchTenantRatingDrain{}, nil
-		},
-		&river.PeriodicJobOpts{ID: "tenant-rating-drain", RunOnStart: true},
-	))
-	q.AddPeriodicJob(river.NewPeriodicJob(
-		river.PeriodicInterval(5*time.Minute),
-		func() (river.JobArgs, *river.InsertOpts) {
-			return servicerankings.ArgsDispatchTenantRatingCopy{}, nil
-		},
-		&river.PeriodicJobOpts{ID: "tenant-rating-copy", RunOnStart: true},
-	))
-	// Daily bounded repair fan-out for root and every parse-enabled tenant.
-	q.AddPeriodicJob(
-		river.NewPeriodicJob(
-			river.PeriodicInterval(24*time.Hour),
-			func() (river.JobArgs, *river.InsertOpts) {
-				return servicerankings.ArgsDispatchParseScoreRepairs{}, nil
-			},
-			&river.PeriodicJobOpts{RunOnStart: false},
-		),
-	)
-	// Daily bounded authoritative verification and repair for persisted ranking runs.
-	q.AddPeriodicJob(
-		river.NewPeriodicJob(
-			river.PeriodicInterval(24*time.Hour),
-			func() (river.JobArgs, *river.InsertOpts) {
-				return rankingargs.ArgsRepairRankingRuns{}, nil
-			},
-			&river.PeriodicJobOpts{RunOnStart: false},
-		),
-	)
-
-	// Repair historical missing Renown facts in bounded pages each day.
-	// Fact changes mark Renown subjects dirty for the tenant drain.
-	q.AddPeriodicJob(
-		river.NewPeriodicJob(
-			river.PeriodicInterval(24*time.Hour),
-			func() (river.JobArgs, *river.InsertOpts) {
-				return servicerankings.ArgsDispatchRenownRepair{}, nil
-			},
-			&river.PeriodicJobOpts{ID: "daily-renown-fact-repair", RunOnStart: false},
-		),
-	)
-	// Advance period windows without deleting career Renown evidence.
-	q.AddPeriodicJob(river.NewPeriodicJob(
-		river.PeriodicInterval(24*time.Hour),
-		func() (river.JobArgs, *river.InsertOpts) {
-			return servicerankings.ArgsDispatchRenownExpiry{}, nil
-		},
-		&river.PeriodicJobOpts{ID: "daily-renown-expiry", RunOnStart: false},
-	))
-	// Revisit only active Mastery period subjects whose observations expired.
-	q.AddPeriodicJob(river.NewPeriodicJob(
-		river.PeriodicInterval(24*time.Hour),
-		func() (river.JobArgs, *river.InsertOpts) {
-			return servicerankings.ArgsDispatchMasteryExpiry{}, nil
-		},
-		&river.PeriodicJobOpts{ID: "daily-mastery-expiry", RunOnStart: false},
-	))
-	// Seed historical canonical runs in bounded pages before incremental
-	// Mastery or Peak reads live evidence. Periodic dispatch repairs missed jobs.
+	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{MaxWorkers: int(s.rankingWorkers)})
 	q.AddPeriodicJob(river.NewPeriodicJob(
 		river.PeriodicInterval(time.Hour),
 		func() (river.JobArgs, *river.InsertOpts) {
-			return servicerankings.ArgsDispatchLiveEvidenceBootstrap{}, nil
+			return servicerankings.ArgsRefreshRankingsSummaries{}, nil
 		},
-		&river.PeriodicJobOpts{ID: "tenant-live-evidence-bootstrap", RunOnStart: true},
+		&river.PeriodicJobOpts{RunOnStart: true},
 	))
-	// Audit canonical run source versions in bounded pages and repair missed
-	// observation intent without replaying every unchanged run.
 	q.AddPeriodicJob(river.NewPeriodicJob(
 		river.PeriodicInterval(24*time.Hour),
 		func() (river.JobArgs, *river.InsertOpts) {
-			return servicerankings.ArgsDispatchLiveEvidenceRepair{}, nil
+			return rankingargs.ArgsRepairRankingRuns{}, nil
 		},
-		&river.PeriodicJobOpts{ID: "daily-live-rating-evidence-repair", RunOnStart: false},
+		&river.PeriodicJobOpts{RunOnStart: false},
 	))
-	// Rank-one can change when even a guildless period observation expires.
-	q.AddPeriodicJob(river.NewPeriodicJob(
-		river.PeriodicInterval(24*time.Hour),
-		func() (river.JobArgs, *river.InsertOpts) {
-			return servicerankings.ArgsDispatchPeakExpiry{}, nil
-		},
-		&river.PeriodicJobOpts{ID: "daily-peak-expiry", RunOnStart: false},
-	))
-	// Historical discovery and expiry only mark durable dirty keys; the
-	// five-minute tenant dispatcher repairs them into the evolving board.
 
 	err = q.Start(ctx)
 	if err != nil {
@@ -458,29 +293,16 @@ func (s *Service) Start(ctx context.Context) error {
 
 	s.Queues = q
 	chron.SetQueue(s.Queues)
-	metricsCtx, cancel := context.WithCancel(context.Background())
-	s.catchupMetricsCancel = cancel
-	s.catchupMetricsDone = runRatingCatchupMetrics(metricsCtx, servicedbstore.DatabaseStore(s.broker), serviceprometheus.Registry(s.broker), logger)
 	return nil
 }
 
-func (s *Service) Close(ctx context.Context) error {
-	if s.catchupMetricsCancel != nil {
-		s.catchupMetricsCancel()
-		select {
-		case <-s.catchupMetricsDone:
-		case <-ctx.Done():
-		}
-	}
-	return s.Queues.Close(ctx)
-}
+func (s *Service) Close(ctx context.Context) error { return s.Queues.Close(ctx) }
 
 func (s *Service) Options() serpent.OptionSet {
 	return serpent.OptionSet{
 		{
 			Name:        "Ranking Worker Count",
-			Description: "Number of workers to use for ranking and tenant rating maintenance jobs.",
-			Required:    false,
+			Description: "Number of workers for Performances ranking jobs.",
 			Flag:        "ranking-worker-count",
 			Env:         "CHRONICLE_RANKING_WORKERS",
 			Default:     "1",

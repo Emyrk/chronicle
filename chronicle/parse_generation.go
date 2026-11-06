@@ -7,7 +7,6 @@ import (
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
-	"github.com/Emyrk/chronicle/internal/ratingfacts"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
@@ -107,7 +106,6 @@ func (c *Chronicle) abortStaleParseGeneration(ctx context.Context, logID uuid.UU
 
 func advanceParseGeneration(ctx context.Context, db database.Store, logID uuid.UUID, clearParsed bool) (int64, error) {
 	if clearParsed {
-		// Match source-deletion lock order before taking the log group row lock.
 		if err := db.AcquireRankingRunRefreshLock(ctx); err != nil {
 			return 0, err
 		}
@@ -120,7 +118,7 @@ func advanceParseGeneration(ctx context.Context, db database.Store, logID uuid.U
 		return 0, err
 	}
 	if clearParsed {
-		if err := ratingfacts.DeleteParsedLogGroupEvidence(ctx, db, logID); err != nil {
+		if err := db.DeleteAllParsedLogsByGroupID(ctx, logID); err != nil {
 			return 0, err
 		}
 	}
@@ -149,7 +147,7 @@ func (c *Chronicle) stageParseGeneration(ctx context.Context, logID uuid.UUID, g
 		if err := lockExpectedParseGeneration(ctx, tx, logID, generation); err != nil {
 			return err
 		}
-		if err := ratingfacts.DeleteParsedLogGroupEvidence(ctx, tx, logID); err != nil {
+		if err := tx.DeleteAllParsedLogsByGroupID(ctx, logID); err != nil {
 			return err
 		}
 		return tx.InsertStagedParsedLogGroup(ctx, database.InsertStagedParsedLogGroupParams{
