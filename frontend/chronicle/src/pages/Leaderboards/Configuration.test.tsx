@@ -139,6 +139,19 @@ describe("configuration inspector", () => {
     expect(html).toContain("/capy.png");
     expect(html).toContain("Not discoverable");
   });
+  it("lists instances by Renown total, highest first", () => {
+    const html = view({
+      ...data,
+      rows: [
+        row({ kind: "instance", instance_name: "Alpha" }),
+        row({ instance_name: "Alpha", has_points: true, points: 2 }),
+        row({ kind: "instance", instance_name: "Zeta" }),
+        row({ instance_name: "Zeta", has_points: true, points: 9 }),
+      ],
+    });
+    const nav = html.slice(html.indexOf('aria-label="Configured instances"'));
+    expect(nav.indexOf("Zeta")).toBeLessThan(nav.indexOf("Alpha"));
+  });
   it("never displays partial configuration on conflict", () => {
     const html = view({
       ...data,
