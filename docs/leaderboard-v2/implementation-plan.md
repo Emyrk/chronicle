@@ -10,31 +10,29 @@ buildable, and deployable. Use red-green-refactor within each implementation PR.
 - Prior ratings are removed. Merged **PR 1625** preserves parse scoring. Retired
   rating tables are neither seed inputs nor a rollback target.
 - Shared global configuration does not share tenant data. Peak/Mastery
-additionally
-  require realm (season) isolation. Exact season identity, lifecycle, and
-temporal
-  boundaries are unresolved; do not invent a season table or time windows.
+  additionally require realm (season) isolation. Exact season identity,
+  lifecycle, and temporal boundaries are unresolved; do not invent a season
+  table or time windows.
 - Park the existing observation-schema draft. Observation, benchmark, subject,
   and queue-key implementation is blocked until the season contract is settled.
   Renown scope and layered provenance/invalidation require separate decisions.
 - No career or cross-instance portfolio schema, seeds, or read aggregation now.
 - Keep parser mechanics in Go. The database is the intended source of
-leaderboard
-  configuration. Existing UI behavior stays unchanged until a later cutover.
+  leaderboard configuration. Existing UI behavior stays unchanged until a later
+  cutover.
 - All database queries go through sqlc. Rating derivation remains set-based SQL
   in bounded PostgreSQL functions; Go orchestrates rather than calculates
-ratings.
+  ratings.
 - Migrations do not scan or rewrite historical production data during startup.
   Review production-scale impact before any data migration.
-- Test before implementation; measure representative SQL with
-  `EXPLAIN (ANALYZE, BUFFERS, WAL)` safely before serving cutover.
+- Test before implementation; measure representative SQL with `EXPLAIN (ANALYZE,
+  BUFFERS, WAL)` safely before serving cutover.
 
 ## Roadmap 1: amend specification (existing PR 1622)
 
 Replace superseded exact-full-set ruleset, career, tenant-only cohort, and
-legacy
-rollback assumptions consistently across all four documents. Clearly separate
-approved configuration work from gated physical rating work.
+legacy rollback assumptions consistently across all four documents. Clearly
+separate approved configuration work from gated physical rating work.
 
 Validation: compile LaTeX, validate Markdown and repository links. No runtime
 behavior changes.
@@ -47,14 +45,13 @@ flavor classification. No observation or result schema in this PR.
 Green:
 
 - Explicitly classify relevant flavors in `database/flavor.go`: `vanilla`,
-`tbc`,
-  `wrath`, `nightmare-of-ursol`, and `vanillaplus` initially. Ignore server tags
-  such as `octowow`, `capybara`, and `ravencraft` for leaderboard matching.
+  `tbc`, `wrath`, `nightmare-of-ursol`, and `vanillaplus` initially. Ignore
+  server tags such as `octowow`, `capybara`, and `ravencraft` for leaderboard
+  matching.
 - Add globally shared structural catalog for instances, instance variants
   (difficulty/raid size), flat bosses, named ordered encounter sets, and
-explicit
-  memberships, plus the structural representation required for layered
-overrides.
+  explicit memberships, plus the structural representation required for layered
+  overrides.
 - Do not add logical boss parents or boss-variant entities. Sartharion
   0D/1D/2D/3D are separate exact bosses.
 - Support explicit exclusion at boss, instance, set, and member override levels;
@@ -88,9 +85,11 @@ Red: add parity fixtures for approved catalog identities, exact set membership
 and order, exclusions, boss awards, and variant overrides. Default Sartharion
 selection is 0D, never best-variant substitution.
 
-Green: insert explicit, reviewed initial values. Record their source and review
-basis with fixtures. Do not read or extract values from migration 313 or retired
-tables. Do not invent awards or difficulty variants. Do not seed portfolios.
+Green: insert explicit, reviewed initial values from historical calibration.
+Record their source and review basis with fixtures. Known values in migration
+313 may be an authoring reference. Deployment must not execute or read old
+migrations or retired tables. Do not invent awards or difficulty variants. Do
+not seed portfolios.
 
 Refactor: review the seed diff separately from schema and resolver mechanics.
 Run migrations, resolver tests, and seed parity tests without changing UI reads.
@@ -108,12 +107,11 @@ settle:
 2. Renown scope independently of Peak/Mastery if needed.
 3. Layered provenance representation and configuration invalidation/repair.
 4. Empty/missing scope behavior and tests for isolation across realms and
-seasons.
+   seasons.
 
 Refactor: update the specification first with approved answers. No implicit
 all-seasons interpretation of all-time. These are design gates, not
-implementation
-details to fill in while writing migrations.
+implementation details to fill in while writing migrations.
 
 ## Roadmap 6: observation, fact, and dirty schema (parked draft)
 
@@ -123,9 +121,8 @@ ownership/deletion, realm and season isolation, deduplication, dirty coalescing,
 and revision-safe acknowledgement. Renown fact/result/work keys require its own
 scope agreement. Do not implement career portfolios.
 
-Once approved, add schema and enqueue queries only. Upload-driven dirty runs
-use a sliding 30-minute debounce; repair and downstream work are due
-immediately.
+Once approved, add schema and enqueue queries only. Upload-driven dirty runs use
+a sliding 30-minute debounce; repair and downstream work are due immediately.
 Refactor by proving each queue key exactly mirrors the scoped value refreshed.
 
 ## Roadmap 7: dirty-run projection refresh
@@ -139,10 +136,9 @@ replacement and downstream fan-out. Inspect plans and remove per-run SQL loops.
 
 Test maximum benchmarks, unchanged benchmarks, record removal, empty cohorts,
 Mastery bands, zero benchmarks, subject deletion, scoped fan-out, and
-concurrency.
-Implement bounded benchmark and subject refresh functions with SQL windows.
-Measure representative plans. This is the first end-to-end rating slice before
-guild work; prove no cross-realm or cross-season benchmark contamination.
+concurrency. Implement bounded benchmark and subject refresh functions with SQL
+windows. Measure representative plans. This is the first end-to-end rating slice
+before guild work; prove no cross-realm or cross-season benchmark contamination.
 
 ## Roadmap 9: guild boss and clear ratings
 
@@ -154,11 +150,10 @@ is clearer than explicit parallel functions.
 ## Roadmap 10: Renown
 
 After its scope gate, test metric deduplication, boss defaults, explicit zero
-and
-variant overrides, exclusion, award changes, source retraction, empty facts, and
-player/guild isolation. Implement bounded refresh and reviewed layered-change
-fan-out. Verify Renown never depends on metric value, Mastery, or set
-membership.
+and variant overrides, exclusion, award changes, source retraction, empty facts,
+and player/guild isolation. Implement bounded refresh and reviewed
+layered-change fan-out. Verify Renown never depends on metric value, Mastery, or
+set membership.
 
 ## Roadmap 11: read service and cursor queries
 
@@ -166,11 +161,11 @@ Test boss Peak derivation, current benchmarks, Mastery, exact named encounter
 sets, arbitrary eligible boss groups, missing-evidence zero fill, exclusion from
 denominators, deterministic cursors, and scope/filter fingerprint rejection.
 Implement sqlc reads and `serviceratings` orchestration. No
-career/cross-instance
-portfolio aggregation. Apply realm/season scope and search before aggregation
-and ordering. Return approximately 50 rows, not exact ranks or offset pages.
-Measure before adding aggregate projections. Layered provenance behavior must
-follow the reviewed contract, not an assumed single ruleset revision.
+career/cross-instance portfolio aggregation. Apply realm/season scope and search
+before aggregation and ordering. Return approximately 50 rows, not exact ranks
+or offset pages. Measure before adding aggregate projections. Layered provenance
+behavior must follow the reviewed contract, not an assumed single ruleset
+revision.
 
 ## Roadmap 12: scheduling and historical bootstrap
 
@@ -188,10 +183,9 @@ complete historical discovery and drain, hand-calculated parity, measured plans,
 and observability. Expose freshness without blocking on dirty work.
 
 Review and exercise a disable/revert strategy for the new feature. Do not
-promise
-rollback to removed legacy ratings. Parse scoring must remain intact. Remove
-only temporary adapters or obsolete references still present; do not plan a
-second removal of already removed ratings.
+promise rollback to removed legacy ratings. Parse scoring must remain intact.
+Remove only temporary adapters or obsolete references still present; do not plan
+a second removal of already removed ratings.
 
 ## Mapping from the old 11-PR roadmap
 
