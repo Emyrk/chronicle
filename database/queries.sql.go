@@ -12004,6 +12004,122 @@ func (q *sqlQuerier) ListLeaderboardLayers(ctx context.Context) ([]LeaderboardLa
 	return items, nil
 }
 
+const listLeaderboardDirtyRuns = `-- name: ListLeaderboardDirtyRuns :many
+SELECT tenant_id, run_id, revision, dirtied_at, process_after FROM leaderboard_dirty_runs WHERE tenant_id = $1::uuid
+`
+
+func (q *sqlQuerier) ListLeaderboardDirtyRuns(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardDirtyRun, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardDirtyRuns, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardDirtyRun
+	for rows.Next() {
+		var i LeaderboardDirtyRun
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.RunID,
+			&i.Revision,
+			&i.DirtiedAt,
+			&i.ProcessAfter,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeaderboardPlayerBossSubjects = `-- name: ListLeaderboardPlayerBossSubjects :many
+SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, projection_version, algorithm_version, computed_at FROM leaderboard_player_boss_subjects WHERE tenant_id = $1::uuid
+`
+
+func (q *sqlQuerier) ListLeaderboardPlayerBossSubjects(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardPlayerBossSubject, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardPlayerBossSubjects, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardPlayerBossSubject
+	for rows.Next() {
+		var i LeaderboardPlayerBossSubject
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.EncounterName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.Metric,
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.ObservationCount,
+			&i.RawPeak,
+			&i.RawForm,
+			&i.RawFloor,
+			&i.ProjectionVersion,
+			&i.AlgorithmVersion,
+			&i.ComputedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeaderboardPlayerObservations = `-- name: ListLeaderboardPlayerObservations :many
+SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, player_guid, source_encounter_id, source_ranking_id, player_class, player_spec, player_sub_spec, metric, metric_value, projection_version, observed_at FROM leaderboard_player_observations WHERE tenant_id = $1::uuid
+`
+
+func (q *sqlQuerier) ListLeaderboardPlayerObservations(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardPlayerObservation, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardPlayerObservations, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardPlayerObservation
+	for rows.Next() {
+		var i LeaderboardPlayerObservation
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.EncounterName,
+			&i.RunID,
+			&i.SourceInstanceID,
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.SourceEncounterID,
+			&i.SourceRankingID,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.Metric,
+			&i.MetricValue,
+			&i.ProjectionVersion,
+			&i.ObservedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resolveLeaderboardConfiguration = `-- name: ResolveLeaderboardConfiguration :many
 WITH assignments AS (
 SELECT layer_key, ARRAY['instance', instance_name]::text[] AS identity, 'enabled'::text AS property, enabled::integer::double precision AS value FROM leaderboard_instance_overrides WHERE enabled IS NOT NULL
