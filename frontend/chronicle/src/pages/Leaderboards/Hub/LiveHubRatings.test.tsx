@@ -1,53 +1,26 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { HubSummary } from "@/api/typesGenerated"
+import { describe, expect, it, vi } from "vitest"
 import { setBoardPage, setBoardURL } from "@/pages/Leaderboards/Ratings/setBoard"
-import { useHubSummary } from "./hubSummaryAdapter"
 import { LiveHubRatings, type LiveHubRatingsProps } from "./LiveHubRatings"
+import { resolvedHubMetadata } from "./resolvedHubAdapter"
+import { configuration } from "./v2RatingAdapter.testdata"
 
-vi.mock("./hubSummaryAdapter", () => ({ useHubSummary: vi.fn() }))
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: () => ({ data: { caught_up: false } }),
-  useQueries: ({ queries }: { queries: unknown[] }) => queries.map(() => ({ isPending: false, isError: false, data: { rows: [], total: 0, page: 0, has_next_page: false } })),
+ useQuery: () => ({data:undefined,isPending:true}),
+ useQueries: ({queries}:{queries:unknown[]}) => queries.map(()=>({isPending:false,isError:false,data:{params:new URLSearchParams({class:"MAGE",spec:"Frost"}),response:{status:"ready",included_bosses:["A"],entries:[{realm_id:"realm",subject_id:"guid",name:"Actual player",score:0,peak:0,mastery:0,renown:0,sample_count:1,computed_at:"2026-01-01"}]}}})),
 }))
-
-const player = (name: string, score: number, raw?: number) => ({ realm_id: "r", realm_name: "Nordanaar", player_guid: name, player_name: name, player_class: "MAGE", player_spec: "Fire", player_sub_spec: "", score, peak_raw: raw })
-const board = (names: string[]) => ({ player: { peak: names.map((n, i) => player(n, 100 - i, 1300 - i)), ranked_mastery: [], renown: [] }, guild: { peak: [], ranked_mastery: [], renown: [] } })
-const summary = { ratings: { raid: board(["Top", "Second"]), bosses: [{ encounter_name: "Ragnaros", ...board(["Rag"]) }, { encounter_name: "Lucifron", ...board(["Luc"]) }] } } as unknown as HubSummary
-
-const props: LiveHubRatingsProps = {
-  instanceName: "Molten Core", bosses: ["Lucifron", "Ragnaros"], selected: [], scope: {}, onScope: vi.fn(), view: "overview", onView: vi.fn(),
-  period: "180d", subject: "player", role: "dps", cohort: { difficulty: "", maxPlayers: 0 }, where: "Molten Core",
-}
-
-beforeEach(() => {
-  vi.clearAllMocks()
-  vi.mocked(useHubSummary).mockReturnValue({ isPending: false, isError: false, data: summary } as ReturnType<typeof useHubSummary>)
-})
-
-describe("live Ratings tab", () => {
-  it("draws the board and a card per boss from one Ratings-depth summary, Peak with its DPS", () => {
-    const html = renderToStaticMarkup(<LiveHubRatings {...props} />)
-    expect(html).toContain("Catching up")
-    expect(html).toContain("Top")
-    expect(html).toContain('data-entity-kind="character"')
-    expect(html).toContain('&quot;realm&quot;:&quot;Nordanaar&quot;')
-    expect(html).toContain("1,300/s")
-    expect(html).toContain("Rag")
-    expect(html).toContain("Luc")
-    expect(vi.mocked(useHubSummary)).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(useHubSummary).mock.calls[0][0]).toMatchObject({ instanceName: "Molten Core", encounters: [], bossDepth: 3, window: "period" })
-  })
-
-  it("asks for the hand-picked bosses and the all-time window", () => {
-    renderToStaticMarkup(<LiveHubRatings {...props} selected={["Lucifron", "Ragnaros"]} period="all" />)
-    expect(vi.mocked(useHubSummary).mock.calls[0][0]).toMatchObject({ encounters: ["Lucifron", "Ragnaros"], window: "all" })
-  })
-
-  it("says so instead of loading without a published raid cohort", () => {
-    const html = renderToStaticMarkup(<LiveHubRatings {...props} view="peak" cohort={undefined} />)
-    expect(html).toContain("No published raid cohort")
-  })
+const props:LiveHubRatingsProps={instanceName:"Raid",bosses:["A","B"],selected:[],scope:{cls:"MAGE",spec:"Frost"},onScope:vi.fn(),view:"overview",onView:vi.fn(),period:"all",subject:"player",role:"dps",cohort:{difficulty:"",maxPlayers:0},where:"Raid",summary:resolvedHubMetadata(configuration,{instanceName:"Raid",performance:"dps"},[],[{player_class:"MAGE",player_spec:"Frost",player_sub_spec:"",metric:"dps"}])}
+describe("existing Hub ratings on current-policy data",()=>{
+ it("retains the existing boards and shows real entries with all-time and Renown scope notice",()=>{
+  const html=renderToStaticMarkup(<LiveHubRatings {...props}/> )
+  expect(html).toContain("Actual player")
+  expect(html).toContain("All-time")
+  expect(html).toContain("independent of set and class filters")
+  expect(html).not.toContain("1,300/s")
+ })
+ it("explicitly reports a missing configured variant",()=>{
+  expect(renderToStaticMarkup(<LiveHubRatings {...props} cohort={undefined}/>)).toContain("No enabled instance variant")
+ })
 })
 
 describe("set board client", () => {

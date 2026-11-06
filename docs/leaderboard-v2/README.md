@@ -11,7 +11,7 @@ gates.
 
 The [table relationships](table-relationships.md) reference maps migration 344
 tables to evidence, summary, and repair responsibilities. The [read preview](read-preview.md)
-documents `/leaderboards-v2`, local synthetic fixtures, and measured SQL plans.
+documents `/leaderboard-v2`, local synthetic fixtures, and measured SQL plans.
 
 The replacement is a clean implementation. Prior ratings are removed; merged PR
 1625 preserves parse scoring. Retired rating tables are neither migration or
