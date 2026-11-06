@@ -36,7 +36,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		bad("max_players must be a nonnegative integer")
 		return
 	}
-	req := leaderboardread.Request{Instance: q.Get("instance"), Difficulty: q.Get("difficulty"), MaxPlayers: int16(size), Subject: q.Get("subject"), Kind: q.Get("kind"), Score: q.Get("score"), Boss: q.Get("boss"), Set: q.Get("set"), Class: q.Get("class"), Spec: q.Get("spec"), SubSpec: q.Get("sub_spec"), Metric: q.Get("metric"), Search: strings.TrimSpace(q.Get("search"))}
+	req := leaderboardread.Request{Instance: q.Get("instance"), Difficulty: q.Get("difficulty"), MaxPlayers: int16(size), Subject: q.Get("subject"), Kind: q.Get("kind"), Score: q.Get("score"), Boss: q.Get("boss"), Bosses: q["bosses"], Set: q.Get("set"), Class: q.Get("class"), Spec: q.Get("spec"), SubSpec: q.Get("sub_spec"), Metric: q.Get("metric"), Search: strings.TrimSpace(q.Get("search"))}
 	if q.Get("realm") != "" {
 		req.Realm, err = uuid.Parse(q.Get("realm"))
 		if err != nil {
@@ -70,6 +70,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		selectionReq.SubSpec = ""
 		selectionReq.Metric = ""
 		selectionReq.Boss = ""
+		selectionReq.Bosses = nil
 		selectionReq.Set = ""
 	}
 	selection, err := leaderboardread.Select(rows, selectionReq)

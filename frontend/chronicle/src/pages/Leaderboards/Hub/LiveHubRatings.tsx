@@ -99,6 +99,8 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
       try {
         if (!context) throw new Error("No enabled instance variant.");
         const params = v2RatingParams(context, target, metric);
+        if (metric === "renown" && target.boss && target.boss !== scope.boss)
+          params.set("boss", target.boss);
         params.set(
           "limit",
           target.boss && target.boss !== scope.boss ? "3" : "50",
@@ -125,9 +127,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
           ),
         };
       },
-      enabled:
-        !!context &&
-        !(request.metric === "renown" && request.target.boss !== scope.boss),
+      enabled: !!context,
       retry: false,
       staleTime: 30_000,
     })),
@@ -146,18 +146,6 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
     board: ({ scope: target, metric }) => {
       if (!context)
         return { status: "error", error: "No enabled instance variant." };
-      if (target.boss !== scope.boss && metric === "renown")
-        return {
-          status: "ready",
-          data: {
-            id: target.boss ?? "raid",
-            kind: "boss",
-            scope: target,
-            title: target.boss ?? where,
-            subtitle: "Renown is instance-wide",
-            entries: [],
-          },
-        };
       const targetIndex = targets.findIndex(
         (item) => item.boss === target.boss,
       );
@@ -205,7 +193,9 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
   );
   if (subject === "guild") {
     const current =
-      view === "overview" ? queries.find(q => q.isError) : queries[RATING_METRICS.indexOf(view)];
+      view === "overview"
+        ? queries.find((q) => q.isError)
+        : queries[RATING_METRICS.indexOf(view)];
     const ratings = Object.fromEntries(
       RATING_METRICS.map((metric, i) => [
         metric,
@@ -232,7 +222,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
               detail: row.realm_id,
             }),
           );
-        return { peak: map(0), mastery: map(1), renown: [] };
+        return { peak: map(0), mastery: map(1), renown: map(2) };
       },
       pending: !!context && queries.some((q) => q.isPending),
       error: !context

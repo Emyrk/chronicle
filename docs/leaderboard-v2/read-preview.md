@@ -42,11 +42,12 @@ The HTTP endpoint remains plural as an internal API contract.
 Ratings are labeled all-time instead of offering an unsupported 180-day window.
 Player performance requires one exact cohort using the existing class/spec
 filters; an ambiguous selection gets an explicit prompt, never a silent merge
-or arbitrary default. One boss maps directly; a multi-boss selection must match
-an enabled named encounter set. Unsupported selections get an explicit message.
+or arbitrary default. One boss maps directly; arbitrary multi-boss selections are sent as repeated
+`bosses` parameters. The API validates every member against current enabled
+bosses, deduplicates and sorts the selection, and preserves its exact denominator.
 Renown ignores class/set filters and uses the selected instance variant, with a
-visible notice. Per-boss cards show performance scores, not invented boss-scoped
-Renown. No retired catch-up worker status is implied.
+visible notice. Per-boss cards request genuine boss-specific Renown from counts and current
+awards, while center Renown totals remain independent of the performance selection. No retired catch-up worker status is implied.
 
 Existing full-list controls use cursor history. Search starts a new cursor chain;
 no synthetic total or global rank is displayed. Missing throughput, run dates,
@@ -68,9 +69,13 @@ rewrites or recounts.
 Required: `instance`, `difficulty` (may be empty), `max_players`,
 `subject=player|guild`, `kind=boss|clear|renown`, `score=peak|mastery|renown`.
 
-For `kind=boss`, choose exactly one `boss` or `set` (set key, not label). Player
+For `kind=boss`, choose exactly one `boss`, `set` (set key, not label), or repeated
+`bosses` parameters for an arbitrary eligible group (maximum 256 entries before
+deduplication). Player
 performance also requires `class`, `spec`, `sub_spec` (may be empty), and
-`metric=dps|hps`. Clear is guild-only. Renown and clear reject boss/set parameters.
+`metric=dps|hps`. Clear is guild-only and rejects boss selections. Renown rejects performance
+sets/groups but accepts an optional exact `boss` for per-boss cards; omitting it
+returns the whole instance/variant total.
 
 Optional: `realm` UUID, `search` literal case-insensitive subject-name substring
 (maximum 100 bytes), `limit` 1–50, and `cursor`. Unlinked metadata falls back to the

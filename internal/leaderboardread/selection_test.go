@@ -57,3 +57,42 @@ func TestSelectionAndCursor(t *testing.T) {
 	_, err = Select(rows, r)
 	require.Error(t, err)
 }
+
+func TestArbitraryBossGroups(t *testing.T) {
+	t.Parallel()
+	rows := []database.ResolveLeaderboardConfigurationRow{{Kind: "instance", InstanceName: "Raid"}, {Kind: "boss", InstanceName: "Raid", EncounterName: "A", HasPoints: true, Points: 10}, {Kind: "boss", InstanceName: "Raid", EncounterName: "B", HasPoints: true, Points: 20}, {Kind: "boss", InstanceName: "Other", EncounterName: "C"}}
+	r := Request{Instance: "Raid", Subject: "player", Kind: "boss", Score: "mastery", Class: "MAGE", Spec: "Frost", Metric: "dps", Bosses: []string{"B", "A", "A"}}
+	s, err := Select(rows, r)
+	require.NoError(t, err)
+	require.Equal(t, []string{"A", "B"}, s.Bosses)
+	require.EqualValues(t, 2, s.Denominator)
+	tenant := uuid.New()
+	fp := Fingerprint(tenant, r, s)
+	r.Bosses = []string{"A", "B"}
+	same, err := Select(rows, r)
+	require.NoError(t, err)
+	require.Equal(t, fp, Fingerprint(tenant, r, same))
+	r.Bosses = []string{"A"}
+	one, err := Select(rows, r)
+	require.NoError(t, err)
+	require.NotEqual(t, fp, Fingerprint(tenant, r, one))
+	r.Bosses = []string{"A", "C"}
+	_, err = Select(rows, r)
+	require.Error(t, err)
+	r.Bosses = []string{""}
+	_, err = Select(rows, r)
+	require.Error(t, err)
+	r.Bosses = []string{"A"}
+	r.Set = "default"
+	_, err = Select(rows, r)
+	require.Error(t, err)
+	r = Request{Instance: "Raid", Subject: "guild", Kind: "renown", Score: "renown", Boss: "B"}
+	bossRenown, err := Select(rows, r)
+	require.NoError(t, err)
+	require.Equal(t, []string{"B"}, bossRenown.Bosses)
+	require.Equal(t, []float64{20}, bossRenown.Awards)
+	r.Boss = ""
+	allRenown, err := Select(rows, r)
+	require.NoError(t, err)
+	require.Len(t, allRenown.Bosses, 2)
+}
