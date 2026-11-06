@@ -48,7 +48,7 @@ func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, m
 		existingByEntry[row.Entry] = row
 	}
 
-	var transmogCandidatesByName map[string][]database.WorldItemTemplate
+	var syntheticTransmogEntries map[int32]struct{}
 	flavor, err := h.flavorForDataset(ctx, datasetID)
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
@@ -58,10 +58,10 @@ func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, m
 		return
 	}
 	if flavor.Has(database.FlavorNightmareOfUrsol) {
-		transmogCandidatesByName, err = h.transmogCandidates(ctx, datasetID, items)
+		syntheticTransmogEntries, err = h.syntheticTransmogEntries(ctx, datasetID, items)
 		if err != nil {
 			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to fetch transmog candidates",
+				Message: "Failed to detect synthetic transmog items",
 				Detail:  err.Error(),
 			})
 			return
@@ -76,16 +76,16 @@ func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, m
 		unchanged int
 		tmogCount int
 	)
-	var (
-		toUpsert []database.WorldItemTemplate
-		toDelete []int32
-	)
+	var toUpsert []database.WorldItemTemplate
+	toDelete := make([]int32, 0, len(syntheticTransmogEntries))
+	for entry := range syntheticTransmogEntries {
+		toDelete = append(toDelete, entry)
+	}
 
 	for _, item := range items {
 		wdbRow := wdb.ItemToWorldTemplate(item)
-		if isSyntheticTransmog(wdbRow, transmogCandidatesByName[item.Name]) {
+		if _, synthetic := syntheticTransmogEntries[wdbRow.Entry]; synthetic {
 			tmogCount++
-			toDelete = append(toDelete, wdbRow.Entry)
 			diffs = append(diffs, chroniclesdk.WDBItemDiff{
 				Entry:  wdbRow.Entry,
 				Name:   item.Name,
@@ -190,51 +190,35 @@ func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, m
 	})
 }
 
-func (h *Handler) transmogCandidates(ctx context.Context, datasetID uuid.UUID, items []wdb.Item) (map[string][]database.WorldItemTemplate, error) {
-	const syntheticEntryFloor = 100000
-
-	candidatesByName := make(map[string][]database.WorldItemTemplate)
+func (h *Handler) syntheticTransmogEntries(ctx context.Context, datasetID uuid.UUID, items []wdb.Item) (map[int32]struct{}, error) {
 	namesSet := make(map[string]struct{})
+	incoming := make([]database.WorldItemTemplate, 0, len(items))
 	for _, item := range items {
 		row := wdb.ItemToWorldTemplate(item)
-		if row.Entry < syntheticEntryFloor {
-			candidatesByName[row.Name] = append(candidatesByName[row.Name], row)
-			continue
-		}
-		if row.Name != "" {
+		incoming = append(incoming, row)
+		if row.Name != "" && wdb.IsPossibleSyntheticTransmogEntry(row.Entry) {
 			namesSet[row.Name] = struct{}{}
 		}
 	}
 	if len(namesSet) == 0 {
-		return candidatesByName, nil
+		return nil, nil
 	}
 
 	names := make([]string, 0, len(namesSet))
 	for name := range namesSet {
 		names = append(names, name)
 	}
-	rows, err := h.zed.GetItemTemplatesByNames(ctx, database.GetItemTemplatesByNamesParams{
+	existing, err := h.zed.GetItemTemplatesByNames(ctx, database.GetItemTemplatesByNamesParams{
 		DatasetID: datasetID,
 		Names:     names,
 	})
 	if err != nil {
 		return nil, err
 	}
-	for _, row := range rows {
-		if row.Entry < syntheticEntryFloor {
-			candidatesByName[row.Name] = append(candidatesByName[row.Name], row)
-		}
-	}
-	return candidatesByName, nil
-}
 
-func isSyntheticTransmog(item database.WorldItemTemplate, candidates []database.WorldItemTemplate) bool {
-	for _, candidate := range candidates {
-		if wdb.IsLikelySyntheticTransmog(item, candidate) {
-			return true
-		}
-	}
-	return false
+	// Existing rows are added first so current WDB data wins when an entry is
+	// already present in the dataset.
+	return wdb.SyntheticTransmogEntries(append(existing, incoming...)), nil
 }
 
 // wdbUpsertColumns are the columns set from WDB data during upsert.
