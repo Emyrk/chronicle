@@ -4,6 +4,7 @@
 \usepackage{lmodern}
 \usepackage{microtype}
 \usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{booktabs}
 \usepackage{tabularx}
 \usepackage{array}
@@ -16,6 +17,7 @@
 \definecolor{muted}{HTML}{53666E}
 \hypersetup{colorlinks=true,linkcolor=accent,urlcolor=accent,pdftitle={Chronicle Leaderboards from First Principles},pdfauthor={Chronicle}}
 
+\setlength{\emergencystretch}{3em}
 \setlength{\parskip}{0.55em}
 \setlength{\parindent}{0pt}
 \setlist[itemize]{leftmargin=1.4em,topsep=2pt,itemsep=2pt}
@@ -30,7 +32,14 @@
 \maketitle
 
 \section{Purpose}
-This document defines the leaderboard model from its source data upward.
+This document defines the leaderboard model from its source data upward. Configuration foundation work is approved; the physical rating schema is not yet an implementation contract.
+
+\subsection{Design gates and delivery status}
+Peak and Mastery are realm (season) based. Exact season identity, lifecycle, and temporal boundaries remain unresolved. No season table or time windows are prescribed here. Realm isolation is mandatory in addition to tenant ownership. Observation, benchmark, subject-result, and queue-key implementation is blocked until that contract is settled; the existing observation-schema draft is parked, not ready to stack or deploy.
+
+Renown's temporal scope is a separate unresolved decision. Layered configuration also needs a reviewed provenance and invalidation contract; a single ruleset ID/revision cannot be assumed to describe the effective configuration. Career and cross-instance portfolios, including schema, seeds, and read aggregation, are deferred.
+
+Amend specification PR 1622 first. PR 1624 contains only structural configuration catalog and flavor vocabulary. Follow with separate resolver/tests and reviewed seed/parity PRs, then policy reads and UI cutover later. Prior ratings have been removed; merged PR 1625 preserves parse scoring. There is no promised legacy-rating rollback. Existing UI behavior stays unchanged during foundation work.
 
 \section{Core observations}
 The model has player observations and guild observations.
@@ -41,12 +50,12 @@ The model has player observations and guild observations.
 \toprule
 Value & Definition & Rule \\
 \midrule
-Boss & $B=(i,e,d,z)$ & instance, encounter, difficulty, player size \\
+Boss & $B=(i,e,d,z)$ & exact flat boss identity, instance variant dimensions \\
 Clear & $C=(i,d,z)$ & instance, difficulty, player size \\
 Player & $P=(r,u)$ & realm, player GUID \\
 Guild & $G=(r,g)$ & realm, guild ID \\
 Specialization & $S=(s,b)$ & spec, subspec \\
-Canonical run & $R=\field{ranking\_runs.run\_id}$ & $R\mapsto\field{representative\_instance\_id}$ \\
+Canonical run & $R=\field{ranking\_\allowbreak runs.\allowbreak run\_\allowbreak id}$ & $R\mapsto\field{representative\_\allowbreak instance\_\allowbreak id}$ \\
 Player metrics & $M_P=\{\mathrm{DPS},\mathrm{HPS}\}$ & $m\in M_P$ \\
 Guild metrics & $M_G=\{\mathrm{kill\ time},\mathrm{clear\ time}\}$ & $m\in M_G$ \\
 Player observation & $\operatorname{id}(O_P)=(R,B,P,m)$ & $m\in M_P$ \\
@@ -56,15 +65,15 @@ Guild clear observation & $\operatorname{id}(O_{GC})=(R,C,G,m)$ & $m=\mathrm{cle
 \end{tabularx}
 \end{center}
 
-All tuple equality is componentwise.
+All tuple equality is componentwise. Bosses are flat identities, not logical parents with boss-variant children. Sartharion 0D, 1D, 2D, and 3D are distinct bosses. Instance variants describe difficulty and raid size; the tuple notation below describes source dimensions, not a prescribed catalog schema.
 
 \[
 \begin{aligned}
-B&=(\field{instance},\field{encounter},\field{difficulty},\field{player\_size}),\\
-C&=(\field{instance},\field{difficulty},\field{player\_size}),\\
-P&=(\field{realm},\field{player\_guid}),\\
-G&=(\field{realm},\field{guild\_id}),\\
-S&=(\field{spec},\field{sub\_spec}).
+B&=(\field{instance},\field{encounter},\field{difficulty},\field{player\_\allowbreak size}),\\
+C&=(\field{instance},\field{difficulty},\field{player\_\allowbreak size}),\\
+P&=(\field{realm},\field{player\_\allowbreak guid}),\\
+G&=(\field{realm},\field{guild\_\allowbreak id}),\\
+S&=(\field{spec},\field{sub\_\allowbreak spec}).
 \end{aligned}
 \]
 
@@ -135,14 +144,14 @@ Let
 \toprule
 Relation & Source & Cardinality \\
 \midrule
-$\mathcal{O}_P$ & \field{encounter\_dps\_rankings} & One source ranking produces one raw observation for each $m\in M_P$: $1:2$. \\
-$\mathcal{O}_{GK}$ & \field{time\_parse\_boss\_scores} joined to its parent \field{time\_parse\_scores} & One boss-score row produces one raw guild kill observation: $1:1$. \\
-$\mathcal{O}_{GC}$ & \field{time\_parse\_scores} with non-null \field{clear\_duration\_ms} & One time-parse row produces one raw guild clear observation: $1:1$. \\
+$\mathcal{O}_P$ & \field{encounter\_\allowbreak dps\_\allowbreak rankings} & One source ranking produces one raw observation for each $m\in M_P$: $1:2$. \\
+$\mathcal{O}_{GK}$ & \field{time\_\allowbreak parse\_\allowbreak boss\_\allowbreak scores} joined to its parent \field{time\_\allowbreak parse\_\allowbreak scores} & One boss-score row produces one raw guild kill observation: $1:1$. \\
+$\mathcal{O}_{GC}$ & \field{time\_\allowbreak parse\_\allowbreak scores} with non-null \field{clear\_\allowbreak duration\_\allowbreak ms} & One time-parse row produces one raw guild clear observation: $1:1$. \\
 \bottomrule
 \end{tabularx}
 \end{center}
 
-Every source row must be canonical and visible, and guild observations require a non-null guild. \field{ranking\_runs} defines $\operatorname{representative}(R)$. Persisted parse-score results are not inputs to the rebuilt rating model.
+Every source row must be canonical and visible, and guild observations require a non-null guild. \field{ranking\_\allowbreak runs} defines $\operatorname{representative}(R)$. Persisted parse-score results are not inputs to the rebuilt rating model.
 
 \section{Cohorts}
 A cohort contains comparable observations. The ranked subject is not part of the cohort identity.
@@ -159,21 +168,12 @@ Guild clear & $H_{GC}=(C,m)$ & $\{O\in\mathcal{O}_{GC}\mid O.C=C\land O.m=m\}$ \
 \end{tabularx}
 \end{center}
 
-Here $c$ is player class. Cohorts are evaluated within one tenant.
+Here $c$ is player class. Each displayed cohort is evaluated within exactly one tenant, realm, and chosen season. These scope dimensions are implicit in the mathematical notation, not optional filters. The physical identity of a season remains unresolved; tenant-only benchmark cohorts are invalid.
 
 \section{Derived rankings}
 
-\subsection{Window and selected observations}
-Let $\tau(O)$ be \field{killed\_at} for boss observations and \field{cleared\_at} for clear observations.
-
-\[
-  W_{\mathrm{career}}(O)=\mathrm{true}.
-\]
-\[
-  W_{[t_0,t_1)}(O)
-  \Longleftrightarrow
-  t_0\le\tau(O)<t_1.
-\]
+\subsection{Scope and selected observations}
+Let $W(O)$ denote membership in the chosen realm/season scope. The exact membership rule awaits the season contract; it is not an all-seasons or career predicate. ``All-time'' may only mean all eligible evidence within that chosen realm/season, not evidence across seasons. No rolling or bounded window implementation is specified. Renown uses its separately unresolved scope selector.
 
 For player $P$ and player cohort $H_P$:
 \[
@@ -188,11 +188,11 @@ In the definitions below, $A$ denotes either selected set.
 \subsection{Cohort benchmarks, Peak, Form, and Floor}
 Each cohort has one current best raw metric value. Let $\beta(H)$ denote that benchmark. For player DPS/HPS cohorts, larger values are better:
 \[
-  \beta(H_P)=\max_{O\in H_P} O.\field{metric\_value}.
+  \beta(H_P)=\max_{O\in H_P} O.\field{metric\_\allowbreak value}.
 \]
 For guild kill-time and clear-time cohorts, smaller values are better:
 \[
-  \beta(H_G)=\min_{O\in H_G} O.\field{metric\_value}.
+  \beta(H_G)=\min_{O\in H_G} O.\field{metric\_\allowbreak value}.
 \]
 
 Normalize every observation against the current benchmark of its cohort. For DPS/HPS:
@@ -200,17 +200,17 @@ Normalize every observation against the current benchmark of its cohort. For DPS
   p_H(O)=
   \begin{cases}
   0, & \beta(H)=0,\\
-  100\min\left(1,\dfrac{O.\field{metric\_value}}{\beta(H)}\right),
+  100\min\left(1,\dfrac{O.\field{metric\_\allowbreak value}}{\beta(H)}\right),
     & \beta(H)>0.
   \end{cases}
 \]
 For kill and clear times:
 \[
   p_H(O)=100\min\left(1,
-    \frac{\beta(H)}{O.\field{metric\_value}}
+    \frac{\beta(H)}{O.\field{metric\_\allowbreak value}}
   \right).
 \]
-Guild durations are strictly positive. The clamp tolerates temporary benchmark/result skew during rolling maintenance. Observations preserve raw \field{metric\_value}; normalized scores are derived from the current cohort benchmark and are not immutable observation payload.
+Guild durations are strictly positive. The clamp tolerates temporary benchmark/result skew during rolling maintenance. Observations preserve raw \field{metric\_\allowbreak value}; normalized scores are derived from the current cohort benchmark and are not immutable observation payload.
 
 For one selected subject set $A$, order the current normalized scores
 \[
@@ -289,22 +289,22 @@ Their identities are
   \qquad
   \operatorname{id}(K_G)=(R,B,G).
 \]
-Each fact retains its kill timestamp as payload for window selection.
+Each fact retains its kill timestamp as payload for the eventual scope-selection contract.
 
-Let $\rho(B)\ge0$ be the configured Renown award for boss $B$. Then
+Let $\rho(B)\ge0$ be the effective configured Renown award for boss $B$, including its instance-variant override, and let $E(B)$ mean that configuration enables the boss for Renown. Set membership does not determine $E$. Disabled bosses contribute nothing without erasing parsed history. Renown's temporal selector $W$ remains separately unresolved. Then
 \[
   \operatorname{Renown}_P(P,W)
-  =\sum_{K\in K_P\,:\,K.P=P\land W(K)}\rho(K.B),
+  =\sum_{K\in K_P\,:\,K.P=P\land W(K)\land E(K.B)}\rho(K.B),
 \]
 \[
   \operatorname{Renown}_G(G,W)
-  =\sum_{K\in K_G\,:\,K.G=G\land W(K)}\rho(K.B).
+  =\sum_{K\in K_G\,:\,K.G=G\land W(K)\land E(K.B)}\rho(K.B).
 \]
 
 Renown is a linear sum of canonical boss-kill awards. It does not depend on metric value, cohort benchmark, Peak, Mastery, or clear completion.
 
 \section{Instance aggregation}
-Let $\mathcal{B}(i,d,z)$ be the configured set of eligible bosses for instance $i$, difficulty $d$, and player size $z$.
+For a selected named encounter set, let $\mathcal{B}(i,d,z)$ be its effective, explicitly listed bosses for instance $i$, difficulty $d$, and player size $z$. The set selection is implicit in the formulas below. Excluded bosses are removed from this set and its denominator, not zero-filled. Missing evidence for an included boss is zero-filled. Never divide by zero for an empty effective set; its API presentation remains a later read-contract decision.
 
 For a subject $q$, window $W$, and boss $B\in\mathcal{B}(i,d,z)$, define missing boss values as zero:
 \[
@@ -336,29 +336,12 @@ Instance Peak and Mastery are equal-weight averages over every eligible boss:
 \widehat{\operatorname{Mastery}}_B(q,W).
 \]
 
-\section{Portfolio aggregation}
-Let $\mathcal{I}$ be the configured set of instances in a portfolio, and let $\omega(I)>0$ be the configured weight of instance $I$. A missing instance value is zero.
-
-\[
-\operatorname{PortfolioPeak}(q,\mathcal{I},W)
-=\frac{\sum_{I\in\mathcal{I}}\omega(I)\operatorname{InstancePeak}(q,I,W)}
-{\sum_{I\in\mathcal{I}}\omega(I)},
-\]
-\[
-\operatorname{PortfolioMastery}(q,\mathcal{I},W)
-=\frac{\sum_{I\in\mathcal{I}}\omega(I)\operatorname{InstanceMastery}(q,I,W)}
-{\sum_{I\in\mathcal{I}}\omega(I)}.
-\]
-
-The current policy is
-\[
-  \omega(I)=1
-  \qquad\text{for every }I\in\mathcal{I}.
-\]
+\section{Deferred portfolios}
+Career and cross-instance portfolios are out of current scope. Do not create portfolio schema, seed memberships or weights, or implement portfolio read aggregation. No cross-season Peak or Mastery is promised.
 
 \section{Logical invariants}
 \begin{enumerate}
-  \item Only the representative instance selected by \field{ranking\_runs} contributes observations.
+  \item Only the representative instance selected by \field{ranking\_\allowbreak runs} contributes observations.
   \item Unlisted and invalidated runs contribute no observations or Renown facts.
   \item Boss, clear, player, guild, and specialization equality is componentwise tuple equality.
   \item One player observation is unique by $(R,B,P,m)$.
@@ -375,15 +358,13 @@ The current policy is
   \item A benchmark change dirties every materialized boss or clear subject result in that cohort.
   \item Boss and clear Peak are derived from a subject's raw peak metric and the current cohort benchmark; normalized Peak is not stored per subject.
   \item Missing selected bosses contribute zero to group Peak and Mastery.
-  \item Every selected boss has equal weight unless a configured portfolio explicitly supplies instance weights.
-  \item Missing configured instances contribute zero to configured portfolio Peak and Mastery.
-  \item Portfolio instance weights are positive; the current policy assigns weight one to every instance.
-  \item Instance, portfolio, and arbitrary boss-group Peak and Mastery are calculated at read time. Aggregate result rows are not materialized in the initial physical design.
+  \item Every selected boss has equal weight.
+  \item Instance encounter-set and arbitrary boss-group Peak and Mastery are calculated at read time. Aggregate result rows are not materialized in the initial physical design.
   \item Renown is a linear sum of configured canonical boss-kill awards.
   \item Renown is independent of metric value, Peak, Mastery, and clear completion.
   \item A run belongs to exactly one non-null rating tenant. Its observations, Renown facts, cohorts, and results are projected only within that tenant.
-  \item A tenant's canonical flavor set resolves to exactly one global current ruleset. Ruleset configuration may be shared; rating data is never shared or copied between tenants.
-  \item The current physical projection stores only $W_{\mathrm{career}}$ results.
+  \item Matching global configuration layers compose by required-flavor subset and strict-superset precedence. Conflicting incomparable matches are rejected; rating data is never shared or copied between tenants.
+  \item Peak and Mastery require realm/season isolation. Physical keys await the season contract; Renown scope and layered provenance remain open gates.
 \end{enumerate}
 
 \section{Database schema}
@@ -391,23 +372,17 @@ The current policy is
 \subsection{Physical conventions}
 Ratings use exact single-tenant ownership. Every canonical run belongs to exactly one rating tenant, determined by
 \[
-\field{ranking\_runs.realm\_id}
-\rightarrow\field{wow\_server\_realms.server\_id}
-\rightarrow\field{wow\_servers.tenant\_id}.
+\field{ranking\_\allowbreak runs.\allowbreak realm\_\allowbreak id}
+\rightarrow\field{wow\_\allowbreak server\_\allowbreak realms.\allowbreak server\_\allowbreak id}
+\rightarrow\field{wow\_\allowbreak servers.\allowbreak tenant\_\allowbreak id}.
 \]
-The owning \field{tenant\_id} must be non-null. If the source server has a null tenant, rating derivation rejects the run. It does not map the run to a zero UUID, default tenant, root tenant, or any tenant selected by \field{include\_in\_all}. A run, observation, Renown fact, cohort, and result is materialized for that one tenant only.
+The owning \field{tenant\_\allowbreak id} must be non-null. If the source server has a null tenant, rating derivation rejects the run. It does not map the run to a zero UUID, default tenant, root tenant, or any tenant selected by \field{include\_\allowbreak in\_\allowbreak all}. A run, observation, Renown fact, cohort, and result is materialized for that one tenant only.
 
-Every proposed rating-data relation is tenant scoped and every rating-data primary key contains \field{tenant\_id}. Global flavor sets and rulesets are shared configuration, not rating data. Source rows retain their existing global identities. All source-to-projection operations require exact equality between the requested tenant and the run's derived owning tenant. Tenant relations use forced RLS with exact equality to \field{app.tenant\_id}; no fallback tenant is substituted when the setting is absent. The administrative bypass may perform maintenance across tenants, but it may not change a row's derived ownership or copy evidence between tenants.
+Every proposed rating-data relation is tenant scoped and every rating-data primary key contains \field{tenant\_\allowbreak id}. Global flavor sets and rulesets are shared configuration, not rating data. Source rows retain their existing global identities. All source-to-projection operations require exact equality between the requested tenant and the run's derived owning tenant. Tenant relations use forced RLS with exact equality to \field{app.\allowbreak tenant\_\allowbreak id}; no fallback tenant is substituted when the setting is absent. The administrative bypass may perform maintenance across tenants, but it may not change a row's derived ownership or copy evidence between tenants.
 
-Realm identity remains \field{wow\_server\_realms.id}; guild identity is the pair $(\field{realm\_id},\field{guild\_id})$ even though \field{guilds.id} is globally unique. In the compact DDL below, every column is \field{NOT NULL} unless nullability is stated or required by a displayed check.
+Realm identity remains \field{wow\_\allowbreak server\_\allowbreak realms.\allowbreak id}; guild identity is the pair $(\field{realm\_\allowbreak id},\field{guild\_\allowbreak id})$ even though \field{guilds.\allowbreak id} is globally unique. Physical rating DDL is intentionally withheld until the design gates close.
 
-The physical schema stores all-time ratings only. The earlier window notation remains a mathematical abstraction with $W=W_{\mathrm{career}}$ for every stored result. No physical window identity, bounds, expiry timestamp, or expiry maintenance exists.
-
-Projection and result rows have stable keys. Writers use direct idempotent replacement:
-\begin{verbatim}
-INSERT ... ON CONFLICT (<full primary key>) DO UPDATE ...
-\end{verbatim}
-There is no build identifier, dataset-wide publication relation, policy-version row, or window row. A write updates the row identified by tenant, subject, and complete cohort or scope. The resolved global \field{ruleset\_id} is provenance payload and is updated in place; it is not part of a result primary key.
+The prior tenant-only physical draft is parked. Stable-key replacement remains the intended maintenance approach, but observations, benchmarks, result keys, indexes, and dirty keys must be designed together after realm/season identity and boundaries are agreed. This document does not prescribe missing season columns or a season table. Layered provenance representation and its repair triggers must also be decided before result schema is implemented.
 
 Supporting constraints make tuple and tenant identity enforceable without redesigning source facts:
 \begin{verbatim}
@@ -415,412 +390,67 @@ UNIQUE ranking_runs     (run_id, representative_instance_id, realm_id)
 UNIQUE time_parse_scores(id, tenant_id)
 UNIQUE guilds           (id, realm_id)
 \end{verbatim}
-A projected observation or Renown fact stores the source \field{realm\_id} and has a composite foreign key to the run. Guild observations additionally bind the source time-parse row to the same tenant. The projection transaction resolves the realm's server and requires its non-null tenant to equal the projected \field{tenant\_id}. The guild constraint permits $(\field{guild\_id},\field{realm\_id})$ foreign keys.
+A projected observation or Renown fact stores the source \field{realm\_\allowbreak id} and has a composite foreign key to the run. Guild observations additionally bind the source time-parse row to the same tenant. The projection transaction resolves the realm's server and requires its non-null tenant to equal the projected \field{tenant\_\allowbreak id}. The guild constraint permits $(\field{guild\_\allowbreak id},\field{realm\_\allowbreak id})$ foreign keys.
 
 \subsection{Source and oracle relations}
-The implementation creates the replacement schema alongside the current rating subsystem. Existing rating tables, scans, dirty-work tables, and projections are not translated into the proposed schema and remain available for rollback until serving cutover is verified. A later cleanup migration removes them after the new system is accepted. Rebuild replacement data from the following authoritative source and oracle relations:
+Prior ratings have been removed; parse scoring is preserved by merged PR 1625. Retired rating tables are neither migration inputs nor a rollback target. Rebuild replacement data from the following preserved authoritative source relations:
 \begin{center}
 \begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.27\linewidth}X@{}}
 \toprule
 Relation & Use \\
 \midrule
-\field{ranking\_runs} & Canonical run, representative instance, and source realm. \\
-\field{encounter\_dps\_rankings} & Raw player DPS/HPS values and player/boss dimensions. \\
-\field{time\_parse\_scores} & Guild, realm, run, and raw clear duration. \\
-\field{time\_parse\_boss\_scores} & Raw guild boss duration. \\
-\field{log\_instances}, \field{wow\_log\_groups} & Invalidation, listing visibility, and provenance. \\
-\field{wow\_server\_realms}, \field{wow\_servers}, \field{guilds} & Exact rating-tenant, realm, and guild identity. \\
+\field{ranking\_\allowbreak runs} & Canonical run, representative instance, and source realm. \\
+\field{encounter\_\allowbreak dps\_\allowbreak rankings} & Raw player DPS/HPS values and player/boss dimensions. \\
+\field{time\_\allowbreak parse\_\allowbreak scores} & Guild, realm, run, and raw clear duration. \\
+\field{time\_\allowbreak parse\_\allowbreak boss\_\allowbreak scores} & Raw guild boss duration. \\
+\field{log\_\allowbreak instances}, \field{wow\_\allowbreak log\_\allowbreak groups} & Invalidation, listing visibility, and provenance. \\
+\field{wow\_\allowbreak server\_\allowbreak realms}, \field{wow\_\allowbreak servers}, \field{guilds} & Exact rating-tenant, realm, and guild identity. \\
 \bottomrule
 \end{tabularx}
 \end{center}
 
-For ratings, the source realm's owning server must have exactly one non-null \field{tenant\_id}. That tenant is copied into every derived row. No rating derivation uses \field{COALESCE} to a root identifier, \field{include\_in\_all}, or a second tenant projection. A nullable source tenant makes the run ineligible until ownership is explicit.
+For ratings, the source realm's owning server must have exactly one non-null \field{tenant\_\allowbreak id}. That tenant is copied into every derived row. No rating derivation uses \field{COALESCE} to a root identifier, \field{include\_\allowbreak in\_\allowbreak all}, or a second tenant projection. A nullable source tenant makes the run ineligible until ownership is explicit.
 
-The rebuilt model does not consume persisted player or guild parse scores. Player metrics use \field{encounter\_dps\_rankings.dps} and \field{encounter\_dps\_rankings.hps}. Guild boss metrics use \field{time\_parse\_boss\_scores.duration\_ms}; guild clear metrics use \field{time\_parse\_scores.clear\_duration\_ms}. The corresponding precise-score, display-score, rank, sample-size, status, window, and policy-version columns are not rating inputs.
+The rebuilt model does not consume persisted player or guild parse scores. Player metrics use \field{encounter\_\allowbreak dps\_\allowbreak rankings.\allowbreak dps} and \field{encounter\_\allowbreak dps\_\allowbreak rankings.\allowbreak hps}. Guild boss metrics use \field{time\_\allowbreak parse\_\allowbreak boss\_\allowbreak scores.\allowbreak duration\_\allowbreak ms}; guild clear metrics use \field{time\_\allowbreak parse\_\allowbreak scores.\allowbreak clear\_\allowbreak duration\_\allowbreak ms}. The corresponding precise-score, display-score, rank, sample-size, status, window, and policy-version columns are not rating inputs.
 
-A player source row joins \field{encounter\_dps\_rankings.instance\_id} to \field{ranking\_runs.representative\_instance\_id}. A guild time-parse source row must match the canonical \field{run\_id}, representative \field{instance\_id}, source \field{realm\_id}, exact tenant, and guild identity. Its parent representative instance must join a listed \field{wow\_log\_groups} row and have null \field{invalidated\_at}. A boss row additionally binds its \field{encounter\_id} to an encounter in that representative instance. These predicates are part of the projection function, not caller discretion.
+\begin{sloppypar}
+A player source row joins \field{encounter\_\allowbreak dps\_\allowbreak rankings.\allowbreak instance\_\allowbreak id} to \field{ranking\_\allowbreak runs.\allowbreak representative\_\allowbreak instance\_\allowbreak id}. A guild time-parse source row must match the canonical \field{run\_\allowbreak id}, representative \field{instance\_\allowbreak id}, source \field{realm\_\allowbreak id}, exact tenant, and guild identity. Its parent representative instance must join a listed \field{wow\_\allowbreak log\_\allowbreak groups} row and have null \field{invalidated\_\allowbreak at}. A boss row additionally binds its \field{encounter\_\allowbreak id} to an encounter in that representative instance. These predicates are part of the projection function, not caller discretion.
+\end{sloppypar}
 
 Observation projections copy only the fields required for stable tuple identity, raw-metric normalization, and score computation. This avoids repeated multi-table source joins. They remain retractable projections: deleting, replacing, unlisting, or invalidating source evidence must remove the corresponding observations and Renown facts from their one owning tenant.
 
-\subsection{Global flavor-set rulesets}
-A tenant's effective flavor set is the union of its dataset flavor and its tenant-configured flavors:
+\subsection{Shared configuration catalog and flavor layers}
+The database is the intended source for leaderboard configuration. Parser mechanics remain in Go. Foundation work does not change existing UI behavior or move combat-log interpretation into SQL.
+
+Leaderboard-relevant flavors are explicitly classified in \field{database/flavor.\allowbreak go}: initially \field{vanilla}, \field{tbc}, \field{wrath}, \field{nightmare-of-ursol}, and \field{vanillaplus}. Server tags such as \field{octowow}, \field{capybara}, and \field{ravencraft} are ignored for layer matching. Let $L$ be that classified vocabulary:
 \[
-\operatorname{flavors}(T)
-=\{\operatorname{dataset\_flavor}(T)\}
-\cup\operatorname{tenant\_flavors}(T).
+ F(T)=\bigl(\{\operatorname{dataset\_flavor}(T)\}
+       \cup\operatorname{tenant\_flavors}(T)\bigr)\cap L.
 \]
-A single authoritative resolver normalizes this union into one canonical flavor set. The canonical set is non-empty, normalized, duplicate-free, and independent of input order. The proposed relational representation is:
-\begin{verbatim}
-leaderboard_flavor_sets (
-  id uuid primary key,
-  canonical_key text unique
-)
-leaderboard_flavor_set_members (
-  flavor_set_id uuid references leaderboard_flavor_sets on delete cascade,
-  flavor text,
-  primary key (flavor_set_id, flavor)
-)
-\end{verbatim}
-Membership is a set: the primary key rejects duplicates and row order has no meaning. \field{canonical\_key} is produced from the sorted distinct normalized member identifiers using an unambiguous length-prefixed encoding. It is an integrity and lookup key, not tenant policy. All rating derivation uses the same resolver for the dataset-flavor and tenant-flavor union.
+Normalize and deduplicate this unordered set. A global configuration layer with required-flavor set $Q$ matches exactly when $Q\subseteq F(T)$. It is not an exact full-set ruleset lookup. For two matching layers, $Q_2$ is more specific than $Q_1$ only if $Q_1\subsetneq Q_2$. Cardinality, input order, and server tags do not break ties. Conflicting assignments from incomparable matching layers are rejected. Compatible assignments may compose. Configuration is globally shared; tenant evidence and results remain separate.
 
-Exactly one global current ruleset exists for each canonical flavor set:
-\begin{verbatim}
-leaderboard_rulesets (
-  id uuid primary key,
-  flavor_set_id uuid unique
-    references leaderboard_flavor_sets on delete restrict,
-  revision bigint check (revision > 0),
-  created_at timestamptz,
-  updated_at timestamptz
-)
-\end{verbatim}
-The unique \field{flavor\_set\_id} is the one-active-ruleset constraint. A rules change updates this row and its dependent configuration in one transaction and increments \field{revision}. Tenant result rows store \field{ruleset\_id} and \field{ruleset\_revision} as provenance but keep stable tenant/subject/cohort keys. Recalculation overwrites results; revisions do not create coexisting serving rows.
+The structural catalog contains instances, instance variants (difficulty and raid size), flat bosses, named ordered encounter sets, and explicit ordered set memberships. There is no logical boss parent or boss-variant entity. Sartharion 0D/1D/2D/3D are distinct exact bosses. Sets select exact bosses; the default Sartharion selection is 0D, with no best-variant substitution.
 
-Ruleset configuration is global:
-\begin{verbatim}
-leaderboard_eligible_bosses (
-  ruleset_id uuid references leaderboard_rulesets on delete cascade,
-  instance_name, encounter_name, difficulty_name, max_players,
-  primary key (ruleset_id, instance_name, encounter_name,
-               difficulty_name, max_players),
-  check (max_players >= 0)
-)
-leaderboard_renown_awards (
-  ruleset_id uuid references leaderboard_rulesets on delete cascade,
-  instance_name, encounter_name, difficulty_name, max_players,
-  points double precision check (points >= 0),
-  primary key (ruleset_id, instance_name, encounter_name,
-               difficulty_name, max_players)
-)
-leaderboard_portfolios (
-  ruleset_id uuid references leaderboard_rulesets on delete cascade,
-  portfolio_key text, name text, difficulty_name text,
-  primary key (ruleset_id, portfolio_key),
-  unique (ruleset_id, name)
-)
-leaderboard_portfolio_instances (
-  ruleset_id, portfolio_key, instance_name, max_players,
-  weight double precision check (weight > 0),
-  primary key (ruleset_id, portfolio_key, instance_name, max_players),
-  foreign key (ruleset_id, portfolio_key)
-    references leaderboard_portfolios on delete cascade,
-  check (max_players >= 0)
-)
-\end{verbatim}
-A portfolio carries exactly one \field{difficulty\_name}; members inherit it. Player-size remains part of each member identity. Equal boss weighting is structural: \field{leaderboard\_eligible\_bosses} has no weight column. Portfolio weights are explicit and positive. The current rules insert \field{weight = 1}.
+Boss, instance, set, and member overrides support explicit exclusion. An absent override inherits; it does not mean disabled or zero. Disabled bosses leave effective sets, aggregate denominators, and Renown eligibility. Excluded instances, sets, or members remove their affected selection; set membership alone does not determine Renown eligibility. Parsed history is unchanged by configuration exclusion.
 
-\subsection{Observation projections}
-\begin{verbatim}
-leaderboard_player_observations (
-  tenant_id uuid, run_id uuid, source_instance_id uuid,
-  realm_id uuid, player_guid text,
-  instance_name text, encounter_name text, difficulty_name text,
-  max_players smallint, player_class text, player_spec text,
-  player_sub_spec text, metric text, metric_value double precision,
-  killed_at timestamptz,
-  primary key (tenant_id, run_id, instance_name, encounter_name,
-               difficulty_name, max_players, realm_id, player_guid, metric),
-  foreign key (run_id, source_instance_id, realm_id)
-    references ranking_runs (run_id, representative_instance_id, realm_id)
-    on delete cascade,
-  foreign key (realm_id) references wow_server_realms,
-  check (metric in ('dps','hps')),
-  check (metric_value >= 0),
-  check (max_players >= 0)
-)
+Renown has boss defaults and instance-variant overrides. Explicit zero is a real award override, distinct from absence. Awards are independent of encounter-set membership. Vanilla awards are not automatically zeroed for TBC or Wrath. Seed values must be explicit reviewed data, not runtime reads or seed extraction from migration 313 or retired rating tables. Do not invent new awards or difficulty variants.
 
-leaderboard_guild_boss_observations (
-  tenant_id uuid, run_id uuid, source_instance_id uuid,
-  source_time_parse_score_id uuid, source_encounter_id uuid,
-  realm_id uuid, guild_id uuid,
-  instance_name text, encounter_name text, difficulty_name text,
-  max_players smallint, metric_value bigint,
-  killed_at timestamptz,
-  primary key (tenant_id, run_id, instance_name, encounter_name,
-               difficulty_name, max_players, realm_id, guild_id),
-  foreign key (run_id, source_instance_id, realm_id)
-    references ranking_runs (run_id, representative_instance_id, realm_id)
-    on delete cascade,
-  foreign key (guild_id, realm_id) references guilds (id, realm_id),
-  foreign key (source_time_parse_score_id, tenant_id)
-    references time_parse_scores (id, tenant_id) on delete cascade,
-  foreign key (source_time_parse_score_id, source_encounter_id)
-    references time_parse_boss_scores (time_parse_score_id, encounter_id)
-    on delete cascade,
-  check (metric_value > 0),
-  check (max_players >= 0)
-)
+\subsection{Deferred physical schema and provenance}
+PR 1624 supplies structural catalog and vocabulary only. A following PR implements subset resolution and overrides with tests; a separate following PR supplies reviewed initial seeds and parity fixtures. Physical catalog naming and constraints are reviewed in those PRs, without coupling them to observation keys.
 
-leaderboard_guild_clear_observations (
-  tenant_id uuid, run_id uuid, source_instance_id uuid,
-  source_time_parse_score_id uuid,
-  realm_id uuid, guild_id uuid,
-  instance_name text, difficulty_name text, max_players smallint,
-  metric_value bigint, cleared_at timestamptz,
-  primary key (tenant_id, run_id, instance_name, difficulty_name,
-               max_players, realm_id, guild_id),
-  foreign key (run_id, source_instance_id, realm_id)
-    references ranking_runs (run_id, representative_instance_id, realm_id)
-    on delete cascade,
-  foreign key (guild_id, realm_id) references guilds (id, realm_id),
-  foreign key (source_time_parse_score_id, tenant_id)
-    references time_parse_scores (id, tenant_id) on delete cascade,
-  check (metric_value > 0),
-  check (max_players >= 0)
-)
-\end{verbatim}
-The metric is implicit in each guild table. \field{metric\_value} is DPS/HPS for player rows and milliseconds for guild rows. Observations do not store a normalized parse score. Peak and Mastery normalize the raw metric against the current cohort benchmark when computed.
+Do not implement the parked observation, fact, benchmark, subject, or queue schema until the realm/season contract is settled. Tenant ownership alone is insufficient: benchmark queries, subject identities, fan-out, and queue keys must all preserve realm isolation and the agreed season scope. Renown's scope needs a separate decision before its physical result and work keys are approved.
 
-The projection transaction derives \field{tenant\_id} from the run realm's owning server, rejects null ownership, and requires exact tenant equality for all source rows. Source dimension agreement and visibility require transactional checks because they cross mutable source relations.
+Results should retain computation time and effective-configuration provenance, but layered resolution does not imply one ruleset ID/revision. How contributing layers and revisions are represented, and how changes identify affected scopes for repair, is unresolved. Rolling maintenance and continued reads are intended; this does not settle provenance encoding or allow excluded bosses into current selections.
 
-Essential observation indexes are:
-\begin{itemize}
-  \item player subject/cohort: tenant, realm, player, class, specialization, metric, boss, \field{killed\_at};
-  \item player benchmark cohort: tenant, boss, class, specialization, metric, \field{metric\_value DESC};
-  \item guild boss subject/cohort and benchmark cohort, ending in \field{metric\_value ASC};
-  \item guild clear subject/cohort and benchmark cohort, ending in \field{metric\_value ASC};
-  \item each observation table on $(\field{tenant\_id},\field{run\_id})$ for replacement and retraction.
-\end{itemize}
+\subsection{Deferred processing contract}
+The following processing behavior is retained as the intended later pipeline, not authorization to implement the parked schema. Every named function and queue requires keys and fan-out consistent with the eventual season and provenance contracts. Dirty keys must exactly mirror the scoped values they refresh. Source deletion must remain processable without a foreign key from dirty-run work to the deleted source.
 
-\subsection{Renown facts}
-Renown facts intentionally duplicate the distinct kill key and timestamp. This is the metric-erasing projection required to prevent DPS/HPS double counting. It is not an immutable historical ledger.
-\begin{verbatim}
-leaderboard_player_renown_facts (
-  tenant_id, run_id, source_instance_id,
-  realm_id, player_guid,
-  instance_name, encounter_name, difficulty_name, max_players,
-  killed_at timestamptz,
-  primary key (tenant_id, run_id, instance_name, encounter_name,
-               difficulty_name, max_players, realm_id, player_guid),
-  foreign key (run_id, source_instance_id, realm_id)
-    references ranking_runs (run_id, representative_instance_id, realm_id)
-    on delete cascade
-)
-leaderboard_guild_renown_facts (
-  tenant_id, run_id, source_instance_id,
-  realm_id, guild_id,
-  instance_name, encounter_name, difficulty_name, max_players,
-  killed_at timestamptz,
-  primary key (tenant_id, run_id, instance_name, encounter_name,
-               difficulty_name, max_players, realm_id, guild_id),
-  foreign key (run_id, source_instance_id, realm_id)
-    references ranking_runs (run_id, representative_instance_id, realm_id)
-    on delete cascade,
-  foreign key (guild_id, realm_id) references guilds (id, realm_id)
-)
-\end{verbatim}
-Index each fact table by tenant, subject, \field{killed\_at}, then boss identity. No fact contains metric, metric value, parse score, clear state, Peak, or Mastery. A fact's \field{tenant\_id} is the exact non-null owner derived from its run realm and may not be copied to another tenant.
-
-\subsection{Stable result identity}
-Every result row stores
-\begin{verbatim}
-ruleset_id uuid references leaderboard_rulesets (id),
-ruleset_revision bigint check (ruleset_revision > 0),
-computed_at timestamptz
-\end{verbatim}
-as provenance. These columns are not part of a result primary key. The stored revision records the ruleset revision used for that computation. It may differ from the currently resolved ruleset revision while a policy upgrade is still being applied.
-
-Serving reads treat every stored result as valid. They do not filter, join, order, or otherwise change behavior based on \field{ruleset\_revision}. Revision comparison belongs only to maintenance workers that identify and gradually recompute stale results.
-
-A result primary key is the stable natural identity of one tenant, subject, and complete cohort or aggregation scope. Recomputing after a rules change updates \field{ruleset\_revision} and replaces the payload in the same row. No policy-version or historical ruleset copy coexists in the serving result tables. Existing rows continue to serve until rolling maintenance overwrites them, so policy upgrades converge through eventual consistency rather than requiring a synchronized rebuild.
-
-All result rows represent $W_{\mathrm{career}}$. Therefore neither result keys nor indexes contain window columns.
-
-\subsection{Cohort benchmarks and boss or clear results}
-Each complete boss or clear cohort stores one current best raw metric:
-\begin{verbatim}
-leaderboard_player_boss_cohort_benchmarks (
-  tenant_id,
-  instance_name, encounter_name, difficulty_name, max_players,
-  player_class, player_spec, player_sub_spec, metric,
-  best_metric_value double precision check (best_metric_value >= 0),
-  computed_at timestamptz,
-  primary key (tenant_id,
-               instance_name, encounter_name, difficulty_name, max_players,
-               player_class, player_spec, player_sub_spec, metric),
-  check (metric in ('dps','hps'))
-)
-leaderboard_guild_boss_cohort_benchmarks (
-  tenant_id,
-  instance_name, encounter_name, difficulty_name, max_players,
-  best_metric_value bigint check (best_metric_value > 0),
-  computed_at timestamptz,
-  primary key (tenant_id,
-               instance_name, encounter_name, difficulty_name, max_players)
-)
-leaderboard_guild_clear_cohort_benchmarks (
-  tenant_id,
-  instance_name, difficulty_name, max_players,
-  best_metric_value bigint check (best_metric_value > 0),
-  computed_at timestamptz,
-  primary key (tenant_id, instance_name, difficulty_name, max_players)
-)
-\end{verbatim}
-The player benchmark is the maximum raw DPS or HPS value. Guild benchmarks are the minimum raw duration. One benchmark row is joined to a page of subject results to derive displayed boss or clear Peak values.
-
-The common result payload is
-\begin{verbatim}
-ruleset_id uuid references leaderboard_rulesets (id),
-ruleset_revision bigint check (ruleset_revision > 0),
-observation_count integer check (observation_count > 0),
-peak_metric_value double precision check (peak_metric_value >= 0),
-form double precision check (form between 0 and 100),
-floor double precision check (floor between 0 and 100),
-mastery double precision check (mastery between 0 and 100),
-computed_at timestamptz
-\end{verbatim}
-For guild results, \field{peak\_metric\_value} is a positive duration. The normalized Peak is derived from \field{peak\_metric\_value} and the current cohort benchmark; it is not stored on each subject row.
-
-\begin{verbatim}
-leaderboard_player_boss_results (
-  tenant_id, realm_id, player_guid,
-  instance_name, encounter_name, difficulty_name, max_players,
-  player_class, player_spec, player_sub_spec, metric,
-  <common result payload>,
-  primary key (tenant_id, realm_id, player_guid,
-               instance_name, encounter_name, difficulty_name, max_players,
-               player_class, player_spec, player_sub_spec, metric),
-  check (metric in ('dps','hps'))
-)
-leaderboard_guild_boss_results (
-  tenant_id, realm_id, guild_id,
-  instance_name, encounter_name, difficulty_name, max_players,
-  <common result payload>,
-  primary key (tenant_id, realm_id, guild_id,
-               instance_name, encounter_name, difficulty_name, max_players)
-)
-leaderboard_guild_clear_results (
-  tenant_id, realm_id, guild_id,
-  instance_name, difficulty_name, max_players,
-  <common result payload>,
-  primary key (tenant_id, realm_id, guild_id,
-               instance_name, difficulty_name, max_players)
-)
-\end{verbatim}
-Each guild result has the composite guild foreign key. Peak board indexes order player raw metrics descending and guild durations ascending, followed by realm and subject. Mastery board indexes begin with tenant and the complete cohort identity, then \field{mastery DESC}, realm, and subject. Ordered cursor browsing uses those same score and subject columns. Subject indexes begin with tenant, realm, and subject. \field{ruleset\_id} and \field{ruleset\_revision} are not read predicates.
-
-\subsection{Instance and portfolio serving}
-Instance and portfolio Peak and Mastery are calculated at read time from boss subject results, current cohort benchmarks, and the boss group selected by the request. They are not materialized in the initial schema.
-
-The leaderboard page may select a configured instance, a configured portfolio, or an arbitrary group of eligible bosses. For each selected boss, the query joins the subject's boss result to the current cohort benchmark, derives normalized Peak, uses the stored boss Mastery, zero-fills missing eligible bosses, and aggregates across the requested group. Portfolio weights apply only when the selected group is a configured portfolio.
-
-The initial product uses ordered cursor pages of approximately 50 rows and does not require exact ranks or arbitrary numbered pages. Read-time aggregation may process more subjects than the returned 50 rows because ordering occurs after aggregation. That tradeoff is accepted initially.
-
-No instance or portfolio result relations are required. If measured production performance later requires materialization, a read projection or cache may be added without changing observation, benchmark, boss-result, or arbitrary-group semantics.
-
-The guild clear leaderboard remains a direct clear-cohort result and is not substituted for boss aggregation.
-
-\subsection{Renown results}
-\begin{verbatim}
-leaderboard_player_renown_results (
-  tenant_id, realm_id, player_guid,
-  ruleset_id uuid references leaderboard_rulesets (id),
-  ruleset_revision bigint check (ruleset_revision > 0),
-  fact_count integer check (fact_count >= 0),
-  renown double precision check (renown >= 0),
-  computed_at timestamptz,
-  primary key (tenant_id, realm_id, player_guid)
-)
-leaderboard_guild_renown_results (
-  tenant_id, realm_id, guild_id,
-  ruleset_id uuid references leaderboard_rulesets (id),
-  ruleset_revision bigint check (ruleset_revision > 0),
-  fact_count integer check (fact_count >= 0),
-  renown double precision check (renown >= 0),
-  computed_at timestamptz,
-  primary key (tenant_id, realm_id, guild_id)
-)
-\end{verbatim}
-Board indexes are $(\field{tenant\_id},\field{renown DESC},\field{realm\_id},\text{subject})$. Renown is deliberately separate from boss, instance, and portfolio result tables.
-
-\subsection{Invariant enforcement map}
-\begin{center}
-\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.13\linewidth}p{0.34\linewidth}X@{}}
-\toprule
-Invariants & Database enforcement & Transaction or application enforcement \\
-\midrule
-1 & Composite FK to $(\field{run\_id},\field{representative\_instance\_id},\field{realm\_id})$. & None after insertion. \\
-2 & Cascading source FKs support retraction. & Visibility join and retraction on unlist/invalidation. \\
-3--6 & Component columns and composite primary keys. & None. \\
-7 & Observation relations contain raw \field{metric\_value} and no normalized score column. & Projection copies the authoritative raw metric. \\
-8--9 & Player Renown-fact primary key omits metric. & Insert distinct facts in the observation transaction. \\
-10 & Benchmark primary keys contain the complete cohort; player values are nonnegative and guild values positive. & Compute player maximums and guild minimums from current observations. \\
-11--13 & Result primary keys contain one subject and complete cohort; score checks constrain $[0,100]$. & Normalize every selected observation with the current benchmark, apply ordered bands, and use the empty-band zero rule. \\
-14 & Metric and result checks constrain valid input and output ranges. & Reject non-finite values and clamp temporary benchmark skew to $[0,100]$. \\
-15 & Dirty cohort and subject keys mirror benchmark and result identities. & When a benchmark changes, enqueue every subject result in that cohort. \\
-16 & Subject results store \field{peak\_metric\_value}, not normalized Peak. & Serving reads join one cohort benchmark and derive Peak. \\
-17--20 & Eligible bosses and portfolio membership are unique; portfolio weights are positive. & Read queries zero-fill missing selected bosses or instances and apply equal boss weights or configured portfolio instance weights. \\
-21 & No instance, portfolio, or arbitrary-group aggregate result relation exists. & Serving queries aggregate boss results and current benchmarks, then use ordered cursor pagination. \\
-22 & Renown awards are nonnegative and unique by ruleset and boss. & Sum one award per selected fact. \\
-23 & Renown facts and results contain no metric value, Peak, Mastery, or clear columns. & Renown computation joins only facts, the resolved ruleset awards, and subjects. \\
-24 & Every rating-data PK contains tenant; run/realm and time-parse/tenant composite FKs prevent cross-tenant source attachment; RLS uses exact tenant equality. & Resolve the run realm's server tenant, reject null, and never project the run or any derived row into a second tenant. \\
-25 & Flavor members are unique; \field{canonical\_key} is unique; \field{leaderboard\_rulesets.flavor\_set\_id} is unique. & One authoritative resolver unions the dataset flavor with tenant flavors, then normalizes, deduplicates, sorts, and resolves the flavor set. \\
-26 & Result relations have no window identity, bounds, or expiry columns. & Every result computation uses $W_{\mathrm{career}}$. \\
-\bottomrule
-\end{tabularx}
-\end{center}
-
-\subsection{Dirty recomputation work}
-Dirty relations identify runs, shared benchmarks, materialized boss or clear subject results, Renown subjects, and tenants that require recomputation. Every dirty relation carries the following queue metadata in addition to its logical primary key:
-\begin{verbatim}
-revision bigint check (revision > 0),
-dirtied_at timestamptz,
-process_after timestamptz
-\end{verbatim}
-A conflicting dirty insertion increments \field{revision} and updates \field{dirtied\_at}. Upload-driven dirty-run writes set \field{process\_after} to 30 minutes after the newest upload mutation, producing a sliding debounce. Repair and administrative run dirt, and all downstream benchmark, subject, Renown, and tenant dirt, set \field{process\_after} to the current time. A row is due exactly when \(\field{process\_after}\le\operatorname{now}()\).
-
-The logical dirty keys are named for the values they refresh:
-\begin{verbatim}
-leaderboard_dirty_runs (
-  primary key (tenant_id, run_id), <dirty metadata>
-)
-leaderboard_dirty_player_boss_benchmarks (
-  primary key (tenant_id,
-               instance_name, encounter_name, difficulty_name, max_players,
-               player_class, player_spec, player_sub_spec, metric),
-  <dirty metadata>
-)
-leaderboard_dirty_guild_boss_benchmarks (
-  primary key (tenant_id,
-               instance_name, encounter_name, difficulty_name, max_players),
-  <dirty metadata>
-)
-leaderboard_dirty_guild_clear_benchmarks (
-  primary key (tenant_id, instance_name, difficulty_name, max_players),
-  <dirty metadata>
-)
-leaderboard_dirty_player_boss_subjects (
-  primary key (tenant_id, realm_id, player_guid,
-               instance_name, encounter_name, difficulty_name, max_players,
-               player_class, player_spec, player_sub_spec, metric),
-  <dirty metadata>
-)
-leaderboard_dirty_guild_boss_subjects (
-  primary key (tenant_id, realm_id, guild_id,
-               instance_name, encounter_name, difficulty_name, max_players),
-  <dirty metadata>
-)
-leaderboard_dirty_guild_clear_subjects (
-  primary key (tenant_id, realm_id, guild_id,
-               instance_name, difficulty_name, max_players),
-  <dirty metadata>
-)
-leaderboard_dirty_player_renown (
-  primary key (tenant_id, realm_id, player_guid), <dirty metadata>
-)
-leaderboard_dirty_guild_renown (
-  primary key (tenant_id, realm_id, guild_id), <dirty metadata>
-)
-leaderboard_dirty_tenants (
-  primary key (tenant_id), <dirty metadata>
-)
-\end{verbatim}
-Dirty run rows intentionally have no foreign key to the source run because deletion of a run is itself work that must remain processable. \field{leaderboard\_dirty\_tenants} is a persisted, independently claimed queue. Effective-flavor and ruleset mutations upsert it immediately; \field{leaderboard\_expand\_dirty\_tenant} expands one bounded page into the benchmark, subject, and Renown keys implied by the current configuration and existing evidence or results.
+Each dirty marker carries a monotonically increasing revision, a dirtied timestamp, and a due timestamp. Upload-driven run dirt uses a sliding 30-minute debounce. Repair, downstream, and configuration dirt is due immediately. Configuration changes require bounded, persisted expansion to affected scopes; the exact layered invalidation design is an open gate.
 
 \subsubsection{Database-resident processing}
 Rating maintenance does not fetch observations, facts, benchmarks, subjects, or result inputs into application code. PostgreSQL functions perform all claiming, derivation, diffing, aggregation, fan-out, replacement, deletion, and acknowledgement with set-based SQL. Application code or an external scheduler only invokes a bounded function and receives optional row counts for observability.
 
-The initial function boundary is one function per work stage:
+The intended function boundary is one function per work stage. These historical signatures illustrate bounded tenant-local dispatch, not settled scope keys or authorization to omit realm/season isolation:
 \begin{verbatim}
 leaderboard_refresh_dirty_runs(tenant_id, batch_size)
 leaderboard_refresh_player_boss_benchmarks(tenant_id, batch_size)
@@ -838,44 +468,44 @@ Each call processes at most one bounded page in one transaction. No function dra
 PL/pgSQL is used only to sequence a small number of set-based statements and return counters. It does not loop over dirty rows. The substantive work remains \field{INSERT\ldots SELECT}, \field{DELETE\ldots USING}, grouped aggregates, window functions, and conflict-handled upserts. Stage-specific functions are preferred over one giant data-modifying query because old and new projection keys must be preserved across several statements and each stage needs an independent bounded transaction.
 
 \subsubsection{Run projection refresh}
-A source mutation only needs to upsert \field{leaderboard\_dirty\_runs}. The run refresh function claims a page, copies the old projected benchmark and subject keys into transaction-local working relations, derives the new observation and Renown projections directly from authoritative source tables, replaces the claimed runs' projections, and inserts the union of old and new keys into the downstream dirty relations.
+A source mutation only needs to upsert \field{leaderboard\_\allowbreak dirty\_\allowbreak runs}. The run refresh function claims a page, copies the old projected benchmark and subject keys into transaction-local working relations, derives the new observation and Renown projections directly from authoritative source tables, replaces the claimed runs' projections, and inserts the union of old and new keys into the downstream dirty relations.
 
 This handles deletion, canonical representative changes, and evidence moving between cohorts. The run function uses set operations for the whole claimed page; it does not execute one source query per run.
 
 \subsubsection{Benchmark and subject refresh}
 A benchmark refresh function recalculates shared benchmarks from current observations with grouped \field{MAX} for player metrics or grouped \field{MIN} for guild durations. If a benchmark changes, one \field{INSERT\ldots SELECT DISTINCT} marks every current subject in that cohort dirty. The changed benchmark is immediately used by Peak reads.
 
-A source change also dirties its directly affected subjects even when the benchmark does not move. Subject refresh functions join the claimed subject keys to observations and current benchmarks, normalize observations, assign ordered bands with SQL window functions, aggregate Peak, Form, Floor, and Mastery, upsert surviving results, and delete results with no remaining observations. There are no dependent instance or portfolio result rows because all selected boss-group aggregates are derived at read time.
+A source change also dirties its directly affected subjects even when the benchmark does not move. Subject refresh functions join the claimed subject keys to observations and current benchmarks, normalize observations, assign ordered bands with SQL window functions, aggregate Peak, Form, Floor, and Mastery, upsert surviving results, and delete results with no remaining observations. There are no dependent instance encounter-set result rows because all selected boss-group aggregates are derived at read time.
 
-Renown refresh functions join claimed subjects to current Renown facts and ruleset awards, aggregate totals, upsert surviving results, and delete subjects with no remaining facts.
+Renown refresh functions join claimed subjects to current Renown facts and effective configured awards, aggregate totals, upsert surviving results, and delete subjects with no remaining facts.
 
 \subsubsection{Bounded claiming and acknowledgement}
 Each dirty relation has a due-work index beginning with
 \begin{verbatim}
 (tenant_id, process_after, <deterministic logical-key suffix>)
 \end{verbatim}
-Each function claims one tenant-local page ordered by \field{process\_after} and the logical key using \field{FOR UPDATE SKIP LOCKED}. The claim, source reads, writes, fan-out, and acknowledgement occur in the same transaction.
+Each function claims one tenant-local page ordered by \field{process\_\allowbreak after} and the logical key using \field{FOR UPDATE SKIP LOCKED}. The claim, source reads, writes, fan-out, and acknowledgement occur in the same transaction.
 
 A function acknowledges a row by deleting the complete logical key only when \field{revision} still equals the claimed revision. If another mutation increments the revision during processing, the conditional delete affects no row and the newer work remains queued. Failed transactions leave all claimed work queued.
 
 Initial page sizes are deliberately small: approximately 25 dirty runs, 16 benchmarks, 25 subjects, and 25--100 Renown subjects per function call. They may be increased only after measuring transaction duration, WAL, lock waits, and query plans.
 
-The initial upload policy uses the dirty-run-only 30-minute sliding debounce so uploads of the same underlying run can settle and canonical duplicate selection can converge. Downstream work and ruleset or flavor changes are due immediately. An hourly scheduler invokes the database functions for tenants with at least one due row; future \field{process\_after} rows do not make a tenant runnable. With that schedule, normal upload refresh latency is approximately 30 to 90 minutes.
+The initial upload policy uses the dirty-run-only 30-minute sliding debounce so uploads of the same underlying run can settle and canonical duplicate selection can converge. Downstream work and ruleset or flavor changes are due immediately. An hourly scheduler invokes the database functions for tenants with at least one due row; future \field{process\_\allowbreak after} rows do not make a tenant runnable. With that schedule, normal upload refresh latency is approximately 30 to 90 minutes.
 
 Thousands of queued rows do not require a table scan. Claim cost is bounded by the due-work index and page size. Total recomputation cost remains proportional to the evidence and subjects actually affected. A moved benchmark may legitimately fan out to every subject in its cohort; that fan-out is inserted set-wise and consumed in bounded database-function calls.
 
 \subsection{Consequences and open physical decisions}
 Direct stable-key replacement has the following consequences:
 \begin{enumerate}
-  \item A policy refresh is intentionally eventually consistent across result tables and stable keys. Readers may observe values computed under different ruleset revisions while rolling maintenance progresses. Serving queries do not inspect revisions or require a synchronized multi-table refresh.
+  \item A policy refresh is intentionally eventually consistent across result tables and stable keys. Readers may observe values computed under different effective-configuration revisions while rolling maintenance progresses. Serving queries do not inspect revisions or require a synchronized multi-table refresh.
   \item Recomputing one stable key overwrites its prior computed payload. No append-only result audit ledger is required.
-  \item A global ruleset revision does not create a second serving row. Existing rows remain valid and readable until maintenance overwrites them. Serving reads do not compare revisions.
+  \item A configuration revision should not create a second serving row. Existing rows remain valid and readable until maintenance overwrites them. Serving reads do not compare revisions.
   \item Dirty state is operational work state, not history. Source changes enqueue affected run, benchmark, subject, and Renown keys. Effective-flavor and ruleset changes enqueue the affected tenant.
   \item Dirty markers coalesce repeated invalidations. A PostgreSQL refresh function acknowledges a marker only after its projection, fan-out, and result writes succeed and only if no newer revision arrived.
-  \item All stored results are all-time. Supporting bounded or rolling ratings later requires a new physical design rather than dormant window columns.
-  \item The replacement projections and results require a fresh derivation from preserved source relations before frontend cutover. Legacy serving remains available until verification and is removed only by a later cleanup migration.
+  \item Peak and Mastery are confined to the chosen realm/season. Season identity, lifecycle, and boundaries must be agreed before physical key implementation; no cross-season all-time result is defined.
+  \item The replacement projections and results require a fresh derivation from preserved source relations before frontend cutover. Prior ratings are already removed. Cutover needs a separately reviewed disable/revert plan, not a promise to restore legacy rating reads.
 \end{enumerate}
 
-The application service owns scheduling, query endpoints, and observability. PostgreSQL owns rating derivation and dirty maintenance. Exact SQL function bodies, batch tuning, and query plans are implementation details validated during development.
+The application service owns scheduling, query endpoints, and observability. PostgreSQL owns rating derivation and dirty maintenance. Season scope, layered provenance, and invalidation are design gates, not implementation details. Once resolved, exact SQL function bodies, batch tuning, and query plans are validated during development.
 
 \end{document}
