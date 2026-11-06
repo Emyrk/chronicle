@@ -119,6 +119,9 @@ export interface ProcessIncrementallyOptions<TResult> {
   onProgress?: (state: TResult, count: number) => void;
   /** How often to yield to UI (default 1000) */
   yieldEveryN?: number;
+  /** Called before each event is handled (filtered or not) with its absolute time
+   *  and the state so far, e.g. to snapshot the state at time steps in one pass. */
+  beforeEvent?: (eventTimeMs: number, state: TResult) => void;
   /** Stable cache key for filter compilation (e.g. panelContextKey). When both
    *  this and the filters array reference are unchanged, compiled predicates are
    *  reused — avoiding expensive recompilation during sync mode ticks. */
@@ -310,6 +313,7 @@ export async function processIncrementally<TResult>(
     previousState,
     onProgress,
     yieldEveryN = 10000,
+    beforeEvent,
   } = options;
 
   const startTime = performance.now();
@@ -590,6 +594,7 @@ export async function processIncrementally<TResult>(
         }
       }
       
+      beforeEvent?.(eventTime, state);
       unitState.setCurrentTimestamp(eventTime);
 
       // Feed unit_classification events into UnitState for temporal ownership tracking

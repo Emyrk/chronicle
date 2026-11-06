@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { InstanceEventsContext } from "@/hooks/instanceEvents";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { SyncModeProvider, useSyncModeContext } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
 import type { PublishedUnitModelUrls } from "./bossMinis";
@@ -23,14 +24,6 @@ import { createVideoDamageMeter, drawVideoMeter, type VideoMeterSnapshot } from 
 const ASSET_WAIT_MS = 10_000;
 const ASSET_POLL_MS = 50;
 const METER_STORAGE_KEY = "chronicle.map.videoMeter";
-
-function readStoredShowMeter(): boolean {
-  try {
-    return localStorage.getItem(METER_STORAGE_KEY) !== "off";
-  } catch {
-    return true;
-  }
-}
 
 export interface VideoRenderResult extends CanvasVideoExportResult {
   frameCount: number;
@@ -85,7 +78,7 @@ export default function VideoRenderDialog({ open, onOpenChange, title, fileName:
   const [speed, setSpeed] = useState<RenderSpeed>(1);
   // The damage meter needs the instance's event streams (absent in some stories).
   const meterAvailable = useContext(InstanceEventsContext) !== null;
-  const [meterWanted, setMeterWanted] = useState(readStoredShowMeter);
+  const [meterWanted, setMeterWanted] = useLocalStorage(METER_STORAGE_KEY, true);
   const showMeter = meterAvailable && meterWanted;
   const rendering = progress.phase === "rendering" || progress.phase === "preparing";
   const fileName = speedFileName(baseFileName, speed);
@@ -103,11 +96,6 @@ export default function VideoRenderDialog({ open, onOpenChange, title, fileName:
 
   const changeShowMeter = (next: boolean) => {
     setMeterWanted(next);
-    try {
-      localStorage.setItem(METER_STORAGE_KEY, next ? "on" : "off");
-    } catch {
-      // Storage may be unavailable; the choice still holds for this render.
-    }
     restartIfDone();
   };
 
@@ -344,11 +332,16 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
       });
       if (!track) throw new Error("Nobody in this fight has position data to film.");
 
-      let meterAt: ((ms: number) => Promise<VideoMeterSnapshot>) | null = null;
+      let meterAt: ((ms: number) => VideoMeterSnapshot) | null = null;
       let meter: VideoMeterSnapshot | null = null;
       if (showMeter && fetchStream) {
         onProgressRef.current({ phase: "preparing", detail: "Loading the damage meter…" });
-        meterAt = await createVideoDamageMeter(panelProps.context, fetchStream, fight.encounterStartMs);
+        try {
+          meterAt = await createVideoDamageMeter(panelProps.context, fetchStream, fight.encounterStartMs, fight.encounterEndMs);
+        } catch (error) {
+          // The meter is an extra: render the video without it rather than fail.
+          console.warn("Video damage meter unavailable", error);
+        }
         if (signal.aborted) return;
       }
 
@@ -372,7 +365,7 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
           // Whole milliseconds: the replay clock is a Date.
           const replayMs = Math.round(fight.encounterStartMs + fightMsAtVideoMs(ms, speed, fightMs));
           await showReplayAt(replayMs);
-          if (meterAt) meter = await meterAt(replayMs);
+          if (meterAt) meter = meterAt(replayMs);
           if (signal.aborted) return;
           const pose = dronePoseAt(track, ms);
           scene3d.captureFrame(pose, ms);

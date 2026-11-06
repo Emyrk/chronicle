@@ -2,17 +2,13 @@ import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/Pl
 import type { CachedStream, StreamType } from "@/hooks/instanceEvents";
 import { aggregateForEncounters } from "../DamageDone/aggregateDamageDone";
 import type { DamageDoneResult } from "../DamageDone/damageDone.processor";
-import { processIncrementally, type IncrementalProcessorState } from "../mainThreadProcessor";
+import { processIncrementally } from "../mainThreadProcessor";
 import { buildMeterValuesModel } from "../meterBarsModel";
 import type { PanelContext } from "../types";
 import { toSerializableContext } from "../usePanelAggregation";
 import { METER_PANELS } from "./meterPanels";
 
-/**
- * How often (in fight time) the video's damage meter updates. Each update
- * re-reads the fight's events from its start (processIncrementally), so it
- * runs twice a fight second rather than every frame.
- */
+/** How often (in fight time) the video's damage meter updates. */
 export const VIDEO_METER_STEP_MS = 500;
 /** Rows drawn in the video's meter. */
 export const VIDEO_METER_ROWS = 8;
@@ -27,20 +23,20 @@ export interface VideoMeterSnapshot {
 
 /**
  * The map's Damage Done meter (same panel, processor and filters as the live
- * meter window) read at replay times: returns a function from an absolute
- * replay time to the meter at the latest step at or before it. Calls must
- * move forward in time; a step back reprocesses from the pull.
+ * meter window) through the fight: one pass over its events, snapshotting the
+ * meter every VIDEO_METER_STEP_MS. Returns a lookup from an absolute replay
+ * time to the latest snapshot at or before it.
  */
 export async function createVideoDamageMeter(
   context: PanelContext,
   fetchStream: (type: StreamType) => Promise<CachedStream>,
   encounterStartMs: number,
-): Promise<(ms: number) => Promise<VideoMeterSnapshot>> {
+  encounterEndMs: number,
+): Promise<(ms: number) => VideoMeterSnapshot> {
   const { panel } = METER_PANELS.damage_done;
-  const streams = new Map<StreamType, CachedStream>();
-  for (const type of new Set<StreamType>([...panel.streams, "unit_classification"])) {
-    streams.set(type, await fetchStream(type));
-  }
+  const types = [...new Set<StreamType>([...panel.streams, "unit_classification"])];
+  const fetched = await Promise.all(types.map((type) => fetchStream(type)));
+  const streams = new Map(types.map((type, index) => [type, fetched[index]]));
   const defaultFilters = panel.defaultFilters ?? [];
   // As the live meter (useEmbeddedPanel): fixed + default filters, with the
   // time range controller passing everything through.
@@ -48,37 +44,28 @@ export async function createVideoDamageMeter(
     filter.type === "time_range" && filter.value === "controller" ? { ...filter, value: "" } : filter);
   const serializable = { ...toSerializableContext(context, null, { filters: defaultFilters }), filters };
 
-  let state: IncrementalProcessorState<DamageDoneResult> | null = null;
-  let snapshot: VideoMeterSnapshot = { rows: [], elapsedMs: 0 };
-  let snapshotStep = -1;
-  return async (ms) => {
-    const step = Math.max(0, Math.floor((ms - encounterStartMs) / VIDEO_METER_STEP_MS));
-    if (step === snapshotStep) return snapshot;
-    const elapsedMs = step * VIDEO_METER_STEP_MS;
-    const response = await processIncrementally<DamageDoneResult>({
-      panelId: panel.id,
-      streams,
-      context: serializable,
-      contextKey: "video-meter",
-      stopAtTimestamp: new Date(encounterStartMs + elapsedMs),
-      previousState: state,
-    });
-    if (response.error) throw new Error(response.error);
-    state = {
-      result: response.result,
-      processedCount: response.processedCount,
-      lastTimestamp: response.lastTimestamp,
-      eventsAtLastTimestamp: response.eventsAtLastTimestamp,
-      isDone: response.isDone,
-      unitState: response.unitState,
-    };
-    snapshot = {
-      rows: aggregateForEncounters("players", response.result, context.selectedEncounterIds, context.entitySelection),
-      elapsedMs,
-    };
-    snapshotStep = step;
-    return snapshot;
-  };
+  const lastStep = Math.max(0, Math.floor((encounterEndMs - encounterStartMs) / VIDEO_METER_STEP_MS));
+  const snapshots: VideoMeterSnapshot[] = [];
+  const record = (state: DamageDoneResult) => snapshots.push({
+    rows: aggregateForEncounters("players", state, context.selectedEncounterIds, context.entitySelection),
+    elapsedMs: snapshots.length * VIDEO_METER_STEP_MS,
+  });
+  const response = await processIncrementally<DamageDoneResult>({
+    panelId: panel.id,
+    streams,
+    context: serializable,
+    contextKey: "video-meter",
+    stopAtTimestamp: new Date(encounterEndMs),
+    previousState: null,
+    // Step k holds the events up to start + k steps, as the live meter shows with the cursor there.
+    beforeEvent: (eventTimeMs, state) => {
+      while (snapshots.length <= lastStep && eventTimeMs > encounterStartMs + snapshots.length * VIDEO_METER_STEP_MS) record(state);
+    },
+  });
+  if (response.error) throw new Error(response.error);
+  while (snapshots.length <= lastStep) record(response.result);
+
+  return (ms) => snapshots[Math.min(lastStep, Math.max(0, Math.floor((ms - encounterStartMs) / VIDEO_METER_STEP_MS)))];
 }
 
 const classColors = new Map<string, string>();
@@ -92,8 +79,16 @@ function classColor(className: string): string {
   return color;
 }
 
-function cssFont(variable: string, fallback: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(variable).trim() || fallback;
+let fonts: { sans: string; mono: string } | null = null;
+function meterFonts(): { sans: string; mono: string } {
+  if (!fonts) {
+    const style = getComputedStyle(document.documentElement);
+    fonts = {
+      sans: style.getPropertyValue("--font-sans").trim() || "sans-serif",
+      mono: style.getPropertyValue("--font-mono").trim() || "monospace",
+    };
+  }
+  return fonts;
 }
 
 /**
@@ -111,8 +106,7 @@ export function drawVideoMeter(context: CanvasRenderingContext2D, width: number,
   if (model.rows.length === 0 || model.rows[0].row.value <= 0) return;
 
   const u = height / 1080;
-  const sans = cssFont("--font-sans", "sans-serif");
-  const mono = cssFont("--font-mono", "monospace");
+  const { sans, mono } = meterFonts();
   const margin = 32 * u;
   const panelWidth = Math.min(440 * u, width - 2 * margin);
   const titleHeight = 40 * u;
