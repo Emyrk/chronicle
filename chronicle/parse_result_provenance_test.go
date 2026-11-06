@@ -11,6 +11,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestValidateParsedJobVersion(t *testing.T) {
+	t.Parallel()
+	current := version.ExactParserVersion()
+	require.NoError(t, ValidateParsedJobVersion(ParsedJobExecutorHeadless, current))
+	require.ErrorContains(t, ValidateParsedJobVersion(ParsedJobExecutorHeadless, ""), "does not match")
+	require.ErrorContains(t, ValidateParsedJobVersion(ParsedJobExecutorHeadless, current+"-other"), "does not match")
+	require.NoError(t, ValidateParsedJobVersion(ParsedJobExecutorFull, current+"-other"))
+	require.NoError(t, ValidateParsedJobVersion(ParsedJobExecutorFull, ""))
+	require.ErrorContains(t, ValidateParsedJobVersion("", current), "unknown parsed job executor")
+	require.ErrorContains(t, ValidateParsedJobVersion("other", current), "unknown parsed job executor")
+}
+
 func TestValidateParsedResultProvenance(t *testing.T) {
 	t.Parallel()
 	format := database.LogFormat112aCcAddon
@@ -34,7 +46,6 @@ func TestValidateParsedResultProvenance(t *testing.T) {
 		{"wrong format", valid, database.LogFormat243CcAddon, flavor, dataset},
 		{"unsupported format", parseresult.Result{SchemaVersion: parseresult.SchemaVersion, Format: database.LogFormat("unknown"), Flavor: flavor, DatasetID: dataset, ParserVersion: valid.ParserVersion}, format, flavor, dataset},
 		{"missing version", parseresult.Result{SchemaVersion: parseresult.SchemaVersion, Format: format, Flavor: flavor, DatasetID: dataset}, format, flavor, dataset},
-		{"wrong version", parseresult.Result{SchemaVersion: parseresult.SchemaVersion, Format: format, Flavor: flavor, DatasetID: dataset, ParserVersion: valid.ParserVersion + "-other"}, format, flavor, dataset},
 		{"missing dataset", parseresult.Result{SchemaVersion: parseresult.SchemaVersion, Format: format, Flavor: flavor, ParserVersion: valid.ParserVersion}, format, flavor, dataset},
 		{"unresolved dataset", valid, format, flavor, uuid.Nil},
 		{"wrong dataset", valid, format, flavor, uuid.New()},
@@ -49,9 +60,9 @@ func TestValidateParsedResultProvenance(t *testing.T) {
 			require.Error(t, ValidateParsedResultProvenance(tc.payload, tc.format, tc.flavor, tc.dataset))
 		})
 	}
-	wrongVersion := valid
-	wrongVersion.ParserVersion += "-other"
-	require.ErrorContains(t, ValidateParsedResultProvenance(wrongVersion, format, flavor, dataset), "parser version")
+	otherBuild := valid
+	otherBuild.ParserVersion += "-other"
+	require.NoError(t, ValidateParsedResultProvenance(otherBuild, format, flavor, dataset))
 	empty := parseresult.Result{SchemaVersion: parseresult.SchemaVersion, Format: format, Flavor: database.WoWFlavor{}, DatasetID: dataset, ParserVersion: valid.ParserVersion}
 	require.NoError(t, ValidateParsedResultProvenance(empty, format, database.WoWFlavor{}, dataset))
 }

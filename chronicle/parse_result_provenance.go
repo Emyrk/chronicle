@@ -12,16 +12,15 @@ import (
 // ValidateParsedResultProvenance checks the parser's reported inputs against
 // values independently resolved by the primary. A future remote ingest must
 // call this before writing; the payload must never choose the write-time
-// flavor, dataset or persisted parser version. The current individual
-// InsertParsed* adapters do not constitute a remote ingest or a
-// transaction/generation fence. The future job must also compare the exact
-// version stamped into its arguments with the running daemon before any work.
+// flavor or dataset. ParserVersion is required but its exact-match policy
+// depends on the job executor (see ValidateParsedJobVersion). The individual
+// InsertParsed* adapters do not constitute an ingest or generation fence.
 func ValidateParsedResultProvenance(result parseresult.Result, format database.LogFormat, flavor database.WoWFlavor, datasetID uuid.UUID) error {
 	if result.SchemaVersion != parseresult.SchemaVersion || !supportedParsedAddonFormat(result.Format) || result.Format != format {
 		return fmt.Errorf("parse result schema or format does not match resolved inputs: schema %d, payload format %q, resolved format %q", result.SchemaVersion, result.Format, format)
 	}
-	if result.ParserVersion == "" || result.ParserVersion != version.ExactParserVersion() {
-		return fmt.Errorf("parse result parser version %q does not match running daemon %q", result.ParserVersion, version.ExactParserVersion())
+	if result.ParserVersion == "" {
+		return fmt.Errorf("parse result parser version is missing")
 	}
 	if datasetID == uuid.Nil || result.DatasetID == uuid.Nil || result.DatasetID != datasetID {
 		return fmt.Errorf("parse result dataset does not match resolved dataset")
@@ -46,6 +45,34 @@ func ValidateParsedResultProvenance(result parseresult.Result, format database.L
 		if _, ok := payloadTags[tag]; !ok {
 			return fmt.Errorf("parse result flavor does not match resolved flavor")
 		}
+	}
+	return nil
+}
+
+// ParsedJobExecutor is chosen by the running service, never by the job payload.
+// A zero or unrecognized value fails closed.
+type ParsedJobExecutor string
+
+const (
+	ParsedJobExecutorHeadless ParsedJobExecutor = "headless"
+	ParsedJobExecutorFull     ParsedJobExecutor = "full"
+)
+
+// ValidateParsedJobVersion checks the durable job creator version at the start
+// of each attempt, before any writes or side effects. Headless executors must
+// run the exact build that created the job; full chronicled executors do not
+// impose that match. A future job must carry its creator version in its args
+// and supply the executor mode from trusted local configuration.
+func ValidateParsedJobVersion(executor ParsedJobExecutor, creatorVersion string) error {
+	switch executor {
+	case ParsedJobExecutorHeadless:
+		if creatorVersion == "" || creatorVersion != version.ExactParserVersion() {
+			return fmt.Errorf("headless job creator version %q does not match running daemon %q", creatorVersion, version.ExactParserVersion())
+		}
+	case ParsedJobExecutorFull:
+		return nil
+	default:
+		return fmt.Errorf("unknown parsed job executor %q", executor)
 	}
 	return nil
 }
