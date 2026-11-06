@@ -59,7 +59,8 @@ func TestInitialSeeds(t *testing.T) {
 		}
 		require.Equal(t, set.Bosses, names, set.Layer+"/"+set.Instance+"/"+set.Key)
 	}
-	require.Len(t, expected.Awards, 104)
+	// 104 legacy calibrations plus three reviewed VanillaPlus additions.
+	require.Len(t, expected.Awards, 107)
 	for _, award := range expected.Awards {
 		found := false
 		for _, r := range effective[award.Layer] {

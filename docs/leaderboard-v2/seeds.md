@@ -14,15 +14,19 @@ old migration files during deployment. It does not scan historical log data.
 - `combatlog/parser/wotlk/instances/tbc.go`: verified Gruul's Lair,
   Serpentshrine Cavern, and Tempest Keep ordered groups.
 - Migration `000313`, VALUES authoring reference only: all 104 explicit Renown
-  calibrations. The committed JSON parity fixture preserves these values.
+  calibrations. The committed JSON parity fixture preserves these values, plus the
+reviewed VanillaPlus additions below.
 
 Instances and bosses appearing in approved awards are explicitly enabled even
 when absent from the default encounter set. Thus optional Zul'Gurub bosses and
 VanillaPlus Blackwing Lair additions can award Renown independently of membership.
 Custom layers contain only changes from Vanilla, not copied defaults. Removed
 VanillaPlus Blackwing Lair set members are explicitly excluded; their independent
-award configuration is not silently rewritten. The combined `Flamegor & Ebonroc`
-encounter has no reviewed calibration and therefore has no award.
+award configuration is not silently rewritten.
+
+Reviewed VanillaPlus additions beyond the 104 legacy calibrations: Blackwing
+Lair `Flamegor & Ebonroc` awards 4, and Zul'Gurub `Azus the Bloodseeker` and
+`The Nameless Hermit` award 1 each.
 Gehennas is explicitly disabled in the `{vanilla, nightmare-of-ursol}` layer.
 Vanilla awards are not automatically suppressed by Wrath or TBC.
 
