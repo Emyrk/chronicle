@@ -28,7 +28,7 @@ func TestParsedAddonFormatGuards(t *testing.T) {
 		require.True(t, supportedParsedAddonFormat(format))
 	}
 	require.False(t, supportedParsedAddonFormat(database.LogFormat("unknown")))
-	result := parseresult.Result{SchemaVersion: 8, Format: database.LogFormat("unknown")}
+	result := parseresult.Result{SchemaVersion: parseresult.SchemaVersion, Format: database.LogFormat("unknown")}
 	_, err := InsertParsedCore(t.Context(), nil, result, ParsedCoreWrite{})
 	require.ErrorContains(t, err, "unsupported core parse result")
 	require.ErrorContains(t, InsertParsedSpeedrun(t.Context(), nil, result, ParsedSpeedrunWrite{}), "unsupported speedrun parse result")

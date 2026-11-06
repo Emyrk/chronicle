@@ -5,17 +5,23 @@ import (
 
 	"github.com/Emyrk/chronicle/chronicle/parseresult"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/google/uuid"
 )
 
 // ValidateParsedResultProvenance checks the parser's reported inputs against
 // values independently resolved by the primary. A future remote ingest must
 // call this before writing; the payload must never choose the write-time
-// flavor or dataset. The current individual InsertParsed* adapters do not
-// constitute a remote ingest or a transaction/generation fence.
+// flavor, dataset or persisted parser version. The current individual
+// InsertParsed* adapters do not constitute a remote ingest or a
+// transaction/generation fence. The future job must also compare the exact
+// version stamped into its arguments with the running daemon before any work.
 func ValidateParsedResultProvenance(result parseresult.Result, format database.LogFormat, flavor database.WoWFlavor, datasetID uuid.UUID) error {
-	if result.SchemaVersion != 8 || !supportedParsedAddonFormat(result.Format) || result.Format != format {
+	if result.SchemaVersion != parseresult.SchemaVersion || !supportedParsedAddonFormat(result.Format) || result.Format != format {
 		return fmt.Errorf("parse result schema or format does not match resolved inputs: schema %d, payload format %q, resolved format %q", result.SchemaVersion, result.Format, format)
+	}
+	if result.ParserVersion == "" || result.ParserVersion != version.ExactParserVersion() {
+		return fmt.Errorf("parse result parser version %q does not match running daemon %q", result.ParserVersion, version.ExactParserVersion())
 	}
 	if datasetID == uuid.Nil || result.DatasetID == uuid.Nil || result.DatasetID != datasetID {
 		return fmt.Errorf("parse result dataset does not match resolved dataset")

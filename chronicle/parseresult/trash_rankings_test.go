@@ -40,7 +40,7 @@ func TestBuildTrashRankingsJSON(t *testing.T) {
 	require.NoError(t, err)
 	second, err := Build(input)
 	require.NoError(t, err)
-	require.Equal(t, 8, first.SchemaVersion)
+	require.Equal(t, SchemaVersion, first.SchemaVersion)
 	require.Len(t, first.TrashRankings.Encounters, 1)
 	units := first.TrashRankings.Encounters[0].Units
 	require.Equal(t, pet.String(), units[0].GUID)

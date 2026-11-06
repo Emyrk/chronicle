@@ -126,7 +126,7 @@ func TestParseWithFailuresStampsDefaultContextAndKeepsConfiguredContext(t *testi
 			if err != nil || len(outcome.Results) != 1 || len(outcome.Failures) != 0 {
 				t.Fatalf("parse with context: %+v, %v", outcome, err)
 			}
-			if outcome.Results[0].SchemaVersion != 8 || outcome.Results[0].DatasetID != wantDataset ||
+			if outcome.Results[0].SchemaVersion != SchemaVersion || outcome.Results[0].DatasetID != wantDataset ||
 				!reflect.DeepEqual(outcome.Results[0].Flavor, reg.Flavor()) {
 				t.Fatalf("resolved parse identity missing: %+v", outcome.Results[0])
 			}
@@ -138,7 +138,7 @@ func TestParseWithFailuresStampsDefaultContextAndKeepsConfiguredContext(t *testi
 			if err := json.Unmarshal(encoded, &decoded); err != nil {
 				t.Fatal(err)
 			}
-			if decoded.DatasetID != wantDataset || !reflect.DeepEqual(decoded.Flavor, reg.Flavor()) || decoded.SchemaVersion != 8 {
+			if decoded.DatasetID != wantDataset || !reflect.DeepEqual(decoded.Flavor, reg.Flavor()) || decoded.SchemaVersion != SchemaVersion {
 				t.Fatalf("identity changed after JSON roundtrip: %+v", decoded)
 			}
 		})

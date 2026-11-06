@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/google/uuid"
 )
 
@@ -42,6 +43,10 @@ type Input struct {
 	IdentifyUnit      func(guid.GUID) identifier.Identity
 }
 
+// SchemaVersion is the current data-only result wire contract. It is distinct
+// from the exact daemon build recorded in Result.ParserVersion.
+const SchemaVersion = 9
+
 // Result covers event streams and parser-derived core instance, overview,
 // encounter fight/phase, raid snapshot and observed-unit fields. It still omits
 // guild-participant rows, guild/armory writes, realm resolution,
@@ -51,22 +56,25 @@ type Input struct {
 // version 2 adds finalized loot observations, version 3 adds armory
 // observations, version 4 adds participating player metadata, and version 5
 // adds speedrun inputs; version 6 adds boss DPS ranking inputs, and version 7
-// adds trash ranking inputs; version 8 adds resolved flavor and dataset ID.
+// adds trash ranking inputs; version 8 adds resolved flavor and dataset ID;
+// version 9 adds the daemon's exact parser build.
 // No version is a complete persistence payload or full DB parity proof.
 // Nil flavor or a nil UUID dataset is unresolved metadata, not permission
 // to infer it from the format during remote ingestion. An explicitly empty
 // (non-nil) flavor is valid and distinct from an unknown flavor.
 type Result struct {
-	Format       database.LogFormat `json:"format"`
-	Flavor       database.WoWFlavor `json:"flavor"`
-	DatasetID    uuid.UUID          `json:"dataset_id"`
-	Name         string             `json:"name"`
-	RealmName    string             `json:"realm_name"`
-	Versions     map[string]string  `json:"versions"`
-	RecorderGUID string             `json:"recorder_guid"`
-	RecorderName string             `json:"recorder_name"`
-	Encounters   []Encounter        `json:"encounters"`
-	Events       EventStreams       `json:"events"`
+	Format    database.LogFormat `json:"format"`
+	Flavor    database.WoWFlavor `json:"flavor"`
+	DatasetID uuid.UUID          `json:"dataset_id"`
+	// ParserVersion identifies the exact daemon build that produced the result.
+	ParserVersion string            `json:"parser_version"`
+	Name          string            `json:"name"`
+	RealmName     string            `json:"realm_name"`
+	Versions      map[string]string `json:"versions"`
+	RecorderGUID  string            `json:"recorder_guid"`
+	RecorderName  string            `json:"recorder_name"`
+	Encounters    []Encounter       `json:"encounters"`
+	Events        EventStreams      `json:"events"`
 	// SchemaVersion identifies the transport DTO shape, not the parser version.
 	SchemaVersion int               `json:"schema_version"`
 	Core          CoreInstance      `json:"core"`
@@ -116,7 +124,8 @@ func Build(in Input) (*Result, error) {
 		Format:        in.Format,
 		Flavor:        slices.Clone(in.Flavor),
 		DatasetID:     in.DatasetID,
-		SchemaVersion: 8,
+		ParserVersion: version.ExactParserVersion(),
+		SchemaVersion: SchemaVersion,
 		Name:          in.Name,
 		Versions:      make(map[string]string, len(fin.Versions)),
 		Encounters:    make([]Encounter, 0, len(fin.Encounters)),

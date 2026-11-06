@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounterevents"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/google/uuid"
 )
 
@@ -22,7 +23,7 @@ func TestBuildResolvedIdentityRoundTripAndIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	flavor[0] = database.FlavorTBC
-	if result.SchemaVersion != 8 || result.DatasetID != datasetID ||
+	if result.SchemaVersion != SchemaVersion || result.DatasetID != datasetID || result.ParserVersion != version.ExactParserVersion() ||
 		!reflect.DeepEqual(result.Flavor, database.WoWFlavor{database.FlavorWrath, database.FlavorVanillaPlus}) {
 		t.Fatalf("resolved identity missing or aliased: %+v", result)
 	}
@@ -34,7 +35,7 @@ func TestBuildResolvedIdentityRoundTripAndIsolation(t *testing.T) {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if decoded.DatasetID != datasetID || !reflect.DeepEqual(decoded.Flavor, result.Flavor) {
+	if decoded.DatasetID != datasetID || decoded.ParserVersion != result.ParserVersion || !reflect.DeepEqual(decoded.Flavor, result.Flavor) {
 		t.Fatalf("resolved identity changed after JSON roundtrip: %+v", decoded)
 	}
 }

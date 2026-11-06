@@ -41,7 +41,7 @@ func TestParsedCoreRowsMatchDirectWriterAfterJSONRoundTrip(t *testing.T) {
 	missingPlayer := guid.GUID(2)
 	fallbackPlayer := guid.GUID(3)
 	complete := true
-	result := parseresult.Result{SchemaVersion: 8, Format: database.LogFormat112aCcAddon, Name: "Core Test", Versions: map[string]string{"addon": "1.0"},
+	result := parseresult.Result{SchemaVersion: parseresult.SchemaVersion, Format: database.LogFormat112aCcAddon, Name: "Core Test", Versions: map[string]string{"addon": "1.0"},
 		Core:     parseresult.CoreInstance{Category: "raid", DifficultyName: "Normal", MaxPlayers: 40, Start: at, End: at.Add(time.Minute), Capabilities: []string{"events"}},
 		Overview: parseresult.Overview{RequirementsComplete: &complete, PlayerDeaths: 2, WipeCount: 1, MetricsVersion: 1, TopIncomingDamageAbilities: []parseresult.IncomingDamageAbility{{Name: "Fire", Damage: 8, Hits: 2}}},
 		Units: []parseresult.UnitMetadata{
