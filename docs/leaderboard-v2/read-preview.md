@@ -123,6 +123,11 @@ pagination limits returned rows, not aggregate candidates. Display-name lookup
 is deferred until after the score page; name search still filters before
 aggregation. No candidate cap, stale cache, or materialized group score was added.
 
+The earlier thirteen-boss all-cohort stress group measured approximately 2,031ms
+warm before the late display-name optimization and 1,847ms after it. These are
+not the ten-boss default-set measurements above. Their plans are retained in
+`benchmarks/all-cohort-thirteen-boss-*.json`.
+
 Current plans, query hashes, parameters and sizes are retained as
 `benchmarks/current-*.json`. Older `stress-*.json` and `read-group.json` are
 historical exact-cohort measurements of the earlier query over a thirteen-boss
