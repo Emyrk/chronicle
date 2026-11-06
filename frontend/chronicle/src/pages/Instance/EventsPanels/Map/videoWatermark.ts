@@ -26,9 +26,14 @@ export async function loadWatermark(url: string = WATERMARK_URL): Promise<ImageB
 
 /**
  * A 2D canvas at the source's size that receives each frame plus the
- * watermark, so only the encoded video carries it, never the live view.
+ * watermark (when it loaded) and `overlay` (e.g. the damage meter), so only
+ * the encoded video carries them, never the live view.
  */
-export function createWatermarkedCanvas(source: HTMLCanvasElement, logo: ImageBitmap): { canvas: HTMLCanvasElement; compose: () => void } | null {
+export function createWatermarkedCanvas(
+  source: HTMLCanvasElement,
+  logo: ImageBitmap | null,
+  overlay?: (context: CanvasRenderingContext2D, width: number, height: number) => void,
+): { canvas: HTMLCanvasElement; compose: () => void } | null {
   const canvas = document.createElement("canvas");
   canvas.width = source.width;
   canvas.height = source.height;
@@ -41,8 +46,15 @@ export function createWatermarkedCanvas(source: HTMLCanvasElement, logo: ImageBi
     compose: () => {
       context.globalAlpha = 1;
       context.drawImage(source, 0, 0);
-      context.globalAlpha = WATERMARK_OPACITY;
-      context.drawImage(logo, x, y, size, size);
+      if (overlay) {
+        context.save();
+        overlay(context, canvas.width, canvas.height);
+        context.restore();
+      }
+      if (logo) {
+        context.globalAlpha = WATERMARK_OPACITY;
+        context.drawImage(logo, x, y, size, size);
+      }
     },
   };
 }

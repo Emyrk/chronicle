@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Download, Loader2, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/Switch/Switch";
+import { InstanceEventsContext } from "@/hooks/instanceEvents";
 import { SyncModeProvider, useSyncModeContext } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
 import type { PublishedUnitModelUrls } from "./bossMinis";
@@ -15,10 +17,20 @@ import MapView3D from "./MapView3D";
 import { isDeadAt } from "./replayEffects";
 import { useMapScene } from "./useMapScene";
 import { exportCanvasVideo, pickVideoOutput, VIDEO_FPS, type CanvasVideoExportResult, type VideoOutputConfig } from "./videoExport";
+import { createVideoDamageMeter, drawVideoMeter, type VideoMeterSnapshot } from "./videoMeter";
 
 /** Longest a frame waits for lazily loaded art (icons, minis) before it is drawn without it. */
 const ASSET_WAIT_MS = 10_000;
 const ASSET_POLL_MS = 50;
+const METER_STORAGE_KEY = "chronicle.map.videoMeter";
+
+function readStoredShowMeter(): boolean {
+  try {
+    return localStorage.getItem(METER_STORAGE_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
 
 export interface VideoRenderResult extends CanvasVideoExportResult {
   frameCount: number;
@@ -71,14 +83,32 @@ export default function VideoRenderDialog({ open, onOpenChange, title, fileName:
   const [output, setOutput] = useState<VideoOutputConfig | null>(null);
   const [progress, setProgress] = useState<RenderProgress>({ phase: "preparing", detail: "Checking video encoding…" });
   const [speed, setSpeed] = useState<RenderSpeed>(1);
+  // The damage meter needs the instance's event streams (absent in some stories).
+  const meterAvailable = useContext(InstanceEventsContext) !== null;
+  const [meterWanted, setMeterWanted] = useState(readStoredShowMeter);
+  const showMeter = meterAvailable && meterWanted;
   const rendering = progress.phase === "rendering" || progress.phase === "preparing";
   const fileName = speedFileName(baseFileName, speed);
+
+  // A finished video belongs to the old settings: render again (the stage remounts).
+  const restartIfDone = () => {
+    if (progress.phase === "done") setProgress({ phase: "preparing", detail: "Loading the fight…" });
+  };
 
   const changeSpeed = (next: RenderSpeed) => {
     if (next === speed) return;
     setSpeed(next);
-    // A finished video belongs to the old speed: render again (the stage remounts).
-    if (progress.phase === "done") setProgress({ phase: "preparing", detail: "Loading the fight…" });
+    restartIfDone();
+  };
+
+  const changeShowMeter = (next: boolean) => {
+    setMeterWanted(next);
+    try {
+      localStorage.setItem(METER_STORAGE_KEY, next ? "on" : "off");
+    } catch {
+      // Storage may be unavailable; the choice still holds for this render.
+    }
+    restartIfDone();
   };
 
   useEffect(() => {
@@ -148,7 +178,7 @@ export default function VideoRenderDialog({ open, onOpenChange, title, fileName:
         <div className="pointer-events-none relative aspect-video w-full select-none overflow-hidden rounded-sm border border-white/10 bg-black" aria-hidden>
           {output && progress.phase !== "error" && progress.phase !== "done" && (
             <SyncModeProvider>
-              <RenderStage {...stageProps} output={output} speed={speed} onProgress={setProgress} />
+              <RenderStage {...stageProps} output={output} speed={speed} showMeter={showMeter} onProgress={setProgress} />
             </SyncModeProvider>
           )}
           {doneUrl && (
@@ -174,6 +204,12 @@ export default function VideoRenderDialog({ open, onOpenChange, title, fileName:
             ))}
           </div>
           <span>{speed === 1 ? "Real time" : "Shorter video, quicker render"}</span>
+          {meterAvailable && (
+            <label className="ml-auto flex cursor-pointer items-center gap-1.5">
+              <Switch size="sm" checked={meterWanted} disabled={progress.phase === "error"} onCheckedChange={changeShowMeter} />
+              Damage meter
+            </label>
+          )}
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
           {/* No width transition: progress lands every frame, and each update restarts a
@@ -218,13 +254,16 @@ export default function VideoRenderDialog({ open, onOpenChange, title, fileName:
 interface RenderStageProps extends Omit<VideoRenderDialogProps, "open" | "onOpenChange" | "title" | "fileName"> {
   output: VideoOutputConfig;
   speed: RenderSpeed;
+  /** Draw the Damage Done meter into the video (needs the InstanceEventsContext). */
+  showMeter: boolean;
   onProgress: (progress: RenderProgress) => void;
 }
 
 // The capture scene and its frame loop, under a replay clock of its own (the
 // dialog's SyncModeProvider) so the page behind it never re-renders per frame.
-function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unitModelUrls, effectSettings, range = null, onRendered, output, speed, onProgress }: RenderStageProps) {
+function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unitModelUrls, effectSettings, range = null, onRendered, output, speed, showMeter, onProgress }: RenderStageProps) {
   const { enable, setTimestamp } = useSyncModeContext();
+  const fetchStream = useContext(InstanceEventsContext)?.fetchStream ?? null;
   const scene = useMapScene(panelProps, { rawDungeonProjection: true, mapSource, showHiddenUnits });
   const ready = scene.status === "ready" ? scene : null;
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
@@ -305,6 +344,14 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
       });
       if (!track) throw new Error("Nobody in this fight has position data to film.");
 
+      let meterAt: ((ms: number) => Promise<VideoMeterSnapshot>) | null = null;
+      let meter: VideoMeterSnapshot | null = null;
+      if (showMeter && fetchStream) {
+        onProgressRef.current({ phase: "preparing", detail: "Loading the damage meter…" });
+        meterAt = await createVideoDamageMeter(panelProps.context, fetchStream, fight.encounterStartMs);
+        if (signal.aborted) return;
+      }
+
       const { firstFrame, frameCount } = videoFrameRange(fightMs, speed, VIDEO_FPS, range);
       let progress: Extract<RenderProgress, { phase: "rendering" }> = { phase: "rendering", done: 0, total: frameCount, startedAt: performance.now(), lastFrameAt: 0, pausedMs: 0, pausedAt: null };
       onProgressRef.current(progress);
@@ -316,11 +363,16 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
         codec: output.codec,
         bitrate: output.bitrate,
         signal,
+        overlay: meterAt ? (context, width, height) => {
+          if (meter) drawVideoMeter(context, width, height, meter);
+        } : undefined,
         renderFrame: async (index) => {
           // `ms` is video time: the camera and animations run in it; the replay steps `speed` times as fast.
           const ms = ((firstFrame + index) * 1000) / VIDEO_FPS;
           // Whole milliseconds: the replay clock is a Date.
-          await showReplayAt(Math.round(fight.encounterStartMs + fightMsAtVideoMs(ms, speed, fightMs)));
+          const replayMs = Math.round(fight.encounterStartMs + fightMsAtVideoMs(ms, speed, fightMs));
+          await showReplayAt(replayMs);
+          if (meterAt) meter = await meterAt(replayMs);
           if (signal.aborted) return;
           const pose = dronePoseAt(track, ms);
           scene3d.captureFrame(pose, ms);
@@ -362,9 +414,9 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
       waiterRef.current?.resolve();
       waiterRef.current = null;
     };
-    // The render runs once per prepared stage and speed; range and output are fixed for its life.
+    // The render runs once per prepared stage, speed and meter choice; range and output are fixed for its life.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prepared, speed]);
+  }, [prepared, speed, showMeter]);
 
   if (!ready) return null;
   return (
