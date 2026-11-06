@@ -162,6 +162,7 @@ export async function fetchResolvedHubSummary(
     `/api/v1/leaderboards-v2?${p}`,
   );
   const result = resolvedHubMetadata(config, request, realms, cohorts);
+  if (request.metadataOnly) return result;
   const board: {
     player: {
       peak: HubRatingBoard["player"]["peak"];
@@ -199,7 +200,7 @@ export async function fetchResolvedHubSummary(
           );
         } catch {
           return;
-        } // No exact cohort/selection: no synthesized score for an aggregate the API does not support.
+        } // Invalid instance/selection: do not synthesize scores.
         params.set("limit", "5");
         const response = await hubJSON<LeaderboardV2Response>(
           v2BoardURL(params),
@@ -213,9 +214,9 @@ export async function fetchResolvedHubSummary(
               row.realm_id,
             player_guid: row.subject_id,
             player_name: row.name,
-            player_class: params.get("class") ?? "",
-            player_spec: params.get("spec") ?? "",
-            player_sub_spec: params.get("sub_spec") ?? "",
+            player_class: row.player_class,
+            player_spec: row.player_spec,
+            player_sub_spec: row.player_sub_spec,
             score: row.score,
           }));
         else

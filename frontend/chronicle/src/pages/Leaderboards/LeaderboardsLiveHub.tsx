@@ -40,7 +40,7 @@ export function LeaderboardsLiveHub() {
   // The page's summary is instance metadata (cohorts, realms, roster); it does not depend on the
   // selected bosses, so picking a boss never reloads the page. Content fetches its own selection.
   const summary = useHubSummary({ instanceName: instance ?? undefined, tab: instance ? undefined : tab, realmIDs, performance: "dps",
-    cohort: requestedCohort }, siteConfig !== undefined && !rootRatingsDisabled)
+    cohort: requestedCohort, metadataOnly: !!instance && tab !== "overview" }, siteConfig !== undefined && !rootRatingsDisabled)
   const available = summary.data?.realms ?? []
   const activeRealm = realmIDs.length === 1 ? available.find((row) => row.id === realmIDs[0]) : undefined
   const selectedRealmIDs = activeRealm ? [activeRealm.id] : realmIDs.length > 1 ? realmIDs : []

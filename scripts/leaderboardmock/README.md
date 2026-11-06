@@ -94,7 +94,11 @@ python3 scripts/leaderboardmock/mock.py --database-url "$MOCK_DB" bench \
   --repeats 6 --output /tmp/leaderboard-benchmark.json
 ```
 
-Use `--boss`, `--search`, `--spec`, `--cursor-subject`, and `--cursor-score` to
+The default now measures the actual all-cohort overview, normalizing each row
+against its own cohort benchmark. Use `--class MAGE --spec Synthetic0` to measure
+a narrow cohort separately.
+
+Use `--boss`, `--search`, `--spec`, `--cursor-subject`, and `--cursor-score`, `--cursor-class`, `--cursor-spec`, and `--cursor-sub-spec` to
 change query shape. `--subject guild --kind clear --score peak` exercises clear
 reads; `--kind renown --score renown` exercises count/award reads. The harness
 uses synthetic awards of 100 to measure SQL. The API uses the actual shared

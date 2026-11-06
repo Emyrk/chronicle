@@ -36,7 +36,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		bad("max_players must be a nonnegative integer")
 		return
 	}
-	req := leaderboardread.Request{Instance: q.Get("instance"), Difficulty: q.Get("difficulty"), MaxPlayers: int16(size), Subject: q.Get("subject"), Kind: q.Get("kind"), Score: q.Get("score"), Boss: q.Get("boss"), Bosses: q["bosses"], Set: q.Get("set"), Class: q.Get("class"), Spec: q.Get("spec"), SubSpec: q.Get("sub_spec"), Metric: q.Get("metric"), Search: strings.TrimSpace(q.Get("search"))}
+	req := leaderboardread.Request{Instance: q.Get("instance"), Difficulty: q.Get("difficulty"), MaxPlayers: int16(size), Subject: q.Get("subject"), Kind: q.Get("kind"), Score: q.Get("score"), Boss: q.Get("boss"), Bosses: q["bosses"], Set: q.Get("set"), Class: q.Get("class"), Spec: q.Get("spec"), SubSpec: q.Get("sub_spec"), FilterSubSpec: q.Has("sub_spec"), Metric: q.Get("metric"), Search: strings.TrimSpace(q.Get("search"))}
 	if q.Get("realm") != "" {
 		req.Realm, err = uuid.Parse(q.Get("realm"))
 		if err != nil {
@@ -118,9 +118,9 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := db.ListLeaderboardV2(ctx, database.ListLeaderboardV2Params{
 		TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers,
-		SubjectKind: req.Subject, BoardKind: req.Kind, ScoreMetric: req.Score, PlayerClass: req.Class, PlayerSpec: req.Spec, PlayerSubSpec: req.SubSpec, Metric: req.Metric,
+		SubjectKind: req.Subject, BoardKind: req.Kind, ScoreMetric: req.Score, PlayerClass: req.Class, PlayerSpec: req.Spec, PlayerSubSpec: req.SubSpec, FilterSubSpec: req.FilterSubSpec, Metric: req.Metric,
 		Bosses: selection.Bosses, Awards: selection.Awards, Denominator: selection.Denominator, RealmFilter: req.Realm, Search: req.Search,
-		PageSize: limit + 1, HasCursor: q.Get("cursor") != "", AfterScore: cursor.Score, AfterRealm: cursor.Realm, AfterSubject: cursor.Subject,
+		PageSize: limit + 1, HasCursor: q.Get("cursor") != "", AfterScore: cursor.Score, AfterRealm: cursor.Realm, AfterSubject: cursor.Subject, AfterClass: cursor.Class, AfterSpec: cursor.Spec, AfterSubSpec: cursor.SubSpec,
 	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
@@ -131,11 +131,11 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		result = result[:limit]
 	}
 	for _, row := range result {
-		out.Entries = append(out.Entries, chroniclesdk.LeaderboardV2Entry{RealmID: row.RealmID, SubjectID: row.SubjectID, Name: row.SubjectName, Score: row.Score, Peak: row.Peak, Mastery: row.Mastery, Renown: row.Renown, SampleCount: row.SampleCount, ComputedAt: row.ComputedAt.Time})
+		out.Entries = append(out.Entries, chroniclesdk.LeaderboardV2Entry{RealmID: row.RealmID, SubjectID: row.SubjectID, PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, Name: row.SubjectName, Score: row.Score, Peak: row.Peak, Mastery: row.Mastery, Renown: row.Renown, SampleCount: row.SampleCount, ComputedAt: row.ComputedAt.Time})
 	}
 	if more {
 		last := result[len(result)-1]
-		out.NextCursor = leaderboardread.EncodeCursor(leaderboardread.Cursor{Fingerprint: fingerprint, Score: last.Score, Realm: last.RealmID, Subject: last.SubjectID})
+		out.NextCursor = leaderboardread.EncodeCursor(leaderboardread.Cursor{Fingerprint: fingerprint, Score: last.Score, Realm: last.RealmID, Subject: last.SubjectID, Class: last.PlayerClass, Spec: last.PlayerSpec, SubSpec: last.PlayerSubSpec})
 	}
 	if len(out.Entries) == 0 {
 		out.Status = "empty"

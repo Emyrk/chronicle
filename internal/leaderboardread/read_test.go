@@ -50,12 +50,18 @@ func TestSummaryReadsWithMixedVersionMetadata(t *testing.T) {
 	p.AfterScore = first[0].Score
 	p.AfterRealm = first[0].RealmID
 	p.AfterSubject = first[0].SubjectID
+	p.AfterClass = first[0].PlayerClass
+	p.AfterSpec = first[0].PlayerSpec
+	p.AfterSubSpec = first[0].PlayerSubSpec
 	second, err := db.ListLeaderboardV2(ctx, p)
 	require.NoError(t, err)
 	require.Equal(t, rows[1].RealmID, second[0].RealmID)
 	p.AfterScore = second[0].Score
 	p.AfterRealm = second[0].RealmID
 	p.AfterSubject = second[0].SubjectID
+	p.AfterClass = second[0].PlayerClass
+	p.AfterSpec = second[0].PlayerSpec
+	p.AfterSubSpec = second[0].PlayerSubSpec
 	third, err := db.ListLeaderboardV2(ctx, p)
 	require.NoError(t, err)
 	require.Equal(t, rows[2].RealmID, third[0].RealmID)
@@ -130,4 +136,74 @@ func TestSummaryReadsWithMixedVersionMetadata(t *testing.T) {
 	require.InDelta(t, 35.5, updated[0].Mastery, 1e-8)
 	require.InDelta(t, 45, updated[0].Peak, 1e-8)
 
+}
+
+func TestAllCohortsNormalizeIndependently(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	_, err = conn.Exec(ctx, "BEGIN")
+	require.NoError(t, err)
+	defer func() { _, _ = conn.Exec(ctx, "ROLLBACK") }()
+	fixture, err := os.ReadFile("testdata/cross_cohort_fixture.sql")
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, string(fixture))
+	require.NoError(t, err)
+	db := database.NewQueries(conn)
+	p := database.ListLeaderboardV2Params{TenantID: uuid.MustParse("00000000-0000-4000-8000-000000000001"), InstanceName: "Cross raid", SubjectKind: "player", BoardKind: "boss", ScoreMetric: "peak", Metric: "dps", Bosses: []string{"A"}, Denominator: 1, PageSize: 50}
+	for _, metric := range []string{"peak", "mastery"} {
+		p.ScoreMetric = metric
+		rows, err := db.ListLeaderboardV2(ctx, p)
+		require.NoError(t, err)
+		require.Len(t, rows, 3)
+		require.Equal(t, "HUNTER", rows[0].PlayerClass)
+		require.Equal(t, "Survival", rows[0].PlayerSpec)
+		require.InDelta(t, 99, rows[0].Score, 1e-8)
+		require.Equal(t, "Arcane", rows[1].PlayerSpec)
+		require.Equal(t, "Frost", rows[2].PlayerSpec)
+		require.InDelta(t, 98, rows[2].Score, 1e-8)
+	}
+	p.PageSize = 1
+	var identities []string
+	for range 3 {
+		rows, err := db.ListLeaderboardV2(ctx, p)
+		require.NoError(t, err)
+		require.Len(t, rows, 1)
+		row := rows[0]
+		identities = append(identities, row.SubjectID+"/"+row.PlayerClass+"/"+row.PlayerSpec)
+		p.HasCursor = true
+		p.AfterScore = row.Score
+		p.AfterRealm = row.RealmID
+		p.AfterSubject = row.SubjectID
+		p.AfterClass = row.PlayerClass
+		p.AfterSpec = row.PlayerSpec
+		p.AfterSubSpec = row.PlayerSubSpec
+	}
+	require.Equal(t, []string{"hunter/HUNTER/Survival", "mage/MAGE/Arcane", "mage/MAGE/Frost"}, identities)
+	end, err := db.ListLeaderboardV2(ctx, p)
+	require.NoError(t, err)
+	require.Empty(t, end)
+	p.HasCursor = false
+	p.PageSize = 50
+	p.PlayerClass = "MAGE"
+	mages, err := db.ListLeaderboardV2(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, mages, 2)
+	p.PlayerSpec = "Frost"
+	frost, err := db.ListLeaderboardV2(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, frost, 1)
+	p.Bosses = []string{"A", "B"}
+	p.Denominator = 2
+	p.PlayerClass = ""
+	p.PlayerSpec = ""
+	group, err := db.ListLeaderboardV2(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, group, 3)
+	require.InDelta(t, 99, group[0].Score, 1e-8)
+	require.InDelta(t, 49, group[1].Score, 1e-8)
+	require.InDelta(t, 49, group[2].Score, 1e-8)
 }

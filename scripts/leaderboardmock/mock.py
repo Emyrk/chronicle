@@ -131,17 +131,22 @@ def seed(db, args):
 
 def bench(db, args):
     db.check_marker()
-    bosses = db.run("SELECT encounter_name FROM leaderboard_bosses WHERE instance_name=" + literal(args.instance) + " ORDER BY encounter_name;").splitlines()
+    # Benchmark the same enabled policy selection as the API, not disabled
+    # catalog bosses. Synthetic tenant dataset is explicitly Vanilla.
+    resolution = (ROOT / "database/queries/leaderboard_resolution.sql").read_text().strip().rstrip(';').replace('@flavors::text[]', "ARRAY['vanilla']::text[]")
+    predicate = "kind='boss'" if args.kind=='renown' or args.boss else "kind='member' AND set_key='default'"
+    bosses = db.run("WITH resolved AS ("+resolution+") SELECT encounter_name FROM resolved WHERE "+predicate+" AND instance_name="+literal(args.instance)+" ORDER BY encounter_name;").splitlines()
+    if args.boss and args.boss not in bosses and args.instance != "Test raid": raise ValueError("Boss is not enabled by the resolved fixture policy")
     if args.boss: bosses = [args.boss]
     if args.instance == "Test raid" and not args.boss: bosses = ["Boss A", "Boss B"]
     # Harness awards are explicit synthetic values. API reads instead use the real
     # resolver. This isolates SQL plan measurement from configuration latency.
-    params = dict(has_cursor=False, after_score=0, after_realm="00000000-0000-0000-0000-000000000000", after_subject="", page_size=51,
+    params = dict(has_cursor=False, after_score=0, after_realm="00000000-0000-0000-0000-000000000000", after_subject="", after_class="", after_spec="", after_sub_spec="", page_size=51,
         subject_kind=args.subject,board_kind=args.kind,tenant_id=TENANT,instance_name=args.instance,
         difficulty_name="",max_players=0,realm_filter="00000000-0000-0000-0000-000000000000",search=args.search,bosses=bosses,
-        player_class="MAGE",player_spec=args.spec,player_sub_spec="",metric="dps",awards=[100]*len(bosses),denominator=len(bosses) if args.kind=='boss' else 1,score_metric=args.score)
+        player_class=args.player_class,player_spec=args.spec,player_sub_spec="",filter_sub_spec=False,metric="dps",awards=[100]*len(bosses),denominator=len(bosses) if args.kind=='boss' else 1,score_metric=args.score)
     if args.cursor_subject:
-        params.update(has_cursor=True,after_score=args.cursor_score,after_realm=REALM,after_subject=args.cursor_subject)
+        params.update(has_cursor=True,after_score=args.cursor_score,after_realm=REALM,after_subject=args.cursor_subject,after_class=args.cursor_class,after_spec=args.cursor_spec,after_sub_spec=args.cursor_sub_spec)
     sql = query_sql(params)
     runs=[]
     for _ in range(args.repeats):
@@ -173,7 +178,11 @@ def main():
     p.add_argument('--score',choices=['peak','mastery','renown'],default='mastery')
     p.add_argument('--boss',default='')
     p.add_argument('--search',default='')
-    p.add_argument('--spec',default='Synthetic0')
+    p.add_argument('--spec',default='',help='Optional exact spec; default ranks all independently normalized cohorts')
+    p.add_argument('--class',dest='player_class',default='')
+    p.add_argument('--cursor-class',default='')
+    p.add_argument('--cursor-spec',default='')
+    p.add_argument('--cursor-sub-spec',default='')
     p.add_argument('--cursor-subject',default='')
     p.add_argument('--cursor-score',type=float,default=50)
     p.add_argument('--repeats',type=int,default=6)
