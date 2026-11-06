@@ -95,8 +95,9 @@ func TestInstanceSearch(t *testing.T) {
 			{name: "HonoredKillTime", user: uuid.New(), tier: "honored", field: "instance.kill_time_ms", boss: "Ragnaros", status: http.StatusOK},
 			{name: "HonoredNeedsReveredDeaths", user: uuid.New(), tier: "honored", field: "instance.deaths", status: http.StatusForbidden, wantError: "Revered supporter perk"},
 			{name: "Honored", user: uuid.New(), tier: "honored", field: "instance.clear_time_ms", status: http.StatusOK},
-			{name: "Revered", user: uuid.New(), tier: "revered", field: "instance.deaths", status: http.StatusOK},
-			{name: "Exalted", user: uuid.New(), tier: "exalted", field: "instance.deaths", status: http.StatusOK},
+			{name: "HonoredNeedsRevered", user: uuid.New(), tier: "honored", field: "instance.clear_parse", status: http.StatusForbidden, wantError: "Revered supporter perk"},
+			{name: "Revered", user: uuid.New(), tier: "revered", field: "instance.clear_parse", status: http.StatusOK},
+			{name: "Exalted", user: uuid.New(), tier: "exalted", field: "instance.clear_parse", status: http.StatusOK},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()

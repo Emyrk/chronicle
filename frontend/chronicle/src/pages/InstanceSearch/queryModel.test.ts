@@ -139,9 +139,9 @@ describe("formToTree / treeToForm", () => {
     expect(treeToForm({ and: [{ field: "instance.name", op: "=", value: "a" }, { field: "instance.name", op: "=", value: "b" }] })).toBeNull();
   });
 
-  it("reads the three-priests example as a form", () => {
-    const ex = EXAMPLES.find((e) => e.id === "09_three_or_more_priests")!;
-    expect(treeToForm(ex.where)?.classCounts).toEqual([{ class: "PRIEST", spec: "", subSpec: "", min: 3 }]);
+  it("reads the one-player parse example as a form", () => {
+    const ex = EXAMPLES.find((e) => e.id === "12_player_rag_dps_parse")!;
+    expect(treeToForm(ex.where)?.playerParses).toEqual([{ name: "Thrall", class: "", spec: "", subSpec: "", min: 95, metric: "dps", bosses: ["Ragnaros"] }]);
   });
 
   it("accepts a single top-level predicate", () => {

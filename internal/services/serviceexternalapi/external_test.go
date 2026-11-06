@@ -46,6 +46,12 @@ type fakeExternalAPIStore struct {
 	phasesCalled          bool
 	datasetResolution     database.ResolveDatasetByRealmRow
 	datasetResolutionErr  error
+	rankingRecords        []database.EncounterDpsRanking
+	rankingRecordsErr     error
+	rankingInstanceID     uuid.UUID
+	parseScores           []database.ParseScoreResult
+	parseScoresErr        error
+	parseScoresInstanceID uuid.UUID
 	event                 database.LogInstanceEvent
 	eventErr              error
 	eventParams           database.InstanceEventParams
@@ -115,6 +121,15 @@ func (f *fakeExternalAPIStore) GetEncounterPhasesByInstanceID(context.Context, u
 func (f *fakeExternalAPIStore) ResolveDatasetByRealm(context.Context, uuid.UUID) (database.ResolveDatasetByRealmRow, error) {
 	return f.datasetResolution, f.datasetResolutionErr
 }
+func (f *fakeExternalAPIStore) InstanceRankingRecords(_ context.Context, instanceID uuid.UUID) ([]database.EncounterDpsRanking, error) {
+	f.rankingInstanceID = instanceID
+	return f.rankingRecords, f.rankingRecordsErr
+}
+func (f *fakeExternalAPIStore) GetParseScoreResultsForInstance(_ context.Context, instanceID uuid.UUID) ([]database.ParseScoreResult, error) {
+	f.parseScoresInstanceID = instanceID
+	return f.parseScores, f.parseScoresErr
+}
+
 func (f *fakeExternalAPIStore) InstanceEvent(_ context.Context, params database.InstanceEventParams) (database.LogInstanceEvent, error) {
 	f.eventParams = params
 	return f.event, f.eventErr
@@ -203,9 +218,10 @@ func TestListCharacterLogsPagination(t *testing.T) {
 		rows[i] = database.ListExternalAPICharacterLogsRow{
 			ID: uuid.New(), Name: "Molten Core", RealmID: realmID,
 			DifficultyName: "Normal", MaxPlayers: 40,
-			StartedAt:  pgtype.Timestamptz{Time: now, Valid: true},
-			EndedAt:    pgtype.Timestamptz{Time: now, Valid: true},
-			UploadedAt: pgtype.Timestamptz{Time: now, Valid: true},
+			StartedAt:       pgtype.Timestamptz{Time: now, Valid: true},
+			EndedAt:         pgtype.Timestamptz{Time: now, Valid: true},
+			UploadedAt:      pgtype.Timestamptz{Time: now, Valid: true},
+			PerformanceJson: `[{"encounter_name":"Ragnaros","dps_parse":95,"hps_parse":42}]`,
 		}
 	}
 	store := &fakeExternalAPIStore{
@@ -237,10 +253,13 @@ func TestListCharacterLogsPagination(t *testing.T) {
 	require.Equal(t, int32(20), response.Pagination.PageSize)
 	require.Equal(t, int32(20), store.logsParams.ResultOffset)
 	require.Equal(t, int32(21), store.logsParams.ResultLimit)
+	require.Equal(t, tenantID, store.logsParams.TenantID)
 	require.Equal(t, playerGUID, store.logsParams.PlayerGuid)
 	require.Equal(t, "Normal", response.Logs[0].Difficulty)
 	require.Equal(t, int32(40), response.Logs[0].MaxPlayers)
-
+	require.Equal(t, []CharacterEncounterPerformance{{
+		EncounterName: "Ragnaros", DPSParse: int32Pointer(95), HPSParse: int32Pointer(42),
+	}}, response.Logs[0].Performance)
 }
 
 func TestListIndividualLeaderboardMatchesRankingsQueryContract(t *testing.T) {
@@ -429,6 +448,20 @@ func TestExternalSpeedrunTiming(t *testing.T) {
 			require.Equal(t, test.wantValid, valid)
 		})
 	}
+}
+
+func TestCharacterLogOmitsPerformanceWithoutParses(t *testing.T) {
+	t.Parallel()
+
+	log, err := characterLogFromRow(database.ListExternalAPICharacterLogsRow{
+		ID: uuid.New(), Name: "Blackwing Lair", PerformanceJson: "[]",
+	})
+	require.NoError(t, err)
+	require.Nil(t, log.Performance)
+
+	encoded, err := json.Marshal(log)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), `"performance"`)
 }
 
 func TestCharacterLogsRejectsPageSizeAboveMaximum(t *testing.T) {

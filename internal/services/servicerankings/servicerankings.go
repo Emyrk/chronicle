@@ -50,10 +50,15 @@ type Service struct {
 	registry  *registry.Registry
 	dataset   *servicedataset.Service
 
-	SummaryDispatchWorker   *WorkerRefreshRankingsSummaries
-	SummaryTenantWorker     *WorkerRefreshRankingsSummaryTenant
-	RankingRunRefreshWorker *WorkerRefreshRankingRuns
-	RankingRunRepairWorker  *WorkerRepairRankingRuns
+	SummaryDispatchWorker         *WorkerRefreshRankingsSummaries
+	SummaryTenantWorker           *WorkerRefreshRankingsSummaryTenant
+	RankingRunRefreshWorker       *WorkerRefreshRankingRuns
+	RankingRunRepairWorker        *WorkerRepairRankingRuns
+	ComputeParseScoresWorker      *WorkerComputeParseScores
+	ComputeTimeParseScoresWorker  *WorkerComputeTimeParseScores
+	BackfillTimeParseScoresWorker *WorkerBackfillTimeParseScores
+	RepairDispatchWorker          *WorkerDispatchParseScoreRepairs
+	RepairParseScoresWorker       *WorkerRepairParseScores
 }
 
 func New(broker *services.Services) *Service { return &Service{broker: broker} }
@@ -81,6 +86,11 @@ func (s *Service) Start(_ context.Context) error {
 	s.SummaryTenantWorker = &WorkerRefreshRankingsSummaryTenant{Store: store, Logger: logger}
 	s.RankingRunRefreshWorker = &WorkerRefreshRankingRuns{Store: store, Logger: logger}
 	s.RankingRunRepairWorker = &WorkerRepairRankingRuns{Store: store, Logger: logger}
+	s.ComputeParseScoresWorker = &WorkerComputeParseScores{Store: store, Logger: logger}
+	s.ComputeTimeParseScoresWorker = &WorkerComputeTimeParseScores{Store: store, Logger: logger}
+	s.BackfillTimeParseScoresWorker = &WorkerBackfillTimeParseScores{Store: store, Logger: logger}
+	s.RepairDispatchWorker = &WorkerDispatchParseScoreRepairs{Store: store, Logger: logger}
+	s.RepairParseScoresWorker = &WorkerRepairParseScores{Store: store, Logger: logger}
 	s.router = chi.NewRouter()
 	s.setupRoutes()
 	s.logger.Info("speedrun leaderboard service started")
@@ -111,6 +121,17 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/clear-times", s.handleClearTimes)
 	s.router.Get("/kill-time-leaderboard", s.handleKillTimeLeaderboard)
 	s.router.Get("/success-rates", s.handleSuccessRates)
+
+	// Parse and time-parse results and cohort transparency.
+	s.router.Get("/instances/{instanceID}/parses", s.handleInstanceParses)
+	s.router.Get("/instances/{instanceID}/time-parses", s.handleInstanceTimeParses)
+	s.router.Get("/characters/{playerGUID}/parses", s.handleCharacterParseHistory)
+	s.router.Get("/parse-score-cohorts/buckets", s.handleParseScoreCohortBuckets)
+	s.router.Get("/parse-score-cohorts/cohort", s.handleParseScoreCohort)
+	s.router.Get("/parse-score-cohorts/spreads", s.handleParseScoreSpreads)
+	s.router.Get("/time-parse-cohorts/buckets", s.handleTimeParseCohortBuckets)
+	s.router.Get("/time-parse-cohorts/cohort", s.handleTimeParseCohort)
+	s.router.Get("/time-parse-cohorts/spreads", s.handleTimeParseSpreads)
 
 	s.router.Get("/characters/{playerGUID}/performance", s.handleCharacterPerformance)
 	s.router.Get("/characters/{playerGUID}/encounters", s.handleCharacterEncounterStats)

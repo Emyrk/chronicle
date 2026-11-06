@@ -140,6 +140,12 @@ func TestOpenAPISpec(t *testing.T) {
 	require.Equal(t, "boolean", instance.Parameters[1].Schema.Type)
 	require.Contains(t, instance.Description, "omitting encounters and units")
 
+	rankingRecords, ok := document.Paths["/raidlogs/instances/{instance_id}/ranking-records"]["get"]
+	require.True(t, ok)
+	require.Equal(t, "Get raid-instance DPS and HPS metrics", rankingRecords.Summary)
+	require.Len(t, rankingRecords.Parameters, 1)
+	require.Equal(t, "instance_id", rankingRecords.Parameters[0].Name)
+
 	events, ok := document.Paths["/raidlogs/instances/{instance_id}/events/{type}"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "Get a raid-instance event stream", events.Summary)

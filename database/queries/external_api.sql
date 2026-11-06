@@ -127,9 +127,31 @@ SELECT
           AND lie.boss = true
           AND lie.kill_type IN ('clean', 'partial')
     ), 0)::int AS boss_kills,
-    '[]'::text AS performance_json
+    COALESCE(parses.performance, '[]'::jsonb)::text AS performance_json
 FROM deduped d
 LEFT JOIN guilds g ON g.id = d.guild_id
+LEFT JOIN LATERAL (
+    SELECT jsonb_agg(
+        jsonb_build_object(
+            'encounter_name', encounter_scores.encounter_name,
+            'dps_parse', encounter_scores.dps_parse,
+            'hps_parse', encounter_scores.hps_parse
+        )
+        ORDER BY encounter_scores.encounter_name
+    ) AS performance
+    FROM (
+        SELECT
+            psr.encounter_name,
+            MAX(psr.display_score) FILTER (WHERE psr.metric = 'dps') AS dps_parse,
+            MAX(psr.display_score) FILTER (WHERE psr.metric = 'hps') AS hps_parse
+        FROM parse_score_results psr
+        WHERE psr.run_id = d.run_id
+          AND psr.player_guid = (@player_guid::wow_guid)::text
+          AND psr.tenant_id = @tenant_id
+          AND psr.status IN ('ok', 'low_confidence')
+        GROUP BY psr.encounter_name
+    ) encounter_scores
+) parses ON true
 ORDER BY d.started_at DESC, d.id DESC
 LIMIT @result_limit
 OFFSET @result_offset;

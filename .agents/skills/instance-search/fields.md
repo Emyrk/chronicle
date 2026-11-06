@@ -28,6 +28,8 @@ Use at the top level (outside any quantifier).
 | `instance.boss_time_ms` | int (ms) | =, !=, <, <=, >, >=, between |  | Time inside the clear spent fighting bosses. Full clears only. |
 | `instance.trash_time_ms` | int (ms) | =, !=, <, <=, >, >=, between |  | Time inside the clear spent fighting trash (non-boss fights). Full clears only. |
 | `instance.idle_time_ms` | int (ms) | =, !=, <, <=, >, >=, between |  | Time inside the clear spent out of combat. Full clears only. |
+| `instance.clear_parse` | int (0-100) | =, !=, <, <=, >, >=, between | parse_scope | Clear-time parse (higher is faster). |
+| `instance.kill_time_parse` | int (0-100) | =, !=, <, <=, >, >=, between | bosses, match, parse_scope | Boss kill-time parse (higher is faster) on any / each of the bosses. |
 | `instance.kill_time_ms` | int (ms) | =, !=, <, <=, >, >=, between | bosses, match | Boss kill duration (clean or partial kills) on any / each of the bosses. |
 
 ## Encounter fields
@@ -41,6 +43,7 @@ Use inside `any_encounter` / `count_encounters`. One encounter is one pull.
 | `encounter.outcome` | enum: clean, partial, wipe, reset | =, !=, in, not_in |  | clean (kill), partial (kill with gaps), wipe or reset. |
 | `encounter.killed` | bool | =, != |  | The encounter ended in a kill (clean or partial). |
 | `encounter.duration_ms` | int (ms) | =, !=, <, <=, >, >=, between |  | Pull duration. |
+| `encounter.kill_time_parse` | int (0-100) | =, !=, <, <=, >, >=, between | parse_scope | Kill-time parse for this kill. |
 
 ## Player fields
 
@@ -62,3 +65,4 @@ Use inside `any_player` / `count_players`. All fields in one quantifier refer to
 | `player.hps` | float | =, !=, <, <=, >, >=, between | bosses, match, on | HPS in a fight. |
 | `player.deaths` | int | =, !=, <, <=, >, >=, between | bosses, match, on | Deaths in a fight. Wipes are not counted. |
 | `player.avg_ilvl` | int | =, !=, <, <=, >, >=, between | bosses, match, on | Average item level in a fight. |
+| `player.parse` | int (0-100) | =, !=, <, <=, >, >=, between | bosses, match, metric | Player parse on a boss kill (latest stored score per boss). |

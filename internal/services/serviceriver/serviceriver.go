@@ -268,6 +268,18 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.SummaryDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.SummaryDispatchWorker)
 	riverqueue.AddWorker(q, rank.SummaryTenantWorker)
+	// Drain pre-windowed snapshot jobs with compatibility no-op workers.
+	riverqueue.AddWorker(q, &servicerankings.WorkerRetiredPublishParseSnapshots{})
+	riverqueue.AddWorker(q, &servicerankings.WorkerRetiredPublishParseSnapshotTenant{})
+	riverqueue.AddWorker(q, rank.ComputeTimeParseScoresWorker)
+	rank.BackfillTimeParseScoresWorker.Queue = q
+	riverqueue.AddWorker(q, rank.BackfillTimeParseScoresWorker)
+	rank.ComputeParseScoresWorker.Queue = q
+	riverqueue.AddWorker(q, rank.ComputeParseScoresWorker)
+	rank.RepairDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.RepairDispatchWorker)
+	rank.RepairParseScoresWorker.Queue = q
+	riverqueue.AddWorker(q, rank.RepairParseScoresWorker)
 	riverqueue.AddWorker(q, rank.RankingRunRefreshWorker)
 	riverqueue.AddWorker(q, rank.RankingRunRepairWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{MaxWorkers: int(s.rankingWorkers)})
@@ -282,6 +294,15 @@ func (s *Service) Start(ctx context.Context) error {
 		river.PeriodicInterval(24*time.Hour),
 		func() (river.JobArgs, *river.InsertOpts) {
 			return rankingargs.ArgsRepairRankingRuns{}, nil
+		},
+		&river.PeriodicJobOpts{RunOnStart: false},
+	))
+
+	// Daily bounded repair for parse-enabled tenants and root.
+	q.AddPeriodicJob(river.NewPeriodicJob(
+		river.PeriodicInterval(24*time.Hour),
+		func() (river.JobArgs, *river.InsertOpts) {
+			return servicerankings.ArgsDispatchParseScoreRepairs{}, nil
 		},
 		&river.PeriodicJobOpts{RunOnStart: false},
 	))
