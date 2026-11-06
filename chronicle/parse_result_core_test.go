@@ -169,8 +169,8 @@ func TestParsedCoreRejectsUnsupportedTransport(t *testing.T) {
 	require.ErrorContains(t, err, "unsupported core parse result")
 }
 
-func TestParsedCoreRejectsPreviousSchemaBeforeWrites(t *testing.T) {
+func TestParsedCoreRejectsUnsupportedSchemaBeforeWrites(t *testing.T) {
 	t.Parallel()
-	_, err := InsertParsedCore(t.Context(), nil, parseresult.Result{SchemaVersion: 7, Format: database.LogFormat112aCcAddon}, ParsedCoreWrite{})
-	require.ErrorContains(t, err, "unsupported core parse result schema 7")
+	_, err := InsertParsedCore(t.Context(), nil, parseresult.Result{SchemaVersion: 2, Format: database.LogFormat112aCcAddon}, ParsedCoreWrite{})
+	require.ErrorContains(t, err, "unsupported core parse result schema 2")
 }

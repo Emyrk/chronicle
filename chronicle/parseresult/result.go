@@ -43,22 +43,18 @@ type Input struct {
 	IdentifyUnit      func(guid.GUID) identifier.Identity
 }
 
-// SchemaVersion is the current data-only result wire contract. It is distinct
+// SchemaVersion is the initial data-only result wire contract. It is distinct
 // from the exact daemon build recorded in Result.ParserVersion.
-const SchemaVersion = 9
+const SchemaVersion = 1
 
 // Result covers event streams and parser-derived core instance, overview,
 // encounter fight/phase, raid snapshot and observed-unit fields. It still omits
 // guild-participant rows, guild/armory writes, realm resolution,
 // DB-assigned IDs, and write-time decisions. Boss and trash DPS ranking
 // inputs are projected, but ranking-run side effects are not.
-// Version 0 is the original unversioned projection, version 1 adds core fields,
-// version 2 adds finalized loot observations, version 3 adds armory
-// observations, version 4 adds participating player metadata, and version 5
-// adds speedrun inputs; version 6 adds boss DPS ranking inputs, and version 7
-// adds trash ranking inputs; version 8 adds resolved flavor and dataset ID;
-// version 9 adds the daemon's exact parser build.
-// No version is a complete persistence payload or full DB parity proof.
+// Schema version 1 is the initial transport contract; earlier revisions of
+// this experimental projection were never deployed. It is not a complete
+// persistence payload or full DB parity proof.
 // Nil flavor or a nil UUID dataset is unresolved metadata, not permission
 // to infer it from the format during remote ingestion. An explicitly empty
 // (non-nil) flavor is valid and distinct from an unknown flavor.

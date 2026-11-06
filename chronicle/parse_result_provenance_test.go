@@ -30,7 +30,7 @@ func TestValidateParsedResultProvenance(t *testing.T) {
 		flavor  database.WoWFlavor
 		dataset uuid.UUID
 	}{
-		{"old schema", parseresult.Result{SchemaVersion: 8, Format: format, Flavor: flavor, DatasetID: dataset, ParserVersion: valid.ParserVersion}, format, flavor, dataset},
+		{"missing schema", parseresult.Result{SchemaVersion: 0, Format: format, Flavor: flavor, DatasetID: dataset, ParserVersion: valid.ParserVersion}, format, flavor, dataset},
 		{"wrong format", valid, database.LogFormat243CcAddon, flavor, dataset},
 		{"unsupported format", parseresult.Result{SchemaVersion: parseresult.SchemaVersion, Format: database.LogFormat("unknown"), Flavor: flavor, DatasetID: dataset, ParserVersion: valid.ParserVersion}, format, flavor, dataset},
 		{"missing version", parseresult.Result{SchemaVersion: parseresult.SchemaVersion, Format: format, Flavor: flavor, DatasetID: dataset}, format, flavor, dataset},
