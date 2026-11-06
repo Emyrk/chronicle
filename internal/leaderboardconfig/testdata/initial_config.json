@@ -1,0 +1,1202 @@
+{
+  "layers": {
+    "vanilla": [
+      "vanilla"
+    ],
+    "nightmare-of-ursol": [
+      "nightmare-of-ursol",
+      "vanilla"
+    ],
+    "vanillaplus": [
+      "vanilla",
+      "vanillaplus"
+    ],
+    "tbc": [
+      "tbc"
+    ],
+    "wrath": [
+      "wrath"
+    ]
+  },
+  "sets": [
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Blackwing Lair",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Razorgore the Untamed",
+        "Vaelastrasz the Corrupt",
+        "Broodlord Lashlayer",
+        "Firemaw",
+        "Ebonroc",
+        "Flamegor",
+        "Chromaggus",
+        "Nefarian",
+        "Ezzel Darkbrewer"
+      ]
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Emerald Sanctum",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Erennius",
+        "Solnius"
+      ]
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Emerald Sanctum",
+      "key": "hard",
+      "name": "Hard Mode",
+      "bosses": [
+        "Solnius (Hard Mode)"
+      ]
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Lower Tower of Karazhan",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Lord Blackwald II",
+        "Brood Queen Araxxna",
+        "Grizikil",
+        "Clawlord Howlfang",
+        "Moroes"
+      ]
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Molten Core",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Lucifron",
+        "Magmadar",
+        "Garr",
+        "Shazzrah",
+        "Baron Geddon",
+        "Sulfuron Harbinger",
+        "Golemagg the Incinerator",
+        "Incindis",
+        "Basalthar & Smoldaris",
+        "Sorcerer-Thane Thaurissan",
+        "Majordomo Executus",
+        "Ragnaros"
+      ]
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Naxxramas",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Anub'Rekhan",
+        "Grand Widow Faerlina",
+        "Maexxna",
+        "Noth the Plaguebringer",
+        "Heigan the Unclean",
+        "Loatheb",
+        "Instructor Razuvious",
+        "Gothik the Harvester",
+        "Four Horsemen",
+        "Patchwerk",
+        "Grobbulus",
+        "Gluth",
+        "Thaddius",
+        "Sapphiron",
+        "Kel'Thuzad"
+      ]
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Onyxia's Lair",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Onyxia",
+        "Broodcommander Axelus"
+      ]
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Ruins of Ahn'Qiraj",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Kurinnaxx",
+        "General Rajaxx",
+        "Moam",
+        "Buru the Gorger",
+        "Ayamiss the Hunter",
+        "Ossirian the Unscarred"
+      ]
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Temple of Ahn'Qiraj",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "The Prophet Skeram",
+        "Bug Family",
+        "Battleguard Sartura",
+        "Fankriss the Unyielding",
+        "Viscidus",
+        "Princess Huhuran",
+        "Twin Emperors",
+        "Ouro",
+        "C'Thun"
+      ]
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Timbermaw Hold",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Kodiak & Rotgrowl",
+        "Trioch the Devourer",
+        "Karrsh the Sentinel",
+        "Chieftain Partath",
+        "Archdruid Kronn",
+        "Selenaxx Foulheart",
+        "Loktanag the Vile",
+        "Ormanos the Cracked",
+        "Ursol",
+        "Peroth'arn"
+      ]
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Upper Tower of Karazhan",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Keeper Gnarlmoon",
+        "Anomalus",
+        "Rupturan the Broken",
+        "Mephistroth",
+        "Ley-Watcher Incantagos",
+        "Echo of Medivh",
+        "King",
+        "Sanv Tas'dal",
+        "Kruul"
+      ]
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Zul'Gurub",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "High Priestess Jeklik",
+        "High Priest Venoxis",
+        "High Priestess Mar'li",
+        "Bloodlord Mandokir",
+        "High Priest Thekal",
+        "High Priestess Arlokk",
+        "Jin'do the Hexxer",
+        "Hakkar"
+      ]
+    },
+    {
+      "layer": "tbc",
+      "instance": "Gruul's Lair",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "High King Maulgar",
+        "Gruul the Dragonkiller"
+      ]
+    },
+    {
+      "layer": "tbc",
+      "instance": "Serpentshrine Cavern",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Hydross the Unstable",
+        "The Lurker Below",
+        "Leotheras the Blind",
+        "Fathom-Lord Karathress",
+        "Morogrim Tidewalker",
+        "Lady Vashj"
+      ]
+    },
+    {
+      "layer": "tbc",
+      "instance": "Tempest Keep",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Al'ar",
+        "Void Reaver",
+        "High Astromancer Solarian",
+        "Kael'thas Sunstrider"
+      ]
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Blackwing Lair",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Razorgore the Untamed",
+        "Vaelastrasz the Corrupt",
+        "Broodlord Lashlayer",
+        "Firemaw",
+        "Ebonroc",
+        "Flamegor",
+        "Chromaggus",
+        "Nefarian"
+      ]
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Molten Core",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Lucifron",
+        "Magmadar",
+        "Garr",
+        "Shazzrah",
+        "Baron Geddon",
+        "Sulfuron Harbinger",
+        "Golemagg the Incinerator",
+        "Gehennas",
+        "Majordomo Executus",
+        "Ragnaros"
+      ]
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Anub'Rekhan",
+        "Grand Widow Faerlina",
+        "Maexxna",
+        "Noth the Plaguebringer",
+        "Heigan the Unclean",
+        "Loatheb",
+        "Instructor Razuvious",
+        "Gothik the Harvester",
+        "Four Horsemen",
+        "Patchwerk",
+        "Grobbulus",
+        "Gluth",
+        "Thaddius",
+        "Sapphiron",
+        "Kel'Thuzad"
+      ]
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Onyxia's Lair",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Onyxia"
+      ]
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Ruins of Ahn'Qiraj",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Kurinnaxx",
+        "General Rajaxx",
+        "Moam",
+        "Buru the Gorger",
+        "Ayamiss the Hunter",
+        "Ossirian the Unscarred"
+      ]
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Temple of Ahn'Qiraj",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "The Prophet Skeram",
+        "Bug Family",
+        "Battleguard Sartura",
+        "Fankriss the Unyielding",
+        "Viscidus",
+        "Princess Huhuran",
+        "Twin Emperors",
+        "Ouro",
+        "C'Thun"
+      ]
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Zul'Gurub",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "High Priestess Jeklik",
+        "High Priest Venoxis",
+        "High Priestess Mar'li",
+        "Bloodlord Mandokir",
+        "High Priest Thekal",
+        "High Priestess Arlokk",
+        "Jin'do the Hexxer",
+        "Hakkar"
+      ]
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Blackwing Lair",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Razorgore the Untamed",
+        "Elementium Decapitator Mk III",
+        "Broodlord Lashlayer",
+        "Firemaw",
+        "Master Elemental Shaper Krixix",
+        "Flamegor & Ebonroc",
+        "Chromaggus",
+        "Nefarian"
+      ]
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Molten Core",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Lucifron",
+        "Magmadar",
+        "Garr",
+        "Shazzrah",
+        "Baron Geddon",
+        "Sulfuron Harbinger",
+        "Golemagg the Incinerator",
+        "Gehennas",
+        "Majordomo Executus",
+        "Ragnaros"
+      ]
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Naxxramas",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Anub'Rekhan",
+        "Grand Widow Faerlina",
+        "Maexxna",
+        "Noth the Plaguebringer",
+        "Heigan the Unclean",
+        "Loatheb",
+        "Instructor Razuvious",
+        "Gothik the Harvester",
+        "Four Horsemen",
+        "Patchwerk",
+        "Grobbulus",
+        "Gluth",
+        "Thaddius",
+        "Sapphiron",
+        "Kel'Thuzad"
+      ]
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Onyxia's Lair",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Onyxia"
+      ]
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Ruins of Ahn'Qiraj",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Kurinnaxx",
+        "General Rajaxx",
+        "Moam",
+        "Buru the Gorger",
+        "Ayamiss the Hunter",
+        "Ossirian the Unscarred"
+      ]
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Scarlet Monastery",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Loksey",
+        "Brother Michael",
+        "Brigitte Abbendis",
+        "Fairbanks",
+        "Doan",
+        "Vishas",
+        "Herod",
+        "Mograine & Whitemane"
+      ]
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Temple of Ahn'Qiraj",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "The Prophet Skeram",
+        "Bug Family",
+        "Battleguard Sartura",
+        "Fankriss the Unyielding",
+        "Viscidus",
+        "Princess Huhuran",
+        "Twin Emperors",
+        "Ouro",
+        "C'Thun"
+      ]
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Zul'Gurub",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "High Priestess Jeklik",
+        "High Priest Venoxis",
+        "High Priestess Mar'li",
+        "Bloodlord Mandokir",
+        "High Priest Thekal",
+        "High Priestess Arlokk",
+        "Jin'do the Hexxer",
+        "Hakkar",
+        "Azus the Bloodseeker",
+        "The Nameless Hermit"
+      ]
+    },
+    {
+      "layer": "wrath",
+      "instance": "Naxxramas",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Anub'Rekhan",
+        "Grand Widow Faerlina",
+        "Maexxna",
+        "Noth the Plaguebringer",
+        "Heigan the Unclean",
+        "Loatheb",
+        "Instructor Razuvious",
+        "Gothik the Harvester",
+        "Four Horsemen",
+        "Patchwerk",
+        "Grobbulus",
+        "Gluth",
+        "Thaddius",
+        "Sapphiron",
+        "Kel'Thuzad"
+      ]
+    },
+    {
+      "layer": "wrath",
+      "instance": "Obsidian Sanctum",
+      "key": "1d",
+      "name": "1D",
+      "bosses": [
+        "Sartharion (1 Drake)"
+      ]
+    },
+    {
+      "layer": "wrath",
+      "instance": "Obsidian Sanctum",
+      "key": "2d",
+      "name": "2D",
+      "bosses": [
+        "Sartharion (2 Drakes)"
+      ]
+    },
+    {
+      "layer": "wrath",
+      "instance": "Obsidian Sanctum",
+      "key": "3d",
+      "name": "3D",
+      "bosses": [
+        "Sartharion (3 Drakes)"
+      ]
+    },
+    {
+      "layer": "wrath",
+      "instance": "Obsidian Sanctum",
+      "key": "default",
+      "name": "0D",
+      "bosses": [
+        "Sartharion"
+      ]
+    },
+    {
+      "layer": "wrath",
+      "instance": "Onyxia's Lair",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Onyxia"
+      ]
+    },
+    {
+      "layer": "wrath",
+      "instance": "Ulduar",
+      "key": "default",
+      "name": "Normal",
+      "bosses": [
+        "Ignis the Furnace Master",
+        "Razorscale",
+        "XT-002 Deconstructor",
+        "Assembly of Iron",
+        "Kologarn",
+        "Auriaya",
+        "Hodir",
+        "Thorim",
+        "Freya",
+        "Mimiron",
+        "General Vezax",
+        "Yogg-Saron",
+        "Algalon the Observer"
+      ]
+    }
+  ],
+  "awards": [
+    {
+      "layer": "vanilla",
+      "instance": "Zul'Gurub",
+      "boss": "High Priestess Jeklik",
+      "points": 0
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Zul'Gurub",
+      "boss": "High Priest Venoxis",
+      "points": 0
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Zul'Gurub",
+      "boss": "High Priestess Mar'li",
+      "points": 0
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Zul'Gurub",
+      "boss": "Bloodlord Mandokir",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Zul'Gurub",
+      "boss": "High Priest Thekal",
+      "points": 0
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Zul'Gurub",
+      "boss": "High Priestess Arlokk",
+      "points": 0
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Zul'Gurub",
+      "boss": "Jin'do the Hexxer",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Zul'Gurub",
+      "boss": "Hakkar",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Zul'Gurub",
+      "boss": "Gahz'ranka",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Zul'Gurub",
+      "boss": "Gri'lek",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Zul'Gurub",
+      "boss": "Hazza'rah",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Zul'Gurub",
+      "boss": "Renataki",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Zul'Gurub",
+      "boss": "Wushoolay",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Ruins of Ahn'Qiraj",
+      "boss": "Kurinnaxx",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Ruins of Ahn'Qiraj",
+      "boss": "General Rajaxx",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Ruins of Ahn'Qiraj",
+      "boss": "Moam",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Ruins of Ahn'Qiraj",
+      "boss": "Buru the Gorger",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Ruins of Ahn'Qiraj",
+      "boss": "Ayamiss the Hunter",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Ruins of Ahn'Qiraj",
+      "boss": "Ossirian the Unscarred",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Onyxia's Lair",
+      "boss": "Onyxia",
+      "points": 2
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Onyxia's Lair",
+      "boss": "Broodcommander Axelus",
+      "points": 1
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Lower Tower of Karazhan",
+      "boss": "Lord Blackwald II",
+      "points": 1
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Lower Tower of Karazhan",
+      "boss": "Brood Queen Araxxna",
+      "points": 1
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Lower Tower of Karazhan",
+      "boss": "Grizikil",
+      "points": 1
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Lower Tower of Karazhan",
+      "boss": "Clawlord Howlfang",
+      "points": 1
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Lower Tower of Karazhan",
+      "boss": "Moroes",
+      "points": 2
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Emerald Sanctum",
+      "boss": "Erennius",
+      "points": 2
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Emerald Sanctum",
+      "boss": "Solnius",
+      "points": 3
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Emerald Sanctum",
+      "boss": "Solnius (Hard Mode)",
+      "points": 5
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Molten Core",
+      "boss": "Lucifron",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Molten Core",
+      "boss": "Magmadar",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Molten Core",
+      "boss": "Garr",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Molten Core",
+      "boss": "Shazzrah",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Molten Core",
+      "boss": "Baron Geddon",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Molten Core",
+      "boss": "Sulfuron Harbinger",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Molten Core",
+      "boss": "Golemagg the Incinerator",
+      "points": 1
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Molten Core",
+      "boss": "Incindis",
+      "points": 1
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Molten Core",
+      "boss": "Basalthar & Smoldaris",
+      "points": 1
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Molten Core",
+      "boss": "Sorcerer-Thane Thaurissan",
+      "points": 1
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Molten Core",
+      "boss": "Majordomo Executus",
+      "points": 2
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Molten Core",
+      "boss": "Ragnaros",
+      "points": 5
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Blackwing Lair",
+      "boss": "Razorgore the Untamed",
+      "points": 2
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Blackwing Lair",
+      "boss": "Vaelastrasz the Corrupt",
+      "points": 2
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Blackwing Lair",
+      "boss": "Broodlord Lashlayer",
+      "points": 2
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Blackwing Lair",
+      "boss": "Firemaw",
+      "points": 2
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Blackwing Lair",
+      "boss": "Ebonroc",
+      "points": 2
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Blackwing Lair",
+      "boss": "Flamegor",
+      "points": 2
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Blackwing Lair",
+      "boss": "Chromaggus",
+      "points": 2
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Blackwing Lair",
+      "boss": "Ezzel Darkbrewer",
+      "points": 2
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Blackwing Lair",
+      "boss": "Nefarian",
+      "points": 9
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Temple of Ahn'Qiraj",
+      "boss": "The Prophet Skeram",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Temple of Ahn'Qiraj",
+      "boss": "Bug Family",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Temple of Ahn'Qiraj",
+      "boss": "Battleguard Sartura",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Temple of Ahn'Qiraj",
+      "boss": "Fankriss the Unyielding",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Temple of Ahn'Qiraj",
+      "boss": "Viscidus",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Temple of Ahn'Qiraj",
+      "boss": "Princess Huhuran",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Temple of Ahn'Qiraj",
+      "boss": "Twin Emperors",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Temple of Ahn'Qiraj",
+      "boss": "Ouro",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Temple of Ahn'Qiraj",
+      "boss": "C'Thun",
+      "points": 11
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Timbermaw Hold",
+      "boss": "Kodiak & Rotgrowl",
+      "points": 3
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Timbermaw Hold",
+      "boss": "Trioch the Devourer",
+      "points": 3
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Timbermaw Hold",
+      "boss": "Karrsh the Sentinel",
+      "points": 3
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Timbermaw Hold",
+      "boss": "Chieftain Partath",
+      "points": 3
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Timbermaw Hold",
+      "boss": "Archdruid Kronn",
+      "points": 3
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Timbermaw Hold",
+      "boss": "Selenaxx Foulheart",
+      "points": 3
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Timbermaw Hold",
+      "boss": "Loktanag the Vile",
+      "points": 3
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Timbermaw Hold",
+      "boss": "Ormanos the Cracked",
+      "points": 3
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Timbermaw Hold",
+      "boss": "Ursol",
+      "points": 3
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Timbermaw Hold",
+      "boss": "Peroth'arn",
+      "points": 8
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "boss": "Anub'Rekhan",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "boss": "Grand Widow Faerlina",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "boss": "Maexxna",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "boss": "Noth the Plaguebringer",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "boss": "Heigan the Unclean",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "boss": "Loatheb",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "boss": "Instructor Razuvious",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "boss": "Gothik the Harvester",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "boss": "Four Horsemen",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "boss": "Patchwerk",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "boss": "Grobbulus",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "boss": "Gluth",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "boss": "Thaddius",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "boss": "Sapphiron",
+      "points": 3
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Naxxramas",
+      "boss": "Kel'Thuzad",
+      "points": 8
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Upper Tower of Karazhan",
+      "boss": "Keeper Gnarlmoon",
+      "points": 6
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Upper Tower of Karazhan",
+      "boss": "Anomalus",
+      "points": 6
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Upper Tower of Karazhan",
+      "boss": "Rupturan the Broken",
+      "points": 6
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Upper Tower of Karazhan",
+      "boss": "Mephistroth",
+      "points": 6
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Upper Tower of Karazhan",
+      "boss": "Ley-Watcher Incantagos",
+      "points": 6
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Upper Tower of Karazhan",
+      "boss": "Echo of Medivh",
+      "points": 6
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Upper Tower of Karazhan",
+      "boss": "King",
+      "points": 6
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Upper Tower of Karazhan",
+      "boss": "Sanv Tas'dal",
+      "points": 6
+    },
+    {
+      "layer": "nightmare-of-ursol",
+      "instance": "Upper Tower of Karazhan",
+      "boss": "Kruul",
+      "points": 7
+    },
+    {
+      "layer": "vanilla",
+      "instance": "Molten Core",
+      "boss": "Gehennas",
+      "points": 1
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Blackwing Lair",
+      "boss": "Master Elemental Shaper Krixix",
+      "points": 2
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Blackwing Lair",
+      "boss": "Elementium Decapitator Mk III",
+      "points": 2
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Scarlet Monastery",
+      "boss": "Loksey",
+      "points": 1
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Scarlet Monastery",
+      "boss": "Brother Michael",
+      "points": 1
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Scarlet Monastery",
+      "boss": "Brigitte Abbendis",
+      "points": 1
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Scarlet Monastery",
+      "boss": "Fairbanks",
+      "points": 1
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Scarlet Monastery",
+      "boss": "Doan",
+      "points": 1
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Scarlet Monastery",
+      "boss": "Vishas",
+      "points": 1
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Scarlet Monastery",
+      "boss": "Herod",
+      "points": 1
+    },
+    {
+      "layer": "vanillaplus",
+      "instance": "Scarlet Monastery",
+      "boss": "Mograine & Whitemane",
+      "points": 3
+    }
+  ]
+}

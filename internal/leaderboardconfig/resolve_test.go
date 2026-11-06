@@ -196,3 +196,18 @@ func TestResolvedSetLabel(t *testing.T) {
 	}
 	require.True(t, found)
 }
+
+func TestResolutionConflictDiagnosticsOrder(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.layer("other", []string{"other"})
+	require.NoError(t, f.db.InsertLeaderboardMemberOverrides(f.ctx, database.InsertLeaderboardMemberOverridesParams{
+		LayerKey: "other", InstanceName: "fixture-instance", SetKey: "default", EncounterName: "A",
+		Enabled: pgtype.Bool{Valid: true}, Position: pgtype.Int4{Int32: 99, Valid: true},
+	}))
+	rows := f.rows("fixture-base", "other")
+	require.Len(t, rows, 2)
+	require.Equal(t, "conflict", rows[0].Kind)
+	require.Equal(t, "enabled", rows[0].ConflictingProperty)
+	require.Equal(t, "position", rows[1].ConflictingProperty)
+}
