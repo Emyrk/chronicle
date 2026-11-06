@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useTalentTrees } from "@/components/ui/TalentTreeViewer/useTalentTrees";
 import { resolvePlayerSpecialization } from "@/components/ui/PlayerMetricChart/playerSpecialization";
 import { iconUrl } from "@/config/iconUrl";
+import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { cn } from "@/lib/utils";
 import { getQualityBorderClass, getQualityTextClass } from "@/pages/ArmoryPage/types";
 import type { PanelContext } from "../types";
@@ -67,6 +68,7 @@ function TimelineItem({
   width: number;
   equippedItemIds: ReadonlySet<number>;
 }) {
+  const iconBaseUrl = useIconBaseUrl();
   const tooltip = useItemTooltip({ itemId: segment.item.itemId, enchant: segment.item.enchantId ?? undefined });
   const quality = tooltip.data?.quality ?? 1;
   const color = QUALITY_COLORS[quality] ?? QUALITY_COLORS[1];
@@ -76,7 +78,7 @@ function TimelineItem({
       style={{ left: `${left}%` }}
     >
       {tooltip.data?.icon ? (
-        <img src={iconUrl(tooltip.data.icon)} alt={tooltip.data.name ?? ""} className="size-full object-cover" loading="lazy" />
+        <img src={iconUrl(tooltip.data.icon, iconBaseUrl)} alt={tooltip.data.name ?? ""} className="size-full object-cover" loading="lazy" />
       ) : (
         <HelpCircle className="m-1 size-3.5 text-muted-foreground" />
       )}

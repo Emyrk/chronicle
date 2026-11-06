@@ -10,10 +10,7 @@ import { getQualityTextClass, getQualityBorderClass, getClassColorVar } from "..
 import { getInstanceLootFilters, getInstanceTurninConfig, type InstanceTurninConfig } from "./lootFilters";
 import { cn } from "../../../../lib/utils";
 import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
-
-function getItemIconUrl(icon: string): string {
-  return iconUrl(icon);
-}
+import { useIconBaseUrl } from "@/hooks/useDatasetId";
 
 // Quality levels displayed as filter badges (highest first)
 const QUALITY_FILTERS = [
@@ -90,12 +87,13 @@ function formatTimestamp(ts: string): string {
 }
 
 function LootRow({ item, context, useOffset, instanceStartMs }: { item: InstanceLoot; context: PanelRenderProps<LootResult>["context"]; useOffset: boolean; instanceStartMs: number }) {
+  const iconBaseUrl = useIconBaseUrl();
   const [hovered, setHovered] = useState(false);
   const tooltip = useItemTooltip(
     hovered ? { itemId: item.item_id, randomProperty: item.loot_suffix || undefined } : null,
   );
   const traded = item.source_guid !== item.received_guid;
-  const iconUrl = getItemIconUrl(item.icon);
+  const itemIconUrl = iconUrl(item.icon, iconBaseUrl);
 
   return (
     <tr
@@ -109,8 +107,8 @@ function LootRow({ item, context, useOffset, instanceStartMs }: { item: Instance
             "w-6 h-6 shrink-0 rounded border bg-zinc-900/80 flex items-center justify-center overflow-hidden",
             getQualityBorderClass(item.quality),
           )}>
-            {iconUrl ? (
-              <img src={iconUrl} alt={item.item_name} className="w-full h-full object-cover" loading="lazy" />
+            {itemIconUrl ? (
+              <img src={itemIconUrl} alt={item.item_name} className="w-full h-full object-cover" loading="lazy" />
             ) : (
               <HelpCircle className="w-3.5 h-3.5 text-zinc-500" />
             )}

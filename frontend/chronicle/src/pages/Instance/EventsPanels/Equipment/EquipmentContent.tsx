@@ -3,6 +3,7 @@ import { iconUrl } from "@/config/iconUrl";
 import type { PanelRenderProps } from "../types";
 import type { EquipmentResult, PlayerSnapshot } from "./equipment.processor";
 import { useCachedValue } from "@/hooks/useCachedValue";
+import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { GenericPanel } from "../GenericPanel";
 import { useItemTooltip } from "@/api/gamedata";
 import { cn } from "@/lib/utils";
@@ -51,12 +52,9 @@ const SLOT_ORDER = [
   { index: 17, label: "Ranged" },
 ];
 
-function getItemIconUrl(icon: string): string {
-  return iconUrl(icon);
-}
-
 /** Compact single-row item display with tooltip-fetched icon/name/quality. */
 function GearRow({ itemId, enchantId, gemEnchantIds, slotLabel, equippedItemIds }: { itemId: number; enchantId: number | null; gemEnchantIds: readonly number[]; slotLabel: string; equippedItemIds?: ReadonlySet<number> }) {
+  const iconBaseUrl = useIconBaseUrl();
   const isEmpty = itemId === 0;
   const tooltip = useItemTooltip(
     !isEmpty ? { itemId, enchant: enchantId ?? undefined } : null,
@@ -85,7 +83,7 @@ function GearRow({ itemId, enchantId, gemEnchantIds, slotLabel, equippedItemIds 
         getQualityBorderClass(quality),
       )}>
         {icon ? (
-          <img src={getItemIconUrl(icon)} alt={name ?? ""} className="w-full h-full object-cover" loading="lazy" />
+          <img src={iconUrl(icon, iconBaseUrl)} alt={name ?? ""} className="w-full h-full object-cover" loading="lazy" />
         ) : (
           <HelpCircle className="w-3.5 h-3.5 text-zinc-500" />
         )}
