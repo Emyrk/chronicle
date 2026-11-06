@@ -621,11 +621,16 @@ func (p *Parser) combatantTransmog(ctx context.Context, ts time.Time, m *Matched
 		return nil, nil
 	}
 
-	return set(&messages.Transmog{
+	transmogMessage := &messages.Transmog{
 		MessageBase: messages.Base(ts),
 		PlayerName:  name,
 		Transmogs:   mogs,
-	})
+	}
+	p.recordTransmogs(name, mogs)
+	if corrected := p.correctedCombatantForTransmog(name, ts); corrected != nil {
+		return set(transmogMessage, corrected)
+	}
+	return set(transmogMessage)
 }
 
 // COMBATANT_TALENTS: guid|playerName|tab1|tab2|tab3
@@ -878,20 +883,23 @@ func (p *Parser) combatantInfo(ctx context.Context, ts time.Time, m *Matched) ([
 		p.itemFetcher.ResolveGear(gear)
 	}
 
+	player := combatant.Combatant{
+		Name:       name,
+		Guid:       id,
+		Seen:       ts,
+		HeroClass:  class,
+		Gender:     gender,
+		Race:       race,
+		PetName:    petName,
+		Guild:      guild,
+		GearSetups: gear,
+		Talents:    playerTalents,
+	}
+	p.applyKnownTransmogs(&player)
+	p.rememberCombatant(player)
 	return set(&messages.Combatant{
 		MessageBase: messages.Base(ts),
-		Combatant: combatant.Combatant{
-			Name:       name,
-			Guid:       id,
-			Seen:       ts,
-			HeroClass:  class,
-			Gender:     gender,
-			Race:       race,
-			PetName:    petName,
-			Guild:      guild,
-			GearSetups: gear,
-			Talents:    playerTalents,
-		},
+		Combatant:   player,
 	})
 }
 
