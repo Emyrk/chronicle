@@ -32,14 +32,16 @@
 \maketitle
 
 \section{Purpose}
-This document defines the leaderboard model from its source data upward. The current delivery is four configuration PRs; later rating work retains tenant-scoped boss and clear cohorts.
+This document defines the leaderboard model from its source data upward. The next delivery is schema-only evidence, sufficient statistics, kill counts, and dirty-work storage for all-time tenant-scoped ratings.
 
-\subsection{Delivery status and deferred policy}
-The current delivery is four PRs: amend specification PR 1622, schema-only catalog and flavor vocabulary PR 1624, subset/override resolution with tests, and reviewed initial seeds with parity tests. Policy reads and UI cutover come later. Prior ratings have been removed; merged PR 1625 preserves parse scoring. There is no promised legacy-rating rollback. Existing UI behavior stays unchanged during foundation work.
+\subsection{Delivery status and scope}
+Configuration work is complete in PRs 1622, 1624, 1633, and 1634, followed by configuration inspector PR 1636 and Wrath migration 343. The next PR adds only tables, constraints, indexes, and schema tests. Workers, serving queries, historical backfill, and UI cutover are later work. Prior ratings have been removed; PR 1625 preserves parse scoring. No legacy-rating rollback is promised.
 
-Boss and clear cohorts are tenant scoped. Realm remains part of player and guild identity, not a mandatory benchmark-cohort partition. Realm/season isolation is only a concern for deferred career/cross-instance portfolios, whose identity, lifecycle, and temporal boundaries remain unresolved. Do not add season columns or block observation, benchmark, subject, or queue implementation on that future contract.
+All rating evidence, statistics, and Renown counts are all-time only. There are no rolling180day or season dimensions, expiry jobs, or finalized-season retention exceptions. Career/cross-instance portfolios remain out of scope. Source deletion and invalidation continue to retract evidence and dirty affected scopes.
 
-Layered configuration still needs a reviewed provenance and invalidation contract; a single ruleset ID/revision cannot be assumed to describe composed configuration. DPS and HPS may produce separate observations today. Mutually exclusive damage-versus-healing eligibility per player/boss is a future observation policy, not a current constraint.
+Boss and clear cohorts are tenant scoped and separate both difficulty and raid size. Realm qualifies player and guild identity, not benchmark cohorts. DPS and HPS remain separate permitted observations. Mutually exclusive damage-versus-healing eligibility per player/boss is future observation policy, not a current constraint.
+
+Raw projection algorithm compatibility is separate from the composed configuration used at read time. This specification does not invent a new provenance scheme or assign one ruleset ID to composed policy. Current benchmark and award changes must not force rewrites of otherwise unchanged raw subject statistics or kill counts.
 
 \section{Core observations}
 The model has player observations and guild observations.
@@ -168,12 +170,12 @@ Guild clear & $H_{GC}=(C,m)$ & $\{O\in\mathcal{O}_{GC}\mid O.C=C\land O.m=m\}$ \
 \end{tabularx}
 \end{center}
 
-Here $c$ is player class. Each displayed cohort is evaluated within exactly one tenant. Realm identifies the player or guild subject but does not partition the boss or clear benchmark cohort. The current contract has no season dimension.
+Here $c$ is player class. Each displayed cohort is evaluated within exactly one tenant. Realm identifies the player or guild subject but does not partition the boss or clear benchmark cohort. Boss and clear identities include both difficulty and raid size, so neither may be pooled. The current contract has no season or rolling-window dimension.
 
 \section{Derived rankings}
 
 \subsection{Scope and selected observations}
-For current boss and clear results, $W(O)=\mathrm{true}$ selects all eligible observations in the tenant-scoped cohort. No season or rolling-window dimension is required. This all-time boss/clear contract does not define career or cross-instance portfolio aggregation. Renown retains its separately unresolved temporal scope selector; that decision does not block boss/clear observation, benchmark, subject, or queue work.
+For every current result, including Renown, $W(O)=\mathrm{true}$ selects all eligible canonical evidence. The notation $W$ is retained only to keep the formulas readable; it is not a physical window identity. No rolling180day, other rolling window, or season is implemented. All-time does not authorize retention of deleted or invalidated source evidence.
 
 For player $P$ and player cohort $H_P$:
 \[
@@ -210,7 +212,7 @@ For kill and clear times:
     \frac{\beta(H)}{O.\field{metric\_\allowbreak value}}
   \right).
 \]
-Guild durations are strictly positive. The clamp tolerates temporary benchmark/result skew during rolling maintenance. Observations preserve raw \field{metric\_\allowbreak value}; normalized scores are derived from the current cohort benchmark and are not immutable observation payload.
+Guild durations are strictly positive. For a coherent evidence and benchmark state, the ratios already lie in $[0,100]$. The clamp is a display safeguard during temporary benchmark/statistic skew, not a reason to materialize normalized bands. Observations preserve raw \field{metric\_\allowbreak value}; normalized scores are derived from the current cohort benchmark and are not immutable observation payload.
 
 For one selected subject set $A$, order the current normalized scores
 \[
@@ -269,7 +271,46 @@ For current normalized scores $A=\{1,2,3,4,5,6,7,8,9,10\}$:
   +0.20\operatorname{avg}(3,4).
 \]
 
-When $\beta(H)$ changes, every subject Mastery result in $H$ becomes dirty because Peak, Form, and Floor all use the current benchmark.
+\subsection{Benchmark-independent sufficient statistics}
+Materialize count and three sufficient statistics, not normalized scores. For each observation define a performance value
+\[
+ y(O)=\begin{cases}
+ O.\field{metric\_value}, & \text{player DPS/HPS},\\
+ 1/O.\field{metric\_value}, & \text{guild duration}.
+ \end{cases}
+\]
+Sort $y_1\le\cdots\le y_n$ and use exactly the same index boundaries $a$ and $b$ and the same empty-band zero convention as above. Store
+\[
+\begin{aligned}
+ n&=\lvert A\rvert,\\
+ p_{\mathrm{raw}}&=y_n,\\
+ f_{\mathrm{raw}}&=\operatorname{avg}(y_{b+1},\ldots,y_{n-1}),\\
+ l_{\mathrm{raw}}&=\operatorname{avg}(y_{a+1},\ldots,y_b).
+\end{aligned}
+\]
+For players these are raw metric Peak and arithmetic band means. For guilds they are peak reciprocal duration and arithmetic means of reciprocal durations. Do not substitute the reciprocal of an arithmetic mean duration: it does not preserve the score formula. Duration units must be consistent between evidence, reciprocals, and benchmarks.
+
+At read time, use the shared current cohort benchmark to define
+\[
+ k(H)=\begin{cases}
+ 0, & \text{player and }\beta(H)=0,\\
+ 100/\beta(H), & \text{player and }\beta(H)>0,\\
+ 100\beta(H), & \text{guild}.
+ \end{cases}
+\]
+For a coherent state, derive
+\[
+\begin{aligned}
+ \operatorname{Peak}&=k(H)p_{\mathrm{raw}},\\
+ \operatorname{Form}&=k(H)f_{\mathrm{raw}},\\
+ \operatorname{Floor}&=k(H)l_{\mathrm{raw}},\\
+ \operatorname{Mastery}&=k(H)\left(0.30p_{\mathrm{raw}}
+                  +0.50f_{\mathrm{raw}}+0.20l_{\mathrm{raw}}\right).
+\end{aligned}
+\]
+Scaling by the same nonnegative factor preserves the band ordering and averages, so this exactly reproduces the existing formulas, including the zero-benchmark case and small-sample ceilings. Clamping during transient mismatched states does not imply equality to recomputing every individually clamped observation; the exact equivalence is for a coherent state.
+
+A benchmark-only change changes all derived scores at reads, but does not fan out dirty subject statistics. A subject's statistics become dirty only when its underlying evidence or projection semantics change. Remove the statistics row when no observations remain. Normalized Peak, Form, Floor, and Mastery are not persisted subject payload.
 
 \subsection{Renown}
 Player kill facts project away the metric:
@@ -289,9 +330,9 @@ Their identities are
   \qquad
   \operatorname{id}(K_G)=(R,B,G).
 \]
-Each fact retains its kill timestamp as payload for the eventual scope-selection contract.
+Kill facts are metric-independent canonical evidence, maintained independently of scoring statistics. The displayed projection removes the metric; it must not require a normalized result or award value to exist. DPS and HPS from the same kill cannot create two facts. Retained timestamps are source payload, not window boundaries.
 
-Let $\rho(B)\ge0$ be the effective configured Renown award for boss $B$, including its instance-variant override, and let $E(B)$ mean that configuration enables the boss for Renown. Set membership does not determine $E$. Disabled bosses contribute nothing without erasing parsed history. Renown's temporal selector $W$ remains separately unresolved. Then
+Let $\rho(B)\ge0$ be the effective configured Renown award for boss $B$, including its instance-variant override, and let $E(B)$ mean that configuration enables the boss for Renown. Set membership does not determine $E$. Disabled bosses contribute nothing without erasing parsed history. Renown is all-time, with $W=\mathrm{true}$. Then
 \[
   \operatorname{Renown}_P(P,W)
   =\sum_{K\in K_P\,:\,K.P=P\land W(K)\land E(K.B)}\rho(K.B),
@@ -301,7 +342,11 @@ Let $\rho(B)\ge0$ be the effective configured Renown award for boss $B$, includi
   =\sum_{K\in K_G\,:\,K.G=G\land W(K)\land E(K.B)}\rho(K.B).
 \]
 
-Renown is a linear sum of canonical boss-kill awards. It does not depend on metric value, cohort benchmark, Peak, Mastery, or clear completion.
+Materialize a canonical eligible kill count $N(q,B)$ for each realm-qualified subject $q$ and exact boss plus instance variant $B$, including difficulty and raid size. The equivalent current Renown read is
+\[
+ \operatorname{Renown}(q)=\sum_{B:E(B)}N(q,B)\rho(B).
+\]
+Counts are independent of metric and award values. A zero award does not erase a kill count; a changed award changes current points without rebuilding counts. Current eligibility determines which counts contribute. There are no frozen points in the summary. Source retraction removes the corresponding fact and updates the count; independent canonical kills each count once. Renown does not depend on metric value, cohort benchmark, Peak, Mastery, or clear completion.
 
 \section{Instance aggregation}
 For a selected named encounter set, let $\mathcal{B}(i,d,z)$ be its effective, explicitly listed bosses for instance $i$, difficulty $d$, and player size $z$. The set selection is implicit in the formulas below. Excluded bosses are removed from this set and its denominator, not zero-filled. Missing evidence for an included boss is zero-filled. Never divide by zero for an empty effective set; its API presentation remains a later read-contract decision.
@@ -337,7 +382,7 @@ Instance Peak and Mastery are equal-weight averages over every eligible boss:
 \]
 
 \section{Deferred portfolios}
-Career and cross-instance portfolios are out of current scope. Do not create portfolio schema, seed memberships or weights, or implement portfolio read aggregation. Realm/season isolation and temporal boundaries for those deferred aggregates remain unresolved; they do not restrict current boss/clear cohorts.
+Career and cross-instance portfolios are out of current scope. Do not create portfolio schema, seed memberships or weights, or implement portfolio read aggregation. No season schema, finalized-season evidence retention, or rolling window is approved as part of this work.
 
 \section{Logical invariants}
 \begin{enumerate}
@@ -355,8 +400,8 @@ Career and cross-instance portfolios are out of current scope. Do not create por
   \item $A_{\mathrm{ignored}}$, $A_{\mathrm{floor}}$, $A_{\mathrm{form}}$, and $A_{\mathrm{peak}}$ are disjoint and partition $A$.
   \item Empty Mastery bands have average zero.
   \item Peak and Mastery are in $[0,100]$ for valid nonnegative player metrics and positive guild durations.
-  \item A benchmark change dirties every materialized boss or clear subject result in that cohort.
-  \item Boss and clear Peak are derived from a subject's raw peak metric and the current cohort benchmark; normalized Peak is not stored per subject.
+  \item A benchmark-only change does not dirty subject sufficient statistics; all normalized scores use the shared current benchmark at reads.
+  \item Boss and clear Peak, Form, Floor, and Mastery are derived from count and raw metric or reciprocal-duration band statistics with the current cohort benchmark; normalized scores are not stored per subject.
   \item Missing selected bosses contribute zero to group Peak and Mastery.
   \item Every selected boss has equal weight.
   \item Instance encounter-set and arbitrary boss-group Peak and Mastery are calculated at read time. Aggregate result rows are not materialized in the initial physical design.
@@ -364,7 +409,7 @@ Career and cross-instance portfolios are out of current scope. Do not create por
   \item Renown is independent of metric value, Peak, Mastery, and clear completion.
   \item A run belongs to exactly one non-null rating tenant. Its observations, Renown facts, cohorts, and results are projected only within that tenant.
   \item Matching global configuration layers compose by required-flavor subset and strict-superset precedence. Conflicting incomparable matches are rejected; rating data is never shared or copied between tenants.
-  \item Boss/clear benchmarks are tenant scoped; subjects additionally carry realm identity. Season policy belongs only to deferred career/portfolio work. DPS and HPS remain separate permitted observations.
+  \item Boss/clear benchmarks are tenant scoped; subjects additionally carry realm identity. Every current scope is all-time, with difficulty and raid size kept separate. DPS and HPS remain separate permitted observations.
 \end{enumerate}
 
 \section{Database schema}
@@ -380,9 +425,9 @@ The owning \field{tenant\_\allowbreak id} must be non-null. If the source server
 
 Every proposed rating-data relation is tenant scoped and every rating-data primary key contains \field{tenant\_\allowbreak id}. Global flavor sets and rulesets are shared configuration, not rating data. Source rows retain their existing global identities. All source-to-projection operations require exact equality between the requested tenant and the run's derived owning tenant. Tenant relations use forced RLS with exact equality to \field{app.\allowbreak tenant\_\allowbreak id}; no fallback tenant is substituted when the setting is absent. The administrative bypass may perform maintenance across tenants, but it may not change a row's derived ownership or copy evidence between tenants.
 
-Realm identity remains \field{wow\_\allowbreak server\_\allowbreak realms.\allowbreak id}; guild identity is the pair $(\field{realm\_\allowbreak id},\field{guild\_\allowbreak id})$ even though \field{guilds.\allowbreak id} is globally unique. Detailed rating DDL belongs to later implementation PRs, not the current four-PR configuration delivery.
+Realm identity remains \field{wow\_\allowbreak server\_\allowbreak realms.\allowbreak id}; guild identity is the pair $(\field{realm\_\allowbreak id},\field{guild\_\allowbreak id})$ even though \field{guilds.\allowbreak id} is globally unique. The next schema PR supplies the physical tables, constraints, indexes, and tests. This document specifies semantics without assigning new physical table names.
 
-Stable-key replacement remains the intended maintenance approach. Boss/clear observation, benchmark, subject, and dirty keys retain the tenant-scoped cohort contract, with realm in subject identity. They do not require season columns or a season gate. Layered provenance representation and its repair triggers still need review before result provenance is implemented.
+Stable-key replacement applies to raw statistics and kill counts. Boss/clear observation, benchmark, subject, and dirty keys retain the tenant-scoped cohort contract, with realm in subject identity and both difficulty and raid size in the encounter identity. Raw projection compatibility must not be conflated with composed current read policy. Benchmark or award changes alone do not invalidate raw statistics or counts; this document adds no new provenance representation.
 
 Supporting constraints make tuple and tenant identity enforceable without redesigning source facts:
 \begin{verbatim}
@@ -435,77 +480,23 @@ Boss, instance, set, and member overrides support explicit exclusion. An absent 
 
 Renown has boss defaults and instance-variant overrides. Explicit zero is a real award override, distinct from absence. Awards are independent of encounter-set membership. Vanilla awards are not automatically zeroed for TBC or Wrath. Seed values must be explicit reviewed data from historical calibration. Known values in migration 313 may be an authoring reference, but deployment must not execute or read old migrations or retired rating tables. Do not invent new awards or difficulty variants.
 
-\subsection{Later rating schema and provenance}
-PR 1624 supplies structural catalog and vocabulary only. A following PR implements subset resolution and overrides with tests; a separate following PR supplies reviewed initial seeds and parity fixtures. Physical catalog naming and constraints are reviewed in those PRs, without coupling them to observation keys.
+\subsection{Next PR: schema only}
+The next PR stores canonical raw player and guild evidence, independent metric-free kill facts, shared cohort benchmarks, count and raw Peak/Form/Floor sufficient statistics, per-subject exact-boss/variant kill counts, and coalesced dirty work. Physical table names are chosen by the schema implementation, not guessed here.
 
-Later observation, benchmark, subject, and queue implementation is not blocked by realm/season policy. Player boss cohorts use tenant, boss, class, specialization, sub-specialization, and metric; guild boss and clear cohorts use tenant and the respective boss or clear. Subject keys add the realm-qualified player or guild. Dirty benchmark and subject keys mirror those identities. Renown scope remains a separate decision, not a gate on boss/clear work.
+Constraints and indexes must support canonical deduplication, exact tenant ownership, realm-qualified subjects, separate difficulty and raid size, valid nonnegative finite player values and positive durations, and efficient source retraction and scope refresh. Summary counts and raw values must have suitable validity constraints. No normalized score or frozen Renown points are required. Empty subject evidence removes its statistic row; count summaries must stop contributing when their facts disappear.
 
-Results should retain computation time and effective-configuration provenance, but layered resolution does not imply one ruleset ID/revision. How contributing layers and revisions are represented, and how changes identify affected scopes for repair, is unresolved. Rolling maintenance and continued reads are intended; this does not settle provenance encoding or allow excluded bosses into current selections.
+The PR includes schema and constraint tests only, not worker functions, serving queries, historical scans/backfill, scheduler wiring, or UI cutover. Later algorithm tests must establish numerical equivalence of raw and reciprocal sufficient statistics with the existing bands, including empty bands and the one/two/three-perfect-observation ceilings.
 
-\subsection{Later processing contract}
-The following processing behavior describes the later rating pipeline, outside the current four configuration PRs. Dirty keys must exactly mirror the tenant-scoped values they refresh, including realm-qualified subject identity where applicable. Source deletion must remain processable without a foreign key from dirty-run work to the deleted source. No season contract is required to implement this pipeline.
+\subsection{Dirty projection and result-scope contract}
+Source mutations enqueue canonical projection work. Projection replacement preserves the old scope keys, derives the new evidence, retracts stale observations and kill facts, and dirties the union of old and new affected result scopes. Deletion, invalidation, visibility changes, canonical replacement, and subject or specialization movement all follow this rule. A source deletion marker must survive deletion of its source. No unapproved finalized-season retention exception may keep invalid evidence alive.
 
-Each dirty marker carries a monotonically increasing revision, a dirtied timestamp, and a due timestamp. Upload-driven run dirt uses a sliding 30-minute debounce. Repair, downstream, and configuration dirt is due immediately. Configuration changes require bounded, persisted expansion to affected scopes; the exact layered invalidation design is an open gate.
+Result-scope work refreshes the affected shared benchmark, subject sufficient statistics, or subject/boss/variant count. A changed benchmark alone does not enqueue every subject in its cohort. Award-only changes are read-policy changes and do not enqueue count rebuilds. Evidence changes still dirty their directly affected subjects even when the benchmark is unchanged. Changes that alter evidence eligibility or projection semantics require the appropriate projection/scope refresh; they are not equivalent to a mere benchmark or award-value change.
 
-\subsubsection{Database-resident processing}
-Rating maintenance does not fetch observations, facts, benchmarks, subjects, or result inputs into application code. PostgreSQL functions perform all claiming, derivation, diffing, aggregation, fan-out, replacement, deletion, and acknowledgement with set-based SQL. Application code or an external scheduler only invokes a bounded function and receives optional row counts for observability.
+Dirty markers coalesce repeated requests and carry a monotonically increasing revision, dirtied timestamp, and due timestamp. Upload-driven projection work uses the existing sliding 30-minute debounce. Repair and downstream scope work are due immediately. Later workers claim bounded due pages and acknowledge only the complete key and revision they processed; a newer revision survives a racing refresh. Failed work remains retryable. The schema PR provides storage, constraints, indexes, and tests for this contract, not running workers.
 
-The intended function boundary is one function per work stage, with bounded tenant-local dispatch:
-\begin{verbatim}
-leaderboard_refresh_dirty_runs(tenant_id, batch_size)
-leaderboard_refresh_player_boss_benchmarks(tenant_id, batch_size)
-leaderboard_refresh_guild_boss_benchmarks(tenant_id, batch_size)
-leaderboard_refresh_guild_clear_benchmarks(tenant_id, batch_size)
-leaderboard_refresh_player_boss_subjects(tenant_id, batch_size)
-leaderboard_refresh_guild_boss_subjects(tenant_id, batch_size)
-leaderboard_refresh_guild_clear_subjects(tenant_id, batch_size)
-leaderboard_refresh_player_renown(tenant_id, batch_size)
-leaderboard_refresh_guild_renown(tenant_id, batch_size)
-leaderboard_expand_dirty_tenant(tenant_id, batch_size)
-\end{verbatim}
-Each call processes at most one bounded page in one transaction. No function drains an unbounded backlog in one transaction. A scheduler may repeatedly invoke the functions until they report no due work or until its time budget expires.
+\subsection{Later serving and maintenance}
+PostgreSQL will derive raw evidence projections and sufficient statistics with bounded set-based operations. Go owns orchestration and endpoints; parser mechanics remain in Go. Serving computes normalized scores from current shared benchmarks, and Renown from kill counts and current effective awards. Configuration layers select the current read policy; raw projection algorithm compatibility is a separate concern, with no new provenance scheme prescribed here.
 
-PL/pgSQL is used only to sequence a small number of set-based statements and return counters. It does not loop over dirty rows. The substantive work remains \field{INSERT\ldots SELECT}, \field{DELETE\ldots USING}, grouped aggregates, window functions, and conflict-handled upserts. Stage-specific functions are preferred over one giant data-modifying query because old and new projection keys must be preserved across several statements and each stage needs an independent bounded transaction.
-
-\subsubsection{Run projection refresh}
-A source mutation only needs to upsert \field{leaderboard\_\allowbreak dirty\_\allowbreak runs}. The run refresh function claims a page, copies the old projected benchmark and subject keys into transaction-local working relations, derives the new observation and Renown projections directly from authoritative source tables, replaces the claimed runs' projections, and inserts the union of old and new keys into the downstream dirty relations.
-
-This handles deletion, canonical representative changes, and evidence moving between cohorts. The run function uses set operations for the whole claimed page; it does not execute one source query per run.
-
-\subsubsection{Benchmark and subject refresh}
-A benchmark refresh function recalculates shared benchmarks from current observations with grouped \field{MAX} for player metrics or grouped \field{MIN} for guild durations. If a benchmark changes, one \field{INSERT\ldots SELECT DISTINCT} marks every current subject in that cohort dirty. The changed benchmark is immediately used by Peak reads.
-
-A source change also dirties its directly affected subjects even when the benchmark does not move. Subject refresh functions join the claimed subject keys to observations and current benchmarks, normalize observations, assign ordered bands with SQL window functions, aggregate Peak, Form, Floor, and Mastery, upsert surviving results, and delete results with no remaining observations. There are no dependent instance encounter-set result rows because all selected boss-group aggregates are derived at read time.
-
-Renown refresh functions join claimed subjects to current Renown facts and effective configured awards, aggregate totals, upsert surviving results, and delete subjects with no remaining facts.
-
-\subsubsection{Bounded claiming and acknowledgement}
-Each dirty relation has a due-work index beginning with
-\begin{verbatim}
-(tenant_id, process_after, <deterministic logical-key suffix>)
-\end{verbatim}
-Each function claims one tenant-local page ordered by \field{process\_\allowbreak after} and the logical key using \field{FOR UPDATE SKIP LOCKED}. The claim, source reads, writes, fan-out, and acknowledgement occur in the same transaction.
-
-A function acknowledges a row by deleting the complete logical key only when \field{revision} still equals the claimed revision. If another mutation increments the revision during processing, the conditional delete affects no row and the newer work remains queued. Failed transactions leave all claimed work queued.
-
-Initial page sizes are deliberately small: approximately 25 dirty runs, 16 benchmarks, 25 subjects, and 25--100 Renown subjects per function call. They may be increased only after measuring transaction duration, WAL, lock waits, and query plans.
-
-The initial upload policy uses the dirty-run-only 30-minute sliding debounce so uploads of the same underlying run can settle and canonical duplicate selection can converge. Downstream work and ruleset or flavor changes are due immediately. An hourly scheduler invokes the database functions for tenants with at least one due row; future \field{process\_\allowbreak after} rows do not make a tenant runnable. With that schedule, normal upload refresh latency is approximately 30 to 90 minutes.
-
-Thousands of queued rows do not require a table scan. Claim cost is bounded by the due-work index and page size. Total recomputation cost remains proportional to the evidence and subjects actually affected. A moved benchmark may legitimately fan out to every subject in its cohort; that fan-out is inserted set-wise and consumed in bounded database-function calls.
-
-\subsection{Consequences and open physical decisions}
-Direct stable-key replacement has the following consequences:
-\begin{enumerate}
-  \item A policy refresh is intentionally eventually consistent across result tables and stable keys. Readers may observe values computed under different effective-configuration revisions while rolling maintenance progresses. Serving queries do not inspect revisions or require a synchronized multi-table refresh.
-  \item Recomputing one stable key overwrites its prior computed payload. No append-only result audit ledger is required.
-  \item A configuration revision should not create a second serving row. Existing rows remain valid and readable until maintenance overwrites them. Serving reads do not compare revisions.
-  \item Dirty state is operational work state, not history. Source changes enqueue affected run, benchmark, subject, and Renown keys. Effective-flavor and ruleset changes enqueue the affected tenant.
-  \item Dirty markers coalesce repeated invalidations. A PostgreSQL refresh function acknowledges a marker only after its projection, fan-out, and result writes succeed and only if no newer revision arrived.
-  \item Boss/clear results use all eligible observations in tenant-scoped cohorts. Realm/season policy remains deferred with career/cross-instance portfolios and does not block these physical keys.
-  \item The replacement projections and results require a fresh derivation from preserved source relations before frontend cutover. Prior ratings are already removed. Cutover needs a separately reviewed disable/revert plan, not a promise to restore legacy rating reads.
-\end{enumerate}
-
-The application service owns scheduling, query endpoints, and observability. PostgreSQL owns rating derivation and dirty maintenance. Layered provenance and invalidation require design review; season policy is only a deferred career/portfolio concern. Separately, exact SQL function bodies, batch tuning, and query plans are validated during development.
+Current exact encounter sets still determine boss aggregation and exclusions. Missing included bosses contribute zero, while excluded bosses leave the denominator. All reads remain all-time. Career/cross-instance aggregation, rolling180day, seasons, and finalized-season retention remain out of scope. Historical backfill, performance measurements, worker implementation, serving, and UI cutover require later PRs.
 
 \end{document}
