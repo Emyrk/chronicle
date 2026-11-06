@@ -9,6 +9,9 @@ that model into observable requirements. The [implementation
 plan](implementation-plan.md) defines the intended Graphite stack and validation
 gates.
 
+The [table relationships](table-relationships.md) reference maps migration 344
+tables to evidence, summary, and repair responsibilities.
+
 The replacement is a clean implementation. Prior ratings are removed; merged PR
 1625 preserves parse scoring. Retired rating tables are neither migration or
 seed inputs nor a rollback target. Existing UI behavior stays unchanged until a
