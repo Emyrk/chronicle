@@ -2272,7 +2272,8 @@ function EncounterDetail({
       </>)}
 
       {/* Preset layout tabs */}
-      <div className={cn("flex shrink-0 gap-1 overflow-x-auto pb-1 pt-1 styled-scrollbar", focused ? "mb-2" : "mb-3")}>
+      <div className={cn("@container flex shrink-0 items-start gap-1 pb-1 pt-1", focused ? "mb-2" : "mb-3")}>
+        <div className={cn("flex min-w-0 flex-1 gap-1", isMobile ? "overflow-x-auto styled-scrollbar" : "flex-wrap")}>
         {focused && onShowSidebar && (
           <button
             type="button"
@@ -2301,6 +2302,7 @@ function EncounterDetail({
             {preset.label}
           </button>
         ))}
+        </div>
         {pageType && <PageModeIndicator presets={availablePresetLayouts} onPresetChange={onPresetChange} />}
         {!isMobile && (
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -2313,7 +2315,7 @@ function EncounterDetail({
               className="flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <Pencil className="h-4 w-4" />
-              Edit layout
+              <span className="hidden @min-[70rem]:inline">Edit layout</span>
             </button>
           )}
           <button
@@ -2328,7 +2330,7 @@ function EncounterDetail({
             )}
           >
             {focused ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-            {focused ? "Exit focus" : "Focus"}
+            <span className="hidden @min-[70rem]:inline">{focused ? "Exit focus" : "Focus"}</span>
           </button>
           </div>
         )}

@@ -281,7 +281,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
   },
   {
     id: "player_timeline",
-    label: "Player Timeline",
+    label: "Timeline",
     kind: "panels",
     seamless: true,
     layoutItems: [

@@ -58,7 +58,7 @@ describe("preset layout availability", () => {
     const labels = getAvailablePresetLayouts([]).map((preset) => preset.label);
 
     expect(labels).not.toContain("Interrupts");
-    expect(labels).toContain("Player Timeline");
+    expect(labels).toContain("Timeline");
     expect(labels).toContain("Summary");
   });
 
