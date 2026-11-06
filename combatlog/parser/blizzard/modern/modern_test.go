@@ -261,6 +261,20 @@ func TestTransformV22Damage(t *testing.T) {
 	assert.Contains(t, converted, `686,"Shadow Bolt",0x20,15,-1,32,0,0,0,nil,nil,nil`)
 }
 
+func TestTransformV22PreservesForeverFirstAndLastName(t *testing.T) {
+	t.Parallel()
+
+	r := newTransformReader(strings.NewReader(""))
+	_, err := r.transform(`11/4/2026 22:11:30.732-6  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,0,BUILD_VERSION,1.60.1,PROJECT_ID,18`)
+	require.NoError(t, err)
+
+	line := `11/4/2026 22:11:32.683-6  SPELL_CAST_START,Player-7055-00C190F4,"Yah-Shi-Roleplay-US",0x518,0x80000000,0000000000000000,nil,0x80000000,0x80000000,403,"Lightning Bolt",0x8`
+	converted, err := r.transform(line)
+	require.NoError(t, err)
+	assert.Contains(t, converted, `"Yah Shi"`)
+	assert.NotContains(t, converted, `"Yah"`)
+}
+
 func TestTransformV22UnitDissipates(t *testing.T) {
 	t.Parallel()
 
@@ -510,6 +524,23 @@ func TestDominantEngagedRealmV22TrailingRegionSeparator(t *testing.T) {
 		`9/20/2026 15:02:08.135-5  SPELL_DAMAGE,Player-4618-00C7EC79,"Tester-ClassicBetaPvE-",0x518,0x80000000,Creature-0-6783-0-16021-1512-0000B03B52,"Duskbat",0xa28,0x80000000,686,"Shadow Bolt",0x20,15,-1,32,0,0,0,nil,nil,nil`,
 	}, "\n")
 	assert.Equal(t, "ClassicBetaPvE", DominantEngagedRealm([]byte(log)))
+}
+
+func TestStripRealmPreservesForeverFirstAndLastNames(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		want string
+	}{
+		{name: "Yah-Shi-Roleplay-US", want: "Yah Shi"},
+		{name: "Blackgoku-Ssj-Roleplay PvP-US", want: "Blackgoku Ssj"},
+		{name: "Tester-ClassicBetaPvE-", want: "Tester"},
+		{name: "Brother-ClassicBetaPvE2-", want: "Brother"},
+		{name: "Bootie-ClassicBetaPvE", want: "Bootie"},
+	} {
+		assert.Equal(t, tc.want, stripRealm(tc.name))
+	}
 }
 
 func TestParseCombatantMetadata(t *testing.T) {
