@@ -4315,6 +4315,8 @@ CREATE INDEX leaderboard_guild_renown_facts_run_idx ON leaderboard_guild_renown_
 
 CREATE INDEX leaderboard_guild_renown_facts_scope_idx ON leaderboard_guild_renown_facts USING btree (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id);
 
+CREATE INDEX leaderboard_player_boss_read_idx ON leaderboard_player_boss_subjects USING btree (tenant_id, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, encounter_name) INCLUDE (raw_peak, raw_form, raw_floor, observation_count, computed_at);
+
 CREATE INDEX leaderboard_player_observations_run_idx ON leaderboard_player_observations USING btree (tenant_id, run_id);
 
 CREATE INDEX leaderboard_player_observations_scope_idx ON leaderboard_player_observations USING btree (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid);

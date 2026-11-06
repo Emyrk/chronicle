@@ -779,6 +779,11 @@ type sqlcQuerier interface {
 	ListLeaderboardLayers(ctx context.Context) ([]LeaderboardLayer, error)
 	ListLeaderboardPlayerBossSubjects(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardPlayerBossSubject, error)
 	ListLeaderboardPlayerObservations(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardPlayerObservation, error)
+	// Read current benchmarks and current resolved awards, never replay observations.
+	// Boss arrays are enabled exact identities resolved by the API. The fixed
+	// denominator includes missing bosses; filtering never shrinks it per subject.
+	ListLeaderboardV2(ctx context.Context, arg ListLeaderboardV2Params) ([]ListLeaderboardV2Row, error)
+	ListLeaderboardV2Cohorts(ctx context.Context, arg ListLeaderboardV2CohortsParams) ([]ListLeaderboardV2CohortsRow, error)
 	ListLogFilePartsForDeletion(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
 	ListLogGroupArtifactsForParse(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)

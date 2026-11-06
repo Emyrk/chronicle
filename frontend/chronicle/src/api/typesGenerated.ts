@@ -2,6 +2,40 @@
 
 import type { GUID } from "@/lib/guid/guid";
 
+// From chroniclesdk/leaderboard_v2.go
+export interface LeaderboardV2Cohort {
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly metric: string;
+}
+
+// From chroniclesdk/leaderboard_v2.go
+export interface LeaderboardV2Entry {
+    readonly realm_id: string;
+    readonly subject_id: string;
+    readonly name: string;
+    readonly score: number;
+    readonly peak: number;
+    readonly mastery: number;
+    readonly renown: number;
+    readonly sample_count: number;
+    readonly computed_at: string;
+}
+
+// From chroniclesdk/leaderboard_v2.go
+/**
+ * LeaderboardV2Response is a preview read over all-time raw summaries, not a
+ * claim that evidence ingestion or refresh workers are installed.
+ */
+export interface LeaderboardV2Response {
+    readonly status: string;
+    readonly message: string;
+    readonly entries: readonly LeaderboardV2Entry[];
+    readonly next_cursor?: string;
+    readonly included_bosses: readonly string[];
+}
+
 // From chroniclesdk/leaderboard_configuration.go
 /**
  * LeaderboardConfiguration is a read-only view of shared policy for the request tenant.
