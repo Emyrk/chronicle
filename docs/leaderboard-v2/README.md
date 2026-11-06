@@ -81,7 +81,12 @@ later.
 
 All rating scopes, including Renown, are all-time. There are no rolling180day or
 season dimensions, expiry jobs, or finalized-season retention exceptions. Source
-deletion/invalidation retracts evidence and dirties old/new affected scopes.
+deletion enqueues coarse D1 repair and leaves evidence intact until D1
+atomically marks D2 for old/new scopes and removes the stale projection. Normal
+ingestion writes canonical evidence and enqueues exact-scope D2 atomically,
+without a mandatory D1 upload path or debounce. No integrity triggers, source
+cascades into evidence, or evidence FKs that block source deletion are used.
+Writers and reconcilers enforce tenant/source/canonical correctness.
 Career/cross-instance portfolios remain out of scope.
 
 Boss/clear cohorts separate difficulty and raid size within one tenant; realm
