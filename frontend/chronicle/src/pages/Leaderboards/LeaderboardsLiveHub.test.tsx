@@ -61,6 +61,16 @@ describe("live Storybook Hub", () => {
     vi.mocked(useSiteConfig).mockReturnValue({ data: { root_tenant_ratings_disabled: false }, isPending: false, isError: false } as ReturnType<typeof useSiteConfig>)
     setSummary(summary)
   })
+  it("keeps the hub frame with an error card when the first summary load fails", () => {
+    vi.mocked(useHubSummary).mockReturnValue({ data: undefined, isPending: false, isError: true, isFetching: false, refetch: vi.fn() } as unknown as ReturnType<typeof useHubSummary>)
+    for (const url of ["/leaderboard-v2", "/leaderboard-v2/ratings?instance=Molten+Core"]) {
+      const html = hub(url)
+      expect(html).toContain("Could not load leaderboards")
+      expect(html).toContain("Try again")
+      expect(html).toContain("Ratings")
+      expect(html).not.toContain("Could not load leaderboard summary.")
+    }
+  })
   it("shows the legacy root message and skips rating queries when root ratings are disabled", () => {
     vi.mocked(useSiteConfig).mockReturnValue({ data: { root_tenant_ratings_disabled: true }, isPending: false, isError: false } as ReturnType<typeof useSiteConfig>)
     const html = hub("/leaderboard-v2/ratings")

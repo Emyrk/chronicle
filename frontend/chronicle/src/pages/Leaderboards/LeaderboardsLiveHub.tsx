@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import { useQuery } from "@tanstack/react-query"
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom"
@@ -7,7 +7,7 @@ import { useRankingsKillTimesByBoss, useRankingsLeaderboard, useRankingsStats, u
 import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
 import { cohortLabel } from "./Hub/cohortLabel"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
-import { LeaderboardsHubApp } from "./Hub/HubLanding"
+import { HubLoadError, LeaderboardsHubApp } from "./Hub/HubLanding"
 import { LeaderboardHub, Overview, SkeletonRows, type HubLiveTabContext } from "./Hub/LeaderboardHub"
 import { LiveHubOverview } from "./Hub/LiveHubOverview"
 import { LiveHubRatings } from "./Hub/LiveHubRatings"
@@ -64,19 +64,21 @@ export function LeaderboardsLiveHub() {
   if (params.has("tab")) return <Navigate to={hubPath(hubTab(params.get("tab")) ?? tab, params)} replace />
   if (pathTab !== undefined && (hubTab(pathTab) === undefined || pathTab === "overview")) return <Navigate to={hubPath("overview", params)} replace />
   if (rootRatingsDisabled) return <p className="p-8 text-center text-muted-foreground">Visit a specific server to see ratings</p>
-  // Only the first load (nothing on screen yet) replaces the page.
-  if (!summary.data && summary.isError) return <p role="alert" className="mx-auto max-w-[1920px] p-8 text-muted-foreground">Could not load leaderboard summary.</p>
+  // Only the first load (nothing on screen yet) fails the page: the hub keeps its frame, empty,
+  // with the error where the boards would be.
+  const failed = !summary.data && summary.isError
+  const loadError = failed ? <HubLoadError onRetry={() => void summary.refetch()} retrying={summary.isFetching} /> : undefined
   // Until then the page renders its frame with skeleton rows. A new request (another instance,
   // cohort, or realm) keeps the last summary as placeholder data; that is loading too, not this
   // page's (empty) boards.
-  const loading = !summary.data
+  const loading = !summary.data && !failed
   const stale = !loading && summary.isPlaceholderData
   return <div className="flex min-w-0 gap-6">
     <div className="min-w-0 flex-1">
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={(name) => choose("instance", name)}
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
         realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data?.instances ?? []} landingPreviews={summary.data?.landing_previews}
-        loading={loading || stale}
+        loading={loading || stale} error={loadError}
         onOpenCohort={(name, cohort) => {
           // A card is one difficulty/size: open the instance on it.
           const next = hubParams(params, "instance", name)
@@ -84,7 +86,7 @@ export function LeaderboardsLiveHub() {
           next.set("size", String(cohort.maxPlayers))
           setParams(next)
         }}
-        renderInstance={(name) => loading ? <LoadingInstanceHub instanceName={name} tab={tab} onTab={chooseTab} realm={realm} onInstance={() => choose("instance")} /> : <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} stale={stale} realm={realm}
+        renderInstance={(name) => !summary.data ? <LoadingInstanceHub error={loadError} instanceName={name} tab={tab} onTab={chooseTab} realm={realm} onInstance={() => choose("instance")} /> : <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} stale={stale} realm={realm}
           realmIDs={selectedRealmIDs} encounters={encounters} tab={tab}
           onInstance={(next) => choose("instance", next)} onTab={chooseTab}
           onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
@@ -96,15 +98,16 @@ export function LeaderboardsLiveHub() {
   </div>
 }
 
-/** The instance page's frame while its summary loads: every summary card shows its skeleton rows. */
-function LoadingInstanceHub({ instanceName, tab, onTab, realm, onInstance }: {
+/** The instance page's frame while its summary loads: every summary card shows its skeleton rows.
+ * With an error (the first load failed) the frame stays and the content is that error. */
+function LoadingInstanceHub({ instanceName, tab, onTab, realm, onInstance, error }: {
   instanceName: string; tab: ReturnType<typeof v2Selection>["tab"]; onTab: (tab: ReturnType<typeof v2Selection>["tab"]) => void
-  realm: string; onInstance: () => void
+  realm: string; onInstance: () => void; error?: ReactNode
 }) {
   const live = {
     bosses: [], realms: [realm], specsFor: () => [], subSpecsFor: () => [],
-    renderOverview: (context: HubLiveTabContext) => <LoadingContent context={context} overview />,
-    renderTab: (context: HubLiveTabContext) => <LoadingContent context={context} />,
+    renderOverview: (context: HubLiveTabContext) => error ?? <LoadingContent context={context} overview />,
+    renderTab: (context: HubLiveTabContext) => error ?? <LoadingContent context={context} />,
   }
   return <LeaderboardHub live={live} instanceName={instanceName} onAllInstances={onInstance} tab={tab} onTab={onTab} realm={realm} onRealm={() => {}} />
 }

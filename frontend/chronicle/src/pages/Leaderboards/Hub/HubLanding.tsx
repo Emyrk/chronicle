@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react"
 import type { HubLandingPreview, RankingsInstanceSummary } from "@/api/typesGenerated"
-import { Skull, Swords, Timer } from "lucide-react"
+import { AlertTriangle, RotateCw, Skull, Swords, Timer } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { InstanceCard } from "@/pages/Rankings/InstanceCard"
@@ -44,6 +44,8 @@ export interface LeaderboardsHubAppProps extends Omit<LeaderboardHubProps, "inst
   onOpenCohort?: (instance: string, cohort: { difficulty: string; maxPlayers: number }) => void
   /** The live summary is still loading: the grid shows skeleton cards. */
   loading?: boolean
+  /** The live summary failed with nothing to show: the grid shows an empty frame with this error. */
+  error?: ReactNode
 }
 
 export function LeaderboardsHubApp({
@@ -61,6 +63,7 @@ export function LeaderboardsHubApp({
   renderInstance,
   onOpenCohort,
   loading,
+  error,
   ...hub
 }: LeaderboardsHubAppProps) {
   const live = instances !== undefined
@@ -129,6 +132,7 @@ export function LeaderboardsHubApp({
           instances={instances}
           landingPreviews={landingPreviews}
           loading={loading}
+          error={error}
         />
       )}
     </div>
@@ -141,12 +145,14 @@ function HubLanding({
   instances,
   landingPreviews,
   loading,
+  error,
 }: {
   tab: HubTab
   onOpen: (instance: string, cohort?: { difficulty: string; maxPlayers: number }) => void
   instances?: readonly RankingsInstanceSummary[]
   landingPreviews?: readonly HubLandingPreview[]
   loading?: boolean
+  error?: ReactNode
 }) {
   if (tab === "rulesets") {
     // Today's rulesets grid as-is; its cards link to ?instance=<name>, opened in place.
@@ -165,6 +171,14 @@ function HubLanding({
       </div>
     )
   }
+  if (error) return (
+    <div className="mx-auto w-full max-w-[1920px] space-y-6 px-3 py-4 sm:px-4 sm:py-8">
+      <section className="space-y-5">
+        <h2 className="text-lg font-semibold text-muted-foreground">Raids</h2>
+        {error}
+      </section>
+    </div>
+  )
   if (loading) return <LandingSkeleton />
   if (instances !== undefined) {
     // One card per published difficulty/size, so each combination has its own headline.
@@ -244,6 +258,30 @@ function HubLanding({
         {grid(all.filter((i) => i.kind === "dungeon"))}
       </section>
       <p className="px-1 text-xs text-muted-foreground/70">Mock data for design review. Names, guilds, and numbers are generated.</p>
+    </div>
+  )
+}
+
+/** A board that could not load: an empty card with the reason and an optional retry. */
+export function HubLoadError({ title = "Could not load leaderboards", message, onRetry, retrying = false }: {
+  title?: string; message?: string; onRetry?: () => void; retrying?: boolean
+}) {
+  return (
+    <div role="alert" className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed bg-card/60 px-6 py-16 text-center">
+      <span className="flex size-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-400">
+        <AlertTriangle className="size-5" />
+      </span>
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="max-w-md text-sm text-muted-foreground">{message ?? "The leaderboard service did not respond. Rankings may be rebuilding; try again in a moment."}</p>
+      </div>
+      {onRetry && (
+        <button type="button" onClick={onRetry} disabled={retrying}
+          className="mt-1 inline-flex cursor-pointer items-center gap-2 rounded-md border bg-background/60 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-default disabled:opacity-60">
+          <RotateCw className={cn("size-3.5", retrying && "animate-spin")} />
+          {retrying ? "Retrying…" : "Try again"}
+        </button>
+      )}
     </div>
   )
 }
