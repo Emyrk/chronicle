@@ -182,3 +182,17 @@ func TestResolution(t *testing.T) {
 		})
 	}
 }
+
+func TestResolvedSetLabel(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	var found bool
+	for _, row := range f.rows("fixture-base") {
+		if row.Kind == "set" {
+			require.Equal(t, "default", row.SetKey)
+			require.Equal(t, "Default", row.SetName)
+			found = true
+		}
+	}
+	require.True(t, found)
+}

@@ -82,11 +82,14 @@ SELECT layer_key, ARRAY['boss_variant', instance_name, encounter_name, difficult
 )
 SELECT kind::text, instance_name::text, encounter_name::text, difficulty_name::text,
        max_players::smallint, set_key::text, COALESCE(position, 0)::integer AS position, COALESCE(points, 0)::double precision AS points,
-       (points IS NOT NULL)::boolean AS has_points, conflicting_property::text
+       (points IS NOT NULL)::boolean AS has_points, conflicting_property::text,
+       COALESCE((SELECT s.name FROM leaderboard_sets s
+                 WHERE output.kind = 'set' AND s.instance_name = output.instance_name
+                   AND s.set_key = output.set_key), '')::text AS set_name
 FROM output WHERE NOT EXISTS (SELECT 1 FROM conflicts)
 UNION ALL
 -- A conflict returns diagnostics ONLY, never a partially resolved configuration.
 SELECT 'conflict'::text, identity[2]::text, array_to_string(identity, '/')::text,
-       ''::text, 0::smallint, ''::text, 0::integer, 0::double precision, false::boolean, property::text
+       ''::text, 0::smallint, ''::text, 0::integer, 0::double precision, false::boolean, property::text, ''::text
 FROM conflicts
 ORDER BY kind, instance_name, set_key, position, encounter_name, difficulty_name, max_players;
