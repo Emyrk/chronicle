@@ -111,7 +111,7 @@ export function RatingBoards({
 
   return (
     <div className="space-y-5" style={{ "--metric": theme.accent } as CSSProperties} data-metric={view}>
-      {live && <LiveRatingCatchup />}
+      {live && live.catchupStatus !== false && <LiveRatingCatchup />}
       {/* Metric taglines (METRIC_THEMES[*].tagline) are hidden for now to save vertical space; they come back later. */}
       {/* The top: the board, or (opened, searched, or a spec, which has no smaller boards) the full table. */}
       {pending?.status === "error" ? (

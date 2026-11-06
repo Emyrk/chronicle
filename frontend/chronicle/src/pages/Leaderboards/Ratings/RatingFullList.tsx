@@ -88,7 +88,7 @@ export function RatingFullList({
     retry: false,
   })
   const state = live?.loadPage
-    ? published.isError ? { status: "error" as const, error: "Published ratings unavailable." }
+    ? published.isError ? { status: "error" as const, error: published.error?.message || "Published ratings unavailable." }
       : published.data ? { status: "ready" as const, data: published.data } : { status: "loading" as const }
     : live?.page?.(selection)
   const livePage = state?.status === "ready" ? state.data : undefined
@@ -205,7 +205,7 @@ export function RatingFullList({
             {visible.map(({ rank, entry, scores, peakComponents, peakRun: liveRun }) => (
               <tr key={entry.id} className="border-b border-white/5 transition-colors last:border-b-0 hover:bg-white/[.025]">
                 <td className="px-4 py-2 sm:px-5">
-                  <RankMark rank={rank} size="sm" />
+                  {live?.ranksKnown !== false && <RankMark rank={rank} size="sm" />}
                 </td>
                 <td className="px-2 py-2 pr-8 whitespace-nowrap">
                   <div className="flex min-w-0 items-center gap-2.5">
@@ -282,7 +282,7 @@ export function RatingFullList({
 
       <div className="flex items-center justify-between gap-3 border-t px-4 py-2.5 text-xs text-muted-foreground sm:px-5">
         <span>
-          {live && (query.trim() || live.ranksKnown === false)
+          {live?.ranksKnown === false ? `${visible.length} results · no global ranks` : live && query.trim()
             ? `${visible.length ? `${current * PAGE_SIZE + 1}–${current * PAGE_SIZE + visible.length}` : "0"} of ${total} matches${visible.length ? ` · global ranks ${visible[0].rank}–${visible[visible.length - 1].rank}` : ""}`
             : `${visible.length === 0 ? "0" : live ? `${visible[0].rank}–${visible[visible.length - 1].rank}` : `${current * PAGE_SIZE + 1}–${Math.min((current + 1) * PAGE_SIZE, filtered.length)}`} of ${live && livePage?.total === undefined ? "published ratings" : total}`}
         </span>

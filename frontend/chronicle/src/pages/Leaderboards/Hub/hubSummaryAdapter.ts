@@ -1,8 +1,10 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
-import type { HubSummary, HubPlayerRatingEntry, HubGuildRatingEntry } from "@/api/typesGenerated"
+import type { HubPlayerRatingEntry, HubGuildRatingEntry } from "@/api/typesGenerated"
 import type { LiveRatingCohort } from "@/pages/Leaderboards/Ratings/liveRatingAdapter"
 
-export type { HubSummary, HubPlayerRatingEntry, HubGuildRatingEntry }
+import { fetchResolvedHubSummary, type ResolvedHubSummary } from "./resolvedHubAdapter"
+export type HubSummary = ResolvedHubSummary
+export type { HubPlayerRatingEntry, HubGuildRatingEntry }
 
 export type HubSummaryRequest = {
   instanceName?: string
@@ -45,12 +47,8 @@ export function hubSummaryURL({ instanceName, tab, encounters = [], window, boss
 export function useHubSummary(request: HubSummaryRequest, enabled = true) {
   const url = hubSummaryURL(request)
   return useQuery({
-    queryKey: ["hub-summary", url],
-    queryFn: async () => {
-      const response = await fetch(url)
-      if (!response.ok) throw new Error(`Hub summary failed (${response.status})`)
-      return response.json() as Promise<HubSummary>
-    },
+    queryKey: ["resolved-hub-summary", url],
+    queryFn: () => fetchResolvedHubSummary(request),
     staleTime: 5 * 60 * 1000,
     enabled,
     retry: false,

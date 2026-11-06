@@ -1,7 +1,8 @@
 # Read-only leaderboard v2 preview
 
-`/leaderboards-v2` is an isolated preview. It does not replace `/leaderboards/*`
-or the older singular `/leaderboard-v2` prototype. Its browser API is
+`/leaderboard-v2` uses the existing Hub layout, rating cards, filters and tables.
+The alternate plural frontend page has been removed; `/leaderboards/*` is unchanged.
+The Hub rating adapter uses the browser API
 `GET /api/v1/leaderboards-v2`, under existing optional-auth and request-tenant
 middleware. Root requests cannot infer a tenant or select arbitrary evidence.
 Use an actual tenant host. Configuration remains available through the inspector.
@@ -30,6 +31,26 @@ Player bands scale from raw summaries at read time. Guild bands use stored mean
 reciprocals, not reciprocals of mean durations. Shared benchmarks do not partition
 by realm. Current Renown awards are supplied as paired exact-boss/award arrays to
 the SQL read, so award-only changes do not require recounting facts.
+
+## Existing Hub mapping
+
+The existing singular Hub is retained: instance grid/banner, sidebar, class/spec
+filters, rating cards, player/guild tables and unrelated parsing/speedrun tabs.
+The plural browser page was removed rather than maintained as a second design.
+The HTTP endpoint remains plural as an internal API contract.
+
+Ratings are labeled all-time instead of offering an unsupported 180-day window.
+Player performance requires one exact cohort using the existing class/spec
+filters; an ambiguous selection gets an explicit prompt, never a silent merge
+or arbitrary default. One boss maps directly; a multi-boss selection must match
+an enabled named encounter set. Unsupported selections get an explicit message.
+Renown ignores class/set filters and uses the selected instance variant, with a
+visible notice. Per-boss cards show performance scores, not invented boss-scoped
+Renown. No retired catch-up worker status is implied.
+
+Existing full-list controls use cursor history. Search starts a new cursor chain;
+no synthetic total or global rank is displayed. Missing throughput, run dates,
+or raw Mastery bands stay absent rather than manufactured from normalized scores.
 
 ## Repair metadata
 
@@ -126,6 +147,7 @@ filters, benchmark-only revaluation, reciprocal guild bands, current awards,
 and mixed projection/algorithm metadata across benchmarks, subjects, and Renown
 counts. Selection tests cover enabled/empty sets,
 explicit-zero variant awards, Vanilla identity, invalid filters, conflicts, and
-cursor scope changes. Frontend tests cover root/conflict/empty/zero states and
-Vanilla's absent selector. The Python tests reject remote, implicit, or redirected
+cursor scope changes. Frontend adapter tests cover root/conflict/empty/zero states, Vanilla identity,
+exact player cohorts, variant-scoped Renown and keyset cursor mapping into the
+existing player/guild table controls. The Python tests reject remote, implicit, or redirected
 database targets.
