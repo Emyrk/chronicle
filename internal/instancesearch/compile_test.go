@@ -83,7 +83,7 @@ func loadExamples(t *testing.T) []example {
 	t.Helper()
 	paths, err := filepath.Glob("testdata/examples/*.json")
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(paths), 10, "keep at least 10 example queries")
+	require.GreaterOrEqual(t, len(paths), 20, "keep at least 20 example queries")
 
 	examples := make([]example, 0, len(paths))
 	for _, path := range paths {
@@ -99,6 +99,9 @@ func loadExamples(t *testing.T) []example {
 	return examples
 }
 
+// goldenTenant is fixed so golden args are stable.
+var goldenTenant = uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
 // TestExamplesGolden pins the SQL each example compiles to. Run with -update
 // after changing the compiler and review the diff.
 func TestExamplesGolden(t *testing.T) {
@@ -107,7 +110,7 @@ func TestExamplesGolden(t *testing.T) {
 	for _, ex := range loadExamples(t) {
 		t.Run(ex.Name, func(t *testing.T) {
 			t.Parallel()
-			compiled, err := instancesearch.Compile(ex.Query, instancesearch.Options{})
+			compiled, err := instancesearch.Compile(ex.Query, instancesearch.Options{TenantID: goldenTenant})
 			require.NoError(t, err)
 
 			args, err := json.MarshalIndent(compiled.Args, "", "  ")
@@ -164,7 +167,7 @@ func TestDescribe(t *testing.T) {
 	require.True(t, role.On)
 	require.True(t, role.Bosses)
 
-	require.Len(t, d.Sorts, 14)
+	require.Len(t, d.Sorts, 15)
 	sorts := map[chroniclesdk.InstanceSearchSortField]chroniclesdk.InstanceSearchSortOption{}
 	for _, sort := range d.Sorts {
 		sorts[sort.Field] = sort
@@ -176,7 +179,10 @@ func TestDescribe(t *testing.T) {
 	require.Equal(t, chroniclesdk.InstanceSearchSortTierHonored, sorts[instancesearch.SortIdleTime].MinimumTier)
 	require.Equal(t, chroniclesdk.InstanceSearchSortTierHonored, sorts[instancesearch.SortBossTime].MinimumTier)
 	require.True(t, sorts[instancesearch.SortKillTime].Boss)
+	require.Equal(t, chroniclesdk.InstanceSearchSortTierRevered, sorts[instancesearch.SortClearParse].MinimumTier)
+	require.True(t, sorts[instancesearch.SortClearParse].ParseScope)
 
+	require.Equal(t, 21, byName["player.parse"].Cost)
 	require.Equal(t, chroniclesdk.InstanceSearchFieldScopeEncounter, byName["encounter.outcome"].Scope)
 }
 
@@ -217,6 +223,24 @@ func TestCompileSort(t *testing.T) {
 		})
 	}
 
+	compiled, err := instancesearch.Compile(instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortClearParse, ParseScope: instancesearch.ParseScopeRealm}}, instancesearch.Options{})
+	require.NoError(t, err)
+	require.Equal(t, instancesearch.Sort{Field: instancesearch.SortClearParse, Direction: instancesearch.SortDesc, ParseScope: instancesearch.ParseScopeRealm}, compiled.Sort)
+	require.Contains(t, compiled.SQL, "clear_realm_display_score")
+	require.Contains(t, compiled.SQL, "ORDER BY m.sort_value DESC NULLS LAST, m.id DESC")
+
+	value := "96"
+	compiled, err = instancesearch.Compile(instancesearch.Query{
+		Sort: &instancesearch.Sort{Field: instancesearch.SortClearParse, Direction: instancesearch.SortDesc, ParseScope: instancesearch.ParseScopeRealm},
+		Cursor: &instancesearch.Cursor{
+			Value: &value,
+			ID:    uuid.New(),
+			Sort:  instancesearch.Sort{Field: instancesearch.SortClearParse, Direction: instancesearch.SortDesc, ParseScope: instancesearch.ParseScopeRealm},
+		},
+	}, instancesearch.Options{})
+	require.NoError(t, err)
+	require.Contains(t, compiled.SQL, "m.sort_value <")
+	require.Contains(t, compiled.SQL, "m.sort_value IS NULL")
 }
 
 func TestCompileSortErrors(t *testing.T) {
@@ -290,8 +314,6 @@ func TestCompileErrors(t *testing.T) {
 		want  string
 	}{
 		{"UnknownField", instancesearch.Query{Where: pred("instance.secret", instancesearch.OpEq, 1)}, `unknown field "instance.secret"`},
-		{"RemovedTimeParse", instancesearch.Query{Where: pred("instance.clear_parse", instancesearch.OpGt, 90)}, `unknown field "instance.clear_parse"`},
-		{"RemovedPlayerParse", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: pred("player.parse", instancesearch.OpGt, 90)}}, `unknown field "player.parse"`},
 		{"PlayerFieldAtTop", instancesearch.Query{Where: pred("player.class", instancesearch.OpEq, "MAGE")}, "must be used inside any_player or count_players"},
 		{"InstanceFieldInPlayer", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: pred("instance.name", instancesearch.OpEq, "x")}}, "must be used inside the top level"},
 		{"NestedQuantifier", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: &instancesearch.Node{AnyEncounter: pred("encounter.boss", instancesearch.OpEq, true)}}}, "only be used at the instance level"},
@@ -307,6 +329,7 @@ func TestCompileErrors(t *testing.T) {
 		{"BetweenOnText", instancesearch.Query{Where: pred("instance.name", instancesearch.OpBetween, []string{"a", "b"})}, "supports =, !=, in, not_in"},
 		{"EachWithoutBosses", instancesearch.Query{Where: &instancesearch.Node{Field: "instance.kill_time_ms", Op: instancesearch.OpLt, Value: json.RawMessage("1"), Match: instancesearch.MatchEach}}, "each requires a list of bosses"},
 		{"BossesNotAllowed", instancesearch.Query{Where: &instancesearch.Node{Field: "instance.name", Op: instancesearch.OpEq, Value: json.RawMessage(`"x"`), Bosses: []string{"Rag"}}}, "does not take bosses"},
+		{"BadParseScope", instancesearch.Query{Where: &instancesearch.Node{Field: "instance.clear_parse", Op: instancesearch.OpGt, Value: json.RawMessage("1"), ParseScope: "world"}}, "must be server, realm or guild"},
 		{"TwoKinds", instancesearch.Query{Where: &instancesearch.Node{Field: "instance.name", Op: instancesearch.OpEq, Value: json.RawMessage(`"x"`), Not: pred("instance.name", instancesearch.OpEq, "y")}}, "exactly one of"},
 		{"EmptyAnd", instancesearch.Query{Where: &instancesearch.Node{And: []instancesearch.Node{}}}, "at least one child"},
 		{"TooDeep", instancesearch.Query{Where: deep}, "nested deeper than"},
@@ -315,6 +338,10 @@ func TestCompileErrors(t *testing.T) {
 		{"ContainsOnNumber", instancesearch.Query{Where: &instancesearch.Node{Field: "instance.max_players", Op: instancesearch.OpContains, Value: json.RawMessage("4")}}, "supports =, !=, <, <=, >, >="},
 		{"ContainsOnEnum", instancesearch.Query{Where: &instancesearch.Node{Field: "instance.category", Op: instancesearch.OpContains, Value: json.RawMessage(`"ra"`)}}, "supports =, !=, in, not_in"},
 		{"ContainsEmpty", instancesearch.Query{Where: &instancesearch.Node{Field: "instance.name", Op: instancesearch.OpContains, Value: json.RawMessage(`"  "`)}}, "must not be empty"},
+		{"BadOn", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: &instancesearch.Node{Field: "player.spec", Op: instancesearch.OpEq, Value: json.RawMessage(`"Holy"`), On: "pulls"}}}, "must be bosses, trash or any"},
+		{"OnNotAllowed", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: &instancesearch.Node{Field: "player.parse", Op: instancesearch.OpGt, Value: json.RawMessage("1"), On: instancesearch.OnTrash}}}, "does not take on"},
+		{"BossesWithTrash", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: &instancesearch.Node{Field: "player.spec", Op: instancesearch.OpEq, Value: json.RawMessage(`"Holy"`), On: instancesearch.OnTrash, Bosses: []string{"Onyxia"}}}}, "only apply with on: bosses"},
+		{"BadRole", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: &instancesearch.Node{Field: "player.role", Op: instancesearch.OpEq, Value: json.RawMessage(`"healer"`)}}}, "must be one of dps, heal, tank"},
 		{"BadCountOp", instancesearch.Query{Where: &instancesearch.Node{CountPlayers: &instancesearch.Count{Op: instancesearch.OpIn, Value: 1}}}, "must be one of =, !=, <, <=, >, >="},
 	}
 	for _, tc := range cases {
@@ -346,10 +373,10 @@ func TestCost(t *testing.T) {
 
 	cheap := cost(`{"field": "instance.name", "op": "=", "value": "Molten Core"}`)
 	heavy := cost(`{"field": "instance.idle_time_ms", "op": "<", "value": 1}`)
-	player := cost(`{"any_player": {"field": "player.class", "op": "=", "value": "PRIEST"}}`)
+	player := cost(`{"any_player": {"field": "player.parse", "op": ">=", "value": 90}}`)
 	require.Equal(t, 3, cheap)
 	require.Equal(t, 21, heavy)
-	require.Equal(t, 7, player)
+	require.Equal(t, 26, player)
 	require.Equal(t, 7, cost(`{"or": [{"field": "instance.name", "op": "=", "value": "a"}, {"field": "instance.name", "op": "=", "value": "b"}]}`))
 	require.Equal(t, 4, cost(`{"not": {"field": "instance.name", "op": "=", "value": "a"}}`))
 	require.Equal(t, 13, cost(`{"count_players": {"where": {"field": "player.class", "op": "=", "value": "MAGE"}, "op": ">", "value": 1}}`))
@@ -377,6 +404,7 @@ func TestCheckAnonymous(t *testing.T) {
 		`{"any_player": {"field": "player.class", "op": "=", "value": "MAGE"}}`,
 		`{"or": [{"field": "instance.name", "op": "=", "value": "a"}, {"field": "instance.name", "op": "=", "value": "b"}]}`,
 		`{"not": {"field": "instance.name", "op": "=", "value": "a"}}`,
+		`{"field": "instance.clear_parse", "op": ">=", "value": 90}`,
 		`{"and": [{"field": "instance.name", "op": "=", "value": "a"}, {"and": [{"field": "instance.name", "op": "=", "value": "b"}]}]}`,
 		`{"and": [` + strings.Repeat(`{"field": "instance.name", "op": "=", "value": "a"},`, 6) + `{"field": "instance.name", "op": "=", "value": "a"}]}`,
 	}

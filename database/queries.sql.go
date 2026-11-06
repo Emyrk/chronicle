@@ -5563,8 +5563,8 @@ WITH participation AS (
     FROM log_instance_players lip
     JOIN log_instances li ON li.id = lip.instance_id
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
-    WHERE lip.unit_guid = $3::wow_guid
-      AND li.realm_id = $4
+    WHERE lip.unit_guid = $1::wow_guid
+      AND li.realm_id = $5
 ), deduped AS (
     SELECT id, hashed_slug, name, realm_id, guild_id, difficulty_name, max_players, started_at, ended_at, uploaded_at, run_id, duplicate_rank
     FROM participation
@@ -5589,18 +5589,41 @@ SELECT
           AND lie.boss = true
           AND lie.kill_type IN ('clean', 'partial')
     ), 0)::int AS boss_kills,
-    '[]'::text AS performance_json
+    COALESCE(parses.performance, '[]'::jsonb)::text AS performance_json
 FROM deduped d
 LEFT JOIN guilds g ON g.id = d.guild_id
+LEFT JOIN LATERAL (
+    SELECT jsonb_agg(
+        jsonb_build_object(
+            'encounter_name', encounter_scores.encounter_name,
+            'dps_parse', encounter_scores.dps_parse,
+            'hps_parse', encounter_scores.hps_parse
+        )
+        ORDER BY encounter_scores.encounter_name
+    ) AS performance
+    FROM (
+        SELECT
+            psr.encounter_name,
+            MAX(psr.display_score) FILTER (WHERE psr.metric = 'dps') AS dps_parse,
+            MAX(psr.display_score) FILTER (WHERE psr.metric = 'hps') AS hps_parse
+        FROM parse_score_results psr
+        WHERE psr.run_id = d.run_id
+          AND psr.player_guid = ($1::wow_guid)::text
+          AND psr.tenant_id = $2
+          AND psr.status IN ('ok', 'low_confidence')
+        GROUP BY psr.encounter_name
+    ) encounter_scores
+) parses ON true
 ORDER BY d.started_at DESC, d.id DESC
-LIMIT $2
-OFFSET $1
+LIMIT $4
+OFFSET $3
 `
 
 type ListExternalAPICharacterLogsParams struct {
+	PlayerGuid   guid.GUID `db:"player_guid" json:"player_guid"`
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
 	ResultOffset int32     `db:"result_offset" json:"result_offset"`
 	ResultLimit  int32     `db:"result_limit" json:"result_limit"`
-	PlayerGuid   guid.GUID `db:"player_guid" json:"player_guid"`
 	RealmID      uuid.UUID `db:"realm_id" json:"realm_id"`
 }
 
@@ -5622,9 +5645,10 @@ type ListExternalAPICharacterLogsRow struct {
 
 func (q *sqlQuerier) ListExternalAPICharacterLogs(ctx context.Context, arg ListExternalAPICharacterLogsParams) ([]ListExternalAPICharacterLogsRow, error) {
 	rows, err := q.db.Query(ctx, listExternalAPICharacterLogs,
+		arg.PlayerGuid,
+		arg.TenantID,
 		arg.ResultOffset,
 		arg.ResultLimit,
-		arg.PlayerGuid,
 		arg.RealmID,
 	)
 	if err != nil {
@@ -6693,6 +6717,18 @@ WITH invalidated_instances AS (
 ),
 deleted_rankings AS (
   DELETE FROM encounter_dps_rankings
+  WHERE instance_id IN (SELECT id FROM invalidated_instances)
+),
+deleted_parse_results AS (
+  DELETE FROM parse_score_results
+  WHERE instance_id IN (SELECT id FROM invalidated_instances)
+),
+deleted_parse_receipts AS (
+  DELETE FROM parse_score_receipts
+  WHERE instance_id IN (SELECT id FROM invalidated_instances)
+),
+deleted_time_parse_scores AS (
+  DELETE FROM time_parse_scores
   WHERE instance_id IN (SELECT id FROM invalidated_instances)
 ),
 deleted_speedruns AS (
@@ -8540,6 +8576,330 @@ func (q *sqlQuerier) UpsertGuildPage(ctx context.Context, arg UpsertGuildPagePar
 	return i, err
 }
 
+const guildBestRuns = `-- name: GuildBestRuns :many
+WITH representative_instances AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        li.id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
+    WHERE li.invalidated_at IS NULL
+    ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = li.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
+        (li.id = li.duplicate_group_id) DESC NULLS LAST,
+        li.start_time ASC,
+        li.id ASC
+), clears AS (
+    SELECT
+        representative.run_id,
+        li.id AS instance_id,
+        COALESCE(li.hashed_slug, '')::text AS instance_slug,
+        sr.instance_name,
+        li.difficulty_name,
+        li.max_players,
+        li.start_time AS instance_start_time,
+        sr.ranked_duration_ms::bigint AS duration_ms,
+        sr.ranked_completion_time::timestamptz AS completion_time
+    FROM representative_instances representative
+    JOIN log_instances li ON li.id = representative.id
+JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
+    JOIN instance_speedruns sr ON sr.instance_id = representative.id
+    JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+    WHERE sr.guild_id = $2::uuid
+      AND sr.ranked_duration_ms > 0
+      AND CASE
+          WHEN $3::bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => $3::int)
+          ELSE true
+      END
+), scored AS (
+    SELECT
+        c.run_id, c.instance_id, c.instance_slug, c.instance_name, c.difficulty_name, c.max_players, c.instance_start_time, c.duration_ms, c.completion_time,
+        CASE
+            WHEN COALESCE(cohort.sample_size, 0) >= $4::bigint
+                THEN (cohort.at_least_as_slow::float8 / cohort.sample_size::float8) * 100.0
+            ELSE -1
+        END::float8 AS clear_time_parse,
+        COALESCE(cohort.sample_size, 0)::bigint AS parse_sample_size
+    FROM clears c
+    LEFT JOIN LATERAL (
+        SELECT
+            COUNT(*)::bigint AS sample_size,
+            COUNT(*) FILTER (WHERE member.duration_ms >= c.duration_ms)::bigint AS at_least_as_slow
+        FROM time_parse_clear_time_memberships member
+JOIN wow_log_groups member_group ON member_group.id = member.log_group_id AND NOT member_group.unlisted
+        WHERE $1::boolean
+          AND member.tenant_id = $5
+          AND member.policy_version = $6::smallint
+          AND member.query_version = $7::smallint
+          AND member.run_id <> c.run_id
+          AND member.start_time < c.instance_start_time
+          AND ($8::int = 0 OR member.start_time >= c.instance_start_time - make_interval(days => $8::int))
+          AND member.instance_name = c.instance_name
+          AND member.difficulty_name = c.difficulty_name
+          AND member.max_players = c.max_players
+    ) cohort ON true
+)
+SELECT DISTINCT ON (instance_name)
+    run_id,
+    instance_id,
+    instance_slug,
+    instance_name,
+    difficulty_name,
+    max_players,
+    duration_ms,
+    completion_time,
+    clear_time_parse,
+    parse_sample_size
+FROM scored
+ORDER BY instance_name,
+    CASE WHEN $1::boolean THEN -clear_time_parse ELSE duration_ms::float8 END ASC,
+    duration_ms ASC
+`
+
+type GuildBestRunsParams struct {
+	ByParse        bool      `db:"by_parse" json:"by_parse"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+	SinceDays      int64     `db:"since_days" json:"since_days"`
+	MinParseSample int64     `db:"min_parse_sample" json:"min_parse_sample"`
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion  int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16     `db:"query_version" json:"query_version"`
+	LookbackDays   int32     `db:"lookback_days" json:"lookback_days"`
+}
+
+type GuildBestRunsRow struct {
+	RunID           uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceID      uuid.UUID          `db:"instance_id" json:"instance_id"`
+	InstanceSlug    string             `db:"instance_slug" json:"instance_slug"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int32              `db:"max_players" json:"max_players"`
+	DurationMs      int64              `db:"duration_ms" json:"duration_ms"`
+	CompletionTime  pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	ClearTimeParse  float64            `db:"clear_time_parse" json:"clear_time_parse"`
+	ParseSampleSize int64              `db:"parse_sample_size" json:"parse_sample_size"`
+}
+
+// Returns the guild's single best full clear of each instance within the
+// window, for the guild page "Best Performance" panel. @by_parse picks the
+// winner by highest historical clear-time parse instead of fastest clear.
+// Duplicate uploads collapse using the shared deterministic representative. Includes
+// unqualified runs: qualification only affects cohort and leaderboard membership,
+// not whether a completed clear can receive a time parse.
+// JOINs wow_server_realms so RLS tenant filtering cascades.
+func (q *sqlQuerier) GuildBestRuns(ctx context.Context, arg GuildBestRunsParams) ([]GuildBestRunsRow, error) {
+	rows, err := q.db.Query(ctx, guildBestRuns,
+		arg.ByParse,
+		arg.GuildID,
+		arg.SinceDays,
+		arg.MinParseSample,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.LookbackDays,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildBestRunsRow
+	for rows.Next() {
+		var i GuildBestRunsRow
+		if err := rows.Scan(
+			&i.RunID,
+			&i.InstanceID,
+			&i.InstanceSlug,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DurationMs,
+			&i.CompletionTime,
+			&i.ClearTimeParse,
+			&i.ParseSampleSize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const guildCharacterRoster = `-- name: GuildCharacterRoster :many
+
+SELECT
+    gp.id,
+    gp.realm_id,
+    gp.name,
+    gp.class,
+    gp.race,
+    gp.level,
+    gp.updated_at,
+    COALESCE(wsr.name, '') AS realm_name,
+    COALESCE(latest.player_spec, '')::text AS player_spec,
+    COALESCE(latest.player_role, '')::text AS player_role,
+    COALESCE(latest.spec_roles, '[]'::jsonb)::text AS spec_roles_json,
+    COALESCE(scores.avg_parse, -1)::float8 AS avg_parse
+FROM game_players gp
+JOIN wow_server_realms wsr ON wsr.id = gp.realm_id
+LEFT JOIN LATERAL (
+    SELECT
+        (ARRAY_AGG(combos.player_spec ORDER BY combos.last_seen DESC))[1] AS player_spec,
+        (ARRAY_AGG(combos.player_role ORDER BY combos.last_seen DESC))[1] AS player_role,
+        JSONB_AGG(
+            JSONB_BUILD_OBJECT('spec', combos.player_spec, 'role', combos.player_role)
+            ORDER BY combos.last_seen DESC
+        ) AS spec_roles
+    FROM (
+        SELECT psr.player_spec, psr.player_role, MAX(psr.killed_at) AS last_seen
+        FROM parse_score_results psr
+JOIN log_instances psr_instance ON psr_instance.id = psr.instance_id
+JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.unlisted
+        WHERE psr.tenant_id = $1
+          AND psr.player_guid = gp.id::text
+          AND psr.status IN ('ok', 'low_confidence')
+          AND psr.instance_id IN (
+              SELECT recent.instance_id
+              FROM (
+                  SELECT psr2.instance_id, MAX(psr2.killed_at) AS latest_kill
+                  FROM parse_score_results psr2
+JOIN log_instances psr2_instance ON psr2_instance.id = psr2.instance_id
+JOIN wow_log_groups psr2_group ON psr2_group.id = psr2_instance.log_group_id AND NOT psr2_group.unlisted
+                  WHERE psr2.tenant_id = $1
+                    AND psr2.player_guid = gp.id::text
+                    AND psr2.status IN ('ok', 'low_confidence')
+                  GROUP BY psr2.instance_id
+                  ORDER BY latest_kill DESC NULLS LAST
+                  LIMIT 3
+              ) recent
+          )
+        GROUP BY psr.player_spec, psr.player_role
+    ) combos
+) latest ON true
+LEFT JOIN LATERAL (
+    SELECT AVG(encounter_scores.avg_parse)::float8 AS avg_parse
+    FROM (
+        SELECT
+            ranked.instance_name,
+            ranked.encounter_name,
+            AVG(ranked.precise_score)::float8 AS avg_parse
+        FROM (
+            SELECT
+                deduped.instance_name,
+                deduped.encounter_name,
+                deduped.precise_score,
+                ROW_NUMBER() OVER (
+                    PARTITION BY deduped.instance_name, deduped.encounter_name
+                    ORDER BY deduped.precise_score DESC
+                ) AS score_rank
+            FROM (
+                SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
+                    psr.instance_name,
+                    psr.encounter_name,
+                    psr.precise_score
+                FROM parse_score_results psr
+JOIN log_instances psr_instance ON psr_instance.id = psr.instance_id
+JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.unlisted
+                WHERE psr.tenant_id = $1
+                  AND psr.player_guid = gp.id::text
+                  AND psr.metric = CASE WHEN latest.player_role = 'heal' THEN 'hps' ELSE 'dps' END
+                  AND psr.status IN ('ok', 'low_confidence')
+                  AND psr.killed_at >= now() - make_interval(days => $2::int)
+                ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
+            ) deduped
+        ) ranked
+        WHERE ranked.score_rank <= 3
+        GROUP BY ranked.instance_name, ranked.encounter_name
+    ) encounter_scores
+) scores ON true
+WHERE gp.guild_id = $3::uuid
+  AND CASE
+      WHEN $4::bigint > 0 THEN gp.updated_at >= now() - make_interval(days => $4::int)
+      ELSE true
+  END
+ORDER BY scores.avg_parse DESC NULLS LAST, gp.level DESC, gp.updated_at DESC
+LIMIT $5
+`
+
+type GuildCharacterRosterParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	ParseWindowDays int32     `db:"parse_window_days" json:"parse_window_days"`
+	GuildID         uuid.UUID `db:"guild_id" json:"guild_id"`
+	SeenWithinDays  int64     `db:"seen_within_days" json:"seen_within_days"`
+	RowLimit        int32     `db:"row_limit" json:"row_limit"`
+}
+
+type GuildCharacterRosterRow struct {
+	ID            guid.GUID          `db:"id" json:"id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	Name          string             `db:"name" json:"name"`
+	Class         WowPlayableClass   `db:"class" json:"class"`
+	Race          WowPlayableRace    `db:"race" json:"race"`
+	Level         int16              `db:"level" json:"level"`
+	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	RealmName     string             `db:"realm_name" json:"realm_name"`
+	PlayerSpec    string             `db:"player_spec" json:"player_spec"`
+	PlayerRole    string             `db:"player_role" json:"player_role"`
+	SpecRolesJson string             `db:"spec_roles_json" json:"spec_roles_json"`
+	AvgParse      float64            `db:"avg_parse" json:"avg_parse"`
+}
+
+// Queries backing guild page panels (roster, top parses, recent raid scores).
+// Returns the guild's characters from raid logs for the guild page "Roster"
+// panel. updated_at is the character's de-facto "last seen"; @seen_within_days
+// hides characters that have gone idle (0 = no filter).
+// player_spec/player_role come from the character's most recent parse;
+// spec_roles_json lists every distinct spec+role combo observed across the
+// character's 3 most recent parsed instances (players often swap specs raid
+// to raid), most recent first. avg_parse matches the Armory score: deduplicate
+// uploads by run, average the best 3 parses per encounter over the last
+// @parse_window_days, then average those encounter scores. It uses hps for
+// healers and dps for everyone else (-1 when the character has no parses).
+// JOINs wow_server_realms so RLS tenant filtering cascades.
+func (q *sqlQuerier) GuildCharacterRoster(ctx context.Context, arg GuildCharacterRosterParams) ([]GuildCharacterRosterRow, error) {
+	rows, err := q.db.Query(ctx, guildCharacterRoster,
+		arg.TenantID,
+		arg.ParseWindowDays,
+		arg.GuildID,
+		arg.SeenWithinDays,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildCharacterRosterRow
+	for rows.Next() {
+		var i GuildCharacterRosterRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RealmID,
+			&i.Name,
+			&i.Class,
+			&i.Race,
+			&i.Level,
+			&i.UpdatedAt,
+			&i.RealmName,
+			&i.PlayerSpec,
+			&i.PlayerRole,
+			&i.SpecRolesJson,
+			&i.AvgParse,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const guildEncounterKills = `-- name: GuildEncounterKills :many
 SELECT
     li.name AS instance_name,
@@ -8591,6 +8951,246 @@ func (q *sqlQuerier) GuildEncounterKills(ctx context.Context, guildID uuid.UUID)
 			&i.Kills,
 			&i.FirstKilledAt,
 			&i.LastKilledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const guildRunParseAverages = `-- name: GuildRunParseAverages :many
+WITH deduped AS (
+    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)
+        psr.run_id,
+        psr.encounter_name,
+        psr.instance_id,
+        psr.precise_score,
+        psr.killed_at
+    FROM parse_score_results psr
+JOIN log_instances psr_instance ON psr_instance.id = psr.instance_id
+JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.unlisted
+    WHERE psr.tenant_id = $1
+      AND psr.guild_id = $2::uuid
+      AND psr.run_id = ANY($3::uuid[])
+      AND psr.status IN ('ok', 'low_confidence')
+      AND (
+          (psr.player_role = 'heal' AND psr.metric = 'hps')
+          OR (psr.player_role != 'heal' AND psr.metric = 'dps')
+      )
+    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
+), grouped AS (
+    SELECT
+        run_id,
+        encounter_name,
+        (ARRAY_AGG(instance_id))[1] AS instance_id,
+        AVG(precise_score)::float8 AS avg_parse,
+        COUNT(*)::bigint AS parse_count,
+        MIN(killed_at)::timestamptz AS killed_at
+    FROM deduped
+    GROUP BY run_id, encounter_name
+)
+SELECT
+    g.run_id,
+    g.encounter_name,
+    g.avg_parse,
+    g.parse_count,
+    g.killed_at,
+    COALESCE(kill.duration_ms, 0)::bigint AS kill_duration_ms
+FROM grouped g
+LEFT JOIN LATERAL (
+    SELECT (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
+    FROM log_instance_encounters lie
+    WHERE lie.instance_id = g.instance_id
+      AND lie.name = g.encounter_name
+      AND lie.boss = true
+      AND lie.kill_type IN ('clean', 'partial')
+    ORDER BY lie.end_time DESC
+    LIMIT 1
+) kill ON true
+ORDER BY g.run_id, g.killed_at ASC NULLS LAST
+`
+
+type GuildRunParseAveragesParams struct {
+	TenantID uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GuildID  uuid.UUID   `db:"guild_id" json:"guild_id"`
+	RunIds   []uuid.UUID `db:"run_ids" json:"run_ids"`
+}
+
+type GuildRunParseAveragesRow struct {
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	AvgParse       float64            `db:"avg_parse" json:"avg_parse"`
+	ParseCount     int64              `db:"parse_count" json:"parse_count"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	KillDurationMs int64              `db:"kill_duration_ms" json:"kill_duration_ms"`
+}
+
+// Returns the guild's average parse per encounter for each raid night (run),
+// for the guild page "Recent" panel (per-boss bars; callers weight by
+// parse_count for a whole-run average). Averages every raider's parses using
+// hps for healers and dps for everyone else. Duplicate uploads collapse to
+// one row per encounter+player before averaging.
+func (q *sqlQuerier) GuildRunParseAverages(ctx context.Context, arg GuildRunParseAveragesParams) ([]GuildRunParseAveragesRow, error) {
+	rows, err := q.db.Query(ctx, guildRunParseAverages, arg.TenantID, arg.GuildID, arg.RunIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildRunParseAveragesRow
+	for rows.Next() {
+		var i GuildRunParseAveragesRow
+		if err := rows.Scan(
+			&i.RunID,
+			&i.EncounterName,
+			&i.AvgParse,
+			&i.ParseCount,
+			&i.KilledAt,
+			&i.KillDurationMs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const guildTopParses = `-- name: GuildTopParses :many
+WITH guild_members AS (
+    SELECT gp.id::text AS player_guid
+    FROM game_players gp
+    WHERE gp.guild_id = $3::uuid
+), deduped AS (
+    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)
+        psr.player_guid,
+        psr.player_name,
+        psr.player_class,
+        psr.player_spec,
+        psr.player_role,
+        psr.encounter_name,
+        psr.instance_id,
+        COALESCE(li.hashed_slug, '')::text AS instance_slug,
+        psr.instance_name,
+        psr.difficulty_name,
+        psr.max_players,
+        psr.metric_value,
+        psr.precise_score,
+        psr.display_score,
+        psr.killed_at
+    FROM parse_score_results psr
+    JOIN guild_members gm ON gm.player_guid = psr.player_guid
+    JOIN log_instances li ON li.id = psr.instance_id
+JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
+    WHERE psr.tenant_id = $4
+      AND psr.metric = $5
+      AND psr.status IN ('ok', 'low_confidence')
+      AND CASE
+          WHEN $6::bigint > 0 THEN psr.killed_at >= now() - make_interval(days => $6::int)
+          ELSE true
+      END
+    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
+), ranked AS (
+    SELECT player_guid, player_name, player_class, player_spec, player_role, encounter_name, instance_id, instance_slug, instance_name, difficulty_name, max_players, metric_value, precise_score, display_score, killed_at,
+        ROW_NUMBER() OVER (
+            PARTITION BY player_guid
+            ORDER BY precise_score DESC, killed_at DESC NULLS LAST
+        ) AS per_player_rank
+    FROM deduped
+)
+SELECT
+    player_guid,
+    player_name,
+    player_class,
+    player_spec,
+    player_role,
+    encounter_name,
+    instance_id,
+    instance_slug,
+    instance_name,
+    difficulty_name,
+    max_players,
+    metric_value,
+    precise_score,
+    display_score,
+    killed_at
+FROM ranked
+WHERE CASE WHEN $1::boolean THEN per_player_rank = 1 ELSE true END
+ORDER BY precise_score DESC, killed_at DESC NULLS LAST
+LIMIT $2
+`
+
+type GuildTopParsesParams struct {
+	BestPerPlayer bool      `db:"best_per_player" json:"best_per_player"`
+	RowLimit      int32     `db:"row_limit" json:"row_limit"`
+	GuildID       uuid.UUID `db:"guild_id" json:"guild_id"`
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Metric        string    `db:"metric" json:"metric"`
+	SinceDays     int64     `db:"since_days" json:"since_days"`
+}
+
+type GuildTopParsesRow struct {
+	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
+	PlayerName     string             `db:"player_name" json:"player_name"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerRole     string             `db:"player_role" json:"player_role"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	InstanceSlug   string             `db:"instance_slug" json:"instance_slug"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	MetricValue    float64            `db:"metric_value" json:"metric_value"`
+	PreciseScore   float64            `db:"precise_score" json:"precise_score"`
+	DisplayScore   int16              `db:"display_score" json:"display_score"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+}
+
+// Returns the current guild members' best parses for the guild page "Top
+// Parses" panel. Membership comes from game_players, matching the roster
+// panel, rather than the guild_id copied onto parse scores at scoring time.
+// Duplicate uploads of the same run collapse to one row per encounter+player
+// (most recently computed scoring wins, matching GetCharacterParseHistory).
+// @best_per_player keeps only each player's single best parse so one player
+// cannot fill the whole board.
+func (q *sqlQuerier) GuildTopParses(ctx context.Context, arg GuildTopParsesParams) ([]GuildTopParsesRow, error) {
+	rows, err := q.db.Query(ctx, guildTopParses,
+		arg.BestPerPlayer,
+		arg.RowLimit,
+		arg.GuildID,
+		arg.TenantID,
+		arg.Metric,
+		arg.SinceDays,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildTopParsesRow
+	for rows.Next() {
+		var i GuildTopParsesRow
+		if err := rows.Scan(
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerRole,
+			&i.EncounterName,
+			&i.InstanceID,
+			&i.InstanceSlug,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.MetricValue,
+			&i.PreciseScore,
+			&i.DisplayScore,
+			&i.KilledAt,
 		); err != nil {
 			return nil, err
 		}
@@ -15432,6 +16032,1386 @@ func (q *sqlQuerier) UnlinkDuplicateGroup(ctx context.Context, id uuid.UUID) (Un
 	return i, err
 }
 
+const deleteParseScoreMembershipsByInstance = `-- name: DeleteParseScoreMembershipsByInstance :exec
+DELETE FROM parse_score_memberships WHERE instance_id = $1
+`
+
+func (q *sqlQuerier) DeleteParseScoreMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteParseScoreMembershipsByInstance, instanceID)
+	return err
+}
+
+const deleteParseScoreMembershipsByLogGroup = `-- name: DeleteParseScoreMembershipsByLogGroup :exec
+
+DELETE FROM parse_score_memberships WHERE log_group_id = $1
+`
+
+// Compact current-known membership for DPS/HPS parse cohorts.
+func (q *sqlQuerier) DeleteParseScoreMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteParseScoreMembershipsByLogGroup, logGroupID)
+	return err
+}
+
+const getParseScoreCohortEntries = `-- name: GetParseScoreCohortEntries :many
+SELECT
+    membership.run_id,
+    membership.instance_id,
+    membership.player_guid,
+    COALESCE(player.player_name, '')::text AS player_name,
+    CASE WHEN $1::text = 'hps' THEN membership.hps ELSE membership.dps END::double precision AS metric_value,
+    membership.killed_at,
+    instance.hashed_slug AS log_hashed_slug
+FROM parse_score_memberships membership
+JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+LEFT JOIN LATERAL (
+    SELECT candidate.player_name
+    FROM (
+        SELECT instance_player.name::text AS player_name, 0 AS source_order
+        FROM log_instance_players instance_player
+        WHERE instance_player.instance_id = membership.instance_id
+          AND instance_player.unit_guid::text = membership.player_guid
+        UNION ALL
+        SELECT ranking.player_name::text AS player_name, 1 AS source_order
+        FROM encounter_dps_rankings ranking
+        WHERE ranking.instance_id = membership.instance_id
+          AND ranking.encounter_name = membership.encounter_name
+          AND ranking.player_guid = membership.player_guid
+    ) candidate
+    ORDER BY candidate.source_order, candidate.player_name
+    LIMIT 1
+) player ON true
+WHERE (
+      ($2::uuid <> '00000000-0000-0000-0000-000000000000'::uuid AND membership.tenant_id = $2)
+      OR
+      ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND (
+          membership.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+          OR EXISTS (SELECT 1 FROM tenants tenant WHERE tenant.id = membership.tenant_id AND tenant.include_in_all)
+      ))
+  )
+  AND membership.policy_version = $3
+  AND membership.query_version = $4
+  AND membership.killed_at < $5
+  AND ($6::timestamptz IS NULL OR membership.killed_at >= $6)
+  AND membership.encounter_name = $7
+  AND membership.difficulty_name = $8
+  AND membership.max_players = $9
+  AND membership.player_class = $10
+  AND ($11::text <> 'spec' OR (
+      membership.player_spec = $12
+      AND membership.player_sub_spec = $13
+      AND lower(btrim(membership.player_spec)) NOT IN ('', 'unknown')
+  ))
+  AND CASE WHEN $1::text = 'hps' THEN membership.hps ELSE membership.dps END > 0
+ORDER BY metric_value DESC, membership.killed_at, membership.id
+`
+
+type GetParseScoreCohortEntriesParams struct {
+	Metric         string             `db:"metric" json:"metric"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion  int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
+	Cutoff         pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	CohortMode     string             `db:"cohort_mode" json:"cohort_mode"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
+}
+
+type GetParseScoreCohortEntriesRow struct {
+	RunID         uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	PlayerName    string             `db:"player_name" json:"player_name"`
+	MetricValue   float64            `db:"metric_value" json:"metric_value"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	LogHashedSlug pgtype.Text        `db:"log_hashed_slug" json:"log_hashed_slug"`
+}
+
+func (q *sqlQuerier) GetParseScoreCohortEntries(ctx context.Context, arg GetParseScoreCohortEntriesParams) ([]GetParseScoreCohortEntriesRow, error) {
+	rows, err := q.db.Query(ctx, getParseScoreCohortEntries,
+		arg.Metric,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.CohortMode,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetParseScoreCohortEntriesRow
+	for rows.Next() {
+		var i GetParseScoreCohortEntriesRow
+		if err := rows.Scan(
+			&i.RunID,
+			&i.InstanceID,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.MetricValue,
+			&i.KilledAt,
+			&i.LogHashedSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getParseScoreMembershipCohort = `-- name: GetParseScoreMembershipCohort :many
+SELECT CASE WHEN $1::text = 'hps' THEN membership.hps ELSE membership.dps END::double precision AS metric_value
+FROM parse_score_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE (
+      ($2::uuid <> '00000000-0000-0000-0000-000000000000'::uuid AND membership.tenant_id = $2)
+      OR
+      ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND (
+          membership.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+          OR EXISTS (SELECT 1 FROM tenants tenant WHERE tenant.id = membership.tenant_id AND tenant.include_in_all)
+      ))
+  )
+  AND membership.policy_version = $3
+  AND membership.query_version = $4
+  AND membership.killed_at < $5
+  AND ($6::timestamptz IS NULL OR membership.killed_at >= $6)
+  AND membership.run_id <> $7
+  AND membership.encounter_name = $8
+  AND membership.difficulty_name = $9
+  AND membership.max_players = $10
+  AND membership.player_class = $11
+  AND ($12::text <> 'spec' OR (
+      membership.player_spec = $13
+      AND membership.player_sub_spec = $14
+      AND lower(btrim(membership.player_spec)) NOT IN ('', 'unknown')
+  ))
+  AND CASE WHEN $1::text = 'hps' THEN membership.hps ELSE membership.dps END > 0
+`
+
+type GetParseScoreMembershipCohortParams struct {
+	Metric         string             `db:"metric" json:"metric"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion  int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
+	Cutoff         pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	ExcludeRunID   uuid.UUID          `db:"exclude_run_id" json:"exclude_run_id"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	CohortMode     string             `db:"cohort_mode" json:"cohort_mode"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
+}
+
+func (q *sqlQuerier) GetParseScoreMembershipCohort(ctx context.Context, arg GetParseScoreMembershipCohortParams) ([]float64, error) {
+	rows, err := q.db.Query(ctx, getParseScoreMembershipCohort,
+		arg.Metric,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.ExcludeRunID,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.CohortMode,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []float64
+	for rows.Next() {
+		var metric_value float64
+		if err := rows.Scan(&metric_value); err != nil {
+			return nil, err
+		}
+		items = append(items, metric_value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listParseScoreCohortBuckets = `-- name: ListParseScoreCohortBuckets :many
+SELECT
+    membership.encounter_name,
+    membership.difficulty_name,
+    membership.max_players,
+    membership.player_class,
+    CASE WHEN $1::text = 'spec' THEN membership.player_spec ELSE '' END::text AS player_spec,
+    CASE WHEN $1::text = 'spec' THEN membership.player_sub_spec ELSE '' END::text AS player_sub_spec,
+    COUNT(*)::bigint AS sample_size
+FROM parse_score_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE (
+      ($2::uuid <> '00000000-0000-0000-0000-000000000000'::uuid AND membership.tenant_id = $2)
+      OR
+      ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND (
+          membership.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+          OR EXISTS (SELECT 1 FROM tenants tenant WHERE tenant.id = membership.tenant_id AND tenant.include_in_all)
+      ))
+  )
+  AND membership.policy_version = $3
+  AND membership.query_version = $4
+  AND membership.killed_at < $5
+  AND ($6::timestamptz IS NULL OR membership.killed_at >= $6)
+  AND CASE WHEN $7::text = 'hps' THEN membership.hps ELSE membership.dps END > 0
+  AND ($1::text <> 'spec' OR lower(btrim(membership.player_spec)) NOT IN ('', 'unknown'))
+GROUP BY membership.encounter_name, membership.difficulty_name, membership.max_players,
+         membership.player_class,
+         CASE WHEN $1::text = 'spec' THEN membership.player_spec ELSE '' END,
+         CASE WHEN $1::text = 'spec' THEN membership.player_sub_spec ELSE '' END
+ORDER BY membership.encounter_name, membership.player_class, player_spec, player_sub_spec,
+         membership.difficulty_name, membership.max_players
+`
+
+type ListParseScoreCohortBucketsParams struct {
+	CohortMode    string             `db:"cohort_mode" json:"cohort_mode"`
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	Cutoff        pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	Metric        string             `db:"metric" json:"metric"`
+}
+
+type ListParseScoreCohortBucketsRow struct {
+	EncounterName  string `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+	PlayerClass    string `db:"player_class" json:"player_class"`
+	PlayerSpec     string `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string `db:"player_sub_spec" json:"player_sub_spec"`
+	SampleSize     int64  `db:"sample_size" json:"sample_size"`
+}
+
+func (q *sqlQuerier) ListParseScoreCohortBuckets(ctx context.Context, arg ListParseScoreCohortBucketsParams) ([]ListParseScoreCohortBucketsRow, error) {
+	rows, err := q.db.Query(ctx, listParseScoreCohortBuckets,
+		arg.CohortMode,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.Metric,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListParseScoreCohortBucketsRow
+	for rows.Next() {
+		var i ListParseScoreCohortBucketsRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.SampleSize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listParseScoreMemberships = `-- name: ListParseScoreMemberships :many
+SELECT membership.id, membership.tenant_id, membership.policy_version, membership.query_version, membership.run_id, membership.encounter_name, membership.player_guid, membership.instance_id, membership.log_group_id, membership.difficulty_name, membership.max_players, membership.player_class, membership.player_spec, membership.player_sub_spec, membership.killed_at, membership.dps, membership.hps
+FROM parse_score_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE membership.tenant_id = $1
+  AND policy_version = $2
+  AND query_version = $3
+ORDER BY run_id, encounter_name, player_guid
+`
+
+type ListParseScoreMembershipsParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+func (q *sqlQuerier) ListParseScoreMemberships(ctx context.Context, arg ListParseScoreMembershipsParams) ([]ParseScoreMembership, error) {
+	rows, err := q.db.Query(ctx, listParseScoreMemberships, arg.TenantID, arg.PolicyVersion, arg.QueryVersion)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ParseScoreMembership
+	for rows.Next() {
+		var i ParseScoreMembership
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.PolicyVersion,
+			&i.QueryVersion,
+			&i.RunID,
+			&i.EncounterName,
+			&i.PlayerGuid,
+			&i.InstanceID,
+			&i.LogGroupID,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.KilledAt,
+			&i.Dps,
+			&i.Hps,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listParseScoreSpreadValues = `-- name: ListParseScoreSpreadValues :many
+SELECT
+    membership.encounter_name,
+    membership.difficulty_name,
+    membership.max_players,
+    membership.player_class,
+    CASE WHEN $1::text = 'spec' THEN membership.player_spec ELSE '' END::text AS player_spec,
+    CASE WHEN $1::text = 'spec' THEN membership.player_sub_spec ELSE '' END::text AS player_sub_spec,
+    membership.run_id,
+    CASE WHEN $2::text = 'hps' THEN membership.hps ELSE membership.dps END::double precision AS metric_value
+FROM parse_score_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE membership.tenant_id = ANY($3::uuid[])
+  AND membership.policy_version = $4
+  AND membership.query_version = $5
+  AND membership.killed_at < $6
+  AND ($7::timestamptz IS NULL OR membership.killed_at >= $7)
+  AND membership.encounter_name = ANY($8::text[])
+  AND ($9::text = '' OR membership.player_class = $9)
+  AND ($1::text <> 'spec' OR (
+      lower(btrim(membership.player_spec)) NOT IN ('', 'unknown')
+      AND ($10::text = '' OR membership.player_spec = $10)
+  ))
+  AND CASE WHEN $2::text = 'hps' THEN membership.hps ELSE membership.dps END > 0
+`
+
+type ListParseScoreSpreadValuesParams struct {
+	CohortMode     string             `db:"cohort_mode" json:"cohort_mode"`
+	Metric         string             `db:"metric" json:"metric"`
+	TenantIds      []uuid.UUID        `db:"tenant_ids" json:"tenant_ids"`
+	PolicyVersion  int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
+	Cutoff         pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	EncounterNames []string           `db:"encounter_names" json:"encounter_names"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+}
+
+type ListParseScoreSpreadValuesRow struct {
+	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	PlayerClass    string    `db:"player_class" json:"player_class"`
+	PlayerSpec     string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string    `db:"player_sub_spec" json:"player_sub_spec"`
+	RunID          uuid.UUID `db:"run_id" json:"run_id"`
+	MetricValue    float64   `db:"metric_value" json:"metric_value"`
+}
+
+// Metric values for every exact DPS/HPS cohort on the given encounters, used
+// to summarize parse spreads without fetching per-player names. Empty
+// player_class/player_spec match every class/spec.
+// tenant_ids is resolved by the caller (the default tenant also sees
+// include_in_all tenants) so it is a plain index condition; an OR across
+// tenant rules, or an array built in SQL, leaves the planner scanning every
+// membership row instead of seeking by encounter.
+func (q *sqlQuerier) ListParseScoreSpreadValues(ctx context.Context, arg ListParseScoreSpreadValuesParams) ([]ListParseScoreSpreadValuesRow, error) {
+	rows, err := q.db.Query(ctx, listParseScoreSpreadValues,
+		arg.CohortMode,
+		arg.Metric,
+		arg.TenantIds,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.EncounterNames,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListParseScoreSpreadValuesRow
+	for rows.Next() {
+		var i ListParseScoreSpreadValuesRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.RunID,
+			&i.MetricValue,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const refreshParseScoreMembershipsForLogGroup = `-- name: RefreshParseScoreMembershipsForLogGroup :one
+WITH affected_runs AS MATERIALIZED (
+    SELECT DISTINCT COALESCE(instance.duplicate_group_id, instance.id) AS run_id
+    FROM log_instances instance
+    WHERE instance.log_group_id = $1
+),
+representative_instances AS MATERIALIZED (
+    SELECT DISTINCT ON (COALESCE(instance.duplicate_group_id, instance.id))
+        instance.id,
+        COALESCE(instance.duplicate_group_id, instance.id) AS run_id
+    FROM log_instances instance
+    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+    JOIN affected_runs affected
+      ON affected.run_id = COALESCE(instance.duplicate_group_id, instance.id)
+    WHERE instance.invalidated_at IS NULL
+    ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = instance.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
+        (instance.id = instance.duplicate_group_id) DESC NULLS LAST,
+        instance.start_time ASC,
+        instance.id ASC
+),
+current_members AS MATERIALIZED (
+    SELECT DISTINCT ON (representative.run_id, ranking.encounter_name, ranking.player_guid)
+        COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id,
+        representative.run_id,
+        ranking.encounter_name,
+        ranking.player_guid,
+        ranking.instance_id,
+        instance.log_group_id,
+        ranking.difficulty_name,
+        ranking.max_players,
+        ranking.player_class,
+        ranking.player_spec,
+        ranking.player_sub_spec,
+        ranking.killed_at,
+        ranking.dps,
+        ranking.hps
+    FROM representative_instances representative
+    JOIN log_instances instance ON instance.id = representative.id
+    JOIN encounter_dps_rankings ranking ON ranking.instance_id = representative.id
+    JOIN wow_server_realms realm ON realm.id = instance.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    WHERE ranking.encounter_id IS NOT NULL
+      AND (ranking.dps > 0 OR ranking.hps > 0)
+      AND ranking.duration_secs > 0
+      AND lower(btrim(ranking.player_class)) NOT IN ('', 'unknown')
+    ORDER BY representative.run_id, ranking.encounter_name, ranking.player_guid,
+             ranking.dps DESC, ranking.hps DESC
+),
+upserted AS (
+    INSERT INTO parse_score_memberships (
+        tenant_id, policy_version, query_version, run_id, encounter_name, player_guid,
+        instance_id, log_group_id, difficulty_name, max_players,
+        player_class, player_spec, player_sub_spec, killed_at, dps, hps
+    )
+    SELECT
+        member.tenant_id, $2, $3, member.run_id,
+        member.encounter_name, member.player_guid, member.instance_id,
+        member.log_group_id, member.difficulty_name,
+        member.max_players, member.player_class, member.player_spec,
+        member.player_sub_spec, member.killed_at, member.dps, member.hps
+    FROM current_members member
+    ON CONFLICT (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid)
+    DO UPDATE SET
+        instance_id = EXCLUDED.instance_id,
+        log_group_id = EXCLUDED.log_group_id,
+        difficulty_name = EXCLUDED.difficulty_name,
+        max_players = EXCLUDED.max_players,
+        player_class = EXCLUDED.player_class,
+        player_spec = EXCLUDED.player_spec,
+        player_sub_spec = EXCLUDED.player_sub_spec,
+        killed_at = EXCLUDED.killed_at,
+        dps = EXCLUDED.dps,
+        hps = EXCLUDED.hps
+    RETURNING 1
+),
+deleted AS (
+    DELETE FROM parse_score_memberships membership
+    WHERE membership.policy_version = $2
+      AND membership.query_version = $3
+      AND membership.run_id IN (SELECT run_id FROM affected_runs)
+      AND NOT EXISTS (
+          SELECT 1
+          FROM current_members member
+          WHERE member.tenant_id = membership.tenant_id
+            AND member.run_id = membership.run_id
+            AND member.encounter_name = membership.encounter_name
+            AND member.player_guid = membership.player_guid
+      )
+    RETURNING 1
+)
+SELECT
+    (SELECT COUNT(*) FROM upserted)::bigint AS upserted_count,
+    (SELECT COUNT(*) FROM deleted)::bigint AS deleted_count
+`
+
+type RefreshParseScoreMembershipsForLogGroupParams struct {
+	LogGroupID    uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+type RefreshParseScoreMembershipsForLogGroupRow struct {
+	UpsertedCount int64 `db:"upserted_count" json:"upserted_count"`
+	DeletedCount  int64 `db:"deleted_count" json:"deleted_count"`
+}
+
+func (q *sqlQuerier) RefreshParseScoreMembershipsForLogGroup(ctx context.Context, arg RefreshParseScoreMembershipsForLogGroupParams) (RefreshParseScoreMembershipsForLogGroupRow, error) {
+	row := q.db.QueryRow(ctx, refreshParseScoreMembershipsForLogGroup, arg.LogGroupID, arg.PolicyVersion, arg.QueryVersion)
+	var i RefreshParseScoreMembershipsForLogGroupRow
+	err := row.Scan(&i.UpsertedCount, &i.DeletedCount)
+	return i, err
+}
+
+const acquireParseScoreLock = `-- name: AcquireParseScoreLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
+`
+
+func (q *sqlQuerier) AcquireParseScoreLock(ctx context.Context, lockKey string) error {
+	_, err := q.db.Exec(ctx, acquireParseScoreLock, lockKey)
+	return err
+}
+
+const deleteParseScoreResultsForTenantInstance = `-- name: DeleteParseScoreResultsForTenantInstance :exec
+DELETE FROM parse_score_results
+WHERE tenant_id = $1 AND instance_id = $2
+`
+
+type DeleteParseScoreResultsForTenantInstanceParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+}
+
+// Remove parse score results for a tenant+instance (before re-computation).
+// Scoped to tenant_id so one tenant's recompute cannot erase another's projections.
+func (q *sqlQuerier) DeleteParseScoreResultsForTenantInstance(ctx context.Context, arg DeleteParseScoreResultsForTenantInstanceParams) error {
+	_, err := q.db.Exec(ctx, deleteParseScoreResultsForTenantInstance, arg.TenantID, arg.InstanceID)
+	return err
+}
+
+const getAnyParseScoreReceiptForTenantInstance = `-- name: GetAnyParseScoreReceiptForTenantInstance :one
+SELECT receipt.id, receipt.tenant_id, receipt.instance_id, receipt.snapshot_id, receipt.policy_version, receipt.query_version, receipt.lookback_days, receipt.source_count, receipt.result_count, receipt.computed_at, receipt.created_at, receipt.cutoff, receipt.window_start, receipt.cohort_mode
+FROM parse_score_receipts receipt
+JOIN log_instances instance ON instance.id = receipt.instance_id
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+WHERE receipt.tenant_id = $1
+  AND receipt.instance_id = $2
+ORDER BY computed_at DESC
+LIMIT 1
+`
+
+type GetAnyParseScoreReceiptForTenantInstanceParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+}
+
+func (q *sqlQuerier) GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error) {
+	row := q.db.QueryRow(ctx, getAnyParseScoreReceiptForTenantInstance, arg.TenantID, arg.InstanceID)
+	var i ParseScoreReceipt
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.InstanceID,
+		&i.SnapshotID,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.LookbackDays,
+		&i.SourceCount,
+		&i.ResultCount,
+		&i.ComputedAt,
+		&i.CreatedAt,
+		&i.Cutoff,
+		&i.WindowStart,
+		&i.CohortMode,
+	)
+	return i, err
+}
+
+const getCharacterParseHistory = `-- name: GetCharacterParseHistory :many
+SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
+    psr.id,
+    psr.instance_id,
+    psr.run_id,
+    psr.snapshot_id,
+    psr.encounter_name,
+    psr.instance_name,
+    psr.difficulty_name,
+    psr.max_players,
+    psr.metric,
+    psr.metric_value,
+    psr.precise_score,
+    psr.display_score,
+    psr.rank,
+    psr.sample_size,
+    psr.status,
+    psr.killed_at,
+    psr.player_name,
+    psr.player_class,
+    psr.player_spec,
+    psr.player_sub_spec,
+    psr.player_role
+FROM parse_score_results psr
+JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
+WHERE psr.tenant_id = $1
+  AND psr.player_guid = $2
+  AND psr.metric = $3
+  AND psr.status IN ('ok', 'low_confidence')
+  AND psr.killed_at >= $4
+ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
+`
+
+type GetCharacterParseHistoryParams struct {
+	TenantID   uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PlayerGuid string             `db:"player_guid" json:"player_guid"`
+	Metric     string             `db:"metric" json:"metric"`
+	Since      pgtype.Timestamptz `db:"since" json:"since"`
+}
+
+type GetCharacterParseHistoryRow struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	SnapshotID     uuid.NullUUID      `db:"snapshot_id" json:"snapshot_id"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	Metric         string             `db:"metric" json:"metric"`
+	MetricValue    float64            `db:"metric_value" json:"metric_value"`
+	PreciseScore   float64            `db:"precise_score" json:"precise_score"`
+	DisplayScore   int16              `db:"display_score" json:"display_score"`
+	Rank           int32              `db:"rank" json:"rank"`
+	SampleSize     int32              `db:"sample_size" json:"sample_size"`
+	Status         string             `db:"status" json:"status"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	PlayerName     string             `db:"player_name" json:"player_name"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PlayerRole     string             `db:"player_role" json:"player_role"`
+}
+
+// Character history: ALL deduplicated parses over the lookback window.
+// Returns every (run_id, encounter) parse — not just one best per encounter.
+// Duplicate uploads of the same run collapse to one row per encounter even
+// when they were scored against different snapshots; the most recently
+// computed scoring wins so a night's rows stay internally consistent.
+// The caller groups by (instance_name, encounter_name), takes best 3 per group,
+// averages each group, then averages groups for the Score.
+func (q *sqlQuerier) GetCharacterParseHistory(ctx context.Context, arg GetCharacterParseHistoryParams) ([]GetCharacterParseHistoryRow, error) {
+	rows, err := q.db.Query(ctx, getCharacterParseHistory,
+		arg.TenantID,
+		arg.PlayerGuid,
+		arg.Metric,
+		arg.Since,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetCharacterParseHistoryRow
+	for rows.Next() {
+		var i GetCharacterParseHistoryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.InstanceID,
+			&i.RunID,
+			&i.SnapshotID,
+			&i.EncounterName,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.Metric,
+			&i.MetricValue,
+			&i.PreciseScore,
+			&i.DisplayScore,
+			&i.Rank,
+			&i.SampleSize,
+			&i.Status,
+			&i.KilledAt,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.PlayerRole,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getLogInstanceForScoring = `-- name: GetLogInstanceForScoring :one
+SELECT
+    li.id,
+    COALESCE(li.duplicate_group_id, li.id) AS run_id,
+    li.start_time,
+    li.name AS instance_name,
+    li.difficulty_name,
+    li.max_players,
+    li.log_group_id,
+    li.guild_id
+FROM log_instances li
+JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
+WHERE li.id = $1
+  AND li.invalidated_at IS NULL
+`
+
+type GetLogInstanceForScoringRow struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int32              `db:"max_players" json:"max_players"`
+	LogGroupID     uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+}
+
+// Fetch instance metadata needed for parse scoring.
+func (q *sqlQuerier) GetLogInstanceForScoring(ctx context.Context, id uuid.UUID) (GetLogInstanceForScoringRow, error) {
+	row := q.db.QueryRow(ctx, getLogInstanceForScoring, id)
+	var i GetLogInstanceForScoringRow
+	err := row.Scan(
+		&i.ID,
+		&i.RunID,
+		&i.StartTime,
+		&i.InstanceName,
+		&i.DifficultyName,
+		&i.MaxPlayers,
+		&i.LogGroupID,
+		&i.GuildID,
+	)
+	return i, err
+}
+
+const getParseScoreReceiptForInstance = `-- name: GetParseScoreReceiptForInstance :many
+SELECT receipt.id, receipt.tenant_id, receipt.instance_id, receipt.snapshot_id, receipt.policy_version, receipt.query_version, receipt.lookback_days, receipt.source_count, receipt.result_count, receipt.computed_at, receipt.created_at, receipt.cutoff, receipt.window_start, receipt.cohort_mode FROM parse_score_receipts receipt
+JOIN log_instances instance ON instance.id = receipt.instance_id
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+WHERE receipt.instance_id = $1
+ORDER BY computed_at DESC
+`
+
+// Get all receipts for an instance (any snapshot).
+func (q *sqlQuerier) GetParseScoreReceiptForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreReceipt, error) {
+	rows, err := q.db.Query(ctx, getParseScoreReceiptForInstance, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ParseScoreReceipt
+	for rows.Next() {
+		var i ParseScoreReceipt
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.InstanceID,
+			&i.SnapshotID,
+			&i.PolicyVersion,
+			&i.QueryVersion,
+			&i.LookbackDays,
+			&i.SourceCount,
+			&i.ResultCount,
+			&i.ComputedAt,
+			&i.CreatedAt,
+			&i.Cutoff,
+			&i.WindowStart,
+			&i.CohortMode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getParseScoreResultsForInstance = `-- name: GetParseScoreResultsForInstance :many
+SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric)
+    psr.id, psr.tenant_id, psr.instance_id, psr.run_id, psr.snapshot_id, psr.log_group_id, psr.guild_id, psr.encounter_name, psr.player_guid, psr.player_name, psr.player_class, psr.player_spec, psr.player_role, psr.metric, psr.metric_value, psr.precise_score, psr.display_score, psr.rank, psr.sample_size, psr.status, psr.instance_name, psr.difficulty_name, psr.max_players, psr.killed_at, psr.created_at, psr.player_sub_spec
+FROM parse_score_results psr
+JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
+WHERE psr.instance_id = $1
+ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric,
+         psr.created_at DESC
+`
+
+// Read deduplicated parse score results for an instance.
+// Uses DISTINCT ON (run_id, encounter, player, snapshot, metric) to collapse duplicate uploads.
+func (q *sqlQuerier) GetParseScoreResultsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreResult, error) {
+	rows, err := q.db.Query(ctx, getParseScoreResultsForInstance, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ParseScoreResult
+	for rows.Next() {
+		var i ParseScoreResult
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.InstanceID,
+			&i.RunID,
+			&i.SnapshotID,
+			&i.LogGroupID,
+			&i.GuildID,
+			&i.EncounterName,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerRole,
+			&i.Metric,
+			&i.MetricValue,
+			&i.PreciseScore,
+			&i.DisplayScore,
+			&i.Rank,
+			&i.SampleSize,
+			&i.Status,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.KilledAt,
+			&i.CreatedAt,
+			&i.PlayerSubSpec,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const hasParseScoreResultsForTenantInstance = `-- name: HasParseScoreResultsForTenantInstance :one
+SELECT EXISTS (
+    SELECT 1
+    FROM parse_score_results result
+    JOIN log_instances visibility_instance ON visibility_instance.id = result.instance_id
+    JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
+    WHERE result.tenant_id = $1 AND result.instance_id = $2
+)
+`
+
+type HasParseScoreResultsForTenantInstanceParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+}
+
+func (q *sqlQuerier) HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasParseScoreResultsForTenantInstance, arg.TenantID, arg.InstanceID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const insertParseScoreResult = `-- name: InsertParseScoreResult :exec
+INSERT INTO parse_score_results (
+    tenant_id, instance_id, run_id, snapshot_id, log_group_id, guild_id,
+    encounter_name, player_guid, player_name, player_class, player_spec, player_sub_spec, player_role,
+    metric, metric_value, precise_score, display_score, rank, sample_size, status,
+    instance_name, difficulty_name, max_players, killed_at
+)
+SELECT
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10, $11, $12, $13,
+    $14, $15, $16, $17, $18, $19, $20,
+    $21, $22, $23, $24
+WHERE EXISTS (
+    SELECT 1
+    FROM log_instances instance
+    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id
+    WHERE instance.id = $2 AND NOT log_group.unlisted
+)
+`
+
+type InsertParseScoreResultParams struct {
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	SnapshotID     uuid.NullUUID      `db:"snapshot_id" json:"snapshot_id"`
+	LogGroupID     uuid.NullUUID      `db:"log_group_id" json:"log_group_id"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
+	PlayerName     string             `db:"player_name" json:"player_name"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PlayerRole     string             `db:"player_role" json:"player_role"`
+	Metric         string             `db:"metric" json:"metric"`
+	MetricValue    float64            `db:"metric_value" json:"metric_value"`
+	PreciseScore   float64            `db:"precise_score" json:"precise_score"`
+	DisplayScore   int16              `db:"display_score" json:"display_score"`
+	Rank           int32              `db:"rank" json:"rank"`
+	SampleSize     int32              `db:"sample_size" json:"sample_size"`
+	Status         string             `db:"status" json:"status"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+}
+
+// Persist a single parse score result for an instance+encounter+player+metric.
+// No unique constraint: duplicate uploads are collapsed at read time via run_id DISTINCT ON.
+func (q *sqlQuerier) InsertParseScoreResult(ctx context.Context, arg InsertParseScoreResultParams) error {
+	_, err := q.db.Exec(ctx, insertParseScoreResult,
+		arg.TenantID,
+		arg.InstanceID,
+		arg.RunID,
+		arg.SnapshotID,
+		arg.LogGroupID,
+		arg.GuildID,
+		arg.EncounterName,
+		arg.PlayerGuid,
+		arg.PlayerName,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.PlayerRole,
+		arg.Metric,
+		arg.MetricValue,
+		arg.PreciseScore,
+		arg.DisplayScore,
+		arg.Rank,
+		arg.SampleSize,
+		arg.Status,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.KilledAt,
+	)
+	return err
+}
+
+const insertWindowedParseScoreReceipt = `-- name: InsertWindowedParseScoreReceipt :one
+INSERT INTO parse_score_receipts (
+    tenant_id, instance_id, snapshot_id,
+    policy_version, query_version, lookback_days,
+    source_count, result_count, cutoff, window_start, cohort_mode, computed_at
+)
+SELECT
+    $1, $2, NULL,
+    $3, $4, $5,
+    $6, $7, $8, $9, $10, now()
+WHERE EXISTS (
+    SELECT 1
+    FROM log_instances instance
+    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id
+    WHERE instance.id = $2 AND NOT log_group.unlisted
+)
+ON CONFLICT (tenant_id, instance_id, lookback_days, policy_version, query_version)
+WHERE snapshot_id IS NULL
+DO UPDATE SET
+    source_count = EXCLUDED.source_count,
+    result_count = EXCLUDED.result_count,
+    cutoff = EXCLUDED.cutoff,
+    window_start = EXCLUDED.window_start,
+    cohort_mode = EXCLUDED.cohort_mode,
+    computed_at = now()
+RETURNING id, tenant_id, instance_id, snapshot_id, policy_version, query_version, lookback_days, source_count, result_count, computed_at, created_at, cutoff, window_start, cohort_mode
+`
+
+type InsertWindowedParseScoreReceiptParams struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	LookbackDays  int16              `db:"lookback_days" json:"lookback_days"`
+	SourceCount   int32              `db:"source_count" json:"source_count"`
+	ResultCount   int32              `db:"result_count" json:"result_count"`
+	Cutoff        pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	CohortMode    string             `db:"cohort_mode" json:"cohort_mode"`
+}
+
+// New scoring contracts are identified by the target instance cutoff and do not
+// require a ranking snapshot.
+func (q *sqlQuerier) InsertWindowedParseScoreReceipt(ctx context.Context, arg InsertWindowedParseScoreReceiptParams) (ParseScoreReceipt, error) {
+	row := q.db.QueryRow(ctx, insertWindowedParseScoreReceipt,
+		arg.TenantID,
+		arg.InstanceID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.LookbackDays,
+		arg.SourceCount,
+		arg.ResultCount,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.CohortMode,
+	)
+	var i ParseScoreReceipt
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.InstanceID,
+		&i.SnapshotID,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.LookbackDays,
+		&i.SourceCount,
+		&i.ResultCount,
+		&i.ComputedAt,
+		&i.CreatedAt,
+		&i.Cutoff,
+		&i.WindowStart,
+		&i.CohortMode,
+	)
+	return i, err
+}
+
+const listInstancesMissingParseReceiptWindowed = `-- name: ListInstancesMissingParseReceiptWindowed :many
+SELECT
+    candidates.instance_id,
+    li.start_time,
+    COALESCE(li.duplicate_group_id, li.id) AS run_id,
+    li.name AS instance_name,
+    li.difficulty_name,
+    li.max_players,
+    li.log_group_id,
+    li.guild_id
+FROM (
+    SELECT DISTINCT edr.instance_id
+    FROM encounter_dps_rankings edr
+    WHERE edr.encounter_id IS NOT NULL
+      AND (edr.dps > 0 OR edr.hps > 0)
+) candidates
+JOIN log_instances li ON li.id = candidates.instance_id
+JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
+WHERE li.start_time >= $1
+  AND li.invalidated_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1
+    FROM parse_score_receipts receipt
+    WHERE receipt.tenant_id = $2
+      AND receipt.instance_id = candidates.instance_id
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM parse_score_results result
+    WHERE result.tenant_id = $2
+      AND result.instance_id = candidates.instance_id
+  )
+ORDER BY li.start_time DESC NULLS LAST
+LIMIT $3
+`
+
+type ListInstancesMissingParseReceiptWindowedParams struct {
+	RepairSince pgtype.Timestamptz `db:"repair_since" json:"repair_since"`
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	MaxRows     int32              `db:"max_rows" json:"max_rows"`
+}
+
+type ListInstancesMissingParseReceiptWindowedRow struct {
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int32              `db:"max_players" json:"max_players"`
+	LogGroupID     uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+}
+
+// Bound automatic repair to recent instances with no successful parse receipt at
+// all. Legacy snapshot-backed receipts remain authoritative and are never
+// selected merely because windowed scoring uses a newer query version.
+func (q *sqlQuerier) ListInstancesMissingParseReceiptWindowed(ctx context.Context, arg ListInstancesMissingParseReceiptWindowedParams) ([]ListInstancesMissingParseReceiptWindowedRow, error) {
+	rows, err := q.db.Query(ctx, listInstancesMissingParseReceiptWindowed, arg.RepairSince, arg.TenantID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInstancesMissingParseReceiptWindowedRow
+	for rows.Next() {
+		var i ListInstancesMissingParseReceiptWindowedRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.StartTime,
+			&i.RunID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.LogGroupID,
+			&i.GuildID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listParseScoreResultsForContract = `-- name: ListParseScoreResultsForContract :many
+SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+    psr.id, psr.tenant_id, psr.instance_id, psr.run_id, psr.snapshot_id, psr.log_group_id, psr.guild_id, psr.encounter_name, psr.player_guid, psr.player_name, psr.player_class, psr.player_spec, psr.player_role, psr.metric, psr.metric_value, psr.precise_score, psr.display_score, psr.rank, psr.sample_size, psr.status, psr.instance_name, psr.difficulty_name, psr.max_players, psr.killed_at, psr.created_at, psr.player_sub_spec
+FROM parse_score_results psr
+JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
+WHERE psr.tenant_id = $1
+  AND psr.instance_id = $2
+  AND psr.snapshot_id = $3::uuid
+  AND psr.metric = $4
+ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC
+`
+
+type ListParseScoreResultsForContractParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+	SnapshotID uuid.UUID `db:"snapshot_id" json:"snapshot_id"`
+	Metric     string    `db:"metric" json:"metric"`
+}
+
+// Read one persisted legacy result per player and encounter for the snapshot ID
+// retained as opaque provenance on its successful receipt.
+func (q *sqlQuerier) ListParseScoreResultsForContract(ctx context.Context, arg ListParseScoreResultsForContractParams) ([]ParseScoreResult, error) {
+	rows, err := q.db.Query(ctx, listParseScoreResultsForContract,
+		arg.TenantID,
+		arg.InstanceID,
+		arg.SnapshotID,
+		arg.Metric,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ParseScoreResult
+	for rows.Next() {
+		var i ParseScoreResult
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.InstanceID,
+			&i.RunID,
+			&i.SnapshotID,
+			&i.LogGroupID,
+			&i.GuildID,
+			&i.EncounterName,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerRole,
+			&i.Metric,
+			&i.MetricValue,
+			&i.PreciseScore,
+			&i.DisplayScore,
+			&i.Rank,
+			&i.SampleSize,
+			&i.Status,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.KilledAt,
+			&i.CreatedAt,
+			&i.PlayerSubSpec,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPersistedParseScoreResultsForInstance = `-- name: ListPersistedParseScoreResultsForInstance :many
+SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+    psr.id, psr.tenant_id, psr.instance_id, psr.run_id, psr.snapshot_id, psr.log_group_id, psr.guild_id, psr.encounter_name, psr.player_guid, psr.player_name, psr.player_class, psr.player_spec, psr.player_role, psr.metric, psr.metric_value, psr.precise_score, psr.display_score, psr.rank, psr.sample_size, psr.status, psr.instance_name, psr.difficulty_name, psr.max_players, psr.killed_at, psr.created_at, psr.player_sub_spec
+FROM parse_score_results psr
+JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
+WHERE psr.tenant_id = $1
+  AND psr.instance_id = $2
+  AND psr.metric = $3
+ORDER BY psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
+`
+
+type ListPersistedParseScoreResultsForInstanceParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+	Metric     string    `db:"metric" json:"metric"`
+}
+
+// Receipt-less results are authoritative historical data. Read them without
+// joining snapshot tables or score memberships so they can never be recomputed.
+func (q *sqlQuerier) ListPersistedParseScoreResultsForInstance(ctx context.Context, arg ListPersistedParseScoreResultsForInstanceParams) ([]ParseScoreResult, error) {
+	rows, err := q.db.Query(ctx, listPersistedParseScoreResultsForInstance, arg.TenantID, arg.InstanceID, arg.Metric)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ParseScoreResult
+	for rows.Next() {
+		var i ParseScoreResult
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.InstanceID,
+			&i.RunID,
+			&i.SnapshotID,
+			&i.LogGroupID,
+			&i.GuildID,
+			&i.EncounterName,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerRole,
+			&i.Metric,
+			&i.MetricValue,
+			&i.PreciseScore,
+			&i.DisplayScore,
+			&i.Rank,
+			&i.SampleSize,
+			&i.Status,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.KilledAt,
+			&i.CreatedAt,
+			&i.PlayerSubSpec,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWindowedParseScoreResultsForContract = `-- name: ListWindowedParseScoreResultsForContract :many
+SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+    psr.id, psr.tenant_id, psr.instance_id, psr.run_id, psr.snapshot_id, psr.log_group_id, psr.guild_id, psr.encounter_name, psr.player_guid, psr.player_name, psr.player_class, psr.player_spec, psr.player_role, psr.metric, psr.metric_value, psr.precise_score, psr.display_score, psr.rank, psr.sample_size, psr.status, psr.instance_name, psr.difficulty_name, psr.max_players, psr.killed_at, psr.created_at, psr.player_sub_spec
+FROM parse_score_results psr
+JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
+WHERE psr.tenant_id = $1
+  AND psr.instance_id = $2
+  AND psr.snapshot_id IS NULL
+  AND psr.metric = $3
+ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC
+`
+
+type ListWindowedParseScoreResultsForContractParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+	Metric     string    `db:"metric" json:"metric"`
+}
+
+func (q *sqlQuerier) ListWindowedParseScoreResultsForContract(ctx context.Context, arg ListWindowedParseScoreResultsForContractParams) ([]ParseScoreResult, error) {
+	rows, err := q.db.Query(ctx, listWindowedParseScoreResultsForContract, arg.TenantID, arg.InstanceID, arg.Metric)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ParseScoreResult
+	for rows.Next() {
+		var i ParseScoreResult
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.InstanceID,
+			&i.RunID,
+			&i.SnapshotID,
+			&i.LogGroupID,
+			&i.GuildID,
+			&i.EncounterName,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerRole,
+			&i.Metric,
+			&i.MetricValue,
+			&i.PreciseScore,
+			&i.DisplayScore,
+			&i.Rank,
+			&i.SampleSize,
+			&i.Status,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.KilledAt,
+			&i.CreatedAt,
+			&i.PlayerSubSpec,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLogInstanceStartTime = `-- name: GetLogInstanceStartTime :one
 SELECT start_time FROM log_instances WHERE id = $1
 `
@@ -17038,6 +19018,21 @@ raw_rows AS MATERIALIZED (
     ORDER BY rr.run_id, edr.encounter_name,
         (CASE WHEN $1::text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
+parse_rows AS MATERIALIZED (
+    SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
+        psr.run_id,
+        psr.encounter_name,
+        psr.precise_score
+    FROM parse_score_results psr
+    JOIN log_instances psr_instance ON psr_instance.id = psr.instance_id
+    JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.unlisted
+    JOIN selected_encounters selected ON selected.encounter_name = psr.encounter_name
+    WHERE psr.tenant_id = $8
+      AND psr.player_guid = $3
+      AND psr.metric = $1
+      AND psr.status IN ('ok', 'low_confidence')
+    ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
+),
 per_run AS (
     SELECT
         raw.run_id,
@@ -17071,9 +19066,12 @@ per_run AS (
         (SUM(raw.damage_done)::double precision / NULLIF(SUM(raw.duration_secs), 0))::double precision AS dps,
         (SUM(raw.healing_done + raw.absorbed_done)::double precision / NULLIF(SUM(raw.duration_secs), 0))::double precision AS hps,
         ((array_agg(raw.log_hashed_slug ORDER BY raw.killed_at DESC))[1])::text AS log_hashed_slug,
-        0::integer AS parse_count,
-        0::double precision AS average_parse
+        COUNT(parse.precise_score)::integer AS parse_count,
+        COALESCE(AVG(parse.precise_score), 0)::double precision AS average_parse
     FROM raw_rows raw
+    LEFT JOIN parse_rows parse
+      ON parse.run_id = raw.run_id
+     AND parse.encounter_name = raw.encounter_name
     GROUP BY raw.run_id, raw.representative_instance_id
 )
 SELECT run_id, representative_instance_id, started_at, killed_at, player_name, player_class, player_spec, player_sub_spec, encounter_count, damage_done, healing_done, absorbed_done, player_deaths, alive_percentage, duration_secs, dps, hps, log_hashed_slug, parse_count, average_parse
@@ -17091,6 +19089,7 @@ type GetCharacterPerformanceRunsParams struct {
 	InstanceName   string        `db:"instance_name" json:"instance_name"`
 	DifficultyName string        `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers     int16         `db:"max_players" json:"max_players"`
+	TenantID       uuid.UUID     `db:"tenant_id" json:"tenant_id"`
 }
 
 type GetCharacterPerformanceRunsRow struct {
@@ -17117,9 +19116,9 @@ type GetCharacterPerformanceRunsRow struct {
 }
 
 // Return complete canonical runs for one character and a selected boss set.
-// Raw DPS/HPS is aggregated from the persisted representative upload.
-// Parse scoring is retired; parse_count and average_parse remain zero for
-// compatibility with the performance-run API.
+// Raw DPS/HPS is aggregated from the persisted representative upload. Cached
+// per-boss parses are averaged when every selected encounter has a usable
+// score. parse_count tells the caller whether the cached average is complete.
 func (q *sqlQuerier) GetCharacterPerformanceRuns(ctx context.Context, arg GetCharacterPerformanceRunsParams) ([]GetCharacterPerformanceRunsRow, error) {
 	rows, err := q.db.Query(ctx, getCharacterPerformanceRuns,
 		arg.Metric,
@@ -17129,6 +19128,7 @@ func (q *sqlQuerier) GetCharacterPerformanceRuns(ctx context.Context, arg GetCha
 		arg.InstanceName,
 		arg.DifficultyName,
 		arg.MaxPlayers,
+		arg.TenantID,
 	)
 	if err != nil {
 		return nil, err
@@ -21704,27 +23704,52 @@ SELECT
     lie.name AS encounter_name,
     lie.end_time AS killed_at,
     (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms,
-    -1::float8 AS parse
+    COALESCE(CASE WHEN tpbs.server_status IN ('ok', 'low_confidence') THEN tpbs.server_precise_score END, -1)::float8 AS parse
 FROM log_instance_encounters lie
-WHERE lie.instance_id = ANY($1 :: uuid[])
+LEFT JOIN time_parse_scores tps
+    ON tps.tenant_id = $1
+   AND tps.instance_id = lie.instance_id
+   AND tps.lookback_days = $2::smallint
+   AND tps.policy_version = $3::smallint
+   AND tps.query_version = $4::smallint
+LEFT JOIN time_parse_boss_scores tpbs
+    ON tpbs.time_parse_score_id = tps.id
+   AND tpbs.encounter_id = lie.id
+WHERE lie.instance_id = ANY($5 :: uuid[])
   AND lie.boss = true
   AND lie.kill_type IN ('clean', 'partial')
   AND lie.end_time > lie.start_time
 ORDER BY lie.instance_id, lie.end_time
 `
 
+type GuildSpeedrunBossKillsParams struct {
+	TenantID      uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	LookbackDays  int16       `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion int16       `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16       `db:"query_version" json:"query_version"`
+	InstanceIds   []uuid.UUID `db:"instance_ids" json:"instance_ids"`
+}
+
 type GuildSpeedrunBossKillsRow struct {
 	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
 	EncounterName string             `db:"encounter_name" json:"encounter_name"`
 	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
 	DurationMs    int64              `db:"duration_ms" json:"duration_ms"`
-	Parse         int32              `db:"parse" json:"parse"`
+	Parse         float64            `db:"parse" json:"parse"`
 }
 
 // Returns the boss kills of the given instances in kill order, for the guild
-// history page's per-boss splits. Kill-time scoring was retired, so parse is -1.
-func (q *sqlQuerier) GuildSpeedrunBossKills(ctx context.Context, instanceIds []uuid.UUID) ([]GuildSpeedrunBossKillsRow, error) {
-	rows, err := q.db.Query(ctx, guildSpeedrunBossKills, instanceIds)
+// history page's per-boss splits. parse is the stored server-scope kill-time
+// parse for the scoring contract given, or -1 when it is not computed or its
+// sample was too small.
+func (q *sqlQuerier) GuildSpeedrunBossKills(ctx context.Context, arg GuildSpeedrunBossKillsParams) ([]GuildSpeedrunBossKillsRow, error) {
+	rows, err := q.db.Query(ctx, guildSpeedrunBossKills,
+		arg.TenantID,
+		arg.LookbackDays,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.InstanceIds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -21770,23 +23795,23 @@ WITH deduped AS (
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
-    WHERE sr.guild_id = $1 :: uuid
-      AND sr.instance_name = $2 :: text
+    WHERE sr.guild_id = $5 :: uuid
+      AND sr.instance_name = $6 :: text
       AND sr.ranked_duration_ms > 0
       AND CASE
-          WHEN $3 :: boolean THEN li.difficulty_name = $4 :: text
+          WHEN $7 :: boolean THEN li.difficulty_name = $8 :: text
           ELSE true
       END
       AND CASE
-          WHEN $5 :: boolean THEN li.max_players = $6 :: int
+          WHEN $9 :: boolean THEN li.max_players = $10 :: int
           ELSE true
       END
       AND CASE
-          WHEN $7 :: boolean THEN li.dynamic_difficulty = $8 :: int
+          WHEN $11 :: boolean THEN li.dynamic_difficulty = $12 :: int
           ELSE true
       END
       AND CASE
-          WHEN $9 :: bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => $9::int)
+          WHEN $13 :: bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => $13::int)
           ELSE true
       END
     ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.qualified DESC, sr.ranked_duration_ms ASC
@@ -21853,13 +23878,23 @@ SELECT
     d.boss_to_boss_duration_ms,
     (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = d.instance_id)::bigint AS player_count,
     GREATEST(COALESCE(c.trash_ms, 0), 0)::bigint AS trash_duration_ms,
-    -1::float8 AS clear_parse
+    COALESCE(CASE WHEN tps.clear_server_status IN ('ok', 'low_confidence') THEN tps.clear_server_precise_score END, -1)::float8 AS clear_parse
 FROM deduped d
 LEFT JOIN covered c ON c.instance_id = d.instance_id
+LEFT JOIN time_parse_scores tps
+    ON tps.tenant_id = $1
+   AND tps.instance_id = d.instance_id
+   AND tps.lookback_days = $2::smallint
+   AND tps.policy_version = $3::smallint
+   AND tps.query_version = $4::smallint
 ORDER BY d.completion_time ASC
 `
 
 type GuildSpeedrunHistoryParams struct {
+	TenantID                uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	LookbackDays            int16     `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion           int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion            int16     `db:"query_version" json:"query_version"`
 	GuildID                 uuid.UUID `db:"guild_id" json:"guild_id"`
 	InstanceName            string    `db:"instance_name" json:"instance_name"`
 	FilterDifficulty        bool      `db:"filter_difficulty" json:"filter_difficulty"`
@@ -21882,7 +23917,7 @@ type GuildSpeedrunHistoryRow struct {
 	BossToBossDurationMs int64              `db:"boss_to_boss_duration_ms" json:"boss_to_boss_duration_ms"`
 	PlayerCount          int64              `db:"player_count" json:"player_count"`
 	TrashDurationMs      int64              `db:"trash_duration_ms" json:"trash_duration_ms"`
-	ClearParse           int32              `db:"clear_parse" json:"clear_parse"`
+	ClearParse           float64            `db:"clear_parse" json:"clear_parse"`
 }
 
 // Returns every full clear of one instance by a guild, oldest first, for the
@@ -21894,13 +23929,18 @@ type GuildSpeedrunHistoryRow struct {
 // merged length of all fights minus the merged length of boss fights. Merging
 // uses window functions (gaps and islands) rather than multiranges, which need
 // PostgreSQL 14.
-// Clear-time parse scoring was retired; clear_parse remains -1 for API compatibility.
+// clear_parse is the stored server-scope clear-time parse for the scoring
+// contract given, or -1 when it is not computed or its sample was too small.
 // JOINs wow_server_realms so RLS tenant filtering cascades.
 // Every fight clipped to its clear's window, once in the "all" scope and,
 // for boss fights, again in the "boss" scope.
 // A fight starts a new island when it begins after every earlier fight ended.
 func (q *sqlQuerier) GuildSpeedrunHistory(ctx context.Context, arg GuildSpeedrunHistoryParams) ([]GuildSpeedrunHistoryRow, error) {
 	rows, err := q.db.Query(ctx, guildSpeedrunHistory,
+		arg.TenantID,
+		arg.LookbackDays,
+		arg.PolicyVersion,
+		arg.QueryVersion,
 		arg.GuildID,
 		arg.InstanceName,
 		arg.FilterDifficulty,
@@ -23795,6 +25835,1637 @@ func (q *sqlQuerier) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (
 		&i.DisabledAds,
 	)
 	return i, err
+}
+
+const deleteTimeParseBossKillMembershipSeries = `-- name: DeleteTimeParseBossKillMembershipSeries :exec
+DELETE FROM time_parse_boss_kill_memberships
+WHERE tenant_id = $1
+  AND policy_version = $2
+  AND query_version = $3
+`
+
+type DeleteTimeParseBossKillMembershipSeriesParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+func (q *sqlQuerier) DeleteTimeParseBossKillMembershipSeries(ctx context.Context, arg DeleteTimeParseBossKillMembershipSeriesParams) error {
+	_, err := q.db.Exec(ctx, deleteTimeParseBossKillMembershipSeries, arg.TenantID, arg.PolicyVersion, arg.QueryVersion)
+	return err
+}
+
+const deleteTimeParseBossKillMembershipsByInstance = `-- name: DeleteTimeParseBossKillMembershipsByInstance :exec
+DELETE FROM time_parse_boss_kill_memberships WHERE instance_id = $1
+`
+
+func (q *sqlQuerier) DeleteTimeParseBossKillMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteTimeParseBossKillMembershipsByInstance, instanceID)
+	return err
+}
+
+const deleteTimeParseBossKillMembershipsByLogGroup = `-- name: DeleteTimeParseBossKillMembershipsByLogGroup :exec
+DELETE FROM time_parse_boss_kill_memberships WHERE log_group_id = $1
+`
+
+func (q *sqlQuerier) DeleteTimeParseBossKillMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteTimeParseBossKillMembershipsByLogGroup, logGroupID)
+	return err
+}
+
+const deleteTimeParseClearTimeMembershipSeries = `-- name: DeleteTimeParseClearTimeMembershipSeries :exec
+
+DELETE FROM time_parse_clear_time_memberships
+WHERE tenant_id = $1
+  AND policy_version = $2
+  AND query_version = $3
+`
+
+type DeleteTimeParseClearTimeMembershipSeriesParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+// Current-known storage for time-parse clear-time and boss-kill cohorts.
+// Each logical run is stored once per tenant and scoring version. Date windows
+// are applied at read time so late uploads, corrections, and invalidations are
+// reflected immediately.
+func (q *sqlQuerier) DeleteTimeParseClearTimeMembershipSeries(ctx context.Context, arg DeleteTimeParseClearTimeMembershipSeriesParams) error {
+	_, err := q.db.Exec(ctx, deleteTimeParseClearTimeMembershipSeries, arg.TenantID, arg.PolicyVersion, arg.QueryVersion)
+	return err
+}
+
+const deleteTimeParseClearTimeMembershipsByInstance = `-- name: DeleteTimeParseClearTimeMembershipsByInstance :exec
+DELETE FROM time_parse_clear_time_memberships WHERE instance_id = $1
+`
+
+func (q *sqlQuerier) DeleteTimeParseClearTimeMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteTimeParseClearTimeMembershipsByInstance, instanceID)
+	return err
+}
+
+const deleteTimeParseClearTimeMembershipsByLogGroup = `-- name: DeleteTimeParseClearTimeMembershipsByLogGroup :exec
+DELETE FROM time_parse_clear_time_memberships WHERE log_group_id = $1
+`
+
+func (q *sqlQuerier) DeleteTimeParseClearTimeMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteTimeParseClearTimeMembershipsByLogGroup, logGroupID)
+	return err
+}
+
+const getTimeParseBossKillCohortEntries = `-- name: GetTimeParseBossKillCohortEntries :many
+SELECT
+    membership.instance_id,
+    membership.duration_ms,
+    membership.killed_at,
+    instance.hashed_slug AS log_hashed_slug,
+    guild.id AS guild_id,
+    guild.name AS guild_name
+FROM time_parse_boss_kill_memberships membership
+JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+LEFT JOIN guilds guild ON guild.id = instance.guild_id
+WHERE membership.tenant_id = $1
+  AND membership.policy_version = $2
+  AND membership.query_version = $3
+  AND membership.killed_at < $4
+  AND ($5::timestamptz IS NULL OR membership.killed_at >= $5)
+  AND membership.instance_name = $6
+  AND membership.encounter_name = $7
+  AND membership.difficulty_name = $8
+  AND membership.max_players = $9
+ORDER BY membership.duration_ms, membership.killed_at
+`
+
+type GetTimeParseBossKillCohortEntriesParams struct {
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion  int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
+	Cutoff         pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+}
+
+type GetTimeParseBossKillCohortEntriesRow struct {
+	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
+	DurationMs    int64              `db:"duration_ms" json:"duration_ms"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	LogHashedSlug pgtype.Text        `db:"log_hashed_slug" json:"log_hashed_slug"`
+	GuildID       uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName     pgtype.Text        `db:"guild_name" json:"guild_name"`
+}
+
+func (q *sqlQuerier) GetTimeParseBossKillCohortEntries(ctx context.Context, arg GetTimeParseBossKillCohortEntriesParams) ([]GetTimeParseBossKillCohortEntriesRow, error) {
+	rows, err := q.db.Query(ctx, getTimeParseBossKillCohortEntries,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTimeParseBossKillCohortEntriesRow
+	for rows.Next() {
+		var i GetTimeParseBossKillCohortEntriesRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.DurationMs,
+			&i.KilledAt,
+			&i.LogHashedSlug,
+			&i.GuildID,
+			&i.GuildName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTimeParseBossKillMembershipCohort = `-- name: GetTimeParseBossKillMembershipCohort :many
+SELECT membership.duration_ms
+FROM time_parse_boss_kill_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE membership.tenant_id = $1
+  AND membership.policy_version = $2
+  AND membership.query_version = $3
+  AND membership.killed_at < $4
+  AND ($5::timestamptz IS NULL OR membership.killed_at >= $5)
+  AND ($6::uuid IS NULL OR membership.run_id <> $6)
+  AND membership.instance_name = $7
+  AND membership.encounter_name = $8
+  AND membership.difficulty_name = $9
+  AND membership.max_players = $10
+`
+
+type GetTimeParseBossKillMembershipCohortParams struct {
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion  int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
+	Cutoff         pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	ExcludeRunID   uuid.UUID          `db:"exclude_run_id" json:"exclude_run_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+}
+
+func (q *sqlQuerier) GetTimeParseBossKillMembershipCohort(ctx context.Context, arg GetTimeParseBossKillMembershipCohortParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, getTimeParseBossKillMembershipCohort,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.ExcludeRunID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var duration_ms int64
+		if err := rows.Scan(&duration_ms); err != nil {
+			return nil, err
+		}
+		items = append(items, duration_ms)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTimeParseClearTimeCohortEntries = `-- name: GetTimeParseClearTimeCohortEntries :many
+SELECT
+    membership.instance_id,
+    membership.duration_ms,
+    membership.start_time AS killed_at,
+    instance.hashed_slug AS log_hashed_slug,
+    guild.id AS guild_id,
+    guild.name AS guild_name
+FROM time_parse_clear_time_memberships membership
+JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+LEFT JOIN guilds guild ON guild.id = instance.guild_id
+WHERE membership.tenant_id = $1
+  AND membership.policy_version = $2
+  AND membership.query_version = $3
+  AND membership.start_time < $4
+  AND ($5::timestamptz IS NULL OR membership.start_time >= $5)
+  AND membership.instance_name = $6
+  AND membership.difficulty_name = $7
+  AND membership.max_players = $8
+ORDER BY membership.duration_ms, membership.start_time
+`
+
+type GetTimeParseClearTimeCohortEntriesParams struct {
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion  int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
+	Cutoff         pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+}
+
+type GetTimeParseClearTimeCohortEntriesRow struct {
+	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
+	DurationMs    int64              `db:"duration_ms" json:"duration_ms"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	LogHashedSlug pgtype.Text        `db:"log_hashed_slug" json:"log_hashed_slug"`
+	GuildID       uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName     pgtype.Text        `db:"guild_name" json:"guild_name"`
+}
+
+func (q *sqlQuerier) GetTimeParseClearTimeCohortEntries(ctx context.Context, arg GetTimeParseClearTimeCohortEntriesParams) ([]GetTimeParseClearTimeCohortEntriesRow, error) {
+	rows, err := q.db.Query(ctx, getTimeParseClearTimeCohortEntries,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTimeParseClearTimeCohortEntriesRow
+	for rows.Next() {
+		var i GetTimeParseClearTimeCohortEntriesRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.DurationMs,
+			&i.KilledAt,
+			&i.LogHashedSlug,
+			&i.GuildID,
+			&i.GuildName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTimeParseClearTimeMembershipCohort = `-- name: GetTimeParseClearTimeMembershipCohort :many
+SELECT membership.duration_ms
+FROM time_parse_clear_time_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE membership.tenant_id = $1
+  AND membership.policy_version = $2
+  AND membership.query_version = $3
+  AND membership.start_time < $4
+  AND ($5::timestamptz IS NULL OR membership.start_time >= $5)
+  AND ($6::uuid IS NULL OR membership.run_id <> $6)
+  AND membership.instance_name = $7
+  AND membership.difficulty_name = $8
+  AND membership.max_players = $9
+`
+
+type GetTimeParseClearTimeMembershipCohortParams struct {
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion  int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
+	Cutoff         pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	ExcludeRunID   uuid.UUID          `db:"exclude_run_id" json:"exclude_run_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+}
+
+func (q *sqlQuerier) GetTimeParseClearTimeMembershipCohort(ctx context.Context, arg GetTimeParseClearTimeMembershipCohortParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, getTimeParseClearTimeMembershipCohort,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.ExcludeRunID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var duration_ms int64
+		if err := rows.Scan(&duration_ms); err != nil {
+			return nil, err
+		}
+		items = append(items, duration_ms)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTimeParseBossKillCohortBuckets = `-- name: ListTimeParseBossKillCohortBuckets :many
+SELECT
+    membership.instance_name,
+    membership.encounter_name,
+    membership.difficulty_name,
+    membership.max_players,
+    COUNT(*)::bigint AS sample_size
+FROM time_parse_boss_kill_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE membership.tenant_id = $1
+  AND membership.policy_version = $2
+  AND membership.query_version = $3
+  AND membership.killed_at < $4
+  AND ($5::timestamptz IS NULL OR membership.killed_at >= $5)
+GROUP BY membership.instance_name, membership.encounter_name,
+         membership.difficulty_name, membership.max_players
+ORDER BY membership.instance_name, membership.encounter_name,
+         membership.difficulty_name, membership.max_players
+`
+
+type ListTimeParseBossKillCohortBucketsParams struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	Cutoff        pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+}
+
+type ListTimeParseBossKillCohortBucketsRow struct {
+	InstanceName   string `db:"instance_name" json:"instance_name"`
+	EncounterName  string `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+	SampleSize     int64  `db:"sample_size" json:"sample_size"`
+}
+
+func (q *sqlQuerier) ListTimeParseBossKillCohortBuckets(ctx context.Context, arg ListTimeParseBossKillCohortBucketsParams) ([]ListTimeParseBossKillCohortBucketsRow, error) {
+	rows, err := q.db.Query(ctx, listTimeParseBossKillCohortBuckets,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTimeParseBossKillCohortBucketsRow
+	for rows.Next() {
+		var i ListTimeParseBossKillCohortBucketsRow
+		if err := rows.Scan(
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.SampleSize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTimeParseBossKillMemberships = `-- name: ListTimeParseBossKillMemberships :many
+SELECT membership.id, membership.tenant_id, membership.policy_version, membership.query_version, membership.run_id, membership.encounter_name, membership.instance_id, membership.log_group_id, membership.instance_name, membership.difficulty_name, membership.max_players, membership.duration_ms, membership.killed_at FROM time_parse_boss_kill_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE tenant_id = $1
+  AND policy_version = $2
+  AND query_version = $3
+ORDER BY run_id, encounter_name
+`
+
+type ListTimeParseBossKillMembershipsParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+func (q *sqlQuerier) ListTimeParseBossKillMemberships(ctx context.Context, arg ListTimeParseBossKillMembershipsParams) ([]TimeParseBossKillMembership, error) {
+	rows, err := q.db.Query(ctx, listTimeParseBossKillMemberships, arg.TenantID, arg.PolicyVersion, arg.QueryVersion)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TimeParseBossKillMembership
+	for rows.Next() {
+		var i TimeParseBossKillMembership
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.PolicyVersion,
+			&i.QueryVersion,
+			&i.RunID,
+			&i.EncounterName,
+			&i.InstanceID,
+			&i.LogGroupID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DurationMs,
+			&i.KilledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTimeParseBossKillSpreadValues = `-- name: ListTimeParseBossKillSpreadValues :many
+SELECT
+    membership.encounter_name,
+    membership.difficulty_name,
+    membership.max_players,
+    membership.duration_ms
+FROM time_parse_boss_kill_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE membership.tenant_id = $1
+  AND membership.policy_version = $2
+  AND membership.query_version = $3
+  AND membership.instance_name = $4
+  AND membership.killed_at < $5
+  AND ($6::timestamptz IS NULL OR membership.killed_at >= $6)
+`
+
+type ListTimeParseBossKillSpreadValuesParams struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	Cutoff        pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+}
+
+type ListTimeParseBossKillSpreadValuesRow struct {
+	EncounterName  string `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+	DurationMs     int64  `db:"duration_ms" json:"duration_ms"`
+}
+
+// Kill durations for every boss-kill cohort in one instance, used to
+// summarize kill-time parse spreads without per-kill guild lookups.
+func (q *sqlQuerier) ListTimeParseBossKillSpreadValues(ctx context.Context, arg ListTimeParseBossKillSpreadValuesParams) ([]ListTimeParseBossKillSpreadValuesRow, error) {
+	rows, err := q.db.Query(ctx, listTimeParseBossKillSpreadValues,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.InstanceName,
+		arg.Cutoff,
+		arg.WindowStart,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTimeParseBossKillSpreadValuesRow
+	for rows.Next() {
+		var i ListTimeParseBossKillSpreadValuesRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DurationMs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTimeParseClearTimeCohortBuckets = `-- name: ListTimeParseClearTimeCohortBuckets :many
+SELECT
+    membership.instance_name,
+    membership.difficulty_name,
+    membership.max_players,
+    COUNT(*)::bigint AS sample_size
+FROM time_parse_clear_time_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE membership.tenant_id = $1
+  AND membership.policy_version = $2
+  AND membership.query_version = $3
+  AND membership.start_time < $4
+  AND ($5::timestamptz IS NULL OR membership.start_time >= $5)
+GROUP BY membership.instance_name, membership.difficulty_name, membership.max_players
+ORDER BY membership.instance_name, membership.difficulty_name, membership.max_players
+`
+
+type ListTimeParseClearTimeCohortBucketsParams struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	Cutoff        pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+}
+
+type ListTimeParseClearTimeCohortBucketsRow struct {
+	InstanceName   string `db:"instance_name" json:"instance_name"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+	SampleSize     int64  `db:"sample_size" json:"sample_size"`
+}
+
+func (q *sqlQuerier) ListTimeParseClearTimeCohortBuckets(ctx context.Context, arg ListTimeParseClearTimeCohortBucketsParams) ([]ListTimeParseClearTimeCohortBucketsRow, error) {
+	rows, err := q.db.Query(ctx, listTimeParseClearTimeCohortBuckets,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTimeParseClearTimeCohortBucketsRow
+	for rows.Next() {
+		var i ListTimeParseClearTimeCohortBucketsRow
+		if err := rows.Scan(
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.SampleSize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTimeParseClearTimeMemberships = `-- name: ListTimeParseClearTimeMemberships :many
+SELECT membership.id, membership.tenant_id, membership.policy_version, membership.query_version, membership.run_id, membership.instance_id, membership.log_group_id, membership.instance_name, membership.difficulty_name, membership.max_players, membership.duration_ms, membership.start_time FROM time_parse_clear_time_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE tenant_id = $1
+  AND policy_version = $2
+  AND query_version = $3
+ORDER BY run_id
+`
+
+type ListTimeParseClearTimeMembershipsParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+func (q *sqlQuerier) ListTimeParseClearTimeMemberships(ctx context.Context, arg ListTimeParseClearTimeMembershipsParams) ([]TimeParseClearTimeMembership, error) {
+	rows, err := q.db.Query(ctx, listTimeParseClearTimeMemberships, arg.TenantID, arg.PolicyVersion, arg.QueryVersion)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TimeParseClearTimeMembership
+	for rows.Next() {
+		var i TimeParseClearTimeMembership
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.PolicyVersion,
+			&i.QueryVersion,
+			&i.RunID,
+			&i.InstanceID,
+			&i.LogGroupID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DurationMs,
+			&i.StartTime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTimeParseClearTimeSpreadValues = `-- name: ListTimeParseClearTimeSpreadValues :many
+SELECT
+    membership.difficulty_name,
+    membership.max_players,
+    membership.duration_ms
+FROM time_parse_clear_time_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE membership.tenant_id = $1
+  AND membership.policy_version = $2
+  AND membership.query_version = $3
+  AND membership.instance_name = $4
+  AND membership.start_time < $5
+  AND ($6::timestamptz IS NULL OR membership.start_time >= $6)
+`
+
+type ListTimeParseClearTimeSpreadValuesParams struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	Cutoff        pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart   pgtype.Timestamptz `db:"window_start" json:"window_start"`
+}
+
+type ListTimeParseClearTimeSpreadValuesRow struct {
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+	DurationMs     int64  `db:"duration_ms" json:"duration_ms"`
+}
+
+// Full-clear durations for every clear-time cohort in one instance.
+func (q *sqlQuerier) ListTimeParseClearTimeSpreadValues(ctx context.Context, arg ListTimeParseClearTimeSpreadValuesParams) ([]ListTimeParseClearTimeSpreadValuesRow, error) {
+	rows, err := q.db.Query(ctx, listTimeParseClearTimeSpreadValues,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.InstanceName,
+		arg.Cutoff,
+		arg.WindowStart,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTimeParseClearTimeSpreadValuesRow
+	for rows.Next() {
+		var i ListTimeParseClearTimeSpreadValuesRow
+		if err := rows.Scan(&i.DifficultyName, &i.MaxPlayers, &i.DurationMs); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const refreshTimeParseBossKillMembershipsForLogGroup = `-- name: RefreshTimeParseBossKillMembershipsForLogGroup :one
+WITH affected_runs AS MATERIALIZED (
+    SELECT DISTINCT COALESCE(instance.duplicate_group_id, instance.id) AS run_id
+    FROM log_instances instance
+    WHERE instance.log_group_id = $1
+),
+representative_instances AS MATERIALIZED (
+    SELECT DISTINCT ON (COALESCE(instance.duplicate_group_id, instance.id))
+        instance.id,
+        COALESCE(instance.duplicate_group_id, instance.id) AS run_id
+    FROM log_instances instance
+    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+    JOIN affected_runs affected
+      ON affected.run_id = COALESCE(instance.duplicate_group_id, instance.id)
+    WHERE instance.invalidated_at IS NULL
+    ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = instance.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
+        (instance.id = instance.duplicate_group_id) DESC NULLS LAST,
+        instance.start_time ASC,
+        instance.id ASC
+),
+current_members AS MATERIALIZED (
+    SELECT DISTINCT ON (representative.run_id, encounter.name)
+        COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id,
+        representative.run_id,
+        encounter.name AS encounter_name,
+        instance.id AS instance_id,
+        instance.log_group_id,
+        speedrun.instance_name,
+        instance.difficulty_name,
+        instance.max_players,
+        (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint AS duration_ms,
+        encounter.end_time AS killed_at
+    FROM representative_instances representative
+    JOIN log_instances instance ON instance.id = representative.id
+    JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
+    JOIN log_instance_encounters encounter ON encounter.instance_id = representative.id
+    JOIN wow_server_realms realm ON realm.id = instance.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    WHERE encounter.boss = true
+      AND encounter.kill_type = 'clean'
+      AND encounter.end_time > encounter.start_time
+      AND (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint > 0
+    ORDER BY representative.run_id, encounter.name,
+        (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint ASC,
+        encounter.end_time ASC
+),
+upserted AS (
+    INSERT INTO time_parse_boss_kill_memberships (
+        tenant_id, policy_version, query_version, run_id, encounter_name,
+        instance_id, log_group_id, instance_name, difficulty_name, max_players,
+        duration_ms, killed_at
+    )
+    SELECT
+        member.tenant_id, $2, $3, member.run_id, member.encounter_name,
+        member.instance_id, member.log_group_id, member.instance_name,
+        member.difficulty_name, member.max_players, member.duration_ms, member.killed_at
+    FROM current_members member
+    ON CONFLICT (tenant_id, policy_version, query_version, run_id, encounter_name) DO UPDATE SET
+        instance_id = EXCLUDED.instance_id,
+        log_group_id = EXCLUDED.log_group_id,
+        instance_name = EXCLUDED.instance_name,
+        difficulty_name = EXCLUDED.difficulty_name,
+        max_players = EXCLUDED.max_players,
+        duration_ms = EXCLUDED.duration_ms,
+        killed_at = EXCLUDED.killed_at
+    RETURNING 1
+),
+deleted AS (
+    DELETE FROM time_parse_boss_kill_memberships membership
+    WHERE membership.policy_version = $2
+      AND membership.query_version = $3
+      AND membership.run_id IN (SELECT run_id FROM affected_runs)
+      AND NOT EXISTS (
+          SELECT 1 FROM current_members member
+          WHERE member.tenant_id = membership.tenant_id
+            AND member.run_id = membership.run_id
+            AND member.encounter_name = membership.encounter_name
+      )
+    RETURNING 1
+)
+SELECT
+    (SELECT COUNT(*) FROM upserted)::bigint AS upserted_count,
+    (SELECT COUNT(*) FROM deleted)::bigint AS deleted_count
+`
+
+type RefreshTimeParseBossKillMembershipsForLogGroupParams struct {
+	LogGroupID    uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+type RefreshTimeParseBossKillMembershipsForLogGroupRow struct {
+	UpsertedCount int64 `db:"upserted_count" json:"upserted_count"`
+	DeletedCount  int64 `db:"deleted_count" json:"deleted_count"`
+}
+
+func (q *sqlQuerier) RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseBossKillMembershipsForLogGroupParams) (RefreshTimeParseBossKillMembershipsForLogGroupRow, error) {
+	row := q.db.QueryRow(ctx, refreshTimeParseBossKillMembershipsForLogGroup, arg.LogGroupID, arg.PolicyVersion, arg.QueryVersion)
+	var i RefreshTimeParseBossKillMembershipsForLogGroupRow
+	err := row.Scan(&i.UpsertedCount, &i.DeletedCount)
+	return i, err
+}
+
+const refreshTimeParseClearTimeMembershipsForLogGroup = `-- name: RefreshTimeParseClearTimeMembershipsForLogGroup :one
+WITH affected_runs AS MATERIALIZED (
+    SELECT DISTINCT COALESCE(instance.duplicate_group_id, instance.id) AS run_id
+    FROM log_instances instance
+    WHERE instance.log_group_id = $1
+),
+representative_instances AS MATERIALIZED (
+    SELECT DISTINCT ON (COALESCE(instance.duplicate_group_id, instance.id))
+        instance.id,
+        COALESCE(instance.duplicate_group_id, instance.id) AS run_id
+    FROM log_instances instance
+    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+    JOIN affected_runs affected
+      ON affected.run_id = COALESCE(instance.duplicate_group_id, instance.id)
+    WHERE instance.invalidated_at IS NULL
+    ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
+        (SELECT COUNT(DISTINCT coverage.encounter_name)
+         FROM encounter_dps_rankings coverage
+         WHERE coverage.instance_id = instance.id
+           AND coverage.encounter_id IS NOT NULL) DESC,
+        (instance.id = instance.duplicate_group_id) DESC NULLS LAST,
+        instance.start_time ASC,
+        instance.id ASC
+),
+current_members AS MATERIALIZED (
+    SELECT
+        COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id,
+        representative.run_id,
+        speedrun.instance_id,
+        instance.log_group_id,
+        speedrun.instance_name,
+        instance.difficulty_name,
+        instance.max_players,
+        speedrun.ranked_duration_ms::bigint AS duration_ms,
+        speedrun.start_time::timestamptz AS start_time
+    FROM representative_instances representative
+    JOIN log_instances instance ON instance.id = representative.id
+    JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
+    JOIN wow_server_realms realm ON realm.id = instance.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    WHERE speedrun.qualified = true
+      AND speedrun.ranked_duration_ms > 0
+),
+upserted AS (
+    INSERT INTO time_parse_clear_time_memberships (
+        tenant_id, policy_version, query_version, run_id,
+        instance_id, log_group_id, instance_name,
+        difficulty_name, max_players, duration_ms, start_time
+    )
+    SELECT
+        member.tenant_id, $2, $3, member.run_id,
+        member.instance_id, member.log_group_id, member.instance_name,
+        member.difficulty_name, member.max_players, member.duration_ms, member.start_time
+    FROM current_members member
+    ON CONFLICT (tenant_id, policy_version, query_version, run_id) DO UPDATE SET
+        instance_id = EXCLUDED.instance_id,
+        log_group_id = EXCLUDED.log_group_id,
+        instance_name = EXCLUDED.instance_name,
+        difficulty_name = EXCLUDED.difficulty_name,
+        max_players = EXCLUDED.max_players,
+        duration_ms = EXCLUDED.duration_ms,
+        start_time = EXCLUDED.start_time
+    RETURNING 1
+),
+deleted AS (
+    DELETE FROM time_parse_clear_time_memberships membership
+    WHERE membership.policy_version = $2
+      AND membership.query_version = $3
+      AND membership.run_id IN (SELECT run_id FROM affected_runs)
+      AND NOT EXISTS (
+          SELECT 1 FROM current_members member
+          WHERE member.tenant_id = membership.tenant_id
+            AND member.run_id = membership.run_id
+      )
+    RETURNING 1
+)
+SELECT
+    (SELECT COUNT(*) FROM upserted)::bigint AS upserted_count,
+    (SELECT COUNT(*) FROM deleted)::bigint AS deleted_count
+`
+
+type RefreshTimeParseClearTimeMembershipsForLogGroupParams struct {
+	LogGroupID    uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+type RefreshTimeParseClearTimeMembershipsForLogGroupRow struct {
+	UpsertedCount int64 `db:"upserted_count" json:"upserted_count"`
+	DeletedCount  int64 `db:"deleted_count" json:"deleted_count"`
+}
+
+func (q *sqlQuerier) RefreshTimeParseClearTimeMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseClearTimeMembershipsForLogGroupParams) (RefreshTimeParseClearTimeMembershipsForLogGroupRow, error) {
+	row := q.db.QueryRow(ctx, refreshTimeParseClearTimeMembershipsForLogGroup, arg.LogGroupID, arg.PolicyVersion, arg.QueryVersion)
+	var i RefreshTimeParseClearTimeMembershipsForLogGroupRow
+	err := row.Scan(&i.UpsertedCount, &i.DeletedCount)
+	return i, err
+}
+
+const acquireTimeParseScoreLock = `-- name: AcquireTimeParseScoreLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+func (q *sqlQuerier) AcquireTimeParseScoreLock(ctx context.Context, instanceID string) error {
+	_, err := q.db.Exec(ctx, acquireTimeParseScoreLock, instanceID)
+	return err
+}
+
+const deleteTimeParseScoreForContract = `-- name: DeleteTimeParseScoreForContract :exec
+DELETE FROM time_parse_scores
+WHERE tenant_id = $1
+  AND instance_id = $2
+  AND lookback_days = $3
+  AND policy_version = $4
+  AND query_version = $5
+`
+
+type DeleteTimeParseScoreForContractParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID    uuid.UUID `db:"instance_id" json:"instance_id"`
+	LookbackDays  int16     `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+func (q *sqlQuerier) DeleteTimeParseScoreForContract(ctx context.Context, arg DeleteTimeParseScoreForContractParams) error {
+	_, err := q.db.Exec(ctx, deleteTimeParseScoreForContract,
+		arg.TenantID,
+		arg.InstanceID,
+		arg.LookbackDays,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+	)
+	return err
+}
+
+const getScopedTimeParseBossKillCohort = `-- name: GetScopedTimeParseBossKillCohort :many
+SELECT membership.duration_ms
+FROM time_parse_boss_kill_memberships membership
+JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE membership.tenant_id = $1
+  AND membership.policy_version = $2
+  AND membership.query_version = $3
+  AND membership.killed_at < $4
+  AND membership.killed_at >= $5
+  AND membership.run_id <> $6
+  AND membership.instance_name = $7
+  AND membership.encounter_name = $8
+  AND membership.difficulty_name = $9
+  AND membership.max_players = $10
+  AND CASE $11::text
+      WHEN 'server' THEN true
+      WHEN 'realm' THEN instance.realm_id = $12
+      WHEN 'guild' THEN $13::uuid IS NOT NULL AND instance.guild_id = $13
+      ELSE false
+  END
+`
+
+type GetScopedTimeParseBossKillCohortParams struct {
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion  int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
+	Cutoff         pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	ExcludeRunID   uuid.UUID          `db:"exclude_run_id" json:"exclude_run_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	Scope          string             `db:"scope" json:"scope"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID          `db:"guild_id" json:"guild_id"`
+}
+
+func (q *sqlQuerier) GetScopedTimeParseBossKillCohort(ctx context.Context, arg GetScopedTimeParseBossKillCohortParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, getScopedTimeParseBossKillCohort,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.ExcludeRunID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.Scope,
+		arg.RealmID,
+		arg.GuildID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var duration_ms int64
+		if err := rows.Scan(&duration_ms); err != nil {
+			return nil, err
+		}
+		items = append(items, duration_ms)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getScopedTimeParseClearTimeCohort = `-- name: GetScopedTimeParseClearTimeCohort :many
+SELECT membership.duration_ms
+FROM time_parse_clear_time_memberships membership
+JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE membership.tenant_id = $1
+  AND membership.policy_version = $2
+  AND membership.query_version = $3
+  AND membership.start_time < $4
+  AND membership.start_time >= $5
+  AND membership.run_id <> $6
+  AND membership.instance_name = $7
+  AND membership.difficulty_name = $8
+  AND membership.max_players = $9
+  AND CASE $10::text
+      WHEN 'server' THEN true
+      WHEN 'realm' THEN instance.realm_id = $11
+      WHEN 'guild' THEN $12::uuid IS NOT NULL AND instance.guild_id = $12
+      ELSE false
+  END
+`
+
+type GetScopedTimeParseClearTimeCohortParams struct {
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion  int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
+	Cutoff         pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart    pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	ExcludeRunID   uuid.UUID          `db:"exclude_run_id" json:"exclude_run_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	Scope          string             `db:"scope" json:"scope"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID          `db:"guild_id" json:"guild_id"`
+}
+
+func (q *sqlQuerier) GetScopedTimeParseClearTimeCohort(ctx context.Context, arg GetScopedTimeParseClearTimeCohortParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, getScopedTimeParseClearTimeCohort,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.ExcludeRunID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.Scope,
+		arg.RealmID,
+		arg.GuildID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var duration_ms int64
+		if err := rows.Scan(&duration_ms); err != nil {
+			return nil, err
+		}
+		items = append(items, duration_ms)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTimeParseScoreForContract = `-- name: GetTimeParseScoreForContract :one
+SELECT score.id, score.tenant_id, score.instance_id, score.run_id, score.log_group_id, score.realm_id, score.guild_id, score.clear_duration_ms, score.clear_server_precise_score, score.clear_server_display_score, score.clear_server_rank, score.clear_server_sample_size, score.clear_server_status, score.clear_realm_precise_score, score.clear_realm_display_score, score.clear_realm_rank, score.clear_realm_sample_size, score.clear_realm_status, score.clear_guild_precise_score, score.clear_guild_display_score, score.clear_guild_rank, score.clear_guild_sample_size, score.clear_guild_status, score.cutoff, score.window_start, score.lookback_days, score.policy_version, score.query_version, score.computed_at FROM time_parse_scores score
+JOIN wow_log_groups log_group ON log_group.id = score.log_group_id AND NOT log_group.unlisted
+WHERE score.tenant_id = $1
+  AND score.instance_id = $2
+  AND lookback_days = $3
+  AND policy_version = $4
+  AND query_version = $5
+`
+
+type GetTimeParseScoreForContractParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID    uuid.UUID `db:"instance_id" json:"instance_id"`
+	LookbackDays  int16     `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+func (q *sqlQuerier) GetTimeParseScoreForContract(ctx context.Context, arg GetTimeParseScoreForContractParams) (TimeParseScore, error) {
+	row := q.db.QueryRow(ctx, getTimeParseScoreForContract,
+		arg.TenantID,
+		arg.InstanceID,
+		arg.LookbackDays,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+	)
+	var i TimeParseScore
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.InstanceID,
+		&i.RunID,
+		&i.LogGroupID,
+		&i.RealmID,
+		&i.GuildID,
+		&i.ClearDurationMs,
+		&i.ClearServerPreciseScore,
+		&i.ClearServerDisplayScore,
+		&i.ClearServerRank,
+		&i.ClearServerSampleSize,
+		&i.ClearServerStatus,
+		&i.ClearRealmPreciseScore,
+		&i.ClearRealmDisplayScore,
+		&i.ClearRealmRank,
+		&i.ClearRealmSampleSize,
+		&i.ClearRealmStatus,
+		&i.ClearGuildPreciseScore,
+		&i.ClearGuildDisplayScore,
+		&i.ClearGuildRank,
+		&i.ClearGuildSampleSize,
+		&i.ClearGuildStatus,
+		&i.Cutoff,
+		&i.WindowStart,
+		&i.LookbackDays,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.ComputedAt,
+	)
+	return i, err
+}
+
+const getTimeParseScoringInstance = `-- name: GetTimeParseScoringInstance :one
+SELECT
+    instance.id,
+    COALESCE(instance.duplicate_group_id, instance.id) AS run_id,
+    instance.log_group_id,
+    instance.realm_id,
+    instance.guild_id,
+    instance.start_time,
+    instance.name AS instance_name,
+    instance.difficulty_name,
+    instance.max_players
+FROM log_instances instance
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+JOIN wow_server_realms realm ON realm.id = instance.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE instance.id = $1
+  AND COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = $2
+  AND instance.invalidated_at IS NULL
+`
+
+type GetTimeParseScoringInstanceParams struct {
+	ID       uuid.UUID     `db:"id" json:"id"`
+	TenantID uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+}
+
+type GetTimeParseScoringInstanceRow struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	LogGroupID     uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int32              `db:"max_players" json:"max_players"`
+}
+
+func (q *sqlQuerier) GetTimeParseScoringInstance(ctx context.Context, arg GetTimeParseScoringInstanceParams) (GetTimeParseScoringInstanceRow, error) {
+	row := q.db.QueryRow(ctx, getTimeParseScoringInstance, arg.ID, arg.TenantID)
+	var i GetTimeParseScoringInstanceRow
+	err := row.Scan(
+		&i.ID,
+		&i.RunID,
+		&i.LogGroupID,
+		&i.RealmID,
+		&i.GuildID,
+		&i.StartTime,
+		&i.InstanceName,
+		&i.DifficultyName,
+		&i.MaxPlayers,
+	)
+	return i, err
+}
+
+const insertTimeParseBossScore = `-- name: InsertTimeParseBossScore :exec
+INSERT INTO time_parse_boss_scores (
+    time_parse_score_id, encounter_id, encounter_name, duration_ms,
+    server_precise_score, server_display_score, server_rank, server_sample_size, server_status,
+    realm_precise_score, realm_display_score, realm_rank, realm_sample_size, realm_status,
+    guild_precise_score, guild_display_score, guild_rank, guild_sample_size, guild_status
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6, $7, $8, $9,
+    $10, $11, $12, $13, $14,
+    $15, $16, $17, $18, $19
+)
+`
+
+type InsertTimeParseBossScoreParams struct {
+	TimeParseScoreID   uuid.UUID     `db:"time_parse_score_id" json:"time_parse_score_id"`
+	EncounterID        uuid.UUID     `db:"encounter_id" json:"encounter_id"`
+	EncounterName      string        `db:"encounter_name" json:"encounter_name"`
+	DurationMs         int64         `db:"duration_ms" json:"duration_ms"`
+	ServerPreciseScore float64       `db:"server_precise_score" json:"server_precise_score"`
+	ServerDisplayScore int16         `db:"server_display_score" json:"server_display_score"`
+	ServerRank         int32         `db:"server_rank" json:"server_rank"`
+	ServerSampleSize   int32         `db:"server_sample_size" json:"server_sample_size"`
+	ServerStatus       string        `db:"server_status" json:"server_status"`
+	RealmPreciseScore  float64       `db:"realm_precise_score" json:"realm_precise_score"`
+	RealmDisplayScore  int16         `db:"realm_display_score" json:"realm_display_score"`
+	RealmRank          int32         `db:"realm_rank" json:"realm_rank"`
+	RealmSampleSize    int32         `db:"realm_sample_size" json:"realm_sample_size"`
+	RealmStatus        string        `db:"realm_status" json:"realm_status"`
+	GuildPreciseScore  pgtype.Float8 `db:"guild_precise_score" json:"guild_precise_score"`
+	GuildDisplayScore  pgtype.Int2   `db:"guild_display_score" json:"guild_display_score"`
+	GuildRank          pgtype.Int4   `db:"guild_rank" json:"guild_rank"`
+	GuildSampleSize    pgtype.Int4   `db:"guild_sample_size" json:"guild_sample_size"`
+	GuildStatus        pgtype.Text   `db:"guild_status" json:"guild_status"`
+}
+
+func (q *sqlQuerier) InsertTimeParseBossScore(ctx context.Context, arg InsertTimeParseBossScoreParams) error {
+	_, err := q.db.Exec(ctx, insertTimeParseBossScore,
+		arg.TimeParseScoreID,
+		arg.EncounterID,
+		arg.EncounterName,
+		arg.DurationMs,
+		arg.ServerPreciseScore,
+		arg.ServerDisplayScore,
+		arg.ServerRank,
+		arg.ServerSampleSize,
+		arg.ServerStatus,
+		arg.RealmPreciseScore,
+		arg.RealmDisplayScore,
+		arg.RealmRank,
+		arg.RealmSampleSize,
+		arg.RealmStatus,
+		arg.GuildPreciseScore,
+		arg.GuildDisplayScore,
+		arg.GuildRank,
+		arg.GuildSampleSize,
+		arg.GuildStatus,
+	)
+	return err
+}
+
+const insertTimeParseScore = `-- name: InsertTimeParseScore :one
+INSERT INTO time_parse_scores (
+    tenant_id, instance_id, run_id, log_group_id, realm_id, guild_id,
+    clear_duration_ms,
+    clear_server_precise_score, clear_server_display_score, clear_server_rank,
+    clear_server_sample_size, clear_server_status,
+    clear_realm_precise_score, clear_realm_display_score, clear_realm_rank,
+    clear_realm_sample_size, clear_realm_status,
+    clear_guild_precise_score, clear_guild_display_score, clear_guild_rank,
+    clear_guild_sample_size, clear_guild_status,
+    cutoff, window_start, lookback_days, policy_version, query_version, computed_at
+)
+SELECT
+    $1, $2, $3, $4, $5, $6,
+    $7,
+    $8, $9, $10,
+    $11, $12,
+    $13, $14, $15,
+    $16, $17,
+    $18, $19, $20,
+    $21, $22,
+    $23, $24, $25, $26, $27, now()
+WHERE EXISTS (
+    SELECT 1 FROM wow_log_groups log_group
+    WHERE log_group.id = $4 AND NOT log_group.unlisted
+)
+RETURNING id, tenant_id, instance_id, run_id, log_group_id, realm_id, guild_id, clear_duration_ms, clear_server_precise_score, clear_server_display_score, clear_server_rank, clear_server_sample_size, clear_server_status, clear_realm_precise_score, clear_realm_display_score, clear_realm_rank, clear_realm_sample_size, clear_realm_status, clear_guild_precise_score, clear_guild_display_score, clear_guild_rank, clear_guild_sample_size, clear_guild_status, cutoff, window_start, lookback_days, policy_version, query_version, computed_at
+`
+
+type InsertTimeParseScoreParams struct {
+	TenantID                uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceID              uuid.UUID          `db:"instance_id" json:"instance_id"`
+	RunID                   uuid.UUID          `db:"run_id" json:"run_id"`
+	LogGroupID              uuid.NullUUID      `db:"log_group_id" json:"log_group_id"`
+	RealmID                 uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID                 uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	ClearDurationMs         pgtype.Int8        `db:"clear_duration_ms" json:"clear_duration_ms"`
+	ClearServerPreciseScore pgtype.Float8      `db:"clear_server_precise_score" json:"clear_server_precise_score"`
+	ClearServerDisplayScore pgtype.Int2        `db:"clear_server_display_score" json:"clear_server_display_score"`
+	ClearServerRank         pgtype.Int4        `db:"clear_server_rank" json:"clear_server_rank"`
+	ClearServerSampleSize   pgtype.Int4        `db:"clear_server_sample_size" json:"clear_server_sample_size"`
+	ClearServerStatus       pgtype.Text        `db:"clear_server_status" json:"clear_server_status"`
+	ClearRealmPreciseScore  pgtype.Float8      `db:"clear_realm_precise_score" json:"clear_realm_precise_score"`
+	ClearRealmDisplayScore  pgtype.Int2        `db:"clear_realm_display_score" json:"clear_realm_display_score"`
+	ClearRealmRank          pgtype.Int4        `db:"clear_realm_rank" json:"clear_realm_rank"`
+	ClearRealmSampleSize    pgtype.Int4        `db:"clear_realm_sample_size" json:"clear_realm_sample_size"`
+	ClearRealmStatus        pgtype.Text        `db:"clear_realm_status" json:"clear_realm_status"`
+	ClearGuildPreciseScore  pgtype.Float8      `db:"clear_guild_precise_score" json:"clear_guild_precise_score"`
+	ClearGuildDisplayScore  pgtype.Int2        `db:"clear_guild_display_score" json:"clear_guild_display_score"`
+	ClearGuildRank          pgtype.Int4        `db:"clear_guild_rank" json:"clear_guild_rank"`
+	ClearGuildSampleSize    pgtype.Int4        `db:"clear_guild_sample_size" json:"clear_guild_sample_size"`
+	ClearGuildStatus        pgtype.Text        `db:"clear_guild_status" json:"clear_guild_status"`
+	Cutoff                  pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart             pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	LookbackDays            int16              `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion           int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion            int16              `db:"query_version" json:"query_version"`
+}
+
+func (q *sqlQuerier) InsertTimeParseScore(ctx context.Context, arg InsertTimeParseScoreParams) (TimeParseScore, error) {
+	row := q.db.QueryRow(ctx, insertTimeParseScore,
+		arg.TenantID,
+		arg.InstanceID,
+		arg.RunID,
+		arg.LogGroupID,
+		arg.RealmID,
+		arg.GuildID,
+		arg.ClearDurationMs,
+		arg.ClearServerPreciseScore,
+		arg.ClearServerDisplayScore,
+		arg.ClearServerRank,
+		arg.ClearServerSampleSize,
+		arg.ClearServerStatus,
+		arg.ClearRealmPreciseScore,
+		arg.ClearRealmDisplayScore,
+		arg.ClearRealmRank,
+		arg.ClearRealmSampleSize,
+		arg.ClearRealmStatus,
+		arg.ClearGuildPreciseScore,
+		arg.ClearGuildDisplayScore,
+		arg.ClearGuildRank,
+		arg.ClearGuildSampleSize,
+		arg.ClearGuildStatus,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.LookbackDays,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+	)
+	var i TimeParseScore
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.InstanceID,
+		&i.RunID,
+		&i.LogGroupID,
+		&i.RealmID,
+		&i.GuildID,
+		&i.ClearDurationMs,
+		&i.ClearServerPreciseScore,
+		&i.ClearServerDisplayScore,
+		&i.ClearServerRank,
+		&i.ClearServerSampleSize,
+		&i.ClearServerStatus,
+		&i.ClearRealmPreciseScore,
+		&i.ClearRealmDisplayScore,
+		&i.ClearRealmRank,
+		&i.ClearRealmSampleSize,
+		&i.ClearRealmStatus,
+		&i.ClearGuildPreciseScore,
+		&i.ClearGuildDisplayScore,
+		&i.ClearGuildRank,
+		&i.ClearGuildSampleSize,
+		&i.ClearGuildStatus,
+		&i.Cutoff,
+		&i.WindowStart,
+		&i.LookbackDays,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.ComputedAt,
+	)
+	return i, err
+}
+
+const listInstancesMissingTimeParseScores = `-- name: ListInstancesMissingTimeParseScores :many
+SELECT
+    instance.id AS instance_id,
+    COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id,
+    instance.start_time
+FROM log_instances instance
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+JOIN wow_server_realms realm ON realm.id = instance.realm_id
+JOIN wow_servers server ON server.id = realm.server_id
+WHERE instance.invalidated_at IS NULL
+  AND instance.start_time IS NOT NULL
+  AND ($1::boolean OR COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = $2)
+  AND ($3::timestamptz IS NULL OR instance.start_time >= $3)
+  AND ($4::timestamptz IS NULL OR instance.start_time < $4)
+  AND (
+      EXISTS (
+          SELECT 1 FROM instance_speedruns speedrun
+          WHERE speedrun.instance_id = instance.id
+            AND speedrun.qualified = true
+            AND speedrun.ranked_duration_ms > 0
+      )
+      OR EXISTS (
+          SELECT 1 FROM log_instance_encounters encounter
+          WHERE encounter.instance_id = instance.id
+            AND encounter.boss = true
+            AND encounter.kill_type = 'clean'
+            AND encounter.end_time > encounter.start_time
+      )
+  )
+  AND (
+      $5::boolean
+      OR NOT EXISTS (
+          SELECT 1 FROM time_parse_scores score
+          WHERE score.tenant_id = COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid)
+            AND score.instance_id = instance.id
+            AND score.lookback_days = $6
+            AND score.policy_version = $7
+            AND score.query_version = $8
+      )
+  )
+ORDER BY instance.start_time DESC NULLS LAST, instance.id
+LIMIT $9
+`
+
+type ListInstancesMissingTimeParseScoresParams struct {
+	AllTenants    bool               `db:"all_tenants" json:"all_tenants"`
+	TenantFilter  uuid.NullUUID      `db:"tenant_filter" json:"tenant_filter"`
+	StartedAfter  pgtype.Timestamptz `db:"started_after" json:"started_after"`
+	StartedBefore pgtype.Timestamptz `db:"started_before" json:"started_before"`
+	Force         bool               `db:"force" json:"force"`
+	LookbackDays  int16              `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	MaxRows       int32              `db:"max_rows" json:"max_rows"`
+}
+
+type ListInstancesMissingTimeParseScoresRow struct {
+	InstanceID uuid.UUID          `db:"instance_id" json:"instance_id"`
+	TenantID   uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
+	StartTime  pgtype.Timestamptz `db:"start_time" json:"start_time"`
+}
+
+func (q *sqlQuerier) ListInstancesMissingTimeParseScores(ctx context.Context, arg ListInstancesMissingTimeParseScoresParams) ([]ListInstancesMissingTimeParseScoresRow, error) {
+	rows, err := q.db.Query(ctx, listInstancesMissingTimeParseScores,
+		arg.AllTenants,
+		arg.TenantFilter,
+		arg.StartedAfter,
+		arg.StartedBefore,
+		arg.Force,
+		arg.LookbackDays,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInstancesMissingTimeParseScoresRow
+	for rows.Next() {
+		var i ListInstancesMissingTimeParseScoresRow
+		if err := rows.Scan(&i.InstanceID, &i.TenantID, &i.StartTime); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTimeParseBossScoresForScore = `-- name: ListTimeParseBossScoresForScore :many
+SELECT time_parse_score_id, encounter_id, encounter_name, duration_ms, server_precise_score, server_display_score, server_rank, server_sample_size, server_status, realm_precise_score, realm_display_score, realm_rank, realm_sample_size, realm_status, guild_precise_score, guild_display_score, guild_rank, guild_sample_size, guild_status FROM time_parse_boss_scores
+WHERE time_parse_score_id = $1
+ORDER BY encounter_name
+`
+
+func (q *sqlQuerier) ListTimeParseBossScoresForScore(ctx context.Context, timeParseScoreID uuid.UUID) ([]TimeParseBossScore, error) {
+	rows, err := q.db.Query(ctx, listTimeParseBossScoresForScore, timeParseScoreID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TimeParseBossScore
+	for rows.Next() {
+		var i TimeParseBossScore
+		if err := rows.Scan(
+			&i.TimeParseScoreID,
+			&i.EncounterID,
+			&i.EncounterName,
+			&i.DurationMs,
+			&i.ServerPreciseScore,
+			&i.ServerDisplayScore,
+			&i.ServerRank,
+			&i.ServerSampleSize,
+			&i.ServerStatus,
+			&i.RealmPreciseScore,
+			&i.RealmDisplayScore,
+			&i.RealmRank,
+			&i.RealmSampleSize,
+			&i.RealmStatus,
+			&i.GuildPreciseScore,
+			&i.GuildDisplayScore,
+			&i.GuildRank,
+			&i.GuildSampleSize,
+			&i.GuildStatus,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getLogInstanceForTimeParse = `-- name: GetLogInstanceForTimeParse :one
+SELECT
+    instance.name AS instance_name,
+    instance.difficulty_name,
+    instance.max_players,
+    COALESCE(instance.duplicate_group_id, instance.id) AS run_id
+FROM log_instances instance
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+WHERE instance.id = $1
+`
+
+type GetLogInstanceForTimeParseRow struct {
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int32     `db:"max_players" json:"max_players"`
+	RunID          uuid.UUID `db:"run_id" json:"run_id"`
+}
+
+// Return the cohort dimensions and logical run identity for live time parsing.
+func (q *sqlQuerier) GetLogInstanceForTimeParse(ctx context.Context, id uuid.UUID) (GetLogInstanceForTimeParseRow, error) {
+	row := q.db.QueryRow(ctx, getLogInstanceForTimeParse, id)
+	var i GetLogInstanceForTimeParseRow
+	err := row.Scan(
+		&i.InstanceName,
+		&i.DifficultyName,
+		&i.MaxPlayers,
+		&i.RunID,
+	)
+	return i, err
+}
+
+const listTimeParseReplacementLogGroups = `-- name: ListTimeParseReplacementLogGroups :many
+SELECT DISTINCT instance.log_group_id
+FROM log_instances instance
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+WHERE COALESCE(instance.duplicate_group_id, instance.id) = $1
+  AND instance.id <> $2
+`
+
+type ListTimeParseReplacementLogGroupsParams struct {
+	RunID      uuid.NullUUID `db:"run_id" json:"run_id"`
+	InstanceID uuid.UUID     `db:"instance_id" json:"instance_id"`
+}
+
+// Locate surviving uploads for a logical run before deleting one instance so
+// compact memberships can elect a new representative afterward.
+func (q *sqlQuerier) ListTimeParseReplacementLogGroups(ctx context.Context, arg ListTimeParseReplacementLogGroupsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listTimeParseReplacementLogGroups, arg.RunID, arg.InstanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var log_group_id uuid.UUID
+		if err := rows.Scan(&log_group_id); err != nil {
+			return nil, err
+		}
+		items = append(items, log_group_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTimeParseReplacementLogGroupsForDeletedLogGroup = `-- name: ListTimeParseReplacementLogGroupsForDeletedLogGroup :many
+SELECT DISTINCT instance.log_group_id
+FROM log_instances instance
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+WHERE COALESCE(instance.duplicate_group_id, instance.id) = ANY($1::uuid[])
+  AND instance.log_group_id <> $2
+`
+
+type ListTimeParseReplacementLogGroupsForDeletedLogGroupParams struct {
+	RunIds     []uuid.UUID `db:"run_ids" json:"run_ids"`
+	LogGroupID uuid.UUID   `db:"log_group_id" json:"log_group_id"`
+}
+
+// Locate surviving uploads for logical runs whose source log group is deleted.
+func (q *sqlQuerier) ListTimeParseReplacementLogGroupsForDeletedLogGroup(ctx context.Context, arg ListTimeParseReplacementLogGroupsForDeletedLogGroupParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listTimeParseReplacementLogGroupsForDeletedLogGroup, arg.RunIds, arg.LogGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var log_group_id uuid.UUID
+		if err := rows.Scan(&log_group_id); err != nil {
+			return nil, err
+		}
+		items = append(items, log_group_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getWoWLogGroupUnlisted = `-- name: GetWoWLogGroupUnlisted :one

@@ -64,6 +64,13 @@ var sortDefinitions = []*sortDefinition{
 			return fmt.Sprintf("(SELECT min(%[1]s) FROM log_instance_encounters %[2]s WHERE %[2]s.instance_id = li.id AND %[2]s.boss AND %[2]s.kill_type %[3]s AND lower(%[2]s.name) = lower(%[4]s::text))",
 				durationMS(e), e, killedSQL, c.arg(sort.Boss))
 		}},
+	{Option: sortOption(SortClearParse, "Clear parse", SortDesc, true, false, chroniclesdk.InstanceSearchSortTierRevered, 6), Type: typeFloat,
+		Expr: func(c *compiler, sort Sort) string {
+			tps := c.alias("sort_tps")
+			col := fmt.Sprintf("%s.clear_%s", tps, sort.ParseScope)
+			return fmt.Sprintf("((SELECT %[1]s_display_score FROM time_parse_scores %[2]s WHERE %[3]s AND %[1]s_status %[4]s))::float8",
+				col, tps, c.timeParseContract(tps), scoredStatusSQL)
+		}},
 }
 
 func sortOption(field SortField, label string, direction SortDirection, parseScope, boss bool, tier chroniclesdk.InstanceSearchSortTier, cost int) chroniclesdk.InstanceSearchSortOption {

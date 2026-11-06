@@ -1,0 +1,20 @@
+{
+  "title": "A healer parsing 90+ on each boss",
+  "category": "Parses",
+  "description": "A healer with a 90+ HPS parse on each of Ragnaros and Golemagg the Incinerator.",
+  "query": {
+    "where": {
+      "any_player": {
+        "field": "player.parse",
+        "op": ">=",
+        "value": 90,
+        "bosses": [
+          "Ragnaros",
+          "Golemagg the Incinerator"
+        ],
+        "match": "each",
+        "metric": "hps"
+      }
+    }
+  }
+}

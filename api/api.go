@@ -547,6 +547,7 @@ func (api *API) Routes() chi.Router {
 					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
 					r.Get("/rankings/status", api.AdminRankingsRefreshStatus)
 					r.Post("/rankings/refresh", api.AdminRefreshRankings)
+					r.Post("/time-scores/backfill", api.AdminBackfillTimeParseScores)
 				})
 
 				// Tenant management — routes owned by servicetenant
@@ -626,7 +627,11 @@ func (api *API) Routes() chi.Router {
 					r.Get("/settings", api.GetGuildSettings)
 					r.Get("/speedruns/clears", api.GuildRaidClears)
 					r.Get("/speedruns/history", api.GuildSpeedrunHistory)
+					r.Get("/characters", api.GuildCharacterRoster)
+					r.Get("/best-runs", api.GuildBestRuns)
 					r.Get("/encounters", api.GuildEncounterKills)
+					r.Get("/parses/top", api.GuildTopParses)
+					r.Get("/parses/runs", api.GuildRunParses)
 
 					// Authenticated routes (non-admin)
 					r.Group(func(r chi.Router) {

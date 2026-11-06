@@ -14,29 +14,32 @@ describe("fieldTiers", () => {
   });
 
   it("locks by tier", () => {
-    expect(fieldLock(field("player.dps"), { honored: false, loggedIn: true })).toBe("honored");
-    expect(fieldLock(field("player.dps"), { honored: true, loggedIn: true })).toBeNull();
+    expect(fieldLock(field("player.parse"), { honored: false, loggedIn: true })).toBe("honored");
+    expect(fieldLock(field("player.parse"), { honored: true, loggedIn: true })).toBeNull();
     expect(fieldLock(field("player.class"), { honored: false, loggedIn: true })).toBeNull();
     expect(fieldLock(field("player.class"), { honored: false, loggedIn: false })).toBe("login");
     expect(fieldLock(field("instance.name"), { honored: false, loggedIn: false })).toBeNull();
     // Unknown access (still loading) is allowed.
-    expect(fieldLock(field("player.dps"), {})).toBeNull();
+    expect(fieldLock(field("player.parse"), {})).toBeNull();
   });
 
   it("finds Honored fields anywhere in a tree", () => {
     expect(treeNeedsHonored({ and: [{ field: "instance.name", op: "=", value: "x" }] })).toBe(false);
     expect(treeNeedsHonored({ not: { any_player: { or: [{ field: "player.class", op: "=", value: "MAGE" }, { field: "player.dps", op: ">=", value: 1 }] } } })).toBe(true);
-    expect(treeNeedsHonored({ count_players: { where: { field: "player.hps", op: ">=", value: 1 }, op: ">=", value: 1 } })).toBe(true);
+    expect(treeNeedsHonored({ count_players: { where: { field: "player.parse", op: ">=", value: 1 }, op: ">=", value: 1 } })).toBe(true);
   });
 
   it("matches the sentence form's Honored conditions", () => {
     // Each sentence condition is Honored exactly when its query uses an Honored field.
     const samples: Partial<Record<string, Partial<SearchForm>>> = {
+      playerParse: { playerParses: [{ name: "", class: "", spec: "", subSpec: "", min: 90, metric: "dps", bosses: [] }] },
       playerStat: { playerStats: [{ name: "", stat: "dps", min: 1, bosses: [] }] },
       bossTime: { bossTimeMaxMinutes: 10 },
       trashTime: { trashTimeMaxMinutes: 10 },
       idleTime: { idleTimeMaxMinutes: 10 },
       clearTime: { clearTimeMaxMinutes: 10 },
+      clearParse: { clearParseMin: 90 },
+      killParse: { killParseMin: 90 },
       classCount: { classCounts: [{ class: "MAGE", spec: "", subSpec: "", min: 1 }] },
       bossKillTime: { bossKillTimes: [{ boss: "Ragnaros", maxMinutes: 2 }] },
     };

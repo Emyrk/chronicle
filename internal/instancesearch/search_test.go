@@ -18,12 +18,14 @@ import (
 	"github.com/Emyrk/chronicle/internal/instancesearch"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 )
 
 // fixture is a small world with two tenants:
 //
 //   - mc1 / mc1dup: the same Molten Core run uploaded twice (one logical run).
-//     Alpha guild, 3 priests, a druid, Thrall, a 90s Ragnaros kill and a clear
+//     Alpha guild, 3 priests, a druid that played Bear and Cat, Thrall with a
+//     97 DPS parse on Ragnaros, a 90s Ragnaros kill, time parses, and a clear
 //     with known boss / trash / idle time.
 //   - mc2: Molten Core by Beta, 2 priests, a Ragnaros wipe then a 200s kill,
 //     a druid that only played Bear.
@@ -113,7 +115,6 @@ func newFixture(t *testing.T) *fixture {
 			VALUES ($1, $2, $3, '{}', $4, $5, $6, $7)`, id, inst, name, boss, t0.Add(from), t0.Add(to), kill)
 		return id
 	}
-
 	ranking := func(inst, enc, realm uuid.UUID, guid, name, class, spec, subSpec, role string, dps float64, deaths int) {
 		exec(`INSERT INTO encounter_dps_rankings (encounter_id, instance_id, encounter_name, instance_name, player_guid, player_name,
 				player_class, player_spec, player_sub_spec, player_role, realm_id, realm_name, damage_done, duration_secs, dps, killed_at, player_deaths)
@@ -144,6 +145,31 @@ func newFixture(t *testing.T) *fixture {
 	exec(`INSERT INTO instance_speedruns (instance_id, instance_name, realm_id, qualified, start_time, completion_time, duration_ms, proof,
 			ranked_start_time, ranked_completion_time, ranked_duration_ms)
 			VALUES ($1, 'Molten Core', $2, true, $3, $4, 1500000, '{}', $3, $4, 1500000)`, f.mc1dup, realmA, t0, t0.Add(1500*time.Second))
+	exec(`INSERT INTO parse_score_results (tenant_id, instance_id, run_id, encounter_name, player_guid, metric, metric_value,
+			precise_score, display_score, rank, sample_size, status)
+		VALUES ($1, $2, $3, 'Ragnaros', $4, 'dps', 1000, 97, 97, 1, 20, 'ok')`, f.tenantA, f.mc1, uuid.New(), thrall)
+	tps := uuid.New()
+	exec(`INSERT INTO time_parse_scores (id, tenant_id, instance_id, run_id, realm_id, clear_duration_ms,
+			clear_server_precise_score, clear_server_display_score, clear_server_rank, clear_server_sample_size, clear_server_status,
+			clear_realm_precise_score, clear_realm_display_score, clear_realm_rank, clear_realm_sample_size, clear_realm_status,
+			cutoff, window_start, lookback_days, policy_version, query_version)
+		VALUES ($1, $2, $3, $4, $5, 1500000, 96, 96, 1, 20, 'ok', 96, 96, 1, 20, 'ok', now(), now(), $6, $7, $8)`,
+		tps, f.tenantA, f.mc1, uuid.New(), realmA, instancesearch.DefaultTimeParseLookbackDays, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.QueryVersion)
+	exec(`INSERT INTO time_parse_scores (id, tenant_id, instance_id, run_id, realm_id, clear_duration_ms,
+			clear_server_precise_score, clear_server_display_score, clear_server_rank, clear_server_sample_size, clear_server_status,
+			clear_realm_precise_score, clear_realm_display_score, clear_realm_rank, clear_realm_sample_size, clear_realm_status,
+			cutoff, window_start, lookback_days, policy_version, query_version)
+			VALUES ($1, $2, $3, $4, $5, 1500000, 96, 96, 1, 20, 'ok', 96, 96, 1, 20, 'ok', now(), now(), $6, $7, $8)`,
+		uuid.New(), f.tenantA, f.mc1dup, uuid.New(), realmA, instancesearch.DefaultTimeParseLookbackDays, int16(timeparsepolicy.PolicyVersion), timeparsepolicy.QueryVersion)
+	bossScore := func(enc uuid.UUID, name string, score int) {
+		exec(`INSERT INTO time_parse_boss_scores (time_parse_score_id, encounter_id, encounter_name, duration_ms,
+				server_precise_score, server_display_score, server_rank, server_sample_size, server_status,
+				realm_precise_score, realm_display_score, realm_rank, realm_sample_size, realm_status)
+			VALUES ($1, $2, $3, 1000, $4::int, $4::int, 1, 20, 'ok', $4::int, $4::int, 1, 20, 'ok')`, tps, enc, name, score)
+	}
+	bossScore(rag, "Ragnaros", 95)
+	bossScore(domo, "Majordomo Executus", 92)
+
 	// mc2: wipe then a slow kill, two priests, a Bear-only druid.
 	player(f.mc2, "PriestA", "PRIEST", beta)
 	player(f.mc2, "PriestB", "PRIEST", beta)
@@ -252,6 +278,68 @@ func TestSearch(t *testing.T) {
 		}
 	})
 
+	t.Run("ExplainEvidence", func(t *testing.T) {
+		t.Parallel()
+		// The same druid was Bear on Majordomo and Cat on Ragnaros.
+		ex := f.explain(t, f.tenantA, `{"and": [
+			{"field": "instance.clear_time_ms", "op": "between", "value": [1000000, 2000000]},
+			{"field": "instance.kill_time_parse", "op": ">=", "value": 90, "bosses": ["Ragnaros", "Majordomo Executus"], "match": "each"},
+			{"any_player": {"and": [
+				{"field": "player.sub_spec", "op": "=", "value": "Bear"},
+				{"field": "player.sub_spec", "op": "=", "value": "Cat"}]}},
+			{"count_players": {"where": {"field": "player.class", "op": "=", "value": "PRIEST"}, "op": ">=", "value": 3}},
+			{"not": {"any_encounter": {"field": "encounter.outcome", "op": "=", "value": "wipe"}}}]}`, f.mc1)
+		require.True(t, ex.Matched)
+		kids := ex.Evidence.Children
+		require.Len(t, kids, 5)
+		for i, k := range kids {
+			require.NotNil(t, k.OK, i)
+			require.True(t, *k.OK, i)
+		}
+
+		require.EqualValues(t, 1_500_000, kids[0].Value)
+
+		parses := map[string]any{}
+		for _, r := range kids[1].Rows {
+			require.True(t, r.OK)
+			parses[r.Name] = r.Value
+		}
+		require.Equal(t, map[string]any{"Ragnaros": float64(95), "Majordomo Executus": float64(92)}, parses)
+
+		require.EqualValues(t, 1, *kids[2].Count)
+		require.Len(t, kids[2].Witnesses, 1)
+		druid := kids[2].Witnesses[0]
+		require.Equal(t, "Bearcat", druid.Name)
+		require.Equal(t, "DRUID", druid.Class)
+		bear, cat := druid.Evidence.Children[0], druid.Evidence.Children[1]
+		require.Equal(t, []instancesearch.EvidenceRow{{Name: "Majordomo Executus", Value: "Bear", OK: true}, {Name: "Ragnaros", Value: "Cat", OK: false}}, bear.Rows)
+		require.Equal(t, []instancesearch.EvidenceRow{{Name: "Majordomo Executus", Value: "Bear", OK: false}, {Name: "Ragnaros", Value: "Cat", OK: true}}, cat.Rows)
+
+		require.EqualValues(t, 3, *kids[3].Count)
+		require.Len(t, kids[3].Witnesses, 3)
+
+		// not: the inner any_encounter is false with no witnesses.
+		inner := kids[4].Children[0]
+		require.False(t, *inner.OK)
+		require.Empty(t, inner.Witnesses)
+
+		// mc2 has no ranked clear: unknown, and still unknown under not.
+		ex = f.explain(t, f.tenantA, `{"not": {"field": "instance.clear_time_ms", "op": ">", "value": 0}}`, f.mc2)
+		require.False(t, ex.Matched)
+		require.Nil(t, ex.Evidence.OK)
+		require.Nil(t, ex.Evidence.Children[0].OK)
+		require.Nil(t, ex.Evidence.Children[0].Value)
+
+		// A wipe is a witness pull with its outcome and duration.
+		ex = f.explain(t, f.tenantA, `{"any_encounter": {"field": "encounter.outcome", "op": "=", "value": "wipe"}}`, f.mc2)
+		require.True(t, ex.Matched)
+		w := ex.Evidence.Witnesses[0]
+		require.Equal(t, "Ragnaros", w.Name)
+		require.Equal(t, "wipe", w.Outcome)
+		require.EqualValues(t, 100_000, w.DurationMS)
+		require.True(t, w.EncounterID.Valid)
+	})
+
 	t.Run("ExplainVisibility", func(t *testing.T) {
 		t.Parallel()
 		q := where(t, `{"field": "instance.name", "op": "contains", "value": "molten"}`)
@@ -322,10 +410,26 @@ func TestSearch(t *testing.T) {
 			query string
 			want  []uuid.UUID
 		}{
+			// mc2's druid was Bear on a boss and Cat only on trash, so the
+			// default (bosses) excludes it.
+			{"SamePlayerBearAndCat", `{"any_player": {"and": [
+				{"field": "player.sub_spec", "op": "=", "value": "Bear"},
+				{"field": "player.sub_spec", "op": "=", "value": "Cat"}]}}`, mc1},
+			{"BearAndCatOnAnyFight", `{"any_player": {"and": [
+				{"field": "player.sub_spec", "op": "=", "value": "Bear", "on": "any"},
+				{"field": "player.sub_spec", "op": "=", "value": "Cat", "on": "any"}]}}`, []uuid.UUID{f.mc1, f.mc2}},
+			{"CatOnTrash", `{"any_player": {"field": "player.sub_spec", "op": "=", "value": "Cat", "on": "trash"}}`, []uuid.UUID{f.mc2}},
+			{"BearOnBossCatOnTrash", `{"any_player": {"and": [
+				{"field": "player.sub_spec", "op": "=", "value": "Bear", "on": "bosses"},
+				{"field": "player.sub_spec", "op": "=", "value": "Cat", "on": "trash"}]}}`, []uuid.UUID{f.mc2}},
 			{"CaseInsensitiveStrings", `{"and": [
 				{"field": "instance.name", "op": "=", "value": "molten CORE"},
 				{"field": "instance.guild", "op": "in", "value": ["BETA"]},
 				{"any_player": {"field": "player.name", "op": "=", "value": "bearONLY"}}]}`, []uuid.UUID{f.mc2}},
+			{"CaseInsensitiveEnumsAndBosses", `{"and": [
+				{"any_player": {"field": "player.class", "op": "=", "value": "priest"}},
+				{"field": "instance.kill_time_parse", "op": ">=", "value": 90, "bosses": ["RAGNAROS", "majordomo executus"], "match": "each"},
+				{"field": "instance.capability", "op": "=", "value": "Unit-Position"}]}`, mc1},
 			// The same boss in two cases counts once for match each.
 			{"EachDedupesBossCase", `{"field": "instance.kill_time_ms", "op": "<=", "value": 120000, "bosses": ["Ragnaros", "RAGNAROS"], "match": "each"}`, mc1},
 			{"NameContains", `{"field": "instance.name", "op": "contains", "value": "molten"}`, []uuid.UUID{f.mc1, f.mc2}},
@@ -336,9 +440,16 @@ func TestSearch(t *testing.T) {
 			// % and _ are literal, not LIKE wildcards.
 			{"ContainsWildcardIsLiteral", `{"field": "instance.name", "op": "contains", "value": "%"}`, nil},
 			{"PlayerNameContains", `{"any_player": {"field": "player.name", "op": "contains", "value": "cat"}}`, mc1},
+			{"TankRole", `{"any_player": {"field": "player.role", "op": "=", "value": "tank"}}`, []uuid.UUID{f.mc1, f.mc2}},
 			{"RagKillWithoutWipes", `{"and": [
 				{"any_encounter": {"and": [{"field": "encounter.name", "op": "=", "value": "Ragnaros"}, {"field": "encounter.killed", "op": "=", "value": true}]}},
 				{"not": {"any_encounter": {"and": [{"field": "encounter.name", "op": "=", "value": "Ragnaros"}, {"field": "encounter.outcome", "op": "=", "value": "wipe"}]}}}]}`, mc1},
+			{"KillParseEach", `{"field": "instance.kill_time_parse", "op": ">=", "value": 90, "bosses": ["Ragnaros", "Majordomo Executus"], "match": "each"}`, mc1},
+			{"KillParseEachMissesOne", `{"field": "instance.kill_time_parse", "op": ">=", "value": 93, "bosses": ["Ragnaros", "Majordomo Executus"], "match": "each"}`, nil},
+			{"KillParseAny", `{"field": "instance.kill_time_parse", "op": ">=", "value": 93, "bosses": ["Ragnaros", "Majordomo Executus"]}`, mc1},
+			{"ClearParse", `{"field": "instance.clear_parse", "op": ">=", "value": 95}`, mc1},
+			{"PlayerParse", `{"any_player": {"and": [{"field": "player.name", "op": "=", "value": "Thrall"},
+				{"field": "player.parse", "op": ">=", "value": 95, "bosses": ["Ragnaros"]}]}}`, mc1},
 			{"FastRagKill", `{"field": "instance.kill_time_ms", "op": "<=", "value": 120000, "bosses": ["Ragnaros"]}`, mc1},
 			{"SlowRagKill", `{"field": "instance.kill_time_ms", "op": ">", "value": 120000, "bosses": ["Ragnaros"]}`, []uuid.UUID{f.mc2}},
 			{"BossTime", `{"field": "instance.boss_time_ms", "op": "=", "value": 270000}`, mc1},
@@ -346,6 +457,8 @@ func TestSearch(t *testing.T) {
 			{"IdleTime", `{"field": "instance.idle_time_ms", "op": "=", "value": 330000}`, mc1},
 			{"WipesCounted", `{"count_encounters": {"where": {"field": "encounter.outcome", "op": "=", "value": "wipe"}, "op": "=", "value": 1}}`, []uuid.UUID{f.mc2}},
 			{"GuildMembers", `{"count_players": {"where": {"field": "player.guild", "op": "in", "value": ["Beta"]}, "op": ">=", "value": 3}}`, []uuid.UUID{f.mc2}},
+			{"DeathlessRag", `{"and": [{"field": "instance.kill_time_ms", "op": ">", "value": 0, "bosses": ["Ragnaros"]},
+				{"not": {"any_player": {"field": "player.deaths", "op": ">=", "value": 1, "bosses": ["Ragnaros"]}}}]}`, mc1},
 			{"HasCapability", `{"field": "instance.capability", "op": "=", "value": "unit-position"}`, mc1},
 			{"LacksCapability", `{"and": [{"field": "instance.capability", "op": "=", "value": "unit-resources"},
 				{"field": "instance.capability", "op": "!=", "value": "unit-position"}]}`, []uuid.UUID{f.mc2}},
@@ -401,6 +514,14 @@ func TestSearch(t *testing.T) {
 		require.EqualValues(t, 1, page.Results[0].BossesKilled)
 	})
 
+	t.Run("ParseTenantIsBound", func(t *testing.T) {
+		t.Parallel()
+		// Tenant B cannot see tenant A's instances, and parse rows are also
+		// tenant-scoped, so nothing matches.
+		q := where(t, `{"field": "instance.clear_parse", "op": ">=", "value": 0}`)
+		require.Empty(t, f.search(t, f.tenantB, q).Results)
+	})
+
 	t.Run("Sorting", func(t *testing.T) {
 		t.Parallel()
 
@@ -420,6 +541,10 @@ func TestSearch(t *testing.T) {
 		require.NotNil(t, page.Results[0].SortValue)
 		require.Equal(t, "1500000", *page.Results[0].SortValue)
 		require.Nil(t, page.Results[1].SortValue)
+
+		q.Sort = &instancesearch.Sort{Field: instancesearch.SortClearParse, ParseScope: instancesearch.ParseScopeServer}
+		page = f.search(t, f.tenantA, q)
+		require.Equal(t, []string{"Alpha", "Beta"}, []string{page.Results[0].GuildName, page.Results[1].GuildName})
 
 		q.Sort = &instancesearch.Sort{Field: instancesearch.SortStartedAt, Direction: instancesearch.SortAsc}
 		ascending := f.search(t, f.tenantA, q)

@@ -84,6 +84,7 @@ const (
 	CheckOauthRelayCodesCodeHashLength                          CheckConstraint = "oauth_relay_codes_code_hash_length"                            // oauth_relay_codes
 	CheckOauthServerSecretsIDCheck                              CheckConstraint = "oauth_server_secrets_id_check"                                 // oauth_server_secrets
 	CheckOauthTokenSessionsTokenTypeCheck                       CheckConstraint = "oauth_token_sessions_token_type_check"                         // oauth_token_sessions
+	CheckParseScoreResultsMetricCheck                           CheckConstraint = "parse_score_results_metric_check"                              // parse_score_results
 	CheckProofRequestSubjectsCheck                              CheckConstraint = "proof_request_subjects_check"                                  // proof_request_subjects
 	CheckProofRequestSubjectsGuildIdentity                      CheckConstraint = "proof_request_subjects_guild_identity"                         // proof_request_subjects
 	CheckProofRequestSubjectsStatusCheck                        CheckConstraint = "proof_request_subjects_status_check"                           // proof_request_subjects
@@ -123,6 +124,8 @@ const (
 	CheckTelemetryNoticesAudienceCheck                          CheckConstraint = "telemetry_notices_audience_check"                              // telemetry_notices
 	CheckTelemetryNoticesCategoryCheck                          CheckConstraint = "telemetry_notices_category_check"                              // telemetry_notices
 	CheckTelemetryNoticesSeverityCheck                          CheckConstraint = "telemetry_notices_severity_check"                              // telemetry_notices
+	CheckTimeParseBossScoresCheck                               CheckConstraint = "time_parse_boss_scores_check"                                  // time_parse_boss_scores
+	CheckTimeParseScoresCheck                                   CheckConstraint = "time_parse_scores_check"                                       // time_parse_scores
 	CheckUserCustomPanelInstallationsRepositoryFormat           CheckConstraint = "user_custom_panel_installations_repository_format"             // user_custom_panel_installations
 	CheckUserFavoriteGuildsSlotCheck                            CheckConstraint = "user_favorite_guilds_slot_check"                               // user_favorite_guilds
 	CheckUserNotificationSettingsChannelCheck                   CheckConstraint = "user_notification_settings_channel_check"                      // user_notification_settings

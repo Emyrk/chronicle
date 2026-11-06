@@ -14,8 +14,10 @@ import (
 
 type sqlcQuerier interface {
 	AbandonAwaitingInferenceRun(ctx context.Context, arg AbandonAwaitingInferenceRunParams) (InferenceRun, error)
+	AcquireParseScoreLock(ctx context.Context, lockKey string) error
 	// Serialize refresh snapshots and commits across logical-run identity changes.
 	AcquireRankingRunRefreshLock(ctx context.Context) error
+	AcquireTimeParseScoreLock(ctx context.Context, instanceID string) error
 	ActivateDiscordMembershipGrantCheckOnLogin(ctx context.Context, arg ActivateDiscordMembershipGrantCheckOnLoginParams) (ActivateDiscordMembershipGrantCheckOnLoginRow, error)
 	// size_bytes is the logical uncompressed size. compressed_size_bytes remains
 	// NULL when the base object is not compressed; hash continues to identify the
@@ -149,6 +151,12 @@ type sqlcQuerier interface {
 	DeleteObsoleteRankingRuns(ctx context.Context, arg DeleteObsoleteRankingRunsParams) ([]uuid.UUID, error)
 	DeleteOldSuccessfulBillingReconciliationRuns(ctx context.Context) (int64, error)
 	DeleteOrphanCustomPanelReleases(ctx context.Context) (int64, error)
+	DeleteParseScoreMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
+	// Compact current-known membership for DPS/HPS parse cohorts.
+	DeleteParseScoreMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error
+	// Remove parse score results for a tenant+instance (before re-computation).
+	// Scoped to tenant_id so one tenant's recompute cannot erase another's projections.
+	DeleteParseScoreResultsForTenantInstance(ctx context.Context, arg DeleteParseScoreResultsForTenantInstanceParams) error
 	DeleteRaidCompositionByID(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteRegressionFixture(ctx context.Context, id uuid.UUID) error
 	DeleteRegressionSnapshot(ctx context.Context, id uuid.UUID) error
@@ -159,6 +167,17 @@ type sqlcQuerier interface {
 	DeleteSidekickInstallation(ctx context.Context, arg DeleteSidekickInstallationParams) (SidekickInstallation, error)
 	DeleteSidekickWoWDirectoriesExcept(ctx context.Context, arg DeleteSidekickWoWDirectoriesExceptParams) (int64, error)
 	DeleteTenant(ctx context.Context, id uuid.UUID) error
+	DeleteTimeParseBossKillMembershipSeries(ctx context.Context, arg DeleteTimeParseBossKillMembershipSeriesParams) error
+	DeleteTimeParseBossKillMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
+	DeleteTimeParseBossKillMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error
+	// Current-known storage for time-parse clear-time and boss-kill cohorts.
+	// Each logical run is stored once per tenant and scoring version. Date windows
+	// are applied at read time so late uploads, corrections, and invalidations are
+	// reflected immediately.
+	DeleteTimeParseClearTimeMembershipSeries(ctx context.Context, arg DeleteTimeParseClearTimeMembershipSeriesParams) error
+	DeleteTimeParseClearTimeMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
+	DeleteTimeParseClearTimeMembershipsByLogGroup(ctx context.Context, logGroupID uuid.UUID) error
+	DeleteTimeParseScoreForContract(ctx context.Context, arg DeleteTimeParseScoreForContractParams) error
 	DeleteUploadKey(ctx context.Context, id uuid.UUID) error
 	DeleteUserAccountRow(ctx context.Context, userID uuid.UUID) (int64, error)
 	DeleteUserAuthLinksByUserID(ctx context.Context, userID uuid.UUID) error
@@ -230,6 +249,7 @@ type sqlcQuerier interface {
 	GetAccountPurge(ctx context.Context, id uuid.UUID) (AccountPurge, error)
 	GetActiveAccountPurgeByUser(ctx context.Context, userID uuid.UUID) (AccountPurge, error)
 	GetActiveInferenceRunByThreadForUpdate(ctx context.Context, arg GetActiveInferenceRunByThreadForUpdateParams) (InferenceRun, error)
+	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
 	GetBillingEntitlementOwnerByProviderCustomerID(ctx context.Context, arg GetBillingEntitlementOwnerByProviderCustomerIDParams) (uuid.UUID, error)
 	GetBillingSubscriptionByProviderCustomerID(ctx context.Context, arg GetBillingSubscriptionByProviderCustomerIDParams) (BillingSubscription, error)
@@ -250,10 +270,18 @@ type sqlcQuerier interface {
 	// rather than by timestamp. Two genuine drops of the same item in one
 	// night survive as drop 1 and drop 2.
 	GetCharacterLoot(ctx context.Context, arg GetCharacterLootParams) ([]GetCharacterLootRow, error)
+	// Character history: ALL deduplicated parses over the lookback window.
+	// Returns every (run_id, encounter) parse — not just one best per encounter.
+	// Duplicate uploads of the same run collapse to one row per encounter even
+	// when they were scored against different snapshots; the most recently
+	// computed scoring wins so a night's rows stay internally consistent.
+	// The caller groups by (instance_name, encounter_name), takes best 3 per group,
+	// averages each group, then averages groups for the Score.
+	GetCharacterParseHistory(ctx context.Context, arg GetCharacterParseHistoryParams) ([]GetCharacterParseHistoryRow, error)
 	// Return complete canonical runs for one character and a selected boss set.
-	// Raw DPS/HPS is aggregated from the persisted representative upload.
-	// Parse scoring is retired; parse_count and average_parse remain zero for
-	// compatibility with the performance-run API.
+	// Raw DPS/HPS is aggregated from the persisted representative upload. Cached
+	// per-boss parses are averaged when every selected encounter has a usable
+	// score. parse_count tells the caller whether the cached average is complete.
 	GetCharacterPerformanceRuns(ctx context.Context, arg GetCharacterPerformanceRunsParams) ([]GetCharacterPerformanceRunsRow, error)
 	GetCreatureTemplatesByEntries(ctx context.Context, arg GetCreatureTemplatesByEntriesParams) ([]WorldCreatureTemplate, error)
 	// GetCurrentUserAuthSession confirms a token's session still exists. It does
@@ -357,6 +385,10 @@ type sqlcQuerier interface {
 	GetLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
 	GetLogGroupInstanceIDByOrdinal(ctx context.Context, arg GetLogGroupInstanceIDByOrdinalParams) (uuid.UUID, error)
 	GetLogInstanceForDiscordAnnouncement(ctx context.Context, id uuid.UUID) (LogInstance, error)
+	// Fetch instance metadata needed for parse scoring.
+	GetLogInstanceForScoring(ctx context.Context, id uuid.UUID) (GetLogInstanceForScoringRow, error)
+	// Return the cohort dimensions and logical run identity for live time parsing.
+	GetLogInstanceForTimeParse(ctx context.Context, id uuid.UUID) (GetLogInstanceForTimeParseRow, error)
 	// Return the start_time for a log instance. Used by the parses handler
 	// to resolve which snapshot cutoff applies to the instance.
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
@@ -374,6 +406,13 @@ type sqlcQuerier interface {
 	GetOrCreateOAuthServerSecret(ctx context.Context, secret []byte) ([]byte, error)
 	GetPanelLayoutByCode(ctx context.Context, code pgtype.Text) (GetPanelLayoutByCodeRow, error)
 	GetPanelLayoutByID(ctx context.Context, id uuid.UUID) (GetPanelLayoutByIDRow, error)
+	GetParseScoreCohortEntries(ctx context.Context, arg GetParseScoreCohortEntriesParams) ([]GetParseScoreCohortEntriesRow, error)
+	GetParseScoreMembershipCohort(ctx context.Context, arg GetParseScoreMembershipCohortParams) ([]float64, error)
+	// Get all receipts for an instance (any snapshot).
+	GetParseScoreReceiptForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreReceipt, error)
+	// Read deduplicated parse score results for an instance.
+	// Uses DISTINCT ON (run_id, encounter, player, snapshot, metric) to collapse duplicate uploads.
+	GetParseScoreResultsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreResult, error)
 	GetParsedBytesByOwner(ctx context.Context, owner uuid.UUID) (GetParsedBytesByOwnerRow, error)
 	GetParsedLogGroupByID(ctx context.Context, id uuid.UUID) (ParsedLogGroup, error)
 	GetPendingInferenceClientToolRequestByThreadForUpdate(ctx context.Context, arg GetPendingInferenceClientToolRequestByThreadForUpdateParams) (InferenceClientToolRequest, error)
@@ -397,6 +436,8 @@ type sqlcQuerier interface {
 	// Returns the realm-specific policy if it exists, otherwise the server-level policy.
 	GetRetentionPolicyForRealm(ctx context.Context, realmID uuid.NullUUID) (RetentionPolicy, error)
 	GetRetentionRulesByPolicy(ctx context.Context, policyID uuid.UUID) ([]RetentionRule, error)
+	GetScopedTimeParseBossKillCohort(ctx context.Context, arg GetScopedTimeParseBossKillCohortParams) ([]int64, error)
+	GetScopedTimeParseClearTimeCohort(ctx context.Context, arg GetScopedTimeParseClearTimeCohortParams) ([]int64, error)
 	GetServerApplicationByID(ctx context.Context, id uuid.UUID) (GetServerApplicationByIDRow, error)
 	GetServerUploadMetaRealmID(ctx context.Context, logGroupID uuid.UUID) (uuid.NullUUID, error)
 	GetServersForWorld(ctx context.Context, worldID uuid.UUID) ([]WowServer, error)
@@ -412,6 +453,12 @@ type sqlcQuerier interface {
 	// itself is not behind RLS (only wow_servers/wow_server_realms are).
 	GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Tenant, error)
 	GetTenantProofRequest(ctx context.Context, arg GetTenantProofRequestParams) (ProofRequest, error)
+	GetTimeParseBossKillCohortEntries(ctx context.Context, arg GetTimeParseBossKillCohortEntriesParams) ([]GetTimeParseBossKillCohortEntriesRow, error)
+	GetTimeParseBossKillMembershipCohort(ctx context.Context, arg GetTimeParseBossKillMembershipCohortParams) ([]int64, error)
+	GetTimeParseClearTimeCohortEntries(ctx context.Context, arg GetTimeParseClearTimeCohortEntriesParams) ([]GetTimeParseClearTimeCohortEntriesRow, error)
+	GetTimeParseClearTimeMembershipCohort(ctx context.Context, arg GetTimeParseClearTimeMembershipCohortParams) ([]int64, error)
+	GetTimeParseScoreForContract(ctx context.Context, arg GetTimeParseScoreForContractParams) (TimeParseScore, error)
+	GetTimeParseScoringInstance(ctx context.Context, arg GetTimeParseScoringInstanceParams) (GetTimeParseScoringInstanceRow, error)
 	GetUploadKey(ctx context.Context, id uuid.UUID) (WowServerUploadKey, error)
 	GetUploadKeyByHash(ctx context.Context, secretHash string) (GetUploadKeyByHashRow, error)
 	GetUserActionBarSlots(ctx context.Context, userID uuid.UUID) (GetUserActionBarSlotsRow, error)
@@ -444,6 +491,27 @@ type sqlcQuerier interface {
 	GetWorld(ctx context.Context, id uuid.UUID) (World, error)
 	GetWorldByName(ctx context.Context, name string) (World, error)
 	GetWorldsByServer(ctx context.Context, serverID uuid.UUID) ([]World, error)
+	// Returns the guild's single best full clear of each instance within the
+	// window, for the guild page "Best Performance" panel. @by_parse picks the
+	// winner by highest historical clear-time parse instead of fastest clear.
+	// Duplicate uploads collapse using the shared deterministic representative. Includes
+	// unqualified runs: qualification only affects cohort and leaderboard membership,
+	// not whether a completed clear can receive a time parse.
+	// JOINs wow_server_realms so RLS tenant filtering cascades.
+	GuildBestRuns(ctx context.Context, arg GuildBestRunsParams) ([]GuildBestRunsRow, error)
+	// Queries backing guild page panels (roster, top parses, recent raid scores).
+	// Returns the guild's characters from raid logs for the guild page "Roster"
+	// panel. updated_at is the character's de-facto "last seen"; @seen_within_days
+	// hides characters that have gone idle (0 = no filter).
+	// player_spec/player_role come from the character's most recent parse;
+	// spec_roles_json lists every distinct spec+role combo observed across the
+	// character's 3 most recent parsed instances (players often swap specs raid
+	// to raid), most recent first. avg_parse matches the Armory score: deduplicate
+	// uploads by run, average the best 3 parses per encounter over the last
+	// @parse_window_days, then average those encounter scores. It uses hps for
+	// healers and dps for everyone else (-1 when the character has no parses).
+	// JOINs wow_server_realms so RLS tenant filtering cascades.
+	GuildCharacterRoster(ctx context.Context, arg GuildCharacterRosterParams) ([]GuildCharacterRosterRow, error)
 	// Per-encounter boss kill aggregates for a guild across all time, for the
 	// guild page "Progression" panel. Duplicate uploads of the same raid night
 	// collapse via duplicate_group_id. JOINs wow_server_realms so RLS tenant
@@ -459,9 +527,17 @@ type sqlcQuerier interface {
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	GuildRaidClears(ctx context.Context, arg GuildRaidClearsParams) ([]GuildRaidClearsRow, error)
 	GuildResourceAnalytics(ctx context.Context, arg GuildResourceAnalyticsParams) ([]GuildResourceAnalyticsRow, error)
+	// Returns the guild's average parse per encounter for each raid night (run),
+	// for the guild page "Recent" panel (per-boss bars; callers weight by
+	// parse_count for a whole-run average). Averages every raider's parses using
+	// hps for healers and dps for everyone else. Duplicate uploads collapse to
+	// one row per encounter+player before averaging.
+	GuildRunParseAverages(ctx context.Context, arg GuildRunParseAveragesParams) ([]GuildRunParseAveragesRow, error)
 	// Returns the boss kills of the given instances in kill order, for the guild
-	// history page's per-boss splits. Kill-time scoring was retired, so parse is -1.
-	GuildSpeedrunBossKills(ctx context.Context, instanceIds []uuid.UUID) ([]GuildSpeedrunBossKillsRow, error)
+	// history page's per-boss splits. parse is the stored server-scope kill-time
+	// parse for the scoring contract given, or -1 when it is not computed or its
+	// sample was too small.
+	GuildSpeedrunBossKills(ctx context.Context, arg GuildSpeedrunBossKillsParams) ([]GuildSpeedrunBossKillsRow, error)
 	// Returns every full clear of one instance by a guild, oldest first, for the
 	// guild history page. Deduplicates re-uploads of the same raid, preferring a
 	// qualified copy and then the fastest. Uses the ranked clear window, so
@@ -471,14 +547,24 @@ type sqlcQuerier interface {
 	// merged length of all fights minus the merged length of boss fights. Merging
 	// uses window functions (gaps and islands) rather than multiranges, which need
 	// PostgreSQL 14.
-	// Clear-time parse scoring was retired; clear_parse remains -1 for API compatibility.
+	// clear_parse is the stored server-scope clear-time parse for the scoring
+	// contract given, or -1 when it is not computed or its sample was too small.
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	// Every fight clipped to its clear's window, once in the "all" scope and,
 	// for boss fights, again in the "boss" scope.
 	// A fight starts a new island when it begins after every earlier fight ended.
 	GuildSpeedrunHistory(ctx context.Context, arg GuildSpeedrunHistoryParams) ([]GuildSpeedrunHistoryRow, error)
+	// Returns the current guild members' best parses for the guild page "Top
+	// Parses" panel. Membership comes from game_players, matching the roster
+	// panel, rather than the guild_id copied onto parse scores at scoring time.
+	// Duplicate uploads of the same run collapse to one row per encounter+player
+	// (most recently computed scoring wins, matching GetCharacterParseHistory).
+	// @best_per_player keeps only each player's single best parse so one player
+	// cannot fill the whole board.
+	GuildTopParses(ctx context.Context, arg GuildTopParsesParams) ([]GuildTopParsesRow, error)
 	HasBillingEntitlement(ctx context.Context, arg HasBillingEntitlementParams) (bool, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
+	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
 	InitializeUserWhatsNewState(ctx context.Context, arg InitializeUserWhatsNewStateParams) (UserWhatsNewState, error)
 	InsertAccountPurge(ctx context.Context, arg InsertAccountPurgeParams) (AccountPurge, error)
@@ -521,6 +607,9 @@ type sqlcQuerier interface {
 	InsertModificationRequest(ctx context.Context, arg InsertModificationRequestParams) (ApplicationModificationRequest, error)
 	InsertModuleAuthor(ctx context.Context, arg InsertModuleAuthorParams) (AddonAuthor, error)
 	InsertOAuthRelayCode(ctx context.Context, arg InsertOAuthRelayCodeParams) error
+	// Persist a single parse score result for an instance+encounter+player+metric.
+	// No unique constraint: duplicate uploads are collapsed at read time via run_id DISTINCT ON.
+	InsertParseScoreResult(ctx context.Context, arg InsertParseScoreResultParams) error
 	InsertParsedLogGroup(ctx context.Context, id uuid.UUID) error
 	InsertProofRequest(ctx context.Context, arg InsertProofRequestParams) (ProofRequest, error)
 	InsertProofSubject(ctx context.Context, arg InsertProofSubjectParams) error
@@ -534,6 +623,8 @@ type sqlcQuerier interface {
 	InsertStampedYoutubeVideo(ctx context.Context, arg InsertStampedYoutubeVideoParams) error
 	InsertTelemetryNotice(ctx context.Context, arg InsertTelemetryNoticeParams) error
 	InsertTenant(ctx context.Context, arg InsertTenantParams) (Tenant, error)
+	InsertTimeParseBossScore(ctx context.Context, arg InsertTimeParseBossScoreParams) error
+	InsertTimeParseScore(ctx context.Context, arg InsertTimeParseScoreParams) (TimeParseScore, error)
 	// Upload Keys
 	InsertUploadKey(ctx context.Context, arg InsertUploadKeyParams) (WowServerUploadKey, error)
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
@@ -541,6 +632,9 @@ type sqlcQuerier interface {
 	InsertUserAuthSession(ctx context.Context, arg InsertUserAuthSessionParams) (UserAuthSession, error)
 	InsertUserCharacterLink(ctx context.Context, arg InsertUserCharacterLinkParams) (UserCharacterLink, error)
 	InsertUserPassword(ctx context.Context, arg InsertUserPasswordParams) (UserPassword, error)
+	// New scoring contracts are identified by the target instance cutoff and do not
+	// require a ranking snapshot.
+	InsertWindowedParseScoreReceipt(ctx context.Context, arg InsertWindowedParseScoreReceiptParams) (ParseScoreReceipt, error)
 	InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGroupParams) (WoWLogGroup, error)
 	InsertWoWServer(ctx context.Context, arg InsertWoWServerParams) (WowServer, error)
 	InsertWoWServerRealm(ctx context.Context, arg InsertWoWServerRealmParams) (WowServerRealm, error)
@@ -655,6 +749,11 @@ type sqlcQuerier interface {
 	ListInstancesByParserVersion(ctx context.Context, parserVersion string) ([]ListInstancesByParserVersionRow, error)
 	ListInstancesByTimeRange(ctx context.Context, arg ListInstancesByTimeRangeParams) ([]ListInstancesByTimeRangeRow, error)
 	ListInstancesForDiscordAnnouncement(ctx context.Context, runID uuid.UUID) ([]ListInstancesForDiscordAnnouncementRow, error)
+	// Bound automatic repair to recent instances with no successful parse receipt at
+	// all. Legacy snapshot-backed receipts remain authoritative and are never
+	// selected merely because windowed scoring uses a newer query version.
+	ListInstancesMissingParseReceiptWindowed(ctx context.Context, arg ListInstancesMissingParseReceiptWindowedParams) ([]ListInstancesMissingParseReceiptWindowedRow, error)
+	ListInstancesMissingTimeParseScores(ctx context.Context, arg ListInstancesMissingTimeParseScoresParams) ([]ListInstancesMissingTimeParseScoresRow, error)
 	ListItemPricingRealms(ctx context.Context) ([]ListItemPricingRealmsRow, error)
 	ListLogFilePartsForDeletion(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
@@ -671,6 +770,22 @@ type sqlcQuerier interface {
 	ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error)
 	ListOwnedLogGroupIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 	ListOwnedLuaProjectIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
+	ListParseScoreCohortBuckets(ctx context.Context, arg ListParseScoreCohortBucketsParams) ([]ListParseScoreCohortBucketsRow, error)
+	ListParseScoreMemberships(ctx context.Context, arg ListParseScoreMembershipsParams) ([]ParseScoreMembership, error)
+	// Read one persisted legacy result per player and encounter for the snapshot ID
+	// retained as opaque provenance on its successful receipt.
+	ListParseScoreResultsForContract(ctx context.Context, arg ListParseScoreResultsForContractParams) ([]ParseScoreResult, error)
+	// Metric values for every exact DPS/HPS cohort on the given encounters, used
+	// to summarize parse spreads without fetching per-player names. Empty
+	// player_class/player_spec match every class/spec.
+	// tenant_ids is resolved by the caller (the default tenant also sees
+	// include_in_all tenants) so it is a plain index condition; an OR across
+	// tenant rules, or an array built in SQL, leaves the planner scanning every
+	// membership row instead of seeking by encounter.
+	ListParseScoreSpreadValues(ctx context.Context, arg ListParseScoreSpreadValuesParams) ([]ListParseScoreSpreadValuesRow, error)
+	// Receipt-less results are authoritative historical data. Read them without
+	// joining snapshot tables or score memberships so they can never be recomputed.
+	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg ListPersistedParseScoreResultsForInstanceParams) ([]ParseScoreResult, error)
 	ListProofEvidenceCleanup(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error)
 	// Resolve current armory classes and guilds in one query per request; old
 	// requests and characters removed from the armory still render without them.
@@ -726,6 +841,21 @@ type sqlcQuerier interface {
 	// Tenants that use this dataset, either directly (tenant.default_dataset_id)
 	// or via a server they own (wow_servers.default_dataset_id).
 	ListTenantsByDataset(ctx context.Context, defaultDatasetID uuid.NullUUID) ([]ListTenantsByDatasetRow, error)
+	ListTimeParseBossKillCohortBuckets(ctx context.Context, arg ListTimeParseBossKillCohortBucketsParams) ([]ListTimeParseBossKillCohortBucketsRow, error)
+	ListTimeParseBossKillMemberships(ctx context.Context, arg ListTimeParseBossKillMembershipsParams) ([]TimeParseBossKillMembership, error)
+	// Kill durations for every boss-kill cohort in one instance, used to
+	// summarize kill-time parse spreads without per-kill guild lookups.
+	ListTimeParseBossKillSpreadValues(ctx context.Context, arg ListTimeParseBossKillSpreadValuesParams) ([]ListTimeParseBossKillSpreadValuesRow, error)
+	ListTimeParseBossScoresForScore(ctx context.Context, timeParseScoreID uuid.UUID) ([]TimeParseBossScore, error)
+	ListTimeParseClearTimeCohortBuckets(ctx context.Context, arg ListTimeParseClearTimeCohortBucketsParams) ([]ListTimeParseClearTimeCohortBucketsRow, error)
+	ListTimeParseClearTimeMemberships(ctx context.Context, arg ListTimeParseClearTimeMembershipsParams) ([]TimeParseClearTimeMembership, error)
+	// Full-clear durations for every clear-time cohort in one instance.
+	ListTimeParseClearTimeSpreadValues(ctx context.Context, arg ListTimeParseClearTimeSpreadValuesParams) ([]ListTimeParseClearTimeSpreadValuesRow, error)
+	// Locate surviving uploads for a logical run before deleting one instance so
+	// compact memberships can elect a new representative afterward.
+	ListTimeParseReplacementLogGroups(ctx context.Context, arg ListTimeParseReplacementLogGroupsParams) ([]uuid.UUID, error)
+	// Locate surviving uploads for logical runs whose source log group is deleted.
+	ListTimeParseReplacementLogGroupsForDeletedLogGroup(ctx context.Context, arg ListTimeParseReplacementLogGroupsForDeletedLogGroupParams) ([]uuid.UUID, error)
 	ListUploadKeysByRealm(ctx context.Context, realmID uuid.UUID) ([]ListUploadKeysByRealmRow, error)
 	ListUserCustomPanelInstallations(ctx context.Context, userID uuid.UUID) ([]ListUserCustomPanelInstallationsRow, error)
 	ListUserFavoriteGuilds(ctx context.Context, userID uuid.UUID) ([]ListUserFavoriteGuildsRow, error)
@@ -739,6 +869,7 @@ type sqlcQuerier interface {
 	ListUsersReferencingCosmetic(ctx context.Context, cosmeticID string) ([]uuid.UUID, error)
 	ListUsersWithCharacterCosmetics(ctx context.Context) ([]uuid.UUID, error)
 	ListVulnerabilitySpellsByDataset(ctx context.Context, arg ListVulnerabilitySpellsByDatasetParams) ([]ListVulnerabilitySpellsByDatasetRow, error)
+	ListWindowedParseScoreResultsForContract(ctx context.Context, arg ListWindowedParseScoreResultsForContractParams) ([]ParseScoreResult, error)
 	// Realms
 	ListWoWServerRealms(ctx context.Context, serverID uuid.UUID) ([]WowServerRealm, error)
 	// Servers
@@ -864,6 +995,9 @@ type sqlcQuerier interface {
 	RecordGuildInstanceView(ctx context.Context, arg RecordGuildInstanceViewParams) error
 	RecordGuildResourceView(ctx context.Context, arg RecordGuildResourceViewParams) error
 	RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) (RedeemOAuthRelayCodeRow, error)
+	RefreshParseScoreMembershipsForLogGroup(ctx context.Context, arg RefreshParseScoreMembershipsForLogGroupParams) (RefreshParseScoreMembershipsForLogGroupRow, error)
+	RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseBossKillMembershipsForLogGroupParams) (RefreshTimeParseBossKillMembershipsForLogGroupRow, error)
+	RefreshTimeParseClearTimeMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseClearTimeMembershipsForLogGroupParams) (RefreshTimeParseClearTimeMembershipsForLogGroupRow, error)
 	RegisterLuaProjectUpload(ctx context.Context, objectKey string) error
 	ReleaseAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
 	RenameSidekickInstallation(ctx context.Context, arg RenameSidekickInstallationParams) (SidekickInstallation, error)

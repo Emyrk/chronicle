@@ -1,0 +1,125 @@
+{
+  "title": "Deathless gnome-tanked BWL on video",
+  "category": "Combined",
+  "description": "A Blackwing Lair full clear under 75 minutes with under 8 minutes idle, zero wipes and a linked video, where a gnome warrior tanked both Vaelastrasz and Nefarian without dying on any boss, at least three priests healed 800+ HPS on Nefarian, Vaelastrasz died in under a minute, and nobody pulled Chromaggus more than once.",
+  "query": {
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "=",
+          "value": "Blackwing Lair"
+        },
+        {
+          "field": "instance.clear_time_ms",
+          "op": "<=",
+          "value": 4500000
+        },
+        {
+          "field": "instance.idle_time_ms",
+          "op": "<",
+          "value": 480000
+        },
+        {
+          "field": "instance.wipes",
+          "op": "=",
+          "value": 0
+        },
+        {
+          "field": "instance.has_video",
+          "op": "=",
+          "value": true
+        },
+        {
+          "any_player": {
+            "and": [
+              {
+                "field": "player.race",
+                "op": "=",
+                "value": "Gnome"
+              },
+              {
+                "field": "player.class",
+                "op": "=",
+                "value": "WARRIOR"
+              },
+              {
+                "field": "player.role",
+                "op": "=",
+                "value": "tank",
+                "bosses": [
+                  "Vaelastrasz the Corrupt",
+                  "Nefarian"
+                ],
+                "match": "each"
+              },
+              {
+                "not": {
+                  "field": "player.deaths",
+                  "op": ">=",
+                  "value": 1,
+                  "on": "bosses"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "count_players": {
+            "where": {
+              "and": [
+                {
+                  "field": "player.class",
+                  "op": "=",
+                  "value": "PRIEST"
+                },
+                {
+                  "field": "player.hps",
+                  "op": ">=",
+                  "value": 800,
+                  "bosses": [
+                    "Nefarian"
+                  ]
+                }
+              ]
+            },
+            "op": ">=",
+            "value": 3
+          }
+        },
+        {
+          "any_encounter": {
+            "and": [
+              {
+                "field": "encounter.name",
+                "op": "=",
+                "value": "Vaelastrasz the Corrupt"
+              },
+              {
+                "field": "encounter.killed",
+                "op": "=",
+                "value": true
+              },
+              {
+                "field": "encounter.duration_ms",
+                "op": "<",
+                "value": 60000
+              }
+            ]
+          }
+        },
+        {
+          "count_encounters": {
+            "where": {
+              "field": "encounter.name",
+              "op": "=",
+              "value": "Chromaggus"
+            },
+            "op": "<=",
+            "value": 1
+          }
+        }
+      ]
+    }
+  }
+}

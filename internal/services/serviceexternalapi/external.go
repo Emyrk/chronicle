@@ -1,6 +1,7 @@
 package serviceexternalapi
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -71,17 +72,24 @@ type Character struct {
 	UpdatedFromInstance *uuid.UUID              `json:"updated_from_instance,omitempty"`
 }
 
+type CharacterEncounterPerformance struct {
+	EncounterName string `json:"encounter_name"`
+	DPSParse      *int32 `json:"dps_parse,omitempty"`
+	HPSParse      *int32 `json:"hps_parse,omitempty"`
+}
+
 type CharacterLog struct {
-	ID         uuid.UUID `json:"id"`
-	Slug       string    `json:"slug,omitempty"`
-	Name       string    `json:"name"`
-	Guild      *Guild    `json:"guild,omitempty"`
-	Difficulty string    `json:"difficulty,omitempty"`
-	MaxPlayers int32     `json:"max_players,omitempty"`
-	BossKills  int32     `json:"boss_kills"`
-	StartedAt  time.Time `json:"started_at"`
-	EndedAt    time.Time `json:"ended_at"`
-	UploadedAt time.Time `json:"uploaded_at"`
+	ID          uuid.UUID                       `json:"id"`
+	Slug        string                          `json:"slug,omitempty"`
+	Name        string                          `json:"name"`
+	Guild       *Guild                          `json:"guild,omitempty"`
+	Difficulty  string                          `json:"difficulty,omitempty"`
+	MaxPlayers  int32                           `json:"max_players,omitempty"`
+	BossKills   int32                           `json:"boss_kills"`
+	StartedAt   time.Time                       `json:"started_at"`
+	EndedAt     time.Time                       `json:"ended_at"`
+	UploadedAt  time.Time                       `json:"uploaded_at"`
+	Performance []CharacterEncounterPerformance `json:"performance,omitempty"`
 }
 
 type Pagination struct {
@@ -210,8 +218,13 @@ func (s *Service) listCharacterLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tenantID := uuid.Nil
+	if resolved.realm.TenantID.Valid {
+		tenantID = resolved.realm.TenantID.UUID
+	}
 	rows, err := s.db.ListExternalAPICharacterLogs(r.Context(), database.ListExternalAPICharacterLogsParams{
 		PlayerGuid:   resolved.player.ID,
+		TenantID:     tenantID,
 		ResultOffset: (page - 1) * pageSize,
 		ResultLimit:  pageSize + 1,
 		RealmID:      resolved.realm.ID,
@@ -629,10 +642,19 @@ func characterLogFromRow(row database.ListExternalAPICharacterLogsRow) (Characte
 		guildInfo = &Guild{ID: row.GuildID.UUID, Name: row.GuildName}
 	}
 
+	var performance []CharacterEncounterPerformance
+	if err := json.Unmarshal([]byte(row.PerformanceJson), &performance); err != nil {
+		return CharacterLog{}, err
+	}
+	if len(performance) == 0 {
+		performance = nil
+	}
+
 	return CharacterLog{
 		ID: row.ID, Slug: row.HashedSlug.String, Name: row.Name, Guild: guildInfo,
 		Difficulty: row.DifficultyName, MaxPlayers: row.MaxPlayers, BossKills: row.BossKills,
 		StartedAt: row.StartedAt.Time, EndedAt: row.EndedAt.Time, UploadedAt: row.UploadedAt.Time,
+		Performance: performance,
 	}, nil
 }
 

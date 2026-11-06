@@ -426,7 +426,8 @@ func column(expr string) func(c *compiler, s scope, p pred) valueSQL {
 }
 
 const (
-	killedSQL = "IN ('clean', 'partial')"
+	killedSQL       = "IN ('clean', 'partial')"
+	scoredStatusSQL = "IN ('ok', 'low_confidence')"
 )
 
 func durationMS(alias string) string {
@@ -517,7 +518,8 @@ var (
 		"Human", "Dwarf", "NightElf", "Gnome", "Draenei", "Orc", "Scourge", "Tauren", "Troll", "Goblin", "BloodElf",
 	}
 	outcomes = []string{"clean", "partial", "wipe", "reset"}
-	roles    = []string{"dps", "heal", "tank"}
+	// roles are the values stored in encounter_dps_rankings.player_role.
+	roles = []string{"dps", "heal", "tank"}
 	// capabilities are the values the log parser writes to
 	// log_instances.capabilities (chronicle/logparse_parse.go).
 	capabilities = []string{"overheal", "absorb", "unit-resources", "unit-position", "raidgroup", "interrupt", "server-side"}
@@ -588,6 +590,22 @@ var fields = []*field{
 		Doc: "Time inside the clear spent fighting trash (non-boss fights). Full clears only.", value: clearParts("trash")},
 	{Name: "instance.idle_time_ms", Cost: 20, Scope: scopeInstance, Type: typeInt, Unit: "ms",
 		Doc: "Time inside the clear spent out of combat. Full clears only.", value: clearParts("idle")},
+	{Name: "instance.clear_parse", Cost: 6, Scope: scopeInstance, Type: typeInt, Unit: "0-100", ParseScope: true,
+		Doc: "Clear-time parse (higher is faster).",
+		value: func(c *compiler, s scope, p pred) valueSQL {
+			tps := c.alias("tps")
+			col := fmt.Sprintf("%s.clear_%s", tps, p.parseScope)
+			return valueSQL{Expr: fmt.Sprintf("(SELECT %[1]s_display_score FROM time_parse_scores %[2]s WHERE %[3]s AND %[1]s_status %[4]s)",
+				col, tps, c.timeParseContract(tps), scoredStatusSQL)}
+		}},
+	{Name: "instance.kill_time_parse", Cost: 8, Scope: scopeInstance, Type: typeInt, Unit: "0-100", ParseScope: true, Bosses: true,
+		Doc: "Boss kill-time parse (higher is faster) on any / each of the bosses.",
+		value: func(c *compiler, s scope, p pred) valueSQL {
+			tps, tbs := c.alias("tps"), c.alias("tbs")
+			from := fmt.Sprintf("time_parse_scores %[1]s JOIN time_parse_boss_scores %[2]s ON %[2]s.time_parse_score_id = %[1]s.id WHERE %[3]s AND %[2]s.%[4]s_status %[5]s",
+				tps, tbs, c.timeParseContract(tps), p.parseScope, scoredStatusSQL)
+			return valueSQL{Expr: fmt.Sprintf("%s.%s_display_score", tbs, p.parseScope), From: from, Name: tbs + ".encounter_name"}
+		}},
 	{Name: "instance.kill_time_ms", Cost: 6, Scope: scopeInstance, Type: typeInt, Unit: "ms", Bosses: true,
 		Doc: "Boss kill duration (clean or partial kills) on any / each of the bosses.",
 		value: func(c *compiler, s scope, p pred) valueSQL {
@@ -610,6 +628,14 @@ var fields = []*field{
 		value: func(c *compiler, s scope, p pred) valueSQL {
 			return valueSQL{Expr: durationMS(s.alias)}
 		}},
+	{Name: "encounter.kill_time_parse", Cost: 8, Scope: scopeEncounter, Type: typeInt, Unit: "0-100", ParseScope: true,
+		Doc: "Kill-time parse for this kill.",
+		value: func(c *compiler, s scope, p pred) valueSQL {
+			tps, tbs := c.alias("tps"), c.alias("tbs")
+			return valueSQL{Expr: fmt.Sprintf("(SELECT %[2]s.%[5]s_display_score FROM time_parse_scores %[1]s JOIN time_parse_boss_scores %[2]s ON %[2]s.time_parse_score_id = %[1]s.id WHERE %[3]s AND %[2]s.encounter_id = %[4]s.id AND %[2]s.%[5]s_status %[6]s)",
+				tps, tbs, c.timeParseContract(tps), s.alias, p.parseScope, scoredStatusSQL)}
+		}},
+
 	// ---- Player scope (inside any_player / count_players) ---------------
 	{Name: "player.name", Scope: scopePlayer, Type: typeString,
 		Doc: "Character name.", value: column("{a}.name")},
@@ -639,6 +665,17 @@ var fields = []*field{
 		Doc: "Deaths in a fight. Wipes are not counted.", value: rankingField("player_deaths")},
 	{Name: "player.avg_ilvl", Cost: 6, Scope: scopePlayer, Type: typeInt, Bosses: true, On: true,
 		Doc: "Average item level in a fight.", value: rankingField("avg_ilvl")},
+	{Name: "player.parse", Cost: 21, Scope: scopePlayer, Type: typeInt, Unit: "0-100", Bosses: true, Metric: true,
+		Doc: "Player parse on a boss kill (latest stored score per boss).",
+		value: func(c *compiler, s scope, p pred) valueSQL {
+			r := c.alias("ps")
+			from := fmt.Sprintf(`(SELECT DISTINCT ON (x.encounter_name) x.encounter_name, x.display_score, x.status
+      FROM parse_score_results x
+      WHERE x.tenant_id = %[2]s AND x.instance_id = li.id AND x.player_guid = %[3]s.unit_guid::text AND x.metric = %[4]s::text
+      ORDER BY x.encounter_name, x.created_at DESC, x.precise_score DESC) %[1]s WHERE %[1]s.status %[5]s`,
+				r, c.tenant(), s.alias, c.arg(string(p.metric)), scoredStatusSQL)
+			return valueSQL{Expr: r + ".display_score", From: from, Name: r + ".encounter_name"}
+		}},
 }
 
 var fieldsByName = func() map[string]*field {
