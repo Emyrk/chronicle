@@ -63,6 +63,9 @@ func TestValidateParsedResultProvenance(t *testing.T) {
 	otherBuild := valid
 	otherBuild.ParserVersion += "-other"
 	require.NoError(t, ValidateParsedResultProvenance(otherBuild, format, flavor, dataset))
+	otherFormat := valid
+	otherFormat.Format = database.LogFormatAzerothcoreMod
+	require.NoError(t, ValidateParsedResultProvenance(otherFormat, otherFormat.Format, flavor, dataset))
 	empty := parseresult.Result{SchemaVersion: parseresult.SchemaVersion, Format: format, Flavor: database.WoWFlavor{}, DatasetID: dataset, ParserVersion: valid.ParserVersion}
 	require.NoError(t, ValidateParsedResultProvenance(empty, format, database.WoWFlavor{}, dataset))
 }

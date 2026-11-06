@@ -16,7 +16,7 @@ import (
 // depends on the job executor (see ValidateParsedJobVersion). The individual
 // InsertParsed* adapters do not constitute an ingest or generation fence.
 func ValidateParsedResultProvenance(result parseresult.Result, format database.LogFormat, flavor database.WoWFlavor, datasetID uuid.UUID) error {
-	if result.SchemaVersion != parseresult.SchemaVersion || !supportedParsedAddonFormat(result.Format) || result.Format != format {
+	if result.SchemaVersion != parseresult.SchemaVersion || result.Format == "" || result.Format != format {
 		return fmt.Errorf("parse result schema or format does not match resolved inputs: schema %d, payload format %q, resolved format %q", result.SchemaVersion, result.Format, format)
 	}
 	if result.ParserVersion == "" {

@@ -15,17 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// These formats share the versioned core DTO and the same primary-side
-// instance/encounter write contract. Ranking policy is validated separately.
-func supportedParsedAddonFormat(format database.LogFormat) bool {
-	switch format {
-	case database.LogFormat112aCcAddon, database.LogFormat243CcAddon, database.LogFormat335aCcAddon:
-		return true
-	default:
-		return false
-	}
-}
-
 // ParsedCoreWrite contains decisions that cannot be derived from a parse result.
 // The caller owns the parse-generation fence and transaction, and must supply
 // realm/guild resolution and the intended slug variants.
@@ -44,7 +33,7 @@ type ParsedCoreWrite struct {
 // armory, rankings or other parser side effects. Use a transactional store: a write
 // failure after the instance insert must roll back the entire operation.
 func InsertParsedCore(ctx context.Context, store database.Store, result parseresult.Result, write ParsedCoreWrite) (database.LogInstance, error) {
-	if result.SchemaVersion != parseresult.SchemaVersion || !supportedParsedAddonFormat(result.Format) {
+	if result.SchemaVersion != parseresult.SchemaVersion || result.Format == "" {
 		return database.LogInstance{}, fmt.Errorf("unsupported core parse result schema %d format %q", result.SchemaVersion, result.Format)
 	}
 	if write.InstanceID == uuid.Nil || write.RealmID == uuid.Nil || write.LogGroupID == uuid.Nil || write.ParserVersion == "" || result.Name == "" || result.Core.Start.IsZero() || result.Core.End.IsZero() {

@@ -19,6 +19,18 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
+// supportedParseFormat is the parser entrypoint's format contract. Persistence
+// adapters do not use it: they validate schema and primary-resolved identity,
+// not which parser constructor produced the result.
+func supportedParseFormat(format database.LogFormat) bool {
+	switch format {
+	case database.LogFormat112aCcAddon, database.LogFormat243CcAddon, database.LogFormat335aCcAddon:
+		return true
+	default:
+		return false
+	}
+}
+
 // InstanceFailure identifies one nonempty instance whose finalization or
 // projection failed. Key matches the legacy worker's name_ordinal convention.
 // Message is diagnostic text, not a stable machine-readable error code.
@@ -68,9 +80,7 @@ func parse(ctx context.Context, reader io.Reader, gameDB gamedb.GameDB, reg *reg
 			Type: database.LogTypeV2, Format: format, Flavor: reg.Flavor(),
 		})
 	}
-	switch format {
-	case database.LogFormat112aCcAddon, database.LogFormat243CcAddon, database.LogFormat335aCcAddon:
-	default:
+	if !supportedParseFormat(format) {
 		return ParseOutcome{}, fmt.Errorf("unsupported parse-result format %q", format)
 	}
 	resolved, _ := parsectx.FromContext(ctx) // Always present after default stamping.

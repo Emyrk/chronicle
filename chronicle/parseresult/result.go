@@ -107,9 +107,7 @@ type EventStreams encounterevents.Events
 // Build does not finalize, query, write, or mutate parser state. It accepts
 // the supported CC-addon formats; format-specific parsing happens in Parse.
 func Build(in Input) (*Result, error) {
-	switch in.Format {
-	case database.LogFormat112aCcAddon, database.LogFormat243CcAddon, database.LogFormat335aCcAddon:
-	default:
+	if !supportedParseFormat(in.Format) {
 		return nil, fmt.Errorf("unsupported parse-result format %q", in.Format)
 	}
 	if in.Finalized == nil || in.Events == nil {

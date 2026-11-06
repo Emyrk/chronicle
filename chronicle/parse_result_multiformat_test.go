@@ -22,16 +22,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParsedAddonFormatGuards(t *testing.T) {
+func TestParsedAdapterFormatGuards(t *testing.T) {
 	t.Parallel()
-	for _, format := range []database.LogFormat{database.LogFormat112aCcAddon, database.LogFormat243CcAddon, database.LogFormat335aCcAddon} {
-		require.True(t, supportedParsedAddonFormat(format))
-	}
-	require.False(t, supportedParsedAddonFormat(database.LogFormat("unknown")))
-	result := parseresult.Result{SchemaVersion: parseresult.SchemaVersion, Format: database.LogFormat("unknown")}
+	result := parseresult.Result{SchemaVersion: parseresult.SchemaVersion}
 	_, err := InsertParsedCore(t.Context(), nil, result, ParsedCoreWrite{})
 	require.ErrorContains(t, err, "unsupported core parse result")
 	require.ErrorContains(t, InsertParsedSpeedrun(t.Context(), nil, result, ParsedSpeedrunWrite{}), "unsupported speedrun parse result")
+	result.Format = database.LogFormatAzerothcoreMod
+	_, err = InsertParsedCore(t.Context(), nil, result, ParsedCoreWrite{})
+	require.ErrorContains(t, err, "core insert requires")
+	require.NoError(t, InsertParsedSpeedrun(t.Context(), nil, result, ParsedSpeedrunWrite{})) // No speedrun to insert.
 	// Ranking guards remain deliberately narrower until flavor-specific rules
 	// and game-data parity have been established for CLEU formats.
 	result.Format = database.LogFormat243CcAddon
