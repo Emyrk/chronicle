@@ -97,11 +97,11 @@ type PlayerObservation struct {
 }
 
 type GearObservation struct {
-	ItemID        int32
-	Name          string
-	EnchantID     *int32
-	TransmogID    *int32
-	GemEnchantIDs [4]int32
+	ItemID        int32    `json:"item_id"`
+	Name          string   `json:"name"`
+	EnchantID     *int32   `json:"enchant_id"`
+	TransmogID    *int32   `json:"transmog_id"`
+	GemEnchantIDs [4]int32 `json:"gem_enchant_ids"`
 }
 
 // Snapshot copies only fields read by Insert, in its stable guild/player order.

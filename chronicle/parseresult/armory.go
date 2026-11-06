@@ -14,8 +14,8 @@ import (
 // (including name fallback, icon, quality and item level), average item level,
 // gear-history eligibility, realm/dataset/instance IDs and guild creation
 // timestamps are write-time decisions, not serialized observations. Player
-// gear includes only fields read by Insert; suffixes, temporary enchants,
-// bonus IDs and modern combatant statistics are intentionally omitted.
+// gear is the parser's finalized GearObservation, which already carries only
+// fields read by Insert; raw combatant.GearItem includes additional fields.
 type ArmoryObservation struct {
 	Guilds           []ObservedGuild  `json:"guilds"`
 	ParticipantCount int              `json:"participant_count"`
@@ -40,13 +40,8 @@ type ObservedPlayer struct {
 	Talents   *ObservedTalents `json:"talents"`
 }
 
-type ObservedGear struct {
-	ItemID        int32    `json:"item_id"`
-	Name          string   `json:"name"`
-	EnchantID     *int32   `json:"enchant_id"`
-	TransmogID    *int32   `json:"transmog_id"`
-	GemEnchantIDs [4]int32 `json:"gem_enchant_ids"`
-}
+// ObservedGear uses the parser's own finalized gear observation on the wire.
+type ObservedGear = armory.GearObservation
 
 type ObservedTalents struct {
 	Tabs [3]ObservedTalentTab `json:"tabs"`
@@ -76,10 +71,7 @@ func buildArmory(snapshot armory.Observation) (ArmoryObservation, error) {
 		obs := ObservedPlayer{GUID: player.GUID.String(), Name: player.Name, GuildName: player.GuildName,
 			Class: string(db2sdk.HeroClassToDB(player.HeroClass)), Gender: string(db2sdk.HeroGenderToDB(player.Gender)),
 			Race: string(db2sdk.HeroRaceToDB(player.Race)), Seen: player.Seen, Level: player.Level}
-		for _, gear := range player.Gear {
-			obs.Gear = append(obs.Gear, ObservedGear{ItemID: gear.ItemID, Name: gear.Name,
-				EnchantID: gear.EnchantID, TransmogID: gear.TransmogID, GemEnchantIDs: gear.GemEnchantIDs})
-		}
+		obs.Gear = append(obs.Gear, player.Gear...)
 		if player.Talents != nil {
 			obs.Talents = &ObservedTalents{}
 			for i, ranks := range player.Talents.Trees {

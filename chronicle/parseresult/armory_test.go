@@ -1,6 +1,7 @@
 package parseresult
 
 import (
+	"bytes"
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -55,6 +56,9 @@ func TestArmoryObservationRoundTripAndCopy(t *testing.T) {
 	data, err := json.Marshal(got)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte(`"item_id":123`)) {
+		t.Fatal("gear observation changed wire field names")
 	}
 	var decoded Result
 	if err := json.Unmarshal(data, &decoded); err != nil {
