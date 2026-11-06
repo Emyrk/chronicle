@@ -161,12 +161,17 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
           id: target.boss ?? "raid",
           kind: target.boss ? "boss" : "raid",
           scope: target,
-          title: metric === "renown" ? instanceName : (target.boss ?? where),
+          title:
+            metric === "renown"
+              ? (q.data.params.get("boss") ?? instanceName)
+              : (target.boss ?? where),
           subtitle:
             q.data.response.status === "empty_selection"
               ? "Empty encounter set: no eligible bosses."
               : metric === "renown"
-                ? "All eligible bosses in this variant; independent of set and class filters."
+                ? q.data.params.has("boss")
+                  ? "This boss's completions and current award; independent of class filters."
+                  : "All eligible bosses in this variant; independent of set and class filters."
                 : `${q.data.response.included_bosses.length} bosses · a missed boss counts as 0`,
           entries: q.data.response.entries.map((row) =>
             v2PlayerEntry(row, q.data.params, metric),
