@@ -1,0 +1,146 @@
+import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
+import { describe, expect, it, vi } from "vitest";
+import {
+  ConfigurationPage,
+  ConfigurationView,
+  InstanceConfiguration,
+} from "./Configuration";
+import type {
+  LeaderboardConfiguration,
+  LeaderboardConfigurationRow,
+} from "@/api/typesGenerated";
+
+const row = (
+  values: Partial<LeaderboardConfigurationRow>,
+): LeaderboardConfigurationRow => ({
+  kind: "boss",
+  instance_name: "Test raid",
+  encounter_name: "Boss",
+  difficulty_name: "",
+  max_players: 0,
+  set_key: "",
+  set_name: "",
+  position: 0,
+  points: 0,
+  has_points: false,
+  ...values,
+});
+const data: LeaderboardConfiguration = {
+  tenant_id: null,
+  tenant_name: "Root site (no tenant)",
+  dataset_id: "dataset",
+  dataset_name: "Vanilla",
+  dataset_flavor: ["vanilla"],
+  additional_flavor: ["turtle"],
+  effective_flavor: ["vanilla", "turtle"],
+  leaderboard_flavor: ["vanilla"],
+  layers: [],
+  rows: [],
+  conflict: "",
+};
+function view(value: LeaderboardConfiguration) {
+  return renderToStaticMarkup(
+    <MemoryRouter>
+      <ConfigurationView data={value} />
+    </MemoryRouter>,
+  );
+}
+
+describe("configuration inspector", () => {
+  it("distinguishes missing awards, explicit zero, and absent variants from no bosses", () => {
+    const html = renderToStaticMarkup(
+      <InstanceConfiguration
+        name="Test raid"
+        rows={[
+          row({ has_points: true }),
+          row({ encounter_name: "Unconfigured" }),
+        ]}
+      />,
+    );
+    expect(html).toContain("0 points");
+    expect(html).toContain("No award configured");
+    expect(html).toContain("No variants configured");
+    expect(html).not.toContain("No bosses configured.");
+    expect(
+      renderToStaticMarkup(<InstanceConfiguration name="Empty" rows={[]} />),
+    ).toContain("No bosses configured.");
+  });
+  it("renders resolved variant awards and named sets in membership order", () => {
+    const html = renderToStaticMarkup(
+      <InstanceConfiguration
+        name="Test raid"
+        rows={[
+          row({ has_points: true, points: 10 }),
+          row({ kind: "variant", difficulty_name: "Heroic", max_players: 25 }),
+          row({
+            kind: "boss_variant",
+            difficulty_name: "Heroic",
+            max_players: 25,
+            has_points: true,
+            points: 0,
+          }),
+          row({ kind: "set", set_key: "clear", set_name: "Full clear" }),
+          row({
+            kind: "member",
+            set_key: "clear",
+            encounter_name: "Second boss",
+            position: 2,
+          }),
+          row({
+            kind: "member",
+            set_key: "clear",
+            encounter_name: "First boss",
+            position: 1,
+          }),
+        ]}
+      />,
+    );
+    expect(html).toContain("10 points");
+    expect(html).toContain("0 points");
+    expect(html).toContain("Full clear");
+    expect(html.indexOf("First boss")).toBeLessThan(
+      html.indexOf("Second boss"),
+    );
+  });
+  it("shows tenant flavors and explicit empty state", () => {
+    const html = view(data);
+    expect(html).toContain("Root site (no tenant)");
+    expect(html).toContain("Leaderboard projection");
+    expect(html).toContain("turtle");
+    expect(html).toContain("No configured instances");
+    expect(html).toContain("No matching layers");
+  });
+  it("never displays partial configuration on conflict", () => {
+    const html = view({
+      ...data,
+      conflict: "conflicting points",
+      rows: [row({ kind: "instance", instance_name: "Secret partial" })],
+    });
+    expect(html).toContain("Configuration conflict");
+    expect(html).not.toContain("Secret partial");
+  });
+});
+
+vi.mock("@/api/leaderboardConfiguration", () => ({
+  useLeaderboardConfiguration: vi.fn(),
+}));
+import { useLeaderboardConfiguration } from "@/api/leaderboardConfiguration";
+
+it("shows loading and request errors instead of an empty configuration", () => {
+  vi.mocked(useLeaderboardConfiguration).mockReturnValue({
+    isPending: true,
+  } as ReturnType<typeof useLeaderboardConfiguration>);
+  expect(renderToStaticMarkup(<ConfigurationPage />)).toContain(
+    "Loading tenant configuration",
+  );
+  vi.mocked(useLeaderboardConfiguration).mockReturnValue({
+    isPending: false,
+    isError: true,
+    error: new Error("Dataset unavailable"),
+  } as ReturnType<typeof useLeaderboardConfiguration>);
+  const html = renderToStaticMarkup(<ConfigurationPage />);
+  expect(html).toContain("Configuration unavailable");
+  expect(html).toContain("Dataset unavailable");
+  expect(html).not.toContain("No configured instances");
+});
