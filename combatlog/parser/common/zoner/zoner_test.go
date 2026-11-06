@@ -59,6 +59,25 @@ func TestLocationProcess(t *testing.T) {
 		assert.Equal(t, uint32(2), loc.InstanceID)
 	})
 
+	t.Run("ZoneChanged_LateArrivalInstanceMetadata", func(t *testing.T) {
+		t.Parallel()
+		loc := zoner.NewLocation()
+		loc.Process(messages.Zone{Zone: zone.Zone{
+			Name:         "木喉要塞",
+			InstanceType: "none",
+		}})
+
+		result := loc.Process(messages.Zone{Zone: zone.Zone{
+			Name:         "木喉要塞",
+			IsInstance:   true,
+			InstanceType: "raid",
+		}})
+
+		assert.Equal(t, zone.ZoneChanged, result)
+		assert.True(t, loc.IsInstance)
+		assert.Equal(t, "raid", loc.InstanceType)
+	})
+
 	t.Run("InfoUpdated_LateArrivalDifficulty", func(t *testing.T) {
 		t.Parallel()
 		loc := zoner.NewLocation()
