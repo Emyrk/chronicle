@@ -1,0 +1,16 @@
+BEGIN;
+DROP TABLE leaderboard_variant_renown;
+DROP TABLE leaderboard_boss_renown;
+DROP TABLE leaderboard_member_overrides;
+DROP TABLE leaderboard_set_overrides;
+DROP TABLE leaderboard_boss_overrides;
+DROP TABLE leaderboard_variant_overrides;
+DROP TABLE leaderboard_instance_overrides;
+DROP TABLE leaderboard_set_members;
+DROP TABLE leaderboard_sets;
+DROP TABLE leaderboard_bosses;
+DROP TABLE leaderboard_instance_variants;
+DROP TABLE leaderboard_instances;
+DROP TABLE leaderboard_layers;
+DROP FUNCTION leaderboard_sorted_flavors(text[]);
+COMMIT;

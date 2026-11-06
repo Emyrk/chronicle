@@ -11758,6 +11758,252 @@ func (q *sqlQuerier) LandingPositionalInstances(ctx context.Context, limitCount 
 	return items, nil
 }
 
+const insertLeaderboardBossOverrides = `-- name: InsertLeaderboardBossOverrides :exec
+INSERT INTO leaderboard_boss_overrides (layer_key, instance_name, encounter_name, enabled)
+VALUES ($1, $2, $3, $4)
+`
+
+type InsertLeaderboardBossOverridesParams struct {
+	LayerKey      string `db:"layer_key" json:"layer_key"`
+	InstanceName  string `db:"instance_name" json:"instance_name"`
+	EncounterName string `db:"encounter_name" json:"encounter_name"`
+	Enabled       bool   `db:"enabled" json:"enabled"`
+}
+
+func (q *sqlQuerier) InsertLeaderboardBossOverrides(ctx context.Context, arg InsertLeaderboardBossOverridesParams) error {
+	_, err := q.db.Exec(ctx, insertLeaderboardBossOverrides,
+		arg.LayerKey,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.Enabled,
+	)
+	return err
+}
+
+const insertLeaderboardBossRenown = `-- name: InsertLeaderboardBossRenown :exec
+INSERT INTO leaderboard_boss_renown (layer_key, instance_name, encounter_name, points)
+VALUES ($1, $2, $3, $4)
+`
+
+type InsertLeaderboardBossRenownParams struct {
+	LayerKey      string  `db:"layer_key" json:"layer_key"`
+	InstanceName  string  `db:"instance_name" json:"instance_name"`
+	EncounterName string  `db:"encounter_name" json:"encounter_name"`
+	Points        float64 `db:"points" json:"points"`
+}
+
+func (q *sqlQuerier) InsertLeaderboardBossRenown(ctx context.Context, arg InsertLeaderboardBossRenownParams) error {
+	_, err := q.db.Exec(ctx, insertLeaderboardBossRenown,
+		arg.LayerKey,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.Points,
+	)
+	return err
+}
+
+const insertLeaderboardBosses = `-- name: InsertLeaderboardBosses :exec
+INSERT INTO leaderboard_bosses (instance_name, encounter_name)
+VALUES ($1, $2)
+`
+
+type InsertLeaderboardBossesParams struct {
+	InstanceName  string `db:"instance_name" json:"instance_name"`
+	EncounterName string `db:"encounter_name" json:"encounter_name"`
+}
+
+func (q *sqlQuerier) InsertLeaderboardBosses(ctx context.Context, arg InsertLeaderboardBossesParams) error {
+	_, err := q.db.Exec(ctx, insertLeaderboardBosses, arg.InstanceName, arg.EncounterName)
+	return err
+}
+
+const insertLeaderboardInstanceOverrides = `-- name: InsertLeaderboardInstanceOverrides :exec
+INSERT INTO leaderboard_instance_overrides (layer_key, instance_name, enabled)
+VALUES ($1, $2, $3)
+`
+
+type InsertLeaderboardInstanceOverridesParams struct {
+	LayerKey     string `db:"layer_key" json:"layer_key"`
+	InstanceName string `db:"instance_name" json:"instance_name"`
+	Enabled      bool   `db:"enabled" json:"enabled"`
+}
+
+func (q *sqlQuerier) InsertLeaderboardInstanceOverrides(ctx context.Context, arg InsertLeaderboardInstanceOverridesParams) error {
+	_, err := q.db.Exec(ctx, insertLeaderboardInstanceOverrides, arg.LayerKey, arg.InstanceName, arg.Enabled)
+	return err
+}
+
+const insertLeaderboardInstanceVariants = `-- name: InsertLeaderboardInstanceVariants :exec
+INSERT INTO leaderboard_instance_variants (instance_name, difficulty_name, max_players)
+VALUES ($1, $2, $3)
+`
+
+type InsertLeaderboardInstanceVariantsParams struct {
+	InstanceName   string `db:"instance_name" json:"instance_name"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+}
+
+func (q *sqlQuerier) InsertLeaderboardInstanceVariants(ctx context.Context, arg InsertLeaderboardInstanceVariantsParams) error {
+	_, err := q.db.Exec(ctx, insertLeaderboardInstanceVariants, arg.InstanceName, arg.DifficultyName, arg.MaxPlayers)
+	return err
+}
+
+const insertLeaderboardInstances = `-- name: InsertLeaderboardInstances :exec
+INSERT INTO leaderboard_instances (instance_name)
+VALUES ($1)
+`
+
+func (q *sqlQuerier) InsertLeaderboardInstances(ctx context.Context, instanceName string) error {
+	_, err := q.db.Exec(ctx, insertLeaderboardInstances, instanceName)
+	return err
+}
+
+const insertLeaderboardLayers = `-- name: InsertLeaderboardLayers :exec
+INSERT INTO leaderboard_layers (key, required_flavors)
+VALUES ($1, $2)
+`
+
+type InsertLeaderboardLayersParams struct {
+	Key             string   `db:"key" json:"key"`
+	RequiredFlavors []string `db:"required_flavors" json:"required_flavors"`
+}
+
+func (q *sqlQuerier) InsertLeaderboardLayers(ctx context.Context, arg InsertLeaderboardLayersParams) error {
+	_, err := q.db.Exec(ctx, insertLeaderboardLayers, arg.Key, arg.RequiredFlavors)
+	return err
+}
+
+const insertLeaderboardMemberOverrides = `-- name: InsertLeaderboardMemberOverrides :exec
+INSERT INTO leaderboard_member_overrides (layer_key, instance_name, set_key, encounter_name, enabled, position)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertLeaderboardMemberOverridesParams struct {
+	LayerKey      string      `db:"layer_key" json:"layer_key"`
+	InstanceName  string      `db:"instance_name" json:"instance_name"`
+	SetKey        string      `db:"set_key" json:"set_key"`
+	EncounterName string      `db:"encounter_name" json:"encounter_name"`
+	Enabled       pgtype.Bool `db:"enabled" json:"enabled"`
+	Position      pgtype.Int4 `db:"position" json:"position"`
+}
+
+func (q *sqlQuerier) InsertLeaderboardMemberOverrides(ctx context.Context, arg InsertLeaderboardMemberOverridesParams) error {
+	_, err := q.db.Exec(ctx, insertLeaderboardMemberOverrides,
+		arg.LayerKey,
+		arg.InstanceName,
+		arg.SetKey,
+		arg.EncounterName,
+		arg.Enabled,
+		arg.Position,
+	)
+	return err
+}
+
+const insertLeaderboardSetMembers = `-- name: InsertLeaderboardSetMembers :exec
+INSERT INTO leaderboard_set_members (instance_name, set_key, encounter_name)
+VALUES ($1, $2, $3)
+`
+
+type InsertLeaderboardSetMembersParams struct {
+	InstanceName  string `db:"instance_name" json:"instance_name"`
+	SetKey        string `db:"set_key" json:"set_key"`
+	EncounterName string `db:"encounter_name" json:"encounter_name"`
+}
+
+func (q *sqlQuerier) InsertLeaderboardSetMembers(ctx context.Context, arg InsertLeaderboardSetMembersParams) error {
+	_, err := q.db.Exec(ctx, insertLeaderboardSetMembers, arg.InstanceName, arg.SetKey, arg.EncounterName)
+	return err
+}
+
+const insertLeaderboardSetOverrides = `-- name: InsertLeaderboardSetOverrides :exec
+INSERT INTO leaderboard_set_overrides (layer_key, instance_name, set_key, enabled)
+VALUES ($1, $2, $3, $4)
+`
+
+type InsertLeaderboardSetOverridesParams struct {
+	LayerKey     string `db:"layer_key" json:"layer_key"`
+	InstanceName string `db:"instance_name" json:"instance_name"`
+	SetKey       string `db:"set_key" json:"set_key"`
+	Enabled      bool   `db:"enabled" json:"enabled"`
+}
+
+func (q *sqlQuerier) InsertLeaderboardSetOverrides(ctx context.Context, arg InsertLeaderboardSetOverridesParams) error {
+	_, err := q.db.Exec(ctx, insertLeaderboardSetOverrides,
+		arg.LayerKey,
+		arg.InstanceName,
+		arg.SetKey,
+		arg.Enabled,
+	)
+	return err
+}
+
+const insertLeaderboardSets = `-- name: InsertLeaderboardSets :exec
+INSERT INTO leaderboard_sets (instance_name, set_key, name)
+VALUES ($1, $2, $3)
+`
+
+type InsertLeaderboardSetsParams struct {
+	InstanceName string `db:"instance_name" json:"instance_name"`
+	SetKey       string `db:"set_key" json:"set_key"`
+	Name         string `db:"name" json:"name"`
+}
+
+func (q *sqlQuerier) InsertLeaderboardSets(ctx context.Context, arg InsertLeaderboardSetsParams) error {
+	_, err := q.db.Exec(ctx, insertLeaderboardSets, arg.InstanceName, arg.SetKey, arg.Name)
+	return err
+}
+
+const insertLeaderboardVariantOverrides = `-- name: InsertLeaderboardVariantOverrides :exec
+INSERT INTO leaderboard_variant_overrides (layer_key, instance_name, difficulty_name, max_players, enabled)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type InsertLeaderboardVariantOverridesParams struct {
+	LayerKey       string `db:"layer_key" json:"layer_key"`
+	InstanceName   string `db:"instance_name" json:"instance_name"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+	Enabled        bool   `db:"enabled" json:"enabled"`
+}
+
+func (q *sqlQuerier) InsertLeaderboardVariantOverrides(ctx context.Context, arg InsertLeaderboardVariantOverridesParams) error {
+	_, err := q.db.Exec(ctx, insertLeaderboardVariantOverrides,
+		arg.LayerKey,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.Enabled,
+	)
+	return err
+}
+
+const insertLeaderboardVariantRenown = `-- name: InsertLeaderboardVariantRenown :exec
+INSERT INTO leaderboard_variant_renown (layer_key, instance_name, encounter_name, difficulty_name, max_players, points)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertLeaderboardVariantRenownParams struct {
+	LayerKey       string  `db:"layer_key" json:"layer_key"`
+	InstanceName   string  `db:"instance_name" json:"instance_name"`
+	EncounterName  string  `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string  `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16   `db:"max_players" json:"max_players"`
+	Points         float64 `db:"points" json:"points"`
+}
+
+func (q *sqlQuerier) InsertLeaderboardVariantRenown(ctx context.Context, arg InsertLeaderboardVariantRenownParams) error {
+	_, err := q.db.Exec(ctx, insertLeaderboardVariantRenown,
+		arg.LayerKey,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.Points,
+	)
+	return err
+}
+
 const releaseAdvisoryLock = `-- name: ReleaseAdvisoryLock :one
 SELECT pg_advisory_unlock($1)::boolean
 `
