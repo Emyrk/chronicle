@@ -1,10 +1,18 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Layers, Search, ShieldCheck } from "lucide-react";
+import {
+  ArrowLeft,
+  EyeOff,
+  Globe,
+  Layers,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
 import { useLeaderboardConfiguration } from "@/api/leaderboardConfiguration";
 import type {
   LeaderboardConfiguration,
   LeaderboardConfigurationRow,
+  LeaderboardConfigurationTenant,
 } from "@/api/typesGenerated";
 import {
   Card,
@@ -15,7 +23,8 @@ import {
 import { Button } from "@/components/ui/button";
 
 export function ConfigurationPage() {
-  const query = useLeaderboardConfiguration();
+  const [params] = useSearchParams();
+  const query = useLeaderboardConfiguration(params.get("tenant") ?? undefined);
   if (query.isPending)
     return (
       <div role="status" className="p-8 text-muted-foreground">
@@ -31,6 +40,70 @@ export function ConfigurationPage() {
       </div>
     );
   return <ConfigurationView data={query.data} />;
+}
+
+function tenantKey(tenant: LeaderboardConfigurationTenant) {
+  return tenant.slug ?? tenant.id;
+}
+
+/** Compact root-only tenant switcher. Picking a tenant resets the instance. */
+export function TenantPicker({
+  tenants,
+  selected,
+}: {
+  tenants: readonly LeaderboardConfigurationTenant[];
+  selected: string | null;
+}) {
+  const [, setParams] = useSearchParams();
+  const chip = (active: boolean) =>
+    `inline-flex h-8 items-center gap-2 rounded-full border pl-1 pr-3 text-xs transition-colors ${active ? "border-primary bg-primary/10 font-semibold text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`;
+  return (
+    <nav aria-label="Tenants" className="flex flex-wrap gap-1.5">
+      <button
+        aria-pressed={!selected}
+        onClick={() => setParams({})}
+        className={chip(!selected)}
+      >
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-muted">
+          <Globe size={13} />
+        </span>
+        Root site
+      </button>
+      {tenants.map((tenant) => {
+        const key = tenantKey(tenant);
+        const active = selected === key || selected === tenant.id;
+        return (
+          <button
+            key={tenant.id}
+            aria-pressed={active}
+            title={
+              tenant.discoverable
+                ? tenant.name
+                : `${tenant.name} (not discoverable)`
+            }
+            onClick={() => setParams({ tenant: key })}
+            className={chip(active)}
+          >
+            {tenant.square_logo ? (
+              <img
+                src={tenant.square_logo}
+                alt=""
+                className="h-6 w-6 rounded-full object-cover"
+              />
+            ) : (
+              <span className="grid h-6 w-6 place-items-center rounded-full bg-muted font-semibold uppercase">
+                {tenant.name.slice(0, 1)}
+              </span>
+            )}
+            {tenant.name}
+            {!tenant.discoverable && (
+              <EyeOff size={12} aria-label="Not discoverable" />
+            )}
+          </button>
+        );
+      })}
+    </nav>
+  );
 }
 
 function Flavors({
@@ -74,6 +147,7 @@ export function ConfigurationView({
     .filter((row) => row.kind === "instance")
     .map((row) => row.instance_name);
   const selected = params.get("instance") ?? instances[0];
+  const tenant = params.get("tenant");
   const filtered = instances.filter((name) =>
     name.toLowerCase().includes(search.toLowerCase()),
   );
@@ -104,6 +178,9 @@ export function ConfigurationView({
           <ShieldCheck size={14} /> Read only
         </span>
       </header>
+      {data.tenants.length > 0 && (
+        <TenantPicker tenants={data.tenants} selected={tenant} />
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Flavor selection</CardTitle>
@@ -193,7 +270,11 @@ export function ConfigurationView({
                 <button
                   key={name}
                   aria-current={selected === name ? "page" : undefined}
-                  onClick={() => setParams({ instance: name })}
+                  onClick={() =>
+                    setParams(
+                      tenant ? { tenant, instance: name } : { instance: name },
+                    )
+                  }
                   className={`w-full rounded-md px-3 py-2.5 text-left text-sm transition-colors ${selected === name ? "bg-primary/10 font-semibold text-primary" : "hover:bg-muted"}`}
                 >
                   {name}

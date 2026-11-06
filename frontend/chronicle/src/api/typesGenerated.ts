@@ -19,6 +19,10 @@ export interface LeaderboardConfiguration {
     readonly layers: readonly LeaderboardConfigurationLayer[];
     readonly rows: readonly LeaderboardConfigurationRow[];
     readonly conflict: string;
+    /**
+     * Tenants lists the tenants the root site may inspect. Empty on tenant sites.
+     */
+    readonly tenants: readonly LeaderboardConfigurationTenant[];
 }
 
 // From chroniclesdk/leaderboard_configuration.go
@@ -39,6 +43,15 @@ export interface LeaderboardConfigurationRow {
     readonly position: number;
     readonly points: number;
     readonly has_points: boolean;
+}
+
+// From chroniclesdk/leaderboard_configuration.go
+export interface LeaderboardConfigurationTenant {
+    readonly id: string;
+    readonly slug: string | null;
+    readonly name: string;
+    readonly square_logo: string;
+    readonly discoverable: boolean;
 }
 
 // From chroniclesdk/account.go

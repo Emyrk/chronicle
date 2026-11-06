@@ -38,6 +38,7 @@ const data: LeaderboardConfiguration = {
   layers: [],
   rows: [],
   conflict: "",
+  tenants: [],
 };
 function view(value: LeaderboardConfiguration) {
   return renderToStaticMarkup(
@@ -111,6 +112,31 @@ describe("configuration inspector", () => {
     expect(html).toContain("No configured instances");
     expect(html).toContain("No matching layers");
   });
+  it("shows the tenant picker only when the root site offers tenants", () => {
+    expect(view(data)).not.toContain('aria-label="Tenants"');
+    const html = view({
+      ...data,
+      tenants: [
+        {
+          id: "a",
+          slug: "capy",
+          name: "Capy",
+          square_logo: "/capy.png",
+          discoverable: true,
+        },
+        {
+          id: "b",
+          slug: null,
+          name: "Secret",
+          square_logo: "",
+          discoverable: false,
+        },
+      ],
+    });
+    expect(html).toContain('aria-label="Tenants"');
+    expect(html).toContain("/capy.png");
+    expect(html).toContain("Not discoverable");
+  });
   it("never displays partial configuration on conflict", () => {
     const html = view({
       ...data,
@@ -131,15 +157,23 @@ it("shows loading and request errors instead of an empty configuration", () => {
   vi.mocked(useLeaderboardConfiguration).mockReturnValue({
     isPending: true,
   } as ReturnType<typeof useLeaderboardConfiguration>);
-  expect(renderToStaticMarkup(<ConfigurationPage />)).toContain(
-    "Loading tenant configuration",
-  );
+  expect(
+    renderToStaticMarkup(
+      <MemoryRouter>
+        <ConfigurationPage />
+      </MemoryRouter>,
+    ),
+  ).toContain("Loading tenant configuration");
   vi.mocked(useLeaderboardConfiguration).mockReturnValue({
     isPending: false,
     isError: true,
     error: new Error("Dataset unavailable"),
   } as ReturnType<typeof useLeaderboardConfiguration>);
-  const html = renderToStaticMarkup(<ConfigurationPage />);
+  const html = renderToStaticMarkup(
+    <MemoryRouter>
+      <ConfigurationPage />
+    </MemoryRouter>,
+  );
   expect(html).toContain("Configuration unavailable");
   expect(html).toContain("Dataset unavailable");
   expect(html).not.toContain("No configured instances");

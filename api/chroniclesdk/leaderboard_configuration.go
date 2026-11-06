@@ -16,6 +16,16 @@ type LeaderboardConfiguration struct {
 	Layers            []LeaderboardConfigurationLayer `json:"layers"`
 	Rows              []LeaderboardConfigurationRow   `json:"rows"`
 	Conflict          string                          `json:"conflict"`
+	// Tenants lists the tenants the root site may inspect. Empty on tenant sites.
+	Tenants []LeaderboardConfigurationTenant `json:"tenants"`
+}
+
+type LeaderboardConfigurationTenant struct {
+	ID           uuid.UUID `json:"id"`
+	Slug         *string   `json:"slug"`
+	Name         string    `json:"name"`
+	SquareLogo   string    `json:"square_logo"`
+	Discoverable bool      `json:"discoverable"`
 }
 
 type LeaderboardConfigurationLayer struct {
