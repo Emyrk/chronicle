@@ -22,6 +22,42 @@ import (
 	"github.com/Emyrk/chronicle/database"
 )
 
+func TestZoneInstanceMetadataUpgradeCreatesInstance(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	state := NewWithInstanceResolver(ctx, logger, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
+		if firstZone.Name != "木喉要塞" || !firstZone.IsInstance || firstZone.InstanceType != "raid" {
+			return nil
+		}
+		return instances.NewHookable(ctx, logger, db, firstZone, instances.InstanceParams{
+			Name:        "Timbermaw Hold",
+			MatchesZone: func(z zone.Zone) bool { return z.Name == "木喉要塞" && z.InstanceType == "raid" },
+			Idf:         identifier.NewIdentifier(map[uint32]instances.Identity{}),
+		})
+	})
+
+	seen := time.Date(2026, time.November, 6, 5, 54, 15, 0, time.UTC)
+	state.Zone(messages.Zone{Zone: zone.Zone{
+		Seen:         seen,
+		Name:         "木喉要塞",
+		InstanceType: "none",
+	}})
+	require.Nil(t, state.CurrentInstance)
+
+	state.Zone(messages.Zone{Zone: zone.Zone{
+		Seen:         seen.Add(25 * time.Second),
+		Name:         "木喉要塞",
+		IsInstance:   true,
+		InstanceType: "raid",
+	}})
+
+	require.Len(t, state.Instances, 1)
+	require.NotNil(t, state.CurrentInstance)
+	require.Equal(t, "Timbermaw Hold", state.CurrentInstance.Name())
+}
+
 func TestZoneReentryDoesNotReuseDifferentDifficulty(t *testing.T) {
 	t.Parallel()
 

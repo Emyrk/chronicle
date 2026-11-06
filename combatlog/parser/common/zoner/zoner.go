@@ -36,7 +36,12 @@ func (l *Location) Process(z messages.Zone) zone.ZoneChangeResult {
 	// At this point we track the "synthetic" property and propagate it properly
 	l.setSynthetic(z.Synthetic)
 
-	if !l.Equal(z.Zone) {
+	// Instance metadata can arrive after an overworld record with the same name
+	// and instance ID. Treat the explicit classification change as a zone change
+	// so the encounter state gets another chance to resolve an instance.
+	instanceMetadataChanged := (z.InstanceType != "" || z.IsInstance) &&
+		(l.InstanceType != z.InstanceType || l.IsInstance != z.IsInstance)
+	if !l.Equal(z.Zone) || instanceMetadataChanged {
 		l.Zone = z.Zone
 		return zone.ZoneChanged
 	}
