@@ -600,6 +600,19 @@ type sqlcQuerier interface {
 	InsertInstanceRaidGroupSnapshot(ctx context.Context, arg InsertInstanceRaidGroupSnapshotParams) error
 	InsertInstanceSpeedrun(ctx context.Context, arg InsertInstanceSpeedrunParams) error
 	InsertInstanceUnits(ctx context.Context, arg []InsertInstanceUnitsParams) *InsertInstanceUnitsBatchResults
+	InsertLeaderboardBossOverrides(ctx context.Context, arg InsertLeaderboardBossOverridesParams) error
+	InsertLeaderboardBossRenown(ctx context.Context, arg InsertLeaderboardBossRenownParams) error
+	InsertLeaderboardBosses(ctx context.Context, arg InsertLeaderboardBossesParams) error
+	InsertLeaderboardInstanceOverrides(ctx context.Context, arg InsertLeaderboardInstanceOverridesParams) error
+	InsertLeaderboardInstanceVariants(ctx context.Context, arg InsertLeaderboardInstanceVariantsParams) error
+	InsertLeaderboardInstances(ctx context.Context, instanceName string) error
+	InsertLeaderboardLayers(ctx context.Context, arg InsertLeaderboardLayersParams) error
+	InsertLeaderboardMemberOverrides(ctx context.Context, arg InsertLeaderboardMemberOverridesParams) error
+	InsertLeaderboardSetMembers(ctx context.Context, arg InsertLeaderboardSetMembersParams) error
+	InsertLeaderboardSetOverrides(ctx context.Context, arg InsertLeaderboardSetOverridesParams) error
+	InsertLeaderboardSets(ctx context.Context, arg InsertLeaderboardSetsParams) error
+	InsertLeaderboardVariantOverrides(ctx context.Context, arg InsertLeaderboardVariantOverridesParams) error
+	InsertLeaderboardVariantRenown(ctx context.Context, arg InsertLeaderboardVariantRenownParams) error
 	InsertLogFile(ctx context.Context, arg InsertLogFileParams) (LogFile, error)
 	InsertLogGroupArtifact(ctx context.Context, arg InsertLogGroupArtifactParams) (LogGroupArtifact, error)
 	InsertLogInstanceEvents(ctx context.Context, arg []InsertLogInstanceEventsParams) *InsertLogInstanceEventsBatchResults

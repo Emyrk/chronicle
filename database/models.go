@@ -1836,6 +1836,91 @@ type ItemDailyPrice struct {
 	FetchedAt           pgtype.Timestamptz `db:"fetched_at" json:"fetched_at"`
 }
 
+type LeaderboardBoss struct {
+	InstanceName  string `db:"instance_name" json:"instance_name"`
+	EncounterName string `db:"encounter_name" json:"encounter_name"`
+}
+
+type LeaderboardBossOverride struct {
+	LayerKey      string `db:"layer_key" json:"layer_key"`
+	InstanceName  string `db:"instance_name" json:"instance_name"`
+	EncounterName string `db:"encounter_name" json:"encounter_name"`
+	Enabled       bool   `db:"enabled" json:"enabled"`
+}
+
+type LeaderboardBossRenown struct {
+	LayerKey      string  `db:"layer_key" json:"layer_key"`
+	InstanceName  string  `db:"instance_name" json:"instance_name"`
+	EncounterName string  `db:"encounter_name" json:"encounter_name"`
+	Points        float64 `db:"points" json:"points"`
+}
+
+type LeaderboardInstance struct {
+	InstanceName string `db:"instance_name" json:"instance_name"`
+}
+
+type LeaderboardInstanceOverride struct {
+	LayerKey     string `db:"layer_key" json:"layer_key"`
+	InstanceName string `db:"instance_name" json:"instance_name"`
+	Enabled      bool   `db:"enabled" json:"enabled"`
+}
+
+type LeaderboardInstanceVariant struct {
+	InstanceName   string `db:"instance_name" json:"instance_name"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+}
+
+type LeaderboardLayer struct {
+	Key             string   `db:"key" json:"key"`
+	RequiredFlavors []string `db:"required_flavors" json:"required_flavors"`
+}
+
+type LeaderboardMemberOverride struct {
+	LayerKey      string      `db:"layer_key" json:"layer_key"`
+	InstanceName  string      `db:"instance_name" json:"instance_name"`
+	SetKey        string      `db:"set_key" json:"set_key"`
+	EncounterName string      `db:"encounter_name" json:"encounter_name"`
+	Enabled       pgtype.Bool `db:"enabled" json:"enabled"`
+	Position      pgtype.Int4 `db:"position" json:"position"`
+}
+
+type LeaderboardSet struct {
+	InstanceName string `db:"instance_name" json:"instance_name"`
+	SetKey       string `db:"set_key" json:"set_key"`
+	Name         string `db:"name" json:"name"`
+}
+
+type LeaderboardSetMember struct {
+	InstanceName  string `db:"instance_name" json:"instance_name"`
+	SetKey        string `db:"set_key" json:"set_key"`
+	EncounterName string `db:"encounter_name" json:"encounter_name"`
+}
+
+type LeaderboardSetOverride struct {
+	LayerKey     string `db:"layer_key" json:"layer_key"`
+	InstanceName string `db:"instance_name" json:"instance_name"`
+	SetKey       string `db:"set_key" json:"set_key"`
+	Enabled      bool   `db:"enabled" json:"enabled"`
+}
+
+type LeaderboardVariantOverride struct {
+	LayerKey       string `db:"layer_key" json:"layer_key"`
+	InstanceName   string `db:"instance_name" json:"instance_name"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+	Enabled        bool   `db:"enabled" json:"enabled"`
+}
+
+type LeaderboardVariantRenown struct {
+	LayerKey       string  `db:"layer_key" json:"layer_key"`
+	InstanceName   string  `db:"instance_name" json:"instance_name"`
+	EncounterName  string  `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string  `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16   `db:"max_players" json:"max_players"`
+	Points         float64 `db:"points" json:"points"`
+}
+
 type LogFile struct {
 	ID       uuid.UUID `db:"id" json:"id"`
 	Owner    uuid.UUID `db:"owner" json:"owner"`
