@@ -1,5 +1,9 @@
 # Incremental tenant ratings: pre-deployment review
 
+> [!IMPORTANT]
+> This runbook describes the legacy rating subsystem being replaced. The authoritative
+> replacement contract is [`docs/leaderboard-v2/`](leaderboard-v2/README.md).
+
 Incremental Renown, Mastery, and Peak updates are implemented alongside a **manual-only** full rebuild. The automatic `daily-rating-score-reconciliation` dispatcher is removed because a full tenant rebuild is too slow; the admin single-tenant and all-tenant rebuild actions remain available for recovery or rule changes. Do not deploy these migrations solely on the basis of local integration tests.
 
 ## Migration impact
