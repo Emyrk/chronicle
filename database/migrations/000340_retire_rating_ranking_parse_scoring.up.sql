@@ -1,12 +1,11 @@
--- Destructive retirement of rating and parse-scoring storage, excluding v1
--- performance rankings (encounter_dps_rankings, ranking_runs, rankings_instance_summaries). No down migration:
--- historical scores, memberships, and policies cannot be reconstructed from DDL.
+-- Destructive retirement of rating storage only. Parse and time-parse scoring
+-- tables and v1 performance rankings remain intact. No down migration:
+-- historical rating scores, memberships, and policies cannot be reconstructed from DDL.
 -- Predeploy: export any data that must be retained, count production rows per table,
 -- and assess locks/traffic. DROP TABLE takes ACCESS EXCLUSIVE locks and may block
 -- service startup while waiting for long-running queries or transactions.
 -- Preview: SELECT relname, n_live_tup FROM pg_stat_user_tables
---          WHERE relname ~ '(rating|ranking|parse_score|time_parse)'
---            AND relname NOT IN ('encounter_dps_rankings', 'ranking_runs', 'rankings_instance_summaries');
+--          WHERE relname ~ '(^rating_|_rating_|^tenant_rating_|^guild_rating_|^player_tenant_rating_)';
 BEGIN;
 
 -- Triggers on source tables must stop writing retired dirty-work tables.
@@ -30,9 +29,6 @@ DROP TABLE IF EXISTS guild_tenant_rating_boss_scores;
 DROP TABLE IF EXISTS guild_tenant_rating_boss_scores_evolving;
 DROP TABLE IF EXISTS guild_tenant_rating_scope_scores;
 DROP TABLE IF EXISTS guild_tenant_rating_scope_scores_evolving;
-DROP TABLE IF EXISTS parse_score_memberships;
-DROP TABLE IF EXISTS parse_score_receipts;
-DROP TABLE IF EXISTS parse_score_results;
 DROP TABLE IF EXISTS player_tenant_rating_boss_scores;
 DROP TABLE IF EXISTS player_tenant_rating_boss_scores_evolving;
 DROP TABLE IF EXISTS player_tenant_rating_scope_scores;
@@ -63,14 +59,10 @@ DROP TABLE IF EXISTS rating_stage_player_observations;
 DROP TABLE IF EXISTS rating_stage_player_renown;
 DROP TABLE IF EXISTS tenant_rating_copy_progress;
 DROP TABLE IF EXISTS tenant_rating_read_states;
-DROP TABLE IF EXISTS time_parse_boss_kill_memberships;
-DROP TABLE IF EXISTS time_parse_boss_scores;
-DROP TABLE IF EXISTS time_parse_clear_time_memberships;
 DROP TABLE IF EXISTS rating_dirty_peak_cohorts;
 DROP TABLE IF EXISTS rating_group_policies;
 DROP TABLE IF EXISTS rating_rebuild_checkpoints;
 DROP TABLE IF EXISTS rating_renown_templates;
-DROP TABLE IF EXISTS time_parse_scores;
 DROP TABLE IF EXISTS rating_realm_groups;
 DROP TABLE IF EXISTS rating_score_generations;
 
