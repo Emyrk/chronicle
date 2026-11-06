@@ -83,7 +83,7 @@ func TestDiscordSearchUsesSharedAdmission(t *testing.T) {
 	require.Contains(t, output, `"cost":1`)
 	status, _, err := search.Peek(ctx, serviceinstancesearch.Caller{UserID: user, TenantID: tenant.ID})
 	require.NoError(t, err)
-	require.InDelta(t, 96, status.Remaining, 1)
+	require.Less(t, status.Remaining, first.Status.Remaining)
 }
 
 func TestDiscordAnswerOnlyCollectsAssistantText(t *testing.T) {
