@@ -83,7 +83,7 @@ func TestParseCLEUFormats(t *testing.T) {
 				t.Fatal(err)
 			}
 			want, err := Build(Input{
-				Format: tc.format, Name: inst.Name(), Finalized: fin, Events: inst.Events(),
+				Format: tc.format, Flavor: tc.flavor, Name: inst.Name(), Finalized: fin, Events: inst.Events(),
 				Category: string(inst.Category), DifficultyName: inst.CurrentZone.DifficultyName,
 				MaxPlayers: int32(inst.CurrentZone.MaxPlayers), DynamicDifficulty: int32(inst.CurrentZone.DynamicDifficulty),
 				Capabilities: []string{"overheal", "absorb", "interrupt"}, Units: state.Units,

@@ -78,7 +78,7 @@ func TestAddonDataOnlyParseMatchesWorkerProjection(t *testing.T) {
 		}
 		legacyFinal = fin
 		result, err := parseresult.Build(parseresult.Input{
-			Format: database.LogFormat112aCcAddon, Name: inst.Name(),
+			Format: database.LogFormat112aCcAddon, Flavor: reg.Flavor(), Name: inst.Name(),
 			Finalized: fin, Events: inst.Events(), Units: parsed.encountersState.Units, IdentifyUnit: inst.IdentifyUnit,
 			Category: string(inst.Category), DifficultyName: inst.CurrentZone.DifficultyName,
 			MaxPlayers: int32(inst.CurrentZone.MaxPlayers), DynamicDifficulty: int32(inst.CurrentZone.DynamicDifficulty),
@@ -104,7 +104,7 @@ func TestAddonDataOnlyParseMatchesWorkerProjection(t *testing.T) {
 	// Also anchor key core fields directly to the live legacy writer inputs.
 	live := parsed.encountersState.Instances[0]
 	liveEncounter := legacyFinal.Encounters[0]
-	if fresh[0].SchemaVersion != 7 || fresh[0].Core.Category != string(live.Category) ||
+	if fresh[0].SchemaVersion != 8 || fresh[0].Core.Category != string(live.Category) ||
 		fresh[0].Core.DifficultyName != live.CurrentZone.DifficultyName ||
 		fresh[0].Core.Start != liveEncounter.Combat.Start || fresh[0].Core.End != liveEncounter.Combat.End ||
 		fresh[0].Overview.WipeCount != legacyFinal.Overview.WipeCount ||

@@ -31,7 +31,7 @@ type parsedTrashAccum struct {
 // owns the supplementary transaction, refresh lock, parse-generation fence,
 // ranking-run source/credit updates and any resulting refresh enqueue.
 func InsertParsedTrashRankings(ctx context.Context, store database.Store, result parseresult.Result, write ParsedBossRankingWrite) error {
-	if result.SchemaVersion != 7 || result.Format != database.LogFormat112aCcAddon {
+	if result.SchemaVersion != 8 || result.Format != database.LogFormat112aCcAddon {
 		return fmt.Errorf("unsupported trash ranking parse result schema %d format %q", result.SchemaVersion, result.Format)
 	}
 	if !write.Rankable || !result.BossRankings.HasRules || !result.BossRankings.HasDPS || !result.BossRankings.LevelEligible {

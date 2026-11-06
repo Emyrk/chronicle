@@ -43,7 +43,7 @@ func TestBuildBossRankingsDeterministicJSON(t *testing.T) {
 	b, err := json.Marshal(second)
 	require.NoError(t, err)
 	require.JSONEq(t, string(a), string(b))
-	require.Equal(t, 7, first.SchemaVersion)
+	require.Equal(t, 8, first.SchemaVersion)
 	require.True(t, first.BossRankings.HasRules)
 	require.True(t, first.BossRankings.HasDPS)
 	require.Equal(t, 8.0, first.BossRankings.Encounters[0].DurationSecs)

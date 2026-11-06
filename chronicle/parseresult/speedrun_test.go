@@ -31,7 +31,7 @@ func TestBuildSpeedrunJSONAndEligibility(t *testing.T) {
 	}
 	result, err := Build(Input{Format: database.LogFormat112aCcAddon, Name: "Raid", Finalized: fin, Events: encounterevents.NewEvents()})
 	require.NoError(t, err)
-	require.Equal(t, 7, result.SchemaVersion)
+	require.Equal(t, 8, result.SchemaVersion)
 	require.True(t, result.Speedrun.HasBossKill)
 	require.False(t, result.Speedrun.ServerSide)
 	require.Equal(t, "1.2", result.Speedrun.AddonVersion)

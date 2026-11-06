@@ -5,6 +5,7 @@ package parseresult
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -15,12 +16,19 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/google/uuid"
 )
 
 // Input is a read-only view of a finalized CC-addon instance. The caller owns
 // Finalized and Events; Build copies every value it emits.
 type Input struct {
-	Format            database.LogFormat
+	Format database.LogFormat
+	// Flavor and DatasetID are the resolved parse identity. Standalone and
+	// synthetic callers may omit them; a remote ingester must reject a nil
+	// flavor or uuid.Nil dataset rather than guessing from the log format.
+	// A non-nil empty flavor is a valid explicitly resolved vanilla flavor.
+	Flavor            database.WoWFlavor
+	DatasetID         uuid.UUID
 	Name              string
 	Finalized         *instances.FinalizedInstance
 	Events            *encounterevents.Events
@@ -43,10 +51,15 @@ type Input struct {
 // version 2 adds finalized loot observations, version 3 adds armory
 // observations, version 4 adds participating player metadata, and version 5
 // adds speedrun inputs; version 6 adds boss DPS ranking inputs, and version 7
-// adds trash ranking inputs. No version is a complete persistence payload or
-// full DB parity proof.
+// adds trash ranking inputs; version 8 adds resolved flavor and dataset ID.
+// No version is a complete persistence payload or full DB parity proof.
+// Nil flavor or a nil UUID dataset is unresolved metadata, not permission
+// to infer it from the format during remote ingestion. An explicitly empty
+// (non-nil) flavor is valid and distinct from an unknown flavor.
 type Result struct {
 	Format       database.LogFormat `json:"format"`
+	Flavor       database.WoWFlavor `json:"flavor"`
+	DatasetID    uuid.UUID          `json:"dataset_id"`
 	Name         string             `json:"name"`
 	RealmName    string             `json:"realm_name"`
 	Versions     map[string]string  `json:"versions"`
@@ -101,7 +114,9 @@ func Build(in Input) (*Result, error) {
 	fin := in.Finalized
 	out := &Result{
 		Format:        in.Format,
-		SchemaVersion: 7,
+		Flavor:        slices.Clone(in.Flavor),
+		DatasetID:     in.DatasetID,
+		SchemaVersion: 8,
 		Name:          in.Name,
 		Versions:      make(map[string]string, len(fin.Versions)),
 		Encounters:    make([]Encounter, 0, len(fin.Encounters)),

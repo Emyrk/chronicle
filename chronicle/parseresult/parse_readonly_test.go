@@ -78,6 +78,9 @@ func TestParseWithReadOnlyPostgres(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, results, 1)
 			require.Equal(t, tc.format, results[0].Format)
+			require.Equal(t, 8, results[0].SchemaVersion)
+			require.Equal(t, tc.flavor, results[0].Flavor)
+			require.Equal(t, datasetID, results[0].DatasetID)
 			require.NotEmpty(t, results[0].Events.Damage)
 			if tc.rich {
 				require.NotEmpty(t, results[0].Armory.Players)

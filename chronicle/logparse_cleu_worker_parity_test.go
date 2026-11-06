@@ -96,6 +96,8 @@ func TestLegacyWorkerCLEUProjectionMatchesDataOnlyParse(t *testing.T) {
 					require.NoError(t, err)
 					require.Len(t, freshResults, 1)
 					require.Equal(t, tc.format, freshResults[0].Format)
+					require.Equal(t, tc.flavor, freshResults[0].Flavor)
+					require.Equal(t, freshChron.defaultDatasetID, freshResults[0].DatasetID)
 					require.NotEmpty(t, freshResults[0].Encounters)
 					require.NotEmpty(t, freshResults[0].Events.Damage)
 					// Anchor the independent projection to rows written by Work, not just
@@ -153,7 +155,8 @@ func TestLegacyWorkerCLEUProjectionMatchesDataOnlyParse(t *testing.T) {
 					require.NoError(t, err)
 					require.NotNil(t, finalized)
 					projected, err := parseresult.Build(parseresult.Input{
-						Format: tc.format, Name: inst.Name(), Finalized: finalized, Events: inst.Events(),
+						Format: tc.format, Flavor: tc.flavor, DatasetID: legacyChron.defaultDatasetID,
+						Name: inst.Name(), Finalized: finalized, Events: inst.Events(),
 						Units: parsed.encountersState.Units, IdentifyUnit: inst.IdentifyUnit,
 						Category: string(inst.Category), DifficultyName: inst.CurrentZone.DifficultyName,
 						MaxPlayers: int32(inst.CurrentZone.MaxPlayers), DynamicDifficulty: int32(inst.CurrentZone.DynamicDifficulty),
@@ -169,6 +172,9 @@ func TestLegacyWorkerCLEUProjectionMatchesDataOnlyParse(t *testing.T) {
 					require.NoError(t, err)
 					assertPersistedParity(t, "CLEU classification", oldClassification, newClassification, cmp.Comparer(proto.Equal))
 					old[0].Events.UnitClassification, decoded[0].Events.UnitClassification = nil, nil
+					// The two isolated fixture databases have different resolved IDs.
+					// Compare the parser projection after asserting the new ID above.
+					old[0].DatasetID, decoded[0].DatasetID = uuid.Nil, uuid.Nil
 					assertPersistedParity(t, "CLEU projection", old, decoded)
 				})
 			}

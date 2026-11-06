@@ -73,6 +73,7 @@ func parse(ctx context.Context, reader io.Reader, gameDB gamedb.GameDB, reg *reg
 	default:
 		return ParseOutcome{}, fmt.Errorf("unsupported parse-result format %q", format)
 	}
+	resolved, _ := parsectx.FromContext(ctx) // Always present after default stamping.
 	state := encounters.New(ctx, logger, reg)
 	modifiers, err := gameDB.DurationModifiers(ctx)
 	if err != nil {
@@ -147,7 +148,8 @@ func parse(ctx context.Context, reader io.Reader, gameDB gamedb.GameDB, reg *reg
 				return Result{}, true, "finalize", err
 			}
 			result, err := Build(Input{
-				Format: format, Name: inst.Name(), Finalized: fin, Events: inst.Events(),
+				Format: format, Flavor: resolved.Flavor, DatasetID: resolved.DatasetID,
+				Name: inst.Name(), Finalized: fin, Events: inst.Events(),
 				Category: string(inst.Category), DifficultyName: inst.CurrentZone.DifficultyName,
 				MaxPlayers: int32(inst.CurrentZone.MaxPlayers), DynamicDifficulty: int32(inst.CurrentZone.DynamicDifficulty),
 				Capabilities: capabilities, Units: state.Units, IdentifyUnit: inst.IdentifyUnit, Armory: fin.Guilds,
