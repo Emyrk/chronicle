@@ -99,7 +99,7 @@ describe("configuration inspector", () => {
       />,
     );
     expect(html).toContain("Heroic · 25p");
-    expect(html).toContain("Renown total");
+    expect(html).toContain("Default set Renown");
     expect(html).toContain("Full clear");
     expect(html).toContain("Not in an encounter set");
     expect(html.indexOf("First boss")).toBeLessThan(
@@ -138,6 +138,23 @@ describe("configuration inspector", () => {
     expect(html).toContain('aria-label="Tenants"');
     expect(html).toContain("/capy.png");
     expect(html).toContain("Not discoverable");
+  });
+  it("totals Renown over the default set only", () => {
+    const html = renderToStaticMarkup(
+      <InstanceConfiguration
+        name="Test raid"
+        rows={[
+          row({ encounter_name: "A", has_points: true, points: 10 }),
+          row({ encounter_name: "B", has_points: true, points: 50 }),
+          row({ encounter_name: "C", has_points: true, points: 5 }),
+          row({ kind: "set", set_key: "default", set_name: "Normal" }),
+          row({ kind: "member", set_key: "default", encounter_name: "A" }),
+          row({ kind: "set", set_key: "hard", set_name: "Hard" }),
+          row({ kind: "member", set_key: "hard", encounter_name: "B" }),
+        ]}
+      />,
+    );
+    expect(html).toMatch(/leading-none">10</);
   });
   it("lists instances by Renown total, highest first", () => {
     const html = view({

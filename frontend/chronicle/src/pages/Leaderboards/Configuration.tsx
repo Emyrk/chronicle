@@ -146,13 +146,23 @@ function awardFor(rows: readonly Row[], boss: string, variant: string) {
   );
 }
 
-/** Sum of configured awards; missing awards are counted, never treated as 0. */
+/** The set that defines an instance's headline Renown total. */
+const DEFAULT_SET = "default";
+
+/**
+ * Sum of configured awards over the default encounter set (all bosses when an
+ * instance has no default set). Missing awards are counted, never treated as 0.
+ */
 function renownTotal(rows: readonly Row[], variant: string) {
+  let bosses = rows
+    .filter((r) => r.kind === "member" && r.set_key === DEFAULT_SET)
+    .map((r) => r.encounter_name);
+  if (!rows.some((r) => r.kind === "set" && r.set_key === DEFAULT_SET))
+    bosses = rows.filter((r) => r.kind === "boss").map((r) => r.encounter_name);
   let total = 0;
   let missing = 0;
-  for (const boss of rows) {
-    if (boss.kind !== "boss") continue;
-    const award = awardFor(rows, boss.encounter_name, variant);
+  for (const boss of bosses) {
+    const award = awardFor(rows, boss, variant);
     if (award?.has_points) total += award.points;
     else missing++;
   }
@@ -380,7 +390,7 @@ export function ConfigurationView({
                       className={`shrink-0 tabular-nums text-xs ${active ? "" : "text-muted-foreground"}`}
                       title={
                         missing
-                          ? `${missing} bosses without an award`
+                          ? `${missing} default-set bosses without an award`
                           : undefined
                       }
                     >
@@ -461,7 +471,7 @@ export function InstanceConfiguration({
             {formatRenown(total)}
           </div>
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            Renown total
+            Default set Renown
             {missing > 0 && (
               <span className="normal-case tracking-normal text-amber-500">
                 {" "}
@@ -526,7 +536,11 @@ export function InstanceConfiguration({
                     </code>
                   )}
                   <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-                    {group.members.length} · {formatRenown(groupTotal)} Renown
+                    {plural(group.members.length, "boss", "bosses")},{" "}
+                    <span className="font-medium text-foreground">
+                      {formatRenown(groupTotal)}
+                    </span>{" "}
+                    Renown
                   </span>
                 </h3>
                 {group.members.length ? (
