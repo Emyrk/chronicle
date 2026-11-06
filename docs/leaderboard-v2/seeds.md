@@ -1,5 +1,8 @@
 # Initial configuration seed review
 
+This document records migration `000342`. The later normal Wrath award seed and
+its expanded supported tuples are documented in [wrath-renown.md](wrath-renown.md).
+
 Migration `000342` contains literal values only. It never reads retired tables or
 old migration files during deployment. It does not scan historical log data.
 
