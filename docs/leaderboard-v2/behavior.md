@@ -6,10 +6,10 @@ definitions and configuration decisions live in [`spec.tex`](spec.tex).
 ## Delivery boundary
 
 Configuration PRs 1622, 1624, 1633, and 1634 are complete, together with
-inspector PR 1636 and Wrath migration 343. The next PR is schema-only: evidence,
-sufficient statistics, kill counts, dirty-work tables, constraints, indexes, and
-tests. It adds no workers, serving, historical backfill, scheduler wiring, or UI
-cutover.
+inspector PR 1636 and Wrath migration 343. Migration344 adds evidence, sufficient
+statistics, kill counts, and dirty-work tables. The isolated
+[read preview](read-preview.md) serves those summaries without workers, historical
+backfill, scheduler wiring, or replacement of existing leaderboard routes.
 
 All scopes are all-time. There are no rolling180day or season keys, expiry jobs,
 or finalized-season retention exceptions. Career/cross-instance portfolios
@@ -123,9 +123,17 @@ A display clamp during transient benchmark/statistic skew does not claim exact
 equivalence to individually clamping every observation in that mismatched state.
 
 Do not persist normalized Peak, Form, Floor, or Mastery per subject. Raw
-projection algorithm compatibility is separate from composed current read
-policy; this contract does not introduce a new provenance scheme. Delete a
-subject's statistics row when no observations remain.
+projection algorithm metadata is separate from composed current read policy.
+Delete a subject's statistics row when no observations remain.
+
+`projection_version` and `algorithm_version` are operational repair metadata,
+not read eligibility. Reads ignore both fields, including when a benchmark and
+subject carry different values. Rare changes are repaired in place; mixed old
+and new summaries may be visible temporarily. There is no version snapshot or
+old-leaderboard serving path. Projection rules describe source-to-canonical
+eligible evidence transformations, deduplication, and player cohort
+classification. Award-only configuration changes do not require evidence
+rewrites or recounts.
 
 ## Boss-group aggregation
 

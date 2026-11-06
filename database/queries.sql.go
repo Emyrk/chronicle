@@ -12120,6 +12120,232 @@ func (q *sqlQuerier) ListLeaderboardPlayerObservations(ctx context.Context, tena
 	return items, nil
 }
 
+const listLeaderboardV2 = `-- name: ListLeaderboardV2 :many
+WITH contributions AS (
+SELECT s.realm_id, s.player_guid COLLATE "C" AS subject_id, COALESCE(m.name, s.player_guid)::text AS subject_name,
+ CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision, 100 * s.raw_peak / b.best_metric) ELSE 0::double precision END AS peak, CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision, 100 * s.raw_form / b.best_metric) ELSE 0::double precision END AS form, CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision, 100 * s.raw_floor / b.best_metric) ELSE 0::double precision END AS floor,
+ 0::double precision AS renown, s.observation_count AS sample_count, s.computed_at
+ FROM leaderboard_player_boss_subjects s
+ LEFT JOIN game_players m ON m.realm_id = s.realm_id AND m.id = s.player_guid
+ JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players AND b.encounter_name = s.encounter_name AND b.player_class = s.player_class AND b.player_spec = s.player_spec AND b.player_sub_spec = s.player_sub_spec AND b.metric = s.metric
+ WHERE $6::text = 'player' AND $7::text = 'boss'
+ AND s.tenant_id = $8::uuid AND s.instance_name = $9::text AND s.difficulty_name = $10::text AND s.max_players = $11::smallint
+ AND ($12::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $12::uuid)
+ AND ($13::text = '' OR position(lower($13::text) IN lower(COALESCE(m.name, s.player_guid))) > 0)
+ AND s.encounter_name = ANY($14::text[])
+ AND s.player_class = $15::text AND s.player_spec = $16::text AND s.player_sub_spec = $17::text AND s.metric = $18::text
+ UNION ALL
+SELECT s.realm_id, s.guild_id::text COLLATE "C" AS subject_id, COALESCE(m.name, s.guild_id::text)::text AS subject_name,
+ LEAST(100::double precision, 100.0 * b.best_duration_ms / s.fastest_duration_ms)::double precision AS peak, LEAST(100::double precision, 100::double precision * b.best_duration_ms * s.form_mean_inverse_ms) AS form, LEAST(100::double precision, 100::double precision * b.best_duration_ms * s.floor_mean_inverse_ms) AS floor,
+ 0::double precision AS renown, s.observation_count AS sample_count, s.computed_at
+ FROM leaderboard_guild_boss_subjects s
+ LEFT JOIN guilds m ON m.realm_id = s.realm_id AND m.id = s.guild_id
+ JOIN leaderboard_guild_boss_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players AND b.encounter_name = s.encounter_name
+ WHERE $6::text = 'guild' AND $7::text = 'boss'
+ AND s.tenant_id = $8::uuid AND s.instance_name = $9::text AND s.difficulty_name = $10::text AND s.max_players = $11::smallint
+ AND ($12::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $12::uuid)
+ AND ($13::text = '' OR position(lower($13::text) IN lower(COALESCE(m.name, s.guild_id::text))) > 0)
+ AND s.encounter_name = ANY($14::text[])
+ UNION ALL
+SELECT s.realm_id, s.guild_id::text COLLATE "C" AS subject_id, COALESCE(m.name, s.guild_id::text)::text AS subject_name,
+ LEAST(100::double precision, 100.0 * b.best_duration_ms / s.fastest_duration_ms)::double precision AS peak, LEAST(100::double precision, 100::double precision * b.best_duration_ms * s.form_mean_inverse_ms) AS form, LEAST(100::double precision, 100::double precision * b.best_duration_ms * s.floor_mean_inverse_ms) AS floor,
+ 0::double precision AS renown, s.observation_count AS sample_count, s.computed_at
+ FROM leaderboard_guild_clear_subjects s
+ LEFT JOIN guilds m ON m.realm_id = s.realm_id AND m.id = s.guild_id
+ JOIN leaderboard_guild_clear_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players
+ WHERE $6::text = 'guild' AND $7::text = 'clear'
+ AND s.tenant_id = $8::uuid AND s.instance_name = $9::text AND s.difficulty_name = $10::text AND s.max_players = $11::smallint
+ AND ($12::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $12::uuid)
+ AND ($13::text = '' OR position(lower($13::text) IN lower(COALESCE(m.name, s.guild_id::text))) > 0)
+ UNION ALL
+SELECT s.realm_id, s.player_guid COLLATE "C" AS subject_id, COALESCE(m.name, s.player_guid)::text AS subject_name,
+ 0::double precision AS peak, 0::double precision AS form, 0::double precision AS floor,
+ s.kill_count * a.points AS renown, s.kill_count AS sample_count, s.computed_at
+ FROM leaderboard_player_renown_counts s
+ LEFT JOIN game_players m ON m.realm_id = s.realm_id AND m.id = s.player_guid
+ JOIN (SELECT unnest($14::text[]) AS encounter_name, unnest($19::double precision[]) AS points) a ON a.encounter_name = s.encounter_name
+ WHERE $6::text = 'player' AND $7::text = 'renown'
+ AND s.tenant_id = $8::uuid AND s.instance_name = $9::text AND s.difficulty_name = $10::text AND s.max_players = $11::smallint
+ AND ($12::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $12::uuid)
+ AND ($13::text = '' OR position(lower($13::text) IN lower(COALESCE(m.name, s.player_guid))) > 0)
+ UNION ALL
+SELECT s.realm_id, s.guild_id::text COLLATE "C" AS subject_id, COALESCE(m.name, s.guild_id::text)::text AS subject_name,
+ 0::double precision AS peak, 0::double precision AS form, 0::double precision AS floor,
+ s.kill_count * a.points AS renown, s.kill_count AS sample_count, s.computed_at
+ FROM leaderboard_guild_renown_counts s
+ LEFT JOIN guilds m ON m.realm_id = s.realm_id AND m.id = s.guild_id
+ JOIN (SELECT unnest($14::text[]) AS encounter_name, unnest($19::double precision[]) AS points) a ON a.encounter_name = s.encounter_name
+ WHERE $6::text = 'guild' AND $7::text = 'renown'
+ AND s.tenant_id = $8::uuid AND s.instance_name = $9::text AND s.difficulty_name = $10::text AND s.max_players = $11::smallint
+ AND ($12::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $12::uuid)
+ AND ($13::text = '' OR position(lower($13::text) IN lower(COALESCE(m.name, s.guild_id::text))) > 0)
+), grouped AS (
+ SELECT realm_id, subject_id, min(subject_name)::text AS subject_name,
+ (sum(peak) / NULLIF($20::integer, 0))::double precision AS peak,
+ (sum(0.30 * peak + 0.50 * form + 0.20 * floor) / NULLIF($20::integer, 0))::double precision AS mastery,
+ sum(renown)::double precision AS renown, sum(sample_count)::bigint AS sample_count,
+ min(computed_at) AS computed_at
+ FROM contributions GROUP BY realm_id, subject_id
+), scored AS (
+ SELECT realm_id, subject_id, subject_name, peak, mastery, renown, sample_count, computed_at, CASE $21::text WHEN 'peak' THEN peak WHEN 'mastery' THEN mastery ELSE renown END::double precision AS score
+ FROM grouped
+)
+SELECT realm_id, subject_id::text AS subject_id, subject_name, COALESCE(peak, 0)::double precision AS peak,
+ COALESCE(mastery, 0)::double precision AS mastery, renown, sample_count,
+ computed_at::timestamptz AS computed_at, score
+FROM scored
+WHERE NOT $1::boolean OR score < $2::double precision
+ OR (score = $2::double precision AND (realm_id, subject_id) > ($3::uuid, $4::text))
+ORDER BY score DESC, realm_id, subject_id
+LIMIT $5::integer
+`
+
+type ListLeaderboardV2Params struct {
+	HasCursor      bool      `db:"has_cursor" json:"has_cursor"`
+	AfterScore     float64   `db:"after_score" json:"after_score"`
+	AfterRealm     uuid.UUID `db:"after_realm" json:"after_realm"`
+	AfterSubject   string    `db:"after_subject" json:"after_subject"`
+	PageSize       int32     `db:"page_size" json:"page_size"`
+	SubjectKind    string    `db:"subject_kind" json:"subject_kind"`
+	BoardKind      string    `db:"board_kind" json:"board_kind"`
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	RealmFilter    uuid.UUID `db:"realm_filter" json:"realm_filter"`
+	Search         string    `db:"search" json:"search"`
+	Bosses         []string  `db:"bosses" json:"bosses"`
+	PlayerClass    string    `db:"player_class" json:"player_class"`
+	PlayerSpec     string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric         string    `db:"metric" json:"metric"`
+	Awards         []float64 `db:"awards" json:"awards"`
+	Denominator    int32     `db:"denominator" json:"denominator"`
+	ScoreMetric    string    `db:"score_metric" json:"score_metric"`
+}
+
+type ListLeaderboardV2Row struct {
+	RealmID     uuid.UUID          `db:"realm_id" json:"realm_id"`
+	SubjectID   string             `db:"subject_id" json:"subject_id"`
+	SubjectName string             `db:"subject_name" json:"subject_name"`
+	Peak        float64            `db:"peak" json:"peak"`
+	Mastery     float64            `db:"mastery" json:"mastery"`
+	Renown      float64            `db:"renown" json:"renown"`
+	SampleCount int64              `db:"sample_count" json:"sample_count"`
+	ComputedAt  pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	Score       float64            `db:"score" json:"score"`
+}
+
+// Read current benchmarks and current resolved awards, never replay observations.
+// Boss arrays are enabled exact identities resolved by the API. The fixed
+// denominator includes missing bosses; filtering never shrinks it per subject.
+func (q *sqlQuerier) ListLeaderboardV2(ctx context.Context, arg ListLeaderboardV2Params) ([]ListLeaderboardV2Row, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardV2,
+		arg.HasCursor,
+		arg.AfterScore,
+		arg.AfterRealm,
+		arg.AfterSubject,
+		arg.PageSize,
+		arg.SubjectKind,
+		arg.BoardKind,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RealmFilter,
+		arg.Search,
+		arg.Bosses,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.Metric,
+		arg.Awards,
+		arg.Denominator,
+		arg.ScoreMetric,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLeaderboardV2Row
+	for rows.Next() {
+		var i ListLeaderboardV2Row
+		if err := rows.Scan(
+			&i.RealmID,
+			&i.SubjectID,
+			&i.SubjectName,
+			&i.Peak,
+			&i.Mastery,
+			&i.Renown,
+			&i.SampleCount,
+			&i.ComputedAt,
+			&i.Score,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeaderboardV2Cohorts = `-- name: ListLeaderboardV2Cohorts :many
+SELECT DISTINCT player_class, player_spec, player_sub_spec, metric
+FROM leaderboard_player_boss_benchmarks
+WHERE tenant_id = $1::uuid AND instance_name = $2::text
+ AND difficulty_name = $3::text AND max_players = $4::smallint
+ AND encounter_name = ANY($5::text[])
+ORDER BY player_class, player_spec, player_sub_spec, metric
+`
+
+type ListLeaderboardV2CohortsParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	Bosses         []string  `db:"bosses" json:"bosses"`
+}
+
+type ListLeaderboardV2CohortsRow struct {
+	PlayerClass   string `db:"player_class" json:"player_class"`
+	PlayerSpec    string `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec string `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric        string `db:"metric" json:"metric"`
+}
+
+func (q *sqlQuerier) ListLeaderboardV2Cohorts(ctx context.Context, arg ListLeaderboardV2CohortsParams) ([]ListLeaderboardV2CohortsRow, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardV2Cohorts,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.Bosses,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLeaderboardV2CohortsRow
+	for rows.Next() {
+		var i ListLeaderboardV2CohortsRow
+		if err := rows.Scan(
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.Metric,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resolveLeaderboardConfiguration = `-- name: ResolveLeaderboardConfiguration :many
 WITH assignments AS (
 SELECT layer_key, ARRAY['instance', instance_name]::text[] AS identity, 'enabled'::text AS property, enabled::integer::double precision AS value FROM leaderboard_instance_overrides WHERE enabled IS NOT NULL

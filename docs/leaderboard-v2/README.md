@@ -1,6 +1,6 @@
 # Leaderboard v2
 
-Status: configuration complete; next PR is all-time raw-statistics schema
+Status: configuration and raw-statistics schema complete; isolated read preview
 
 This directory defines Chronicle's replacement rating and leaderboard system.
 The [LaTeX specification](spec.tex) is the authoritative mathematical and
@@ -10,12 +10,13 @@ plan](implementation-plan.md) defines the intended Graphite stack and validation
 gates.
 
 The [table relationships](table-relationships.md) reference maps migration 344
-tables to evidence, summary, and repair responsibilities.
+tables to evidence, summary, and repair responsibilities. The [read preview](read-preview.md)
+documents `/leaderboards-v2`, local synthetic fixtures, and measured SQL plans.
 
 The replacement is a clean implementation. Prior ratings are removed; merged PR
 1625 preserves parse scoring. Retired rating tables are neither migration or
-seed inputs nor a rollback target. Existing UI behavior stays unchanged until a
-later cutover. The next PR adds schema only, not runtime behavior.
+seed inputs nor a rollback target. Existing leaderboard routes stay unchanged until a later cutover. The isolated
+read preview does not install evidence writers or refresh workers.
 
 ## Authority
 
@@ -77,10 +78,10 @@ leaderboard v2.
 ## Current delivery and exclusions
 
 Configuration PRs 1622, 1624, 1633, and 1634 are complete, together with
-inspector PR 1636 and Wrath migration 343. The next PR adds evidence, raw
-sufficient statistics, kill counts, and dirty-work tables, constraints, indexes,
-and tests only. Workers, serving, historical backfill, and UI cutover come
-later.
+inspector PR 1636 and Wrath migration 343. Migration344 adds evidence, raw
+sufficient statistics, kill counts, and dirty-work tables. The read preview
+serves current summaries separately from existing boards. Workers, historical
+backfill, and UI cutover remain out of scope.
 
 All rating scopes, including Renown, are all-time. There are no rolling180day or
 season dimensions, expiry jobs, or finalized-season retention exceptions. Source
@@ -94,8 +95,9 @@ Career/cross-instance portfolios remain out of scope.
 
 Boss/clear cohorts separate difficulty and raid size within one tenant; realm
 qualifies subject identity, not benchmarks. DPS/HPS remain separately permitted.
-Raw projection algorithm compatibility is separate from composed current read
-policy; this work does not invent a new provenance scheme.
+Raw projection and algorithm versions are repair metadata ignored by reads;
+in-place repair may temporarily expose mixed versions. They are not composed
+read-policy versions or a snapshot mechanism.
 
 See the [implementation plan](implementation-plan.md) for the schema-only
 boundary and later maintenance/read validation. Cutover needs a disable/revert
