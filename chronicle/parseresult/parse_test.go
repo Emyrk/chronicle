@@ -1,11 +1,11 @@
 package parseresult
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -79,7 +79,13 @@ func TestParseCanonicalLinesRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(results, decoded) {
-		t.Fatal("parsed result changed after JSON roundtrip")
+	// Compare the wire representation, not time.Location pointer identity:
+	// JSON roundtrips a Local UTC timestamp as time.UTC at the same instant.
+	reencoded, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(data, reencoded) {
+		t.Fatal("parsed result JSON changed after roundtrip")
 	}
 }
