@@ -789,7 +789,7 @@ func (api *API) Routes() chi.Router {
 				})
 			})
 
-			r.Get("/leaderboard-configuration", api.LeaderboardConfiguration)
+			r.With(api.Auth.Authenticated(true)).Get("/leaderboard-configuration", api.LeaderboardConfiguration)
 
 			if api.Opts.Rankings != nil {
 				r.Mount("/rankings", api.Opts.Rankings)
