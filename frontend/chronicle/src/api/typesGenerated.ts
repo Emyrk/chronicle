@@ -12,6 +12,9 @@ export interface LeaderboardV2Cohort {
 
 // From chroniclesdk/leaderboard_v2.go
 export interface LeaderboardV2Entry {
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
     readonly realm_id: string;
     readonly subject_id: string;
     readonly name: string;

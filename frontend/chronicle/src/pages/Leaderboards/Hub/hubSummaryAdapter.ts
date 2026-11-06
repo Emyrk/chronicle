@@ -7,6 +7,7 @@ export type HubSummary = ResolvedHubSummary
 export type { HubPlayerRatingEntry, HubGuildRatingEntry }
 
 export type HubSummaryRequest = {
+  metadataOnly?: boolean
   instanceName?: string
   tab?: "overview" | "ratings" | "performances" | "speedruns" | "statistics" | "parsing" | "rulesets"
   /** Chosen bosses; empty is the instance's preset. */
@@ -47,7 +48,7 @@ export function hubSummaryURL({ instanceName, tab, encounters = [], window, boss
 export function useHubSummary(request: HubSummaryRequest, enabled = true) {
   const url = hubSummaryURL(request)
   return useQuery({
-    queryKey: ["resolved-hub-summary", url],
+    queryKey: ["resolved-hub-summary", url, request.metadataOnly ?? false],
     queryFn: () => fetchResolvedHubSummary(request),
     staleTime: 5 * 60 * 1000,
     enabled,

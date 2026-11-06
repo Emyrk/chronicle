@@ -4,6 +4,7 @@ import { resolvedHubMetadata } from "./resolvedHubAdapter";
 import {
   createV2Pager,
   v2RatingParams,
+  v2PlayerEntry,
   type V2RatingContext,
 } from "./v2RatingAdapter";
 const cohorts = [
@@ -60,27 +61,27 @@ describe("existing Hub adapter", () => {
       ),
     ).toThrow("specific server");
   });
-  it("maps exact performance cohort and preset, never silently combines cohorts", () => {
-    expect(
-      Object.fromEntries(v2RatingParams(context, {}, "mastery")),
-    ).toMatchObject({
+  it("defaults to all cohorts and narrows only explicit class/spec filters", () => {
+    const all = v2RatingParams(context, {}, "mastery");
+    expect(Object.fromEntries(all)).toMatchObject({
       max_players: "0",
       difficulty: "",
       set: "default",
-      class: "MAGE",
-      spec: "Frost",
       metric: "dps",
     });
-    expect(() =>
-      v2RatingParams(
-        {
-          ...context,
-          cohorts: [...cohorts, { ...cohorts[0], player_spec: "Fire" }],
-        },
-        {},
-        "peak",
-      ),
-    ).toThrow("exact performance cohort");
+    expect(all.has("class")).toBe(false);
+    expect(all.has("spec")).toBe(false);
+    const exact = v2RatingParams(
+      context,
+      { cls: "MAGE", spec: "Frost", subSpec: "" },
+      "peak",
+    );
+    expect(Object.fromEntries(exact)).toMatchObject({
+      class: "MAGE",
+      spec: "Frost",
+      sub_spec: "",
+      metric: "dps",
+    });
     expect(
       v2RatingParams(
         { ...context, selected: ["B", "A", "A"] },
@@ -157,4 +158,31 @@ describe("existing Hub adapter", () => {
       pager({ scope: {}, metric: "mastery", query: "other", page: 1 }),
     ).rejects.toThrow("first page");
   });
+});
+
+it("preserves returned cohort identity for two specs of the same player", () => {
+  const common = {
+    realm_id: "realm",
+    subject_id: "same",
+    name: "Mage",
+    score: 98,
+    peak: 98,
+    mastery: 98,
+    renown: 0,
+    sample_count: 10,
+    computed_at: "2026-01-01",
+    player_class: "MAGE",
+    player_spec: "Frost",
+    player_sub_spec: "",
+  };
+  const frost = v2PlayerEntry(common, new URLSearchParams(), "peak");
+  const arcane = v2PlayerEntry(
+    { ...common, player_spec: "Arcane" },
+    new URLSearchParams(),
+    "peak",
+  );
+  expect(frost.cls).toBe("MAGE");
+  expect(frost.spec).toBe("Frost");
+  expect(frost.id).not.toBe(arcane.id);
+  expect(frost.guid).toBe(arcane.guid);
 });

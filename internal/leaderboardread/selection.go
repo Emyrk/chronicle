@@ -27,6 +27,7 @@ type Request struct {
 	Class, Spec, SubSpec, Metric string
 	Realm                        uuid.UUID
 	Search                       string
+	FilterSubSpec                bool
 }
 
 type Selection struct {
@@ -53,11 +54,11 @@ func Select(rows []database.ResolveLeaderboardConfigurationRow, r Request) (Sele
 		return out, errors.New("search must be at most 100 bytes")
 	}
 	if r.Kind == "renown" || r.Subject == "guild" {
-		if r.Class != "" || r.Spec != "" || r.SubSpec != "" || r.Metric != "" {
+		if r.Class != "" || r.Spec != "" || r.SubSpec != "" || r.FilterSubSpec || r.Metric != "" {
 			return out, errors.New("performance cohort filters only apply to player performance boards")
 		}
-	} else if r.Class == "" || r.Spec == "" || (r.Metric != "dps" && r.Metric != "hps") {
-		return out, errors.New("select an exact player class, spec, subspec, and DPS/HPS cohort")
+	} else if r.Metric != "dps" && r.Metric != "hps" {
+		return out, errors.New("select DPS or HPS")
 	}
 	if r.Kind == "clear" && (r.Boss != "" || r.Set != "" || len(r.Bosses) > 0) {
 		return out, errors.New("clear boards do not accept boss selections")
@@ -193,6 +194,9 @@ type Cursor struct {
 	Score       float64   `json:"s"`
 	Realm       uuid.UUID `json:"r"`
 	Subject     string    `json:"i"`
+	Class       string    `json:"c"`
+	Spec        string    `json:"p"`
+	SubSpec     string    `json:"u"`
 }
 
 func Fingerprint(tenant uuid.UUID, r Request, selection Selection) string {

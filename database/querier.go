@@ -782,6 +782,8 @@ type sqlcQuerier interface {
 	// Read current benchmarks and current resolved awards, never replay observations.
 	// Boss arrays are enabled exact identities resolved by the API. The fixed
 	// denominator includes missing bosses; filtering never shrinks it per subject.
+	// Names are display metadata: retrieve them only after the authoritative score
+	// page. Name/search filtering above still occurs before aggregation.
 	ListLeaderboardV2(ctx context.Context, arg ListLeaderboardV2Params) ([]ListLeaderboardV2Row, error)
 	ListLeaderboardV2Cohorts(ctx context.Context, arg ListLeaderboardV2CohortsParams) ([]ListLeaderboardV2CohortsRow, error)
 	ListLogFilePartsForDeletion(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)

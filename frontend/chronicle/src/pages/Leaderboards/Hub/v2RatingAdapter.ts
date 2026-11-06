@@ -57,40 +57,33 @@ export function v2RatingParams(
     p.set("set", set.set_key);
   }
   if (context.subject === "player") {
-    const choices = context.cohorts.filter(
-      (c) =>
-        c.metric === context.performance &&
-        (!scope.cls || scope.cls === c.player_class) &&
-        (!scope.spec || scope.spec === c.player_spec) &&
-        (scope.subSpec === undefined || scope.subSpec === c.player_sub_spec),
-    );
-    if (choices.length !== 1)
-      throw new Error(
-        choices.length
-          ? "Choose a class, spec and subspec to select one exact performance cohort."
-          : "No performance summaries for this cohort.",
-      );
-    const c = choices[0];
-    p.set("class", c.player_class);
-    p.set("spec", c.player_spec);
-    p.set("sub_spec", c.player_sub_spec);
-    p.set("metric", c.metric);
+    p.set("metric", context.performance);
+    if (scope.cls) p.set("class", scope.cls);
+    if (scope.spec) p.set("spec", scope.spec);
+    if (scope.subSpec !== undefined) p.set("sub_spec", scope.subSpec);
   }
+
   return p;
 }
 export function v2PlayerEntry(
   row: LeaderboardV2Entry,
-  params: URLSearchParams,
+  _params: URLSearchParams,
   metric: RatingMetric,
 ): RatingEntry {
   return {
-    id: `${row.realm_id}:${row.subject_id}`,
+    id: JSON.stringify([
+      row.realm_id,
+      row.subject_id,
+      row.player_class,
+      row.player_spec,
+      row.player_sub_spec,
+    ]),
     name: row.name,
     realm: row.realm_id,
     guid: row.subject_id,
-    cls: params.get("class") ?? "",
-    spec: params.get("spec") ?? "",
-    subSpec: params.get("sub_spec") ?? "",
+    cls: row.player_class,
+    spec: row.player_spec,
+    subSpec: row.player_sub_spec,
     score:
       metric === "peak"
         ? row.peak

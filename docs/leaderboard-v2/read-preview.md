@@ -9,8 +9,9 @@ Use an actual tenant host. Configuration remains available through the inspector
 
 ## Scope
 
-- Player exact-boss and named-set Peak and Mastery, for one exact class, spec,
-  subspec, DPS/HPS cohort and instance difficulty/size.
+- Player exact-boss, arbitrary-group and named-set Peak/Mastery across all
+  cohorts or optional class/spec/subspec filters. Each row uses its own exact
+  class/spec/subspec/DPS-or-HPS benchmark and selected instance difficulty/size.
 - Guild exact-boss and named-set Peak/Mastery, plus instance clear Peak/Mastery.
 - Player and guild Renown from metric-independent counts and current resolved
   awards. Renown includes all enabled instance bosses, **independent of named
@@ -40,9 +41,10 @@ The plural browser page was removed rather than maintained as a second design.
 The HTTP endpoint remains plural as an internal API contract.
 
 Ratings are labeled all-time instead of offering an unsupported 180-day window.
-Player performance requires one exact cohort using the existing class/spec
-filters; an ambiguous selection gets an explicit prompt, never a silent merge
-or arbitrary default. One boss maps directly; arbitrary multi-boss selections are sent as repeated
+The existing All classes/All specs overview ranks independently normalized
+cohort-qualified rows together. A Frost Mage at 98 ranks below a Survival Hunter
+at 99 regardless of different raw DPS scales. A player with multiple specs stays
+multiple rows; no best-spec collapse or raw benchmark pooling occurs. One boss maps directly; arbitrary multi-boss selections are sent as repeated
 `bosses` parameters. The API validates every member against current enabled
 bosses, deduplicates and sorts the selection, and preserves its exact denominator.
 Renown ignores class/set filters and uses the selected instance variant, with a
@@ -72,8 +74,9 @@ Required: `instance`, `difficulty` (may be empty), `max_players`,
 For `kind=boss`, choose exactly one `boss`, `set` (set key, not label), or repeated
 `bosses` parameters for an arbitrary eligible group (maximum 256 entries before
 deduplication). Player
-performance also requires `class`, `spec`, `sub_spec` (may be empty), and
-`metric=dps|hps`. Clear is guild-only and rejects boss selections. Renown rejects performance
+performance requires `metric=dps|hps`; `class`, `spec`, and `sub_spec` are optional
+filters. An explicitly empty `sub_spec` selects the empty-subspec cohort; omission
+selects all subspecs. Clear is guild-only and rejects boss selections. Renown rejects performance
 sets/groups but accepts an optional exact `boss` for per-boss cards; omitting it
 returns the whole instance/variant total.
 
@@ -88,7 +91,7 @@ The API rejects public tenant/dataset/version override parameters. Every evidenc
 query includes the middleware tenant explicitly, in addition to existing RLS.
 Cursors bind tenant, exact effective boss selection, named set, variant,
 performance cohort, score, and filters. They preserve full floating-point score
-precision, then order realm UUID and bytewise subject ID. There are no offset
+precision, then order realm UUID, bytewise subject ID, class, spec and subspec. There are no offset
 pages or fabricated global ranks. Normal result/award changes do not invalidate
 cursors; a changed selection does. Like ordinary keyset pagination, mutations
 between requests can move rows across the cursor.
@@ -98,38 +101,36 @@ between requests can move rows across the cursor.
 See [the local tool](../../scripts/leaderboardmock/README.md) for safeguards and
 commands. These are **synthetic summaries**, not estimates of production cohorts.
 PostgreSQL 17 ran in a local Docker container, default memory settings, on this
-execution host. Player/guild metadata was populated for the final matrix. One
-realm, 4 seeded exact player cohorts, 13 catalog bosses, 80% deterministic player-boss
-coverage, and history count 44 were used. No raw evidence was seeded. The
-performance query selects only `MAGE / Synthetic0 / empty subspec / dps`, never
-pooling the four seeded cohorts. The benchmark arrays include all 13 catalog bosses as a stress group; they do not
-claim to be a particular production named set. API sets use actual resolution.
+execution host. Player/guild metadata is populated. The final fixture has one
+realm, four synthetic cohorts, 50k subjects per cohort, 13 seeded catalog bosses,
+80% deterministic coverage and history count 44: 2.08m player summary rows and
+200k cohort-qualified candidate rows. These cardinalities are synthetic, not
+inferred production population. No raw observations are read.
 
-Warm median of five reads after a first measured read, milliseconds:
+The **current all-class query** resolves the actual Vanilla ten-boss default set,
+normalizes every row against its own cohort benchmark, then aggregates and ranks
+across cohorts. Warm median of five reads after a first measured read:
 
-| Shape | 416k player summaries / 10k subjects | 2.08m player summaries / 50k subjects |
+| Current query shape | First read ms | Warm median ms |
 | --- | ---: | ---: |
-| All-boss group Mastery | 50.5 | 305.7 |
-| Single boss Peak | 17.7 | 90.8 |
-| Player Renown | 60.2 | 305.6 |
-| Guild clear Mastery | 0.6 | 2.4 |
-| Name-filtered group | 31.7 | 130.6 |
-| Subsequent group cursor | 54.6 | 295.0 |
+| All-class default-set Mastery | 1287.6 | 1234.7 |
+| Explicit Mage/Synthetic0 default-set Mastery | 359.2 | 349.2 |
+| All-class Ragnaros Peak | 414.6 | 396.6 |
+| Whole-instance player Renown | 367.9 | 363.4 |
 
-The target is approximately **200ms**, not a demonstrated bound. The moderate
-fixture meets it; the 50k-subject group/Renown stress cases **do not**. Cursor
-pagination bounds returned rows but cannot avoid evaluating the current aggregate
-for all candidate subjects. We did not silently cap candidates, cache stale
-scores, or introduce materialized group scores to meet a timing claim.
+The approximately **200ms target is not met** on this stress fixture. Cursor
+pagination limits returned rows, not aggregate candidates. Display-name lookup
+is deferred until after the score page; name search still filters before
+aggregation. No candidate cap, stale cache, or materialized group score was added.
 
-The final version-independent query was measured on a fresh fixture both without
-and with the exact-cohort covering index. Without it, large-group warm median
-was 431.6ms; with it, 305.7ms. The index avoids scanning other performance cohorts
-and permits index-only scans over vacuumed rows. Explicit bytewise subject
-identity ordering avoids locale-sensitive tie ordering. The retained final
-plans, query hashes, and table/index sizes are in `benchmarks/`, including the
-no-index plan. No version columns participate in this index or query filtering.
-These timings still depend on caching, visibility maps, and the local hardware.
+Current plans, query hashes, parameters and sizes are retained as
+`benchmarks/current-*.json`. Older `stress-*.json` and `read-group.json` are
+historical exact-cohort measurements of the earlier query over a thirteen-boss
+stress group, **not evidence of all-class overview latency**. That earlier
+exact-cohort index comparison measured 431.6ms without the covering index versus
+305.7ms with it. The index helps explicit cohort filters and vacuumed index-only
+reads; it does not make the all-class aggregate meet the target. No version
+columns participate in index eligibility or query filtering.
 
 Migration345 adds only that measured covering index on the new summary table.
 It does not scan historical source/evidence tables or backfill results. Building
@@ -153,6 +154,6 @@ and mixed projection/algorithm metadata across benchmarks, subjects, and Renown
 counts. Selection tests cover enabled/empty sets,
 explicit-zero variant awards, Vanilla identity, invalid filters, conflicts, and
 cursor scope changes. Frontend adapter tests cover root/conflict/empty/zero states, Vanilla identity,
-exact player cohorts, variant-scoped Renown and keyset cursor mapping into the
+all-cohort defaults and explicit filters, variant-scoped Renown and keyset cursor mapping into the
 existing player/guild table controls. The Python tests reject remote, implicit, or redirected
 database targets.
