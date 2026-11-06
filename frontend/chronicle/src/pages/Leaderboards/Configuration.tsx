@@ -178,7 +178,8 @@ export function ConfigurationView({
           <ShieldCheck size={14} /> Read only
         </span>
       </header>
-      {data.tenants.length > 0 && (
+      {/* Older backends omit tenants; treat that as no picker. */}
+      {data.tenants?.length > 0 && (
         <TenantPicker tenants={data.tenants} selected={tenant} />
       )}
       <Card>
