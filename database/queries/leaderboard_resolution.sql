@@ -92,4 +92,4 @@ UNION ALL
 SELECT 'conflict'::text, identity[2]::text, array_to_string(identity, '/')::text,
        ''::text, 0::smallint, ''::text, 0::integer, 0::double precision, false::boolean, property::text, ''::text
 FROM conflicts
-ORDER BY kind, instance_name, set_key, position, encounter_name, difficulty_name, max_players;
+ORDER BY kind, instance_name, set_key, position, encounter_name, difficulty_name, max_players, conflicting_property;
