@@ -1,7 +1,8 @@
+import { readFile } from 'node:fs/promises';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ImageResponse } from 'next/og';
 import { characterStats, characterTheme, parseBest } from '../../app/api/og/themes/character';
-import { listParam } from '../../app/api/og/themes/kit';
+import { listParam, parseColor } from '../../app/api/og/themes/kit';
 import type { ThemeContext, ThemeProps } from '../../app/api/og/themes/types';
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47];
@@ -53,10 +54,10 @@ describe('character card', () => {
     }
   });
 
-  test('no parses: ilvl · raids logged · last seen, no pills', async () => {
+  test('no parses: ilvl · raids with kills · last seen, no pills', async () => {
     // Stray parse-only params are ignored without a parse.
     const query = `${NO_PARSES}&kills=212&best=Ragnaros:99`;
-    expect(labels(query)).toEqual(['Item level', 'Raids logged', 'Last seen']);
+    expect(labels(query)).toEqual(['Item level', 'Raids with kills', 'Last seen']);
     const json = await tree(query);
     expect(json).toContain('Nov 2026');
     expect(json).not.toContain('Ragnaros');
@@ -65,7 +66,7 @@ describe('character card', () => {
 
   test('no gear: item level is dropped', () => {
     expect(labels(NO_GEAR)).toEqual(['Best avg parse', 'Boss kills']);
-    expect(labels(`${IDENTITY}&raids=2`)).toEqual(['Raids logged']);
+    expect(labels(`${IDENTITY}&raids=2`)).toEqual(['Raids with kills']);
   });
 
   test('class and initial alone still draw the emblem', async () => {
@@ -102,5 +103,51 @@ describe('character card', () => {
 
     expect(Array.from(bytes.subarray(0, 4))).toEqual(PNG_SIGNATURE);
     expect(network()).toEqual([]);
+  });
+
+  // fonts.googleapis.cn answers with the bundled 月光 subset; every other
+  // request (next/og's own Google fallback included) is recorded and refused.
+  async function mockFontNetwork() {
+    const realFetch = globalThis.fetch;
+    const fixture = (weight: number) => readFile(new URL(`../fixtures/noto-sans-sc-yueguang-${weight}.ttf`, import.meta.url));
+    const [regular, bold] = await Promise.all([fixture(400), fixture(700)]);
+    const css = [400, 700]
+      .map(weight => `@font-face { font-weight: ${weight}; src: url(https://fonts.gstatic.cn/l/font?kit=${weight}) format('truetype'); }`)
+      .join('\n');
+    const hosts: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation((async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.startsWith('data:')) return realFetch(input, init);
+      const { hostname, searchParams } = new URL(url);
+      hosts.push(hostname);
+      if (hostname === 'fonts.googleapis.cn') return new Response(css);
+      if (hostname === 'fonts.gstatic.cn') return new Response(new Uint8Array(searchParams.get('kit') === '700' ? bold : regular));
+      return new Response('offline', { status: 503 });
+    }) as typeof fetch);
+    return hosts;
+  }
+
+  test.each([
+    ['CJK', 'name=%E6%9C%88%E5%85%89&class=mage&level=60&realm=Nordanaar', ['fonts.googleapis.cn', 'fonts.gstatic.cn', 'fonts.gstatic.cn']],
+    ['Cyrillic', `name=${encodeURIComponent('Лунный')}&class=priest&guild=${encodeURIComponent('Северный')}&realm=Nordanaar`, []],
+  ])('%s names render bold without Google’s main font domains', async (_label, query, expectedHosts) => {
+    const hosts = await mockFontNetwork();
+    const fonts = await characterTheme.loadFonts(context(query));
+    // A bold cut that covers the script, beyond the latin kit fonts.
+    expect(fonts.some(font => !['Inter', 'Libre Baskerville'].includes(font.name) && font.weight === 700)).toBe(true);
+
+    const response = new ImageResponse(await characterTheme.render(props, context(query)), { width: 1200, height: 630, fonts });
+    const bytes = new Uint8Array(await response.arrayBuffer());
+
+    expect(Array.from(bytes.subarray(0, 4))).toEqual(PNG_SIGNATURE);
+    expect(hosts.filter(host => host === 'fonts.googleapis.com' || host === 'fonts.gstatic.com')).toEqual([]);
+    expect(hosts.sort()).toEqual(expectedHosts);
+  });
+
+  test('parse colour follows the rounded score, like the page', () => {
+    const [parse] = characterStats(context('parse=94.6'));
+    expect(parse.value).toBe('94.6');
+    expect(parse.color).toBe(parseColor(95));
+    expect(parse.color).not.toBe(parseColor(94));
   });
 });

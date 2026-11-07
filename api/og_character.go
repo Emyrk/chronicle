@@ -125,7 +125,7 @@ func characterAverageItemLevel(gear *database.PlayerOutfit) (avg int, ok bool) {
 
 // characterCardParams builds the `character` card's query params. With
 // parses the stats are parse · ilvl · kills plus up to three boss pills;
-// without them, ilvl · raids logged · last seen. Missing stats are omitted.
+// without them, ilvl · raids with kills · last seen. Missing stats are omitted.
 func characterCardParams(p database.GetGamePlayerByGUIDRow, race, class string, stats characterCardStats) url.Values {
 	params := url.Values{}
 	params.Set("name", p.Name)
@@ -170,6 +170,7 @@ func characterCardParams(p database.GetGamePlayerByGUIDRow, race, class string, 
 		return params
 	}
 
+	// Distinct raids with at least one boss kill: rankings rows are kills only.
 	raids := map[string]struct{}{}
 	for _, e := range stats.Encounters {
 		raids[e.InstanceName] = struct{}{}
@@ -219,7 +220,22 @@ func characterBestBosses(parses []chroniclesdk.CharacterParse) string {
 	clean := strings.NewReplacer(",", " ", ":", " ")
 	items := make([]string, 0, characterCardBestBosses)
 	for _, b := range bosses[:min(characterCardBestBosses, len(bosses))] {
-		items = append(items, fmt.Sprintf("%s:%d", strings.TrimSpace(clean.Replace(b.name)), b.score))
+		name := shortenBossName(strings.TrimSpace(clean.Replace(b.name)))
+		items = append(items, fmt.Sprintf("%s:%d", name, b.score))
 	}
 	return strings.Join(items, ",")
+}
+
+// characterCardBossNameMax keeps `Name:score` inside the card's 40-character
+// list item, so a long encounter name can't cut off its score.
+const characterCardBossNameMax = 30
+
+// shortenBossName clips a name to characterCardBossNameMax runes, ending in
+// an ellipsis when it was cut.
+func shortenBossName(name string) string {
+	runes := []rune(name)
+	if len(runes) <= characterCardBossNameMax {
+		return name
+	}
+	return strings.TrimSpace(string(runes[:characterCardBossNameMax-1])) + "…"
 }

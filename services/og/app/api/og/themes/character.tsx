@@ -21,8 +21,10 @@ import {
   SANS,
   SERIF,
 } from './kit';
+import { loadCjkFonts } from './cjk-fonts';
+import { readPublicFile } from './public-files';
 import { fitFontSize } from './shared';
-import type { ThemeContext, ThemeDefinition, ThemeProps } from './types';
+import type { ThemeContext, ThemeDefinition, ThemeFont, ThemeProps } from './types';
 
 const PANEL = 400;
 const MAX_BEST = 3;
@@ -65,14 +67,15 @@ export function parseBest(items: string[]): Boss[] {
   return bosses.slice(0, MAX_BEST);
 }
 
-// parse · ilvl · kills with a parse; ilvl · raids logged · last seen without.
+// parse · ilvl · kills with a parse; ilvl · raids with kills · last seen without.
+// The parse is coloured by its rounded value, as the armory page shows it.
 export function characterStats(context: ThemeContext): Stat[] {
   const raw = param(context, 'parse', 6);
   const parse = /^\d{1,3}(\.\d)?$/.test(raw) ? Math.min(100, Number(raw)) : null;
   const ilvl = intParam(context, 'ilvl', { min: 0, max: 999 });
   const stats: Stat[] = [];
   if (parse !== null) {
-    stats.push({ value: raw.includes('.') ? parse.toFixed(1) : String(parse), label: PARSE_LABEL, color: parseColor(parse) });
+    stats.push({ value: raw.includes('.') ? parse.toFixed(1) : String(parse), label: PARSE_LABEL, color: parseColor(Math.round(parse)) });
     if (ilvl !== null) stats.push({ value: String(ilvl), label: 'Item level' });
     const kills = intParam(context, 'kills', { min: 0, max: 999_999 });
     if (kills !== null) stats.push({ value: kills.toLocaleString('en-US'), label: 'Boss kills' });
@@ -80,7 +83,7 @@ export function characterStats(context: ThemeContext): Stat[] {
   }
   if (ilvl !== null) stats.push({ value: String(ilvl), label: 'Item level' });
   const raids = intParam(context, 'raids', { min: 0, max: 999 });
-  if (raids !== null) stats.push({ value: String(raids), label: 'Raids logged' });
+  if (raids !== null) stats.push({ value: String(raids), label: 'Raids with kills' });
   const seen = param(context, 'seen', 14);
   if (seen) stats.push({ value: seen, label: 'Last seen' });
   return stats;
@@ -219,9 +222,9 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
         </div>
 
         {stats.length > 0 ? (
-          <div style={{ display: 'flex', alignItems: 'stretch', gap: 34 }}>
+          <div style={{ display: 'flex', alignItems: 'stretch', gap: 28 }}>
             {stats.map((stat, index) => (
-              <div key={stat.label} style={{ display: 'flex', alignItems: 'stretch', gap: 34 }}>
+              <div key={stat.label} style={{ display: 'flex', alignItems: 'stretch', gap: 28 }}>
                 {index > 0 ? <div style={{ width: 2, background: COLORS.rule }} /> : null}
                 <StatBlock stat={stat} />
               </div>
@@ -243,8 +246,33 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   );
 }
 
+const CYRILLIC = /\p{Script=Cyrillic}/u;
+const INTER_WEIGHTS = [400, 600, 700] as const;
+
+// The kit fonts are latin only, and next/og fetches any missing glyph from
+// Google's main font domains. A Cyrillic name adds the bundled Inter Cyrillic
+// cuts; a CJK name loads a subset from the China domain at 400 and 700.
+async function loadFonts(context: ThemeContext): Promise<ThemeFont[]> {
+  const text = [param(context, 'name', 20), param(context, 'guild', 32), param(context, 'realm', 32)].join('');
+  const [kit, cyrillic, cjk] = await Promise.all([
+    loadKitFonts(),
+    CYRILLIC.test(text)
+      ? Promise.all(
+          INTER_WEIGHTS.map(async weight => ({
+            name: 'Inter Cyrillic', // Satori keys fonts by name + weight, so it can't share Inter's name
+            data: await readPublicFile(`fonts/inter/cyrillic-${weight}-normal.ttf`),
+            weight,
+            style: 'normal' as const,
+          }))
+        )
+      : [],
+    loadCjkFonts(text),
+  ]);
+  return [...kit, ...cyrillic, ...cjk];
+}
+
 export const characterTheme: ThemeDefinition = {
-  loadFonts: loadKitFonts,
+  loadFonts,
   render,
   fontFamily: SANS,
 };

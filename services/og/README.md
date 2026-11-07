@@ -64,7 +64,7 @@ No other configuration or `.env` file is required.
 
 | Param | Max length | Notes |
 |-------|-----------|-------|
-| `template` | | `modern` (default), `chronicle` or `brand`. Unknown values use `modern` |
+| `template` | | `modern` (default), `chronicle`, `talents`, `brand` or `character`. Unknown values use `modern` |
 | `theme` | | Same as `template` (upstream's name); wins if both are given |
 | `title` | 200 | Defaults to `Untitled` |
 | `site` | 80 | Defaults to `Blog` |
@@ -124,6 +124,7 @@ An image that fails any check is dropped and the card renders without it.
 | `chronicle` | Chronicle's dark palette, a Libre Baskerville headline and an Inter byline under a gold rule; `image` sits behind a dark wash | `image`, `icon`, `avatar`, `tag`, `accent` (the rule and tag border) |
 | `talents` | Talent build for `/talents/{class}?build=`: spec + class in class colour, the point split, a bar per tree. No `points` draws "<Class> Talent Calculator" with empty trees; `class=pet` draws one bar | `class`, `spec`, `points` (`17-34-0`, one number for a pet), `keys` (up to 3, comma-separated), `host`, `product` |
 | `brand` | The wordmark over a faint mark, a serif tagline, up to two count pills and the footer. Used for `/`, static routes and every fallback | `title` (default `Every pull, every parse, every wipe.`, 90), `excerpt` (default `Free raid log analysis for <product>`, 160), `stat1`/`stat2` as `count:label` (digits are grouped, or compacted from 100,000; no stats → no pill row), `host`, `product` |
+| `character` | Armory character for `/armory/{realm}/{player}`: an initial medallion in class colour with the spec, name, level line, guild · realm, three stats and up to three boss pills. With `parse`: best avg parse (coloured by its rounded value) · item level · boss kills + pills; without: item level · raids with kills · last seen. Missing stats are dropped. Cyrillic names use the bundled Inter Cyrillic cuts, CJK names a China-domain subset | `name` (20), `class`, `spec`, `race`, `level`, `guild`, `realm`, `parse` (`96.4`), `ilvl`, `kills`, `best` (`Name:score`, up to 3), `raids`, `seen`, `host`, `product` |
 
 ### Adding a template
 

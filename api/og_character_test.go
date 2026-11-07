@@ -3,9 +3,12 @@ package api
 import (
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -115,6 +118,22 @@ func TestCharacterCardParamsFallbacks(t *testing.T) {
 		require.Equal(t, "Garr:76", got.Get("best"))
 		require.False(t, got.Has("kills"))
 	})
+}
+
+func TestCharacterBestBossesShortensLongNames(t *testing.T) {
+	t.Parallel()
+	long := "High Priestess Mar'li and Twin Emperors Vek'lor"
+	best := characterBestBosses([]chroniclesdk.CharacterParse{
+		{InstanceName: "Zul'Gurub", EncounterName: long, PreciseScore: 97},
+		{InstanceName: "Blackwing Lair", EncounterName: "Nefarian", PreciseScore: 95},
+	})
+	items := strings.Split(best, ",")
+	require.Equal(t, []string{"High Priestess Mar'li and Twi…:97", "Nefarian:95"}, items)
+	// Every item fits the card's 40-character list item, score included.
+	for _, item := range items {
+		require.LessOrEqual(t, utf8.RuneCountInString(item), 40)
+	}
+	require.Equal(t, "Nefarian", shortenBossName("Nefarian"))
 }
 
 func TestCharacterCardMetric(t *testing.T) {
