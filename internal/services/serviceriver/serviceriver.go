@@ -188,9 +188,13 @@ func (s *Service) Start(ctx context.Context) error {
 	// separate source-writer integration. No startup/backfill work is scheduled.
 	ratings := serviceratings.Ratings(s.broker)
 	ratings.Dispatcher.Queue = q
+	ratings.RepairDispatcher.Queue = q
+	riverqueue.AddWorker(q, ratings.RepairDispatcher)
+	riverqueue.AddWorker(q, ratings.RepairWorker)
 	riverqueue.AddWorker(q, ratings.Dispatcher)
 	riverqueue.AddWorker(q, ratings.TenantWorker)
 	if serviceratings.DispatchEnabled {
+		q.AddPeriodicJob(river.NewPeriodicJob(river.PeriodicInterval(serviceratings.DispatchInterval), func() (river.JobArgs, *river.InsertOpts) { return serviceratings.ArgsRepairDispatch{}, nil }, &river.PeriodicJobOpts{ID: "leaderboard-d1-dispatch", RunOnStart: false}))
 		q.AddPeriodicJob(river.NewPeriodicJob(
 			river.PeriodicInterval(serviceratings.DispatchInterval),
 			func() (river.JobArgs, *river.InsertOpts) { return serviceratings.ArgsDispatch{}, nil },

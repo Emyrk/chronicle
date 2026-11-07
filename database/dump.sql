@@ -1676,6 +1676,13 @@ CREATE TABLE leaderboard_dirty_runs (
     revision bigint DEFAULT 1 NOT NULL,
     dirtied_at timestamp with time zone DEFAULT now() NOT NULL,
     process_after timestamp with time zone DEFAULT now() NOT NULL,
+    claim_token uuid,
+    claimed_revision bigint,
+    locked_until timestamp with time zone,
+    retry_after timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    CONSTRAINT leaderboard_dirty_runs_attempts_check CHECK ((attempts >= 0)),
+    CONSTRAINT leaderboard_dirty_runs_claim_complete CHECK ((((claim_token IS NULL) AND (claimed_revision IS NULL) AND (locked_until IS NULL)) OR ((claim_token IS NOT NULL) AND (claimed_revision IS NOT NULL) AND (claimed_revision > 0) AND (locked_until IS NOT NULL)))),
     CONSTRAINT leaderboard_dirty_runs_revision_check CHECK ((revision > 0))
 );
 
