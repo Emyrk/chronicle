@@ -31,7 +31,7 @@ import {
   type DirectorUnit,
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
-import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, planarStep, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, wheelZoomDistance, type MapControlAction, type MobileMapInput } from "./mapControls";
+import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, planarStep, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, wheelZoomDistance, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { unwrapCompassRadians } from "./mapCompassModel";
 import { createShotHold, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SLICE_MS, startFollowTrackBuild, type FollowTrackBuild, FOLLOW_SMOOTH_SECONDS, followKeyAt, glideDurationMs, glidePoseAt, holdShot, isReplayJump, type FollowKey, type FollowTrack, type GlidePose } from "./followCamera";
 import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
@@ -764,6 +764,8 @@ interface WalkState {
   vy: number;
   grounded: boolean;
   camYaw: number;
+  /** The camera is still easing behind the character after a turn (walkCameraSettling). */
+  camSettling: boolean;
   /** Camera elevation above the head, radians. */
   camPitch: number;
   /** Camera distance from the head, yards; 0 is first person. */
@@ -1216,6 +1218,8 @@ export class MapScene3D {
       this.renderer.domElement.addEventListener("dblclick", this.handleDoubleClick);
       this.renderer.domElement.addEventListener("pointerdown", this.handlePointerDown);
       this.renderer.domElement.addEventListener("pointerup", this.handlePointerUp);
+      this.renderer.domElement.addEventListener("pointercancel", this.handlePointerLoss);
+      this.renderer.domElement.addEventListener("lostpointercapture", this.handlePointerLoss);
       this.renderer.domElement.addEventListener("wheel", this.handleWheel, { passive: false });
       this.renderer.domElement.addEventListener("contextmenu", this.handleWalkContextMenu);
       // Capture, so walk mode's Esc is handled before the page's own Esc (focus mode) sees it.
@@ -2758,6 +2762,8 @@ export class MapScene3D {
     canvas.removeEventListener("dblclick", this.handleDoubleClick);
     canvas.removeEventListener("pointerdown", this.handlePointerDown);
     canvas.removeEventListener("pointerup", this.handlePointerUp);
+    canvas.removeEventListener("pointercancel", this.handlePointerLoss);
+    canvas.removeEventListener("lostpointercapture", this.handlePointerLoss);
     canvas.removeEventListener("wheel", this.handleWheel);
     canvas.removeEventListener("contextmenu", this.handleWalkContextMenu);
     if (this.walk) this.disposeAvatar(this.walk.avatar);
@@ -4132,8 +4138,9 @@ export class MapScene3D {
       // Both buttons move forward at once, as in walk mode, without waiting for a drag.
       if (walkMouseControl(buttons).movingForward) this.beginFreeCamDrag(this.orbitDrag);
     }
-    if (this.walk && (event.button === 0 || event.button === 2)) {
-      const buttons = setWalkMouseButton(this.walk.drag?.buttons ?? 0, event.button, true);
+    const walkButton = walkDragButton(event.pointerType, event.button);
+    if (this.walk && (walkButton === 0 || walkButton === 2)) {
+      const buttons = setWalkMouseButton(this.walk.drag?.buttons ?? 0, walkButton, true);
       this.walk.drag = { buttons, x: event.clientX, y: event.clientY };
       this.renderer.domElement.setPointerCapture(event.pointerId);
       // Hide a mouse cursor while dragging; touch keeps its real coordinates.
@@ -4189,8 +4196,9 @@ export class MapScene3D {
       this.planInput.up(this.planPointAt(event), event);
       return;
     }
-    if (this.walk?.drag && (event.button === 0 || event.button === 2)) {
-      const buttons = setWalkMouseButton(this.walk.drag.buttons, event.button, false);
+    const walkButton = walkDragButton(event.pointerType, event.button);
+    if (this.walk?.drag && (walkButton === 0 || walkButton === 2)) {
+      const buttons = setWalkMouseButton(this.walk.drag.buttons, walkButton, false);
       if (buttons) {
         this.walk.drag = { buttons, x: event.clientX, y: event.clientY };
       } else {
@@ -4217,6 +4225,22 @@ export class MapScene3D {
     clearTimeout(this.unitClickTimer);
     if (!guid) return;
     this.unitClickTimer = window.setTimeout(() => this.onUnitClick?.(guid), UNIT_CLICK_DELAY_MS);
+  };
+
+  // A cancelled touch (a system gesture, an edge swipe) never sends its
+  // pointerup: end the drag here as pointerup would, so the camera follows again.
+  private readonly handlePointerLoss = (event: PointerEvent) => {
+    if (!pointerLossEndsDrag(event.type, event.pointerType)) return;
+    if (this.walk?.drag) {
+      this.walk.drag = null;
+      this.unlockPointer();
+    }
+    if (this.orbitDrag) {
+      const dragged = this.orbitDrag.dragging;
+      this.orbitDrag = null;
+      this.unlockPointer();
+      if (dragged) this.handleControlsEnd();
+    }
   };
 
   private readonly handlePointerLeave = () => {
@@ -4880,6 +4904,7 @@ export class MapScene3D {
       vy: 0,
       grounded: true,
       camYaw,
+      camSettling: false,
       camPitch: WALK_START_PITCH,
       camDistance: WALK_START_DISTANCE_YARDS,
       camShown: WALK_START_DISTANCE_YARDS,
@@ -5049,9 +5074,11 @@ export class MapScene3D {
     }
     const forward = Math.max(-1, Math.min(1, axis("forward", "back") + (mouse.movingForward ? 1 : 0) + this.mobileInput.forward));
     // Any planar movement brings a free-look camera back behind the character.
-    // Keyboard turning moves the target yaw first, so the camera trails the turn.
-    if (shouldFollowWalkCamera(forward, strafe, turn, walk.drag !== null)) {
-      const followRate = turn ? WALK_CAMERA_TURN_FOLLOW_RATE : WALK_CAMERA_FOLLOW_RATE;
+    // Turning (keys or the look stick) moves the target yaw first, so the camera
+    // trails the turn, and keeps settling at the turn rate once the turn stops.
+    walk.camSettling = walkCameraSettling(walk.camSettling, turn, walk.drag !== null, walk.camYaw, walk.yaw);
+    if (shouldFollowWalkCamera(forward, strafe, turn, walk.drag !== null, walk.camSettling)) {
+      const followRate = turn || walk.camSettling ? WALK_CAMERA_TURN_FOLLOW_RATE : WALK_CAMERA_FOLLOW_RATE;
       walk.camYaw = easeAngleToward(walk.camYaw, walk.yaw, followRate, dt);
     }
     if (this.mobileInput.pitch) {

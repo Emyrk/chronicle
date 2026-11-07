@@ -198,9 +198,44 @@ export function walkMovementYaw(characterYaw: number, cameraYaw: number, rightDr
   return rightDragging ? cameraYaw : characterYaw;
 }
 
-/** Whether planar walk input should bring a free-look camera back behind the character. */
-export function shouldFollowWalkCamera(forward: number, strafe: number, turn: number, dragging: boolean): boolean {
-  return !dragging && (forward !== 0 || strafe !== 0 || turn !== 0);
+/**
+ * The walk-mode button a press on the map counts as. A phone has no right
+ * button to steer with, so a touch (anything but a mouse) drags as WoW's
+ * right-drag: the character turns with the camera, and the arrow pad moves
+ * where the camera looks (chronicle-1650).
+ */
+export function walkDragButton(pointerType: string, button: number): number {
+  return pointerType === "mouse" ? button : 2;
+}
+
+/**
+ * Whether a lost pointer ends a walk or free-cam drag, as a pointerup would.
+ * A cancelled touch (a system gesture, an edge swipe) must, or the drag sticks.
+ * A mouse loses capture when the cursor locks at the start of its own drag,
+ * and still gets its pointerup, so a mouse's lost capture is ignored.
+ */
+export function pointerLossEndsDrag(eventType: string, pointerType: string): boolean {
+  return eventType === "pointercancel" || pointerType !== "mouse";
+}
+
+/** Within this many radians the camera has settled behind the character. */
+export const WALK_CAMERA_SETTLED_RADIANS = 0.002;
+
+/**
+ * Whether the camera is still settling behind the character after a turn:
+ * set while turning, kept after the turn ends until the camera is within
+ * WALK_CAMERA_SETTLED_RADIANS of the facing, so it never freezes off-axis.
+ * A drag takes the camera, so it drops the settle.
+ */
+export function walkCameraSettling(settling: boolean, turn: number, dragging: boolean, cameraYaw: number, characterYaw: number): boolean {
+  if (dragging) return false;
+  if (turn !== 0) return true;
+  return settling && Math.abs(Math.atan2(Math.sin(characterYaw - cameraYaw), Math.cos(characterYaw - cameraYaw))) > WALK_CAMERA_SETTLED_RADIANS;
+}
+
+/** Whether planar walk input, or a turn still settling, should bring a free-look camera back behind the character. */
+export function shouldFollowWalkCamera(forward: number, strafe: number, turn: number, dragging: boolean, settling = false): boolean {
+  return !dragging && (forward !== 0 || strafe !== 0 || turn !== 0 || settling);
 }
 
 /** Toggles walk mode while the pointer is over the map (or while walking). */

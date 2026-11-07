@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, FREE_CAM_FAST_FACTOR, freeCamTravelSpeed, lookDrag, LOOK_RADIANS_PER_PX, planarStep, wheelZoomDistance, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, keyLabel, MAP_CONTROL_ACTIONS, MAP_CONTROL_KEYBINDS, mobileJoystickAxis, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY } from "./mapControls";
+import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, FREE_CAM_FAST_FACTOR, freeCamTravelSpeed, lookDrag, LOOK_RADIANS_PER_PX, planarStep, wheelZoomDistance, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, keyLabel, MAP_CONTROL_ACTIONS, MAP_CONTROL_KEYBINDS, mobileJoystickAxis, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, WALK_CAMERA_SETTLED_RADIANS, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY } from "./mapControls";
 
 describe("easeAngleToward", () => {
   it("eases toward the target without snapping", () => {
@@ -90,6 +90,69 @@ describe("shouldFollowWalkCamera", () => {
   it("stays put without movement or while the user is dragging the camera", () => {
     expect(shouldFollowWalkCamera(0, 0, 0, false)).toBe(false);
     expect(shouldFollowWalkCamera(1, 1, 1, true)).toBe(false);
+  });
+
+  it("keeps following after a turn while the camera is still settling", () => {
+    expect(shouldFollowWalkCamera(0, 0, 0, false, true)).toBe(true);
+    expect(shouldFollowWalkCamera(0, 0, 0, true, true)).toBe(false);
+  });
+});
+
+describe("walkDragButton", () => {
+  it("leaves mouse buttons alone", () => {
+    expect(walkDragButton("mouse", 0)).toBe(0);
+    expect(walkDragButton("mouse", 2)).toBe(2);
+  });
+
+  it.each(["touch", "pen"])("steers a %s drag like a right-drag", (pointerType) => {
+    const button = walkDragButton(pointerType, 0);
+    expect(button).toBe(2);
+    expect(walkMouseControl(setWalkMouseButton(0, button, true))).toEqual({ looking: true, steering: true, movingForward: false });
+  });
+});
+
+describe("pointerLossEndsDrag", () => {
+  it("ends any drag on pointercancel", () => {
+    expect(pointerLossEndsDrag("pointercancel", "touch")).toBe(true);
+    expect(pointerLossEndsDrag("pointercancel", "mouse")).toBe(true);
+  });
+
+  it("ends a touch drag on lost capture, but not a mouse drag whose cursor just locked", () => {
+    expect(pointerLossEndsDrag("lostpointercapture", "touch")).toBe(true);
+    expect(pointerLossEndsDrag("lostpointercapture", "mouse")).toBe(false);
+  });
+});
+
+describe("walkCameraSettling", () => {
+  it("starts settling while turning", () => {
+    expect(walkCameraSettling(false, 1, false, 0, 1)).toBe(true);
+  });
+
+  it("keeps settling after the turn until the camera is behind the character", () => {
+    expect(walkCameraSettling(true, 0, false, 0, Math.PI / 8)).toBe(true);
+    expect(walkCameraSettling(true, 0, false, 0, WALK_CAMERA_SETTLED_RADIANS / 2)).toBe(false);
+  });
+
+  it("measures the gap the short way across the angle wrap", () => {
+    expect(walkCameraSettling(true, 0, false, Math.PI - 0.0005, -Math.PI + 0.0005)).toBe(false);
+  });
+
+  it("does not start without a turn, and a drag drops it", () => {
+    expect(walkCameraSettling(false, 0, false, 0, 1)).toBe(false);
+    expect(walkCameraSettling(true, 1, true, 0, 1)).toBe(false);
+  });
+
+  it("brings a look-stick turn fully behind the character once released", () => {
+    const turnRate = 8;
+    const dt = 1 / 60;
+    let camYaw = 0;
+    let settling = walkCameraSettling(false, 1, false, camYaw, Math.PI / 8);
+    for (let frame = 0; frame < 120 && shouldFollowWalkCamera(0, 0, 0, false, settling); frame++) {
+      camYaw = easeAngleToward(camYaw, Math.PI / 8, turnRate, dt);
+      settling = walkCameraSettling(settling, 0, false, camYaw, Math.PI / 8);
+    }
+    expect(settling).toBe(false);
+    expect(Math.abs(camYaw - Math.PI / 8)).toBeLessThanOrEqual(WALK_CAMERA_SETTLED_RADIANS);
   });
 });
 describe("mapControls", () => {
