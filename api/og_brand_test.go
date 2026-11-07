@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"sort"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -98,13 +99,49 @@ func TestWithBrandOG(t *testing.T) {
 
 type fakeSiteStats struct {
 	calls atomic.Int32
-	err   error
-	row   database.SiteStatsRow
+
+	mu     sync.Mutex
+	err    error
+	row    database.SiteStatsRow
+	panics bool
+	tenant uuid.UUID // tenant seen by the last call
+	ctxErr error     // ctx.Err() seen by the last call
 }
 
-func (f *fakeSiteStats) SiteStats(context.Context) (database.SiteStatsRow, error) {
+func (f *fakeSiteStats) set(row database.SiteStatsRow, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.row, f.err = row, err
+}
+
+func (f *fakeSiteStats) SiteStats(ctx context.Context) (database.SiteStatsRow, error) {
 	f.calls.Add(1)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.tenant = servicetenant.TenantIDFromContext(ctx)
+	f.ctxErr = ctx.Err()
+	if f.panics {
+		panic("boom")
+	}
 	return f.row, f.err
+}
+
+// waitIdle waits until no refresh is running for the site entry.
+func waitIdle(t *testing.T, c *ogSiteStatsCache, key uuid.UUID) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		e := c.entries[key]
+		return e != nil && !e.refreshing
+	}, 5*time.Second, 5*time.Millisecond)
+}
+
+// expire makes the entry due for a refresh now.
+func expire(c *ogSiteStatsCache, key uuid.UUID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries[key].nextRefresh = time.Time{}
 }
 
 func TestOGSiteStatsCache(t *testing.T) {
@@ -116,20 +153,21 @@ func TestOGSiteStatsCache(t *testing.T) {
 		q := &fakeSiteStats{row: database.SiteStatsRow{LogsParsed: 7, BossKills: 2}}
 		ctx := context.Background()
 
-		require.Zero(t, c.get(ctx, q), "first read never waits on the query")
-		require.Eventually(t, func() bool { return c.get(ctx, q).LogsParsed == 7 }, 5*time.Second, 5*time.Millisecond)
+		require.Zero(t, c.get(ctx, nil, q), "first read never waits on the query")
+		require.Eventually(t, func() bool { return c.get(ctx, nil, q).LogsParsed == 7 }, 5*time.Second, 5*time.Millisecond)
 		for range 5 {
-			require.Equal(t, int64(2), c.get(ctx, q).BossKills)
+			require.Equal(t, int64(2), c.get(ctx, nil, q).BossKills)
 		}
 		require.Equal(t, int32(1), q.calls.Load())
 
 		// Past the hour, the old counts are served while one refresh runs.
 		c.mu.Lock()
-		c.entries[uuid.Nil].fetchedAt = time.Now().Add(-brandOGRefresh)
+		require.WithinDuration(t, time.Now().Add(brandOGRefresh), c.entries[uuid.Nil].nextRefresh, time.Minute)
 		c.mu.Unlock()
-		q.row = database.SiteStatsRow{LogsParsed: 8}
-		require.Equal(t, int64(7), c.get(ctx, q).LogsParsed)
-		require.Eventually(t, func() bool { return c.get(ctx, q).LogsParsed == 8 }, 5*time.Second, 5*time.Millisecond)
+		expire(&c, uuid.Nil)
+		q.set(database.SiteStatsRow{LogsParsed: 8}, nil)
+		require.Equal(t, int64(7), c.get(ctx, nil, q).LogsParsed)
+		require.Eventually(t, func() bool { return c.get(ctx, nil, q).LogsParsed == 8 }, 5*time.Second, 5*time.Millisecond)
 		require.Equal(t, int32(2), q.calls.Load())
 	})
 
@@ -140,26 +178,72 @@ func TestOGSiteStatsCache(t *testing.T) {
 		tenant := &fakeSiteStats{row: database.SiteStatsRow{LogsParsed: 5}}
 		tctx := servicetenant.WithTenantID(context.Background(), uuid.New())
 
-		c.get(context.Background(), site)
-		c.get(tctx, tenant)
+		c.get(context.Background(), nil, site)
+		c.get(tctx, nil, tenant)
 		require.Eventually(t, func() bool {
-			return c.get(context.Background(), site).LogsParsed == 100 && c.get(tctx, tenant).LogsParsed == 5
+			return c.get(context.Background(), nil, site).LogsParsed == 100 && c.get(tctx, nil, tenant).LogsParsed == 5
 		}, 5*time.Second, 5*time.Millisecond)
 	})
 
-	t.Run("ErrorKeepsLastCountsAndWaits", func(t *testing.T) {
+	t.Run("RefreshKeepsTenantButNotCancellation", func(t *testing.T) {
 		t.Parallel()
 		var c ogSiteStatsCache
-		q := &fakeSiteStats{err: errors.New("db down")}
+		q := &fakeSiteStats{row: database.SiteStatsRow{LogsParsed: 5}}
+		tenantID := uuid.New()
+		ctx, cancel := context.WithCancel(servicetenant.WithTenantID(context.Background(), tenantID))
+		cancel() // the request is already gone when the refresh runs
+
+		c.get(ctx, nil, q)
+		waitIdle(t, &c, tenantID)
+		q.mu.Lock()
+		defer q.mu.Unlock()
+		require.Equal(t, tenantID, q.tenant, "the refresh must run under the request's tenant for RLS")
+		require.NoError(t, q.ctxErr, "the refresh must not inherit the request's cancellation")
+	})
+
+	t.Run("ErrorKeepsLastCountsAndRetriesSooner", func(t *testing.T) {
+		t.Parallel()
+		var c ogSiteStatsCache
+		q := &fakeSiteStats{row: database.SiteStatsRow{LogsParsed: 7}}
 		ctx := context.Background()
 
-		c.get(ctx, q)
-		require.Eventually(t, func() bool {
-			c.mu.Lock()
-			defer c.mu.Unlock()
-			return !c.entries[uuid.Nil].refreshing
-		}, 5*time.Second, 5*time.Millisecond)
-		require.Zero(t, c.get(ctx, q))
-		require.Equal(t, int32(1), q.calls.Load(), "a failed query is not retried within the hour")
+		c.get(ctx, nil, q)
+		waitIdle(t, &c, uuid.Nil)
+		expire(&c, uuid.Nil)
+		q.set(database.SiteStatsRow{}, errors.New("db down"))
+		c.get(ctx, nil, q)
+		waitIdle(t, &c, uuid.Nil)
+
+		require.Equal(t, int64(7), c.get(ctx, nil, q).LogsParsed, "a failed query keeps the last counts")
+		require.Equal(t, int32(2), q.calls.Load(), "no retry before brandOGRetry")
+		c.mu.Lock()
+		next := c.entries[uuid.Nil].nextRefresh
+		c.mu.Unlock()
+		require.WithinDuration(t, time.Now().Add(brandOGRetry), next, time.Minute)
+
+		// After the retry wait, the next read retries and picks up new counts.
+		expire(&c, uuid.Nil)
+		q.set(database.SiteStatsRow{LogsParsed: 9}, nil)
+		require.Eventually(t, func() bool { return c.get(ctx, nil, q).LogsParsed == 9 }, 5*time.Second, 5*time.Millisecond)
+	})
+
+	t.Run("PanicIsRecovered", func(t *testing.T) {
+		t.Parallel()
+		var c ogSiteStatsCache
+		q := &fakeSiteStats{panics: true}
+		ctx := context.Background()
+
+		c.get(ctx, nil, q)
+		waitIdle(t, &c, uuid.Nil)
+		c.mu.Lock()
+		require.WithinDuration(t, time.Now().Add(brandOGRetry), c.entries[uuid.Nil].nextRefresh, time.Minute)
+		c.mu.Unlock()
+
+		// The entry isn't wedged: once due, it refreshes again.
+		q.mu.Lock()
+		q.panics, q.row = false, database.SiteStatsRow{LogsParsed: 3}
+		q.mu.Unlock()
+		expire(&c, uuid.Nil)
+		require.Eventually(t, func() bool { return c.get(ctx, nil, q).LogsParsed == 3 }, 5*time.Second, 5*time.Millisecond)
 	})
 }

@@ -25,11 +25,18 @@ func (api *API) ogImageURL(r *http.Request, template string, params url.Values) 
 	if api.Opts == nil || api.Opts.OGServiceURL == nil || api.Opts.OGSigningKey == "" {
 		return ""
 	}
+	return api.ogImageURLForProduct(r, template, seoProductName(api.resolvedSiteFlavor(r.Context())), params)
+}
+
+// ogImageURLForProduct is ogImageURL with the product name already resolved.
+func (api *API) ogImageURLForProduct(r *http.Request, template, product string, params url.Values) string {
+	if api.Opts == nil || api.Opts.OGServiceURL == nil || api.Opts.OGSigningKey == "" {
+		return ""
+	}
 	host := params.Get("host")
 	if host == "" {
 		host = ogHost(r)
 	}
-	product := seoProductName(api.resolvedSiteFlavor(r.Context()))
 	return signedOGImageURL(api.Opts.OGServiceURL, api.Opts.OGSigningKey, template, host, product, params)
 }
 

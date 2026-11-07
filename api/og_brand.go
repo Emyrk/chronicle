@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -18,6 +20,8 @@ import (
 const (
 	brandOGTitle   = "Every pull, every parse, every wipe."
 	brandOGRefresh = time.Hour
+	// brandOGRetry is the wait after a failed SiteStats query.
+	brandOGRetry = 5 * time.Minute
 )
 
 // brandOGImageURL returns the signed brand card URL for r, or "" when the OG
@@ -29,10 +33,10 @@ func (api *API) brandOGImageURL(r *http.Request) string {
 	}
 	var stats database.SiteStatsRow
 	if api.Opts.Zed != nil {
-		stats = api.ogSiteStats.get(r.Context(), api.Opts.Zed)
+		stats = api.ogSiteStats.get(r.Context(), api.Opts.Logger, api.Opts.Zed)
 	}
 	product := seoProductName(api.resolvedSiteFlavor(r.Context()))
-	return api.ogImageURL(r, "brand", brandOGParams(product, stats))
+	return api.ogImageURLForProduct(r, "brand", product, brandOGParams(product, stats))
 }
 
 // brandOGParams is the brand card's query. A zero count (not fetched yet, or a
@@ -80,19 +84,20 @@ type siteStatsQuerier interface {
 // ogSiteStatsCache holds SiteStats per tenant (uuid.Nil for the site itself;
 // the query is tenant-scoped by RLS). get never waits on the database: a stale
 // or missing entry starts one background refresh and returns what it has
-// (zero counts before the first refresh lands).
+// (zero counts before the first refresh lands). A failed refresh keeps the
+// last counts and retries after brandOGRetry.
 type ogSiteStatsCache struct {
 	mu      sync.Mutex
 	entries map[uuid.UUID]*ogSiteStatsEntry
 }
 
 type ogSiteStatsEntry struct {
-	stats      database.SiteStatsRow
-	fetchedAt  time.Time
-	refreshing bool
+	stats       database.SiteStatsRow
+	nextRefresh time.Time
+	refreshing  bool
 }
 
-func (c *ogSiteStatsCache) get(ctx context.Context, q siteStatsQuerier) database.SiteStatsRow {
+func (c *ogSiteStatsCache) get(ctx context.Context, logger *slog.Logger, q siteStatsQuerier) database.SiteStatsRow {
 	key := uuid.Nil
 	if t := servicetenant.TenantFromContext(ctx); t != nil {
 		key = t.ID
@@ -108,27 +113,44 @@ func (c *ogSiteStatsCache) get(ctx context.Context, q siteStatsQuerier) database
 		e = &ogSiteStatsEntry{}
 		c.entries[key] = e
 	}
-	if !e.refreshing && time.Since(e.fetchedAt) >= brandOGRefresh {
+	if !e.refreshing && !time.Now().Before(e.nextRefresh) {
 		e.refreshing = true
 		// Keep the request's tenant and actor for RLS, but not its cancellation.
 		refreshCtx := context.WithoutCancel(ctx)
-		go c.refresh(refreshCtx, q, e)
+		go c.refresh(refreshCtx, logger, q, e)
 	}
 	return e.stats
 }
 
-func (c *ogSiteStatsCache) refresh(ctx context.Context, q siteStatsQuerier, e *ogSiteStatsEntry) {
+func (c *ogSiteStatsCache) refresh(ctx context.Context, logger *slog.Logger, q siteStatsQuerier, e *ogSiteStatsEntry) {
+	var (
+		stats database.SiteStatsRow
+		err   error
+	)
+	// Whatever happens, clear refreshing so the entry can refresh again; a
+	// panic counts as a failed query.
+	defer func() {
+		if p := recover(); p != nil {
+			if logger == nil {
+				logger = slog.Default()
+			}
+			logger.Error("og site stats refresh panicked", slog.Any("panic", p))
+			err = errors.New("panic")
+		}
+
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		e.refreshing = false
+		if err != nil {
+			// Keep the last good counts; retry sooner than a full interval.
+			e.nextRefresh = time.Now().Add(brandOGRetry)
+			return
+		}
+		e.stats = stats
+		e.nextRefresh = time.Now().Add(brandOGRefresh)
+	}()
+
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	stats, err := q.SiteStats(ctx)
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	e.refreshing = false
-	// A failed query also waits out the interval, so a slow database is
-	// asked at most once an hour; the last good counts stay.
-	e.fetchedAt = time.Now()
-	if err == nil {
-		e.stats = stats
-	}
+	stats, err = q.SiteStats(ctx)
 }
