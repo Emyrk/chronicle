@@ -25,6 +25,9 @@ export interface RatingEntry {
   detail: string
   /** Peak only: the DPS/HPS behind the score (a boss kill's, or duration-weighted across bosses). */
   raw?: number
+  rawMetric?: "DPS" | "HPS"
+  durationMs?: number
+  bossCounts?: readonly { encounter_name: string; count: number }[]
   /** Ranked Mastery entries: the parts it is built from. Across a raid, Peak/Form/Floor average every boss. */
   mastery?: MasteryParts
   /** Published boss-score components; absent for raid aggregate projections. */

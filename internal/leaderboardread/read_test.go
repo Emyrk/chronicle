@@ -41,6 +41,8 @@ func TestSummaryReadsWithMixedVersionMetadata(t *testing.T) {
 	require.InDelta(t, 71, rows[0].Score, 1e-8)
 	require.InDelta(t, 90, rows[0].Peak, 1e-8)
 	require.InDelta(t, 40, rows[1].Score, 1e-8)
+	require.InDelta(t, 40, rows[1].Form, 1e-8)
+	require.InDelta(t, 25, rows[1].Floor, 1e-8)
 	require.InDelta(t, 50, rows[1].Peak, 1e-8)
 	require.NotEqual(t, rows[1].RealmID, rows[2].RealmID)
 	// Ties advance by realm then subject, never offset or display-rounded scores.
@@ -253,4 +255,65 @@ func TestSelectedRenownSums(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestPageBossDetails(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	_, err = conn.Exec(ctx, "BEGIN")
+	require.NoError(t, err)
+	defer func() { _, _ = conn.Exec(ctx, "ROLLBACK") }()
+	for _, file := range []string{"read_fixture.sql", "peak_provenance_fixture.sql"} {
+		fixture, err := os.ReadFile("testdata/" + file)
+		require.NoError(t, err)
+		_, err = conn.Exec(ctx, string(fixture))
+		require.NoError(t, err)
+	}
+	db := database.NewQueries(conn)
+	realm := uuid.MustParse("00000000-0000-4000-8000-000000000002")
+	p := database.ListLeaderboardV2PageBossesParams{TenantID: uuid.MustParse("00000000-0000-4000-8000-000000000001"), InstanceName: "Test raid", SubjectKind: "player", Metric: "dps", Bosses: []string{"Boss A", "Boss B"}, Realms: []uuid.UUID{realm}, Subjects: []string{"Alice"}, Classes: []string{"MAGE"}, Specs: []string{"Frost"}, SubSpecs: []string{""}}
+	rows, err := db.ListLeaderboardV2PageBosses(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, "Alice", rows[0].SubjectID) // Bob and the other realm never enter the requested page.
+	require.Equal(t, 100.0, rows[0].Peak)
+	require.Equal(t, 100.0, rows[0].RawPeak)
+	require.EqualValues(t, 130000, rows[0].DurationMs)
+	require.Zero(t, rows[1].Peak)
+	require.Zero(t, rows[1].ObservationCount)
+	require.Zero(t, rows[1].DurationMs)
+	p.Realms[0] = uuid.MustParse("00000000-0000-4000-8000-000000000003")
+	rows, err = db.ListLeaderboardV2PageBosses(ctx, p)
+	require.NoError(t, err)
+	require.Zero(t, rows[0].DurationMs)
+	p.Realms[0] = realm
+	p.Specs[0] = "Other"
+	rows, err = db.ListLeaderboardV2PageBosses(ctx, p)
+	require.NoError(t, err)
+	require.Zero(t, rows[0].ObservationCount)
+	p.Specs[0] = "Frost"
+	p.DifficultyName = "Heroic"
+	p.MaxPlayers = 25
+	rows, err = db.ListLeaderboardV2PageBosses(ctx, p)
+	require.NoError(t, err)
+	require.Zero(t, rows[0].DurationMs)
+	p.DifficultyName = ""
+	p.MaxPlayers = 0
+	p.TenantID = uuid.New()
+	rows, err = db.ListLeaderboardV2PageBosses(ctx, p)
+	require.NoError(t, err)
+	require.Zero(t, rows[0].ObservationCount)
+	p.TenantID = uuid.MustParse("00000000-0000-4000-8000-000000000001")
+	p.SubjectKind = "guild"
+	p.Subjects[0] = "00000000-0000-4000-8000-000000000004"
+	p.Classes[0] = ""
+	p.Specs[0] = ""
+	rows, err = db.ListLeaderboardV2PageBosses(ctx, p)
+	require.NoError(t, err)
+	require.EqualValues(t, 200, rows[0].DurationMs)
+	require.Equal(t, 50.0, rows[0].Peak)
 }

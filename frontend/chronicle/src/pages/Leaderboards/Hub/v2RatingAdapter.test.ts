@@ -190,6 +190,9 @@ it("preserves returned cohort identity for two specs of the same player", () => 
     score: 98,
     peak: 98,
     mastery: 98,
+    form: 97,
+    floor: 96,
+    bosses: [{ encounter_name: "A", peak: 98, raw_peak: 980, duration_ms: null, observation_count: 5 }],
     renown: 0,
     sample_count: 10,
     computed_at: "2026-01-01",
@@ -203,6 +206,10 @@ it("preserves returned cohort identity for two specs of the same player", () => 
     new URLSearchParams(),
     "peak",
   );
+  expect(frost.raw).toBe(980);
+  expect(frost.durationMs).toBeUndefined();
+  expect(frost.publishedMastery).toEqual({ peak: 98, form: 97, floor: 96 });
+  expect(frost.bossCounts).toEqual([{ encounter_name: "A", count: 5 }]);
   expect(frost.cls).toBe("MAGE");
   expect(frost.spec).toBe("Frost");
   expect(frost.id).not.toBe(arcane.id);

@@ -137,7 +137,43 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		result = result[:limit]
 	}
 	for _, row := range result {
-		out.Entries = append(out.Entries, chroniclesdk.LeaderboardV2Entry{RealmID: row.RealmID, SubjectID: row.SubjectID, PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, Name: row.SubjectName, Score: row.Score, Peak: row.Peak, Mastery: row.Mastery, Renown: row.Renown, SampleCount: row.SampleCount, ComputedAt: row.ComputedAt.Time})
+		out.Entries = append(out.Entries, chroniclesdk.LeaderboardV2Entry{RealmID: row.RealmID, SubjectID: row.SubjectID, PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, Name: row.SubjectName, Score: row.Score, Peak: row.Peak, Form: row.Form, Floor: row.Floor, Bosses: []chroniclesdk.LeaderboardV2Boss{}, Mastery: row.Mastery, Renown: row.Renown, SampleCount: row.SampleCount, ComputedAt: row.ComputedAt.Time})
+	}
+	// Enrich only the actual returned page, not the look-ahead row or all candidates.
+	if req.Kind == "boss" && len(out.Entries) > 0 {
+		details := database.ListLeaderboardV2PageBossesParams{TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers, Metric: req.Metric, SubjectKind: req.Subject, Bosses: selection.Bosses}
+		type identity struct {
+			Realm                         uuid.UUID
+			Subject, Class, Spec, SubSpec string
+		}
+		indexes := make(map[identity]int, len(out.Entries))
+		for i, entry := range out.Entries {
+			details.Realms = append(details.Realms, entry.RealmID)
+			details.Subjects = append(details.Subjects, entry.SubjectID)
+			details.Classes = append(details.Classes, entry.PlayerClass)
+			details.Specs = append(details.Specs, entry.PlayerSpec)
+			details.SubSpecs = append(details.SubSpecs, entry.PlayerSubSpec)
+			indexes[identity{entry.RealmID, entry.SubjectID, entry.PlayerClass, entry.PlayerSpec, entry.PlayerSubSpec}] = i
+		}
+		bosses, err := db.ListLeaderboardV2PageBosses(ctx, details)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		for _, boss := range bosses {
+			i, ok := indexes[identity{boss.RealmID, boss.SubjectID, boss.PlayerClass, boss.PlayerSpec, boss.PlayerSubSpec}]
+			if !ok {
+				continue
+			}
+			detail := chroniclesdk.LeaderboardV2Boss{EncounterName: boss.EncounterName, Peak: boss.Peak, ObservationCount: boss.ObservationCount}
+			if req.Subject == "player" && boss.ObservationCount > 0 {
+				detail.RawPeak = &boss.RawPeak
+			}
+			if boss.DurationMs > 0 {
+				detail.DurationMS = &boss.DurationMs
+			}
+			out.Entries[i].Bosses = append(out.Entries[i].Bosses, detail)
+		}
 	}
 	if more {
 		last := result[len(result)-1]

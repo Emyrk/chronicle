@@ -3,6 +3,19 @@
 import type { GUID } from "@/lib/guid/guid";
 
 // From chroniclesdk/leaderboard_v2.go
+/**
+ * LeaderboardV2Boss is page-bounded summary detail, never observation replay.
+ * Missing summaries have zero peak/count; unavailable raw values stay null.
+ */
+export interface LeaderboardV2Boss {
+    readonly encounter_name: string;
+    readonly peak: number;
+    readonly raw_peak: number | null;
+    readonly duration_ms: number | null;
+    readonly observation_count: number;
+}
+
+// From chroniclesdk/leaderboard_v2.go
 export interface LeaderboardV2Cohort {
     readonly player_class: string;
     readonly player_spec: string;
@@ -20,6 +33,9 @@ export interface LeaderboardV2Entry {
     readonly name: string;
     readonly score: number;
     readonly peak: number;
+    readonly form: number;
+    readonly floor: number;
+    readonly bosses: readonly LeaderboardV2Boss[];
     readonly mastery: number;
     readonly renown: number;
     readonly sample_count: number;

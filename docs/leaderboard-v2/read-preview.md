@@ -52,8 +52,15 @@ visible notice. Per-boss cards request genuine boss-specific Renown from counts 
 awards, while center Renown sums the current boss selection without averaging. No retired catch-up worker status is implied.
 
 Existing full-list controls use cursor history. Search starts a new cursor chain;
-no synthetic total or global rank is displayed. Missing throughput, run dates,
-or raw Mastery bands stay absent rather than manufactured from normalized scores.
+no synthetic total or global rank is displayed. Single-boss player Peak shows raw DPS/HPS; multi-boss Peak shows each selected
+boss's normalized Peak (missing bosses zero). Mastery exposes normalized Peak,
+Form and Floor averaged over the same fixed selection. Progress is
+`sum(min(observation_count, 3)) / (3 * selected_boss_count)`, with per-boss counts
+in a keyboard-accessible description; it does not change scores. A single-boss
+guild Peak shows its fastest duration. Player duration is shown only when the
+raw-peak observation has recorded provenance; legacy nulls and absent dates are
+labeled unavailable, never fabricated. One batched detail query enriches only
+the returned page with exact tenant/variant/realm/cohort summary data.
 
 ## Repair metadata
 
@@ -163,3 +170,28 @@ cursor scope changes. Frontend adapter tests cover root/conflict/empty/zero stat
 all-cohort defaults and explicit filters, variant-scoped Renown and keyset cursor mapping into the
 existing player/guild table controls. The Python tests reject remote, implicit, or redirected
 database targets.
+
+## Peak provenance
+
+Migration346 adds nullable `peak_encounter_id` and `peak_duration_ms` to player
+boss summaries. They identify the **same observation as raw_peak**, not the
+fastest kill. Both must be present (positive duration) or absent. There is no
+source foreign key and source deletion/retention is not blocked. The CHECK is
+NOT VALID to avoid a startup table scan; new/updated rows are checked and old rows
+receive NULLs. No backfill/population worker is added. Future writers must carry
+provenance atomically with raw_peak; equal raw peaks choose the lexicographically
+smallest source encounter UUID deterministically. Repair legacy rows in place.
+The existing table has no source-encounter link, so no extra instance ID or fake
+clickable mock link is introduced. Run dates remain unavailable.
+
+### Page-detail overhead
+
+On the existing 2.08m-summary local fixture, the separate exact-cohort detail
+lookup for 50 returned players × 10 selected bosses returned 500 records in
+5.323ms on the first measured read and 5.660ms warm median (five repeats).
+`benchmarks/page-boss-details.json` retains the plan and aligned page parameters.
+A live all-cohort Peak HTTP response with those details was 83,961 bytes and
+approximately 1,400ms including ranking/config/API overhead. These are separate
+measurements, not a before/after latency claim or a production bound. Existing
+synthetic summaries have no source encounters, so player duration remains null
+in that fixture; isolated provenance tests exercise a real recorded duration.

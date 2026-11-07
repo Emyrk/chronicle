@@ -2149,6 +2149,8 @@ type LeaderboardPlayerBossSubject struct {
 	ProjectionVersion int32              `db:"projection_version" json:"projection_version"`
 	AlgorithmVersion  int32              `db:"algorithm_version" json:"algorithm_version"`
 	ComputedAt        pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	PeakEncounterID   uuid.NullUUID      `db:"peak_encounter_id" json:"peak_encounter_id"`
+	PeakDurationMs    pgtype.Int8        `db:"peak_duration_ms" json:"peak_duration_ms"`
 }
 
 type LeaderboardPlayerObservation struct {

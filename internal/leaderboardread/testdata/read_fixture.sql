@@ -15,10 +15,10 @@ FROM (VALUES
 ) AS v(boss,realm,subject,peak,form,floor);
 -- Exact-scope adversaries must not bleed into the selected board.
 INSERT INTO leaderboard_player_boss_subjects
-SELECT tenant_id,instance_name,'Heroic',25,encounter_name,player_class,player_spec,player_sub_spec,metric,realm_id,player_guid,observation_count,raw_peak,raw_form,raw_floor,projection_version,algorithm_version,computed_at
+SELECT tenant_id,instance_name,'Heroic',25,encounter_name,player_class,player_spec,player_sub_spec,metric,realm_id,player_guid,observation_count,raw_peak,raw_form,raw_floor,projection_version,algorithm_version,computed_at,NULL::uuid,NULL::bigint
 FROM leaderboard_player_boss_subjects;
 INSERT INTO leaderboard_player_boss_subjects
-SELECT '00000000-0000-4000-8000-000000000009',instance_name,difficulty_name,max_players,encounter_name,player_class,player_spec,player_sub_spec,metric,realm_id,player_guid,observation_count,raw_peak,raw_form,raw_floor,projection_version,algorithm_version,computed_at
+SELECT '00000000-0000-4000-8000-000000000009',instance_name,difficulty_name,max_players,encounter_name,player_class,player_spec,player_sub_spec,metric,realm_id,player_guid,observation_count,raw_peak,raw_form,raw_floor,projection_version,algorithm_version,computed_at,NULL::uuid,NULL::bigint
 FROM leaderboard_player_boss_subjects WHERE max_players=0;
 INSERT INTO leaderboard_player_renown_counts
 (tenant_id,instance_name,difficulty_name,max_players,encounter_name,realm_id,player_guid,kill_count,projection_version,algorithm_version)
