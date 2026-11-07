@@ -214,7 +214,7 @@ func (w *WorkerAnnounceRaidLog) Work(ctx context.Context, job *river.Job[ArgsAnn
 		return fmt.Errorf("reconcile announcement: %w", err)
 	}
 	if reconciled.obsolete != nil {
-		w.deleteObsoleteMessage(reconciled.obsolete)
+		w.deleteObsoleteMessage(ctx, reconciled.obsolete)
 	}
 
 	announcement := reconciled.announcement
@@ -236,7 +236,7 @@ func (w *WorkerAnnounceRaidLog) Work(ctx context.Context, job *river.Job[ArgsAnn
 			SetContent(messagePayload.Content).
 			SetEmbeds(messagePayload.Embeds)
 		edit.AllowedMentions = messagePayload.AllowedMentions
-		if _, err := w.messenger.ChannelMessageEditComplex(edit); err != nil {
+		if _, err := w.messenger.ChannelMessageEditComplex(edit, discordRequestOption(ctx, "raid_announcement")); err != nil {
 			deliveryErr := fmt.Errorf("edit Discord announcement: %w", err)
 			if persistErr := w.setDeliveryError(ctx, announcement.ID, deliveryErr); persistErr != nil {
 				return errors.Join(deliveryErr, persistErr)
@@ -264,7 +264,7 @@ func (w *WorkerAnnounceRaidLog) Work(ctx context.Context, job *river.Job[ArgsAnn
 		return fmt.Errorf("claim Discord announcement delivery: %w", err)
 	}
 
-	message, err := w.messenger.ChannelMessageSendComplex(installation.AnnounceRaidLogsChannelID.String, messagePayload)
+	message, err := w.messenger.ChannelMessageSendComplex(installation.AnnounceRaidLogsChannelID.String, messagePayload, discordRequestOption(ctx, "raid_announcement"))
 	if err != nil {
 		deliveryErr := fmt.Errorf("send Discord announcement: %w", err)
 		if persistErr := w.setDeliveryError(ctx, announcement.ID, deliveryErr); persistErr != nil {
@@ -297,11 +297,11 @@ func (w *WorkerAnnounceRaidLog) setDeliveryError(ctx context.Context, announceme
 	return nil
 }
 
-func (w *WorkerAnnounceRaidLog) deleteObsoleteMessage(announcement *database.GuildDiscordLogAnnouncement) {
+func (w *WorkerAnnounceRaidLog) deleteObsoleteMessage(ctx context.Context, announcement *database.GuildDiscordLogAnnouncement) {
 	if w.messenger == nil || !announcement.DiscordMessageID.Valid {
 		return
 	}
-	if err := w.messenger.ChannelMessageDelete(announcement.DiscordChannelID, announcement.DiscordMessageID.String); err != nil {
+	if err := w.messenger.ChannelMessageDelete(announcement.DiscordChannelID, announcement.DiscordMessageID.String, discordRequestOption(ctx, "raid_announcement")); err != nil {
 		w.bot.logger.Warn("failed to delete superseded Discord announcement", slog.String("error", err.Error()))
 	}
 }

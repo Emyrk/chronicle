@@ -217,7 +217,7 @@ func (w *WorkerCheckDiscordMembershipGrant) Work(ctx context.Context, job *river
 	// A full Discord user sync can replace this result and clear the claim while
 	// the API request is in flight. Completion then returns sql.ErrNoRows, which
 	// means this job is stale rather than failed.
-	member, fetchErr := w.bot.GetGuildMember(w.bot.ChronicleGuildID(), link.LinkedID)
+	member, fetchErr := w.bot.GetGuildMember(ctx, w.bot.ChronicleGuildID(), link.LinkedID)
 	if fetchErr != nil {
 		safeError := sanitizeMembershipError(fetchErr)
 		_, err := w.bot.config.DB.CompleteDiscordMembershipGrantCheckError(ctx, database.CompleteDiscordMembershipGrantCheckErrorParams{

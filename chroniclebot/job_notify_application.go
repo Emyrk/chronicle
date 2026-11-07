@@ -54,7 +54,7 @@ func (b *Bot) NewWorkerNotifyApplication() river.Worker[ArgsNotifyApplication] {
 	return &WorkerNotifyApplication{bot: b}
 }
 
-func (w *WorkerNotifyApplication) Work(_ context.Context, job *river.Job[ArgsNotifyApplication]) error {
+func (w *WorkerNotifyApplication) Work(ctx context.Context, job *river.Job[ArgsNotifyApplication]) error {
 	b := w.bot
 	channelID := job.Args.ChannelID
 	if channelID == "" {
@@ -84,7 +84,7 @@ func (w *WorkerNotifyApplication) Work(_ context.Context, job *river.Job[ArgsNot
 		},
 		Color: 0x5865F2, // Discord blurple
 	}
-	_, err := b.session.ChannelMessageSendEmbed(channelID, embed)
+	_, err := b.session.ChannelMessageSendEmbed(channelID, embed, discordRequestOption(ctx, "application_notification"))
 	if err != nil {
 		return fmt.Errorf("send application notification to channel %s: %w", channelID, err)
 	}

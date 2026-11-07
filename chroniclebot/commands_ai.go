@@ -102,7 +102,7 @@ func (b *Bot) handleAsk(s *discordgo.Session, i *discordgo.InteractionCreate, op
 		_ = RespondEphemeral(s, i, "Ask a question of at most 32768 characters.")
 		return
 	}
-	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, Data: &discordgo.InteractionResponseData{Flags: discordgo.MessageFlagsEphemeral}}); err != nil {
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, Data: &discordgo.InteractionResponseData{Flags: discordgo.MessageFlagsEphemeral}}, discordRequestOption(context.Background(), "interaction_ai")); err != nil {
 		b.logger.Error("defer Discord AI response", slog.String("error", err.Error()))
 		return
 	}
@@ -133,7 +133,7 @@ func (b *Bot) handleSearch(s *discordgo.Session, i *discordgo.InteractionCreate,
 		_ = RespondEphemeral(s, i, "Describe a search in at most 32768 characters.")
 		return
 	}
-	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, Data: &discordgo.InteractionResponseData{Flags: discordgo.MessageFlagsEphemeral}}); err != nil {
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, Data: &discordgo.InteractionResponseData{Flags: discordgo.MessageFlagsEphemeral}}, discordRequestOption(context.Background(), "interaction_ai")); err != nil {
 		b.logger.Error("defer Discord search response", slog.String("error", err.Error()))
 		return
 	}
@@ -224,7 +224,7 @@ func aiFollowupParams(text, owner string) *discordgo.WebhookParams {
 }
 
 func (b *Bot) aiFollowup(s *discordgo.Session, i *discordgo.InteractionCreate, text, owner string) {
-	if _, err := s.FollowupMessageCreate(i.Interaction, true, aiFollowupParams(text, owner)); err != nil {
+	if _, err := s.FollowupMessageCreate(i.Interaction, true, aiFollowupParams(text, owner), discordRequestOption(context.Background(), "interaction_ai")); err != nil {
 		b.logger.Error("send Discord AI followup", slog.String("error", err.Error()))
 	}
 }

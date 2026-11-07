@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v5"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 )
@@ -29,6 +30,7 @@ type Config struct {
 	ExaltedRoleID                string
 	Disabled                     bool
 	MembershipGrantChecksPerHour int64
+	Registry                     prometheus.Registerer
 	DB                           database.Store
 	Zed                          *authz.Authz
 	AccessURL                    string
@@ -100,7 +102,15 @@ func New(_ context.Context, logger *slog.Logger, config Config) (*Bot, error) {
 		return nil, err
 	}
 
-	httpDiagnostics := newDiscordHTTPDiagnostics(session.Client.Transport, config.Token)
+	transport := session.Client.Transport
+	if config.Registry != nil {
+		httpMetrics, err := newDiscordHTTPMetrics(transport, config.Registry)
+		if err != nil {
+			return nil, err
+		}
+		transport = httpMetrics
+	}
+	httpDiagnostics := newDiscordHTTPDiagnostics(transport, config.Token)
 	session.Client.Transport = httpDiagnostics
 	bot := &Bot{
 		session:         session,
@@ -243,7 +253,7 @@ func (b *Bot) StartGateway(ctx context.Context) error {
 	// best-effort because a transient Discord failure should not surrender an
 	// otherwise healthy gateway connection.
 	if b.ChronicleGuildID() != "" {
-		if _, err := b.GetGuildRoles(b.ChronicleGuildID()); err != nil {
+		if _, err := b.GetGuildRoles(ctx, b.ChronicleGuildID()); err != nil {
 			b.logger.Warn("initial guild role fetch failed, roles will be fetched on next call",
 				slog.String("error", err.Error()))
 		}
@@ -359,11 +369,11 @@ func (b *Bot) enqueueSyncJob(discordID, uniqueString string) {
 }
 
 // VerifyGuild confirms that the connected bot can access a Discord guild.
-func (b *Bot) VerifyGuild(guildID string) (*discordgo.Guild, error) {
+func (b *Bot) VerifyGuild(ctx context.Context, guildID string) (*discordgo.Guild, error) {
 	if !b.Available() || b.session == nil {
 		return nil, fmt.Errorf("discord bot is unavailable")
 	}
-	guild, err := b.session.Guild(guildID)
+	guild, err := b.session.Guild(guildID, discordRequestOption(ctx, "guild_installation"))
 	if err != nil {
 		return nil, fmt.Errorf("fetch Discord guild %s: %w", guildID, err)
 	}
@@ -375,7 +385,7 @@ func (b *Bot) LeaveGuild(guildID string) error {
 	if !b.Available() || b.session == nil {
 		return fmt.Errorf("discord bot is unavailable")
 	}
-	if err := b.session.GuildLeave(guildID); err != nil {
+	if err := b.session.GuildLeave(guildID, discordRequestOption(context.Background(), "guild_uninstall")); err != nil {
 		return fmt.Errorf("leave Discord guild %s: %w", guildID, err)
 	}
 	return nil
@@ -423,11 +433,12 @@ func discordAnnouncementChannelTypeReason(channelType discordgo.ChannelType) (st
 }
 
 // TextChannelEligibility returns text-like channels and explains why each channel can or cannot be used for announcements.
-func (b *Bot) TextChannelEligibility(guildID string) ([]DiscordChannelEligibility, error) {
+func (b *Bot) TextChannelEligibility(ctx context.Context, guildID string) ([]DiscordChannelEligibility, error) {
 	if !b.Available() || b.session == nil || b.session.State == nil || b.session.State.User == nil {
 		return nil, fmt.Errorf("discord bot is unavailable")
 	}
-	channels, err := b.session.GuildChannels(guildID)
+	requestOption := discordRequestOption(ctx, "guild_channel_eligibility")
+	channels, err := b.session.GuildChannels(guildID, requestOption)
 	if err != nil {
 		return nil, fmt.Errorf("get Discord guild channels: %w", err)
 	}
@@ -443,7 +454,7 @@ func (b *Bot) TextChannelEligibility(guildID string) ([]DiscordChannelEligibilit
 			eligibility = append(eligibility, result)
 			continue
 		}
-		permissions, err := b.session.UserChannelPermissions(b.session.State.User.ID, channel.ID)
+		permissions, err := b.session.UserChannelPermissions(b.session.State.User.ID, channel.ID, requestOption)
 		if err != nil {
 			return nil, fmt.Errorf("get Discord channel %s permissions: %w", channel.ID, err)
 		}
@@ -454,8 +465,8 @@ func (b *Bot) TextChannelEligibility(guildID string) ([]DiscordChannelEligibilit
 }
 
 // WritableTextChannels returns text channels where the bot can send announcements.
-func (b *Bot) WritableTextChannels(guildID string) ([]*discordgo.Channel, error) {
-	eligibility, err := b.TextChannelEligibility(guildID)
+func (b *Bot) WritableTextChannels(ctx context.Context, guildID string) ([]*discordgo.Channel, error) {
+	eligibility, err := b.TextChannelEligibility(ctx, guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -470,8 +481,8 @@ func (b *Bot) WritableTextChannels(guildID string) ([]*discordgo.Channel, error)
 
 // GetGuildMember fetches a member from a guild.
 // Returns nil if the user is not a member of the guild.
-func (b *Bot) GetGuildMember(guildID, userID string) (*discordgo.Member, error) {
-	member, err := b.session.GuildMember(guildID, userID)
+func (b *Bot) GetGuildMember(ctx context.Context, guildID, userID string) (*discordgo.Member, error) {
+	member, err := b.session.GuildMember(guildID, userID, discordRequestOption(ctx, "membership_sync"))
 	if err != nil {
 		if restErr, ok := err.(*discordgo.RESTError); ok {
 			if restErr.Response.StatusCode == 404 {
@@ -485,8 +496,8 @@ func (b *Bot) GetGuildMember(guildID, userID string) (*discordgo.Member, error) 
 
 // GetGuildRoles fetches all roles in a guild.
 // Useful for mapping role IDs to names.
-func (b *Bot) GetGuildRoles(guildID string) ([]*discordgo.Role, error) {
-	roles, err := b.session.GuildRoles(guildID)
+func (b *Bot) GetGuildRoles(ctx context.Context, guildID string) ([]*discordgo.Role, error) {
+	roles, err := b.session.GuildRoles(guildID, discordRequestOption(ctx, "gateway_role_cache"))
 	if err != nil {
 		return nil, fmt.Errorf("get guild roles: %w", err)
 	}

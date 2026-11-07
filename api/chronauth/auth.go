@@ -165,8 +165,9 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 			"email", "identify",
 		)
 		d.SetName(name)
+		d.HTTPClient = opts.Bot.DiscordHTTPClient("oauth_user")
 		providers[d.Name()] = withContextualTokenRefresh(
-			d, d.ClientKey, d.Secret, discordTokenURL,
+			d, d.ClientKey, d.Secret, discordTokenURL, opts.Bot.DiscordHTTPClient("oauth_token"),
 		)
 	}
 
@@ -200,6 +201,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 				oidcProvider.ClientKey,
 				oidcProvider.Secret,
 				oidcProvider.OpenIDConfig.TokenEndpoint,
+				nil,
 			)
 		}
 		providers[devProv.Name()] = devProv

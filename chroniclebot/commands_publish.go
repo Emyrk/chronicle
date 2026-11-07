@@ -1,6 +1,7 @@
 package chroniclebot
 
 import (
+	"context"
 	"log/slog"
 	"strings"
 	"time"
@@ -43,15 +44,16 @@ func (b *Bot) handlePublish(s *discordgo.Session, i *discordgo.InteractionCreate
 		return
 	}
 	// Acknowledge within Discord's interaction deadline before sending the public message.
-	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{Type: discordgo.InteractionResponseDeferredMessageUpdate}); err != nil {
+	requestOption := discordRequestOption(context.Background(), "interaction_publish")
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{Type: discordgo.InteractionResponseDeferredMessageUpdate}, requestOption); err != nil {
 		b.publishing.Delete(i.Message.ID)
 		b.logger.Error("acknowledge Discord publish", slog.String("error", err.Error()))
 		return
 	}
-	if _, err := s.ChannelMessageSendComplex(i.ChannelID, &discordgo.MessageSend{Content: answer, AllowedMentions: &discordgo.MessageAllowedMentions{Parse: []discordgo.AllowedMentionType{}}}); err != nil {
+	if _, err := s.ChannelMessageSendComplex(i.ChannelID, &discordgo.MessageSend{Content: answer, AllowedMentions: &discordgo.MessageAllowedMentions{Parse: []discordgo.AllowedMentionType{}}}, requestOption); err != nil {
 		b.publishing.Delete(i.Message.ID)
 		b.logger.Error("publish Discord answer", slog.String("error", err.Error()))
-		if _, followupErr := s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{Content: "Couldn't publish this answer. Check channel permissions and try again.", Flags: discordgo.MessageFlagsEphemeral}); followupErr != nil {
+		if _, followupErr := s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{Content: "Couldn't publish this answer. Check channel permissions and try again.", Flags: discordgo.MessageFlagsEphemeral}, requestOption); followupErr != nil {
 			b.logger.Error("report Discord publish failure", slog.String("error", followupErr.Error()))
 		}
 		return
@@ -61,7 +63,7 @@ func (b *Bot) handlePublish(s *discordgo.Session, i *discordgo.InteractionCreate
 	time.AfterFunc(15*time.Minute, func() { b.publishing.Delete(i.Message.ID) })
 	// Keep the original answer private, but remove its button after publishing.
 	empty := []discordgo.MessageComponent{}
-	if _, err := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Components: &empty}); err != nil {
+	if _, err := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Components: &empty}, requestOption); err != nil {
 		b.logger.Error("remove Discord publish button", slog.String("error", err.Error()))
 	}
 }

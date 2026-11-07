@@ -1,6 +1,7 @@
 package chroniclebot
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
@@ -42,6 +43,8 @@ func (b *Bot) RegisterCommands(commands []Command) error {
 	}
 	b.mu.Unlock()
 
+	requestOption := discordRequestOption(context.Background(), "command_registration")
+
 	// Register commands with Discord
 	for _, cmd := range commands {
 		guildID := b.config.GuildID
@@ -52,6 +55,7 @@ func (b *Bot) RegisterCommands(commands []Command) error {
 			appID,
 			guildID,
 			cmd.Definition,
+			requestOption,
 		)
 		if err != nil {
 			return fmt.Errorf("register command %s: %w", cmd.Definition.Name, err)
@@ -75,7 +79,7 @@ func (b *Bot) RegisterCommands(commands []Command) error {
 	if b.config.GuildID == "" {
 		return nil
 	}
-	existing, err := b.session.ApplicationCommands(appID, b.config.GuildID)
+	existing, err := b.session.ApplicationCommands(appID, b.config.GuildID, requestOption)
 	if err != nil {
 		b.logger.Warn("failed to list existing commands for cleanup",
 			slog.String("error", err.Error()),
@@ -83,7 +87,7 @@ func (b *Bot) RegisterCommands(commands []Command) error {
 	} else {
 		for _, cmd := range existing {
 			if !registeredNames[cmd.Name] {
-				if err := b.session.ApplicationCommandDelete(appID, b.config.GuildID, cmd.ID); err != nil {
+				if err := b.session.ApplicationCommandDelete(appID, b.config.GuildID, cmd.ID, requestOption); err != nil {
 					b.logger.Error("failed to delete stale command",
 						slog.String("name", cmd.Name),
 						slog.String("error", err.Error()),
@@ -107,7 +111,7 @@ func RespondWithMessage(s *discordgo.Session, i *discordgo.InteractionCreate, co
 		Data: &discordgo.InteractionResponseData{
 			Content: content,
 		},
-	})
+	}, discordRequestOption(context.Background(), "interaction_command"))
 }
 
 // RespondWithEmbed sends an embed response to an interaction.
@@ -117,7 +121,7 @@ func RespondWithEmbed(s *discordgo.Session, i *discordgo.InteractionCreate, embe
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{embed},
 		},
-	})
+	}, discordRequestOption(context.Background(), "interaction_command"))
 }
 
 // RespondEphemeral sends a message only visible to the user who invoked the command.
@@ -128,7 +132,7 @@ func RespondEphemeral(s *discordgo.Session, i *discordgo.InteractionCreate, cont
 			Content: content,
 			Flags:   discordgo.MessageFlagsEphemeral,
 		},
-	})
+	}, discordRequestOption(context.Background(), "interaction_command"))
 }
 
 // DeferResponse sends a "thinking..." response for commands that take time.
@@ -136,13 +140,13 @@ func RespondEphemeral(s *discordgo.Session, i *discordgo.InteractionCreate, cont
 func DeferResponse(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
-	})
+	}, discordRequestOption(context.Background(), "interaction_command"))
 }
 
 // FollowupMessage sends a follow-up message after DeferResponse.
 func FollowupMessage(s *discordgo.Session, i *discordgo.InteractionCreate, content string) error {
 	_, err := s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 		Content: content,
-	})
+	}, discordRequestOption(context.Background(), "interaction_command"))
 	return err
 }
