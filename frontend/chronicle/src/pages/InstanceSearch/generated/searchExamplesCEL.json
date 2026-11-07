@@ -1,0 +1,803 @@
+[
+  {
+    "id": "18_small_group_mc_or_ony",
+    "text": "instance.name in [\"Molten Core\", \"Onyxia's Lair\"]\n&& instance.player_count <= 30",
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "in",
+          "value": [
+            "Molten Core",
+            "Onyxia's Lair"
+          ]
+        },
+        {
+          "field": "instance.player_count",
+          "op": "<=",
+          "value": 30
+        }
+      ]
+    }
+  },
+  {
+    "id": "26_partial_zone_and_guild_name",
+    "text": "instance.name.contains(\"molten\")\n&& instance.guild.startsWith(\"alp\")",
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "contains",
+          "value": "molten"
+        },
+        {
+          "field": "instance.guild",
+          "op": "starts_with",
+          "value": "alp"
+        }
+      ]
+    }
+  },
+  {
+    "id": "02_rag_kill_without_wipes",
+    "text": "encounters.exists(e, e.name == \"Ragnaros\" && e.killed == true)\n&& !(encounters.exists(e, e.name == \"Ragnaros\" && e.outcome == \"wipe\"))",
+    "where": {
+      "and": [
+        {
+          "any_encounter": {
+            "and": [
+              {
+                "field": "encounter.name",
+                "op": "=",
+                "value": "Ragnaros"
+              },
+              {
+                "field": "encounter.killed",
+                "op": "=",
+                "value": true
+              }
+            ]
+          }
+        },
+        {
+          "not": {
+            "any_encounter": {
+              "and": [
+                {
+                  "field": "encounter.name",
+                  "op": "=",
+                  "value": "Ragnaros"
+                },
+                {
+                  "field": "encounter.outcome",
+                  "op": "=",
+                  "value": "wipe"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "03_nefarian_progression",
+    "text": "encounters.filter(e, e.name == \"Nefarian\" && e.outcome == \"wipe\").size() >= 5",
+    "where": {
+      "count_encounters": {
+        "where": {
+          "and": [
+            {
+              "field": "encounter.name",
+              "op": "=",
+              "value": "Nefarian"
+            },
+            {
+              "field": "encounter.outcome",
+              "op": "=",
+              "value": "wipe"
+            }
+          ]
+        },
+        "op": ">=",
+        "value": 5
+      }
+    }
+  },
+  {
+    "id": "16_deathless_ragnaros",
+    "text": "instance.kill_time_ms({\"bosses\": [\"Ragnaros\"]}) > 0\n&& !(players.exists(p, p.deaths({\"bosses\": [\"Ragnaros\"]}) >= 1))",
+    "where": {
+      "and": [
+        {
+          "field": "instance.kill_time_ms",
+          "op": ">",
+          "value": 0,
+          "bosses": [
+            "Ragnaros"
+          ]
+        },
+        {
+          "not": {
+            "any_player": {
+              "field": "player.deaths",
+              "op": ">=",
+              "value": 1,
+              "bosses": [
+                "Ragnaros"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "19_naxx_partial_progress",
+    "text": "instance.name == \"Naxxramas\"\n&& instance.bosses_killed >= 5\n&& instance.bosses_killed <= 10",
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "=",
+          "value": "Naxxramas"
+        },
+        {
+          "field": "instance.bosses_killed",
+          "op": ">=",
+          "value": 5
+        },
+        {
+          "field": "instance.bosses_killed",
+          "op": "<=",
+          "value": 10
+        }
+      ]
+    }
+  },
+  {
+    "id": "04_top_realm_clear_parse",
+    "text": "instance.clear_parse({\"parse_scope\": \"realm\"}) >= 95",
+    "where": {
+      "field": "instance.clear_parse",
+      "op": ">=",
+      "value": 95,
+      "parse_scope": "realm"
+    }
+  },
+  {
+    "id": "05_kill_parse_each_boss",
+    "text": "instance.kill_time_parse({\"bosses\": [\"Ragnaros\", \"Majordomo Executus\"], \"match\": \"each\"}) >= 90",
+    "where": {
+      "field": "instance.kill_time_parse",
+      "op": ">=",
+      "value": 90,
+      "bosses": [
+        "Ragnaros",
+        "Majordomo Executus"
+      ],
+      "match": "each"
+    }
+  },
+  {
+    "id": "06_guild_best_kill_any_boss",
+    "text": "instance.kill_time_parse({\"parse_scope\": \"guild\"}) >= 99",
+    "where": {
+      "field": "instance.kill_time_parse",
+      "op": ">=",
+      "value": 99,
+      "parse_scope": "guild"
+    }
+  },
+  {
+    "id": "07_tight_clear_low_idle",
+    "text": "instance.idle_time_ms < 300000\n&& instance.trash_time_ms < 1200000",
+    "where": {
+      "and": [
+        {
+          "field": "instance.idle_time_ms",
+          "op": "<",
+          "value": 300000
+        },
+        {
+          "field": "instance.trash_time_ms",
+          "op": "<",
+          "value": 1200000
+        }
+      ]
+    }
+  },
+  {
+    "id": "08_bwl_short_boss_time",
+    "text": "instance.name == \"Blackwing Lair\"\n&& instance.boss_time_ms <= 900000",
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "=",
+          "value": "Blackwing Lair"
+        },
+        {
+          "field": "instance.boss_time_ms",
+          "op": "<=",
+          "value": 900000
+        }
+      ]
+    }
+  },
+  {
+    "id": "17_fast_ragnaros_kill",
+    "text": "instance.kill_time_ms({\"bosses\": [\"Ragnaros\"]}) <= 120000",
+    "where": {
+      "field": "instance.kill_time_ms",
+      "op": "<=",
+      "value": 120000,
+      "bosses": [
+        "Ragnaros"
+      ]
+    }
+  },
+  {
+    "id": "29_october_mc_clears_60_to_75_min",
+    "text": "instance.name == \"Molten Core\"\n&& instance.started_at.between(timestamp(\"2026-10-01T00:00:00Z\"), timestamp(\"2026-10-31T23:59:59Z\"))\n&& instance.clear_time_ms.between(3600000, 4500000)",
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "=",
+          "value": "Molten Core"
+        },
+        {
+          "field": "instance.started_at",
+          "op": "between",
+          "value": [
+            "2026-10-01T00:00:00Z",
+            "2026-10-31T23:59:59Z"
+          ]
+        },
+        {
+          "field": "instance.clear_time_ms",
+          "op": "between",
+          "value": [
+            3600000,
+            4500000
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "09_three_or_more_priests",
+    "text": "players.filter(p, p.class == \"PRIEST\").size() >= 3",
+    "where": {
+      "count_players": {
+        "where": {
+          "field": "player.class",
+          "op": "=",
+          "value": "PRIEST"
+        },
+        "op": ">=",
+        "value": 3
+      }
+    }
+  },
+  {
+    "id": "10_two_holy_paladins",
+    "text": "players.filter(p, p.class == \"PALADIN\" && p.spec == \"Holy\").size() >= 2",
+    "where": {
+      "count_players": {
+        "where": {
+          "and": [
+            {
+              "field": "player.class",
+              "op": "=",
+              "value": "PALADIN"
+            },
+            {
+              "field": "player.spec",
+              "op": "=",
+              "value": "Holy"
+            }
+          ]
+        },
+        "op": ">=",
+        "value": 2
+      }
+    }
+  },
+  {
+    "id": "11_druid_bear_and_cat",
+    "text": "players.exists(p, p.class == \"DRUID\" && p.sub_spec == \"Bear\" && p.sub_spec == \"Cat\")",
+    "where": {
+      "any_player": {
+        "and": [
+          {
+            "field": "player.class",
+            "op": "=",
+            "value": "DRUID"
+          },
+          {
+            "field": "player.sub_spec",
+            "op": "=",
+            "value": "Bear"
+          },
+          {
+            "field": "player.sub_spec",
+            "op": "=",
+            "value": "Cat"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "15_guild_core_in_pug",
+    "text": "players.filter(p, p.guild == \"Alpha\").size() >= 5\n&& !(instance.guild == \"Alpha\")",
+    "where": {
+      "and": [
+        {
+          "count_players": {
+            "where": {
+              "field": "player.guild",
+              "op": "=",
+              "value": "Alpha"
+            },
+            "op": ">=",
+            "value": 5
+          }
+        },
+        {
+          "not": {
+            "field": "instance.guild",
+            "op": "=",
+            "value": "Alpha"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "20_geared_tanks",
+    "text": "players.filter(p, p.role == \"tank\" && p.avg_ilvl >= 70).size() >= 2",
+    "where": {
+      "count_players": {
+        "where": {
+          "and": [
+            {
+              "field": "player.role",
+              "op": "=",
+              "value": "tank"
+            },
+            {
+              "field": "player.avg_ilvl",
+              "op": ">=",
+              "value": 70
+            }
+          ]
+        },
+        "op": ">=",
+        "value": 2
+      }
+    }
+  },
+  {
+    "id": "25_bear_trash_cat_bosses",
+    "text": "players.exists(p, p.sub_spec({\"on\": \"trash\"}) == \"Bear\" && p.sub_spec({\"on\": \"bosses\"}) == \"Cat\" && !(p.sub_spec({\"on\": \"bosses\"}) == \"Bear\"))",
+    "where": {
+      "any_player": {
+        "and": [
+          {
+            "field": "player.sub_spec",
+            "op": "=",
+            "value": "Bear",
+            "on": "trash"
+          },
+          {
+            "field": "player.sub_spec",
+            "op": "=",
+            "value": "Cat",
+            "on": "bosses"
+          },
+          {
+            "not": {
+              "field": "player.sub_spec",
+              "op": "=",
+              "value": "Bear",
+              "on": "bosses"
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "12_player_rag_dps_parse",
+    "text": "players.exists(p, p.name == \"Thrall\" && p.parse({\"bosses\": [\"Ragnaros\"], \"metric\": \"dps\"}) >= 95)",
+    "where": {
+      "any_player": {
+        "and": [
+          {
+            "field": "player.name",
+            "op": "=",
+            "value": "Thrall"
+          },
+          {
+            "field": "player.parse",
+            "op": ">=",
+            "value": 95,
+            "bosses": [
+              "Ragnaros"
+            ],
+            "metric": "dps"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "13_healer_parse_each_boss",
+    "text": "players.exists(p, p.parse({\"bosses\": [\"Ragnaros\", \"Golemagg the Incinerator\"], \"match\": \"each\", \"metric\": \"hps\"}) >= 90)",
+    "where": {
+      "any_player": {
+        "field": "player.parse",
+        "op": ">=",
+        "value": 90,
+        "bosses": [
+          "Ragnaros",
+          "Golemagg the Incinerator"
+        ],
+        "match": "each",
+        "metric": "hps"
+      }
+    }
+  },
+  {
+    "id": "24_full_telemetry_rag_kill",
+    "text": "\"unit-position\" in instance.capabilities\n&& \"unit-resources\" in instance.capabilities\n&& encounters.exists(e, e.name == \"Ragnaros\" && e.killed == true)",
+    "where": {
+      "and": [
+        {
+          "field": "instance.capability",
+          "op": "=",
+          "value": "unit-position"
+        },
+        {
+          "field": "instance.capability",
+          "op": "=",
+          "value": "unit-resources"
+        },
+        {
+          "any_encounter": {
+            "and": [
+              {
+                "field": "encounter.name",
+                "op": "=",
+                "value": "Ragnaros"
+              },
+              {
+                "field": "encounter.killed",
+                "op": "=",
+                "value": true
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "23_complex_speed_comp",
+    "text": "(instance.kill_time_parse({\"bosses\": [\"Ragnaros\", \"Majordomo Executus\"], \"match\": \"each\"}) >= 90 || instance.clear_parse >= 95)\n&& players.filter(p, p.class == \"WARRIOR\" && p.role == \"tank\").size() >= 2\n&& !(players.exists(p, p.deaths >= 3))",
+    "where": {
+      "and": [
+        {
+          "or": [
+            {
+              "field": "instance.kill_time_parse",
+              "op": ">=",
+              "value": 90,
+              "bosses": [
+                "Ragnaros",
+                "Majordomo Executus"
+              ],
+              "match": "each"
+            },
+            {
+              "field": "instance.clear_parse",
+              "op": ">=",
+              "value": 95
+            }
+          ]
+        },
+        {
+          "count_players": {
+            "where": {
+              "and": [
+                {
+                  "field": "player.class",
+                  "op": "=",
+                  "value": "WARRIOR"
+                },
+                {
+                  "field": "player.role",
+                  "op": "=",
+                  "value": "tank"
+                }
+              ]
+            },
+            "op": ">=",
+            "value": 2
+          }
+        },
+        {
+          "not": {
+            "any_player": {
+              "field": "player.deaths",
+              "op": ">=",
+              "value": 3
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "27_gnome_warrior_bwl_deathless_vod",
+    "text": "instance.name == \"Blackwing Lair\"\n&& instance.clear_time_ms <= 4500000\n&& instance.idle_time_ms < 480000\n&& instance.wipes == 0\n&& instance.has_video == true\n&& players.exists(p, p.race == \"Gnome\" && p.class == \"WARRIOR\" && p.role({\"bosses\": [\"Vaelastrasz the Corrupt\", \"Nefarian\"], \"match\": \"each\"}) == \"tank\" && !(p.deaths({\"on\": \"bosses\"}) >= 1))\n&& players.filter(p, p.class == \"PRIEST\" && p.hps({\"bosses\": [\"Nefarian\"]}) >= 800).size() >= 3\n&& encounters.exists(e, e.name == \"Vaelastrasz the Corrupt\" && e.killed == true && e.duration_ms < 60000)\n&& encounters.filter(e, e.name == \"Chromaggus\").size() <= 1",
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "=",
+          "value": "Blackwing Lair"
+        },
+        {
+          "field": "instance.clear_time_ms",
+          "op": "<=",
+          "value": 4500000
+        },
+        {
+          "field": "instance.idle_time_ms",
+          "op": "<",
+          "value": 480000
+        },
+        {
+          "field": "instance.wipes",
+          "op": "=",
+          "value": 0
+        },
+        {
+          "field": "instance.has_video",
+          "op": "=",
+          "value": true
+        },
+        {
+          "any_player": {
+            "and": [
+              {
+                "field": "player.race",
+                "op": "=",
+                "value": "Gnome"
+              },
+              {
+                "field": "player.class",
+                "op": "=",
+                "value": "WARRIOR"
+              },
+              {
+                "field": "player.role",
+                "op": "=",
+                "value": "tank",
+                "bosses": [
+                  "Vaelastrasz the Corrupt",
+                  "Nefarian"
+                ],
+                "match": "each"
+              },
+              {
+                "not": {
+                  "field": "player.deaths",
+                  "op": ">=",
+                  "value": 1,
+                  "on": "bosses"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "count_players": {
+            "where": {
+              "and": [
+                {
+                  "field": "player.class",
+                  "op": "=",
+                  "value": "PRIEST"
+                },
+                {
+                  "field": "player.hps",
+                  "op": ">=",
+                  "value": 800,
+                  "bosses": [
+                    "Nefarian"
+                  ]
+                }
+              ]
+            },
+            "op": ">=",
+            "value": 3
+          }
+        },
+        {
+          "any_encounter": {
+            "and": [
+              {
+                "field": "encounter.name",
+                "op": "=",
+                "value": "Vaelastrasz the Corrupt"
+              },
+              {
+                "field": "encounter.killed",
+                "op": "=",
+                "value": true
+              },
+              {
+                "field": "encounter.duration_ms",
+                "op": "<",
+                "value": 60000
+              }
+            ]
+          }
+        },
+        {
+          "count_encounters": {
+            "where": {
+              "field": "encounter.name",
+              "op": "=",
+              "value": "Chromaggus"
+            },
+            "op": "<=",
+            "value": 1
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "28_one_pull_rag_cat_shaman_carry",
+    "text": "instance.name.contains(\"molten\")\n&& \"unit-resources\" in instance.capabilities\n&& \"unit-position\" in instance.capabilities\n&& instance.kill_time_ms({\"bosses\": [\"Ragnaros\"]}) < 120000\n&& instance.kill_time_parse({\"bosses\": [\"Ragnaros\"], \"parse_scope\": \"realm\"}) >= 90\n&& !(encounters.exists(e, e.name == \"Ragnaros\" && e.outcome in [\"wipe\", \"reset\"]))\n&& players.exists(p, p.class == \"DRUID\" && p.sub_spec({\"on\": \"trash\"}) == \"Bear\" && p.sub_spec({\"bosses\": [\"Ragnaros\"]}) == \"Cat\" && p.parse({\"bosses\": [\"Ragnaros\"], \"metric\": \"dps\"}) >= 95)\n&& players.filter(p, p.class == \"SHAMAN\" && p.hps({\"bosses\": [\"Ragnaros\"]}) >= 600).size() >= 2\n&& !(players.exists(p, p.class == \"WARLOCK\" && p.deaths({\"on\": \"bosses\"}) >= 1))",
+    "where": {
+      "and": [
+        {
+          "field": "instance.name",
+          "op": "contains",
+          "value": "molten"
+        },
+        {
+          "field": "instance.capability",
+          "op": "=",
+          "value": "unit-resources"
+        },
+        {
+          "field": "instance.capability",
+          "op": "=",
+          "value": "unit-position"
+        },
+        {
+          "field": "instance.kill_time_ms",
+          "op": "<",
+          "value": 120000,
+          "bosses": [
+            "Ragnaros"
+          ]
+        },
+        {
+          "field": "instance.kill_time_parse",
+          "op": ">=",
+          "value": 90,
+          "bosses": [
+            "Ragnaros"
+          ],
+          "parse_scope": "realm"
+        },
+        {
+          "not": {
+            "any_encounter": {
+              "and": [
+                {
+                  "field": "encounter.name",
+                  "op": "=",
+                  "value": "Ragnaros"
+                },
+                {
+                  "field": "encounter.outcome",
+                  "op": "in",
+                  "value": [
+                    "wipe",
+                    "reset"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "any_player": {
+            "and": [
+              {
+                "field": "player.class",
+                "op": "=",
+                "value": "DRUID"
+              },
+              {
+                "field": "player.sub_spec",
+                "op": "=",
+                "value": "Bear",
+                "on": "trash"
+              },
+              {
+                "field": "player.sub_spec",
+                "op": "=",
+                "value": "Cat",
+                "bosses": [
+                  "Ragnaros"
+                ]
+              },
+              {
+                "field": "player.parse",
+                "op": ">=",
+                "value": 95,
+                "bosses": [
+                  "Ragnaros"
+                ],
+                "metric": "dps"
+              }
+            ]
+          }
+        },
+        {
+          "count_players": {
+            "where": {
+              "and": [
+                {
+                  "field": "player.class",
+                  "op": "=",
+                  "value": "SHAMAN"
+                },
+                {
+                  "field": "player.hps",
+                  "op": ">=",
+                  "value": 600,
+                  "bosses": [
+                    "Ragnaros"
+                  ]
+                }
+              ]
+            },
+            "op": ">=",
+            "value": 2
+          }
+        },
+        {
+          "not": {
+            "any_player": {
+              "and": [
+                {
+                  "field": "player.class",
+                  "op": "=",
+                  "value": "WARLOCK"
+                },
+                {
+                  "field": "player.deaths",
+                  "op": ">=",
+                  "value": 1,
+                  "on": "bosses"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+]
