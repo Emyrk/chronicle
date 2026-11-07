@@ -207,6 +207,33 @@ func TestSonOfFlame_FactoryMatchesCorrectEntry(t *testing.T) {
 	require.Nil(t, created)
 }
 
+func TestSonOfFlameTimeoutIsDeathWhileRagnarosAlive(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	player := guid.GUID(0x1)
+	ragnaros := creatureGUID(ragnarosEntry, 0x1)
+	son := creatureGUID(sonOfFlame, 0x2)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, ragnaros))
+	require.NoError(t, err)
+	_, err = chars.Process(damage(base.Add(time.Second), player, son))
+	require.NoError(t, err)
+	_, err = chars.Process(damage(base.Add(30*time.Second), player, ragnaros))
+	require.NoError(t, err)
+	_, err = chars.Process(messages.TimedOut(base.Add(62 * time.Second)))
+	require.NoError(t, err)
+
+	sonCharacter, ok := chars.Get(son)
+	require.True(t, ok)
+	require.False(t, sonCharacter.IsActive())
+	require.Len(t, sonCharacter.Periods(), 1)
+	require.Equal(t, period.EndStateSlain, sonCharacter.Periods()[0].EndState)
+	require.Equal(t, "Timeout: inactivity", sonCharacter.Periods()[0].End.Reason)
+}
+
 func TestCoreRagerTimeoutIsDeathWhileGolemaggAlive(t *testing.T) {
 	t.Parallel()
 

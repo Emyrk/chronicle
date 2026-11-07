@@ -56,8 +56,9 @@ func NewSonOfTheFlameCharacter(id guid.GUID, all *characters.Characters) (charac
 	}
 
 	return &sonOfTheFlameCharacter{
-		Common: characters.NewCommonCharacter(id, all),
-		all:    all,
+		Common: characters.NewCommonCharacter(id, all).
+			WithTimeoutAsDeathIf(characters.IfEntryAlive(ragnarosEntry)),
+		all: all,
 	}, true
 }
 
