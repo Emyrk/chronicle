@@ -4,13 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"math"
-	"net"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
@@ -26,8 +22,8 @@ import (
 )
 
 const (
-	InstanceSearchCostHeader        = "Chronicle-Search-Cost"
-	InstanceSearchRuntimeCostHeader = "Chronicle-Search-Runtime-Cost"
+	InstanceSearchCostHeader        = serviceinstancesearch.CostHeader
+	InstanceSearchRuntimeCostHeader = serviceinstancesearch.RuntimeCostHeader
 )
 const instanceSearchMaxBody = 64 << 10
 
@@ -46,76 +42,11 @@ func newInstanceSearchUserLimitResolver(zed *authz.Authz) serviceinstancesearch.
 	}
 }
 func instanceSearchCaller(r *http.Request) serviceinstancesearch.Caller {
-	c := serviceinstancesearch.Caller{TenantID: servicetenant.TenantIDFromContext(r.Context()), IP: instanceSearchClientIP(r)}
+	c := serviceinstancesearch.Caller{TenantID: servicetenant.TenantIDFromContext(r.Context()), IP: serviceinstancesearch.ClientIP(r)}
 	if claims, ok := chronauth.AuthenticatedClaims(r.Context()); ok {
 		c.UserID = claims.Subject
 	}
 	return c
-}
-func writeSearchResult(w http.ResponseWriter, r *http.Request, result serviceinstancesearch.Result, explain bool) {
-	ctx := r.Context()
-	if result.Status.Limit != 0 {
-		ratelimit.SetHeaders(w, result.Status)
-	}
-	if result.Cost != 0 {
-		w.Header().Set(InstanceSearchCostHeader, strconv.Itoa(result.Cost))
-	}
-	if result.RuntimeCost != 0 {
-		w.Header().Set(InstanceSearchRuntimeCostHeader, strconv.Itoa(result.RuntimeCost))
-	}
-	if result.Err == nil {
-		return
-	}
-	switch {
-	case errors.Is(result.Err, serviceinstancesearch.ErrInvalid):
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid search.", Detail: strings.TrimPrefix(result.Err.Error(), serviceinstancesearch.ErrInvalid.Error()+"\n")})
-	case errors.Is(result.Err, serviceinstancesearch.ErrSupporterRequired):
-		tierName := strings.ToUpper(result.RequiredTier[:1]) + result.RequiredTier[1:]
-		article := "a"
-		if result.RequiredTier == "honored" {
-			article = "an"
-		}
-		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
-			Message:      fmt.Sprintf("Sorting by this property is %s %s supporter perk.", article, tierName),
-			CallToAction: fmt.Sprintf("Become %s %s supporter to use this sort order.", article, tierName),
-			Link:         "/supporter",
-			LinkText:     "View supporter perks",
-		})
-	case errors.Is(result.Err, serviceinstancesearch.ErrLoginRequired):
-		response := chroniclesdk.Response{Message: "Log in to use advanced search.", Detail: strings.TrimPrefix(result.Err.Error(), serviceinstancesearch.ErrLoginRequired.Error()+"\n")}
-		if !explain {
-			response.CallToAction = "Logged-in users can search by players, specs, parses, kill times and more."
-		}
-		httpapi.Write(ctx, w, http.StatusForbidden, response)
-	case errors.Is(result.Err, serviceinstancesearch.ErrRateLimited), errors.Is(result.Err, serviceinstancesearch.ErrTooComplex):
-		retrySeconds := int64(math.Ceil(result.RetryAfter.Seconds()))
-		if retrySeconds < 1 || errors.Is(result.Err, serviceinstancesearch.ErrTooComplex) {
-			retrySeconds = 1
-		}
-		w.Header().Set("Retry-After", strconv.FormatInt(retrySeconds, 10))
-		msg := "You are searching too quickly. Try again shortly."
-		if errors.Is(result.Err, serviceinstancesearch.ErrTooComplex) {
-			msg = "This search is too complex. Remove some filters and try again."
-		}
-		httpapi.Write(ctx, w, http.StatusTooManyRequests, chroniclesdk.Response{Message: msg})
-	case errors.Is(result.Err, serviceinstancesearch.ErrBusy):
-		w.Header().Set("Retry-After", "1")
-		httpapi.Write(ctx, w, http.StatusServiceUnavailable, chroniclesdk.Response{Message: "Search is busy. Try again in a moment."})
-	case errors.Is(result.Err, instancesearch.ErrNotFound):
-		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "Run not found."})
-	case errors.Is(result.Err, instancesearch.ErrTimeout):
-		response := chroniclesdk.Response{Message: "This search took too long.", CallToAction: "Narrow it with a zone, realm or date range."}
-		if explain {
-			response = chroniclesdk.Response{Message: "Explaining this run took too long."}
-		}
-		httpapi.Write(ctx, w, http.StatusUnprocessableEntity, response)
-	default:
-		msg := "Search failed."
-		if explain {
-			msg = "Explain failed."
-		}
-		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{Message: msg})
-	}
 }
 
 // invalidSearchBody resolves the caller before rejecting malformed JSON, as
@@ -142,10 +73,10 @@ func (api *API) InstanceSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	page, result := api.instanceSearch.Search(r.Context(), c, q)
 	if result.Err != nil {
-		writeSearchResult(w, r, result, false)
+		serviceinstancesearch.WriteResult(w, r, result, false)
 		return
 	}
-	writeSearchResult(w, r, result, false)
+	serviceinstancesearch.WriteResult(w, r, result, false)
 	httpapi.Write(r.Context(), w, http.StatusOK, page)
 }
 func (api *API) InstanceSearchExplain(w http.ResponseWriter, r *http.Request) {
@@ -157,7 +88,7 @@ func (api *API) InstanceSearchExplain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ex, result := api.instanceSearch.Explain(r.Context(), c, chroniclesdk.InstanceSearchQuery{Where: req.Query.Where}, req.InstanceID)
-	writeSearchResult(w, r, result, true)
+	serviceinstancesearch.WriteResult(w, r, result, true)
 	if result.Err == nil {
 		httpapi.Write(r.Context(), w, http.StatusOK, ex)
 	}
@@ -174,15 +105,4 @@ func (api *API) InstanceSearchLimit(w http.ResponseWriter, r *http.Request) {
 }
 func (api *API) InstanceSearchFields(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusOK, instancesearch.Describe())
-}
-func instanceSearchClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		first, _, _ := strings.Cut(xff, ",")
-		return strings.TrimSpace(first)
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
 }

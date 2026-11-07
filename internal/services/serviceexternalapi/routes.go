@@ -231,6 +231,8 @@ func (s *Service) registerRoutes() {
 		}),
 	}, s.listSpeedrunLeaderboard)
 
+	s.registerSearchRoutes()
+
 	s.register(http.MethodGet, "/openapi.json", OpenAPIOperation{
 		Tags:        []string{"General"},
 		Summary:     "Get the OpenAPI document",

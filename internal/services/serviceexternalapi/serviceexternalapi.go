@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
+	"github.com/Emyrk/chronicle/internal/services/serviceinstancesearch"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/coder/serpent"
 	"github.com/go-chi/chi/v5"
@@ -59,6 +60,9 @@ type Service struct {
 	router      chi.Router
 	rateLimiter *externalIPLimiter
 	openapi     OpenAPIDocument
+	// search is the replica's shared instance-search service; it owns the
+	// concurrency cap and search rate buckets.
+	search *serviceinstancesearch.Service
 }
 
 func New(broker *services.Services) *Service {
@@ -71,11 +75,13 @@ func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
 		servicedbstore.OnDatabaseStore(),
+		serviceinstancesearch.OnSearch(),
 	}
 }
 
 func (s *Service) Start(_ context.Context) error {
 	s.db = servicedbstore.DatabaseStore(s.broker)
+	s.search = serviceinstancesearch.SearchService(s.broker)
 	s.setupRoutes()
 	servicelogger.Logger(s.broker).Info("external API service started")
 	return nil
