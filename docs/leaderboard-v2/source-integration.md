@@ -29,7 +29,7 @@ Group-mutating actions lock their existing group row before D1, matching raw/rep
 
 ## Metric selection and canonical delivery caveats
 
-The maintained projector currently emits both finite nonnegative DPS and HPS observations and one metric-free Renown fact per player/boss. An exclusive DPS-or-HPS selection rule has not been approved; persisted role values are `dps`, `heal`, and `tank`, but this change does not invent a policy from them. Any later selection rule must change shared projection so D1 and direct writers agree.
+The shared projector selects the greatest positive finite raw DPS/HPS candidate per player/boss fight, with DPS winning positive ties. Invalid candidates are excluded before comparison and cannot poison a valid counterpart. This is not role classification: both rates share the source ranking-duration denominator, and roles/class/spec do not choose the metric. No eligible positive candidate (including both zero) means neither player performance evidence nor player Renown kill credit. Eligible players receive one metric-free Renown fact per boss; guild credit is independent. Direct writers and D1 use this same policy, while generic storage/calculators continue to support both metrics independently.
 
 Canonical-refresh jobs now use River `InsertTx` in the same source/action
 transaction. Enqueue failure rolls back source changes and their evidence/D1/D2

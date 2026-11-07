@@ -1064,7 +1064,7 @@ func TestCanonicalRefreshPublishesLeaderboardEvidenceAtomically(t *testing.T) {
 	}
 	rows, err := read.ListLeaderboardPlayerObservations(ctx, tenant)
 	require.NoError(t, err)
-	require.Len(t, rows, 2)
+	require.Len(t, rows, 1)
 	dirty, err := read.ListLeaderboardDirtyRuns(ctx, tenant)
 	require.NoError(t, err)
 	require.Empty(t, dirty)
@@ -1088,7 +1088,7 @@ func TestCanonicalRefreshPublishesLeaderboardEvidenceAtomically(t *testing.T) {
 	require.ErrorIs(t, err, rollback)
 	rows, err = read.ListLeaderboardPlayerObservations(ctx, tenant)
 	require.NoError(t, err)
-	require.Len(t, rows, 2)
+	require.Len(t, rows, 1)
 	var after int64
 	require.NoError(t, conn.QueryRow(ctx, `SELECT sum(revision) FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id=$1`, tenant).Scan(&after))
 	require.Equal(t, revision, after)

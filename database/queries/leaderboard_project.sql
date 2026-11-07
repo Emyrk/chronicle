@@ -23,9 +23,16 @@ WITH source AS MATERIALIZED (
  JOIN log_instance_encounters e ON e.id=d.encounter_id AND e.instance_id=s.source_instance_id
   AND e.name=d.encounter_name AND e.boss AND e.kill_type='clean'
  WHERE btrim(d.player_guid)<>'' AND btrim(d.player_class)<>'' AND btrim(d.player_spec)<>''
-), player_metrics AS MATERIALIZED (
+), player_candidates AS MATERIALIZED (
  SELECT players.*, 'dps'::text AS metric,dps AS metric_value FROM players
  UNION ALL SELECT players.*, 'hps'::text AS metric,hps AS metric_value FROM players
+), eligible_player_metrics AS MATERIALIZED (
+ -- PostgreSQL orders NaN above Infinity: this excludes both before comparison.
+ SELECT * FROM player_candidates WHERE metric_value>0 AND metric_value<'Infinity'::double precision
+), player_metrics AS MATERIALIZED (
+ -- One raw metric per player/fight; positive ties favor DPS, not a role classification.
+ SELECT DISTINCT ON (ranking_id) * FROM eligible_player_metrics
+ ORDER BY ranking_id,metric_value DESC,metric ASC
 ), guild_source AS MATERIALIZED (
  SELECT s.* FROM source s JOIN guilds g ON g.id=s.guild_id AND g.realm_id=s.realm_id
 ), guild_times AS MATERIALIZED (
@@ -52,7 +59,7 @@ UNION ALL
  ORDER BY s.guild_id,s.clear_duration_ms,s.time_score_id)
 UNION ALL
 (SELECT DISTINCT ON (s.encounter_name,s.player_guid) 4::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
- FROM players s
+ FROM player_metrics s
  ORDER BY s.encounter_name,s.player_guid,s.encounter_id)
 UNION ALL
 (SELECT DISTINCT ON (e.name) 5::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, e.name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, e.id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms

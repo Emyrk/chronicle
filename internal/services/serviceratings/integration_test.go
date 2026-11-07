@@ -65,7 +65,7 @@ func TestDirectIntegrationOverlappingRepairAndDeletion(t *testing.T) {
 		return err
 	}, nil))
 	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_player_observations WHERE tenant_id=$1`, s.tenant).Scan(&count))
-	require.Equal(t, 2, count)
+	require.Equal(t, 1, count)
 	_, err = w.Drain(s.ctx, s.tenant)
 	require.NoError(t, err)
 	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_player_observations WHERE tenant_id=$1`, s.tenant).Scan(&count))
