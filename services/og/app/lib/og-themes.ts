@@ -42,6 +42,11 @@ export const OG_THEMES = [
     label: 'Boss parse',
     description: 'One player on one boss kill: the parse ring in its tier colour, DPS or HPS, kill time and rank; DPS and raid rank lead without a parse.',
   },
+  {
+    key: 'clear',
+    label: 'Clear time',
+    description: 'A qualified fast clear: the timer, realm rank or Top N%, the record it broke and per-boss splits.',
+  },
 ] as const;
 
 export type OgThemeOption = (typeof OG_THEMES)[number];

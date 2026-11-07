@@ -2,6 +2,7 @@ import type { OgThemeKey } from '@/app/lib/og-themes';
 import { brandTheme } from './brand';
 import { characterTheme } from './character';
 import { chronicleTheme } from './chronicle';
+import { clearTheme } from './clear';
 import { guildTheme } from './guild';
 import { modernTheme } from './modern';
 import { parseTheme } from './parse';
@@ -18,4 +19,5 @@ export const themes: Record<OgThemeKey, ThemeDefinition> = {
   guild: guildTheme,
   raid: raidTheme,
   parse: parseTheme,
+  clear: clearTheme,
 };
