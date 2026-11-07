@@ -1,10 +1,11 @@
 # Chronicle Grafana dashboards
 
-Chronicle includes three ready-to-import dashboards for its Prometheus metrics:
+Chronicle includes four ready-to-import dashboards for its Prometheus metrics:
 
 - `chronicle-operations.json` covers service health and background processing.
 - `chronicle-http-traffic.json` investigates HTTP request volume, rate, and latency by route template and method.
 - `chronicle-external-api.json` measures external developer API usage, call volume over time, endpoint popularity, request rate, and latency.
+- `chronicle-discord-http.json` attributes outbound Discord traffic, errors, rate limits, and latency to bounded logical sources.
 
 The operations dashboard includes rows for:
 
@@ -31,7 +32,7 @@ All dashboards target Grafana 10 or newer and use only built-in panels.
 4. Select the Prometheus datasource that scrapes Chronicle.
 5. Select the appropriate **Prometheus job** variable.
 
-The dashboard UIDs are `chronicle-operations`, `chronicle-http-traffic`, and `chronicle-external-api`. Importing a newer version with the same UID updates the corresponding existing dashboard.
+The dashboard UIDs are `chronicle-operations`, `chronicle-http-traffic`, `chronicle-external-api`, and `chronicle-discord-http`. Importing a newer version with the same UID updates the corresponding existing dashboard.
 
 ## File provisioning
 
@@ -41,6 +42,7 @@ Copy one or more dashboard JSON files into a directory visible to Grafana, for e
 /etc/grafana/provisioning/dashboards/chronicle/chronicle-operations.json
 /etc/grafana/provisioning/dashboards/chronicle/chronicle-http-traffic.json
 /etc/grafana/provisioning/dashboards/chronicle/chronicle-external-api.json
+/etc/grafana/provisioning/dashboards/chronicle/chronicle-discord-http.json
 ```
 
 Create a dashboard provider such as `/etc/grafana/provisioning/dashboards/chronicle.yml`:
@@ -72,6 +74,7 @@ services:
       - ./docs/grafana/chronicle-operations.json:/etc/grafana/provisioning/dashboards/chronicle/chronicle-operations.json:ro
       - ./docs/grafana/chronicle-http-traffic.json:/etc/grafana/provisioning/dashboards/chronicle/chronicle-http-traffic.json:ro
       - ./docs/grafana/chronicle-external-api.json:/etc/grafana/provisioning/dashboards/chronicle/chronicle-external-api.json:ro
+      - ./docs/grafana/chronicle-discord-http.json:/etc/grafana/provisioning/dashboards/chronicle/chronicle-discord-http.json:ro
       - ./deploy/grafana/chronicle.yml:/etc/grafana/provisioning/dashboards/chronicle.yml:ro
 ```
 
@@ -91,6 +94,12 @@ The current HTTP metrics do not include response status, client IP, user ID, or 
 
 The dashboard reports completed origin requests observed by Chronicle and labels each request with the tenant slug that received it (`root` for the primary site). CDN-served responses do not reach Chronicle and are not counted. The current metrics cannot identify individual callers or separate responses by status code.
 
+## Discord HTTP dashboard
+
+`chronicle-discord-http.json` shows every outbound request Chronicle makes to Discord, including discordgo retries and OAuth traffic. Use the `source`, `method`, and `status` variables to isolate a caller, then compare request volume, 429 responses, other errors, and latency.
+
+The `source` label is a bounded logical operation such as `gateway`, `membership_sync`, `raid_announcement`, or `oauth_token`. It never contains user, guild, channel, message, command, or job identifiers. Requests without an explicit source appear as `unattributed`, which makes new uninstrumented call sites visible without introducing unbounded cardinality.
+
 ## Variables
 
 | Variable | Purpose |
@@ -99,7 +108,9 @@ The dashboard reports completed origin requests observed by Chronicle and labels
 | `job` | One Prometheus scrape job, usually one Chronicle deployment or environment |
 | `instance` | Chronicle replicas used by process-local panels |
 | `tenant` | Root or tenant-slug activity for HTTP, UI, and authentication panels |
-| `method` | HTTP methods on the traffic dashboard |
+| `method` | HTTP methods on traffic and Discord dashboards |
+| `source` | Bounded logical callers on the Discord dashboard |
+| `status` | Discord HTTP status codes or the `error` transport outcome |
 | `queue` | River queues |
 | `route` | API route templates |
 | `cache` | In-process cache names |
