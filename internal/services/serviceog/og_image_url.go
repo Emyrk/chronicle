@@ -1,4 +1,4 @@
-package api
+package serviceog
 
 import (
 	"crypto/hmac"
@@ -21,29 +21,29 @@ const ogImageVersion = "1"
 // and ogImageVersion. "product" is the site flavor's product name; a caller's
 // "product" is kept only when that name is empty. Every value goes through
 // sanitizeOGParam before signing. params is not modified.
-func (api *API) ogImageURL(r *http.Request, template string, params url.Values) string {
-	if !api.ogServiceConfigured() {
+func (s *Service) ogImageURL(r *http.Request, template string, params url.Values) string {
+	if !s.ogServiceConfigured() {
 		return ""
 	}
-	return api.ogImageURLForProduct(r, template, seoProductName(api.resolvedSiteFlavor(r.Context())), params)
+	return s.ogImageURLForProduct(r, template, seoProductName(s.resolvedSiteFlavor(r.Context())), params)
 }
 
 // ogImageURLForProduct is ogImageURL with the product name already resolved.
-func (api *API) ogImageURLForProduct(r *http.Request, template, product string, params url.Values) string {
-	if api.Opts == nil || api.Opts.OGServiceURL == nil || api.Opts.OGSigningKey == "" {
+func (s *Service) ogImageURLForProduct(r *http.Request, template, product string, params url.Values) string {
+	if s.imageBaseURL == nil || s.signingKey == "" {
 		return ""
 	}
 	host := params.Get("host")
 	if host == "" {
 		host = ogHost(r)
 	}
-	return signedOGImageURL(api.Opts.OGServiceURL, api.Opts.OGSigningKey, template, host, product, params)
+	return signedOGImageURL(s.imageBaseURL, s.signingKey, template, host, product, params)
 }
 
 // ogServiceConfigured reports whether ogImageURL can sign URLs, so callers
 // can skip loading card data when it can't.
-func (api *API) ogServiceConfigured() bool {
-	return api.Opts != nil && api.Opts.OGServiceURL != nil && api.Opts.OGSigningKey != ""
+func (s *Service) ogServiceConfigured() bool {
+	return s.imageBaseURL != nil && s.signingKey != ""
 }
 
 func signedOGImageURL(base *url.URL, key, template, host, product string, params url.Values) string {

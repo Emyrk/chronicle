@@ -1,4 +1,4 @@
-package api
+package serviceog
 
 import (
 	"context"
@@ -265,13 +265,13 @@ func TestGuildOGResolver(t *testing.T) {
 
 	ogBase, err := url.Parse("https://og.example.com/")
 	require.NoError(t, err)
-	newAPI := func(db database.Store, configured bool) *API {
+	newAPI := func(db database.Store, configured bool) *Service {
 		opts := &Options{Zed: authz.NewDatabaseOnly(testutil.Logger(t), db)}
 		if configured {
 			opts.OGServiceURL = ogBase
 			opts.OGSigningKey = "k"
 		}
-		return &API{Opts: opts}
+		return New(*opts)
 	}
 	request := func(ctx context.Context) *http.Request {
 		r := httptest.NewRequest(http.MethodGet, "/g/"+guild.ID.String(), nil).WithContext(ctx)

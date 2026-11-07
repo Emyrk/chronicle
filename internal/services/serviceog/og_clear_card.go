@@ -1,4 +1,4 @@
-package api
+package serviceog
 
 import (
 	"context"
@@ -102,10 +102,10 @@ func clearCardParams(raid raidCard, sr clearCard) url.Values {
 // also in parallel. Everything shares clearCardTimeout, derived from r's
 // context (which carries the tenant for RLS). A failed or timed-out board
 // read only drops realm rank and delta: the card shows the "Top N%" pill.
-func (api *API) loadClearCard(r *http.Request, inst database.LogInstancesGuild, encounters []database.LogInstanceEncounter) (clearCard, bool) {
+func (s *Service) loadClearCard(r *http.Request, inst database.LogInstancesGuild, encounters []database.LogInstanceEncounter) (clearCard, bool) {
 	ctx, cancel := context.WithTimeout(r.Context(), clearCardTimeout)
 	defer cancel()
-	db := api.Opts.Zed
+	db := s.store
 
 	var (
 		wg          sync.WaitGroup
@@ -145,8 +145,8 @@ func (api *API) loadClearCard(r *http.Request, inst database.LogInstancesGuild, 
 		scoreOK = err == nil
 	})
 	wg.Go(func() {
-		if api.Chronicle != nil {
-			progression, _ = api.Chronicle.RegistryForFlavor(api.resolvedSiteFlavor(ctx)).ProgressionBosses(inst.Name)
+		if s.chronicle != nil {
+			progression, _ = s.chronicle.RegistryForFlavor(s.resolvedSiteFlavor(ctx)).ProgressionBosses(inst.Name)
 		}
 	})
 	wg.Wait()

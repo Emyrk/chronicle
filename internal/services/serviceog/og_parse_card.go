@@ -1,4 +1,4 @@
-package api
+package serviceog
 
 import (
 	"context"
@@ -147,10 +147,10 @@ func shareParseSelection(payload []byte, encounters []database.LogInstanceEncoun
 //
 // ok is false when the player has no ranking record for the kill (or the
 // lookup failed); the caller then falls back to the raid report card.
-func (api *API) loadParseCard(r *http.Request, inst database.LogInstancesGuild, player database.LogInstancePlayer, enc database.LogInstanceEncounter, base parseCard) (parseCard, bool) {
+func (s *Service) loadParseCard(r *http.Request, inst database.LogInstancesGuild, player database.LogInstancePlayer, enc database.LogInstanceEncounter, base parseCard) (parseCard, bool) {
 	ctx, cancel := context.WithTimeout(r.Context(), raidCardTimeout)
 	defer cancel()
-	db := api.Opts.Zed
+	db := s.store
 	playerGUID := player.UnitGuid.String()
 
 	// Each goroutine writes only its own variables; all are read after Wait.

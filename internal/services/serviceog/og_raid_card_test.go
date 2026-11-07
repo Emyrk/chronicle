@@ -1,4 +1,4 @@
-package api
+package serviceog
 
 import (
 	"context"
@@ -196,7 +196,7 @@ func TestLoadRaidCard(t *testing.T) {
 	t.Parallel()
 
 	db, _ := dbtestutil.NewDB(t)
-	api := &API{Opts: &Options{Zed: authz.NewDatabaseOnly(testutil.Logger(t), db)}}
+	api := New(Options{Zed: authz.NewDatabaseOnly(testutil.Logger(t), db)})
 	inst := database.LogInstancesGuild{ID: uuid.New(), Name: "Zul'Gurub"}
 	players := 20
 	base := raidCard{Raid: "Zul'Gurub", Players: &players}

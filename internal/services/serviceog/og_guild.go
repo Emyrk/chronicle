@@ -1,4 +1,4 @@
-package api
+package serviceog
 
 import (
 	"context"
@@ -321,7 +321,7 @@ const guildOGCardTimeout = 1500 * time.Millisecond
 // guildOG builds the Open Graph metadata for /g/{guildID}. The guild lookup
 // (title and description) gets 5s; the card's queries only run when the OG
 // service is configured, in parallel under guildOGCardTimeout.
-func (api *API) guildOG(r *http.Request, rawID string) *frontend.OGData {
+func (s *Service) guildOG(r *http.Request, rawID string) *frontend.OGData {
 	guildID, err := uuid.Parse(rawID)
 	if err != nil {
 		return nil
@@ -329,7 +329,7 @@ func (api *API) guildOG(r *http.Request, rawID string) *frontend.OGData {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	db := api.Opts.Zed
+	db := s.store
 	guild, err := db.GetGuildByID(ctx, guildID)
 	if err != nil {
 		return nil
@@ -341,7 +341,7 @@ func (api *API) guildOG(r *http.Request, rawID string) *frontend.OGData {
 		Description: fmt.Sprintf("%s guild on %s: raid progression, best clears and top parses on Chronicle.", guild.Name, guild.RealmName),
 		URL:         fmt.Sprintf("https://%s/g/%s", host, guild.ID),
 	}
-	if api.Opts.OGServiceURL == nil || api.Opts.OGSigningKey == "" {
+	if s.imageBaseURL == nil || s.signingKey == "" {
 		return og
 	}
 
@@ -393,10 +393,10 @@ func (api *API) guildOG(r *http.Request, rawID string) *frontend.OGData {
 	_ = g.Wait()
 
 	var raids map[string]guildOGRaid
-	if api.Chronicle != nil {
-		raids = guildOGRaids(api.Chronicle.RegistryForFlavor(api.resolvedSiteFlavor(ctx)).AllInstanceDetails())
+	if s.chronicle != nil {
+		raids = guildOGRaids(s.chronicle.RegistryForFlavor(s.resolvedSiteFlavor(ctx)).AllInstanceDetails())
 	}
-	if imageURL := api.ogImageURL(r, "guild", guildOGParams(host, data, raids)); imageURL != "" {
+	if imageURL := s.ogImageURL(r, "guild", guildOGParams(host, data, raids)); imageURL != "" {
 		og.ImageURL = imageURL
 	}
 	return og

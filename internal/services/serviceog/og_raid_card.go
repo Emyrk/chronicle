@@ -1,4 +1,4 @@
-package api
+package serviceog
 
 import (
 	"context"
@@ -113,10 +113,10 @@ const raidCardTimeout = 1500 * time.Millisecond
 // parallel under raidCardTimeout, derived from r's context (which also
 // carries the tenant). Each part is optional: when its query fails or times
 // out, that part is left off the card (boss progress falls back to the log).
-func (api *API) loadRaidCard(r *http.Request, inst database.LogInstancesGuild, encounters []database.LogInstanceEncounter, base raidCard) raidCard {
+func (s *Service) loadRaidCard(r *http.Request, inst database.LogInstancesGuild, encounters []database.LogInstanceEncounter, base raidCard) raidCard {
 	ctx, cancel := context.WithTimeout(r.Context(), raidCardTimeout)
 	defer cancel()
-	db := api.Opts.Zed
+	db := s.store
 	card := base
 
 	// Each goroutine writes only its own variables; all are read after Wait.
@@ -129,8 +129,8 @@ func (api *API) loadRaidCard(r *http.Request, inst database.LogInstancesGuild, e
 		recordsErr, avgErr error
 	)
 	wg.Go(func() {
-		if api.Chronicle != nil {
-			progression, bossCount = api.Chronicle.RegistryForFlavor(api.resolvedSiteFlavor(ctx)).ProgressionBosses(inst.Name)
+		if s.chronicle != nil {
+			progression, bossCount = s.chronicle.RegistryForFlavor(s.resolvedSiteFlavor(ctx)).ProgressionBosses(inst.Name)
 		}
 	})
 	wg.Go(func() {

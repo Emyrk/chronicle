@@ -1,4 +1,4 @@
-package api
+package serviceog
 
 import (
 	"context"
@@ -37,7 +37,7 @@ type characterCardStats struct {
 
 // fetchCharacterCardStats runs the parse and kill lookups concurrently, each
 // with its own timeout. Errors only drop the stat.
-func (api *API) fetchCharacterCardStats(ctx context.Context, p database.GetGamePlayerByGUIDRow) characterCardStats {
+func (s *Service) fetchCharacterCardStats(ctx context.Context, p database.GetGamePlayerByGUIDRow) characterCardStats {
 	var (
 		stats characterCardStats
 		wg    sync.WaitGroup
@@ -48,7 +48,7 @@ func (api *API) fetchCharacterCardStats(ctx context.Context, p database.GetGameP
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(ctx, characterCardStatTimeout)
 		defer cancel()
-		rows, err := api.Opts.Zed.GetCharacterParseHistory(ctx, database.GetCharacterParseHistoryParams{
+		rows, err := s.store.GetCharacterParseHistory(ctx, database.GetCharacterParseHistoryParams{
 			TenantID:   servicetenant.TenantIDFromContext(ctx),
 			PlayerGuid: playerGUID,
 			Metric:     characterCardMetric(characterSpec(p)),
@@ -62,7 +62,7 @@ func (api *API) fetchCharacterCardStats(ctx context.Context, p database.GetGameP
 		defer wg.Done()
 		ctx, cancel := context.WithTimeout(ctx, characterCardStatTimeout)
 		defer cancel()
-		rows, err := api.Opts.Zed.GetCharacterEncounterStats(ctx, database.GetCharacterEncounterStatsParams{
+		rows, err := s.store.GetCharacterEncounterStats(ctx, database.GetCharacterEncounterStatsParams{
 			PlayerGuid: playerGUID,
 			RealmID:    uuid.NullUUID{UUID: p.RealmID, Valid: true},
 		})

@@ -1,4 +1,4 @@
-package api
+package serviceog
 
 import (
 	"net/http/httptest"
@@ -152,7 +152,7 @@ func TestCharacterCardSignedURL(t *testing.T) {
 
 	base, err := url.Parse("https://og.example.com/")
 	require.NoError(t, err)
-	api := &API{Opts: &Options{OGServiceURL: base, OGSigningKey: "secret"}}
+	api := New(Options{OGServiceURL: base, OGSigningKey: "secret"})
 	r := httptest.NewRequest("GET", "https://forever.chronicleclassic.com/armory/Nordanaar/Moonbrew", nil)
 
 	params := characterCardParams(characterCardFixture(), "Night Elf", "Druid", characterCardStats{})
@@ -168,5 +168,5 @@ func TestCharacterCardSignedURL(t *testing.T) {
 	require.Equal(t, ogSignature("secret", q), q.Get("sig"))
 
 	// Unconfigured: no URL, so the page keeps today's image.
-	require.Empty(t, (&API{Opts: &Options{}}).ogImageURL(r, "character", params))
+	require.Empty(t, New(Options{}).ogImageURL(r, "character", params))
 }

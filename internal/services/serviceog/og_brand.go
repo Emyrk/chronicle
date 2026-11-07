@@ -1,4 +1,4 @@
-package api
+package serviceog
 
 import (
 	"context"
@@ -27,16 +27,16 @@ const (
 // brandOGImageURL returns the signed brand card URL for r, or "" when the OG
 // service isn't configured. Site counts come from ogSiteStats and are left out
 // until the first refresh lands; the card then hides its pill row.
-func (api *API) brandOGImageURL(r *http.Request) string {
-	if api.Opts == nil || api.Opts.OGServiceURL == nil || api.Opts.OGSigningKey == "" {
+func (s *Service) brandOGImageURL(r *http.Request) string {
+	if s.imageBaseURL == nil || s.signingKey == "" {
 		return ""
 	}
 	var stats database.SiteStatsRow
-	if api.Opts.Zed != nil {
-		stats = api.ogSiteStats.get(r.Context(), api.Opts.Logger, api.Opts.Zed)
+	if s.store != nil {
+		stats = s.ogSiteStats.get(r.Context(), s.logger, s.store)
 	}
-	product := seoProductName(api.resolvedSiteFlavor(r.Context()))
-	return api.ogImageURLForProduct(r, "brand", product, brandOGParams(product, stats))
+	product := seoProductName(s.resolvedSiteFlavor(r.Context()))
+	return s.ogImageURLForProduct(r, "brand", product, brandOGParams(product, stats))
 }
 
 // brandOGParams is the brand card's query. A zero count (not fetched yet, or a
@@ -59,13 +59,13 @@ func brandOGParams(product string, stats database.SiteStatsRow) url.Values {
 // withBrandOG gives a page the brand card when its resolver sets no image,
 // including when its lookup fails (nil). With the OG service unset, the
 // resolver's result passes through untouched.
-func (api *API) withBrandOG(resolve func(r *http.Request) *frontend.OGData) func(r *http.Request) *frontend.OGData {
+func (s *Service) withBrandOG(resolve func(r *http.Request) *frontend.OGData) func(r *http.Request) *frontend.OGData {
 	return func(r *http.Request) *frontend.OGData {
 		og := resolve(r)
 		if og != nil && og.ImageURL != "" {
 			return og
 		}
-		image := api.brandOGImageURL(r)
+		image := s.brandOGImageURL(r)
 		if image == "" {
 			return og
 		}

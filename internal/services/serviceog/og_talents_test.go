@@ -1,4 +1,4 @@
-package api
+package serviceog
 
 import (
 	"context"
@@ -58,9 +58,9 @@ func TestFlavorStaticOG(t *testing.T) {
 
 func TestDownloadOGImage(t *testing.T) {
 	t.Parallel()
-	api := &API{Opts: &Options{}}
+	api := New(Options{})
 	req := httptest.NewRequest(http.MethodGet, "https://octo.chronicleclassic.com/download", nil)
-	for _, route := range api.OGRoutes() {
+	for _, route := range api.Routes() {
 		if route.Pattern != "/download" {
 			continue
 		}
@@ -166,13 +166,13 @@ func TestTalentOGImageParams(t *testing.T) {
 func TestTalentRouteOGImage(t *testing.T) {
 	t.Parallel()
 
-	resolve := func(t *testing.T, api *API, target string) *frontend.OGData {
+	resolve := func(t *testing.T, api *Service, target string) *frontend.OGData {
 		t.Helper()
 		req := httptest.NewRequest(http.MethodGet, target, nil)
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("class", "mage")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-		for _, route := range api.OGRoutes() {
+		for _, route := range api.Routes() {
 			if route.Pattern == "/talents/{class}" {
 				return route.Resolve(req)
 			}

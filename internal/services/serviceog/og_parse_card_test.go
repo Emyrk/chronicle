@@ -1,4 +1,4 @@
-package api
+package serviceog
 
 import (
 	"context"
@@ -247,8 +247,8 @@ func TestLoadParseCard(t *testing.T) {
 	t.Parallel()
 
 	store, inst, enc := seedParseCard(t)
-	apiWith := func(s database.Store) *API {
-		return &API{Opts: &Options{Zed: authz.NewDatabaseOnly(testutil.Logger(t), s)}}
+	apiWith := func(s database.Store) *Service {
+		return New(Options{Zed: authz.NewDatabaseOnly(testutil.Logger(t), s)})
 	}
 	request := func(ctx context.Context) *http.Request {
 		return httptest.NewRequest(http.MethodGet, "/s/code", nil).WithContext(ctx)
@@ -324,7 +324,7 @@ func TestInstanceCardURL(t *testing.T) {
 	template := func(t *testing.T, s database.Store, payload []byte) url.Values {
 		ctx := testutil.Context(t, testutil.WaitShort)
 		r := httptest.NewRequest(http.MethodGet, "/s/code", nil).WithContext(ctx)
-		a := &API{Opts: &Options{Zed: authz.NewDatabaseOnly(testutil.Logger(t), s), OGServiceURL: ogURL, OGSigningKey: "k"}}
+		a := New(Options{Zed: authz.NewDatabaseOnly(testutil.Logger(t), s), OGServiceURL: ogURL, OGSigningKey: "k"})
 		u, err := url.Parse(a.instanceCardURL(r, inst, encounters, players, nil, base, payload))
 		require.NoError(t, err)
 		return u.Query()

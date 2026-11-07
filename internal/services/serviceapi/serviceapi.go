@@ -36,6 +36,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicemail"
 	"github.com/Emyrk/chronicle/internal/services/serviceoauth"
+	"github.com/Emyrk/chronicle/internal/services/serviceog"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
@@ -264,6 +265,17 @@ func (s *Service) Start(ctx context.Context) error {
 	billingService := servicebilling.Billing(s.broker)
 	billingService.SetAccessURL(au)
 
+	ogSvc := serviceog.New(serviceog.Options{
+		Logger:       logger,
+		Zed:          zed,
+		Chronicle:    chron,
+		Tenant:       tenantSvc,
+		Dataset:      datasetSvc,
+		AccessURL:    au,
+		OGServiceURL: ogServiceURL,
+		OGSigningKey: s.ogSigningKey,
+	})
+
 	handler, err := api.New(ctx, api.Options{
 		Logger:                logger,
 		Storage:               st,
@@ -293,8 +305,7 @@ func (s *Service) Start(ctx context.Context) error {
 		NitroPaySiteID:           s.nitroPaySiteID,
 		GA4ID:                    s.ga4MeasurementID,
 		ShortLinkDomain:          s.shortLinkDomain,
-		OGServiceURL:             ogServiceURL,
-		OGSigningKey:             s.ogSigningKey,
+		OG:                       ogSvc,
 		LandingFeaturedID:        landingFeaturedID,
 		ClientUploadsDisabled:    s.clientUploadsDisabled,
 		BillingEnabled:           servicebilling.BillingEnabled(s.broker),

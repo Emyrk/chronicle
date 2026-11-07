@@ -1,4 +1,4 @@
-package api
+package serviceog
 
 import (
 	"context"
@@ -96,8 +96,8 @@ func seedCharacterCardStats(t *testing.T) (database.Store, database.GetGamePlaye
 func TestFetchCharacterCardStats(t *testing.T) {
 	t.Parallel()
 	store, player := seedCharacterCardStats(t)
-	apiWith := func(s database.Store) *API {
-		return &API{Opts: &Options{Zed: authz.NewDatabaseOnly(testutil.Logger(t), s)}}
+	apiWith := func(s database.Store) *Service {
+		return New(Options{Zed: authz.NewDatabaseOnly(testutil.Logger(t), s)})
 	}
 
 	t.Run("both lookups", func(t *testing.T) {

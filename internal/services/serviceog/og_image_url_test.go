@@ -1,4 +1,4 @@
-package api
+package serviceog
 
 import (
 	"encoding/json"
@@ -20,7 +20,7 @@ type ogSigVector struct {
 // loadOGSigVectors reads the signing vectors shared with the OG service's verifier.
 func loadOGSigVectors(t *testing.T) []ogSigVector {
 	t.Helper()
-	data, err := os.ReadFile("../services/og/tests/fixtures/og-sig-vectors.json")
+	data, err := os.ReadFile("../../../services/og/tests/fixtures/og-sig-vectors.json")
 	require.NoError(t, err)
 	var vectors []ogSigVector
 	require.NoError(t, json.Unmarshal(data, &vectors))
@@ -71,13 +71,13 @@ func TestSignedOGImageURLMatchesVectors(t *testing.T) {
 	}
 }
 
-func testOGImageAPI(t *testing.T, serviceURL string) *API {
+func testOGImageAPI(t *testing.T, serviceURL string) *Service {
 	t.Helper()
-	api := &API{Opts: &Options{OGSigningKey: "test-og-signing-key"}}
+	api := New(Options{OGSigningKey: "test-og-signing-key"})
 	if serviceURL != "" {
 		u, err := url.Parse(serviceURL)
 		require.NoError(t, err)
-		api.Opts.OGServiceURL = u
+		api.imageBaseURL = u
 	}
 	return api
 }
@@ -92,7 +92,7 @@ func TestOGImageURL(t *testing.T) {
 		require.Empty(t, testOGImageAPI(t, "").ogImageURL(req, "talents", url.Values{"class": {"mage"}}))
 
 		api := testOGImageAPI(t, "https://og.example.com")
-		api.Opts.OGSigningKey = ""
+		api.signingKey = ""
 		require.Empty(t, api.ogImageURL(req, "talents", url.Values{"class": {"mage"}}))
 	})
 

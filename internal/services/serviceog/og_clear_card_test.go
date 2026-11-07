@@ -1,4 +1,4 @@
-package api
+package serviceog
 
 import (
 	"context"
@@ -440,8 +440,8 @@ func seedClearCard(t *testing.T) clearFixture {
 func TestLoadClearCard(t *testing.T) {
 	t.Parallel()
 	f := seedClearCard(t)
-	apiWith := func(s database.Store) *API {
-		return &API{Opts: &Options{Zed: authz.NewDatabaseOnly(testutil.Logger(t), s)}}
+	apiWith := func(s database.Store) *Service {
+		return New(Options{Zed: authz.NewDatabaseOnly(testutil.Logger(t), s)})
 	}
 	request := func(ctx context.Context) *http.Request {
 		return httptest.NewRequest(http.MethodGet, "/instances/x", nil).WithContext(ctx)
