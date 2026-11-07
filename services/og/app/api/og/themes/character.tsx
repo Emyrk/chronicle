@@ -1,7 +1,7 @@
 // Character card for /armory/{realm}/{player}: a class emblem on the left,
 // name, level line, guild, three stats and up to three boss pills.
 //
-//   name, class, spec, race, level, guild
+//   name, class, spec, race, gender (male|female, default male), level, guild
 //   parse, ilvl, kills, best=Ragnaros:99,Nefarian:97,C'Thun:88   (with parses)
 //   ilvl, raids, seen=Nov 2026                               (without parses)
 //
@@ -19,9 +19,13 @@ import {
   headerLogoImage,
   param,
   parseColor,
+  classIconFile,
+  raceIconFile,
   SANS,
   SERIF,
+  specIconFile,
 } from './kit';
+import { publicImage } from './public-files';
 import { fitFontSize } from './shared';
 import type { ThemeContext, ThemeDefinition, ThemeFont, ThemeProps } from './types';
 
@@ -89,6 +93,34 @@ export function characterStats(context: ThemeContext): Stat[] {
   return stats;
 }
 
+interface IconTile {
+  src: string;
+  border: string;
+}
+
+// Race, class and spec icons we know, in that order; any of them may be missing.
+async function iconTiles(race: string, gender: string, className: string, spec: string, color: string): Promise<IconTile[]> {
+  const files: [string | null, string][] = [
+    [raceIconFile(race, gender), COLORS.border],
+    [classIconFile(className), color],
+    [spec ? specIconFile(className, spec) : null, color],
+  ];
+  return Promise.all(
+    files.filter((entry): entry is [string, string] => entry[0] !== null).map(async ([file, border]) => ({ src: await publicImage(file), border }))
+  );
+}
+
+const TILE = 76;
+
+function Tile({ tile }: { tile: IconTile }) {
+  return (
+    <div style={{ display: 'flex', padding: 3, borderRadius: 10, border: `3px solid ${tile.border}`, background: '#141414' }}>
+      {/* eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text */}
+      <img src={tile.src} width={TILE} height={TILE} style={{ width: TILE, height: TILE, borderRadius: 6 }} />
+    </div>
+  );
+}
+
 function StatBlock({ stat }: { stat: Stat }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -129,6 +161,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   const className = param(context, 'class', 20);
   const spec = param(context, 'spec', 20);
   const race = param(context, 'race', 20);
+  const gender = param(context, 'gender', 10);
   const level = intParam(context, 'level', { min: 1, max: 999 });
   const guild = param(context, 'guild', 32);
   const color = classColor(className);
@@ -136,7 +169,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   // Pills only go with a parse; without one the card shows activity instead.
   const hasParse = stats[0]?.label === PARSE_LABEL;
   const best = hasParse ? parseBest(listParam(context, 'best', { maxItems: MAX_BEST, maxLength: 40 })) : [];
-  const logoSrc = await headerLogoImage();
+  const [logoSrc, tiles] = await Promise.all([headerLogoImage(), iconTiles(race, gender, className, spec, color)]);
 
   const initial = (Array.from(name)[0] ?? '?').toUpperCase();
   const emblemLabel = [spec, titleCase(className)].filter(Boolean).join(' ');
@@ -161,7 +194,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
         background: COLORS.background,
       }}
     >
-      {/* Emblem panel: a class-colour ring and initial. A later `image=` could carry a model render here. */}
+      {/* Emblem panel: a class-colour ring and initial, then whichever race/class/spec icons we know. */}
       <div
         style={{
           position: 'absolute',
@@ -180,8 +213,8 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
       >
         <div
           style={{
-            width: 240,
-            height: 240,
+            width: tiles.length > 0 ? 210 : 240,
+            height: tiles.length > 0 ? 210 : 240,
             borderRadius: 999,
             border: `6px solid ${color}`,
             backgroundImage: 'radial-gradient(circle at 50% 35%, #3a2a1c 0%, #1c1611 75%)',
@@ -190,8 +223,15 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
             justifyContent: 'center',
           }}
         >
-          <span style={{ fontFamily: SERIF, fontSize: 130, fontWeight: 700, lineHeight: 1, color }}>{initial}</span>
+          <span style={{ fontFamily: SERIF, fontSize: tiles.length > 0 ? 112 : 130, fontWeight: 700, lineHeight: 1, color }}>{initial}</span>
         </div>
+        {tiles.length > 0 ? (
+          <div style={{ display: 'flex', gap: 14 }}>
+            {tiles.map(tile => (
+              <Tile key={tile.src} tile={tile} />
+            ))}
+          </div>
+        ) : null}
         {emblemLabel ? (
           <span style={{ fontSize: 24, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color }}>
             {emblemLabel}

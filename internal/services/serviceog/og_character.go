@@ -87,6 +87,13 @@ func characterCardParams(p database.GetGamePlayerByGUIDRow, race, class string, 
 	params.Set("name", p.Name)
 	params.Set("class", strings.ToLower(class))
 	params.Set("race", race)
+	// The renderer draws the male race icon when gender is absent.
+	switch p.Gender {
+	case database.WowPlayableGenderMale:
+		params.Set("gender", "male")
+	case database.WowPlayableGenderFemale:
+		params.Set("gender", "female")
+	}
 	if spec := characterSpec(p); spec != "" {
 		params.Set("spec", spec)
 	}

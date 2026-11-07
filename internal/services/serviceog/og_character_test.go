@@ -22,6 +22,7 @@ func characterCardFixture() database.GetGamePlayerByGUIDRow {
 	return database.GetGamePlayerByGUIDRow{
 		Name:      "Moonbrew",
 		Class:     database.WowPlayableClassDRUID,
+		Gender:    database.WowPlayableGenderFemale,
 		Level:     58,
 		Gear:      &gear,
 		Talents:   &database.PlayerTalents{Trees: [3]database.PlayerTalentTab{{PointsSpent: 11}, {PointsSpent: 32}, {PointsSpent: 8}}},
@@ -39,15 +40,16 @@ func TestCharacterCardParams(t *testing.T) {
 	got := characterCardParams(characterCardFixture(), "Night Elf", "Druid", stats)
 
 	require.Equal(t, url.Values{
-		"name":  {"Moonbrew"},
-		"class": {"druid"},
-		"spec":  {"Feral"},
-		"race":  {"Night Elf"},
-		"level": {"58"},
-		"guild": {"Nightfall"},
-		"ilvl":  {"72"},
-		"logs":  {"14"},
-		"seen":  {"Nov 2026"},
+		"name":   {"Moonbrew"},
+		"class":  {"druid"},
+		"spec":   {"Feral"},
+		"race":   {"Night Elf"},
+		"gender": {"female"},
+		"level":  {"58"},
+		"guild":  {"Nightfall"},
+		"ilvl":   {"72"},
+		"logs":   {"14"},
+		"seen":   {"Nov 2026"},
 	}, got)
 }
 
@@ -71,8 +73,9 @@ func TestCharacterCardParamsFallbacks(t *testing.T) {
 		p.Talents = nil
 		p.Level = 0
 		p.GuildName = pgtype.Text{}
+		p.Gender = database.WowPlayableGenderUnknown
 		got := characterCardParams(p, "Night Elf", "Druid", characterCardStats{})
-		for _, key := range []string{"ilvl", "spec", "level", "guild", "logs", "parse", "best", "kills"} {
+		for _, key := range []string{"ilvl", "spec", "gender", "level", "guild", "logs", "parse", "best", "kills"} {
 			require.False(t, got.Has(key), key)
 		}
 		require.Equal(t, "druid", got.Get("class"))

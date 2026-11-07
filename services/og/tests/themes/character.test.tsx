@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ImageResponse } from 'next/og';
 import { characterStats, characterTheme, parseBest } from '../../app/api/og/themes/character';
-import { listParam, parseColor } from '../../app/api/og/themes/kit';
+import { classIconFile, listParam, parseColor, raceIconFile, specIconFile } from '../../app/api/og/themes/kit';
 import type { ThemeContext, ThemeProps } from '../../app/api/og/themes/types';
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47];
@@ -75,6 +75,26 @@ describe('character card', () => {
     expect(json).toContain('"M"');
     expect(json).toContain('#FF7D0A');
     expect(json).not.toContain('Level');
+  });
+
+  test('race, class and spec icons are drawn only when known', async () => {
+    const pngs = async (query: string) => (await tree(query)).match(/"src":"data:image\/png;base64/g)?.length ?? 0;
+    // One `src` per icon tile (the header mark goes in as `markSrc`).
+    expect(await pngs(IDENTITY)).toBe(3);
+    expect(await pngs('name=Moonbrew&class=warrior')).toBe(1);
+    expect(await pngs('name=Moonbrew&class=bard&spec=Feral&race=Draenei')).toBe(0);
+
+    expect(raceIconFile('Night Elf')).toBe('icons/race_night_elf.png');
+    expect(raceIconFile('Undead')).toBe('icons/race_forsaken.png');
+    expect(raceIconFile('Blood Elf')).toBe('icons/race_blood_elf.png');
+    expect(raceIconFile('Night Elf', 'female')).toBe('icons/race_night_elf_female.png');
+    expect(raceIconFile('Undead', 'Female')).toBe('icons/race_forsaken_female.png');
+    expect(raceIconFile('Human', 'unknown')).toBe('icons/race_human.png');
+    expect(raceIconFile('Goblin', 'female')).toBe('icons/race_goblin.png');
+    expect(classIconFile('DRUID')).toBe('icons/class_druid.png');
+    expect(specIconFile('druid', 'Feral')).toBe('icons/spec_druid_feral.png');
+    expect(specIconFile('hunter', 'Beast Mastery')).toBe('icons/spec_hunter_beastmastery.png');
+    expect(specIconFile('mage', 'Holy')).toBeNull();
   });
 
   test('best is capped at three and skips malformed items', () => {

@@ -194,6 +194,59 @@ export async function artImage(context: ThemeContext): Promise<string | null> {
   return Object.hasOwn(RAID_ART, slug) ? publicImage(RAID_ART[slug]) : null;
 }
 
+// Class, spec and race icons: 64×64 PNGs in public/icons. Class and spec are
+// the web app's bundled /c/icons files; race icons come from the icon CDN, the
+// same picks as the Armory header (getRaceIconUrl). Unknown or missing → null;
+// never a network request.
+const ICON_SLUG = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// Race slug → icon base name. Goblin has no female icon, so it always uses the male one.
+const RACE_ICONS: Readonly<Record<string, { base: string; female: boolean }>> = {
+  human: { base: 'human', female: true },
+  dwarf: { base: 'dwarf', female: true },
+  gnome: { base: 'gnome', female: true },
+  nightelf: { base: 'night_elf', female: true },
+  orc: { base: 'orc', female: true },
+  troll: { base: 'troll', female: true },
+  tauren: { base: 'tauren', female: true },
+  undead: { base: 'forsaken', female: true },
+  scourge: { base: 'forsaken', female: true },
+  forsaken: { base: 'forsaken', female: true },
+  goblin: { base: 'goblin', female: false },
+  bloodelf: { base: 'blood_elf', female: true },
+};
+
+const SPECS_BY_CLASS: Readonly<Record<string, readonly string[]>> = {
+  druid: ['balance', 'feral', 'feralcombat', 'restoration'],
+  hunter: ['beastmastery', 'marksmanship', 'survival'],
+  mage: ['arcane', 'fire', 'frost'],
+  paladin: ['holy', 'protection', 'retribution'],
+  priest: ['discipline', 'holy', 'shadow'],
+  rogue: ['assassination', 'combat', 'subtlety'],
+  shaman: ['elemental', 'enhancement', 'restoration'],
+  warlock: ['affliction', 'demonology', 'destruction'],
+  warrior: ['arms', 'fury', 'protection'],
+};
+
+export function classIconFile(className: string): string | null {
+  const key = ICON_SLUG(className);
+  return Object.hasOwn(SPECS_BY_CLASS, key) ? `icons/class_${key}.png` : null;
+}
+
+export function specIconFile(className: string, spec: string): string | null {
+  const key = ICON_SLUG(className);
+  const specKey = ICON_SLUG(spec);
+  return Object.hasOwn(SPECS_BY_CLASS, key) && SPECS_BY_CLASS[key].includes(specKey) ? `icons/spec_${key}_${specKey}.png` : null;
+}
+
+// `gender` is the card's gender param; anything but "female" draws the male icon.
+export function raceIconFile(race: string, gender = ''): string | null {
+  const key = ICON_SLUG(race);
+  if (!Object.hasOwn(RACE_ICONS, key)) return null;
+  const { base, female } = RACE_ICONS[key];
+  return female && gender.trim().toLowerCase() === 'female' ? `icons/race_${base}_female.png` : `icons/race_${base}.png`;
+}
+
 // ---------------------------------------------------------------- chrome
 
 // Combined <C>hronicle logo on the left, an optional chip on the right.
