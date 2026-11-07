@@ -933,6 +933,18 @@ type sqlcQuerier interface {
 	MarkLogGroupArtifactsStorageDeleted(ctx context.Context, arg MarkLogGroupArtifactsStorageDeletedParams) ([]LogGroupArtifact, error)
 	MarkWhatsNewRead(ctx context.Context, arg MarkWhatsNewReadParams) (UserWhatsNewState, error)
 	MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error)
+	MaterializeLeaderboardGuildBossBenchmark(ctx context.Context, arg MaterializeLeaderboardGuildBossBenchmarkParams) error
+	MaterializeLeaderboardGuildBossSubject(ctx context.Context, arg MaterializeLeaderboardGuildBossSubjectParams) error
+	MaterializeLeaderboardGuildClearBenchmark(ctx context.Context, arg MaterializeLeaderboardGuildClearBenchmarkParams) error
+	MaterializeLeaderboardGuildClearSubject(ctx context.Context, arg MaterializeLeaderboardGuildClearSubjectParams) error
+	MaterializeLeaderboardGuildRenownCount(ctx context.Context, arg MaterializeLeaderboardGuildRenownCountParams) error
+	// These callable calculations publish one exact scope from one statement snapshot.
+	// Evidence is already canonical/eligible; compatibility versions are metadata,
+	// not filters. Callers own transactions and future revision/publication fencing.
+	// No producer, queue acknowledgement, or concurrency fence is installed here.
+	MaterializeLeaderboardPlayerBossBenchmark(ctx context.Context, arg MaterializeLeaderboardPlayerBossBenchmarkParams) error
+	MaterializeLeaderboardPlayerBossSubject(ctx context.Context, arg MaterializeLeaderboardPlayerBossSubjectParams) error
+	MaterializeLeaderboardPlayerRenownCount(ctx context.Context, arg MaterializeLeaderboardPlayerRenownCountParams) error
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
 	PauseEphemeralInferenceRun(ctx context.Context, arg PauseEphemeralInferenceRunParams) (InferenceRun, error)
 	PauseInferenceRun(ctx context.Context, arg PauseInferenceRunParams) (InferenceRun, error)
