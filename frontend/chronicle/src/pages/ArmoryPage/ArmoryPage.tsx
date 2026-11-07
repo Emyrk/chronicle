@@ -295,7 +295,7 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
           {activeTab === "gear" && (
             <Card className="mt-4 py-8">
               <CardContent>
-                <GearDisplay gear={player.gear} race={player.race} gender={player.gender} />
+                <GearDisplay gear={player.gear} />
               </CardContent>
             </Card>
           )}
