@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
@@ -55,6 +56,9 @@ type fakeExternalAPIStore struct {
 	event                 database.LogInstanceEvent
 	eventErr              error
 	eventParams           database.InstanceEventParams
+	events                map[string][]byte
+	eventCalls            map[string]int
+	disambiguations       []database.ListConsumableDisambiguationsByDatasetRow
 	recent                []database.ListExternalAPIRecentInstancesRow
 	recentParams          database.ListExternalAPIRecentInstancesParams
 }
@@ -132,7 +136,22 @@ func (f *fakeExternalAPIStore) GetParseScoreResultsForInstance(_ context.Context
 
 func (f *fakeExternalAPIStore) InstanceEvent(_ context.Context, params database.InstanceEventParams) (database.LogInstanceEvent, error) {
 	f.eventParams = params
+	if f.events != nil {
+		if f.eventCalls == nil {
+			f.eventCalls = make(map[string]int)
+		}
+		f.eventCalls[params.Type]++
+		payload, ok := f.events[params.Type]
+		if !ok {
+			return database.LogInstanceEvent{}, pgx.ErrNoRows
+		}
+		return database.LogInstanceEvent{InstanceID: params.InstanceID, Type: database.LogInstanceEventType(params.Type), Events: payload}, nil
+	}
 	return f.event, f.eventErr
+}
+
+func (f *fakeExternalAPIStore) ListConsumableDisambiguationsByDataset(context.Context, uuid.UUID) ([]database.ListConsumableDisambiguationsByDatasetRow, error) {
+	return f.disambiguations, nil
 }
 
 func (f *fakeExternalAPIStore) ListExternalAPIRecentInstances(_ context.Context, params database.ListExternalAPIRecentInstancesParams) ([]database.ListExternalAPIRecentInstancesRow, error) {
