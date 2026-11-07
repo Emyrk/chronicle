@@ -75,6 +75,8 @@ def seed(db, args):
     COMMIT;
     """
     db.run(metadata)
+    if args.distribution == "varied":
+        return seed_varied(db, args)
     db.run(f"""BEGIN; SET LOCAL app.tenant_bypass='true';
     INSERT INTO game_players(id,realm_id,name,class,gender,race)
     SELECT '0x'||lpad(to_hex(n),16,'0'),'{REALM}','Synthetic player '||lpad(n::text,7,'0'),'MAGE','Male','Human' FROM generate_series(1,{args.subjects}) n;
@@ -128,6 +130,76 @@ def seed(db, args):
     db.run("ANALYZE;")
     actual = db.run(f"SET app.tenant_bypass='true'; SELECT count(*),sum(observation_count) FROM leaderboard_player_boss_subjects WHERE tenant_id='{TENANT}';")
     print(json.dumps({"synthetic":True,"target":db.name,"summary_rows_and_represented_history":actual,"source_scale_reference":args.source_scale,"parameters":{k:v for k,v in vars(args).items() if k!='database_url'}}, indent=2))
+
+def history_bands(values):
+    values = sorted(values)
+    n = len(values)
+    if not n: return (0, 0, 0)
+    def mean(band): return sum(band) / len(band) if band else 0
+    return values[-1], mean(values[(2*n)//5:n-1]), mean(values[n//5:(2*n)//5])
+
+def varied_number(seed, *parts):
+    return int.from_bytes(hashlib.sha256("|".join(map(str,(seed,*parts))).encode()).digest()[:8],"big")
+
+def seed_varied(db, args):
+    """Small reproducible UI fixture; reduce synthetic histories to raw summaries."""
+    cohorts = [("MAGE", [("Frost","dps",1800),("Fire","dps",2400)]),
+               ("HUNTER",[("Survival","dps",1500)]), ("WARRIOR",[("Fury","dps",3000)]),
+               ("PRIEST",[("Holy","hps",2200)]), ("DRUID",[("Restoration","hps",1600)])]
+    bosses = db.run("SELECT encounter_name FROM leaderboard_bosses WHERE instance_name="+literal(args.instance)+" ORDER BY encounter_name;").splitlines()
+    if not bosses: raise ValueError("Unknown fixture instance")
+    players=[]; subjects=[]; counts=[]
+    for n in range(1,args.subjects+1):
+        cls,specs=cohorts[(n-1)%len(cohorts)]
+        guid="0x"+format(n,"016x")
+        players.append((guid,REALM,f"Synthetic {cls.title()} {n:04d}",cls,"Male","Human" if cls in ("MAGE","WARRIOR","PRIEST") else "NightElf"))
+        for boss in bosses:
+            count=[0,1,2,3,5,8,20,44][varied_number(args.seed,n,boss,"count")%8]
+            if not count: continue
+            counts.append((TENANT,args.instance,"",0,boss,REALM,guid,count,1,1))
+            # A mage's kills are partitioned between specs, not duplicated into Renown.
+            per_spec=[[] for _ in specs]
+            for observation in range(count):
+                k=varied_number(args.seed,n,boss,observation,"spec")%len(specs)
+                spec,metric,scale=specs[k]
+                strength=0.3+0.65*(varied_number(args.seed,n,boss,spec,"strength")%1001)/1000
+                variability=0.5+0.5*(varied_number(args.seed,n,boss,spec,observation,"roll")%1001)/1000
+                per_spec[k].append(scale*strength*variability)
+            for (spec,metric,_),values in zip(specs,per_spec):
+                if values:
+                    peak,form,floor=history_bands(values)
+                    subjects.append((TENANT,args.instance,"",0,boss,cls,spec,"",metric,REALM,guid,len(values),peak,form,floor,1,1))
+    def insert(table,columns,rows):
+        for offset in range(0,len(rows),500):
+            values=','.join('('+','.join(literal(v) for v in row)+')' for row in rows[offset:offset+500])
+            db.run("BEGIN;SET LOCAL app.tenant_bypass='true';INSERT INTO "+table+"("+columns+") VALUES "+values+";COMMIT;")
+    insert("game_players","id,realm_id,name,class,gender,race",players)
+    insert("leaderboard_player_boss_subjects","tenant_id,instance_name,difficulty_name,max_players,encounter_name,player_class,player_spec,player_sub_spec,metric,realm_id,player_guid,observation_count,raw_peak,raw_form,raw_floor,projection_version,algorithm_version",subjects)
+    insert("leaderboard_player_renown_counts","tenant_id,instance_name,difficulty_name,max_players,encounter_name,realm_id,player_guid,kill_count,projection_version,algorithm_version",counts)
+    db.run(f"""BEGIN; SET LOCAL app.tenant_bypass='true';
+    INSERT INTO leaderboard_player_boss_benchmarks(tenant_id,instance_name,difficulty_name,max_players,encounter_name,player_class,player_spec,player_sub_spec,metric,best_metric,projection_version,algorithm_version)
+     SELECT tenant_id,instance_name,difficulty_name,max_players,encounter_name,player_class,player_spec,player_sub_spec,metric,max(raw_peak),1,1
+     FROM leaderboard_player_boss_subjects WHERE tenant_id='{TENANT}' GROUP BY tenant_id,instance_name,difficulty_name,max_players,encounter_name,player_class,player_spec,player_sub_spec,metric;
+    COMMIT;""")
+    guilds=[]; guild_subjects=[]; guild_counts=[]
+    for n in range(1,max(12,args.subjects//20)+1):
+        identity=hashlib.md5(f'varied-guild-{n}'.encode()).hexdigest()
+        guilds.append((identity,REALM,f"Synthetic guild {n:03d}"))
+        for boss in bosses:
+            count=[0,1,2,3,5,8,20,44][varied_number(args.seed,"guild",n,boss)%8]
+            if not count:continue
+            durations=[90000+varied_number(args.seed,"duration",n,boss,i)%360000 for i in range(count)]
+            _,form,floor=history_bands([1/d for d in durations])
+            guild_subjects.append((TENANT,args.instance,"",0,boss,REALM,identity,count,min(durations),form,floor,1,1))
+            guild_counts.append((TENANT,args.instance,"",0,boss,REALM,identity,count,1,1))
+    insert("guilds","id,realm_id,name",guilds)
+    insert("leaderboard_guild_boss_subjects","tenant_id,instance_name,difficulty_name,max_players,encounter_name,realm_id,guild_id,observation_count,fastest_duration_ms,form_mean_inverse_ms,floor_mean_inverse_ms,projection_version,algorithm_version",guild_subjects)
+    insert("leaderboard_guild_renown_counts","tenant_id,instance_name,difficulty_name,max_players,encounter_name,realm_id,guild_id,kill_count,projection_version,algorithm_version",guild_counts)
+    db.run(f"""BEGIN;SET LOCAL app.tenant_bypass='true';
+    INSERT INTO leaderboard_guild_boss_benchmarks(tenant_id,instance_name,difficulty_name,max_players,encounter_name,best_duration_ms,projection_version,algorithm_version)
+     SELECT tenant_id,instance_name,difficulty_name,max_players,encounter_name,min(fastest_duration_ms),1,1 FROM leaderboard_guild_boss_subjects WHERE tenant_id='{TENANT}' GROUP BY tenant_id,instance_name,difficulty_name,max_players,encounter_name;
+    COMMIT;ANALYZE;""")
+    print(json.dumps({"synthetic":True,"distribution":"varied","seed":args.seed,"players":len(players),"player_summaries":len(subjects),"guilds":len(guilds),"history":"deterministic counts 0/1/2/3/5/8/20/44; exact ascending 20%/40% bands; no observations persisted"},indent=2))
 
 def peak_examples(db, args):
     """Attach a bounded synthetic source chain, never replay or backfill history."""
@@ -206,6 +278,8 @@ def main():
     p.add_argument('--prepare-migrated',action='store_true',help='Mark an already migrated dedicated mock dev database; requires write approval')
     p.add_argument('--init',action='store_true',help='Initialize EMPTY mock database from dump and configuration seeds')
     p.add_argument('action',choices=['seed','fixture','bench','peak-examples'])
+    p.add_argument('--distribution',choices=['baseline','varied'],default='baseline')
+    p.add_argument('--seed',type=int,default=20261107)
     p.add_argument('--subjects',type=int,default=10000)
     p.add_argument('--cohorts',type=int,default=4)
     p.add_argument('--history',type=int,default=44)

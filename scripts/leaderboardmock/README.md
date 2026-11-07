@@ -135,3 +135,39 @@ inside a savepoint, checks that summary provenance survives, and rolls that dele
 back before committing the demo. Other summaries retain honest null provenance.
 
 The live preview's Ragnaros Peak first page now demonstrates non-null durations.
+
+## Varied UI distribution
+
+The default `--distribution baseline` preserves the original performance fixture:
+all players are Mage/Synthetic cohorts, covered bosses share `--history` counts,
+raw Peak follows subject index, Form=80% Peak and Floor=50% Peak. This makes
+benchmark comparisons reproducible but is deliberately visually uniform.
+
+For a richer UI demo use a **new dedicated database**, run normal server migrations,
+then (never reseed an existing populated database):
+
+```sh
+python3 scripts/leaderboardmock/mock.py seed \
+  --database-url 'postgresql://postgres:LOCAL_PASSWORD@127.0.0.1:55449/chronicle_lbmock_varied' \
+  --prepare-migrated --allow-local-writes --distribution varied --seed 20261107 \
+  --subjects 600 --instance 'Molten Core'
+```
+
+This uses SHA-256 of the explicit seed and subject/boss/observation identity, not
+process-randomized hash or wall-clock randomness. Characters retain one class:
+Frost/Fire Mage, Survival Hunter, Fury Warrior, Holy Priest, Restoration Druid.
+Priest/Druid use HPS and the other cohorts DPS with distinct raw scales. Mage kills
+are partitioned between specs; Renown counts each kill once, not once per spec.
+Each subject/boss has0,1,2,3,5,8,20 or44 kills, with independent boss-specific
+strength and observation variation. The generator sorts those temporary synthetic
+histories and computes the exact20%/40% Form/Floor bands. At two kills Form is the
+lower observation and Floor is empty (zero); no approximate band multipliers are
+used. Benchmarks come from the generated cohort maxima. No raw observations are
+persisted or production logs used. Guild durations vary independently and their
+bands are computed over reciprocals. The varied preset ignores baseline
+`--cohorts`, `--history`, `--coverage`, `--skew` and `--profile`; use subjects/seed
+and instance to control it. Clear boards are not seeded by this UI preset.
+
+Run the optional `peak-examples` command afterward for actual synthetic source
+records and durations. The original `chronicle_lbmock_preview` database remains
+intact when the preview is switched to `chronicle_lbmock_varied`.
