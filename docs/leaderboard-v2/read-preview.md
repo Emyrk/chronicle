@@ -192,6 +192,7 @@ lookup for 50 returned players × 10 selected bosses returned 500 records in
 `benchmarks/page-boss-details.json` retains the plan and aligned page parameters.
 A live all-cohort Peak HTTP response with those details was 83,961 bytes and
 approximately 1,400ms including ranking/config/API overhead. These are separate
-measurements, not a before/after latency claim or a production bound. Existing
-synthetic summaries have no source encounters, so player duration remains null
-in that fixture; isolated provenance tests exercise a real recorded duration.
+measurements, not a before/after latency claim or a production bound. The optional `peak-examples` local fixture now supplies actual synthetic source
+encounters and matching durations to at most12 top summaries per catalog boss.
+All other summaries retain null provenance. Source deletion is exercised and
+rolled back, proving summaries survive without destroying the demonstration.
