@@ -128,6 +128,11 @@ func (s *Service) Slots() chan struct{} { return s.slots } // Useful for determi
 func (s *Service) SetUserAccessResolver(resolver UserAccessResolver) {
 	s.resolveUserAccess = resolver
 }
+
+// UserAccess resolves a user's live supporter tier and search budget.
+func (s *Service) UserAccess(ctx context.Context, user uuid.UUID) (UserAccess, error) {
+	return s.resolveUserAccess(ctx, user)
+}
 func (s *Service) kind(c Caller) string {
 	if c.UserID != uuid.Nil {
 		return "user"

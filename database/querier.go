@@ -241,6 +241,7 @@ type sqlcQuerier interface {
 	// Item name/quality/icon/level are read from the snapshot jsonb itself,
 	// so results are self-contained.
 	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
+	GetAIKeyByHashedSecret(ctx context.Context, hashedSecret []byte) (AiKey, error)
 	// GetAccountDataCounts counts the data an account purge removes, grouped into
 	// sets the user must acknowledge individually. Zero counts are omitted.
 	GetAccountDataCounts(ctx context.Context, userID uuid.UUID) ([]GetAccountDataCountsRow, error)
@@ -461,6 +462,8 @@ type sqlcQuerier interface {
 	GetTimeParseClearTimeMembershipCohort(ctx context.Context, arg GetTimeParseClearTimeMembershipCohortParams) ([]int64, error)
 	GetTimeParseScoreForContract(ctx context.Context, arg GetTimeParseScoreForContractParams) (TimeParseScore, error)
 	GetTimeParseScoringInstance(ctx context.Context, arg GetTimeParseScoringInstanceParams) (GetTimeParseScoringInstanceRow, error)
+	// The user's current key in a community, which may have expired.
+	GetUnrevokedAIKey(ctx context.Context, arg GetUnrevokedAIKeyParams) (AiKey, error)
 	GetUploadKey(ctx context.Context, id uuid.UUID) (WowServerUploadKey, error)
 	GetUploadKeyByHash(ctx context.Context, secretHash string) (GetUploadKeyByHashRow, error)
 	GetUserActionBarSlots(ctx context.Context, userID uuid.UUID) (GetUserActionBarSlotsRow, error)
@@ -569,6 +572,7 @@ type sqlcQuerier interface {
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
 	InitializeUserWhatsNewState(ctx context.Context, arg InitializeUserWhatsNewStateParams) (UserWhatsNewState, error)
+	InsertAIKey(ctx context.Context, arg InsertAIKeyParams) (AiKey, error)
 	InsertAccountPurge(ctx context.Context, arg InsertAccountPurgeParams) (AccountPurge, error)
 	InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults
 	InsertAffectedAuraDurations(ctx context.Context, arg []InsertAffectedAuraDurationsParams) *InsertAffectedAuraDurationsBatchResults
@@ -1019,6 +1023,8 @@ type sqlcQuerier interface {
 	ResolveExternalAPIServer(ctx context.Context, server string) (ResolveExternalAPIServerRow, error)
 	ResolveSidekickIssuesExcept(ctx context.Context, arg ResolveSidekickIssuesExceptParams) (int64, error)
 	ResumeInferenceRun(ctx context.Context, arg ResumeInferenceRunParams) (InferenceRun, error)
+	// Revokes the user's unrevoked key in a community.
+	RevokeAIKeys(ctx context.Context, arg RevokeAIKeysParams) (int64, error)
 	RevokeActiveSidekickOAuthGrants(ctx context.Context, sidekickID uuid.UUID) ([]string, error)
 	RevokeOAuthTokenSessions(ctx context.Context, arg RevokeOAuthTokenSessionsParams) (int64, error)
 	RotateOAuthRefreshToken(ctx context.Context, arg RotateOAuthRefreshTokenParams) (int64, error)
@@ -1105,6 +1111,8 @@ type sqlcQuerier interface {
 	// Returns instance and unique player counts per discoverable tenant within a
 	// time window. Used by the discovery endpoint to surface activity metrics.
 	TenantDiscoveryStats(ctx context.Context, since pgtype.Timestamptz) ([]TenantDiscoveryStatsRow, error)
+	// Records an accepted request.
+	TouchAIKey(ctx context.Context, arg TouchAIKeyParams) error
 	TouchLogInstanceRankingSource(ctx context.Context, instanceID uuid.UUID) error
 	TouchSidekickUpload(ctx context.Context, arg TouchSidekickUploadParams) (int64, error)
 	TouchUploadKeyLastUsed(ctx context.Context, id uuid.UUID) error

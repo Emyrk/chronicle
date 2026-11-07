@@ -397,6 +397,141 @@ func (q *sqlQuerier) UpdateAccountPurgeProgress(ctx context.Context, arg UpdateA
 	return err
 }
 
+const getAIKeyByHashedSecret = `-- name: GetAIKeyByHashedSecret :one
+SELECT id, user_id, tenant_id, tenant_scope_id, hashed_secret, private_data, created_at, expires_at, revoked_at, last_used_at, last_user_agent, request_count FROM ai_keys WHERE hashed_secret = $1
+`
+
+func (q *sqlQuerier) GetAIKeyByHashedSecret(ctx context.Context, hashedSecret []byte) (AiKey, error) {
+	row := q.db.QueryRow(ctx, getAIKeyByHashedSecret, hashedSecret)
+	var i AiKey
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TenantID,
+		&i.TenantScopeID,
+		&i.HashedSecret,
+		&i.PrivateData,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.LastUsedAt,
+		&i.LastUserAgent,
+		&i.RequestCount,
+	)
+	return i, err
+}
+
+const getUnrevokedAIKey = `-- name: GetUnrevokedAIKey :one
+SELECT id, user_id, tenant_id, tenant_scope_id, hashed_secret, private_data, created_at, expires_at, revoked_at, last_used_at, last_user_agent, request_count FROM ai_keys
+WHERE user_id = $1 AND tenant_scope_id = $2 AND revoked_at IS NULL
+`
+
+type GetUnrevokedAIKeyParams struct {
+	UserID        uuid.UUID     `db:"user_id" json:"user_id"`
+	TenantScopeID uuid.NullUUID `db:"tenant_scope_id" json:"tenant_scope_id"`
+}
+
+// The user's current key in a community, which may have expired.
+func (q *sqlQuerier) GetUnrevokedAIKey(ctx context.Context, arg GetUnrevokedAIKeyParams) (AiKey, error) {
+	row := q.db.QueryRow(ctx, getUnrevokedAIKey, arg.UserID, arg.TenantScopeID)
+	var i AiKey
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TenantID,
+		&i.TenantScopeID,
+		&i.HashedSecret,
+		&i.PrivateData,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.LastUsedAt,
+		&i.LastUserAgent,
+		&i.RequestCount,
+	)
+	return i, err
+}
+
+const insertAIKey = `-- name: InsertAIKey :one
+INSERT INTO ai_keys (id, user_id, tenant_id, hashed_secret, private_data, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, user_id, tenant_id, tenant_scope_id, hashed_secret, private_data, created_at, expires_at, revoked_at, last_used_at, last_user_agent, request_count
+`
+
+type InsertAIKeyParams struct {
+	ID           uuid.UUID          `db:"id" json:"id"`
+	UserID       uuid.UUID          `db:"user_id" json:"user_id"`
+	TenantID     uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
+	HashedSecret []byte             `db:"hashed_secret" json:"hashed_secret"`
+	PrivateData  bool               `db:"private_data" json:"private_data"`
+	ExpiresAt    pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+}
+
+func (q *sqlQuerier) InsertAIKey(ctx context.Context, arg InsertAIKeyParams) (AiKey, error) {
+	row := q.db.QueryRow(ctx, insertAIKey,
+		arg.ID,
+		arg.UserID,
+		arg.TenantID,
+		arg.HashedSecret,
+		arg.PrivateData,
+		arg.ExpiresAt,
+	)
+	var i AiKey
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TenantID,
+		&i.TenantScopeID,
+		&i.HashedSecret,
+		&i.PrivateData,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.LastUsedAt,
+		&i.LastUserAgent,
+		&i.RequestCount,
+	)
+	return i, err
+}
+
+const revokeAIKeys = `-- name: RevokeAIKeys :execrows
+UPDATE ai_keys SET revoked_at = NOW()
+WHERE user_id = $1 AND tenant_scope_id = $2 AND revoked_at IS NULL
+`
+
+type RevokeAIKeysParams struct {
+	UserID        uuid.UUID     `db:"user_id" json:"user_id"`
+	TenantScopeID uuid.NullUUID `db:"tenant_scope_id" json:"tenant_scope_id"`
+}
+
+// Revokes the user's unrevoked key in a community.
+func (q *sqlQuerier) RevokeAIKeys(ctx context.Context, arg RevokeAIKeysParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeAIKeys, arg.UserID, arg.TenantScopeID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const touchAIKey = `-- name: TouchAIKey :exec
+UPDATE ai_keys SET
+  last_used_at = NOW(),
+  last_user_agent = $1,
+  request_count = request_count + 1
+WHERE id = $2
+`
+
+type TouchAIKeyParams struct {
+	LastUserAgent string    `db:"last_user_agent" json:"last_user_agent"`
+	ID            uuid.UUID `db:"id" json:"id"`
+}
+
+// Records an accepted request.
+func (q *sqlQuerier) TouchAIKey(ctx context.Context, arg TouchAIKeyParams) error {
+	_, err := q.db.Exec(ctx, touchAIKey, arg.LastUserAgent, arg.ID)
+	return err
+}
+
 const censusPlayerCounts = `-- name: CensusPlayerCounts :many
 SELECT
   gp.class,

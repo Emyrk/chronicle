@@ -20,7 +20,10 @@ import (
 	"github.com/Emyrk/chronicle/api/chronicleproto"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/aikey"
+	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protowire"
@@ -674,6 +677,67 @@ func TestSummaryRoutesInOpenAPI(t *testing.T) {
 		for _, parameter := range operation.Parameters {
 			names = append(names, parameter.Name)
 		}
-		require.Equal(t, []string{"instance_id", "encounter", "attempt", "format"}, names)
+		require.Equal(t, []string{"instance_id", "encounter", "attempt", "format", "ai_key"}, names)
 	}
+}
+
+// keyStore is an aikey.Store with one key and buckets that never run out.
+type keyStore struct{ row database.AiKey }
+
+func (keyStore) TakeRateLimitTokens(context.Context, database.TakeRateLimitTokensParams) (database.TakeRateLimitTokensRow, error) {
+	return database.TakeRateLimitTokensRow{Allowed: true, Tokens: 1}, nil
+}
+
+func (keyStore) ForceTakeRateLimitTokens(context.Context, database.ForceTakeRateLimitTokensParams) (float64, error) {
+	return 1, nil
+}
+
+func (keyStore) PeekRateLimitTokens(_ context.Context, arg database.PeekRateLimitTokensParams) (float64, error) {
+	return arg.Burst, nil
+}
+
+func (s keyStore) GetAIKeyByHashedSecret(_ context.Context, hashed []byte) (database.AiKey, error) {
+	if !bytes.Equal(hashed, s.row.HashedSecret) {
+		return database.AiKey{}, pgx.ErrNoRows
+	}
+	return s.row, nil
+}
+
+func (keyStore) TouchAIKey(context.Context, database.TouchAIKeyParams) error { return nil }
+
+func TestSummaryRoutesWithAIKey(t *testing.T) {
+	t.Parallel()
+	_, store, _ := newSummaryFixtureService(t)
+	secret, err := aikey.Generate()
+	require.NoError(t, err)
+	keys := keyStore{row: database.AiKey{
+		ID: uuid.New(), UserID: uuid.New(), TenantScopeID: aikey.TenantScope(uuid.Nil),
+		HashedSecret: aikey.Hash(secret),
+		CreatedAt:    database.Timestamptz(time.Now()), ExpiresAt: database.Timestamptz(time.Now().Add(time.Hour)),
+	}}
+	service := &Service{db: store}
+	service.aiKeys = aikey.NewAuthenticator(testutil.Logger(t), keys, func(context.Context, uuid.UUID) (string, error) { return "free", nil })
+	service.setupRoutes()
+
+	for _, route := range []string{"deaths", "consumables"} {
+		// One client IP well past the anonymous summary burst: keyed requests
+		// use the key's view buckets, not the IP bucket.
+		for i := range 6 {
+			rec := getSummaryFrom(t, service, "/raidlogs/instances/fixture-run/"+route+"?format=md&ai_key="+secret, "192.0.2.40")
+			require.Equal(t, http.StatusOK, rec.Code, "%s %d: %s", route, i, rec.Body.String())
+			require.Equal(t, "no-store", rec.Header().Get("Cache-Control"), route)
+			require.Equal(t, "no-referrer", rec.Header().Get("Referrer-Policy"), route)
+			require.Equal(t, "noindex", rec.Header().Get("X-Robots-Tag"), route)
+			require.NotEmpty(t, rec.Header().Get(aikey.ViewsRemainingTodayHeader), route)
+			require.Contains(t, rec.Body.String(), "https://chronicle.example/instances/fixture-run?ai_key="+secret, route)
+			require.Contains(t, rec.Body.String(), "https://chronicle.example/armory/Nordanaar/Healy?ai_key="+secret, route)
+		}
+		rec := getSummaryFrom(t, service, "/raidlogs/instances/fixture-run/"+route+"?ai_key=ck_wrong", "192.0.2.41")
+		require.Equal(t, http.StatusUnauthorized, rec.Code, route)
+	}
+
+	// Without a key, links stay plain.
+	rec := getSummary(t, service, "/raidlogs/instances/fixture-run/deaths?format=md")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotContains(t, rec.Body.String(), "ai_key")
 }
