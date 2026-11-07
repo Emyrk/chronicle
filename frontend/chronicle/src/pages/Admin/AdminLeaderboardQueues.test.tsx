@@ -17,8 +17,8 @@ const snapshot = {
     "guild_boss_subjects",
     "guild_clear_benchmarks",
     "guild_clear_subjects",
-    "player_renown_counts",
-    "guild_renown_counts",
+    "player_renown",
+    "guild_renown",
   ].map((family, i) => ({
     family,
     pending: i === 0 ? 10 : 0,

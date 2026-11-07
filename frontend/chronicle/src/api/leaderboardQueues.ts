@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { operationJSON } from "./leaderboardOperations";
 
-// Temporary isolated contract until the backend SDK generation is integrated.
+// Temporary isolated alias for SDK LeaderboardQueueDiagnostics (rows are
+// LeaderboardQueueStatus) until the backend generation is integrated.
 export interface LeaderboardQueueSnapshot {
   tenant_id: string;
   collected_at: string;
@@ -61,8 +62,8 @@ export function queueFamilyLabel(family: string): string {
     guild_boss_subjects: "D2 · Guild boss summaries",
     guild_clear_benchmarks: "D2 · Guild clear benchmarks",
     guild_clear_subjects: "D2 · Guild clear summaries",
-    player_renown_counts: "D2 · Player Renown counts",
-    guild_renown_counts: "D2 · Guild Renown counts",
+    player_renown: "D2 · Player Renown counts",
+    guild_renown: "D2 · Guild Renown counts",
   };
   return labels[family] ?? family.replaceAll("_", " ");
 }
