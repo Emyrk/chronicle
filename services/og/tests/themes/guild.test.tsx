@@ -65,7 +65,7 @@ describe('guild card', () => {
     const { json, png } = await renderGuild(FULL_QUERY);
     expect([...png.slice(0, 4)]).toEqual(PNG_SIGNATURE);
     expect(networkCalls()).toEqual([]);
-    for (const text of ['Nightfall', 'Guild · Raiding', 'Nordanaar · WoW Forever · 62 raiders · raiding since Mar 2025', 'Naxx', '4/15', '34:52', 'Best MC clear', 'Avg parse', 'forever.chronicleclassic.com', 'See our raids']) {
+    for (const text of ['Nightfall', 'Guild · Raiding', 'Nordanaar · WoW Forever · 62 members · since Mar 2025', 'Naxx', '4/15', '34:52', 'Best MC clear', 'Top parse avg', 'forever.chronicleclassic.com', 'See our raids']) {
       expect(json).toContain(text);
     }
   });

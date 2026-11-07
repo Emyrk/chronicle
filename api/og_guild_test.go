@@ -1,9 +1,18 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"golang.org/x/xerrors"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -11,6 +20,9 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/testutil"
 )
 
 func guildOGKill(instance, encounter string, kills int32, first time.Time) database.GuildEncounterKillsRow {
@@ -88,9 +100,11 @@ func TestGuildOGParams(t *testing.T) {
 		bare := guildOGData{
 			Guild: database.GetGuildByIDRow{Name: "Nightfall", RealmName: "Nordanaar"},
 			Encounters: []database.GuildEncounterKillsRow{
-				guildOGKill("Ragefire Chasm", "Taragaman", 3, mar),
-				guildOGKill("Ragefire Chasm", "Bazzalan", 2, mar),
-				guildOGKill("Wailing Caverns", "Mutanus", 4, mar),
+				// Dungeon kills count toward neither raids logged nor since.
+				guildOGKill("Ragefire Chasm", "Taragaman", 3, mar.AddDate(-1, 0, 0)),
+				guildOGKill("Wailing Caverns", "Mutanus", 4, mar.AddDate(-1, 0, 0)),
+				// A raid kill that isn't a progression boss: no row, but a raid logged.
+				guildOGKill("Naxxramas", "Trash Pack", 2, mar),
 			},
 			TopParses: []database.GuildTopParsesRow{
 				{PlayerName: "Thal,en:dris", PlayerClass: "MAGE", DisplayScore: 99},
@@ -104,7 +118,7 @@ func TestGuildOGParams(t *testing.T) {
 			"name":  {"Nightfall"},
 			"realm": {"Nordanaar"},
 			"since": {"2025-03"},
-			"raids": {"7"},
+			"raids": {"2"},
 			"top":   {"Thalendris:mage:99,Grimtusk:warrior:80,Lyra:priest:56"},
 			"avg":   {"69"},
 		}, got)
@@ -113,12 +127,29 @@ func TestGuildOGParams(t *testing.T) {
 
 func TestGuildOGLogoURL(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, "https://cdn.example.com/a.png", guildOGLogoURL("h.com", " https://cdn.example.com/a.png "))
-	require.Equal(t, "https://h.com/c/images/a.png", guildOGLogoURL("h.com", "/c/images/a.png"))
-	require.Empty(t, guildOGLogoURL("h.com", "//evil.com/a.png"))
-	require.Empty(t, guildOGLogoURL("h.com", "data:image/png;base64,AAAA"))
-	require.Empty(t, guildOGLogoURL("h.com", "javascript:alert(1)"))
-	require.Empty(t, guildOGLogoURL("h.com", ""))
+	host := "forever.chronicleclassic.com"
+	for raw, want := range map[string]string{
+		" https://forever.chronicleclassic.com/c/images/a.png ": "https://forever.chronicleclassic.com/c/images/a.png",
+		"/c/images/a.png":                            "https://forever.chronicleclassic.com/c/images/a.png",
+		"https://chronicleclassic.com/a.png":         "https://chronicleclassic.com/a.png",
+		"https://cdn.chronicleclassic.com/a.png":     "https://cdn.chronicleclassic.com/a.png",
+		"https://FOREVER.chronicleclassic.com/a.png": "https://FOREVER.chronicleclassic.com/a.png",
+		// Not Chronicle-hosted: the monogram shows.
+		"https://cdn.example.com/a.png":                  "",
+		"https://evilchronicleclassic.com/a.png":         "",
+		"https://chronicleclassic.com.evil/a.png":        "",
+		"http://forever.chronicleclassic.com/a.png":      "",
+		"https://u:p@forever.chronicleclassic.com/a.png": "",
+		"//evil.com/a.png":                               "",
+		"data:image/png;base64,AAAA":                     "",
+		"javascript:alert(1)":                            "",
+		"":                                               "",
+		"/" + strings.Repeat("a", 600):                   "",
+	} {
+		require.Equal(t, want, guildOGLogoURL(host, raw), raw)
+	}
+	// The page host may carry a port locally.
+	require.Equal(t, "https://localhost:4000/a.png", guildOGLogoURL("localhost:4000", "/a.png"))
 }
 
 func TestGuildOGRaidsFromRegistry(t *testing.T) {
@@ -139,6 +170,44 @@ func TestGuildOGRaidsFromRegistry(t *testing.T) {
 	require.False(t, ok, "dungeons have no progression row")
 }
 
+// Turtle splits Tower of Karazhan into Lower/Upper, which only exist as
+// derived names on the registry entry.
+func TestGuildOGTurtleKarazhan(t *testing.T) {
+	t.Parallel()
+	turtle := database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol, database.FlavorTurtle}
+	reg := registry.RegistryForFlavor(nil, turtle)
+	raids := guildOGRaids(reg.AllInstanceDetails())
+
+	upper, ok := raids["Upper Tower of Karazhan"]
+	require.True(t, ok, "UKara must be indexed")
+	require.Positive(t, upper.Total)
+	require.Len(t, upper.Bosses, upper.Total)
+	require.Greater(t, upper.Order, raids["Naxxramas"].Order)
+	_, ok = raids["Lower Tower of Karazhan"]
+	require.True(t, ok, "LKara must be indexed")
+
+	var boss string
+	for b := range upper.Bosses {
+		boss = b
+		break
+	}
+	when := time.Date(2025, 6, 1, 20, 0, 0, 0, time.UTC)
+	got := guildOGParams("turtle.chronicleclassic.com", guildOGData{
+		Guild: database.GetGuildByIDRow{Name: "Nightfall", RealmName: "Nordanaar"},
+		Encounters: []database.GuildEncounterKillsRow{
+			guildOGKill("Naxxramas", "Patchwerk", 3, when),
+			guildOGKill("Upper Tower of Karazhan", boss, 1, when),
+		},
+		BestRuns: []database.GuildBestRunsRow{
+			{InstanceName: "Naxxramas", DurationMs: 9_000_000},
+			{InstanceName: "Upper Tower of Karazhan", DurationMs: 5_400_000},
+		},
+	}, raids)
+	require.Equal(t, fmt.Sprintf("Naxx:1:%d,UKara:1:%d", raids["Naxxramas"].Total, upper.Total), got.Get("prog"))
+	require.Equal(t, "UKara", got.Get("bestraid"))
+	require.Equal(t, "5400", got.Get("best"))
+}
+
 func TestGuildOGImageURLSigned(t *testing.T) {
 	t.Parallel()
 	base, err := url.Parse("https://og.example.com/")
@@ -151,4 +220,123 @@ func TestGuildOGImageURLSigned(t *testing.T) {
 	require.Equal(t, "guild", q.Get("template"))
 	require.Equal(t, "MC:10:10", q.Get("prog"))
 	require.Equal(t, ogSignature("k", q), q.Get("sig"))
+}
+
+// guildOGFaultStore makes one card query fail (or block until its context is
+// done) on top of a real store.
+type guildOGFaultStore struct {
+	database.Store
+	block bool
+}
+
+func (s guildOGFaultStore) GetGuildPage(ctx context.Context, guildID uuid.UUID) (database.GuildPage, error) {
+	if s.block {
+		<-ctx.Done()
+		return database.GuildPage{}, ctx.Err()
+	}
+	return database.GuildPage{}, xerrors.New("boom")
+}
+
+func TestGuildOGResolver(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	store, _ := dbtestutil.NewDB(t)
+
+	serverID := uuid.New()
+	_, err := store.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: serverID, Name: "og guild " + serverID.String()})
+	require.NoError(t, err)
+	realmID := uuid.New()
+	realmName := "Realm " + realmID.String()[:8]
+	_, err = store.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: realmID, ServerID: serverID, Name: realmName})
+	require.NoError(t, err)
+	guild, err := store.UpsertGuild(ctx, database.UpsertGuildParams{RealmID: realmID, Name: "Nightfall", CreatedAt: database.Timestamptz(time.Now())})
+	require.NoError(t, err)
+	theme, err := json.Marshal(chroniclesdk.GuildPageTheme{
+		PrimaryColor: "#A63F3F",
+		LogoURL:      "https://cdn.example.com/logo.png",
+		Tags:         []chroniclesdk.GuildTag{chroniclesdk.GuildTagRaiding},
+	})
+	require.NoError(t, err)
+	_, err = store.UpsertGuildPage(ctx, database.UpsertGuildPageParams{GuildID: guild.ID, Theme: theme})
+	require.NoError(t, err)
+
+	ogBase, err := url.Parse("https://og.example.com/")
+	require.NoError(t, err)
+	newAPI := func(db database.Store, configured bool) *API {
+		opts := &Options{Zed: authz.NewDatabaseOnly(testutil.Logger(t), db)}
+		if configured {
+			opts.OGServiceURL = ogBase
+			opts.OGSigningKey = "k"
+		}
+		return &API{Opts: opts}
+	}
+	request := func() *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "/g/"+guild.ID.String(), nil).WithContext(ctx)
+		r.Host = "forever.chronicleclassic.com"
+		return r
+	}
+	imageQuery := func(t *testing.T, raw string) url.Values {
+		t.Helper()
+		require.NotEmpty(t, raw)
+		u, err := url.Parse(raw)
+		require.NoError(t, err)
+		q := u.Query()
+		require.Equal(t, ogSignature("k", q), q.Get("sig"))
+		return q
+	}
+	wantTitle := "Nightfall"
+	wantDescription := "Nightfall guild on " + realmName + ": raid progression, best clears and top parses on Chronicle."
+
+	t.Run("Unconfigured", func(t *testing.T) {
+		t.Parallel()
+		og := newAPI(store, false).guildOG(request(), guild.ID.String())
+		require.NotNil(t, og)
+		require.Empty(t, og.ImageURL)
+		require.Equal(t, wantTitle, og.Title)
+		require.Equal(t, wantDescription, og.Description)
+		require.Equal(t, "https://forever.chronicleclassic.com/g/"+guild.ID.String(), og.URL)
+	})
+
+	t.Run("UnknownOrInvalid", func(t *testing.T) {
+		t.Parallel()
+		api := newAPI(store, true)
+		require.Nil(t, api.guildOG(request(), uuid.NewString()))
+		require.Nil(t, api.guildOG(request(), "not-a-uuid"))
+	})
+
+	t.Run("Configured", func(t *testing.T) {
+		t.Parallel()
+		og := newAPI(store, true).guildOG(request(), guild.ID.String())
+		require.NotNil(t, og)
+		require.Equal(t, wantTitle, og.Title)
+		require.Equal(t, wantDescription, og.Description)
+		q := imageQuery(t, og.ImageURL)
+		require.Equal(t, "guild", q.Get("template"))
+		require.Equal(t, "Nightfall", q.Get("name"))
+		require.Equal(t, realmName, q.Get("realm"))
+		require.Equal(t, "A63F3F", q.Get("accent"))
+		require.Equal(t, "Raiding", q.Get("tag"))
+		require.Equal(t, "forever.chronicleclassic.com", q.Get("host"))
+		require.False(t, q.Has("icon"), "a logo on another host is never sent")
+	})
+
+	for name, fault := range map[string]guildOGFaultStore{
+		"QueryFails":    {Store: store},
+		"QueryTimesOut": {Store: store, block: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			start := time.Now()
+			og := newAPI(fault, true).guildOG(request(), guild.ID.String())
+			require.Less(t, time.Since(start), guildOGCardTimeout+2*time.Second)
+			require.NotNil(t, og)
+			require.Equal(t, wantTitle, og.Title)
+			q := imageQuery(t, og.ImageURL)
+			require.Equal(t, "Nightfall", q.Get("name"))
+			require.Equal(t, realmName, q.Get("realm"))
+			// Only the failed page-theme lookup's params are missing.
+			require.False(t, q.Has("accent"))
+			require.False(t, q.Has("tag"))
+		})
+	}
 }

@@ -2,7 +2,8 @@
 // two headline stats. Every value comes from the signed params api/og.go writes:
 //   name, realm, product, members, since (YYYY-MM), accent, tag, host,
 //   prog=MC:10:10,BWL:8:8 (short:down:total, at most 4), best (seconds),
-//   bestraid, avg, and when there is no progression raids + top=name:class:score.
+//   bestraid, avg (mean of the top best-per-player parses), and when there is
+//   no progression raids + top=name:class:score.
 // `icon` (the guild logo) is fetched by the handler through the SSRF pipeline;
 // any failure, WebP included, leaves iconSrc null and the monogram shows.
 import { Img, fitFontSize } from './shared';
@@ -201,8 +202,8 @@ async function render(props: ThemeProps, context: ThemeContext): Promise<React.R
   const subline = [
     realm,
     product,
-    members ? `${members.toLocaleString('en-US')} ${members === 1 ? 'raider' : 'raiders'}` : '',
-    since ? `raiding since ${since}` : '',
+    members ? `${members.toLocaleString('en-US')} ${members === 1 ? 'member' : 'members'}` : '',
+    since ? `since ${since}` : '',
   ].filter(Boolean);
   const nameSize = fitFontSize(name, [
     [12, 88],
@@ -277,7 +278,7 @@ async function render(props: ThemeProps, context: ThemeContext): Promise<React.R
             {hasStats ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                 {best !== null ? <Stat value={formatDuration(best)} label={bestRaid ? `Best ${bestRaid} clear` : 'Best clear'} /> : null}
-                {avg !== null ? <Stat value={String(avg)} label="Avg parse" color={parseColor(avg)} /> : null}
+                {avg !== null ? <Stat value={String(avg)} label="Top parse avg" color={parseColor(avg)} /> : null}
               </div>
             ) : null}
           </div>

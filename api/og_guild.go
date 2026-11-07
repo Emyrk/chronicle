@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/frontend"
@@ -76,21 +78,43 @@ type guildOGRaid struct {
 	Bosses map[string]struct{}
 }
 
-// guildOGRaids indexes the flavor's raids that have a known boss count.
+// guildOGRaids indexes the flavor's raids that have a known boss count, plus
+// their derived names (Turtle splits "Tower of Karazhan" into Lower/Upper).
+// A derived raid takes its order from DerivedRaidProgressionOrders and its
+// bosses from the Bosses requirements of DerivedSpeedrunRules, the same rule
+// as the frontend's selectSupportedInstanceProgressionBosses.
 func guildOGRaids(details []registry.InstanceDetail) map[string]guildOGRaid {
 	raids := make(map[string]guildOGRaid)
 	for _, d := range details {
-		if d.Category != instances.InstanceCategoryRaid || d.BossCount == nil || *d.BossCount <= 0 {
+		if d.Category != instances.InstanceCategoryRaid {
 			continue
 		}
-		raid := guildOGRaid{Order: d.RaidProgressionOrder, Total: *d.BossCount}
-		if d.ProgressionBosses != nil {
-			raid.Bosses = make(map[string]struct{}, len(d.ProgressionBosses))
-			for _, boss := range d.ProgressionBosses {
-				raid.Bosses[boss] = struct{}{}
+		if d.BossCount != nil && *d.BossCount > 0 {
+			raid := guildOGRaid{Order: d.RaidProgressionOrder, Total: *d.BossCount}
+			if d.ProgressionBosses != nil {
+				raid.Bosses = make(map[string]struct{}, len(d.ProgressionBosses))
+				for _, boss := range d.ProgressionBosses {
+					raid.Bosses[boss] = struct{}{}
+				}
 			}
+			raids[d.Name] = raid
 		}
-		raids[d.Name] = raid
+		for _, name := range d.DerivedNames {
+			rules := d.DerivedSpeedrunRules[name]
+			if rules == nil {
+				continue
+			}
+			bosses := make(map[string]struct{})
+			for _, req := range rules.Requirements {
+				if req.Category == rankings.SpeedrunCategoryBosses {
+					bosses[req.Name] = struct{}{}
+				}
+			}
+			if len(bosses) == 0 {
+				continue
+			}
+			raids[name] = guildOGRaid{Order: d.DerivedRaidProgressionOrders[name], Total: len(bosses), Bosses: bosses}
+		}
 	}
 	return raids
 }
@@ -126,6 +150,9 @@ func guildOGParams(host string, d guildOGData, raids map[string]guildOGRaid) url
 
 	var since time.Time
 	for _, e := range d.Encounters {
+		if _, ok := raids[e.InstanceName]; !ok {
+			continue
+		}
 		if e.FirstKilledAt.Valid && (since.IsZero() || e.FirstKilledAt.Time.Before(since)) {
 			since = e.FirstKilledAt.Time
 		}
@@ -139,7 +166,7 @@ func guildOGParams(host string, d guildOGData, raids map[string]guildOGRaid) url
 		q.Set("prog", strings.Join(prog, ","))
 	} else {
 		// No progression: the card shows raids logged and the top 3 parsers.
-		if logged := guildOGRaidsLogged(d.Encounters); logged > 0 {
+		if logged := guildOGRaidsLogged(d.Encounters, raids); logged > 0 {
 			q.Set("raids", strconv.Itoa(logged))
 		}
 		top := make([]string, 0, 3)
@@ -234,11 +261,14 @@ func guildOGProgression(encounters []database.GuildEncounterKillsRow, raids map[
 	return prog
 }
 
-// guildOGRaidsLogged approximates the guild's logged raid nights: per instance,
-// the most kills of any one boss.
-func guildOGRaidsLogged(encounters []database.GuildEncounterKillsRow) int {
+// guildOGRaidsLogged approximates the guild's logged raid nights: per raid,
+// the most kills of any one boss. Dungeons don't count.
+func guildOGRaidsLogged(encounters []database.GuildEncounterKillsRow, raids map[string]guildOGRaid) int {
 	most := make(map[string]int)
 	for _, e := range encounters {
+		if _, ok := raids[e.InstanceName]; !ok {
+			continue
+		}
 		most[e.InstanceName] = max(most[e.InstanceName], int(e.Kills))
 	}
 	total := 0
@@ -248,21 +278,49 @@ func guildOGRaidsLogged(encounters []database.GuildEncounterKillsRow) int {
 	return total
 }
 
-// guildOGLogoURL makes a guild logo URL absolute; anything but http(s) is dropped.
+// guildOGLogoMaxLen drops logo URLs too long to be worth signing into the image URL.
+const guildOGLogoMaxLen = 512
+
+// guildOGLogoDomain is Chronicle's own domain; logos on it or its subdomains
+// are Chronicle-hosted.
+const guildOGLogoDomain = "chronicleclassic.com"
+
+// guildOGLogoURL returns the guild logo as an absolute https URL when it is
+// Chronicle-hosted (the page's own host, or chronicleclassic.com and its
+// subdomains), so the OG service never fetches from a host a guild admin
+// picked. Anything else, or anything over guildOGLogoMaxLen, returns "" and
+// the card draws the monogram.
 func guildOGLogoURL(host, raw string) string {
 	raw = strings.TrimSpace(raw)
+	if raw == "" || len(raw) > guildOGLogoMaxLen {
+		return ""
+	}
 	if strings.HasPrefix(raw, "/") && !strings.HasPrefix(raw, "//") {
 		raw = "https://" + host + raw
 	}
 	u, err := url.Parse(raw)
-	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || len(u.String()) > guildOGLogoMaxLen {
+		return ""
+	}
+	logoHost := strings.ToLower(u.Hostname())
+	pageHost := strings.ToLower(host)
+	if h, _, err := net.SplitHostPort(pageHost); err == nil {
+		pageHost = h
+	}
+	if logoHost != pageHost && logoHost != guildOGLogoDomain && !strings.HasSuffix(logoHost, "."+guildOGLogoDomain) {
 		return ""
 	}
 	return u.String()
 }
 
-// guildOG builds the Open Graph metadata for /g/{guildID}. The card's queries
-// only run when the OG service is configured, all under one 5s budget.
+// guildOGCardTimeout bounds the guild card's queries. OG data resolves on
+// every HTML load of the page, browsers included, so the card must not hold up
+// the first byte for long; a query that runs out just leaves its part off.
+const guildOGCardTimeout = 1500 * time.Millisecond
+
+// guildOG builds the Open Graph metadata for /g/{guildID}. The guild lookup
+// (title and description) gets 5s; the card's queries only run when the OG
+// service is configured, in parallel under guildOGCardTimeout.
 func (api *API) guildOG(r *http.Request, rawID string) *frontend.OGData {
 	guildID, err := uuid.Parse(rawID)
 	if err != nil {
@@ -287,7 +345,10 @@ func (api *API) guildOG(r *http.Request, rawID string) *frontend.OGData {
 		return og
 	}
 
-	// Each lookup is best effort: a failure leaves its params off the card.
+	// Each lookup is best effort: a failure or timeout leaves its params off
+	// the card. Each goroutine writes only its own field; all are read after Wait.
+	ctx, cancelCard := context.WithTimeout(ctx, guildOGCardTimeout)
+	defer cancelCard()
 	data := guildOGData{Guild: guild}
 	tenantID := servicetenant.TenantIDFromContext(ctx)
 	lookbackDays := int64(parsepolicy.DefaultLookbackDays)
