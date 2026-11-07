@@ -369,6 +369,42 @@ func (s *Service) logoutOAuth(res http.ResponseWriter, req *http.Request) error 
 	return nil
 }
 
+func (s *Service) tenantAuthRedirect(r *http.Request, provider string) (string, bool) {
+	if s.accessURL == nil || strings.EqualFold(r.Host, s.accessURL.Host) {
+		return "", false
+	}
+
+	// OAuth state cookies and the provider callback must use the same host. If
+	// authentication starts on a tenant, move it to the access URL and relay the
+	// completed session back to the tenant.
+	tenantOrigin, _, _, ok := s.parseRelayTarget(s.accessURL.Scheme + "://" + r.Host + "/")
+	if !ok {
+		return "", false
+	}
+
+	from := s.safeAuthRedirect(r.URL.Query().Get("from"))
+	fromURL, err := url.Parse(from)
+	if err != nil {
+		fromURL = &url.URL{Path: "/"}
+	}
+	if !fromURL.IsAbs() {
+		if !strings.HasPrefix(fromURL.Path, "/") {
+			fromURL.Path = "/" + fromURL.Path
+		}
+		origin, err := url.Parse(tenantOrigin)
+		if err != nil {
+			return "", false
+		}
+		from = origin.ResolveReference(fromURL).String()
+	}
+
+	target := s.accessURL.ResolveReference(&url.URL{Path: "/auth/" + provider})
+	query := target.Query()
+	query.Set("from", from)
+	target.RawQuery = query.Encode()
+	return target.String(), true
+}
+
 func (s *Service) BeginAuthHandler(w http.ResponseWriter, req *http.Request) {
 	u, err := s.GetAuthURL(w, req)
 	if err != nil {
@@ -691,6 +727,15 @@ func (s *Service) Handler() http.Handler {
 					}
 				}
 				return // Already authenticated, not a relay target
+			}
+
+			provider, ok := s.provider(w, r)
+			if !ok {
+				return
+			}
+			if redirect, ok := s.tenantAuthRedirect(r, provider.Name()); ok {
+				http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
+				return
 			}
 
 			s.BeginAuthHandler(w, r)
