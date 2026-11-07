@@ -36,7 +36,7 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 			},
 		})
 	}
-	return append(routes, []frontend.OGRoute{
+	routes = append(routes, []frontend.OGRoute{
 		{
 			Pattern: "/instances/{idOrSlug}",
 			Resolve: func(r *http.Request) *frontend.OGData {
@@ -75,6 +75,11 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 			},
 		},
 	}...)
+	// Any page without its own image, or whose lookup failed, gets the brand card.
+	for i := range routes {
+		routes[i].Resolve = api.withBrandOG(routes[i].Resolve)
+	}
+	return routes
 }
 
 type staticOGMetadata struct {

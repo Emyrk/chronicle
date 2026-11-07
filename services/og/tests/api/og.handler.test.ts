@@ -258,17 +258,15 @@ describe('signed params', () => {
     const { response, rendered } = await render(url, 'og', { OG_SIGNING_KEY: KEY });
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toBe('image/png');
-    expect(rendered?.theme).toBe('modern');
-    expect(rendered?.props.title).toBe('Chronicle');
-    expect(rendered?.context.searchParams.has('title')).toBe(true);
-    expect(rendered?.context.searchParams.get('title')).not.toBe('Forged');
+    expect(rendered?.theme).toBe('brand');
+    expect([...rendered!.context.searchParams]).toEqual([['template', 'brand']]);
   });
 
   test('renders the fallback when a signed param is changed', async () => {
     const url = signedUrl('template=chronicle&title=Hello').replace('title=Hello', 'title=Changed');
     const { rendered } = await render(url, 'og', { OG_SIGNING_KEY: KEY });
-    expect(rendered?.theme).toBe('modern');
-    expect(rendered?.props.title).toBe('Chronicle');
+    expect(rendered?.theme).toBe('brand');
+    expect(rendered?.context.searchParams.has('title')).toBe(false);
   });
 
   test('never fetches images from a rejected request', async () => {

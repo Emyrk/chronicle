@@ -2,7 +2,7 @@ import { ImageResponse } from 'next/og';
 import { NextRequest } from 'next/server';
 import { loadRemoteImage, reconstructImageUrl } from '@/app/lib/og-remote-image';
 import { resolveOgRouteKeys } from '@/app/lib/og-route-keys';
-import { DEFAULT_OG_THEME, normalizeOgTheme } from '@/app/lib/og-themes';
+import { normalizeOgTheme } from '@/app/lib/og-themes';
 import { verifyOgSignature } from '@/app/lib/og-signature';
 import { capText, sanitizeText } from '@/app/lib/og-text';
 import { themes } from './themes';
@@ -34,9 +34,9 @@ function readAccent(value: string | null): string | null {
   return null;
 }
 
-// Until the `brand` card exists, the fallback is the default template.
+// The brand card draws its own defaults, so it needs no other params.
 function fallbackParams(): URLSearchParams {
-  return new URLSearchParams({ template: DEFAULT_OG_THEME, title: 'Chronicle', site: 'Chronicle' });
+  return new URLSearchParams({ template: 'brand' });
 }
 
 export async function handleOgGet(request: NextRequest, routeKey: string): Promise<Response> {
