@@ -1,45 +1,46 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-// Pinned to match services/og/tests/fixtures/og-sig-vectors.json (#1661).
-var ogSigVectors = []struct {
-	key    string
-	params map[string]string
-	sig    string
-}{
-	{
-		key:    "test-og-signing-key",
-		params: map[string]string{"template": "talents", "class": "mage", "spec": "Fire", "points": "17-34-0", "host": "forever.chronicleclassic.com", "product": "WoW Forever", "v": "1"},
-		sig:    "f43227d0557bd10628c0808c28881500",
-	},
-	{
-		key:    "test-og-signing-key",
-		params: map[string]string{"template": "raid", "guild": "<Nightfall> & Co", "raid": "Ahn'Qiraj", "top": "Thalendris:mage:1284,Grimtusk:warrior:1201", "host": "chronicleclassic.com", "v": "2"},
-		sig:    "ec4a6217febcb090c103b5b2588b704f",
-	},
+type ogSigVector struct {
+	Key    string            `json:"key"`
+	Params map[string]string `json:"params"`
+	Sig    string            `json:"sig"`
+}
+
+// loadOGSigVectors reads the signing vectors shared with the OG service's verifier.
+func loadOGSigVectors(t *testing.T) []ogSigVector {
+	t.Helper()
+	data, err := os.ReadFile("../services/og/tests/fixtures/og-sig-vectors.json")
+	require.NoError(t, err)
+	var vectors []ogSigVector
+	require.NoError(t, json.Unmarshal(data, &vectors))
+	require.NotEmpty(t, vectors)
+	return vectors
 }
 
 func TestOGSignatureVectors(t *testing.T) {
 	t.Parallel()
 
-	for _, vec := range ogSigVectors {
+	for _, vec := range loadOGSigVectors(t) {
 		params := url.Values{}
-		for k, v := range vec.params {
+		for k, v := range vec.Params {
 			params.Set(k, v)
 		}
-		require.Equal(t, vec.sig, ogSignature(vec.key, params))
+		require.Equal(t, vec.Sig, ogSignature(vec.Key, params))
 
 		// An existing sig param is not part of the canonical string.
 		params.Set("sig", "ignored")
-		require.Equal(t, vec.sig, ogSignature(vec.key, params))
+		require.Equal(t, vec.Sig, ogSignature(vec.Key, params))
 	}
 }
 
@@ -48,23 +49,23 @@ func TestSignedOGImageURLMatchesVectors(t *testing.T) {
 
 	base, err := url.Parse("https://og.example.com/")
 	require.NoError(t, err)
-	for _, vec := range ogSigVectors {
+	for _, vec := range loadOGSigVectors(t) {
 		params := url.Values{}
-		for k, v := range vec.params {
+		for k, v := range vec.Params {
 			if k != "template" && k != "host" && k != "product" {
 				params.Set(k, v)
 			}
 		}
-		raw := signedOGImageURL(base, vec.key, vec.params["template"], vec.params["host"], vec.params["product"], params)
+		raw := signedOGImageURL(base, vec.Key, vec.Params["template"], vec.Params["host"], vec.Params["product"], params)
 
 		u, err := url.Parse(raw)
 		require.NoError(t, err)
 		require.Equal(t, "og.example.com", u.Host)
 		require.Equal(t, "/api/og", u.Path)
 		got := u.Query()
-		require.Equal(t, vec.sig, got.Get("sig"))
-		require.Len(t, got, len(vec.params)+1)
-		for k, v := range vec.params {
+		require.Equal(t, vec.Sig, got.Get("sig"))
+		require.Len(t, got, len(vec.Params)+1)
+		for k, v := range vec.Params {
 			require.Equal(t, v, got.Get(k), k)
 		}
 	}
@@ -128,4 +129,28 @@ func TestOGImageURL(t *testing.T) {
 		require.Equal(t, "7", q.Get("v"))
 		require.Equal(t, ogSignature("test-og-signing-key", q), q.Get("sig"))
 	})
+}
+
+func TestSignedOGImageURLSanitizesValues(t *testing.T) {
+	t.Parallel()
+
+	base, err := url.Parse("https://og.example.com")
+	require.NoError(t, err)
+	params := url.Values{
+		"bad":   {"abc\xff\xfe"},
+		"guild": {"Night\nv\n9\r\nfall"},
+	}
+	raw := signedOGImageURL(base, "test-og-signing-key", "raid", "chronicle\xffclassic.com", "Wo\nW", params)
+
+	// Parse the way the service does: decode the query, then verify the sig
+	// over exactly what was decoded.
+	u, err := url.Parse(raw)
+	require.NoError(t, err)
+	q := u.Query()
+	require.Equal(t, "abc\uFFFD", q.Get("bad"))
+	require.Equal(t, "Night v 9  fall", q.Get("guild"))
+	require.Equal(t, "chronicle\uFFFDclassic.com", q.Get("host"))
+	require.Equal(t, "Wo W", q.Get("product"))
+	require.Equal(t, ogSignature("test-og-signing-key", q), q.Get("sig"))
+	require.Equal(t, "abc\xff\xfe", params.Get("bad"), "caller params must not be modified")
 }
