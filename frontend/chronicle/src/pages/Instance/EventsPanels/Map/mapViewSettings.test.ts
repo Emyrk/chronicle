@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  ABOVE_DISC_HEALTH_DEFAULT_STORAGE_KEY,
   DEFAULT_EFFECT_SETTINGS,
   EFFECTS_STORAGE_KEY,
   MAX_CHIP_SCALE_PERCENT,
@@ -17,6 +18,25 @@ Object.defineProperty(globalThis, "localStorage", { value: localStorage, configu
 
 describe("map view settings", () => {
   beforeEach(() => localStorage.clear());
+
+  it("shows health above 3D map tokens by default", () => {
+    expect(readStoredEffectSettings().aboveDisc).toBe("health");
+  });
+
+  it("forces the new health default over an existing saved choice until they opt out", () => {
+    localStorage.setItem(EFFECTS_STORAGE_KEY, JSON.stringify({ aboveDisc: "none" }));
+
+    expect(readStoredEffectSettings().aboveDisc).toBe("health");
+    expect(readStoredEffectSettings().aboveDisc).toBe("health");
+    expect(localStorage.getItem(ABOVE_DISC_HEALTH_DEFAULT_STORAGE_KEY)).toBe("1");
+  });
+
+  it("preserves an explicit opt-out after the health default was applied", () => {
+    localStorage.setItem(EFFECTS_STORAGE_KEY, JSON.stringify({ aboveDisc: "none" }));
+    localStorage.setItem(ABOVE_DISC_HEALTH_DEFAULT_STORAGE_KEY, "1");
+
+    expect(readStoredEffectSettings().aboveDisc).toBe("none");
+  });
 
   it("keeps the alignment overlay off by default", () => {
     expect(readStoredEffectSettings().alignmentOverlay).toBe(false);
