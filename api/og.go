@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/db2sdk"
@@ -471,7 +472,22 @@ func (api *API) instanceCardURL(r *http.Request, inst database.LogInstancesGuild
 			}
 		}
 	}
-	return api.ogImageURL(r, "raid", raidCardParams(api.loadRaidCard(loadReq, inst, encounters, base)))
+	// The raid card and the clear card load in parallel on loadReq, so after
+	// a parse card fallback both stay inside the same deadline. The clear
+	// card wins when the run is a qualified speedrun with a 90+ time-parse.
+	var (
+		wg       sync.WaitGroup
+		card     raidCard
+		speedrun clearCard
+		isClear  bool
+	)
+	wg.Go(func() { card = api.loadRaidCard(loadReq, inst, encounters, base) })
+	wg.Go(func() { speedrun, isClear = api.loadClearCard(loadReq, inst, encounters) })
+	wg.Wait()
+	if isClear {
+		return api.ogImageURL(r, "clear", clearCardParams(card, speedrun))
+	}
+	return api.ogImageURL(r, "raid", raidCardParams(card))
 }
 
 func instanceOGImageURL(host, instanceName string) string {
