@@ -25,6 +25,12 @@ describe("Storybook full-list live data", () => {
     const html = renderToStaticMarkup(<RatingFullList scope={{}} title="Molten Core" encounterCount={2} period="180d"
       view="peak" query="" onQuery={vi.fn()} live={live} />)
     expect(html).toContain("Boss peaks")
+    expect(html).not.toContain('<td class="w-full')
+    expect(html).toContain('w-[22%]')
+    expect(html).toContain('w-[28%]')
+    expect(html).toContain('table-auto')
+    expect(html).toContain('inline-flex items-center gap-1.5 whitespace-nowrap')
+    expect(html).toContain('/c/icons/spec_mage_fire.png')
     expect(html).toContain("mean of 2, misses count 0")
     expect(html).toContain("2 bosses · 1 missed")
     expect(html).toContain('title="Lucifron: no kill"')

@@ -144,11 +144,11 @@ export function RatingFullList({
       </div>
 
       <div className="styled-scrollbar overflow-x-auto">
-        <table className="w-full min-w-[42rem] text-sm">
+        <table className="w-full min-w-[42rem] table-auto text-sm">
           <thead className="border-b bg-black/10 text-[11px] tracking-wider text-muted-foreground uppercase">
             <tr>
               <th className="w-14 px-4 py-2.5 text-left font-medium sm:px-5">#</th>
-              <th className="w-px px-2 py-2.5 pr-8 text-left font-medium whitespace-nowrap">Character</th>
+              <th className="w-[22%] px-2 py-2.5 pr-6 text-left font-medium whitespace-nowrap">Character</th>
               {/* The ranking's own number sits next to the name; supporting columns follow to the right. */}
               {view === "overview" ? (
                 RATING_METRICS.map((m) => {
@@ -179,7 +179,7 @@ export function RatingFullList({
                   <th className="w-32 px-3 py-2.5 text-left font-medium">{theme.label}</th>
                   {view === "mastery" && (live ? <PublishedMasteryHeaders /> : <MasteryPartHeaders />)}
                   {showPeakComponents && (
-                    <th className="px-3 py-2.5 text-left font-medium" title="Peak is the mean of every boss's best score; a boss without a kill counts as 0.">
+                    <th className="w-[28%] px-3 py-2.5 text-left font-medium" title="Peak is the mean of every boss's best score; a boss without a kill counts as 0.">
                       Boss peaks <span className="ml-1 hidden tracking-normal normal-case opacity-70 md:inline">· mean of {encounterCount}, misses count 0</span>
                     </th>
                   )}
@@ -192,9 +192,9 @@ export function RatingFullList({
                   )}
                 </>
               )}
-              <th className="hidden px-3 py-2.5 text-left font-medium lg:table-cell">Realm</th>
-              <th className="hidden px-2 py-2.5 text-left font-medium md:table-cell">Spec</th>
-              <th className="hidden px-2 py-2.5 pr-4 text-left font-medium sm:pr-5 md:table-cell">Sub-spec</th>
+              <th className="hidden w-48 whitespace-nowrap px-3 py-2.5 text-left font-medium lg:table-cell">Realm</th>
+              <th className="hidden w-40 px-2 py-2.5 text-left font-medium md:table-cell">Spec</th>
+              <th className="hidden w-36 px-2 py-2.5 pr-4 text-left font-medium sm:pr-5 md:table-cell">Sub-spec</th>
             </tr>
           </thead>
           <tbody>
@@ -256,7 +256,7 @@ export function RatingFullList({
                       </div>
                     </td>
                     {view === "mastery" && (live ? <PublishedMasteryCells entry={entry} /> : <MasteryPartCells parts={entry.mastery} />)}
-                    {showPeakComponents && <td className="w-full px-3 py-2"><PeakComponents entry={entry} scores={peakComponents} /></td>}
+                    {showPeakComponents && <td className="px-3 py-2"><PeakComponents entry={entry} scores={peakComponents} /></td>}
                     {showPeakRun && (() => {
                       const run = live ? { ms: entry.durationMs, date: liveRun?.date } : liveRun ?? peakRun(entry.id, scope.boss)
                       return <>
@@ -267,8 +267,8 @@ export function RatingFullList({
                     })()}
                   </>
                 )}
-                <td className="hidden px-3 py-2 text-xs text-muted-foreground lg:table-cell">{entry.realmLabel || "Unknown realm"}</td>
-                <td className="hidden px-2 py-2 text-muted-foreground md:table-cell">{entry.spec}</td>
+                <td className="hidden whitespace-nowrap px-3 py-2 text-xs text-muted-foreground lg:table-cell">{entry.realmLabel || "Unknown realm"}</td>
+                <td className="hidden px-2 py-2 text-muted-foreground md:table-cell"><span className="inline-flex items-center gap-1.5 whitespace-nowrap">{entry.spec && <SpecIcon cls={entry.cls} spec={entry.spec} className="size-4 shrink-0 rounded-sm" />}<span>{entry.spec || "—"}</span></span></td>
                 <td className="hidden px-2 py-2 pr-4 text-muted-foreground sm:pr-5 md:table-cell">{entry.subSpec}</td>
               </tr>
             ))}

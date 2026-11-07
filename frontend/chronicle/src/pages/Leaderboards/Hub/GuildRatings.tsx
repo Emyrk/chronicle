@@ -346,11 +346,11 @@ function GuildFullTable({
       </BoardHeader>
 
       <div className="styled-scrollbar overflow-x-auto border-t">
-        <table className="w-full min-w-[42rem] text-sm">
+        <table className="w-full min-w-[42rem] table-auto text-sm">
           <thead className="border-b bg-black/10 text-[11px] tracking-wider text-muted-foreground uppercase">
             <tr>
               <th className="w-14 px-4 py-2.5 text-left font-medium sm:px-5">#</th>
-              <th className="w-px px-2 py-2.5 pr-8 text-left font-medium whitespace-nowrap">Guild</th>
+              <th className="w-[26%] px-2 py-2.5 pr-6 text-left font-medium whitespace-nowrap">Guild</th>
               {view === "overview" ? (
                 RATING_METRICS.map((m) => {
                   const t = METRIC_THEMES[m]
@@ -384,7 +384,7 @@ function GuildFullTable({
                   )}
                 </>
               )}
-              <th className="hidden px-3 py-2.5 pr-4 text-left font-medium sm:pr-5 lg:table-cell">Realm</th>
+              <th className="hidden w-48 whitespace-nowrap px-3 py-2.5 pr-4 text-left font-medium sm:pr-5 lg:table-cell">Realm</th>
             </tr>
           </thead>
           <tbody>
@@ -438,7 +438,7 @@ function GuildFullTable({
                     )}
                   </>
                 )}
-                <td className="hidden px-3 py-2 pr-4 text-xs text-muted-foreground sm:pr-5 lg:table-cell">{g.realmLabel || "Unknown realm"}</td>
+                <td className="hidden whitespace-nowrap px-3 py-2 pr-4 text-xs text-muted-foreground sm:pr-5 lg:table-cell">{g.realmLabel || "Unknown realm"}</td>
               </tr>
             ))}
             {rows.length === 0 && (
