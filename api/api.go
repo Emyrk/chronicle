@@ -124,6 +124,11 @@ type Options struct {
 	// ShortLinkDomain is the domain used for short share links (e.g. "chrn.link").
 	// If empty, short links use same-origin paths instead.
 	ShortLinkDomain string
+	// OGServiceURL is the base URL of the OG image service (services/og).
+	// When nil, pages keep their static OG images.
+	OGServiceURL *url.URL
+	// OGSigningKey signs OG service image URLs; it must match the service's key.
+	OGSigningKey string
 	// LandingFeaturedID is the deployment default for the /start hero's
 	// featured instance, used when the site setting is empty.
 	LandingFeaturedID uuid.UUID
@@ -183,6 +188,7 @@ type API struct {
 	instanceSearch     *serviceinstancesearch.Service
 	discoveryStats     discoveryStatsCache
 	landing            landingFeaturedCache
+	ogSiteStats        ogSiteStatsCache
 	// landingMeshMaps overrides datasetMeshMaps (tests).
 	landingMeshMaps func(ctx context.Context, realmID uuid.UUID) (map[int32]bool, error)
 }

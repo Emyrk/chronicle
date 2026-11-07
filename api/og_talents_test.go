@@ -1,12 +1,18 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
-	"github.com/Emyrk/chronicle/database"
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/frontend"
+	"github.com/Emyrk/chronicle/internal/services"
 )
 
 func TestSEOProductName(t *testing.T) {
@@ -132,5 +138,88 @@ func TestTalentCalculatorOG(t *testing.T) {
 		og := talentCalculatorOG("capy.chronicleclassic.com", "rogue", "<script>alert(1)</script>")
 		require.Equal(t, "Assassination Rogue (1/0/0)", og.Title)
 		require.Equal(t, "https://capy.chronicleclassic.com/talents/rogue?build=1", og.URL)
+	})
+}
+
+func TestTalentOGImageParams(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name, class, build string
+		want               url.Values
+	}{
+		{"Build", "Mage", "2305000000000000000000-0055300002032501312-", url.Values{"class": {"mage"}, "points": {"10-32-0"}, "spec": {"Fire"}}},
+		{"NoBuild", "mage", "", url.Values{"class": {"mage"}}},
+		{"UnknownSpec", "mage", "000", url.Values{"class": {"mage"}, "points": {"0-0-0"}}},
+		{"Pet", "pet", "5551--", url.Values{"class": {"pet"}, "points": {"16"}}},
+		{"GarbageBuild", "rogue", "<script>", url.Values{"class": {"rogue"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, talentOGImageParams(tc.class, tc.build))
+		})
+	}
+	require.Nil(t, talentOGImageParams("gnomelord", "505"))
+}
+
+func TestTalentRouteOGImage(t *testing.T) {
+	t.Parallel()
+
+	resolve := func(t *testing.T, api *API, target string) *frontend.OGData {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("class", "mage")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		for _, route := range api.OGRoutes() {
+			if route.Pattern == "/talents/{class}" {
+				return route.Resolve(req)
+			}
+		}
+		t.Fatal("no /talents/{class} OG route")
+		return nil
+	}
+	const target = "https://forever.chronicleclassic.com/talents/mage?build=2305000000000000000000-0055300002032501312-"
+
+	t.Run("Configured", func(t *testing.T) {
+		t.Parallel()
+		og := resolve(t, testOGImageAPI(t, "https://og.example.com"), target)
+		require.Equal(t, "Fire Mage (10/32/0)", og.Title)
+
+		u, err := url.Parse(og.ImageURL)
+		require.NoError(t, err)
+		require.Equal(t, "https://og.example.com/api/og", u.Scheme+"://"+u.Host+u.Path)
+		q := u.Query()
+		sig := q.Get("sig")
+		q.Del("sig")
+		want := url.Values{
+			"template": {"talents"},
+			"class":    {"mage"},
+			"spec":     {"Fire"},
+			"points":   {"10-32-0"},
+			"host":     {"forever.chronicleclassic.com"},
+			"v":        {ogImageVersion},
+		}
+		// The test API has no tenant, so the product comes from the build's
+		// server flavor: none for turtle (the default build).
+		switch services.ServerName {
+		case services.ServerIdentityKronos:
+			want.Set("product", "Kronos")
+		case services.ServerIdentityEpoch:
+			want.Set("product", "Epoch Reborn")
+		case services.ServerIdentityVanillaPlus:
+			want.Set("product", "VanillaPlus")
+		case services.ServerIdentityOctoWoW:
+			want.Set("product", "OctoWoW")
+		}
+		require.Equal(t, want, q)
+		require.Equal(t, ogSignature("test-og-signing-key", q), sig)
+	})
+
+	t.Run("Unconfigured", func(t *testing.T) {
+		t.Parallel()
+		og := resolve(t, testOGImageAPI(t, ""), target)
+		require.Empty(t, og.ImageURL)
 	})
 }
