@@ -23,7 +23,7 @@ const props: ThemeProps = {
 
 const IDENTITY = 'name=Moonbrew&class=druid&spec=Feral&race=Night+Elf&level=60&guild=Nightfall&realm=Nordanaar&host=forever.chronicleclassic.com';
 const FULL = `${IDENTITY}&parse=96.4&ilvl=71&kills=212&best=${encodeURIComponent("Ragnaros:99,Nefarian:97,C'Thun:88")}`;
-const NO_PARSES = `${IDENTITY}&ilvl=71&raids=4&seen=${encodeURIComponent('Nov 2026')}`;
+const HISTORY = `${IDENTITY}&ilvl=71&logs=14&seen=${encodeURIComponent('Nov 2026')}`;
 const NO_GEAR = `${IDENTITY}&parse=96.4&kills=212&best=Ragnaros:99`;
 const MINIMAL = 'name=Moonbrew&class=druid';
 
@@ -46,7 +46,7 @@ afterEach(() => {
 });
 
 describe('character card', () => {
-  test('with parses: parse · ilvl · kills and the boss pills', async () => {
+  test('unreleased performance style: parse · ilvl · kills and boss pills', async () => {
     expect(labels(FULL)).toEqual(['Best avg parse', 'Item level', 'Boss kills']);
     const json = await tree(FULL);
     for (const text of ['Moonbrew', 'Level 60 Night Elf Druid', '<Nightfall> · Nordanaar', 'Feral Druid', '96.4', 'Ragnaros', "C'Thun", 'forever.chronicleclassic.com/armory']) {
@@ -54,10 +54,10 @@ describe('character card', () => {
     }
   });
 
-  test('no parses: ilvl · raids with kills · last seen, no pills', async () => {
-    // Stray parse-only params are ignored without a parse.
-    const query = `${NO_PARSES}&kills=212&best=Ragnaros:99`;
-    expect(labels(query)).toEqual(['Item level', 'Raids with kills', 'Last seen']);
+  test('released history style: ilvl · logs seen · last seen, no pills', async () => {
+    // Stray performance-only params are ignored without a parse.
+    const query = `${HISTORY}&kills=212&best=Ragnaros:99`;
+    expect(labels(query)).toEqual(['Item level', 'Logs seen', 'Last seen']);
     const json = await tree(query);
     expect(json).toContain('Nov 2026');
     expect(json).not.toContain('Ragnaros');
@@ -66,7 +66,7 @@ describe('character card', () => {
 
   test('no gear: item level is dropped', () => {
     expect(labels(NO_GEAR)).toEqual(['Best avg parse', 'Boss kills']);
-    expect(labels(`${IDENTITY}&raids=2`)).toEqual(['Raids with kills']);
+    expect(labels(`${IDENTITY}&logs=2`)).toEqual(['Logs seen']);
   });
 
   test('class and initial alone still draw the emblem', async () => {
@@ -88,7 +88,7 @@ describe('character card', () => {
 
   test.each([
     ['full', FULL],
-    ['no parses', NO_PARSES],
+    ['history', HISTORY],
     ['no gear', NO_GEAR],
     ['minimal', MINIMAL],
     ['long name, unknown class', 'name=Abcdefghijklmnopqrst&class=bard&level=1'],

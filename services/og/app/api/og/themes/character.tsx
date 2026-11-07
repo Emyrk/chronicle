@@ -66,8 +66,9 @@ export function parseBest(items: string[]): Boss[] {
   return bosses.slice(0, MAX_BEST);
 }
 
-// parse · ilvl · kills with a parse; ilvl · raids with kills · last seen without.
-// The parse is coloured by its rounded value, as the armory page shows it.
+// The released history card shows ilvl · logs seen · last seen. Supplying a
+// parse still renders the preserved performance design for approval, but
+// Chronicle does not emit those params until metric/spec selection is settled.
 export function characterStats(context: ThemeContext): Stat[] {
   const raw = param(context, 'parse', 6);
   const parse = /^\d{1,3}(\.\d)?$/.test(raw) ? Math.min(100, Number(raw)) : null;
@@ -81,8 +82,8 @@ export function characterStats(context: ThemeContext): Stat[] {
     return stats;
   }
   if (ilvl !== null) stats.push({ value: String(ilvl), label: 'Item level' });
-  const raids = intParam(context, 'raids', { min: 0, max: 999 });
-  if (raids !== null) stats.push({ value: String(raids), label: 'Raids with kills' });
+  const logs = intParam(context, 'logs', { min: 0, max: 999_999 });
+  if (logs !== null) stats.push({ value: logs.toLocaleString('en-US'), label: 'Logs seen' });
   const seen = param(context, 'seen', 14);
   if (seen) stats.push({ value: seen, label: 'Last seen' });
   return stats;

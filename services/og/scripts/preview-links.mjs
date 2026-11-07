@@ -130,7 +130,7 @@ function renderVariantPage(variants, renderer) {
             ${item.image ? `<img src="${item.image}" alt="${escapeHtml(item.label)} Open Graph card" />` : escapeHtml(item.error)}
           </a>
           <div class="copy">
-            <div class="label"><h2>${escapeHtml(item.label)}</h2><code>${escapeHtml(item.params.template)}</code></div>
+            <div class="label"><h2>${escapeHtml(item.label)}</h2><span class="tags">${item.status ? `<strong>${escapeHtml(item.status)}</strong>` : ''}<code>${escapeHtml(item.params.template)}</code></span></div>
             <p>${escapeHtml(item.description)}</p>
             <code class="route">${escapeHtml(item.pageExample)}</code>
             ${item.note ? `<p class="note">${escapeHtml(item.note)}</p>` : ''}
@@ -165,6 +165,8 @@ function renderVariantPage(variants, renderer) {
     .image img { display: block; width: 100%; height: 100%; object-fit: contain; }
     .copy { padding: 22px 24px 25px; }
     .label { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+    .tags { display: flex; align-items: center; gap: 8px; }
+    .tags strong { border: 1px solid #7a3f3f; border-radius: 999px; padding: 4px 8px; color: #e9a6a6; background: #2a1517; font: 10px ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
     h2 { margin: 0; font-size: 24px; font-weight: 400; }
     .label code { color: #77736b; font-size: 11px; }
     .copy > p { min-height: 48px; margin: 9px 0 17px; color: #aaa69d; font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; }

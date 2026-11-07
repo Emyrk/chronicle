@@ -16,23 +16,23 @@ import (
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
 
-// slowEncounterStore never answers the kill lookup before its deadline.
-type slowEncounterStore struct{ database.Store }
+// slowLogCountStore never answers the history lookup before its deadline.
+type slowLogCountStore struct{ database.Store }
 
-func (slowEncounterStore) GetCharacterEncounterStats(ctx context.Context, _ database.GetCharacterEncounterStatsParams) ([]database.GetCharacterEncounterStatsRow, error) {
+func (slowLogCountStore) GetCharacterLogCount(ctx context.Context, _ database.GetCharacterLogCountParams) (int32, error) {
 	<-ctx.Done()
-	return nil, ctx.Err()
+	return 0, ctx.Err()
 }
 
-// failingParseStore fails the parse lookup.
-type failingParseStore struct{ database.Store }
+// failingLogCountStore fails the history lookup.
+type failingLogCountStore struct{ database.Store }
 
-func (failingParseStore) GetCharacterParseHistory(context.Context, database.GetCharacterParseHistoryParams) ([]database.GetCharacterParseHistoryRow, error) {
-	return nil, errors.New("boom")
+func (failingLogCountStore) GetCharacterLogCount(context.Context, database.GetCharacterLogCountParams) (int32, error) {
+	return 0, errors.New("boom")
 }
 
-// seedCharacterCardStats stores one Molten Core kill and its parse for the
-// player, like the parses handler fixture, and returns the player row.
+// seedCharacterCardStats stores one listed Molten Core log with a boss kill
+// for the player and returns the player row.
 func seedCharacterCardStats(t *testing.T) (database.Store, database.GetGamePlayerByGUIDRow) {
 	t.Helper()
 	pool, _ := dbtestutil.NewPGXPool(t)
@@ -83,52 +83,38 @@ func seedCharacterCardStats(t *testing.T) (database.Store, database.GetGamePlaye
 		DifficultyName: "Normal", MaxPlayers: 40, RealmID: realmID, RealmName: "test-realm",
 		DamageDone: 60_000, DurationSecs: 60, Dps: 1000, KilledAt: database.Timestamptz(now), LogHashedSlug: "slug",
 	}))
-	require.NoError(t, store.InsertParseScoreResult(ctx, database.InsertParseScoreResultParams{
-		TenantID: uuid.Nil, InstanceID: instanceID, RunID: instanceID,
-		EncounterName: "Ragnaros", PlayerGuid: player.ID.String(), PlayerName: player.Name,
-		PlayerClass: "WARRIOR", PlayerSpec: "Arms", PlayerRole: "dps",
-		Metric: "dps", MetricValue: 1000, PreciseScore: 94.6, DisplayScore: 95, Rank: 1, SampleSize: 10, Status: "ok",
-		InstanceName: "Molten Core", DifficultyName: "Normal", MaxPlayers: 40, KilledAt: database.Timestamptz(now),
-	}))
 	return store, player
 }
 
 func TestFetchCharacterCardStats(t *testing.T) {
 	t.Parallel()
 	store, player := seedCharacterCardStats(t)
-	apiWith := func(s database.Store) *Service {
+	serviceWith := func(s database.Store) *Service {
 		return New(Options{Zed: authz.NewDatabaseOnly(testutil.Logger(t), s)})
 	}
 
-	t.Run("both lookups", func(t *testing.T) {
+	t.Run("counts canonical listed logs", func(t *testing.T) {
 		t.Parallel()
 		ctx := testutil.Context(t, testutil.WaitShort)
-		stats := apiWith(store).fetchCharacterCardStats(ctx, player)
-		require.Len(t, stats.Parses, 1)
-		require.InDelta(t, 94.6, stats.Parses[0].PreciseScore, 0.001)
-		require.Len(t, stats.Encounters, 1)
-		require.EqualValues(t, 1, stats.Encounters[0].Kills)
+		stats := serviceWith(store).fetchCharacterCardStats(ctx, player)
+		require.NotNil(t, stats.Logs)
+		require.Equal(t, 1, *stats.Logs)
 	})
 
-	t.Run("kill lookup times out", func(t *testing.T) {
+	t.Run("lookup times out", func(t *testing.T) {
 		t.Parallel()
 		ctx := testutil.Context(t, testutil.WaitShort)
 		start := time.Now()
-		stats := apiWith(slowEncounterStore{store}).fetchCharacterCardStats(ctx, player)
+		stats := serviceWith(slowLogCountStore{store}).fetchCharacterCardStats(ctx, player)
 		require.Less(t, time.Since(start), characterCardStatTimeout+time.Second)
-		require.Len(t, stats.Parses, 1)
-		require.Nil(t, stats.Encounters)
-		// The card keeps the parse and drops only the kill count.
-		params := characterCardParams(player, "Human", "Warrior", stats)
-		require.Equal(t, "94.6", params.Get("parse"))
-		require.False(t, params.Has("kills"))
+		require.Nil(t, stats.Logs)
+		require.False(t, characterCardParams(player, "Human", "Warrior", stats).Has("logs"))
 	})
 
-	t.Run("parse lookup fails", func(t *testing.T) {
+	t.Run("lookup fails", func(t *testing.T) {
 		t.Parallel()
 		ctx := testutil.Context(t, testutil.WaitShort)
-		stats := apiWith(failingParseStore{store}).fetchCharacterCardStats(ctx, player)
-		require.Nil(t, stats.Parses)
-		require.Len(t, stats.Encounters, 1)
+		stats := serviceWith(failingLogCountStore{store}).fetchCharacterCardStats(ctx, player)
+		require.Nil(t, stats.Logs)
 	})
 }

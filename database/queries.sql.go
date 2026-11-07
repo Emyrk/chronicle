@@ -19011,6 +19011,30 @@ func (q *sqlQuerier) GetCharacterEncounterStats(ctx context.Context, arg GetChar
 	return items, nil
 }
 
+const getCharacterLogCount = `-- name: GetCharacterLogCount :one
+SELECT COUNT(DISTINCT COALESCE(li.duplicate_group_id, edr.instance_id))::INT
+FROM encounter_dps_rankings edr
+JOIN log_instances li ON li.id = edr.instance_id
+JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
+WHERE edr.player_guid = $1
+  AND ($2::uuid IS NULL OR edr.realm_id = $2)
+  AND edr.encounter_id IS NOT NULL
+`
+
+type GetCharacterLogCountParams struct {
+	PlayerGuid string        `db:"player_guid" json:"player_guid"`
+	RealmID    uuid.NullUUID `db:"realm_id" json:"realm_id"`
+}
+
+// Count canonical listed raid logs in which the character has at least one
+// ranked boss kill. Duplicate uploads of the same raid night count once.
+func (q *sqlQuerier) GetCharacterLogCount(ctx context.Context, arg GetCharacterLogCountParams) (int32, error) {
+	row := q.db.QueryRow(ctx, getCharacterLogCount, arg.PlayerGuid, arg.RealmID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getCharacterPerformanceRuns = `-- name: GetCharacterPerformanceRuns :many
 WITH selected_encounters AS MATERIALIZED (
     SELECT DISTINCT unnest($2::text[]) AS encounter_name

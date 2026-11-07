@@ -28,6 +28,18 @@ const styles = {
   copy: { padding: '22px 24px 25px' },
   labelRow: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 16 },
   label: { margin: 0, fontSize: 24, fontWeight: 400 },
+  tags: { display: 'flex', alignItems: 'center', gap: 8 },
+  status: {
+    border: '1px solid #7a3f3f',
+    borderRadius: 999,
+    padding: '4px 8px',
+    color: '#e9a6a6',
+    background: '#2a1517',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontSize: 10,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase' as const,
+  },
   template: { color: '#77736b', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11 },
   description: { minHeight: 48, margin: '9px 0 17px', color: '#aaa69d', fontFamily: 'ui-sans-serif, system-ui, sans-serif', lineHeight: 1.5 },
   route: {
@@ -85,7 +97,10 @@ export default function Home() {
                       <div style={styles.copy}>
                         <div style={styles.labelRow}>
                           <h2 style={styles.label}>{item.label}</h2>
-                          <span style={styles.template}>{item.params.template}</span>
+                          <div style={styles.tags}>
+                            {'status' in item && item.status ? <span style={styles.status}>{item.status}</span> : null}
+                            <span style={styles.template}>{item.params.template}</span>
+                          </div>
                         </div>
                         <p style={styles.description}>{item.description}</p>
                         <code style={styles.route}>{item.pageExample}</code>

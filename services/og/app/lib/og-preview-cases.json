@@ -73,7 +73,7 @@
     "id": "character-history",
     "group": "Character",
     "label": "Character history",
-    "description": "Armory character without enough parse data for a best average.",
+    "description": "Released Armory card showing stable history signals without choosing between healing and damage performance.",
     "pageExample": "/armory/turtle/Playername",
     "params": {
       "template": "character",
@@ -85,16 +85,16 @@
       "guild": "Moonlit Vanguard",
       "realm": "Turtle WoW",
       "ilvl": "72",
-      "raids": "14",
       "seen": "Nov 2026",
-      "host": "chronicleclassic.com"
+      "host": "chronicleclassic.com",
+      "logs": "14"
     }
   },
   {
     "id": "character-parse",
     "group": "Character",
     "label": "Character performance",
-    "description": "Armory character with average parse, item level, kills, and best bosses.",
+    "description": "Preserved performance-card design. Not selected by Chronicle until healing versus damage spec and metric selection is settled.",
     "pageExample": "/armory/turtle/Playername",
     "params": {
       "template": "character",
@@ -110,13 +110,14 @@
       "kills": "37",
       "best": "Patchwerk:99,Loatheb:97,Nefarian:96",
       "host": "chronicleclassic.com"
-    }
+    },
+    "status": "Not released"
   },
   {
     "id": "guild-roster",
     "group": "Guild",
-    "label": "Guild activity",
-    "description": "Guild page before progression data is available, showing raids and top parsers.",
+    "label": "Guild activity fallback",
+    "description": "Fallback for a guild with no logged boss kills in a recognized progression raid.",
     "pageExample": "/g/{guild-id}",
     "params": {
       "template": "guild",
@@ -128,13 +129,14 @@
       "top": "Aeloria:priest:98,Ravenshield:warrior:96,Starcaller:mage:95",
       "accent": "#5f8fa6",
       "host": "chronicleclassic.com"
-    }
+    },
+    "note": "Current rule: shown only when no progression rows can be built. It then shows estimated raid nights and up to three top parsers."
   },
   {
     "id": "guild-progression",
     "group": "Guild",
     "label": "Guild progression",
-    "description": "Guild page with progression, best clear, and average parse.",
+    "description": "Guild card after at least one boss kill is logged in a recognized progression raid.",
     "pageExample": "/g/{guild-id}",
     "params": {
       "template": "guild",
@@ -148,7 +150,8 @@
       "avg": "95",
       "accent": "#89744d",
       "host": "chronicleclassic.com"
-    }
+    },
+    "note": "Current rule: any recognized progression boss kill selects this variant. It shows up to four of the furthest raids with kills."
   },
   {
     "id": "raid-report",

@@ -112,6 +112,7 @@ The generated OG card feature was originally merged as one large train spanning 
 - Treat commit `f1c4e8368` as the behavioral baseline for this refactor. The stack's restoration commit reproduces that tree before preview tooling or refactors.
 - Open Graph metadata resolution, card selection, signing, and renderer-specific lookups belong in `internal/services/serviceog`; the `api` package only owns the narrow route-provider interface and frontend wiring.
 - The generated-image renderer is optional. With no renderer URL or signing key, `serviceog` must preserve the pre-existing static metadata and skip generated-card lookups.
+- The released Armory card is history-only. Keep the Character Performance renderer for design review, but do not select it until healing-versus-damage spec and metric selection is defined.
 - Refactors must preserve page metadata, card selection thresholds, and rendered query parameters unless the user explicitly approves a behavior change.
 - Keep the Go signer and TypeScript verifier byte-compatible. Any signature change must update the shared vectors and both test suites together.
 - Use `cd services/og && pnpm preview:links -- <url...>` to compare the actual metadata and image selected for real Chronicle links before and after a refactor.
