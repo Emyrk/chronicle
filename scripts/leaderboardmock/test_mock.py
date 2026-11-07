@@ -2,7 +2,7 @@ import unittest
 import subprocess
 import sys
 from pathlib import Path
-from mock import validate_target, query_sql
+from mock import validate_target, query_sql, history_bands, varied_number
 
 class SafetyTests(unittest.TestCase):
     def test_explicit_mock_target(self):
@@ -24,6 +24,18 @@ class SafetyTests(unittest.TestCase):
         result = subprocess.run([sys.executable, str(Path(__file__).with_name("mock.py")), "peak-examples", "--database-url", "postgresql://test:local@127.0.0.1:55439/chronicle_lbmock_fixture"], capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Explicit --allow-local-writes required", result.stderr)
+
+    def test_exact_history_bands(self):
+        self.assertEqual(history_bands([]), (0, 0, 0))
+        self.assertEqual(history_bands([100]), (100, 0, 0))
+        self.assertEqual(history_bands([100, 100]), (100, 100, 0))
+        self.assertEqual(history_bands([100, 100, 100]), (100, 100, 100))
+        self.assertEqual(history_bands([50, 10, 40, 20, 30]), (50, 35, 20))
+
+    def test_varied_seed_is_stable_and_boss_specific(self):
+        self.assertEqual(varied_number(7, "A", 1), varied_number(7, "A", 1))
+        self.assertNotEqual(varied_number(7, "A", 1), varied_number(7, "B", 1))
+        self.assertNotEqual(varied_number(7, "A", 1), varied_number(8, "A", 1))
 
     def test_benchmark_uses_application_query(self):
         class Values(dict):
