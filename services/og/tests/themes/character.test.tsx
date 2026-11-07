@@ -8,17 +8,8 @@ import type { ThemeContext, ThemeProps } from '../../app/api/og/themes/types';
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47];
 
 const props: ThemeProps = {
-  title: 'Untitled',
-  site: 'Chronicle',
-  excerpt: '',
-  author: '',
-  date: '',
-  tag: '',
-  readingTime: '',
   accent: null,
-  imageSrc: null,
   iconSrc: null,
-  avatarSrc: null,
 };
 
 const IDENTITY = 'name=Moonbrew&class=druid&spec=Feral&race=Night+Elf&level=60&guild=Nightfall&host=forever.chronicleclassic.com';

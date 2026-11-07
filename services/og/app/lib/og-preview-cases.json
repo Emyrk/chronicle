@@ -284,38 +284,5 @@
       "splits": "Lucifron:331,Magmadar:627,Gehennas:1004,Garr:1358,Baron Geddon:1692,Shazzrah:1908,Sulfuron:2291,Golemagg:2604,Majordomo:3120,Ragnaros:3712",
       "host": "chronicleclassic.com"
     }
-  },
-  {
-    "id": "generic-chronicle",
-    "group": "Renderer primitives",
-    "label": "Chronicle editorial template",
-    "description": "The generic Chronicle renderer retained for non-product-specific cards.",
-    "pageExample": "Direct renderer template",
-    "params": {
-      "template": "chronicle",
-      "title": "The night Naxxramas finally fell",
-      "excerpt": "Forty raiders, one last pull, and a clean finish after weeks of progression.",
-      "site": "Chronicle",
-      "author": "Raid Desk",
-      "date": "Nov 7, 2026",
-      "tag": "Raid report"
-    }
-  },
-  {
-    "id": "generic-modern",
-    "group": "Renderer primitives",
-    "label": "Modern template",
-    "description": "The neutral upstream renderer and default for unknown template names.",
-    "pageExample": "Direct renderer template",
-    "params": {
-      "template": "modern",
-      "title": "A cleaner way to read every pull",
-      "excerpt": "A neutral card for generic content outside Chronicle's product routes.",
-      "site": "Chronicle",
-      "author": "Chronicle",
-      "date": "Nov 7, 2026",
-      "tag": "Analysis",
-      "accent": "#89744d"
-    }
   }
 ]

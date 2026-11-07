@@ -3,16 +3,6 @@
 
 export const OG_THEMES = [
   {
-    key: 'modern',
-    label: 'Modern',
-    description: 'Headline set straight on your cover image, like a magazine cover. The neutral default.',
-  },
-  {
-    key: 'chronicle',
-    label: 'Chronicle',
-    description: 'Chronicle\'s dark card: a Libre Baskerville headline over an Inter byline, with a gold rule.',
-  },
-  {
     key: 'talents',
     label: 'Talent build',
     description: 'A talent calculator build: spec in class colour, the point split and a bar per tree.',
@@ -52,7 +42,8 @@ export const OG_THEMES = [
 export type OgThemeOption = (typeof OG_THEMES)[number];
 export type OgThemeKey = OgThemeOption['key'];
 
-export const DEFAULT_OG_THEME: OgThemeKey = 'modern';
+// Unknown or missing template names draw the brand card, like every fallback.
+export const DEFAULT_OG_THEME: OgThemeKey = 'brand';
 
 const themeKeys = new Set<string>(OG_THEMES.map(theme => theme.key));
 

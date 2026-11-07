@@ -10,9 +10,8 @@ https://cdn.jsdelivr.net/fontsource/fonts/<id>@5.3.0/latin-<weight>-<style>.ttf
 
 | Folder | Family | Used by |
 |--------|--------|---------|
-| `geist` | Geist 400/500/600 | `modern` |
-| `inter` | Inter 400/600/700, plus `cyrillic-<weight>-normal.ttf` cuts | `chronicle`, kit cards; the Cyrillic cuts only for `character` names |
-| `libre-baskerville` | Libre Baskerville 400/700 | `chronicle` |
+| `inter` | Inter 400/600/700, plus `cyrillic-<weight>-normal.ttf` cuts | Every kit card; the Cyrillic cuts only for `character` names |
+| `libre-baskerville` | Libre Baskerville 400/700 | Every kit card |
 
 All are under the SIL Open Font License 1.1, and each folder carries its `LICENSE`. Only add fonts under an open licence: commercial faces such as Friz Quadrata must not be bundled here.
 

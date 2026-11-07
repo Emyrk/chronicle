@@ -9,17 +9,8 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47];
 
 // The handler's props; the brand card reads only its own params.
 const props: ThemeProps = {
-  title: 'Untitled',
-  site: 'Blog',
-  excerpt: '',
-  author: '',
-  date: '',
-  tag: '',
-  readingTime: '',
   accent: null,
-  imageSrc: null,
   iconSrc: null,
-  avatarSrc: null,
 };
 
 const FULL =

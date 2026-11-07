@@ -15,17 +15,8 @@ const context = (query: string): ThemeContext => ({ searchParams: new URLSearchP
 
 // The handler validates `accent` and fetches `icon`; the card sees the results.
 const props = (overrides: Partial<ThemeProps> = {}): ThemeProps => ({
-  title: 'Untitled',
-  site: 'Blog',
-  excerpt: '',
-  author: '',
-  date: '',
-  tag: '',
-  readingTime: '',
   accent: '#5f8fa6',
-  imageSrc: null,
   iconSrc: null,
-  avatarSrc: null,
   ...overrides,
 });
 
