@@ -86,7 +86,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Total selected outbound Discord HTTP attempts during the dashboard range. Retries are counted as separate attempts.",
+      "description": "Total selected outbound Discord HTTP calls during the dashboard range. Retries are counted as separate calls.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -101,7 +101,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "decimals": 0
         },
         "overrides": []
       },
@@ -113,9 +114,9 @@
       },
       "id": 2,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
           "calcs": [
@@ -125,7 +126,7 @@
           "values": false
         },
         "showPercentChange": false,
-        "textMode": "value_and_name",
+        "textMode": "value",
         "wideLayout": true
       },
       "targets": [
@@ -142,7 +143,7 @@
           "instant": true
         }
       ],
-      "title": "Requests in range",
+      "title": "Total calls",
       "type": "stat"
     },
     {
@@ -1419,5 +1420,5 @@
   "timezone": "browser",
   "title": "Chronicle Discord HTTP",
   "uid": "chronicle-discord-http",
-  "version": 1
+  "version": 2
 }
