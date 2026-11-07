@@ -1,6 +1,6 @@
 # services/og – agent guide
 
-A standalone Next.js 16 service that renders 1200×630 Open Graph PNGs with `next/og` (Satori) on the Node.js runtime: `GET /api/og?title=…&template=…`. It deploys on its own (Docker / Railway, Root Directory `services/og`). The Go server, the frontend, the Makefile and CI neither build nor test it, and no workflow runs on its paths, so run the checks below yourself. User-facing docs live in [README.md](README.md); this file only covers how to work on the service.
+A standalone Next.js 16 service that renders 1200×630 Open Graph PNGs with `next/og` (Satori) on the Node.js runtime: `GET /api/og?title=…&template=…`. Root CI runs its tests, typecheck, Docker build, and container smoke test; tagged releases push `emyrk/chronicle-og` and redeploy Railway's `chronicle-og` service. Run the checks below yourself before committing. User-facing docs live in [README.md](README.md); this file only covers how to work on the service.
 
 ## Commands
 

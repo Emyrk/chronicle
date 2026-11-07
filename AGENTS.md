@@ -122,7 +122,7 @@ The generated OG card feature was originally merged as one large train spanning 
 - Keep the Go signer and TypeScript verifier byte-compatible. Any signature change must update the shared vectors and both test suites together.
 - Use `cd services/og && pnpm preview:links -- <url...>` to compare the actual metadata and image selected for real Chronicle links before and after a refactor.
 - Record accepted OG design decisions in this section as they are finalized. Do not turn tentative refactor ideas into repository rules.
-- The root CI does not cover `services/og`. Run its test, typecheck, and build commands directly for changes under that directory.
+- Root CI validates `services/og` with tests, typechecking, a Docker build, and a container smoke test. Tagged releases push `emyrk/chronicle-og` and redeploy Railway's `chronicle-og` service. Still run the service's checks directly before committing renderer changes.
 
 ## Essential Commands
 
