@@ -32,7 +32,7 @@ export interface FriendlyClassBuffsResult {
 }
 
 function isApplication(event: AuraProcessorEvent): boolean {
-  if (event.amount <= 0 || event.state === AuraState.Removed) return false;
+  if (event.isSynthetic || event.amount <= 0 || event.state === AuraState.Removed) return false;
   return event.transition === AuraTransition.Applied
     || event.transition === AuraTransition.Refreshed
     || (event.transition === AuraTransition.Unknown && event.state === AuraState.Added);

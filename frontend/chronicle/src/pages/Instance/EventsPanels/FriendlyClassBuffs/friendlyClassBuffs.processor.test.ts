@@ -74,6 +74,33 @@ describe("friendlyClassBuffsProcessor", () => {
     expect(state.byCaster.get(CASTER)?.applications).toBe(2);
   });
 
+  it("ignores synthetic aura snapshots repeated across encounters", () => {
+    const state = friendlyClassBuffsProcessor.createState();
+    const ctx = context();
+    ctx.selectedEncounterIds.add("enc2");
+
+    friendlyClassBuffsProcessor.processEvent(state, aura(), "enc1", new Date(0), "aura", ctx);
+    friendlyClassBuffsProcessor.processEvent(
+      state,
+      aura({ isSynthetic: true }),
+      "enc1",
+      new Date(0),
+      "aura",
+      ctx,
+    );
+    friendlyClassBuffsProcessor.processEvent(
+      state,
+      aura({ isSynthetic: true }),
+      "enc2",
+      new Date(0),
+      "aura",
+      ctx,
+    );
+
+    expect(state.byCaster.get(CASTER)?.applications).toBe(1);
+    expect(state.byTarget.get(TARGET)?.applications).toBe(1);
+  });
+
   it("records unknown casters for the received perspective", () => {
     const state = process(aura({ caster: null }));
 
