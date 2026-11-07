@@ -58,7 +58,7 @@ Chronicle already uses **Mastery** for a proposed player-performance rating. Ach
 The repository already contains many stable actions suitable for achievements:
 
 - Instance analysis supports encounter and time-range selection, totals and per-second modes, focus, comparison, metric breakouts, panel explainers, replay, and video synchronization.
-- Panels can be added, replaced, duplicated, copied, pasted, filtered, rearranged, resized, and opened in separate windows.
+- Panels can be added, replaced, copied, pasted, focused on supported entities, filtered, rearranged, resized, and opened in separate windows.
 - Layouts can be edited, saved in the Layout Book, assigned to action-bar slots, imported, exported, shared, and opened in a separate window.
 - Built-in presets are static product definitions. Saved Layout Book layouts are not custom presets.
 - Keybind help currently documents layout, focus, inspect, compare, replay, map, and rotation-timeline controls.
@@ -117,11 +117,11 @@ Avoid achievements for:
 - Creating and deleting layouts repeatedly.
 - Generating unused share links.
 - Applying meaningless filters solely to increase a counter.
-- Inflating page views, live-session joins, or tracked-layout counts with alternate accounts.
+- Inflating page views, future live-collaboration joins, or tracked-layout counts with alternate accounts.
 
 ### Keep core capability available
 
-Achievements may unlock cosmetics, profile presentation, or modest convenience. Core reporting, filtering, layouts, and collaboration should remain available based on normal product permissions.
+Achievements may unlock cosmetics, profile presentation, or modest convenience. Core reporting, filtering, layouts, and sharing should remain available based on normal product permissions.
 
 ### Use account-wide progress by default
 
@@ -144,6 +144,7 @@ description
 criteria
 points
 visibility
+requirements
 required_achievement_ids (set achievements only)
 reward_ids
 introduced_at
@@ -151,6 +152,12 @@ retired_at
 ```
 
 Definitions should be immutable after release. A material criteria change creates a new version or replacement achievement. Names and descriptions can be corrected without changing earned state when the criterion remains identical.
+
+### Eligibility and requirement indicators
+
+Some achievements depend on account reputation, permissions, supporter access, report capabilities, or an unreleased feature. These prerequisites belong in structured `requirements` metadata and must be visible anywhere the achievement is shown.
+
+Examples include `Requires Honored reputation`, `Requires guild-page edit permission`, or `Available after Live Collaboration launches`. A prerequisite is not achievement progress. The UI should distinguish a locked requirement from an incomplete criterion, and the global completion percentage still uses the catalog-wide account cohort.
 
 ### Point values
 
@@ -167,7 +174,7 @@ Points are not a currency. Spending points would make catalog changes and retire
 
 ## Proposed category catalog
 
-The catalog below is intentionally broader than a first release. The **Phase** column distinguishes a practical launch set from later instrumentation or product work.
+The catalog below is intentionally broader than a first release. Third-level headings are categories, and nested fourth-level headings are series within that category. The **Phase** column distinguishes a practical launch set from later instrumentation or product work.
 
 - **Phase 1:** Existing action with a clear client or server completion boundary.
 - **Phase 2:** Existing workflow that needs stronger durable instrumentation or cross-account attribution.
@@ -178,7 +185,7 @@ The catalog below is intentionally broader than a first release. The **Phase** c
 | Achievement | Points | Criterion | Phase |
 | --- | ---: | --- | --- |
 | Welcome to Chronicle | 5 | Sign in for the first time. | Phase 1 |
-| Known by Name | 10 | Link and verify a character. | Phase 1 |
+| Known by Name | 10 | After reaching Honored reputation, link and verify a character. | Phase 1 |
 | The First Record | 10 | Complete the first successful combat-log parse owned by the account. | Phase 1 |
 | Open the Books | 5 | Open one of the account's successfully parsed reports. | Phase 1 |
 
@@ -186,32 +193,35 @@ The first version should not add achievements for upload counts. The successful 
 
 ### Report Explorer
 
+#### Report Navigation
+
 | Achievement | Points | Criterion | Phase |
 | --- | ---: | --- | --- |
 | Choose Your Battles | 5 | Change the selected encounters in a report. | Phase 1 |
+| Pick Your Players | 5 | Select specific players or enemies for report analysis. | Phase 1 |
 | A Matter of Time | 5 | Apply a custom time range. | Phase 1 |
 | Rate of Change | 5 | Switch a supported panel between totals and per-second display. | Phase 1 |
 | Read the Manual | 5 | Open a panel explainer. | Phase 1 |
 | Follow the Action | 10 | Enter focus mode for a player, enemy, or other supported entity. | Phase 1 |
-| Side by Side | 10 | Add two supported entities to comparison. | Phase 1 |
+| Side by Side | 10 | Open a Comparison panel and select at least two source panels. | Phase 1 |
 
 Opening a report is covered by Getting Started. This category begins when the user changes the report to answer a question.
 
-### Panel Craft
+#### Panel Craft
 
-This series separates built-in presets from user-saved layouts.
+Panel Craft is a series within Report Explorer. It covers configuring the panels used to investigate a report, while saved layouts remain a separate concept.
 
 | Achievement | Points | Criterion | Phase |
 | --- | ---: | --- | --- |
 | New Perspective | 5 | Apply a different built-in preset. | Phase 1 |
 | Panel Craft I: Renovation | 5 | Replace one panel with a different panel type. | Phase 1 |
-| Panel Craft II: Make Another | 10 | Duplicate a panel. | Phase 1 |
-| Panel Craft III: Copy That | 10 | Copy a panel and paste it into another panel position. | Phase 1 |
+| Panel Craft II: Copy That | 10 | Copy a panel and paste it into another panel position. | Phase 1 |
+| Panel Craft III: Single Subject | 10 | Focus a supported panel on one player. | Phase 1 |
 | Panel Craft IV: Window Shopping | 10 | Open a single panel in a separate window. | Phase 1 |
 
 Copy and paste should count only when the paste succeeds with a valid serialized panel configuration.
 
-### Filter Craft
+#### Filter Craft
 
 | Achievement | Points | Criterion | Phase |
 | --- | ---: | --- | --- |
@@ -219,7 +229,7 @@ Copy and paste should count only when the paste succeeds with a valid serialized
 | Filter Craft II: The Exception | 10 | Use a negated filter. | Phase 1 |
 | Filter Craft III: Both Things | 10 | Apply an expression with at least two AND-connected filters or groups. | Phase 1 |
 | Filter Craft IV: Either Works | 10 | Apply an expression containing an OR-connected filter group. | Phase 1 |
-| Filter Craft V: Fine Print | 15 | Apply a valid expression with at least three leaf filters and both AND and OR relationships. | Phase 1 |
+| Filter Craft V: Fine Print | 15 | Apply a filter equivalent to `A AND (B OR C)`. | Phase 1 |
 
 The system should evaluate the filter expression when it is successfully applied to a panel or persisted as part of a saved layout, not each intermediate editor change. Filter type completion should not be required because some streams and panels do not support every filter type.
 
@@ -228,12 +238,14 @@ The system should evaluate the filter expression when it is successfully applied
 | Achievement | Points | Criterion | Phase |
 | --- | ---: | --- | --- |
 | Layouts I: Move Things Around | 5 | Finish a layout edit that moves or resizes at least one panel. | Phase 1 |
-| Layouts II: Make Yourself at Home | 10 | Save a custom layout in the Layout Book. | Phase 1 |
-| Layouts III: Ready for Action | 10 | Assign a saved layout to an action-bar slot. | Phase 1 |
-| Layouts IV: Another Point of View | 10 | Open a full layout in a separate window. | Phase 1 |
-| Layouts V: Pack It Up | 10 | Export or copy a valid layout payload. | Phase 1 |
-| Layouts VI: Unpack It | 10 | Successfully import a valid layout payload. | Phase 1 |
-| Layouts VII: Trendsetter | 20 | Another account tracks the user's shared layout. | Phase 2 |
+| Layouts II: Strip It Down | 5 | Add and use a strip in a layout. | Phase 1 |
+| Layouts III: Group Project | 5 | Add a group and place a panel or strip inside it. | Phase 1 |
+| Layouts IV: Make Yourself at Home | 10 | Save a custom layout in the Layout Book. | Phase 1 |
+| Layouts V: Ready for Action | 10 | Assign a saved layout to an action-bar slot. | Phase 1 |
+| Layouts VI: Another Point of View | 10 | Open a full layout in a separate window. | Phase 1 |
+| Layouts VII: Pack It Up | 10 | Export or copy a valid layout payload. | Phase 1 |
+| Layouts VIII: Unpack It | 10 | Successfully import a valid layout payload. | Phase 1 |
+| Layouts IX: Trendsetter | 20 | Another account tracks the user's shared layout. | Phase 2 |
 
 Trendsetter needs server-observed attribution. Copying a share link alone is not sufficient. Self-use and repeated imports by the same recipient should not count.
 
@@ -263,7 +275,7 @@ Keybind descriptions should be platform-aware. Display `Option` and `Cmd` on mac
 | Deeper Look II: Source Material | 10 | Where supported, drill from a breakout into an ability, source, or target detail view. | Phase 1 |
 | Deeper Look III: Cause of Death | 10 | Open a death or incoming-events analysis for a selected entity. | Phase 1 |
 | Deeper Look IV: Keep It in View | 10 | Pin or expand a supported breakout. | Phase 1 |
-| Deeper Look V: Compare Notes | 15 | Use comparison and a breakout in the same report session. | Phase 1 |
+| Deeper Look V: Compare Notes | 15 | Open a breakout from a source panel selected in a Comparison panel. | Phase 1 |
 
 Criteria should be capability-based. A report that lacks the required stream should not advertise an impossible next step.
 
@@ -279,17 +291,24 @@ Criteria should be capability-based. A report that lacks the required stream sho
 
 Replay achievements must only be shown when the selected report supports the relevant replay capability.
 
-### Sharing and Collaboration
+### Sharing
 
 | Achievement | Points | Criterion | Phase |
 | --- | ---: | --- | --- |
 | Pass It On | 5 | Copy a valid shareable report view link. | Phase 1 |
 | Fresh Eyes | 10 | Open a shared report view created by another account. | Phase 2 |
-| Assemble the Group | 10 | Start a live session and create an invite link. | Phase 2 |
-| Company | 15 | Have another account join a live session created by the user. | Phase 2 |
-| In Sync | 20 | Change a synchronized live-session state while at least one other account is present. | Phase 2 |
 
-Link opens and joins must exclude the creator, anonymous duplicate sessions where identity cannot be established, automated previews, and known crawlers.
+Shared-link opens must exclude the creator, automated previews, and known crawlers.
+
+### Future: Live Collaboration
+
+Live Collaboration is not released. These achievements are product ideas only and must remain unavailable until the feature launches.
+
+| Achievement | Points | Criterion | Phase |
+| --- | ---: | --- | --- |
+| Assemble the Group | 10 | Start a live collaboration session and create an invite link. | Future |
+| Company | 15 | Have another account join a live collaboration session created by the user. | Future |
+| In Sync | 20 | Change synchronized session state while at least one other account is present. | Future |
 
 ### Guild Builder
 
@@ -334,8 +353,7 @@ Potential examples:
 
 | Achievement | Points | Criterion | Phase |
 | --- | ---: | --- | --- |
-| Command Center | 20 | Earn Panel Craft IV, Layouts III, and Layouts IV. | Phase 1 |
-| Shared Vision | 20 | Earn Layouts VII, Company, and In Sync. | Phase 2 |
+| Command Center | 20 | Earn Panel Craft IV, Layouts V, and Layouts VI. | Phase 1 |
 | Chronicle Field Guide | 25 | Earn a deliberately selected cross-category set of discovery achievements. | Future |
 
 A set achievement should have its own identity, icon, and reason to exist. Do not add one merely because a category has several achievements. Its required achievement IDs and versions must be frozen when released so later catalog growth does not revoke or silently change it.
@@ -348,7 +366,7 @@ Potential examples:
 
 - Participated in an achievement-system beta.
 - Used a feature before a major redesign or retirement.
-- Joined a large live session during an official test event.
+- Participated in an official Live Collaboration test event before release.
 - Imported a layout format that was later retired.
 - Completed an official Chronicle community challenge.
 
@@ -380,7 +398,7 @@ Selected achievements can award a themed treatment or badge. A category does not
 | Keybinds | Keyboard or crossed keys |
 | Breakouts and Comparison | Magnifying lens |
 | Replay and Map | Compass or director's frame |
-| Sharing and Collaboration | Linked rings |
+| Sharing | Linked rings |
 | Guild Builder | Banner or guild hall |
 | Rankings and Discovery | Laurel or scouting eye |
 | Planning and Theorycraft | Blueprint or cog |
@@ -461,9 +479,8 @@ report.encounters_changed
 report.time_range_applied
 report.display_rate_changed
 report.focus_changed
-report.comparison_changed
+comparison.source_panels_changed
 panel.type_changed
-panel.duplicated
 panel.clipboard_pasted
 panel.filter_applied
 panel.breakout_opened
@@ -481,9 +498,6 @@ keybind.invoked
 replay.opened
 replay.playback_changed
 replay.camera_moved
-live_session.started
-live_session.joined
-live_session.state_changed
 guild_page.saved
 ranking.opened
 entity.opened_from_search
@@ -514,7 +528,7 @@ Not every client event needs to be stored forever. The server can evaluate simpl
 | Shared-link recipient open | Server redirect or authenticated landing event |
 | Character link | Server |
 | Guild-page save | Server |
-| Live-session join and synchronized state | Session service/server |
+| Future live-collaboration join and synchronized state | Session service/server after feature release |
 | Simulation completion | Server when remote, client result event when browser-only |
 
 Client-only achievements are inherently easier to spoof. That is acceptable for low-stakes cosmetics if the threat model is explicit. Capacity, storage, or paid-equivalent rewards require server authority.
@@ -677,9 +691,7 @@ Multiple completions caused by migration or backfill should be summarized rather
 Launch a focused catalog of roughly 25 to 35 achievements from:
 
 - Getting Started
-- Report Explorer
-- Panel Craft
-- Filter Craft
+- Report Explorer, including Report Navigation, Panel Craft, and Filter Craft
 - Layouts
 - Keybinds
 - Breakouts and Comparison
@@ -692,7 +704,7 @@ Include points, completion toasts, and a small set of cosmetic marks attached to
 Add:
 
 - Recipient-attributed layout sharing.
-- Live-session collaboration.
+- Live Collaboration achievements only after that feature is released.
 - Replay and video synchronization.
 - Guild Builder.
 - Planning and Theorycraft.
