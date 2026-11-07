@@ -41,7 +41,6 @@ export function v2RatingParams(
     throw new Error("Choose one realm or All realms.");
   if (context.realmIDs?.[0]) p.set("realm", context.realmIDs[0]);
   if (search.trim()) p.set("search", search.trim());
-  if (metric === "renown") return p; // Current instance/variant awards, never set or cohort filtered.
   const rows = context.configuration.rows.filter(
     (row) => row.instance_name === context.instance,
   );
@@ -56,7 +55,7 @@ export function v2RatingParams(
     if (!set) throw new Error("No default encounter set is configured.");
     p.set("set", set.set_key);
   }
-  if (context.subject === "player") {
+  if (context.subject === "player" && metric !== "renown") {
     p.set("metric", context.performance);
     if (scope.cls) p.set("class", scope.cls);
     if (scope.spec) p.set("spec", scope.spec);

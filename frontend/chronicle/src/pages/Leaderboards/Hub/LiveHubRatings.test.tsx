@@ -15,7 +15,7 @@ describe("existing Hub ratings on current-policy data",()=>{
   const html=renderToStaticMarkup(<LiveHubRatings {...props}/> )
   expect(html).toContain("Actual player")
   expect(html).toContain("All-time")
-  expect(html).toContain("independent of set and class filters")
+  expect(html).toContain("of class filters")
   expect(html).not.toContain("1,300/s")
  })
  it("explicitly reports a missing configured variant",()=>{

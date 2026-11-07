@@ -175,12 +175,16 @@ Materialize all-time kill counts per realm-qualified subject and exact boss plus
 instance variant, preserving difficulty and raid size. At reads:
 
 ```text
-Renown = sum(eligible boss/variant kill count * current effective award)
+Renown = sum(selected eligible boss/variant kill count * current effective award)
 ```
 
 Do not store frozen points. Award-only changes, including explicit zero, change
 current Renown without rebuilding kill counts. Current eligibility determines
-which counts contribute; set membership does not determine awards. Retraction
+which counts may contribute; the current exact-boss, named-set or arbitrary-group
+selection determines which eligible counts are summed, without averaging. No
+selection resolves to the default set. An empty default does not disable optional
+bosses: explicitly selecting an eligible optional boss still earns its award. Set
+membership does not determine awards. Retraction
 removes the fact and refreshes the affected count. Renown remains independent of
 metric value, benchmark, Peak, Mastery, or clear completion.
 

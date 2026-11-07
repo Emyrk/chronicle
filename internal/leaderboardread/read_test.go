@@ -6,6 +6,7 @@ import (
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/leaderboardread"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -92,7 +93,7 @@ func TestSummaryReadsWithMixedVersionMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 60.0, renown[0].Score)
 	// Optional Boss B is outside the performance set but still contributes its
-	// current award to instance Renown. The other variant remains isolated.
+	// current award when explicitly selected for Renown. The other variant remains isolated.
 	p.Awards = []float64{20, 5}
 	renown, err = db.ListLeaderboardV2(ctx, p)
 	require.NoError(t, err)
@@ -206,4 +207,50 @@ func TestAllCohortsNormalizeIndependently(t *testing.T) {
 	require.InDelta(t, 99, group[0].Score, 1e-8)
 	require.InDelta(t, 49, group[1].Score, 1e-8)
 	require.InDelta(t, 49, group[2].Score, 1e-8)
+}
+
+func TestSelectedRenownSums(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	_, err = conn.Exec(ctx, "BEGIN")
+	require.NoError(t, err)
+	defer func() { _, _ = conn.Exec(ctx, "ROLLBACK") }()
+	fixture, err := os.ReadFile("testdata/renown_selection_fixture.sql")
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, string(fixture))
+	require.NoError(t, err)
+	config := []database.ResolveLeaderboardConfigurationRow{
+		{Kind: "instance", InstanceName: "Selected raid"},
+		{Kind: "set", InstanceName: "Selected raid", SetKey: "default"},
+		{Kind: "set", InstanceName: "Selected raid", SetKey: "empty"},
+	}
+	for i, boss := range []string{"Ragnaros", "Lucifron", "Other"} {
+		config = append(config, database.ResolveLeaderboardConfigurationRow{Kind: "boss", InstanceName: "Selected raid", EncounterName: boss, HasPoints: true, Points: []float64{5, 1, 9}[i]}, database.ResolveLeaderboardConfigurationRow{Kind: "member", InstanceName: "Selected raid", SetKey: "default", EncounterName: boss})
+	}
+	for _, subject := range []string{"player", "guild"} {
+		for _, tc := range []struct {
+			boss, set string
+			bosses    []string
+			want      float64
+		}{
+			{boss: "Ragnaros", want: 220}, {boss: "Lucifron", want: 44}, {bosses: []string{"Ragnaros", "Lucifron", "Ragnaros"}, want: 264}, {set: "default", want: 660}, {want: 660}, {set: "empty", want: 0},
+		} {
+			req := leaderboardread.Request{Instance: "Selected raid", Subject: subject, Kind: "renown", Score: "renown", Boss: tc.boss, Set: tc.set, Bosses: tc.bosses}
+			selection, err := leaderboardread.Select(config, req)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, selection.Denominator)
+			rows, err := database.NewQueries(conn).ListLeaderboardV2(ctx, database.ListLeaderboardV2Params{TenantID: uuid.MustParse("00000000-0000-4000-8000-000000000001"), InstanceName: req.Instance, SubjectKind: subject, BoardKind: "renown", ScoreMetric: "renown", Bosses: selection.Bosses, Awards: selection.Awards, Denominator: selection.Denominator, PageSize: 50})
+			require.NoError(t, err)
+			if tc.want == 0 {
+				require.Empty(t, rows)
+			} else {
+				require.Len(t, rows, 1)
+				require.Equal(t, tc.want, rows[0].Score)
+			}
+		}
+	}
 }

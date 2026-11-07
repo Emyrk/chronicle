@@ -29,7 +29,7 @@ func TestSelectionAndCursor(t *testing.T) {
 	r.Metric = ""
 	s, err = Select(rows, r)
 	require.NoError(t, err)
-	require.Equal(t, []string{"A", "B"}, s.Bosses)
+	require.Equal(t, []string{"A"}, s.Bosses)
 	r.MaxPlayers = 25
 	_, err = Select(rows, r)
 	require.Error(t, err)
@@ -40,7 +40,7 @@ func TestSelectionAndCursor(t *testing.T) {
 	require.Zero(t, s.Awards[0])
 	r.Set = "default"
 	_, err = Select(rows, r)
-	require.Error(t, err)
+	require.NoError(t, err)
 	r.Set = ""
 	tenant := uuid.New()
 	fp := Fingerprint(tenant, r, s)
@@ -92,7 +92,28 @@ func TestArbitraryBossGroups(t *testing.T) {
 	require.Equal(t, []string{"B"}, bossRenown.Bosses)
 	require.Equal(t, []float64{20}, bossRenown.Awards)
 	r.Boss = ""
+	r.Bosses = []string{"A", "B"}
 	allRenown, err := Select(rows, r)
 	require.NoError(t, err)
 	require.Len(t, allRenown.Bosses, 2)
+}
+
+func TestRenownOptionalBossWithEmptyDefault(t *testing.T) {
+	t.Parallel()
+	rows := []database.ResolveLeaderboardConfigurationRow{{Kind: "instance", InstanceName: "Vault"}, {Kind: "set", InstanceName: "Vault", SetKey: "default"}, {Kind: "boss", InstanceName: "Vault", EncounterName: "Optional", HasPoints: true, Points: 5}}
+	r := Request{Instance: "Vault", Subject: "player", Kind: "renown", Score: "renown"}
+	empty, err := Select(rows, r)
+	require.NoError(t, err)
+	require.Empty(t, empty.Bosses)
+	tenant := uuid.New()
+	before := Fingerprint(tenant, r, empty)
+	r.Boss = "Optional"
+	selected, err := Select(rows, r)
+	require.NoError(t, err)
+	require.Equal(t, []string{"Optional"}, selected.Bosses)
+	require.Equal(t, []float64{5}, selected.Awards)
+	require.NotEqual(t, before, Fingerprint(tenant, r, selected))
+	r.Set = "default"
+	_, err = Select(rows, r)
+	require.Error(t, err)
 }

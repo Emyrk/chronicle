@@ -99,8 +99,6 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
       try {
         if (!context) throw new Error("No enabled instance variant.");
         const params = v2RatingParams(context, target, metric);
-        if (metric === "renown" && target.boss && target.boss !== scope.boss)
-          params.set("boss", target.boss);
         params.set(
           "limit",
           target.boss && target.boss !== scope.boss ? "3" : "50",
@@ -171,7 +169,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
               : metric === "renown"
                 ? q.data.params.has("boss")
                   ? "This boss's completions and current award; independent of class filters."
-                  : "All eligible bosses in this variant; independent of set and class filters."
+                  : "Sum of selected bosses in this variant; independent of class filters."
                 : `${q.data.response.included_bosses.length} bosses · a missed boss counts as 0`,
           entries: q.data.response.entries.map((row) =>
             v2PlayerEntry(row, q.data.params, metric),
@@ -191,9 +189,8 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
     );
   const notice = (
     <p className="text-xs text-muted-foreground">
-      All-time. Renown includes every eligible boss in this variant, independent
-      of set and class filters. In-place repairs may temporarily mix calculation
-      versions.
+      All-time. Renown sums the selected bosses in this variant, independent of
+      class filters. In-place repairs may temporarily mix calculation versions.
     </p>
   );
   if (subject === "guild") {
