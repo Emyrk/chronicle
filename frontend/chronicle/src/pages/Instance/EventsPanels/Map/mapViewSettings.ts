@@ -29,6 +29,8 @@ export interface EffectSettings {
 }
 
 export const EFFECTS_STORAGE_KEY = "chronicle.map.effects3d";
+/** One-time rollout marker: existing users see the new health-column default once, then their choice is respected. */
+export const ABOVE_DISC_HEALTH_DEFAULT_STORAGE_KEY = "chronicle.map.effects3d.aboveDiscHealthDefault";
 export const MIN_CHIP_SCALE_PERCENT = 15;
 export const MAX_CHIP_SCALE_PERCENT = 200;
 export const CHIP_SCALE_STEP_PERCENT = 5;
@@ -42,7 +44,7 @@ export const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
   maxEffects: MAX_EFFECT_PRIMITIVES,
   bars: true,
   castMode: "selected",
-  aboveDisc: "none",
+  aboveDisc: "health",
   trailSeconds: 0,
   chipScalePercent: 100,
   gameModelsOnly: false,
@@ -70,17 +72,29 @@ export const DENSITY_OPTIONS = [16, 32, MAX_EFFECT_PRIMITIVES];
 
 export function readStoredEffectSettings(): EffectSettings {
   try {
-    const stored = JSON.parse(localStorage.getItem(EFFECTS_STORAGE_KEY) ?? "{}") as Partial<EffectSettings>;
+    const applyHealthDefault = localStorage.getItem(ABOVE_DISC_HEALTH_DEFAULT_STORAGE_KEY) !== "1";
+    let stored: Partial<EffectSettings> = {};
+    try {
+      stored = JSON.parse(localStorage.getItem(EFFECTS_STORAGE_KEY) ?? "{}") as Partial<EffectSettings>;
+    } catch {
+      // Replace malformed storage with normalized defaults below.
+    }
+
     const settings = { ...DEFAULT_EFFECT_SETTINGS, ...stored };
     if (!stored.castMode && stored.casts === false) settings.castMode = "off";
     if (!CAST_MODES.some((mode) => mode.value === settings.castMode)) settings.castMode = "selected";
     if (!DENSITY_OPTIONS.includes(settings.maxEffects)) settings.maxEffects = MAX_EFFECT_PRIMITIVES;
     if (!ABOVE_DISC_MODES.some((mode) => mode.value === settings.aboveDisc)) settings.aboveDisc = DEFAULT_EFFECT_SETTINGS.aboveDisc;
+    if (applyHealthDefault) settings.aboveDisc = "health";
     if (!TRAIL_OPTIONS.some((option) => option.value === settings.trailSeconds)) settings.trailSeconds = DEFAULT_EFFECT_SETTINGS.trailSeconds;
     if (typeof stored.gameModelsOnly !== "boolean") settings.gameModelsOnly = DEFAULT_EFFECT_SETTINGS.gameModelsOnly;
     settings.chipScalePercent = typeof settings.chipScalePercent === "number" && Number.isFinite(settings.chipScalePercent)
       ? Math.min(MAX_CHIP_SCALE_PERCENT, Math.max(MIN_CHIP_SCALE_PERCENT, settings.chipScalePercent))
       : DEFAULT_EFFECT_SETTINGS.chipScalePercent;
+    if (applyHealthDefault) {
+      localStorage.setItem(EFFECTS_STORAGE_KEY, JSON.stringify(settings));
+      localStorage.setItem(ABOVE_DISC_HEALTH_DEFAULT_STORAGE_KEY, "1");
+    }
     return settings;
   } catch {
     return DEFAULT_EFFECT_SETTINGS;
