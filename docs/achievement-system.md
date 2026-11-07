@@ -10,7 +10,7 @@ The proposed model uses:
 
 - WoW-style categories for navigation.
 - Tiered achievement series for increasing proficiency in one concept.
-- Category Proficiency achievements for completing the important series in a category.
+- Optional set achievements for selected collections where completing the set is meaningful.
 - Achievement points as a record of breadth, with cosmetics as the primary reward.
 - A visible global completion percentage for every achievement.
 - Semantic product events so achievements are independent of individual React components.
@@ -22,7 +22,7 @@ This document inventories the current product, proposes an initial achievement c
 1. Teach users that Chronicle's deeper analysis and customization features exist.
 2. Turn feature discovery into an optional progression system.
 3. Recognize meaningful use without encouraging spam, excessive uploads, or competitive manipulation.
-4. Support related achievements as tiered series and category-level Proficiency achievements.
+4. Support related achievements as tiered series without requiring a capstone for every category or series.
 5. Reuse Chronicle's existing character cosmetics where possible.
 6. Keep achievement evaluation deterministic, idempotent, and auditable.
 7. Allow the catalog to grow without changing the meaning of achievements already earned.
@@ -33,6 +33,7 @@ This document inventories the current product, proposes an initial achievement c
 - Reward high parses, leaderboard placement, or raid performance in the first version.
 - Require a supporter tier to complete a category.
 - Treat every button, panel, or filter type as a separate achievement.
+- Require a capstone or set-completion award for every category or series.
 - Add custom presets. Chronicle has built-in presets and saved layouts, but no custom preset inventory.
 - Add or limit saved-filter slots. Filters are panel state and currently have no independent slot model.
 - Replace the separate player Mastery and Renown rating proposal.
@@ -45,12 +46,12 @@ This document inventories the current product, proposes an initial achievement c
 | Series | A group of achievements that represent increasing proficiency in one concept. |
 | Tier | An achievement's level within a series. Tiers do not need to be completed in order unless the criterion naturally requires it. |
 | Category | A WoW-style navigation group such as Layouts, Analysis, or Keybinds. |
-| Category Proficiency | A meta-achievement earned by completing the required achievements in a category. |
+| Set achievement | An optional achievement earned by completing a specifically defined collection of other achievements. |
 | Achievement points | A non-spendable total representing completed achievements. |
 | Mark | Proposed achievement terminology for a cosmetic treatment or badge. Existing character cosmetics use name, background, and border treatments. |
-| Feat of Strength | A hidden, time-limited, retired, or unusual achievement that does not count toward Category Proficiency. |
+| Feat of Strength | A hidden, time-limited, retired, or unusual achievement outside the normal catalog. |
 
-Chronicle already uses **Mastery** for a proposed player-performance rating. The achievement system therefore uses **Proficiency** for category meta-achievements and reserves **Mastery** for the rating system.
+Chronicle already uses **Mastery** for a proposed player-performance rating. Achievement terminology should reserve **Mastery** for that rating system.
 
 ## Current product landscape
 
@@ -143,7 +144,7 @@ description
 criteria
 points
 visibility
-proficiency_required
+required_achievement_ids (set achievements only)
 reward_ids
 introduced_at
 retired_at
@@ -159,7 +160,7 @@ Definitions should be immutable after release. A material criteria change create
 | Completed workflow | 10 |
 | Advanced workflow | 15 |
 | Social or cross-feature workflow | 20 |
-| Category Proficiency | 25 |
+| Optional set achievement | 15 to 50 |
 | Feat of Strength | 0 unless explicitly included in progression |
 
 Points are not a currency. Spending points would make catalog changes and retired achievements much harder to reason about.
@@ -180,7 +181,6 @@ The catalog below is intentionally broader than a first release. The **Phase** c
 | Known by Name | 10 | Link and verify a character. | Phase 1 |
 | The First Record | 10 | Complete the first successful combat-log parse owned by the account. | Phase 1 |
 | Open the Books | 5 | Open one of the account's successfully parsed reports. | Phase 1 |
-| Getting Started Proficiency | 25 | Complete all required Getting Started achievements. | Phase 1 |
 
 The first version should not add achievements for upload counts. The successful parse is the useful outcome and is naturally durable.
 
@@ -194,7 +194,6 @@ The first version should not add achievements for upload counts. The successful 
 | Read the Manual | 5 | Open a panel explainer. | Phase 1 |
 | Follow the Action | 10 | Enter focus mode for a player, enemy, or other supported entity. | Phase 1 |
 | Side by Side | 10 | Add two supported entities to comparison. | Phase 1 |
-| Report Explorer Proficiency | 25 | Complete all required Report Explorer achievements. | Phase 1 |
 
 Opening a report is covered by Getting Started. This category begins when the user changes the report to answer a question.
 
@@ -209,7 +208,6 @@ This series separates built-in presets from user-saved layouts.
 | Panel Craft II: Make Another | 10 | Duplicate a panel. | Phase 1 |
 | Panel Craft III: Copy That | 10 | Copy a panel and paste it into another panel position. | Phase 1 |
 | Panel Craft IV: Window Shopping | 10 | Open a single panel in a separate window. | Phase 1 |
-| Panel Craft Proficiency | 25 | Complete all required Panel Craft achievements. | Phase 1 |
 
 Copy and paste should count only when the paste succeeds with a valid serialized panel configuration.
 
@@ -222,7 +220,6 @@ Copy and paste should count only when the paste succeeds with a valid serialized
 | Filter Craft III: Both Things | 10 | Apply an expression with at least two AND-connected filters or groups. | Phase 1 |
 | Filter Craft IV: Either Works | 10 | Apply an expression containing an OR-connected filter group. | Phase 1 |
 | Filter Craft V: Fine Print | 15 | Apply a valid expression with at least three leaf filters and both AND and OR relationships. | Phase 1 |
-| Filter Craft Proficiency | 25 | Complete all required Filter Craft achievements. | Phase 1 |
 
 The system should evaluate the filter expression when it is successfully applied to a panel or persisted as part of a saved layout, not each intermediate editor change. Filter type completion should not be required because some streams and panels do not support every filter type.
 
@@ -237,12 +234,10 @@ The system should evaluate the filter expression when it is successfully applied
 | Layouts V: Pack It Up | 10 | Export or copy a valid layout payload. | Phase 1 |
 | Layouts VI: Unpack It | 10 | Successfully import a valid layout payload. | Phase 1 |
 | Layouts VII: Trendsetter | 20 | Another account tracks the user's shared layout. | Phase 2 |
-| Layout Proficiency | 25 | Complete all required Layout achievements except Trendsetter. | Phase 1 |
-| Layout Proficiency: Shared Vision | 20 | Complete Layout Proficiency and Trendsetter. | Phase 2 |
 
 Trendsetter needs server-observed attribution. Copying a share link alone is not sufficient. Self-use and repeated imports by the same recipient should not count.
 
-### Keybind Proficiency
+### Keybinds
 
 Keybind achievements should be their own category rather than higher tiers of unrelated feature series. They recognize a more efficient way to perform an already available action.
 
@@ -255,7 +250,6 @@ Keybind achievements should be their own category rather than higher tiers of un
 | Keybinds V: Big Picture | 10 | Use a registered fullscreen keybind for a supported view. | Phase 1 |
 | Keybinds VI: Playback Control | 10 | Use a registered replay keyboard control to change playback. | Phase 1 |
 | Keybinds VII: Hands on the Timeline | 15 | Use a registered rotation-timeline keyboard or modified-mouse command. | Phase 1 |
-| Keybind Proficiency | 25 | Complete five required Keybind achievements, including Quick Edit and At Your Fingertips. | Phase 1 |
 
 The event must originate from the registered keybind path. Performing the equivalent action by clicking should award the feature achievement, but not the Keybind achievement.
 
@@ -270,7 +264,6 @@ Keybind descriptions should be platform-aware. Display `Option` and `Cmd` on mac
 | Deeper Look III: Cause of Death | 10 | Open a death or incoming-events analysis for a selected entity. | Phase 1 |
 | Deeper Look IV: Keep It in View | 10 | Pin or expand a supported breakout. | Phase 1 |
 | Deeper Look V: Compare Notes | 15 | Use comparison and a breakout in the same report session. | Phase 1 |
-| Breakout Proficiency | 25 | Complete all required Breakouts and Comparison achievements. | Phase 1 |
 
 Criteria should be capability-based. A report that lacks the required stream should not advertise an impossible next step.
 
@@ -283,7 +276,6 @@ Criteria should be capability-based. A report that lacks the required stream sho
 | Replay III: Walk the Battlefield | 10 | Enter walk or free-camera mode and move the camera. | Phase 1 |
 | Replay IV: Time and Place | 10 | For a report with map or replay entity selection, select an event or entity and inspect related report data. | Phase 2 |
 | Replay V: Director's Cut | 15 | Use replay with synchronized video. | Phase 2 |
-| Replay Proficiency | 25 | Complete the required Replay and Map achievements. | Phase 2 |
 
 Replay achievements must only be shown when the selected report supports the relevant replay capability.
 
@@ -296,7 +288,6 @@ Replay achievements must only be shown when the selected report supports the rel
 | Assemble the Group | 10 | Start a live session and create an invite link. | Phase 2 |
 | Company | 15 | Have another account join a live session created by the user. | Phase 2 |
 | In Sync | 20 | Change a synchronized live-session state while at least one other account is present. | Phase 2 |
-| Sharing and Collaboration Proficiency | 25 | Complete all required Sharing and Collaboration achievements. | Phase 2 |
 
 Link opens and joins must exclude the creator, anonymous duplicate sessions where identity cannot be established, automated previews, and known crawlers.
 
@@ -309,7 +300,6 @@ Link opens and joins must exclude the creator, anonymous duplicate sessions wher
 | Guild Builder III: Turn the Page | 10 | Add and save a new guild-page tab. | Phase 1 |
 | Guild Builder IV: Make It Yours | 10 | Save a guild-page header or theme customization. | Phase 1 |
 | Guild Builder V: Now Recruiting | 15 | Save a guild page with a configured recruitment or application destination. | Phase 1 |
-| Guild Builder Proficiency | 25 | Complete all required Guild Builder achievements. | Phase 1 |
 
 Only successful, authorized saves count. Opening the editor or making unsaved changes does not count.
 
@@ -322,7 +312,6 @@ Only successful, authorized saves count. Opening the editor or making unsaved ch
 | Scout III: Guild Research | 5 | Open a guild from search or a ranking. | Phase 1 |
 | Scout IV: Through the Years | 10 | Open a supported character, guild, or raid history view. | Phase 1 |
 | Scout V: Keep an Eye on This | 10 | Add a supported entity or report to favorites. | Phase 1 |
-| Discovery Proficiency | 25 | Complete all required Rankings and Discovery achievements. | Phase 1 |
 
 These achievements recognize using discovery tools. They do not reward the user's own leaderboard position.
 
@@ -336,21 +325,24 @@ These achievements recognize using discovery tools. They do not reward the user'
 | Theorycraft IV: Dressed for the Occasion | 10 | Save a gear list or progression plan. | Phase 1 |
 | Theorycraft V: Assemble the Raid | 10 | Save a raid-planner composition. | Phase 1 |
 | Theorycraft VI: No Need to Type It Twice | 15 | Successfully import a supported raid-plan or roster format. | Phase 1 |
-| Planning and Theorycraft Proficiency | 25 | Complete all required Planning and Theorycraft achievements. | Phase 1 |
 
-### Chronicle Proficiency
+### Optional set achievements
+
+Set achievements are available when a collection creates a distinct accomplishment that is more meaningful than its parts. They are not the default ending for a category or series.
+
+Potential examples:
 
 | Achievement | Points | Criterion | Phase |
 | --- | ---: | --- | --- |
-| Chronicle Apprentice | 25 | Earn three Category Proficiency achievements. | Phase 1 |
-| Chronicle Adept | 25 | Earn six Category Proficiency achievements. | Phase 1 |
-| Chronicle Expert | 50 | Earn all Category Proficiency achievements designated as core for the current catalog version. | Phase 2 |
+| Command Center | 20 | Earn Panel Craft IV, Layouts III, and Layouts IV. | Phase 1 |
+| Shared Vision | 20 | Earn Layouts VII, Company, and In Sync. | Phase 2 |
+| Chronicle Field Guide | 25 | Earn a deliberately selected cross-category set of discovery achievements. | Future |
 
-The required set must be frozen per catalog version. Adding a category later must not revoke Chronicle Expert from users who already earned it.
+A set achievement should have its own identity, icon, and reason to exist. Do not add one merely because a category has several achievements. Its required achievement IDs and versions must be frozen when released so later catalog growth does not revoke or silently change it.
 
 ## Feats of Strength
 
-Feats of Strength can recognize unusual or retired moments without making Category Proficiency unobtainable.
+Feats of Strength can recognize unusual or retired moments without affecting the normal catalog.
 
 Potential examples:
 
@@ -369,14 +361,14 @@ These should be rare. Product usage that every new user can still perform belong
 Use rewards in this order:
 
 1. Achievement points and achievement completion presentation.
-2. Category Proficiency marks.
+2. Marks attached to selected achievements.
 3. Profile titles, badges, or a small achievement showcase.
 4. Point-threshold cosmetics.
 5. Only later, modest account convenience or storage grants.
 
-### Category marks
+### Achievement mark directions
 
-Each Category Proficiency can award one themed treatment or badge. These are art directions, not IDs that exist in the current catalog. Implementing them requires new name, background, or border treatment IDs, or a new badge/title renderer:
+Selected achievements can award a themed treatment or badge. A category does not automatically need a capstone or cosmetic. These are art directions, not IDs that exist in the current catalog. Implementing them requires new name, background, or border treatment IDs, or a new badge/title renderer:
 
 | Category | Cosmetic direction |
 | --- | --- |
@@ -427,7 +419,7 @@ Achievement-earned storage could be represented as a permanent additive data gra
 - How much free storage can be earned without weakening supporter value.
 - Whether abuse through duplicate accounts is acceptable.
 
-A small one-time grant for broad Chronicle Proficiency is safer than repeated grants for upload-related achievements.
+A small one-time grant attached to an intentionally broad set achievement is safer than repeated grants for upload-related achievements.
 
 #### Feature unlocks
 
@@ -532,11 +524,11 @@ Client-only achievements are inherently easier to spoof. That is acceptable for 
 Achievements fall into four evaluator shapes:
 
 1. **One-shot:** The first accepted matching event completes the achievement.
-2. **Set:** The account must complete several distinct actions.
+2. **Multi-action:** The account must complete several distinct actions.
 3. **Counter:** Distinct qualifying subjects or events reach a threshold.
-4. **Meta:** Required achievement IDs are complete.
+4. **Achievement set:** A specifically declared list of achievement IDs and versions is complete.
 
-The launch catalog should prefer one-shot, set, and meta evaluators. Counters introduce the most abuse and backfill complexity.
+The launch catalog should prefer one-shot and multi-action evaluators. Achievement-set evaluators should be used selectively, and counters introduce the most abuse and backfill complexity.
 
 For expression-based criteria, store a compact progress projection rather than replaying all historical events on every request.
 
@@ -548,7 +540,7 @@ Every achievement must display the percentage of users who have earned it. The s
 12.4% of users have this achievement
 ```
 
-The percentage is part of the achievement contract, not an optional analytics view. It appears on achievement cards, detail views, search results, earned-achievement views, and Category Proficiency or meta-achievement entries.
+The percentage is part of the achievement contract, not an optional analytics view. It appears on achievement cards, detail views, search results, earned-achievement views, and set-achievement entries.
 
 ### Calculation
 
@@ -628,7 +620,7 @@ The achievement UI should identify retroactively awarded achievements without pr
 - Require successful persistence before awarding save/import achievements.
 - Do not award on canceled layout edits or invalid filter expressions.
 - Do not require a capability that the current server, report, or device cannot provide.
-- Touch alternatives must exist for category completion. Keybind Proficiency can remain optional for touch-only users and should not be required for the first Chronicle Expert catalog.
+- A set achievement that includes keybinds must account for touch-only users or be clearly optional and platform-specific.
 - Avoid achievements tied to supporter-only cosmetics or permissions.
 - Define how merged, unlinked, banned, or deleted accounts affect progress before attaching valuable account capacity.
 
@@ -641,7 +633,7 @@ The browser should provide:
 - Category navigation.
 - Earned points and total available core points.
 - Series and tier presentation.
-- Category Proficiency progress.
+- Set-achievement progress where a set achievement exists.
 - The percentage of users who have earned every listed achievement.
 - Search and filters for earned, in progress, hidden, and reward-bearing achievements.
 - Capability-aware descriptions so impossible actions are not promoted in the current context.
@@ -664,7 +656,7 @@ A completion toast should show:
 
 - Achievement name and icon.
 - Points earned.
-- Series tier or Category Proficiency status.
+- Series tier or set-achievement status, when applicable.
 - The percentage of users who have earned it.
 - Reward, if any.
 - A link to inspect the category.
@@ -689,11 +681,11 @@ Launch a focused catalog of roughly 25 to 35 achievements from:
 - Panel Craft
 - Filter Craft
 - Layouts
-- Keybind Proficiency
+- Keybinds
 - Breakouts and Comparison
 - Rankings and Discovery
 
-Include points, Category Proficiency, completion toasts, and a small set of cosmetic marks. Do not include storage or variable quotas.
+Include points, completion toasts, and a small set of cosmetic marks attached to selected achievements. Do not require category capstones, storage, or variable quotas.
 
 ### Phase 2: Social and advanced workflows
 
@@ -704,7 +696,7 @@ Add:
 - Replay and video synchronization.
 - Guild Builder.
 - Planning and Theorycraft.
-- Chronicle-wide meta achievements.
+- A small number of intentional set achievements where the combined accomplishment has a clear identity.
 
 ### Phase 3: Reward expansion
 
@@ -712,23 +704,22 @@ After observing completion rates and supporter impact, consider:
 
 - More achievement-only cosmetic IDs.
 - Profile achievement showcases.
-- A small permanent Chronicle Expert storage grant.
+- A small permanent storage grant attached to a deliberately broad set achievement.
 - Carefully specified layout-capacity rewards, if users actually encounter the existing quota.
 
 ## Decisions required before implementation
 
-1. Is Category Proficiency acceptable terminology alongside the separate player Mastery rating?
-2. Which categories are core for the first Chronicle Expert meta-achievement?
-3. Should Keybind Proficiency be excluded from Chronicle Expert for touch-only accessibility?
-4. Are achievement cosmetics displayed through the existing three character-cosmetic slots, or through a new badge/title slot?
-5. Can non-supporters equip achievement-earned cosmetic IDs while supporter-only IDs remain tier-gated?
-6. Which achievement events must be server-authoritative?
-7. How much historical progress should be backfilled?
-8. Are achievements private by default, profile-visible by default, or governed by existing profile visibility?
-9. Should social achievements require authenticated recipients?
-10. Should points remain presentation-only permanently, or can they unlock rewards at fixed thresholds?
-11. Should the existing 30-layout quota remain universal?
-12. Is any storage reward worth the overlap with supporter storage benefits?
+1. Which collections, if any, deserve a set-completion achievement?
+2. What makes a set achievement meaningful enough to add instead of treating points as the breadth signal?
+3. Are achievement cosmetics displayed through the existing three character-cosmetic slots, or through a new badge/title slot?
+4. Can non-supporters equip achievement-earned cosmetic IDs while supporter-only IDs remain tier-gated?
+5. Which achievement events must be server-authoritative?
+6. How much historical progress should be backfilled?
+7. Are achievements private by default, profile-visible by default, or governed by existing profile visibility?
+8. Should social achievements require authenticated recipients?
+9. Should points remain presentation-only permanently, or can they unlock rewards at fixed thresholds?
+10. Should the existing 30-layout quota remain universal?
+11. Is any storage reward worth the overlap with supporter storage benefits?
 
 ## Recommended first decision
 
