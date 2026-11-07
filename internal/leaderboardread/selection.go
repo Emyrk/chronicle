@@ -19,15 +19,17 @@ import (
 // Request identifies one exact cohort. Renown intentionally has no performance
 // cohort or set selection. Tenant comes from request middleware, never input.
 type Request struct {
-	Instance, Difficulty         string
-	MaxPlayers                   int16
-	Subject, Kind, Score         string
-	Boss, Set                    string
-	Bosses                       []string
-	Class, Spec, SubSpec, Metric string
-	Realm                        uuid.UUID
-	Search                       string
-	FilterSubSpec                bool
+	Instance, Difficulty                                             string
+	MaxPlayers                                                       int16
+	Subject, Kind, Score                                             string
+	Boss, Set                                                        string
+	Bosses                                                           []string
+	Class, Spec, SubSpec, Metric                                     string
+	Realm                                                            uuid.UUID
+	Search                                                           string
+	FilterSubSpec                                                    bool
+	CompanionMetric, CompanionClass, CompanionSpec, CompanionSubSpec string
+	CompanionFilterSubSpec                                           bool
 }
 
 type Selection struct {
@@ -52,6 +54,9 @@ func Select(rows []database.ResolveLeaderboardConfigurationRow, r Request) (Sele
 	}
 	if len(r.Search) > 100 {
 		return out, errors.New("search must be at most 100 bytes")
+	}
+	if r.CompanionMetric != "" && (r.Kind != "renown" || r.Subject != "player" || (r.CompanionMetric != "dps" && r.CompanionMetric != "hps")) {
+		return out, errors.New("performance companions require player Renown and DPS or HPS")
 	}
 	if r.Kind == "renown" || r.Subject == "guild" {
 		if r.Class != "" || r.Spec != "" || r.SubSpec != "" || r.FilterSubSpec || r.Metric != "" {

@@ -111,6 +111,9 @@ describe("existing Hub adapter", () => {
       score: "renown",
       realm: "realm",
       boss: "A",
+      companion_metric: "dps",
+      companion_class: "MAGE",
+      companion_spec: "Frost",
     });
     expect(
       v2RatingParams({ ...context, subject: "guild" }, {}, "mastery").has(
@@ -138,6 +141,16 @@ describe("existing Hub adapter", () => {
         ).toString(),
       );
     }
+  });
+  it("maps independent Renown companions including zero and preserves absent data", async () => {
+    const fetch = vi.fn().mockResolvedValue({ok:true,json:async()=>({entries:[{realm_id:"r",subject_id:"p",name:"Mage",renown:44,peak:0,mastery:0,bosses:[],peak_companion:{score:0,player_class:"MAGE",player_spec:"Frost",player_sub_spec:""},mastery_companion:{score:70,player_class:"MAGE",player_spec:"Fire",player_sub_spec:""}},{realm_id:"r",subject_id:"q",name:"Healer",renown:33,bosses:[],peak_companion:null,mastery_companion:null}],next_cursor:""})});
+    vi.stubGlobal("fetch",fetch);
+    const page=await createV2Pager(context)({scope:{},metric:"renown",query:"",page:0});
+    expect(page.rows[0].scores?.peak?.score).toBe(0);
+    expect(page.rows[0].scores?.peak?.cohortLabel).toContain("Frost");
+    expect(page.rows[0].scores?.mastery?.cohortLabel).toContain("Fire");
+    expect(page.rows[1].scores?.peak).toBeUndefined();
+    expect(fetch.mock.calls[0][0]).toContain("companion_metric=dps");
   });
   it("uses API cursors in existing page controls, scopes search and preserves zeros without global ranks", async () => {
     const fetch = vi
@@ -188,6 +201,8 @@ it("preserves returned cohort identity for two specs of the same player", () => 
     subject_id: "same",
     name: "Mage",
     score: 98,
+    peak_companion: null,
+    mastery_companion: null,
     peak: 98,
     mastery: 98,
     form: 97,

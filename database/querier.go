@@ -782,6 +782,11 @@ type sqlcQuerier interface {
 	// Only the returned score page is passed here, with aligned exact cohort arrays.
 	// Cross the bounded page with selection to retain missing bosses as zero peaks.
 	ListLeaderboardV2PageBosses(ctx context.Context, arg ListLeaderboardV2PageBossesParams) ([]ListLeaderboardV2PageBossesRow, error)
+	// Companion metric for the returned performance page; no cohort double-counting.
+	ListLeaderboardV2PageRenown(ctx context.Context, arg ListLeaderboardV2PageRenownParams) ([]ListLeaderboardV2PageRenownRow, error)
+	// Bounded page x eligible benchmark cohorts x selected bosses. Never blend specs
+	// boss-by-boss: rank only complete fixed-denominator candidate aggregates.
+	ListLeaderboardV2PlayerCompanions(ctx context.Context, arg ListLeaderboardV2PlayerCompanionsParams) ([]ListLeaderboardV2PlayerCompanionsRow, error)
 	ListLogFilePartsForDeletion(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
 	ListLogGroupArtifactsForParse(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)

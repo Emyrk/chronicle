@@ -41,6 +41,12 @@ export function v2RatingParams(
     throw new Error("Choose one realm or All realms.");
   if (context.realmIDs?.[0]) p.set("realm", context.realmIDs[0]);
   if (search.trim()) p.set("search", search.trim());
+  if (metric === "renown" && context.subject === "player") {
+    p.set("companion_metric", context.performance);
+    if (scope.cls) p.set("companion_class", scope.cls);
+    if (scope.spec) p.set("companion_spec", scope.spec);
+    if (scope.subSpec !== undefined) p.set("companion_sub_spec", scope.subSpec);
+  }
   const rows = context.configuration.rows.filter(
     (row) => row.instance_name === context.instance,
   );
@@ -141,8 +147,13 @@ export function createV2Pager(context: V2RatingContext) {
         entry: v2PlayerEntry(row, params, metric),
         scores:
           metric === "renown"
-            ? { renown: v2PlayerEntry(row, params, "renown") }
+            ? {
+                renown: v2PlayerEntry(row, params, "renown"),
+                ...(row.peak_companion ? { peak: { ...v2PlayerEntry(row, params, "peak"), score: row.peak_companion.score, cohortLabel: [row.peak_companion.player_class, row.peak_companion.player_spec, row.peak_companion.player_sub_spec].filter(Boolean).join(" · ") } } : {}),
+                ...(row.mastery_companion ? { mastery: { ...v2PlayerEntry(row, params, "mastery"), score: row.mastery_companion.score, cohortLabel: [row.mastery_companion.player_class, row.mastery_companion.player_spec, row.mastery_companion.player_sub_spec].filter(Boolean).join(" · ") } } : {}),
+              }
             : {
+                renown: v2PlayerEntry(row, params, "renown"),
                 peak: v2PlayerEntry(row, params, "peak"),
                 mastery: v2PlayerEntry(row, params, "mastery"),
               },

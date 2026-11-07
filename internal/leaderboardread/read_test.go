@@ -317,3 +317,70 @@ func TestPageBossDetails(t *testing.T) {
 	require.EqualValues(t, 200, rows[0].DurationMs)
 	require.Equal(t, 50.0, rows[0].Peak)
 }
+
+func TestIndependentWholeSelectionCompanions(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	_, err = conn.Exec(ctx, "BEGIN")
+	require.NoError(t, err)
+	defer func() { _, _ = conn.Exec(ctx, "ROLLBACK") }()
+	fixture, err := os.ReadFile("testdata/companion_fixture.sql")
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, string(fixture))
+	require.NoError(t, err)
+	db := database.NewQueries(conn)
+	p := database.ListLeaderboardV2PlayerCompanionsParams{TenantID: uuid.MustParse("00000000-0000-4000-8000-000000000001"), InstanceName: "Companions", Metric: "dps", Bosses: []string{"A", "B"}, Denominator: 2, Realms: []uuid.UUID{uuid.MustParse("00000000-0000-4000-8000-000000000002")}, Subjects: []string{"Mage"}}
+	rows, err := db.ListLeaderboardV2PlayerCompanions(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	for _, row := range rows {
+		if row.Metric == "peak" {
+			require.Equal(t, "Frost", row.PlayerSpec)
+			require.Equal(t, 100.0, row.Score)
+		} else {
+			require.Equal(t, "Fire", row.PlayerSpec)
+			require.Equal(t, 80.0, row.Score)
+		}
+	}
+	// A perfect Arcane boss cannot be blended with another spec's B to win.
+	p.PlayerSpec = "Arcane"
+	rows, err = db.ListLeaderboardV2PlayerCompanions(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	for _, row := range rows {
+		require.Equal(t, 50.0, row.Score)
+	}
+	p.PlayerSpec = ""
+	p.Metric = "hps"
+	rows, err = db.ListLeaderboardV2PlayerCompanions(ctx, p)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+	p.Metric = "dps"
+	p.Subjects = []string{"Not on page"}
+	rows, err = db.ListLeaderboardV2PlayerCompanions(ctx, p)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+	p.Subjects = []string{"Zero"}
+	rows, err = db.ListLeaderboardV2PlayerCompanions(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	for _, row := range rows {
+		require.Zero(t, row.Score)
+	}
+	p.Subjects = []string{"Mage"}
+	p.DifficultyName = "Heroic"
+	p.MaxPlayers = 25
+	rows, err = db.ListLeaderboardV2PlayerCompanions(ctx, p)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+	p.DifficultyName = ""
+	p.MaxPlayers = 0
+	renown, err := db.ListLeaderboardV2PageRenown(ctx, database.ListLeaderboardV2PageRenownParams{TenantID: p.TenantID, InstanceName: p.InstanceName, SubjectKind: "player", Realms: []uuid.UUID{p.Realms[0], p.Realms[0]}, Subjects: []string{"Mage", "Mage"}, Bosses: p.Bosses, Awards: []float64{5, 1}})
+	require.NoError(t, err)
+	require.Len(t, renown, 1)
+	require.Equal(t, 222.0, renown[0].Renown)
+}

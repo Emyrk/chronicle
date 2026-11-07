@@ -118,6 +118,8 @@ WITH subjects AS (
 )
 SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_class::text AS player_class, p.player_spec::text AS player_spec, p.player_sub_spec::text AS player_sub_spec, p.encounter_name::text AS encounter_name,
  CASE WHEN b.best_metric > 0 THEN COALESCE(LEAST(100::double precision,100*s.raw_peak/b.best_metric),0) ELSE 0 END::double precision AS peak,
+ CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision,100*s.raw_form/b.best_metric) ELSE 0 END::double precision AS form,
+ CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision,100*s.raw_floor/b.best_metric) ELSE 0 END::double precision AS floor,
  COALESCE(s.raw_peak,0)::double precision AS raw_peak, COALESCE(s.peak_duration_ms,0)::bigint AS duration_ms,
  COALESCE(s.observation_count,0)::bigint AS observation_count
 FROM selected p
@@ -132,6 +134,8 @@ WHERE @subject_kind::text='player'
 UNION ALL
 SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_class::text AS player_class, p.player_spec::text AS player_spec, p.player_sub_spec::text AS player_sub_spec, p.encounter_name::text AS encounter_name,
  CASE WHEN s.fastest_duration_ms > 0 AND b.best_duration_ms IS NOT NULL THEN LEAST(100::double precision,100.0*b.best_duration_ms/s.fastest_duration_ms) ELSE 0 END::double precision AS peak,
+ CASE WHEN b.best_duration_ms IS NOT NULL THEN LEAST(100::double precision,100*b.best_duration_ms*s.form_mean_inverse_ms) ELSE 0 END::double precision AS form,
+ CASE WHEN b.best_duration_ms IS NOT NULL THEN LEAST(100::double precision,100*b.best_duration_ms*s.floor_mean_inverse_ms) ELSE 0 END::double precision AS floor,
  0::double precision AS raw_peak, COALESCE(s.fastest_duration_ms,0)::bigint AS duration_ms,
  COALESCE(s.observation_count,0)::bigint AS observation_count
 FROM selected p
@@ -142,3 +146,49 @@ LEFT JOIN leaderboard_guild_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.i
  AND b.difficulty_name=s.difficulty_name AND b.max_players=s.max_players AND b.encounter_name=s.encounter_name
 WHERE @subject_kind::text='guild'
 ORDER BY realm_id,subject_id,player_class,player_spec,player_sub_spec,encounter_name;
+
+-- name: ListLeaderboardV2PageRenown :many
+-- Companion metric for the returned performance page; no cohort double-counting.
+WITH page AS (SELECT DISTINCT unnest(@realms::uuid[]) AS realm_id, unnest(@subjects::text[]) AS subject_id),
+awards AS (SELECT unnest(@bosses::text[]) AS encounter_name,unnest(@awards::double precision[]) AS points)
+SELECT p.realm_id::uuid AS realm_id,p.subject_id::text AS subject_id,COALESCE(sum(c.kill_count*a.points),0)::double precision AS renown
+FROM page p CROSS JOIN awards a
+LEFT JOIN leaderboard_player_renown_counts c ON c.tenant_id = @tenant_id::uuid AND c.instance_name = @instance_name::text
+ AND c.difficulty_name = @difficulty_name::text AND c.max_players = @max_players::smallint
+ AND c.realm_id=p.realm_id AND c.player_guid=p.subject_id AND c.encounter_name=a.encounter_name
+WHERE @subject_kind::text='player' GROUP BY p.realm_id,p.subject_id
+UNION ALL
+SELECT p.realm_id::uuid AS realm_id,p.subject_id::text AS subject_id,COALESCE(sum(c.kill_count*a.points),0)::double precision AS renown
+FROM page p CROSS JOIN awards a
+LEFT JOIN leaderboard_guild_renown_counts c ON c.tenant_id = @tenant_id::uuid AND c.instance_name = @instance_name::text
+ AND c.difficulty_name = @difficulty_name::text AND c.max_players = @max_players::smallint
+ AND c.realm_id=p.realm_id AND c.guild_id=p.subject_id::uuid AND c.encounter_name=a.encounter_name
+WHERE @subject_kind::text='guild' GROUP BY p.realm_id,p.subject_id;
+
+-- name: ListLeaderboardV2PlayerCompanions :many
+-- Bounded page x eligible benchmark cohorts x selected bosses. Never blend specs
+-- boss-by-boss: rank only complete fixed-denominator candidate aggregates.
+WITH page AS (SELECT DISTINCT unnest(@realms::uuid[]) AS realm_id,unnest(@subjects::text[]) AS subject_id),
+cohorts AS (SELECT DISTINCT player_class,player_spec,player_sub_spec FROM leaderboard_player_boss_benchmarks
+ WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text
+ AND max_players = @max_players::smallint AND metric = @metric::text AND encounter_name=ANY(@bosses::text[])
+ AND (@player_class::text='' OR player_class = @player_class::text)
+ AND (@player_spec::text='' OR player_spec = @player_spec::text)
+ AND (NOT @filter_sub_spec::boolean OR player_sub_spec = @player_sub_spec::text)),
+candidates AS (
+ SELECT p.realm_id,p.subject_id,c.player_class,c.player_spec,c.player_sub_spec,
+ sum(CASE WHEN b.best_metric>0 THEN LEAST(100::double precision,100*s.raw_peak/b.best_metric) ELSE 0 END)/ @denominator::integer AS peak,
+ sum(CASE WHEN b.best_metric>0 THEN .3*LEAST(100::double precision,100*s.raw_peak/b.best_metric)+.5*LEAST(100::double precision,100*s.raw_form/b.best_metric)+.2*LEAST(100::double precision,100*s.raw_floor/b.best_metric) ELSE 0 END)/ @denominator::integer AS mastery
+ FROM page p CROSS JOIN cohorts c CROSS JOIN unnest(@bosses::text[]) boss
+ JOIN leaderboard_player_boss_subjects s ON s.tenant_id = @tenant_id::uuid AND s.instance_name = @instance_name::text
+ AND s.difficulty_name = @difficulty_name::text AND s.max_players = @max_players::smallint AND s.encounter_name=boss
+ AND s.realm_id=p.realm_id AND s.player_guid=p.subject_id AND s.player_class=c.player_class AND s.player_spec=c.player_spec AND s.player_sub_spec=c.player_sub_spec AND s.metric = @metric::text
+ JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.instance_name=s.instance_name AND b.difficulty_name=s.difficulty_name AND b.max_players=s.max_players AND b.encounter_name=s.encounter_name AND b.player_class=s.player_class AND b.player_spec=s.player_spec AND b.player_sub_spec=s.player_sub_spec AND b.metric=s.metric
+ GROUP BY p.realm_id,p.subject_id,c.player_class,c.player_spec,c.player_sub_spec
+), ranked AS (
+ SELECT *,row_number() OVER(PARTITION BY realm_id,subject_id ORDER BY peak DESC,player_class COLLATE "C",player_spec COLLATE "C",player_sub_spec COLLATE "C") AS peak_rank,
+ row_number() OVER(PARTITION BY realm_id,subject_id ORDER BY mastery DESC,player_class COLLATE "C",player_spec COLLATE "C",player_sub_spec COLLATE "C") AS mastery_rank FROM candidates
+)
+SELECT realm_id::uuid AS realm_id,subject_id::text AS subject_id,player_class,player_spec,player_sub_spec,'peak'::text AS metric,peak::double precision AS score FROM ranked WHERE peak_rank=1
+UNION ALL
+SELECT realm_id::uuid AS realm_id,subject_id::text AS subject_id,player_class,player_spec,player_sub_spec,'mastery'::text AS metric,mastery::double precision AS score FROM ranked WHERE mastery_rank=1;

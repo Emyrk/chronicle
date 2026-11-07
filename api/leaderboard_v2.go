@@ -37,6 +37,12 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req := leaderboardread.Request{Instance: q.Get("instance"), Difficulty: q.Get("difficulty"), MaxPlayers: int16(size), Subject: q.Get("subject"), Kind: q.Get("kind"), Score: q.Get("score"), Boss: q.Get("boss"), Bosses: q["bosses"], Set: q.Get("set"), Class: q.Get("class"), Spec: q.Get("spec"), SubSpec: q.Get("sub_spec"), FilterSubSpec: q.Has("sub_spec"), Metric: q.Get("metric"), Search: strings.TrimSpace(q.Get("search"))}
+	req.CompanionMetric = q.Get("companion_metric")
+	req.CompanionClass = q.Get("companion_class")
+	req.CompanionSpec = q.Get("companion_spec")
+	req.CompanionSubSpec = q.Get("companion_sub_spec")
+	req.CompanionFilterSubSpec = q.Has("companion_sub_spec")
+
 	if q.Get("realm") != "" {
 		req.Realm, err = uuid.Parse(q.Get("realm"))
 		if err != nil {
@@ -140,7 +146,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		out.Entries = append(out.Entries, chroniclesdk.LeaderboardV2Entry{RealmID: row.RealmID, SubjectID: row.SubjectID, PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, Name: row.SubjectName, Score: row.Score, Peak: row.Peak, Form: row.Form, Floor: row.Floor, Bosses: []chroniclesdk.LeaderboardV2Boss{}, Mastery: row.Mastery, Renown: row.Renown, SampleCount: row.SampleCount, ComputedAt: row.ComputedAt.Time})
 	}
 	// Enrich only the actual returned page, not the look-ahead row or all candidates.
-	if req.Kind == "boss" && len(out.Entries) > 0 {
+	if (req.Kind == "boss" || (req.Kind == "renown" && req.Subject == "guild")) && len(out.Entries) > 0 {
 		details := database.ListLeaderboardV2PageBossesParams{TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers, Metric: req.Metric, SubjectKind: req.Subject, Bosses: selection.Bosses}
 		type identity struct {
 			Realm                         uuid.UUID
@@ -172,7 +178,68 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 			if boss.DurationMs > 0 {
 				detail.DurationMS = &boss.DurationMs
 			}
+			if req.Kind == "renown" {
+				denominator := float64(len(selection.Bosses))
+				out.Entries[i].Peak += boss.Peak / denominator
+				out.Entries[i].Form += boss.Form / denominator
+				out.Entries[i].Floor += boss.Floor / denominator
+				out.Entries[i].Mastery += (.3*boss.Peak + .5*boss.Form + .2*boss.Floor) / denominator
+			}
 			out.Entries[i].Bosses = append(out.Entries[i].Bosses, detail)
+		}
+	}
+	if req.Kind == "renown" && req.Subject == "guild" {
+		for i, entry := range out.Entries {
+			for _, boss := range entry.Bosses {
+				if boss.ObservationCount > 0 {
+					out.Entries[i].PeakCompanion = &chroniclesdk.LeaderboardV2Companion{Score: entry.Peak}
+					out.Entries[i].MasteryCompanion = &chroniclesdk.LeaderboardV2Companion{Score: entry.Mastery}
+					break
+				}
+			}
+		}
+	}
+	if req.Kind == "boss" && len(out.Entries) > 0 {
+		params := database.ListLeaderboardV2PageRenownParams{TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers, SubjectKind: req.Subject, Bosses: selection.Bosses, Awards: selection.Awards}
+		for _, entry := range out.Entries {
+			params.Realms = append(params.Realms, entry.RealmID)
+			params.Subjects = append(params.Subjects, entry.SubjectID)
+		}
+		companions, err := db.ListLeaderboardV2PageRenown(ctx, params)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		for _, companion := range companions {
+			for i, entry := range out.Entries {
+				if entry.RealmID == companion.RealmID && entry.SubjectID == companion.SubjectID {
+					out.Entries[i].Renown = companion.Renown
+				}
+			}
+		}
+	}
+	if req.Kind == "renown" && req.Subject == "player" && req.CompanionMetric != "" && len(out.Entries) > 0 {
+		params := database.ListLeaderboardV2PlayerCompanionsParams{TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers, Metric: req.CompanionMetric, PlayerClass: req.CompanionClass, PlayerSpec: req.CompanionSpec, PlayerSubSpec: req.CompanionSubSpec, FilterSubSpec: req.CompanionFilterSubSpec, Bosses: selection.Bosses, Denominator: int32(len(selection.Bosses))}
+		for _, entry := range out.Entries {
+			params.Realms = append(params.Realms, entry.RealmID)
+			params.Subjects = append(params.Subjects, entry.SubjectID)
+		}
+		companions, err := db.ListLeaderboardV2PlayerCompanions(ctx, params)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		for _, companion := range companions {
+			for i, entry := range out.Entries {
+				if entry.RealmID == companion.RealmID && entry.SubjectID == companion.SubjectID {
+					value := &chroniclesdk.LeaderboardV2Companion{Score: companion.Score, PlayerClass: companion.PlayerClass, PlayerSpec: companion.PlayerSpec, PlayerSubSpec: companion.PlayerSubSpec}
+					if companion.Metric == "peak" {
+						out.Entries[i].PeakCompanion = value
+					} else {
+						out.Entries[i].MasteryCompanion = value
+					}
+				}
+			}
 		}
 	}
 	if more {

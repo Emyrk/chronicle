@@ -15,21 +15,23 @@ type LeaderboardV2Response struct {
 	IncludedBosses []string             `json:"included_bosses"`
 }
 type LeaderboardV2Entry struct {
-	PlayerClass   string              `json:"player_class"`
-	PlayerSpec    string              `json:"player_spec"`
-	PlayerSubSpec string              `json:"player_sub_spec"`
-	RealmID       uuid.UUID           `json:"realm_id"`
-	SubjectID     string              `json:"subject_id"`
-	Name          string              `json:"name"`
-	Score         float64             `json:"score"`
-	Peak          float64             `json:"peak"`
-	Form          float64             `json:"form"`
-	Floor         float64             `json:"floor"`
-	Bosses        []LeaderboardV2Boss `json:"bosses"`
-	Mastery       float64             `json:"mastery"`
-	Renown        float64             `json:"renown"`
-	SampleCount   int64               `json:"sample_count"`
-	ComputedAt    time.Time           `json:"computed_at"`
+	PeakCompanion    *LeaderboardV2Companion `json:"peak_companion"`
+	MasteryCompanion *LeaderboardV2Companion `json:"mastery_companion"`
+	PlayerClass      string                  `json:"player_class"`
+	PlayerSpec       string                  `json:"player_spec"`
+	PlayerSubSpec    string                  `json:"player_sub_spec"`
+	RealmID          uuid.UUID               `json:"realm_id"`
+	SubjectID        string                  `json:"subject_id"`
+	Name             string                  `json:"name"`
+	Score            float64                 `json:"score"`
+	Peak             float64                 `json:"peak"`
+	Form             float64                 `json:"form"`
+	Floor            float64                 `json:"floor"`
+	Bosses           []LeaderboardV2Boss     `json:"bosses"`
+	Mastery          float64                 `json:"mastery"`
+	Renown           float64                 `json:"renown"`
+	SampleCount      int64                   `json:"sample_count"`
+	ComputedAt       time.Time               `json:"computed_at"`
 }
 type LeaderboardV2Cohort struct {
 	PlayerClass   string `json:"player_class"`
@@ -46,4 +48,12 @@ type LeaderboardV2Boss struct {
 	RawPeak          *float64 `json:"raw_peak"`
 	DurationMS       *int64   `json:"duration_ms"`
 	ObservationCount int64    `json:"observation_count"`
+}
+
+// LeaderboardV2Companion identifies the winning whole-selection cohort.
+type LeaderboardV2Companion struct {
+	Score         float64 `json:"score"`
+	PlayerClass   string  `json:"player_class"`
+	PlayerSpec    string  `json:"player_spec"`
+	PlayerSubSpec string  `json:"player_sub_spec"`
 }
