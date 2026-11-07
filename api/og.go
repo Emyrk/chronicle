@@ -50,6 +50,12 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 			},
 		},
 		{
+			Pattern: "/g/{guildID}",
+			Resolve: func(r *http.Request) *frontend.OGData {
+				return api.guildOG(r, chi.URLParam(r, "guildID"))
+			},
+		},
+		{
 			Pattern: "/armory/{realm}/{player}",
 			Resolve: func(r *http.Request) *frontend.OGData {
 				return api.armoryOG(r, chi.URLParam(r, "realm"), chi.URLParam(r, "player"))
