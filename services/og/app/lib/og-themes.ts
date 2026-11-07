@@ -12,6 +12,11 @@ export const OG_THEMES = [
     label: 'Chronicle',
     description: 'Chronicle\'s dark card: a Libre Baskerville headline over an Inter byline, with a gold rule.',
   },
+  {
+    key: 'talents',
+    label: 'Talent build',
+    description: 'A talent calculator build: spec in class colour, the point split and a bar per tree.',
+  },
 ] as const;
 
 export type OgThemeOption = (typeof OG_THEMES)[number];

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,7 +64,14 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 		{
 			Pattern: "/talents/{class}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return flavorTalentCalculatorOG(ogHost(r), seoProductName(api.resolvedSiteFlavor(r.Context())), chi.URLParam(r, "class"), r.URL.Query().Get("build"))
+				class, build := chi.URLParam(r, "class"), r.URL.Query().Get("build")
+				og := flavorTalentCalculatorOG(ogHost(r), seoProductName(api.resolvedSiteFlavor(r.Context())), class, build)
+				if params := talentOGImageParams(class, build); params != nil {
+					if imageURL := api.ogImageURL(r, "talents", params); imageURL != "" {
+						og.ImageURL = imageURL
+					}
+				}
+				return og
 			},
 		},
 	}...)
@@ -278,6 +287,32 @@ func flavorTalentCalculatorOG(host, productName, classSlug, build string) *front
 		Description: fmt.Sprintf("A %d-point %s talent build. Open it in the talent calculator.", total, className),
 		URL:         fmt.Sprintf("%s?build=%s", classURL, build),
 	}
+}
+
+// talentOGImageParams returns the OG service `talents` card params for a
+// calculator link: class, and with a build, points per tree ("17-34-0", or one
+// number for a pet) and the inferred spec when there is one. Unknown class → nil.
+func talentOGImageParams(classSlug, build string) url.Values {
+	slug := strings.ToLower(classSlug)
+	cls, ok := talentClassSlugs[slug]
+	if !ok {
+		return nil
+	}
+	params := url.Values{"class": {slug}}
+	build = sanitizeBuildParam(build)
+	if build == "" {
+		return params
+	}
+	summary, total := talentBuildSummary(build)
+	if _, isPet := talentPetSlugs[slug]; isPet {
+		params.Set("points", strconv.Itoa(total))
+		return params
+	}
+	params.Set("points", fmt.Sprintf("%d-%d-%d", summary[0], summary[1], summary[2]))
+	if spec := wowspec.InferSpec(cls.Spec, summary); spec != "Unknown" {
+		params.Set("spec", spec)
+	}
+	return params
 }
 
 func (api *API) instanceOG(host, idOrSlug string) *frontend.OGData {
