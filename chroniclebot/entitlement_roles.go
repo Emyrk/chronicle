@@ -67,12 +67,12 @@ func (b *Bot) syncEntitlementRoles(ctx context.Context, discordID string, userID
 	}
 	remove, add := tierRoleDiff(b.config, memberRoles, paidtier.Effective(entitlements))
 	for _, roleID := range remove {
-		if err := b.session.GuildMemberRoleRemove(b.config.GuildID, discordID, roleID); err != nil {
+		if err := b.session.GuildMemberRoleRemove(b.config.GuildID, discordID, roleID, discordRequestOption(ctx, "membership_sync")); err != nil {
 			return fmt.Errorf("remove Discord tier role %s: %w", roleID, err)
 		}
 	}
 	if add != "" {
-		if err := b.session.GuildMemberRoleAdd(b.config.GuildID, discordID, add); err != nil {
+		if err := b.session.GuildMemberRoleAdd(b.config.GuildID, discordID, add, discordRequestOption(ctx, "membership_sync")); err != nil {
 			return fmt.Errorf("add Discord tier role %s: %w", add, err)
 		}
 	}

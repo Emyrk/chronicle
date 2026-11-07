@@ -99,7 +99,7 @@ func (api *API) guildDiscordInstallationToSDK(ctx context.Context, guildID uuid.
 		Scope:     installation.AnnounceRaidLogsScope,
 		ChannelID: installation.AnnounceRaidLogsChannelID.String,
 	}
-	channels, err := api.Opts.Bot.TextChannelEligibility(installation.DiscordGuildID)
+	channels, err := api.Opts.Bot.TextChannelEligibility(ctx, installation.DiscordGuildID)
 	if err != nil {
 		return chroniclesdk.GuildDiscordIntegrationSettings{}, err
 	}
@@ -407,7 +407,7 @@ func (api *API) UpdateGuildDiscordRaidLogAnnouncements(w http.ResponseWriter, r 
 		return
 	}
 	if req.ChannelID != "" {
-		channels, err := api.Opts.Bot.WritableTextChannels(installation.DiscordGuildID)
+		channels, err := api.Opts.Bot.WritableTextChannels(ctx, installation.DiscordGuildID)
 		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return
@@ -557,7 +557,7 @@ func (api *API) CompleteGuildDiscordInstall(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	response, err := http.DefaultClient.Do(req)
+	response, err := api.Opts.Bot.DiscordHTTPClient("oauth_installation").Do(req)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -572,7 +572,7 @@ func (api *API) CompleteGuildDiscordInstall(w http.ResponseWriter, r *http.Reque
 		httpapi.Write(ctx, w, http.StatusBadGateway, chroniclesdk.Response{Message: "Discord did not return the installed server."})
 		return
 	}
-	verifiedGuild, err := api.Opts.Bot.VerifyGuild(tokenResponse.Guild.ID)
+	verifiedGuild, err := api.Opts.Bot.VerifyGuild(ctx, tokenResponse.Guild.ID)
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusBadGateway, chroniclesdk.Response{Message: "Chronicle could not verify the Discord server installation."})
 		return

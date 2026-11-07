@@ -61,7 +61,7 @@ func (bot *Bot) syncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 	}
 
 	checkedAt := time.Now().UTC()
-	member, err := bot.GetGuildMember(bot.ChronicleGuildID(), discordID)
+	member, err := bot.GetGuildMember(ctx, bot.ChronicleGuildID(), discordID)
 	if err != nil {
 		safeError := sanitizeMembershipError(err)
 		if _, dbErr := bot.config.DB.UpsertDiscordMembershipGrantCheckError(ctx, database.UpsertDiscordMembershipGrantCheckErrorParams{

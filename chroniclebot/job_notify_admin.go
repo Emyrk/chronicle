@@ -79,12 +79,12 @@ func adminNotificationMessage(args ArgsNotifyAdmin) *discordgo.MessageSend {
 	}
 }
 
-func (w *WorkerNotifyAdmin) Work(_ context.Context, job *river.Job[ArgsNotifyAdmin]) error {
+func (w *WorkerNotifyAdmin) Work(ctx context.Context, job *river.Job[ArgsNotifyAdmin]) error {
 	if w.bot.session == nil {
 		return errors.New("discord bot session unavailable")
 	}
 	args := job.Args
-	_, err := w.bot.session.ChannelMessageSendComplex(args.ChannelID, adminNotificationMessage(args))
+	_, err := w.bot.session.ChannelMessageSendComplex(args.ChannelID, adminNotificationMessage(args), discordRequestOption(ctx, "admin_notification"))
 	if err != nil {
 		return fmt.Errorf("send admin notification to channel %s: %w", args.ChannelID, err)
 	}

@@ -52,11 +52,12 @@ The River queue depth and oldest-job-age gauges are database-global values colle
 
 ## Included Grafana dashboards
 
-Chronicle includes three importable dashboards:
+Chronicle includes four importable dashboards:
 
 - [`docs/grafana/chronicle-operations.json`](grafana/chronicle-operations.json) covers service health, instance search, Sidekick, parser outcomes and bottlenecks, River queues, cache behavior, authentication, UI usage, maintenance, and leader election.
 - [`docs/grafana/chronicle-http-traffic.json`](grafana/chronicle-http-traffic.json) investigates HTTP request volume, rate, and latency by route template and method.
 - [`docs/grafana/chronicle-external-api.json`](grafana/chronicle-external-api.json) measures external developer API call volume over time, request rate, endpoint popularity, and latency while excluding health checks by default.
+- [`docs/grafana/chronicle-discord-http.json`](grafana/chronicle-discord-http.json) attributes outbound Discord requests, errors, rate limits, and latency to bounded logical sources.
 
 See [`docs/grafana/README.md`](grafana/README.md) for import and file-provisioning instructions.
 
@@ -71,10 +72,49 @@ Useful Grafana variables include:
 | `$queue` | `label_values(chronicle_river_configured_workers, queue)` |
 | `$kind` | `label_values(chronicle_river_jobs_total{queue=~"$queue"}, kind)` |
 | `$route` | `label_values(chronicle_api_requests_processed_total, path)` |
+| `$source` | `label_values(chronicle_discord_http_requests_total, source)` |
+| `$status` | `label_values(chronicle_discord_http_requests_total, status)` |
 | `$cache` | `label_values(chronicle_cache_capacity, cache)` |
 | `$dataset` | `label_values(chronicle_cache_hits_total{cache=~"$cache"}, dataset)` |
 
 The exact infrastructure labels available alongside Chronicle's labels depend on the Prometheus deployment.
+
+## Discord HTTP requests
+
+Chronicle records every outbound HTTP attempt to Discord, including discordgo retries and OAuth traffic:
+
+- `chronicle_discord_http_requests_total{source,method,status}` counts attempts. `status` is an HTTP status code or `error` when no response was received.
+- `chronicle_discord_http_request_duration_seconds{source,method,status}` measures request duration as a histogram.
+
+`source` is a bounded logical caller such as `gateway`, `membership_sync`, `command_registration`, `raid_announcement`, `direct_message`, or `oauth_token`. Dynamic Discord identifiers are never labels. Requests from future call sites that do not attach a source use `unattributed`.
+
+Requests per second by source:
+
+```promql
+sum by (source) (
+  rate(chronicle_discord_http_requests_total[$__rate_interval])
+)
+```
+
+Rate-limit responses by source:
+
+```promql
+sum by (source) (
+  rate(chronicle_discord_http_requests_total{status="429"}[$__rate_interval])
+)
+```
+
+P95 request latency by source:
+
+```promql
+histogram_quantile(0.95,
+  sum by (le, source) (
+    rate(chronicle_discord_http_request_duration_seconds_bucket[$__rate_interval])
+  )
+)
+```
+
+These metrics are process-local. Sum counters and histogram buckets across the selected replicas. A single logical operation can produce multiple attempts when discordgo retries a request.
 
 ## UI panel and preset usage
 

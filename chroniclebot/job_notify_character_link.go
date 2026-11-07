@@ -139,15 +139,16 @@ func discordEmbedFieldValue(value string) string {
 	return string(runes[:maxRunes-3]) + "..."
 }
 
-func (w *WorkerNotifyCharacterLinkDecision) Work(_ context.Context, job *river.Job[ArgsNotifyCharacterLinkDecision]) error {
+func (w *WorkerNotifyCharacterLinkDecision) Work(ctx context.Context, job *river.Job[ArgsNotifyCharacterLinkDecision]) error {
 	if w.bot.session == nil {
 		return errors.New("discord bot session unavailable")
 	}
-	channel, err := w.bot.session.UserChannelCreate(job.Args.DiscordID)
+	requestOption := discordRequestOption(ctx, "direct_message")
+	channel, err := w.bot.session.UserChannelCreate(job.Args.DiscordID, requestOption)
 	if err != nil {
 		return fmt.Errorf("create Discord DM channel for user %s: %w", job.Args.DiscordID, err)
 	}
-	if _, err := w.bot.session.ChannelMessageSendComplex(channel.ID, characterLinkDecisionMessage(job.Args)); err != nil {
+	if _, err := w.bot.session.ChannelMessageSendComplex(channel.ID, characterLinkDecisionMessage(job.Args), requestOption); err != nil {
 		return fmt.Errorf("send character-link decision DM to user %s: %w", job.Args.DiscordID, err)
 	}
 	return nil

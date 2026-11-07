@@ -128,7 +128,8 @@ func (w *WorkerSendDiscordDM) Work(ctx context.Context, job *river.Job[ArgsSendD
 	if w.bot.session == nil {
 		return errors.New("discord bot session unavailable")
 	}
-	channel, err := w.bot.session.UserChannelCreate(job.Args.DiscordID)
+	requestOption := discordRequestOption(ctx, "direct_message")
+	channel, err := w.bot.session.UserChannelCreate(job.Args.DiscordID, requestOption)
 	if err != nil {
 		err = fmt.Errorf("create Discord DM channel for user %s: %w", job.Args.DiscordID, err)
 		if discordDMRecipientUnavailable(err) {
@@ -136,7 +137,7 @@ func (w *WorkerSendDiscordDM) Work(ctx context.Context, job *river.Job[ArgsSendD
 		}
 		return err
 	}
-	if _, err := w.bot.session.ChannelMessageSendComplex(channel.ID, discordDirectMessage(job.Args.Message)); err != nil {
+	if _, err := w.bot.session.ChannelMessageSendComplex(channel.ID, discordDirectMessage(job.Args.Message), requestOption); err != nil {
 		err = fmt.Errorf("send Discord DM to user %s: %w", job.Args.DiscordID, err)
 		if discordDMRecipientUnavailable(err) {
 			return completeUnavailableDiscordDM(ctx, err)

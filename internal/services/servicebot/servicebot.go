@@ -80,6 +80,7 @@ func (s *Service) Start(ctx context.Context) error {
 		AdminNotificationsChannelID:  s.cfg.AdminNotificationsChannelID,
 		Disabled:                     s.cfg.Disabled,
 		MembershipGrantChecksPerHour: s.cfg.MembershipGrantChecksPerHour,
+		Registry:                     serviceprometheus.Registry(s.broker),
 		DB:                           db,
 		Zed:                          zed,
 		AccessURL:                    serviceaccessurl.AccessURL(s.broker),

@@ -9,6 +9,7 @@ import (
 
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
+	"github.com/markbates/goth/providers/discord"
 	"github.com/markbates/goth/providers/openidConnect"
 	"github.com/stretchr/testify/require"
 )
@@ -32,6 +33,7 @@ func TestContextualRefreshProviderCancelsTokenRequest(t *testing.T) {
 		"client-id",
 		"client-secret",
 		server.URL,
+		nil,
 	)
 	refresher, ok := provider.(contextualTokenRefresher)
 	require.True(t, ok)
@@ -56,6 +58,36 @@ func TestContextualRefreshProviderCancelsTokenRequest(t *testing.T) {
 	case <-testCtx.Done():
 		t.Fatalf("timed out waiting for token refresh cancellation: %v", testCtx.Err())
 	}
+}
+
+func TestAuthorizeDiscordSessionUsesConfiguredHTTPClient(t *testing.T) {
+	t.Parallel()
+
+	codes := make(chan string, 1)
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		codes <- r.Form.Get("code")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"access-token","refresh_token":"refresh-token","token_type":"Bearer","expires_in":3600}`))
+	}))
+	t.Cleanup(tokenServer.Close)
+
+	discordProvider := discord.New("client-id", "client-secret", "https://example.com/callback")
+	provider := withContextualTokenRefresh(
+		discordProvider,
+		discordProvider.ClientKey,
+		discordProvider.Secret,
+		tokenServer.URL,
+		tokenServer.Client(),
+	)
+	session := &discord.Session{}
+
+	token, err := authorizeSession(session, provider, url.Values{"code": {"authorization-code"}})
+	require.NoError(t, err)
+	require.Equal(t, "authorization-code", <-codes)
+	require.Equal(t, "access-token", token)
+	require.Equal(t, "access-token", session.AccessToken)
+	require.Equal(t, "refresh-token", session.RefreshToken)
 }
 
 func TestAuthorizeSessionUnwrapsContextualRefreshProvider(t *testing.T) {
@@ -85,6 +117,7 @@ func TestAuthorizeSessionUnwrapsContextualRefreshProvider(t *testing.T) {
 		oidcProvider.ClientKey,
 		oidcProvider.Secret,
 		oidcProvider.OpenIDConfig.TokenEndpoint,
+		nil,
 	)
 	session := &openidConnect.Session{}
 
