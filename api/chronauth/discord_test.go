@@ -32,6 +32,7 @@ func TestContextualRefreshProviderCancelsTokenRequest(t *testing.T) {
 		&testRefreshProvider{},
 		"client-id",
 		"client-secret",
+		"https://example.com/callback",
 		server.URL,
 		nil,
 	)
@@ -63,20 +64,22 @@ func TestContextualRefreshProviderCancelsTokenRequest(t *testing.T) {
 func TestAuthorizeDiscordSessionUsesConfiguredHTTPClient(t *testing.T) {
 	t.Parallel()
 
-	codes := make(chan string, 1)
+	callbackURL := "https://example.com/callback"
+	requests := make(chan url.Values, 1)
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
-		codes <- r.Form.Get("code")
+		requests <- r.Form
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"access_token":"access-token","refresh_token":"refresh-token","token_type":"Bearer","expires_in":3600}`))
 	}))
 	t.Cleanup(tokenServer.Close)
 
-	discordProvider := discord.New("client-id", "client-secret", "https://example.com/callback")
+	discordProvider := discord.New("client-id", "client-secret", callbackURL)
 	provider := withContextualTokenRefresh(
 		discordProvider,
 		discordProvider.ClientKey,
 		discordProvider.Secret,
+		discordProvider.CallbackURL,
 		tokenServer.URL,
 		tokenServer.Client(),
 	)
@@ -84,7 +87,9 @@ func TestAuthorizeDiscordSessionUsesConfiguredHTTPClient(t *testing.T) {
 
 	token, err := authorizeSession(session, provider, url.Values{"code": {"authorization-code"}})
 	require.NoError(t, err)
-	require.Equal(t, "authorization-code", <-codes)
+	request := <-requests
+	require.Equal(t, "authorization-code", request.Get("code"))
+	require.Equal(t, callbackURL, request.Get("redirect_uri"))
 	require.Equal(t, "access-token", token)
 	require.Equal(t, "access-token", session.AccessToken)
 	require.Equal(t, "refresh-token", session.RefreshToken)
@@ -116,6 +121,7 @@ func TestAuthorizeSessionUnwrapsContextualRefreshProvider(t *testing.T) {
 		oidcProvider,
 		oidcProvider.ClientKey,
 		oidcProvider.Secret,
+		oidcProvider.CallbackURL,
 		oidcProvider.OpenIDConfig.TokenEndpoint,
 		nil,
 	)
