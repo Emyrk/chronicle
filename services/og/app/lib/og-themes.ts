@@ -35,7 +35,7 @@ export const OG_THEMES = [
   {
     key: 'raid',
     label: 'Raid report',
-    description: 'Chronicle raid report: guild, raid, bosses, clear time, avg parse, top damage and class composition.',
+    description: 'Chronicle raid report: guild, raid, bosses, clear time, kill-time parses, top damage and healing, and class composition.',
   },
   {
     key: 'parse',

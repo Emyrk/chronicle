@@ -22,7 +22,8 @@ import (
 )
 
 const (
-	raidCardTopN       = 5
+	// The card draws only the top damage and top healing player.
+	raidCardTopN       = 1
 	raidCardNameLength = 16
 )
 
@@ -40,7 +41,8 @@ type raidCard struct {
 	Wipes          *int
 	KillTimeParses []int
 	KillTimeAvg    *int
-	Top            []raidCardDPS
+	Top            []raidCardDPS // top DPS
+	Heal           []raidCardDPS // top HPS (healing + absorbs); DPS holds the HPS
 	Comp           []raidCardClass
 }
 
@@ -95,13 +97,8 @@ func raidCardParams(card raidCard) url.Values {
 	if card.KillTimeAvg != nil {
 		q.Set("killavg", strconv.Itoa(*card.KillTimeAvg))
 	}
-	if len(card.Top) > 0 {
-		top := make([]string, 0, len(card.Top))
-		for _, p := range card.Top {
-			top = append(top, p.Name+":"+p.Class+":"+strconv.Itoa(p.DPS))
-		}
-		q.Set("top", strings.Join(top, ","))
-	}
+	setIf("top", raidCardTopParam(card.Top))
+	setIf("heal", raidCardTopParam(card.Heal))
 	if len(card.Comp) > 0 {
 		comp := make([]string, 0, len(card.Comp))
 		for _, c := range card.Comp {
@@ -111,6 +108,16 @@ func raidCardParams(card raidCard) url.Values {
 	}
 	setIf("art", ogArtSlug(card.Raid))
 	return q
+}
+
+// raidCardTopParam encodes players as the `top`/`heal` param:
+// name:class:value items joined by ','. Empty for none.
+func raidCardTopParam(players []raidCardDPS) string {
+	items := make([]string, 0, len(players))
+	for _, p := range players {
+		items = append(items, p.Name+":"+p.Class+":"+strconv.Itoa(p.DPS))
+	}
+	return strings.Join(items, ",")
 }
 
 // raidCardTimeout bounds loadRaidCard. OG data resolves on every HTML load
@@ -162,6 +169,7 @@ func (s *Service) loadRaidCard(r *http.Request, inst database.LogInstancesGuild,
 	card.Wipes = wipes
 	if recordsErr == nil {
 		card.Top = raidTopDPS(records, raidCardTopN)
+		card.Heal = raidTopHPS(records, raidCardTopN)
 	}
 	return card
 }
@@ -284,6 +292,15 @@ func raidBossProgress(encounters []database.LogInstanceEncounter, progression []
 // raidTopDPS ranks players by damage ÷ time across the instance's ranked boss
 // kills (trash rows have no encounter_id) and returns the top n.
 func raidTopDPS(records []database.EncounterDpsRanking, n int) []raidCardDPS {
+	return raidTopPerSecond(records, n, func(rec database.EncounterDpsRanking) int64 { return rec.DamageDone })
+}
+
+// raidTopHPS is raidTopDPS for healing, counting absorbs like the rankings' HPS.
+func raidTopHPS(records []database.EncounterDpsRanking, n int) []raidCardDPS {
+	return raidTopPerSecond(records, n, func(rec database.EncounterDpsRanking) int64 { return rec.HealingDone + rec.AbsorbedDone })
+}
+
+func raidTopPerSecond(records []database.EncounterDpsRanking, n int, amount func(database.EncounterDpsRanking) int64) []raidCardDPS {
 	type total struct {
 		name, class string
 		damage      int64
@@ -299,7 +316,7 @@ func raidTopDPS(records []database.EncounterDpsRanking, n int) []raidCardDPS {
 			t = &total{name: rec.PlayerName, class: rec.PlayerClass}
 			byGUID[rec.PlayerGuid] = t
 		}
-		t.damage += rec.DamageDone
+		t.damage += amount(rec)
 		t.secs += rec.DurationSecs
 	}
 

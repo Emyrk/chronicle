@@ -42,9 +42,10 @@ export interface RaidTopEntry {
   dps: number;
 }
 
-// `name:class:dps` items; capped at 5 entries, names at 16 characters.
-export function topEntries(context: ThemeContext): RaidTopEntry[] {
-  return listParam(context, 'top', { maxItems: 5, maxLength: 48 }).flatMap(item => {
+// `name:class:value` items from `top` (DPS) or `heal` (HPS); capped at 5
+// entries, names at 16 characters. The card draws only the first of each.
+export function topEntries(context: ThemeContext, key: 'top' | 'heal' = 'top'): RaidTopEntry[] {
+  return listParam(context, key, { maxItems: 5, maxLength: 48 }).flatMap(item => {
     const [name = '', className = '', dps = ''] = item.split(':');
     const value = /^\d{1,9}$/.test(dps.trim()) ? Number(dps.trim()) : 0;
     const shortName = Array.from(name.trim()).slice(0, 16).join('');
@@ -128,43 +129,46 @@ function StatRow({ stats, killParses, killAverage }: { stats: Array<{ value: str
   );
 }
 
-function TopDamage({ entries }: { entries: RaidTopEntry[] }) {
-  // Don't trust the param order: scale to the largest entry.
-  const max = Math.max(1, ...entries.map(entry => entry.dps));
+// One line, clipped with an ellipsis (Satori needs display block and a single string child).
+const ONE_LINE: React.CSSProperties = { display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+
+function Leader({ label, entry, unit }: { label: string; entry: RaidTopEntry; unit: string }) {
+  const color = classColor(entry.className);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: COLORS.muted }}>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', width: 6, height: 30, borderRadius: 2, background: color, flexShrink: 0 }} />
+        <span style={{ ...ONE_LINE, flexGrow: 1, flexShrink: 1, minWidth: 0, fontSize: 28, fontWeight: 700, color }}>{entry.name}</span>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexShrink: 0 }}>
+          <span style={{ fontSize: 28, fontWeight: 700 }}>{thousands(entry.dps)}</span>
+          <span style={{ fontSize: 18, color: COLORS.muted }}>{unit}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Top damage and top healing, stacked in the right-hand panel; either may be missing.
+export function Leaders({ damage, healing }: { damage?: RaidTopEntry; healing?: RaidTopEntry }) {
   return (
     <div
       style={{
         display: 'flex',
         flexDirection: 'column',
-        width: 320,
+        width: 400,
         flexShrink: 0,
-        gap: 12,
-        padding: '20px 22px',
+        gap: 14,
+        marginTop: 12,
+        padding: '18px 22px',
         background: 'rgba(18, 18, 18, 0.8)',
         border: `2px solid ${COLORS.rule}`,
         borderRadius: 6,
       }}
     >
-      <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: '0.14em', color: COLORS.muted }}>TOP DAMAGE</span>
-      {entries.map((entry, index) => (
-        <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 22 }}>
-            <span style={{ color: classColor(entry.className), fontWeight: 600 }}>{entry.name}</span>
-            <span style={{ flexShrink: 0, fontWeight: 700 }}>{thousands(entry.dps)}</span>
-          </div>
-          <div style={{ display: 'flex', height: 8, background: 'rgba(255, 255, 255, 0.07)', borderRadius: 3 }}>
-            <div
-              style={{
-                display: 'flex',
-                width: `${Math.max(2, (entry.dps / max) * 100).toFixed(1)}%`,
-                height: '100%',
-                borderRadius: 3,
-                background: classColor(entry.className),
-              }}
-            />
-          </div>
-        </div>
-      ))}
+      {damage ? <Leader label="Top damage" entry={damage} unit="dps" /> : null}
+      {damage && healing ? <div style={{ display: 'flex', height: 2, background: COLORS.rule }} /> : null}
+      {healing ? <Leader label="Top healing" entry={healing} unit="hps" /> : null}
     </div>
   );
 }
@@ -212,12 +216,13 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   const wipes = intParam(context, 'wipes', { min: 0, max: 999 });
   const killParses = killTimeParseScores(context);
   const killAverage = intParam(context, 'killavg', { min: 0, max: 100 });
-  const top = topEntries(context);
+  const [topDamage] = topEntries(context, 'top');
+  const [topHealing] = topEntries(context, 'heal');
   const comp = compEntries(context);
   const [logoSrc, artSrc] = await Promise.all([headerLogoImage(), artImage(context)]);
 
-  // No ranked bosses (dungeon, custom raid) → no TOP DAMAGE panel.
-  const ranked = top.length > 0;
+  // No ranked bosses (dungeon, custom raid) → no top damage/healing row.
+  const ranked = Boolean(topDamage || topHealing);
   const headline = guild || raid;
   const chip = [guild ? 'Raid report' : 'PUG', date].filter(Boolean).join(' · ');
   const meta = [product, players !== null ? `${players} players` : ''].filter(Boolean).join(' · ');
@@ -269,18 +274,12 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
       <div style={{ ...FILL, flexDirection: 'column', justifyContent: 'space-between', padding: '50px 64px 42px 72px' }}>
         <Header logoSrc={logoSrc} chip={chip} />
 
-        {ranked ? (
-          <div style={{ display: 'flex', width: '100%', gap: 28, alignItems: 'flex-start' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minWidth: 0, gap: 30 }}>
-              {title}
-              <StatRow stats={stats} killParses={killParses} killAverage={killAverage} />
-            </div>
-            <TopDamage entries={top} />
-          </div>
-        ) : (
-          title
-        )}
-        {ranked ? null : <StatRow stats={stats} killParses={killParses} killAverage={killAverage} />}
+        {/* Title on the left, leaders in the otherwise empty right side; stats run full width below. */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24 }}>
+          {title}
+          {ranked ? <Leaders damage={topDamage} healing={topHealing} /> : null}
+        </div>
+        <StatRow stats={stats} killParses={killParses} killAverage={killAverage} />
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {total > 0 ? (

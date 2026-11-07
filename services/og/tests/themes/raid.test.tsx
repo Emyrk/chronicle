@@ -24,6 +24,7 @@ const FULL = new URLSearchParams({
   killparses: '72,81,95,76,88,64,91,83,99,77',
   killavg: '83',
   top: 'Thalendris:mage:1284,Grimtusk:warrior:1201,Vexxa:warlock:1166,Shadowstep:rogue:1122,Kaelyn:hunter:1043',
+  heal: 'Aeloria:priest:812',
   comp: 'warrior:5,rogue:6,mage:6,warlock:5,hunter:4,priest:8,druid:3,paladin:3',
   art: 'molten-core',
   host: 'forever.chronicleclassic.com',
@@ -86,9 +87,11 @@ describe('raid card', () => {
 
     const json = await tree(FULL.toString());
     const shown = texts(json);
-    for (const text of ['Nightfall', 'Molten Core', 'Raid report · Nov 6', '10/10', '1:52:07', 'Clear', '83', 'avg', 'Kill time parse', 'TOP DAMAGE', 'Thalendris', '1,284', 'forever.chronicleclassic.com']) {
+    for (const text of ['Nightfall', 'Molten Core', 'Raid report · Nov 6', '10/10', '1:52:07', 'Clear', '83', 'avg', 'Kill time parse', 'Top damage', 'Thalendris', '1,284', 'dps', 'Top healing', 'Aeloria', '812', 'hps', 'forever.chronicleclassic.com']) {
       expect(shown).toContain(text);
     }
+    // Only the top damage dealer is drawn.
+    expect(shown).not.toContain('Grimtusk');
     expect(json).toContain((await artImage(context(FULL.toString())))!);
   });
 
@@ -100,18 +103,24 @@ describe('raid card', () => {
     }
   });
 
-  test('top bars scale to the largest entry even when unsorted', async () => {
-    const json = await tree(query({ top: 'Small:mage:500,Big:warrior:1000,Same:rogue:500' }));
-    const widths = [...json.matchAll(/"width":"(\d+\.\d)%"/g)].map(m => m[1]);
-    expect(widths).toEqual(['50.0', '100.0', '50.0']);
+  test('top damage and healing each draw alone when the other is missing', async () => {
+    const damageOnly = texts(await tree(query({ heal: null })));
+    expect(damageOnly).toContain('Top damage');
+    expect(damageOnly).not.toContain('Top healing');
+
+    const q = query({ top: null });
+    const healingOnly = texts(await tree(q));
+    expect(healingOnly).toContain('Top healing');
+    expect(healingOnly).toContain('Aeloria');
+    expect(healingOnly).not.toContain('Top damage');
+    expect(Array.from((await renderPng(q)).subarray(0, 4))).toEqual(PNG_SIGNATURE);
   });
 
-  test('top damage stays constrained inside the card beside kill-time parses', async () => {
-    const q = query({ top: 'Averyveryverylon:mage:999999999,Ravenshield:warrior:1284,Aeloria:priest:1201' });
+  test('long leaders stay inside the right-hand panel', async () => {
+    const q = query({ top: 'Averyveryverylon:mage:999999999', heal: 'Averyveryverylon:priest:999999999' });
     const json = await tree(q);
-    expect(json).toContain('"width":"100%","gap":28');
-    expect(json).toContain('"width":320,"flexShrink":0');
-    expect(json).toContain('"flexShrink":0,"fontWeight":700');
+    expect(json).not.toContain('"width":320');
+    expect(texts(json)).toContain('999,999,999');
     expect(Array.from((await renderPng(q)).subarray(0, 4))).toEqual(PNG_SIGNATURE);
   });
 
@@ -120,16 +129,17 @@ describe('raid card', () => {
     const json = await tree(query({ art: null }));
     expect(json).not.toContain('data:image/jpeg');
     expect(json).toContain('radial-gradient(circle at 88% 30%');
-    expect(json).toContain('TOP DAMAGE');
+    expect(texts(json)).toContain('Top damage');
     expect(await tree(query({ art: 'not-a-raid' }))).toContain('radial-gradient(circle at 88% 30%');
     expect(Array.from((await renderPng(query({ art: null }))).subarray(0, 4))).toEqual(PNG_SIGNATURE);
     expect(network()).toEqual([]);
   });
 
   test('fallback: no ranked bosses or kill parses drops those panels and shows wipes', async () => {
-    const q = query({ top: null, killparses: null, killavg: null, raid: 'Karazhan Crypts', art: null, kills: '4', bosses: '6', dur: '9660', wipes: '3', players: '10' });
+    const q = query({ top: null, heal: null, killparses: null, killavg: null, raid: 'Karazhan Crypts', art: null, kills: '4', bosses: '6', dur: '9660', wipes: '3', players: '10' });
     const shown = texts(await tree(q));
-    expect(shown).not.toContain('TOP DAMAGE');
+    expect(shown).not.toContain('Top damage');
+    expect(shown).not.toContain('Top healing');
     expect(shown).not.toContain('Kill time parse');
     for (const text of ['4/6', 'Bosses', '2:41:00', 'Duration', '3', 'Wipes']) expect(shown).toContain(text);
     expect(Array.from((await renderPng(q)).subarray(0, 4))).toEqual(PNG_SIGNATURE);
@@ -157,8 +167,9 @@ describe('raid params', () => {
     expect(entries[0]).toEqual({ name: 'Averyveryverylon', className: 'mage', dps: 1000 });
   });
 
-  test('top and comp drop malformed items', () => {
+  test('top, heal and comp drop malformed items', () => {
     expect(topEntries(context('top=A:mage:x,B:rogue:0,:mage:5,C:warrior:12'))).toEqual([{ name: 'C', className: 'warrior', dps: 12 }]);
+    expect(topEntries(context('heal=A:priest:x,B:druid:640'), 'heal')).toEqual([{ name: 'B', className: 'druid', dps: 640 }]);
     expect(compEntries(context('comp=warrior:5,mage:x,priest:0,druid:3'))).toEqual([
       { className: 'warrior', count: 5 },
       { className: 'druid', count: 3 },

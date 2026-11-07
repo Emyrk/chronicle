@@ -39,6 +39,7 @@ func TestRaidCardParams(t *testing.T) {
 			{Name: "Thalendris", Class: "mage", DPS: 1284},
 			{Name: "Grimtusk", Class: "warrior", DPS: 1201},
 		},
+		Heal: []raidCardDPS{{Name: "Aeloria", Class: "priest", DPS: 812}},
 		Comp: []raidCardClass{{Class: "warrior", Count: 5}, {Class: "priest", Count: 8}},
 	}
 
@@ -55,6 +56,7 @@ func TestRaidCardParams(t *testing.T) {
 		"killparses": {"72,81,95,76"},
 		"killavg":    {"81"},
 		"top":        {"Thalendris:mage:1284,Grimtusk:warrior:1201"},
+		"heal":       {"Aeloria:priest:812"},
 		"comp":       {"warrior:5,priest:8"},
 		"art":        {"molten-core"},
 	}, raidCardParams(card))
@@ -71,6 +73,7 @@ func TestRaidCardParams(t *testing.T) {
 	require.Equal(t, "forever.chronicleclassic.com", q.Get("host"))
 	require.Equal(t, "WoW Forever", q.Get("product"))
 	require.Equal(t, "Thalendris:mage:1284,Grimtusk:warrior:1201", q.Get("top"))
+	require.Equal(t, "Aeloria:priest:812", q.Get("heal"))
 	require.NotEmpty(t, q.Get("sig"))
 }
 
@@ -102,7 +105,7 @@ func TestRaidCardParamsFallbacks(t *testing.T) {
 	// A PUG dungeon: no guild, no ranked bosses, no parse, no known art.
 	// The players query failed: no players param rather than "0 players".
 	params := raidCardParams(raidCard{Raid: "Karazhan Crypts", Kills: 4, Bosses: 6})
-	for _, key := range []string{"host", "guild", "players", "top", "killparses", "killavg", "wipes", "comp", "date", "dur"} {
+	for _, key := range []string{"host", "guild", "players", "top", "heal", "killparses", "killavg", "wipes", "comp", "date", "dur"} {
 		require.False(t, params.Has(key), key)
 	}
 	require.Equal(t, "karazhan-crypts", params.Get("art"))
@@ -138,13 +141,35 @@ func TestRaidTopDPS(t *testing.T) {
 		{Name: "Shadowstep", Class: "rogue", DPS: 640},
 		{Name: "Kaelyn", Class: "hunter", DPS: 630},
 		{Name: "Sixth", Class: "deathknight", DPS: 620},
-	}, raidTopDPS(records, raidCardTopN))
+	}, raidTopDPS(records, 5))
+	require.Equal(t, []raidCardDPS{{Name: "Grimtusk", Class: "warrior", DPS: 700}}, raidTopDPS(records, raidCardTopN))
 
 	top := raidTopDPS(records, 10)
 	require.Len(t, top, 6, "zero-DPS players are dropped")
 	require.Equal(t, raidCardDPS{Name: "Averylongcharact", Class: "mage", DPS: 600}, top[5])
 
 	require.Empty(t, raidTopDPS(records[2:3], raidCardTopN), "trash only = no ranked bosses")
+}
+
+func TestRaidTopHPS(t *testing.T) {
+	t.Parallel()
+
+	boss := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	row := func(guid, name, class string, healing, absorbed int64) database.EncounterDpsRanking {
+		return database.EncounterDpsRanking{EncounterID: boss, PlayerGuid: guid, PlayerName: name, PlayerClass: class, HealingDone: healing, AbsorbedDone: absorbed, DurationSecs: 100}
+	}
+	records := []database.EncounterDpsRanking{
+		row("a", "Aeloria", "PRIEST", 60_000, 30_000), // absorbs count: 900
+		row("b", "Moonbrew", "DRUID", 85_000, 0),
+		row("c", "Grimtusk", "WARRIOR", 0, 0),
+		{PlayerGuid: "a", PlayerName: "Aeloria", PlayerClass: "PRIEST", HealingDone: 9_000_000, DurationSecs: 10}, // trash
+	}
+
+	require.Equal(t, []raidCardDPS{
+		{Name: "Aeloria", Class: "priest", DPS: 900},
+		{Name: "Moonbrew", Class: "druid", DPS: 850},
+	}, raidTopHPS(records, 5))
+	require.Len(t, raidTopHPS(records, raidCardTopN), 1)
 }
 
 func TestRaidComposition(t *testing.T) {
@@ -235,6 +260,7 @@ func TestLoadRaidCard(t *testing.T) {
 		require.Equal(t, 1, card.Bosses)
 		require.Nil(t, card.Wipes)
 		require.Empty(t, card.Top)
+		require.Empty(t, card.Heal)
 		require.Empty(t, card.KillTimeParses)
 		require.Nil(t, card.KillTimeAvg)
 	})
