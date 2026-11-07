@@ -12,6 +12,16 @@ describe("published rating icons", () => {
     expect(html).not.toContain("/c/icons/")
   })
 
+  it("shows readable realms instead of internal IDs in entry subtitles", () => {
+    const entry = { id: "one", name: "Raider", cls: "MAGE", spec: "Unknown", score: 100, detail: "internal-realm-uuid", realmLabel: "Nordanaar" }
+    const html = renderToStaticMarkup(<EntryRow entry={entry} theme={METRIC_THEMES.peak} size="sm" />)
+    expect(html).toContain("Unknown · Nordanaar")
+    expect(html).not.toContain("internal-realm-uuid")
+    const missing = renderToStaticMarkup(<EntryRow entry={{ ...entry, realmLabel: " " }} theme={METRIC_THEMES.peak} size="sm" />)
+    expect(missing).toContain("Unknown realm")
+    expect(missing).not.toContain("internal-realm-uuid")
+  })
+
   it("uses the known unknown asset rather than class_.png for an empty class", () => {
     const html = renderToStaticMarkup(<ClassIcon cls="" />)
     expect(html).toContain("/c/icons/class_unknown.png")

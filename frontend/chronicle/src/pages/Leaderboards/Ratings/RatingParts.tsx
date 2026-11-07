@@ -45,7 +45,7 @@ export function EntryRow({ entry, rank, theme, size }: { entry: RatingEntry; ran
           {entry.guild && <span className="min-w-0 truncate text-xs text-muted-foreground">&lt;{entry.guild}&gt;</span>}
         </span>
         <span className="block truncate text-[11px] text-muted-foreground">
-          {entry.spec} · {entry.detail}
+          {entry.spec} · {entry.realmLabel?.trim() || "Unknown realm"}
         </span>
       </span>
       {entry.raw ? <RawTag raw={entry.raw} /> : null}
