@@ -59,7 +59,7 @@ docker run --rm -p 3000:3000 -e OG_API_ONLY=true chronicle-og
 curl -o hello.png 'http://localhost:3000/api/og?title=Hello&template=chronicle'
 ```
 
-On Railway, create a service from this repo with **Root Directory** `services/og`; it picks up the Dockerfile and honours `PORT`.
+Production releases use the same image-backed Railway flow as `livesessiond`. Create the Railway service as `chronicle-og` from `emyrk/chronicle-og:latest`. On a Git tag, `.github/workflows/go-checks.yml` validates the renderer, pushes both `latest` and the release tag to Docker Hub, then runs `railway redeploy --service chronicle-og --yes`. The container honours Railway's `PORT`.
 
 Put a cache in front of it. Responses carry `cache-control: public, max-age=0, s-maxage=86400, stale-while-revalidate=604800`; a CDN (Cloudflare, Bunny) or caching proxy honours that, and without one every crawler hit renders the image again.
 
