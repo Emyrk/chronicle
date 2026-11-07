@@ -850,6 +850,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			}
 
 			inst := db2sdk.WoWInstanceWithGuild(dbinstance, guild)
+			inst.UploadSource = string(lg.UploadSource)
 			inst.RealmName = realmName
 			jobOut.Instances = append(jobOut.Instances, chroniclesdk.WoWSimpleParsedInstance{
 				WoWInstance: inst,

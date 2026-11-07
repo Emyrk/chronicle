@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -24,6 +25,13 @@ func TestWoWLogUploadRetired(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	require.Equal(t, "This upload endpoint has been retired.", body.Message)
 	require.Equal(t, "Use /api/v1/raidlogs/logs/upload-v2 instead.", body.CallToAction)
+}
+
+func TestClientUploadSource(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, database.UploadSourceWeb, clientUploadSource(false))
+	require.Equal(t, database.UploadSourceSidekick, clientUploadSource(true))
 }
 
 func TestUserLogAppendMeta(t *testing.T) {

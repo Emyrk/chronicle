@@ -512,6 +512,13 @@ func isGzipped(header *multipart.FileHeader) bool {
 		header.Header.Get("Content-Type") == "application/gzip"
 }
 
+func clientUploadSource(isSidekick bool) database.UploadSource {
+	if isSidekick {
+		return database.UploadSourceSidekick
+	}
+	return database.UploadSourceWeb
+}
+
 // WoWLogUploadV2 handles single-file uploads for parserv2 logs.
 func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -587,6 +594,7 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 	// middleware). Anything still empty falls through to UploadLogs (format)
 	// or to the parser's dataset resolution (flavor).
 	var meta chronicle.UploadMeta
+	meta.Source = clientUploadSource(api.Opts.Sidekick != nil && api.Opts.Sidekick.IsSidekickRequest(ctx))
 	if f := r.URL.Query().Get("format"); f != "" {
 		format := database.LogFormat(f)
 		if !format.Valid() {

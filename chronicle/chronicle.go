@@ -241,6 +241,7 @@ func (c *Chronicle) initStorage(ctx context.Context) error {
 type UploadMeta struct {
 	Format   database.LogFormat
 	Flavor   database.WoWFlavor
+	Source   database.UploadSource
 	Unlisted bool
 }
 
@@ -506,10 +507,11 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 			Format:  database.NullLogFormat{LogFormat: format, Valid: format.Valid()},
 			// flavor is the server's identity, independent of log_type. nil leaves
 			// the column NULL.
-			Flavor:    flavor.Strings(),
-			Unlisted:  meta.Unlisted,
-			CreatedAt: database.Timestamptz(now),
-			UpdatedAt: database.Timestamptz(now),
+			Flavor:       flavor.Strings(),
+			UploadSource: string(meta.Source),
+			Unlisted:     meta.Unlisted,
+			CreatedAt:    database.Timestamptz(now),
+			UpdatedAt:    database.Timestamptz(now),
 		})
 		if err != nil {
 			return err
