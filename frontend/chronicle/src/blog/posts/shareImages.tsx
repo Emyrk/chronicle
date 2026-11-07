@@ -6,6 +6,10 @@ export function ShareImagesPost({ post }: { post: BlogPostDefinition }) {
   return (
     <ShortPost post={post}>
       <p>
+        <strong>Note:</strong> These share cards are evolving. Their designs and the information
+        they display are subject to change.
+      </p>
+      <p>
         A raid link should tell a story before anyone opens it. Chronicle now gives shared links
         their own preview images, so your guild chat can see the night, the kill or the build you
         are talking about. No screenshot cropping required.
