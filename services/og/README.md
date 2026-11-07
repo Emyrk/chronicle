@@ -64,7 +64,7 @@ No other configuration or `.env` file is required.
 
 | Param | Max length | Notes |
 |-------|-----------|-------|
-| `template` | | `modern` (default) or `chronicle`. Unknown values use `modern` |
+| `template` | | `modern` (default), `chronicle` or `brand`. Unknown values use `modern` |
 | `theme` | | Same as `template` (upstream's name); wins if both are given |
 | `title` | 200 | Defaults to `Untitled` |
 | `site` | 80 | Defaults to `Blog` |
@@ -103,7 +103,7 @@ With `OG_SIGNING_KEY` set, the Chronicle server signs every image URL it writes 
 - **canonical**: for each param key except `sig`, sorted ascending by key, first value only, `key + "\n" + value + "\n"` with decoded values (no URL encoding), concatenated
 - **sig**: the first 32 characters of the lowercase hex HMAC-SHA256 of the canonical string under the key
 
-A missing or wrong `sig` renders the fallback card (the default template with a fixed title until the `brand` card exists) with HTTP 200, never an error image, and none of the request's params are used, so no remote image is fetched. `tests/fixtures/og-sig-vectors.json` holds shared test vectors; the Go signer's test uses the same file contents, so change both together.
+A missing or wrong `sig` renders the fallback card (`brand` with its defaults) with HTTP 200, never an error image, and none of the request's params are used, so no remote image is fetched. `tests/fixtures/og-sig-vectors.json` holds shared test vectors; the Go signer's test uses the same file contents, so change both together.
 
 ### Remote images
 
@@ -123,6 +123,7 @@ An image that fails any check is dropped and the card renders without it.
 | `modern` | Headline set on the cover image like a magazine cover; a bundled starfield when there is no `image` | `image`, `icon`, `avatar`, `tag`, `accent` |
 | `chronicle` | Chronicle's dark palette, a Libre Baskerville headline and an Inter byline under a gold rule; `image` sits behind a dark wash | `image`, `icon`, `avatar`, `tag`, `accent` (the rule and tag border) |
 | `talents` | Talent build for `/talents/{class}?build=`: spec + class in class colour, the point split, a bar per tree. No `points` draws "<Class> Talent Calculator" with empty trees; `class=pet` draws one bar | `class`, `spec`, `points` (`17-34-0`, one number for a pet), `keys` (up to 3, comma-separated), `host`, `product` |
+| `brand` | The wordmark over a faint mark, a serif tagline, up to two count pills and the footer. Used for `/`, static routes and every fallback | `title` (default `Every pull, every parse, every wipe.`, 90), `excerpt` (default `Free raid log analysis for <product>`, 160), `stat1`/`stat2` as `count:label` (digits are grouped, or compacted from 100,000; no stats → no pill row), `host`, `product` |
 
 ### Adding a template
 

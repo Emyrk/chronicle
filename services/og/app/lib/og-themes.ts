@@ -17,6 +17,11 @@ export const OG_THEMES = [
     label: 'Talent build',
     description: 'A talent calculator build: spec in class colour, the point split and a bar per tree.',
   },
+  {
+    key: 'brand',
+    label: 'Brand',
+    description: 'Chronicle\'s wordmark, a tagline and up to two site counts. The fallback for every Chronicle card.',
+  },
 ] as const;
 
 export type OgThemeOption = (typeof OG_THEMES)[number];

@@ -188,6 +188,7 @@ type API struct {
 	instanceSearch     *serviceinstancesearch.Service
 	discoveryStats     discoveryStatsCache
 	landing            landingFeaturedCache
+	ogSiteStats        ogSiteStatsCache
 	// landingMeshMaps overrides datasetMeshMaps (tests).
 	landingMeshMaps func(ctx context.Context, realmID uuid.UUID) (map[int32]bool, error)
 }
