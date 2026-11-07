@@ -55,6 +55,7 @@ Theme fonts ship with the app and are read from disk, so the server never reques
 | `OG_API_ONLY` | `true` returns `404` for everything outside `/api/*` and `/_next/*`, i.e. hides the `/` index page |
 | `OG_API_PATH` | Also serve the endpoint at `/api/<OG_API_PATH>` (one segment: letters, digits, `_`, `-`). `/api/og` always works |
 | `OG_ENABLE_DEBUG` | `true` enables `/api/debug`, which takes the same query and explains why each image was accepted or rejected |
+| `OG_SIGNING_KEY` | HMAC key shared with the Chronicle server. When set, every request must carry a valid `sig` (see [Signed URLs](#signed-urls)); others render the fallback card. Unset accepts unsigned requests (local dev) |
 | `OG_SECRET` | Legacy upstream option: keeps an `/api/og_xxxxxxxxxxxx` path derived from it working. Not needed for new deployments |
 
 No other configuration or `.env` file is required.
@@ -78,6 +79,31 @@ No other configuration or `.env` file is required.
 | `avatar` | | Author avatar URL |
 
 Typographic quotes, dashes and odd Unicode spaces are normalized before rendering.
+
+#### Chronicle card params
+
+Chronicle cards render from query params only: no database, no API call and no fetch to Chronicle. `api/og.go` already has the data when it serves the page, so it writes everything a card needs into the (signed) image URL. Every card takes:
+
+| Param | Max length | Notes |
+|-------|-----------|-------|
+| `host` | 80 | Tenant host printed in the footer, e.g. `forever.chronicleclassic.com`. Defaults to `chronicleclassic.com` |
+| `product` | 40 | Tenant flavour, e.g. `WoW Forever` |
+| `art` | | Bundled raid art by slug (below). Unknown slugs draw no art; never fetched |
+| `sig` | | Signature, see [Signed URLs](#signed-urls) |
+| `v` | | Cache buster; ignored by the renderer but covered by `sig` |
+
+`art` slugs are the instance name lowercased, apostrophes dropped and other runs of non-alphanumerics turned into `-` (`artSlug()` in `kit.tsx`): `molten-core`, `blackwing-lair`, `zulgurub`, `ruins-of-ahnqiraj`, `temple-of-ahnqiraj`, `naxxramas`, `onyxias-lair`, `emerald-sanctum`, `tower-of-karazhan`, `lower-tower-of-karazhan`, `upper-tower-of-karazhan`. The JPGs in `public/raids/` are the same 3:2 centre crops of the web app's loading screens that `frontend.InstanceOGImage` serves.
+
+Each card documents its own params next to its template below.
+
+### Signed URLs
+
+With `OG_SIGNING_KEY` set, the Chronicle server signs every image URL it writes (`ogImageURL` in `api/og.go`) and the service checks it (`app/lib/og-signature.ts`):
+
+- **canonical**: for each param key except `sig`, sorted ascending by key, first value only, `key + "\n" + value + "\n"` with decoded values (no URL encoding), concatenated
+- **sig**: the first 32 characters of the lowercase hex HMAC-SHA256 of the canonical string under the key
+
+A missing or wrong `sig` renders the fallback card (the default template with a fixed title until the `brand` card exists) with HTTP 200, never an error image, and none of the request's params are used, so no remote image is fetched. `tests/fixtures/og-sig-vectors.json` holds shared test vectors; the Go signer's test uses the same file contents, so change both together.
 
 ### Remote images
 
@@ -106,6 +132,12 @@ An image that fails any check is dropped and the card renders without it.
    - `fontFamily`, and optionally `coversCjk` if the theme's own fonts draw CJK
    `chronicle.tsx` is the smallest complete example.
 3. **Register it** in `app/api/og/themes/index.ts` and add a `{ key, label, description }` entry to `app/lib/og-themes.ts`. The type of `themes` makes TypeScript fail until both agree.
+   For a Chronicle card, build on the kit in `app/api/og/themes/kit.tsx` so the card file is only its layout:
+   - params: `param(context, key, max)`, `intParam(context, key, { min, max })`, `listParam(context, key, { maxItems, maxLength })` (split `a:b:c` items yourself), `chromeParams(context)` for `host`/`product`
+   - chrome: `<Header markSrc chip />` (mark, `CHRONICLE` kicker, right chip) and `<Footer host cta />`; `markImage()` / `wordmarkImage()` load the logos, `loadKitFonts()` the Inter + Libre Baskerville cuts
+   - tables: `COLORS`, `SANS`/`SERIF`, `classColor(name)` (unknown → grey), `parseColor(score)` (same tiers as the web app), `formatDuration(seconds)` (`h:mm:ss` / `m:ss`)
+   - art: `artImage(context)` returns the bundled `art=<slug>` JPEG as a data URL, or null
+   Draw arrows and other symbols as SVG: the bundled latin font cuts lack them (no `→`), and a missing glyph makes `next/og` fetch a font.
 4. **Test.** `tests/themes/themes.test.tsx` loops over every registered theme: it checks every font cut is read from disk and renders a PNG with minimal and full props. Run `pnpm test`, then look at the result in `pnpm dev`.
 
 ### Satori gotchas
@@ -120,5 +152,6 @@ An image that fails any check is dropped and the card renders without it.
 
 - Code: [OGIS](https://github.com/bunizao/ogis) by [bunizao](https://github.com/bunizao), copyright 2015–2024 Peter Amende and 2025 bunizao, under the MIT licence kept in `LICENSE`. Copied from upstream `main` at `9c57f00` without its git history.
 - Default background (`public/default-bg.jpg`): [Cluster of Stars](https://unsplash.com/photos/cluster-of-stars-in-the-sky-qVotvbsuM_c) by [Paul Lichtblau](https://unsplash.com/@paullichtblau) on Unsplash.
+- Chronicle mark and wordmark (`public/chronicle/`) from the Chronicle web app; raid art (`public/raids/`) is cropped from the World of Warcraft loading screens the web app already ships.
 - Geist, Inter and Libre Baskerville via [Fontsource](https://fontsource.org), under the SIL Open Font License.
 - Noto Sans SC, JP and KR via [Google Fonts](https://fonts.google.com/noto) for CJK text.
