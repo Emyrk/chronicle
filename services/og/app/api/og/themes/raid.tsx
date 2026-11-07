@@ -136,9 +136,10 @@ function TopDamage({ entries }: { entries: RaidTopEntry[] }) {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        width: 430,
-        gap: 14,
-        padding: '22px 24px',
+        width: 320,
+        flexShrink: 0,
+        gap: 12,
+        padding: '20px 22px',
         background: 'rgba(18, 18, 18, 0.8)',
         border: `2px solid ${COLORS.rule}`,
         borderRadius: 6,
@@ -147,9 +148,9 @@ function TopDamage({ entries }: { entries: RaidTopEntry[] }) {
       <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: '0.14em', color: COLORS.muted }}>TOP DAMAGE</span>
       {entries.map((entry, index) => (
         <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 26 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 22 }}>
             <span style={{ color: classColor(entry.className), fontWeight: 600 }}>{entry.name}</span>
-            <span style={{ fontWeight: 700 }}>{thousands(entry.dps)}</span>
+            <span style={{ flexShrink: 0, fontWeight: 700 }}>{thousands(entry.dps)}</span>
           </div>
           <div style={{ display: 'flex', height: 8, background: 'rgba(255, 255, 255, 0.07)', borderRadius: 3 }}>
             <div
@@ -269,8 +270,8 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
         <Header logoSrc={logoSrc} chip={chip} />
 
         {ranked ? (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 30 }}>
+          <div style={{ display: 'flex', width: '100%', gap: 28, alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minWidth: 0, gap: 30 }}>
               {title}
               <StatRow stats={stats} killParses={killParses} killAverage={killAverage} />
             </div>

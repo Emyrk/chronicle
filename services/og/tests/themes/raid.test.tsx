@@ -106,6 +106,15 @@ describe('raid card', () => {
     expect(widths).toEqual(['50.0', '100.0', '50.0']);
   });
 
+  test('top damage stays constrained inside the card beside kill-time parses', async () => {
+    const q = query({ top: 'Averyveryverylon:mage:999999999,Ravenshield:warrior:1284,Aeloria:priest:1201' });
+    const json = await tree(q);
+    expect(json).toContain('"width":"100%","gap":28');
+    expect(json).toContain('"width":320,"flexShrink":0');
+    expect(json).toContain('"flexShrink":0,"fontWeight":700');
+    expect(Array.from((await renderPng(q)).subarray(0, 4))).toEqual(PNG_SIGNATURE);
+  });
+
   test('fallback: no art draws the gold glow', async () => {
     const network = spyNetwork();
     const json = await tree(query({ art: null }));
