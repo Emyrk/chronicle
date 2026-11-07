@@ -27,6 +27,11 @@ export const OG_THEMES = [
     label: 'Brand',
     description: 'Chronicle\'s wordmark, a tagline and up to two site counts. The fallback for every Chronicle card.',
   },
+  {
+    key: 'guild',
+    label: 'Guild',
+    description: 'A guild\'s logo or monogram, raid progression bars, best clear and average parse.',
+  },
 ] as const;
 
 export type OgThemeOption = (typeof OG_THEMES)[number];
