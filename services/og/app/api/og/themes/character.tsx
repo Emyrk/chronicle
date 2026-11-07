@@ -16,7 +16,7 @@ import {
   listParam,
   loadKitFonts,
   loadNameFonts,
-  markImage,
+  headerLogoImage,
   param,
   parseColor,
   SANS,
@@ -136,7 +136,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   // Pills only go with a parse; without one the card shows activity instead.
   const hasParse = stats[0]?.label === PARSE_LABEL;
   const best = hasParse ? parseBest(listParam(context, 'best', { maxItems: MAX_BEST, maxLength: 40 })) : [];
-  const markSrc = await markImage();
+  const logoSrc = await headerLogoImage();
 
   const initial = (Array.from(name)[0] ?? '?').toUpperCase();
   const emblemLabel = [spec, titleCase(className)].filter(Boolean).join(' ');
@@ -212,7 +212,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
           padding: '50px 64px 42px 60px',
         }}
       >
-        <Header markSrc={markSrc} chip="Armory" />
+        <Header logoSrc={logoSrc} chip="Armory" />
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span style={{ ...ONE_LINE, fontFamily: SERIF, fontSize: nameSize, fontWeight: 700, lineHeight: 1.1, color }}>{name}</span>

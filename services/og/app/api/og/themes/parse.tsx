@@ -14,7 +14,7 @@ import {
   intParam,
   loadKitFonts,
   loadNameFonts,
-  markImage,
+  headerLogoImage,
   param,
   parseColor,
   SANS,
@@ -214,7 +214,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   const data = parseCardData(context);
   const color = classColor(data.className);
   const hasParse = data.score !== null;
-  const markSrc = await markImage();
+  const logoSrc = await headerLogoImage();
 
   const nameSize = fitFontSize(data.player, [
     [10, 96],
@@ -232,7 +232,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
       <div style={{ position: 'absolute', top: 0, left: 0, width: BAR, height: 630, display: 'flex', background: color }} />
 
       <div style={{ ...FILL, flexDirection: 'column', justifyContent: 'space-between', padding: '50px 64px 42px 72px' }}>
-        <Header markSrc={markSrc} chip={hasParse ? 'Boss parse' : 'Boss kill'} />
+        <Header logoSrc={logoSrc} chip={hasParse ? 'Boss parse' : 'Boss kill'} />
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 26, width: 700 }}>

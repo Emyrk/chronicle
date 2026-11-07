@@ -2,7 +2,7 @@
 //   class=mage  spec=Fire  points=17-34-0 (one number for a pet)  keys=a,b,c
 // plus the kit's host and product. Every param but class is optional.
 import { fitFontSize } from './shared';
-import { chromeParams, classColor, COLORS, Footer, Header, listParam, loadKitFonts, markImage, param, SANS, SERIF } from './kit';
+import { chromeParams, classColor, COLORS, Footer, Header, listParam, loadKitFonts, headerLogoImage, param, SANS, SERIF } from './kit';
 import type { ThemeContext, ThemeDefinition } from './types';
 
 interface TalentClass {
@@ -132,7 +132,7 @@ function Tree({ tree, color, max, lead }: { tree: TalentTree; color: string; max
 async function render(_props: unknown, context: ThemeContext): Promise<React.ReactElement> {
   const model = talentCardModel(context);
   const { host } = chromeParams(context);
-  const markSrc = await markImage();
+  const logoSrc = await headerLogoImage();
   // At least 62px at 1200 wide, so it reads in a 400px embed.
   const titleSize = fitFontSize(model.title, [
     [10, 104],
@@ -167,7 +167,7 @@ async function render(_props: unknown, context: ThemeContext): Promise<React.Rea
           padding: '50px 72px 42px 86px',
         }}
       >
-        <Header markSrc={markSrc} chip={model.chip} />
+        <Header logoSrc={logoSrc} chip={model.chip} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: model.trees.length > 1 ? 620 : 840 }}>
             <div

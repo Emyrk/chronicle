@@ -11,7 +11,7 @@ import {
   intParam,
   listParam,
   loadKitFonts,
-  markImage,
+  headerLogoImage,
   param,
   parseColor,
   SANS,
@@ -169,7 +169,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   const avg = intParam(context, 'avg', { min: 0, max: 100 });
   const top = topEntries(context);
   const comp = compEntries(context);
-  const [markSrc, artSrc] = await Promise.all([markImage(), artImage(context)]);
+  const [logoSrc, artSrc] = await Promise.all([headerLogoImage(), artImage(context)]);
 
   // No ranked bosses (dungeon, custom raid) → no TOP DAMAGE panel, no avg parse.
   const ranked = top.length > 0;
@@ -224,7 +224,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
       <div style={{ position: 'absolute', top: 0, left: 0, width: 1200, height: 8, display: 'flex', background: COLORS.goldHi }} />
 
       <div style={{ ...FILL, flexDirection: 'column', justifyContent: 'space-between', padding: '50px 64px 42px 72px' }}>
-        <Header markSrc={markSrc} chip={chip} />
+        <Header logoSrc={logoSrc} chip={chip} />
 
         {ranked ? (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

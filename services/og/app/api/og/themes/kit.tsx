@@ -145,6 +145,12 @@ export function formatDuration(totalSeconds: number): string {
 export const MARK = { file: 'chronicle/mark.png', width: 137, height: 156 } as const;
 export const WORDMARK = { file: 'chronicle/wordmark.png', width: 419, height: 156 } as const;
 
+export const HEADER_LOGO = { file: 'chronicle/logo-center.png', width: 440, height: 180 } as const;
+
+export function headerLogoImage(): Promise<string> {
+  return publicImage(HEADER_LOGO.file);
+}
+
 export function markImage(): Promise<string> {
   return publicImage(MARK.file);
 }
@@ -190,22 +196,12 @@ export async function artImage(context: ThemeContext): Promise<string | null> {
 
 // ---------------------------------------------------------------- chrome
 
-const KICKER: React.CSSProperties = {
-  fontSize: 22,
-  fontWeight: 600,
-  letterSpacing: '0.14em',
-  textTransform: 'uppercase',
-};
-
-// Mark + CHRONICLE kicker on the left, an optional chip on the right.
-export function Header({ markSrc, chip, chipStyle }: { markSrc: string; chip?: string; chipStyle?: React.CSSProperties }) {
+// Combined <C>hronicle logo on the left, an optional chip on the right.
+export function Header({ logoSrc, chip, chipStyle }: { logoSrc: string; chip?: string; chipStyle?: React.CSSProperties }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        {/* eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text */}
-        <img src={markSrc} width={38} height={43} style={{ width: 38, height: 43 }} />
-        <span style={{ ...KICKER, color: COLORS.goldHi }}>Chronicle</span>
-      </div>
+      {/* eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text */}
+      <img src={logoSrc} width={147} height={60} style={{ width: 147, height: 60 }} />
       {chip ? (
         <div
           style={{

@@ -10,6 +10,7 @@ import {
   Footer,
   formatDuration,
   Header,
+  headerLogoImage,
   intParam,
   listParam,
   loadKitFonts,
@@ -168,6 +169,7 @@ describe('art', () => {
   });
 
   test('logos load as PNG data URLs', async () => {
+    expect((await headerLogoImage()).startsWith('data:image/png;base64,')).toBe(true);
     expect((await markImage()).startsWith('data:image/png;base64,')).toBe(true);
     expect((await wordmarkImage()).startsWith('data:image/png;base64,')).toBe(true);
   });
@@ -177,7 +179,7 @@ describe('chrome', () => {
   test('renders header, footer and art in Satori with no network call', async () => {
     const networkCalls = spyNetwork();
     const ctx = context('art=molten-core&host=forever.chronicleclassic.com');
-    const [fonts, markSrc, art] = await Promise.all([loadKitFonts(ctx), markImage(), artImage(ctx)]);
+    const [fonts, logoSrc, art] = await Promise.all([loadKitFonts(ctx), headerLogoImage(), artImage(ctx)]);
     const { host } = chromeParams(ctx);
 
     const response = new ImageResponse(
@@ -186,7 +188,7 @@ describe('chrome', () => {
           {/* eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text */}
           <img src={art!} width={770} height={630} style={{ position: 'absolute', top: 0, left: 430, width: 770, height: 630, objectFit: 'cover' }} />
           <div style={{ position: 'absolute', top: 0, left: 0, width: 1200, height: 630, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '50px 64px 42px 72px' }}>
-            <Header markSrc={markSrc} chip="Raid report · Nov 6" />
+            <Header logoSrc={logoSrc} chip="Raid report · Nov 6" />
             <span style={{ fontSize: 40, color: classColor('mage') }}>Thalendris {formatDuration(134)}</span>
             <Footer host={host} cta="See the full log" />
           </div>

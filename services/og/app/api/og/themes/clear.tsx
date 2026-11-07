@@ -11,7 +11,7 @@ import {
   listParam,
   loadKitFonts,
   loadNameFonts,
-  markImage,
+  headerLogoImage,
   param,
   SANS,
   SERIF,
@@ -114,7 +114,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   const wipes = intParam(context, 'wipes', { min: 0, max: 999 });
   const players = intParam(context, 'players', { min: 0, max: 999 });
   const splits = splitEntries(context);
-  const markSrc = await markImage();
+  const logoSrc = await headerLogoImage();
 
   const timer = formatDuration(Math.floor(ms / 1000)) || '0:00';
   // `h:mm:ss` is two characters wider than `mm:ss`; both fill the left column.
@@ -145,7 +145,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
       <div style={{ position: 'absolute', top: 0, left: 0, width: 1200, height: 8, display: 'flex', background: COLORS.goldHi }} />
 
       <div style={{ ...FILL, flexDirection: 'column', justifyContent: 'space-between', padding: '46px 64px 40px 72px' }}>
-        <Header markSrc={markSrc} chip={`Speedrun · ${raid}`} chipStyle={{ color: COLORS.goldHi, borderColor: COLORS.gold }} />
+        <Header logoSrc={logoSrc} chip={`Speedrun · ${raid}`} chipStyle={{ color: COLORS.goldHi, borderColor: COLORS.gold }} />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 48, marginTop: -8 }}>
           <span style={{ display: 'flex', flexShrink: 0, fontSize: timerSize, fontWeight: 700, lineHeight: 1, letterSpacing: '-0.03em', color: TIMER_GOLD }}>

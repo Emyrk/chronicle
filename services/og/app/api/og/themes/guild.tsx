@@ -15,7 +15,7 @@ import {
   intParam,
   listParam,
   loadKitFonts,
-  markImage,
+  headerLogoImage,
   param,
   SANS,
   SERIF,
@@ -162,7 +162,7 @@ async function render(props: ThemeProps, context: ThemeContext): Promise<React.R
   const raids = intParam(context, 'raids', { min: 0, max: 999999 });
   const best = intParam(context, 'best', { min: 1, max: 24 * 3600 });
   const bestRaid = param(context, 'bestraid', 12);
-  const markSrc = await markImage();
+  const logoSrc = await headerLogoImage();
 
   const subline = [
     product,
@@ -206,7 +206,7 @@ async function render(props: ThemeProps, context: ThemeContext): Promise<React.R
         }}
       >
         <Header
-          markSrc={markSrc}
+          logoSrc={logoSrc}
           chip={tag ? `Guild · ${tag}` : 'Guild'}
           chipStyle={{ borderColor: shade(accent, -0.45), color: shade(accent, 0.5) }}
         />
