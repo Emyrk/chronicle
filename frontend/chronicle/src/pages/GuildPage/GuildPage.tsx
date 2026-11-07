@@ -15,6 +15,8 @@ import { GuildPageCanvas, TabBar, GuildPageHeader, GuildActionsMenu } from "./co
 import { Shield, PanelLeft, UserPlus, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FavoriteButton } from "@/components/Favorites";
+import { CopyForAI } from "@/features/aiKey/CopyForAI";
+import { guildAIURL } from "@/features/aiKey/aiLinks";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { GuildClaimDialog, GuildClaimLockedButton } from "./GuildClaimDialog";
 import { ensureRequiredRaidsTab, orderGuildPageTabs } from "./guildPageTabs";
@@ -141,8 +143,13 @@ export function GuildPage() {
       <GuildPageHeader
         guild={pageConfig.guild}
         theme={pageConfig.theme}
-        leading={pageConfig.guild.can_claim || pageConfig.guild.claim_locked || joinButtonVisible ? (
+        leading={
           <div className="flex flex-wrap items-center gap-2">
+            <CopyForAI
+              page="guild"
+              values={{ guild: pageConfig.guild.name, realm: pageConfig.guild.realm_name }}
+              url={guildAIURL(window.location.origin, pageConfig.guild.id)}
+            />
             {pageConfig.guild.can_claim && <GuildClaimDialog guild={pageConfig.guild} />}
             {pageConfig.guild.claim_locked && <GuildClaimLockedButton />}
             {joinButtonVisible && (myRequest ? (
@@ -193,7 +200,7 @@ export function GuildPage() {
               </Button>
             ))}
           </div>
-        ) : undefined}
+        }
       />
 
       {/* Sidebar + Content */}

@@ -2,6 +2,34 @@
 <html lang="en" class="dark" style="{{ .ThemeCSS }}">
   <head>
     <script>
+      // AI keys (?ai_key=ck_…) are for chat AIs and are never a browser login.
+      // Remove the key from the address bar before any other script runs, so
+      // GA4's page_location and ad scripts never see it. This must stay the
+      // first script in <head> (features/aiKey/stripAIKeyScript.test.ts checks).
+      // The app reads window.__chronicleAIKey once to show the owner a banner.
+      (function () {
+        try {
+          var search = location.search;
+          if (!search) return;
+          var key = null;
+          var kept = search.slice(1).split("&").filter(function (part) {
+            if (!part) return false;
+            var name = part.split("=", 1)[0];
+            var decoded;
+            try { decoded = decodeURIComponent(name.replace(/\+/g, " ")); } catch (e) { return true; }
+            if (decoded !== "ai_key") return true;
+            var value = part.slice(name.length + 1);
+            try { key = decodeURIComponent(value.replace(/\+/g, " ")); } catch (e) { key = value; }
+            return false;
+          });
+          if (key === null) return;
+          history.replaceState(history.state, "", location.pathname + (kept.length ? "?" + kept.join("&") : "") + location.hash);
+          // Not enumerable, so scripts that walk window properties don't pick it up.
+          Object.defineProperty(window, "__chronicleAIKey", { value: key, enumerable: false, configurable: true, writable: true });
+        } catch (e) {}
+      })();
+    </script>
+    <script>
       // The WoW Forever landing (/ and /start2): pick this visit's hero clip (they rotate per visit).
       // The app reads the pick from these data attributes (pages/Landing/heroClips.ts).
       // HERO_CLIPS mirrors clips.json's slug, poster and portrait.poster (heroClips.test.ts checks it).

@@ -57,6 +57,9 @@ import {
 } from "./queryModel";
 import { planSearchDraftUpdate } from "./searchInferenceDraft";
 import { SearchError, runSearch, useSearchFields, useSearchLimit, type SearchBudget } from "./searchApi";
+import { CopyForAI } from "@/features/aiKey/CopyForAI";
+import { searchAIURL, searchEqualsValue } from "@/features/aiKey/aiLinks";
+import { formatClassLabel } from "@/pages/ArmoryPage/characterDisplay";
 
 type Mode = "form" | "blocks" | "code";
 
@@ -132,6 +135,13 @@ export function InstanceSearchPage() {
   // The submitted search lives in the URL so it can be shared.
   const submittedParam = params.get("q");
   const submittedTree = useMemo(() => decodeQuery(submittedParam), [submittedParam]);
+  const aiPromptValues = useMemo(() => {
+    const cls = searchEqualsValue(submittedTree, "player.class");
+    return {
+      realm: searchEqualsValue(submittedTree, "instance.realm"),
+      class: cls ? formatClassLabel(cls) : null,
+    };
+  }, [submittedTree]);
   const sortFieldParam = params.get("sort");
   const sortDirectionParam = params.get("order");
   const sortScopeParam = params.get("sort_scope");
@@ -141,6 +151,12 @@ export function InstanceSearchPage() {
     [sortFieldParam, sortDirectionParam, sortScopeParam, sortBossParam],
   );
   const selectedSort: InstanceSearchSort = submittedSort ?? DEFAULT_SORT;
+  // The AI gets car 1's keyed GET search (markdown), with the same where tree
+  // and sort the POST search sends; /search itself has no agent view.
+  const aiSearchURL = useMemo(
+    () => searchAIURL(window.location.origin, buildQuery(submittedTree, undefined, submittedSort)),
+    [submittedTree, submittedSort],
+  );
   const [draftSort, writeDraftSort] = useState<InstanceSearchSort>(() => selectedSort);
   const setDraftSort = (sort: InstanceSearchSort) => { bumpDraftRevision(); writeDraftSort(sort); };
   // Logged-out users can view a shared block / code search read-only.
@@ -442,7 +458,10 @@ export function InstanceSearchPage() {
             </Link>
           </p>
         </div>
-        <BudgetLine budget={budget} lastCost={lastCost} lastRuntimeCost={lastRuntimeCost} pending={collapsed ? null : (liveCost?.total ?? null)} />
+        <div className="flex flex-col items-end gap-2">
+          <BudgetLine budget={budget} lastCost={lastCost} lastRuntimeCost={lastRuntimeCost} pending={collapsed ? null : (liveCost?.total ?? null)} />
+          <CopyForAI page="search" values={aiPromptValues} url={aiSearchURL} />
+        </div>
       </div>
 
       {collapsed ? (
