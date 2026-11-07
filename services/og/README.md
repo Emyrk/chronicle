@@ -39,7 +39,7 @@ pnpm preview:links -- \
 
 The command fetches each page with a Discord crawler user agent, reads the actual `og:title`, `og:description`, `og:url`, and `og:image`, then writes a visual gallery to `.preview/index.html`. Open that file in a browser. Use `--out /tmp/og-preview.html` to choose another location.
 
-This works against production, a deployed preview environment, or a local Chronicle server. For local end-to-end testing, run Chronicle with `CHRONICLE_OG_SERVICE_URL` pointing at the local OG service and leave both signing keys unset, then pass the local page URLs to this command.
+This works against production, a deployed preview environment, or a local Chronicle server. For local end-to-end testing, run Chronicle with `CHRONICLE_OG_SERVICE_URL` pointing at the local OG service and set the same development key in `CHRONICLE_OG_SIGNING_KEY` and the OG service's `OG_SIGNING_KEY`, then pass the local page URLs to this command.
 
 ## Docker
 
