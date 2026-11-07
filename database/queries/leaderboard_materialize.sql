@@ -1,9 +1,10 @@
--- These callable calculations publish one exact scope from one statement snapshot.
--- Evidence is already canonical/eligible; compatibility versions are metadata,
--- not filters. Callers own transactions and future revision/publication fencing.
--- No producer, queue acknowledgement, or concurrency fence is installed here.
+-- Single maintained calculation source. Compute returns one typed record even
+-- for empty evidence. Workers buffer at most 100 records, then publish in a
+-- separate SHORT transaction. Never hold dirty-row locks while sorting history.
+-- Compatibility singleton wrappers explicitly opt into unfenced manual writes;
+-- worker publication must use ownership fencing and never sets manual=true.
 
--- name: MaterializeLeaderboardPlayerBossBenchmark :exec
+-- name: ComputeLeaderboardPlayerBossBenchmark :batchone
 WITH calculated AS (
     SELECT metric_value AS best_metric
     FROM leaderboard_player_observations
@@ -18,29 +19,49 @@ WITH calculated AS (
       AND metric = @metric::text
     ORDER BY metric_value DESC
     LIMIT 1
-), written AS (
-    INSERT INTO leaderboard_player_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at)
-    SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @player_class::text, @player_spec::text, @player_sub_spec::text, @metric::text, best_metric, @projection_version::integer, @algorithm_version::integer, statement_timestamp() FROM calculated
-    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric) DO UPDATE SET
-        best_metric = EXCLUDED.best_metric,
-        projection_version = EXCLUDED.projection_version,
-        algorithm_version = EXCLUDED.algorithm_version,
-        computed_at = EXCLUDED.computed_at
-    RETURNING 1
 )
-DELETE FROM leaderboard_player_boss_benchmarks
-WHERE tenant_id = @tenant_id::uuid
-      AND instance_name = @instance_name::text
-      AND difficulty_name = @difficulty_name::text
-      AND max_players = @max_players::smallint
-      AND encounter_name = @encounter_name::text
-      AND player_class = @player_class::text
-      AND player_spec = @player_spec::text
-      AND player_sub_spec = @player_sub_spec::text
-      AND metric = @metric::text
-  AND NOT EXISTS (SELECT 1 FROM calculated);
+SELECT COALESCE(c.best_metric, 0)::double precision AS best_metric,
+       (c.best_metric IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
 
--- name: MaterializeLeaderboardPlayerBossSubject :exec
+-- name: PublishLeaderboardPlayerBossBenchmark :batchexec
+WITH locked AS MATERIALIZED (
+ SELECT d.* FROM leaderboard_dirty_player_boss_benchmarks d
+ WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint AND d.encounter_name = @encounter_name::text AND d.player_class = @player_class::text AND d.player_spec = @player_spec::text AND d.player_sub_spec = @player_sub_spec::text AND d.metric = @metric::text
+   AND d.claim_token = @claim_token::uuid AND d.claimed_revision = @claimed_revision::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE @unfenced_manual::boolean
+), written AS (
+ INSERT INTO leaderboard_player_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at)
+ SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @player_class::text, @player_spec::text, @player_sub_spec::text, @metric::text, @best_metric::double precision, @projection_version::integer, @algorithm_version::integer, statement_timestamp()
+ WHERE @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric) DO UPDATE SET
+ best_metric = EXCLUDED.best_metric,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_player_boss_benchmarks WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint AND encounter_name = @encounter_name::text AND player_class = @player_class::text AND player_spec = @player_spec::text AND player_sub_spec = @player_sub_spec::text AND metric = @metric::text
+ AND NOT @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_player_boss_benchmarks d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+)
+UPDATE leaderboard_dirty_player_boss_benchmarks d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed);
+
+-- name: ComputeLeaderboardPlayerBossSubject :batchone
 WITH scoped AS MATERIALIZED (
     SELECT * FROM leaderboard_player_observations WHERE tenant_id = @tenant_id::uuid
       AND instance_name = @instance_name::text
@@ -81,36 +102,54 @@ WITH scoped AS MATERIALIZED (
 ), calculated AS (
     SELECT statistics.*, provenance.id AS peak_encounter_id, provenance.duration_ms AS peak_duration_ms
     FROM statistics LEFT JOIN provenance ON true
-), written AS (
-    INSERT INTO leaderboard_player_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, peak_encounter_id, peak_duration_ms, projection_version, algorithm_version, computed_at)
-    SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @player_class::text, @player_spec::text, @player_sub_spec::text, @metric::text, @realm_id::uuid, @player_guid::text, observation_count, raw_peak, raw_form, raw_floor, peak_encounter_id, peak_duration_ms, @projection_version::integer, @algorithm_version::integer, statement_timestamp() FROM calculated
-    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid) DO UPDATE SET
-        observation_count = EXCLUDED.observation_count,
-        raw_peak = EXCLUDED.raw_peak,
-        raw_form = EXCLUDED.raw_form,
-        raw_floor = EXCLUDED.raw_floor,
-        peak_encounter_id = EXCLUDED.peak_encounter_id,
-        peak_duration_ms = EXCLUDED.peak_duration_ms,
-        projection_version = EXCLUDED.projection_version,
-        algorithm_version = EXCLUDED.algorithm_version,
-        computed_at = EXCLUDED.computed_at
-    RETURNING 1
 )
-DELETE FROM leaderboard_player_boss_subjects
-WHERE tenant_id = @tenant_id::uuid
-      AND instance_name = @instance_name::text
-      AND difficulty_name = @difficulty_name::text
-      AND max_players = @max_players::smallint
-      AND encounter_name = @encounter_name::text
-      AND player_class = @player_class::text
-      AND player_spec = @player_spec::text
-      AND player_sub_spec = @player_sub_spec::text
-      AND metric = @metric::text
-      AND realm_id = @realm_id::uuid
-      AND player_guid = @player_guid::text
-  AND NOT EXISTS (SELECT 1 FROM calculated);
+SELECT COALESCE(c.observation_count, 0)::bigint AS observation_count, COALESCE(c.raw_peak, 0)::double precision AS raw_peak, COALESCE(c.raw_form, 0)::double precision AS raw_form, COALESCE(c.raw_floor, 0)::double precision AS raw_floor, c.peak_encounter_id, c.peak_duration_ms,
+       (c.observation_count IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
 
--- name: MaterializeLeaderboardGuildBossBenchmark :exec
+-- name: PublishLeaderboardPlayerBossSubject :batchexec
+WITH locked AS MATERIALIZED (
+ SELECT d.* FROM leaderboard_dirty_player_boss_subjects d
+ WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint AND d.encounter_name = @encounter_name::text AND d.player_class = @player_class::text AND d.player_spec = @player_spec::text AND d.player_sub_spec = @player_sub_spec::text AND d.metric = @metric::text AND d.realm_id = @realm_id::uuid AND d.player_guid = @player_guid::text
+   AND d.claim_token = @claim_token::uuid AND d.claimed_revision = @claimed_revision::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE @unfenced_manual::boolean
+), written AS (
+ INSERT INTO leaderboard_player_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, peak_encounter_id, peak_duration_ms, projection_version, algorithm_version, computed_at)
+ SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @player_class::text, @player_spec::text, @player_sub_spec::text, @metric::text, @realm_id::uuid, @player_guid::text, @observation_count::bigint, @raw_peak::double precision, @raw_form::double precision, @raw_floor::double precision, sqlc.narg(peak_encounter_id)::uuid, sqlc.narg(peak_duration_ms)::bigint, @projection_version::integer, @algorithm_version::integer, statement_timestamp()
+ WHERE @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid) DO UPDATE SET
+ observation_count = EXCLUDED.observation_count,
+ raw_peak = EXCLUDED.raw_peak,
+ raw_form = EXCLUDED.raw_form,
+ raw_floor = EXCLUDED.raw_floor,
+ peak_encounter_id = EXCLUDED.peak_encounter_id,
+ peak_duration_ms = EXCLUDED.peak_duration_ms,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_player_boss_subjects WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint AND encounter_name = @encounter_name::text AND player_class = @player_class::text AND player_spec = @player_spec::text AND player_sub_spec = @player_sub_spec::text AND metric = @metric::text AND realm_id = @realm_id::uuid AND player_guid = @player_guid::text
+ AND NOT @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_player_boss_subjects d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+)
+UPDATE leaderboard_dirty_player_boss_subjects d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed);
+
+-- name: ComputeLeaderboardGuildBossBenchmark :batchone
 WITH calculated AS (
     SELECT duration_ms AS best_duration_ms
     FROM leaderboard_guild_boss_observations
@@ -121,25 +160,49 @@ WITH calculated AS (
       AND encounter_name = @encounter_name::text
     ORDER BY duration_ms ASC
     LIMIT 1
-), written AS (
-    INSERT INTO leaderboard_guild_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, best_duration_ms, projection_version, algorithm_version, computed_at)
-    SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, best_duration_ms, @projection_version::integer, @algorithm_version::integer, statement_timestamp() FROM calculated
-    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name) DO UPDATE SET
-        best_duration_ms = EXCLUDED.best_duration_ms,
-        projection_version = EXCLUDED.projection_version,
-        algorithm_version = EXCLUDED.algorithm_version,
-        computed_at = EXCLUDED.computed_at
-    RETURNING 1
 )
-DELETE FROM leaderboard_guild_boss_benchmarks
-WHERE tenant_id = @tenant_id::uuid
-      AND instance_name = @instance_name::text
-      AND difficulty_name = @difficulty_name::text
-      AND max_players = @max_players::smallint
-      AND encounter_name = @encounter_name::text
-  AND NOT EXISTS (SELECT 1 FROM calculated);
+SELECT COALESCE(c.best_duration_ms, 0)::bigint AS best_duration_ms,
+       (c.best_duration_ms IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
 
--- name: MaterializeLeaderboardGuildBossSubject :exec
+-- name: PublishLeaderboardGuildBossBenchmark :batchexec
+WITH locked AS MATERIALIZED (
+ SELECT d.* FROM leaderboard_dirty_guild_boss_benchmarks d
+ WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint AND d.encounter_name = @encounter_name::text
+   AND d.claim_token = @claim_token::uuid AND d.claimed_revision = @claimed_revision::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE @unfenced_manual::boolean
+), written AS (
+ INSERT INTO leaderboard_guild_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, best_duration_ms, projection_version, algorithm_version, computed_at)
+ SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @best_duration_ms::bigint, @projection_version::integer, @algorithm_version::integer, statement_timestamp()
+ WHERE @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name) DO UPDATE SET
+ best_duration_ms = EXCLUDED.best_duration_ms,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_guild_boss_benchmarks WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint AND encounter_name = @encounter_name::text
+ AND NOT @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_guild_boss_benchmarks d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+)
+UPDATE leaderboard_dirty_guild_boss_benchmarks d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed);
+
+-- name: ComputeLeaderboardGuildBossSubject :batchone
 WITH scoped AS MATERIALIZED (
     SELECT * FROM leaderboard_guild_boss_observations WHERE tenant_id = @tenant_id::uuid
       AND instance_name = @instance_name::text
@@ -158,30 +221,52 @@ WITH scoped AS MATERIALIZED (
            COALESCE(avg(1.0::double precision / duration_ms) FILTER (WHERE position > observations * 2 / 5 AND position < observations), 0)::double precision AS form_mean_inverse_ms,
            COALESCE(avg(1.0::double precision / duration_ms) FILTER (WHERE position > observations / 5 AND position <= observations * 2 / 5), 0)::double precision AS floor_mean_inverse_ms
     FROM ranked HAVING count(*) > 0
-), calculated AS (SELECT * FROM statistics), written AS (
-    INSERT INTO leaderboard_guild_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at)
-    SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @realm_id::uuid, @guild_id::uuid, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, @projection_version::integer, @algorithm_version::integer, statement_timestamp() FROM calculated
-    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE SET
-        observation_count = EXCLUDED.observation_count,
-        fastest_duration_ms = EXCLUDED.fastest_duration_ms,
-        form_mean_inverse_ms = EXCLUDED.form_mean_inverse_ms,
-        floor_mean_inverse_ms = EXCLUDED.floor_mean_inverse_ms,
-        projection_version = EXCLUDED.projection_version,
-        algorithm_version = EXCLUDED.algorithm_version,
-        computed_at = EXCLUDED.computed_at
-    RETURNING 1
-)
-DELETE FROM leaderboard_guild_boss_subjects
-WHERE tenant_id = @tenant_id::uuid
-      AND instance_name = @instance_name::text
-      AND difficulty_name = @difficulty_name::text
-      AND max_players = @max_players::smallint
-      AND encounter_name = @encounter_name::text
-      AND realm_id = @realm_id::uuid
-      AND guild_id = @guild_id::uuid
-  AND NOT EXISTS (SELECT 1 FROM calculated);
+), calculated AS (SELECT * FROM statistics)
+SELECT COALESCE(c.observation_count, 0)::bigint AS observation_count, COALESCE(c.fastest_duration_ms, 0)::bigint AS fastest_duration_ms, COALESCE(c.form_mean_inverse_ms, 0)::double precision AS form_mean_inverse_ms, COALESCE(c.floor_mean_inverse_ms, 0)::double precision AS floor_mean_inverse_ms,
+       (c.observation_count IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
 
--- name: MaterializeLeaderboardGuildClearBenchmark :exec
+-- name: PublishLeaderboardGuildBossSubject :batchexec
+WITH locked AS MATERIALIZED (
+ SELECT d.* FROM leaderboard_dirty_guild_boss_subjects d
+ WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint AND d.encounter_name = @encounter_name::text AND d.realm_id = @realm_id::uuid AND d.guild_id = @guild_id::uuid
+   AND d.claim_token = @claim_token::uuid AND d.claimed_revision = @claimed_revision::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE @unfenced_manual::boolean
+), written AS (
+ INSERT INTO leaderboard_guild_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at)
+ SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @realm_id::uuid, @guild_id::uuid, @observation_count::bigint, @fastest_duration_ms::bigint, @form_mean_inverse_ms::double precision, @floor_mean_inverse_ms::double precision, @projection_version::integer, @algorithm_version::integer, statement_timestamp()
+ WHERE @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE SET
+ observation_count = EXCLUDED.observation_count,
+ fastest_duration_ms = EXCLUDED.fastest_duration_ms,
+ form_mean_inverse_ms = EXCLUDED.form_mean_inverse_ms,
+ floor_mean_inverse_ms = EXCLUDED.floor_mean_inverse_ms,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_guild_boss_subjects WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint AND encounter_name = @encounter_name::text AND realm_id = @realm_id::uuid AND guild_id = @guild_id::uuid
+ AND NOT @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_guild_boss_subjects d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+)
+UPDATE leaderboard_dirty_guild_boss_subjects d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed);
+
+-- name: ComputeLeaderboardGuildClearBenchmark :batchone
 WITH calculated AS (
     SELECT duration_ms AS best_duration_ms
     FROM leaderboard_guild_clear_observations
@@ -191,24 +276,49 @@ WITH calculated AS (
       AND max_players = @max_players::smallint
     ORDER BY duration_ms ASC
     LIMIT 1
-), written AS (
-    INSERT INTO leaderboard_guild_clear_benchmarks (tenant_id, instance_name, difficulty_name, max_players, best_duration_ms, projection_version, algorithm_version, computed_at)
-    SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, best_duration_ms, @projection_version::integer, @algorithm_version::integer, statement_timestamp() FROM calculated
-    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players) DO UPDATE SET
-        best_duration_ms = EXCLUDED.best_duration_ms,
-        projection_version = EXCLUDED.projection_version,
-        algorithm_version = EXCLUDED.algorithm_version,
-        computed_at = EXCLUDED.computed_at
-    RETURNING 1
 )
-DELETE FROM leaderboard_guild_clear_benchmarks
-WHERE tenant_id = @tenant_id::uuid
-      AND instance_name = @instance_name::text
-      AND difficulty_name = @difficulty_name::text
-      AND max_players = @max_players::smallint
-  AND NOT EXISTS (SELECT 1 FROM calculated);
+SELECT COALESCE(c.best_duration_ms, 0)::bigint AS best_duration_ms,
+       (c.best_duration_ms IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
 
--- name: MaterializeLeaderboardGuildClearSubject :exec
+-- name: PublishLeaderboardGuildClearBenchmark :batchexec
+WITH locked AS MATERIALIZED (
+ SELECT d.* FROM leaderboard_dirty_guild_clear_benchmarks d
+ WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint
+   AND d.claim_token = @claim_token::uuid AND d.claimed_revision = @claimed_revision::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE @unfenced_manual::boolean
+), written AS (
+ INSERT INTO leaderboard_guild_clear_benchmarks (tenant_id, instance_name, difficulty_name, max_players, best_duration_ms, projection_version, algorithm_version, computed_at)
+ SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @best_duration_ms::bigint, @projection_version::integer, @algorithm_version::integer, statement_timestamp()
+ WHERE @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players) DO UPDATE SET
+ best_duration_ms = EXCLUDED.best_duration_ms,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_guild_clear_benchmarks WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint
+ AND NOT @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_guild_clear_benchmarks d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+)
+UPDATE leaderboard_dirty_guild_clear_benchmarks d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed);
+
+-- name: ComputeLeaderboardGuildClearSubject :batchone
 WITH scoped AS MATERIALIZED (
     SELECT * FROM leaderboard_guild_clear_observations WHERE tenant_id = @tenant_id::uuid
       AND instance_name = @instance_name::text
@@ -226,29 +336,52 @@ WITH scoped AS MATERIALIZED (
            COALESCE(avg(1.0::double precision / duration_ms) FILTER (WHERE position > observations * 2 / 5 AND position < observations), 0)::double precision AS form_mean_inverse_ms,
            COALESCE(avg(1.0::double precision / duration_ms) FILTER (WHERE position > observations / 5 AND position <= observations * 2 / 5), 0)::double precision AS floor_mean_inverse_ms
     FROM ranked HAVING count(*) > 0
-), calculated AS (SELECT * FROM statistics), written AS (
-    INSERT INTO leaderboard_guild_clear_subjects (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at)
-    SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @realm_id::uuid, @guild_id::uuid, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, @projection_version::integer, @algorithm_version::integer, statement_timestamp() FROM calculated
-    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id) DO UPDATE SET
-        observation_count = EXCLUDED.observation_count,
-        fastest_duration_ms = EXCLUDED.fastest_duration_ms,
-        form_mean_inverse_ms = EXCLUDED.form_mean_inverse_ms,
-        floor_mean_inverse_ms = EXCLUDED.floor_mean_inverse_ms,
-        projection_version = EXCLUDED.projection_version,
-        algorithm_version = EXCLUDED.algorithm_version,
-        computed_at = EXCLUDED.computed_at
-    RETURNING 1
-)
-DELETE FROM leaderboard_guild_clear_subjects
-WHERE tenant_id = @tenant_id::uuid
-      AND instance_name = @instance_name::text
-      AND difficulty_name = @difficulty_name::text
-      AND max_players = @max_players::smallint
-      AND realm_id = @realm_id::uuid
-      AND guild_id = @guild_id::uuid
-  AND NOT EXISTS (SELECT 1 FROM calculated);
+), calculated AS (SELECT * FROM statistics)
+SELECT COALESCE(c.observation_count, 0)::bigint AS observation_count, COALESCE(c.fastest_duration_ms, 0)::bigint AS fastest_duration_ms, COALESCE(c.form_mean_inverse_ms, 0)::double precision AS form_mean_inverse_ms, COALESCE(c.floor_mean_inverse_ms, 0)::double precision AS floor_mean_inverse_ms,
+       (c.observation_count IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
 
--- name: MaterializeLeaderboardPlayerRenownCount :exec
+-- name: PublishLeaderboardGuildClearSubject :batchexec
+WITH locked AS MATERIALIZED (
+ SELECT d.* FROM leaderboard_dirty_guild_clear_subjects d
+ WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint AND d.realm_id = @realm_id::uuid AND d.guild_id = @guild_id::uuid
+   AND d.claim_token = @claim_token::uuid AND d.claimed_revision = @claimed_revision::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE @unfenced_manual::boolean
+), written AS (
+ INSERT INTO leaderboard_guild_clear_subjects (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at)
+ SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @realm_id::uuid, @guild_id::uuid, @observation_count::bigint, @fastest_duration_ms::bigint, @form_mean_inverse_ms::double precision, @floor_mean_inverse_ms::double precision, @projection_version::integer, @algorithm_version::integer, statement_timestamp()
+ WHERE @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id) DO UPDATE SET
+ observation_count = EXCLUDED.observation_count,
+ fastest_duration_ms = EXCLUDED.fastest_duration_ms,
+ form_mean_inverse_ms = EXCLUDED.form_mean_inverse_ms,
+ floor_mean_inverse_ms = EXCLUDED.floor_mean_inverse_ms,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_guild_clear_subjects WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint AND realm_id = @realm_id::uuid AND guild_id = @guild_id::uuid
+ AND NOT @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_guild_clear_subjects d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+)
+UPDATE leaderboard_dirty_guild_clear_subjects d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed);
+
+-- name: ComputeLeaderboardPlayerRenownCount :batchone
 WITH calculated AS (
     SELECT count(*)::bigint AS kill_count FROM leaderboard_player_renown_facts
     WHERE tenant_id = @tenant_id::uuid
@@ -259,25 +392,49 @@ WITH calculated AS (
       AND realm_id = @realm_id::uuid
       AND player_guid = @player_guid::text
     HAVING count(*) > 0
-), written AS (
-    INSERT INTO leaderboard_player_renown_counts (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid, kill_count, projection_version, algorithm_version, computed_at)
-    SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @realm_id::uuid, @player_guid::text, kill_count, @projection_version::integer, @algorithm_version::integer, statement_timestamp() FROM calculated
-    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid) DO UPDATE SET
-        kill_count = EXCLUDED.kill_count, projection_version = EXCLUDED.projection_version,
-        algorithm_version = EXCLUDED.algorithm_version, computed_at = EXCLUDED.computed_at
-    RETURNING 1
 )
-DELETE FROM leaderboard_player_renown_counts
-WHERE tenant_id = @tenant_id::uuid
-      AND instance_name = @instance_name::text
-      AND difficulty_name = @difficulty_name::text
-      AND max_players = @max_players::smallint
-      AND encounter_name = @encounter_name::text
-      AND realm_id = @realm_id::uuid
-      AND player_guid = @player_guid::text
-  AND NOT EXISTS (SELECT 1 FROM calculated);
+SELECT COALESCE(c.kill_count, 0)::bigint AS kill_count,
+       (c.kill_count IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
 
--- name: MaterializeLeaderboardGuildRenownCount :exec
+-- name: PublishLeaderboardPlayerRenownCount :batchexec
+WITH locked AS MATERIALIZED (
+ SELECT d.* FROM leaderboard_dirty_player_renown d
+ WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint AND d.encounter_name = @encounter_name::text AND d.realm_id = @realm_id::uuid AND d.player_guid = @player_guid::text
+   AND d.claim_token = @claim_token::uuid AND d.claimed_revision = @claimed_revision::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE @unfenced_manual::boolean
+), written AS (
+ INSERT INTO leaderboard_player_renown_counts (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid, kill_count, projection_version, algorithm_version, computed_at)
+ SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @realm_id::uuid, @player_guid::text, @kill_count::bigint, @projection_version::integer, @algorithm_version::integer, statement_timestamp()
+ WHERE @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid) DO UPDATE SET
+ kill_count = EXCLUDED.kill_count,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_player_renown_counts WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint AND encounter_name = @encounter_name::text AND realm_id = @realm_id::uuid AND player_guid = @player_guid::text
+ AND NOT @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_player_renown d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+)
+UPDATE leaderboard_dirty_player_renown d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed);
+
+-- name: ComputeLeaderboardGuildRenownCount :batchone
 WITH calculated AS (
     SELECT count(*)::bigint AS kill_count FROM leaderboard_guild_renown_facts
     WHERE tenant_id = @tenant_id::uuid
@@ -288,20 +445,48 @@ WITH calculated AS (
       AND realm_id = @realm_id::uuid
       AND guild_id = @guild_id::uuid
     HAVING count(*) > 0
-), written AS (
-    INSERT INTO leaderboard_guild_renown_counts (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, kill_count, projection_version, algorithm_version, computed_at)
-    SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @realm_id::uuid, @guild_id::uuid, kill_count, @projection_version::integer, @algorithm_version::integer, statement_timestamp() FROM calculated
-    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE SET
-        kill_count = EXCLUDED.kill_count, projection_version = EXCLUDED.projection_version,
-        algorithm_version = EXCLUDED.algorithm_version, computed_at = EXCLUDED.computed_at
-    RETURNING 1
 )
-DELETE FROM leaderboard_guild_renown_counts
-WHERE tenant_id = @tenant_id::uuid
-      AND instance_name = @instance_name::text
-      AND difficulty_name = @difficulty_name::text
-      AND max_players = @max_players::smallint
-      AND encounter_name = @encounter_name::text
-      AND realm_id = @realm_id::uuid
-      AND guild_id = @guild_id::uuid
-  AND NOT EXISTS (SELECT 1 FROM calculated);
+SELECT COALESCE(c.kill_count, 0)::bigint AS kill_count,
+       (c.kill_count IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
+
+-- name: PublishLeaderboardGuildRenownCount :batchexec
+WITH locked AS MATERIALIZED (
+ SELECT d.* FROM leaderboard_dirty_guild_renown d
+ WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint AND d.encounter_name = @encounter_name::text AND d.realm_id = @realm_id::uuid AND d.guild_id = @guild_id::uuid
+   AND d.claim_token = @claim_token::uuid AND d.claimed_revision = @claimed_revision::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE @unfenced_manual::boolean
+), written AS (
+ INSERT INTO leaderboard_guild_renown_counts (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, kill_count, projection_version, algorithm_version, computed_at)
+ SELECT @tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @realm_id::uuid, @guild_id::uuid, @kill_count::bigint, @projection_version::integer, @algorithm_version::integer, statement_timestamp()
+ WHERE @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE SET
+ kill_count = EXCLUDED.kill_count,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_guild_renown_counts WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint AND encounter_name = @encounter_name::text AND realm_id = @realm_id::uuid AND guild_id = @guild_id::uuid
+ AND NOT @has_evidence::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_guild_renown d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+)
+UPDATE leaderboard_dirty_guild_renown d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed);
+
+-- name: LeaderboardD2Clock :one
+-- Shared database clock for operational diagnostics; leases never use Go time.
+SELECT clock_timestamp()::timestamptz;

@@ -26,6 +26,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
 	"github.com/Emyrk/chronicle/internal/services/serviceretention"
 	"github.com/Emyrk/chronicle/internal/services/servicetelemetry"
 	"github.com/google/uuid"
@@ -77,6 +78,7 @@ func (s *Service) DependsOn() []string {
 		serviceretention.OnRetention(),
 		servicetelemetry.OnTelemetry(),
 		servicerankings.OnRankings(),
+		serviceratings.OnRatings(),
 	}
 }
 
@@ -181,6 +183,20 @@ func (s *Service) Start(ctx context.Context) error {
 	billingService.Billing.SetCosmeticAuditEnqueuer(func(ctx context.Context, userID uuid.UUID) error {
 		return cosmetics.EnqueueUserAudit(ctx, q, userID)
 	})
+
+	// D2 workers are registered but dispatch remains code-disabled until the
+	// separate source-writer integration. No startup/backfill work is scheduled.
+	ratings := serviceratings.Ratings(s.broker)
+	ratings.Dispatcher.Queue = q
+	riverqueue.AddWorker(q, ratings.Dispatcher)
+	riverqueue.AddWorker(q, ratings.TenantWorker)
+	if serviceratings.DispatchEnabled {
+		q.AddPeriodicJob(river.NewPeriodicJob(
+			river.PeriodicInterval(serviceratings.DispatchInterval),
+			func() (river.JobArgs, *river.InsertOpts) { return serviceratings.ArgsDispatch{}, nil },
+			&river.PeriodicJobOpts{ID: "leaderboard-d2-dispatch", RunOnStart: false},
+		))
+	}
 
 	// Register retention workers and periodic job.
 	ret := serviceretention.RetentionService(s.broker)

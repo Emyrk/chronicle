@@ -20,12 +20,13 @@ import (
 
 type StoreQueries interface {
 	sqlcQuerier
+	manualMaterializer
 }
 
 // Store contains all queryable database functions.
 // It extends the generated interface to add transaction support.
 type Store interface {
-	sqlcQuerier
+	StoreQueries
 	DBTX
 
 	RankingsLeaderboardNoJIT(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error)
