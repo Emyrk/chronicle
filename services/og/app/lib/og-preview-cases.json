@@ -142,6 +142,7 @@
       "prog": "MC:10:10,BWL:8:8,AQ40:9:9,NAXX:13:15",
       "best": "4237",
       "bestraid": "Naxxramas",
+      "icon": "https://cdn.discordapp.com/icons/1470042728896139468/1339c5e33f0cb237475752c52d20e5fc.png?size=1024",
       "accent": "#89744d",
       "host": "chronicleclassic.com"
     },

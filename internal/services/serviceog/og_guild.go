@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -264,10 +265,13 @@ const guildOGLogoMaxLen = 512
 const guildOGLogoDomain = "chronicleclassic.com"
 
 // guildOGLogoURL returns the guild logo as an absolute https URL when it is
-// Chronicle-hosted (the page's own host, or chronicleclassic.com and its
-// subdomains), so the OG service never fetches from a host a guild admin
-// picked. Anything else, or anything over guildOGLogoMaxLen, returns "" and
-// the card draws the monogram.
+// Chronicle-hosted or a Discord guild icon on cdn.discordapp.com. Discord WebP
+// icons are normalized to PNG for Satori. Any other external host, malformed
+// Discord path, or overlong URL returns "" and the card draws the monogram.
+const guildOGDiscordLogoDomain = "cdn.discordapp.com"
+
+var guildOGDiscordLogoPath = regexp.MustCompile(`^/icons/[0-9]+/[A-Za-z0-9_-]+\.(?:png|jpe?g|gif|webp)$`)
+
 func guildOGLogoURL(host, raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || len(raw) > guildOGLogoMaxLen {
@@ -284,6 +288,18 @@ func guildOGLogoURL(host, raw string) string {
 	pageHost := strings.ToLower(host)
 	if h, _, err := net.SplitHostPort(pageHost); err == nil {
 		pageHost = h
+	}
+	if logoHost == guildOGDiscordLogoDomain {
+		if !guildOGDiscordLogoPath.MatchString(u.EscapedPath()) {
+			return ""
+		}
+		// Discord commonly stores guild icons as WebP, which Satori cannot
+		// decode. The same CDN asset is available as PNG by changing the suffix.
+		if strings.HasSuffix(u.Path, ".webp") {
+			u.Path = strings.TrimSuffix(u.Path, ".webp") + ".png"
+			u.RawPath = ""
+		}
+		return u.String()
 	}
 	if logoHost != pageHost && logoHost != guildOGLogoDomain && !strings.HasSuffix(logoHost, "."+guildOGLogoDomain) {
 		return ""

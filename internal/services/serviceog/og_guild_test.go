@@ -118,17 +118,22 @@ func TestGuildOGLogoURL(t *testing.T) {
 		"https://chronicleclassic.com/a.png":         "https://chronicleclassic.com/a.png",
 		"https://cdn.chronicleclassic.com/a.png":     "https://cdn.chronicleclassic.com/a.png",
 		"https://FOREVER.chronicleclassic.com/a.png": "https://FOREVER.chronicleclassic.com/a.png",
-		// Not Chronicle-hosted: the monogram shows.
-		"https://cdn.example.com/a.png":                  "",
-		"https://evilchronicleclassic.com/a.png":         "",
-		"https://chronicleclassic.com.evil/a.png":        "",
-		"http://forever.chronicleclassic.com/a.png":      "",
-		"https://u:p@forever.chronicleclassic.com/a.png": "",
-		"//evil.com/a.png":                               "",
-		"data:image/png;base64,AAAA":                     "",
-		"javascript:alert(1)":                            "",
-		"":                                               "",
-		"/" + strings.Repeat("a", 600):                   "",
+		"https://cdn.discordapp.com/icons/1470042728896139468/1339c5e33f0cb237475752c52d20e5fc.webp?size=1024": "https://cdn.discordapp.com/icons/1470042728896139468/1339c5e33f0cb237475752c52d20e5fc.png?size=1024",
+		"https://cdn.discordapp.com/icons/1470042728896139468/1339c5e33f0cb237475752c52d20e5fc.png?size=256":   "https://cdn.discordapp.com/icons/1470042728896139468/1339c5e33f0cb237475752c52d20e5fc.png?size=256",
+		// Other Discord paths or external hosts show the monogram.
+		"https://cdn.discordapp.com/avatars/1470042728896139468/hash.png":    "",
+		"https://media.discordapp.net/icons/1470042728896139468/hash.png":    "",
+		"https://cdn.discordapp.com.evil/icons/1470042728896139468/hash.png": "",
+		"https://cdn.example.com/a.png":                                      "",
+		"https://evilchronicleclassic.com/a.png":                             "",
+		"https://chronicleclassic.com.evil/a.png":                            "",
+		"http://forever.chronicleclassic.com/a.png":                          "",
+		"https://u:p@forever.chronicleclassic.com/a.png":                     "",
+		"//evil.com/a.png":             "",
+		"data:image/png;base64,AAAA":   "",
+		"javascript:alert(1)":          "",
+		"":                             "",
+		"/" + strings.Repeat("a", 600): "",
 	} {
 		require.Equal(t, want, guildOGLogoURL(host, raw), raw)
 	}

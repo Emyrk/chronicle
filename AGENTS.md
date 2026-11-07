@@ -113,6 +113,7 @@ The generated OG card feature was originally merged as one large train spanning 
 - Open Graph metadata resolution, card selection, signing, and renderer-specific lookups belong in `internal/services/serviceog`; the `api` package only owns the narrow route-provider interface and frontend wiring.
 - The generated-image renderer is optional. With no renderer URL or signing key, `serviceog` must preserve the pre-existing static metadata and skip generated-card lookups.
 - The released Armory card is history-only. Keep the Character Performance renderer for design review, but do not select it until healing-versus-damage spec and metric selection is defined.
+- Guild card logos may use Chronicle-hosted images or exact Discord guild-icon URLs under `https://cdn.discordapp.com/icons/`; reject other external hosts and normalize Discord WebP icons to PNG for the renderer.
 - Guild cards must not include player lists or aggregate player scores until guild-level scoring is ready; the activity fallback shows only estimated raid nights.
 - Generated OG cards and metadata must not display or serialize server/realm names; route URLs may still carry the realm identifier required for navigation.
 - Refactors must preserve page metadata, card selection thresholds, and rendered query parameters unless the user explicitly approves a behavior change.
