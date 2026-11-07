@@ -16,23 +16,25 @@ import (
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 )
 
 func TestRaidCardParams(t *testing.T) {
 	t.Parallel()
 
-	wipes, avg, players := 0, 81, 40
+	wipes, killAvg, players := 0, 81, 40
 	card := raidCard{
-		Host:     "forever.chronicleclassic.com",
-		Guild:    "Nightfall",
-		Raid:     "Molten Core",
-		Date:     time.Date(2026, 11, 6, 21, 30, 0, 0, time.UTC),
-		Players:  &players,
-		Kills:    10,
-		Bosses:   10,
-		Duration: 6727 * time.Second,
-		Wipes:    &wipes,
-		AvgParse: &avg,
+		Host:           "forever.chronicleclassic.com",
+		Guild:          "Nightfall",
+		Raid:           "Molten Core",
+		Date:           time.Date(2026, 11, 6, 21, 30, 0, 0, time.UTC),
+		Players:        &players,
+		Kills:          10,
+		Bosses:         10,
+		Duration:       6727 * time.Second,
+		Wipes:          &wipes,
+		KillTimeParses: []int{72, 81, 95, 76},
+		KillTimeAvg:    &killAvg,
 		Top: []raidCardDPS{
 			{Name: "Thalendris", Class: "mage", DPS: 1284},
 			{Name: "Grimtusk", Class: "warrior", DPS: 1201},
@@ -41,19 +43,20 @@ func TestRaidCardParams(t *testing.T) {
 	}
 
 	require.Equal(t, url.Values{
-		"host":    {"forever.chronicleclassic.com"},
-		"guild":   {"Nightfall"},
-		"raid":    {"Molten Core"},
-		"date":    {"2026-11-06"},
-		"players": {"40"},
-		"kills":   {"10"},
-		"bosses":  {"10"},
-		"dur":     {"6727"},
-		"wipes":   {"0"},
-		"avg":     {"81"},
-		"top":     {"Thalendris:mage:1284,Grimtusk:warrior:1201"},
-		"comp":    {"warrior:5,priest:8"},
-		"art":     {"molten-core"},
+		"host":       {"forever.chronicleclassic.com"},
+		"guild":      {"Nightfall"},
+		"raid":       {"Molten Core"},
+		"date":       {"2026-11-06"},
+		"players":    {"40"},
+		"kills":      {"10"},
+		"bosses":     {"10"},
+		"dur":        {"6727"},
+		"wipes":      {"0"},
+		"killparses": {"72,81,95,76"},
+		"killavg":    {"81"},
+		"top":        {"Thalendris:mage:1284,Grimtusk:warrior:1201"},
+		"comp":       {"warrior:5,priest:8"},
+		"art":        {"molten-core"},
 	}, raidCardParams(card))
 
 	// Through the signer: template, host, product and v are added, and the
@@ -71,13 +74,35 @@ func TestRaidCardParams(t *testing.T) {
 	require.NotEmpty(t, q.Get("sig"))
 }
 
+func TestRaidKillTimeParseSummary(t *testing.T) {
+	t.Parallel()
+
+	first, second, unmatched, small := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	start := time.Date(2026, 11, 6, 20, 0, 0, 0, time.UTC)
+	encounters := []database.LogInstanceEncounter{
+		{ID: first, StartTime: database.Timestamptz(start)},
+		{ID: second, StartTime: database.Timestamptz(start.Add(time.Minute))},
+	}
+	rows := []database.TimeParseBossScore{
+		{EncounterID: second, ServerPreciseScore: 90.4, ServerDisplayScore: 90, ServerStatus: string(timeparsepolicy.StatusOK)},
+		{EncounterID: unmatched, ServerPreciseScore: 70.4, ServerDisplayScore: 70, ServerStatus: string(timeparsepolicy.StatusLowConfidence)},
+		{EncounterID: small, ServerPreciseScore: 99, ServerDisplayScore: 99, ServerStatus: string(timeparsepolicy.StatusSampleTooSmall)},
+		{EncounterID: first, ServerPreciseScore: 60.4, ServerDisplayScore: 60, ServerStatus: string(timeparsepolicy.StatusOK)},
+	}
+
+	scores, avg := raidKillTimeParseSummary(rows, encounters)
+	require.Equal(t, []int{60, 90, 70}, scores)
+	require.NotNil(t, avg)
+	require.Equal(t, 74, *avg)
+}
+
 func TestRaidCardParamsFallbacks(t *testing.T) {
 	t.Parallel()
 
 	// A PUG dungeon: no guild, no ranked bosses, no parse, no known art.
 	// The players query failed: no players param rather than "0 players".
 	params := raidCardParams(raidCard{Raid: "Karazhan Crypts", Kills: 4, Bosses: 6})
-	for _, key := range []string{"host", "guild", "players", "top", "avg", "wipes", "comp", "date", "dur"} {
+	for _, key := range []string{"host", "guild", "players", "top", "killparses", "killavg", "wipes", "comp", "date", "dur"} {
 		require.False(t, params.Has(key), key)
 	}
 	require.Equal(t, "karazhan-crypts", params.Get("art"))
@@ -210,7 +235,8 @@ func TestLoadRaidCard(t *testing.T) {
 		require.Equal(t, 1, card.Bosses)
 		require.Nil(t, card.Wipes)
 		require.Empty(t, card.Top)
-		require.Nil(t, card.AvgParse)
+		require.Empty(t, card.KillTimeParses)
+		require.Nil(t, card.KillTimeAvg)
 	})
 
 	t.Run("CanceledRequest", func(t *testing.T) {

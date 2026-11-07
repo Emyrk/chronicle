@@ -116,6 +116,7 @@ The generated OG card feature was originally merged as one large train spanning 
 - Guild card logos may use Chronicle-hosted images or exact Discord guild-icon URLs under `https://cdn.discordapp.com/icons/`; reject other external hosts and normalize Discord WebP icons to PNG for the renderer.
 - Guild cards must not include player lists or aggregate player scores until guild-level scoring is ready; the activity fallback shows only estimated raid nights.
 - Generated OG cards and metadata must not display or serialize server/realm names; route URLs may still carry the realm identifier required for navigation.
+- Raid report cards use server-wide per-boss kill-time parses and their average; do not restore the player-average parse metric.
 - Refactors must preserve page metadata, card selection thresholds, and rendered query parameters unless the user explicitly approves a behavior change.
 - Keep the Go signer and TypeScript verifier byte-compatible. Any signature change must update the shared vectors and both test suites together.
 - Use `cd services/og && pnpm preview:links -- <url...>` to compare the actual metadata and image selected for real Chronicle links before and after a refactor.

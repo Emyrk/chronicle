@@ -12,9 +12,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/Emyrk/chronicle/database"
 	overviewmetricsversion "github.com/Emyrk/chronicle/internal/overviewmetrics"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 )
 
 const (
@@ -25,18 +29,19 @@ const (
 // raidCard is what the OG service's raid template draws (template=raid). The
 // parse (#1666) and clear-time (#1668) cards reuse raidCardParams.
 type raidCard struct {
-	Host     string // tenant host, drawn in the footer
-	Guild    string
-	Raid     string
-	Date     time.Time
-	Players  *int // nil = unknown
-	Kills    int
-	Bosses   int // 0 = unknown
-	Duration time.Duration
-	Wipes    *int
-	AvgParse *int
-	Top      []raidCardDPS
-	Comp     []raidCardClass
+	Host           string // tenant host, drawn in the footer
+	Guild          string
+	Raid           string
+	Date           time.Time
+	Players        *int // nil = unknown
+	Kills          int
+	Bosses         int // 0 = unknown
+	Duration       time.Duration
+	Wipes          *int
+	KillTimeParses []int
+	KillTimeAvg    *int
+	Top            []raidCardDPS
+	Comp           []raidCardClass
 }
 
 type raidCardDPS struct {
@@ -80,8 +85,15 @@ func raidCardParams(card raidCard) url.Values {
 	if card.Wipes != nil {
 		q.Set("wipes", strconv.Itoa(*card.Wipes))
 	}
-	if card.AvgParse != nil {
-		q.Set("avg", strconv.Itoa(*card.AvgParse))
+	if len(card.KillTimeParses) > 0 {
+		scores := make([]string, 0, len(card.KillTimeParses))
+		for _, score := range card.KillTimeParses {
+			scores = append(scores, strconv.Itoa(score))
+		}
+		q.Set("killparses", strings.Join(scores, ","))
+	}
+	if card.KillTimeAvg != nil {
+		q.Set("killavg", strconv.Itoa(*card.KillTimeAvg))
 	}
 	if len(card.Top) > 0 {
 		top := make([]string, 0, len(card.Top))
@@ -107,8 +119,8 @@ func raidCardParams(card raidCard) url.Values {
 const raidCardTimeout = 1500 * time.Millisecond
 
 // loadRaidCard fills in what base can't get from data the page already
-// loaded: boss progress, wipes, top DPS and avg parse. The queries run in
-// parallel under raidCardTimeout, derived from r's context (which also
+// loaded: boss progress, wipes and top DPS. The queries run in parallel under
+// raidCardTimeout, derived from r's context (which also
 // carries the tenant). Each part is optional: when its query fails or times
 // out, that part is left off the card (boss progress falls back to the log).
 func (s *Service) loadRaidCard(r *http.Request, inst database.LogInstancesGuild, encounters []database.LogInstanceEncounter, base raidCard) raidCard {
@@ -119,12 +131,12 @@ func (s *Service) loadRaidCard(r *http.Request, inst database.LogInstancesGuild,
 
 	// Each goroutine writes only its own variables; all are read after Wait.
 	var (
-		wg                 sync.WaitGroup
-		progression        []string
-		bossCount          *int
-		wipes, avg         *int
-		records            []database.EncounterDpsRanking
-		recordsErr, avgErr error
+		wg          sync.WaitGroup
+		progression []string
+		bossCount   *int
+		wipes       *int
+		records     []database.EncounterDpsRanking
+		recordsErr  error
 	)
 	wg.Go(func() {
 		if s.chronicle != nil {
@@ -144,14 +156,6 @@ func (s *Service) loadRaidCard(r *http.Request, inst database.LogInstancesGuild,
 	wg.Go(func() {
 		records, recordsErr = db.InstanceRankingRecords(ctx, inst.ID)
 	})
-	wg.Go(func() {
-		var n int
-		var ok bool
-		n, ok, avgErr = servicerankings.InstanceAverageParse(ctx, db, inst.ID)
-		if ok {
-			avg = &n
-		}
-	})
 	wg.Wait()
 
 	card.Kills, card.Bosses = raidBossProgress(encounters, progression, bossCount)
@@ -159,12 +163,90 @@ func (s *Service) loadRaidCard(r *http.Request, inst database.LogInstancesGuild,
 	if recordsErr == nil {
 		card.Top = raidTopDPS(records, raidCardTopN)
 	}
-	// Avg parse only reads alongside ranked bosses; dungeons and custom raids
-	// show bosses, duration and wipes instead.
-	if avgErr == nil && len(card.Top) > 0 {
-		card.AvgParse = avg
-	}
 	return card
+}
+
+// loadRaidKillTimeParses returns server-wide boss kill-time parses in encounter
+// order, plus their precise-score average. Missing, disabled, incomplete, and
+// sample-too-small scores are omitted so the raid card can fall back cleanly.
+func (s *Service) loadRaidKillTimeParses(r *http.Request, inst database.LogInstancesGuild, encounters []database.LogInstanceEncounter) ([]int, *int) {
+	ctx, cancel := context.WithTimeout(r.Context(), raidCardTimeout)
+	defer cancel()
+
+	tenantID := servicetenant.TenantIDFromContext(ctx)
+	if tenantID != uuid.Nil {
+		tenant, err := s.store.GetTenantByID(ctx, tenantID)
+		if err == nil && servicerankings.IsParseDisabled(tenant.ParseConfig) {
+			return nil, nil
+		}
+	}
+	score, err := s.store.GetTimeParseScoreForContract(ctx, database.GetTimeParseScoreForContractParams{
+		TenantID:      tenantID,
+		InstanceID:    inst.ID,
+		LookbackDays:  servicerankings.TimeParseScoreLookbackDays,
+		PolicyVersion: int16(timeparsepolicy.PolicyVersion),
+		QueryVersion:  timeparsepolicy.QueryVersion,
+	})
+	if err != nil {
+		return nil, nil
+	}
+	rows, err := s.store.ListTimeParseBossScoresForScore(ctx, score.ID)
+	if err != nil {
+		return nil, nil
+	}
+
+	return raidKillTimeParseSummary(rows, encounters)
+}
+
+func raidKillTimeParseSummary(rows []database.TimeParseBossScore, encounters []database.LogInstanceEncounter) ([]int, *int) {
+	byEncounter := make(map[uuid.UUID]database.TimeParseBossScore, len(rows))
+	for _, row := range rows {
+		if row.ServerStatus == string(timeparsepolicy.StatusSampleTooSmall) {
+			continue
+		}
+		if row.ServerStatus != string(timeparsepolicy.StatusOK) && row.ServerStatus != string(timeparsepolicy.StatusLowConfidence) {
+			continue
+		}
+		byEncounter[row.EncounterID] = row
+	}
+	ordered := append([]database.LogInstanceEncounter(nil), encounters...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		if !ordered[i].StartTime.Valid {
+			return false
+		}
+		if !ordered[j].StartTime.Valid {
+			return true
+		}
+		return ordered[i].StartTime.Time.Before(ordered[j].StartTime.Time)
+	})
+
+	scores := make([]int, 0, len(byEncounter))
+	precise := make([]float64, 0, len(byEncounter))
+	for _, encounter := range ordered {
+		row, ok := byEncounter[encounter.ID]
+		if !ok {
+			continue
+		}
+		scores = append(scores, int(row.ServerDisplayScore))
+		precise = append(precise, row.ServerPreciseScore)
+		delete(byEncounter, encounter.ID)
+	}
+	// Persisted rows should match the instance encounters. Keep any unmatched
+	// rows rather than dropping valid scores if historical encounter data moved.
+	for _, row := range rows {
+		if _, ok := byEncounter[row.EncounterID]; !ok {
+			continue
+		}
+		scores = append(scores, int(row.ServerDisplayScore))
+		precise = append(precise, row.ServerPreciseScore)
+		delete(byEncounter, row.EncounterID)
+	}
+	average, ok := timeparsepolicy.AverageParse(precise, len(rows))
+	if !ok {
+		return nil, nil
+	}
+	avg := average.DisplayScore
+	return scores, &avg
 }
 
 // raidBossProgress returns the card's kills and boss total. With a registry

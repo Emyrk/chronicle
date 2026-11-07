@@ -61,6 +61,43 @@ export function compEntries(context: ThemeContext): Array<{ className: string; c
   });
 }
 
+export function killTimeParseScores(context: ThemeContext): number[] {
+  return listParam(context, 'killparses', { maxItems: 20, maxLength: 3 }).flatMap(item => {
+    const value = Number(item);
+    return Number.isInteger(value) && value >= 0 && value <= 100 ? [value] : [];
+  });
+}
+
+function KillTimeParseStat({ scores, average }: { scores: number[]; average: number }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, height: 58 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: 56 }}>
+          {scores.map((score, index) => (
+            <div
+              key={index}
+              style={{
+                display: 'flex',
+                width: 10,
+                height: Math.max(8, Math.round(score * 0.52)),
+                borderRadius: 2,
+                background: parseColor(score),
+              }}
+            />
+          ))}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <span style={{ fontSize: 48, fontWeight: 700, lineHeight: 1, color: parseColor(average) }}>{average}</span>
+          <span style={{ fontSize: 18, color: COLORS.muted }}>avg</span>
+        </div>
+      </div>
+      <span style={{ fontSize: 21, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: COLORS.muted }}>
+        Kill time parse
+      </span>
+    </div>
+  );
+}
+
 function Stat({ value, label, color }: { value: string; label: string; color?: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -74,13 +111,19 @@ function Stat({ value, label, color }: { value: string; label: string; color?: s
   );
 }
 
-function StatRow({ stats }: { stats: Array<{ value: string; label: string; color?: string }> }) {
+function StatRow({ stats, killParses, killAverage }: { stats: Array<{ value: string; label: string; color?: string }>; killParses: number[]; killAverage: number | null }) {
   return (
     <div style={{ display: 'flex', gap: 32, alignItems: 'stretch' }}>
       {stats.flatMap((stat, index) => [
         index > 0 ? <div key={`rule-${stat.label}`} style={{ width: 2, background: 'rgba(255, 255, 255, 0.09)' }} /> : null,
         <Stat key={stat.label} {...stat} />,
       ])}
+      {killParses.length > 0 && killAverage !== null ? (
+        <div style={{ display: 'flex', gap: 32, alignItems: 'stretch' }}>
+          {stats.length > 0 ? <div style={{ width: 2, background: 'rgba(255, 255, 255, 0.09)' }} /> : null}
+          <KillTimeParseStat scores={killParses} average={killAverage} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -166,12 +209,13 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   const bosses = intParam(context, 'bosses', { min: 0, max: 99 });
   const duration = intParam(context, 'dur', { min: 0, max: 7 * 86400 });
   const wipes = intParam(context, 'wipes', { min: 0, max: 999 });
-  const avg = intParam(context, 'avg', { min: 0, max: 100 });
+  const killParses = killTimeParseScores(context);
+  const killAverage = intParam(context, 'killavg', { min: 0, max: 100 });
   const top = topEntries(context);
   const comp = compEntries(context);
   const [logoSrc, artSrc] = await Promise.all([headerLogoImage(), artImage(context)]);
 
-  // No ranked bosses (dungeon, custom raid) → no TOP DAMAGE panel, no avg parse.
+  // No ranked bosses (dungeon, custom raid) → no TOP DAMAGE panel.
   const ranked = top.length > 0;
   const headline = guild || raid;
   const chip = [guild ? 'Raid report' : 'PUG', date].filter(Boolean).join(' · ');
@@ -183,9 +227,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   if (duration) {
     stats.push({ value: formatDuration(duration), label: bosses && kills >= bosses ? 'Clear' : 'Duration' });
   }
-  if (ranked && avg !== null) {
-    stats.push({ value: String(avg), label: 'Avg parse', color: parseColor(avg) });
-  } else if (wipes !== null) {
+  if (killParses.length === 0 && wipes !== null) {
     stats.push({ value: String(wipes), label: wipes === 1 ? 'Wipe' : 'Wipes' });
   }
 
@@ -230,14 +272,14 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 30 }}>
               {title}
-              <StatRow stats={stats} />
+              <StatRow stats={stats} killParses={killParses} killAverage={killAverage} />
             </div>
             <TopDamage entries={top} />
           </div>
         ) : (
           title
         )}
-        {ranked ? null : <StatRow stats={stats} />}
+        {ranked ? null : <StatRow stats={stats} killParses={killParses} killAverage={killAverage} />}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {total > 0 ? (

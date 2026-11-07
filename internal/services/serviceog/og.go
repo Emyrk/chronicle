@@ -473,14 +473,19 @@ func (s *Service) instanceCardURL(r *http.Request, inst database.LogInstancesGui
 	// a parse card fallback both stay inside the same deadline. The clear
 	// card wins when the run is a qualified speedrun with a 90+ time-parse.
 	var (
-		wg       sync.WaitGroup
-		card     raidCard
-		speedrun clearCard
-		isClear  bool
+		wg             sync.WaitGroup
+		card           raidCard
+		speedrun       clearCard
+		killTimeParses []int
+		killTimeAvg    *int
+		isClear        bool
 	)
 	wg.Go(func() { card = s.loadRaidCard(loadReq, inst, encounters, base) })
 	wg.Go(func() { speedrun, isClear = s.loadClearCard(loadReq, inst, encounters) })
+	wg.Go(func() { killTimeParses, killTimeAvg = s.loadRaidKillTimeParses(loadReq, inst, encounters) })
 	wg.Wait()
+	card.KillTimeParses = killTimeParses
+	card.KillTimeAvg = killTimeAvg
 	if isClear {
 		return s.ogImageURL(r, "clear", clearCardParams(card, speedrun))
 	}

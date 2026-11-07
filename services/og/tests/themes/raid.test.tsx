@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ImageResponse } from 'next/og';
 import { themes } from '../../app/api/og/themes';
 import { artImage } from '../../app/api/og/themes/kit';
-import { compEntries, shortDate, topEntries } from '../../app/api/og/themes/raid';
+import { compEntries, killTimeParseScores, shortDate, topEntries } from '../../app/api/og/themes/raid';
 import type { ThemeContext, ThemeProps } from '../../app/api/og/themes/types';
 
 const context = (query: string): ThemeContext => ({ searchParams: new URLSearchParams(query) });
@@ -21,7 +21,8 @@ const FULL = new URLSearchParams({
   bosses: '10',
   dur: '6727',
   wipes: '0',
-  avg: '81',
+  killparses: '72,81,95,76,88,64,91,83,99,77',
+  killavg: '83',
   top: 'Thalendris:mage:1284,Grimtusk:warrior:1201,Vexxa:warlock:1166,Shadowstep:rogue:1122,Kaelyn:hunter:1043',
   comp: 'warrior:5,rogue:6,mage:6,warlock:5,hunter:4,priest:8,druid:3,paladin:3',
   art: 'molten-core',
@@ -85,7 +86,7 @@ describe('raid card', () => {
 
     const json = await tree(FULL.toString());
     const shown = texts(json);
-    for (const text of ['Nightfall', 'Molten Core', 'Raid report · Nov 6', '10/10', '1:52:07', 'Clear', '81', 'Avg parse', 'TOP DAMAGE', 'Thalendris', '1,284', 'forever.chronicleclassic.com']) {
+    for (const text of ['Nightfall', 'Molten Core', 'Raid report · Nov 6', '10/10', '1:52:07', 'Clear', '83', 'avg', 'Kill time parse', 'TOP DAMAGE', 'Thalendris', '1,284', 'forever.chronicleclassic.com']) {
       expect(shown).toContain(text);
     }
     expect(json).toContain((await artImage(context(FULL.toString())))!);
@@ -116,11 +117,11 @@ describe('raid card', () => {
     expect(network()).toEqual([]);
   });
 
-  test('fallback: no ranked bosses drops TOP DAMAGE and avg parse, shows wipes', async () => {
-    const q = query({ top: null, raid: 'Karazhan Crypts', art: null, kills: '4', bosses: '6', dur: '9660', wipes: '3', players: '10' });
+  test('fallback: no ranked bosses or kill parses drops those panels and shows wipes', async () => {
+    const q = query({ top: null, killparses: null, killavg: null, raid: 'Karazhan Crypts', art: null, kills: '4', bosses: '6', dur: '9660', wipes: '3', players: '10' });
     const shown = texts(await tree(q));
     expect(shown).not.toContain('TOP DAMAGE');
-    expect(shown).not.toContain('Avg parse');
+    expect(shown).not.toContain('Kill time parse');
     for (const text of ['4/6', 'Bosses', '2:41:00', 'Duration', '3', 'Wipes']) expect(shown).toContain(text);
     expect(Array.from((await renderPng(q)).subarray(0, 4))).toEqual(PNG_SIGNATURE);
   });
@@ -153,6 +154,12 @@ describe('raid params', () => {
       { className: 'warrior', count: 5 },
       { className: 'druid', count: 3 },
     ]);
+  });
+
+  test('kill-time parse scores are bounded and malformed entries are dropped', () => {
+    const scores = Array.from({ length: 22 }, (_, index) => String(index)).join(',');
+    expect(killTimeParseScores(context(`killparses=${scores}`))).toHaveLength(20);
+    expect(killTimeParseScores(context('killparses=64,-1,101,nope,95'))).toEqual([64, 95]);
   });
 
   test('shortDate', () => {
