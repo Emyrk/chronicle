@@ -51,6 +51,7 @@ func (d *OperationDispatcher) Work(ctx context.Context, j *river.Job[ArgsOperati
 }
 
 type OperationWorker struct {
+	Metrics *Metrics
 	river.WorkerDefaults[ArgsOperationPage]
 	Store database.Store
 }
@@ -71,7 +72,9 @@ func (w *OperationWorker) Step(ctx context.Context, tenant, id uuid.UUID) error 
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	return w.Store.InTx(ctx, func(tx database.Store) error {
+	start := time.Now()
+	phase := ""
+	err := w.Store.InTx(ctx, func(tx database.Store) error {
 		op, err := tx.LockLeaderboardOperation(ctx, database.LockLeaderboardOperationParams{ID: id, TenantID: tenant})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
@@ -81,6 +84,10 @@ func (w *OperationWorker) Step(ctx context.Context, tenant, id uuid.UUID) error 
 		}
 		if op.State == "paused" || op.State == "completed" {
 			return nil
+		}
+		phase = op.Phase
+		if op.State == "draining" {
+			phase = "drain"
 		}
 		if op.State == "draining" {
 			return tx.CompleteLeaderboardOperation(ctx, database.CompleteLeaderboardOperationParams{ID: id, TenantID: tenant})
@@ -141,6 +148,14 @@ func (w *OperationWorker) Step(ctx context.Context, tenant, id uuid.UUID) error 
 		}
 		return tx.AdvanceLeaderboardOperation(ctx, database.AdvanceLeaderboardOperationParams{ID: id, TenantID: tenant, CursorRealm: op.CursorRealm, CursorDate: op.CursorDate, CursorID: op.CursorID, Phase: "runs", PageCount: int64(len(rows))})
 	}, nil)
+	if phase != "" {
+		phase = metricOperationPhase(phase)
+		w.Metrics.elapsed(tenant, "operation", phase, start, err)
+		if err == nil {
+			w.Metrics.event(tenant, "operation", phase, "committed_page", 1)
+		}
+	}
+	return err
 }
 
 var operationResultPhases = []string{"player_boss_benchmarks", "player_boss_subjects", "guild_boss_benchmarks", "guild_boss_subjects", "guild_clear_benchmarks", "guild_clear_subjects", "player_renown_counts", "guild_renown_counts"}
@@ -209,4 +224,16 @@ func operationRepairPhase(ctx context.Context, tx database.Store, op database.Le
 		}
 	}
 	return nil
+}
+
+func metricOperationPhase(phase string) string {
+	if phase == "runs" || phase == "evidence" || phase == "drain" {
+		return phase
+	}
+	for _, known := range operationResultPhases {
+		if known == phase {
+			return phase
+		}
+	}
+	return "unknown"
 }

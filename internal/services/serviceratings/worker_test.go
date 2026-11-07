@@ -155,7 +155,7 @@ func playerPublish(c database.LeaderboardDirtyPlayerBossSubject, value float64, 
 }
 func (f *fixture) publish(p database.PublishLeaderboardPlayerBossSubjectParams) error {
 	return f.db.InTx(f.tenantctx(), func(tx database.Store) error {
-		return consume(tx.PublishLeaderboardPlayerBossSubject(f.tenantctx(), []database.PublishLeaderboardPlayerBossSubjectParams{p}))
+		return consumePublished(context.Background(), tx.PublishLeaderboardPlayerBossSubject(f.tenantctx(), []database.PublishLeaderboardPlayerBossSubjectParams{p}))
 	}, nil)
 }
 
@@ -233,7 +233,7 @@ func TestPublicationBatchRollbackAndRetry(t *testing.T) {
 	p1, p2 := playerPublish(rows[0], 100, true), playerPublish(rows[1], 100, true)
 	p2.AlgorithmVersion = 0
 	err = f.db.InTx(f.tenantctx(), func(tx database.Store) error {
-		return consume(tx.PublishLeaderboardPlayerBossSubject(f.tenantctx(), []database.PublishLeaderboardPlayerBossSubjectParams{p1, p2}))
+		return consumePublished(context.Background(), tx.PublishLeaderboardPlayerBossSubject(f.tenantctx(), []database.PublishLeaderboardPlayerBossSubjectParams{p1, p2}))
 	}, nil)
 	require.Error(t, err)
 	var count int
@@ -320,7 +320,7 @@ func TestProducerProgressDuringFullPageCompute(t *testing.T) {
 						ProjectionVersion: 1, AlgorithmVersion: 1, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64,
 					}
 				}
-				return consume(tx.PublishLeaderboardPlayerBossSubject(ctx, params))
+				return consumePublished(context.Background(), tx.PublishLeaderboardPlayerBossSubject(ctx, params))
 			},
 			func(ctx context.Context, tx database.Store, claims []database.LeaderboardDirtyPlayerBossSubject) error {
 				params := make([]database.RetryLeaderboardPlayerBossSubjectParams, len(claims))
@@ -479,7 +479,7 @@ func TestPublicationRechecksTokenAfterLockWait(t *testing.T) {
 	pid := publisher.Conn().PgConn().PID()
 	done := make(chan error, 1)
 	go func() {
-		done <- consume(database.NewQueries(publisher).PublishLeaderboardPlayerBossSubject(f.tenantctx(), []database.PublishLeaderboardPlayerBossSubjectParams{playerPublish(old, 999, true)}))
+		done <- consumePublished(context.Background(), database.NewQueries(publisher).PublishLeaderboardPlayerBossSubject(f.tenantctx(), []database.PublishLeaderboardPlayerBossSubjectParams{playerPublish(old, 999, true)}))
 	}()
 	// Ensure join/unblock even if the lock-wait assertion fails.
 	joined := false

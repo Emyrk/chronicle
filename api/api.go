@@ -497,6 +497,7 @@ func (api *API) Routes() chi.Router {
 			// Admin routes - require admin or technical_admin role
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(api.Auth.Authenticated(false))
+				r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User)).Get("/leaderboard-queues", api.AdminLeaderboardQueues)
 				r.Route("/leaderboard-operations", func(r chi.Router) {
 					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
 					r.Get("/", api.AdminListLeaderboardOperations)

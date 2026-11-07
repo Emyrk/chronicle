@@ -7409,3 +7409,22 @@ export interface LeaderboardOperationList {
     readonly operations: readonly LeaderboardOperation[];
 }
 
+
+// From chroniclesdk/leaderboard_queues.go
+export interface LeaderboardQueueDiagnostics {
+    readonly tenant_id: string;
+    readonly collected_at: string;
+    readonly queues: readonly LeaderboardQueueStatus[];
+}
+
+// From chroniclesdk/leaderboard_queues.go
+export interface LeaderboardQueueStatus {
+    readonly family: string;
+    readonly pending: number;
+    readonly due: number;
+    readonly claimed: number;
+    readonly retrying: number;
+    readonly oldest_pending_at?: string;
+    readonly oldest_due_at?: string;
+}
+

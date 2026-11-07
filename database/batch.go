@@ -1447,7 +1447,7 @@ func (b *InsertLogInstanceEventsBatchResults) Close() error {
 	return b.br.Close()
 }
 
-const publishLeaderboardGuildBossBenchmark = `-- name: PublishLeaderboardGuildBossBenchmark :batchexec
+const publishLeaderboardGuildBossBenchmark = `-- name: PublishLeaderboardGuildBossBenchmark :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_guild_boss_benchmarks d
  WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text
@@ -1476,13 +1476,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_guild_boss_benchmarks d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed)
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
 `
 
 type PublishLeaderboardGuildBossBenchmarkBatchResults struct {
@@ -1529,18 +1531,20 @@ func (q *sqlQuerier) PublishLeaderboardGuildBossBenchmark(ctx context.Context, a
 	return &PublishLeaderboardGuildBossBenchmarkBatchResults{br, len(arg), false}
 }
 
-func (b *PublishLeaderboardGuildBossBenchmarkBatchResults) Exec(f func(int, error)) {
+func (b *PublishLeaderboardGuildBossBenchmarkBatchResults) QueryRow(f func(int, bool, error)) {
 	defer b.br.Close()
 	for t := 0; t < b.tot; t++ {
+		var published bool
 		if b.closed {
 			if f != nil {
-				f(t, ErrBatchAlreadyClosed)
+				f(t, published, ErrBatchAlreadyClosed)
 			}
 			continue
 		}
-		_, err := b.br.Exec()
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
 		if f != nil {
-			f(t, err)
+			f(t, published, err)
 		}
 	}
 }
@@ -1550,7 +1554,7 @@ func (b *PublishLeaderboardGuildBossBenchmarkBatchResults) Close() error {
 	return b.br.Close()
 }
 
-const publishLeaderboardGuildBossSubject = `-- name: PublishLeaderboardGuildBossSubject :batchexec
+const publishLeaderboardGuildBossSubject = `-- name: PublishLeaderboardGuildBossSubject :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.realm_id, d.guild_id, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_guild_boss_subjects d
  WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text AND d.realm_id = $6::uuid AND d.guild_id = $7::uuid
@@ -1582,13 +1586,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_guild_boss_subjects d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed)
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
 `
 
 type PublishLeaderboardGuildBossSubjectBatchResults struct {
@@ -1645,18 +1651,20 @@ func (q *sqlQuerier) PublishLeaderboardGuildBossSubject(ctx context.Context, arg
 	return &PublishLeaderboardGuildBossSubjectBatchResults{br, len(arg), false}
 }
 
-func (b *PublishLeaderboardGuildBossSubjectBatchResults) Exec(f func(int, error)) {
+func (b *PublishLeaderboardGuildBossSubjectBatchResults) QueryRow(f func(int, bool, error)) {
 	defer b.br.Close()
 	for t := 0; t < b.tot; t++ {
+		var published bool
 		if b.closed {
 			if f != nil {
-				f(t, ErrBatchAlreadyClosed)
+				f(t, published, ErrBatchAlreadyClosed)
 			}
 			continue
 		}
-		_, err := b.br.Exec()
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
 		if f != nil {
-			f(t, err)
+			f(t, published, err)
 		}
 	}
 }
@@ -1666,7 +1674,7 @@ func (b *PublishLeaderboardGuildBossSubjectBatchResults) Close() error {
 	return b.br.Close()
 }
 
-const publishLeaderboardGuildClearBenchmark = `-- name: PublishLeaderboardGuildClearBenchmark :batchexec
+const publishLeaderboardGuildClearBenchmark = `-- name: PublishLeaderboardGuildClearBenchmark :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_guild_clear_benchmarks d
  WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint
@@ -1695,13 +1703,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_guild_clear_benchmarks d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed)
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
 `
 
 type PublishLeaderboardGuildClearBenchmarkBatchResults struct {
@@ -1746,18 +1756,20 @@ func (q *sqlQuerier) PublishLeaderboardGuildClearBenchmark(ctx context.Context, 
 	return &PublishLeaderboardGuildClearBenchmarkBatchResults{br, len(arg), false}
 }
 
-func (b *PublishLeaderboardGuildClearBenchmarkBatchResults) Exec(f func(int, error)) {
+func (b *PublishLeaderboardGuildClearBenchmarkBatchResults) QueryRow(f func(int, bool, error)) {
 	defer b.br.Close()
 	for t := 0; t < b.tot; t++ {
+		var published bool
 		if b.closed {
 			if f != nil {
-				f(t, ErrBatchAlreadyClosed)
+				f(t, published, ErrBatchAlreadyClosed)
 			}
 			continue
 		}
-		_, err := b.br.Exec()
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
 		if f != nil {
-			f(t, err)
+			f(t, published, err)
 		}
 	}
 }
@@ -1767,7 +1779,7 @@ func (b *PublishLeaderboardGuildClearBenchmarkBatchResults) Close() error {
 	return b.br.Close()
 }
 
-const publishLeaderboardGuildClearSubject = `-- name: PublishLeaderboardGuildClearSubject :batchexec
+const publishLeaderboardGuildClearSubject = `-- name: PublishLeaderboardGuildClearSubject :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.realm_id, d.guild_id, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_guild_clear_subjects d
  WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.realm_id = $5::uuid AND d.guild_id = $6::uuid
@@ -1799,13 +1811,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_guild_clear_subjects d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed)
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
 `
 
 type PublishLeaderboardGuildClearSubjectBatchResults struct {
@@ -1860,18 +1874,20 @@ func (q *sqlQuerier) PublishLeaderboardGuildClearSubject(ctx context.Context, ar
 	return &PublishLeaderboardGuildClearSubjectBatchResults{br, len(arg), false}
 }
 
-func (b *PublishLeaderboardGuildClearSubjectBatchResults) Exec(f func(int, error)) {
+func (b *PublishLeaderboardGuildClearSubjectBatchResults) QueryRow(f func(int, bool, error)) {
 	defer b.br.Close()
 	for t := 0; t < b.tot; t++ {
+		var published bool
 		if b.closed {
 			if f != nil {
-				f(t, ErrBatchAlreadyClosed)
+				f(t, published, ErrBatchAlreadyClosed)
 			}
 			continue
 		}
-		_, err := b.br.Exec()
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
 		if f != nil {
-			f(t, err)
+			f(t, published, err)
 		}
 	}
 }
@@ -1881,7 +1897,7 @@ func (b *PublishLeaderboardGuildClearSubjectBatchResults) Close() error {
 	return b.br.Close()
 }
 
-const publishLeaderboardGuildRenownCount = `-- name: PublishLeaderboardGuildRenownCount :batchexec
+const publishLeaderboardGuildRenownCount = `-- name: PublishLeaderboardGuildRenownCount :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.realm_id, d.guild_id, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_guild_renown d
  WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text AND d.realm_id = $6::uuid AND d.guild_id = $7::uuid
@@ -1910,13 +1926,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_guild_renown d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed)
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
 `
 
 type PublishLeaderboardGuildRenownCountBatchResults struct {
@@ -1967,18 +1985,20 @@ func (q *sqlQuerier) PublishLeaderboardGuildRenownCount(ctx context.Context, arg
 	return &PublishLeaderboardGuildRenownCountBatchResults{br, len(arg), false}
 }
 
-func (b *PublishLeaderboardGuildRenownCountBatchResults) Exec(f func(int, error)) {
+func (b *PublishLeaderboardGuildRenownCountBatchResults) QueryRow(f func(int, bool, error)) {
 	defer b.br.Close()
 	for t := 0; t < b.tot; t++ {
+		var published bool
 		if b.closed {
 			if f != nil {
-				f(t, ErrBatchAlreadyClosed)
+				f(t, published, ErrBatchAlreadyClosed)
 			}
 			continue
 		}
-		_, err := b.br.Exec()
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
 		if f != nil {
-			f(t, err)
+			f(t, published, err)
 		}
 	}
 }
@@ -1988,7 +2008,7 @@ func (b *PublishLeaderboardGuildRenownCountBatchResults) Close() error {
 	return b.br.Close()
 }
 
-const publishLeaderboardPlayerBossBenchmark = `-- name: PublishLeaderboardPlayerBossBenchmark :batchexec
+const publishLeaderboardPlayerBossBenchmark = `-- name: PublishLeaderboardPlayerBossBenchmark :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.player_class, d.player_spec, d.player_sub_spec, d.metric, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_player_boss_benchmarks d
  WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text AND d.player_class = $6::text AND d.player_spec = $7::text AND d.player_sub_spec = $8::text AND d.metric = $9::text
@@ -2017,13 +2037,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_player_boss_benchmarks d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed)
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
 `
 
 type PublishLeaderboardPlayerBossBenchmarkBatchResults struct {
@@ -2078,18 +2100,20 @@ func (q *sqlQuerier) PublishLeaderboardPlayerBossBenchmark(ctx context.Context, 
 	return &PublishLeaderboardPlayerBossBenchmarkBatchResults{br, len(arg), false}
 }
 
-func (b *PublishLeaderboardPlayerBossBenchmarkBatchResults) Exec(f func(int, error)) {
+func (b *PublishLeaderboardPlayerBossBenchmarkBatchResults) QueryRow(f func(int, bool, error)) {
 	defer b.br.Close()
 	for t := 0; t < b.tot; t++ {
+		var published bool
 		if b.closed {
 			if f != nil {
-				f(t, ErrBatchAlreadyClosed)
+				f(t, published, ErrBatchAlreadyClosed)
 			}
 			continue
 		}
-		_, err := b.br.Exec()
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
 		if f != nil {
-			f(t, err)
+			f(t, published, err)
 		}
 	}
 }
@@ -2099,7 +2123,7 @@ func (b *PublishLeaderboardPlayerBossBenchmarkBatchResults) Close() error {
 	return b.br.Close()
 }
 
-const publishLeaderboardPlayerBossSubject = `-- name: PublishLeaderboardPlayerBossSubject :batchexec
+const publishLeaderboardPlayerBossSubject = `-- name: PublishLeaderboardPlayerBossSubject :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.player_class, d.player_spec, d.player_sub_spec, d.metric, d.realm_id, d.player_guid, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_player_boss_subjects d
  WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text AND d.player_class = $6::text AND d.player_spec = $7::text AND d.player_sub_spec = $8::text AND d.metric = $9::text AND d.realm_id = $10::uuid AND d.player_guid = $11::text
@@ -2133,13 +2157,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_player_boss_subjects d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed)
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
 `
 
 type PublishLeaderboardPlayerBossSubjectBatchResults struct {
@@ -2208,18 +2234,20 @@ func (q *sqlQuerier) PublishLeaderboardPlayerBossSubject(ctx context.Context, ar
 	return &PublishLeaderboardPlayerBossSubjectBatchResults{br, len(arg), false}
 }
 
-func (b *PublishLeaderboardPlayerBossSubjectBatchResults) Exec(f func(int, error)) {
+func (b *PublishLeaderboardPlayerBossSubjectBatchResults) QueryRow(f func(int, bool, error)) {
 	defer b.br.Close()
 	for t := 0; t < b.tot; t++ {
+		var published bool
 		if b.closed {
 			if f != nil {
-				f(t, ErrBatchAlreadyClosed)
+				f(t, published, ErrBatchAlreadyClosed)
 			}
 			continue
 		}
-		_, err := b.br.Exec()
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
 		if f != nil {
-			f(t, err)
+			f(t, published, err)
 		}
 	}
 }
@@ -2229,7 +2257,7 @@ func (b *PublishLeaderboardPlayerBossSubjectBatchResults) Close() error {
 	return b.br.Close()
 }
 
-const publishLeaderboardPlayerRenownCount = `-- name: PublishLeaderboardPlayerRenownCount :batchexec
+const publishLeaderboardPlayerRenownCount = `-- name: PublishLeaderboardPlayerRenownCount :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.realm_id, d.player_guid, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_player_renown d
  WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text AND d.realm_id = $6::uuid AND d.player_guid = $7::text
@@ -2258,13 +2286,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_player_renown d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed)
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
 `
 
 type PublishLeaderboardPlayerRenownCountBatchResults struct {
@@ -2315,18 +2345,20 @@ func (q *sqlQuerier) PublishLeaderboardPlayerRenownCount(ctx context.Context, ar
 	return &PublishLeaderboardPlayerRenownCountBatchResults{br, len(arg), false}
 }
 
-func (b *PublishLeaderboardPlayerRenownCountBatchResults) Exec(f func(int, error)) {
+func (b *PublishLeaderboardPlayerRenownCountBatchResults) QueryRow(f func(int, bool, error)) {
 	defer b.br.Close()
 	for t := 0; t < b.tot; t++ {
+		var published bool
 		if b.closed {
 			if f != nil {
-				f(t, ErrBatchAlreadyClosed)
+				f(t, published, ErrBatchAlreadyClosed)
 			}
 			continue
 		}
-		_, err := b.br.Exec()
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
 		if f != nil {
-			f(t, err)
+			f(t, published, err)
 		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
+	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/coder/serpent"
 	"github.com/google/uuid"
@@ -17,6 +18,9 @@ import (
 )
 
 type Service struct {
+	metrics             *Metrics
+	cancelMetrics       context.CancelFunc
+	metricsDone         chan struct{}
 	OperationDispatcher *OperationDispatcher
 	OperationWorker     *OperationWorker
 	broker              *services.Services
@@ -31,21 +35,54 @@ func Ratings(broker *services.Services) *Service { return services.MustGet[*Serv
 func OnRatings() string                          { return services.ServiceRatings }
 func (*Service) Name() string                    { return OnRatings() }
 func (*Service) DependsOn() []string {
-	return []string{servicedbstore.OnDatabaseStore(), servicetenant.OnTenant()}
+	return []string{servicedbstore.OnDatabaseStore(), servicetenant.OnTenant(), serviceprometheus.OnPrometheus()}
 }
 func (*Service) Configures() []string       { return nil }
 func (*Service) Options() serpent.OptionSet { return nil } // Deliberately no runtime batch setting.
-func (s *Service) Start(context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
+	var err error
+	s.metrics, err = NewMetrics(serviceprometheus.Registry(s.broker))
+	if err != nil {
+		return err
+	}
 	store := servicedbstore.DatabaseStore(s.broker)
 	s.Dispatcher = &Dispatcher{Store: store}
 	s.OperationDispatcher = &OperationDispatcher{Store: store}
 	s.OperationWorker = &OperationWorker{Store: store}
 	s.RepairWorker = &RepairWorker{Store: store}
 	s.RepairDispatcher = &RepairDispatcher{Store: store}
-	s.TenantWorker = &TenantWorker{Worker: &Worker{Store: store}}
+	s.TenantWorker = &TenantWorker{Worker: &Worker{Store: store, Metrics: s.metrics}}
+	s.RepairWorker.Metrics = s.metrics
+	s.OperationWorker.Metrics = s.metrics
+	metricsctx, cancel := context.WithCancel(ctx)
+	s.cancelMetrics = cancel
+	s.metricsDone = make(chan struct{})
+	go func() {
+		defer close(s.metricsDone)
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-metricsctx.Done():
+				return
+			case <-ticker.C:
+				_ = s.metrics.RefreshPage(metricsctx, store)
+			}
+		}
+	}()
 	return nil
 }
-func (*Service) Close(context.Context) error { return nil }
+func (s *Service) Close(ctx context.Context) error {
+	if s.cancelMetrics != nil {
+		s.cancelMetrics()
+		select {
+		case <-s.metricsDone:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
 
 func insertOptions() river.InsertOpts {
 	return river.InsertOpts{
