@@ -12,6 +12,7 @@ import (
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/frontend"
+	"github.com/Emyrk/chronicle/internal/services"
 )
 
 func TestSEOProductName(t *testing.T) {
@@ -200,8 +201,17 @@ func TestTalentRouteOGImage(t *testing.T) {
 			"host":     {"forever.chronicleclassic.com"},
 			"v":        {ogImageVersion},
 		}
-		if product := q.Get("product"); product != "" {
-			want.Set("product", product)
+		// The test API has no tenant, so the product comes from the build's
+		// server flavor: none for turtle (the default build).
+		switch services.ServerName {
+		case services.ServerIdentityKronos:
+			want.Set("product", "Kronos")
+		case services.ServerIdentityEpoch:
+			want.Set("product", "Epoch Reborn")
+		case services.ServerIdentityVanillaPlus:
+			want.Set("product", "VanillaPlus")
+		case services.ServerIdentityOctoWoW:
+			want.Set("product", "OctoWoW")
 		}
 		require.Equal(t, want, q)
 		require.Equal(t, ogSignature("test-og-signing-key", q), sig)

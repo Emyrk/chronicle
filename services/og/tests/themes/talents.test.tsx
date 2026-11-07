@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ImageResponse } from 'next/og';
+import { Children, isValidElement, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { talentCardModel, talentsTheme } from '../../app/api/og/themes/talents';
 import type { ThemeContext, ThemeProps } from '../../app/api/og/themes/types';
 
@@ -54,6 +55,10 @@ describe('talentCardModel', () => {
     expect(model.lead).toBe(-1);
   });
 
+  test('death knight bars fill against 71 points', () => {
+    expect(talentCardModel(context('class=deathknight&spec=Unholy&points=0-17-54')).max).toBe(71);
+  });
+
   test('no or unknown class: generic calculator, no trees', () => {
     for (const query of ['', 'class=gnomelord&points=5-0-5']) {
       const model = talentCardModel(context(query));
@@ -67,14 +72,28 @@ describe('talentCardModel', () => {
     expect(talentCardModel(context('class=mage&points=1-2-3-4')).split).toBe('');
   });
 
-  test('hero text stays at least 46px at 1200 wide', async () => {
-    for (const query of [FULL, 'class=hunter&spec=Beast+Mastery&points=31-20-0', 'class=deathknight']) {
-      const tree = JSON.stringify(await talentsTheme.render(props, context(query)));
-      const sizes = [...tree.matchAll(/"fontSize":(\d+)/g)].map(m => Number(m[1]));
-      expect(Math.max(...sizes)).toBeGreaterThanOrEqual(46);
+  test('title stays at least 46px at 1200 wide', async () => {
+    const queries = [FULL, 'class=hunter&spec=Beast+Mastery&points=31-20-0', 'class=deathknight', 'class=mage', 'class=warlock', ''];
+    for (const query of queries) {
+      const ctx = context(query);
+      const title = talentCardModel(ctx).title;
+      const el = findByText(await talentsTheme.render(props, ctx), title);
+      expect(el, `title element for "${query}"`).not.toBeNull();
+      expect(el?.props.style?.fontSize).toBeGreaterThanOrEqual(46);
     }
   });
 });
+
+// The rendered element whose only child is `text`, searched depth-first.
+function findByText(node: unknown, text: string): ReactElement<{ style?: CSSProperties }> | null {
+  if (!isValidElement<{ children?: unknown }>(node)) return null;
+  if (node.props.children === text) return node as ReactElement<{ style?: CSSProperties }>;
+  for (const child of Children.toArray(node.props.children as ReactNode)) {
+    const found = findByText(child, text);
+    if (found) return found;
+  }
+  return null;
+}
 
 describe('render', () => {
   test.each([

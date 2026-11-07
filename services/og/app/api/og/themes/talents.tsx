@@ -24,7 +24,7 @@ const CLASSES: Readonly<Record<string, TalentClass>> = {
   mage: { name: 'Mage', trees: ['Arcane', 'Fire', 'Frost'], max: 51, color: classColor('mage') },
   warlock: { name: 'Warlock', trees: ['Affliction', 'Demonology', 'Destruction'], max: 51, color: classColor('warlock') },
   druid: { name: 'Druid', trees: ['Balance', 'Feral', 'Restoration'], max: 51, color: classColor('druid') },
-  deathknight: { name: 'Death Knight', trees: ['Blood', 'Frost', 'Unholy'], max: 51, color: '#C41F3B' },
+  deathknight: { name: 'Death Knight', trees: ['Blood', 'Frost', 'Unholy'], max: 71, color: '#C41F3B' },
   pet: { name: 'Hunter Pet', trees: ['Pet'], max: 20, color: classColor('hunter') },
 };
 
