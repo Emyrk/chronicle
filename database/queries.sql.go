@@ -12235,7 +12235,8 @@ WHERE NOT $18::boolean OR score < $19::double precision
 ORDER BY score DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec
 LIMIT $25::integer
 )
-SELECT page.realm_id, page.subject_id, page.player_class, page.player_spec, page.player_sub_spec, page.peak, page.form, page.floor, page.mastery, page.renown, page.sample_count, page.computed_at, page.score, COALESCE(CASE WHEN $1::text = 'player' THEN
+SELECT page.realm_id, page.subject_id, page.player_class, page.player_spec, page.player_sub_spec, page.peak, page.form, page.floor, page.mastery, page.renown, page.sample_count, page.computed_at, page.score, COALESCE((SELECT NULLIF(r.name,'') FROM wow_server_realms r WHERE r.id=page.realm_id),'Unknown realm')::text AS realm_name,
+ COALESCE(CASE WHEN $1::text = 'player' THEN
  (SELECT p.name FROM game_players p WHERE p.realm_id = page.realm_id AND p.id = page.subject_id)
  ELSE (SELECT g.name FROM guilds g WHERE g.realm_id = page.realm_id AND g.id::text = page.subject_id)
  END, page.subject_id)::text AS subject_name
@@ -12284,6 +12285,7 @@ type ListLeaderboardV2Row struct {
 	SampleCount   int64              `db:"sample_count" json:"sample_count"`
 	ComputedAt    pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
 	Score         float64            `db:"score" json:"score"`
+	RealmName     string             `db:"realm_name" json:"realm_name"`
 	SubjectName   string             `db:"subject_name" json:"subject_name"`
 }
 
@@ -12341,6 +12343,7 @@ func (q *sqlQuerier) ListLeaderboardV2(ctx context.Context, arg ListLeaderboardV
 			&i.SampleCount,
 			&i.ComputedAt,
 			&i.Score,
+			&i.RealmName,
 			&i.SubjectName,
 		); err != nil {
 			return nil, err

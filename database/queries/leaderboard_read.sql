@@ -92,7 +92,8 @@ LIMIT @page_size::integer
 )
 -- Names are display metadata: retrieve them only after the authoritative score
 -- page. Name/search filtering above still occurs before aggregation.
-SELECT page.*, COALESCE(CASE WHEN @subject_kind::text = 'player' THEN
+SELECT page.*, COALESCE((SELECT NULLIF(r.name,'') FROM wow_server_realms r WHERE r.id=page.realm_id),'Unknown realm')::text AS realm_name,
+ COALESCE(CASE WHEN @subject_kind::text = 'player' THEN
  (SELECT p.name FROM game_players p WHERE p.realm_id = page.realm_id AND p.id = page.subject_id)
  ELSE (SELECT g.name FROM guilds g WHERE g.realm_id = page.realm_id AND g.id::text = page.subject_id)
  END, page.subject_id)::text AS subject_name

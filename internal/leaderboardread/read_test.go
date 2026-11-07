@@ -38,6 +38,7 @@ func TestSummaryReadsWithMixedVersionMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 3)
 	require.Equal(t, "Bob", rows[0].SubjectID)
+	require.Equal(t, "Unknown realm", rows[0].RealmName)
 	require.InDelta(t, 71, rows[0].Score, 1e-8)
 	require.InDelta(t, 90, rows[0].Peak, 1e-8)
 	require.InDelta(t, 40, rows[1].Score, 1e-8)

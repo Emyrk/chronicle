@@ -190,9 +190,9 @@ export function RatingFullList({
                       <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Date</th>
                     </>
                   )}
-                  <th className="hidden px-3 py-2.5 text-left font-medium lg:table-cell">Record</th>
                 </>
               )}
+              <th className="hidden px-3 py-2.5 text-left font-medium lg:table-cell">Realm</th>
               <th className="hidden px-2 py-2.5 text-left font-medium md:table-cell">Spec</th>
               <th className="hidden px-2 py-2.5 pr-4 text-left font-medium sm:pr-5 md:table-cell">Sub-spec</th>
             </tr>
@@ -265,9 +265,9 @@ export function RatingFullList({
                         <td className="hidden px-3 py-2 text-xs text-muted-foreground sm:table-cell">{run.date ?? "Unavailable"}</td>
                       </>
                     })()}
-                    <td className="hidden px-3 py-2 text-xs text-muted-foreground lg:table-cell">{entry.detail}</td>
                   </>
                 )}
+                <td className="hidden px-3 py-2 text-xs text-muted-foreground lg:table-cell">{entry.realmLabel || "Unknown realm"}</td>
                 <td className="hidden px-2 py-2 text-muted-foreground md:table-cell">{entry.spec}</td>
                 <td className="hidden px-2 py-2 pr-4 text-muted-foreground sm:pr-5 md:table-cell">{entry.subSpec}</td>
               </tr>

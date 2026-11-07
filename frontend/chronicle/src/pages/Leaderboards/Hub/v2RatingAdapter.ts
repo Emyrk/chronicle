@@ -85,6 +85,7 @@ export function v2PlayerEntry(
     ]),
     name: row.name,
     realm: row.realm_id,
+    realmLabel: row.realm_name?.trim() || "Unknown realm",
     guid: row.subject_id,
     cls: row.player_class,
     spec: row.player_spec,

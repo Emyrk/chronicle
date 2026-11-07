@@ -15,6 +15,7 @@ type LeaderboardV2Response struct {
 	IncludedBosses []string             `json:"included_bosses"`
 }
 type LeaderboardV2Entry struct {
+	RealmName        string                  `json:"realm_name"`
 	PeakCompanion    *LeaderboardV2Companion `json:"peak_companion"`
 	MasteryCompanion *LeaderboardV2Companion `json:"mastery_companion"`
 	PlayerClass      string                  `json:"player_class"`

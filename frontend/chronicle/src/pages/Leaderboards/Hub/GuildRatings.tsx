@@ -315,7 +315,7 @@ function GuildFullTable({
   const published = useQuery({queryKey:["hub-guild-v2-page",pageKey,page],queryFn:()=>live!.loadPage!({scope:oneBoss ? {boss:oneBoss} : {},metric,period:"all",query,page}),enabled:!!live?.loadPage,retry:false})
   const byGuild = (m: RatingMetric) => new Map(ratings[m].map((g) => [g.guild, g]))
   const scores = { peak: byGuild("peak"), mastery: byGuild("mastery"), renown: byGuild("renown") }
-  const ranked = live ? (published.data?.rows ?? []).map(row => ({rank:0,g:{guild:row.entry.name,guildId:row.entry.guid,score:row.entry.score,detail:row.entry.detail,ms:row.entry.durationMs} as GuildRating})) : ratings[metric].map((g, i) => ({ rank: i + 1, g }))
+  const ranked = live ? (published.data?.rows ?? []).map(row => ({rank:0,g:{guild:row.entry.name,guildId:row.entry.guid,score:row.entry.score,detail:row.entry.detail,realmLabel:row.entry.realmLabel,ms:row.entry.durationMs} as GuildRating})) : ratings[metric].map((g, i) => ({ rank: i + 1, g }))
   const needle = query.trim().toLowerCase()
   const rows = !live && needle ? ranked.filter((r) => r.g.guild.toLowerCase().includes(needle)) : ranked
   const top = ranked[0]?.g.score ?? 1
@@ -382,9 +382,9 @@ function GuildFullTable({
                       <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Date</th>
                     </>
                   )}
-                  <th className="hidden px-3 py-2.5 pr-4 text-left font-medium sm:pr-5 lg:table-cell">Record</th>
                 </>
               )}
+              <th className="hidden px-3 py-2.5 pr-4 text-left font-medium sm:pr-5 lg:table-cell">Realm</th>
             </tr>
           </thead>
           <tbody>
@@ -436,9 +436,9 @@ function GuildFullTable({
                         <td className="hidden px-3 py-2 text-xs text-muted-foreground sm:table-cell">{g.date}</td>
                       </>
                     )}
-                    <td className="hidden px-3 py-2 pr-4 text-xs text-muted-foreground sm:pr-5 lg:table-cell">{g.detail}</td>
                   </>
                 )}
+                <td className="hidden px-3 py-2 pr-4 text-xs text-muted-foreground sm:pr-5 lg:table-cell">{g.realmLabel || "Unknown realm"}</td>
               </tr>
             ))}
             {rows.length === 0 && (

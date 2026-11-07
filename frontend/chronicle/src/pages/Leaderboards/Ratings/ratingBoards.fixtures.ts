@@ -15,6 +15,8 @@ export interface RatingEntry {
   name: string
   /** Published character identity for the site-wide Alt+click entity menu. */
   realm?: string
+  /** Human-readable display only; never used as realm identity. */
+  realmLabel?: string
   guid?: string
   guild?: string
   cls: string

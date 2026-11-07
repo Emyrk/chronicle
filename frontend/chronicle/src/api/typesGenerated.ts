@@ -36,6 +36,7 @@ export interface LeaderboardV2Companion {
 
 // From chroniclesdk/leaderboard_v2.go
 export interface LeaderboardV2Entry {
+    readonly realm_name: string;
     readonly peak_companion: LeaderboardV2Companion | null;
     readonly mastery_companion: LeaderboardV2Companion | null;
     readonly player_class: string;

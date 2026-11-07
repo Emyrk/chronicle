@@ -198,6 +198,7 @@ describe("existing Hub adapter", () => {
 it("preserves returned cohort identity for two specs of the same player", () => {
   const common = {
     realm_id: "realm",
+    realm_name: "Readable realm",
     subject_id: "same",
     name: "Mage",
     score: 98,
@@ -221,6 +222,12 @@ it("preserves returned cohort identity for two specs of the same player", () => 
     new URLSearchParams(),
     "peak",
   );
+  expect(frost.realmLabel).toBe("Readable realm");
+  expect(frost.realm).toBe("realm");
+  expect(frost.detail).toBe("realm");
+  const otherRealm = v2PlayerEntry({...common,realm_id:"other",realm_name:"Readable realm"},new URLSearchParams(),"peak");
+  expect(otherRealm.id).not.toBe(frost.id);
+  expect(v2PlayerEntry({...common,realm_name:""},new URLSearchParams(),"peak").realmLabel).toBe("Unknown realm");
   expect(frost.raw).toBe(980);
   expect(frost.durationMs).toBeUndefined();
   expect(frost.publishedMastery).toEqual({ peak: 98, form: 97, floor: 96 });

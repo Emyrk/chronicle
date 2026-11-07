@@ -380,7 +380,7 @@ function CompactRow({ entry, theme, lead }: { entry: RatingEntry; theme: MetricT
   return (
     <li
       className="flex items-center gap-2 px-3 py-1.5"
-      title={`${entry.name}${entry.guild ? ` <${entry.guild}>` : ""} · ${entry.spec} · ${entry.detail}`}
+      title={`${entry.name}${entry.guild ? ` <${entry.guild}>` : ""} · ${entry.spec} · ${entry.realmLabel ?? entry.detail}`}
     >
       {lead}
       <SpecIcon cls={entry.cls} spec={entry.spec} className="size-4 shrink-0 rounded-sm" />
