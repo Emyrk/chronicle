@@ -9,7 +9,7 @@ Chronicle can use achievements as a guided tour of the product. The system shoul
 The proposed model uses:
 
 - WoW-style categories for navigation.
-- Ranked achievement series for increasing proficiency in one concept.
+- Tiered achievement series for increasing proficiency in one concept.
 - Category Proficiency achievements for completing the important series in a category.
 - Achievement points as a record of breadth, with cosmetics as the primary reward.
 - A visible global completion percentage for every achievement.
@@ -22,7 +22,7 @@ This document inventories the current product, proposes an initial achievement c
 1. Teach users that Chronicle's deeper analysis and customization features exist.
 2. Turn feature discovery into an optional progression system.
 3. Recognize meaningful use without encouraging spam, excessive uploads, or competitive manipulation.
-4. Support related achievements as ranked series and category-level Proficiency achievements.
+4. Support related achievements as tiered series and category-level Proficiency achievements.
 5. Reuse Chronicle's existing character cosmetics where possible.
 6. Keep achievement evaluation deterministic, idempotent, and auditable.
 7. Allow the catalog to grow without changing the meaning of achievements already earned.
@@ -43,7 +43,7 @@ This document inventories the current product, proposes an initial achievement c
 | --- | --- |
 | Achievement | A one-time award for satisfying a versioned criterion. |
 | Series | A group of achievements that represent increasing proficiency in one concept. |
-| Rank | A step within a series. Ranks do not need to be completed in order unless the criterion naturally requires it. |
+| Tier | An achievement's level within a series. Tiers do not need to be completed in order unless the criterion naturally requires it. |
 | Category | A WoW-style navigation group such as Layouts, Analysis, or Keybinds. |
 | Category Proficiency | A meta-achievement earned by completing the required achievements in a category. |
 | Achievement points | A non-spendable total representing completed achievements. |
@@ -96,13 +96,13 @@ Account log storage is also entitlement-backed. New accounts receive a base gran
 
 ### Reward learning, not opening menus
 
-An introductory achievement may fire when a user discovers a feature. Higher ranks should require a completed, meaningful action.
+An introductory achievement may fire when a user discovers a feature. Higher tiers should require a completed, meaningful action.
 
 Examples:
 
-- Opening layout editing can be Rank I.
-- Saving the edited layout is a higher rank.
-- Sharing a layout that another account tracks is an advanced rank.
+- Opening layout editing can be Tier I.
+- Saving the edited layout is a higher tier.
+- Sharing a layout that another account tracks is an advanced tier.
 
 ### Prefer breadth to repetition
 
@@ -137,7 +137,7 @@ id
 version
 category
 series
-rank
+tier
 name
 description
 criteria
@@ -244,7 +244,7 @@ Trendsetter needs server-observed attribution. Copying a share link alone is not
 
 ### Keybind Proficiency
 
-Keybind achievements should be their own category rather than higher ranks of unrelated feature series. They recognize a more efficient way to perform an already available action.
+Keybind achievements should be their own category rather than higher tiers of unrelated feature series. They recognize a more efficient way to perform an already available action.
 
 | Achievement | Points | Criterion | Phase |
 | --- | ---: | --- | --- |
@@ -640,7 +640,7 @@ The browser should provide:
 
 - Category navigation.
 - Earned points and total available core points.
-- Series and rank presentation.
+- Series and tier presentation.
 - Category Proficiency progress.
 - The percentage of users who have earned every listed achievement.
 - Search and filters for earned, in progress, hidden, and reward-bearing achievements.
@@ -664,7 +664,7 @@ A completion toast should show:
 
 - Achievement name and icon.
 - Points earned.
-- Series rank or Category Proficiency status.
+- Series tier or Category Proficiency status.
 - The percentage of users who have earned it.
 - Reward, if any.
 - A link to inspect the category.
