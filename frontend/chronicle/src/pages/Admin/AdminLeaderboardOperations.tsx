@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { AdminLeaderboardQueues } from "./AdminLeaderboardQueues";
 import { Loader2 } from "lucide-react";
 import { useAdminTenants } from "@/api/queries";
 import {
@@ -133,6 +134,7 @@ export function TenantLeaderboardOperations({
           />
         )}
       </div>
+      <AdminLeaderboardQueues tenantID={tenantID} tenantName={tenantName} />
       <div className="flex flex-wrap items-end gap-3">
         <label className="space-y-1 text-sm">
           <span className="block">Runs completed before</span>
