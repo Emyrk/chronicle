@@ -27,12 +27,13 @@ type contextualRefreshProvider struct {
 	httpClient *http.Client
 }
 
-func withContextualTokenRefresh(provider goth.Provider, clientID, clientSecret, tokenURL string, httpClient *http.Client) goth.Provider {
+func withContextualTokenRefresh(provider goth.Provider, clientID, clientSecret, redirectURL, tokenURL string, httpClient *http.Client) goth.Provider {
 	return &contextualRefreshProvider{
 		Provider: provider,
 		config: oauth2.Config{
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
+			RedirectURL:  redirectURL,
 			Endpoint: oauth2.Endpoint{
 				TokenURL: tokenURL,
 			},
