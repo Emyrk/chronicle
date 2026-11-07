@@ -184,8 +184,8 @@ func (s *Service) Start(ctx context.Context) error {
 		return cosmetics.EnqueueUserAudit(ctx, q, userID)
 	})
 
-	// D2 workers are registered but dispatch remains code-disabled until the
-	// separate source-writer integration. No startup/backfill work is scheduled.
+	// Source-integrated D1/D2 dispatch is enabled. Periodic scans only existing
+	// dirt; no startup discovery or historical backfill is scheduled.
 	ratings := serviceratings.Ratings(s.broker)
 	ratings.Dispatcher.Queue = q
 	ratings.RepairDispatcher.Queue = q

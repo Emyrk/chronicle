@@ -40,6 +40,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/guildrenames"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/ptr"
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
@@ -857,6 +858,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				Encounters:  sdkEncounters,
 			})
 
+			if publicLog {
+				return w.parent.EnqueueRankingRunRefreshTx(ctx, tx, dbinstance.ID)
+			}
 			return nil
 		}, &pgx.TxOptions{
 			DeferrableMode: pgx.Deferrable,
@@ -880,6 +884,11 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		// Duplicate detection is best-effort, but it must use its own transaction.
 		// A failed statement aborts a PostgreSQL transaction even when the Go error
 		// is logged, which would otherwise roll back the successfully parsed instance.
+		sourceCtx, resolveErr := serviceratings.SourceContext(ctx, db, []uuid.UUID{dbinstance.ID})
+		if resolveErr != nil {
+			return resolveErr
+		}
+		ctx = sourceCtx
 		var rankingRunAffectedIDs []uuid.UUID
 		if publicLog {
 			rankingRunAffectedIDs = []uuid.UUID{dbinstance.ID}
@@ -894,7 +903,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				if err != nil {
 					return err
 				}
-				return nil
+				return w.parent.EnqueueRankingRunRefreshTx(ctx, tx, rankingRunAffectedIDs...)
 			}, nil)
 			if errors.Is(dupErr, errStaleParseGeneration) {
 				w.parent.insertParsedInstanceMu.Unlock()
@@ -924,6 +933,10 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 					return err
 				}
+				runs, err := serviceratings.PrepareDirectRunsTx(ctx, tx, []uuid.UUID{dbinstance.ID})
+				if err != nil {
+					return err
+				}
 				if playerRankings {
 					if err := insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, resolved.DatasetID, flavor, talentTreeData); err != nil {
 						return err
@@ -932,7 +945,10 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				if err := tx.TouchLogInstanceRankingSource(ctx, dbinstance.ID); err != nil {
 					return err
 				}
-				return nil
+				if err := serviceratings.PublishDirectRunsTx(ctx, tx, runs); err != nil {
+					return err
+				}
+				return w.parent.EnqueueRankingRunRefreshTx(ctx, tx, dbinstance.ID)
 			}, nil)
 			if errors.Is(rankErr, errStaleParseGeneration) {
 				jobResult = "cancelled"
@@ -946,15 +962,11 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			}
 		}
 
-		var refreshIDs []uuid.UUID
+		// Every source transaction above already persists its canonical job.
+		// Keep replacement completion/failure tracking for jobs queued before
+		// this integration and for the final whole-log reconciliation snapshot.
 		if publicLog {
-			refreshIDs = rankingRunRefresh.AfterRankingCommit(rankingRunAffectedIDs...)
-		}
-		if len(refreshIDs) > 0 {
-			if err := w.parent.EnqueueRankingRunRefresh(ctx, refreshIDs...); err != nil {
-				w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run refresh",
-					slog.String("instance_id", dbinstance.ID.String()), slog.Any("error", err))
-			}
+			rankingRunRefresh.AfterRankingCommit(rankingRunAffectedIDs...)
 		}
 
 		metrics.encountersParsed.Add(float64(len(finalized.Encounters)))
@@ -1459,6 +1471,9 @@ func detectAndLinkDuplicate(
 	ids = append(ids, instanceID)
 	affectedIDs = append(affectedIDs, instanceID, groupID.UUID)
 
+	if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, affectedIDs); err != nil {
+		return nil, err
+	}
 	if err := tx.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
 		DuplicateGroupID: groupID,
 		Ids:              ids,

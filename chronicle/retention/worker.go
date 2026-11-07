@@ -6,8 +6,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
+
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
-	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/storage"
@@ -183,6 +184,11 @@ func (w *RealmWorker) Work(ctx context.Context, job *river.Job[ArgsRetentionReal
 	)
 
 	if !args.DryRun && len(toDelete) > 0 {
+		sourceCtx, resolveErr := serviceratings.SourceContext(ctx, w.Store, toDelete)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		ctx = sourceCtx
 		// Fence active parsers in short database transactions before touching
 		// external object storage.
 		fencedGroups := make(map[uuid.UUID]struct{}, len(toDeleteGroups))
@@ -219,23 +225,21 @@ func (w *RealmWorker) Work(ctx context.Context, job *river.Job[ArgsRetentionReal
 			if err != nil {
 				return err
 			}
+			if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, toDelete); err != nil {
+				return err
+			}
+			affectedIDs := append([]uuid.UUID(nil), toDelete...)
+			for _, identity := range identities {
+				affectedIDs = append(affectedIDs, identity.RunID)
+			}
+			if err := serviceratings.EnqueueCanonicalRefreshTx(ctx, tx, w.Queue, affectedIDs); err != nil {
+				return err
+			}
 			deleted, err = tx.DeleteLogInstancesByIDs(ctx, toDelete)
 			return err
 		}, nil); err != nil {
 			return fmt.Errorf("delete retained instances: %w", err)
 		}
-		affectedIDs := make([]uuid.UUID, 0, len(identities)*2)
-		for _, identity := range identities {
-			affectedIDs = append(affectedIDs, identity.InstanceID, identity.RunID)
-		}
-		const rankingRefreshBatchSize = 500
-		for start := 0; start < len(affectedIDs); start += rankingRefreshBatchSize {
-			end := min(start+rankingRefreshBatchSize, len(affectedIDs))
-			if _, err := w.Queue.Insert(ctx, rankingargs.NewRefreshRankingRuns(affectedIDs[start:end]...), nil); err != nil {
-				logger.ErrorContext(ctx, "failed to enqueue ranking run refresh after retention deletion", slog.Any("error", err))
-			}
-		}
-
 		_ = w.Store.UpdateRetentionPolicyStats(ctx, database.UpdateRetentionPolicyStatsParams{
 			ID:      policy.ID,
 			Deleted: deleted,

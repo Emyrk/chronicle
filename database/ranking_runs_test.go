@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -1034,4 +1037,107 @@ func TestRankingRunRepairSafetyBoundRollsBack(t *testing.T) {
 	require.ErrorContains(t, err, "reached safety bound of 10000 logical runs")
 	_, err = store.RankingRunByID(ctx, runID)
 	require.NoError(t, err, "safety-bound failure must roll back transaction mutations")
+}
+
+func TestCanonicalRefreshPublishesLeaderboardEvidenceAtomically(t *testing.T) {
+	t.Parallel()
+	pool, store, realm := setupParsesTest(t)
+	ctx := servicetenant.AdminBypass(testutil.Context(t, testutil.WaitLong))
+	store = canonicalTenantStore{store}
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
+	require.NoError(t, err)
+	read := database.NewQueries(conn)
+	tenant, instance := uuid.New(), uuid.New()
+	_, err = conn.Exec(ctx, `INSERT INTO tenants(id,name) VALUES($1,'Integration tenant')`, tenant)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, `UPDATE wow_servers SET tenant_id=$1 WHERE id=(SELECT server_id FROM wow_server_realms WHERE id=$2)`, tenant, realm)
+	require.NoError(t, err)
+	insertRankingRunSource(t, pool, store, realm, instance, time.Now().Add(-time.Hour), "Boss")
+	_, err = conn.Exec(ctx, `UPDATE encounter_dps_rankings SET player_spec='Frost' WHERE instance_id=$1`, instance)
+	require.NoError(t, err)
+	for range 2 {
+		_, err := servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{instance})
+		require.NoError(t, err)
+	}
+	rows, err := read.ListLeaderboardPlayerObservations(ctx, tenant)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	dirty, err := read.ListLeaderboardDirtyRuns(ctx, tenant)
+	require.NoError(t, err)
+	require.Empty(t, dirty)
+	// Failure after the actual canonical/evidence hook rolls back canonical row,
+	// evidence deletion and all dirty-scope revision increments together.
+	var revision int64
+	require.NoError(t, conn.QueryRow(ctx, `SELECT sum(revision) FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id=$1`, tenant).Scan(&revision))
+	rollback := errors.New("rollback canonical source action")
+	err = store.InTx(ctx, func(tx database.Store) error {
+		raw, ok := database.PGXTx(tx)
+		require.True(t, ok)
+		_, err := raw.Exec(ctx, `UPDATE log_instances SET invalidated_at=now() WHERE id=$1`, instance)
+		if err != nil {
+			return err
+		}
+		if _, err := servicerankings.RefreshRankingRuns(ctx, tx, []uuid.UUID{instance}); err != nil {
+			return err
+		}
+		return rollback
+	}, nil)
+	require.ErrorIs(t, err, rollback)
+	rows, err = read.ListLeaderboardPlayerObservations(ctx, tenant)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	var after int64
+	require.NoError(t, conn.QueryRow(ctx, `SELECT sum(revision) FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id=$1`, tenant).Scan(&after))
+	require.Equal(t, revision, after)
+}
+
+func TestMeasureCanonicalLeaderboardPublication(t *testing.T) {
+	if os.Getenv("CHRONICLE_MEASURE_CANONICAL") != "1" {
+		t.Skip("opt-in local canonical publication measurement")
+	}
+	t.Parallel()
+	pool, store, realm := setupParsesTest(t)
+	ctx := servicetenant.AdminBypass(testutil.Context(t, testutil.WaitSuperLong))
+	store = canonicalTenantStore{store}
+	tenant, instance := uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `INSERT INTO tenants(id,name) VALUES($1,'Measured canonical')`, tenant)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE wow_servers SET tenant_id=$1 WHERE id=(SELECT server_id FROM wow_server_realms WHERE id=$2)`, tenant, realm)
+	require.NoError(t, err)
+	bosses := make([]string, 12)
+	for i := range bosses {
+		bosses[i] = fmt.Sprintf("Boss%d", i)
+	}
+	insertRankingRunSource(t, pool, store, realm, instance, time.Now().Add(-time.Hour), bosses...)
+	_, err = pool.Exec(ctx, `UPDATE encounter_dps_rankings SET player_spec='Frost' WHERE instance_id=$1`, instance)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO encounter_dps_rankings SELECT(jsonb_populate_record(NULL::encounter_dps_rankings,to_jsonb(d)||jsonb_build_object('id',gen_random_uuid(),'player_guid','Player'||g))).* FROM encounter_dps_rankings d CROSS JOIN generate_series(1,39) g WHERE instance_id=$1`, instance)
+	require.NoError(t, err)
+	for i := range 7 {
+		start := time.Now()
+		_, err := servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{instance})
+		require.NoError(t, err)
+		t.Logf("canonical+evidence sample=%d duration_ms=%.3f", i, float64(time.Since(start).Microseconds())/1000)
+	}
+}
+
+// Match production context-to-session setup without shared global hook mutation.
+type canonicalTenantStore struct{ database.Store }
+
+func (s canonicalTenantStore) InTx(ctx context.Context, fn func(database.Store) error, opts *pgx.TxOptions) error {
+	return s.Store.InTx(ctx, func(tx database.Store) error {
+		if servicetenant.IsBypass(ctx) {
+			raw, ok := database.PGXTx(tx)
+			if !ok {
+				return fmt.Errorf("expected transaction")
+			}
+			if _, err := raw.Exec(ctx, "SET LOCAL app.tenant_bypass = 'true'"); err != nil {
+				return err
+			}
+		}
+		return fn(tx)
+	}, opts)
 }

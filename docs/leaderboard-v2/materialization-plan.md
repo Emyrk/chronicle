@@ -265,6 +265,12 @@ as an explicit repair capability, ready before normal writers can be enabled.
 
 ## PR 4: normal writers and source-action integration
 
+**Implementation status:** normal canonical/player/duration publication and
+source-action D1 obligations are integrated. `DispatchEnabled` is true by explicit
+user approval; D1/D2 periodic scans process existing dirt only, with no historical
+discovery or backfill. See [integration map](source-integration.md).
+
+
 **Red:** end-to-end source-to-evidence tests at parse/ranking publication, canonical
 representative change, user delete, retention delete, visibility/invalidation,
 and reparse. Capture both old and new identities. Failure at any transaction

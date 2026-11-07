@@ -1,10 +1,11 @@
 # Bounded D2 worker protocol
 
-PR2 adds orchestration only. Source writers, D1 reconciliation, backfill, read/UI/cache integration and production enablement are deliberately absent. `serviceratings.DispatchEnabled` is false; workers are registered, but neither production worker does work and no periodic dispatcher is scheduled.
-
-## Later enablement
-
-Enablement is a separate reviewed integration change, not an operator flag: first integrate and validate the source evidence/D2 writers and required repair path, then change the `DispatchEnabled` code constant in `internal/services/serviceratings/worker.go` to true and deploy. That enables the already-registered workers and registers the periodic dispatcher at service startup. It does not itself run a backfill; any historical population requires its separately approved process. Do not enable by adding a CLI/environment override.
+D1/D2 orchestration is integrated with normal source publication and lifecycle
+actions by PR4. `serviceratings.DispatchEnabled` is true by explicit user approval.
+Periodic workers scan existing dirt only; there is no automatic historical
+discovery or backfill. UI/cache behavior remains unchanged. To disable, change
+the code constant and redeploy; no CLI/environment override exists. See the
+[source integration map](source-integration.md).
 
 ## Ownership and transactions
 
@@ -25,7 +26,7 @@ Dispatcher discovery is paginated by `(tenant_id, family)` and schedules at most
 
 ## Validation and local measurements
 
-Tests cover all eight families, non-sliding enqueue, 100+1 partial pages, newer revisions, stale-owner write/delete suppression, expired-owner takeover, PostgreSQL lock-wait ownership recheck, transactional rollback, retry preservation, cancellation cleanup, poison isolation, 101-tenant dispatcher pagination, future-only no-spin, and disabled production entry points.
+Tests cover all eight families, non-sliding enqueue, 100+1 partial pages, newer revisions, stale-owner write/delete suppression, expired-owner takeover, PostgreSQL lock-wait ownership recheck, transactional rollback, retry preservation, cancellation cleanup, poison isolation, 101-tenant dispatcher pagination, future-only no-spin, and enabled production entry points.
 
 A deterministic channel barrier holds a full 100-scope compute transaction open. Fifteen producer revisions complete before computation is released; all 100 results publish and exactly 15 newer dirty scopes remain. Local producer time was 6.46 ms. This verifies transaction boundaries, not an artificial SQL sort delay.
 

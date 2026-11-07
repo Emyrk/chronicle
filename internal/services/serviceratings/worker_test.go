@@ -399,10 +399,10 @@ func TestDispatchPaginationAndFutureNoSpin(t *testing.T) {
 	queue.jobs = nil
 	require.NoError(t, dispatcher.dispatch(f.ctx, ArgsDispatch{AfterTenant: last.TenantID, AfterFamily: int32(last.Family)}))
 	require.Empty(t, queue.jobs)
-	// Registered production paths stay inert until the separate integration phase.
-	require.NoError(t, dispatcher.Work(f.ctx, &river.Job[ArgsDispatch]{}))
+	// Production entry point is enabled and preserves future-only/no-spin behavior.
+	require.NoError(t, dispatcher.Work(f.ctx, &river.Job[ArgsDispatch]{Args: ArgsDispatch{AfterTenant: last.TenantID, AfterFamily: int32(last.Family)}}))
 	require.Empty(t, queue.jobs)
-	require.False(t, DispatchEnabled)
+	require.True(t, DispatchEnabled)
 }
 
 func TestDrainCancellationAndPoisonIsolation(t *testing.T) {

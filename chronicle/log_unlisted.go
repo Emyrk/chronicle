@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
+
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
@@ -13,6 +15,11 @@ import (
 
 // ReconcileUnlistedLogGroup removes unlisted instances from shared duplicate groups.
 func (c *Chronicle) ReconcileUnlistedLogGroup(ctx context.Context, logGroupID uuid.UUID) error {
+	sourceCtx, resolveErr := serviceratings.GroupSourceContext(ctx, c.Zed, logGroupID)
+	if resolveErr != nil {
+		return resolveErr
+	}
+	ctx = sourceCtx
 	identities, err := c.Zed.RankingRunIdentitiesByLogGroupID(ctx, logGroupID)
 	if err != nil {
 		return fmt.Errorf("load ranking run identities: %w", err)
@@ -52,6 +59,9 @@ func (c *Chronicle) ReconcileUnlistedLogGroup(ctx context.Context, logGroupID uu
 	c.insertParsedInstanceMu.Lock()
 	defer c.insertParsedInstanceMu.Unlock()
 	if err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, affectedIDs); err != nil {
+			return err
+		}
 		for _, instance := range instances {
 			if !instance.DuplicateGroupID.Valid {
 				continue
@@ -88,9 +98,40 @@ func (c *Chronicle) ReconcileUnlistedLogGroup(ctx context.Context, logGroupID uu
 				return fmt.Errorf("refresh boss-kill memberships after unlisted change: %w", err)
 			}
 		}
-		return nil
+		if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, affectedIDs); err != nil {
+			return err
+		}
+		return c.EnqueueRankingRunRefreshTx(ctx, tx, affectedIDs...)
 	}, nil); err != nil {
 		return err
 	}
-	return c.EnqueueRankingRunRefresh(ctx, affectedIDs...)
+	return nil
+}
+
+// MarkWoWLogGroupUnlisted atomically preserves repair work with visibility change.
+// Authorization remains with the caller; this does not bypass tenant RLS.
+func (c *Chronicle) MarkWoWLogGroupUnlisted(ctx context.Context, logGroupID uuid.UUID) error {
+	sourceCtx, err := serviceratings.GroupSourceContext(ctx, c.Zed, logGroupID)
+	if err != nil {
+		return err
+	}
+	ctx = sourceCtx
+	return c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		// Reparse owns this same group row before acquiring D1. Never reverse it.
+		if _, err := tx.LockWoWLogGroupParseGeneration(ctx, logGroupID); err != nil {
+			return err
+		}
+		identities, err := tx.RankingRunIdentitiesByLogGroupID(ctx, logGroupID)
+		if err != nil {
+			return err
+		}
+		if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, rankingRunLogGroupIdentitySeeds(identities)); err != nil {
+			return err
+		}
+		_, err = tx.MarkWoWLogGroupUnlisted(ctx, logGroupID)
+		if err != nil {
+			return err
+		}
+		return c.EnqueueRankingRunRefreshTx(ctx, tx, rankingRunLogGroupIdentitySeeds(identities)...)
+	}, nil)
 }

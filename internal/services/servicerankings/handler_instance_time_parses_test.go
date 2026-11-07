@@ -36,7 +36,7 @@ type timeParsesTestFixture struct {
 func setupTimeParsesTest(t *testing.T) timeParsesTestFixture {
 	t.Helper()
 	pool, _ := dbtestutil.NewPGXPool(t)
-	store := database.New(pool)
+	store := tenantTransactionStore{database.New(pool)}
 	ctx := testutil.Context(t, testutil.WaitShort)
 
 	serverID := uuid.New()

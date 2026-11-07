@@ -19,7 +19,7 @@ const (
 	ClaimLease         = 15 * time.Minute // SQL claim interval is checked by integration tests.
 	PublicationTimeout = 30 * time.Second
 	DispatchInterval   = 30 * time.Second
-	DispatchEnabled    = false // Activation is a later integration change, not a flag.
+	DispatchEnabled    = true // Source integration is enabled; no runtime flag or implicit backfill.
 	familyCount        = 8
 )
 

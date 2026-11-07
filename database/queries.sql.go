@@ -13044,6 +13044,51 @@ func (q *sqlQuerier) SetLeaderboardWorkerTimeouts(ctx context.Context, statement
 	return err
 }
 
+const leaderboardRunKeysForIDs = `-- name: LeaderboardRunKeysForIDs :many
+WITH keys AS (
+ SELECT s.tenant_id, COALESCE(li.duplicate_group_id,li.id) AS run_id
+ FROM log_instances li JOIN wow_server_realms r ON r.id=li.realm_id
+ JOIN wow_servers s ON s.id=r.server_id
+ WHERE (li.id=ANY($1::uuid[]) OR li.duplicate_group_id=ANY($1::uuid[])) AND s.tenant_id IS NOT NULL
+ UNION
+ SELECT s.tenant_id, rr.run_id FROM ranking_runs rr
+ JOIN wow_server_realms r ON r.id=rr.realm_id JOIN wow_servers s ON s.id=r.server_id
+ WHERE (rr.run_id=ANY($1::uuid[]) OR rr.representative_instance_id=ANY($1::uuid[])) AND s.tenant_id IS NOT NULL
+ UNION SELECT tenant_id,run_id FROM leaderboard_player_observations WHERE run_id=ANY($1::uuid[]) OR source_instance_id=ANY($1::uuid[])
+ UNION SELECT tenant_id,run_id FROM leaderboard_guild_boss_observations WHERE run_id=ANY($1::uuid[]) OR source_instance_id=ANY($1::uuid[])
+ UNION SELECT tenant_id,run_id FROM leaderboard_guild_clear_observations WHERE run_id=ANY($1::uuid[]) OR source_instance_id=ANY($1::uuid[])
+ UNION SELECT tenant_id,run_id FROM leaderboard_player_renown_facts WHERE run_id=ANY($1::uuid[]) OR source_instance_id=ANY($1::uuid[])
+ UNION SELECT tenant_id,run_id FROM leaderboard_guild_renown_facts WHERE run_id=ANY($1::uuid[]) OR source_instance_id=ANY($1::uuid[])
+) SELECT tenant_id::uuid,run_id FROM keys ORDER BY tenant_id,run_id
+`
+
+type LeaderboardRunKeysForIDsRow struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+}
+
+// Capture BEFORE source changes. Input may contain instance or logical-run IDs.
+// Old evidence survives source deletion/tenant movement and supplies old keys.
+func (q *sqlQuerier) LeaderboardRunKeysForIDs(ctx context.Context, ids []uuid.UUID) ([]LeaderboardRunKeysForIDsRow, error) {
+	rows, err := q.db.Query(ctx, leaderboardRunKeysForIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardRunKeysForIDsRow
+	for rows.Next() {
+		var i LeaderboardRunKeysForIDsRow
+		if err := rows.Scan(&i.TenantID, &i.RunID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const leaderboardD2Clock = `-- name: LeaderboardD2Clock :one
 SELECT clock_timestamp()::timestamptz
 `

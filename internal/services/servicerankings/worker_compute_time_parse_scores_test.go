@@ -57,6 +57,9 @@ func TestWorkerComputeTimeParseScoresScopesAndLocking(t *testing.T) {
 	insert(realm2, uuid.NullUUID{}, 5*time.Minute, start.Add(time.Hour))
 
 	refreshTimeParseMemberships(t, ctx, store)
+	// Canonical publication can precede this independent raw-duration stage.
+	_, err = servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{target})
+	require.NoError(t, err)
 	worker := &servicerankings.WorkerComputeTimeParseScores{Store: store, Logger: slog.Default()}
 	job := &river.Job[parseargs.ArgsComputeTimeParseScores]{Args: parseargs.ArgsComputeTimeParseScores{InstanceID: target, TenantID: tenantID, Force: true}}
 	require.NoError(t, worker.Work(ctx, job))
@@ -89,6 +92,21 @@ func TestWorkerComputeTimeParseScoresScopesAndLocking(t *testing.T) {
 	require.NoError(t, worker.Work(ctx, job))
 	replaced, err := store.GetTimeParseScoreForContract(ctx, database.GetTimeParseScoreForContractParams{TenantID: tenantID, InstanceID: target, LookbackDays: servicerankings.TimeParseScoreLookbackDays, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion})
 	require.NoError(t, err)
+	tenantCtx := servicetenant.WithTenantID(ctx, tenantID)
+	require.NoError(t, store.InTx(tenantCtx, func(tx database.Store) error {
+		raw, ok := database.PGXTx(tx)
+		require.True(t, ok)
+		var source uuid.UUID
+		var duration int64
+		err := raw.QueryRow(tenantCtx, `SELECT source_time_parse_score_id,duration_ms FROM leaderboard_guild_clear_observations WHERE tenant_id=$1 AND run_id=$2`, tenantID, target).Scan(&source, &duration)
+		require.NoError(t, err)
+		require.Equal(t, replaced.ID, source)
+		require.Equal(t, (50 * time.Minute).Milliseconds(), duration)
+		var pending int
+		require.NoError(t, raw.QueryRow(tenantCtx, `SELECT count(*) FROM leaderboard_dirty_runs WHERE tenant_id=$1`, tenantID).Scan(&pending))
+		require.Zero(t, pending)
+		return nil
+	}, nil))
 	assert.NotEqual(t, score.ID, replaced.ID)
 }
 
