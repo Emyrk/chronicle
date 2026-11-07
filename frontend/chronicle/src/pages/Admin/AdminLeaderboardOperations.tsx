@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { useAdminTenants } from "@/api/queries";
 import {
@@ -12,6 +12,23 @@ import {
 } from "@/api/leaderboardOperations";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+
+function OperationHelp({ title, description, children }: {
+  title: string; description: string; children: ReactNode;
+}) {
+  return <HintTooltip>
+    <TooltipTrigger asChild>
+      <span tabIndex={0} aria-label={`${title}: ${description}`} className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        {children}
+      </span>
+    </TooltipTrigger>
+    <TooltipContent side="top" sideOffset={8} className="max-w-sm space-y-1 p-3 text-left leading-relaxed">
+      <p className="font-semibold">{title}</p>
+      <p className="text-zinc-300">{description}</p>
+    </TooltipContent>
+  </HintTooltip>;
+}
 
 function dateTime(value?: string | null) {
   if (!value) return "—";
@@ -132,6 +149,7 @@ export function TenantLeaderboardOperations({
         <span className="pb-2 text-xs text-muted-foreground">
           00:00 UTC (exclusive)
         </span>
+        <OperationHelp title="Populate historical coverage" description="Process runs completed before the selected UTC date, including runs already represented, then reconcile existing all-time evidence and results. Uses the same pipeline as Repair tenant; records a backfill and shows an incomplete-coverage notice.">
         <Button
           disabled={
             !beforeDate ||
@@ -151,6 +169,8 @@ export function TenantLeaderboardOperations({
         >
           Backfill {tenantName}
         </Button>
+        </OperationHelp>
+        <OperationHelp title="Recalculate tenant data" description="Use the same date-scoped scan and all-time reconciliation as Backfill to refresh stale or incorrect leaderboard data. Records a repair and shows a recalculation notice; it is not a different processing algorithm.">
         <Button
           variant="outline"
           disabled={
@@ -171,6 +191,7 @@ export function TenantLeaderboardOperations({
         >
           Repair tenant
         </Button>
+        </OperationHelp>
       </div>
       <p className="text-xs text-muted-foreground">
         Uses run completion time, not upload time. Runs without a completion
@@ -188,6 +209,7 @@ export function TenantLeaderboardOperations({
             className="h-9 w-full rounded-md border bg-background px-3 font-mono text-xs"
           />
         </label>
+        <OperationHelp title="Repair one canonical run" description="Rebuild evidence for the entered run ID and recalculate affected results. Ignores the date cutoff and supports runs without completion dates. Completion still waits for all pending tenant processing.">
         <Button
           variant="outline"
           disabled={
@@ -210,6 +232,7 @@ export function TenantLeaderboardOperations({
         >
           Repair run
         </Button>
+        </OperationHelp>
       </div>
       {action.isError && (
         <p role="alert" className="text-sm text-destructive">

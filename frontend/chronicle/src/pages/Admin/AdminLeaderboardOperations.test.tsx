@@ -65,6 +65,10 @@ describe("tenant leaderboard operations", () => {
       <TenantLeaderboardOperations tenantID="tenant-a" tenantName="Turtle" />,
     );
     expect(html).toContain("Backfill Turtle");
+    expect(html).toContain("Uses the same pipeline as Repair tenant");
+    expect(html).toContain("including runs already represented");
+    expect(html).toContain("Records a repair and shows a recalculation notice");
+    expect(html).toContain("Ignores the date cutoff");
     expect(html).toContain("Runs completed before");
     expect(html).toContain("00:00 UTC (exclusive)");
     expect(html).toContain("Single-run repair");
