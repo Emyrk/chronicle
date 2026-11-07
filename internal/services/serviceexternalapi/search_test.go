@@ -208,6 +208,8 @@ func TestSearchGET(t *testing.T) {
 			{searchPath("limit", "0"), "limit must be a positive integer.", ""},
 			{searchPath("cursor", "!!"), "cursor is not valid.", ""},
 			{searchPath("format", "xml"), "format must be json or md.", ""},
+			{searchPath("q", strings.Repeat("(", searchMaxQueryLen+1)), "The search is too long.", ""},
+			{searchPath("q", strings.Repeat("(", 100)), "Invalid search text.", "nested too deeply"},
 			{"/raidlogs/search/explain?instance_id=nope", "instance_id must be a run UUID.", ""},
 		}
 		for _, c := range cases {
@@ -276,4 +278,38 @@ func TestSearchOpenAPI(t *testing.T) {
 	require.NotNil(t, md.Example)
 	_, err := json.Marshal(service.openapi)
 	require.NoError(t, err)
+}
+
+func TestSearchMarkdownEscaping(t *testing.T) {
+	t.Parallel()
+
+	r := httptest.NewRequest(http.MethodGet, "/api/external/v1/raidlogs/search?format=md", nil)
+	resp := SearchResponse{Results: []chroniclesdk.InstanceSearchResult{{
+		ID: uuid.New(), Slug: "run", Name: `Molten Core\]`, RealmName: "<b>realm</b>",
+		GuildName: `a\|b \[Click\](https://evil.example) ` + "`x`",
+	}}}
+	body := searchMarkdown(r, resp)
+	row := strings.Split(strings.TrimSpace(body), "\n")[2]
+	require.Equal(t, `| [Molten Core\\\]](http://example.com/instances/run) | 0001-01-01 | \<b\>realm\</b\> | a\\\|b \\\[Click\\\](https://evil.example) \`+"`x\\`"+` | 0 |`, row)
+	// Unescaped, the row still has exactly six cell separators.
+	require.Equal(t, 6, strings.Count(strings.ReplaceAll(strings.ReplaceAll(row, `\\`, ""), `\|`, ""), "|"))
+}
+
+func TestRequestOriginScheme(t *testing.T) {
+	t.Parallel()
+
+	for proto, want := range map[string]string{
+		"":                  "http://example.com",
+		"https":             "https://example.com",
+		"http, https":       "http://example.com",
+		"HTTP":              "http://example.com",
+		"javascript":        "https://example.com",
+		"data:text/html,x;": "https://example.com",
+	} {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		if proto != "" {
+			r.Header.Set("X-Forwarded-Proto", proto)
+		}
+		require.Equal(t, want, requestOrigin(r), proto)
+	}
 }

@@ -19,12 +19,15 @@ import (
 	"github.com/google/uuid"
 )
 
-// searchMaxQueryLen bounds q and where, matching the POST body limit.
-const searchMaxQueryLen = 64 << 10
+// searchMaxQueryLen bounds q and where. Real searches are a few hundred
+// bytes; the cap keeps parse work small, since malformed input is not charged
+// to the search bucket.
+const searchMaxQueryLen = 4 << 10
 
-// SearchResponse is a page of GET /raidlogs/search results.
+// SearchResponse is a page of GET /raidlogs/search results. It replaces the
+// POST response's structured next with the opaque next_cursor string.
 type SearchResponse struct {
-	chroniclesdk.InstanceSearchResponse
+	Results []chroniclesdk.InstanceSearchResult `json:"results"`
 	// NextCursor is set when more results exist. Pass it back as cursor.
 	NextCursor string `json:"next_cursor,omitempty"`
 }
@@ -145,7 +148,7 @@ func (s *Service) searchInstances(w http.ResponseWriter, r *http.Request) {
 	if result.Err != nil {
 		return
 	}
-	resp := SearchResponse{InstanceSearchResponse: page, NextCursor: encodeSearchCursor(page.Next)}
+	resp := SearchResponse{Results: page.Results, NextCursor: encodeSearchCursor(page.Next)}
 	if format == "md" {
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
@@ -181,19 +184,28 @@ func (*Service) searchFields(w http.ResponseWriter, r *http.Request) {
 }
 
 // requestOrigin is the scheme and host the client used, so links in
-// markdown point back at the same Chronicle community.
+// markdown point back at the same Chronicle community. The scheme is only
+// ever http or https, whatever X-Forwarded-Proto says.
 func requestOrigin(r *http.Request) string {
 	scheme := "https"
 	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-		scheme, _, _ = strings.Cut(proto, ",")
-		scheme = strings.TrimSpace(scheme)
+		first, _, _ := strings.Cut(proto, ",")
+		if strings.EqualFold(strings.TrimSpace(first), "http") {
+			scheme = "http"
+		}
 	} else if r.TLS == nil {
 		scheme = "http"
 	}
 	return scheme + "://" + r.Host
 }
 
-var markdownCell = strings.NewReplacer("|", `\|`, "\n", " ", "\r", " ", "[", `\[`, "]", `\]`)
+// markdownCell makes uploader-controlled text (run, realm and guild names)
+// inert inside a table cell or link text: backslash too, so `a\|b`
+// can't unescape a pipe, plus the characters that start links, code or HTML.
+var markdownCell = strings.NewReplacer(
+	"\\", "\\\\", "|", `\|`, "[", `\[`, "]", `\]`, "`", "\\`", "<", `\<`, ">", `\>`,
+	"\n", " ", "\r", " ",
+)
 
 // searchMarkdown renders a compact table for AI agents.
 func searchMarkdown(r *http.Request, resp SearchResponse) string {
@@ -227,7 +239,7 @@ func searchMarkdown(r *http.Request, resp SearchResponse) string {
 
 func (s *Service) registerSearchRoutes() {
 	whereParameters := []OpenAPIParameter{
-		queryParameter("q", "Search text in the code editor's syntax, e.g. instance.name == \"Molten Core\" && instance.started_at >= timestamp(\"2026-10-01T00:00:00Z\"). Use q or where, not both; neither matches every run. Anonymous callers may AND up to 6 filters on instance.name, realm, guild, started_at, difficulty and category.", false, "string", `instance.name == "Molten Core"`),
+		queryParameter("q", "Search text in the code editor's syntax, e.g. instance.name == \"Molten Core\" && instance.started_at >= timestamp(\"2026-10-01T00:00:00Z\"). Use q or where, not both; neither matches every run. Up to 4 KB, nested at most 32 levels. Anonymous callers may AND up to 6 filters on instance.name, realm, guild, started_at, difficulty and category.", false, "string", `instance.name == "Molten Core"`),
 		queryParameter("where", "The search tree as JSON (the where of POST /api/v1/raidlogs/search), instead of q.", false, "string", `{"field":"instance.name","op":"=","value":"Molten Core"}`),
 	}
 	searchErrors := map[string]OpenAPIResponse{
@@ -250,8 +262,8 @@ func (s *Service) registerSearchRoutes() {
 	matched := true
 	exampleValue := example.StartedAt.Format(time.RFC3339)
 	searchOK := okResponse(SearchResponse{
-		InstanceSearchResponse: chroniclesdk.InstanceSearchResponse{Results: []chroniclesdk.InstanceSearchResult{example}},
-		NextCursor:             encodeSearchCursor(&chroniclesdk.InstanceSearchCursor{Value: &exampleValue, ID: example.ID, Sort: chroniclesdk.InstanceSearchSort{Field: chroniclesdk.InstanceSearchSortStartedAt, Direction: chroniclesdk.InstanceSearchSortDesc}}),
+		Results:    []chroniclesdk.InstanceSearchResult{example},
+		NextCursor: encodeSearchCursor(&chroniclesdk.InstanceSearchCursor{Value: &exampleValue, ID: example.ID, Sort: chroniclesdk.InstanceSearchSort{Field: chroniclesdk.InstanceSearchSortStartedAt, Direction: chroniclesdk.InstanceSearchSortDesc}}),
 	})
 	searchOK["200"].Content["text/markdown"] = OpenAPIMediaType{Example: "| Run | Date | Realm | Guild | Bosses killed |\n|---|---|---|---|---|\n| [Molten Core](https://chronicle.example/instances/example-instance) | 2026-10-03 | Example Realm | Example Guild | 10 |\n\n[Next page](https://chronicle.example/api/external/v1/raidlogs/search?cursor=...&format=md&q=...)\n"}
 	s.register(http.MethodGet, "/raidlogs/search", OpenAPIOperation{

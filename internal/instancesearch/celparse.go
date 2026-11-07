@@ -35,7 +35,7 @@ func (e *CELParseError) Error() string {
 // Empty text (or "true") means no conditions and returns nil. Errors are
 // *CELParseError.
 func ParseCEL(src string) (*Node, error) {
-	if t := strings.TrimSpace(src); t == "" || t == "true" {
+	if t := strings.TrimFunc(src, isCELSpace); t == "" || t == "true" {
 		return nil, nil
 	}
 	toks, err := celTokenize(src)
@@ -69,6 +69,10 @@ type celTok struct {
 
 var celPunctuation = []string{"&&", "||", "==", "!=", "<=", ">=", "<", ">", "!", "(", ")", "[", "]", "{", "}", ",", ":", "."}
 
+// isCELSpace matches JavaScript's \s, which also treats U+FEFF (BOM) as
+// whitespace.
+func isCELSpace(r rune) bool { return unicode.IsSpace(r) || r == '\uFEFF' }
+
 func isCELDigit(r rune) bool { return r >= '0' && r <= '9' }
 func isCELIdentStart(r rune) bool {
 	return r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
@@ -81,7 +85,7 @@ func celTokenize(src string) ([]celTok, error) {
 	for i < len(rs) {
 		c := rs[i]
 		switch {
-		case unicode.IsSpace(c):
+		case isCELSpace(c):
 			i++
 		case c == '"':
 			// JSON string (formatCEL uses JSON.stringify).
@@ -160,9 +164,24 @@ type celPair struct {
 // and are recovered in parse, which keeps the grammar code close to the
 // TypeScript original.
 type celParser struct {
-	toks []celTok
-	i    int
+	toks  []celTok
+	i     int
+	depth int
 }
+
+// celMaxDepth bounds nesting (parentheses, !, players/encounters, lists and
+// objects) so hostile input can't grow the stack without limit.
+const celMaxDepth = 32
+
+// enter adds one nesting level at t; pair it with leave.
+func (p *celParser) enter(t celTok) {
+	p.depth++
+	if p.depth > celMaxDepth {
+		p.failAt(fmt.Sprintf("The query is nested too deeply (more than %d levels)", celMaxDepth), t)
+	}
+}
+
+func (p *celParser) leave() { p.depth-- }
 
 func (p *celParser) peek(o int) celTok { return p.toks[min(p.i+o, len(p.toks)-1)] }
 func (p *celParser) next() celTok {
@@ -276,7 +295,8 @@ func (p *celParser) unary(scope celScope) Node {
 	if !p.isPunct("!", 0) {
 		return p.primary(scope)
 	}
-	p.i++
+	p.enter(p.next())
+	defer p.leave()
 	// !instance.capabilities.exists(c, c in [...]) -> capability not_in
 	if p.isCapabilities() {
 		n := p.primary(scope)
@@ -302,7 +322,8 @@ func (p *celParser) unary(scope celScope) Node {
 func (p *celParser) primary(scope celScope) Node {
 	t := p.peek(0)
 	if p.isPunct("(", 0) {
-		p.i++
+		p.enter(p.next())
+		defer p.leave()
 		n := p.or(scope)
 		p.expectPunct(")")
 		return n
@@ -345,6 +366,8 @@ func (p *celParser) primary(scope celScope) Node {
 
 func (p *celParser) quantifier(scope celScope) Node {
 	listTok := p.next()
+	p.enter(listTok)
+	defer p.leave()
 	kind := "encounter"
 	if listTok.str == "players" {
 		kind = "player"
@@ -546,6 +569,10 @@ func (p *celParser) literal() any {
 			return s.str
 		}
 	case celPunct:
+		if t.str == "[" || t.str == "{" {
+			p.enter(t)
+			defer p.leave()
+		}
 		switch t.str {
 		case "[":
 			out := []any{}

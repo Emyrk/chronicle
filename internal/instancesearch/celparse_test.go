@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -58,6 +59,9 @@ func TestParseCEL(t *testing.T) {
 	}{
 		{"", nil},
 		{"  true ", nil},
+		// U+FEFF counts as whitespace, as in JavaScript's \s.
+		{"\uFEFF", nil},
+		{"\uFEFFinstance.name == \"Molten Core\"\uFEFF", &instancesearch.Node{Field: "instance.name", Op: instancesearch.OpEq, Value: "Molten Core"}},
 		{`instance.name == "Molten Core"`, &instancesearch.Node{Field: "instance.name", Op: instancesearch.OpEq, Value: "Molten Core"}},
 		{`players.exists(x, x.class == "MAGE")`, &instancesearch.Node{AnyPlayer: &instancesearch.Node{Field: "player.class", Op: instancesearch.OpEq, Value: "MAGE"}}},
 		{`players.size() > 30 || instance.player_count <= 20`, &instancesearch.Node{Or: []instancesearch.Node{
@@ -128,6 +132,10 @@ func TestParseCELErrors(t *testing.T) {
 		{`players.size() >= "2"`, "Expected a number", 18},
 		{`instance.started_at > timestamp(5)`, "Expected a date string", 32},
 		{`instance.name in ["a" "b"]`, `Expected ","`, 22},
+		// Nesting is capped at 32 levels; the offset is the 33rd opener.
+		{strings.Repeat("!", 40) + `instance.name == "a"`, "nested too deeply", 32},
+		{`instance.name in ` + strings.Repeat("[", 40), "nested too deeply", 49},
+		{`instance.kill_time_ms(` + strings.Repeat(`{"a": `, 40), "nested too deeply", 22 + 32*6},
 	}
 	for _, c := range cases {
 		_, err := instancesearch.ParseCEL(c.src)
@@ -136,4 +144,22 @@ func TestParseCELErrors(t *testing.T) {
 		require.Contains(t, pe.Message, c.msg, c.src)
 		require.Equal(t, c.offset, pe.Offset, c.src)
 	}
+}
+
+// TestParseCELDeepNesting checks hostile nesting fails at the depth cap
+// rather than recursing once per opener, which would take hundreds of MB of
+// stack on a large input.
+func TestParseCELDeepNesting(t *testing.T) {
+	t.Parallel()
+
+	ok := strings.Repeat("(", 32) + `instance.name == "a"` + strings.Repeat(")", 32)
+	_, err := instancesearch.ParseCEL(ok)
+	require.NoError(t, err)
+
+	_, err = instancesearch.ParseCEL(strings.Repeat("(", 10_000))
+	var pe *instancesearch.CELParseError
+	require.ErrorAs(t, err, &pe)
+	require.Contains(t, pe.Message, "nested too deeply")
+	// Failing at the 33rd "(" shows recursion stopped at the cap.
+	require.Equal(t, 32, pe.Offset)
 }
