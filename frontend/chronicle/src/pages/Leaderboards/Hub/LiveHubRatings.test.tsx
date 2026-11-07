@@ -1,14 +1,24 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { setBoardPage, setBoardURL } from "@/pages/Leaderboards/Ratings/setBoard"
 import { LiveHubRatings, type LiveHubRatingsProps } from "./LiveHubRatings"
 import { resolvedHubMetadata } from "./resolvedHubAdapter"
 import { configuration } from "./v2RatingAdapter.testdata"
 
+const states = vi.hoisted(() => ({ bosses: {} as Record<string, "pending" | "error" | "empty">, centerPending: false }))
+beforeEach(() => { states.bosses = {}; states.centerPending = false })
 vi.mock("@tanstack/react-query", () => ({
  useQuery: () => ({data:undefined,isPending:true}),
- useQueries: ({queries}:{queries:unknown[]}) => queries.map(()=>({isPending:false,isError:false,data:{params:new URLSearchParams({class:"MAGE",spec:"Frost"}),response:{status:"ready",included_bosses:["A"],entries:[{realm_id:"realm",subject_id:"guid",name:"Actual player",score:0,peak:0,mastery:0,renown:0,sample_count:1,computed_at:"2026-01-01"}]}}})),
+ useQueries: ({queries}:{queries:{queryKey: string[]}[]}) => queries.map((query)=>{
+  const params = new URLSearchParams(query.queryKey[1])
+  const boss = params.get("boss") ?? ""
+  const state = states.bosses[boss]
+  if (state === "pending" || (!boss && states.centerPending)) return {isPending:true,isError:false}
+  if (state === "error") return {isPending:false,isError:true,error:new Error(`${boss} failed`)}
+  return {isPending:false,isError:false,data:{params,response:{status:"ready",included_bosses:["A"],entries:state === "empty" ? [] : [{realm_id:"realm",subject_id:"guid",name:"Actual player",score:0,peak:0,mastery:0,renown:0,sample_count:1,computed_at:"2026-01-01"}]}}}
+ }),
 }))
+
 const props:LiveHubRatingsProps={instanceName:"Raid",bosses:["A","B"],selected:[],scope:{cls:"MAGE",spec:"Frost"},onScope:vi.fn(),view:"overview",onView:vi.fn(),period:"all",subject:"player",role:"dps",cohort:{difficulty:"",maxPlayers:0},where:"Raid",summary:resolvedHubMetadata(configuration,{instanceName:"Raid",performance:"dps"},[],[{player_class:"MAGE",player_spec:"Frost",player_sub_spec:"",metric:"dps"}])}
 describe("existing Hub ratings on current-policy data",()=>{
  it("retains the existing boards and shows real entries with all-time and Renown scope notice",()=>{
@@ -18,6 +28,30 @@ describe("existing Hub ratings on current-policy data",()=>{
   expect(html).toContain("of class filters")
   expect(html).not.toContain("1,300/s")
  })
+ for (const subject of ["player", "guild"] as const) {
+  it(`keeps independent ${subject} boss placeholders while center and child queries resolve`, () => {
+   states.centerPending = true
+   states.bosses = { A: "pending", B: "pending" }
+   const loading = renderToStaticMarkup(<LiveHubRatings {...props} subject={subject} />)
+   expect(loading).toContain('Loading A Peak')
+   expect(loading).toContain('Loading B Peak')
+   expect(loading).toContain('motion-reduce:animate-none')
+   states.centerPending = false
+   delete states.bosses.A
+   const partial = renderToStaticMarkup(<LiveHubRatings {...props} subject={subject} />)
+   expect(partial).not.toContain('Loading A Peak')
+   expect(partial).toContain('Loading B Peak')
+   expect(partial).toContain('Actual player')
+   states.bosses.B = "error"
+   const failed = renderToStaticMarkup(<LiveHubRatings {...props} subject={subject} />)
+   expect(failed).toContain('B failed')
+   expect(failed).not.toContain('Loading B')
+   states.bosses.B = "empty"
+   const empty = renderToStaticMarkup(<LiveHubRatings {...props} subject={subject} />)
+   expect(empty).toContain('No ranked kills')
+   expect(empty).not.toContain('Loading B')
+  })
+ }
  it("explicitly reports a missing configured variant",()=>{
   expect(renderToStaticMarkup(<LiveHubRatings {...props} cohort={undefined}/>)).toContain("No enabled instance variant")
  })
