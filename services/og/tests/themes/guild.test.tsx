@@ -65,9 +65,16 @@ describe('guild card', () => {
     const { json, png } = await renderGuild(FULL_QUERY);
     expect([...png.slice(0, 4)]).toEqual(PNG_SIGNATURE);
     expect(networkCalls()).toEqual([]);
-    for (const text of ['Nightfall', 'Guild · Raiding', 'WoW Forever · 62 members · since Mar 2025', 'Naxx', '4/15', '34:52', 'Best MC clear', 'forever.chronicleclassic.com', 'See our raids']) {
+    for (const text of ['"<Nightfall>"', 'Guild · Raiding', 'WoW Forever · 62 members · since Mar 2025', 'Naxx', '4/15', '34:52', 'Best MC clear', 'forever.chronicleclassic.com', 'See our raids']) {
       expect(json).toContain(text);
     }
+  });
+
+  test('the guild name reads <Name>; no name stays a bare placeholder', async () => {
+    expect((await renderGuild('name=Nightfall')).json).toContain('"<Nightfall>"');
+    const { json } = await renderGuild('members=3');
+    expect(json).toContain('"Guild"');
+    expect(json).not.toContain('<Guild>');
   });
 
   test('hero name stays at least 46px, even for the longest names', async () => {

@@ -154,7 +154,10 @@ function Stat({ value, label, color }: { value: string; label: string; color?: s
 async function render(props: ThemeProps, context: ThemeContext): Promise<React.ReactElement> {
   const { host, product } = chromeParams(context);
   const accent = props.accent ?? DEFAULT_GUILD_ACCENT;
-  const name = param(context, 'name', 32) || 'Guild';
+  const rawName = param(context, 'name', 32);
+  const name = rawName || 'Guild';
+  // Guild names read as `<Name>`, like in game; the placeholder stays bare.
+  const displayName = rawName ? `<${rawName}>` : name;
   const tag = param(context, 'tag', 24);
   const members = intParam(context, 'members', { min: 0, max: 99999 });
   const since = formatSince(param(context, 'since', 7));
@@ -169,7 +172,7 @@ async function render(props: ThemeProps, context: ThemeContext): Promise<React.R
     members ? `${members.toLocaleString('en-US')} ${members === 1 ? 'member' : 'members'}` : '',
     since ? `since ${since}` : '',
   ].filter(Boolean);
-  const nameSize = fitFontSize(name, [
+  const nameSize = fitFontSize(displayName, [
     [12, 88],
     [16, 72],
     [22, 58],
@@ -228,7 +231,7 @@ async function render(props: ThemeProps, context: ThemeContext): Promise<React.R
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: 834 }}>
             <div style={{ display: 'block', lineClamp: 2, textWrap: 'pretty', fontFamily: SERIF, fontSize: nameSize, fontWeight: 700, lineHeight: 1.08 }}>
-              {name}
+              {displayName}
             </div>
             {subline.length > 0 ? (
               <div style={{ display: 'block', lineClamp: 2, fontSize: 28, lineHeight: 1.3, color: COLORS.muted }}>{subline.join(' · ')}</div>

@@ -87,7 +87,7 @@ describe('raid card', () => {
 
     const json = await tree(FULL.toString());
     const shown = texts(json);
-    for (const text of ['Nightfall', 'Molten Core', 'Raid report · Nov 6', '10/10', '1:52:07', 'Clear', '83', 'avg', 'Kill time parse', 'Top damage', 'Thalendris', '1,284', 'dps', 'Top healing', 'Aeloria', '812', 'hps', 'forever.chronicleclassic.com']) {
+    for (const text of ['<Nightfall>', 'Molten Core', 'Raid report · Nov 6', '10/10', '1:52:07', 'Clear', '83', 'avg', 'Kill time parse', 'Top damage', 'Thalendris', '1,284', 'dps', 'Top healing', 'Aeloria', '812', 'hps', 'forever.chronicleclassic.com']) {
       expect(shown).toContain(text);
     }
     // Only the top damage dealer is drawn.

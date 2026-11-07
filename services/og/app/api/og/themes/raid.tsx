@@ -223,7 +223,8 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
 
   // No ranked bosses (dungeon, custom raid) → no top damage/healing row.
   const ranked = Boolean(topDamage || topHealing);
-  const headline = guild || raid;
+  // Guild names read as `<Name>`, like in game.
+  const headline = guild ? `<${guild}>` : raid;
   const chip = [guild ? 'Raid report' : 'PUG', date].filter(Boolean).join(' · ');
   const meta = [product, players !== null ? `${players} players` : ''].filter(Boolean).join(' · ');
 
