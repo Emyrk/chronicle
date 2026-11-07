@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   alignmentOverlayForMapMode,
   createMapPanel,
+  mapOwnsPortalContainer,
   mapPresentationForSelection,
   preferredMeshState,
   walkModeAvailable,
@@ -53,5 +54,12 @@ describe("map presentation", () => {
     expect(walkModeAvailable(true, true, "loading", true)).toBe(false);
     expect(walkModeAvailable(true, true, "ready", false)).toBe(true);
     expect(walkModeAvailable(false, false, "ready", true)).toBe(false);
+  });
+
+  it("keeps popovers inside the map in every immersive mode", () => {
+    expect(mapOwnsPortalContainer(true, false, false)).toBe(true);
+    expect(mapOwnsPortalContainer(false, true, false)).toBe(true);
+    expect(mapOwnsPortalContainer(false, false, true)).toBe(true);
+    expect(mapOwnsPortalContainer(false, false, false)).toBe(false);
   });
 });

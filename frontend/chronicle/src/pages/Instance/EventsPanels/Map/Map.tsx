@@ -126,6 +126,10 @@ export function walkModeAvailable(
   return show3D && (meshWanted ? meshState === "ready" : flatYardsAvailable);
 }
 
+export function mapOwnsPortalContainer(fullscreen: boolean, windowed: boolean, mobileWorldOpen: boolean): boolean {
+  return fullscreen || windowed || mobileWorldOpen;
+}
+
 const RAID_FRAMES_STORAGE_KEY = "chronicle.map.raidFrames";
 const ENEMY_FRAMES_STORAGE_KEY = "chronicle.map.enemyFrames";
 
@@ -363,6 +367,11 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   // Walk mode ("join the fight"): your own character on the dungeon mesh.
   const [walkWanted, setWalking] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const [rootElement, setRootElement] = useState<HTMLDivElement | null>(null);
+  const attachRoot = useCallback((element: HTMLDivElement | null) => {
+    rootRef.current = element;
+    setRootElement(element);
+  }, []);
   const [mobileWorldOpen, setMobileWorldOpen] = useState(false);
   const [mobileInput, setMobileInput] = useState<MobileMapInput>(IDLE_MOBILE_MAP_INPUT);
   const closeMobileWorld = useCallback(() => {
@@ -401,8 +410,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     };
   }, [mobileWorldOpen]);
   // Desktop fullscreen: the whole map (frames, settings, meters) fills the screen.
-  // The map's own element while it is the browser's fullscreen element: popovers
-  // portal into it then, since the browser shows nothing outside it.
+  // Immersive modes portal popovers into the map itself. Browser fullscreen hides
+  // outside content, while window fullscreen places the map above body portals.
   const [fullscreenElement, setFullscreenElement] = useState<HTMLElement | null>(null);
   const fullscreen = fullscreenElement !== null;
   const inheritedPortalContainer = usePortalContainer();
@@ -849,10 +858,14 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     </div>
   );
 
+  const portalContainer = mapOwnsPortalContainer(fullscreen, windowed, mobileWorldOpen)
+    ? rootElement ?? inheritedPortalContainer
+    : inheritedPortalContainer;
+
   return (
-    <PortalContainerProvider container={fullscreenElement ?? inheritedPortalContainer}>
+    <PortalContainerProvider container={portalContainer}>
     <div
-      ref={rootRef}
+      ref={attachRoot}
       data-window-fullscreen={mobileWorldOpen || windowed ? "" : undefined}
       className={cn(
         "flex h-full min-h-0 flex-col bg-black",
