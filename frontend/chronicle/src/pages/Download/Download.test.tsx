@@ -46,6 +46,13 @@ describe("DownloadView", () => {
     expect(render("windows", config("1.12a-cc-addon"))).toContain("Add WoW folder…");
   });
 
+  it("walks macOS players through Open Anyway and links the source", () => {
+    const markup = render("macos", config("1.12a-cc-addon"));
+    expect(markup).toContain("Privacy &amp; Security");
+    expect(markup).toContain("Open Anyway");
+    expect(markup).toContain('href="https://github.com/Emyrk/chronicle-sidekick">The code is on GitHub');
+  });
+
   it("hides the picker with a single format", () => {
     expect(render("windows", config("1.12a-cc-addon"))).not.toContain("Your client");
   });
