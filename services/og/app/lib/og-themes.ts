@@ -32,6 +32,11 @@ export const OG_THEMES = [
     label: 'Guild',
     description: 'A guild\'s logo or monogram, raid progression bars, best clear and average parse.',
   },
+  {
+    key: 'raid',
+    label: 'Raid report',
+    description: 'Chronicle raid report: guild, raid, bosses, clear time, avg parse, top damage and class composition.',
+  },
 ] as const;
 
 export type OgThemeOption = (typeof OG_THEMES)[number];
