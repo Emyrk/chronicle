@@ -24,7 +24,20 @@ export interface LeaderboardV2Cohort {
 }
 
 // From chroniclesdk/leaderboard_v2.go
+/**
+ * LeaderboardV2Companion identifies the winning whole-selection cohort.
+ */
+export interface LeaderboardV2Companion {
+    readonly score: number;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+}
+
+// From chroniclesdk/leaderboard_v2.go
 export interface LeaderboardV2Entry {
+    readonly peak_companion: LeaderboardV2Companion | null;
+    readonly mastery_companion: LeaderboardV2Companion | null;
     readonly player_class: string;
     readonly player_spec: string;
     readonly player_sub_spec: string;

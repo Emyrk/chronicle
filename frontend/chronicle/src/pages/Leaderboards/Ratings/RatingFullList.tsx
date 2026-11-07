@@ -233,7 +233,8 @@ export function RatingFullList({
                         className={cn("px-3 py-2 font-mono tabular-nums", sortBy !== m && "text-muted-foreground")}
                         style={sortBy === m && rank === 1 ? { color: METRIC_THEMES[m].accent } : undefined}
                       >
-                        {score ? METRIC_THEMES[m].format(score.score) : "—"}
+                        {score ? METRIC_THEMES[m].format(score.score) : <span title="No performance summary in the selected role and cohort filters">—</span>}
+                        {score?.cohortLabel && <span className="mt-0.5 block text-[10px] text-muted-foreground" title={`Best whole-selection ${METRIC_THEMES[m].label}: ${score.cohortLabel}`}>{score.cohortLabel}</span>}
                         {m === "peak" && score?.raw ? <RawTag raw={score.raw} className="ml-1.5" /> : null}
                       </td>
                     )

@@ -196,3 +196,37 @@ measurements, not a before/after latency claim or a production bound. The option
 encounters and matching durations to at most12 top summaries per catalog boss.
 All other summaries retain null provenance. Source deletion is exercised and
 rolled back, proving summaries survive without destroying the demonstration.
+
+## Overview companion columns
+
+The selected sorting metric still owns row identity, ranking and cursor order.
+Performance rows remain cohort-qualified; their selected-boss Renown is fetched
+once per realm/subject and repeated across that character's cohort rows.
+Renown rows remain one per realm/subject. Their Peak companion is the highest
+**whole selected-boss aggregate Peak** among eligible player cohorts, and Mastery
+independently chooses the highest whole-selection Mastery. These winners may use
+different specs, explicitly labeled beside each overview score. No boss-by-boss
+cross-spec maximum is taken. Missing selected bosses count zero in each candidate's
+fixed denominator. Ties choose bytewise class/spec/subspec order. Guild companions
+use the same selected bosses and guild summaries without a cohort choice.
+
+`companion_metric=dps|hps` enables player Renown companions; optional
+`companion_class`, `companion_spec`, and `companion_sub_spec` narrow only those
+performance candidates. They never narrow Renown counts or its ranking. Explicit
+empty subspec selects empty subspec; omission selects all. These fields bind the
+cursor request identity. A missing eligible performance summary produces null
+companions, not invented zeros. Genuine zero-valued summaries remain displayed as0.
+
+Both directions use batched page-only summary reads, no raw observations. On the
+preserved2.08m-summary baseline fixture,50 Renown subjects ×4 eligible cohorts ×10
+selected bosses took18.504ms first and16.859ms warm median for independent winner
+enrichment. Plans are in `benchmarks/renown-performance-companions.json`. The
+varied UI fixture is intentionally separate and these are not its timings.
+
+### Current varied preview
+
+`chronicle_lbmock_varied` uses seed20261107,600 players across5 classes/6 specs,
+7,773 player summary rows and30 guilds. The original large baseline database is
+preserved. See the mock README for formulas and rerunnable fresh-database commands.
+The baseline's44 identical counts and80%/50% band multipliers are not used in the
+varied preset: it computes exact bands from deterministic temporary histories.

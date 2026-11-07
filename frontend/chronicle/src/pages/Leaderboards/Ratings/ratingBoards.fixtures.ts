@@ -24,6 +24,7 @@ export interface RatingEntry {
   score: number
   detail: string
   /** Peak only: the DPS/HPS behind the score (a boss kill's, or duration-weighted across bosses). */
+  cohortLabel?: string
   raw?: number
   rawMetric?: "DPS" | "HPS"
   durationMs?: number
