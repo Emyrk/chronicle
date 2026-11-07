@@ -147,7 +147,9 @@ jobs:
           tags: ${{ steps.docker-tags.outputs.tags }}
           labels: ${{ steps.docker-tags.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.server }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.server }}
+          # mode=max exported the full frontend and Go build cache on every release,
+          # adding about 4.5 minutes after the image had already been pushed.
+          cache-to: type=gha,mode=min,scope=${{ matrix.server }}
           build-args: |
             GIT_TAG=${{ steps.version.outputs.GIT_TAG }}
             GIT_COMMIT=${{ steps.version.outputs.GIT_COMMIT }}
