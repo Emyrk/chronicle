@@ -2,6 +2,8 @@ package chronauth
 
 import (
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"sync"
 	"sync/atomic"
@@ -11,6 +13,8 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/google/uuid"
+	"github.com/markbates/goth"
+	"github.com/markbates/goth/providers/discord"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -187,6 +191,37 @@ func TestRelayCodeStore_ConcurrentRedemptionHasOneWinner(t *testing.T) {
 			assert.ErrorIs(t, err, errRelayCodeInvalid)
 		}
 	}
+}
+
+func TestTenantOAuthStartRedirectsToAccessURL(t *testing.T) {
+	t.Parallel()
+
+	accessURL, err := url.Parse("https://legacy.chronicleclassic.com")
+	require.NoError(t, err)
+	provider := discord.New("client-id", "client-secret", accessURL.String()+"/auth/discord/callback")
+	service := &Service{
+		Providers: goth.Providers{"discord": provider},
+		Store:     testCookieStore(t),
+		logger:    slog.Default(),
+		accessURL: accessURL,
+		tenantChecker: func(host string) *TenantInfo {
+			if host == "octo.chronicleclassic.com" {
+				return &TenantInfo{Slug: "octo", Name: "OctoWoW"}
+			}
+			return nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "https://octo.chronicleclassic.com/auth/discord?from=%2Fraids%3Ftab%3Dboss", nil)
+	rec := httptest.NewRecorder()
+	http.StripPrefix("/auth", service.Handler()).ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusTemporaryRedirect, rec.Code, rec.Body.String())
+	location, err := url.Parse(rec.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "https://legacy.chronicleclassic.com/auth/discord", location.Scheme+"://"+location.Host+location.Path)
+	require.Equal(t, "https://octo.chronicleclassic.com/raids?tab=boss", location.Query().Get("from"))
+	require.Empty(t, rec.Result().Cookies(), "tenant must not create an OAuth state cookie")
 }
 
 func TestSafeAuthRedirect(t *testing.T) {
