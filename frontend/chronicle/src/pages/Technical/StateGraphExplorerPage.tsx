@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
@@ -11,10 +11,15 @@ import {
   ClipboardPaste,
   Copy,
   Folder,
+  FolderTree,
   Link2,
+  LocateFixed,
+  Maximize2,
   Network,
   RotateCcw,
   Upload,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import targetJSON from "../../../../../docs/logparse-snapshots/catalog/target.json";
 import { Card } from "@/components/ui/Card/Card";
@@ -60,6 +65,11 @@ const defaultPayload = (): Payload => ({ label: DEFAULT_SOURCE, result: coerceSt
 
 export function StateGraphExplorerPage() {
   const [payload, setPayload] = useState<Payload>(defaultPayload);
+  const [center, setCenterState] = useState<CenterPane>(() => loadLayout().center);
+  const setCenter = (next: CenterPane) => {
+    setCenterState(next);
+    saveLayout({ center: next });
+  };
   const [searchParams, setSearchParams] = useSearchParams();
   const selected = searchParams.get("path") ?? undefined;
 
@@ -107,18 +117,147 @@ export function StateGraphExplorerPage() {
           <IssueList issues={issues} onSelect={select} />
         </Card>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-[17rem_minmax(0,1fr)_19rem]">
-          <Card className="min-w-0 p-0">
-            <PathTree index={index} selected={selected} onSelect={select} />
-          </Card>
-          <Card className="min-w-0 p-0">
-            <GraphCanvas index={index} layout={layout} selected={selected} onSelect={select} />
-          </Card>
-          <Card className="min-w-0 p-0">
-            <Inspector index={index} issues={issues} selected={selected} onSelect={select} />
-          </Card>
-        </div>
+        <ResizableColumns
+          center={center}
+          onCenterChange={setCenter}
+          tree={<PathTree index={index} selected={selected} onSelect={select} />}
+          graph={<GraphCanvas index={index} layout={layout} selected={selected} onSelect={select} fill={center === "graph"} />}
+          inspector={<Inspector index={index} issues={issues} selected={selected} onSelect={select} />}
+        />
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Resizable three-pane layout. The center pane flexes; the side panes have
+// draggable widths. Either the tree or the graph can take the center.
+
+type CenterPane = "graph" | "tree";
+
+interface LayoutPrefs {
+  center: CenterPane;
+  left: number;
+  right: number;
+}
+
+const LAYOUT_KEY = "chronicle.stateGraphExplorer.layout";
+const DEFAULT_LAYOUT: LayoutPrefs = { center: "graph", left: 288, right: 320 };
+const MIN_SIDE = 200;
+const MAX_SIDE = 900;
+
+// Kept outside components: try/catch inside React Compiler memos goes stale.
+function loadLayout(): LayoutPrefs {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? "{}") as Partial<LayoutPrefs>;
+    return {
+      center: raw.center === "tree" ? "tree" : "graph",
+      left: clampSide(raw.left ?? DEFAULT_LAYOUT.left),
+      right: clampSide(raw.right ?? DEFAULT_LAYOUT.right),
+    };
+  } catch {
+    return DEFAULT_LAYOUT;
+  }
+}
+
+function saveLayout(patch: Partial<LayoutPrefs>) {
+  try {
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ ...loadLayout(), ...patch }));
+  } catch {
+    // Per-viewer convenience only.
+  }
+}
+
+function clampSide(width: number) {
+  return Number.isFinite(width) ? Math.max(MIN_SIDE, Math.min(MAX_SIDE, Math.round(width))) : MIN_SIDE;
+}
+
+function ResizableColumns({ center, onCenterChange, tree, graph, inspector }: {
+  center: CenterPane;
+  onCenterChange: (center: CenterPane) => void;
+  tree: React.ReactNode;
+  graph: React.ReactNode;
+  inspector: React.ReactNode;
+}) {
+  const [widths, setWidths] = useState(() => {
+    const { left, right } = loadLayout();
+    return { left, right };
+  });
+
+  const startDrag = (side: "left" | "right", event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    const startX = event.clientX;
+    const startWidth = widths[side];
+    let latest = startWidth;
+    const onMove = (move: PointerEvent) => {
+      const delta = move.clientX - startX;
+      latest = clampSide(side === "left" ? startWidth + delta : startWidth - delta);
+      setWidths((current) => ({ ...current, [side]: latest }));
+    };
+    const onUp = () => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.removeEventListener("pointercancel", onUp);
+      saveLayout({ [side]: latest });
+    };
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onUp);
+  };
+
+  const reset = (side: "left" | "right") => {
+    setWidths((current) => ({ ...current, [side]: DEFAULT_LAYOUT[side] }));
+    saveLayout({ [side]: DEFAULT_LAYOUT[side] });
+  };
+
+  const side = center === "graph" ? tree : graph;
+  const main = center === "graph" ? graph : tree;
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-end gap-2 text-xs">
+        <span className="text-muted-foreground">Center pane</span>
+        <div className="inline-flex rounded-md border border-input p-0.5">
+          {(["graph", "tree"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => onCenterChange(option)}
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 ${center === option ? "bg-primary/15 text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {option === "graph" ? <Network className="h-3 w-3" /> : <FolderTree className="h-3 w-3" />}
+              {option === "graph" ? "Graph" : "Path tree"}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div
+        className="flex flex-col gap-4 xl:grid xl:gap-0"
+        style={{ gridTemplateColumns: `${widths.left}px 12px minmax(0,1fr) 12px ${widths.right}px` }}
+      >
+        <Card className="min-w-0 p-0">{side}</Card>
+        <ResizeHandle onPointerDown={(event) => startDrag("left", event)} onReset={() => reset("left")} />
+        <Card className="min-w-0 p-0">{main}</Card>
+        <ResizeHandle onPointerDown={(event) => startDrag("right", event)} onReset={() => reset("right")} />
+        <Card className="min-w-0 p-0">{inspector}</Card>
+      </div>
+    </div>
+  );
+}
+
+function ResizeHandle({ onPointerDown, onReset }: { onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void; onReset: () => void }) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      title="Drag to resize, double-click to reset"
+      onPointerDown={onPointerDown}
+      onDoubleClick={onReset}
+      className="group hidden cursor-col-resize touch-none items-stretch justify-center xl:flex"
+    >
+      <div className="w-px bg-border transition-colors group-hover:w-0.5 group-hover:bg-primary group-active:bg-primary" />
     </div>
   );
 }
@@ -334,11 +473,11 @@ function TreeRow(props: {
         {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </button>
       <KindIcon kind={kind} />
-      <span className="truncate font-mono">{baseName(path)}</span>
+      <span className="shrink-0 font-mono">{baseName(path)}</span>
       {kind === "reference" && target ? (
-        <span className="ml-auto truncate pl-2 font-mono text-[10px] text-muted-foreground">→ {target.replace(/^\/root\//, "")}</span>
+        <span className="ml-auto min-w-0 truncate pl-3 font-mono text-[10px] text-muted-foreground" title={`${target}\n${type ?? ""}`}>→ {target}</span>
       ) : type ? (
-        <span className="ml-auto truncate pl-2 font-mono text-[10px] text-muted-foreground">{shortType(type)}</span>
+        <span className="ml-auto min-w-0 truncate pl-3 font-mono text-[10px] text-muted-foreground" title={type}>{shortType(type)}</span>
       ) : null}
     </div>
   );
@@ -360,11 +499,13 @@ function KindIcon({ kind, className = "h-3.5 w-3.5 shrink-0" }: { kind?: StateGr
 // ---------------------------------------------------------------------------
 // Graph canvas
 
-function GraphCanvas({ index, layout, selected, onSelect }: {
+function GraphCanvas({ index, layout, selected, onSelect, fill }: {
   index: GraphIndex;
   layout: GraphLayout;
   selected?: string;
   onSelect: (p?: string) => void;
+  /** In the center pane, keep text legible by scrolling instead of shrinking too far. */
+  fill: boolean;
 }) {
   const root = index.graph.root;
   const boxed = useMemo(() => new Set(layout.boxes.map((box) => box.path)), [layout]);
@@ -394,6 +535,13 @@ function GraphCanvas({ index, layout, selected, onSelect }: {
       if (owner) edges.add(edgeKey(owner, node.target));
     } else {
       for (const box of layout.boxes) if (isWithin(box.path, selected)) boxes.add(box.path);
+      // Directories of aliases (e.g. State.Instances) focus on what they point at.
+      for (const node of index.graph.nodes) {
+        if (node.kind !== "reference" || !node.target || !isWithin(node.path, selected)) continue;
+        const owner = boxedOwner(node.path, boxed, root);
+        if (owner) boxes.add(owner);
+        if (boxed.has(node.target)) boxes.add(node.target);
+      }
       for (const edge of layout.edges) if (boxes.has(edge.from) && boxes.has(edge.to)) edges.add(edgeKey(edge.from, edge.to));
     }
     return { boxes, edges };
@@ -418,19 +566,103 @@ function GraphCanvas({ index, layout, selected, onSelect }: {
     return { out, inc };
   }, [layout, boxAt]);
 
+  // Zoom/pan works on the SVG viewBox. With auto-focus on, each selection
+  // frames the selected node and everything it relates to; manual zooming
+  // overrides that until the selection changes.
+  const [autoFocus, setAutoFocus] = useState(true);
+  const fullView: View = { x: 0, y: 0, w: layout.width, h: layout.height };
+  const focusView = focus && focus.boxes.size > 0 ? frameBoxes([...focus.boxes].map((p) => boxAt.get(p)!).filter(Boolean)) : undefined;
+  const autoView = autoFocus && focusView ? focusView : fullView;
+  const viewKey = `${selected ?? ""}|${autoFocus}|${layout.width}x${layout.height}`;
+  const [manual, setManual] = useState<{ key: string; view: View }>();
+  const view = manual?.key === viewKey ? manual.view : autoView;
+
+  const svgRef = useRef<SVGSVGElement>(null);
+  const latest = useRef({ view, viewKey, fullView });
+  useEffect(() => {
+    latest.current = { view, viewKey, fullView };
+  });
+
+  const zoomAt = (factor: number, cx?: number, cy?: number) => {
+    const { view: v, viewKey: key, fullView: full } = latest.current;
+    setManual({ key, view: zoomView(v, factor, cx ?? v.x + v.w / 2, cy ?? v.y + v.h / 2, full) });
+  };
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const point = toGraphPoint(svg, event.clientX, event.clientY);
+      const { view: v, viewKey: key, fullView: full } = latest.current;
+      setManual({ key, view: zoomView(v, Math.exp(event.deltaY * 0.0015), point.x, point.y, full) });
+    };
+    svg.addEventListener("wheel", onWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", onWheel);
+  }, []);
+
+  const dragged = useRef(false);
+  const startPan = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0) return;
+    const svg = event.currentTarget;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return;
+    dragged.current = false;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const { view: start, viewKey: key } = latest.current;
+    const onMove = (move: PointerEvent) => {
+      const dx = move.clientX - startX;
+      const dy = move.clientY - startY;
+      if (!dragged.current && Math.hypot(dx, dy) < 4) return;
+      if (!dragged.current) svg.setPointerCapture(event.pointerId);
+      dragged.current = true;
+      setManual({ key, view: { ...start, x: start.x - dx / ctm.a, y: start.y - dy / ctm.d } });
+    };
+    const onUp = () => {
+      svg.removeEventListener("pointermove", onMove);
+      svg.removeEventListener("pointerup", onUp);
+      svg.removeEventListener("pointercancel", onUp);
+    };
+    svg.addEventListener("pointermove", onMove);
+    svg.addEventListener("pointerup", onUp);
+    svg.addEventListener("pointercancel", onUp);
+  };
+
+  const zoomButton = "flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40";
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border/70 px-3 py-2">
         <div className="text-sm font-semibold">Canonical values</div>
         <Legend />
       </div>
-      <div className="styled-scrollbar overflow-auto p-2" onClick={() => onSelect(undefined)}>
+      <div className={`relative ${fill ? "h-[34rem]" : "h-[24rem]"}`}>
+        <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5 rounded-md border border-border/70 bg-card/90 p-0.5 shadow-sm">
+          <button type="button" className={zoomButton} title="Zoom in" onClick={() => zoomAt(1 / 1.25)}><ZoomIn className="h-3.5 w-3.5" /></button>
+          <button type="button" className={zoomButton} title="Zoom out" onClick={() => zoomAt(1.25)}><ZoomOut className="h-3.5 w-3.5" /></button>
+          <button type="button" className={zoomButton} title="Fit whole graph" onClick={() => setManual({ key: viewKey, view: fullView })}><Maximize2 className="h-3.5 w-3.5" /></button>
+          <button
+            type="button"
+            className={`${zoomButton} ${autoFocus ? "bg-primary/15 text-primary" : ""}`}
+            title={autoFocus ? "Auto-focus on selection: on" : "Auto-focus on selection: off"}
+            aria-pressed={autoFocus}
+            onClick={() => setAutoFocus(!autoFocus)}
+          >
+            <LocateFixed className="h-3.5 w-3.5" />
+          </button>
+        </div>
         <svg
-          viewBox={`0 0 ${layout.width} ${layout.height}`}
-          className="mx-auto block h-auto w-full"
-          style={{ minWidth: layout.width * 0.7, maxWidth: layout.width }}
+          ref={svgRef}
+          viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
+          preserveAspectRatio="xMidYMid meet"
+          className="block h-full w-full cursor-grab touch-none select-none active:cursor-grabbing"
           role="img"
           aria-label="State graph"
+          onPointerDown={startPan}
+          onClick={() => {
+            if (!dragged.current) onSelect(undefined);
+          }}
         >
           <defs>
             <marker id="sg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -484,7 +716,7 @@ function GraphCanvas({ index, layout, selected, onSelect }: {
                 opacity={dim ? 0.3 : 1}
                 onClick={(event) => {
                   event.stopPropagation();
-                  onSelect(box.path);
+                  if (!dragged.current) onSelect(box.path);
                 }}
               >
                 <title>{`${box.path}\n${node?.type ?? node?.kind ?? ""}`}</title>
@@ -523,7 +755,7 @@ function GraphCanvas({ index, layout, selected, onSelect }: {
             <span className="font-mono">{group || "root"}</span>
           </span>
         ))}
-        <span className="ml-auto">Badge = incoming reference count. Click empty space to clear.</span>
+        <span className="ml-auto">Badge = incoming references. Scroll to zoom, drag to pan, click empty space to clear.</span>
       </div>
     </div>
   );
@@ -713,4 +945,38 @@ function truncate(text: string, max: number) {
 
 function escapeRegExp(text: string) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+interface View {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Frame a set of boxes with padding, never zooming in past ~2.5 boxes wide. */
+function frameBoxes(boxes: { x: number; y: number }[]): View {
+  const pad = 36;
+  const minX = Math.min(...boxes.map((box) => box.x)) - pad;
+  const minY = Math.min(...boxes.map((box) => box.y)) - pad;
+  const maxX = Math.max(...boxes.map((box) => box.x + BOX_WIDTH)) + pad;
+  const maxY = Math.max(...boxes.map((box) => box.y + BOX_HEIGHT)) + pad;
+  const w = Math.max(maxX - minX, BOX_WIDTH * 2.5);
+  const h = Math.max(maxY - minY, BOX_HEIGHT * 3);
+  return { x: (minX + maxX - w) / 2, y: (minY + maxY - h) / 2, w, h };
+}
+
+function zoomView(view: View, factor: number, cx: number, cy: number, full: View): View {
+  const maxW = Math.max(full.w, full.h) * 3;
+  const w = Math.max(BOX_WIDTH, Math.min(maxW, view.w * factor));
+  const applied = w / view.w;
+  const h = view.h * applied;
+  return { x: cx - (cx - view.x) * applied, y: cy - (cy - view.y) * applied, w, h };
+}
+
+function toGraphPoint(svg: SVGSVGElement, clientX: number, clientY: number) {
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return { x: 0, y: 0 };
+  const point = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+  return { x: point.x, y: point.y };
 }
