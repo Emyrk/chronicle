@@ -77,4 +77,3 @@ WITH page AS MATERIALIZED (
  SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id,clock_timestamp() FROM page
  ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE SET revision=leaderboard_dirty_guild_renown.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_dirty_guild_renown.process_after,EXCLUDED.process_after) RETURNING 1
 ) SELECT (SELECT count(*) FROM enqueued)::bigint AS page_count,COALESCE((SELECT to_jsonb(page) FROM page ORDER BY instance_name DESC, difficulty_name DESC, max_players DESC, encounter_name DESC, realm_id DESC, guild_id DESC LIMIT 1),'{}'::jsonb)::jsonb AS last_cursor;
-
