@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Blocks, Check, Code2, ListFilter, Loader2, Lock, Search } from "lucide-react";
 import type { InstanceSearchField, InstanceSearchFieldScope } from "@/api/typesGenerated";
@@ -8,12 +8,14 @@ import { CelCode } from "./CelCode";
 import { CEL_CHEATSHEET } from "./celCheatsheet";
 import { EXAMPLES } from "./examples";
 import { OP_LABELS, fieldLabel } from "./fieldLabels";
-import { HONORED_FIELDS, treeNeedsHonored } from "./fieldTiers";
+import { honoredFields, treeNeedsHonored } from "./fieldTiers";
 import { encodeQuery, formatCEL } from "./queryModel";
 import { useSearchFields } from "./searchApi";
 
 /** Tools & FAQ guide for instance search (/search/guide). */
 export function SearchGuidePage() {
+  const fields = useSearchFields();
+  const honored = useMemo(() => honoredFields(fields.data?.fields), [fields.data]);
   return (
     <div className="container mx-auto max-w-3xl px-4 py-8">
       <ToolsBackLink className="mb-5" />
@@ -115,7 +117,7 @@ export function SearchGuidePage() {
                 <div>
                   <h3 className="flex flex-wrap items-center gap-2 font-semibold text-foreground">
                     {ex.title}
-                    {treeNeedsHonored(ex.where) && <HonoredBadge />}
+                    {treeNeedsHonored(ex.where, honored) && <HonoredBadge />}
                   </h3>
                   <p className="text-sm">{ex.description}</p>
                 </div>
@@ -150,11 +152,13 @@ export function SearchGuidePage() {
             except the Honored ones below.
           </li>
           <li>
-            <strong style={{ color: TIER_COLOR.honored }}>Honored supporters</strong> and above: Code, and the costly
-            conditions: player parse, DPS, HPS and item level, and boss, trash and idle time. They&apos;re marked{" "}
+            <strong style={{ color: TIER_COLOR.honored }}>Honored supporters</strong> and above: the Code editor, and the
+            costly conditions: player parse, DPS, HPS and item level, and boss, trash and idle time. They&apos;re marked{" "}
             <HonoredBadge /> in the examples and field reference.{" "}
             <Link to="/supporter" className="text-primary hover:underline">Become a supporter</Link>. Without Honored you
-            can still open a shared search or example that uses them to read it, but you can&apos;t run it.
+            can still open a shared search or example that uses them to read it, but you can&apos;t run it: Chronicle
+            refuses searches that use an Honored condition anywhere, including through AI keys and the API. The Code lock
+            is only on the editor: it doesn&apos;t limit which kinds of searches you can run.
           </li>
           <li>
             <strong>Search budget:</strong> searches spend from a budget that refills over time; the search page shows
@@ -232,7 +236,7 @@ function FieldReference() {
                       <td className="w-48 px-3 py-2">
                         <div className="flex flex-wrap items-center gap-1.5 font-medium text-foreground">
                           {fieldLabel(f.name)}
-                          {HONORED_FIELDS.has(f.name) && <HonoredBadge />}
+                          {f.minimum_tier === "honored" && <HonoredBadge />}
                         </div>
                         <code className="text-[11px] text-muted-foreground">{f.name}</code>
                       </td>

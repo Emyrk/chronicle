@@ -123,6 +123,8 @@ func (s *Service) searchInstances(ctx context.Context, tc toolContext, args stri
 	switch {
 	case errors.Is(search.Err, serviceinstancesearch.ErrInvalid):
 		return "", fmt.Errorf("invalid instance search: %w", search.Err)
+	case errors.Is(search.Err, serviceinstancesearch.ErrSupporterRequired):
+		return "", supporterRequiredError(search)
 	case errors.Is(search.Err, serviceinstancesearch.ErrTooComplex):
 		return "", errors.New("instance search is too complex; remove some filters")
 	case errors.Is(search.Err, serviceinstancesearch.ErrRateLimited):
@@ -186,6 +188,8 @@ func (s *Service) explainInstanceSearch(ctx context.Context, tc toolContext, arg
 	switch {
 	case errors.Is(search.Err, serviceinstancesearch.ErrInvalid):
 		return "", fmt.Errorf("invalid instance search: %w", search.Err)
+	case errors.Is(search.Err, serviceinstancesearch.ErrSupporterRequired):
+		return "", supporterRequiredError(search)
 	case errors.Is(search.Err, serviceinstancesearch.ErrTooComplex):
 		return "", errors.New("instance search is too complex; remove some filters")
 	case errors.Is(search.Err, serviceinstancesearch.ErrRateLimited):
@@ -207,4 +211,10 @@ func (s *Service) explainInstanceSearch(ctx context.Context, tc toolContext, arg
 		Cost        int                                        `json:"cost"`
 		Explanation chroniclesdk.InstanceSearchExplainResponse `json:"explanation"`
 	}{Cost: search.Cost, Explanation: explanation})
+}
+
+// supporterRequiredError tells the model which filter the user's tier can't
+// use, so it can say so instead of reporting search as unavailable.
+func supporterRequiredError(r serviceinstancesearch.Result) error {
+	return fmt.Errorf("searching by %s needs the %s supporter tier; tell the user it is a supporter perk, or search without it", r.RequiredField, r.RequiredTier)
 }

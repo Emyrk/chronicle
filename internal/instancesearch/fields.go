@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/google/uuid"
 )
 
@@ -71,6 +72,9 @@ type field struct {
 	// On: the predicate reads per-fight player rows and accepts on
 	// (bosses, trash, any).
 	On bool
+	// MinimumTier is the lowest supporter tier that may filter on the field.
+	// Empty means free. serviceinstancesearch enforces it.
+	MinimumTier chroniclesdk.InstanceSearchSortTier
 	// Cost is the field's weight in Compiled.Cost. Zero means 2 (a plain
 	// column). Correlated subqueries cost more; per-player ranking lookups
 	// and clear-window math the most.
@@ -525,6 +529,10 @@ var (
 	capabilities = []string{"overheal", "absorb", "unit-resources", "unit-position", "raidgroup", "interrupt", "server-side"}
 )
 
+// honored marks the costly fields: player parses and stats, and boss, trash
+// and idle time.
+const honored = chroniclesdk.InstanceSearchSortTierHonored
+
 var fields = []*field{
 	// ---- Instance scope -------------------------------------------------
 	{Name: "instance.name", Scope: scopeInstance, Type: typeString,
@@ -584,11 +592,11 @@ var fields = []*field{
 	{Name: "instance.clear_qualified", Cost: 4, Scope: scopeInstance, Type: typeBool,
 		Doc:   "The clear qualifies for speedrun leaderboards.",
 		value: column("(SELECT sr.qualified FROM instance_speedruns sr WHERE sr.instance_id = li.id)")},
-	{Name: "instance.boss_time_ms", Cost: 20, Scope: scopeInstance, Type: typeInt, Unit: "ms",
+	{Name: "instance.boss_time_ms", MinimumTier: honored, Cost: 20, Scope: scopeInstance, Type: typeInt, Unit: "ms",
 		Doc: "Time inside the clear spent fighting bosses. Full clears only.", value: clearParts("boss")},
-	{Name: "instance.trash_time_ms", Cost: 20, Scope: scopeInstance, Type: typeInt, Unit: "ms",
+	{Name: "instance.trash_time_ms", MinimumTier: honored, Cost: 20, Scope: scopeInstance, Type: typeInt, Unit: "ms",
 		Doc: "Time inside the clear spent fighting trash (non-boss fights). Full clears only.", value: clearParts("trash")},
-	{Name: "instance.idle_time_ms", Cost: 20, Scope: scopeInstance, Type: typeInt, Unit: "ms",
+	{Name: "instance.idle_time_ms", MinimumTier: honored, Cost: 20, Scope: scopeInstance, Type: typeInt, Unit: "ms",
 		Doc: "Time inside the clear spent out of combat. Full clears only.", value: clearParts("idle")},
 	{Name: "instance.clear_parse", Cost: 6, Scope: scopeInstance, Type: typeInt, Unit: "0-100", ParseScope: true,
 		Doc: "Clear-time parse (higher is faster).",
@@ -657,15 +665,15 @@ var fields = []*field{
 		Doc: "Sub-spec in a fight: Bear / Cat (Feral druid), Tank / DPS (Enhancement shaman), Fury Prot. Empty for other specs and servers.", value: rankingField("player_sub_spec")},
 	{Name: "player.role", Cost: 6, Scope: scopePlayer, Type: typeEnum, Enum: roles, Bosses: true, On: true,
 		Doc: "Role in a fight.", value: rankingField("player_role")},
-	{Name: "player.dps", Cost: 6, Scope: scopePlayer, Type: typeFloat, Bosses: true, On: true,
+	{Name: "player.dps", MinimumTier: honored, Cost: 6, Scope: scopePlayer, Type: typeFloat, Bosses: true, On: true,
 		Doc: "DPS in a fight.", value: rankingField("dps")},
-	{Name: "player.hps", Cost: 6, Scope: scopePlayer, Type: typeFloat, Bosses: true, On: true,
+	{Name: "player.hps", MinimumTier: honored, Cost: 6, Scope: scopePlayer, Type: typeFloat, Bosses: true, On: true,
 		Doc: "HPS in a fight.", value: rankingField("hps")},
 	{Name: "player.deaths", Cost: 6, Scope: scopePlayer, Type: typeInt, Bosses: true, On: true,
 		Doc: "Deaths in a fight. Wipes are not counted.", value: rankingField("player_deaths")},
-	{Name: "player.avg_ilvl", Cost: 6, Scope: scopePlayer, Type: typeInt, Bosses: true, On: true,
+	{Name: "player.avg_ilvl", MinimumTier: honored, Cost: 6, Scope: scopePlayer, Type: typeInt, Bosses: true, On: true,
 		Doc: "Average item level in a fight.", value: rankingField("avg_ilvl")},
-	{Name: "player.parse", Cost: 21, Scope: scopePlayer, Type: typeInt, Unit: "0-100", Bosses: true, Metric: true,
+	{Name: "player.parse", MinimumTier: honored, Cost: 21, Scope: scopePlayer, Type: typeInt, Unit: "0-100", Bosses: true, Metric: true,
 		Doc: "Player parse on a boss kill (latest stored score per boss).",
 		value: func(c *compiler, s scope, p pred) valueSQL {
 			r := c.alias("ps")
@@ -688,3 +696,12 @@ var fieldsByName = func() map[string]*field {
 	}
 	return m
 }()
+
+// FieldMinimumTier is the lowest supporter tier that may filter on a field.
+// Unknown fields report free; compiling rejects them.
+func FieldMinimumTier(name string) chroniclesdk.InstanceSearchSortTier {
+	if f := fieldsByName[name]; f != nil && f.MinimumTier != "" {
+		return f.MinimumTier
+	}
+	return chroniclesdk.InstanceSearchSortTierFree
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/aikey"
+	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/instancesearch"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
@@ -312,6 +313,8 @@ func TestLLMsTxt(t *testing.T) {
 			require.Contains(t, body, "| "+titleCase(tier.Tier))
 		}
 		require.Contains(t, body, "| Honored (this key) | 60 | 3000 | 100 | 300 |")
+		require.Contains(t, body, "| player.parse | int (0-100) | Honored |")
+		require.Contains(t, body, "| player.class | enum: ")
 		for _, ex := range frontend.CELCheatsheet() {
 			require.Contains(t, body, "- `"+ex[0]+"`: "+ex[1])
 		}
@@ -357,7 +360,8 @@ func TestAgentViewIsBounded(t *testing.T) {
 
 func TestSearchMenuNarrowsOnePlayer(t *testing.T) {
 	t.Parallel()
-	ctx := aikey.WithKey(context.Background(), aikey.Key{}, "ck_menu")
+	// Honored, so the menu offers parse links too.
+	ctx := aikey.WithKey(context.Background(), aikey.Key{Benefits: aikey.BenefitsFor(billing.TierHonored)}, "ck_menu")
 	steps := []struct{ q, label, want string }{
 		{"", "Has a Druid", `players.exists(p, p.class == "DRUID")`},
 		{`players.exists(p, p.class == "DRUID")`, "Same player is Feral", `players.exists(p, p.class == "DRUID" && p.spec == "Feral")`},
@@ -391,5 +395,17 @@ func TestSearchMenuNarrowsOnePlayer(t *testing.T) {
 		u, err := url.Parse(followLink(t, menu, step.label))
 		require.NoError(t, err)
 		require.Equal(t, step.want, u.Query().Get("q"))
+	}
+}
+
+// A key below Honored sees the parse example marked, not linked.
+func TestLLMsExamplesMarkHonored(t *testing.T) {
+	t.Parallel()
+	r := httptest.NewRequest(http.MethodGet, "https://chronicle.example/llms.txt", nil)
+	for tier, linked := range map[string]bool{"free": false, "honored": true} {
+		var b strings.Builder
+		writeLLMsExamples(&b, newAgentLinks(r), tier)
+		require.Equal(t, linked, strings.Contains(b.String(), "[Runs where a mage parsed 95+]("), tier)
+		require.Equal(t, !linked, strings.Contains(b.String(), "- Runs where a mage parsed 95+ (needs Honored; this key can't run it)"), tier)
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/internal/aikey"
 	"github.com/Emyrk/chronicle/internal/instancesearch"
+	"github.com/Emyrk/chronicle/internal/services/serviceinstancesearch"
 	"github.com/Emyrk/chronicle/internal/wowspec"
 )
 
@@ -181,7 +182,8 @@ func (s *Service) searchMenu(r *http.Request, where *searchNode, results []chron
 		add("Outcome", [][2]string{{"Had a boss wipe", link(with(parts, bossWipe))}})
 	}
 
-	add("Players", s.playerMenu(parts, link))
+	key, _ := aikey.FromContext(ctx)
+	add("Players", s.playerMenu(parts, link, key.Benefits.Tier))
 
 	if !pinned(parts, "instance.guild", "instance.guild_id") {
 		add("Guild", each(top(func(r chroniclesdk.InstanceSearchResult) string { return r.GuildName }), "Guild: %s",
@@ -251,8 +253,9 @@ func (s *Service) searchMenu(r *http.Request, where *searchNode, results []chron
 }
 
 // playerMenu narrows by class, then within that class by spec, sub-spec,
-// role and parse, all on the same player.
-func (*Service) playerMenu(parts []searchNode, link func([]searchNode) string) [][2]string {
+// role and parse, all on the same player. Parse links are left out below
+// the tier that may search by parse.
+func (*Service) playerMenu(parts []searchNode, link func([]searchNode) string, tier string) [][2]string {
 	i := slices.IndexFunc(parts, func(n searchNode) bool { return n.AnyPlayer != nil })
 	if i < 0 {
 		items := make([][2]string, 0, len(menuClasses))
@@ -288,7 +291,7 @@ func (*Service) playerMenu(parts []searchNode, link func([]searchNode) string) [
 			items = append(items, narrow("Same player's role is "+role, pred("player.role", chroniclesdk.InstanceSearchOpEq, role)))
 		}
 	}
-	if !pinned(player, "player.parse") {
+	if !pinned(player, "player.parse") && serviceinstancesearch.FieldAllowed(tier, "player.parse") {
 		for _, score := range []int{75, 90, 95, 99} {
 			items = append(items, narrow(fmt.Sprintf("Same player parsed %d+", score), pred("player.parse", chroniclesdk.InstanceSearchOpGte, score)))
 		}

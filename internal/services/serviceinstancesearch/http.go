@@ -25,7 +25,15 @@ const (
 // search or explain result. On success it writes headers only; the caller
 // writes the body.
 func WriteResult(w http.ResponseWriter, r *http.Request, result Result, explain bool) {
-	ctx := r.Context()
+	if status, resp := ResultError(w, result, explain); status != 0 {
+		httpapi.Write(r.Context(), w, status, resp)
+	}
+}
+
+// ResultError writes a result's headers and, on failure, returns the status
+// and error body to send. The status is 0 on success. Callers that answer in
+// another format (markdown) use it instead of WriteResult.
+func ResultError(w http.ResponseWriter, result Result, explain bool) (int, chroniclesdk.Response) {
 	if result.Status.Limit != 0 {
 		ratelimit.SetHeaders(w, result.Status)
 	}
@@ -36,29 +44,34 @@ func WriteResult(w http.ResponseWriter, r *http.Request, result Result, explain 
 		w.Header().Set(RuntimeCostHeader, strconv.Itoa(result.RuntimeCost))
 	}
 	if result.Err == nil {
-		return
+		return 0, chroniclesdk.Response{}
 	}
 	switch {
 	case errors.Is(result.Err, ErrInvalid):
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid search.", Detail: strings.TrimPrefix(result.Err.Error(), ErrInvalid.Error()+"\n")})
+		return http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid search.", Detail: strings.TrimPrefix(result.Err.Error(), ErrInvalid.Error()+"\n")}
 	case errors.Is(result.Err, ErrSupporterRequired):
 		tierName := strings.ToUpper(result.RequiredTier[:1]) + result.RequiredTier[1:]
 		article := "a"
 		if result.RequiredTier == "honored" {
 			article = "an"
 		}
-		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
+		response := chroniclesdk.Response{
 			Message:      fmt.Sprintf("Sorting by this property is %s %s supporter perk.", article, tierName),
 			CallToAction: fmt.Sprintf("Become %s %s supporter to use this sort order.", article, tierName),
 			Link:         "/supporter",
 			LinkText:     "View supporter perks",
-		})
+		}
+		if result.RequiredField != "" {
+			response.Message = fmt.Sprintf("Searching by %s is %s %s supporter perk.", result.RequiredField, article, tierName)
+			response.CallToAction = fmt.Sprintf("Become %s %s supporter to run this search.", article, tierName)
+		}
+		return http.StatusForbidden, response
 	case errors.Is(result.Err, ErrLoginRequired):
 		response := chroniclesdk.Response{Message: "Log in to use advanced search.", Detail: strings.TrimPrefix(result.Err.Error(), ErrLoginRequired.Error()+"\n")}
 		if !explain {
 			response.CallToAction = "Logged-in users can search by players, specs, parses, kill times and more."
 		}
-		httpapi.Write(ctx, w, http.StatusForbidden, response)
+		return http.StatusForbidden, response
 	case errors.Is(result.Err, ErrRateLimited), errors.Is(result.Err, ErrTooComplex):
 		retrySeconds := int64(math.Ceil(result.RetryAfter.Seconds()))
 		if retrySeconds < 1 || errors.Is(result.Err, ErrTooComplex) {
@@ -69,24 +82,24 @@ func WriteResult(w http.ResponseWriter, r *http.Request, result Result, explain 
 		if errors.Is(result.Err, ErrTooComplex) {
 			msg = "This search is too complex. Remove some filters and try again."
 		}
-		httpapi.Write(ctx, w, http.StatusTooManyRequests, chroniclesdk.Response{Message: msg})
+		return http.StatusTooManyRequests, chroniclesdk.Response{Message: msg}
 	case errors.Is(result.Err, ErrBusy):
 		w.Header().Set("Retry-After", "1")
-		httpapi.Write(ctx, w, http.StatusServiceUnavailable, chroniclesdk.Response{Message: "Search is busy. Try again in a moment."})
+		return http.StatusServiceUnavailable, chroniclesdk.Response{Message: "Search is busy. Try again in a moment."}
 	case errors.Is(result.Err, instancesearch.ErrNotFound):
-		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "Run not found."})
+		return http.StatusNotFound, chroniclesdk.Response{Message: "Run not found."}
 	case errors.Is(result.Err, instancesearch.ErrTimeout):
 		response := chroniclesdk.Response{Message: "This search took too long.", CallToAction: "Narrow it with a zone, realm or date range."}
 		if explain {
 			response = chroniclesdk.Response{Message: "Explaining this run took too long."}
 		}
-		httpapi.Write(ctx, w, http.StatusUnprocessableEntity, response)
+		return http.StatusUnprocessableEntity, response
 	default:
 		msg := "Search failed."
 		if explain {
 			msg = "Explain failed."
 		}
-		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{Message: msg})
+		return http.StatusInternalServerError, chroniclesdk.Response{Message: msg}
 	}
 }
 
