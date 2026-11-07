@@ -100,12 +100,15 @@ func TestParserAllowsTimestampRegressionWithinReorderWindow(t *testing.T) {
 	t.Parallel()
 
 	input := strings.Join([]string{
-		`10/7/2026 22:00:47.0000  COMBAT_LOG_VERSION,22`,
-		`10/7/2026 22:00:45.0000  COMBAT_LOG_VERSION,22`,
+		`10/7/2026 22:00:40.0000  COMBAT_LOG_VERSION,22`,
+		`10/7/2026 22:00:47.0000  ZONE_CHANGE,389,"Ragefire Chasm",1`,
+		`10/7/2026 22:00:45.0000  ZONE_CHANGE,389,"Ragefire Chasm",1`,
 	}, "\n")
 	p, err := New(t.Context(), slog.Default(), strings.NewReader(input), hermesProxyTestDB{}, hermesProxyTestDB{}, nil, database.LogFormatV22Cleu)
 	require.NoError(t, err)
 
+	_, err = p.Advance(t.Context())
+	require.NoError(t, err)
 	_, err = p.Advance(t.Context())
 	require.NoError(t, err)
 	batch, err := p.Advance(t.Context())
@@ -114,21 +117,39 @@ func TestParserAllowsTimestampRegressionWithinReorderWindow(t *testing.T) {
 	require.Equal(t, time.Date(2026, time.October, 7, 22, 0, 45, 0, time.UTC), batch[0].Date())
 }
 
-func TestParserRejectsTimestampRegressionBeyondReorderWindow(t *testing.T) {
+func TestParserIgnoresCombatLogVersionTimestampSpike(t *testing.T) {
 	t.Parallel()
 
 	input := strings.Join([]string{
-		`10/7/2026 22:00:47.0000  COMBAT_LOG_VERSION,22`,
-		`10/7/2026 22:00:45.0000  COMBAT_LOG_VERSION,22`,
-		`10/7/2026 22:00:43.0000  COMBAT_LOG_VERSION,22`,
+		`11/6/2026 20:29:18.112-6  ZONE_CHANGE,389,"Ragefire Chasm",1`,
+		`11/6/2026 20:29:47.175-6  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,1.60.1,PROJECT_ID,18`,
+		`11/6/2026 20:29:19.420-6  ZONE_CHANGE,389,"Ragefire Chasm",1`,
 	}, "\n")
 	p, err := New(t.Context(), slog.Default(), strings.NewReader(input), hermesProxyTestDB{}, hermesProxyTestDB{}, nil, database.LogFormatV22Cleu)
 	require.NoError(t, err)
 
-	_, err = p.Advance(t.Context())
+	for range 3 {
+		_, err = p.Advance(t.Context())
+		require.NoError(t, err)
+	}
+}
+
+func TestParserRejectsTimestampRegressionBeyondReorderWindow(t *testing.T) {
+	t.Parallel()
+
+	input := strings.Join([]string{
+		`10/7/2026 22:00:40.0000  COMBAT_LOG_VERSION,22`,
+		`10/7/2026 22:00:47.0000  ZONE_CHANGE,389,"Ragefire Chasm",1`,
+		`10/7/2026 22:00:45.0000  ZONE_CHANGE,389,"Ragefire Chasm",1`,
+		`10/7/2026 22:00:43.0000  ZONE_CHANGE,389,"Ragefire Chasm",1`,
+	}, "\n")
+	p, err := New(t.Context(), slog.Default(), strings.NewReader(input), hermesProxyTestDB{}, hermesProxyTestDB{}, nil, database.LogFormatV22Cleu)
 	require.NoError(t, err)
-	_, err = p.Advance(t.Context())
-	require.NoError(t, err)
+
+	for range 3 {
+		_, err = p.Advance(t.Context())
+		require.NoError(t, err)
+	}
 	_, err = p.Advance(t.Context())
 	require.ErrorContains(t, err, "log dates went backwards")
 }

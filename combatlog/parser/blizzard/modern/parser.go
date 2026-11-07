@@ -89,6 +89,7 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 	case database.LogFormatV22Cleu:
 		p.version = 22
 		p.inner.SetMaxTimestampRegression(ReorderWindow)
+		p.inner.ExcludeEventFromTimestampOrdering("BLIZZARD_COMBAT_LOG_VERSION")
 	case database.LogFormatV9Cleu:
 		p.version = 9
 	}

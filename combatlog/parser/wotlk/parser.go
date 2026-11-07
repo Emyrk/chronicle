@@ -28,10 +28,11 @@ type Parser struct {
 	scanner *bufio.Scanner
 	format  database.LogFormat
 
-	lastDate               time.Time
-	maxTimestampRegression time.Duration
-	guidNames              *GUIDNames
-	synthetics             interface {
+	lastDate                        time.Time
+	maxTimestampRegression          time.Duration
+	timestampOrderingExcludedEvents map[string]struct{}
+	guidNames                       *GUIDNames
+	synthetics                      interface {
 		ProcessMessages([]messages.Message) ([]messages.Message, error)
 	}
 	itemFetcher   gamedb.GearResolver
@@ -147,6 +148,15 @@ func (p *Parser) SetMaxTimestampRegression(maximum time.Duration) {
 	p.maxTimestampRegression = maximum
 }
 
+// ExcludeEventFromTimestampOrdering prevents metadata events from advancing or
+// being checked against the combat-event timestamp watermark.
+func (p *Parser) ExcludeEventFromTimestampOrdering(event string) {
+	if p.timestampOrderingExcludedEvents == nil {
+		p.timestampOrderingExcludedEvents = make(map[string]struct{})
+	}
+	p.timestampOrderingExcludedEvents[event] = struct{}{}
+}
+
 // SawRaidGroup reports whether the companion addon emitted a valid raid layout.
 func (p *Parser) SawRaidGroup() bool {
 	return p.companion != nil && p.companion.SawRaidGroup()
@@ -229,12 +239,14 @@ func (p *Parser) advance(_ context.Context) (_ []messages.Message, final error) 
 		ts = p.normalizeTimestamp(ts)
 	}
 
-	if !p.lastDate.IsZero() && ts.Before(p.lastDate.Add(-p.maxTimestampRegression)) {
-		diff := ts.Sub(p.lastDate)
-		return nil, parseerrors.AsFatalError(fmt.Errorf("log dates went backwards by %s: latest %v, current %v", diff.String(), p.lastDate, ts))
-	}
-	if ts.After(p.lastDate) {
-		p.lastDate = ts
+	if _, excluded := p.timestampOrderingExcludedEvents[event]; !excluded {
+		if !p.lastDate.IsZero() && ts.Before(p.lastDate.Add(-p.maxTimestampRegression)) {
+			diff := ts.Sub(p.lastDate)
+			return nil, parseerrors.AsFatalError(fmt.Errorf("log dates went backwards by %s: latest %v, current %v", diff.String(), p.lastDate, ts))
+		}
+		if ts.After(p.lastDate) {
+			p.lastDate = ts
+		}
 	}
 
 	return p.dispatch(ts, event, m, next)
