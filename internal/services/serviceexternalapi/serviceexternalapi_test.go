@@ -92,6 +92,7 @@ func TestOpenAPISpec(t *testing.T) {
 		{Name: "Explore", Description: "Discover servers, realms, recent raids, and leaderboards."},
 		{Name: "Characters", Description: "Look up characters and their raid history."},
 		{Name: "Raid Instance", Description: "Inspect one parsed raid instance and its data."},
+		{Name: "Search", Description: "Search raid runs with Chronicle's search query language. Anonymous callers get the public subset."},
 		{Name: "General", Description: "API health and contract endpoints."},
 	}, document.Tags)
 
