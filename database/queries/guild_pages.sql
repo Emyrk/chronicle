@@ -121,10 +121,6 @@ GROUP BY g.id, gp.id, r.name, gp.theme
 ORDER BY COUNT(gpl.id) DESC, g.name
 LIMIT @result_limit OFFSET @result_offset;
 
--- name: CountGuildPlayers :one
--- Characters seen in this guild, for the guild card's member count.
-SELECT COUNT(*) FROM game_players WHERE guild_id = @guild_id::uuid;
-
 -- name: GetGuildByID :one
 SELECT g.*, r.name as realm_name
 FROM guilds g

@@ -64,8 +64,6 @@ type sqlcQuerier interface {
 	CountActiveRegressionJobs(ctx context.Context) (int64, error)
 	CountAllWoWLogGroups(ctx context.Context, arg CountAllWoWLogGroupsParams) (int32, error)
 	CountGuildDiscordInstallationsByDiscordGuildID(ctx context.Context, discordGuildID string) (int64, error)
-	// Characters seen in this guild, for the guild card's member count.
-	CountGuildPlayers(ctx context.Context, guildID uuid.UUID) (int64, error)
 	CountGuilds(ctx context.Context, arg CountGuildsParams) (int64, error)
 	CountLuaProjectStars(ctx context.Context, projectIds []uuid.UUID) ([]CountLuaProjectStarsRow, error)
 	CountLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)

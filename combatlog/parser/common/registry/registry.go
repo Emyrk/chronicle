@@ -280,17 +280,6 @@ func (r *Registry) EntryByName(name string) *Entry {
 	return nil
 }
 
-// ProgressionBosses returns an instance's progression boss encounter list
-// and its canonical boss count. Either is nil when the instance is unknown or
-// has none configured.
-func (r *Registry) ProgressionBosses(name string) ([]string, *int) {
-	entry := r.EntryByName(name)
-	if entry == nil {
-		return nil, nil
-	}
-	return progressionBosses(entry), progressionBossCount(entry)
-}
-
 // RankingEncounterSet returns one effective rankings encounter set by instance
 // and set ID. An empty set ID selects the default set.
 func (r *Registry) RankingEncounterSet(instanceName, setID string) ([]string, bool) {

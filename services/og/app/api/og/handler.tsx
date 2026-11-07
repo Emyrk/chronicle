@@ -3,8 +3,6 @@ import { NextRequest } from 'next/server';
 import { loadRemoteImage, reconstructImageUrl } from '@/app/lib/og-remote-image';
 import { resolveOgRouteKeys } from '@/app/lib/og-route-keys';
 import { normalizeOgTheme } from '@/app/lib/og-themes';
-import { verifyOgSignature } from '@/app/lib/og-signature';
-import { capText, sanitizeText } from '@/app/lib/og-text';
 import { themes } from './themes';
 import { loadCjkFonts } from './themes/cjk-fonts';
 
@@ -21,8 +19,26 @@ const MAX_LENGTH = {
   reading: 40,
 } as const;
 
+// Built from a string: SWC emits the line/paragraph separators of a regex
+// literal as raw characters, which webpack then fails to parse.
+const UNICODE_SPACES = new RegExp('[\\u2000-\\u200F\\u2028-\\u202F]', 'g');
+
+// Sanitize text - replace unsupported characters with safe alternatives
+function sanitizeText(text: string): string {
+  return text
+    .replace(/[⸺⸻—–]+|-{2,}/g, ' — ')
+    .replace(/[""“”]/g, '"')
+    .replace(/[''‘’]/g, "'")
+    .replace(/…/g, '...')
+    .replace(UNICODE_SPACES, ' ')
+    .replace(/ {2,}/g, ' ')
+    .trim();
+}
+
 function readText(searchParams: URLSearchParams, name: keyof typeof MAX_LENGTH, fallback = ''): string {
-  return capText(sanitizeText(searchParams.get(name) ?? '') || fallback, MAX_LENGTH[name]);
+  const value = sanitizeText(searchParams.get(name) ?? '') || fallback;
+  // Slice by code point so a cap never splits an emoji or surrogate pair.
+  return Array.from(value).slice(0, MAX_LENGTH[name]).join('');
 }
 
 function readAccent(value: string | null): string | null {
@@ -34,21 +50,12 @@ function readAccent(value: string | null): string | null {
   return null;
 }
 
-// The brand card draws its own defaults, so it needs no other params.
-function fallbackParams(): URLSearchParams {
-  return new URLSearchParams({ template: 'brand' });
-}
-
 export async function handleOgGet(request: NextRequest, routeKey: string): Promise<Response> {
   if (!routeKeys.has(routeKey)) {
     return new Response('Not Found', { status: 404 });
   }
 
-  // With OG_SIGNING_KEY set, an unsigned or forged URL draws the fallback card
-  // and none of its params: no caller text, no remote image fetches.
-  const requestParams = new URL(request.url).searchParams;
-  const signatureValid = verifyOgSignature(requestParams);
-  const searchParams = signatureValid ? requestParams : fallbackParams();
+  const { searchParams } = new URL(request.url);
   const themeContext = { searchParams };
 
   // `template` is an alias for `theme`; `theme` wins when both are given.
@@ -87,7 +94,6 @@ export async function handleOgGet(request: NextRequest, routeKey: string): Promi
       routeKey,
       userAgent: request.headers.get('user-agent') || '',
       theme: themeName,
-      signatureValid,
       title: props.title.slice(0, 80),
       site: props.site.slice(0, 80),
       imageHost: background.host,
