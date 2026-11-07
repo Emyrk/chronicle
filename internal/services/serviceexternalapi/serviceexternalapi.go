@@ -52,6 +52,7 @@ type externalAPIStore interface {
 	InstanceRankingRecords(context.Context, uuid.UUID) ([]database.EncounterDpsRanking, error)
 	GetParseScoreResultsForInstance(context.Context, uuid.UUID) ([]database.ParseScoreResult, error)
 	InstanceEvent(context.Context, database.InstanceEventParams) (database.LogInstanceEvent, error)
+	ListConsumableDisambiguationsByDataset(context.Context, uuid.UUID) ([]database.ListConsumableDisambiguationsByDatasetRow, error)
 }
 
 type Service struct {
@@ -63,6 +64,9 @@ type Service struct {
 	// search is the replica's shared instance-search service; it owns the
 	// concurrency cap and search rate buckets.
 	search *serviceinstancesearch.Service
+
+	deathCache       *summaryCache[*deathSummary]
+	consumablesCache *summaryCache[*consumablesSummary]
 }
 
 func New(broker *services.Services) *Service {
@@ -91,6 +95,8 @@ func (s *Service) setupRoutes() {
 	s.router = chi.NewRouter()
 	s.rateLimiter = newExternalIPLimiter()
 	s.openapi = newOpenAPIDocument()
+	s.deathCache = newSummaryCache[*deathSummary]()
+	s.consumablesCache = newSummaryCache[*consumablesSummary]()
 	s.registerRoutes()
 }
 

@@ -1,0 +1,101 @@
+{
+  "_comment": "Shared by the Go deaths/consumables summaries (internal/services/serviceexternalapi/summary_test.go) and agentSummaryParity.test.ts so the server summaries and the Deaths/Consumables panels cannot drift apart. Edit both expectations together.",
+  "players": {
+    "0x0000000000000001": { "name": "Tanky", "class": "WARRIOR" },
+    "0x0000000000000002": { "name": "Healy", "class": "PRIEST" },
+    "0x0000000000000003": { "name": "Hunty", "class": "HUNTER" }
+  },
+  "units": {
+    "0xF13000290B000001": "Ragnaros",
+    "0xF13000300F000002": "Son of Flame"
+  },
+  "encounters": [
+    { "id": "aaaaaaaa-0000-0000-0000-000000000000", "name": "Core Hound Pack", "boss": false, "startUnixMilli": 1767225600000, "endUnixMilli": 1767225660000, "killType": "clean" },
+    { "id": "aaaaaaaa-0000-0000-0000-000000000001", "name": "Ragnaros", "boss": true, "startUnixMilli": 1767225720000, "endUnixMilli": 1767225912000, "killType": "wipe" },
+    { "id": "aaaaaaaa-0000-0000-0000-000000000002", "name": "Ragnaros", "boss": true, "startUnixMilli": 1767226200000, "endUnixMilli": 1767226500000, "killType": "clean" }
+  ],
+  "disambiguations": [
+    { "effect_kind": "buff", "spell_id": 17543, "item_id": 13457 }
+  ],
+  "streams": {
+    "slain": {
+      "aaaaaaaa-0000-0000-0000-000000000000": [
+        { "index": 3, "offsetMilli": 5000, "target": "0x0000000000000003", "caster": "0xF13000300F000002" }
+      ],
+      "aaaaaaaa-0000-0000-0000-000000000001": [
+        { "index": 50, "offsetMilli": 45000, "target": "0x0000000000000001", "caster": "0xF13000300F000002" },
+        { "index": 40, "offsetMilli": 30000, "target": "0x0000000000000002", "caster": "0xF13000290B000001",
+          "attribution": { "caster": "0xF13000290B000001", "sourceName": "Wrath of Ragnaros", "amount": 3000, "overkill": 500, "spellId": 20566 } },
+        { "index": 41, "offsetMilli": 30000, "target": "0xF13000300F000002", "caster": "0x0000000000000003" }
+      ]
+    },
+    "damage": {
+      "aaaaaaaa-0000-0000-0000-000000000001": [
+        { "index": 10, "offsetMilli": 15000, "caster": "0xF13000290B000001", "target": "0x0000000000000002", "sourceName": "Melee", "amount": 900 },
+        { "index": 20, "offsetMilli": 25000, "caster": "0xF13000290B000001", "target": "0x0000000000000002", "sourceName": "Melee", "amount": 1000 },
+        { "index": 30, "offsetMilli": 29000, "caster": "0xF13000290B000001", "target": "0x0000000000000002", "sourceName": "Melee", "amount": 0, "tailers": [{ "amount": 400, "hitType": 64 }] },
+        { "index": 31, "offsetMilli": 29500, "caster": "0xF13000290B000001", "target": "0x0000000000000002", "sourceName": "Melee", "amount": 0 },
+        { "index": 39, "offsetMilli": 30000, "caster": "0xF13000290B000001", "target": "0x0000000000000002", "sourceName": "Wrath of Ragnaros", "amount": 3000, "overkill": 500, "spellId": 20566 },
+        { "index": 45, "offsetMilli": 44000, "caster": "0xF13000300F000002", "target": "0x0000000000000001", "sourceName": "Melee", "amount": 2000 },
+        { "index": 46, "offsetMilli": 44000, "caster": "0xF13000290B000001", "target": "0x0000000000000003", "sourceName": "Melee", "amount": 500 }
+      ]
+    },
+    "heal": {
+      "aaaaaaaa-0000-0000-0000-000000000001": [
+        { "index": 25, "offsetMilli": 26000, "caster": "0x0000000000000002", "target": "0x0000000000000002", "sourceName": "Flash Heal", "amount": 800 },
+        { "index": 26, "offsetMilli": 27000, "caster": "0x0000000000000002", "target": "0x0000000000000002", "sourceName": "Renew", "amount": 0, "overheal": 300 }
+      ]
+    },
+    "consume": {
+      "aaaaaaaa-0000-0000-0000-000000000000": [
+        { "index": 1, "offsetMilli": 1000, "consumeId": "c1", "evidenceId": "e1", "player": "0x0000000000000001", "itemId": 13510, "itemName": "Flask of the Titans", "spellId": 17626, "spellName": "Flask of the Titans", "kind": 1, "confidence": 1, "observedAtUnixMilli": 1767225601000 }
+      ],
+      "aaaaaaaa-0000-0000-0000-000000000001": [
+        { "index": 1, "offsetMilli": 0, "consumeId": "c1", "evidenceId": "e2", "player": "0x0000000000000001", "itemId": 13510, "itemName": "Flask of the Titans", "spellId": 17626, "spellName": "Flask of the Titans", "kind": 7, "confidence": 2, "observedAtUnixMilli": 1767225720000, "isProjection": true },
+        { "index": 2, "offsetMilli": 3000, "consumeId": "c2", "evidenceId": "e3", "player": "0x0000000000000002", "candidateItemIds": [13462, 13457], "spellId": 17543, "spellName": "Fire Protection", "kind": 3, "confidence": 3, "observedAtUnixMilli": 1767225723000 },
+        { "index": 3, "offsetMilli": 4000, "consumeId": "c3", "evidenceId": "e4", "player": "0x0000000000000003", "candidateItemIds": [5634, 5633], "spellId": 6615, "spellName": "Free Action", "kind": 2, "confidence": 3, "observedAtUnixMilli": 1767225724000 },
+        { "index": 4, "offsetMilli": 0, "consumeId": "c4", "evidenceId": "e5", "player": "0x0000000000000003", "itemId": 12451, "itemName": "Juju Power", "spellId": 16323, "spellName": "Juju Power", "kind": 9, "confidence": 1, "observedAtUnixMilli": 1767225700000 }
+      ],
+      "aaaaaaaa-0000-0000-0000-000000000002": [
+        { "index": 1, "offsetMilli": 0, "consumeId": "c1", "evidenceId": "e2", "player": "0x0000000000000001", "itemId": 13510, "itemName": "Flask of the Titans", "spellId": 17626, "spellName": "Flask of the Titans", "kind": 7, "confidence": 2, "observedAtUnixMilli": 1767225720000, "isProjection": true },
+        { "index": 2, "offsetMilli": 20000, "consumeId": "c5", "evidenceId": "e6", "player": "0x0000000000000001", "itemId": 13442, "itemName": "Mighty Rage Potion", "spellId": 17528, "spellName": "Mighty Rage", "kind": 1, "confidence": 1, "observedAtUnixMilli": 1767226220000 },
+        { "index": 3, "offsetMilli": 30000, "consumeId": "c6", "evidenceId": "e7", "player": "0x0000000000000002", "itemId": 13444, "itemName": "Major Mana Potion", "spellId": 17531, "spellName": "Restore Mana", "kind": 1, "confidence": 1, "observedAtUnixMilli": 1767226230000 },
+        { "index": 4, "offsetMilli": 150000, "consumeId": "c7", "evidenceId": "e8", "player": "0x0000000000000002", "itemId": 13444, "itemName": "Major Mana Potion", "spellId": 17531, "spellName": "Restore Mana", "kind": 1, "confidence": 1, "observedAtUnixMilli": 1767226350000 }
+      ]
+    }
+  },
+  "expected": {
+    "deaths": {
+      "aaaaaaaa-0000-0000-0000-000000000001": [
+        { "player": "Healy", "offsetMilli": 30000, "killer": "Ragnaros", "killingBlow": "Wrath of Ragnaros", "amount": 3000,
+          "recap": [
+            { "offsetMilli": 25000, "type": "damage", "ability": "Melee", "amount": 1000 },
+            { "offsetMilli": 26000, "type": "heal", "ability": "Flash Heal", "amount": 800 },
+            { "offsetMilli": 29000, "type": "damage", "ability": "Melee", "amount": 0 },
+            { "offsetMilli": 30000, "type": "damage", "ability": "Wrath of Ragnaros", "amount": 3000 }
+          ] },
+        { "player": "Tanky", "offsetMilli": 45000, "killer": "Son of Flame", "killingBlow": null, "amount": 0,
+          "recap": [
+            { "offsetMilli": 44000, "type": "damage", "ability": "Melee", "amount": 2000 }
+          ] }
+      ],
+      "aaaaaaaa-0000-0000-0000-000000000002": []
+    },
+    "consumables": {
+      "all": {
+        "Healy": { "item:13444": 2, "item:13457": 1 },
+        "Hunty": { "candidates:5633,5634": 1, "item:12451": 1 },
+        "Tanky": { "item:13442": 1, "item:13510": 1 }
+      },
+      "aaaaaaaa-0000-0000-0000-000000000001": {
+        "Healy": { "item:13457": 1 },
+        "Hunty": { "candidates:5633,5634": 1, "item:12451": 1 },
+        "Tanky": { "item:13510": 1 }
+      },
+      "aaaaaaaa-0000-0000-0000-000000000002": {
+        "Healy": { "item:13444": 2 },
+        "Tanky": { "item:13442": 1, "item:13510": 1 }
+      }
+    }
+  }
+}
