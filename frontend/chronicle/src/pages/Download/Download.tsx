@@ -324,7 +324,15 @@ export function DownloadView({ os, clients }: { os: OS; clients: ClientOption[] 
             <p className={s.stepBody}>{current.install}</p>
             <p className={s.note}>
               <Info size={16} color="#e6b450" aria-hidden="true" />
-              <span>{current.note}</span>
+              <span>
+                {current.note}
+                {current.os === "macos" && (
+                  <>
+                    {" "}
+                    Want to check what it does first? <a href={REPO}>The code is on GitHub</a>.
+                  </>
+                )}
+              </span>
             </p>
           </div>
 

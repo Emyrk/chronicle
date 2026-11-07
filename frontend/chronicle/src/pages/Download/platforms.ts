@@ -48,7 +48,7 @@ export const PLATFORMS: Platform[] = [
     tray: "menu bar",
     install:
       "Open the .dmg, drag Chronicle Sidekick into Applications and open it from there. Sidekick appears in your menu bar. That is the whole install.",
-    note: "macOS will warn you once because this build is not notarized yet. Right-click the app, choose Open, then Open again.",
+    note: "The first time you open it, macOS blocks it because this build is not notarized yet. Click Done, then open System Settings › Privacy & Security, scroll down to Security and click Open Anyway next to \"Chronicle Sidekick\".",
   },
   {
     os: "linux",
