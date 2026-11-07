@@ -2273,7 +2273,7 @@ function EncounterDetail({
 
       {/* Preset layout tabs */}
       <div className={cn("@container flex shrink-0 items-start gap-1 pb-1 pt-1", focused ? "mb-2" : "mb-3")}>
-        <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+        <div className={cn("flex min-w-0 flex-1 gap-1", isMobile ? "overflow-x-auto styled-scrollbar" : "flex-wrap")}>
         {focused && onShowSidebar && (
           <button
             type="button"
