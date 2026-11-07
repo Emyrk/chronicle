@@ -1,0 +1,27 @@
+[
+  {
+    "key": "test-og-signing-key",
+    "params": {
+      "template": "talents",
+      "class": "mage",
+      "spec": "Fire",
+      "points": "17-34-0",
+      "host": "forever.chronicleclassic.com",
+      "product": "WoW Forever",
+      "v": "1"
+    },
+    "sig": "f43227d0557bd10628c0808c28881500"
+  },
+  {
+    "key": "test-og-signing-key",
+    "params": {
+      "template": "raid",
+      "guild": "<Nightfall> & Co",
+      "raid": "Ahn'Qiraj",
+      "top": "Thalendris:mage:1284,Grimtusk:warrior:1201",
+      "host": "chronicleclassic.com",
+      "v": "2"
+    },
+    "sig": "ec4a6217febcb090c103b5b2588b704f"
+  }
+]

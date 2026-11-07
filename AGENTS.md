@@ -105,6 +105,25 @@ For a broker-managed service:
 
 Before implementing an extraction, state what the service owns, what remains with the caller, and the narrow interface between them. Treat that boundary as an architectural decision and get user approval when it is not already explicit in the request.
 
+## Open Graph card refactor
+
+The generated OG card feature was originally merged as one large train spanning page metadata lookup, ranking aggregation, signed URL serialization, and the standalone renderer. Preserve the shipped behavior while splitting that layout into smaller, reviewable responsibilities.
+
+- Treat commit `f1c4e8368` as the behavioral baseline for this refactor. The stack's restoration commit reproduces that tree before preview tooling or refactors.
+- Open Graph metadata resolution, card selection, signing, and renderer-specific lookups belong in `internal/services/serviceog`; the `api` package only owns the narrow route-provider interface and frontend wiring.
+- The generated-image renderer is optional. With no renderer URL or signing key, `serviceog` must preserve the pre-existing static metadata and skip generated-card lookups.
+- The released Armory card is history-only. Keep the Character Performance renderer for design review, but do not select it until healing-versus-damage spec and metric selection is defined.
+- Guild card logos may use Chronicle-hosted images or exact Discord guild-icon URLs under `https://cdn.discordapp.com/icons/`; reject other external hosts and normalize Discord WebP icons to PNG for the renderer.
+- Guild cards must not include player lists or aggregate player scores until guild-level scoring is ready; the activity fallback shows only estimated raid nights.
+- Generated OG cards and metadata must not display or serialize server/realm names; route URLs may still carry the realm identifier required for navigation.
+- Boss share cards ignore selected players: a share of one boss kill shows the kill time and the fight's top DPS and top HPS. Keep the player-parse renderer for design review, but do not select it.
+- Raid report cards use server-wide per-boss kill-time parses and their average; do not restore the player-average parse metric.
+- Refactors must preserve page metadata, card selection thresholds, and rendered query parameters unless the user explicitly approves a behavior change.
+- Keep the Go signer and TypeScript verifier byte-compatible. Any signature change must update the shared vectors and both test suites together.
+- Use `cd services/og && pnpm preview:links -- <url...>` to compare the actual metadata and image selected for real Chronicle links before and after a refactor.
+- Record accepted OG design decisions in this section as they are finalized. Do not turn tentative refactor ideas into repository rules.
+- The root CI does not cover `services/og`. Run its test, typecheck, and build commands directly for changes under that directory.
+
 ## Essential Commands
 
 ### Build

@@ -4,13 +4,14 @@ import { NextRequest } from 'next/server';
 import { createElement } from 'react';
 import { themes } from '../../app/api/og/themes';
 import * as remoteImage from '../../app/lib/og-remote-image';
+import { signOgParams } from '../../app/lib/og-signature';
 import type { ThemeContext, ThemeFont, ThemeProps } from '../../app/api/og/themes/types';
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 
-const GEIST: ThemeFont = {
-  name: 'Geist',
-  data: await readFile('public/fonts/geist/latin-400-normal.ttf'),
+const INTER: ThemeFont = {
+  name: 'Inter',
+  data: await readFile('public/fonts/inter/latin-400-normal.ttf'),
   weight: 400,
   style: 'normal',
 };
@@ -23,10 +24,10 @@ const state = {
 // handler under test still imports the real registry.
 function stubThemes() {
   for (const [theme, definition] of Object.entries(themes)) {
-    vi.spyOn(definition, 'loadFonts').mockImplementation(async () => [GEIST]);
+    vi.spyOn(definition, 'loadFonts').mockImplementation(async () => [INTER]);
     vi.spyOn(definition, 'render').mockImplementation((props, context) => {
       state.renders.push({ theme, props, context });
-      return createElement('div', { style: { display: 'flex' } }, props.site);
+      return createElement('div', { style: { display: 'flex' } }, theme);
     });
   }
 }
@@ -70,6 +71,7 @@ beforeEach(() => {
   state.renders = [];
   delete process.env.OG_API_PATH;
   delete process.env.OG_SECRET;
+  delete process.env.OG_SIGNING_KEY;
   stubThemes();
 });
 
@@ -77,13 +79,14 @@ afterEach(() => {
   vi.restoreAllMocks();
   delete process.env.OG_API_PATH;
   delete process.env.OG_SECRET;
+  delete process.env.OG_SIGNING_KEY;
 });
 
 describe('route keys', () => {
   test('serves the default og path', async () => {
     const { response, rendered } = await render('https://example.com/api/og?title=Hello');
     expect(response.status).toBe(200);
-    expect(rendered?.theme).toBe('modern');
+    expect(rendered?.theme).toBe('brand');
   });
 
   test('returns 404 for unknown paths', async () => {
@@ -110,64 +113,24 @@ describe('route keys', () => {
 });
 
 describe('themes', () => {
-  test.each(['modern', 'chronicle'])('selects %s when requested', async theme => {
+  test.each(['raid', 'guild'])('selects %s when requested', async theme => {
     const { rendered } = await render(`https://example.com/api/og?theme=${theme}`);
     expect(rendered?.theme).toBe(theme);
   });
 
   test('accepts template as an alias for theme', async () => {
-    const { rendered } = await render('https://example.com/api/og?template=chronicle');
-    expect(rendered?.theme).toBe('chronicle');
+    const { rendered } = await render('https://example.com/api/og?template=raid');
+    expect(rendered?.theme).toBe('raid');
   });
 
   test('prefers theme over template', async () => {
-    const { rendered } = await render('https://example.com/api/og?theme=modern&template=chronicle');
-    expect(rendered?.theme).toBe('modern');
+    const { rendered } = await render('https://example.com/api/og?theme=guild&template=raid');
+    expect(rendered?.theme).toBe('guild');
   });
 
-  test('falls back to modern for unknown theme names', async () => {
-    const { rendered } = await render('https://example.com/api/og?theme=vaporwave');
-    expect(rendered?.theme).toBe('modern');
-  });
-});
-
-describe('text', () => {
-  test('uses defaults for missing title and site', async () => {
-    const { rendered } = await render('https://example.com/api/og');
-    expect(rendered?.props.title).toBe('Untitled');
-    expect(rendered?.props.site).toBe('Blog');
-    expect(rendered?.props.excerpt).toBe('');
-  });
-
-  test('normalizes typographic quotes, dashes, ellipses and odd spaces', async () => {
-    const { rendered } = await render(
-      'https://example.com/api/og?title=%E2%80%9CHello%E2%80%9D%E2%80%94World%E2%80%A6&site=%E2%80%98My%20Site%E2%80%99&excerpt=Line%E2%80%89Break'
-    );
-    expect(rendered?.props.title).toBe('"Hello" — World...');
-    expect(rendered?.props.site).toBe("'My Site'");
-    expect(rendered?.props.excerpt).toBe('Line Break');
-  });
-
-  test('keeps single hyphens intact', async () => {
-    const { rendered } = await render(
-      'https://example.com/api/og?title=state-of-the-art&excerpt=Pause%20%E2%80%94%20resume'
-    );
-    expect(rendered?.props.title).toBe('state-of-the-art');
-    expect(rendered?.props.excerpt).toBe('Pause — resume');
-  });
-
-  test('caps long fields by code point without splitting emoji', async () => {
-    const title = encodeURIComponent('🚀'.repeat(300));
-    const { rendered } = await render(`https://example.com/api/og?title=${title}&tag=${'x'.repeat(100)}`);
-    expect(Array.from(rendered?.props.title ?? '')).toHaveLength(200);
-    expect(rendered?.props.title.endsWith('🚀')).toBe(true);
-    expect(rendered?.props.tag).toHaveLength(40);
-  });
-
-  test('passes tag and reading time through', async () => {
-    const { rendered } = await render('https://example.com/api/og?tag=Essay&reading=5%20min%20read');
-    expect(rendered?.props.tag).toBe('Essay');
-    expect(rendered?.props.readingTime).toBe('5 min read');
+  test.each(['vaporwave', 'modern', 'chronicle'])('falls back to brand for unknown theme name %s', async name => {
+    const { rendered } = await render(`https://example.com/api/og?theme=${name}`);
+    expect(rendered?.theme).toBe('brand');
   });
 });
 
@@ -184,20 +147,21 @@ describe('accent', () => {
 });
 
 describe('images', () => {
-  test('embeds accepted images as data URLs', async () => {
+  test('embeds an accepted icon as a data URL and fetches nothing else', async () => {
     mockNetwork();
     const { rendered } = await render(
-      'https://example.com/api/og?image=https://cdn.example.com/hero.png&icon=https://cdn.example.com/icon.png&avatar=https://cdn.example.com/me.png'
+      'https://example.com/api/og?template=guild&icon=https://cdn.example.com/icon.png&image=https://cdn.example.com/hero.png&avatar=https://cdn.example.com/me.png'
     );
-    expect(rendered?.props.imageSrc?.startsWith('data:image/png;base64,')).toBe(true);
     expect(rendered?.props.iconSrc?.startsWith('data:image/png;base64,')).toBe(true);
-    expect(rendered?.props.avatarSrc?.startsWith('data:image/png;base64,')).toBe(true);
+    // `image` and `avatar` are upstream params no card draws: never downloaded.
+    expect(remoteImage.remoteImageDeps.fetch).toHaveBeenCalledTimes(1);
+    expect(rendered?.props).toEqual({ accent: null, iconSrc: rendered?.props.iconSrc });
   });
 
-  test('drops rejected images and still renders', async () => {
-    const { response, rendered } = await render('https://example.com/api/og?image=http://192.168.1.5/p.png');
+  test('drops a rejected icon and still renders', async () => {
+    const { response, rendered } = await render('https://example.com/api/og?template=guild&icon=http://192.168.1.5/p.png');
     expect(response.status).toBe(200);
-    expect(rendered?.props.imageSrc).toBeNull();
+    expect(rendered?.props.iconSrc).toBeNull();
   });
 });
 
@@ -211,21 +175,61 @@ describe('response', () => {
     expect(await pngSize(response)).toEqual({ width: 1200, height: 630 });
   });
 
-  test('fetches CJK glyphs unless the theme draws them itself', async () => {
+  test('fetches no CJK fonts for caller text; cards load their own name fonts', async () => {
     const network = mockNetwork();
-    const fontHosts = () => network.mock.calls.map(([input]) => new URL(String(input)).hostname);
+    await render('https://example.com/api/og?theme=raid&title=%E4%BD%A0%E5%A5%BD');
+    expect(network).not.toHaveBeenCalled();
+  });
+});
 
-    await render('https://example.com/api/og?theme=modern&title=%E4%BD%A0%E5%A5%BD');
-    expect(fontHosts()).toEqual(['fonts.googleapis.cn']);
+describe('signed params', () => {
+  const KEY = 'test-og-signing-key';
+  const signedUrl = (query: string) => {
+    const params = new URLSearchParams(query);
+    params.set('sig', signOgParams(KEY, params));
+    return `https://example.com/api/og?${params}`;
+  };
 
-    network.mockClear();
-    // Neither bundled theme draws CJK itself, so fake one that does.
-    themes.modern.coversCjk = () => true;
-    try {
-      await render('https://example.com/api/og?theme=modern&title=%E4%BD%A0%E5%A5%BD');
-    } finally {
-      delete themes.modern.coversCjk;
-    }
-    expect(fontHosts()).toEqual([]);
+  test('renders a correctly signed request as asked', async () => {
+    const { response, rendered } = await render(signedUrl('template=raid&title=Hello'), 'og', {
+      OG_SIGNING_KEY: KEY,
+    });
+    expect(response.status).toBe(200);
+    expect(rendered?.theme).toBe('raid');
+    expect(rendered?.context.searchParams.get('title')).toBe('Hello');
+  });
+
+  test.each([
+    ['unsigned', 'https://example.com/api/og?template=raid&title=Forged'],
+    ['forged', 'https://example.com/api/og?template=raid&title=Forged&sig=00000000000000000000000000000000'],
+  ])('renders the fallback with 200 for an %s request', async (_name, url) => {
+    const { response, rendered } = await render(url, 'og', { OG_SIGNING_KEY: KEY });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toBe('image/png');
+    expect(rendered?.theme).toBe('brand');
+    expect([...rendered!.context.searchParams]).toEqual([['template', 'brand']]);
+  });
+
+  test('renders the fallback when a signed param is changed', async () => {
+    const url = signedUrl('template=raid&title=Hello').replace('title=Hello', 'title=Changed');
+    const { rendered } = await render(url, 'og', { OG_SIGNING_KEY: KEY });
+    expect(rendered?.theme).toBe('brand');
+    expect(rendered?.context.searchParams.has('title')).toBe(false);
+  });
+
+  test('never fetches images from a rejected request', async () => {
+    const network = mockNetwork();
+    const { rendered } = await render('https://example.com/api/og?template=guild&icon=https://cdn.example.com/icon.png', 'og', {
+      OG_SIGNING_KEY: KEY,
+    });
+    expect(rendered?.props.iconSrc).toBeNull();
+    expect(network).not.toHaveBeenCalled();
+    expect(remoteImage.remoteImageDeps.fetch).not.toHaveBeenCalled();
+  });
+
+  test('accepts unsigned requests when no key is set', async () => {
+    const { rendered } = await render('https://example.com/api/og?template=raid&title=Hello');
+    expect(rendered?.theme).toBe('raid');
+    expect(rendered?.context.searchParams.get('title')).toBe('Hello');
   });
 });

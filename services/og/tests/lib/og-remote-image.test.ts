@@ -5,7 +5,6 @@ import {
   checkPublicImageUrl,
   loadRemoteImage,
   publicOnlyLookup,
-  reconstructImageUrl,
   requestWithLookup,
   resolveHostnameOverHttps,
   sniffImageType,
@@ -268,17 +267,5 @@ describe('sniffImageType', () => {
     expect(sniffImageType(svg, '')).toBe('image/svg+xml');
     expect(sniffImageType(new TextEncoder().encode('<x/>'), 'image/svg+xml')).toBe('image/svg+xml');
     expect(sniffImageType(new TextEncoder().encode('<html>'), 'text/html')).toBeNull();
-  });
-});
-
-describe('reconstructImageUrl', () => {
-  test('moves stray Unsplash params back onto the image URL', () => {
-    const params = new URLSearchParams('image=https://images.unsplash.com/photo-1&crop=entropy&q=80&title=Hi');
-    expect(reconstructImageUrl(params)).toBe('https://images.unsplash.com/photo-1?crop=entropy&q=80');
-  });
-
-  test('leaves other hosts untouched', () => {
-    const params = new URLSearchParams('image=https://cdn.example.com/a.png&q=80');
-    expect(reconstructImageUrl(params)).toBe('https://cdn.example.com/a.png');
   });
 });

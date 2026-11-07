@@ -8069,6 +8069,18 @@ func (q *sqlQuerier) BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []b
 	return err
 }
 
+const countGuildPlayers = `-- name: CountGuildPlayers :one
+SELECT COUNT(*) FROM game_players WHERE guild_id = $1::uuid
+`
+
+// Characters seen in this guild, for the guild card's member count.
+func (q *sqlQuerier) CountGuildPlayers(ctx context.Context, guildID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countGuildPlayers, guildID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countGuilds = `-- name: CountGuilds :one
 SELECT COUNT(*) FROM guilds g
 WHERE ($1::text = '' OR g.name ILIKE '%' || $1 || '%')
@@ -18997,6 +19009,30 @@ func (q *sqlQuerier) GetCharacterEncounterStats(ctx context.Context, arg GetChar
 		return nil, err
 	}
 	return items, nil
+}
+
+const getCharacterLogCount = `-- name: GetCharacterLogCount :one
+SELECT COUNT(DISTINCT COALESCE(li.duplicate_group_id, edr.instance_id))::INT
+FROM encounter_dps_rankings edr
+JOIN log_instances li ON li.id = edr.instance_id
+JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
+WHERE edr.player_guid = $1
+  AND ($2::uuid IS NULL OR edr.realm_id = $2)
+  AND edr.encounter_id IS NOT NULL
+`
+
+type GetCharacterLogCountParams struct {
+	PlayerGuid string        `db:"player_guid" json:"player_guid"`
+	RealmID    uuid.NullUUID `db:"realm_id" json:"realm_id"`
+}
+
+// Count canonical listed raid logs in which the character has at least one
+// ranked boss kill. Duplicate uploads of the same raid night count once.
+func (q *sqlQuerier) GetCharacterLogCount(ctx context.Context, arg GetCharacterLogCountParams) (int32, error) {
+	row := q.db.QueryRow(ctx, getCharacterLogCount, arg.PlayerGuid, arg.RealmID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const getCharacterPerformanceRuns = `-- name: GetCharacterPerformanceRuns :many

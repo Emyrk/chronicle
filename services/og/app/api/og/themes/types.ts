@@ -1,18 +1,11 @@
+// What the handler prepares for a card beyond its query params (which cards
+// read from ThemeContext). Only the guild card uses these today.
 export interface ThemeProps {
-  title: string;
-  site: string;
-  excerpt: string;
-  author: string;
-  date: string;
-  tag: string;
-  readingTime: string;
   // Validated `#rrggbb`, or null to use the theme's own accent.
   accent: string | null;
-  // Caller-supplied images, already fetched and inlined as data URLs; null when
-  // absent or rejected so themes can lay out without them.
-  imageSrc: string | null;
+  // The caller's `icon`, already fetched through the SSRF checks and inlined
+  // as a data URL; null when absent or rejected so themes can lay out without it.
   iconSrc: string | null;
-  avatarSrc: string | null;
 }
 
 export interface ThemeContext {
@@ -31,6 +24,4 @@ export interface ThemeDefinition {
   // Async when the theme draws on bundled images (see public-files.ts).
   render: (props: ThemeProps, context: ThemeContext) => React.ReactElement | Promise<React.ReactElement>;
   fontFamily: string;
-  // True when the theme's own fonts draw CJK, so no CJK fallback is fetched.
-  coversCjk?: (context: ThemeContext) => boolean;
 }
