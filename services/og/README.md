@@ -122,6 +122,7 @@ An image that fails any check is dropped and the card renders without it.
 |----------|------|------|
 | `modern` | Headline set on the cover image like a magazine cover; a bundled starfield when there is no `image` | `image`, `icon`, `avatar`, `tag`, `accent` |
 | `chronicle` | Chronicle's dark palette, a Libre Baskerville headline and an Inter byline under a gold rule; `image` sits behind a dark wash | `image`, `icon`, `avatar`, `tag`, `accent` (the rule and tag border) |
+| `talents` | Talent build for `/talents/{class}?build=`: spec + class in class colour, the point split, a bar per tree. No `points` draws "<Class> Talent Calculator" with empty trees; `class=pet` draws one bar | `class`, `spec`, `points` (`17-34-0`, one number for a pet), `keys` (up to 3, comma-separated), `host`, `product` |
 
 ### Adding a template
 
