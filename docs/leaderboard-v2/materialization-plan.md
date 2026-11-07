@@ -20,9 +20,9 @@ change the accepted read API/UI. Track remaining work against
   prerequisite intentionally precedes enabling normal ingestion so deletion and
   canonical replacement cannot strand summaries.
 - Accepted follow-up decision: PR 2 will batch existing D2 calculations through
-  sqlc/pgx, with a configurable default of 100 scopes per result family. This is
-  **planned orchestration, not implemented configuration**. See the PR 2 contract
-  below; it does not change refresh timing, concurrency, or rating equations.
+  sqlc/pgx, with a code constant of 100 scopes per tenant/result family, a 10-minute
+  work timeout, and a 15-minute ownership lease. No CLI/environment batch setting
+  is authorized. See the PR 2 contract below; rating equations are unchanged.
 - Current synthetic ten-boss all-class Mastery warm median is **1,234.7ms**,
   roughly 1.23s, not the 200ms target. This is accepted as a starting point.
   **Caching is deferred**; do not add a cache or bosswise best-spec projection.
@@ -167,51 +167,58 @@ Respect transaction-local tenant access, bounded pages, and a per-invocation tim
 budget. Process due scopes on a bounded period: repeated dirt cannot indefinitely
 slide the original due deadline. This is not mandatory D1 upload debounce.
 
-### Accepted batching contract (planned for PR 2)
+### Accepted batching and ownership contract
 
-Add a positive batch-size option to the new `serviceratings.Options`, wired
-through serpent:
+Use code constants: **100 scopes per tenant/result family**, **10-minute work
+timeout**, and **15-minute claim lease** measured by the database wall clock.
+There is no batch-size CLI flag, environment variable, or runtime option. The
+scope cap never truncates a subject's complete history.
 
-- Flag: `--leaderboard-materialization-batch-size`.
-- Environment: `CHRONICLE_LEADERBOARD_MATERIALIZATION_BATCH_SIZE`.
-- Default: `100`; reject zero and negative values during option validation.
+Use three distinct phases:
 
-This caps scopes per result-family batch, not a subject's history. Use generated
-sqlc `:batchexec` calls with `[]Params` over pgx batching to execute the existing
-calculations. Do not replace them with a server-side array query. Keep
-`database/queries/leaderboard_materialize.sql` as the single maintained SQL source;
-experimental duplicate calculation SQL must not ship with production integration.
+1. A short claim transaction selects due scopes with `FOR UPDATE SKIP LOCKED`,
+   assigning a fresh ownership token, claimed revision, and lease expiration.
+2. Generated sqlc `:batchone` calls compute full exact-scope histories and buffer
+   at most 100 typed results in Go. **No dirty-row locks are held during any
+   computation**, including the remaining items in a batch. No JSON staging or
+   replacement server-side scope-array query is authorized.
+3. A separate short publication transaction uses generated `:batchexec` calls to
+   lock and recheck token, claimed revision, and unexpired ownership before
+   upserting/deleting and acknowledging atomically. Current revision equal to
+   claimed revision removes dirt. A newer revision still permits the useful owned
+   snapshot to publish, then clears ownership while preserving pending dirt and
+   its due time. Requiring current revision equality would starve hot scopes.
+   Expired or replaced owners may neither publish nor delete nor acknowledge.
 
-Flush a partial batch immediately when available work is exhausted or the drain
-budget is reached; never wait for 100 scopes to accumulate. Batch size is separate
-from concurrency limits and the bounded refresh period. Respect cancellation and
-per-drain time budgets, stop scheduling additional work on cancellation, and use
-bounded retries/backoff rather than an unbounded drain loop.
+Keep `database/queries/leaderboard_materialize.sql` as the single maintained
+calculation source; experimental duplicate calculation SQL must not ship.
+Flush partial pages immediately when available work is exhausted; never wait
+for 100 scopes to accumulate. Stop scheduling on cancellation and use bounded
+retry/backoff rather than an unbounded drain loop. The shorter work deadline is
+not proof a paused process or database statement has stopped: tokens and
+publication-time ownership fencing remain necessary despite the longer lease.
 
 Consume/drain batch results and close them on every path, explicitly handling
-execution, result-drain, close, and transaction/commit errors. A failed or rolled
-back transaction must not acknowledge its dirty work; do not mistake a successful
-earlier batch item for a committed result. Batching does not replace revision
-fencing or stale-publication protection described below.
+execution, result-drain, close, and transaction/commit errors. Failed publication
+must not acknowledge work, even if earlier batch statements succeeded. Cleanup
+must be bounded and ownership-checked; lease expiry recovers failed cleanup.
 
-Extend PR 2 tests for default/flag/environment wiring, positive validation,
-per-family caps, immediate partial flush, cancellation/time-budget exits, and
-execution/drain/close/commit failures with no failed-work acknowledgement. Verify
-that batching does not alter the exact calculation results or enqueue semantics.
-
-Use short claim/publication critical sections, not row locks held throughout a
-large history sort. Acknowledging the claimed revision is necessary but not
-sufficient: prevent a slow older computation from overwriting a newer published
-result. Finalize the concrete claim/fencing mechanism in this PR after checking
-existing columns and concurrency tests; do not assume a schema-only comment
-already implements safe multi-consumer ownership.
+Test fixed constants/no runtime setting, per-family caps, partial flush,
+cancellation, failure rollback, tenant fairness and future-due no-spin. Explicitly
+test a full 100-scope compute phase with 15 concurrently bumped revisions: all
+100 owned snapshots may publish while exactly those 15 newer obligations remain.
+Verify replaced-token rejection after an actual PostgreSQL row-lock wait, and
+stale-owner suppression for both result writes and empty-result deletion.
 
 **Refactor/acceptance:** demonstrate producer latency stays bounded while a large
 subject recomputes, newer dirt survives, no stale overwrite occurs, and each
-active tenant progresses under sustained load. Specify the configurable maximum
-refresh period before enablement, with measured compute budget and explicit
-retry/backoff behavior. No arbitrary new numeric freshness promise is set here.
-Keep production dispatch disabled until integration checks pass.
+active tenant progresses under sustained load. Document the bounded dispatcher
+period, measured compute budget, and retry/backoff behavior; do not imply that the
+period is a guaranteed end-to-end freshness bound. Keep production dispatch
+code-disabled until integration checks pass. Later enablement is a separately
+reviewed change to `serviceratings.DispatchEnabled`, followed by deployment—not
+a CLI/environment setting or an implicit historical backfill. See
+[detailed protocol and measurements](d2-worker-protocol.md).
 
 ## PR 3: shared canonical projector and rare D1 reconciliation
 

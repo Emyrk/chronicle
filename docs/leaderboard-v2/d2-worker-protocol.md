@@ -2,6 +2,10 @@
 
 PR2 adds orchestration only. Source writers, D1 reconciliation, backfill, read/UI/cache integration and production enablement are deliberately absent. `serviceratings.DispatchEnabled` is false; workers are registered, but neither production worker does work and no periodic dispatcher is scheduled.
 
+## Later enablement
+
+Enablement is a separate reviewed integration change, not an operator flag: first integrate and validate the source evidence/D2 writers and required repair path, then change the `DispatchEnabled` code constant in `internal/services/serviceratings/worker.go` to true and deploy. That enables the already-registered workers and registers the periodic dispatcher at service startup. It does not itself run a backfill; any historical population requires its separately approved process. Do not enable by adding a CLI/environment override.
+
 ## Ownership and transactions
 
 - Code constants: 100 scopes per page, 10-minute work deadline, 15-minute lease. No CLI/env tuning knob.
@@ -34,4 +38,4 @@ Opt-in `CHRONICLE_MEASURE_D2=1 go test ./internal/services/serviceratings -run T
 
 Times include claim, batched computation, fenced publication and acknowledgement; enqueue is outside the timer. Fixtures have no matching provenance hierarchy, so provenance remains null. These are local warm-cache observations, not production throughput guarantees or separate publication-tail measurements. Existing scoped EXPLAIN tests now target the maintained compute queries and also pass.
 
-Targeted calculator/read/config/service/CLI tests, worker race tests (`-count=3`), and changed-code lint pass. Lint has a narrow exception for sqlc-generated deferred batch `Close` calls; handwritten callers explicitly drain and check `Close`. Unrestricted lint also reports pre-existing issues outside this change. Full `make gen` remains blocked by the absent `frontend/imagecache/turtle/icons` asset directory; database generation succeeds. No production databases, preview fixtures, or running servers were changed.
+Targeted calculator/read/config/service/CLI tests, worker race tests (`-count=3`), changed-code lint, and `make build-backend` pass. Lint has a narrow exception for sqlc-generated deferred batch `Close` calls; handwritten callers explicitly drain and check `Close`. Unrestricted lint also reports pre-existing issues outside this change. Full `make gen` remains blocked by the absent `frontend/imagecache/turtle/icons` asset directory; database generation succeeds. No production databases, preview fixtures, or running servers were changed.
