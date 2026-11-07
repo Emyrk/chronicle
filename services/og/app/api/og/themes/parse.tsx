@@ -1,7 +1,7 @@
 // Parse card (template=parse) for /s/{code} shares of one player on one boss
 // kill. api/og.go (parseCardParams) writes every value into the signed URL.
 //
-//   player, class, spec, boss, raid, guild, realm, metric (dps|hps), value, dur
+//   player, class, spec, boss, raid, guild, metric (dps|hps), value, dur
 //   score, rank, of        the boss parse; without score the card leads with
 //   raidrank               value and the raid rank (the DPS-hero fallback)
 import {
@@ -60,7 +60,6 @@ export interface ParseCardData {
   boss: string;
   raid: string;
   guild: string;
-  realm: string;
   metric: 'DPS' | 'HPS';
   value: string | null;
   duration: string;
@@ -81,7 +80,6 @@ export function parseCardData(context: ThemeContext): ParseCardData {
     boss: param(context, 'boss', 40),
     raid: param(context, 'raid', 48),
     guild: param(context, 'guild', 32),
-    realm: param(context, 'realm', 32),
     metric: param(context, 'metric', 3).toLowerCase() === 'hps' ? 'HPS' : 'DPS',
     value: formatMetric(param(context, 'value', 12)),
     duration: dur !== null ? formatDuration(dur) : '',
@@ -224,7 +222,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
     [Infinity, 64],
   ]);
   const specLine = [[data.spec, titleCase(data.className)].filter(Boolean).join(' '), data.guild ? `<${data.guild}>` : ''].filter(Boolean).join(' · ');
-  const meta = [data.raid, data.realm, product].filter(Boolean).join(' · ');
+  const meta = [data.raid, product].filter(Boolean).join(' · ');
   const row = stats(data, hasParse);
 
   return (

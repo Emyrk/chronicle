@@ -19,7 +19,6 @@ const FULL = new URLSearchParams({
   boss: 'Ragnaros',
   raid: 'Molten Core',
   guild: 'Nightfall',
-  realm: 'Nordanaar',
   product: 'WoW Forever',
   score: '99',
   rank: '3',
@@ -90,7 +89,7 @@ describe('parse card', () => {
 
     const json = await tree(FULL.toString());
     const shown = texts(json);
-    for (const text of ['Thalendris', 'Fire Mage · <Nightfall>', 'Ragnaros', 'Molten Core · Nordanaar · WoW Forever', '99', 'Parse', '1,284.6', 'DPS', '2:14', 'Kill time', '#3', '/ 1,412', 'Rank', 'Boss parse', 'forever.chronicleclassic.com']) {
+    for (const text of ['Thalendris', 'Fire Mage · <Nightfall>', 'Ragnaros', 'Molten Core · WoW Forever', '99', 'Parse', '1,284.6', 'DPS', '2:14', 'Kill time', '#3', '/ 1,412', 'Rank', 'Boss parse', 'forever.chronicleclassic.com']) {
       expect(shown).toContain(text);
     }
     // The ring: track + arc in the 99 tier colour; the class bar in mage blue.

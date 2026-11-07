@@ -14,7 +14,6 @@ const FULL = new URLSearchParams({
   template: 'clear',
   guild: 'Nightfall',
   raid: 'Molten Core',
-  realm: 'Nordanaar',
   product: 'WoW Forever',
   ms: '2092000',
   score: '98',
@@ -86,7 +85,7 @@ describe('clear card', () => {
     for (const text of [
       'Speedrun · Molten Core',
       '34:52',
-      '#1 on Nordanaar',
+      'Realm #1',
       'Faster than 98% of 318 clears',
       '−1:04 vs. previous record',
       '<Nightfall>',
@@ -122,7 +121,7 @@ describe('clear card', () => {
     const shown = texts(await tree(q));
     expect(shown).toContain('Top 2%');
     expect(shown).toContain('#6 of 318 clears');
-    expect(shown).not.toContain('#1 on Nordanaar');
+    expect(shown).not.toContain('Realm #1');
     expect(shown.some(text => text.includes('previous record'))).toBe(false);
     expect(Array.from((await renderPng(q)).subarray(0, 4))).toEqual(PNG_SIGNATURE);
     expect(network()).toEqual([]);

@@ -105,7 +105,6 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   const { host, product } = chromeParams(context);
   const guild = param(context, 'guild', 32);
   const raid = param(context, 'raid', 48) || 'Raid';
-  const realm = param(context, 'realm', 32);
   const ms = intParam(context, 'ms', { min: 0, max: 7 * 86400 * 1000 }) ?? 0;
   const score = intParam(context, 'score', { min: 0, max: 100 });
   const rank = intParam(context, 'rank', { min: 1, max: 999999 });
@@ -122,7 +121,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   const timerSize = fitFontSize(timer, [[5, 200], [Infinity, 150]]);
 
   // No realm rank (or one outside the board) → the time-parse percentile.
-  const pill = realmRank !== null && realm ? `#${realmRank} on ${realm}` : score !== null ? `Top ${Math.max(1, 100 - score)}%` : '';
+  const pill = realmRank !== null ? `Realm #${realmRank}` : score !== null ? `Top ${Math.max(1, 100 - score)}%` : '';
   const clears = `${of} clears`;
   const standing =
     of === null || score === null
@@ -191,10 +190,10 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   );
 }
 
-// Cyrillic and CJK guild, realm or raid names load their fonts before the
-// render (kit loadNameFonts), so next/og never fetches one while drawing.
+// Cyrillic and CJK guild or raid names load their fonts before the render
+// (kit loadNameFonts), so next/og never fetches one while drawing.
 async function loadFonts(context: ThemeContext): Promise<ThemeFont[]> {
-  const text = [param(context, 'guild', 32), param(context, 'realm', 32), param(context, 'raid', 48)].join('');
+  const text = [param(context, 'guild', 32), param(context, 'raid', 48)].join('');
   const [kit, names] = await Promise.all([loadKitFonts(), loadNameFonts(text)]);
   return [...kit, ...names];
 }

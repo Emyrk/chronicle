@@ -160,7 +160,6 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   const { host, product } = chromeParams(context);
   const guild = param(context, 'guild', 40);
   const raid = param(context, 'raid', 48) || 'Raid';
-  const realm = param(context, 'realm', 32);
   const date = shortDate(param(context, 'date', 10));
   const players = intParam(context, 'players', { min: 0, max: 999 });
   const kills = intParam(context, 'kills', { min: 0, max: 99 }) ?? 0;
@@ -176,7 +175,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   const ranked = top.length > 0;
   const headline = guild || raid;
   const chip = [guild ? 'Raid report' : 'PUG', date].filter(Boolean).join(' · ');
-  const meta = [realm, product, players !== null ? `${players} players` : ''].filter(Boolean).join(' · ');
+  const meta = [product, players !== null ? `${players} players` : ''].filter(Boolean).join(' · ');
 
   const stats: Array<{ value: string; label: string; color?: string }> = [
     { value: bosses ? `${kills}/${bosses}` : String(kills), label: 'Bosses' },

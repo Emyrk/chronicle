@@ -14,7 +14,6 @@ const FULL = new URLSearchParams({
   template: 'raid',
   guild: 'Nightfall',
   raid: 'Molten Core',
-  realm: 'Nordanaar',
   product: 'WoW Forever',
   date: '2026-11-06',
   players: '40',

@@ -33,7 +33,6 @@ type parseCard struct {
 	Boss   string
 	Raid   string
 	Guild  string
-	Realm  string
 	// Metric is "dps" or "hps" (healers).
 	Metric string
 	Value  float64
@@ -62,7 +61,6 @@ func parseCardParams(card parseCard) url.Values {
 	setIf("boss", card.Boss)
 	setIf("raid", card.Raid)
 	setIf("guild", card.Guild)
-	setIf("realm", card.Realm)
 	setIf("metric", card.Metric)
 	if card.Value > 0 {
 		q.Set("value", strconv.FormatFloat(card.Value, 'f', 1, 64))

@@ -30,7 +30,6 @@ func TestParseCardParams(t *testing.T) {
 		Boss:     "Ragnaros",
 		Raid:     "Molten Core",
 		Guild:    "Nightfall",
-		Realm:    "Nordanaar",
 		Metric:   "dps",
 		Value:    1284.62,
 		Duration: 134 * time.Second,
@@ -48,7 +47,6 @@ func TestParseCardParams(t *testing.T) {
 		"boss":     {"Ragnaros"},
 		"raid":     {"Molten Core"},
 		"guild":    {"Nightfall"},
-		"realm":    {"Nordanaar"},
 		"metric":   {"dps"},
 		"value":    {"1284.6"},
 		"dur":      {"134"},
@@ -253,7 +251,7 @@ func TestLoadParseCard(t *testing.T) {
 	request := func(ctx context.Context) *http.Request {
 		return httptest.NewRequest(http.MethodGet, "/s/code", nil).WithContext(ctx)
 	}
-	base := parseCard{Host: "forever.chronicleclassic.com", Raid: "Molten Core", Realm: "Nordanaar"}
+	base := parseCard{Host: "forever.chronicleclassic.com", Raid: "Molten Core"}
 	load := func(t *testing.T, s database.Store, playerGUID guid.GUID) (parseCard, bool) {
 		ctx := testutil.Context(t, testutil.WaitShort)
 		return apiWith(s).loadParseCard(request(ctx), inst, database.LogInstancePlayer{UnitGuid: playerGUID}, enc, base)
@@ -265,7 +263,7 @@ func TestLoadParseCard(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, url.Values{
 			"host": {"forever.chronicleclassic.com"}, "player": {"Thalendris"}, "class": {"mage"}, "spec": {"Fire"},
-			"boss": {"Ragnaros"}, "raid": {"Molten Core"}, "realm": {"Nordanaar"}, "metric": {"dps"},
+			"boss": {"Ragnaros"}, "raid": {"Molten Core"}, "metric": {"dps"},
 			"value": {"1284.6"}, "dur": {"134"}, "score": {"99"}, "rank": {"3"}, "of": {"1412"}, "raidrank": {"2"},
 		}, parseCardParams(card))
 	})
@@ -320,7 +318,7 @@ func TestInstanceCardURL(t *testing.T) {
 		{UnitGuid: guid.GUID(0x0A), Name: "Thalendris", Class: database.WowPlayableClassMAGE},
 		{UnitGuid: guid.GUID(0x0B), Name: "Lightwell", Class: database.WowPlayableClassPRIEST},
 	}
-	base := raidCard{Host: "forever.chronicleclassic.com", Raid: inst.Name, Realm: inst.RealmName}
+	base := raidCard{Host: "forever.chronicleclassic.com", Raid: inst.Name}
 	template := func(t *testing.T, s database.Store, payload []byte) url.Values {
 		ctx := testutil.Context(t, testutil.WaitShort)
 		r := httptest.NewRequest(http.MethodGet, "/s/code", nil).WithContext(ctx)

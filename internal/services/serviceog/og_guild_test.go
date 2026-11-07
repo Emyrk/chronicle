@@ -78,7 +78,6 @@ func TestGuildOGParams(t *testing.T) {
 	got := guildOGParams("forever.chronicleclassic.com", data, guildOGFixtureRaids())
 	require.Equal(t, url.Values{
 		"name":     {"Nightfall"},
-		"realm":    {"Nordanaar"},
 		"members":  {"62"},
 		"icon":     {"https://forever.chronicleclassic.com/c/images/guilds/nightfall.png"},
 		"accent":   {"5F8FA6"},
@@ -104,7 +103,6 @@ func TestGuildOGParams(t *testing.T) {
 		got := guildOGParams("chronicleclassic.com", bare, guildOGFixtureRaids())
 		require.Equal(t, url.Values{
 			"name":  {"Nightfall"},
-			"realm": {"Nordanaar"},
 			"since": {"2025-03"},
 			"raids": {"2"},
 		}, got)
@@ -274,7 +272,7 @@ func TestGuildOGResolver(t *testing.T) {
 		return q
 	}
 	wantTitle := "Nightfall"
-	wantDescription := "Nightfall guild on " + realmName + ": raid progression and best clears on Chronicle."
+	wantDescription := "Nightfall guild: raid progression and best clears on Chronicle."
 
 	t.Run("Unconfigured", func(t *testing.T) {
 		t.Parallel()
@@ -305,7 +303,7 @@ func TestGuildOGResolver(t *testing.T) {
 		q := imageQuery(t, og.ImageURL)
 		require.Equal(t, "guild", q.Get("template"))
 		require.Equal(t, "Nightfall", q.Get("name"))
-		require.Equal(t, realmName, q.Get("realm"))
+		require.False(t, q.Has("realm"))
 		require.Equal(t, "A63F3F", q.Get("accent"))
 		require.Equal(t, "Raiding", q.Get("tag"))
 		require.Equal(t, "forever.chronicleclassic.com", q.Get("host"))
@@ -326,7 +324,7 @@ func TestGuildOGResolver(t *testing.T) {
 			require.Equal(t, wantTitle, og.Title)
 			q := imageQuery(t, og.ImageURL)
 			require.Equal(t, "Nightfall", q.Get("name"))
-			require.Equal(t, realmName, q.Get("realm"))
+			require.False(t, q.Has("realm"))
 			// Only the failed page-theme lookup's params are missing.
 			require.False(t, q.Has("accent"))
 			require.False(t, q.Has("tag"))

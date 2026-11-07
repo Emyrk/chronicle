@@ -32,7 +32,6 @@ func TestClearCardParams(t *testing.T) {
 		Host:    "forever.chronicleclassic.com",
 		Guild:   "Nightfall",
 		Raid:    "Molten Core",
-		Realm:   "Nordanaar",
 		Players: &players,
 		Wipes:   &wipes,
 		Top:     []raidCardDPS{{Name: "Thalendris", Class: "mage", DPS: 1284}}, // not on the clear card
@@ -50,7 +49,6 @@ func TestClearCardParams(t *testing.T) {
 		"host":      {"forever.chronicleclassic.com"},
 		"guild":     {"Nightfall"},
 		"raid":      {"Molten Core"},
-		"realm":     {"Nordanaar"},
 		"ms":        {"2092000"},
 		"score":     {"98"},
 		"rank":      {"6"},

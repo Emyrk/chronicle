@@ -28,7 +28,6 @@ type raidCard struct {
 	Host     string // tenant host, drawn in the footer
 	Guild    string
 	Raid     string
-	Realm    string
 	Date     time.Time
 	Players  *int // nil = unknown
 	Kills    int
@@ -64,7 +63,6 @@ func raidCardParams(card raidCard) url.Values {
 	setIf("host", card.Host)
 	setIf("guild", card.Guild)
 	setIf("raid", card.Raid)
-	setIf("realm", card.Realm)
 	if !card.Date.IsZero() {
 		// Same zone as the page description's date.
 		q.Set("date", card.Date.Format(time.DateOnly))

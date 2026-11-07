@@ -1,6 +1,6 @@
 // Guild card for /g/{guildId}: logo or monogram, name, progression bars and
 // best-clear stats. Every value comes from the signed params serviceog writes:
-//   name, realm, product, members, since (YYYY-MM), accent, tag, host,
+//   name, product, members, since (YYYY-MM), accent, tag, host,
 //   prog=MC:10:10,BWL:8:8 (short:down:total, at most 4), best (seconds),
 //   bestraid, and when there is no progression, raids logged.
 // `icon` (the guild logo) is fetched by the handler through the SSRF pipeline;
@@ -155,7 +155,6 @@ async function render(props: ThemeProps, context: ThemeContext): Promise<React.R
   const { host, product } = chromeParams(context);
   const accent = props.accent ?? DEFAULT_GUILD_ACCENT;
   const name = param(context, 'name', 32) || 'Guild';
-  const realm = param(context, 'realm', 40);
   const tag = param(context, 'tag', 24);
   const members = intParam(context, 'members', { min: 0, max: 99999 });
   const since = formatSince(param(context, 'since', 7));
@@ -166,7 +165,6 @@ async function render(props: ThemeProps, context: ThemeContext): Promise<React.R
   const markSrc = await markImage();
 
   const subline = [
-    realm,
     product,
     members ? `${members.toLocaleString('en-US')} ${members === 1 ? 'member' : 'members'}` : '',
     since ? `since ${since}` : '',

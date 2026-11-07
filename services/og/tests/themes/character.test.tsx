@@ -21,7 +21,7 @@ const props: ThemeProps = {
   avatarSrc: null,
 };
 
-const IDENTITY = 'name=Moonbrew&class=druid&spec=Feral&race=Night+Elf&level=60&guild=Nightfall&realm=Nordanaar&host=forever.chronicleclassic.com';
+const IDENTITY = 'name=Moonbrew&class=druid&spec=Feral&race=Night+Elf&level=60&guild=Nightfall&host=forever.chronicleclassic.com';
 const FULL = `${IDENTITY}&parse=96.4&ilvl=71&kills=212&best=${encodeURIComponent("Ragnaros:99,Nefarian:97,C'Thun:88")}`;
 const HISTORY = `${IDENTITY}&ilvl=71&logs=14&seen=${encodeURIComponent('Nov 2026')}`;
 const NO_GEAR = `${IDENTITY}&parse=96.4&kills=212&best=Ragnaros:99`;
@@ -49,7 +49,7 @@ describe('character card', () => {
   test('unreleased performance style: parse · ilvl · kills and boss pills', async () => {
     expect(labels(FULL)).toEqual(['Best avg parse', 'Item level', 'Boss kills']);
     const json = await tree(FULL);
-    for (const text of ['Moonbrew', 'Level 60 Night Elf Druid', '<Nightfall> · Nordanaar', 'Feral Druid', '96.4', 'Ragnaros', "C'Thun", 'forever.chronicleclassic.com/armory']) {
+    for (const text of ['Moonbrew', 'Level 60 Night Elf Druid', '<Nightfall>', 'Feral Druid', '96.4', 'Ragnaros', "C'Thun", 'forever.chronicleclassic.com/armory']) {
       expect(json).toContain(text);
     }
   });
@@ -128,8 +128,8 @@ describe('character card', () => {
   }
 
   test.each([
-    ['CJK', 'name=%E6%9C%88%E5%85%89&class=mage&level=60&realm=Nordanaar', ['fonts.googleapis.cn', 'fonts.gstatic.cn', 'fonts.gstatic.cn']],
-    ['Cyrillic', `name=${encodeURIComponent('Лунный')}&class=priest&guild=${encodeURIComponent('Северный')}&realm=Nordanaar`, []],
+    ['CJK', 'name=%E6%9C%88%E5%85%89&class=mage&level=60', ['fonts.googleapis.cn', 'fonts.gstatic.cn', 'fonts.gstatic.cn']],
+    ['Cyrillic', `name=${encodeURIComponent('Лунный')}&class=priest&guild=${encodeURIComponent('Северный')}`, []],
   ])('%s names render bold without Google’s main font domains', async (_label, query, expectedHosts) => {
     const hosts = await mockFontNetwork();
     const fonts = await characterTheme.loadFonts(context(query));

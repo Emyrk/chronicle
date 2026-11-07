@@ -398,7 +398,6 @@ func (s *Service) buildInstanceOG(ctx context.Context, r *http.Request, host str
 		fmt.Fprintf(&title, "%s — ", inst.GuildName.String)
 	}
 	title.WriteString(inst.Name)
-	title.WriteString(" on [" + inst.RealmName + "]")
 
 	var desc strings.Builder
 	sep := " · "
@@ -432,7 +431,6 @@ func (s *Service) buildInstanceOG(ctx context.Context, r *http.Request, host str
 			Host:     host,
 			Guild:    inst.GuildName.String,
 			Raid:     inst.Name,
-			Realm:    inst.RealmName,
 			Date:     startDate,
 			Duration: dur,
 		}
@@ -465,7 +463,6 @@ func (s *Service) instanceCardURL(r *http.Request, inst database.LogInstancesGui
 				Class:  ogClassSlug(string(player.Class)),
 				Raid:   base.Raid,
 				Guild:  base.Guild,
-				Realm:  base.Realm,
 			})
 			if ok {
 				return s.ogImageURL(r, "parse", parseCardParams(card))
@@ -553,8 +550,8 @@ func (s *Service) armoryOG(r *http.Request, realm, player string) *frontend.OGDa
 	if p.Level > 0 {
 		level = fmt.Sprintf("%d ", p.Level)
 	}
-	fmt.Fprintf(&desc, "%s%s (%s) — %s%s %s",
-		p.Name, guild, p.RealmName,
+	fmt.Fprintf(&desc, "%s%s — %s%s %s",
+		p.Name, guild,
 		level, race, class,
 	)
 

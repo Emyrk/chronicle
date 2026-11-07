@@ -1,7 +1,7 @@
 // Character card for /armory/{realm}/{player}: a class emblem on the left,
-// name, level line, guild and realm, three stats and up to three boss pills.
+// name, level line, guild, three stats and up to three boss pills.
 //
-//   name, class, spec, race, level, guild, realm
+//   name, class, spec, race, level, guild
 //   parse, ilvl, kills, best=Ragnaros:99,Nefarian:97,C'Thun:88   (with parses)
 //   ilvl, raids, seen=Nov 2026                               (without parses)
 //
@@ -131,7 +131,6 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   const race = param(context, 'race', 20);
   const level = intParam(context, 'level', { min: 1, max: 999 });
   const guild = param(context, 'guild', 32);
-  const realm = param(context, 'realm', 32);
   const color = classColor(className);
   const stats = characterStats(context);
   // Pills only go with a parse; without one the card shows activity instead.
@@ -142,7 +141,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   const initial = (Array.from(name)[0] ?? '?').toUpperCase();
   const emblemLabel = [spec, titleCase(className)].filter(Boolean).join(' ');
   const levelLine = [level !== null ? `Level ${level}` : '', race, titleCase(className)].filter(Boolean).join(' ');
-  const guildLine = [guild ? `<${guild}>` : '', realm].filter(Boolean).join(' · ');
+  const guildLine = guild ? `<${guild}>` : '';
   const nameSize = fitFontSize(name, [
     [12, 92],
     [15, 76],
@@ -248,7 +247,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
 
 // Cyrillic and CJK names need fonts beyond the latin kit cuts (loadNameFonts).
 async function loadFonts(context: ThemeContext): Promise<ThemeFont[]> {
-  const text = [param(context, 'name', 20), param(context, 'guild', 32), param(context, 'realm', 32)].join('');
+  const text = [param(context, 'name', 20), param(context, 'guild', 32)].join('');
   const [kit, names] = await Promise.all([loadKitFonts(), loadNameFonts(text)]);
   return [...kit, ...names];
 }

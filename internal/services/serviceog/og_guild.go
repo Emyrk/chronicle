@@ -132,7 +132,6 @@ type guildOGData struct {
 func guildOGParams(host string, d guildOGData, raids map[string]guildOGRaid) url.Values {
 	q := url.Values{}
 	q.Set("name", d.Guild.Name)
-	q.Set("realm", d.Guild.RealmName)
 	if d.Members > 0 {
 		q.Set("members", strconv.FormatInt(d.Members, 10))
 	}
@@ -317,7 +316,7 @@ func (s *Service) guildOG(r *http.Request, rawID string) *frontend.OGData {
 	host := ogHost(r)
 	og := &frontend.OGData{
 		Title:       guild.Name,
-		Description: fmt.Sprintf("%s guild on %s: raid progression and best clears on Chronicle.", guild.Name, guild.RealmName),
+		Description: fmt.Sprintf("%s guild: raid progression and best clears on Chronicle.", guild.Name),
 		URL:         fmt.Sprintf("https://%s/g/%s", host, guild.ID),
 	}
 	if s.imageBaseURL == nil || s.signingKey == "" {

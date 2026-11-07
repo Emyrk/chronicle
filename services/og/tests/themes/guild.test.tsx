@@ -8,7 +8,7 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpA
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47];
 
 const FULL_QUERY =
-  'template=guild&name=Nightfall&realm=Nordanaar&product=WoW+Forever&members=62&since=2025-03&accent=5F8FA6' +
+  'template=guild&name=Nightfall&product=WoW+Forever&members=62&since=2025-03&accent=5F8FA6' +
   '&prog=MC:10:10,BWL:8:8,AQ40:7:9,Naxx:4:15&best=2092&bestraid=MC&tag=Raiding&host=forever.chronicleclassic.com&v=1';
 
 const context = (query: string): ThemeContext => ({ searchParams: new URLSearchParams(query) });
@@ -65,7 +65,7 @@ describe('guild card', () => {
     const { json, png } = await renderGuild(FULL_QUERY);
     expect([...png.slice(0, 4)]).toEqual(PNG_SIGNATURE);
     expect(networkCalls()).toEqual([]);
-    for (const text of ['Nightfall', 'Guild · Raiding', 'Nordanaar · WoW Forever · 62 members · since Mar 2025', 'Naxx', '4/15', '34:52', 'Best MC clear', 'forever.chronicleclassic.com', 'See our raids']) {
+    for (const text of ['Nightfall', 'Guild · Raiding', 'WoW Forever · 62 members · since Mar 2025', 'Naxx', '4/15', '34:52', 'Best MC clear', 'forever.chronicleclassic.com', 'See our raids']) {
       expect(json).toContain(text);
     }
   });

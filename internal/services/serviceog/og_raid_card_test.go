@@ -26,7 +26,6 @@ func TestRaidCardParams(t *testing.T) {
 		Host:     "forever.chronicleclassic.com",
 		Guild:    "Nightfall",
 		Raid:     "Molten Core",
-		Realm:    "Nordanaar",
 		Date:     time.Date(2026, 11, 6, 21, 30, 0, 0, time.UTC),
 		Players:  &players,
 		Kills:    10,
@@ -45,7 +44,6 @@ func TestRaidCardParams(t *testing.T) {
 		"host":    {"forever.chronicleclassic.com"},
 		"guild":   {"Nightfall"},
 		"raid":    {"Molten Core"},
-		"realm":   {"Nordanaar"},
 		"date":    {"2026-11-06"},
 		"players": {"40"},
 		"kills":   {"10"},
@@ -78,7 +76,7 @@ func TestRaidCardParamsFallbacks(t *testing.T) {
 
 	// A PUG dungeon: no guild, no ranked bosses, no parse, no known art.
 	// The players query failed: no players param rather than "0 players".
-	params := raidCardParams(raidCard{Raid: "Karazhan Crypts", Realm: "Nordanaar", Kills: 4, Bosses: 6})
+	params := raidCardParams(raidCard{Raid: "Karazhan Crypts", Kills: 4, Bosses: 6})
 	for _, key := range []string{"host", "guild", "players", "top", "avg", "wipes", "comp", "date", "dur"} {
 		require.False(t, params.Has(key), key)
 	}

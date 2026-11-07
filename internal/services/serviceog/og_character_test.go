@@ -45,7 +45,6 @@ func TestCharacterCardParams(t *testing.T) {
 		"race":  {"Night Elf"},
 		"level": {"58"},
 		"guild": {"Nightfall"},
-		"realm": {"Nordanaar"},
 		"ilvl":  {"72"},
 		"logs":  {"14"},
 		"seen":  {"Nov 2026"},

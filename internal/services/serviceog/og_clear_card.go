@@ -38,7 +38,7 @@ const (
 )
 
 // clearCard is what the OG service's clear template draws (template=clear)
-// on top of the raid card's guild, raid, realm, players and wipes.
+// on top of the raid card's guild, raid, players and wipes.
 type clearCard struct {
 	DurationMs int64
 	Score      int // server clear-time parse, display score
@@ -65,7 +65,6 @@ func clearCardParams(raid raidCard, sr clearCard) url.Values {
 	setIf("host", raid.Host)
 	setIf("guild", raid.Guild)
 	setIf("raid", raid.Raid)
-	setIf("realm", raid.Realm)
 	q.Set("ms", strconv.FormatInt(sr.DurationMs, 10))
 	q.Set("score", strconv.Itoa(sr.Score))
 	if sr.Rank > 0 && sr.Of > 0 {
