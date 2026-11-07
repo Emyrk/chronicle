@@ -67,6 +67,7 @@ const encounter: MapEncounterPositions = {
   positionsByUnit: new Map([["player", samples]]),
   healthByUnit: new Map(),
   debuffsByUnit: new Map(),
+  activePlayerGuids: ["player"],
   effects: createEncounterEffects(),
 };
 
@@ -371,6 +372,7 @@ describe("map replay model", () => {
       positionsByUnit: new Map([["boss", [sample]]]),
       healthByUnit: new Map(),
       debuffsByUnit: new Map(),
+      activePlayerGuids: [],
       effects: createEncounterEffects(),
     };
     const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => entry);
@@ -396,6 +398,7 @@ describe("map replay model", () => {
       ]]]),
       healthByUnit: new Map(),
       debuffsByUnit: new Map(),
+      activePlayerGuids: [],
       effects: createEncounterEffects(),
     };
     const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => 3670);
@@ -411,6 +414,7 @@ describe("map replay model", () => {
       positionsByUnit: new Map([["boss", [anchor]]]),
       healthByUnit: new Map(),
       debuffsByUnit: new Map(),
+      activePlayerGuids: [],
       effects: createEncounterEffects(),
     };
     const calibration = resolveDungeonMapCalibration(43, calibrationEncounter, () => 3670)!;

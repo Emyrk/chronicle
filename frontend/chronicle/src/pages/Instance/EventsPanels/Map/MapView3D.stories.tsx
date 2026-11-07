@@ -1588,6 +1588,7 @@ function meshFightFixture(players: number, { instance, world, encounterId }: Mes
       healthByUnit: new Map([...bossFightHealth(players)].map(([guid, samples]) => [guid, shift(samples)])),
       effects,
       debuffsByUnit: new Map(),
+      activePlayerGuids: fightMembers(players).map((member) => member.guid),
     }]]),
   };
   const classCount: Record<string, number> = {};

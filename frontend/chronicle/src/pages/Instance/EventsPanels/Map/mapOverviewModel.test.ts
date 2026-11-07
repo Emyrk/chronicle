@@ -29,6 +29,7 @@ function mapEncounter(
     positionsByUnit,
     healthByUnit: new Map(),
     debuffsByUnit: new Map(),
+    activePlayerGuids: [],
     effects: createEncounterEffects(),
   };
 }

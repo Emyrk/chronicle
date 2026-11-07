@@ -41,7 +41,7 @@ import { useEmbeddedPanel, useEmbeddedPanelWithResult } from "../useEmbeddedPane
 import { UnitInspectContext, type UnitInspectSelection } from "../UnitInspectContext";
 import { InspectCards } from "./InspectCards";
 import { createRaidFramesPanel, HIDE_DEAD_ENEMIES_OPTION, selectRaidFramesEncounter } from "../RaidFrames/RaidFrames";
-import { lastTargetAt } from "../RaidFrames/raidFrames.processor";
+import { lastTargetAt, raidFramePlayerGuidsOption } from "../RaidFrames/raidFrames.processor";
 import { createUnitAurasPanel } from "../UnitAuras/UnitAuras";
 import { TargetFrames } from "./TargetFrames";
 import { DEFAULT_AD_STRAFE, IDLE_MOBILE_MAP_INPUT, MAP_CONTROL_KEYBINDS, type MobileMapInput } from "./mapControls";
@@ -639,6 +639,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   const framesWanted = pinned.length > 0 || target !== null;
   // One Raid Frames run draws the grid, the target frames and the inspect boxes
   // (and says who the target is targeting); one Unit Auras run their auras.
+  const raidFramePlayerOption = ready ? raidFramePlayerGuidsOption(ready.activePlayerGuids) : null;
   const { render: raidFrames, result: raidFramesResult } = useEmbeddedPanelWithResult({
     panel: RAID_FRAMES_PANEL,
     context: props.context,
@@ -1052,7 +1053,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
             <div className="pointer-events-none absolute bottom-2 left-2 top-2 z-30 flex max-w-[calc(100%-1rem)] flex-col items-start gap-1.5">
               {showRaidFrames ? (
                 <div className="group/raid flex max-w-full shrink-0 items-start gap-0.5">
-                  <div className="min-w-0 overflow-hidden">{raidFrames()}</div>
+                  <div className="min-w-0 overflow-hidden">{raidFrames(raidFramePlayerOption)}</div>
                   <button
                     type="button"
                     onClick={() => setShowRaidFrames(false)}

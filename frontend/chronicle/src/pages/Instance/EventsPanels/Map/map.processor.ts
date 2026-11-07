@@ -78,6 +78,8 @@ export interface MapEncounterPositions {
   effects: EncounterEffects;
   /** Debuffs on players, by player, in application order: the map tints them by dispel type. */
   debuffsByUnit: Map<string, MapDebuff[]>;
+  /** Players who dealt damage or effective healing during this encounter. */
+  activePlayerGuids: string[];
 }
 
 export interface MapResult {
@@ -224,6 +226,19 @@ function toEffectEvent(
   }
 }
 
+function recordActivePlayer(
+  activePlayerGuids: string[],
+  event: DamageProcessorEvent | HealProcessorEvent,
+  context: ProcessorContext,
+) {
+  const effectiveAmount = event.type === "heal" ? Math.max(0, event.amount - event.overheal) : event.amount;
+  if (effectiveAmount <= 0) return;
+  const playerGuid = context.players[event.caster]
+    ? event.caster
+    : context.unitState?.getOwner(event.caster) ?? context.units?.[event.caster]?.owner ?? null;
+  if (playerGuid && context.players[playerGuid] && !activePlayerGuids.includes(playerGuid)) activePlayerGuids.push(playerGuid);
+}
+
 export const mapProcessor: PanelProcessor<MapResult, MapProcessorEvent> = {
   id: "map",
   streams: ["unit_position", "unit_resources", "damage", "heal", "spell_start", "spell_go", "interrupt", "slain", "ressurection", "aura"],
@@ -243,8 +258,12 @@ export const mapProcessor: PanelProcessor<MapResult, MapProcessorEvent> = {
         healthByUnit: new Map(),
         effects: createEncounterEffects(),
         debuffsByUnit: new Map(),
+        activePlayerGuids: [],
       };
       state.encounters.set(encounterId, encounter);
+    }
+    if (event.type === "damage" || event.type === "heal") {
+      recordActivePlayer(encounter.activePlayerGuids, event, context);
     }
     if (event.type === "aura") {
       if (!event.isBuff && event.spellId && context.players[event.target]) addDebuff(encounter.debuffsByUnit, event, timestampMs);

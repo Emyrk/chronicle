@@ -390,6 +390,28 @@ export function activeCastAt(
   return null;
 }
 
+export const RAID_FRAME_PLAYER_GUIDS_OPTION = "players:";
+
+/** Render-only option that limits the player grid to the listed full-fight contributors. */
+export function raidFramePlayerGuidsOption(guids: Iterable<string>): string {
+  return `${RAID_FRAME_PLAYER_GUIDS_OPTION}${[...guids].join("|")}`;
+}
+
+/** Player GUID allowlist from a render-only option, or null when no allowlist was requested. */
+export function raidFramePlayerGuidsFromOption(panelOption: string | null | undefined): ReadonlySet<string> | null {
+  const token = (panelOption ?? "").split(",").find((part) => part.startsWith(RAID_FRAME_PLAYER_GUIDS_OPTION));
+  if (token === undefined) return null;
+  return new Set(token.slice(RAID_FRAME_PLAYER_GUIDS_OPTION.length).split("|").filter(Boolean));
+}
+
+export function filterRaidFramePlayersByOption<T>(
+  players: readonly (readonly [string, T])[],
+  panelOption: string | null | undefined,
+): (readonly [string, T])[] {
+  const included = raidFramePlayerGuidsFromOption(panelOption);
+  return included === null ? [...players] : players.filter(([guid]) => included.has(guid));
+}
+
 const RAID_GROUP_SIZE = 5;
 
 /**

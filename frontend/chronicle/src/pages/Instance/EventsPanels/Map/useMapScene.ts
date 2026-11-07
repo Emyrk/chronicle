@@ -257,6 +257,8 @@ export type MapScene =
     mapSource: SelectedReplayMapSource | null;
     /** The preferred 2D artwork retained while the active ground switches to mesh coordinates. */
     alignmentGround: MapSceneGround | null;
+    /** Players who dealt damage or effective healing during the full encounter. */
+    activePlayerGuids: readonly string[];
     markers: MapSceneMarker[];
     /** Every debuff spell seen on a player in the encounter (stable per encounter), to look up dispel types. */
     debuffSpellIds: number[];
@@ -673,6 +675,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     alignmentGround: artwork.kind === "instance" && availableFlatCanvas
       ? { iconBaseUrl, canvas: availableFlatCanvas.canvas }
       : null,
+    activePlayerGuids: encounter.activePlayerGuids,
     markers,
     debuffSpellIds: encounterDebuffSpellIds(encounter.debuffsByUnit),
     worldMapId: artworkMapId ?? mapId,
