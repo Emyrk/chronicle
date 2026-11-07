@@ -37,6 +37,9 @@ type DeathPull struct {
 	TotalDeaths int           `json:"total_deaths"`
 	FirstDeath  *FirstDeath   `json:"first_death,omitempty"`
 	Deaths      []PlayerDeath `json:"deaths"`
+	// Omitted is set when this pull's deaths were left out to bound the
+	// response; total_deaths and first_death are still accurate.
+	Omitted bool `json:"omitted,omitempty"`
 }
 
 type FirstDeath struct {
@@ -45,8 +48,9 @@ type FirstDeath struct {
 }
 
 // PlayerDeath is one player death on a boss pull. Every slain event whose
-// target is a player counts, as in the Deaths panel; the parser already
-// replaces Feign Death with a spell event.
+// target is a player counts, as in the Deaths panel. Only the WotLK parser
+// rewrites likely Feign Deaths into spell events; other logs are counted as
+// the panel counts them.
 type PlayerDeath struct {
 	TimeIntoPullMs int64         `json:"time_into_pull_ms"`
 	At             time.Time     `json:"at"`
@@ -87,26 +91,34 @@ type deathSummary struct {
 }
 
 func (s *Service) computeDeathSummary(ctx context.Context, instance database.LogInstancesGuild) (*deathSummary, error) {
-	return s.deathCache.get(instance.ID, func() (*deathSummary, error) {
+	return s.deathCache.get(ctx, instance.ID, func(ctx context.Context) (*deathSummary, error) {
 		summaryCtx, err := s.loadSummaryContext(ctx, instance)
 		if err != nil {
 			return nil, err
 		}
-		streams := make(map[database.LogInstanceEventType][]byte, 3)
-		for _, kind := range []database.LogInstanceEventType{database.LogInstanceEventTypeSlain, database.LogInstanceEventTypeDamage, database.LogInstanceEventTypeHeal} {
-			if streams[kind], err = s.loadEventStream(ctx, instance.ID, kind); err != nil {
-				return nil, err
-			}
-		}
-		return buildDeathSummary(summaryCtx, streams[database.LogInstanceEventTypeSlain], streams[database.LogInstanceEventTypeDamage], streams[database.LogInstanceEventTypeHeal])
+		return buildDeathSummary(ctx, summaryCtx, func(kind database.LogInstanceEventType) ([]byte, error) {
+			return s.loadEventStream(ctx, instance.ID, kind)
+		})
 	})
 }
 
-func buildDeathSummary(c *summaryContext, slainStream, damageStream, healStream []byte) (*deathSummary, error) {
+// buildDeathSummary loads and decodes the slain, damage and heal streams one
+// at a time, so only one compressed stream is held in memory at once.
+func buildDeathSummary(ctx context.Context, c *summaryContext, load func(database.LogInstanceEventType) ([]byte, error)) (*deathSummary, error) {
+	decode := func(kind database.LogInstanceEventType, fn func(encounterID string, first time.Time, message []byte) error) error {
+		stream, err := load(kind)
+		if err != nil {
+			return err
+		}
+		if err := decodeEventSegments(ctx, stream, defaultStreamLimits, fn); err != nil {
+			return fmt.Errorf("decode %s events: %w", kind, err)
+		}
+		return nil
+	}
 	deathsByPull := make(map[string][]PlayerDeath)
 	// deathKey -> death offsets, used to keep only recap-relevant events.
 	deathOffsets := make(map[string][]int64)
-	err := decodeEventSegments(slainStream, func(encounterID string, first time.Time, message []byte) error {
+	err := decode(database.LogInstanceEventTypeSlain, func(encounterID string, first time.Time, message []byte) error {
 		if _, ok := c.pullByID[encounterID]; !ok {
 			return nil
 		}
@@ -145,7 +157,7 @@ func buildDeathSummary(c *summaryContext, slainStream, damageStream, healStream 
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("decode slain events: %w", err)
+		return nil, err
 	}
 
 	// Recap candidates: incoming events within the window before any death of
@@ -159,7 +171,7 @@ func buildDeathSummary(c *summaryContext, slainStream, damageStream, healStream 
 		}
 		return false
 	}
-	err = decodeEventSegments(damageStream, func(encounterID string, _ time.Time, message []byte) error {
+	err = decode(database.LogInstanceEventTypeDamage, func(encounterID string, _ time.Time, message []byte) error {
 		if _, ok := c.pullByID[encounterID]; !ok {
 			return nil
 		}
@@ -183,9 +195,9 @@ func buildDeathSummary(c *summaryContext, slainStream, damageStream, healStream 
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("decode damage events: %w", err)
+		return nil, err
 	}
-	err = decodeEventSegments(healStream, func(encounterID string, _ time.Time, message []byte) error {
+	err = decode(database.LogInstanceEventTypeHeal, func(encounterID string, _ time.Time, message []byte) error {
 		if _, ok := c.pullByID[encounterID]; !ok {
 			return nil
 		}
@@ -209,7 +221,7 @@ func buildDeathSummary(c *summaryContext, slainStream, damageStream, healStream 
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("decode heal events: %w", err)
+		return nil, err
 	}
 	for key := range recaps {
 		entries := recaps[key]
@@ -284,8 +296,11 @@ func renderDeaths(summary *deathSummary, filter summaryFilter, links summaryLink
 		}
 		out := pull
 		out.Deaths = make([]PlayerDeath, 0, len(pull.Deaths))
-		if included+len(pull.Deaths) > maxDeathsPerResponse {
+		// Once one pull does not fit, later pulls omit deaths too, so the
+		// included deaths are always a complete prefix of the night.
+		if response.Truncated || included+len(pull.Deaths) > maxDeathsPerResponse {
 			response.Truncated = true
+			out.Omitted = len(pull.Deaths) > 0
 		} else {
 			for _, death := range pull.Deaths {
 				death.Player = links.player(death.Player)
@@ -313,7 +328,7 @@ func deathsMarkdown(value any) string {
 			continue
 		}
 		_, _ = fmt.Fprintf(&b, "%d deaths. First: %s at %s.\n\n", pull.TotalDeaths, markdownCell.Replace(pull.FirstDeath.Player), formatPullTime(pull.FirstDeath.TimeIntoPullMs))
-		if len(pull.Deaths) == 0 {
+		if pull.Omitted {
 			b.WriteString("Individual deaths omitted to bound the response; filter by encounter and attempt.\n\n")
 			continue
 		}

@@ -3,14 +3,17 @@ package serviceexternalapi
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -228,11 +231,22 @@ func newSummaryFixtureService(t *testing.T) (*Service, *fakeExternalAPIStore, su
 	return service, store, fixture
 }
 
+var summaryClientIPs atomic.Uint32
+
+// getSummary sends each request from a fresh client IP so tests are not
+// throttled by the summary routes' rate-limit cost.
 func getSummary(t *testing.T, service *Service, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	ip := summaryClientIPs.Add(1)
+	return getSummaryFrom(t, service, path, fmt.Sprintf("10.%d.%d.%d", byte(ip>>16), byte(ip>>8), byte(ip)))
+}
+
+func getSummaryFrom(t *testing.T, service *Service, path, clientIP string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Host = "chronicle.example"
 	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-For", clientIP)
 	rec := httptest.NewRecorder()
 	service.ServeHTTP(rec, req)
 	return rec
@@ -390,6 +404,7 @@ func TestInstanceSummaryFilters(t *testing.T) {
 		{name: "encounter is case-insensitive", path: "/raidlogs/instances/fixture-run/deaths?encounter=ragnaros", status: http.StatusOK, attempts: []int{1, 2}},
 		{name: "attempt", path: "/raidlogs/instances/fixture-run/deaths?encounter=Ragnaros&attempt=2", status: http.StatusOK, attempts: []int{2}},
 		{name: "encounter id", path: "/raidlogs/instances/fixture-run/deaths?encounter=aaaaaaaa-0000-0000-0000-000000000001", status: http.StatusOK, attempts: []int{1}},
+		{name: "encounter id in any case", path: "/raidlogs/instances/fixture-run/deaths?encounter=AAAAAAAA-0000-0000-0000-000000000002", status: http.StatusOK, attempts: []int{2}},
 		{name: "no match", path: "/raidlogs/instances/fixture-run/deaths?encounter=Onyxia", status: http.StatusOK, attempts: []int{}},
 		{name: "consumables attempt", path: "/raidlogs/instances/fixture-run/consumables?attempt=1", status: http.StatusOK, attempts: []int{1}},
 		{name: "bad attempt", path: "/raidlogs/instances/fixture-run/deaths?attempt=0", status: http.StatusBadRequest},
@@ -441,15 +456,209 @@ func TestInstanceSummaryMarkdown(t *testing.T) {
 func TestDeathsResponseIsBounded(t *testing.T) {
 	t.Parallel()
 
-	pull := DeathPull{SummaryPull: SummaryPull{Encounter: "Ragnaros", Attempt: 1}, Deaths: make([]PlayerDeath, maxDeathsPerResponse-1)}
-	pull.TotalDeaths = len(pull.Deaths)
-	second := DeathPull{SummaryPull: SummaryPull{Encounter: "Ragnaros", Attempt: 2}, Deaths: make([]PlayerDeath, 2), TotalDeaths: 2}
-	response := renderDeaths(&deathSummary{pulls: []DeathPull{pull, second}}, summaryFilter{}, summaryLinks{}).(DeathsResponse)
+	pull := func(attempt, deaths int) DeathPull {
+		out := DeathPull{SummaryPull: SummaryPull{Encounter: "Ragnaros", Attempt: attempt}, Deaths: make([]PlayerDeath, deaths), TotalDeaths: deaths}
+		if deaths > 0 {
+			out.FirstDeath = &FirstDeath{Player: "Tanky"}
+		}
+		return out
+	}
+	summary := &deathSummary{pulls: []DeathPull{pull(1, maxDeathsPerResponse-1), pull(2, 2), pull(3, 1), pull(4, 0)}}
+	response := renderDeaths(summary, summaryFilter{}, summaryLinks{}).(DeathsResponse)
 
 	require.True(t, response.Truncated)
+	require.Len(t, response.Pulls, 4)
 	require.Len(t, response.Pulls[0].Deaths, maxDeathsPerResponse-1)
-	require.Empty(t, response.Pulls[1].Deaths)
+	require.False(t, response.Pulls[0].Omitted)
+	// The pull that does not fit and every later pull omit their deaths, even
+	// one small enough to fit, so the included deaths are a complete prefix.
+	for _, omitted := range response.Pulls[1:3] {
+		require.Empty(t, omitted.Deaths)
+		require.True(t, omitted.Omitted)
+	}
 	require.Equal(t, 2, response.Pulls[1].TotalDeaths)
+	require.False(t, response.Pulls[3].Omitted, "pulls without deaths have nothing to omit")
+	require.Contains(t, deathsMarkdown(response), "Individual deaths omitted to bound the response")
+}
+
+func TestConsumablesResponseIsBounded(t *testing.T) {
+	t.Parallel()
+
+	pull := func(attempt, rows int) ConsumablePull {
+		return ConsumablePull{
+			SummaryPull: SummaryPull{Encounter: "Ragnaros", Attempt: attempt},
+			Players:     []PlayerConsumables{{Player: SummaryPlayer{Name: "Tanky"}, Total: rows, Consumables: make([]ConsumableCount, rows)}},
+		}
+	}
+	summary := &consumablesSummary{
+		pulls:   []ConsumablePull{pull(1, maxConsumableRowsPerResponse-1), pull(2, 2), pull(3, 1)},
+		players: []PlayerConsumables{{Player: SummaryPlayer{Name: "Tanky"}, Total: 1}},
+	}
+	response := renderConsumables(summary, summaryFilter{}, summaryLinks{}).(ConsumablesResponse)
+
+	require.True(t, response.Truncated)
+	require.Len(t, response.Pulls[0].Players, 1)
+	for _, omitted := range response.Pulls[1:] {
+		require.Empty(t, omitted.Players)
+		require.True(t, omitted.Omitted)
+	}
+	require.Len(t, response.Players, 1, "whole-instance totals are always included")
+	require.Contains(t, consumablesMarkdown(response), "Players omitted to bound the response")
+}
+
+func TestSummaryRateLimitCost(t *testing.T) {
+	t.Parallel()
+	service, _, _ := newSummaryFixtureService(t)
+
+	// The burst is 20 standard requests and a summary costs 5, so the fifth
+	// request from one client in a burst is throttled.
+	for range 4 {
+		require.Equal(t, http.StatusOK, getSummaryFrom(t, service, "/raidlogs/instances/fixture-run/deaths", "192.0.2.10").Code)
+	}
+	require.Equal(t, http.StatusTooManyRequests, getSummaryFrom(t, service, "/raidlogs/instances/fixture-run/consumables", "192.0.2.10").Code)
+}
+
+func TestSummaryBusyReturns503(t *testing.T) {
+	t.Parallel()
+	service, store, _ := newSummaryFixtureService(t)
+
+	// Occupy every computation slot; a cache miss must not queue.
+	slots := service.deathCache.slots
+	for range cap(slots) {
+		slots <- struct{}{}
+	}
+	rec := getSummary(t, service, "/raidlogs/instances/fixture-run/consumables")
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code, rec.Body.String())
+	require.Equal(t, "1", rec.Header().Get("Retry-After"))
+	require.Zero(t, store.eventCalls["consume"], "busy requests must not load streams")
+
+	// Busy is not cached as a failure: once a slot frees, the request works.
+	<-slots
+	require.Equal(t, http.StatusOK, getSummary(t, service, "/raidlogs/instances/fixture-run/consumables").Code)
+}
+
+func TestSummaryFailuresAreCachedBriefly(t *testing.T) {
+	t.Parallel()
+	service, store, _ := newSummaryFixtureService(t)
+	store.events["slain"] = []byte("not gzip")
+
+	for range 3 {
+		require.Equal(t, http.StatusInternalServerError, getSummary(t, service, "/raidlogs/instances/fixture-run/deaths").Code)
+	}
+	require.Equal(t, 1, store.eventCalls["slain"], "a bad stream is decoded once, not on every request")
+}
+
+func TestSummaryComputeIsDetachedAndBounded(t *testing.T) {
+	t.Parallel()
+	cache := newSummaryCache[int](make(chan struct{}, 1))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // the requesting client already went away
+
+	value, err := cache.get(ctx, uuid.New(), func(ctx context.Context) (int, error) {
+		require.NoError(t, ctx.Err(), "computation must survive the client disconnecting")
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		require.WithinDuration(t, time.Now().Add(summaryComputeTimeout), deadline, 5*time.Second)
+		return 7, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, 7, value)
+}
+
+func gzipBytes(t *testing.T, raw []byte) []byte {
+	t.Helper()
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	_, err := writer.Write(raw)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	return compressed.Bytes()
+}
+
+func TestDecodeEventSegmentsLimits(t *testing.T) {
+	t.Parallel()
+
+	segment := func(messages ...[]byte) []byte {
+		var body []byte
+		for _, message := range messages {
+			body = protowire.AppendBytes(body, message)
+		}
+		raw := protowire.AppendString(nil, "aaaaaaaa-0000-0000-0000-000000000001")
+		raw = protowire.AppendVarint(raw, 1767225600000)
+		raw = protowire.AppendVarint(raw, uint64(len(messages)))
+		raw = protowire.AppendVarint(raw, uint64(len(body)))
+		return append(raw, body...)
+	}
+	stream := gzipBytes(t, append(segment([]byte("one"), []byte("two")), segment(bytes.Repeat([]byte("x"), 100))...))
+	ctx := context.Background()
+	count := func(limits streamLimits) (int, error) {
+		n := 0
+		err := decodeEventSegments(ctx, stream, limits, func(string, time.Time, []byte) error {
+			n++
+			return nil
+		})
+		return n, err
+	}
+
+	n, err := count(defaultStreamLimits)
+	require.NoError(t, err)
+	require.Equal(t, 3, n)
+
+	_, err = count(streamLimits{totalBytes: 1 << 20, messageBytes: 50})
+	require.ErrorIs(t, err, errEventStreamTooLong, "a message over the per-message cap")
+
+	_, err = count(streamLimits{totalBytes: 100, messageBytes: 1 << 20})
+	require.ErrorIs(t, err, errEventStreamTooLong, "a stream over the decompressed cap")
+
+	truncated := gzipBytes(t, segment([]byte("one"), []byte("two"))[:60])
+	err = decodeEventSegments(ctx, truncated, defaultStreamLimits, func(string, time.Time, []byte) error { return nil })
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	err = decodeEventSegments(cancelled, stream, defaultStreamLimits, func(string, time.Time, []byte) error { return nil })
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestSummaryMarkdownEscapesHostileNames(t *testing.T) {
+	t.Parallel()
+	hostile := "Evil|Name\\]x\n<b>"
+	player := SummaryPlayer{Name: hostile, Class: "WARRIOR", URL: "https://chronicle.example/armory/R/E(v)il"}
+	deaths := DeathsResponse{
+		Instance: SummaryInstance{Name: "Molten | Core", URL: "https://chronicle.example/instances/x"},
+		Pulls: []DeathPull{{
+			SummaryPull: SummaryPull{Encounter: hostile, Attempt: 1, Outcome: "wipe"},
+			TotalDeaths: 1, FirstDeath: &FirstDeath{Player: hostile},
+			Deaths: []PlayerDeath{{
+				Player: player, Killer: hostile,
+				KillingBlow: &KillingBlow{Ability: hostile, Source: hostile, Amount: 1},
+				Recap:       []DeathRecapEntry{{Type: "damage", Ability: hostile, Source: hostile, Amount: 1}},
+			}},
+		}},
+	}
+	consumables := ConsumablesResponse{
+		Instance: deaths.Instance,
+		Players:  []PlayerConsumables{{Player: player, Total: 1, Consumables: []ConsumableCount{{Name: hostile, Count: 1}}}},
+	}
+
+	for name, body := range map[string]string{"deaths": deathsMarkdown(deaths), "consumables": consumablesMarkdown(consumables)} {
+		t.Run(name, func(t *testing.T) {
+			require.NotContains(t, body, "<b>", "HTML must be escaped")
+			require.Contains(t, body, `Evil\|Name\\\]x \<b\>`)
+			require.Contains(t, body, "(https://chronicle.example/armory/R/E%28v%29il)", "parentheses must not close the link")
+			for _, line := range strings.Split(body, "\n") {
+				if strings.HasPrefix(line, "| ") && !strings.HasPrefix(line, "| Time") && !strings.HasPrefix(line, "| Player") {
+					// Every data row keeps its column count: escaped pipes do not split cells.
+					cells := strings.Count(strings.ReplaceAll(line, `\|`, ""), "|")
+					want := 7
+					if name == "consumables" {
+						want = 5
+					}
+					require.Equal(t, want, cells, line)
+				}
+			}
+		})
+	}
 }
 
 func TestSummaryRoutesInOpenAPI(t *testing.T) {

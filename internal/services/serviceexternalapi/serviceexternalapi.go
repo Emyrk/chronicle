@@ -95,8 +95,9 @@ func (s *Service) setupRoutes() {
 	s.router = chi.NewRouter()
 	s.rateLimiter = newExternalIPLimiter()
 	s.openapi = newOpenAPIDocument()
-	s.deathCache = newSummaryCache[*deathSummary]()
-	s.consumablesCache = newSummaryCache[*consumablesSummary]()
+	summarySlots := make(chan struct{}, summaryMaxConcurrent)
+	s.deathCache = newSummaryCache[*deathSummary](summarySlots)
+	s.consumablesCache = newSummaryCache[*consumablesSummary](summarySlots)
 	s.registerRoutes()
 }
 

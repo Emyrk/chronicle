@@ -1,9 +1,11 @@
 package serviceexternalapi
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -31,30 +33,76 @@ import (
 const (
 	summaryCacheSize = 64
 	summaryCacheTTL  = 30 * time.Minute
+	// summaryFailureTTL briefly remembers failed computations (bad or
+	// oversized streams, timeouts) so they are not retried on every request.
+	summaryFailureTTL = time.Minute
+	// summaryMaxConcurrent caps cache-miss computations across both
+	// summaries. Further misses get 503 instead of queueing.
+	summaryMaxConcurrent = 3
+	// summaryComputeTimeout bounds one computation. It runs detached from the
+	// request, because other requests may be waiting on the same result.
+	summaryComputeTimeout = 30 * time.Second
+	// summaryRequestCost charges summary routes like five standard requests.
+	summaryRequestCost = 5 * externalStandardRequestCost
+)
+
+var (
+	errSummaryBusy        = errors.New("summary computation busy")
+	errEventStreamTooLong = errors.New("event stream exceeds the summary size limit")
 )
 
 // summaryCache memoizes one computed summary per instance and collapses
-// concurrent first requests into one computation.
+// concurrent first requests into one computation. Computations share a
+// fixed number of slots with other summary caches.
 type summaryCache[V any] struct {
-	lru   *expirable.LRU[uuid.UUID, V]
-	group singleflight.Group
+	lru      *expirable.LRU[uuid.UUID, V]
+	failures *expirable.LRU[uuid.UUID, error]
+	group    singleflight.Group
+	slots    chan struct{}
 }
 
-func newSummaryCache[V any]() *summaryCache[V] {
-	return &summaryCache[V]{lru: expirable.NewLRU[uuid.UUID, V](summaryCacheSize, nil, summaryCacheTTL)}
+func newSummaryCache[V any](slots chan struct{}) *summaryCache[V] {
+	return &summaryCache[V]{
+		lru:      expirable.NewLRU[uuid.UUID, V](summaryCacheSize, nil, summaryCacheTTL),
+		failures: expirable.NewLRU[uuid.UUID, error](summaryCacheSize, nil, summaryFailureTTL),
+		slots:    slots,
+	}
 }
 
-func (c *summaryCache[V]) get(key uuid.UUID, compute func() (V, error)) (V, error) {
+func (c *summaryCache[V]) cached(key uuid.UUID) (V, error, bool) {
 	if value, ok := c.lru.Get(key); ok {
-		return value, nil
+		return value, nil, true
+	}
+	if err, ok := c.failures.Get(key); ok {
+		var zero V
+		return zero, err, true
+	}
+	var zero V
+	return zero, nil, false
+}
+
+func (c *summaryCache[V]) get(ctx context.Context, key uuid.UUID, compute func(context.Context) (V, error)) (V, error) {
+	if value, err, ok := c.cached(key); ok {
+		return value, err
 	}
 	value, err, _ := c.group.Do(key.String(), func() (any, error) {
-		if value, ok := c.lru.Get(key); ok {
-			return value, nil
-		}
-		value, err := compute()
-		if err != nil {
+		if value, err, ok := c.cached(key); ok {
 			return value, err
+		}
+		select {
+		case c.slots <- struct{}{}:
+			defer func() { <-c.slots }()
+		default:
+			return nil, errSummaryBusy
+		}
+		// Detached so a disconnecting client does not fail other waiters,
+		// but bounded so abandoned work cannot run forever.
+		computeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), summaryComputeTimeout)
+		defer cancel()
+		value, err := compute(computeCtx)
+		if err != nil {
+			c.failures.Add(key, err)
+			return nil, err
 		}
 		c.lru.Add(key, value)
 		return value, nil
@@ -216,61 +264,127 @@ func (s *Service) loadEventStream(ctx context.Context, instanceID uuid.UUID, kin
 	return events.Events, nil
 }
 
-// decodeEventSegments walks a stored event stream: gzip of concatenated
+// streamLimits caps how much one stored stream may expand to while decoding.
+type streamLimits struct {
+	totalBytes   int64  // decompressed bytes per stream
+	messageBytes uint64 // one encoded event, or one encounter ID
+}
+
+// defaultStreamLimits are far above real raid nights; they only stop
+// pathological streams from consuming the summary budget.
+var defaultStreamLimits = streamLimits{totalBytes: 512 << 20, messageBytes: 1 << 20}
+
+// cappedReader fails once more than remaining bytes are read.
+type cappedReader struct {
+	r         io.Reader
+	remaining int64
+}
+
+func (c *cappedReader) Read(p []byte) (int, error) {
+	if c.remaining <= 0 {
+		var probe [1]byte
+		n, err := c.r.Read(probe[:])
+		if n > 0 {
+			return 0, errEventStreamTooLong
+		}
+		return 0, err
+	}
+	if int64(len(p)) > c.remaining {
+		p = p[:c.remaining]
+	}
+	n, err := c.r.Read(p)
+	c.remaining -= int64(n)
+	return n, err
+}
+
+// decodeEventSegments streams a stored event stream: gzip of concatenated
 // per-encounter segments, each a header (encounter id, first-event unix
 // millis, event count, body length) followed by length-delimited protobuf
-// messages whose offsets are relative to the segment's first event.
-func decodeEventSegments(gz []byte, fn func(encounterID string, first time.Time, message []byte) error) error {
+// messages whose offsets are relative to the segment's first event. It never
+// holds more than one message, and fails with errEventStreamTooLong when the
+// stream or a message exceeds limits. The message slice is reused.
+func decodeEventSegments(ctx context.Context, gz []byte, limits streamLimits, fn func(encounterID string, first time.Time, message []byte) error) error {
 	if len(gz) == 0 {
 		return nil
 	}
-	reader, err := gzip.NewReader(bytes.NewReader(gz))
+	zr, err := gzip.NewReader(bytes.NewReader(gz))
 	if err != nil {
 		return err
 	}
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return err
-	}
-	for len(data) > 0 {
-		encounterID, n := protowire.ConsumeString(data)
-		if n < 0 {
-			return protowire.ParseError(n)
-		}
-		data = data[n:]
-		firstMs, n := protowire.ConsumeVarint(data)
-		if n < 0 {
-			return protowire.ParseError(n)
-		}
-		data = data[n:]
-		if _, n = protowire.ConsumeVarint(data); n < 0 { // event count
-			return protowire.ParseError(n)
-		}
-		data = data[n:]
-		bodyLen, n := protowire.ConsumeVarint(data)
-		if n < 0 {
-			return protowire.ParseError(n)
-		}
-		data = data[n:]
-		if bodyLen > uint64(len(data)) {
+	reader := bufio.NewReader(&cappedReader{r: zr, remaining: limits.totalBytes})
+	// Only the start of a segment may end the stream; EOF anywhere else means
+	// the stream was cut short.
+	midSegment := func(err error) error {
+		if errors.Is(err, io.EOF) {
 			return io.ErrUnexpectedEOF
 		}
-		body := data[:bodyLen]
-		data = data[bodyLen:]
-
+		return err
+	}
+	readVarint := func() (uint64, error) {
+		value, err := binary.ReadUvarint(reader)
+		return value, midSegment(err)
+	}
+	readLength := func() (uint64, error) {
+		length, err := readVarint()
+		if err == nil && length > limits.messageBytes {
+			return 0, fmt.Errorf("%w: %d-byte entry", errEventStreamTooLong, length)
+		}
+		return length, err
+	}
+	var message []byte
+	for {
+		idLength, err := binary.ReadUvarint(reader)
+		if errors.Is(err, io.EOF) {
+			return nil // clean end between segments
+		}
+		if err != nil {
+			return midSegment(err)
+		}
+		if idLength > limits.messageBytes {
+			return fmt.Errorf("%w: %d-byte encounter id", errEventStreamTooLong, idLength)
+		}
+		id := make([]byte, idLength)
+		if _, err := io.ReadFull(reader, id); err != nil {
+			return midSegment(err)
+		}
+		firstMs, err := readVarint()
+		if err != nil {
+			return err
+		}
+		if _, err := readVarint(); err != nil { // event count
+			return err
+		}
+		bodyLength, err := readVarint()
+		if err != nil {
+			return err
+		}
+		encounterID := string(id)
 		first := time.UnixMilli(int64(firstMs)).UTC()
-		for len(body) > 0 {
-			message, n := protowire.ConsumeBytes(body)
-			if n < 0 {
-				return protowire.ParseError(n)
+		for remaining := bodyLength; remaining > 0; {
+			if err := ctx.Err(); err != nil {
+				return err
 			}
-			body = body[n:]
+			length, err := readLength()
+			if err != nil {
+				return err
+			}
+			size := uint64(protowire.SizeVarint(length)) + length
+			if size > remaining {
+				return io.ErrUnexpectedEOF
+			}
+			remaining -= size
+			if uint64(cap(message)) < length {
+				message = make([]byte, length)
+			}
+			message = message[:length]
+			if _, err := io.ReadFull(reader, message); err != nil {
+				return midSegment(err)
+			}
 			if err := fn(encounterID, first, message); err != nil {
 				return err
 			}
 		}
 	}
-	return nil
 }
 
 func isPlayerGUID(id string) bool {
@@ -281,13 +395,17 @@ func isPlayerGUID(id string) bool {
 // summaryFilter selects pulls by encounter (name, case-insensitive, or
 // encounter UUID) and attempt number.
 type summaryFilter struct {
-	encounter string
-	attempt   int
+	encounter   string
+	encounterID uuid.UUID
+	attempt     int
 }
 
 func parseSummaryFilter(r *http.Request) (summaryFilter, string) {
 	query := r.URL.Query()
 	filter := summaryFilter{encounter: strings.TrimSpace(query.Get("encounter"))}
+	if id, err := uuid.Parse(filter.encounter); err == nil {
+		filter.encounterID = id
+	}
 	if raw := query.Get("attempt"); raw != "" {
 		attempt, err := strconv.Atoi(raw)
 		if err != nil || attempt < 1 {
@@ -302,7 +420,12 @@ func parseSummaryFilter(r *http.Request) (summaryFilter, string) {
 }
 
 func (f summaryFilter) match(pull SummaryPull) bool {
-	if f.encounter != "" && !strings.EqualFold(f.encounter, pull.Encounter) && f.encounter != pull.EncounterID.String() {
+	switch {
+	case f.encounterID != uuid.Nil:
+		if pull.EncounterID != f.encounterID {
+			return false
+		}
+	case f.encounter != "" && !strings.EqualFold(f.encounter, pull.Encounter):
 		return false
 	}
 	return f.attempt == 0 || f.attempt == pull.Attempt
@@ -374,10 +497,19 @@ func serveSummary[V any](
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	// The result is shared through the cache, so a client disconnecting must
-	// not fail the computation for other waiters.
-	summary, err := compute(context.WithoutCancel(ctx), instance)
-	if err != nil {
+	summary, err := compute(ctx, instance)
+	switch {
+	case errors.Is(err, errSummaryBusy):
+		w.Header().Set("Retry-After", "1")
+		httpapi.Write(ctx, w, http.StatusServiceUnavailable, chroniclesdk.Response{Message: "Summaries are busy. Try again in a moment."})
+		return
+	case errors.Is(err, errEventStreamTooLong):
+		httpapi.Write(ctx, w, http.StatusUnprocessableEntity, chroniclesdk.Response{Message: "This instance's event streams are too large to summarize."})
+		return
+	case errors.Is(err, context.DeadlineExceeded):
+		httpapi.Write(ctx, w, http.StatusServiceUnavailable, chroniclesdk.Response{Message: "Summarizing this instance took too long."})
+		return
+	case err != nil:
 		httpapi.InternalServerError(w, err)
 		return
 	}
@@ -406,5 +538,7 @@ func summaryOKResponse(example any, markdownExample string) map[string]OpenAPIRe
 	responses["200"].Content["text/markdown"] = OpenAPIMediaType{Example: markdownExample}
 	responses["400"] = OpenAPIResponse{Description: "Invalid attempt or format."}
 	responses["404"] = OpenAPIResponse{Description: "Instance not found."}
+	responses["422"] = OpenAPIResponse{Description: "The instance's event streams are too large to summarize."}
+	responses["503"] = OpenAPIResponse{Description: "Summaries are busy (see Retry-After) or took too long."}
 	return responses
 }

@@ -14,10 +14,16 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// maxConsumableRowsPerResponse bounds the per-pull rows (one player and one
+// item each) in a response. Once a pull does not fit, it and later pulls omit
+// their players. Use the encounter/attempt filters to page.
+const maxConsumableRowsPerResponse = 2000
+
 type ConsumablesResponse struct {
 	Instance SummaryInstance `json:"instance"`
 	// Pulls lists boss pulls with each player's consumables on that pull.
-	Pulls []ConsumablePull `json:"pulls"`
+	Pulls     []ConsumablePull `json:"pulls"`
+	Truncated bool             `json:"truncated,omitempty"`
 	// Players totals the whole instance, trash included, as the Consumables
 	// panel does with every encounter selected.
 	Players []PlayerConsumables `json:"players"`
@@ -26,6 +32,9 @@ type ConsumablesResponse struct {
 type ConsumablePull struct {
 	SummaryPull
 	Players []PlayerConsumables `json:"players"`
+	// Omitted is set when this pull's players were left out to bound the
+	// response.
+	Omitted bool `json:"omitted,omitempty"`
 }
 
 type PlayerConsumables struct {
@@ -247,7 +256,7 @@ type consumablesSummary struct {
 }
 
 func (s *Service) computeConsumablesSummary(ctx context.Context, instance database.LogInstancesGuild) (*consumablesSummary, error) {
-	return s.consumablesCache.get(instance.ID, func() (*consumablesSummary, error) {
+	return s.consumablesCache.get(ctx, instance.ID, func(ctx context.Context) (*consumablesSummary, error) {
 		summaryCtx, err := s.loadSummaryContext(ctx, instance)
 		if err != nil {
 			return nil, err
@@ -268,15 +277,15 @@ func (s *Service) computeConsumablesSummary(ctx context.Context, instance databa
 				}
 			}
 		}
-		return buildConsumablesSummary(summaryCtx, stream, disambiguations)
+		return buildConsumablesSummary(ctx, summaryCtx, stream, disambiguations)
 	})
 }
 
-func buildConsumablesSummary(c *summaryContext, stream []byte, disambiguations map[string]int32) (*consumablesSummary, error) {
+func buildConsumablesSummary(ctx context.Context, c *summaryContext, stream []byte, disambiguations map[string]int32) (*consumablesSummary, error) {
 	night := newConsumableAccumulator()
 	byPull := make(map[string]*consumableAccumulator)
 	itemNames := make(map[int32]string)
-	err := decodeEventSegments(stream, func(encounterID string, _ time.Time, message []byte) error {
+	err := decodeEventSegments(ctx, stream, defaultStreamLimits, func(encounterID string, _ time.Time, message []byte) error {
 		var event chronicleproto.Consume
 		if err := proto.Unmarshal(message, &event); err != nil {
 			return err
@@ -324,10 +333,24 @@ func renderConsumables(summary *consumablesSummary, filter summaryFilter, links 
 		Pulls:    []ConsumablePull{},
 		Players:  linkPlayers(summary.players),
 	}
+	included := 0
 	for _, pull := range summary.pulls {
-		if filter.match(pull.SummaryPull) {
-			response.Pulls = append(response.Pulls, ConsumablePull{SummaryPull: pull.SummaryPull, Players: linkPlayers(pull.Players)})
+		if !filter.match(pull.SummaryPull) {
+			continue
 		}
+		rows := 0
+		for _, player := range pull.Players {
+			rows += len(player.Consumables)
+		}
+		out := ConsumablePull{SummaryPull: pull.SummaryPull, Players: []PlayerConsumables{}}
+		if response.Truncated || included+rows > maxConsumableRowsPerResponse {
+			response.Truncated = true
+			out.Omitted = len(pull.Players) > 0
+		} else {
+			out.Players = linkPlayers(pull.Players)
+			included += rows
+		}
+		response.Pulls = append(response.Pulls, out)
 	}
 	return response
 }
@@ -351,6 +374,10 @@ func consumablesMarkdown(value any) string {
 	}
 	for _, pull := range response.Pulls {
 		_, _ = fmt.Fprintf(&b, "## %s, attempt %d (%s)\n\n", markdownCell.Replace(pull.Encounter), pull.Attempt, pull.Outcome)
+		if pull.Omitted {
+			b.WriteString("Players omitted to bound the response; filter by encounter and attempt.\n\n")
+			continue
+		}
 		writeTable(pull.Players)
 	}
 	b.WriteString("## Whole instance\n\n")

@@ -153,13 +153,14 @@ func (s *Service) registerRoutes() {
 		}}),
 	}, s.getInstanceRankingRecordsBySlug)
 
-	s.register(http.MethodGet, "/raidlogs/instances/{instance_id}/deaths", OpenAPIOperation{
+	s.registerWithRateLimitCost(http.MethodGet, "/raidlogs/instances/{instance_id}/deaths", summaryRequestCost, OpenAPIOperation{
 		Tags:    []string{"Raid Instance"},
 		Summary: "Get player deaths per boss pull",
 		Description: "Returns player deaths on each boss pull (kills and wipes) in time order: time into the pull, player, class and role, the killing blow, " +
 			"and the last few damage and heal events the player received in the 10 seconds before death. Each pull reports its outcome, total deaths and first death. " +
 			"Responses include at most 300 individual deaths; later pulls keep their counts and truncated is set. Filter with encounter and attempt. " +
-			"Set format=md for compact markdown tables with absolute links. Results are cached per instance.",
+			"Set format=md for compact markdown tables with absolute links. Results are cached per instance. " +
+			"Each request costs five standard requests of rate limit; when summaries are busy the response is 503 with Retry-After.",
 		Parameters: summaryParameters(),
 		Responses: summaryOKResponse(DeathsResponse{
 			Instance: SummaryInstance{Name: "Molten Core", Slug: "example-instance", RealmName: "Example Realm", URL: "https://chronicle.example/instances/example-instance"},
@@ -178,13 +179,14 @@ func (s *Service) registerRoutes() {
 			"| 0:45 | [Example](https://chronicle.example/armory/Example%20Realm/Example) | WARRIOR | tank | Wrath of Ragnaros 2345 by Ragnaros (overkill 300) | Melee -1200 (Ragnaros) |\n"),
 	}, s.getInstanceDeaths)
 
-	s.register(http.MethodGet, "/raidlogs/instances/{instance_id}/consumables", OpenAPIOperation{
+	s.registerWithRateLimitCost(http.MethodGet, "/raidlogs/instances/{instance_id}/consumables", summaryRequestCost, OpenAPIOperation{
 		Tags:    []string{"Raid Instance"},
 		Summary: "Get consumables per boss pull and player",
 		Description: "Returns the consumables each player used or had active on each boss pull, plus per-player totals for the whole instance. " +
 			"Counts are physical uses, grouped by item with the same rules as the Consumables panel; candidate_item_ids lists possible items when a use is ambiguous. " +
 			"active_at_pull counts buffs already active when the pull started. Filter pulls with encounter and attempt. " +
-			"Set format=md for compact markdown tables with absolute links. Results are cached per instance.",
+			"Set format=md for compact markdown tables with absolute links. Results are cached per instance. " +
+			"Each request costs five standard requests of rate limit; when summaries are busy the response is 503 with Retry-After.",
 		Parameters: summaryParameters(),
 		Responses: summaryOKResponse(ConsumablesResponse{
 			Instance: SummaryInstance{Name: "Molten Core", Slug: "example-instance", RealmName: "Example Realm", URL: "https://chronicle.example/instances/example-instance"},
