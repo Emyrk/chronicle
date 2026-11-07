@@ -14,8 +14,8 @@ Use an actual tenant host. Configuration remains available through the inspector
   class/spec/subspec/DPS-or-HPS benchmark and selected instance difficulty/size.
 - Guild exact-boss and named-set Peak/Mastery, plus instance clear Peak/Mastery.
 - Player and guild Renown from metric-independent counts and current resolved
-  awards. Renown includes all enabled instance bosses, **independent of named
-  sets**, but only in the selected difficulty/size. Class/spec/metric filters are
+  awards. Renown sums the selected enabled bosses in the exact difficulty/size.
+  Boss, named-set and arbitrary-group selection match Peak/Mastery. Class/spec/metric filters are
   rejected, not ignored.
 - Vanilla without configured variant tuples uses exact difficulty `''` and size
   `0`; the UI does not invent a Heroic/variant selector.
@@ -47,9 +47,9 @@ at 99 regardless of different raw DPS scales. A player with multiple specs stays
 multiple rows; no best-spec collapse or raw benchmark pooling occurs. One boss maps directly; arbitrary multi-boss selections are sent as repeated
 `bosses` parameters. The API validates every member against current enabled
 bosses, deduplicates and sorts the selection, and preserves its exact denominator.
-Renown ignores class/set filters and uses the selected instance variant, with a
+Renown ignores class filters and sums the selected bosses in the exact variant, with a
 visible notice. Per-boss cards request genuine boss-specific Renown from counts and current
-awards, while center Renown totals remain independent of the performance selection. No retired catch-up worker status is implied.
+awards, while center Renown sums the current boss selection without averaging. No retired catch-up worker status is implied.
 
 Existing full-list controls use cursor history. Search starts a new cursor chain;
 no synthetic total or global rank is displayed. Missing throughput, run dates,
@@ -76,9 +76,10 @@ For `kind=boss`, choose exactly one `boss`, `set` (set key, not label), or repea
 deduplication). Player
 performance requires `metric=dps|hps`; `class`, `spec`, and `sub_spec` are optional
 filters. An explicitly empty `sub_spec` selects the empty-subspec cohort; omission
-selects all subspecs. Clear is guild-only and rejects boss selections. Renown rejects performance
-sets/groups but accepts an optional exact `boss` for per-boss cards; omitting it
-returns the whole instance/variant total.
+selects all subspecs. Clear is guild-only and rejects boss selections. Renown accepts the same boss, set or explicit group selectors. Omitting all selectors
+on a Renown request resolves the enabled `default` set, never the whole catalog.
+An empty default set stays empty; an explicitly selected optional boss can still
+contribute its configured award. Renown is a sum, not a per-boss average.
 
 Optional: `realm` UUID, `search` literal case-insensitive subject-name substring
 (maximum 100 bytes), `limit` 1–50, and `cursor`. Unlinked metadata falls back to the
@@ -116,7 +117,7 @@ across cohorts. Warm median of five reads after a first measured read:
 | All-class default-set Mastery | 1287.6 | 1234.7 |
 | Explicit Mage/Synthetic0 default-set Mastery | 359.2 | 349.2 |
 | All-class Ragnaros Peak | 414.6 | 396.6 |
-| Whole-instance player Renown | 367.9 | 363.4 |
+| Default-set player Renown | 367.9 | 363.4 |
 
 The approximately **200ms target is not met** on this stress fixture. Cursor
 pagination limits returned rows, not aggregate candidates. Display-name lookup

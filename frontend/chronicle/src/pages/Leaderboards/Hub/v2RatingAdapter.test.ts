@@ -90,7 +90,7 @@ describe("existing Hub adapter", () => {
       ).getAll("bosses"),
     ).toEqual(["A", "B"]);
   });
-  it("Renown ignores boss/class selections while retaining selected variant and realm", () => {
+  it("Renown follows boss selections and ignores class filters while retaining variant and realm", () => {
     const p = v2RatingParams(
       {
         ...context,
@@ -110,12 +110,34 @@ describe("existing Hub adapter", () => {
       kind: "renown",
       score: "renown",
       realm: "realm",
+      boss: "A",
     });
     expect(
       v2RatingParams({ ...context, subject: "guild" }, {}, "mastery").has(
         "class",
       ),
     ).toBe(false);
+  });
+  it("uses the same default and arbitrary selection for player and guild Renown", () => {
+    for (const subject of ["player", "guild"] as const) {
+      expect(
+        v2RatingParams({ ...context, subject }, {}, "renown").get("set"),
+      ).toBe("default");
+      const group = v2RatingParams(
+        { ...context, subject, selected: ["B", "A", "A"] },
+        {},
+        "renown",
+      );
+      expect(group.getAll("bosses")).toEqual(["A", "B"]);
+      expect(group.has("metric")).toBe(false);
+      expect(group.toString()).not.toBe(
+        v2RatingParams(
+          { ...context, subject, selected: ["A"] },
+          {},
+          "renown",
+        ).toString(),
+      );
+    }
   });
   it("uses API cursors in existing page controls, scopes search and preserves zeros without global ranks", async () => {
     const fetch = vi

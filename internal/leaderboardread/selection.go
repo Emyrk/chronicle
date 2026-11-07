@@ -63,8 +63,8 @@ func Select(rows []database.ResolveLeaderboardConfigurationRow, r Request) (Sele
 	if r.Kind == "clear" && (r.Boss != "" || r.Set != "" || len(r.Bosses) > 0) {
 		return out, errors.New("clear boards do not accept boss selections")
 	}
-	if r.Kind == "renown" && (r.Set != "" || len(r.Bosses) > 0) {
-		return out, errors.New("renown accepts only an optional exact boss, never performance sets")
+	if r.Kind == "renown" && r.Boss == "" && r.Set == "" && len(r.Bosses) == 0 {
+		r.Set = "default"
 	}
 	if r.Kind == "clear" && r.Subject != "guild" {
 		return out, errors.New("clear boards are guild-only")
@@ -110,18 +110,7 @@ func Select(rows []database.ResolveLeaderboardConfigurationRow, r Request) (Sele
 	switch r.Kind {
 	case "clear":
 		return out, nil
-	case "renown":
-		if r.Boss != "" {
-			if _, ok := bosses[r.Boss]; !ok {
-				return out, errors.New("boss is not enabled")
-			}
-			selected[r.Boss] = true
-		} else {
-			for name := range bosses {
-				selected[name] = true
-			}
-		}
-	case "boss":
+	case "boss", "renown":
 		modes := 0
 		if r.Boss != "" {
 			modes++

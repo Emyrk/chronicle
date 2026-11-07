@@ -68,10 +68,16 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		selectionReq.Class = ""
 		selectionReq.Spec = ""
 		selectionReq.SubSpec = ""
+		selectionReq.FilterSubSpec = false
 		selectionReq.Metric = ""
 		selectionReq.Boss = ""
 		selectionReq.Bosses = nil
 		selectionReq.Set = ""
+		for _, row := range rows {
+			if row.Kind == "boss" && row.InstanceName == req.Instance {
+				selectionReq.Bosses = append(selectionReq.Bosses, row.EncounterName)
+			}
+		}
 	}
 	selection, err := leaderboardread.Select(rows, selectionReq)
 	if err != nil {
