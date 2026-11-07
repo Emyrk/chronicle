@@ -117,6 +117,16 @@ test("Miniature Foundry edits tabletop and original game models", async () => {
   assert.match(page, /id="bulk-scale"/);
   assert.match(page, /id="apply-scale"/);
   assert.match(page, /for\(const item of bulkSelected\)item\.map_scale=scale/);
+  assert.match(page, /id="animation-clip"/);
+  assert.match(page, /id="animation-play"/);
+  assert.match(page, /id="animation-restart"/);
+  assert.match(page, /id="animation-speed"/);
+  assert.match(page, /id="animation-timeline"/);
+  assert.match(page, /mixer\.stopAllAction\(\)/);
+  assert.match(page, /mixer\.clipAction\(activeClip\)/);
+  assert.match(page, /mixer\?\.update\(delta\*playbackSpeed\)/);
+  assert.match(page, /activeAction\.time=Math\.min/);
+  assert.match(page, /animationControls\.hidden=false/);
 });
 
 test("provides an empty manifest for first-time setup", () => {

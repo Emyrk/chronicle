@@ -90,13 +90,21 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
         .preview-empty { min-height:480px; display:grid; place-items:center; padding:24px; color:var(--muted); text-align:center; }
         .preview-empty strong { display:block; margin-bottom:5px; color:#c9cec9; }
         .preview-meta { display:flex; justify-content:space-between; gap:12px; padding:10px 0 0; color:var(--muted); font:10px 'JetBrains Mono',monospace; }
+        .animation-controls { display:grid; grid-template-columns:minmax(150px,1fr) auto auto 82px; gap:8px; align-items:center; margin-top:10px; padding:10px; border:1px solid #303832; border-radius:6px; background:#0d100e; }
+        .animation-controls[hidden] { display:none; }
+        .animation-controls select { min-width:0; width:100%; padding:8px 9px; color:var(--text); background:#171b18; border:1px solid var(--line); border-radius:5px; font:11px 'JetBrains Mono',monospace; }
+        .animation-controls button { min-width:72px; padding:8px 10px; }
+        .animation-controls .animation-speed { min-width:72px; }
+        .animation-timeline { grid-column:1 / -1; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; }
+        .animation-timeline input { width:100%; accent-color:var(--moss); }
+        .animation-time { min-width:76px; color:var(--muted); font:9px 'JetBrains Mono',monospace; text-align:right; }
         details { margin-top:15px; border:1px solid var(--line); border-radius:8px; background:#141815; }
         summary { padding:12px 14px; cursor:pointer; color:#adb5af; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
         pre { max-height:300px; overflow:auto; margin:0; padding:14px; color:#afbeb4; background:#0c0f0d; border-top:1px solid var(--line); font:10px/1.55 'JetBrains Mono',monospace; }
         .empty-editor { min-height:600px; display:grid; place-items:center; color:var(--muted); text-align:center; }
         .empty-editor strong { display:block; margin-bottom:6px; color:#c8cec9; }
         @media (max-width:980px) { .workspace,.editor-grid { grid-template-columns:1fr; } .model-list { min-height:0; max-height:330px; } }
-        @media (max-width:620px) { main { width:min(100% - 20px,1480px); } header { align-items:flex-start; flex-direction:column; } .header-actions,.bulk-tools,.toolbar-actions { width:100%; } .toolbar { grid-template-columns:1fr; } .bulk-tools { flex-wrap:wrap; } .bulk-tools button,.toolbar-actions button { flex:1; } }
+        @media (max-width:620px) { main { width:min(100% - 20px,1480px); } header { align-items:flex-start; flex-direction:column; } .header-actions,.bulk-tools,.toolbar-actions { width:100%; } .toolbar { grid-template-columns:1fr; } .bulk-tools { flex-wrap:wrap; } .bulk-tools button,.toolbar-actions button { flex:1; } .animation-controls { grid-template-columns:1fr 1fr; } .animation-controls #animation-clip,.animation-controls .animation-timeline { grid-column:1 / -1; } }
       </style>`}
     </head>
     <body>
@@ -174,8 +182,33 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
           const floor=new THREE.Mesh(new THREE.CircleGeometry(30,64),new THREE.MeshStandardMaterial({color:0x171b18,roughness:.95,metalness:0}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;scene.add(floor);
           const player=new THREE.Mesh(new THREE.CapsuleGeometry(.9,1.2,4,12).translate(0,1.5,0),new THREE.MeshStandardMaterial({color:0x78b9d5,roughness:.5,metalness:.08}));player.castShadow=true;player.receiveShadow=true;scene.add(player);
           const modelRoot=new THREE.Group();scene.add(modelRoot);
-          let model=null,mixer=null,baseScale=1,currentScale=mapScale,disposed=false,frame=0;
+          const animationControls=document.getElementById('animation-controls');
+          const animationClip=document.getElementById('animation-clip');
+          const animationPlay=document.getElementById('animation-play');
+          const animationRestart=document.getElementById('animation-restart');
+          const animationSpeed=document.getElementById('animation-speed');
+          const animationTimeline=document.getElementById('animation-timeline');
+          const animationTime=document.getElementById('animation-time');
+          let model=null,mixer=null,clips=[],activeAction=null,activeClip=null,playing=true,playbackSpeed=1,baseScale=1,currentScale=mapScale,disposed=false,frame=0;
           const clock=new THREE.Clock();
+          function formatTime(seconds) { return Number(seconds||0).toFixed(2); }
+          function updateAnimationUI() {
+            const duration=activeClip?.duration||0;
+            const time=activeAction?.time||0;
+            if(animationTimeline){animationTimeline.max=String(Math.max(.001,duration));animationTimeline.value=String(Math.min(duration,time));animationTimeline.disabled=!activeAction;}
+            if(animationTime)animationTime.textContent=formatTime(time)+' / '+formatTime(duration)+' s';
+            if(animationPlay){animationPlay.textContent=playing?'Pause':'Play';animationPlay.disabled=!activeAction;}
+            if(animationRestart)animationRestart.disabled=!activeAction;
+          }
+          function selectClip(index) {
+            if(!mixer||!clips[index])return;
+            mixer.stopAllAction();activeClip=clips[index];activeAction=mixer.clipAction(activeClip);activeAction.reset().play();playing=true;updateAnimationUI();
+          }
+          animationClip?.addEventListener('change',event=>selectClip(Number(event.target.value)));
+          animationPlay?.addEventListener('click',()=>{if(!activeAction)return;playing=!playing;updateAnimationUI();});
+          animationRestart?.addEventListener('click',()=>{if(!activeAction)return;activeAction.reset().play();playing=true;mixer?.update(0);updateAnimationUI();});
+          animationSpeed?.addEventListener('change',event=>{const speed=Number(event.target.value);if(Number.isFinite(speed)&&speed>0)playbackSpeed=speed;});
+          animationTimeline?.addEventListener('input',event=>{if(!activeAction)return;activeAction.time=Math.min(activeClip.duration,Math.max(0,Number(event.target.value)));mixer?.update(0);updateAnimationUI();});
           function fit() {
             if(!model)return;
             modelRoot.scale.setScalar(baseScale*currentScale);modelRoot.position.set(0,0,0);
@@ -189,8 +222,8 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
           }
           function resize() { const width=Math.max(1,stage.clientWidth),height=Math.max(1,stage.clientHeight);renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix(); }
           const observer=new ResizeObserver(resize);observer.observe(stage);resize();
-          function animate() { if(disposed)return;frame=requestAnimationFrame(animate);const delta=Math.min(.05,clock.getDelta());mixer?.update(delta);controls.update();renderer.render(scene,camera); }
-          previewLoader.load(url,gltf=>{if(disposed){disposeObject(gltf.scene);return;}model=gltf.scene;model.traverse(child=>{if(child.isMesh){child.castShadow=true;child.receiveShadow=true;}});modelRoot.add(model);const nativeBox=new THREE.Box3().setFromObject(model);const nativeHeight=Math.max(.001,nativeBox.max.y-nativeBox.min.y);baseScale=worldHeight===undefined?(isGameModel?BASE_MODEL_HEIGHT/nativeHeight:BASE_MODEL_HEIGHT)*MESH_MODEL_SCALE:(worldHeight*PLAYER_GEOMETRY_HEIGHT)/(PLAYER_WORLD_HEIGHT*nativeHeight);if(gltf.animations.length){mixer=new THREE.AnimationMixer(model);mixer.clipAction(gltf.animations.find(clip=>/^stand$/i.test(clip.name))||gltf.animations[0]).play();}fit();},undefined,error=>{if(disposed)return;console.error('Unable to load model preview',error);stage.insertAdjacentHTML('beforeend','<div class="preview-empty"><div><strong>Preview failed</strong>Open the asset to inspect it directly.</div></div>');});
+          function animate() { if(disposed)return;frame=requestAnimationFrame(animate);const delta=Math.min(.05,clock.getDelta());if(playing)mixer?.update(delta*playbackSpeed);updateAnimationUI();controls.update();renderer.render(scene,camera); }
+          previewLoader.load(url,gltf=>{if(disposed){disposeObject(gltf.scene);return;}model=gltf.scene;model.traverse(child=>{if(child.isMesh){child.castShadow=true;child.receiveShadow=true;}});modelRoot.add(model);const nativeBox=new THREE.Box3().setFromObject(model);const nativeHeight=Math.max(.001,nativeBox.max.y-nativeBox.min.y);baseScale=worldHeight===undefined?(isGameModel?BASE_MODEL_HEIGHT/nativeHeight:BASE_MODEL_HEIGHT)*MESH_MODEL_SCALE:(worldHeight*PLAYER_GEOMETRY_HEIGHT)/(PLAYER_WORLD_HEIGHT*nativeHeight);clips=gltf.animations;if(clips.length){mixer=new THREE.AnimationMixer(model);animationClip.innerHTML=clips.map((clip,index)=>'<option value="'+index+'">'+escapeHTML(clip.name||('Animation '+(index+1)))+' · '+formatTime(clip.duration)+' s</option>').join('');const stand=clips.findIndex(clip=>/^stand$/i.test(clip.name));const initial=stand>=0?stand:0;animationClip.value=String(initial);animationControls.hidden=false;selectClip(initial);}fit();},undefined,error=>{if(disposed)return;console.error('Unable to load model preview',error);stage.insertAdjacentHTML('beforeend','<div class="preview-empty"><div><strong>Preview failed</strong>Open the asset to inspect it directly.</div></div>');});
           animate();
           preview={setScale(scale){currentScale=scale;fit();},dispose(){disposed=true;cancelAnimationFrame(frame);observer.disconnect();controls.dispose();mixer?.stopAllAction();disposeObject(scene);renderer.dispose();renderer.domElement.remove();}};
         }
@@ -236,8 +269,8 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
             '<p class="hint">Separate IDs with commas, spaces, or new lines. Positive 32-bit IDs only.</p>'+
             '<label>Map size<div class="scale-row"><input id="map-scale" type="range" min="0.1" max="10" step="0.05" value="'+(item.map_scale||1)+'" /><input id="map-scale-number" type="number" min="0.1" max="10" step="0.05" value="'+(item.map_scale||1)+'" /></div><span class="scale-readout"><span>0.1×</span><span>Baseline 1×</span><span>10× max</span></span></label>'+
             '<p class="hint">Adjust this model relative to a standard player on the 3D replay map. Existing models default to 1×.</p><div class="form-actions"><button id="remove" class="danger">Remove model</button></div></article>'+
-            '<article class="preview-card"><h3>Model preview</h3><p class="hint">Drag to orbit and scroll to zoom.'+(isGameModel?' Animation clips from the extracted game model are available in compatible viewers.':' This model is optimized for the replay map.')+'</p>'+
-            (hasPath?'<div class="model-stage" id="model-stage" role="img" aria-label="'+escapeHTML((item.name||typeLabel)+' beside a standard player')+'"><div class="model-stage-note"><strong>Blue capsule</strong> = standard player</div></div><div class="preview-meta"><span>GLB 2.0 · true relative map size</span><a href="'+previewURL(item.path)+'" target="_blank" rel="noreferrer">Open asset ↗</a></div>':'<div class="preview-empty"><div><strong>No GLB uploaded</strong>Upload a model to inspect it here.</div></div>')+'</article></div><details><summary>Draft manifest</summary><pre id="json"></pre></details></div>';
+            '<article class="preview-card"><h3>Model preview</h3><p class="hint">Drag to orbit and scroll to zoom.'+(isGameModel?' Select and scrub the extracted game animations below.':' This model is optimized for the replay map.')+'</p>'+
+            (hasPath?'<div class="model-stage" id="model-stage" role="img" aria-label="'+escapeHTML((item.name||typeLabel)+' beside a standard player')+'"><div class="model-stage-note"><strong>Blue capsule</strong> = standard player</div></div><div class="animation-controls" id="animation-controls" hidden><select id="animation-clip" aria-label="Animation clip"></select><button id="animation-play" type="button">Pause</button><button id="animation-restart" type="button">Restart</button><select id="animation-speed" class="animation-speed" aria-label="Animation speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select><div class="animation-timeline"><input id="animation-timeline" type="range" min="0" max="1" step="0.001" value="0" aria-label="Animation timeline" /><span class="animation-time" id="animation-time">0.00 / 0.00 s</span></div></div><div class="preview-meta"><span>GLB 2.0 · true relative map size</span><a href="'+previewURL(item.path)+'" target="_blank" rel="noreferrer">Open asset ↗</a></div>':'<div class="preview-empty"><div><strong>No GLB uploaded</strong>Upload a model to inspect it here.</div></div>')+'</article></div><details><summary>Draft manifest</summary><pre id="json"></pre></details></div>';
           document.getElementById('name').addEventListener('input',()=>{syncEditor();markDirty();renderList();});
           document.getElementById('entry-ids').addEventListener('input',()=>{syncEditor();markDirty();renderList();});
           document.getElementById('map-scale').addEventListener('input',event=>setMapScale(event.target.value));
