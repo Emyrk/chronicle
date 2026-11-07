@@ -23,23 +23,31 @@ pnpm typecheck    # tsc --noEmit
 pnpm build
 ```
 
-Then open `http://localhost:3000/api/og?title=Hello&template=chronicle`. `/` lists every template with a live example.
+Then open `http://localhost:3000/`. The index is the approval gallery: every curated card variant, grouped by product surface and labelled with the Chronicle route that selects it. It uses the real `next/og` endpoint, fonts, and bundled assets rather than approximating the cards as frontend components in Storybook.
 
-## Preview real Chronicle links
+## Preview and approve cards
 
-The template index previews the renderer directly. To check what Discord will see for real Chronicle pages, pass one or more page URLs to the link preview command:
+With the local renderer running **without** `OG_SIGNING_KEY`, capture every curated variant into one self-contained HTML file:
 
 ```bash
 cd services/og
+pnpm preview:links
+```
+
+The command renders every case from `app/lib/og-preview-cases.json`, embeds the resulting PNGs, and writes `.preview/index.html`. The file can be opened or shared without keeping the renderer running. Use `--renderer http://localhost:3001` or `--out /tmp/og-preview.html` to override the defaults.
+
+To check what Discord will see for specific real Chronicle pages, pass their URLs instead:
+
+```bash
 pnpm preview:links -- \
   'https://chronicleclassic.com/instances/example' \
   'https://chronicleclassic.com/s/example' \
   'https://chronicleclassic.com/armory/turtle/player'
 ```
 
-The command fetches each page with a Discord crawler user agent, reads the actual `og:title`, `og:description`, `og:url`, and `og:image`, then writes a visual gallery to `.preview/index.html`. Open that file in a browser. Use `--out /tmp/og-preview.html` to choose another location.
+In URL mode, the command fetches each page with a Discord crawler user agent and previews its actual `og:title`, `og:description`, `og:url`, and `og:image`.
 
-This works against production, a deployed preview environment, or a local Chronicle server. For local end-to-end testing, run Chronicle with `CHRONICLE_OG_SERVICE_URL` pointing at the local OG service and set the same development key in `CHRONICLE_OG_SIGNING_KEY` and the OG service's `OG_SIGNING_KEY`, then pass the local page URLs to this command.
+For local end-to-end page testing, run Chronicle with `CHRONICLE_OG_SERVICE_URL` pointing at the local OG service and set the same development key in `CHRONICLE_OG_SIGNING_KEY` and the renderer's `OG_SIGNING_KEY`, then pass the local Chronicle page URLs to URL mode. The curated approval gallery intentionally uses an unsigned renderer so its hand-authored cases can render directly.
 
 ## Docker
 

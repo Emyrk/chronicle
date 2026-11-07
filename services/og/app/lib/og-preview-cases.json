@@ -1,0 +1,330 @@
+[
+  {
+    "id": "brand-default",
+    "group": "Brand",
+    "label": "Brand fallback",
+    "description": "Default Chronicle identity when a route has no dedicated image or a card lookup fails.",
+    "pageExample": "/",
+    "note": "Used across static pages and as the safe fallback.",
+    "params": {
+      "template": "brand",
+      "title": "Every pull, every parse, every wipe.",
+      "excerpt": "Free raid log analysis for World of Warcraft",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "brand-stats",
+    "group": "Brand",
+    "label": "Brand with site stats",
+    "description": "Brand card after the asynchronous site totals cache has loaded.",
+    "pageExample": "/recent",
+    "note": "Count pills disappear independently when a value is unavailable.",
+    "params": {
+      "template": "brand",
+      "title": "Every pull, every parse, every wipe.",
+      "excerpt": "Free raid log analysis for WoW Forever",
+      "stat1": "18427:raids logged",
+      "stat2": "263904:bosses killed",
+      "host": "forever.chronicleclassic.com",
+      "product": "WoW Forever"
+    }
+  },
+  {
+    "id": "talents-empty",
+    "group": "Talents",
+    "label": "Talent calculator",
+    "description": "Class calculator before a build has allocated any points.",
+    "pageExample": "/talents/mage",
+    "params": {
+      "template": "talents",
+      "class": "mage",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "talents-build",
+    "group": "Talents",
+    "label": "Talent build",
+    "description": "A shared class build with inferred spec and points per tree.",
+    "pageExample": "/talents/mage?build=2305000000000000000000-0055300002032501312-",
+    "params": {
+      "template": "talents",
+      "class": "mage",
+      "spec": "Fire",
+      "points": "10-32-0",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "talents-pet",
+    "group": "Talents",
+    "label": "Hunter pet build",
+    "description": "Pet calculators use one point total instead of three class trees.",
+    "pageExample": "/talents/pet?build=5551--",
+    "params": {
+      "template": "talents",
+      "class": "pet",
+      "points": "16",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "character-history",
+    "group": "Character",
+    "label": "Character history",
+    "description": "Armory character without enough parse data for a best average.",
+    "pageExample": "/armory/turtle/Playername",
+    "params": {
+      "template": "character",
+      "name": "Aeloria",
+      "class": "priest",
+      "spec": "Holy",
+      "race": "Night Elf",
+      "level": "60",
+      "guild": "Moonlit Vanguard",
+      "realm": "Turtle WoW",
+      "ilvl": "72",
+      "raids": "14",
+      "seen": "Nov 2026",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "character-parse",
+    "group": "Character",
+    "label": "Character performance",
+    "description": "Armory character with average parse, item level, kills, and best bosses.",
+    "pageExample": "/armory/turtle/Playername",
+    "params": {
+      "template": "character",
+      "name": "Ravenshield",
+      "class": "warrior",
+      "spec": "Fury",
+      "race": "Human",
+      "level": "60",
+      "guild": "No Quarter",
+      "realm": "Turtle WoW",
+      "parse": "96.4",
+      "ilvl": "79",
+      "kills": "37",
+      "best": "Patchwerk:99,Loatheb:97,Nefarian:96",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "guild-roster",
+    "group": "Guild",
+    "label": "Guild activity",
+    "description": "Guild page before progression data is available, showing raids and top parsers.",
+    "pageExample": "/g/{guild-id}",
+    "params": {
+      "template": "guild",
+      "name": "Adventure Company",
+      "realm": "Turtle WoW",
+      "members": "54",
+      "since": "2025-03",
+      "raids": "42",
+      "top": "Aeloria:priest:98,Ravenshield:warrior:96,Starcaller:mage:95",
+      "accent": "#5f8fa6",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "guild-progression",
+    "group": "Guild",
+    "label": "Guild progression",
+    "description": "Guild page with progression, best clear, and average parse.",
+    "pageExample": "/g/{guild-id}",
+    "params": {
+      "template": "guild",
+      "name": "No Quarter",
+      "realm": "Turtle WoW",
+      "members": "68",
+      "since": "2024-08",
+      "prog": "MC:10:10,BWL:8:8,AQ40:9:9,NAXX:13:15",
+      "best": "4237",
+      "bestraid": "Naxxramas",
+      "avg": "95",
+      "accent": "#89744d",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "raid-report",
+    "group": "Raid",
+    "label": "Raid report",
+    "description": "General raid report selected when the run does not qualify for a fast-clear card.",
+    "pageExample": "/instances/{id-or-slug}",
+    "note": "This is the normal instance-page card.",
+    "params": {
+      "template": "raid",
+      "guild": "No Quarter",
+      "raid": "Naxxramas",
+      "realm": "Turtle WoW",
+      "date": "2026-11-07",
+      "dur": "8924",
+      "wipes": "8",
+      "players": "40",
+      "avg": "92",
+      "top": "Ravenshield:warrior:1343,Aeloria:priest:1288,Starcaller:mage:1255",
+      "comp": "warrior:8,priest:6,mage:6,rogue:5,warlock:4,hunter:4,paladin:4,druid:3",
+      "art": "naxxramas",
+      "host": "chronicleclassic.com",
+      "kills": "13",
+      "bosses": "15"
+    }
+  },
+  {
+    "id": "parse-ranked",
+    "group": "Boss share",
+    "label": "Ranked damage parse",
+    "description": "One selected player and boss kill with a parse score of at least 75.",
+    "pageExample": "/s/{share-code}",
+    "note": "Selected when a share link contains one player and one boss kill.",
+    "params": {
+      "template": "parse",
+      "player": "Ravenshield",
+      "class": "warrior",
+      "spec": "Fury",
+      "boss": "Patchwerk",
+      "raid": "Naxxramas",
+      "guild": "No Quarter",
+      "realm": "Turtle WoW",
+      "metric": "dps",
+      "value": "1342.6",
+      "dur": "188",
+      "score": "99",
+      "rank": "12",
+      "of": "8421",
+      "raidrank": "1",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "parse-unranked",
+    "group": "Boss share",
+    "label": "Unranked damage",
+    "description": "Player and boss share without a qualifying parse, led by DPS and raid position.",
+    "pageExample": "/s/{share-code}",
+    "note": "Used when no parse exists or the score is below 75.",
+    "params": {
+      "template": "parse",
+      "player": "Shieldwall",
+      "class": "warrior",
+      "spec": "Protection",
+      "boss": "Nefarian",
+      "raid": "Blackwing Lair",
+      "guild": "Adventure Company",
+      "realm": "Turtle WoW",
+      "metric": "dps",
+      "value": "483.2",
+      "dur": "326",
+      "raidrank": "18",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "parse-healing",
+    "group": "Boss share",
+    "label": "Ranked healing parse",
+    "description": "Healing shares switch the lead metric from DPS to HPS.",
+    "pageExample": "/s/{share-code}",
+    "params": {
+      "template": "parse",
+      "player": "Aeloria",
+      "class": "priest",
+      "spec": "Holy",
+      "boss": "Loatheb",
+      "raid": "Naxxramas",
+      "guild": "Moonlit Vanguard",
+      "realm": "Turtle WoW",
+      "metric": "hps",
+      "value": "1128.4",
+      "dur": "291",
+      "score": "97",
+      "rank": "34",
+      "of": "6932",
+      "raidrank": "2",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "clear-realm-rank",
+    "group": "Fast clear",
+    "label": "Realm-ranked clear",
+    "description": "Qualified clear with an explicit realm rank and record delta.",
+    "pageExample": "/instances/{id-or-slug}",
+    "note": "Selected instead of the raid card when the time parse is 90 or higher.",
+    "params": {
+      "template": "clear",
+      "guild": "No Quarter",
+      "raid": "Blackwing Lair",
+      "realm": "Turtle WoW",
+      "ms": "2945000",
+      "score": "99",
+      "rank": "6",
+      "of": "1248",
+      "realmrank": "2",
+      "delta": "-84",
+      "wipes": "0",
+      "players": "40",
+      "splits": "Razorgore:284,Vaelastrasz:426,Broodlord:711,Firemaw:1054,Ebonroc:1268,Flamegor:1442,Chromaggus:1948,Nefarian:2945",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "clear-percentile",
+    "group": "Fast clear",
+    "label": "Percentile clear",
+    "description": "Qualified clear without a realm rank, using the time-parse percentile fallback.",
+    "pageExample": "/instances/{id-or-slug}",
+    "params": {
+      "template": "clear",
+      "guild": "Moonlit Vanguard",
+      "raid": "Molten Core",
+      "realm": "Turtle WoW",
+      "ms": "3712000",
+      "score": "93",
+      "rank": "77",
+      "of": "1167",
+      "wipes": "2",
+      "players": "38",
+      "splits": "Lucifron:331,Magmadar:627,Gehennas:1004,Garr:1358,Baron Geddon:1692,Shazzrah:1908,Sulfuron:2291,Golemagg:2604,Majordomo:3120,Ragnaros:3712",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "generic-chronicle",
+    "group": "Renderer primitives",
+    "label": "Chronicle editorial template",
+    "description": "The generic Chronicle renderer retained for non-product-specific cards.",
+    "pageExample": "Direct renderer template",
+    "params": {
+      "template": "chronicle",
+      "title": "The night Naxxramas finally fell",
+      "excerpt": "Forty raiders, one last pull, and a clean finish after weeks of progression.",
+      "site": "Chronicle",
+      "author": "Raid Desk",
+      "date": "Nov 7, 2026",
+      "tag": "Raid report"
+    }
+  },
+  {
+    "id": "generic-modern",
+    "group": "Renderer primitives",
+    "label": "Modern template",
+    "description": "The neutral upstream renderer and default for unknown template names.",
+    "pageExample": "Direct renderer template",
+    "params": {
+      "template": "modern",
+      "title": "A cleaner way to read every pull",
+      "excerpt": "A neutral card for generic content outside Chronicle's product routes.",
+      "site": "Chronicle",
+      "author": "Chronicle",
+      "date": "Nov 7, 2026",
+      "tag": "Analysis",
+      "accent": "#89744d"
+    }
+  }
+]

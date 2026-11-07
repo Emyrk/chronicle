@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const DEFAULT_OUTPUT = resolve(dirname(fileURLToPath(import.meta.url)), '../.preview/index.html');
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const CASES_PATH = resolve(SCRIPT_DIR, '../app/lib/og-preview-cases.json');
+const DEFAULT_OUTPUT = resolve(SCRIPT_DIR, '../.preview/index.html');
 const USER_AGENT = 'Discordbot/2.0 (+https://discordapp.com) Chronicle-OG-preview';
 
 function decodeHtml(value) {
@@ -67,6 +69,7 @@ function escapeHtml(value) {
 function parseArgs(argv) {
   const urls = [];
   let output = DEFAULT_OUTPUT;
+  let renderer = 'http://localhost:3000';
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--') {
@@ -77,13 +80,103 @@ function parseArgs(argv) {
       if (!next) throw new Error(`${arg} requires a file path`);
       output = resolve(next);
       index += 1;
+    } else if (arg === '--renderer') {
+      const next = argv[index + 1];
+      if (!next) throw new Error(`${arg} requires a base URL`);
+      renderer = new URL(next).toString();
+      index += 1;
     } else if (arg === '--help' || arg === '-h') {
-      return { help: true, output, urls };
+      return { help: true, output, renderer, urls };
     } else {
       urls.push(arg);
     }
   }
-  return { help: false, output, urls };
+  return { help: false, output, renderer, urls };
+}
+
+async function loadPreviewCases() {
+  return JSON.parse(await readFile(CASES_PATH, 'utf8'));
+}
+
+async function inspectVariant(renderer, variant) {
+  const imageUrl = new URL('/api/og', renderer);
+  imageUrl.search = new URLSearchParams(variant.params).toString();
+  try {
+    const response = await fetch(imageUrl, { signal: AbortSignal.timeout(30_000) });
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!response.ok || !contentType.startsWith('image/')) {
+      throw new Error(`renderer returned HTTP ${response.status} ${contentType || 'without a content type'}`);
+    }
+    const bytes = Buffer.from(await response.arrayBuffer());
+    return {
+      ...variant,
+      image: `data:${contentType};base64,${bytes.toString('base64')}`,
+      imageUrl: imageUrl.toString(),
+      error: '',
+    };
+  } catch (error) {
+    return { ...variant, image: '', imageUrl: imageUrl.toString(), error: error.message };
+  }
+}
+
+function renderVariantPage(variants, renderer) {
+  const groups = [...new Set(variants.map(item => item.group))];
+  const sections = groups
+    .map(group => {
+      const cards = variants
+        .filter(item => item.group === group)
+        .map(item => `<article>
+          <a class="image ${item.error ? 'missing' : ''}" href="${escapeHtml(item.imageUrl)}">
+            ${item.image ? `<img src="${item.image}" alt="${escapeHtml(item.label)} Open Graph card" />` : escapeHtml(item.error)}
+          </a>
+          <div class="copy">
+            <div class="label"><h2>${escapeHtml(item.label)}</h2><code>${escapeHtml(item.params.template)}</code></div>
+            <p>${escapeHtml(item.description)}</p>
+            <code class="route">${escapeHtml(item.pageExample)}</code>
+            ${item.note ? `<p class="note">${escapeHtml(item.note)}</p>` : ''}
+          </div>
+        </article>`)
+        .join('\n');
+      return `<section><div class="group"><h3>${escapeHtml(group)}</h3><span></span></div><div class="grid">${cards}</div></section>`;
+    })
+    .join('\n');
+
+  return `<!doctype html>
+<html lang="en"><head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chronicle OG card approval</title>
+  <style>
+    :root { color-scheme: dark; font-family: Georgia, Cambria, serif; background: #090b10; color: #ece7dc; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 64px 28px 96px; }
+    main { max-width: 1440px; margin: 0 auto; }
+    .eyebrow, h3, code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .eyebrow, h3 { color: #c4a96a; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; }
+    h1 { max-width: 850px; margin: 10px 0 14px; font-size: clamp(40px, 7vw, 84px); font-weight: 400; line-height: .98; }
+    .intro { max-width: 800px; color: #aaa69d; font: 17px/1.7 ui-sans-serif, system-ui, sans-serif; }
+    section { margin-top: 72px; }
+    .group { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+    .group h3 { margin: 0; }
+    .group span { height: 1px; flex: 1; background: #302d28; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 26px; }
+    article { overflow: hidden; border: 1px solid #292721; border-radius: 5px; background: #101218; box-shadow: 0 24px 70px #0008; }
+    .image { display: grid; place-items: center; width: 100%; aspect-ratio: 1200/630; background: #06070a; color: #d98d8d; font: 14px ui-monospace, monospace; text-decoration: none; }
+    .image img { display: block; width: 100%; height: 100%; object-fit: contain; }
+    .copy { padding: 22px 24px 25px; }
+    .label { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+    h2 { margin: 0; font-size: 24px; font-weight: 400; }
+    .label code { color: #77736b; font-size: 11px; }
+    .copy > p { min-height: 48px; margin: 9px 0 17px; color: #aaa69d; font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; }
+    .route { display: inline-block; max-width: 100%; overflow-wrap: anywhere; border: 1px solid #343027; border-radius: 999px; padding: 6px 10px; color: #d2b875; background: #17150f; font-size: 12px; }
+    .copy > .note { min-height: 0; margin: 13px 0 0; color: #77736b; font-size: 13px; }
+  </style>
+</head><body><main>
+  <p class="eyebrow">Chronicle · social card review</p>
+  <h1>Every card, captured from the renderer.</h1>
+  <p class="intro">${variants.length} curated outcomes rendered by ${escapeHtml(renderer)}. Each card identifies the Chronicle route and selection condition it represents. Images are embedded, so this file can be shared for approval.</p>
+  ${sections}
+</main></body></html>`;
 }
 
 function renderPage(results) {
@@ -179,15 +272,34 @@ async function inspectUrl(input) {
 }
 
 async function main() {
-  const { help, output, urls } = parseArgs(process.argv.slice(2));
-  if (help || urls.length === 0) {
-    console.log(`Usage: pnpm preview:links -- [--out FILE] URL [URL ...]\n\nFetches each page as Discordbot and writes an HTML gallery of its actual Open Graph metadata and image.\nDefault output: ${relative(process.cwd(), DEFAULT_OUTPUT)}`);
-    process.exitCode = help ? 0 : 1;
+  const { help, output, renderer, urls } = parseArgs(process.argv.slice(2));
+  if (help) {
+    console.log(`Usage:
+  pnpm preview:links
+  pnpm preview:links -- [--renderer URL] [--out FILE]
+  pnpm preview:links -- [--out FILE] URL [URL ...]
+
+With no page URLs, renders every curated OG variant from the local renderer and embeds the PNGs in an approval gallery.
+With page URLs, fetches each page as Discordbot and previews its actual Open Graph metadata.
+Default renderer: http://localhost:3000
+Default output: ${relative(process.cwd(), DEFAULT_OUTPUT)}`);
+    return;
+  }
+
+  await mkdir(dirname(output), { recursive: true });
+  if (urls.length === 0) {
+    const cases = await loadPreviewCases();
+    const variants = await Promise.all(cases.map(item => inspectVariant(renderer, item)));
+    await writeFile(output, renderVariantPage(variants, renderer));
+    const failures = variants.filter(item => item.error);
+    console.log(`Rendered ${variants.length - failures.length}/${variants.length} curated OG variants from ${renderer}`);
+    for (const failure of failures) console.log(`  ${failure.label}: ${failure.error}`);
+    console.log(`\nApproval gallery written to ${output}`);
+    if (failures.length > 0) process.exitCode = 1;
     return;
   }
 
   const results = await Promise.all(urls.map(inspectUrl));
-  await mkdir(dirname(output), { recursive: true });
   await writeFile(output, renderPage(results));
 
   for (const result of results) {
