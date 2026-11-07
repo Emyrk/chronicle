@@ -129,3 +129,76 @@ func TestInstanceAverageParse(t *testing.T) {
 		require.False(t, ok, "never scores on demand")
 	})
 }
+
+func TestInstanceBossParse(t *testing.T) {
+	t.Parallel()
+
+	// "dps" does damage on Ragnaros; "healer" heals it (the DPS view calls
+	// them a healer, so their HPS parse is read). "small" has a cohort too
+	// small to score.
+	f := setupParsesTest(t)
+	ranking := func(playerGUID, role string, dps, hps float64) {
+		f.insertSimpleRanking(t, "Ragnaros", playerGUID, dps, hps)
+		ctx := testutil.Context(t, testutil.WaitShort)
+		_, err := f.pool.Exec(ctx,
+			"UPDATE encounter_dps_rankings SET player_role = $1 WHERE instance_id = $2 AND player_guid = $3",
+			role, f.instanceID, playerGUID)
+		require.NoError(t, err)
+	}
+	ranking("dps", "dps", 1000, 0)
+	ranking("healer", "heal", 0, 900)
+	ranking("small", "dps", 800, 0)
+
+	snapshot := f.publishSnapshot(t)
+	result := func(playerGUID, metric string, score int16, rank, sample int32, status parsepolicy.Status) {
+		f.insertPersistedParseResult(t, struct {
+			tenantID      uuid.UUID
+			snapshotID    uuid.NullUUID
+			encounterName string
+			playerGUID    string
+			playerName    string
+			metric        string
+			metricValue   float64
+			preciseScore  float64
+			displayScore  int16
+			rank          int32
+			sampleSize    int32
+			status        string
+		}{
+			snapshotID: uuid.NullUUID{UUID: snapshot.ID, Valid: true}, encounterName: "Ragnaros", playerGUID: playerGUID, playerName: playerGUID,
+			metric: metric, metricValue: 1000, preciseScore: float64(score), displayScore: score,
+			rank: rank, sampleSize: sample, status: string(status),
+		})
+	}
+	result("dps", "dps", 99, 3, 1412, parsepolicy.StatusOK)
+	result("healer", "hps", 80, 12, 300, parsepolicy.StatusOK)
+	result("small", "dps", 0, 0, 2, parsepolicy.StatusSampleTooSmall)
+	f.insertPersistedParseReceipt(t, uuid.Nil, snapshot.ID, 3)
+
+	ctx := testutil.Context(t, testutil.WaitShort)
+	parse, ok, err := servicerankings.InstanceBossParse(ctx, f.store, f.instanceID, "dps", "Ragnaros")
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, servicerankings.BossParse{Metric: parsepolicy.MetricDPS, Score: 99, Rank: 3, SampleSize: 1412}, parse)
+
+	parse, ok, err = servicerankings.InstanceBossParse(ctx, f.store, f.instanceID, "healer", "Ragnaros")
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, servicerankings.BossParse{Metric: parsepolicy.MetricHPS, Score: 80, Rank: 12, SampleSize: 300}, parse)
+
+	for _, tc := range []struct{ player, boss string }{{"small", "Ragnaros"}, {"missing", "Ragnaros"}, {"dps", "Golemagg"}} {
+		_, ok, err := servicerankings.InstanceBossParse(ctx, f.store, f.instanceID, tc.player, tc.boss)
+		require.NoError(t, err)
+		require.False(t, ok, tc)
+	}
+
+	// cohort_mode=disabled shows no parse, as the endpoint does.
+	tenant, err := f.store.InsertTenant(ctx, database.InsertTenantParams{
+		ID: uuid.New(), Name: "disabled-boss-parse", ParseConfig: []byte(`{"cohort_mode":"disabled"}`),
+		IncludeInAll: true, AvailableFormats: []string{},
+	})
+	require.NoError(t, err)
+	_, ok, err = servicerankings.InstanceBossParse(servicetenant.WithTenantID(ctx, tenant.ID), f.store, f.instanceID, "dps", "Ragnaros")
+	require.NoError(t, err)
+	require.False(t, ok)
+}

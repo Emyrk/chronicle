@@ -34,31 +34,15 @@ type InstanceParsesStore interface {
 // cohort_mode=disabled, a tenant lookback override, no start time, missing
 // or incomplete persisted results, or nobody with a scored boss.
 func InstanceAverageParse(ctx context.Context, store InstanceParsesStore, instanceID uuid.UUID) (int, bool, error) {
-	invalid, err := store.IsLogInstanceInvalid(ctx, instanceID)
-	if err != nil || invalid {
+	view, ok, err := loadDefaultInstanceParsesView(ctx, store, instanceID)
+	if err != nil || !ok {
 		return 0, false, err
 	}
-	tid := servicetenant.TenantIDFromContext(ctx)
-	config := loadInstanceParseTenantConfig(ctx, store, tid)
-	if config.cohortMode == parsepolicy.CohortModeDisabled {
-		return 0, false, nil
-	}
-	if config.lookbackDays != nil && parsepolicy.LookbackDays(*config.lookbackDays) != parsepolicy.DefaultLookbackDays {
-		return 0, false, nil
-	}
-	startTime, err := store.GetLogInstanceStartTime(ctx, instanceID)
-	if err != nil || !startTime.Valid {
-		return 0, false, err
-	}
-	rankings, err := store.ListRankingsForInstance(ctx, instanceID)
-	if err != nil {
-		return 0, false, err
-	}
-	encounterNames := instanceEncounterNames(rankings)
+	encounterNames := instanceEncounterNames(view.rankings)
 
 	views := map[parsepolicy.Metric]map[string]chroniclesdk.InstanceParsePlayer{}
 	for _, metric := range []parsepolicy.Metric{parsepolicy.MetricDPS, parsepolicy.MetricHPS} {
-		persisted, err := loadPersistedInstanceParses(ctx, store, tid, instanceID, rankings, encounterNames, metric, config.cohortMode)
+		persisted, err := loadPersistedInstanceParses(ctx, store, view.tid, instanceID, view.rankings, encounterNames, metric, view.config.cohortMode)
 		if err != nil {
 			return 0, false, err
 		}
@@ -96,6 +80,41 @@ func InstanceAverageParse(ctx context.Context, store InstanceParsesStore, instan
 		return 0, false, nil
 	}
 	return parsepolicy.RoundDisplay(sum / float64(players)), true, nil
+}
+
+// defaultInstanceParsesView is what the instance parses endpoint's default
+// view (historical, default lookback) reads before loading persisted results.
+type defaultInstanceParsesView struct {
+	tid      uuid.UUID
+	config   instanceParseTenantConfig
+	rankings []database.ListRankingsForInstanceRow
+}
+
+// loadDefaultInstanceParsesView applies the endpoint's rules for the default
+// view. ok is false when it would show no persisted parses: an invalid
+// instance, cohort_mode=disabled, a tenant lookback override or no start time.
+func loadDefaultInstanceParsesView(ctx context.Context, store InstanceParsesStore, instanceID uuid.UUID) (defaultInstanceParsesView, bool, error) {
+	invalid, err := store.IsLogInstanceInvalid(ctx, instanceID)
+	if err != nil || invalid {
+		return defaultInstanceParsesView{}, false, err
+	}
+	tid := servicetenant.TenantIDFromContext(ctx)
+	config := loadInstanceParseTenantConfig(ctx, store, tid)
+	if config.cohortMode == parsepolicy.CohortModeDisabled {
+		return defaultInstanceParsesView{}, false, nil
+	}
+	if config.lookbackDays != nil && parsepolicy.LookbackDays(*config.lookbackDays) != parsepolicy.DefaultLookbackDays {
+		return defaultInstanceParsesView{}, false, nil
+	}
+	startTime, err := store.GetLogInstanceStartTime(ctx, instanceID)
+	if err != nil || !startTime.Valid {
+		return defaultInstanceParsesView{}, false, err
+	}
+	rankings, err := store.ListRankingsForInstance(ctx, instanceID)
+	if err != nil {
+		return defaultInstanceParsesView{}, false, err
+	}
+	return defaultInstanceParsesView{tid: tid, config: config, rankings: rankings}, true, nil
 }
 
 // instanceEncounterNames is every encounter in the instance's rankings,
