@@ -7,6 +7,7 @@ import {
 import {
   utcToday,
   operationActive,
+  operationPhaseDescription,
   type LeaderboardOperation,
 } from "@/api/leaderboardOperations";
 const mocks = vi.hoisted(() => ({
@@ -18,6 +19,11 @@ vi.mock("@/api/leaderboardOperations", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/leaderboardOperations")>()),
   useLeaderboardOperations: () => ({
     data: { operations: mocks.operations },
+    isPending: false,
+    isError: false,
+  }),
+  useLeaderboardOperationDetail: () => ({
+    data: undefined,
     isPending: false,
     isError: false,
   }),
@@ -38,7 +44,7 @@ const operation: LeaderboardOperation = {
   date_basis: "run_end_time",
   missing_dates: 3,
   state: "paused",
-  phase: "discovering",
+  phase: "runs",
   discovered: 27,
   discovery_complete: false,
   started_at: "2026-11-07T09:00:00Z",
@@ -73,9 +79,47 @@ describe("tenant leaderboard operations", () => {
     expect(html).toContain("queued D1/D2 processing continues");
     expect(html).toContain("operation-1");
     expect(html).toContain("admin-a");
-    expect(html).toContain("27 runs discovered");
+    expect(html).toContain("27 obligations / keys discovered");
     expect(html).toContain("3 runs have no completion date");
     expect(html).toContain("2026-11-07 00:00 UTC");
+  });
+  it("distinguishes dated discovery from all-time evidence and result reconciliation", () => {
+    expect(operationPhaseDescription(operation)).toContain(
+      "by completion date",
+    );
+    expect(operationPhaseDescription({ ...operation, scope: "run" })).toContain(
+      "missing completion dates are allowed",
+    );
+    expect(
+      operationPhaseDescription({ ...operation, phase: "evidence" }),
+    ).toContain("All-time evidence");
+    expect(
+      operationPhaseDescription({
+        ...operation,
+        phase: "player_boss_subjects",
+      }),
+    ).toContain("All-time result");
+    expect(
+      operationPhaseDescription({ ...operation, phase: "future_phase" }),
+    ).toBe("Phase: future_phase");
+    const html = renderToStaticMarkup(
+      <OperationSummary
+        operation={{
+          ...operation,
+          backlog: {
+            d1_pending: 12,
+            d2_pending: 7,
+            pending_retries: 2,
+            oldest_pending_at: "2026-11-07T08:00:00Z",
+          },
+        }}
+      />,
+    );
+    expect(html).toContain("D1 pending: 12");
+    expect(html).toContain("D2 pending: 7");
+    expect(html).toContain("Pending retries: 2");
+    expect(html).toContain("includes other queued work");
+    expect(html).toContain("2026-11-07 08:00:00 UTC");
   });
   it("does not treat discovery completion as operation completion", () => {
     const draining = {

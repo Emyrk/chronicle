@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Info } from "lucide-react";
 import {
   operationJSON,
-  type LeaderboardMaintenance,
+  type LeaderboardMaintenanceResponse,
 } from "@/api/leaderboardOperations";
 
 export function LeaderboardMaintenanceNotice({
@@ -13,7 +13,7 @@ export function LeaderboardMaintenanceNotice({
   const status = useQuery({
     queryKey: ["leaderboard-maintenance", tenantID],
     queryFn: () =>
-      operationJSON<{ maintenance: LeaderboardMaintenance | null }>(
+      operationJSON<LeaderboardMaintenanceResponse>(
         "/api/v1/leaderboards-v2/maintenance",
       ),
     enabled: !!tenantID,
@@ -42,7 +42,9 @@ export function LeaderboardMaintenanceNotice({
             <p className="font-medium">
               {notice.kind === "partial_coverage"
                 ? "Historical leaderboard coverage is incomplete"
-                : "Leaderboard results are being recalculated"}
+                : notice.kind === "repair_in_progress"
+                  ? "Leaderboard results are being recalculated"
+                  : "Leaderboard maintenance"}
             </p>
             <p>{notice.message}</p>
             <p className="text-xs text-muted-foreground">

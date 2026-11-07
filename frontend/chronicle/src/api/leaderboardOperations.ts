@@ -1,44 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-// Local contract until the backend SDK generation is integrated. Keep this
-// isolated; do not modify generated declarations to anticipate backend changes.
-export interface LeaderboardOperation {
-  id: string;
-  tenant_id: string;
-  requested_by: string;
-  purpose: "bootstrap" | "repair";
-  scope: "tenant" | "run";
-  run_id?: string | null;
-  before_date: string;
-  cutoff: string;
-  date_basis: "run_end_time";
-  missing_dates: number;
-  state: "discovering" | "draining" | "paused" | "completed";
-  phase: string;
-  discovered: number;
-  discovery_complete: boolean;
-  started_at: string;
-  completed_at?: string | null;
-  last_progress_at: string;
-  retry_count: number;
-  last_error: string;
-}
-export interface CreateLeaderboardOperation {
-  tenant_id: string;
-  purpose: "bootstrap" | "repair";
-  scope: "tenant" | "run";
-  before_date?: string;
-  run_id?: string;
-}
-export interface LeaderboardMaintenance {
-  kind: "partial_coverage" | "repair_in_progress";
-  state: "discovering" | "draining" | "paused" | "completed";
-  message: string;
-  before_date: string;
-  cutoff: string;
-  date_basis: "run_end_time";
-  missing_dates: number;
-}
+import type {
+  CreateLeaderboardOperationRequest,
+  LeaderboardOperation,
+  LeaderboardOperationList,
+} from "./typesGenerated";
+export type {
+  LeaderboardOperation,
+  LeaderboardMaintenance,
+  LeaderboardMaintenanceResponse,
+} from "./typesGenerated";
+export type CreateLeaderboardOperation = CreateLeaderboardOperationRequest;
+
 export const operationKey = (tenantID: string) =>
   ["admin", "leaderboard-operations", tenantID] as const;
 export function utcToday(now = new Date()): string {
@@ -65,12 +38,36 @@ export function useLeaderboardOperations(tenantID: string) {
   return useQuery({
     queryKey: operationKey(tenantID),
     queryFn: () =>
-      operationJSON<{ operations: LeaderboardOperation[] }>(
+      operationJSON<LeaderboardOperationList>(
         `/api/v1/admin/leaderboard-operations?tenant_id=${encodeURIComponent(tenantID)}`,
       ),
     retry: false,
     refetchInterval: (query) =>
       query.state.data?.operations.some(operationActive) ? 15_000 : false,
+  });
+}
+export async function fetchLeaderboardOperationDetail(
+  tenantID: string,
+  operationID: string,
+) {
+  const operation = await operationJSON<LeaderboardOperation>(
+    `/api/v1/admin/leaderboard-operations/${encodeURIComponent(operationID)}`,
+  );
+  if (operation.tenant_id !== tenantID)
+    throw new Error("Operation belongs to a different tenant");
+  return operation;
+}
+export function useLeaderboardOperationDetail(
+  tenantID: string,
+  operationID?: string,
+) {
+  return useQuery({
+    queryKey: [...operationKey(tenantID), "detail", operationID],
+    enabled: !!operationID,
+    queryFn: () => fetchLeaderboardOperationDetail(tenantID, operationID!),
+    retry: false,
+    refetchInterval: (query) =>
+      !query.state.data || operationActive(query.state.data) ? 15_000 : false,
   });
 }
 export async function performLeaderboardOperationAction(
@@ -97,4 +94,28 @@ export function useLeaderboardOperationAction(tenantID: string) {
     onSuccess: () =>
       client.invalidateQueries({ queryKey: operationKey(tenantID) }),
   });
+}
+
+const RESULT_PHASES = new Set([
+  "player_boss_benchmarks",
+  "player_boss_subjects",
+  "guild_boss_benchmarks",
+  "guild_boss_subjects",
+  "guild_clear_benchmarks",
+  "guild_clear_subjects",
+  "player_renown_counts",
+  "guild_renown_counts",
+]);
+export function operationPhaseDescription(
+  operation: LeaderboardOperation,
+): string {
+  if (operation.phase === "runs")
+    return operation.scope === "run"
+      ? "Explicit single-run discovery; missing completion dates are allowed."
+      : "Canonical run discovery by completion date (exclusive UTC cutoff).";
+  if (operation.phase === "evidence")
+    return "All-time evidence reconciliation; not limited by the run completion date.";
+  if (RESULT_PHASES.has(operation.phase))
+    return `All-time result reconciliation: ${operation.phase.replaceAll("_", " ")}.`;
+  return `Phase: ${operation.phase || "not reported"}`;
 }

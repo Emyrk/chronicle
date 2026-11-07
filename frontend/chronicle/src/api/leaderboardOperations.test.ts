@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   performLeaderboardOperationAction,
   operationKey,
+  fetchLeaderboardOperationDetail,
 } from "./leaderboardOperations";
 afterEach(() => vi.unstubAllGlobals());
 describe("leaderboard operation requests", () => {
@@ -42,6 +43,28 @@ describe("leaderboard operation requests", () => {
       run_id: "run",
     });
     expect(operationKey("a")).not.toEqual(operationKey("b"));
+  });
+  it("fetches backlog detail by operation ID and verifies the owning tenant", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: "op",
+          tenant_id: "a",
+          backlog: { d1_pending: 2, d2_pending: 3, pending_retries: 1 },
+        }),
+      });
+    vi.stubGlobal("fetch", fetch);
+    expect(
+      (await fetchLeaderboardOperationDetail("a", "op")).backlog?.d2_pending,
+    ).toBe(3);
+    expect(fetch.mock.calls[0][0]).toBe(
+      "/api/v1/admin/leaderboard-operations/op",
+    );
+    await expect(fetchLeaderboardOperationDetail("b", "op")).rejects.toThrow(
+      "different tenant",
+    );
   });
   it("uses operation-scoped pause/resume routes and preserves server error messages", async () => {
     const fetch = vi

@@ -3,9 +3,11 @@ import { Loader2 } from "lucide-react";
 import { useAdminTenants } from "@/api/queries";
 import {
   operationActive,
+  operationPhaseDescription,
   utcToday,
   useLeaderboardOperationAction,
   useLeaderboardOperations,
+  useLeaderboardOperationDetail,
   type LeaderboardOperation,
 } from "@/api/leaderboardOperations";
 import { Card } from "@/components/ui/Card/Card";
@@ -29,8 +31,9 @@ export function OperationSummary({
         <span className="font-medium text-foreground">
           {operation.state} · {operation.phase}
         </span>{" "}
-        · {operation.discovered.toLocaleString()} runs discovered
+        · {operation.discovered.toLocaleString()} obligations / keys discovered
       </p>
+      <p>{operationPhaseDescription(operation)}</p>
       <p>
         {operation.state === "completed"
           ? "Discovery and pending tenant processing for this operation are complete."
@@ -51,6 +54,25 @@ export function OperationSummary({
           date and are not covered by date scans. Use single-run repair for
           those runs.
         </p>
+      )}
+      {operation.backlog && (
+        <div
+          className="space-y-1 rounded border p-2"
+          aria-label="Current tenant processing backlog"
+        >
+          <p className="font-medium text-foreground">
+            Current tenant backlog (includes other queued work)
+          </p>
+          <p>
+            D1 pending: {operation.backlog.d1_pending.toLocaleString()} · D2
+            pending: {operation.backlog.d2_pending.toLocaleString()}
+          </p>
+          <p>
+            Pending retries:{" "}
+            {operation.backlog.pending_retries.toLocaleString()} · Oldest
+            pending: {dateTime(operation.backlog.oldest_pending_at)}
+          </p>
+        </div>
       )}
       {operation.last_error && (
         <p role="alert" className="break-words text-destructive">
@@ -74,7 +96,10 @@ export function TenantLeaderboardOperations({
   const rows = [...(operations.data?.operations ?? [])].sort((a, b) =>
     b.started_at.localeCompare(a.started_at),
   );
-  const active = rows.find(operationActive);
+  const activeSummary = rows.find(operationActive);
+  const detail = useLeaderboardOperationDetail(tenantID, activeSummary?.id);
+  const active =
+    detail.data?.id === activeSummary?.id ? detail.data : activeSummary;
   return (
     <Card className="space-y-4 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -97,6 +122,7 @@ export function TenantLeaderboardOperations({
           <input
             aria-label={`${tenantName} completion cutoff date`}
             type="date"
+            max={utcToday()}
             required
             value={beforeDate}
             onChange={(event) => setBeforeDate(event.target.value)}
@@ -198,24 +224,34 @@ export function TenantLeaderboardOperations({
       {active && (
         <div className="space-y-2 rounded-md border p-3">
           <OperationSummary operation={active} />
-          {!active.discovery_complete &&
-            (active.state === "discovering" || active.state === "paused") && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={action.isPending}
-                onClick={() =>
-                  action.mutate({
-                    id: active.id,
-                    action: active.state === "paused" ? "resume" : "pause",
-                  })
-                }
-              >
-                {active.state === "paused"
-                  ? "Resume discovery"
-                  : "Pause discovery"}
-              </Button>
-            )}
+          {detail.isPending && (
+            <p role="status" className="text-xs text-muted-foreground">
+              Loading current tenant backlog…
+            </p>
+          )}
+          {detail.isError && (
+            <p role="alert" className="text-xs text-destructive">
+              Could not refresh current tenant backlog. {detail.error.message}
+            </p>
+          )}
+          {(active.state === "paused" ||
+            (!active.discovery_complete && active.state === "discovering")) && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={action.isPending}
+              onClick={() =>
+                action.mutate({
+                  id: active.id,
+                  action: active.state === "paused" ? "resume" : "pause",
+                })
+              }
+            >
+              {active.state === "paused"
+                ? "Resume discovery"
+                : "Pause discovery"}
+            </Button>
+          )}
           <p className="text-xs text-muted-foreground">
             Pausing stops discovery only; queued processing continues. The
             leaderboard notice remains until completion.
@@ -224,7 +260,7 @@ export function TenantLeaderboardOperations({
       )}
       <details open={rows.length === 0}>
         <summary className="cursor-pointer text-sm font-medium">
-          Operation history ({rows.length})
+          Recent operation history ({rows.length}, latest 50)
           {rows[0] &&
             ` · latest ${rows[0].state}${rows[0].completed_at ? ` · completed ${dateTime(rows[0].completed_at)}` : ""}`}
         </summary>
@@ -243,7 +279,7 @@ export function TenantLeaderboardOperations({
                 <tr className="border-b text-muted-foreground">
                   {[
                     "Operation / scope",
-                    "Completion cutoff",
+                    "Run discovery before",
                     "Progress",
                     "Audit",
                   ].map((label) => (
