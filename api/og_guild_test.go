@@ -239,17 +239,20 @@ func (s guildOGFaultStore) GetGuildPage(ctx context.Context, guildID uuid.UUID) 
 
 func TestGuildOGResolver(t *testing.T) {
 	t.Parallel()
-	ctx := testutil.Context(t, testutil.WaitMedium)
+	// Setup gets its own context, and so does every subtest: parallel
+	// subtests only start once the parent returns and a -parallel slot is
+	// free, which on a busy runner can be longer than any parent deadline.
+	setupCtx := testutil.Context(t, testutil.WaitMedium)
 	store, _ := dbtestutil.NewDB(t)
 
 	serverID := uuid.New()
-	_, err := store.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: serverID, Name: "og guild " + serverID.String()})
+	_, err := store.InsertWoWServer(setupCtx, database.InsertWoWServerParams{ID: serverID, Name: "og guild " + serverID.String()})
 	require.NoError(t, err)
 	realmID := uuid.New()
 	realmName := "Realm " + realmID.String()[:8]
-	_, err = store.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: realmID, ServerID: serverID, Name: realmName})
+	_, err = store.InsertWoWServerRealm(setupCtx, database.InsertWoWServerRealmParams{ID: realmID, ServerID: serverID, Name: realmName})
 	require.NoError(t, err)
-	guild, err := store.UpsertGuild(ctx, database.UpsertGuildParams{RealmID: realmID, Name: "Nightfall", CreatedAt: database.Timestamptz(time.Now())})
+	guild, err := store.UpsertGuild(setupCtx, database.UpsertGuildParams{RealmID: realmID, Name: "Nightfall", CreatedAt: database.Timestamptz(time.Now())})
 	require.NoError(t, err)
 	theme, err := json.Marshal(chroniclesdk.GuildPageTheme{
 		PrimaryColor: "#A63F3F",
@@ -257,7 +260,7 @@ func TestGuildOGResolver(t *testing.T) {
 		Tags:         []chroniclesdk.GuildTag{chroniclesdk.GuildTagRaiding},
 	})
 	require.NoError(t, err)
-	_, err = store.UpsertGuildPage(ctx, database.UpsertGuildPageParams{GuildID: guild.ID, Theme: theme})
+	_, err = store.UpsertGuildPage(setupCtx, database.UpsertGuildPageParams{GuildID: guild.ID, Theme: theme})
 	require.NoError(t, err)
 
 	ogBase, err := url.Parse("https://og.example.com/")
@@ -270,7 +273,7 @@ func TestGuildOGResolver(t *testing.T) {
 		}
 		return &API{Opts: opts}
 	}
-	request := func() *http.Request {
+	request := func(ctx context.Context) *http.Request {
 		r := httptest.NewRequest(http.MethodGet, "/g/"+guild.ID.String(), nil).WithContext(ctx)
 		r.Host = "forever.chronicleclassic.com"
 		return r
@@ -289,7 +292,8 @@ func TestGuildOGResolver(t *testing.T) {
 
 	t.Run("Unconfigured", func(t *testing.T) {
 		t.Parallel()
-		og := newAPI(store, false).guildOG(request(), guild.ID.String())
+		ctx := testutil.Context(t, testutil.WaitMedium)
+		og := newAPI(store, false).guildOG(request(ctx), guild.ID.String())
 		require.NotNil(t, og)
 		require.Empty(t, og.ImageURL)
 		require.Equal(t, wantTitle, og.Title)
@@ -299,14 +303,16 @@ func TestGuildOGResolver(t *testing.T) {
 
 	t.Run("UnknownOrInvalid", func(t *testing.T) {
 		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitMedium)
 		api := newAPI(store, true)
-		require.Nil(t, api.guildOG(request(), uuid.NewString()))
-		require.Nil(t, api.guildOG(request(), "not-a-uuid"))
+		require.Nil(t, api.guildOG(request(ctx), uuid.NewString()))
+		require.Nil(t, api.guildOG(request(ctx), "not-a-uuid"))
 	})
 
 	t.Run("Configured", func(t *testing.T) {
 		t.Parallel()
-		og := newAPI(store, true).guildOG(request(), guild.ID.String())
+		ctx := testutil.Context(t, testutil.WaitMedium)
+		og := newAPI(store, true).guildOG(request(ctx), guild.ID.String())
 		require.NotNil(t, og)
 		require.Equal(t, wantTitle, og.Title)
 		require.Equal(t, wantDescription, og.Description)
@@ -326,8 +332,9 @@ func TestGuildOGResolver(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			ctx := testutil.Context(t, testutil.WaitMedium)
 			start := time.Now()
-			og := newAPI(fault, true).guildOG(request(), guild.ID.String())
+			og := newAPI(fault, true).guildOG(request(ctx), guild.ID.String())
 			require.Less(t, time.Since(start), guildOGCardTimeout+2*time.Second)
 			require.NotNil(t, og)
 			require.Equal(t, wantTitle, og.Title)
