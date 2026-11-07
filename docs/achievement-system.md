@@ -640,6 +640,8 @@ The achievement UI should identify retroactively awarded achievements without pr
 
 ## User experience
 
+The UI is mocked in Storybook (`Pages/Achievements`, `Features/Achievements/Notifications`) using the real components in `frontend/chronicle/src/features/achievements`. The stories render the production `AchievementsPage` against mocked `GET /api/v1/achievements` responses typed by `api/chroniclesdk/achievements.go`. Implementation must reuse those components and that contract rather than rebuilding the UI. See the feature `README.md`.
+
 ### Achievement browser
 
 The browser should provide:
