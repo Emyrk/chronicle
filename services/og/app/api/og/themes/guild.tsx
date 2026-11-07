@@ -1,15 +1,13 @@
 // Guild card for /g/{guildId}: logo or monogram, name, progression bars and
-// two headline stats. Every value comes from the signed params api/og.go writes:
+// best-clear stats. Every value comes from the signed params serviceog writes:
 //   name, realm, product, members, since (YYYY-MM), accent, tag, host,
 //   prog=MC:10:10,BWL:8:8 (short:down:total, at most 4), best (seconds),
-//   bestraid, avg (mean of the top best-per-player parses), and when there is
-//   no progression raids + top=name:class:score.
+//   bestraid, and when there is no progression, raids logged.
 // `icon` (the guild logo) is fetched by the handler through the SSRF pipeline;
 // any failure, WebP included, leaves iconSrc null and the monogram shows.
 import { Img, fitFontSize } from './shared';
 import {
   chromeParams,
-  classColor,
   COLORS,
   Footer,
   formatDuration,
@@ -19,7 +17,6 @@ import {
   loadKitFonts,
   markImage,
   param,
-  parseColor,
   SANS,
   SERIF,
 } from './kit';
@@ -73,21 +70,6 @@ export function readProgression(context: ThemeContext): ProgressionRow[] {
     return [{ label: label.trim(), down: Math.min(d, t), total: t }];
     })
     .slice(0, 4);
-}
-
-export interface TopParser {
-  name: string;
-  className: string;
-  score: number | null;
-}
-
-export function readTopParsers(context: ThemeContext): TopParser[] {
-  return listParam(context, 'top', { maxItems: 3, maxLength: 48 }).flatMap(item => {
-    const [name, className = '', score = ''] = item.split(':');
-    if (!name?.trim()) return [];
-    const value = /^\d{1,3}$/.test(score) ? Math.min(100, Number(score)) : null;
-    return [{ name: name.trim().slice(0, 24), className, score: value }];
-  });
 }
 
 function Monogram({ name, accent }: { name: string; accent: string }) {
@@ -149,27 +131,13 @@ function ProgressionBars({ rows, accent }: { rows: ProgressionRow[]; accent: str
   );
 }
 
-// No progression: raids logged over the top three parsers.
-function Activity({ raids, top }: { raids: number | null; top: TopParser[] }) {
+// No progression: show only estimated raid activity. Aggregate player scores
+// are intentionally omitted until guild-level scoring is ready.
+function Activity({ raids }: { raids: number }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: 620 }}>
-      {raids ? (
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
-          <span style={{ fontSize: 44, fontWeight: 700, color: COLORS.foreground }}>{raids.toLocaleString('en-US')}</span>
-          <span style={{ fontSize: 24, color: COLORS.muted }}>{raids === 1 ? 'raid logged' : 'raids logged'}</span>
-        </div>
-      ) : null}
-      {top.map((parser, index) => (
-        <div key={`${parser.name}-${index}`} style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-          <span style={{ width: 28, fontSize: 24, color: COLORS.muted }}>{`${index + 1}.`}</span>
-          <span style={{ width: 300, fontSize: 28, fontWeight: 600, color: classColor(parser.className), overflow: 'hidden', whiteSpace: 'nowrap' }}>
-            {parser.name}
-          </span>
-          {parser.score !== null ? (
-            <span style={{ fontSize: 28, fontWeight: 700, color: parseColor(parser.score) }}>{String(parser.score)}</span>
-          ) : null}
-        </div>
-      ))}
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, width: 620 }}>
+      <span style={{ fontSize: 52, fontWeight: 700, color: COLORS.foreground }}>{raids.toLocaleString('en-US')}</span>
+      <span style={{ fontSize: 26, color: COLORS.muted }}>{raids === 1 ? 'raid logged' : 'raids logged'}</span>
     </div>
   );
 }
@@ -193,10 +161,8 @@ async function render(props: ThemeProps, context: ThemeContext): Promise<React.R
   const since = formatSince(param(context, 'since', 7));
   const prog = readProgression(context);
   const raids = intParam(context, 'raids', { min: 0, max: 999999 });
-  const top = prog.length > 0 ? [] : readTopParsers(context);
   const best = intParam(context, 'best', { min: 1, max: 24 * 3600 });
   const bestRaid = param(context, 'bestraid', 12);
-  const avg = intParam(context, 'avg', { min: 0, max: 100 });
   const markSrc = await markImage();
 
   const subline = [
@@ -211,8 +177,8 @@ async function render(props: ThemeProps, context: ThemeContext): Promise<React.R
     [22, 58],
     [Infinity, 50],
   ]);
-  const hasBody = prog.length > 0 || top.length > 0 || Boolean(raids);
-  const hasStats = best !== null || avg !== null;
+  const hasBody = prog.length > 0 || Boolean(raids);
+  const hasStats = best !== null;
 
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', position: 'relative', fontFamily: SANS, color: COLORS.foreground, background: BACKGROUND }}>
@@ -274,11 +240,10 @@ async function render(props: ThemeProps, context: ThemeContext): Promise<React.R
 
         {hasBody || hasStats ? (
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 48 }}>
-            {prog.length > 0 ? <ProgressionBars rows={prog} accent={accent} /> : hasBody ? <Activity raids={raids} top={top} /> : null}
+            {prog.length > 0 ? <ProgressionBars rows={prog} accent={accent} /> : raids !== null && raids > 0 ? <Activity raids={raids} /> : null}
             {hasStats ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                {best !== null ? <Stat value={formatDuration(best)} label={bestRaid ? `Best ${bestRaid} clear` : 'Best clear'} /> : null}
-                {avg !== null ? <Stat value={String(avg)} label="Top parse avg" color={parseColor(avg)} /> : null}
+                <Stat value={formatDuration(best)} label={bestRaid ? `Best ${bestRaid} clear` : 'Best clear'} />
               </div>
             ) : null}
           </div>

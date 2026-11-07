@@ -126,11 +126,10 @@
       "members": "54",
       "since": "2025-03",
       "raids": "42",
-      "top": "Aeloria:priest:98,Ravenshield:warrior:96,Starcaller:mage:95",
       "accent": "#5f8fa6",
       "host": "chronicleclassic.com"
     },
-    "note": "Current rule: shown only when no progression rows can be built. It then shows estimated raid nights and up to three top parsers."
+    "note": "Current rule: shown only when no progression rows can be built. It shows estimated raid nights without player names or aggregate scores."
   },
   {
     "id": "guild-progression",
@@ -147,7 +146,6 @@
       "prog": "MC:10:10,BWL:8:8,AQ40:9:9,NAXX:13:15",
       "best": "4237",
       "bestraid": "Naxxramas",
-      "avg": "95",
       "accent": "#89744d",
       "host": "chronicleclassic.com"
     },

@@ -73,11 +73,6 @@ func TestGuildOGParams(t *testing.T) {
 			{InstanceName: "Blackwing Lair", DurationMs: 3_000_000},
 			{InstanceName: "Ragefire Chasm", DurationMs: 600_000},
 		},
-		TopParses: []database.GuildTopParsesRow{
-			{PlayerName: "Thalendris", PlayerClass: "MAGE", DisplayScore: 99},
-			{PlayerName: "Grimtusk", PlayerClass: "WARRIOR", DisplayScore: 80},
-			{PlayerName: "Lyra", PlayerClass: "PRIEST", DisplayScore: 56},
-		},
 	}
 
 	got := guildOGParams("forever.chronicleclassic.com", data, guildOGFixtureRaids())
@@ -92,7 +87,6 @@ func TestGuildOGParams(t *testing.T) {
 		"prog":     {"Ony:1:1,BWL:2:2,AQ40:1:9,Naxx:1:15"},
 		"best":     {"3000"},
 		"bestraid": {"BWL"},
-		"avg":      {"78"},
 	}, got)
 
 	t.Run("NoProgression", func(t *testing.T) {
@@ -106,12 +100,6 @@ func TestGuildOGParams(t *testing.T) {
 				// A raid kill that isn't a progression boss: no row, but a raid logged.
 				guildOGKill("Naxxramas", "Trash Pack", 2, mar),
 			},
-			TopParses: []database.GuildTopParsesRow{
-				{PlayerName: "Thal,en:dris", PlayerClass: "MAGE", DisplayScore: 99},
-				{PlayerName: "Grimtusk", PlayerClass: "WARRIOR", DisplayScore: 80},
-				{PlayerName: "Lyra", PlayerClass: "PRIEST", DisplayScore: 56},
-				{PlayerName: "Fourth", PlayerClass: "ROGUE", DisplayScore: 41},
-			},
 		}
 		got := guildOGParams("chronicleclassic.com", bare, guildOGFixtureRaids())
 		require.Equal(t, url.Values{
@@ -119,8 +107,6 @@ func TestGuildOGParams(t *testing.T) {
 			"realm": {"Nordanaar"},
 			"since": {"2025-03"},
 			"raids": {"2"},
-			"top":   {"Thalendris:mage:99,Grimtusk:warrior:80,Lyra:priest:56"},
-			"avg":   {"69"},
 		}, got)
 	})
 }
@@ -288,7 +274,7 @@ func TestGuildOGResolver(t *testing.T) {
 		return q
 	}
 	wantTitle := "Nightfall"
-	wantDescription := "Nightfall guild on " + realmName + ": raid progression, best clears and top parses on Chronicle."
+	wantDescription := "Nightfall guild on " + realmName + ": raid progression and best clears on Chronicle."
 
 	t.Run("Unconfigured", func(t *testing.T) {
 		t.Parallel()

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ImageResponse } from 'next/og';
 import { themes } from '../../app/api/og/themes';
-import { DEFAULT_GUILD_ACCENT, formatSince, readProgression, readTopParsers } from '../../app/api/og/themes/guild';
+import { DEFAULT_GUILD_ACCENT, formatSince, readProgression } from '../../app/api/og/themes/guild';
 import type { ThemeContext, ThemeProps } from '../../app/api/og/themes/types';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGNwSJgARwzEcQDpQxMBLJSVHwAAAABJRU5ErkJggg==';
@@ -9,7 +9,7 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47];
 
 const FULL_QUERY =
   'template=guild&name=Nightfall&realm=Nordanaar&product=WoW+Forever&members=62&since=2025-03&accent=5F8FA6' +
-  '&prog=MC:10:10,BWL:8:8,AQ40:7:9,Naxx:4:15&best=2092&bestraid=MC&avg=78&tag=Raiding&host=forever.chronicleclassic.com&v=1';
+  '&prog=MC:10:10,BWL:8:8,AQ40:7:9,Naxx:4:15&best=2092&bestraid=MC&tag=Raiding&host=forever.chronicleclassic.com&v=1';
 
 const context = (query: string): ThemeContext => ({ searchParams: new URLSearchParams(query) });
 
@@ -65,7 +65,7 @@ describe('guild card', () => {
     const { json, png } = await renderGuild(FULL_QUERY);
     expect([...png.slice(0, 4)]).toEqual(PNG_SIGNATURE);
     expect(networkCalls()).toEqual([]);
-    for (const text of ['Nightfall', 'Guild · Raiding', 'Nordanaar · WoW Forever · 62 members · since Mar 2025', 'Naxx', '4/15', '34:52', 'Best MC clear', 'Top parse avg', 'forever.chronicleclassic.com', 'See our raids']) {
+    for (const text of ['Nightfall', 'Guild · Raiding', 'Nordanaar · WoW Forever · 62 members · since Mar 2025', 'Naxx', '4/15', '34:52', 'Best MC clear', 'forever.chronicleclassic.com', 'See our raids']) {
       expect(json).toContain(text);
     }
   });
@@ -93,17 +93,18 @@ describe('guild card', () => {
     expect(json).not.toContain('"children":"N"');
   });
 
-  test('no progression: raids logged and the top 3 parsers', async () => {
+  test('no progression: only raids logged, without aggregate player scores', async () => {
     const networkCalls = spyNetwork();
     const { json, png } = await renderGuild(
-      'name=Nightfall&raids=47&top=Thalendris:mage:99,Grimtusk:warrior:80,Lyra:priest:56,Extra:rogue:12&avg=69'
+      'name=Nightfall&raids=47&top=Thalendris:mage:99,Grimtusk:warrior:80&avg=69'
     );
     expect([...png.slice(0, 4)]).toEqual(PNG_SIGNATURE);
     expect(networkCalls()).toEqual([]);
-    for (const text of ['47', 'raids logged', 'Thalendris', 'Grimtusk', 'Lyra', '#69CCF0', '#C79C6E']) {
-      expect(json).toContain(text);
-    }
-    expect(json).not.toContain('Extra');
+    expect(json).toContain('47');
+    expect(json).toContain('raids logged');
+    expect(json).not.toContain('Thalendris');
+    expect(json).not.toContain('Grimtusk');
+    expect(json).not.toContain('Top parse avg');
     expect(json).not.toContain('/15');
   });
 
@@ -137,14 +138,6 @@ describe('guild params', () => {
       { label: 'ES', down: 1, total: 4 },
     ]);
     expect(readProgression(context('prog=MC:1:10,BWL:1:8,ZG:1:8,AQ40:1:9,Naxx:1:15'))).toHaveLength(4);
-  });
-
-  test('top parsers: at most 3, scores optional and capped', () => {
-    expect(readTopParsers(context('top=A:mage:150,B:warrior,C:priest:56,D:rogue:1'))).toEqual([
-      { name: 'A', className: 'mage', score: 100 },
-      { name: 'B', className: 'warrior', score: null },
-      { name: 'C', className: 'priest', score: 56 },
-    ]);
   });
 
   test.each([

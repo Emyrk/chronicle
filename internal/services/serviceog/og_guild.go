@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -126,7 +125,6 @@ type guildOGData struct {
 	Members    int64
 	Encounters []database.GuildEncounterKillsRow
 	BestRuns   []database.GuildBestRunsRow
-	TopParses  []database.GuildTopParsesRow
 }
 
 // guildOGParams builds the `template=guild` params (minus host/product, which
@@ -164,22 +162,10 @@ func guildOGParams(host string, d guildOGData, raids map[string]guildOGRaid) url
 	prog := guildOGProgression(d.Encounters, raids)
 	if len(prog) > 0 {
 		q.Set("prog", strings.Join(prog, ","))
-	} else {
-		// No progression: the card shows raids logged and the top 3 parsers.
-		if logged := guildOGRaidsLogged(d.Encounters, raids); logged > 0 {
-			q.Set("raids", strconv.Itoa(logged))
-		}
-		top := make([]string, 0, 3)
-		for _, p := range d.TopParses {
-			if len(top) == 3 {
-				break
-			}
-			name := strings.NewReplacer(",", "", ":", "").Replace(p.PlayerName)
-			top = append(top, fmt.Sprintf("%s:%s:%d", name, strings.ToLower(p.PlayerClass), p.DisplayScore))
-		}
-		if len(top) > 0 {
-			q.Set("top", strings.Join(top, ","))
-		}
+	} else if logged := guildOGRaidsLogged(d.Encounters, raids); logged > 0 {
+		// No progression: the activity fallback only shows estimated raid nights.
+		// Aggregate player scores are not ready for guild Open Graph cards.
+		q.Set("raids", strconv.Itoa(logged))
 	}
 
 	// Best clear: the fastest full clear of the furthest raid the guild has cleared.
@@ -198,13 +184,6 @@ func guildOGParams(host string, d guildOGData, raids map[string]guildOGRaid) url
 		q.Set("bestraid", guildOGRaidShortName(best.InstanceName))
 	}
 
-	if len(d.TopParses) > 0 {
-		var sum float64
-		for _, p := range d.TopParses {
-			sum += float64(p.DisplayScore)
-		}
-		q.Set("avg", strconv.Itoa(int(math.Round(sum/float64(len(d.TopParses))))))
-	}
 	return q
 }
 
@@ -338,7 +317,7 @@ func (s *Service) guildOG(r *http.Request, rawID string) *frontend.OGData {
 	host := ogHost(r)
 	og := &frontend.OGData{
 		Title:       guild.Name,
-		Description: fmt.Sprintf("%s guild on %s: raid progression, best clears and top parses on Chronicle.", guild.Name, guild.RealmName),
+		Description: fmt.Sprintf("%s guild on %s: raid progression and best clears on Chronicle.", guild.Name, guild.RealmName),
 		URL:         fmt.Sprintf("https://%s/g/%s", host, guild.ID),
 	}
 	if s.imageBaseURL == nil || s.signingKey == "" {
@@ -376,17 +355,6 @@ func (s *Service) guildOG(r *http.Request, rawID string) *frontend.OGData {
 			PolicyVersion:  int16(timeparsepolicy.PolicyVersion),
 			QueryVersion:   timeparsepolicy.QueryVersion,
 			MinParseSample: timeparsepolicy.MinSampleForParse,
-		})
-		return nil
-	})
-	g.Go(func() error {
-		data.TopParses, _ = db.GuildTopParses(ctx, database.GuildTopParsesParams{
-			TenantID:      tenantID,
-			GuildID:       guildID,
-			Metric:        "dps",
-			SinceDays:     lookbackDays,
-			BestPerPlayer: true,
-			RowLimit:      25,
 		})
 		return nil
 	})
