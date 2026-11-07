@@ -2,7 +2,8 @@
 // Cards render from query params only (no database, no API, no fetch to
 // Chronicle); api/og.go writes every value into the signed image URL.
 import { capText, sanitizeText } from '@/app/lib/og-text';
-import { publicImage } from './public-files';
+import { loadCjkFonts } from './cjk-fonts';
+import { publicImage, readPublicFile } from './public-files';
 import { loadFontsourceFamily } from './shared';
 import type { ThemeContext, ThemeFont } from './types';
 
@@ -73,6 +74,30 @@ export async function loadKitFonts(_context?: ThemeContext): Promise<ThemeFont[]
     loadFontsourceFamily('inter', 'Inter', [{ weight: 400 }, { weight: 600 }, { weight: 700 }]),
   ]);
   return [...serif, ...sans];
+}
+
+const CYRILLIC = /\p{Script=Cyrillic}/u;
+const INTER_WEIGHTS = [400, 600, 700] as const;
+
+// The kit fonts are latin only, and next/og fetches any missing glyph from
+// Google's main font domains. For player, guild and realm names: Cyrillic adds
+// the bundled Inter Cyrillic cuts, CJK a subset from the China domain at 400
+// and 700. Latin-only text adds nothing.
+export async function loadNameFonts(text: string): Promise<ThemeFont[]> {
+  const [cyrillic, cjk] = await Promise.all([
+    CYRILLIC.test(text)
+      ? Promise.all(
+          INTER_WEIGHTS.map(async weight => ({
+            name: 'Inter Cyrillic', // Satori keys fonts by name + weight, so it can't share Inter's name
+            data: await readPublicFile(`fonts/inter/cyrillic-${weight}-normal.ttf`),
+            weight,
+            style: 'normal' as const,
+          }))
+        )
+      : [],
+    loadCjkFonts(text),
+  ]);
+  return [...cyrillic, ...cjk];
 }
 
 export const UNKNOWN_CLASS_COLOR = '#9d9d9d';

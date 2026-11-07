@@ -335,7 +335,7 @@ func (api *API) instanceOG(r *http.Request, host, idOrSlug string) *frontend.OGD
 		return nil
 	}
 
-	return api.buildInstanceOG(ctx, r, host, inst)
+	return api.buildInstanceOG(ctx, r, host, inst, nil)
 }
 
 func (api *API) shareOG(r *http.Request, host, code string) *frontend.OGData {
@@ -361,10 +361,13 @@ func (api *API) shareOG(r *http.Request, host, code string) *frontend.OGData {
 		return nil
 	}
 
-	return api.buildInstanceOG(ctx, r, host, inst)
+	return api.buildInstanceOG(ctx, r, host, inst, shared.Payload)
 }
 
-func (api *API) buildInstanceOG(ctx context.Context, r *http.Request, host string, inst database.LogInstancesGuild) *frontend.OGData {
+// buildInstanceOG builds an instance page's OG data. sharePayload is the
+// /s/{code} share payload, nil for the instance page itself: when its view
+// selects one player and one boss kill, the image is the parse card.
+func (api *API) buildInstanceOG(ctx context.Context, r *http.Request, host string, inst database.LogInstancesGuild, sharePayload []byte) *frontend.OGData {
 	db := api.Opts.Zed
 
 	encounters, _ := db.EncountersByInstanceID(ctx, inst.ID)
@@ -437,12 +440,38 @@ func (api *API) buildInstanceOG(ctx context.Context, r *http.Request, host strin
 			base.Players = &n
 			base.Comp = raidComposition(players)
 		}
-		card := api.loadRaidCard(r, inst, encounters, base)
-		if imageURL := api.ogImageURL(r, "raid", raidCardParams(card)); imageURL != "" {
+		if imageURL := api.instanceCardURL(r, inst, encounters, players, playersErr, base, sharePayload); imageURL != "" {
 			og.ImageURL = imageURL
 		}
 	}
 	return og
+}
+
+// instanceCardURL returns the signed parse card URL when sharePayload selects
+// one player and one boss kill and the player has numbers for it, else the
+// raid report card's. Both cards' lookups share one raidCardTimeout budget,
+// so a parse card that falls back can't double the wait.
+func (api *API) instanceCardURL(r *http.Request, inst database.LogInstancesGuild, encounters []database.LogInstanceEncounter, players []database.LogInstancePlayer, playersErr error, base raidCard, sharePayload []byte) string {
+	loadReq := r
+	if sharePayload != nil && playersErr == nil {
+		if player, enc, ok := shareParseSelection(sharePayload, encounters, players); ok {
+			ctx, cancel := context.WithTimeout(r.Context(), raidCardTimeout)
+			defer cancel()
+			loadReq = r.WithContext(ctx)
+			card, ok := api.loadParseCard(loadReq, inst, player, enc, parseCard{
+				Host:   base.Host,
+				Player: ogCardName(player.Name),
+				Class:  ogClassSlug(string(player.Class)),
+				Raid:   base.Raid,
+				Guild:  base.Guild,
+				Realm:  base.Realm,
+			})
+			if ok {
+				return api.ogImageURL(r, "parse", parseCardParams(card))
+			}
+		}
+	}
+	return api.ogImageURL(r, "raid", raidCardParams(api.loadRaidCard(loadReq, inst, encounters, base)))
 }
 
 func instanceOGImageURL(host, instanceName string) string {

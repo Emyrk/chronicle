@@ -15,14 +15,13 @@ import {
   intParam,
   listParam,
   loadKitFonts,
+  loadNameFonts,
   markImage,
   param,
   parseColor,
   SANS,
   SERIF,
 } from './kit';
-import { loadCjkFonts } from './cjk-fonts';
-import { readPublicFile } from './public-files';
 import { fitFontSize } from './shared';
 import type { ThemeContext, ThemeDefinition, ThemeFont, ThemeProps } from './types';
 
@@ -246,29 +245,11 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
   );
 }
 
-const CYRILLIC = /\p{Script=Cyrillic}/u;
-const INTER_WEIGHTS = [400, 600, 700] as const;
-
-// The kit fonts are latin only, and next/og fetches any missing glyph from
-// Google's main font domains. A Cyrillic name adds the bundled Inter Cyrillic
-// cuts; a CJK name loads a subset from the China domain at 400 and 700.
+// Cyrillic and CJK names need fonts beyond the latin kit cuts (loadNameFonts).
 async function loadFonts(context: ThemeContext): Promise<ThemeFont[]> {
   const text = [param(context, 'name', 20), param(context, 'guild', 32), param(context, 'realm', 32)].join('');
-  const [kit, cyrillic, cjk] = await Promise.all([
-    loadKitFonts(),
-    CYRILLIC.test(text)
-      ? Promise.all(
-          INTER_WEIGHTS.map(async weight => ({
-            name: 'Inter Cyrillic', // Satori keys fonts by name + weight, so it can't share Inter's name
-            data: await readPublicFile(`fonts/inter/cyrillic-${weight}-normal.ttf`),
-            weight,
-            style: 'normal' as const,
-          }))
-        )
-      : [],
-    loadCjkFonts(text),
-  ]);
-  return [...kit, ...cyrillic, ...cjk];
+  const [kit, names] = await Promise.all([loadKitFonts(), loadNameFonts(text)]);
+  return [...kit, ...names];
 }
 
 export const characterTheme: ThemeDefinition = {

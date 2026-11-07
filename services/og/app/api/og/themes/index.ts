@@ -4,6 +4,7 @@ import { characterTheme } from './character';
 import { chronicleTheme } from './chronicle';
 import { guildTheme } from './guild';
 import { modernTheme } from './modern';
+import { parseTheme } from './parse';
 import { talentsTheme } from './talents';
 import { raidTheme } from './raid';
 import type { ThemeDefinition } from './types';
@@ -16,4 +17,5 @@ export const themes: Record<OgThemeKey, ThemeDefinition> = {
   character: characterTheme,
   guild: guildTheme,
   raid: raidTheme,
+  parse: parseTheme,
 };
