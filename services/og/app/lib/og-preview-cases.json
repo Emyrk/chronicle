@@ -180,9 +180,9 @@
     "id": "parse-ranked",
     "group": "Boss share",
     "label": "Ranked damage parse",
-    "description": "One selected player and boss kill with a parse score of at least 75.",
+    "description": "Preserved player-parse design. Not selected by Chronicle: boss shares ignore selected players and use the boss kill card.",
     "pageExample": "/s/{share-code}",
-    "note": "Selected when a share link contains one player and one boss kill.",
+    "status": "Not released",
     "params": {
       "template": "parse",
       "player": "Ravenshield",
@@ -197,29 +197,24 @@
       "score": "99",
       "rank": "12",
       "of": "8421",
-      "raidrank": "1",
       "host": "chronicleclassic.com"
     }
   },
   {
     "id": "parse-unranked",
     "group": "Boss share",
-    "label": "Unranked damage",
-    "description": "Player and boss share without a qualifying parse, led by DPS and raid position.",
+    "label": "Boss kill",
+    "description": "Any share of one boss kill: kill time and the fight's top DPS and top HPS. Selected players are ignored.",
     "pageExample": "/s/{share-code}",
-    "note": "Used when no parse exists or the score is below 75.",
+    "note": "Selected when a share link contains one boss kill, whatever players it selects.",
     "params": {
       "template": "parse",
-      "player": "Shieldwall",
-      "class": "warrior",
-      "spec": "Protection",
       "boss": "Nefarian",
       "raid": "Blackwing Lair",
       "guild": "Adventure Company",
-      "metric": "dps",
-      "value": "483.2",
       "dur": "326",
-      "raidrank": "18",
+      "top": "Ravenshield:warrior:1102",
+      "heal": "Aeloria:priest:964",
       "host": "chronicleclassic.com"
     }
   },
@@ -227,8 +222,9 @@
     "id": "parse-healing",
     "group": "Boss share",
     "label": "Ranked healing parse",
-    "description": "Healing shares switch the lead metric from DPS to HPS.",
+    "description": "Preserved healer variant of the player-parse design. Not selected by Chronicle.",
     "pageExample": "/s/{share-code}",
+    "status": "Not released",
     "params": {
       "template": "parse",
       "player": "Aeloria",
@@ -243,7 +239,6 @@
       "score": "97",
       "rank": "34",
       "of": "6932",
-      "raidrank": "2",
       "host": "chronicleclassic.com"
     }
   },

@@ -10,7 +10,7 @@ import type { ThemeContext, ThemeProps } from '../../app/api/og/themes/types';
 const context = (query: string): ThemeContext => ({ searchParams: new URLSearchParams(query) });
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47];
 
-// The ticket's params contract (#1666), plus raidrank for the fallback.
+// The ticket's params contract (#1666).
 const FULL = new URLSearchParams({
   template: 'parse',
   player: 'Thalendris',
@@ -26,7 +26,6 @@ const FULL = new URLSearchParams({
   metric: 'dps',
   value: '1284.6',
   dur: '134',
-  raidrank: '1',
   host: 'forever.chronicleclassic.com',
   v: '1',
 });
@@ -40,8 +39,18 @@ function query(changes: Record<string, string | null>): string {
   return q.toString();
 }
 
-// What api/og.go sends without a parse (none, or below 75).
-const DPS_HERO = query({ score: null, rank: null, of: null });
+// What serviceog sends without a parse (none, or below 75): the boss kill, no player.
+const BOSS_KILL = new URLSearchParams({
+  template: 'parse',
+  boss: 'Ragnaros',
+  raid: 'Molten Core',
+  guild: 'Nightfall',
+  product: 'WoW Forever',
+  dur: '134',
+  top: 'Grimtusk:warrior:1300',
+  heal: 'Lightwell:priest:900',
+  host: 'forever.chronicleclassic.com',
+}).toString();
 const HEALER = query({ player: 'Lightwell', class: 'priest', spec: 'Holy', metric: 'hps', value: '900', score: '80', rank: '12', of: '300' });
 
 // Calls function components so the JSON holds the drawn host elements.
@@ -105,33 +114,46 @@ describe('parse card', () => {
     }
   });
 
-  test('fallback: no parse leads with DPS and the raid rank', async () => {
+  test('fallback: no parse shows the boss kill with its top DPS and HPS', async () => {
     const network = spyNetwork();
-    expect(Array.from((await renderPng(DPS_HERO)).subarray(0, 4))).toEqual(PNG_SIGNATURE);
+    expect(Array.from((await renderPng(BOSS_KILL)).subarray(0, 4))).toEqual(PNG_SIGNATURE);
     expect(network()).toEqual([]);
 
-    const json = await tree(DPS_HERO);
+    const json = await tree(BOSS_KILL);
     const shown = texts(json);
-    for (const text of ['1,284.6', 'DPS', '#1 in raid', '2:14', 'Kill time', 'Boss kill']) {
+    for (const text of ['Boss kill', 'Ragnaros', '<Nightfall>', 'Molten Core · WoW Forever', '2:14', 'Kill time', 'Top damage', 'Grimtusk', '1,300', 'dps', 'Top healing', 'Lightwell', '900', 'hps', 'See the full fight']) {
       expect(shown).toContain(text);
     }
     expect(json).not.toContain('strokeDasharray');
     expect(shown).not.toContain('Parse');
     expect(shown).not.toContain('Rank');
-    // No raid rank → no badge.
-    expect(texts(await tree(query({ score: null, rank: null, of: null, raidrank: null })))).not.toContain('#1 in raid');
   });
 
-  test('fallback: healers read HPS', async () => {
+  test('fallback: stray player params are ignored without a parse', async () => {
+    const shown = texts(await tree(query({ score: null, rank: null, of: null, raidrank: '18', top: 'Grimtusk:warrior:1300' })));
+    expect(shown).not.toContain('Thalendris');
+    expect(shown).not.toContain('1,284.6');
+    expect(shown.some(text => text.includes('in raid'))).toBe(false);
+    expect(shown).toContain('Grimtusk');
+  });
+
+  test('fallback: a boss kill with no ranked players still renders', async () => {
+    const q = 'template=parse&boss=Ragnaros&dur=134';
+    const shown = texts(await tree(q));
+    expect(shown).toContain('Ragnaros');
+    expect(shown).not.toContain('Top damage');
+    expect(Array.from((await renderPng(q)).subarray(0, 4))).toEqual(PNG_SIGNATURE);
+  });
+
+  test('healers read HPS', async () => {
     expect(Array.from((await renderPng(HEALER)).subarray(0, 4))).toEqual(PNG_SIGNATURE);
     const shown = texts(await tree(HEALER));
     expect(shown).toContain('HPS');
     expect(shown).toContain('900');
     expect(shown).not.toContain('DPS');
-    expect(texts(await tree(query({ metric: 'hps', score: null, rank: null, of: null })))).toContain('HPS');
   });
 
-  test('fallback: unknown class draws the grey bar', async () => {
+  test('unknown class draws the grey bar', async () => {
     const json = await tree(query({ class: 'tinker' }));
     expect(json).toContain(`"background":"${UNKNOWN_CLASS_COLOR}"`);
     expect(json).toContain('Fire Tinker');

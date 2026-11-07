@@ -39,8 +39,8 @@ export const OG_THEMES = [
   },
   {
     key: 'parse',
-    label: 'Boss parse',
-    description: 'One player on one boss kill: the parse ring in its tier colour, DPS or HPS, kill time and rank; DPS and raid rank lead without a parse.',
+    label: 'Boss share',
+    description: 'One boss kill: kill time and the fight\'s top damage and healing. A preserved player-parse design draws when a score is given.',
   },
   {
     key: 'clear',

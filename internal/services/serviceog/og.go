@@ -439,33 +439,32 @@ func (s *Service) buildInstanceOG(ctx context.Context, r *http.Request, host str
 			base.Players = &n
 			base.Comp = raidComposition(players)
 		}
-		if imageURL := s.instanceCardURL(r, inst, encounters, players, playersErr, base, sharePayload); imageURL != "" {
+		if imageURL := s.instanceCardURL(r, inst, encounters, base, sharePayload); imageURL != "" {
 			og.ImageURL = imageURL
 		}
 	}
 	return og
 }
 
-// instanceCardURL returns the signed parse card URL when sharePayload selects
-// one player and one boss kill and the player has numbers for it, else the
-// raid report card's. Both cards' lookups share one raidCardTimeout budget,
-// so a parse card that falls back can't double the wait.
-func (s *Service) instanceCardURL(r *http.Request, inst database.LogInstancesGuild, encounters []database.LogInstanceEncounter, players []database.LogInstancePlayer, playersErr error, base raidCard, sharePayload []byte) string {
+// instanceCardURL returns the signed boss share card URL when sharePayload
+// selects one boss kill (selected players are ignored) and the kill has a
+// ranked top DPS or HPS, else the raid report card's. Both cards' lookups
+// share one raidCardTimeout budget, so a boss share card that falls back
+// can't double the wait.
+func (s *Service) instanceCardURL(r *http.Request, inst database.LogInstancesGuild, encounters []database.LogInstanceEncounter, base raidCard, sharePayload []byte) string {
 	loadReq := r
-	if sharePayload != nil && playersErr == nil {
-		if player, enc, ok := shareParseSelection(sharePayload, encounters, players); ok {
+	if sharePayload != nil {
+		if enc, ok := shareBossSelection(sharePayload, encounters); ok {
 			ctx, cancel := context.WithTimeout(r.Context(), raidCardTimeout)
 			defer cancel()
 			loadReq = r.WithContext(ctx)
-			card, ok := s.loadParseCard(loadReq, inst, player, enc, parseCard{
-				Host:   base.Host,
-				Player: ogCardName(player.Name),
-				Class:  ogClassSlug(string(player.Class)),
-				Raid:   base.Raid,
-				Guild:  base.Guild,
+			card, ok := s.loadBossShareCard(loadReq, inst, enc, bossShareCard{
+				Host:  base.Host,
+				Raid:  base.Raid,
+				Guild: base.Guild,
 			})
 			if ok {
-				return s.ogImageURL(r, "parse", parseCardParams(card))
+				return s.ogImageURL(r, "parse", bossShareCardParams(card))
 			}
 		}
 	}

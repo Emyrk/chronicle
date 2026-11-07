@@ -1,9 +1,11 @@
-// Parse card (template=parse) for /s/{code} shares of one player on one boss
-// kill. api/og.go (parseCardParams) writes every value into the signed URL.
+// Parse card (template=parse) for /s/{code} shares of one boss kill.
+// serviceog (parseCardParams) writes every value into the signed URL.
 //
-//   player, class, spec, boss, raid, guild, metric (dps|hps), value, dur
-//   score, rank, of        the boss parse; without score the card leads with
-//   raidrank               value and the raid rank (the DPS-hero fallback)
+// Chronicle sends the boss kill card: selected players are ignored.
+//   boss, raid, guild, dur, top=name:class:dps, heal=name:class:hps
+// With a score, it draws the preserved player-parse design for review only;
+// Chronicle doesn't select it.
+//   player, class, spec, boss, raid, guild, metric (dps|hps), value, dur, score, rank, of
 import {
   chromeParams,
   classColor,
@@ -20,6 +22,7 @@ import {
   SANS,
   SERIF,
 } from './kit';
+import { Leaders, topEntries } from './raid';
 import { fitFontSize, FILL } from './shared';
 import type { ThemeContext, ThemeDefinition, ThemeFont, ThemeProps } from './types';
 
@@ -66,7 +69,6 @@ export interface ParseCardData {
   score: number | null;
   rank: number | null;
   of: number | null;
-  raidRank: number | null;
 }
 
 export function parseCardData(context: ThemeContext): ParseCardData {
@@ -87,7 +89,6 @@ export function parseCardData(context: ThemeContext): ParseCardData {
     // `#3 / 1,412` needs both halves, and never a rank past the sample.
     rank: rank !== null && of !== null && rank <= of ? rank : null,
     of: rank !== null && of !== null && rank <= of ? of : null,
-    raidRank: intParam(context, 'raidrank', { min: 1, max: 999 }),
   };
 }
 
@@ -132,33 +133,6 @@ function Ring({ score }: { score: number }) {
         <span style={{ fontSize: 120, fontWeight: 700, lineHeight: 1, letterSpacing: '-0.03em', color }}>{String(score)}</span>
         <span style={{ ...LABEL, marginTop: 4 }}>Parse</span>
       </div>
-    </div>
-  );
-}
-
-// The DPS-hero fallback's right column: the metric value and the raid rank.
-function MetricHero({ data }: { data: ParseCardData }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
-      <span style={{ fontSize: 104, fontWeight: 700, lineHeight: 1, letterSpacing: '-0.03em' }}>{data.value ?? ''}</span>
-      <span style={LABEL}>{data.metric}</span>
-      {data.raidRank !== null ? (
-        <div
-          style={{
-            display: 'flex',
-            marginTop: 14,
-            padding: '8px 18px',
-            borderRadius: 4,
-            border: `2px solid ${withAlpha(COLORS.goldHi, 0.55)}`,
-            background: withAlpha(COLORS.goldHi, 0.12),
-            fontSize: 28,
-            fontWeight: 700,
-            color: COLORS.goldHi,
-          }}
-        >
-          {`#${data.raidRank} in raid`}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -209,11 +183,40 @@ function stats(data: ParseCardData, hasParse: boolean): StatItem[] {
   return out;
 }
 
+// No qualifying parse: the boss kill itself, with the fight's top DPS and HPS.
+function BossKill({ data, context, product }: { data: ParseCardData; context: ThemeContext; product: string }) {
+  const [topDamage] = topEntries(context, 'top');
+  const [topHealing] = topEntries(context, 'heal');
+  const boss = data.boss || 'Boss kill';
+  const bossSize = fitFontSize(boss, [
+    [12, 88],
+    [18, 72],
+    [Infinity, 58],
+  ]);
+  const meta = [data.raid, product].filter(Boolean).join(' · ');
+  const row: StatItem[] = data.duration ? [{ key: 'dur', label: 'Kill time', node: <span style={STAT_VALUE}>{data.duration}</span> }] : [];
+  const ranked = Boolean(topDamage || topHealing);
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 26, width: ranked ? 600 : 1000 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={{ ...ONE_LINE, fontFamily: SERIF, fontSize: bossSize, fontWeight: 700, lineHeight: 1.1 }}>{boss}</span>
+          {data.guild ? <span style={{ ...ONE_LINE, fontFamily: SERIF, fontSize: 40, lineHeight: 1.15, color: COLORS.goldHi }}>{`<${data.guild}>`}</span> : null}
+          {meta ? <span style={{ ...ONE_LINE, fontSize: 24, color: COLORS.muted, marginTop: 4 }}>{meta}</span> : null}
+        </div>
+        {row.length > 0 ? <StatRow stats={row} /> : null}
+      </div>
+      {ranked ? <Leaders damage={topDamage} healing={topHealing} /> : null}
+    </div>
+  );
+}
+
 async function render(_props: ThemeProps, context: ThemeContext): Promise<React.ReactElement> {
   const { host, product } = chromeParams(context);
   const data = parseCardData(context);
-  const color = classColor(data.className);
   const hasParse = data.score !== null;
+  // The boss kill card has no player, so it takes the brand gold.
+  const color = hasParse ? classColor(data.className) : COLORS.goldHi;
   const logoSrc = await headerLogoImage();
 
   const nameSize = fitFontSize(data.player, [
@@ -234,6 +237,7 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
       <div style={{ ...FILL, flexDirection: 'column', justifyContent: 'space-between', padding: '50px 64px 42px 72px' }}>
         <Header logoSrc={logoSrc} chip={hasParse ? 'Boss parse' : 'Boss kill'} />
 
+        {hasParse ? (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 26, width: 700 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -246,10 +250,13 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
             </div>
             {row.length > 0 ? <StatRow stats={row} /> : null}
           </div>
-          {hasParse ? <Ring score={data.score!} /> : data.value ? <MetricHero data={data} /> : null}
+          <Ring score={data.score!} />
         </div>
+        ) : (
+          <BossKill data={data} context={context} product={product} />
+        )}
 
-        <Footer host={host} cta="See the full parse" />
+        <Footer host={host} cta={hasParse ? 'See the full parse' : 'See the full fight'} />
       </div>
     </div>
   );
