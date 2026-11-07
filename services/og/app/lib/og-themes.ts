@@ -16,6 +16,11 @@ export const OG_THEMES = [
     key: 'talents',
     label: 'Talent build',
     description: 'A talent calculator build: spec in class colour, the point split and a bar per tree.',
+    },
+    {
+    key: 'character',
+    label: 'Character',
+    description: 'Armory character card: class emblem, level line, parse, item level and kills, and the best three bosses.',
   },
   {
     key: 'brand',
