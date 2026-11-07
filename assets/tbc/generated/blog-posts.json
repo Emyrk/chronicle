@@ -1,5 +1,16 @@
 [
   {
+    "id": "share-images",
+    "title": "Give your raid link a proper introduction",
+    "description": "Share a raid, a boss kill, your guild, a character or a talent build. Chronicle's link previews put the useful details right in the conversation.",
+    "publishedAt": "2026-11-07",
+    "rarity": "rare",
+    "tag": "Feature",
+    "icon": "inv_misc_book_09",
+    "flavor": "A good story starts before the click.",
+    "hintEnabled": false
+  },
+  {
     "id": "instance-search",
     "title": "Instance search",
     "description": "Find any raid on Chronicle by zone, bosses, speed, parses and roster, then see exactly why each run matched. Build searches with a form, blocks or code.",

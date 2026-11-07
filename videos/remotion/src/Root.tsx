@@ -55,6 +55,8 @@ import CharacterCosmeticsVideo from "../../../frontend/chronicle/src/pages/Insta
 import RankedDamageVideo from "../../../frontend/chronicle/src/pages/Instance/videos/RankedDamage.video";
 import EntityInspectorVideo from "../../../frontend/chronicle/src/pages/Instance/videos/EntityInspector.video";
 import InstanceSearchVideo from "../../../frontend/chronicle/src/pages/InstanceSearch/videos/InstanceSearch.video";
+import ShareImagesVideo from "../../../frontend/chronicle/src/blog/videos/ShareImages.video";
+import { SHARE_IMAGES_DURATION } from "../../../frontend/chronicle/src/blog/videos/shareImagesData";
 import FavoritesPromo from "./FavoritesPromo";
 import CooldownUsagePromo from "./CooldownUsagePromo";
 import Maps3DAnnouncement, { MAPS_3D_ANNOUNCEMENT_DURATION } from "./Maps3DAnnouncement";
@@ -70,6 +72,7 @@ export const RemotionRoot: React.FC = () => {
   return (
     <>
       <Folder name="FeatureDemos">
+        <Composition id="ShareImages" component={ShareImagesVideo} durationInFrames={SHARE_IMAGES_DURATION} fps={30} width={1280} height={720} />
         <Composition id="FavoritesPromo" component={FavoritesPromo} durationInFrames={620} fps={30} width={1280} height={720} />
         <Composition id="CooldownUsagePromo" component={CooldownUsagePromo} durationInFrames={800} fps={30} width={1280} height={720} />
         <Composition id="Maps3DAnnouncement" component={Maps3DAnnouncement} durationInFrames={MAPS_3D_ANNOUNCEMENT_DURATION} fps={30} width={1280} height={720} />

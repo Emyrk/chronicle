@@ -26,6 +26,8 @@ import {
   VehicleSupportPost,
   YoutubeSyncPost,
 } from "./posts/announcements";
+import { ShareImagesPost } from "./posts/shareImages";
+import { SHARE_IMAGES_DURATION } from "./videos/shareImagesData";
 import { InstanceSearchPost } from "./posts/instanceSearch";
 
 export type BlogFlavorSet = readonly string[];
@@ -64,6 +66,7 @@ export interface BlogPostDefinition extends BlogPostMetadata {
 }
 
 const BLOG_COMPONENTS = {
+  "share-images": ShareImagesPost,
   "instance-search": InstanceSearchPost,
   "alt-click-compare": EntityInspectorPost,
   "ranked-damage": RankedDamagePost,
@@ -101,6 +104,7 @@ function remotionVideo(load: LessonVideo["load"], durationInFrames: number): Les
 }
 
 const BLOG_VIDEOS = {
+  "share-images": remotionVideo(() => import("./videos/ShareImages.video"), SHARE_IMAGES_DURATION),
   "instance-search": remotionVideo(() => import("@/pages/InstanceSearch/videos/InstanceSearch.video"), 970),
   "alt-click-compare": remotionVideo(() => import("@/pages/Instance/videos/EntityInspector.video"), 1256),
   "ranked-damage": remotionVideo(() => import("@/pages/Instance/videos/RankedDamage.video"), 900),

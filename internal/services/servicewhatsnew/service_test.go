@@ -34,3 +34,10 @@ func TestStatusUnreadComparison(t *testing.T) {
 
 	require.Equal(t, "ranked-damage", CurrentID())
 }
+
+func TestShareImagesIsBlogOnly(t *testing.T) {
+	t.Parallel()
+
+	// Publishing this article must not create a What's New notification.
+	require.NotContains(t, releaseIDs, "share-images")
+}
