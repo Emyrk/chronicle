@@ -25,6 +25,7 @@ import { OverviewTab } from "./overview/OverviewTab";
 import { IdentityHeader } from "./overview/IdentityHeader";
 import { formatClassLabel } from "./characterDisplay";
 import { CopyForAI } from "@/features/aiKey/CopyForAI";
+import { characterAIURL } from "@/features/aiKey/aiLinks";
 import { ActivityHeaderCard, GearHeaderCard, TalentsHeaderCard } from "./TabHeaderCards";
 import { JourneyStatsCard } from "./overview/JourneyStatsCard";
 import { ScoreCard } from "./overview/ScoreCard";
@@ -255,6 +256,7 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
                   <CopyForAI
                     page="character"
                     className="shrink-0"
+                    url={characterAIURL(window.location.origin, player.realm_name, player.name)}
                     values={{ character: player.name, guild: player.guild_name, realm: player.realm_name, class: formatClassLabel(player.class) }}
                   />
                 </>

@@ -1,3 +1,4 @@
+import { clearAIKeyStorage } from "@/features/aiKey/aiKeyStore";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -296,6 +297,7 @@ export function ProfileSettings() {
   const switchToDiscordAccount = async () => {
     await fetch("/auth/logout", { method: "POST" });
     clearInstanceDefaultsCache();
+    clearAIKeyStorage();
     // OAuth runs on the main domain; tenants pass a full URL so it relays back.
     window.location.href = siteConfig?.tenant && siteConfig.access_url
       ? `${siteConfig.access_url}/auth/discord?from=${encodeURIComponent(`${window.location.origin}/account/settings`)}`

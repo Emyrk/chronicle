@@ -94,7 +94,7 @@ import { isInstanceOverviewEnabled, parseInstanceViewMode, withInstanceViewMode,
 import { InstanceOverview } from "./Overview/InstanceOverview";
 import { LiveSessionButton } from "./LiveSessionButton";
 import { CopyForAI } from "@/features/aiKey/CopyForAI";
-import { bossForPrompt } from "@/features/aiKey/aiLinks";
+import { bossForPrompt, instanceAIURL } from "@/features/aiKey/aiLinks";
 import { LivePanelViewboxes, useAutoJoinLiveSession, useLiveSession } from "./LiveSessionContext";
 
 import { showDebugDesktopControls } from "./debugFeatureGate";
@@ -4550,7 +4550,9 @@ function InstancePageViewContent({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              {!reconstruction && <CopyForAI page="raid" values={aiPromptValues} />}
+              {!reconstruction && (
+                <CopyForAI page="raid" values={aiPromptValues} url={instanceAIURL(window.location.origin, instance.slug || instance.id)} />
+              )}
               {isEncounterView && youtubeButton}
               {showHints && (
                 <>

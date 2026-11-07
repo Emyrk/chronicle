@@ -1,6 +1,7 @@
 import { useSession } from "@/api/queries";
 import { clearInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
 import { useQueryClient } from "@tanstack/react-query";
+import { clearAIKeyStorage } from "@/features/aiKey/aiKeyStore";
 
 export function useAuth() {
   const queryClient = useQueryClient();
@@ -9,6 +10,8 @@ export function useAuth() {
   const logout = async () => {
     await fetch("/auth/logout", { method: "POST" });
     clearInstanceDefaultsCache();
+    // The AI key secret and warning belong to this user, not the browser.
+    clearAIKeyStorage();
     window.location.reload();
     // Queries should be invalid from a reload
     queryClient.invalidateQueries();

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { KeyRound, X } from "lucide-react";
+import { useSession } from "@/api/queries";
 import { loadStoredAIKey } from "./aiKeyStore";
 import { consumeURLAIKey } from "./urlAIKey";
 import { aiKeyBannerKind, type AIKeyBannerKind } from "./aiKeyFormat";
@@ -40,7 +41,11 @@ export function AIKeyBannerView({ kind, onDismiss }: { kind: AIKeyBannerKind; on
 
 /** AIKeyBanner tells the viewer the page was opened with an AI key link. */
 export function AIKeyBanner() {
-  const [kind, setKind] = useState(() => aiKeyBannerKind(urlKey, loadStoredAIKey()?.secret));
+  const { data: session, isLoading } = useSession({ enabled: urlKey !== null });
+  const [dismissed, setDismissed] = useState(false);
+  // Wait for the session: "your key" only if this browser saved it for this user.
+  if (urlKey === null || dismissed || isLoading) return null;
+  const kind = aiKeyBannerKind(urlKey, loadStoredAIKey(session?.user_id)?.secret);
   if (!kind) return null;
-  return <AIKeyBannerView kind={kind} onDismiss={() => setKind(null)} />;
+  return <AIKeyBannerView kind={kind} onDismiss={() => setDismissed(true)} />;
 }

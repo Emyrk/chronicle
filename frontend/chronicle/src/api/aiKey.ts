@@ -25,7 +25,7 @@ export async function fetchAIKeyUsage(): Promise<AIKeyUsage> {
  * carries its secret, and it's saved in this browser right away: the server
  * keeps a hash and can't show it again.
  */
-export async function issueAIKey(req: CreateAIKeyRequest, rotate: boolean): Promise<AIKeySecretResponse> {
+export async function issueAIKey(userID: string, req: CreateAIKeyRequest, rotate: boolean): Promise<AIKeySecretResponse> {
   const res = await fetch(rotate ? "/api/v1/me/ai-key/rotate" : "/api/v1/me/ai-key", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -33,7 +33,7 @@ export async function issueAIKey(req: CreateAIKeyRequest, rotate: boolean): Prom
   });
   if (!res.ok) throw new Error(await errorMessage(res, "Couldn't make an AI key."));
   const body = (await res.json()) as AIKeySecretResponse;
-  if (body.secret) saveStoredAIKey({ id: body.key.id, secret: body.secret });
+  if (body.secret) saveStoredAIKey({ userID, id: body.key.id, secret: body.secret });
   return body;
 }
 
@@ -51,7 +51,7 @@ export function useMyAIKey(enabled = true) {
 export function useIssueAIKey() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ req, rotate }: { req: CreateAIKeyRequest; rotate: boolean }) => issueAIKey(req, rotate),
+    mutationFn: ({ userID, req, rotate }: { userID: string; req: CreateAIKeyRequest; rotate: boolean }) => issueAIKey(userID, req, rotate),
     onSettled: () => queryClient.invalidateQueries({ queryKey: AI_KEY_QUERY_KEY }),
   });
 }

@@ -180,12 +180,21 @@ async function copyText(text: Promise<string>): Promise<boolean> {
 
 type Pending = { question: string | null };
 
+/** rereadSecret checks storage once more after a moment, for a key another tab just made. */
+async function rereadSecret(userID: string, resp: { key: { id: string } }): Promise<string | null> {
+  await new Promise((r) => setTimeout(r, 300));
+  return secretFromResponse(userID, resp);
+}
+
 export interface CopyForAIProps {
   page: AIPageType;
   /** Values for question placeholders: {character}, {guild}, {raid}… */
   values?: AIPromptValues;
-  /** The page link; defaults to the current address (already without ai_key). */
-  url?: string;
+  /**
+   * The absolute page link to give the AI. Required: only some routes have an
+   * agent view (see pageAIURL / searchAIURL), so a page must say which.
+   */
+  url: string;
   className?: string;
 }
 
@@ -198,7 +207,8 @@ export interface CopyForAIProps {
 export function CopyForAI({ page, values = {}, url, className }: CopyForAIProps) {
   const queryClient = useQueryClient();
   const { data: session } = useSession();
-  const loggedIn = !!session?.user_id;
+  const userID = session?.user_id;
+  const loggedIn = !!userID;
   const [target, setTarget] = useState<AITargetId>(loadAITarget);
   const [busy, setBusy] = useState(false);
   const [warning, setWarning] = useState<Pending | null>(null);
@@ -219,9 +229,8 @@ export function CopyForAI({ page, values = {}, url, className }: CopyForAIProps)
 
   const perform = useCallback(
     async (question: string | null, opts: { choice?: AIKeyChoice; rotate?: boolean } = {}) => {
+      if (!userID) return;
       const t = aiTarget(target);
-      // Open the tab now, while this is still a click, or popup blockers stop it.
-      const win = t.prefillURL ? window.open("", "_blank") : null;
       let resolveText!: (text: string) => void;
       let rejectText!: (err: unknown) => void;
       const textPromise = new Promise<string>((res, rej) => {
@@ -229,13 +238,18 @@ export function CopyForAI({ page, values = {}, url, className }: CopyForAIProps)
         rejectText = rej;
       });
       textPromise.catch(() => {});
+      // Start the clipboard write first: once the new tab opens this document
+      // loses focus and Chrome rejects writes ("Document is not focused").
       const copied = copyText(textPromise);
+      // Open the tab now, while this is still a click, or popup blockers stop it.
+      const win = t.prefillURL ? window.open("", "_blank") : null;
 
       setBusy(true);
       try {
         const current = await loadUsage();
         const lifetime = opts.choice?.lifetimeHours ?? pickLifetime(current.benefits, loadLifetimeHours());
         const resp = await issueAIKey(
+          userID,
           {
             lifetime_hours: lifetime,
             private_data: opts.choice?.privateData ?? (opts.rotate ? current.key?.private_data : false) ?? false,
@@ -243,14 +257,15 @@ export function CopyForAI({ page, values = {}, url, className }: CopyForAIProps)
           !!opts.rotate,
         );
         void queryClient.invalidateQueries({ queryKey: AI_KEY_QUERY_KEY });
-        const secret = secretFromResponse(resp);
+        // Another tab may have just made this key (201) and not saved it yet.
+        const secret = secretFromResponse(userID, resp) ?? (await rereadSecret(userID, resp));
         if (!secret) {
           rejectText(new Error("no secret"));
           win?.close();
           setRotate({ question });
           return;
         }
-        const text = buildAIText(withAIKey(url ?? window.location.href, secret), question);
+        const text = buildAIText(withAIKey(url, secret), question);
         resolveText(text);
         const openURL = buildOpenURL(t, text);
         if (win && openURL) {
@@ -275,11 +290,11 @@ export function CopyForAI({ page, values = {}, url, className }: CopyForAIProps)
         setBusy(false);
       }
     },
-    [loadUsage, queryClient, target, url],
+    [loadUsage, queryClient, target, url, userID],
   );
 
   const onRun = (question: string | null) => {
-    if (!isWarningAcknowledged()) {
+    if (!isWarningAcknowledged(userID)) {
       setWarning({ question });
       void loadUsage().then(setUsage, () => {});
       return;
@@ -312,7 +327,7 @@ export function CopyForAI({ page, values = {}, url, className }: CopyForAIProps)
         actionLabel={actionLabel}
         onConfirm={(choice) => {
           const pending = warning;
-          acknowledgeWarning();
+          if (userID) acknowledgeWarning(userID);
           saveLifetimeHours(choice.lifetimeHours);
           setWarning(null);
           void perform(pending?.question ?? null, existingKey ? {} : { choice });

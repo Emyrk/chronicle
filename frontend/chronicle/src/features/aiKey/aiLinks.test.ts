@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   aiTarget,
   bossForPrompt,
+  characterAIURL,
+  guildAIURL,
+  instanceAIURL,
+  searchAIURL,
   buildAIText,
   buildOpenURL,
   fillPrompt,
@@ -162,5 +166,46 @@ describe("searchEqualsValue", () => {
     expect(searchEqualsValue(tree, "instance.guild")).toBeNull();
     expect(searchEqualsValue(tree, "instance.name")).toBeNull();
     expect(searchEqualsValue(undefined, "instance.realm")).toBeNull();
+  });
+});
+
+describe("AI page URLs", () => {
+  const origin = "https://epoch.chronicleclassic.com";
+
+  it("links pages that have an agent view, without view state", () => {
+    expect(instanceAIURL(origin, "mc-2026-11-07")).toBe(`${origin}/instances/mc-2026-11-07`);
+    expect(characterAIURL(origin, "Nordanaar", "Thrall")).toBe(`${origin}/armory/Nordanaar/Thrall`);
+    expect(characterAIURL(origin, "Tel'Abim", "Æthel")).toBe(`${origin}/armory/Tel'Abim/%C3%86thel`);
+    // A guild sub-tab copies the guild root.
+    expect(guildAIURL(origin, "0b6f1c2e")).toBe(`${origin}/g/0b6f1c2e`);
+  });
+
+  it("sends search to the keyed GET search as markdown, with the POST where tree and sort", () => {
+    const where = {
+      and: [
+        { field: "instance.name", op: "=", value: "Molten Core" },
+        { any_player: { and: [{ field: "player.class", op: "=", value: "DRUID" }] } },
+        { field: "instance.guild", op: "contains", value: "A&B #1" },
+      ],
+    };
+    const url = searchAIURL(origin, { where, sort: { field: "instance.clear_time_ms", direction: "asc" } });
+    const u = new URL(url);
+    expect(`${u.origin}${u.pathname}`).toBe(`${origin}/api/external/v1/raidlogs/search`);
+    expect(JSON.parse(u.searchParams.get("where")!)).toEqual(where);
+    expect(u.searchParams.get("sort")).toBe("instance.clear_time_ms");
+    expect(u.searchParams.get("dir")).toBe("asc");
+    expect(u.searchParams.get("format")).toBe("md");
+    expect(u.hash).toBe("");
+    // The key goes on last and the where tree survives.
+    const keyed = new URL(withAIKey(url, "ck_1"));
+    expect(keyed.searchParams.get("ai_key")).toBe("ck_1");
+    expect(JSON.parse(keyed.searchParams.get("where")!)).toEqual(where);
+  });
+
+  it("omits where and sort when the search has none", () => {
+    expect(searchAIURL(origin, {})).toBe(`${origin}/api/external/v1/raidlogs/search?format=md`);
+    expect(searchAIURL(origin, { sort: { field: "instance.started_at" } })).toBe(
+      `${origin}/api/external/v1/raidlogs/search?sort=instance.started_at&format=md`,
+    );
   });
 });

@@ -24,7 +24,8 @@
           });
           if (key === null) return;
           history.replaceState(history.state, "", location.pathname + (kept.length ? "?" + kept.join("&") : "") + location.hash);
-          window.__chronicleAIKey = key;
+          // Not enumerable, so scripts that walk window properties don't pick it up.
+          Object.defineProperty(window, "__chronicleAIKey", { value: key, enumerable: false, configurable: true, writable: true });
         } catch (e) {}
       })();
     </script>

@@ -44,6 +44,10 @@ function run(url: string): Run {
       target[String(prop)] = value;
       return true;
     },
+    defineProperty(target, prop, descriptor) {
+      result.touched.push(String(prop));
+      return Reflect.defineProperty(target, prop, descriptor);
+    },
   });
   const forbidden = new Proxy({}, { get(_t, prop) { throw new Error(`script touched ${String(prop)}`); } });
   // Shadow every global a login or leak would need.
@@ -73,6 +77,10 @@ describe("index.html ai_key strip script", () => {
     const r = run("https://epoch.chronicleclassic.com/instances/abc?view=dps&ai_key=ck_secret&q=a%20b#boss-3");
     expect(r.href).toBe("https://epoch.chronicleclassic.com/instances/abc?view=dps&q=a%20b#boss-3");
     expect(r.window.__chronicleAIKey).toBe("ck_secret");
+    // Hidden from anything that walks window's properties, but deletable.
+    expect(Object.keys(r.window)).not.toContain("__chronicleAIKey");
+    expect(consumeURLAIKey(r.window as { __chronicleAIKey?: string })).toBe("ck_secret");
+    expect("__chronicleAIKey" in r.window).toBe(false);
   });
 
   it("removes a lone key, repeated keys and the encoded ai%5Fkey name", () => {

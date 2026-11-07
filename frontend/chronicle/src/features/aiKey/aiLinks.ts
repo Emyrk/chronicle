@@ -152,3 +152,42 @@ export function searchEqualsValue(node: SearchNode | null | undefined, field: st
   }
   return null;
 }
+
+// Which URLs to give the AI. Car 3 serves agent views only on
+// /instances/{id}, /armory/{realm}/{character} and /g/{guild_id}; any other
+// keyed page gets the browser app with the key stripped, which an AI reads
+// as an empty page. Search goes to car 1's GET search, which returns keyed
+// markdown with follow-on links.
+
+/** instanceAIURL is the raid page link: no view state, slug if there is one. */
+export function instanceAIURL(origin: string, idOrSlug: string): string {
+  return `${origin}/instances/${encodeURIComponent(idOrSlug)}`;
+}
+
+/** characterAIURL is the armory link for a character on a realm. */
+export function characterAIURL(origin: string, realm: string, character: string): string {
+  return `${origin}/armory/${encodeURIComponent(realm)}/${encodeURIComponent(character)}`;
+}
+
+/** guildAIURL is the guild root, so a sub-tab still copies a page the AI can read. */
+export function guildAIURL(origin: string, guildID: string): string {
+  return `${origin}/g/${encodeURIComponent(guildID)}`;
+}
+
+interface SearchAIQuery {
+  where?: unknown;
+  sort?: { field: string; direction?: string };
+}
+
+/**
+ * searchAIURL points at GET /api/external/v1/raidlogs/search with the same
+ * where tree the POST search sends, as markdown, plus the sort if set.
+ */
+export function searchAIURL(origin: string, query: SearchAIQuery): string {
+  const params: string[] = [];
+  if (query.where) params.push(`where=${encodeURIComponent(JSON.stringify(query.where))}`);
+  if (query.sort?.field) params.push(`sort=${encodeURIComponent(query.sort.field)}`);
+  if (query.sort?.direction) params.push(`dir=${encodeURIComponent(query.sort.direction)}`);
+  params.push("format=md");
+  return `${origin}/api/external/v1/raidlogs/search?${params.join("&")}`;
+}

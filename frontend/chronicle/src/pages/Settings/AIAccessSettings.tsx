@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Bot, Check, KeyRound, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useIssueAIKey, useMyAIKey, useRevokeAIKey } from "@/api/aiKey";
+import { useSession } from "@/api/queries";
 import type { AIKey, AIKeyBenefits, AIKeyUsage } from "@/api/typesGenerated";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
@@ -41,8 +42,8 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function KeyStatus({ aiKey, usage }: { aiKey: AIKey; usage: AIKeyUsage }) {
-  const inBrowser = !!storedSecretFor(aiKey.id);
+function KeyStatus({ aiKey, usage, userID }: { aiKey: AIKey; usage: AIKeyUsage; userID: string | undefined }) {
+  const inBrowser = !!storedSecretFor(userID, aiKey.id);
   return (
     <dl className="divide-y divide-border">
       <Row label="Status">
@@ -112,6 +113,8 @@ type Confirm = "rotate" | "revoke" | null;
 /** Settings → AI access: the user's AI key, its usage, rotate/revoke and tier benefits. */
 export function AIAccessSettings() {
   const { data: usage, isLoading, error } = useMyAIKey();
+  const { data: session } = useSession();
+  const userID = session?.user_id;
   const issue = useIssueAIKey();
   const revoke = useRevokeAIKey();
   const [chosenLifetime, setLifetime] = useState<number | null>(null);
@@ -126,8 +129,9 @@ export function AIAccessSettings() {
 
   const makeKey = (rotate: boolean) => {
     saveLifetimeHours(lifetime);
+    if (!userID) return;
     issue.mutate(
-      { req: { lifetime_hours: lifetime, private_data: privateData }, rotate },
+      { userID, req: { lifetime_hours: lifetime, private_data: privateData }, rotate },
       {
         onSuccess: (resp) =>
           toast.success(rotate ? "New AI key made. Old links stopped working." : "AI key made.", {
@@ -160,7 +164,7 @@ export function AIAccessSettings() {
             <h3 className="flex items-center gap-2 font-semibold">
               <KeyRound className="h-4 w-4" /> Your AI key
             </h3>
-            {aiKey ? <KeyStatus aiKey={aiKey} usage={usage} /> : <p className="text-sm text-muted-foreground">You have no AI key yet.</p>}
+            {aiKey ? <KeyStatus aiKey={aiKey} usage={usage} userID={userID} /> : <p className="text-sm text-muted-foreground">You have no AI key yet.</p>}
 
             <div className="space-y-3 border-t pt-4 text-sm">
               <p className="font-medium">{working ? "Settings for your next key" : "New key"}</p>

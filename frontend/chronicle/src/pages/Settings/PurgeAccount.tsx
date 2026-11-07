@@ -1,3 +1,4 @@
+import { clearAIKeyStorage } from "@/features/aiKey/aiKeyStore";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Circle, Loader2, LogIn, Trash2, XCircle } from "lucide-react";
@@ -101,6 +102,7 @@ function useSignInExpired(recentSignInUntil: string) {
 async function signInAgain() {
   await fetch("/auth/logout", { method: "POST" });
   clearInstanceDefaultsCache();
+  clearAIKeyStorage();
   window.location.href = `/login?from=${encodeURIComponent("/account/purge")}`;
 }
 
@@ -334,6 +336,7 @@ function PurgeProgress({ purgeID, onRetry }: { purgeID: string; onRetry: () => v
     // The server already revoked every session; this clears local state.
     void fetch("/auth/logout", { method: "POST" }).catch(() => {});
     clearInstanceDefaultsCache();
+    clearAIKeyStorage();
     queryClient.clear();
   }, [done, queryClient]);
 
