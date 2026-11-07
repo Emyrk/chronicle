@@ -36,6 +36,7 @@ INSERT INTO
     log_type,
     format,
     flavor,
+    upload_source,
     unlisted,
     created_at,
     updated_at
@@ -47,6 +48,10 @@ VALUES
     $3,
     $4,
     $5,
+    CASE
+      WHEN @upload_source::text = '' THEN 'unknown'::upload_source
+      ELSE @upload_source::upload_source
+    END,
     $6,
     $7,
     $8

@@ -36,15 +36,16 @@ type ActivityPeriod struct {
 type GUIDString = guid.GUID
 
 type WoWLogGroup struct {
-	ID        uuid.UUID          `json:"id"`
-	Owner     uuid.UUID          `json:"owner"`
-	OwnerName string             `json:"owner_name,omitempty"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	LogType   string             `json:"log_type"`
-	Format    string             `json:"format,omitempty"`
-	Flavor    []string           `json:"flavor,omitempty"`
-	Unlisted  bool               `json:"unlisted"`
+	ID           uuid.UUID          `json:"id"`
+	Owner        uuid.UUID          `json:"owner"`
+	OwnerName    string             `json:"owner_name,omitempty"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	LogType      string             `json:"log_type"`
+	Format       string             `json:"format,omitempty"`
+	Flavor       []string           `json:"flavor,omitempty"`
+	UploadSource string             `json:"upload_source"`
+	Unlisted     bool               `json:"unlisted"`
 
 	InvalidatedAt *time.Time `json:"invalidated_at,omitempty"`
 	InvalidReason string     `json:"invalid_reason,omitempty"`
@@ -166,6 +167,7 @@ type WoWInstance struct {
 	TenantIncludeAll        bool                    `json:"tenant_include_in_all,omitempty"`
 	OwnerAdsFree            bool                    `json:"owner_ads_free"`
 	LogGroupID              uuid.UUID               `json:"log_group_id"`
+	UploadSource            string                  `json:"upload_source"`
 	Unlisted                bool                    `json:"unlisted"`
 	Name                    string                  `json:"name"`
 	Slug                    string                  `json:"slug"`
