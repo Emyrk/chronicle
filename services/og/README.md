@@ -25,6 +25,22 @@ pnpm build
 
 Then open `http://localhost:3000/api/og?title=Hello&template=chronicle`. `/` lists every template with a live example.
 
+## Preview real Chronicle links
+
+The template index previews the renderer directly. To check what Discord will see for real Chronicle pages, pass one or more page URLs to the link preview command:
+
+```bash
+cd services/og
+pnpm preview:links -- \
+  'https://chronicleclassic.com/instances/example' \
+  'https://chronicleclassic.com/s/example' \
+  'https://chronicleclassic.com/armory/turtle/player'
+```
+
+The command fetches each page with a Discord crawler user agent, reads the actual `og:title`, `og:description`, `og:url`, and `og:image`, then writes a visual gallery to `.preview/index.html`. Open that file in a browser. Use `--out /tmp/og-preview.html` to choose another location.
+
+This works against production, a deployed preview environment, or a local Chronicle server. For local end-to-end testing, run Chronicle with `CHRONICLE_OG_SERVICE_URL` pointing at the local OG service and leave both signing keys unset, then pass the local page URLs to this command.
+
 ## Docker
 
 The Dockerfile builds Next's standalone server (`NEXT_OUTPUT=standalone`) and runs it as the `node` user on port 3000. The build context is this directory:
