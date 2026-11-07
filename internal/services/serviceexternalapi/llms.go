@@ -19,9 +19,15 @@ import (
 // from an AI fetcher it is the signed-in guide; otherwise the public one.
 // Browsers are never signed in by a key.
 func (s *Service) llmsTxt(w http.ResponseWriter, r *http.Request) {
-	if aikey.HasKey(r) && s.aiKeys != nil && !aikey.IsBrowser(r) {
+	if aikey.HasKey(r) && s.aiKeys != nil && !aikey.IsBrowser(r) && r.Method == http.MethodGet {
 		s.aiKeys.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			s.logFetcher(r)
+			// Without a resolved key (a malformed query the middleware
+			// dropped), llmsBody renders the public guide.
+			if _, ok := aikey.FromContext(r.Context()); !ok {
+				w = aikey.PrivateWriter(w)
+			} else {
+				s.logFetcher(r)
+			}
 			writeLLMs(w, s.llmsBody(w, r))
 		})).ServeHTTP(w, r)
 		return

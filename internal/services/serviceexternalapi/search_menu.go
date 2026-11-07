@@ -24,6 +24,10 @@ const (
 	menuTopValues     = 5
 	menuMaxBosses     = 8
 	menuMaxRemoveLink = 10
+	// menuNarrowBudget bounds the narrow-by links in bytes. With the result
+	// table, the remove links and the user link, a page stays near
+	// maxAgentViewBytes even for a query at searchMaxQueryLen.
+	menuNarrowBudget = 32 << 10
 )
 
 // menuClasses are the classes offered by "narrow by class", in the order
@@ -111,7 +115,11 @@ func (s *Service) searchMenu(r *http.Request, where *searchNode, results []chron
 			v[k] = slices.Clone(vs)
 		}
 		if n := andOf(parts); n != nil {
-			v.Set("q", celText(n))
+			q := celText(n)
+			if len(q) > searchMaxQueryLen {
+				return "" // the search would be rejected as too long
+			}
+			v.Set("q", q)
 		}
 		return aikey.Link(ctx, origin+r.URL.Path+"?"+v.Encode())
 	}
@@ -123,6 +131,7 @@ func (s *Service) searchMenu(r *http.Request, where *searchNode, results []chron
 	}
 	var sections []section
 	add := func(title string, items [][2]string) {
+		items = slices.DeleteFunc(items, func(item [2]string) bool { return item[1] == "" })
 		if len(items) > 0 {
 			sections = append(sections, section{title, items})
 		}
@@ -204,16 +213,33 @@ func (s *Service) searchMenu(r *http.Request, where *searchNode, results []chron
 	if len(sections) == 0 {
 		b.WriteString("Nothing left to add from here.\n")
 	}
+	// Each link repeats the whole query, so a long query makes a long menu.
+	// Stop adding narrow-by links once they pass the budget.
+	narrowStart, omitted := b.Len(), false
 	for _, sec := range sections {
-		_, _ = fmt.Fprintf(&b, "%s:\n", sec.title)
-		linkList(&b, sec.items)
-		b.WriteString("\n")
+		var lines strings.Builder
+		for _, item := range sec.items {
+			line := "- " + markdownLink(item[0], item[1]) + "\n"
+			if b.Len()-narrowStart+lines.Len()+len(line) > menuNarrowBudget {
+				omitted = true
+				continue
+			}
+			lines.WriteString(line)
+		}
+		if lines.Len() > 0 {
+			_, _ = fmt.Fprintf(&b, "%s:\n%s\n", sec.title, lines.String())
+		}
+	}
+	if omitted {
+		b.WriteString("More filters were left out to keep this page small. Remove a filter to see them.\n\n")
 	}
 	if len(parts) > 0 {
 		b.WriteString("## Remove a filter\n\n")
 		var items [][2]string
 		for i := range parts[:min(len(parts), menuMaxRemoveLink)] {
-			items = append(items, [2]string{"Remove " + celText(&parts[i]), link(without(parts, i))})
+			if u := link(without(parts, i)); u != "" {
+				items = append(items, [2]string{"Remove " + celText(&parts[i]), u})
+			}
 		}
 		linkList(&b, items)
 		b.WriteString("\n")

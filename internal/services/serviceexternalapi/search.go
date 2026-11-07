@@ -160,13 +160,11 @@ func (s *Service) searchInstances(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := SearchResponse{Results: page.Results, NextCursor: encodeSearchCursor(page.Next)}
 	if format == "md" {
-		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
 		body := searchMarkdown(r, resp)
 		if _, keyed := aikey.FromContext(r.Context()); keyed {
-			body += s.searchMenu(r, q.Where, page.Results)
+			body = s.agentHeader(w, r, "Search results") + body + s.searchMenu(r, q.Where, page.Results)
 		}
-		_, _ = w.Write([]byte(body))
+		writeMarkdown(w, http.StatusOK, body)
 		return
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, resp)

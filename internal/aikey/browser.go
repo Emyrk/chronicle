@@ -36,3 +36,14 @@ func StripKey(w http.ResponseWriter, r *http.Request) http.ResponseWriter {
 	_, _ = takeKey(r)
 	return newKeyedWriter(w)
 }
+
+// PrivateWriter returns w with the privacy headers every keyed response
+// carries: no-store, no-referrer and noindex. Use it when a request had a key
+// that did not resolve (for example a malformed query the key middleware
+// dropped), so the response is still never cached or indexed.
+func PrivateWriter(w http.ResponseWriter) http.ResponseWriter {
+	if kw, ok := w.(*keyedWriter); ok {
+		return kw
+	}
+	return newKeyedWriter(w)
+}
