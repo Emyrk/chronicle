@@ -12,41 +12,6 @@ export const OG_THEMES = [
     label: 'Chronicle',
     description: 'Chronicle\'s dark card: a Libre Baskerville headline over an Inter byline, with a gold rule.',
   },
-  {
-    key: 'talents',
-    label: 'Talent build',
-    description: 'A talent calculator build: spec in class colour, the point split and a bar per tree.',
-  },
-  {
-    key: 'character',
-    label: 'Character',
-    description: 'Armory character card: class emblem, level line, parse, item level and kills, and the best three bosses.',
-  },
-  {
-    key: 'brand',
-    label: 'Brand',
-    description: 'Chronicle\'s wordmark, a tagline and up to two site counts. The fallback for every Chronicle card.',
-  },
-  {
-    key: 'guild',
-    label: 'Guild',
-    description: 'A guild\'s logo or monogram, raid progression bars, best clear and average parse.',
-  },
-  {
-    key: 'raid',
-    label: 'Raid report',
-    description: 'Chronicle raid report: guild, raid, bosses, clear time, avg parse, top damage and class composition.',
-  },
-  {
-    key: 'parse',
-    label: 'Boss parse',
-    description: 'One player on one boss kill: the parse ring in its tier colour, DPS or HPS, kill time and rank; DPS and raid rank lead without a parse.',
-  },
-  {
-    key: 'clear',
-    label: 'Clear time',
-    description: 'A qualified fast clear: the timer, realm rank or Top N%, the record it broke and per-boss splits.',
-  },
 ] as const;
 
 export type OgThemeOption = (typeof OG_THEMES)[number];

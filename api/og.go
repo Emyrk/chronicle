@@ -4,10 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/db2sdk"
@@ -37,29 +34,23 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 			},
 		})
 	}
-	routes = append(routes, []frontend.OGRoute{
+	return append(routes, []frontend.OGRoute{
 		{
 			Pattern: "/instances/{idOrSlug}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return api.instanceOG(r, ogHost(r), chi.URLParam(r, "idOrSlug"))
+				return api.instanceOG(ogHost(r), chi.URLParam(r, "idOrSlug"))
 			},
 		},
 		{
 			Pattern: "/s/{code}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return api.shareOG(r, ogHost(r), chi.URLParam(r, "code"))
-			},
-		},
-		{
-			Pattern: "/g/{guildID}",
-			Resolve: func(r *http.Request) *frontend.OGData {
-				return api.guildOG(r, chi.URLParam(r, "guildID"))
+				return api.shareOG(ogHost(r), chi.URLParam(r, "code"))
 			},
 		},
 		{
 			Pattern: "/armory/{realm}/{player}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return api.armoryOG(r, chi.URLParam(r, "realm"), chi.URLParam(r, "player"))
+				return api.armoryOG(ogHost(r), chi.URLParam(r, "realm"), chi.URLParam(r, "player"))
 			},
 		},
 		{
@@ -71,22 +62,10 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 		{
 			Pattern: "/talents/{class}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				class, build := chi.URLParam(r, "class"), r.URL.Query().Get("build")
-				og := flavorTalentCalculatorOG(ogHost(r), seoProductName(api.resolvedSiteFlavor(r.Context())), class, build)
-				if params := talentOGImageParams(class, build); params != nil {
-					if imageURL := api.ogImageURL(r, "talents", params); imageURL != "" {
-						og.ImageURL = imageURL
-					}
-				}
-				return og
+				return flavorTalentCalculatorOG(ogHost(r), seoProductName(api.resolvedSiteFlavor(r.Context())), chi.URLParam(r, "class"), r.URL.Query().Get("build"))
 			},
 		},
 	}...)
-	// Any page without its own image, or whose lookup failed, gets the brand card.
-	for i := range routes {
-		routes[i].Resolve = api.withBrandOG(routes[i].Resolve)
-	}
-	return routes
 }
 
 type staticOGMetadata struct {
@@ -301,33 +280,7 @@ func flavorTalentCalculatorOG(host, productName, classSlug, build string) *front
 	}
 }
 
-// talentOGImageParams returns the OG service `talents` card params for a
-// calculator link: class, and with a build, points per tree ("17-34-0", or one
-// number for a pet) and the inferred spec when there is one. Unknown class → nil.
-func talentOGImageParams(classSlug, build string) url.Values {
-	slug := strings.ToLower(classSlug)
-	cls, ok := talentClassSlugs[slug]
-	if !ok {
-		return nil
-	}
-	params := url.Values{"class": {slug}}
-	build = sanitizeBuildParam(build)
-	if build == "" {
-		return params
-	}
-	summary, total := talentBuildSummary(build)
-	if _, isPet := talentPetSlugs[slug]; isPet {
-		params.Set("points", strconv.Itoa(total))
-		return params
-	}
-	params.Set("points", fmt.Sprintf("%d-%d-%d", summary[0], summary[1], summary[2]))
-	if spec := wowspec.InferSpec(cls.Spec, summary); spec != "Unknown" {
-		params.Set("spec", spec)
-	}
-	return params
-}
-
-func (api *API) instanceOG(r *http.Request, host, idOrSlug string) *frontend.OGData {
+func (api *API) instanceOG(host, idOrSlug string) *frontend.OGData {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -336,10 +289,10 @@ func (api *API) instanceOG(r *http.Request, host, idOrSlug string) *frontend.OGD
 		return nil
 	}
 
-	return api.buildInstanceOG(ctx, r, host, inst, nil)
+	return api.buildInstanceOG(ctx, host, inst)
 }
 
-func (api *API) shareOG(r *http.Request, host, code string) *frontend.OGData {
+func (api *API) shareOG(host, code string) *frontend.OGData {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -362,22 +315,23 @@ func (api *API) shareOG(r *http.Request, host, code string) *frontend.OGData {
 		return nil
 	}
 
-	return api.buildInstanceOG(ctx, r, host, inst, shared.Payload)
+	return api.buildInstanceOG(ctx, host, inst)
 }
 
-// buildInstanceOG builds an instance page's OG data. sharePayload is the
-// /s/{code} share payload, nil for the instance page itself: when its view
-// selects one player and one boss kill, the image is the parse card.
-func (api *API) buildInstanceOG(ctx context.Context, r *http.Request, host string, inst database.LogInstancesGuild, sharePayload []byte) *frontend.OGData {
+func (api *API) buildInstanceOG(ctx context.Context, host string, inst database.LogInstancesGuild) *frontend.OGData {
 	db := api.Opts.Zed
 
 	encounters, _ := db.EncountersByInstanceID(ctx, inst.ID)
-	players, playersErr := db.InstancePlayersByInstanceID(ctx, inst.ID)
+	players, _ := db.InstancePlayersByInstanceID(ctx, inst.ID)
 
+	bossKills := 0
 	var startDate time.Time
 	var endDate time.Time
 	var combatDuration time.Duration
 	for _, e := range encounters {
+		if e.Boss && (e.KillType == database.KillTypeClean || e.KillType == database.KillTypePartial) {
+			bossKills++
+		}
 		if e.StartTime.Valid && e.EndTime.Valid {
 			combatDuration += e.EndTime.Time.Sub(e.StartTime.Time)
 		}
@@ -421,73 +375,12 @@ func (api *API) buildInstanceOG(ctx context.Context, r *http.Request, host strin
 		host = inst.TenantSlug.String + "." + api.Opts.Tenant.PrimaryDomain()
 	}
 
-	og := &frontend.OGData{
+	return &frontend.OGData{
 		Title:       title.String(),
 		Description: desc.String(),
 		URL:         fmt.Sprintf("https://%s/instances/%s", host, identifier),
 		ImageURL:    instanceOGImageURL(host, inst.Name),
 	}
-	if api.ogServiceConfigured() {
-		base := raidCard{
-			Host:     host,
-			Guild:    inst.GuildName.String,
-			Raid:     inst.Name,
-			Realm:    inst.RealmName,
-			Date:     startDate,
-			Duration: dur,
-		}
-		if playersErr == nil {
-			n := len(players)
-			base.Players = &n
-			base.Comp = raidComposition(players)
-		}
-		if imageURL := api.instanceCardURL(r, inst, encounters, players, playersErr, base, sharePayload); imageURL != "" {
-			og.ImageURL = imageURL
-		}
-	}
-	return og
-}
-
-// instanceCardURL returns the signed parse card URL when sharePayload selects
-// one player and one boss kill and the player has numbers for it, else the
-// raid report card's. Both cards' lookups share one raidCardTimeout budget,
-// so a parse card that falls back can't double the wait.
-func (api *API) instanceCardURL(r *http.Request, inst database.LogInstancesGuild, encounters []database.LogInstanceEncounter, players []database.LogInstancePlayer, playersErr error, base raidCard, sharePayload []byte) string {
-	loadReq := r
-	if sharePayload != nil && playersErr == nil {
-		if player, enc, ok := shareParseSelection(sharePayload, encounters, players); ok {
-			ctx, cancel := context.WithTimeout(r.Context(), raidCardTimeout)
-			defer cancel()
-			loadReq = r.WithContext(ctx)
-			card, ok := api.loadParseCard(loadReq, inst, player, enc, parseCard{
-				Host:   base.Host,
-				Player: ogCardName(player.Name),
-				Class:  ogClassSlug(string(player.Class)),
-				Raid:   base.Raid,
-				Guild:  base.Guild,
-				Realm:  base.Realm,
-			})
-			if ok {
-				return api.ogImageURL(r, "parse", parseCardParams(card))
-			}
-		}
-	}
-	// The raid card and the clear card load in parallel on loadReq, so after
-	// a parse card fallback both stay inside the same deadline. The clear
-	// card wins when the run is a qualified speedrun with a 90+ time-parse.
-	var (
-		wg       sync.WaitGroup
-		card     raidCard
-		speedrun clearCard
-		isClear  bool
-	)
-	wg.Go(func() { card = api.loadRaidCard(loadReq, inst, encounters, base) })
-	wg.Go(func() { speedrun, isClear = api.loadClearCard(loadReq, inst, encounters) })
-	wg.Wait()
-	if isClear {
-		return api.ogImageURL(r, "clear", clearCardParams(card, speedrun))
-	}
-	return api.ogImageURL(r, "raid", raidCardParams(card))
 }
 
 func instanceOGImageURL(host, instanceName string) string {
@@ -498,11 +391,9 @@ func instanceOGImageURL(host, instanceName string) string {
 	return fmt.Sprintf("https://%s%s", host, imagePath)
 }
 
-func (api *API) armoryOG(r *http.Request, realm, player string) *frontend.OGData {
-	// The request context carries the tenant, which scopes the lookups.
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+func (api *API) armoryOG(host, realm, player string) *frontend.OGData {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	host := ogHost(r)
 
 	db := api.Opts.Zed
 
@@ -549,28 +440,16 @@ func (api *API) armoryOG(r *http.Request, realm, player string) *frontend.OGData
 	class = strings.ToLower(class)
 	class = strings.ToUpper(string(class[0])) + class[1:]
 
-	level := ""
-	if p.Level > 0 {
-		level = fmt.Sprintf("%d ", p.Level)
-	}
-	fmt.Fprintf(&desc, "%s%s (%s) — %s%s %s",
+	desc.WriteString(fmt.Sprintf("%s%s (%s) — %d %s %s",
 		p.Name, guild, p.RealmName,
-		level, race, class,
-	)
+		60, race, class,
+	))
 
-	og := &frontend.OGData{
+	return &frontend.OGData{
 		Title:       title.String(),
 		Description: desc.String(),
 		URL:         fmt.Sprintf("https://%s/armory/%s/%s", host, realm, p.ID),
 	}
-	// Skip the stat lookups when there's no OG service to draw the card.
-	if api.Opts.OGServiceURL != nil && api.Opts.OGSigningKey != "" {
-		params := characterCardParams(p, race, class, api.fetchCharacterCardStats(ctx, p))
-		if u := api.ogImageURL(r, "character", params); u != "" {
-			og.ImageURL = u
-		}
-	}
-	return og
 }
 
 func resolveInstance(ctx context.Context, db *authz.Authz, idOrSlug string) (database.LogInstancesGuild, error) {

@@ -23,8 +23,6 @@ Before you commit, `pnpm test && pnpm build` must pass. See [Environment variabl
 - `app/api/og/themes/`: one file per template, registered in `index.ts`
 - `app/api/og/themes/types.ts`: the theme contract (`ThemeProps`, `ThemeDefinition`)
 - `app/api/og/themes/shared.tsx`: `loadFontsourceFamily`, `fitFontSize`, `Img`, `Cover`, `FILL`
-- `app/api/og/themes/kit.tsx`: the Chronicle card kit: param helpers, header/footer chrome, class and parse colours, durations, bundled logos and raid art
-- `app/lib/og-signature.ts`: `OG_SIGNING_KEY` signed-URL check; vectors in `tests/fixtures/og-sig-vectors.json`
 - `app/api/og/themes/public-files.ts`: `readPublicFile` / `publicImage`, which read bundled files from disk
 - `app/lib/og-themes.ts`: template keys, labels and the default (`modern`)
 - `app/lib/og-remote-image.ts`: the SSRF-checked image download and DoH resolution

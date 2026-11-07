@@ -55,7 +55,6 @@ Theme fonts ship with the app and are read from disk, so the server never reques
 | `OG_API_ONLY` | `true` returns `404` for everything outside `/api/*` and `/_next/*`, i.e. hides the `/` index page |
 | `OG_API_PATH` | Also serve the endpoint at `/api/<OG_API_PATH>` (one segment: letters, digits, `_`, `-`). `/api/og` always works |
 | `OG_ENABLE_DEBUG` | `true` enables `/api/debug`, which takes the same query and explains why each image was accepted or rejected |
-| `OG_SIGNING_KEY` | HMAC key shared with the Chronicle server. When set, every request must carry a valid `sig` (see [Signed URLs](#signed-urls)); others render the fallback card. Unset accepts unsigned requests (local dev) |
 | `OG_SECRET` | Legacy upstream option: keeps an `/api/og_xxxxxxxxxxxx` path derived from it working. Not needed for new deployments |
 
 No other configuration or `.env` file is required.
@@ -64,7 +63,7 @@ No other configuration or `.env` file is required.
 
 | Param | Max length | Notes |
 |-------|-----------|-------|
-| `template` | | `modern` (default), `chronicle`, `talents`, `brand`, `character` or `guild`. Unknown values use `modern` |
+| `template` | | `modern` (default) or `chronicle`. Unknown values use `modern` |
 | `theme` | | Same as `template` (upstream's name); wins if both are given |
 | `title` | 200 | Defaults to `Untitled` |
 | `site` | 80 | Defaults to `Blog` |
@@ -79,31 +78,6 @@ No other configuration or `.env` file is required.
 | `avatar` | | Author avatar URL |
 
 Typographic quotes, dashes and odd Unicode spaces are normalized before rendering.
-
-#### Chronicle card params
-
-Chronicle cards render from query params only: no database, no API call and no fetch to Chronicle. `api/og.go` already has the data when it serves the page, so it writes everything a card needs into the (signed) image URL. Every card takes:
-
-| Param | Max length | Notes |
-|-------|-----------|-------|
-| `host` | 80 | Tenant host printed in the footer, e.g. `forever.chronicleclassic.com`. Defaults to `chronicleclassic.com` |
-| `product` | 40 | Tenant flavour, e.g. `WoW Forever` |
-| `art` | | Bundled raid art by slug (below). Unknown slugs draw no art; never fetched |
-| `sig` | | Signature, see [Signed URLs](#signed-urls) |
-| `v` | | Cache buster; ignored by the renderer but covered by `sig` |
-
-`art` slugs are the instance name lowercased, apostrophes dropped and other runs of non-alphanumerics turned into `-` (`artSlug()` in `kit.tsx`): `molten-core`, `blackwing-lair`, `zulgurub`, `ruins-of-ahnqiraj`, `temple-of-ahnqiraj`, `naxxramas`, `onyxias-lair`, `emerald-sanctum`, `tower-of-karazhan`, `lower-tower-of-karazhan`, `upper-tower-of-karazhan`. The JPGs in `public/raids/` are the same 3:2 centre crops of the web app's loading screens that `frontend.InstanceOGImage` serves.
-
-Each card documents its own params next to its template below.
-
-### Signed URLs
-
-With `OG_SIGNING_KEY` set, the Chronicle server signs every image URL it writes (`ogImageURL` in `api/og.go`) and the service checks it (`app/lib/og-signature.ts`):
-
-- **canonical**: for each param key except `sig`, sorted ascending by key, first value only, `key + "\n" + value + "\n"` with decoded values (no URL encoding), concatenated
-- **sig**: the first 32 characters of the lowercase hex HMAC-SHA256 of the canonical string under the key
-
-A missing or wrong `sig` renders the fallback card (`brand` with its defaults) with HTTP 200, never an error image, and none of the request's params are used, so no remote image is fetched. `tests/fixtures/og-sig-vectors.json` holds shared test vectors; the Go signer's test uses the same file contents, so change both together.
 
 ### Remote images
 
@@ -122,12 +96,6 @@ An image that fails any check is dropped and the card renders without it.
 |----------|------|------|
 | `modern` | Headline set on the cover image like a magazine cover; a bundled starfield when there is no `image` | `image`, `icon`, `avatar`, `tag`, `accent` |
 | `chronicle` | Chronicle's dark palette, a Libre Baskerville headline and an Inter byline under a gold rule; `image` sits behind a dark wash | `image`, `icon`, `avatar`, `tag`, `accent` (the rule and tag border) |
-| `talents` | Talent build for `/talents/{class}?build=`: spec + class in class colour, the point split, a bar per tree. No `points` draws "<Class> Talent Calculator" with empty trees; `class=pet` draws one bar | `class`, `spec`, `points` (`17-34-0`, one number for a pet), `keys` (up to 3, comma-separated), `host`, `product` |
-| `brand` | The wordmark over a faint mark, a serif tagline, up to two count pills and the footer. Used for `/`, static routes and every fallback | `title` (default `Every pull, every parse, every wipe.`, 90), `excerpt` (default `Free raid log analysis for <product>`, 160), `stat1`/`stat2` as `count:label` (digits are grouped, or compacted from 100,000; no stats → no pill row), `host`, `product` |
-| `character` | Armory character for `/armory/{realm}/{player}`: an initial medallion in class colour with the spec, name, level line, guild · realm, three stats and up to three boss pills. With `parse`: best avg parse (coloured by its rounded value) · item level · boss kills + pills; without: item level · raids with kills · last seen. Missing stats are dropped. Cyrillic names use the bundled Inter Cyrillic cuts, CJK names a China-domain subset | `name` (20), `class`, `spec`, `race`, `level`, `guild`, `realm`, `parse` (`96.4`), `ilvl`, `kills`, `best` (`Name:score`, up to 3), `raids`, `seen`, `host`, `product` |
-| `guild` | Guild page `/g/{guildId}`: logo (or a serif monogram on the accent), name, `realm · product · N members · since Mon YYYY`, up to 4 progression bars (complete raids in gold), best clear and top parse average. No `prog` draws `raids` logged over the `top` 3 parsers. `icon` is only sent for Chronicle-hosted logos | `name` (32), `realm`, `members`, `since` (`YYYY-MM`), `accent` (default `#5f8fa6`), `tag`, `icon`, `prog` (`MC:10:10,…`, `short:down:total`, at most 4), `best` (seconds), `bestraid`, `avg`, `raids`, `top` (`name:class:score`, at most 3), `host`, `product` |
-| `parse` | One player on one boss kill, for `/s/{code}` shares: a class-colour bar, the name (96 → 80 → 64 px), spec · guild, the boss in gold, then DPS (or HPS for `metric=hps`) · kill time · `#rank / of`, with the parse ring (SVG, tier colour from `score`) on the right. Without `score` (no parse, or below 75) DPS / HPS leads on the right with `#N in raid`. Unknown class → grey. Cyrillic and CJK names load fonts as `character` does | `player` (20), `class`, `spec`, `boss`, `raid`, `guild`, `realm`, `metric` (`dps`/`hps`), `value` (`1284.6`), `dur` (seconds), `score`, `rank`, `of`, `raidrank`, `host`, `product` |
-| `clear` | Clear time for a qualified fast clear on `/instances/{id}` (api/og.go picks it when the server clear-time parse is 90+, else `raid`): the timer at 200px (150px for `h:mm:ss`), a gold pill `#N on <realm>` (no `realmrank` → `Top N%` from `score`), "Faster than N% of M clears" (`#rank of M clears` in the fallback), the green delta vs the previous realm record, `<guild>` with product · bosses · wipes · raiders, and the splits bar with labels (every other boss, counted back from the last, above 8). Cyrillic and CJK names load fonts like `character` | `guild` (32), `raid`, `realm`, `ms`, `score`, `rank`, `of`, `realmrank`, `delta` (seconds, negative), `wipes`, `players`, `splits` (`Name:secs`, at most 20), `host`, `product` |
 
 ### Adding a template
 
@@ -138,12 +106,6 @@ An image that fails any check is dropped and the card renders without it.
    - `fontFamily`, and optionally `coversCjk` if the theme's own fonts draw CJK
    `chronicle.tsx` is the smallest complete example.
 3. **Register it** in `app/api/og/themes/index.ts` and add a `{ key, label, description }` entry to `app/lib/og-themes.ts`. The type of `themes` makes TypeScript fail until both agree.
-   For a Chronicle card, build on the kit in `app/api/og/themes/kit.tsx` so the card file is only its layout:
-   - params: `param(context, key, max)`, `intParam(context, key, { min, max })`, `listParam(context, key, { maxItems, maxLength })` (split `a:b:c` items yourself), `chromeParams(context)` for `host`/`product`
-   - chrome: `<Header markSrc chip />` (mark, `CHRONICLE` kicker, right chip) and `<Footer host cta />`; `markImage()` / `wordmarkImage()` load the logos, `loadKitFonts()` the Inter + Libre Baskerville cuts
-   - tables: `COLORS`, `SANS`/`SERIF`, `classColor(name)` (unknown → grey), `parseColor(score)` (same tiers as the web app), `formatDuration(seconds)` (`h:mm:ss` / `m:ss`)
-   - art: `artImage(context)` returns the bundled `art=<slug>` JPEG as a data URL, or null
-   Draw arrows and other symbols as SVG: the bundled latin font cuts lack them (no `→`), and a missing glyph makes `next/og` fetch a font.
 4. **Test.** `tests/themes/themes.test.tsx` loops over every registered theme: it checks every font cut is read from disk and renders a PNG with minimal and full props. Run `pnpm test`, then look at the result in `pnpm dev`.
 
 ### Satori gotchas
@@ -158,6 +120,5 @@ An image that fails any check is dropped and the card renders without it.
 
 - Code: [OGIS](https://github.com/bunizao/ogis) by [bunizao](https://github.com/bunizao), copyright 2015–2024 Peter Amende and 2025 bunizao, under the MIT licence kept in `LICENSE`. Copied from upstream `main` at `9c57f00` without its git history.
 - Default background (`public/default-bg.jpg`): [Cluster of Stars](https://unsplash.com/photos/cluster-of-stars-in-the-sky-qVotvbsuM_c) by [Paul Lichtblau](https://unsplash.com/@paullichtblau) on Unsplash.
-- Chronicle mark and wordmark (`public/chronicle/`) from the Chronicle web app; raid art (`public/raids/`) is cropped from the World of Warcraft loading screens the web app already ships.
 - Geist, Inter and Libre Baskerville via [Fontsource](https://fontsource.org), under the SIL Open Font License.
 - Noto Sans SC, JP and KR via [Google Fonts](https://fonts.google.com/noto) for CJK text.

@@ -16,9 +16,3 @@ func isParseDisabled(parseConfigJSON []byte) bool {
 	return json.Unmarshal(parseConfigJSON, &config) == nil &&
 		config.CohortMode == string(parsepolicy.CohortModeDisabled)
 }
-
-// IsParseDisabled reports whether a tenant's parse_config turns parses off
-// (cohort_mode=disabled), as the time-parses endpoint checks.
-func IsParseDisabled(parseConfigJSON []byte) bool {
-	return isParseDisabled(parseConfigJSON)
-}
