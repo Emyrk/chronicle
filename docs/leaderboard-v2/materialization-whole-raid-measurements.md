@@ -54,7 +54,7 @@ new `dbtestutil` database, a three-minute cell deadline, and a thirty-second
 refresh-pass deadline. The measured fixture contains 10, 100, or 1,000 previous
 kills per player/boss. Another tenant/raid has 100 complete historical raids:
 98,500 unrelated evidence rows for one metric, or 146,500 for two metrics.
-Existing migration347 indexes are present and tables are analyzed after seeding.
+Existing migration348 indexes are present and tables are analyzed after seeding.
 
 Before timing the new raid, the test materializes the previous state. It then
 commits one appended raid and measures:

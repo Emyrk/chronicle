@@ -13,7 +13,7 @@
 - PR 1633: subset/override resolution.
 - PR 1634: initial configuration seeds.
 - PR 1636: configuration inspector.
-- Migration 343: Wrath configuration.
+- Migration 344: Wrath configuration.
 
 Prior ratings are removed; PR 1625 preserves parse scoring. Do not promise
 legacy rating rollback or use retired tables as deployment seed inputs.

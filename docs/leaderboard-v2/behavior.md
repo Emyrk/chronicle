@@ -6,7 +6,7 @@ definitions and configuration decisions live in [`spec.tex`](spec.tex).
 ## Delivery boundary
 
 Configuration PRs 1622, 1624, 1633, and 1634 are complete, together with
-inspector PR 1636 and Wrath migration 343. Migration344 adds evidence, sufficient
+inspector PR 1636 and Wrath migration 344. Migration345 adds evidence, sufficient
 statistics, kill counts, and dirty-work tables. The isolated
 [read preview](read-preview.md) serves those summaries without workers, historical
 backfill, scheduler wiring, or replacement of existing leaderboard routes.

@@ -13,7 +13,7 @@ describe("published rating icons", () => {
   })
 
   it("shows readable realms instead of internal IDs in entry subtitles", () => {
-    const entry = { id: "one", name: "Raider", cls: "MAGE", spec: "Unknown", score: 100, detail: "internal-realm-uuid", realmLabel: "Nordanaar" }
+    const entry = { id: "one", name: "Raider", cls: "MAGE", spec: "Unknown", subSpec: "", score: 100, detail: "internal-realm-uuid", realmLabel: "Nordanaar" }
     const html = renderToStaticMarkup(<EntryRow entry={entry} theme={METRIC_THEMES.peak} size="sm" />)
     expect(html).toContain("Unknown · Nordanaar")
     expect(html).not.toContain("internal-realm-uuid")

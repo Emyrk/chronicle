@@ -9,7 +9,7 @@ that model into observable requirements. The [implementation
 plan](implementation-plan.md) defines the intended Graphite stack and validation
 gates.
 
-The [table relationships](table-relationships.md) reference maps migration 344
+The [table relationships](table-relationships.md) reference maps migration 345
 tables to evidence, summary, and repair responsibilities. The
 [read preview](read-preview.md)
 documents `/leaderboard-v2`, local synthetic fixtures, and measured SQL plans.
@@ -87,7 +87,7 @@ leaderboard v2.
 ## Current delivery and exclusions
 
 Configuration PRs 1622, 1624, 1633, and 1634 are complete, together with
-inspector PR 1636 and Wrath migration 343. Migration344 adds evidence, raw
+inspector PR 1636 and Wrath migration 344. Migration345 adds evidence, raw
 sufficient statistics, kill counts, and dirty-work tables. The read preview
 serves current summaries separately from existing boards. Workers, historical
 backfill, and UI cutover remain out of scope.

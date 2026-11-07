@@ -35,7 +35,7 @@
 This document defines the leaderboard model from its source data upward. The next delivery is schema-only evidence, sufficient statistics, kill counts, and dirty-work storage for all-time tenant-scoped ratings.
 
 \subsection{Delivery status and scope}
-Configuration work is complete in PRs 1622, 1624, 1633, and 1634, followed by configuration inspector PR 1636 and Wrath migration 343. The next PR adds only tables, constraints, indexes, and schema tests. Workers, serving queries, historical backfill, and UI cutover are later work. Prior ratings have been removed; PR 1625 preserves parse scoring. No legacy-rating rollback is promised.
+Configuration work is complete in PRs 1622, 1624, 1633, and 1634, followed by configuration inspector PR 1636 and Wrath migration 344. The next PR adds only tables, constraints, indexes, and schema tests. Workers, serving queries, historical backfill, and UI cutover are later work. Prior ratings have been removed; PR 1625 preserves parse scoring. No legacy-rating rollback is promised.
 
 All rating evidence, statistics, and Renown counts are all-time only. There are no rolling180day or season dimensions, expiry jobs, or finalized-season retention exceptions. Career/cross-instance portfolios remain out of scope. Source deletion and invalidation continue to retract evidence and dirty affected scopes.
 

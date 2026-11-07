@@ -1,7 +1,7 @@
 # Historical backfill and repair operations
 
 Operations are explicitly requested by an authorized administrator; service startup
-only resumes already-persisted operations. Migration 351 creates an empty audit table
+only resumes already-persisted operations. Migration 352 creates an empty audit table
 and indexes on that new table. It performs no source rewrite or historical scan.
 
 ## Scope and dates

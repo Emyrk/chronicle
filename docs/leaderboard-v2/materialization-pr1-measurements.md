@@ -36,7 +36,7 @@ The test creates a new `dbtestutil` database. It does not reuse or overwrite a
 preview database, restart services, or contact production. Measurements execute
 `EXPLAIN (ANALYZE, BUFFERS, WAL, FORMAT JSON)` on the actual write statements.
 The transaction rolls back at completion. The opt-in test drops/recreates only
-its own candidate indexes to reproduce the comparison after migration347 exists.
+its own candidate indexes to reproduce the comparison after migration348 exists.
 
 Each of five evidence tables contains 30,000 unrelated rows across 16 tenants
 and 32 cohorts, plus a selected subject history of 100, 1,000, or 10,000 rows.
@@ -45,7 +45,7 @@ provenance lookup. Histories contain ties, zero metrics and nonuniform durations
 Seven repeated executions produce p50 and nearest-rank p95 (the seventh sample).
 These are warm local diagnostics, not production latency guarantees.
 
-The baseline uses migration344 scope indexes. Migration347 adds only the three
+The baseline uses migration345 scope indexes. Migration348 adds only the three
 missing value-ordered benchmark indexes. Existing scope indexes already bound
 subject histories and Renown counts. No measured query scanned unrelated evidence
 via a sequential table scan. All selected rows remain in the exact predicate,
@@ -125,6 +125,6 @@ WHERE relname IN ('leaderboard_player_observations',
 
 These are estimates. If populated substantially, inspect exact impact off the
 startup path and get approval for a maintenance window or online index build.
-Migration347 uses transactional `CREATE INDEX`, which scans each table and blocks
+Migration348 uses transactional `CREATE INDEX`, which scans each table and blocks
 writes until commit. Do not silently deploy it to a populated installation.
 No historical source tables are indexed or rewritten by this migration.

@@ -10,8 +10,8 @@ change the accepted read API/UI. Track remaining work against
 
 - Stack: configuration -> [schema #1638](https://github.com/Emyrk/chronicle/pull/1638)
   -> read preview #1639 -> this materialization plan.
-- Implemented: configuration resolution, migration 344's 22 tables, migration
-  345's player read index, migration 346's nullable peak provenance, and the
+- Implemented: configuration resolution, migration 345's 22 tables, migration
+  346's player read index, migration 347's nullable peak provenance, and the
   isolated `/leaderboard-v2` UI / `GET /api/v1/leaderboards-v2` read path.
 - Missing: canonical evidence writers, D1 reconciliation, D2 calculations and
   dispatch, real-history bootstrap, progress/repair operations, and real-data
@@ -112,7 +112,7 @@ mistake artifact retention for an encounter deletion.
    band means. Guild Form/Floor use means of reciprocal milliseconds, not
    reciprocals of mean durations. Empty bands are zero; no evidence removes rows.
 6. Benchmarks use indexed exact-cohort MAX(raw metric)/MIN(positive duration).
-   Plan and measure the scope/value access paths; migration 345 is a summary
+   Plan and measure the scope/value access paths; migration 346 is a summary
    read index, not evidence MAX/MIN or per-subject history acceleration.
 7. Metric-free canonical kill facts produce one count per subject/exact boss and
    variant. DPS/HPS or specialization changes must not double-credit the kill.
@@ -127,7 +127,7 @@ mistake artifact retention for an encounter deletion.
    choose the best **whole selected view**; never blend bosswise spec maxima.
 10. Peak provenance belongs to the observation supplying `raw_peak`, not the
     fastest kill. Carry `peak_encounter_id` and `peak_duration_ms` together;
-    equal peaks choose the smallest source encounter UUID. Migration 346 allows
+    equal peaks choose the smallest source encounter UUID. Migration 347 allows
     both null until repair. Derive duration from authoritative encounter data;
     never invent it. Records/details must continue identifying the actual peak.
 
@@ -351,11 +351,11 @@ with measurements and operator sign-off, not a claim that 1.23s meets 200ms.
 - Re-run [mock read benchmarks](../../scripts/leaderboardmock/README.md) for read
   regressions, but add raw-evidence histories for D2/D1 benchmarks: synthetic
   summary-only fixtures cannot measure materialization cost.
-- Migration 345's covering index helps exact-cohort reads, not all-class aggregate
+- Migration 346's covering index helps exact-cohort reads, not all-class aggregate
   latency or raw-history sorts. Its write/storage costs and visibility-map gains
   must be remeasured under churn. Additional indexes need production cardinality
   and startup/build-impact review before deployment.
-- Migration 346 only adds nullable fields and a NOT VALID completeness CHECK;
+- Migration 347 only adds nullable fields and a NOT VALID completeness CHECK;
   it does not backfill provenance or validate old rows by scanning at startup.
   Do not infer populated duration from the mere presence of these columns.
 - Before PR 2 ships: settle claim/publication fencing and the bounded scheduling
