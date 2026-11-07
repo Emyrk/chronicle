@@ -1,9 +1,11 @@
+import { useQuery } from "@tanstack/react-query"
+import type { RatingLiveData } from "../Ratings/ratingLiveData"
 import { useState, type CSSProperties, type ReactNode } from "react"
 import { ArrowDown, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react"
 import { RATING_METRICS, type RatingMetric } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 import { cn } from "@/lib/utils"
-import { BoardSearch, MasteryPartCells, MasteryPartHeaders } from "@/pages/Leaderboards/Ratings/RatingFullList"
-import { BoardSkeleton } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
+import { BoardSearch, MasteryPartCells, MasteryPartHeaders, PublishedMasteryCells, PublishedMasteryHeaders, PeakComponents } from "@/pages/Leaderboards/Ratings/RatingFullList"
+import { BoardSkeleton, BossMetricSkeleton } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
 import { BossPortrait, Emblem, RankMark } from "@/pages/Leaderboards/Ratings/RatingParts"
 import { METRIC_THEMES, type MetricTheme, type RatingView } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { formatClock, guildRatings, type GuildRating } from "./hub.fixtures"
@@ -11,7 +13,9 @@ import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities"
 
 /** Published guild ratings for the guild boards: whole ranked lists, and each boss's leaders. */
 export interface GuildRatingData {
+  live?: RatingLiveData
   ratings: Record<RatingMetric, GuildRating[]>
+  perBossState?: (boss: string) => Partial<Record<RatingMetric, { pending?: boolean; error?: string }>>
   perBoss: (boss: string) => Record<RatingMetric, GuildRating[]> | undefined
   pending?: boolean
   error?: string
@@ -104,7 +108,7 @@ export function GuildName({ guild, guildId, logo, size = "size-5" }: { guild: st
 }
 
 function toRows(list: GuildRating[]): MetricRow[] {
-  return list.map((g) => ({ id: g.guildId ?? g.guild, name: <GuildName guild={g.guild} guildId={g.guildId} logo={g.logo} />, score: g.score }))
+  return list.map((g) => ({ id: g.guildId ? `${g.detail}:${g.guildId}` : g.guild, name: <GuildName guild={g.guild} guildId={g.guildId} logo={g.logo} />, score: g.score }))
 }
 
 /** The overview's ratings card in Guilds mode: top five guilds per metric. */
@@ -164,11 +168,10 @@ export function GuildRatingBoards({
       </section>
     )
   }
-  if (data?.pending) return <BoardSkeleton />
 
   return (
     <div className="space-y-5" style={{ "--metric": theme.accent } as CSSProperties}>
-      {expanded ? (
+      {data?.pending ? <BoardSkeleton /> : expanded ? (
         <GuildFullTable
           toolbar={toolbar}
           label={label}
@@ -177,6 +180,7 @@ export function GuildRatingBoards({
           kindLabel={kindLabel}
           view={view}
           ratings={all}
+          live={data?.live}
           query={query}
           onQuery={setQuery}
           onCollapse={
@@ -190,10 +194,10 @@ export function GuildRatingBoards({
         />
       ) : (
         <section aria-label={label} className="relative flex flex-col overflow-hidden rounded-xl border bg-card">
-          <BoardHeader oneBoss={oneBoss} title={title} theme={theme} subtitle={`${all.peak.length} guilds ranked`} toolbar={toolbar}>
+          <BoardHeader oneBoss={oneBoss} title={title} theme={theme} subtitle={data?.live ? "All-time guild scores" : `${all.peak.length} guilds ranked`} toolbar={toolbar}>
             <BoardSearch query={query} onQuery={setQuery} />
           </BoardHeader>
-          <MetricColumns
+          <MetricColumns ranksKnown={!data?.live}
             columns={{ peak: toRows(all.peak.slice(0, 5)), mastery: toRows(all.mastery.slice(0, 5)), renown: toRows(all.renown.slice(0, 5)) }}
             onOpen={onView}
           />
@@ -203,7 +207,7 @@ export function GuildRatingBoards({
             className="relative mt-auto flex cursor-pointer items-center justify-center gap-1.5 border-t px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-white/[.03] hover:text-foreground"
           >
             <ArrowDown className="size-3.5" />
-            All {all.peak.length} ranked
+            {data?.live ? "Full board" : `All ${all.peak.length} ranked`}
           </button>
         </section>
       )}
@@ -216,6 +220,7 @@ export function GuildRatingBoards({
               <BossBoard
                 key={boss}
                 boss={boss}
+                states={data?.perBossState?.(boss)}
                 ratings={data ? (data.perBoss(boss) ?? EMPTY_GUILD_RATINGS) : guildRatings([boss], allBosses, instanceName, 3)}
                 view={view}
                 onOpen={() => onBoss(boss)}
@@ -287,7 +292,9 @@ function GuildFullTable({
   onQuery,
   onCollapse,
   toolbar,
+  live,
 }: {
+  live?: RatingLiveData
   toolbar?: ReactNode
   label: string
   title: string
@@ -302,11 +309,15 @@ function GuildFullTable({
   const [sortBy, setSortBy] = useState<RatingMetric>(view === "overview" ? "peak" : view)
   const metric = view === "overview" ? sortBy : view
   const theme = METRIC_THEMES[view]
+  const pageKey = `${metric}|${query}|${live?.pageKey}`
+  const [pageState,setPageState] = useState({key:"",page:0})
+  const page = pageState.key === pageKey ? pageState.page : 0
+  const published = useQuery({queryKey:["hub-guild-v2-page",pageKey,page],queryFn:()=>live!.loadPage!({scope:oneBoss ? {boss:oneBoss} : {},metric,period:"all",query,page}),enabled:!!live?.loadPage,retry:false})
   const byGuild = (m: RatingMetric) => new Map(ratings[m].map((g) => [g.guild, g]))
   const scores = { peak: byGuild("peak"), mastery: byGuild("mastery"), renown: byGuild("renown") }
-  const ranked = ratings[metric].map((g, i) => ({ rank: i + 1, g }))
+  const ranked = live ? (published.data?.rows ?? []).map(row => ({rank:0,g:{guild:row.entry.name,guildId:row.entry.guid,score:row.entry.score,detail:row.entry.detail,ms:row.entry.durationMs} as GuildRating})) : ratings[metric].map((g, i) => ({ rank: i + 1, g }))
   const needle = query.trim().toLowerCase()
-  const rows = needle ? ranked.filter((r) => r.g.guild.toLowerCase().includes(needle)) : ranked
+  const rows = !live && needle ? ranked.filter((r) => r.g.guild.toLowerCase().includes(needle)) : ranked
   const top = ranked[0]?.g.score ?? 1
   const timeLabel = oneBoss ? "Kill time" : kindLabel === "Bosses" ? "Total kill time" : "Clear time"
 
@@ -316,7 +327,7 @@ function GuildFullTable({
         oneBoss={oneBoss}
         title={title}
         theme={theme}
-        subtitle={`${ranked.length} guilds ranked`}
+        subtitle={live ? "All-time guild scores · no global rank" : `${ranked.length} guilds ranked`}
         toolbar={toolbar}
         lead={
           onCollapse && (
@@ -364,10 +375,10 @@ function GuildFullTable({
               ) : (
                 <>
                   <th className="w-32 px-3 py-2.5 text-left font-medium">{theme.label}</th>
-                  {view === "mastery" && <MasteryPartHeaders />}
+                  {view === "mastery" && (live ? <PublishedMasteryHeaders /> : <MasteryPartHeaders />)}
                   {view === "peak" && (
                     <>
-                      <th className="px-3 py-2.5 text-right font-medium">{timeLabel}</th>
+                      <th className="px-3 py-2.5 text-right font-medium">{live && !oneBoss ? "Boss peaks" : timeLabel}</th>
                       <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Date</th>
                     </>
                   )}
@@ -378,9 +389,9 @@ function GuildFullTable({
           </thead>
           <tbody>
             {rows.map(({ rank, g }) => (
-              <tr key={g.guild} className="border-b border-white/5 transition-colors last:border-b-0 hover:bg-white/[.025]">
+              <tr key={g.guildId ? `${g.detail}:${g.guildId}` : g.guild} className="border-b border-white/5 transition-colors last:border-b-0 hover:bg-white/[.025]">
                 <td className="px-4 py-2 sm:px-5">
-                  <RankMark rank={rank} size="sm" />
+                  {!live && <RankMark rank={rank} size="sm" />}
                 </td>
                 <td className="px-2 py-2 pr-8 whitespace-nowrap">
                   <span className="flex items-center gap-2.5 font-medium">
@@ -389,7 +400,8 @@ function GuildFullTable({
                 </td>
                 {view === "overview" ? (
                   RATING_METRICS.map((m) => {
-                    const score = scores[m].get(g.guild)
+                    const source = live ? published.data?.rows.find(row => row.entry.guid === g.guildId && row.entry.detail === g.detail)?.scores?.[m] : undefined
+                    const score = live ? source : scores[m].get(g.guild)
                     return (
                       <td
                         key={m}
@@ -415,11 +427,11 @@ function GuildFullTable({
                         </span>
                       </div>
                     </td>
-                    {view === "mastery" && <MasteryPartCells parts={g.mastery} />}
+                    {view === "mastery" && (live ? <PublishedMasteryCells entry={published.data!.rows.find(row => row.entry.guid === g.guildId && row.entry.detail === g.detail)!.entry} /> : <MasteryPartCells parts={g.mastery} />)}
                     {view === "peak" && (
                       <>
                         <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">
-                          {g.ms !== undefined ? formatClock(g.ms) : "—"}
+                          {live && !oneBoss ? (() => { const row = published.data!.rows.find(row => row.entry.guid === g.guildId && row.entry.detail === g.detail)!; return <PeakComponents entry={row.entry} scores={row.peakComponents} /> })() : g.ms !== undefined ? formatClock(g.ms) : "Unavailable"}
                         </td>
                         <td className="hidden px-3 py-2 text-xs text-muted-foreground sm:table-cell">{g.date}</td>
                       </>
@@ -432,7 +444,7 @@ function GuildFullTable({
             {rows.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-5 py-10 text-center text-muted-foreground">
-                  No guilds match.
+                  {live && published.isPending ? "Loading guild scores…" : published.isError ? published.error.message : "No guilds match."}
                 </td>
               </tr>
             )}
@@ -440,7 +452,7 @@ function GuildFullTable({
         </table>
       </div>
       <div className="border-t px-4 py-2.5 text-xs text-muted-foreground sm:px-5">
-        {rows.length === 0 ? "0" : `1–${rows.length}`} of {rows.length}
+        {live ? <div className="flex items-center justify-between"><button disabled={!published.data?.hasPreviousPage || published.isFetching} onClick={()=>setPageState({key:pageKey,page:page-1})} className="disabled:opacity-40">Previous</button><span>{rows.length} results · page {page+1}</span><button disabled={!published.data?.hasNextPage || published.isFetching} onClick={()=>setPageState({key:pageKey,page:page+1})} className="disabled:opacity-40">Next</button></div> : <>{rows.length === 0 ? "0" : `1–${rows.length}`} of {rows.length}</>}
       </div>
     </section>
   )
@@ -448,12 +460,14 @@ function GuildFullTable({
 
 /** One boss: #1 per metric on the overview, top three on a single metric. */
 function BossBoard({
+  states,
   boss,
   ratings: r,
   view,
   onOpen,
 }: {
   boss: string
+  states?: Partial<Record<RatingMetric, { pending?: boolean; error?: string }>>
   ratings: Record<RatingMetric, GuildRating[]>
   view: RatingView
   onOpen: () => void
@@ -465,6 +479,7 @@ function BossBoard({
     <button
       type="button"
       onClick={onOpen}
+      aria-busy={Object.values(states ?? {}).some(state => state.pending)}
       aria-label={boss}
       className="group flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-card text-left transition-colors hover:border-white/20"
     >
@@ -473,8 +488,11 @@ function BossBoard({
         <span className="truncate font-wow text-base group-hover:text-primary">{boss}</span>
       </div>
       <ol className="text-xs">
-        {rows.map(({ metric, g }, i) => {
+        {(view === "overview" ? RATING_METRICS.map(metric => ({metric,g:r[metric][0]})) : rows).map(({ metric, g }, i) => {
           const t = METRIC_THEMES[metric]
+          if (states?.[metric]?.pending) return <BossMetricSkeleton key={metric} boss={boss} label={t.label} />
+          if (states?.[metric]?.error) return <li key={metric} role="alert" title={states[metric]?.error} className="h-7 truncate px-3 py-1.5 text-muted-foreground">{states[metric]?.error}</li>
+          if (!g) return <li key={metric} className="h-7 px-3 py-1.5 text-muted-foreground">No ranked kills</li>
           return (
             <li key={metric + g.guild} className="flex items-center gap-2 px-3 py-1.5">
               {view === "overview" ? (

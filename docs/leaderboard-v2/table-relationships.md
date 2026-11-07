@@ -2,8 +2,8 @@
 
 [Migration 344](../../database/migrations/000344_leaderboard_raw_evidence.up.sql)
 creates **22 tables: 5 evidence, 8 results, and 9 dirty-work tables**. This is a
-functional map, not an FK diagram. The schema exists; writers, reconciliation,
-D2 workers, and current-policy serving described here are future implementation.
+functional map, not an FK diagram. The schema and isolated current-policy read preview exist; writers,
+reconciliation, and D2 workers remain future implementation.
 See [behavior](behavior.md) and the [specification](spec.tex) for the contract.
 
 ## Data -> evidence -> summary
@@ -86,7 +86,7 @@ evidence; table creation alone does not perform this bookkeeping.
 
 Each diagram shows two **independent evidence computations**, scheduled by the
 matching D2 rows above. Neither benchmark computation feeds subject computation.
-Both results meet only at future reads; benchmark-only changes never fan out
+Both results meet only at reads; benchmark-only changes never fan out
 subject-statistic dirt.
 
 ### Player boss
@@ -131,7 +131,7 @@ flowchart TD
   s --> r
 ```
 
-Player subjects store `raw_peak`, `raw_form`, `raw_floor`, and count. Future reads
+Player subjects store `raw_peak`, `raw_form`, `raw_floor`, and count. Reads
 scale bands by `100 / best_metric` (zero if the benchmark is zero). Guild subjects
 store `fastest_duration_ms`, `form_mean_inverse_ms`, `floor_mean_inverse_ms`, and
 count. Peak uses `100 * best_duration_ms / fastest_duration_ms`; Form/Floor use
@@ -180,8 +180,12 @@ exact result scope. No season or rolling-window keys exist.
 Enqueuers increment `revision` on repeated dirt. Later workers acknowledge only
 the complete key and claimed revision after successful work; newer dirt survives.
 `dirtied_at`/`process_after` support scheduling without imposing upload debounce.
-`projection_version`/`algorithm_version` describe raw compatibility, not frozen
-configuration or award versions.
+`projection_version`/`algorithm_version` are operational repair metadata, not
+frozen configuration or award versions. Reads ignore both, including differing
+benchmark/subject versions. Rare changes are repaired in place; mixed versions
+may be visible temporarily, with no old-leaderboard or version-snapshot path.
+Projection rules mean source-to-canonical eligibility, deduplication, and player
+cohort classification, not award changes that would force evidence rewrites.
 
 ## Change-impact reference
 

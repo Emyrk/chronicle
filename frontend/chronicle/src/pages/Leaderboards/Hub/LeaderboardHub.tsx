@@ -1255,7 +1255,7 @@ function PlayerName({ player, iconSize = "size-4" }: { player: HubPlayer; iconSi
 function RatingLeaders({ leaders, role, onOpen }: { leaders: Record<RatingMetric, RatingLeader[]>; role: HubRole; onOpen: (metric: RatingMetric) => void }) {
   const rows = (m: RatingMetric) =>
     leaders[m].map((l) => ({
-      id: l.player.id,
+      id: JSON.stringify([l.player.realm,l.player.id,l.player.cls,l.player.spec,l.player.subSpec]),
       name: <PlayerName player={l.player} iconSize="size-5" />,
       score: l.score,
       raw: l.raw ? formatPeakRaw(l.raw, role === "dps" ? "dps" : "hps") : undefined,
@@ -1292,7 +1292,7 @@ function ThroughputList({ rows }: { rows: readonly ThroughputRow[] }) {
     <ol>
       {rows.map((r, i) => (
         <li
-          key={r.player.id}
+          key={JSON.stringify([r.player.realm,r.player.id,r.player.cls,r.player.spec,r.player.subSpec])}
           className="grid grid-cols-[24px_1fr_70px] items-center gap-2 border-b border-white/5 px-4 py-2 text-sm last:border-b-0 md:grid-cols-[24px_1fr_120px_70px_1fr]"
         >
           <span className="font-mono text-xs text-muted-foreground">{i + 1}</span>
