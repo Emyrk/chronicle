@@ -51,6 +51,47 @@ func newTestElector(t *testing.T, pool Pool, lockKey int64, callbacks *testCallb
 	return elector
 }
 
+type delayedTestError struct {
+	delay time.Duration
+}
+
+func (e delayedTestError) Error() string {
+	return "activation failed"
+}
+
+func (e delayedTestError) RetryDelay() time.Duration {
+	return e.delay
+}
+
+func TestInitialActivationFailureCanRetryInBackground(t *testing.T) {
+	t.Parallel()
+	pool, _ := dbtestutil.NewPGXPool(t)
+	var starts atomic.Int32
+	elector, err := New(Options{
+		Name:                     "test_initial_retry",
+		LockKey:                  newTestLockKey(),
+		Pool:                     pool,
+		Logger:                   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Registerer:               prometheus.NewRegistry(),
+		RetryInterval:            time.Second,
+		HealthInterval:           5 * time.Second,
+		Jitter:                   func(d time.Duration) time.Duration { return d },
+		ContinueOnInitialFailure: true,
+	}, Callbacks{Start: func(context.Context) error {
+		if starts.Add(1) == 1 {
+			return delayedTestError{delay: 10 * time.Millisecond}
+		}
+		return nil
+	}})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, elector.Close(context.Background())) })
+
+	require.NoError(t, elector.Start(t.Context()))
+	require.False(t, elector.IsLeader())
+	require.Eventually(t, elector.IsLeader, 5*time.Second, 10*time.Millisecond)
+	require.Equal(t, int32(2), starts.Load())
+}
+
 func TestElectorsHaveOneLeaderAndFailOver(t *testing.T) {
 	t.Parallel()
 	pool, _ := dbtestutil.NewPGXPool(t)

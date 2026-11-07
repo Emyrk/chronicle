@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/stretchr/testify/require"
@@ -16,6 +17,8 @@ type fakeGateway struct {
 	mu         sync.Mutex
 	openCalls  int
 	closeCalls int
+	openErr    error
+	openFunc   func() error
 	closeErr   error
 }
 
@@ -23,7 +26,10 @@ func (g *fakeGateway) Open() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.openCalls++
-	return nil
+	if g.openFunc != nil {
+		return g.openFunc()
+	}
+	return g.openErr
 }
 
 func (g *fakeGateway) Close() error {
@@ -93,6 +99,25 @@ func TestGatewayLifecycleIsIdempotentAndRestartable(t *testing.T) {
 	openCalls, closeCalls = gateway.calls()
 	require.Equal(t, 2, openCalls)
 	require.Equal(t, 2, closeCalls)
+}
+
+func TestStartGatewayPropagatesHTTPRetryDelay(t *testing.T) {
+	t.Parallel()
+
+	bot, gateway := testBot(t)
+	gateway.openFunc = func() error {
+		bot.httpDiagnostics.mu.Lock()
+		bot.httpDiagnostics.retryAfter = 17 * time.Second
+		bot.httpDiagnostics.mu.Unlock()
+		return errors.New("rate limited")
+	}
+
+	err := bot.StartGateway(t.Context())
+	require.Error(t, err)
+	var delayed interface{ RetryDelay() time.Duration }
+	require.ErrorAs(t, err, &delayed)
+	require.Equal(t, 17*time.Second, delayed.RetryDelay())
+	require.False(t, bot.GatewayRunning())
 }
 
 func TestStopGatewayFailureKeepsGatewayRunning(t *testing.T) {

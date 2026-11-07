@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
@@ -33,6 +34,23 @@ type Config struct {
 	AccessURL                    string
 	PrimaryDomain                string
 	DiscordAI                    DiscordAI
+}
+
+type gatewayStartError struct {
+	err        error
+	retryDelay time.Duration
+}
+
+func (e *gatewayStartError) Error() string {
+	return e.err.Error()
+}
+
+func (e *gatewayStartError) Unwrap() error {
+	return e.err
+}
+
+func (e *gatewayStartError) RetryDelay() time.Duration {
+	return e.retryDelay
 }
 
 type gatewaySession interface {
@@ -200,7 +218,11 @@ func (b *Bot) StartGateway(ctx context.Context) error {
 	b.httpDiagnostics.reset()
 	if err := b.gateway.Open(); err != nil {
 		b.gatewayMu.Unlock()
-		return fmt.Errorf("open discord session: %w", b.httpDiagnostics.annotate(err))
+		annotated := fmt.Errorf("open discord session: %w", b.httpDiagnostics.annotate(err))
+		if retryDelay := b.httpDiagnostics.gatewayRetryDelay(); retryDelay > 0 {
+			return &gatewayStartError{err: annotated, retryDelay: retryDelay}
+		}
+		return annotated
 	}
 	b.mu.Lock()
 	b.gatewayRunning = true

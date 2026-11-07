@@ -97,11 +97,12 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 
 	elector, err := leaderelection.New(leaderelection.Options{
-		Name:       "discord_gateway",
-		LockKey:    discordGatewayLockKey,
-		Pool:       servicepgxpool.PGXPool(s.broker),
-		Logger:     logger,
-		Registerer: serviceprometheus.Registry(s.broker),
+		Name:                     "discord_gateway",
+		LockKey:                  discordGatewayLockKey,
+		Pool:                     servicepgxpool.PGXPool(s.broker),
+		Logger:                   logger,
+		Registerer:               serviceprometheus.Registry(s.broker),
+		ContinueOnInitialFailure: true,
 	}, leaderelection.Callbacks{
 		Start: func(ctx context.Context) error {
 			if err := bot.StartGateway(ctx); err != nil {

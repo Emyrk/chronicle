@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -37,6 +38,8 @@ func TestDiscordHTTPDiagnosticsAnnotatesFailureAndPreservesBody(t *testing.T) {
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.Equal(t, responseBody, string(body), "diagnostic capture must not consume the response body")
+
+	require.Equal(t, 17*time.Second, diagnostics.gatewayRetryDelay())
 
 	annotated := diagnostics.annotate(errors.New("invalid character 'e' looking for beginning of value"))
 	require.ErrorContains(t, annotated, "status=\"429 Too Many Requests\"")

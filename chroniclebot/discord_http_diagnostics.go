@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 )
 
@@ -16,8 +18,9 @@ type discordHTTPDiagnostics struct {
 	base  http.RoundTripper
 	token string
 
-	mu   sync.Mutex
-	last string
+	mu         sync.Mutex
+	last       string
+	retryAfter time.Duration
 }
 
 func newDiscordHTTPDiagnostics(base http.RoundTripper, token string) *discordHTTPDiagnostics {
@@ -79,14 +82,32 @@ func (d *discordHTTPDiagnostics) RoundTrip(req *http.Request) (*http.Response, e
 
 	d.mu.Lock()
 	d.last = diagnostic
+	d.retryAfter = parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
 	d.mu.Unlock()
 	return resp, nil
+}
+
+func parseRetryAfter(value string, now time.Time) time.Duration {
+	if seconds, err := strconv.ParseFloat(value, 64); err == nil && seconds > 0 {
+		return time.Duration(seconds * float64(time.Second))
+	}
+	if retryAt, err := http.ParseTime(value); err == nil && retryAt.After(now) {
+		return retryAt.Sub(now)
+	}
+	return 0
 }
 
 func (d *discordHTTPDiagnostics) reset() {
 	d.mu.Lock()
 	d.last = ""
+	d.retryAfter = 0
 	d.mu.Unlock()
+}
+
+func (d *discordHTTPDiagnostics) gatewayRetryDelay() time.Duration {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.retryAfter
 }
 
 func (d *discordHTTPDiagnostics) annotate(err error) error {

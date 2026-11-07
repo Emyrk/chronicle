@@ -26,14 +26,15 @@ type Pool interface {
 
 // Options configures an advisory-lock leader election.
 type Options struct {
-	Name           string
-	LockKey        int64
-	Pool           Pool
-	Logger         *slog.Logger
-	Registerer     prometheus.Registerer
-	RetryInterval  time.Duration
-	HealthInterval time.Duration
-	Jitter         func(time.Duration) time.Duration
+	Name                     string
+	LockKey                  int64
+	Pool                     Pool
+	Logger                   *slog.Logger
+	Registerer               prometheus.Registerer
+	RetryInterval            time.Duration
+	HealthInterval           time.Duration
+	Jitter                   func(time.Duration) time.Duration
+	ContinueOnInitialFailure bool
 }
 
 // Callbacks run when this process gains or loses leadership. Calls are
@@ -134,9 +135,9 @@ func New(opts Options, callbacks Callbacks) (*Elector, error) {
 }
 
 // Start makes one synchronous election attempt, then continues health checks
-// or follower retries in the background. An activation failure during the
-// initial attempt is returned so a broken single-node configuration still
-// fails startup as it did before leader election was introduced.
+// or follower retries in the background. By default the initial attempt is
+// returned to the caller. ContinueOnInitialFailure makes that failure non-fatal
+// and retries it in the background.
 func (e *Elector) Start(ctx context.Context) error {
 	e.mu.Lock()
 	if e.started {
@@ -150,22 +151,31 @@ func (e *Elector) Start(ctx context.Context) error {
 	done := e.done
 	e.mu.Unlock()
 
+	initialRetryDelay := time.Duration(0)
 	if err := e.tryAcquire(runCtx); err != nil {
-		cancel()
-		e.mu.Lock()
-		e.started = false
-		e.cancel = nil
-		e.done = nil
-		e.mu.Unlock()
-		close(done)
-		return err
+		if !e.opts.ContinueOnInitialFailure || runCtx.Err() != nil {
+			cancel()
+			e.mu.Lock()
+			e.started = false
+			e.cancel = nil
+			e.done = nil
+			e.mu.Unlock()
+			close(done)
+			return err
+		}
+		initialRetryDelay = e.retryDelay(err)
+		e.opts.Logger.Warn("initial leader election attempt failed, retrying in background",
+			slog.String("election", e.opts.Name),
+			slog.Duration("retry_delay", initialRetryDelay),
+			slog.String("error", err.Error()),
+		)
 	}
 
-	go e.run(runCtx, done)
+	go e.run(runCtx, done, initialRetryDelay)
 	return nil
 }
 
-func (e *Elector) run(ctx context.Context, done chan struct{}) {
+func (e *Elector) run(ctx context.Context, done chan struct{}, retryDelay time.Duration) {
 	defer func() {
 		e.mu.Lock()
 		e.started = false
@@ -176,11 +186,16 @@ func (e *Elector) run(ctx context.Context, done chan struct{}) {
 	}()
 
 	for {
-		interval := e.opts.RetryInterval
-		if e.IsLeader() {
-			interval = e.opts.HealthInterval
+		interval := retryDelay
+		retryDelay = 0
+		if interval <= 0 {
+			interval = e.opts.RetryInterval
+			if e.IsLeader() {
+				interval = e.opts.HealthInterval
+			}
+			interval = e.opts.Jitter(interval)
 		}
-		timer := time.NewTimer(e.opts.Jitter(interval))
+		timer := time.NewTimer(interval)
 		select {
 		case <-ctx.Done():
 			if err := e.relinquish(context.Background(), "shutdown"); err != nil {
@@ -196,9 +211,28 @@ func (e *Elector) run(ctx context.Context, done chan struct{}) {
 			continue
 		}
 		if err := e.tryAcquire(ctx); err != nil && ctx.Err() == nil {
-			e.opts.Logger.Warn("leader election attempt failed", slog.String("election", e.opts.Name), slog.String("error", err.Error()))
+			retryDelay = e.retryDelay(err)
+			e.opts.Logger.Warn("leader election attempt failed",
+				slog.String("election", e.opts.Name),
+				slog.Duration("retry_delay", retryDelay),
+				slog.String("error", err.Error()),
+			)
 		}
 	}
+}
+
+type retryDelayError interface {
+	RetryDelay() time.Duration
+}
+
+func (e *Elector) retryDelay(err error) time.Duration {
+	var delayed retryDelayError
+	if errors.As(err, &delayed) {
+		if delay := delayed.RetryDelay(); delay > 0 {
+			return delay
+		}
+	}
+	return e.opts.Jitter(e.opts.RetryInterval)
 }
 
 func (e *Elector) tryAcquire(ctx context.Context) error {
