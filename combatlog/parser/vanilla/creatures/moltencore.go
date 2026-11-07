@@ -154,7 +154,8 @@ func NewCoreRager(id guid.GUID, all *characters.Characters) (characters.Characte
 		return nil, false
 	}
 
-	c := characters.NewCommonCharacter(id, all)
+	c := characters.NewCommonCharacter(id, all).
+		WithTimeoutAsDeathIf(characters.IfEntryAlive(11988))
 	return &coreRager{c}, true
 }
 

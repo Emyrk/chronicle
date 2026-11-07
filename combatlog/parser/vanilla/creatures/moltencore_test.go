@@ -7,7 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures"
@@ -203,4 +205,31 @@ func TestSonOfFlame_FactoryMatchesCorrectEntry(t *testing.T) {
 	created, ok = creatures.NewSonOfTheFlameCharacter(guid.GUID(0x1), chars)
 	require.False(t, ok)
 	require.Nil(t, created)
+}
+
+func TestCoreRagerTimeoutIsDeathWhileGolemaggAlive(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	player := guid.GUID(0x1)
+	golemagg := creatureGUID(11988, 0x1)
+	coreRager := creatureGUID(11672, 0x2)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, golemagg))
+	require.NoError(t, err)
+	_, err = chars.Process(damage(base.Add(time.Second), player, coreRager))
+	require.NoError(t, err)
+	_, err = chars.Process(damage(base.Add(30*time.Second), player, golemagg))
+	require.NoError(t, err)
+	_, err = chars.Process(messages.TimedOut(base.Add(62 * time.Second)))
+	require.NoError(t, err)
+
+	coreRagerCharacter, ok := chars.Get(coreRager)
+	require.True(t, ok)
+	require.False(t, coreRagerCharacter.IsActive())
+	require.Len(t, coreRagerCharacter.Periods(), 1)
+	require.Equal(t, period.EndStateSlain, coreRagerCharacter.Periods()[0].EndState)
+	require.Equal(t, "Timeout: inactivity", coreRagerCharacter.Periods()[0].End.Reason)
 }
