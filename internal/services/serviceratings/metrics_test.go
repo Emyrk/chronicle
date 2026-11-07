@@ -248,4 +248,29 @@ func TestMetricsCollectorPagesAndPrunesTenants(t *testing.T) {
 	store.tenants = store.tenants[:1]
 	require.NoError(t, metrics.RefreshPage(context.Background(), store))
 	require.Len(t, metrics.snapshots, 1)
+	store.tenants = nil
+	require.NoError(t, metrics.RefreshPage(context.Background(), store))
+	require.Empty(t, metrics.snapshots)
+}
+
+type closeFailPublication struct{}
+
+func (closeFailPublication) QueryRow(fn func(int, bool, error)) { fn(0, true, nil) }
+func (closeFailPublication) Close() error                       { return errors.New("injected batch close failure") }
+func TestD2MetricsIgnoreBatchCloseFailure(t *testing.T) {
+	t.Parallel()
+	s := newSourceFixture(t)
+	metrics, err := NewMetrics(prometheus.NewRegistry())
+	require.NoError(t, err)
+	ctx := withMetricScope(s.tenantctx(), metrics, s.tenant, "player_boss_subjects")
+	result, err := drainFamily(ctx, s.db,
+		func(context.Context, database.Store) ([]int, error) { return []int{1}, nil },
+		func(context.Context, database.Store, []int) ([]int, error) { return []int{1}, nil },
+		func(ctx context.Context, _ database.Store, _, _ []int) error {
+			return consumePublished(ctx, closeFailPublication{})
+		},
+		func(context.Context, database.Store, []int) error { return nil })
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Failed)
+	require.Zero(t, counterValue(t, metrics.events.WithLabelValues(s.tenant.String(), "player_boss_subjects", "publish", "committed")))
 }

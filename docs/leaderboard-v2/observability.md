@@ -112,3 +112,18 @@ backfill must be left alone.
    An ETA is only an estimate under the measured workload, not a completion promise.
 
 Tests use isolated dbtestutil databases. No real pilot is launched by validation.
+
+Example alert expressions (choose thresholds for observed workload):
+
+```promql
+# No fresh queue observation for a tenant in five minutes.
+time() - max by (tenant) (chronicle_leaderboard_queue_snapshot_timestamp_seconds) > 300
+# A replica is failing tenant collection; keep replica identity in this alert.
+chronicle_leaderboard_queue_collection_success == 0
+# Fresh tenant snapshots with persistent queue growth should be investigated.
+max by (tenant, family) (chronicle_leaderboard_queue_pending) > 10000
+```
+
+Use a sustained alert duration (for example five minutes) and correlate backlog
+alerts with snapshot freshness and publication rates; the numeric threshold is
+illustrative, not a production capacity limit.
