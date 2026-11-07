@@ -99,6 +99,7 @@ type Options struct {
 	Assets                http.Handler
 	InternalGameData      http.Handler
 	ExternalAPI           http.Handler
+	AgentViews            AgentViews // nil serves the SPA without agent views
 	OAuth                 OAuthHandler
 	Sidekick              SidekickService
 	Rankings              http.Handler
@@ -300,6 +301,12 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		}
 	}()
 	return api, nil
+}
+
+// AgentViews mounts the AI agent page views on the site router and returns
+// the SPA handler to use for everything else.
+type AgentViews interface {
+	MountAgentViews(r chi.Router, spa http.Handler) http.Handler
 }
 
 func (api *API) Routes() chi.Router {
@@ -862,7 +869,11 @@ func (api *API) Routes() chi.Router {
 		}
 	})
 
-	r.NotFound(frontend.Handler(frontend.FS(), api.OGRoutes(), api.brandingResolver, api.blogFlavorResolver).ServeHTTP)
+	spa := frontend.Handler(frontend.FS(), api.OGRoutes(), api.brandingResolver, api.blogFlavorResolver)
+	if api.Opts.AgentViews != nil {
+		spa = api.Opts.AgentViews.MountAgentViews(r, spa)
+	}
+	r.NotFound(spa.ServeHTTP)
 
 	return r
 }

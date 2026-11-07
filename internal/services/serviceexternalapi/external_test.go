@@ -61,6 +61,24 @@ type fakeExternalAPIStore struct {
 	disambiguations       []database.ListConsumableDisambiguationsByDatasetRow
 	recent                []database.ListExternalAPIRecentInstancesRow
 	recentParams          database.ListExternalAPIRecentInstancesParams
+	user                  database.ChronicleUser
+	guild                 database.GetGuildByIDRow
+	guildErr              error
+	realmByName           database.WowServerRealm
+	realmByNameErr        error
+}
+
+func (f *fakeExternalAPIStore) GetUserByID(context.Context, uuid.UUID) (database.ChronicleUser, error) {
+	return f.user, nil
+}
+func (f *fakeExternalAPIStore) GetGuildByID(context.Context, uuid.UUID) (database.GetGuildByIDRow, error) {
+	return f.guild, f.guildErr
+}
+func (f *fakeExternalAPIStore) GetWoWServerRealm(context.Context, uuid.UUID) (database.WowServerRealm, error) {
+	return f.realmByName, f.realmByNameErr
+}
+func (f *fakeExternalAPIStore) GetWoWServerRealmByName(context.Context, string) (database.WowServerRealm, error) {
+	return f.realmByName, f.realmByNameErr
 }
 
 func (f *fakeExternalAPIStore) ListExternalAPIServers(context.Context) ([]database.ListExternalAPIServersRow, error) {
