@@ -28,7 +28,7 @@ func TestTargetCatalog(t *testing.T) {
 	}
 
 	for path, typ := range map[stategraph.Path]string{
-		"/root/encounters":             statecatalog.TypeEncounterState,
+		"/root/parse-state":            statecatalog.TypeEncounterState,
 		"/root/instances/0000":         statecatalog.TypeHookable,
 		"/root/shared/units":           statecatalog.TypeUnits,
 		"/root/shared/vehicles":        statecatalog.TypeVehicles,
@@ -41,13 +41,13 @@ func TestTargetCatalog(t *testing.T) {
 	}
 
 	for reference, target := range map[stategraph.Path]stategraph.Path{
-		"/root/encounters/current-instance":    "/root/instances/0000",
-		"/root/encounters/instances/0000":      "/root/instances/0000",
-		"/root/encounters/units":               "/root/shared/units",
-		"/root/encounters/vehicles":            "/root/shared/vehicles",
-		"/root/encounters/raid-groups":         "/root/shared/raid-groups",
-		"/root/encounters/auras":               "/root/shared/auras",
-		"/root/encounters/consume-tracker":     "/root/shared/consume-tracker",
+		"/root/parse-state/current-instance":   "/root/instances/0000",
+		"/root/parse-state/instances/0000":     "/root/instances/0000",
+		"/root/parse-state/units":              "/root/shared/units",
+		"/root/parse-state/vehicles":           "/root/shared/vehicles",
+		"/root/parse-state/raid-groups":        "/root/shared/raid-groups",
+		"/root/parse-state/auras":              "/root/shared/auras",
+		"/root/parse-state/consume-tracker":    "/root/shared/consume-tracker",
 		"/root/instances/0000/units":           "/root/shared/units",
 		"/root/instances/0000/vehicles":        "/root/shared/vehicles",
 		"/root/instances/0000/raid-groups":     "/root/shared/raid-groups",
@@ -58,10 +58,32 @@ func TestTargetCatalog(t *testing.T) {
 		require.Equal(t, target, nodes[reference].Target, reference)
 	}
 
-	require.Len(t, graph.DependenciesFrom("/root/encounters"), 5)
-	require.Len(t, graph.DependenciesFrom("/root/instances/0000"), 5)
-	require.Len(t, graph.ReferencesTo("/root/shared/units"), 2)
-	require.NotEmpty(t, graph.Children("/root/encounters"))
+	require.Len(t, graph.DependenciesFrom("/root/parse-state"), 5)
+	require.Len(t, graph.DependenciesFrom("/root/instances/0000"), 6)
+	require.Len(t, graph.ReferencesTo("/root/shared/units"), 3)
+	require.NotEmpty(t, graph.Children("/root/parse-state"))
+
+	characters, ok := graph.Find("/root/instances/0000/characters")
+	require.True(t, ok)
+	require.Equal(t, statecatalog.TypeCharacters, characters.Type)
+	require.Len(t, graph.DependenciesFrom(characters.Path), 4)
+
+	for _, path := range []stategraph.Path{
+		"/root/character-types/common/common",
+		"/root/character-types/vanilla/totem",
+		"/root/character-types/vanilla/nefarian",
+		"/root/character-types/wotlk/mimiron",
+		"/root/character-types/wotlk/thorim",
+		"/root/character-shared-state/common/room",
+		"/root/character-shared-state/wotlk/yogg-saron",
+	} {
+		node, ok := graph.Find(path)
+		require.True(t, ok, path)
+		require.Equal(t, stategraph.KindDirectory, node.Kind, path)
+	}
+
+	require.NotEmpty(t, graph.DependenciesFrom("/root/character-types/wotlk/mimiron"))
+	require.NotEmpty(t, graph.DependenciesFrom("/root/instances/0000/characters/shared-state"))
 
 	encoded, err := json.MarshalIndent(graph, "", "  ")
 	require.NoError(t, err)
