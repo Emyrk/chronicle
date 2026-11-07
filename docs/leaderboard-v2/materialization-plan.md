@@ -19,6 +19,10 @@ change the accepted read API/UI. Track remaining work against
 - Estimate: **six implementation PRs after this plan**, described below. The D1
   prerequisite intentionally precedes enabling normal ingestion so deletion and
   canonical replacement cannot strand summaries.
+- Accepted follow-up decision: PR 2 will batch existing D2 calculations through
+  sqlc/pgx, with a configurable default of 100 scopes per result family. This is
+  **planned orchestration, not implemented configuration**. See the PR 2 contract
+  below; it does not change refresh timing, concurrency, or rating equations.
 - Current synthetic ten-boss all-class Mastery warm median is **1,234.7ms**,
   roughly 1.23s, not the 200ms target. This is accepted as a starting point.
   **Caching is deferred**; do not add a cache or bosswise best-spec projection.
@@ -162,6 +166,38 @@ River orchestration through `AddWorker`/`AddPeriodicJob` and central registratio
 Respect transaction-local tenant access, bounded pages, and a per-invocation time
 budget. Process due scopes on a bounded period: repeated dirt cannot indefinitely
 slide the original due deadline. This is not mandatory D1 upload debounce.
+
+### Accepted batching contract (planned for PR 2)
+
+Add a positive batch-size option to the new `serviceratings.Options`, wired
+through serpent:
+
+- Flag: `--leaderboard-materialization-batch-size`.
+- Environment: `CHRONICLE_LEADERBOARD_MATERIALIZATION_BATCH_SIZE`.
+- Default: `100`; reject zero and negative values during option validation.
+
+This caps scopes per result-family batch, not a subject's history. Use generated
+sqlc `:batchexec` calls with `[]Params` over pgx batching to execute the existing
+calculations. Do not replace them with a server-side array query. Keep
+`database/queries/leaderboard_materialize.sql` as the single maintained SQL source;
+experimental duplicate calculation SQL must not ship with production integration.
+
+Flush a partial batch immediately when available work is exhausted or the drain
+budget is reached; never wait for 100 scopes to accumulate. Batch size is separate
+from concurrency limits and the bounded refresh period. Respect cancellation and
+per-drain time budgets, stop scheduling additional work on cancellation, and use
+bounded retries/backoff rather than an unbounded drain loop.
+
+Consume/drain batch results and close them on every path, explicitly handling
+execution, result-drain, close, and transaction/commit errors. A failed or rolled
+back transaction must not acknowledge its dirty work; do not mistake a successful
+earlier batch item for a committed result. Batching does not replace revision
+fencing or stale-publication protection described below.
+
+Extend PR 2 tests for default/flag/environment wiring, positive validation,
+per-family caps, immediate partial flush, cancellation/time-budget exits, and
+execution/drain/close/commit failures with no failed-work acknowledgement. Verify
+that batching does not alter the exact calculation results or enqueue semantics.
 
 Use short claim/publication critical sections, not row locks held throughout a
 large history sort. Acknowledging the claimed revision is necessary but not
