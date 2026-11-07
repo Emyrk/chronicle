@@ -23,6 +23,8 @@ import { TalentsTab } from "./TalentsTab";
 import { ActivityTab } from "./ActivityTab";
 import { OverviewTab } from "./overview/OverviewTab";
 import { IdentityHeader } from "./overview/IdentityHeader";
+import { formatClassLabel } from "./characterDisplay";
+import { CopyForAI } from "@/features/aiKey/CopyForAI";
 import { ActivityHeaderCard, GearHeaderCard, TalentsHeaderCard } from "./TabHeaderCards";
 import { JourneyStatsCard } from "./overview/JourneyStatsCard";
 import { ScoreCard } from "./overview/ScoreCard";
@@ -245,7 +247,20 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
 
           {/* Keep one identity header mounted while its tab-specific controls change. */}
           <div className="mt-8">
-            <IdentityHeader player={player} titleAction={favoriteButton} actions={modeSelector}>
+            <IdentityHeader
+              player={player}
+              titleAction={
+                <>
+                  {favoriteButton}
+                  <CopyForAI
+                    page="character"
+                    className="shrink-0"
+                    values={{ character: player.name, guild: player.guild_name, realm: player.realm_name, class: formatClassLabel(player.class) }}
+                  />
+                </>
+              }
+              actions={modeSelector}
+            >
               <div className="w-full lg:w-[480px]">
                 {activeTab === "overview" && mode === "performance" && (
                   <ScoreCard

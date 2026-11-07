@@ -93,6 +93,8 @@ import { InstanceViewModeSwitch } from "./InstanceViewMode";
 import { isInstanceOverviewEnabled, parseInstanceViewMode, withInstanceViewMode, type InstanceViewMode } from "./instanceViewModeState";
 import { InstanceOverview } from "./Overview/InstanceOverview";
 import { LiveSessionButton } from "./LiveSessionButton";
+import { CopyForAI } from "@/features/aiKey/CopyForAI";
+import { bossForPrompt } from "@/features/aiKey/aiLinks";
 import { LivePanelViewboxes, useAutoJoinLiveSession, useLiveSession } from "./LiveSessionContext";
 
 import { showDebugDesktopControls } from "./debugFeatureGate";
@@ -4097,6 +4099,15 @@ function InstancePageViewContent({
     () => instance.encounters.filter((e) => selectedIds.includes(e.id)),
     [instance.encounters, selectedIds],
   );
+  const aiPromptValues = useMemo(
+    () => ({
+      raid: instance.name,
+      guild: instance.guild?.name,
+      realm: instance.realm,
+      boss: bossForPrompt(instance.encounters, selectedEncounters),
+    }),
+    [instance.name, instance.guild?.name, instance.realm, instance.encounters, selectedEncounters],
+  );
   const activePhaseId = useMemo(() => activePhaseForTimeRange(
     selectedEncounters,
     timeRange?.enabled ?? false,
@@ -4539,6 +4550,7 @@ function InstancePageViewContent({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              {!reconstruction && <CopyForAI page="raid" values={aiPromptValues} />}
               {isEncounterView && youtubeButton}
               {showHints && (
                 <>

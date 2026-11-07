@@ -18,6 +18,7 @@ import { NoticeBanner } from "../NoticeBanner/NoticeBanner";
 import { useHideSiteChrome } from "@/hooks/useFocusMode";
 import { GlobalSiteHelpChat } from "@/features/chat/InferenceChats";
 import { RouteLoadingFallback } from "./RouteLoadingFallback";
+import { AIKeyBanner } from "@/features/aiKey/AIKeyBanner";
 
 export function Layout() {
   usePageTracking();
@@ -33,6 +34,7 @@ export function Layout() {
     <TooltipProvider>
       <RootCommunityProvider>
         <EntityMenuProvider>
+          <AIKeyBanner />
           {!hideChrome && (
             <>
               <NoticeBanner notices={noticeResponse?.notices ?? []} />
