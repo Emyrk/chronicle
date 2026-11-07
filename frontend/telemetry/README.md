@@ -190,7 +190,7 @@ miniatures/manifest.json
 miniatures/<content-digest>-<name>.glb
 ```
 
-The public manifest contract is:
+The public `chronicle-unit-miniatures-v1` contract has separate collections for tabletop miniatures and original game models:
 
 ```json
 {
@@ -198,14 +198,27 @@ The public manifest contract is:
   "miniatures": [{
     "name": "Deviate serpent",
     "path": "miniatures/deviate-serpent.glb",
-    "entry_ids": [3669, 3670, 3671, 3673]
+    "entry_ids": [3669, 3670, 3671, 3673],
+    "map_scale": 1
+  }],
+  "game_models": [{
+    "name": "aq40-prophet-skeram",
+    "path": "miniatures/<digest>-aq40-prophet-skeram.glb",
+    "animation_path": "miniatures/<digest>-aq40-prophet-skeram-animations.glb",
+    "entry_ids": [15263],
+    "map_scale": 1,
+    "world_heights": { "15263": 6.576021624 }
   }]
 }
 ```
 
-One model may own many positive creature entry IDs, but each entry ID may appear in only one model. Paths are unique, clean `miniatures/*.glb` paths. The editor validates GLB 2.0 uploads, previews models interactively, detects duplicate assignments, and supports the same R2 draft, ETag, lock, explicit publish, and one-hour public-manifest cache workflow as the Map Foundry.
+`path` is always the immediately loadable base GLB. An original game-model base contains its mesh, textures, materials, skin, named skeleton, inverse bind matrices, and `Stand` clip. Optional `animation_path` points to a meshless lazy animation pack: it repeats the same named skeleton-node hierarchy and contains the remaining clips, but contains no mesh, textures, materials, or skin. A consumer loads `path` first, then may fetch `animation_path` later and bind its clips to the base model's matching bone names.
 
-The Chronicle replay Map panel fetches this root-level manifest once per cached frontend session and resolves models by creature entry ID for hostiles, pets, totems, and other units. Published models take priority; the bundled Wailing Caverns boss models and ordinary unit markers remain fallbacks when the manifest, an entry, or a GLB is unavailable.
+Create both files with `scripts/dbcdata extract-models --split-animations`. The extractor emits `<model>.glb` and `<model>.anim.glb`; upload both as immutable content-addressed Foundry assets, then register their returned paths as `path` and `animation_path`. Omitting `animation_path` remains valid for existing v1 records and static models.
+
+One model may own many positive creature entry IDs, but each entry ID may appear in only one model per collection. Every base and animation path must be a unique, clean `miniatures/*.glb` path. Publication verifies that both referenced objects exist. The editor validates GLB 2.0 uploads, previews base models interactively, detects duplicate assignments, and supports the same R2 draft, ETag, lock, explicit publish, and one-hour public-manifest cache workflow as the Map Foundry.
+
+The Chronicle replay Map panel fetches this root-level manifest once per cached frontend session and resolves models by creature entry ID for hostiles, pets, totems, and other units. Published tabletop miniatures take priority by default, with `game_models` as the original-model fallback. The replay manifest parser exposes the optional animation-pack URL; animation loading and event-driven playback are handled separately by the map frontend.
 
 ## Validation and deployment
 

@@ -147,17 +147,25 @@ They never enter Git.
 # Every creature model in the client that has a display (and so a skin):
 go run ./scripts/dbcdata extract-models --dbc ~/Games/OctoWoW --list
 
-# Convert (repeat --model; output is the model name, lower case: cow.glb).
+# Convert walk avatars as one GLB (repeat --model; output is lower case).
 # Append ="Creature\X\Skin.blp" to override the main skin.
 go run ./scripts/dbcdata extract-models --dbc ~/Games/OctoWoW \
   --out /tmp/models --model 'Creature\Cow\Cow.m2'
+
+# Replay game models use a skinned base plus a lazy animation pack.
+go run ./scripts/dbcdata extract-models --dbc ~/Games/OctoWoW \
+  --out /tmp/models --split-animations --model 'Creature\Cow\Cow.m2'
 ```
 
+Without `--split-animations`, the extractor writes one animated `<model>.glb` for walk avatars. With it, `<model>.glb` contains mesh, textures, skin, named skeleton, inverse bind matrices, and `Stand`; `<model>.anim.glb` contains matching named skeleton nodes plus the remaining clips and no mesh or textures. Miniature-manifest game models register those paths as `path` and `animation_path`, respectively.
+
 1. Check the converter's line for the model: it prints bones, vertices and the
-   animations it exported. Skip models with only `Stand` unless that is the
-   joke, and mounts (they are static).
-2. Upload the `.glb` to `game/models/` on the icon CDN.
-3. Add the file name to its group in `GROUPS`.
+   animations it exported. Skip walk avatars with only `Stand` unless that is
+   the joke, and mounts (they are static).
+2. Upload walk-avatar `.glb` files to `game/models/`. Upload replay base and
+   animation-pack GLBs through the Miniature Foundry under `miniatures/`.
+3. Add walk-avatar file names to their group in `GROUPS`; replay models instead
+   use the shared miniature manifest's `game_models` collection.
 4. Look at it in Storybook: **Instance/Map/MapView3D → KreshRealWalkAvatar**,
    pick it, hover the map and press G. It should face away from the camera and
    animate when you move.

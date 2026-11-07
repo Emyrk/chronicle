@@ -8,7 +8,10 @@ export const MAX_MAP_SCALE = 10;
 
 export interface UnitModelDefinition {
   name: string;
+  /** Skinned base GLB. Original game models retain their skeleton and Stand clip. */
   path: string;
+  /** Optional meshless GLB containing clips for lazy loading against the base skeleton. */
+  animation_path?: string;
   entry_ids: number[];
   map_scale: number;
   /** Client-derived standing height in world yards, keyed by creature entry ID. */
@@ -23,6 +26,8 @@ export interface MiniatureManifest {
 
 export interface PublishedUnitModel {
   url: string;
+  /** Lazy animation-pack URL for original game models. */
+  animationUrl?: string;
   mapScale: number;
   /** Client-derived standing height in world yards. */
   worldHeight?: number;
@@ -74,14 +79,22 @@ function parseModelCollection(value: unknown, label: string): UnitModelDefinitio
     const item = raw as Record<string, unknown>;
     const name = typeof item.name === "string" ? item.name.trim() : "";
     const path = typeof item.path === "string" ? item.path : "";
+    const animation_path = item.animation_path === undefined ? undefined : item.animation_path;
     const map_scale = item.map_scale === undefined ? 1 : item.map_scale;
     if (!name) throw new Error(`${label} ${index} has no name`);
     if (!/^miniatures\/[^/\\]+\.glb$/.test(path)) throw new Error(`${label} ${index} has an invalid path`);
+    if (animation_path !== undefined && (typeof animation_path !== "string" || !/^miniatures\/[^/\\]+\.glb$/.test(animation_path))) {
+      throw new Error(`${label} ${index} has an invalid animation path`);
+    }
     if (typeof map_scale !== "number" || !Number.isFinite(map_scale) || map_scale < MIN_MAP_SCALE || map_scale > MAX_MAP_SCALE) {
       throw new Error(`${label} ${index} has an invalid map scale`);
     }
     if (paths.has(path)) throw new Error(`Duplicate ${label.toLowerCase()} path: ${path}`);
     paths.add(path);
+    if (animation_path !== undefined) {
+      if (paths.has(animation_path)) throw new Error(`Duplicate ${label.toLowerCase()} path: ${animation_path}`);
+      paths.add(animation_path);
+    }
     if (!Array.isArray(item.entry_ids) || item.entry_ids.length === 0) throw new Error(`${label} ${index} has no entry IDs`);
     const entry_ids = item.entry_ids.map((entry) => {
       if (!Number.isSafeInteger(entry) || (entry as number) <= 0 || (entry as number) > 0xffff_ffff) {
@@ -93,7 +106,14 @@ function parseModelCollection(value: unknown, label: string): UnitModelDefinitio
       return id;
     });
     const world_heights = parseWorldHeights(item.world_heights, entry_ids, `${label} ${index}`);
-    return { name, path, entry_ids, map_scale, ...(world_heights === undefined ? {} : { world_heights }) };
+    return {
+      name,
+      path,
+      ...(animation_path === undefined ? {} : { animation_path }),
+      entry_ids,
+      map_scale,
+      ...(world_heights === undefined ? {} : { world_heights }),
+    };
   });
 }
 
@@ -118,6 +138,7 @@ function modelCollectionUrls(models: UnitModelDefinition[], baseUrl: string): Re
   return new Map(models.flatMap((model) =>
     model.entry_ids.map((entry) => [entry, {
       url: miniatureAssetUrl(model.path, baseUrl),
+      ...(model.animation_path === undefined ? {} : { animationUrl: miniatureAssetUrl(model.animation_path, baseUrl) }),
       mapScale: model.map_scale,
       ...(model.world_heights?.[entry] === undefined ? {} : { worldHeight: model.world_heights[entry] }),
     }] as const),

@@ -58,11 +58,16 @@ go run ./scripts/dbcdata extract-models \
 
 The skin normally lives beside the model. Preserve client path capitalization. `CreatureModelData` may report legacy `.mdx` names, but the MPQ stores the converted model as `.m2`; change the extension to `.m2` before extraction.
 
-### 2a. Keep the raw animated model
+### 2a. Keep the skinned base and lazy animation pack
 
-The extracted GLB is a publishable unit asset, not a temporary intermediate. It contains the skinned mesh, skeleton, embedded textures, and the available named locomotion clips. Preserve it byte-for-byte and register it in the Miniature Foundry's `game_models` collection. Do not attach new game models to the unit-images manifest. Existing `models.raw` entries remain readable for compatibility. Shared model-and-skin outputs may use the same content-addressed path across several unit records.
+For replay game models, run `extract-models` with `--split-animations`. The extractor emits two publishable assets:
 
-Animation consumers use the GLB clip names emitted by the extractor. In Three.js, load the scene and animations with `GLTFLoader`, create `new THREE.AnimationMixer(gltf.scene)`, select a clip such as `Stand`, `Walk`, or `Run`, call `mixer.clipAction(clip).play()`, then call `mixer.update(deltaSeconds)` every frame. Do not assume every clip exists; use `Stand` as the idle fallback.
+- `<model>.glb`: mesh, embedded textures, materials, skin, named skeleton, inverse bind matrices, and `Stand`;
+- `<model>.anim.glb`: the same named skeleton-node hierarchy plus the remaining locomotion and combat clips, with no mesh, textures, materials, or skin.
+
+Preserve both files byte-for-byte. Register the base under `path` and the lazy pack under `animation_path` in the Miniature Foundry's `game_models` collection. Do not attach new game models to the unit-images manifest. Existing `models.raw` entries remain readable for compatibility. Shared model-and-skin outputs may use the same content-addressed paths across several unit records.
+
+Animation consumers load the base scene first, fetch the pack only when animation is needed, and play the pack's `AnimationClip` objects against the base scene's matching bone names with `THREE.AnimationMixer`. Do not replace or rename the generated bones independently in either file. Do not assume every clip exists; the base always keeps `Stand`, while attack, cast, wound, death, and special clips vary by source M2.
 
 ### 3. Render headshots
 
@@ -135,7 +140,7 @@ The dry run must show no duplicate entry ownership, duplicate paths, unsupported
 
 The browser Foundry at `/internal/unit-images` is the preferred path for interactive cropping. Choosing a new source and uploading a crop automatically stores the uncropped source as `full`. Use **Start over from full** to discard an unsatisfactory crop, adjust zoom, position, and brightness, then upload a replacement `headshot`. Save a draft first, then show the exact draft diff before requesting publish approval.
 
-Register each extracted GLB separately in `/internal/miniatures` with **Add game model**. Use the same canonical entry IDs, upload the raw GLB, and save it under the miniature manifest's `game_models` collection. Show the exact miniature-manifest draft before requesting publish approval.
+Register each extracted model in `/internal/miniatures` with **Add game model**. Use the same canonical entry IDs, upload the base GLB and optional lazy animation GLB, and save them as `path` and `animation_path` in the miniature manifest's `game_models` collection. Show the exact miniature-manifest draft before requesting publish approval.
 
 ### 6. Publish and verify
 
@@ -149,7 +154,7 @@ Or publish the reviewed draft in the Unit Image Foundry. After publication:
 
 1. Fetch `https://icons.chronicleclassic.com/unit-images/manifest.json` and `https://icons.chronicleclassic.com/miniatures/manifest.json`.
 2. Confirm every expected name, entry ID, `headshot`, and `full` path in the unit-images manifest.
-3. Confirm every extracted GLB appears under `game_models` in the miniature manifest.
+3. Confirm every extracted base GLB and animation pack appears under `game_models` as `path` and `animation_path`.
 4. Fetch every new image and model URL and require HTTP 200.
 5. Confirm each object has the expected content type and a nonzero byte size.
 6. Report the exact published boss count and any bosses intentionally omitted.
@@ -172,4 +177,4 @@ Or publish the reviewed draft in the Unit Image Foundry. After publication:
 - [ ] Contact sheet received explicit operator approval.
 - [ ] Dry run passed.
 - [ ] Publish received separate explicit approval.
-- [ ] Live unit-image and miniature manifests, every CDN image, and every `game_models` GLB were verified.
+- [ ] Live unit-image and miniature manifests, every CDN image, base GLB, and registered animation pack were verified.

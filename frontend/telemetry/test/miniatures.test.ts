@@ -31,6 +31,34 @@ test("parses original game models independently from tabletop miniatures", () =>
   ]);
 });
 
+test("parses optional lazy animation packs for original game models", () => {
+  const parsed = parseMiniatureManifest(manifest([], [{
+    name: "Boss game model",
+    path: "miniatures/boss-base.glb",
+    animation_path: "miniatures/boss-animations.glb",
+    entry_ids: [11502],
+  }]));
+  assert.deepEqual(parsed.game_models, [{
+    name: "Boss game model",
+    path: "miniatures/boss-base.glb",
+    animation_path: "miniatures/boss-animations.glb",
+    entry_ids: [11502],
+    map_scale: 1,
+  }]);
+  assert.throws(() => parseMiniatureManifest(manifest([], [{
+    name: "Invalid",
+    path: "miniatures/shared.glb",
+    animation_path: "miniatures/shared.glb",
+    entry_ids: [1],
+  }])), /duplicate model path/);
+  assert.throws(() => parseMiniatureManifest(manifest([], [{
+    name: "Invalid",
+    path: "miniatures/base.glb",
+    animation_path: "animations/pack.glb",
+    entry_ids: [1],
+  }])), /animation_path/);
+});
+
 test("defaults game models for existing v1 manifests", () => {
   const parsed = parseMiniatureManifest({
     format: MINIATURE_MANIFEST_FORMAT,
@@ -105,7 +133,9 @@ test("Miniature Foundry edits tabletop and original game models", async () => {
   const page = await readFile(new URL("../src/dashboard/miniatures.tsx", import.meta.url), "utf8");
   assert.match(page, /id="add-game-model"/);
   assert.match(page, /game_models/);
-  assert.match(page, /original animated GLB extracted from the game files/);
+  assert.match(page, /skinned base GLB/);
+  assert.match(page, /id="animation-file"/);
+  assert.match(page, /animation_path/);
   assert.match(page, /id="map-scale"/);
   assert.match(page, /Blue capsule/);
   assert.match(page, /new THREE\.CapsuleGeometry/);

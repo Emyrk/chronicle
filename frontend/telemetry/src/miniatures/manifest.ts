@@ -5,7 +5,10 @@ export const MAX_MAP_SCALE = 10;
 
 export interface UnitModelDefinition {
   name: string;
+  /** Skinned base GLB. Original game models retain their skeleton and Stand clip. */
   path: string;
+  /** Optional meshless GLB containing clips that bind to the base GLB's named skeleton nodes. */
+  animation_path?: string;
   entry_ids: number[];
   /** Manual multiplier applied after the client-derived default size. */
   map_scale: number;
@@ -82,14 +85,20 @@ function parseModelCollection(value: unknown, context: string): UnitModelDefinit
   const paths = new Set<string>();
   const models = array(value, context).map((raw, index) => {
     const itemContext = `${context}[${index}]`;
-    const item = object(raw, itemContext, ["name", "path", "entry_ids", "map_scale", "world_heights"]);
+    const item = object(raw, itemContext, ["name", "path", "animation_path", "entry_ids", "map_scale", "world_heights"]);
     const name = string(item.name, `${itemContext}.name`).trim();
     const path = string(item.path, `${itemContext}.path`);
+    const animation_path = item.animation_path === undefined ? undefined : string(item.animation_path, `${itemContext}.animation_path`);
     const map_scale = mapScale(item.map_scale, `${itemContext}.map_scale`);
     if (name === "") throw new TypeError(`${itemContext}.name must not be blank`);
     if (!isMiniatureAssetPath(path)) throw new TypeError(`${itemContext}.path must be a clean miniatures/*.glb path`);
     if (paths.has(path)) throw new TypeError(`duplicate model path ${path} in ${context}`);
     paths.add(path);
+    if (animation_path !== undefined) {
+      if (!isMiniatureAssetPath(animation_path)) throw new TypeError(`${itemContext}.animation_path must be a clean miniatures/*.glb path`);
+      if (paths.has(animation_path)) throw new TypeError(`duplicate model path ${animation_path} in ${context}`);
+      paths.add(animation_path);
+    }
 
     const ids = array(item.entry_ids, `${itemContext}.entry_ids`).map((id, idIndex) => entryID(id, `${itemContext}.entry_ids[${idIndex}]`));
     if (ids.length === 0) throw new TypeError(`${itemContext}.entry_ids must not be empty`);
@@ -101,7 +110,14 @@ function parseModelCollection(value: unknown, context: string): UnitModelDefinit
       assignedEntries.set(id, path);
     }
     const world_heights = worldHeights(item.world_heights, entry_ids, `${itemContext}.world_heights`);
-    return { name, path, entry_ids, map_scale, ...(world_heights === undefined ? {} : { world_heights }) };
+    return {
+      name,
+      path,
+      ...(animation_path === undefined ? {} : { animation_path }),
+      entry_ids,
+      map_scale,
+      ...(world_heights === undefined ? {} : { world_heights }),
+    };
   });
 
   models.sort((left, right) => left.name.localeCompare(right.name) || left.path.localeCompare(right.path));

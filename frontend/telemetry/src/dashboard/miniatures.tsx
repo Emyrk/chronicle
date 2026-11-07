@@ -261,10 +261,11 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
           const typeLabel=isGameModel?'Game model':'Miniature';
           const hasPath=item.path.startsWith('miniatures/');
           els.editor.innerHTML='<div class="panel-head"><h2>'+typeLabel+' editor</h2><span class="count">shared globally</span></div><div class="editor-body"><div class="editor-grid">'+
-            '<article class="form-card"><h3>'+escapeHTML(item.name||('New '+typeLabel.toLowerCase()))+'</h3><p class="hint">'+(isGameModel?'Upload the original animated GLB extracted from the game files.':'Upload the tabletop-style GLB used by the 3D replay map.')+' Each entry ID may belong to only one '+typeLabel.toLowerCase()+'.</p>'+
+            '<article class="form-card"><h3>'+escapeHTML(item.name||('New '+typeLabel.toLowerCase()))+'</h3><p class="hint">'+(isGameModel?'Upload the skinned base GLB, then optionally attach its meshless lazy animation pack.':'Upload the tabletop-style GLB used by the 3D replay map.')+' Each entry ID may belong to only one '+typeLabel.toLowerCase()+'.</p>'+
             '<label>Display name<input id="name" type="text" value="'+escapeHTML(item.name)+'" placeholder="Deviate serpent" /></label>'+
             '<div class="path '+(!hasPath?'empty':'')+'">'+escapeHTML(item.path||'Upload a GLB to create its immutable path')+'</div>'+
-            '<label class="upload">Upload or replace GLB<input id="file" type="file" accept="model/gltf-binary,.glb" /></label>'+
+            '<label class="upload">Upload or replace base GLB<input id="file" type="file" accept="model/gltf-binary,.glb" /></label>'+
+            (isGameModel?'<label>Lazy animation pack<div class="path '+(!item.animation_path?'empty':'')+'">'+escapeHTML(item.animation_path||'Optional meshless .anim.glb')+'</div></label><label class="upload">Upload or replace animation GLB<input id="animation-file" type="file" accept="model/gltf-binary,.glb" /></label>':'')+
             '<label>Creature entry IDs<textarea id="entry-ids" placeholder="3669, 3670, 3671">'+escapeHTML(item.entry_ids.join(', '))+'</textarea></label>'+
             '<p class="hint">Separate IDs with commas, spaces, or new lines. Positive 32-bit IDs only.</p>'+
             '<label>Map size<div class="scale-row"><input id="map-scale" type="range" min="0.1" max="10" step="0.05" value="'+(item.map_scale||1)+'" /><input id="map-scale-number" type="number" min="0.1" max="10" step="0.05" value="'+(item.map_scale||1)+'" /></div><span class="scale-readout"><span>0.1×</span><span>Baseline 1×</span><span>10× max</span></span></label>'+
@@ -276,15 +277,16 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
           document.getElementById('map-scale').addEventListener('input',event=>setMapScale(event.target.value));
           document.getElementById('map-scale-number').addEventListener('input',event=>setMapScale(event.target.value));
           document.getElementById('file').addEventListener('change',event=>upload(event.target.files[0]));
+          document.getElementById('animation-file')?.addEventListener('change',event=>upload(event.target.files[0],'animation_path'));
           document.getElementById('remove').addEventListener('click',remove);
           renderJSON();
           if(hasPath){const entry=item.entry_ids[0];mountPreview(previewURL(item.path),isGameModel,item.map_scale||1,item.world_heights?.[entry]);}
         }
         function renderJSON(){const pre=document.getElementById('json');if(pre&&state)pre.textContent=JSON.stringify(state.draft,null,2);}
         function remove(){const selectedItem=current();if(!selectedItem)return;const {kind,item}=selectedItem;if(!confirm('Remove "'+(item.name||'this model')+'" from the draft? The uploaded GLB will remain in R2 until cleaned up separately.'))return;bulkSelected.delete(item);state.draft[kind]=collection(kind).filter(candidate=>candidate!==item);selected=items()[0] ? itemKey(items()[0].kind,items()[0].item) : null;markDirty();renderList();renderEditor();}
-        async function upload(file){
+        async function upload(file,field='path'){
           if(!file||!state)return;syncEditor();const selectedItem=current();if(!selectedItem)return;setBusy(true);setStatus('Uploading '+file.name+'…');
-          try{const data=new FormData();data.append('file',file);const response=await fetch('/internal/api/v1/miniatures/assets',{method:'POST',body:data});const result=await response.json();if(!response.ok)throw new Error(result.error||'Upload failed');selectedItem.item.path=result.path;selected=itemKey(selectedItem.kind,selectedItem.item);dirty=true;setStatus('GLB uploaded. Save the draft to register it.');renderList();renderEditor();}
+          try{const data=new FormData();data.append('file',file);const response=await fetch('/internal/api/v1/miniatures/assets',{method:'POST',body:data});const result=await response.json();if(!response.ok)throw new Error(result.error||'Upload failed');selectedItem.item[field]=result.path;if(field==='path')selected=itemKey(selectedItem.kind,selectedItem.item);dirty=true;setStatus('GLB uploaded. Save the draft to register it.');renderList();renderEditor();}
           catch(error){setStatus(error.message,true);}finally{setBusy(false);}
         }
         function firstKey(){const first=items()[0];return first?itemKey(first.kind,first.item):null;}

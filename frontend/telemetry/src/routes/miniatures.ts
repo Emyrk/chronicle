@@ -232,9 +232,11 @@ miniatures.post("/internal/api/v1/miniatures/publish", async (c) => {
     if (!state.draftObject) return c.json({ error: "There is no saved draft to publish" }, 400);
     if ((input.version ?? null) !== state.draftObject.httpEtag) return c.json({ error: "Draft changed in another tab. Reload before publishing." }, 409);
     const missing: string[] = [];
-    await Promise.all([...state.draft.miniatures, ...state.draft.game_models].map(async (item) => {
-      if (!(await c.env.MAPS.head(item.path))) missing.push(item.path);
-    }));
+    await Promise.all([...state.draft.miniatures, ...state.draft.game_models].flatMap((item) =>
+      [item.path, item.animation_path].filter((path): path is string => path !== undefined).map(async (path) => {
+        if (!(await c.env.MAPS.head(path))) missing.push(path);
+      }),
+    ));
     if (missing.length > 0) throw new TypeError(`missing uploaded miniature assets: ${missing.sort().join(", ")}`);
     await c.env.MAPS.put(MANIFEST_KEY, jsonText(state.draft), {
       httpMetadata: { contentType: "application/json", cacheControl: "public, max-age=3600" },

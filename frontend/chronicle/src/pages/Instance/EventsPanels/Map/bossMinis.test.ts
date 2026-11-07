@@ -52,6 +52,30 @@ describe("bossMinis", () => {
     })).toThrow(/Duplicate miniature entry ID/);
   });
 
+  it("parses and validates lazy animation-pack paths", () => {
+    const model = parseMiniatureManifest({
+      format: MINIATURE_MANIFEST_FORMAT,
+      miniatures: [],
+      game_models: [{
+        name: "Animated boss",
+        path: "miniatures/boss-base.glb",
+        animation_path: "miniatures/boss-animations.glb",
+        entry_ids: [1],
+      }],
+    }).game_models[0];
+    expect(model?.animation_path).toBe("miniatures/boss-animations.glb");
+    expect(() => parseMiniatureManifest({
+      format: MINIATURE_MANIFEST_FORMAT,
+      miniatures: [],
+      game_models: [{ name: "Invalid", path: "miniatures/shared.glb", animation_path: "miniatures/shared.glb", entry_ids: [1] }],
+    })).toThrow(/Duplicate game model path/);
+    expect(() => parseMiniatureManifest({
+      format: MINIATURE_MANIFEST_FORMAT,
+      miniatures: [],
+      game_models: [{ name: "Invalid", path: "miniatures/base.glb", animation_path: "animations/pack.glb", entry_ids: [1] }],
+    })).toThrow(/animation path/);
+  });
+
   it("validates per-model map scale", () => {
     expect(parseMiniatureManifest({
       format: MINIATURE_MANIFEST_FORMAT,
@@ -92,7 +116,7 @@ describe("bossMinis", () => {
         { name: "Firelord", path: "miniatures/firelord.glb", entry_ids: [11502], map_scale: 1.5 },
       ],
       game_models: [
-        { name: "Firelord game model", path: "miniatures/firelord-game.glb", entry_ids: [11502], map_scale: 2, world_heights: { 11502: 54.4 } },
+        { name: "Firelord game model", path: "miniatures/firelord-game.glb", animation_path: "miniatures/firelord-animations.glb", entry_ids: [11502], map_scale: 2, world_heights: { 11502: 54.4 } },
       ],
     };
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => payload });
@@ -120,7 +144,7 @@ describe("bossMinis", () => {
         [11502, { url: "https://icons.example/root/miniatures/firelord.glb", mapScale: 1.5 }],
       ]),
       gameModels: new Map([
-        [11502, { url: "https://icons.example/root/miniatures/firelord-game.glb", mapScale: 2, worldHeight: 54.4 }],
+        [11502, { url: "https://icons.example/root/miniatures/firelord-game.glb", animationUrl: "https://icons.example/root/miniatures/firelord-animations.glb", mapScale: 2, worldHeight: 54.4 }],
       ]),
     });
     expect(gameModelUrl(11502, new Map([[11502, "https://icons.example/game.glb"]]))).toBe("https://icons.example/game.glb");
