@@ -18,6 +18,7 @@ type RepairWorker struct {
 	river.WorkerDefaults[ArgsRepair]
 	Store   database.Store
 	Metrics *Metrics
+	Queue   JobInserter
 }
 type ArgsRepair struct {
 	TenantID uuid.UUID `json:"tenant_id"`
@@ -30,7 +31,19 @@ func (w *RepairWorker) Work(ctx context.Context, job *river.Job[ArgsRepair]) err
 	if !DispatchEnabled {
 		return nil
 	}
-	_, err := w.Drain(ctx, job.Args.TenantID)
+	ctx, cancel := context.WithTimeout(ctx, WorkTimeout)
+	defer cancel()
+	worked := false
+	err := continueWork(ctx, func(ctx context.Context) (bool, error) {
+		processed, err := w.Drain(ctx, job.Args.TenantID)
+		worked = worked || processed
+		return processed, err
+	}, func(ctx context.Context) (bool, error) {
+		return w.Store.HasDueLeaderboardD1(servicetenant.WithTenantID(ctx, job.Args.TenantID), job.Args.TenantID)
+	})
+	if worked {
+		nudgeDownstream(ctx, w.Queue, w.Metrics, job.Args.TenantID, false)
+	}
 	return err
 }
 func (w *RepairWorker) Drain(ctx context.Context, tenant uuid.UUID) (bool, error) {
@@ -152,7 +165,7 @@ func (d *RepairDispatcher) dispatch(ctx context.Context, args ArgsRepairDispatch
 		}
 	}
 	if more {
-		_, err = d.Queue.Insert(ctx, ArgsRepairDispatch{AfterTenant: tenants[len(tenants)-1]}, &river.InsertOpts{ScheduledAt: time.Now().Add(DispatchInterval)})
+		_, err = d.Queue.Insert(ctx, ArgsRepairDispatch{AfterTenant: tenants[len(tenants)-1]}, nil)
 	}
 	return err
 }

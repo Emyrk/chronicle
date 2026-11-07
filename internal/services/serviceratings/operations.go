@@ -45,21 +45,65 @@ func (d *OperationDispatcher) Work(ctx context.Context, j *river.Job[ArgsOperati
 		}
 	}
 	if len(rows) == 100 {
-		_, err = d.Queue.Insert(ctx, ArgsOperationDispatch{AfterTenant: rows[99].TenantID}, &river.InsertOpts{ScheduledAt: time.Now().Add(DispatchInterval)})
+		_, err = d.Queue.Insert(ctx, ArgsOperationDispatch{AfterTenant: rows[99].TenantID}, nil)
 	}
 	return err
 }
 
 type OperationWorker struct {
 	Metrics *Metrics
+	Queue   JobInserter
 	river.WorkerDefaults[ArgsOperationPage]
 	Store database.Store
 }
 
+func (*OperationWorker) Timeout(*river.Job[ArgsOperationPage]) time.Duration { return WorkTimeout }
 func (w *OperationWorker) Work(ctx context.Context, j *river.Job[ArgsOperationPage]) error {
 	ctx = servicetenant.WithTenantID(ctx, j.Args.TenantID)
-	err := w.Step(ctx, j.Args.TenantID, j.Args.OperationID)
-	if err != nil {
+	ctx, cancel := context.WithTimeout(ctx, WorkTimeout)
+	defer cancel()
+	worked := false
+	ready := func(ctx context.Context) (bool, error) {
+		op, err := w.Store.GetLeaderboardOperation(ctx, database.GetLeaderboardOperationParams{ID: j.Args.OperationID, TenantID: j.Args.TenantID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return err == nil && op.State == "discovering", err
+	}
+	err := continueWork(ctx, func(ctx context.Context) (bool, error) {
+		op, lookupErr := w.Store.GetLeaderboardOperation(ctx, database.GetLeaderboardOperationParams{ID: j.Args.OperationID, TenantID: j.Args.TenantID})
+		if errors.Is(lookupErr, pgx.ErrNoRows) {
+			return false, nil
+		}
+		if lookupErr != nil {
+			return false, lookupErr
+		}
+		if op.State == "paused" || op.State == "completed" {
+			return false, nil
+		}
+		if err := w.Step(ctx, j.Args.TenantID, j.Args.OperationID); err != nil {
+			return false, err
+		}
+		worked = worked || op.State == "discovering"
+		discovering, err := ready(ctx)
+		worked = worked || discovering
+		return discovering, err
+	}, ready)
+	if err == nil && worked {
+		// One final completion check after discovery exhaustion; never loop while
+		// draining is blocked by durable D1/D2 work.
+		op, lookupErr := w.Store.GetLeaderboardOperation(ctx, database.GetLeaderboardOperationParams{ID: j.Args.OperationID, TenantID: j.Args.TenantID})
+		if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
+			err = lookupErr
+		} else if lookupErr == nil && op.State == "draining" {
+			err = w.Step(ctx, j.Args.TenantID, j.Args.OperationID)
+		}
+	}
+	if worked {
+		nudgeDownstream(ctx, w.Queue, w.Metrics, j.Args.TenantID, true)
+	}
+	var snooze *river.JobSnoozeError
+	if err != nil && !errors.As(err, &snooze) {
 		cleanup, cancel := context.WithTimeout(servicetenant.WithTenantID(context.WithoutCancel(ctx), j.Args.TenantID), 5*time.Second)
 		defer cancel()
 		_ = w.Store.RetryLeaderboardOperation(cleanup, database.RetryLeaderboardOperationParams{ID: j.Args.OperationID, TenantID: j.Args.TenantID, LastError: err.Error()})

@@ -12028,6 +12028,40 @@ func (q *sqlQuerier) ListLeaderboardLayers(ctx context.Context) ([]LeaderboardLa
 	return items, nil
 }
 
+const hasDueLeaderboardD1 = `-- name: HasDueLeaderboardD1 :one
+SELECT EXISTS(SELECT 1 FROM leaderboard_dirty_runs WHERE tenant_id= $1::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))::boolean
+`
+
+func (q *sqlQuerier) HasDueLeaderboardD1(ctx context.Context, tenantID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasDueLeaderboardD1, tenantID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const hasDueLeaderboardD2 = `-- name: HasDueLeaderboardD2 :one
+SELECT (($1::integer=0 AND EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_benchmarks WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=1 AND EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=2 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_boss_benchmarks WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=3 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_boss_subjects WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=4 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_clear_benchmarks WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=5 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_clear_subjects WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=6 AND EXISTS(SELECT 1 FROM leaderboard_dirty_player_renown WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=7 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_renown WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))))::boolean
+`
+
+type HasDueLeaderboardD2Params struct {
+	Family   int32     `db:"family" json:"family"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) HasDueLeaderboardD2(ctx context.Context, arg HasDueLeaderboardD2Params) (bool, error) {
+	row := q.db.QueryRow(ctx, hasDueLeaderboardD2, arg.Family, arg.TenantID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const acknowledgeLeaderboardRun = `-- name: AcknowledgeLeaderboardRun :exec
 WITH removed AS (
  DELETE FROM leaderboard_dirty_runs WHERE tenant_id= $1::uuid AND run_id= $2::uuid

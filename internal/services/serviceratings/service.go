@@ -124,7 +124,7 @@ func (d *Dispatcher) Work(ctx context.Context, job *river.Job[ArgsDispatch]) err
 }
 
 // Paginated continuation gives every due tenant/family a turn even if a hot
-// prefix stays dirty. Continuations wait one period, never spin a drain loop.
+// prefix stays dirty. Cursor continuations run promptly; bounded workers yield between bursts.
 // Future-only or leased/backed-off scopes produce no jobs. Root periodic scans
 // discover newly due keys; active River uniqueness suppresses duplicate jobs.
 func (d *Dispatcher) dispatch(ctx context.Context, args ArgsDispatch) error {
@@ -148,7 +148,7 @@ func (d *Dispatcher) dispatch(ctx context.Context, args ArgsDispatch) error {
 	}
 	if more {
 		last := rows[len(rows)-1]
-		_, err = d.Queue.Insert(ctx, ArgsDispatch{AfterTenant: last.TenantID, AfterFamily: last.Family}, &river.InsertOpts{ScheduledAt: time.Now().Add(DispatchInterval)})
+		_, err = d.Queue.Insert(ctx, ArgsDispatch{AfterTenant: last.TenantID, AfterFamily: last.Family}, nil)
 	}
 	return err
 }
@@ -163,7 +163,18 @@ func (w *TenantWorker) Work(ctx context.Context, job *river.Job[ArgsDrain]) erro
 	if !DispatchEnabled {
 		return nil
 	}
-	result, err := w.Worker.Drain(ctx, job.Args.TenantID, job.Args.Family)
-	_ = river.RecordOutput(ctx, result)
+	ctx, cancel := context.WithTimeout(ctx, WorkTimeout)
+	defer cancel()
+	var total DrainResult
+	err := continueWork(ctx, func(ctx context.Context) (bool, error) {
+		result, err := w.Worker.Drain(ctx, job.Args.TenantID, job.Args.Family)
+		total.Claimed += result.Claimed
+		total.Processed += result.Processed
+		total.Failed += result.Failed
+		return result.Claimed > 0, err
+	}, func(ctx context.Context) (bool, error) {
+		return w.Worker.Store.HasDueLeaderboardD2(servicetenant.WithTenantID(ctx, job.Args.TenantID), database.HasDueLeaderboardD2Params{TenantID: job.Args.TenantID, Family: int32(job.Args.Family)})
+	})
+	_ = river.RecordOutput(ctx, total)
 	return err
 }

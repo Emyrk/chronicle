@@ -382,7 +382,7 @@ func TestDispatchPaginationAndFutureNoSpin(t *testing.T) {
 	require.Len(t, queue.jobs, 101)
 	cursor, ok := queue.jobs[100].(ArgsDispatch)
 	require.True(t, ok)
-	require.False(t, queue.options[100].ScheduledAt.IsZero())
+	require.Nil(t, queue.options[100]) // prompt cursor continuation, not periodic delay
 	seen := map[uuid.UUID]bool{}
 	for _, job := range queue.jobs[:100] {
 		drain := job.(ArgsDrain)

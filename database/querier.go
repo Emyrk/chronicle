@@ -617,6 +617,8 @@ type sqlcQuerier interface {
 	// cannot fill the whole board.
 	GuildTopParses(ctx context.Context, arg GuildTopParsesParams) ([]GuildTopParsesRow, error)
 	HasBillingEntitlement(ctx context.Context, arg HasBillingEntitlementParams) (bool, error)
+	HasDueLeaderboardD1(ctx context.Context, tenantID uuid.UUID) (bool, error)
+	HasDueLeaderboardD2(ctx context.Context, arg HasDueLeaderboardD2Params) (bool, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
