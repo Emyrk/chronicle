@@ -14,7 +14,6 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
-	"github.com/google/uuid"
 	"github.com/gorilla/sessions"
 )
 
@@ -77,11 +76,6 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 		// An earlier authentication middleware, such as service OAuth, may have
 		// already established Chronicle claims for this request.
 		if state := AuthenticationState(r); state != nil && state.Error == nil && state.Claims != nil {
-			if state.Claims.AIKeyID != uuid.Nil {
-				// AI keys are only for the read-only GET routes that accept them.
-				next.ServeHTTP(w, withState(r, &AuthenticationContext{Error: errAIKeyNotAccepted}))
-				return
-			}
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -219,8 +213,7 @@ func MustAuthenticatedClaims(ctx context.Context) *claims.Claims {
 
 var (
 	ErrNotAuthorized = errors.New("not authorized")
-	// errAIKeyNotAccepted rejects an AI key used as a Bearer token or on a
-	// route that doesn't take AI keys.
+	// errAIKeyNotAccepted rejects an AI key used as a Bearer token.
 	errAIKeyNotAccepted = fmt.Errorf("AI keys only work as ?ai_key= on read-only GET links, not as Bearer tokens: %w", ErrNotAuthorized)
 )
 

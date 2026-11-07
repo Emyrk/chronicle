@@ -174,6 +174,8 @@ func (api *API) issueAIKey(w http.ResponseWriter, r *http.Request, rotate bool) 
 	if resp.Created {
 		status = http.StatusCreated
 	}
+	// The body may carry the secret.
+	w.Header().Set("Cache-Control", "no-store")
 	httpapi.Write(ctx, w, status, resp)
 }
 

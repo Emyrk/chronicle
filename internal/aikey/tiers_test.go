@@ -74,8 +74,6 @@ func TestTierTable(t *testing.T) {
 				require.LessOrEqual(t, refill, ratelimit.IdleBucketTTL, b.Tier)
 			}
 		}
-		refill := time.Duration(InvalidLimit.Burst / InvalidLimit.PerSecond * float64(time.Second))
-		require.LessOrEqual(t, refill, ratelimit.IdleBucketTTL)
 	})
 
 	t.Run("CallersCannotEditTheTable", func(t *testing.T) {

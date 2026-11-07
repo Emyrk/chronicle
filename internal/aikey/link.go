@@ -31,15 +31,21 @@ func Link(ctx context.Context, rawURL string) string {
 
 // takeKey reads the first ai_key value and removes every ai_key from the
 // request in place, so nothing that later logs or echoes the URL (including
-// middleware that ran earlier and holds the same request) can see it.
+// middleware that ran earlier and holds the same request) can see it. The
+// decision uses the parsed query, so an encoded name (ai%5Fkey) counts too.
 func takeKey(r *http.Request) (string, bool) {
-	if !strings.Contains(r.URL.RawQuery, chroniclesdk.AIKeyQueryParam) {
+	raw := r.URL.RawQuery
+	if raw == "" {
 		return "", false
 	}
-	// The query is rebuilt from what parses, so a malformed pair that might
-	// hold the key is dropped rather than kept verbatim.
-	q, _ := url.ParseQuery(r.URL.RawQuery)
-	values := q[chroniclesdk.AIKeyQueryParam]
+	q, err := url.ParseQuery(raw)
+	values, present := q[chroniclesdk.AIKeyQueryParam]
+	if !present && err == nil {
+		return "", false
+	}
+	// The query is rebuilt from what parses, so a malformed pair, which
+	// might hold the key under any spelling, is dropped rather than kept
+	// verbatim. Handlers reading r.URL.Query() drop those pairs anyway.
 	q.Del(chroniclesdk.AIKeyQueryParam)
 	r.URL.RawQuery = q.Encode()
 	r.RequestURI = r.URL.RequestURI()

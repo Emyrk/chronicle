@@ -29,13 +29,17 @@ func TestAIKeys(t *testing.T) {
 		})
 	}
 
-	first, err := insert("ck_first")
+	firstSecret, err := aikey.Generate()
+	require.NoError(t, err)
+	secondSecret, err := aikey.Generate()
+	require.NoError(t, err)
+	first, err := insert(firstSecret)
 	require.NoError(t, err)
 	require.False(t, first.TenantID.Valid)
 	require.Equal(t, root, first.TenantScopeID)
 
 	// One unrevoked key per user per community.
-	_, err = insert("ck_second")
+	_, err = insert(secondSecret)
 	require.True(t, database.IsUniqueViolation(err, database.UniqueAiKeysOneUnrevokedPerUserTenant), err)
 
 	got, err := store.GetUnrevokedAIKey(ctx, database.GetUnrevokedAIKeyParams{UserID: userID, TenantScopeID: root})
@@ -43,7 +47,7 @@ func TestAIKeys(t *testing.T) {
 	require.Equal(t, first.ID, got.ID)
 
 	require.NoError(t, store.TouchAIKey(ctx, database.TouchAIKeyParams{ID: first.ID, LastUserAgent: "Claude-User"}))
-	got, err = store.GetAIKeyByHashedSecret(ctx, aikey.Hash("ck_first"))
+	got, err = store.GetAIKeyByHashedSecret(ctx, aikey.Hash(firstSecret))
 	require.NoError(t, err)
 	require.Equal(t, int64(1), got.RequestCount)
 	require.Equal(t, "Claude-User", got.LastUserAgent)
@@ -54,12 +58,12 @@ func TestAIKeys(t *testing.T) {
 	n, err := store.RevokeAIKeys(ctx, database.RevokeAIKeysParams{UserID: userID, TenantScopeID: root})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
-	second, err := insert("ck_second")
+	second, err := insert(secondSecret)
 	require.NoError(t, err)
 	got, err = store.GetUnrevokedAIKey(ctx, database.GetUnrevokedAIKeyParams{UserID: userID, TenantScopeID: root})
 	require.NoError(t, err)
 	require.Equal(t, second.ID, got.ID)
-	old, err := store.GetAIKeyByHashedSecret(ctx, aikey.Hash("ck_first"))
+	old, err := store.GetAIKeyByHashedSecret(ctx, aikey.Hash(firstSecret))
 	require.NoError(t, err)
 	require.True(t, old.RevokedAt.Valid)
 }

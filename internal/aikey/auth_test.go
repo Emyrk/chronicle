@@ -30,6 +30,8 @@ type fakeStore struct {
 	keys    map[string]database.AiKey
 	buckets map[string]float64
 	touched map[uuid.UUID]database.TouchAIKeyParams
+	// lookups and takes count database calls.
+	lookups, takes int
 }
 
 func newFakeStore() *fakeStore {
@@ -39,6 +41,7 @@ func newFakeStore() *fakeStore {
 func (s *fakeStore) TakeRateLimitTokens(_ context.Context, arg database.TakeRateLimitTokensParams) (database.TakeRateLimitTokensRow, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.takes++
 	tokens, ok := s.buckets[arg.Key]
 	if !ok {
 		tokens = arg.Burst
@@ -68,6 +71,7 @@ func (s *fakeStore) PeekRateLimitTokens(_ context.Context, arg database.PeekRate
 func (s *fakeStore) GetAIKeyByHashedSecret(_ context.Context, hashed []byte) (database.AiKey, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.lookups++
 	row, ok := s.keys[string(hashed)]
 	if !ok {
 		return database.AiKey{}, sql.ErrNoRows
@@ -204,10 +208,9 @@ func TestMiddleware(t *testing.T) {
 		require.Equal(t, f.tenant, key.TenantID)
 		require.True(t, key.PrivateData)
 		require.Equal(t, billing.TierFree, key.Benefits.Tier)
-		claims, ok := chronauth.AuthenticatedClaims(f.seen.Context())
-		require.True(t, ok)
-		require.Equal(t, user, claims.Subject)
-		require.Equal(t, row.ID, claims.AIKeyID)
+		// Keys don't become Chronicle claims; handlers opt in with FromContext.
+		_, ok = chronauth.AuthenticatedClaims(f.seen.Context())
+		require.False(t, ok)
 
 		// The key is gone from the request; links carry it forward.
 		require.Equal(t, "q=x", f.seen.URL.RawQuery)
@@ -261,9 +264,21 @@ func TestMiddleware(t *testing.T) {
 			require.Equal(t, "no-store", rec.Header().Get("Cache-Control"), name)
 		}
 		require.Nil(t, f.seen)
-		// Expired, revoked and other-community keys are stale links, not
-		// guesses, so only the last three were charged to the IP.
-		require.Equal(t, InvalidLimit.Burst-3, f.store.buckets[limiterInvalid+":ip:192.0.2.1"])
+		// Malformed and empty keys never reach the database, and no failure
+		// writes a rate-limit bucket.
+		require.Equal(t, 4, f.store.lookups)
+		require.Zero(t, f.store.takes)
+	})
+
+	t.Run("StaleKeysWeighLess", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthFixture(t)
+		expired, _ := f.store.addKey(t, uuid.New(), f.tenant, f.now.Add(-2*time.Hour), time.Hour)
+		// A stale link costs a quarter of an unknown key: 4x the attempts.
+		for i := range failureBurst * unknownKeyCost / staleKeyCost {
+			require.Equal(t, http.StatusUnauthorized, f.do(t, http.MethodGet, "/x?ai_key="+expired).Code, i)
+		}
+		require.Equal(t, http.StatusTooManyRequests, f.do(t, http.MethodGet, "/x?ai_key="+expired).Code)
 	})
 
 	t.Run("WrongKeysLimitedPerIP", func(t *testing.T) {
@@ -273,17 +288,20 @@ func TestMiddleware(t *testing.T) {
 		from := func(ip string) func(*http.Request) {
 			return func(r *http.Request) { r.Header.Set("CF-Connecting-IP", ip) }
 		}
-		for i := range int(InvalidLimit.Burst) {
-			rec := f.do(t, http.MethodGet, "/x?ai_key=ck_wrong", from("198.51.100.7"))
+		unknown, err := Generate()
+		require.NoError(t, err)
+		for i := range failureBurst {
+			rec := f.do(t, http.MethodGet, "/x?ai_key="+unknown, from("198.51.100.7"))
 			require.Equal(t, http.StatusUnauthorized, rec.Code, i)
 		}
-		rec := f.do(t, http.MethodGet, "/x?ai_key=ck_wrong", from("198.51.100.7"))
+		rec := f.do(t, http.MethodGet, "/x?ai_key="+unknown, from("198.51.100.7"))
 		require.Equal(t, http.StatusTooManyRequests, rec.Code)
-		require.NotEmpty(t, rec.Header().Get("Retry-After"))
+		require.Equal(t, "3", rec.Header().Get("Retry-After"))
 		require.Contains(t, message(t, rec), "Too many invalid AI keys")
-		// Once blocked, the IP can't try more keys, even real ones.
+		require.Equal(t, http.StatusTooManyRequests, f.do(t, http.MethodGet, "/x?ai_key=ck_nope", from("198.51.100.7")).Code)
+		// A spent IP never blocks a working key: it is looked up first.
 		rec = f.do(t, http.MethodGet, "/x?ai_key="+valid, from("198.51.100.7"))
-		require.Equal(t, http.StatusTooManyRequests, rec.Code)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		// Other clients are unaffected, even behind the same proxy.
 		rec = f.do(t, http.MethodGet, "/x?ai_key="+valid, from("198.51.100.8"), func(r *http.Request) {
 			r.Header.Set("X-Forwarded-For", "198.51.100.7")
@@ -319,6 +337,30 @@ func TestMiddleware(t *testing.T) {
 		rec = f.do(t, http.MethodGet, "/x?ai_key="+secret)
 		require.Equal(t, http.StatusTooManyRequests, rec.Code)
 		require.Contains(t, message(t, rec), "Honored tier it may make 60 requests a minute")
+	})
+
+	t.Run("RefusedViewsAnsweredFromMemory", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthFixture(t)
+		user := uuid.New()
+		secret, _ := f.store.addKey(t, user, f.tenant, f.now, time.Hour)
+		f.store.buckets[limiterViewsMinute+":user:"+user.String()] = 0
+		rec := f.do(t, http.MethodGet, "/x?ai_key="+secret)
+		require.Equal(t, http.StatusTooManyRequests, rec.Code)
+		require.Equal(t, "2", rec.Header().Get("Retry-After"))
+		takes := f.store.takes
+		for range 5 {
+			rec = f.do(t, http.MethodGet, "/x?ai_key="+secret)
+			require.Equal(t, http.StatusTooManyRequests, rec.Code)
+			require.Equal(t, "2", rec.Header().Get("Retry-After"))
+			require.Contains(t, message(t, rec), "30 requests a minute")
+		}
+		require.Equal(t, takes, f.store.takes, "repeated 429s must not touch Postgres")
+
+		// Once the wait is over, the bucket is asked again.
+		f.now = f.now.Add(2 * time.Second)
+		f.store.buckets[limiterViewsMinute+":user:"+user.String()] = 1
+		require.Equal(t, http.StatusOK, f.do(t, http.MethodGet, "/x?ai_key="+secret).Code)
 	})
 
 	t.Run("DailyCap", func(t *testing.T) {
@@ -360,6 +402,8 @@ func TestMiddleware(t *testing.T) {
 			"/x?ai_key=" + secret,
 			"/x?a=1&ai_key=" + secret + "&ai_key=" + secret,
 			"/x?ai_key=" + secret + "&bad=%zz",
+			"/x?ai%5Fkey=" + secret,
+			"/x?AI_KEY=x&ai%5fkey=" + secret,
 		}
 		for _, p := range paths {
 			require.Equal(t, http.StatusOK, f.do(t, http.MethodGet, p).Code, p)
@@ -389,6 +433,9 @@ func TestTakeKey(t *testing.T) {
 		"ai_key=ck_a&ai_key=ck_b": {"ck_a", true, ""},
 		"q=ai_key":                {"", false, "q=ai_key"},
 		"ai_key=ck_%zz&q=1":       {"", false, "q=1"},
+		"ai%5Fkey=ck_a&q=1":       {"ck_a", true, "q=1"},
+		"%61i%5fkey=ck_%zz&q=1":   {"", false, "q=1"},
+		"q=1&x=%zz":               {"", false, "q=1"},
 		"ai_key=":                 {"", true, ""},
 	} {
 		req := httptest.NewRequest(http.MethodGet, "/p?"+raw, nil)
@@ -448,4 +495,43 @@ func TestHumanDuration(t *testing.T) {
 	require.Equal(t, "2 seconds", humanDuration(1500*time.Millisecond))
 	require.Equal(t, "3 minutes", humanDuration(150*time.Second))
 	require.Equal(t, "2 hours", humanDuration(91*time.Minute))
+}
+
+func TestKeyedWriterHeaders(t *testing.T) {
+	t.Parallel()
+	f := newAuthFixture(t)
+	secret, _ := f.store.addKey(t, uuid.New(), f.tenant, f.now, time.Hour)
+	serve := func(inner http.HandlerFunc) *httptest.ResponseRecorder {
+		// recoverer stands in for httpmw.Recover: it writes the 500 to the
+		// writer it was given, outside the key middleware's wrapper.
+		recoverer := func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer func() {
+					if recover() != nil {
+						w.WriteHeader(http.StatusInternalServerError)
+					}
+				}()
+				next.ServeHTTP(w, r)
+			})
+		}
+		req := httptest.NewRequest(http.MethodGet, "/x?ai_key="+secret, nil)
+		req = req.WithContext(servicetenant.WithTenantID(req.Context(), f.tenant))
+		rec := httptest.NewRecorder()
+		recoverer(f.auth.Middleware(inner)).ServeHTTP(rec, req)
+		return rec
+	}
+
+	rec := serve(func(http.ResponseWriter, *http.Request) { panic("boom") })
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+	require.Equal(t, "no-referrer", rec.Header().Get("Referrer-Policy"))
+	require.Equal(t, "noindex", rec.Header().Get("X-Robots-Tag"))
+
+	rec = serve(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=300")
+		require.NoError(t, http.NewResponseController(w).Flush())
+	})
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.True(t, rec.Flushed)
+	require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 }

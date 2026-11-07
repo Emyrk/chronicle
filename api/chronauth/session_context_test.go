@@ -116,15 +116,4 @@ func TestAuthenticationMiddlewareRejectsAIKeys(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, res.Code)
 	})
 
-	t.Run("ClaimsFromAIKeyMiddleware", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/whoami", nil)
-		req = req.WithContext(WithClaims(req.Context(), &claims.Claims{Subject: uuid.New(), AIKeyID: uuid.New()}))
-		handler.ServeHTTP(httptest.NewRecorder(), req)
-		require.Nil(t, state.Claims)
-		require.ErrorIs(t, state.Error, ErrNotAuthorized)
-
-		res := httptest.NewRecorder()
-		service.AuthenticationMiddleware(protected).ServeHTTP(res, req)
-		require.Equal(t, http.StatusUnauthorized, res.Code)
-	})
 }
